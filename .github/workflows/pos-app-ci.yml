@@ -1,0 +1,65 @@
+name: POS App CI
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'apps/pos_app/**'
+      - '.github/workflows/pos-app-ci.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'apps/pos_app/**'
+      - '.github/workflows/pos-app-ci.yml'
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    
+    defaults:
+      run:
+        working-directory: apps/pos_app
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          flutter-version: '3.41.8'
+          cache: true
+          cache-key: 'flutter-:os:-:channel:-:version:-:arch:-:hash:'
+          cache-path: '${{ runner.tool_cache }}/flutter'
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze project source
+        run: flutter analyze
+
+      - name: Run tests
+        run: flutter test --coverage
+
+  build-check:
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    
+    defaults:
+      run:
+        working-directory: apps/pos_app
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          flutter-version: '3.41.8'
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Web Smoke Test
+        run: flutter build web
