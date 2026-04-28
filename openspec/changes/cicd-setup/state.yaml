@@ -1,0 +1,14 @@
+name: cicd-setup
+status: proposed
+phase: tasks
+artifact_store: hybrid
+mode: interactive
+created_at: '2026-04-28'
+updated_at: '2026-04-28'
+dependencies:
+  - bootstrap-apps
+completed_tasks: []
+pending_tasks:
+  - create-pos-app-ci
+  - create-admin-backend-ci
+  - test-ci-triggers
