@@ -1,0 +1,25 @@
+# IDEs and Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# SDD Artifacts (handled by hybrid mode, but we want the audit trail in git)
+# We keep openspec/ in git for the team
+
+# Local agent tools
+.atl/
+.agents/
+
+# App specific ignores are handled within apps/
+# Node.js
+**/node_modules/
+**/dist/
+**/npm-debug.log*
+
+# Flutter / Dart
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/build/

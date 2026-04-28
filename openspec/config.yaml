@@ -1,0 +1,27 @@
+# openspec/config.yaml
+schema: spec-driven
+
+context: |
+  Tech stack: Flutter, NestJS, SQLite, PostgreSQL
+  Architecture: Clean Architecture, Hexagonal, Tactic DDD
+  Testing: Not yet established
+  Style: Conventional Commits, standard linting
+
+strict_tdd: false # Disabled until apps are scaffolded
+
+rules:
+  proposal:
+    - Include rollback plan for risky changes
+    - Identify affected modules/packages
+  specs:
+    - Use Given/When/Then format for scenarios
+  design:
+    - Document architecture decisions with rationale
+  tasks:
+    - Group tasks by phase (infrastructure, implementation, testing)
+  apply:
+    - Follow existing code patterns and conventions
+  verify:
+    - Run tests if test infrastructure exists
+  archive:
+    - Warn before merging destructive deltas
