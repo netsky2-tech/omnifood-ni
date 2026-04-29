@@ -94,6 +94,23 @@ Para garantizar la durabilidad en el entorno:
 * Habilitación de "Auto-onboarding" para otros tramos del Food Park.
 * Lanzamiento de módulos específicos para otros nichos (ej. Manejo de lotes/vencimientos para farmacias o tallas/colores para tiendas de ropa).
 
+## **Fase 4: Blindaje Comercial y "Hardening" (Semanas 12+)**
+
+**Objetivo:** Convertir el software en un producto escalable y protegido legalmente.
+
+* **Documentación Legal y Técnica (Obligatorio DGI):**
+    * **Manual de Usuario y Técnico:** La DGI exige estos manuales para autorizar el sistema a cualquier contribuyente.
+    * **Contrato de Asistencia Técnica:** Debes tener un modelo de contrato listo. La ley nicaragüense vincula la autorización del sistema a la existencia de un responsable técnico que brinde soporte.
+* **Protección de Propiedad Intelectual (MIFIC):**
+    * **Registro de Marca:** Iniciar el trámite en el Registro de la Propiedad Intelectual (Managua) para proteger el nombre "OmniFood NI".
+    * **Depósito de Obra (Software):** Registrar el código fuente para tener respaldo legal ante posibles plagios en el food park.
+* **Estrategia de Onboarding (Venta Rápida):**
+    * **Módulo de Importación Masiva:** Herramienta para cargar menús e inventarios desde Excel. Si un cliente quiere cambiarse de Neox a tu sistema, el proceso debe durar minutos, no días.
+    * **Base de Datos de Insumos Predeterminada:** Tener precargados insumos comunes (leche, tipos de café, azúcar) para que el café solo tenga que ajustar sus costos.
+* **Seguridad y Auditoría Proactiva:**
+    * **Log de Auditoría (Audit Trail):** Registro inalterable de quién abrió caja, quién hizo un descuento y quién anuló una factura. Esto es lo que más valoran los dueños de negocios para evitar robos hormiga.
+    * **Cifrado de Datos en Reposo:** Asegurar que si roban la tablet/terminal, la base de datos SQLite no pueda ser leída por terceros.
+
 ## **Estrategia de Monetización**
 
 **Fee de Implementación:** Cobro único por configuración de hardware y carga de menú/inventario inicial.
