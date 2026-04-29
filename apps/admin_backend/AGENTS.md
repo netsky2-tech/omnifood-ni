@@ -20,6 +20,7 @@ This document provides specific instructions for AI agents working on the **Omni
 2. **Repository Pattern**: Use repositories to abstract persistence details.
 3. **No Deletions**: Invoices can only be canceled, never deleted from the database.
 4. **Validation**: Use NestJS `ValidationPipe` with `class-validator` for all incoming DTOs.
+5. **Strict Typing (No Any)**: Prohibited use of `any`. Use interfaces, DTOs, or `unknown`/`Record<string, unknown>` for dynamic data. Use the `typescript` skill patterns for advanced types.
 
 ---
 
