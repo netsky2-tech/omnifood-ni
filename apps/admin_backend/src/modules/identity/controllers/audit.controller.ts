@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, UseInterceptors, Request, ForbiddenException } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, UseInterceptors, Request } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuditLog } from '../entities/audit-log.entity';

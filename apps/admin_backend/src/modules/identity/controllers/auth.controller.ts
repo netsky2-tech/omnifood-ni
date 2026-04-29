@@ -18,11 +18,11 @@ export class AuthController {
   async refresh(@Body() body: RefreshTokenDto) {
     return this.authService.refreshTokens(body.userId, body.refreshToken);
   }
-...
+
   @UseGuards(AuthGuard)
   @UseInterceptors(TenantInterceptor)
   @Get('staff')
   async getStaff(@GetTenantId() tenantId: string) {
-    return this.authService.getStaffForSync(tenantId);
+    return this.authService.getStaffForSync(tenantId || '');
   }
 }
