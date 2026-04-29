@@ -49,6 +49,6 @@ void main() {
     );
 
     // Verify that login screen is shown
-    expect(find.text('Iniciar Sesión'), findsOneWidget);
+    expect(find.text('INGRESAR'), findsOneWidget);
   });
 }
