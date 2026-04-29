@@ -1,30 +1,54 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
+import 'package:provider/provider.dart';
 import 'package:pos_app/main.dart';
+import 'package:pos_app/ui/features/auth/viewmodels/login_viewmodel.dart';
+import 'package:pos_app/ui/features/auth/viewmodels/lock_screen_viewmodel.dart';
+import 'package:pos_app/domain/repositories/auth_repository.dart';
+import 'package:pos_app/data/daos/user_dao.dart';
+import 'package:pos_app/domain/models/user.dart';
+import 'package:pos_app/data/models/user_entity.dart';
+
+// Manual fakes for smoke test
+class FakeAuthRepository implements AuthRepository {
+  @override
+  Future<User?> loginOnline(String email, String password) async => null;
+  @override
+  Future<void> syncStaff() async {}
+  @override
+  Future<User?> loginOffline(String userId, String pin) async => null;
+  @override
+  Future<User?> getCurrentUser() async => null;
+  @override
+  Future<void> logout() async {}
+}
+
+class FakeUserDao implements UserDao {
+  @override
+  Future<List<UserEntity>> findAllActiveUsers() async => [];
+  @override
+  Future<UserEntity?> findUserById(String id) async => null;
+  @override
+  Future<void> insertUsers(List<UserEntity> users) async {}
+  @override
+  Future<void> deleteAllUsers() async {}
+}
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('App smoke test', (WidgetTester tester) async {
+    final fakeAuth = FakeAuthRepository();
+    final fakeUserDao = FakeUserDao();
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => LoginViewModel(fakeAuth)),
+          ChangeNotifierProvider(create: (_) => LockScreenViewModel(fakeAuth, fakeUserDao)),
+        ],
+        child: const MyApp(),
+      ),
+    );
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // Verify that login screen is shown
+    expect(find.text('Iniciar Sesión'), findsOneWidget);
   });
 }
