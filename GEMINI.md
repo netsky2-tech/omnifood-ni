@@ -55,6 +55,7 @@ Usamos **Aggregates** (ej: Venta + Items), **Value Objects** y **Entities** para
 - **Regla #2**: Offline-first desde el día 1. Si no funciona sin WiFi, no sirve.
 - **Regla #3**: Las facturas son inmutables. Se anulan, no se borran (`is_canceled`).
 - **Regla #4**: Test-First (TDD). Con la infraestructura lista, los cambios significativos deben venir con sus tests correspondientes.
+- **Regla #5**: **PROHIBIDO EL USO DE `any`**. El tipado debe ser estricto en todo el proyecto. Si un dato es dinámico, usá `unknown` o `Record<string, unknown>`, pero nunca `any`. No seas vago, loco.
 
 ---
 

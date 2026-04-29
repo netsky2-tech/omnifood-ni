@@ -20,6 +20,7 @@ This document provides specific instructions for AI agents working on the **Omni
 2. **Aggregates**: Group related entities (e.g., Sale and its Items) into aggregates to ensure transactional consistency.
 3. **Dependency Lock**: Do not update `analyzer` above `6.4.1` without checking Floor/Freezed compatibility.
 4. **Code Generation**: Always run `build_runner` after modifying entities or DAOs.
+5. **Strict Typing**: Use of `any` or `dynamic` (when avoidable) is strictly prohibited. Prefer exhaustive type definitions with Freezed.
 
 ---
 

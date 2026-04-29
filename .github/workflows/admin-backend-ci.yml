@@ -20,6 +20,21 @@ jobs:
       run:
         working-directory: apps/admin_backend
 
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: admin
+          POSTGRES_DB: omnifood
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v4
 
@@ -41,6 +56,13 @@ jobs:
 
       - name: Run E2E tests
         run: npm run test:e2e
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USERNAME: postgres
+          DB_PASSWORD: admin
+          DB_DATABASE: omnifood
+          JWT_SECRET: test-secret
 
   build:
     needs: lint-and-test

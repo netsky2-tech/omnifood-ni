@@ -1,0 +1,35 @@
+name: identity-access-audit
+status: completed
+phases:
+  explore:
+    status: completed
+    artifact: openspec/changes/identity-access-audit/exploration.md
+  propose:
+    status: completed
+    artifact: openspec/changes/identity-access-audit/proposal.md
+  spec:
+    status: completed
+    artifact: openspec/changes/identity-access-audit/spec.md
+  design:
+    status: completed
+    artifact: openspec/changes/identity-access-audit/design.md
+  tasks:
+    status: completed
+    artifact: openspec/changes/identity-access-audit/tasks.md
+  apply:
+    status: completed
+  verify:
+    status: completed
+    artifact: openspec/changes/identity-access-audit/verify-report.md
+  archive:
+    status: pending
+  design:
+    status: pending
+  tasks:
+    status: pending
+  apply:
+    status: pending
+  verify:
+    status: pending
+  archive:
+    status: pending
