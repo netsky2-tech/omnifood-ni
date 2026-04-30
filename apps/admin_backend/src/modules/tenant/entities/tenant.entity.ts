@@ -9,7 +9,7 @@ export class Tenant {
   name: string;
 
   @Column({ nullable: true })
-  ruc: string;
+  ruc: string | null;
 
   @Column({ default: true })
   is_active: boolean;

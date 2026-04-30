@@ -38,7 +38,7 @@ async function provision() {
       // 1. Create Tenant
       const tenant = new Tenant();
       tenant.name = tenantName;
-      tenant.ruc = ruc || undefined;
+      tenant.ruc = ruc || null;
       tenant.is_active = true;
       const savedTenant = await manager.save(tenant);
       console.log(`✅ Tenant creado: ${savedTenant.id}`);
