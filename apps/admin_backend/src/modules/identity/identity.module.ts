@@ -8,6 +8,7 @@ import { AuthService } from './services/auth.service';
 import { UserService } from './services/user.service';
 import { AuthController } from './controllers/auth.controller';
 import { AuditController } from './controllers/audit.controller';
+import { UsersController } from './controllers/users.controller';
 
 @Module({
   imports: [
@@ -21,7 +22,7 @@ import { AuditController } from './controllers/audit.controller';
       }),
     }),
   ],
-  controllers: [AuthController, AuditController],
+  controllers: [AuthController, AuditController, UsersController],
   providers: [AuthService, UserService],
   exports: [AuthService, UserService],
 })
