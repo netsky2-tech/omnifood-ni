@@ -66,4 +66,4 @@ async function provision() {
   }
 }
 
-provision();
+void provision();

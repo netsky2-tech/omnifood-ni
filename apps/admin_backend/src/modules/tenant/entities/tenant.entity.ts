@@ -8,7 +8,7 @@ export class Tenant {
   @Column({ unique: true })
   name: string;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   ruc: string | null;
 
   @Column({ default: true })
