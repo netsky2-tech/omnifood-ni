@@ -1,4 +1,13 @@
-import { IsString, IsEmail, IsNotEmpty, IsArray, ValidateNested, IsOptional, IsUUID, IsObject } from 'class-validator';
+import {
+  IsString,
+  IsEmail,
+  IsNotEmpty,
+  IsArray,
+  ValidateNested,
+  IsOptional,
+  IsUUID,
+  IsObject,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class LoginDto {

@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:dio/dio.dart';
+import 'package:pos_app/domain/services/alerts/alert_service.dart';
+import 'package:pos_app/domain/services/inventory/movement_engine_impl.dart';
+import 'package:pos_app/presentation/services/alert_service_impl.dart';
+import 'package:pos_app/presentation/widgets/inventory_alert_overlay.dart';
+import 'package:pos_app/data/repositories/inventory/inventory_repository_impl.dart';
 import 'data/database/app_database.dart';
 import 'data/repositories/auth_repository_impl.dart';
 import 'data/repositories/audit_repository_impl.dart';
@@ -8,6 +13,16 @@ import 'data/services/local_auth_service.dart';
 import 'data/services/sync_service.dart';
 import 'ui/features/auth/viewmodels/login_viewmodel.dart';
 import 'ui/features/auth/viewmodels/lock_screen_viewmodel.dart';
+import 'ui/features/inventory/suppliers/supplier_view_model.dart';
+import 'ui/features/inventory/warehouses/warehouse_view_model.dart';
+import 'ui/features/inventory/items/insumo_view_model.dart';
+import 'ui/features/inventory/purchases/purchase_view_model.dart';
+import 'ui/features/inventory/shrinkage/shrinkage_view_model.dart';
+import 'ui/features/inventory/suppliers/supplier_view.dart';
+import 'ui/features/inventory/warehouses/warehouse_view.dart';
+import 'ui/features/inventory/items/insumo_view.dart';
+import 'ui/features/inventory/purchases/purchase_view.dart';
+import 'ui/features/inventory/shrinkage/shrinkage_view.dart';
 import 'ui/features/auth/views/login_view.dart';
 import 'ui/features/auth/views/lock_screen_view.dart';
 
@@ -35,122 +50,149 @@ void main() async {
   final syncService = SyncService(auditRepository);
   syncService.start();
 
+  final alertService = AlertServiceImpl();
+  final inventoryRepository = InventoryRepositoryImpl(
+    insumoDao: database.insumoDao,
+    recipeDao: database.recipeDao,
+    movementDao: database.movementDao,
+    supplierDao: database.supplierDao,
+    warehouseDao: database.warehouseDao,
+    uomConversionDao: database.uomConversionDao,
+    batchDao: database.batchDao,
+    database: database,
+  );
+  final movementEngine = MovementEngineImpl(inventoryRepository, alertService);
+
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => LoginViewModel(authRepository)),
         ChangeNotifierProvider(create: (_) => LockScreenViewModel(authRepository, database.userDao)),
+        ChangeNotifierProvider(create: (_) => SupplierViewModel(inventoryRepository)),
+        ChangeNotifierProvider(create: (_) => WarehouseViewModel(inventoryRepository)),
+        ChangeNotifierProvider(create: (_) => InsumoViewModel(inventoryRepository)),
+        ChangeNotifierProvider(create: (_) => PurchaseViewModel(inventoryRepository)),
+        ChangeNotifierProvider(create: (_) => ShrinkageViewModel(inventoryRepository, movementEngine)),
         Provider<AuditRepositoryImpl>.value(value: auditRepository),
+        Provider<AlertService>.value(value: alertService),
+        Provider<MovementEngineImpl>.value(value: movementEngine),
       ],
-      child: const MyApp(),
+      child: MyApp(alertService: alertService),
     ),
   );
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final AlertService alertService;
+  const MyApp({super.key, required this.alertService});
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'OmniFood NI POS',
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: const ColorScheme(
-          brightness: Brightness.light,
-          primary: Color(0xFF3F6167), // Muted Teal
-          onPrimary: Colors.white,
-          primaryContainer: Color(0xFF577A80),
-          onPrimaryContainer: Color(0xFFF7FEFF),
-          secondary: Color(0xFF546163), // Cool Gray
-          onSecondary: Colors.white,
-          tertiary: Color(0xFF79573F), // Warm Brown
-          onTertiary: Colors.white,
-          error: Color(0xFFBA1A1A),
-          onError: Colors.white,
-          surface: Color(0xFFFAF9F9),
-          onSurface: Color(0xFF1A1C1C),
-          surfaceContainerHighest: Color(0xFFE3E2E2),
-          onSurfaceVariant: Color(0xFF414849),
-          outline: Color(0xFF71787A),
-          outlineVariant: Color(0xFFC1C8C9),
-        ),
-        scaffoldBackgroundColor: const Color(0xFFFAF9F9),
-        fontFamily: 'Inter',
-        textTheme: const TextTheme(
-          headlineLarge: TextStyle(
-            fontSize: 32,
-            fontWeight: FontWeight.w700,
-            letterSpacing: -0.64, // -0.02em
-            height: 1.25, // 40px
+    return InventoryAlertOverlay(
+      alertService: alertService,
+      child: MaterialApp(
+        title: 'OmniFood NI POS',
+        theme: ThemeData(
+          useMaterial3: true,
+          colorScheme: const ColorScheme(
+            brightness: Brightness.light,
+            primary: Color(0xFF3F6167), // Muted Teal
+            onPrimary: Colors.white,
+            primaryContainer: Color(0xFF577A80),
+            onPrimaryContainer: Color(0xFFF7FEFF),
+            secondary: Color(0xFF546163), // Cool Gray
+            onSecondary: Colors.white,
+            tertiary: Color(0xFF79573F), // Warm Brown
+            onTertiary: Colors.white,
+            error: Color(0xFFBA1A1A),
+            onError: Colors.white,
+            surface: Color(0xFFFAF9F9),
+            onSurface: Color(0xFF1A1C1C),
+            surfaceContainerHighest: Color(0xFFE3E2E2),
+            onSurfaceVariant: Color(0xFF414849),
+            outline: Color(0xFF71787A),
+            outlineVariant: Color(0xFFC1C8C9),
           ),
-          headlineMedium: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.w600,
-            letterSpacing: -0.24, // -0.01em
-            height: 1.33, // 32px
+          scaffoldBackgroundColor: const Color(0xFFFAF9F9),
+          fontFamily: 'Inter',
+          textTheme: const TextTheme(
+            headlineLarge: TextStyle(
+              fontSize: 32,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.64, // -0.02em
+              height: 1.25, // 40px
+            ),
+            headlineMedium: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w600,
+              letterSpacing: -0.24, // -0.01em
+              height: 1.33, // 32px
+            ),
+            bodyLarge: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w400,
+              height: 1.55, // 28px
+            ),
+            bodyMedium: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w400,
+              height: 1.5, // 24px
+            ),
+            labelLarge: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              height: 1.42, // 20px
+            ),
           ),
-          bodyLarge: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w400,
-            height: 1.55, // 28px
+          elevatedButtonTheme: ElevatedButtonThemeData(
+            style: ElevatedButton.styleFrom(
+              elevation: 0,
+              backgroundColor: const Color(0xFF3F6167),
+              foregroundColor: Colors.white,
+              minimumSize: const Size.fromHeight(48),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(4),
+                side: const BorderSide(color: Color(0xFF767777), width: 1),
+              ),
+            ),
           ),
-          bodyMedium: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w400,
-            height: 1.5, // 24px
+          inputDecorationTheme: InputDecorationTheme(
+            filled: true,
+            fillColor: Colors.white,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(4),
+              borderSide: const BorderSide(color: Color(0xFF767777), width: 1),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(4),
+              borderSide: const BorderSide(color: Color(0xFF767777), width: 1),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(4),
+              borderSide: const BorderSide(color: Color(0xFF3F6167), width: 2),
+            ),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           ),
-          labelLarge: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-            height: 1.42, // 20px
-          ),
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
+          cardTheme: CardThemeData(
             elevation: 0,
-            backgroundColor: const Color(0xFF3F6167),
-            foregroundColor: Colors.white,
-            minimumSize: const Size.fromHeight(48),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(4),
               side: const BorderSide(color: Color(0xFF767777), width: 1),
             ),
+            color: Colors.white,
           ),
         ),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: Colors.white,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(4),
-            borderSide: const BorderSide(color: Color(0xFF767777), width: 1),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(4),
-            borderSide: const BorderSide(color: Color(0xFF767777), width: 1),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(4),
-            borderSide: const BorderSide(color: Color(0xFF3F6167), width: 2),
-          ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        ),
-        cardTheme: CardThemeData(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(4),
-            side: const BorderSide(color: Color(0xFF767777), width: 1),
-          ),
-          color: Colors.white,
-        ),
-      ),
-      initialRoute: '/',
-
-      routes: {
-        '/': (context) => const LoginView(),
-        '/lock': (context) => const LockScreenView(),
-        '/home': (context) => const PlaceholderHome(),
-      },
+        initialRoute: '/',
+        routes: {
+          '/': (context) => const LoginView(),
+          '/lock': (context) => const LockScreenView(),
+          '/home': (context) => const PlaceholderHome(),
+          '/inventory/items': (context) => const InsumoView(),
+          '/inventory/suppliers': (context) => const SupplierView(),
+          '/inventory/warehouses': (context) => const WarehouseView(),
+          '/inventory/purchases': (context) => const PurchaseView(),
+          '/inventory/shrinkage': (context) => const ShrinkageView(),
+          },      ),
     );
   }
 }

@@ -4,15 +4,27 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { IdentityModule } from '../../modules/identity/identity.module';
+import { InventoryModule } from '../../modules/inventory/inventory.module';
+import { NotificationsModule } from '../../modules/notifications/notifications.module';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { Tenant } from '../../modules/tenant/entities/tenant.entity';
 import { User } from '../../modules/identity/entities/user.entity';
 import { AuditLog } from '../../modules/identity/entities/audit-log.entity';
+import { Insumo } from '../../modules/inventory/entities/insumo.entity';
+import { Product } from '../../modules/inventory/entities/product.entity';
+import { Recipe } from '../../modules/inventory/entities/recipe.entity';
+import { InventoryMovement } from '../../modules/inventory/entities/inventory-movement.entity';
+import { Supplier } from '../../modules/inventory/entities/supplier.entity';
+import { Warehouse } from '../../modules/inventory/entities/warehouse.entity';
+import { UomConversion } from '../../modules/inventory/entities/uom-conversion.entity';
+import { Batch } from '../../modules/inventory/entities/batch.entity';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    EventEmitterModule.forRoot(),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -23,11 +35,25 @@ import { AuditLog } from '../../modules/identity/entities/audit-log.entity';
         username: configService.get<string>('DB_USERNAME', 'postgres'),
         password: configService.get<string>('DB_PASSWORD', 'admin'),
         database: configService.get<string>('DB_DATABASE', 'omnifood'),
-        entities: [Tenant, User, AuditLog],
+        entities: [
+          Tenant,
+          User,
+          AuditLog,
+          Insumo,
+          Product,
+          Recipe,
+          InventoryMovement,
+          Supplier,
+          Warehouse,
+          UomConversion,
+          Batch,
+        ],
         synchronize: true, // Only for development
       }),
     }),
     IdentityModule,
+    InventoryModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

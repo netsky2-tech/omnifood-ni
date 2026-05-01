@@ -23,9 +23,14 @@ export class AuthService {
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
-    const tokens = await this.getTokens(user.id, user.email, user.tenant_id, user.role);
+    const tokens = await this.getTokens(
+      user.id,
+      user.email,
+      user.tenant_id,
+      user.role,
+    );
     await this.updateRefreshToken(user.id, tokens.refresh_token);
-    
+
     return {
       ...tokens,
       user: {
@@ -47,12 +52,20 @@ export class AuthService {
       throw new UnauthorizedException('Acceso denegado');
     }
 
-    const refreshTokenMatches = await bcrypt.compare(refreshToken, user.hashed_refresh_token);
+    const refreshTokenMatches = await bcrypt.compare(
+      refreshToken,
+      user.hashed_refresh_token,
+    );
     if (!refreshTokenMatches) {
       throw new UnauthorizedException('Token inválido');
     }
 
-    const tokens = await this.getTokens(user.id, user.email, user.tenant_id, user.role);
+    const tokens = await this.getTokens(
+      user.id,
+      user.email,
+      user.tenant_id,
+      user.role,
+    );
     await this.updateRefreshToken(user.id, tokens.refresh_token);
     return tokens;
   }
@@ -64,7 +77,12 @@ export class AuthService {
     });
   }
 
-  async getTokens(userId: string, email: string, tenantId: string, role: string) {
+  async getTokens(
+    userId: string,
+    email: string,
+    tenantId: string,
+    role: string,
+  ) {
     const payload = { sub: userId, email, tenant_id: tenantId, role };
     const [at, rt] = await Promise.all([
       this.jwtService.signAsync(payload, { expiresIn: '1h' }),

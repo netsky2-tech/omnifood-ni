@@ -1,4 +1,11 @@
-import { Controller, Post, Body, UseGuards, UseInterceptors, Request } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  UseGuards,
+  UseInterceptors,
+  Request,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuditLog } from '../entities/audit-log.entity';
@@ -23,8 +30,8 @@ export class AuditController {
     @Request() req: { user: { sub: string } },
   ) {
     const userId = req.user.sub;
-    
-    const logsToSave = dto.logs.map(log => {
+
+    const logsToSave = dto.logs.map((log) => {
       // Security Check: Verify user can only push logs for themselves
       // Unless they have a higher role (Logic can be expanded here)
       return {

@@ -7,6 +7,7 @@ import 'package:pos_app/domain/repositories/auth_repository.dart';
 import 'package:pos_app/data/daos/user_dao.dart';
 import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/data/models/user_entity.dart';
+import 'package:pos_app/domain/services/alerts/alert_service.dart';
 
 // Manual fakes for smoke test
 class FakeAuthRepository implements AuthRepository {
@@ -33,10 +34,18 @@ class FakeUserDao implements UserDao {
   Future<void> deleteAllUsers() async {}
 }
 
+class FakeAlertService implements AlertService {
+  @override
+  Stream<AlertMessage> get alertStream => const Stream.empty();
+  @override
+  void notifyLowStock(String insumoName, double currentStock, double parLevel) {}
+}
+
 void main() {
   testWidgets('App smoke test', (WidgetTester tester) async {
     final fakeAuth = FakeAuthRepository();
     final fakeUserDao = FakeUserDao();
+    final fakeAlertService = FakeAlertService();
 
     await tester.pumpWidget(
       MultiProvider(
@@ -44,7 +53,7 @@ void main() {
           ChangeNotifierProvider(create: (_) => LoginViewModel(fakeAuth)),
           ChangeNotifierProvider(create: (_) => LockScreenViewModel(fakeAuth, fakeUserDao)),
         ],
-        child: const MyApp(),
+        child: MyApp(alertService: fakeAlertService),
       ),
     );
 

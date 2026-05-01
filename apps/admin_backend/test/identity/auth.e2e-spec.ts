@@ -28,9 +28,7 @@ describe('AuthController (e2e)', () => {
 
   describe('/identity/staff (GET)', () => {
     it('should return 401 when no token is provided', () => {
-      return request(app.getHttpServer())
-        .get('/identity/staff')
-        .expect(401);
+      return request(app.getHttpServer()).get('/identity/staff').expect(401);
     });
   });
 
