@@ -7,7 +7,19 @@ context: |
   Testing: Not yet established
   Style: Conventional Commits, standard linting
 
-strict_tdd: false # Disabled until apps are scaffolded
+strict_tdd: true
+
+testing:
+  admin_backend:
+    runner: jest
+    command: npm test
+    e2e: npm run test:e2e
+    lint: npm run lint
+  pos_app:
+    runner: flutter_test
+    command: flutter test
+    lint: flutter analyze
+    codegen: flutter pub run build_runner build
 
 rules:
   proposal:
