@@ -22,6 +22,7 @@ This document provides essential context and instructions for AI agents working 
 #### Frontend POS (`apps/pos_app` - Flutter)
 - **Pattern**: MVVM (Views + ViewModels using `ChangeNotifier` & `Provider`).
 - **Persistence**: **Floor (SQLite)**.
+- **Floor @transaction**: Methods annotated with `@transaction` in DAOs **MUST** use positional arguments. Named arguments break code generation in `.g.dart` files.
 - **Immutability**: Use **Freezed** for all domain models.
 - **Constraints**: Locked `analyzer: 6.4.1` in `pubspec.yaml` to resolve conflicts between Floor and Freezed.
 

@@ -96,10 +96,13 @@ export class AuthService {
   }
 
   async getStaffForSync(tenantId: string) {
-    return this.userRepository.find({
-      where: { tenant_id: tenantId, is_active: true },
-      select: ['id', 'name', 'role', 'pin_hash'],
-    });
+    return this.userRepository
+      .createQueryBuilder('user')
+      .select(['user.id', 'user.name', 'user.role'])
+      .addSelect('user.pin_hash')
+      .where('user.tenant_id = :tenantId', { tenantId })
+      .andWhere('user.is_active = :isActive', { isActive: true })
+      .getMany();
   }
 
   async hashPassword(password: string): Promise<string> {

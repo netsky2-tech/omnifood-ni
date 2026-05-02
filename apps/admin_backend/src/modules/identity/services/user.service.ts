@@ -1,4 +1,8 @@
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
@@ -16,9 +20,9 @@ export class UserService {
   ) {}
 
   async findByTenant(tenantId: string): Promise<User[]> {
-    return this.userRepository.find({ 
+    return this.userRepository.find({
       where: { tenant_id: tenantId, is_active: true },
-      select: ['id', 'email', 'name', 'role', 'created_at']
+      select: ['id', 'email', 'name', 'role', 'created_at'],
     });
   }
 
@@ -26,8 +30,14 @@ export class UserService {
     return this.userRepository.findOne({ where: { id, is_active: true } });
   }
 
-  async create(dto: CreateUserDto, tenantId: string, adminId: string): Promise<User> {
-    const existing = await this.userRepository.findOne({ where: { email: dto.email } });
+  async create(
+    dto: CreateUserDto,
+    tenantId: string,
+    adminId: string,
+  ): Promise<User> {
+    const existing = await this.userRepository.findOne({
+      where: { email: dto.email },
+    });
     if (existing) {
       throw new ConflictException('El email ya está registrado');
     }
@@ -54,15 +64,22 @@ export class UserService {
     return savedUser;
   }
 
-  async update(id: string, dto: UpdateUserDto, tenantId: string, adminId: string): Promise<User> {
-    const user = await this.userRepository.findOne({ where: { id, tenant_id: tenantId } });
+  async update(
+    id: string,
+    dto: UpdateUserDto,
+    tenantId: string,
+    adminId: string,
+  ): Promise<User> {
+    const user = await this.userRepository.findOne({
+      where: { id, tenant_id: tenantId },
+    });
     if (!user) {
       throw new NotFoundException('Usuario no encontrado');
     }
 
     if (dto.name) user.name = dto.name;
     if (dto.role) user.role = dto.role;
-    
+
     if (dto.password) {
       user.password_hash = await bcrypt.hash(dto.password, 10);
     }
@@ -78,8 +95,14 @@ export class UserService {
     return updatedUser;
   }
 
-  async deactivate(id: string, tenantId: string, adminId: string): Promise<void> {
-    const user = await this.userRepository.findOne({ where: { id, tenant_id: tenantId } });
+  async deactivate(
+    id: string,
+    tenantId: string,
+    adminId: string,
+  ): Promise<void> {
+    const user = await this.userRepository.findOne({
+      where: { id, tenant_id: tenantId },
+    });
     if (!user) {
       throw new NotFoundException('Usuario no encontrado');
     }
@@ -90,7 +113,12 @@ export class UserService {
     await this.logAction('USER_DEACTIVATED', id, tenantId, adminId);
   }
 
-  private async logAction(action: string, targetId: string, tenantId: string, adminId: string) {
+  private async logAction(
+    action: string,
+    targetId: string,
+    tenantId: string,
+    adminId: string,
+  ) {
     const log = new AuditLog();
     log.action = action;
     log.target_type = 'USER';
@@ -100,7 +128,7 @@ export class UserService {
     log.device_id = 'WEB_ADMIN';
     log.timestamp = new Date();
     log.metadata = { timestamp: new Date().toISOString() };
-    
+
     await this.auditRepository.save(log);
   }
 }

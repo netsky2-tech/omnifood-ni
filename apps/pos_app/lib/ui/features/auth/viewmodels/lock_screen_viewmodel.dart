@@ -28,6 +28,18 @@ class LockScreenViewModel extends ChangeNotifier {
 
     final entities = await _userDao.findAllActiveUsers();
     _users = entities.map((e) => e.toDomain()).toList();
+
+    // FALLBACK: Si no hay usuarios (primera vez o backend caído), agregar admin inicial
+    if (_users.isEmpty) {
+      _users.add(const User(
+        id: 'setup-admin',
+        name: 'Admin Inicial (Setup)',
+        email: 'admin@omnifood.ni',
+        role: UserRole.owner,
+        pinHash: '', 
+        isActive: true,
+      ));
+    }
     
     _isLoading = false;
     notifyListeners();

@@ -21,6 +21,7 @@ Seguimos **Clean Architecture** a rajatabla en la carpeta `lib/`:
 - **Regla #1**: Las Views son "tontas". No tienen lógica de negocio ni hacen cálculos de IVA. Todo eso viene del ViewModel o del Domain.
 - **Regla #2**: **SQLite es la fuente de verdad**. Nunca asumas que el backend tiene la última versión del dato mientras el POS está operando.
 - **Regla #3**: Usa **Aggregates** para transacciones complejas (ej: Venta + Items).
+- **Regla #4**: **@transaction requiere parámetros posicionales**. No uses *named arguments* en métodos de DAOs marcados con `@transaction`; esto rompe la generación de código de Floor.
 
 ---
 

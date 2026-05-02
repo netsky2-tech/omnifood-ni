@@ -26,6 +26,7 @@ El proyecto está organizado como un **monorepo-lite** dentro de la carpeta `app
 
 ### 🔧 Resoluciones Técnicas Críticas
 - **Conflicto Floor/Freezed**: Se utiliza un `dependency_override` para `analyzer: 6.4.1` en `pos_app` para permitir que ambos generadores convivan sin errores de Macros/Dart SDK.
+- **Transacciones de Floor**: Los métodos marcados con `@transaction` en los DAOs **DEBEN usar parámetros posicionales**. El uso de *named arguments* (parámetros con nombre) causa errores de generación en el archivo `.g.dart` (mismatch de argumentos).
 
 ---
 

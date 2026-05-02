@@ -28,7 +28,7 @@ class _LockScreenViewState extends State<LockScreenView> {
       setState(() {
         _pin += digit;
       });
-      if (_pin.length >= 4) {
+      if (_pin.length == 6) {
         _attemptUnlock();
       }
     }
@@ -49,11 +49,17 @@ class _LockScreenViewState extends State<LockScreenView> {
   }
 
   Future<void> _attemptUnlock() async {
+    debugPrint('Attempting unlock with PIN of length: ${_pin.length}');
     final navigator = Navigator.of(context);
     final success = await context.read<LockScreenViewModel>().unlock(_pin);
+    
     if (success) {
+      debugPrint('Unlock successful, navigating to /home');
       navigator.pushReplacementNamed('/home');
     } else {
+      debugPrint('Unlock failed');
+      // Give the user a moment to see the full PIN filled before clearing
+      await Future.delayed(const Duration(milliseconds: 300));
       _onClear();
     }
   }
@@ -141,68 +147,85 @@ class _LockScreenViewState extends State<LockScreenView> {
           // Right Side: PIN Pad
           Expanded(
             flex: 2,
-            child: Container(
-              color: colorScheme.surface,
-              padding: const EdgeInsets.all(48.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (viewModel.selectedUser != null) ...[
-                    Text(
-                      'HOLA, ${viewModel.selectedUser!.name.toUpperCase()}',
-                      style: textTheme.headlineMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'INGRESE SU PIN PARA CONTINUAR',
-                      style: textTheme.bodyMedium?.copyWith(color: colorScheme.outline),
-                    ),
-                  ] else ...[
-                    Text(
-                      'SELECCIONE UN USUARIO',
-                      style: textTheme.headlineMedium,
-                    ),
-                  ],
-                  const SizedBox(height: 48),
-                  // Masked PIN Display (Brutalist Style)
-                  Row(
+            child: Stack(
+              children: [
+                Container(
+                  color: colorScheme.surface,
+                  padding: const EdgeInsets.all(48.0),
+                  child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(6, (index) {
-                      final hasDigit = index < _pin.length;
-                      return Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 12),
-                        width: 24,
-                        height: 24,
-                        decoration: BoxDecoration(
-                          color: hasDigit ? colorScheme.primary : Colors.transparent,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                            color: const Color(0xFF767777),
-                            width: 2,
+                    children: [
+                      if (viewModel.selectedUser != null) ...[
+                        Text(
+                          'HOLA, ${viewModel.selectedUser!.name.toUpperCase()}',
+                          style: textTheme.headlineMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'INGRESE SU PIN PARA CONTINUAR',
+                          style: textTheme.bodyMedium?.copyWith(color: colorScheme.outline),
+                        ),
+                      ] else ...[
+                        Text(
+                          'SELECCIONE UN USUARIO',
+                          style: textTheme.headlineMedium,
+                        ),
+                      ],
+                      const SizedBox(height: 48),
+                      // Masked PIN Display (Brutalist Style)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List.generate(6, (index) {
+                          final hasDigit = index < _pin.length;
+                          return Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 12),
+                            width: 24,
+                            height: 24,
+                            decoration: BoxDecoration(
+                              color: hasDigit ? colorScheme.primary : Colors.transparent,
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: const Color(0xFF767777),
+                                width: 2,
+                              ),
+                            ),
+                          );
+                        }),
+                      ),
+                      const SizedBox(height: 48),
+                      if (viewModel.error != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 24),
+                          child: Text(
+                            viewModel.error!,
+                            style: TextStyle(color: colorScheme.error, fontWeight: FontWeight.bold, fontSize: 18),
                           ),
                         ),
-                      );
-                    }),
-                  ),
-                  const SizedBox(height: 48),
-                  if (viewModel.error != null)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 24),
-                      child: Text(
-                        viewModel.error!,
-                        style: TextStyle(color: colorScheme.error, fontWeight: FontWeight.bold),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 450),
+                        child: AbsorbPointer(
+                          absorbing: viewModel.isLoading,
+                          child: Opacity(
+                            opacity: viewModel.isLoading ? 0.5 : 1.0,
+                            child: PinPad(
+                              onKeyPressed: _onPinPressed,
+                              onDelete: _onDelete,
+                              onClear: _onClear,
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 450),
-                    child: PinPad(
-                      onKeyPressed: _onPinPressed,
-                      onDelete: _onDelete,
-                      onClear: _onClear,
+                    ],
+                  ),
+                ),
+                if (viewModel.isLoading)
+                  Container(
+                    color: Colors.white.withValues(alpha: 0.3),
+                    child: const Center(
+                      child: CircularProgressIndicator(),
                     ),
                   ),
-                ],
-              ),
+              ],
             ),
           ),
         ],

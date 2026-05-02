@@ -1,4 +1,5 @@
 import 'package:floor/floor.dart';
+import './product_entity.dart';
 
 @Entity(
   tableName: 'recipes',
@@ -27,30 +28,5 @@ class RecipeEntity {
     required this.ingredientId,
     required this.ingredientType,
     required this.quantity,
-  });
-}
-
-@Entity(tableName: 'products')
-class ProductEntity {
-  @primaryKey
-  final String id;
-  final String name;
-  final String uom;
-  final double stock;
-  @ColumnInfo(name: 'average_cost')
-  final double averageCost;
-  @ColumnInfo(name: 'sell_price')
-  final double sellPrice;
-  @ColumnInfo(name: 'is_active')
-  final bool isActive;
-
-  ProductEntity({
-    required this.id,
-    required this.name,
-    required this.uom,
-    required this.stock,
-    required this.averageCost,
-    required this.sellPrice,
-    this.isActive = true,
   });
 }

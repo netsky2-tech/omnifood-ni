@@ -3,11 +3,13 @@ import '../../domain/models/inventory/recipe.dart';
 import '../../domain/models/inventory/inventory_movement.dart';
 import '../../domain/models/inventory/supplier.dart';
 import '../../domain/models/inventory/warehouse.dart';
+import '../../domain/models/inventory/product.dart';
 import '../models/inventory/insumo_entity.dart';
 import '../models/inventory/recipe_entity.dart';
 import '../models/inventory/movement_entity.dart';
 import '../models/inventory/supplier_entity.dart';
 import '../models/inventory/warehouse_entity.dart';
+import '../models/inventory/product_entity.dart';
 
 class InventoryMapper {
   static Insumo toInsumoDomain(InsumoEntity entity) {
@@ -97,6 +99,74 @@ class InventoryMapper {
       timestamp: domain.timestamp.toIso8601String(),
       reason: domain.reason,
       userId: domain.userId,
+    );
+  }
+
+  static Product toProductDomain(
+    ProductEntity entity, {
+    List<ProductVariant> variants = const [],
+    List<Modifier> modifiers = const [],
+  }) {
+    return Product(
+      id: entity.id,
+      name: entity.name,
+      uom: entity.uom,
+      stock: entity.stock,
+      averageCost: entity.averageCost,
+      sellPrice: entity.sellPrice,
+      isActive: entity.isActive,
+      sku: entity.sku,
+      barcode: entity.barcode,
+      variants: variants,
+      availableModifiers: modifiers,
+    );
+  }
+
+  static ProductEntity toProductEntity(Product domain) {
+    return ProductEntity(
+      id: domain.id,
+      name: domain.name,
+      uom: domain.uom,
+      stock: domain.stock,
+      averageCost: domain.averageCost,
+      sellPrice: domain.sellPrice,
+      isActive: domain.isActive,
+      sku: domain.sku,
+      barcode: domain.barcode,
+    );
+  }
+
+  static ProductVariant toVariantDomain(ProductVariantEntity entity) {
+    return ProductVariant(
+      id: entity.id,
+      name: entity.name,
+      priceAdjustment: entity.priceAdjustment,
+    );
+  }
+
+  static ProductVariantEntity toVariantEntity(String productId, ProductVariant domain) {
+    return ProductVariantEntity(
+      id: domain.id,
+      productId: productId,
+      name: domain.name,
+      priceAdjustment: domain.priceAdjustment,
+    );
+  }
+
+  static Modifier toModifierDomain(ProductModifierEntity entity) {
+    return Modifier(
+      id: entity.id,
+      name: entity.name,
+      extraPrice: entity.extraPrice,
+    );
+  }
+
+  static ProductModifierEntity toModifierEntity(String productId, Modifier domain) {
+    return ProductModifierEntity(
+      id: domain.id,
+      productId: productId,
+      name: domain.name,
+      extraPrice: domain.extraPrice,
     );
   }
 }
