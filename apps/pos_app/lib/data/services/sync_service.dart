@@ -1,13 +1,18 @@
 import 'dart:async';
 import 'dart:developer' as developer;
+import 'package:dio/dio.dart';
 import '../../domain/repositories/audit_repository.dart';
+import '../../domain/repositories/sales/sales_repository.dart';
 
 class SyncService {
   final AuditRepository _auditRepository;
+  final SalesRepository _salesRepository;
+  final Dio _dio;
+  
   Timer? _timer;
   bool _isSyncing = false;
 
-  SyncService(this._auditRepository);
+  SyncService(this._auditRepository, this._salesRepository, this._dio);
 
   void start() {
     // Sync every 5 minutes
@@ -28,7 +33,13 @@ class SyncService {
     _isSyncing = true;
     try {
       developer.log('Starting sync...', name: 'SyncService');
+      
+      // 1. Sync Audit Logs
       await _auditRepository.syncLogs();
+      
+      // 2. Sync Sales
+      await _syncSales();
+      
       developer.log('Sync completed successfully', name: 'SyncService');
     } catch (e, stackTrace) {
       developer.log(
@@ -37,9 +48,28 @@ class SyncService {
         error: e,
         stackTrace: stackTrace,
       );
-      // Here we could implement a retry strategy or notify the UI
     } finally {
       _isSyncing = false;
+    }
+  }
+
+  Future<void> _syncSales() async {
+    final unsynced = await _salesRepository.getUnsyncedAggregates();
+    if (unsynced.isEmpty) return;
+
+    try {
+      final response = await _dio.post('/sales/sync', data: unsynced);
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        developer.log('Synced ${unsynced.length} sales to cloud', name: 'SyncService');
+        
+        // Mark all as synced
+        for (final item in unsynced) {
+          await _salesRepository.markAsSynced(item['id']);
+        }
+      }
+    } on DioException catch (e) {
+      developer.log('Failed to sync sales: ${e.message}', name: 'SyncService');
+      // We don't rethrow here to allow other sync operations to continue if added
     }
   }
 }

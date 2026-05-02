@@ -45,8 +45,9 @@ dependencies:
   bcrypt: ^1.2.0
   flutter_secure_storage: ^9.2.2
 
-# dependency_overrides:
-#   analyzer: 6.4.1
+  uuid: any
+dependency_overrides:
+  analyzer: 6.4.1
 
 dev_dependencies:
   flutter_test:

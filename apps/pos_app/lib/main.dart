@@ -8,6 +8,7 @@ import 'package:pos_app/presentation/widgets/inventory_alert_overlay.dart';
 import 'package:pos_app/data/repositories/inventory/inventory_repository_impl.dart';
 import 'data/database/app_database.dart';
 import 'data/repositories/auth_repository_impl.dart';
+import 'domain/repositories/auth_repository.dart';
 import 'data/repositories/audit_repository_impl.dart';
 import 'data/services/local_auth_service.dart';
 import 'data/services/sync_service.dart';
@@ -23,8 +24,13 @@ import 'ui/features/inventory/warehouses/warehouse_view.dart';
 import 'ui/features/inventory/items/insumo_view.dart';
 import 'ui/features/inventory/purchases/purchase_view.dart';
 import 'ui/features/inventory/shrinkage/shrinkage_view.dart';
+import 'data/repositories/sales/sales_repository_impl.dart';
+import 'presentation/features/sales/view_models/sale_view_model.dart';
+import 'ui/features/sales/sale_view.dart';
 import 'ui/features/auth/views/login_view.dart';
 import 'ui/features/auth/views/lock_screen_view.dart';
+import 'domain/services/sales/dgi_numbering_service.dart';
+import 'data/services/sales/dgi_numbering_service_impl.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -40,15 +46,24 @@ void main() async {
   final dio = Dio(BaseOptions(baseUrl: baseUrl));
   final localAuthService = LocalAuthService();
   final authRepository = AuthRepositoryImpl(database.userDao, localAuthService, dio);
+
+  // Add Auth Interceptor
+  dio.interceptors.add(InterceptorsWrapper(
+    onRequest: (options, handler) async {
+      final token = await authRepository.getAccessToken();
+      if (token != null) {
+        options.headers['Authorization'] = 'Bearer $token';
+      }
+      return handler.next(options);
+    },
+  ));
+
   final auditRepository = AuditRepositoryImpl(
     database.auditDao,
     authRepository,
     dio,
     deviceId,
   );
-
-  final syncService = SyncService(auditRepository);
-  syncService.start();
 
   final alertService = AlertServiceImpl();
   final inventoryRepository = InventoryRepositoryImpl(
@@ -63,6 +78,29 @@ void main() async {
   );
   final movementEngine = MovementEngineImpl(inventoryRepository, alertService);
 
+  // Sales Module Initialization
+  final numberingService = DgiNumberingServiceImpl(database.localConfigDao);
+  // Provision initial DGI range for Pilot (Coffee Shop)
+  await numberingService.initializeRange(
+    prefix: '001-001-01-', 
+    start: 1, 
+    end: 1000,
+  );
+
+  final salesRepository = SalesRepositoryImpl(
+    database: database,
+    invoiceDao: database.invoiceDao,
+    itemDao: database.invoiceItemDao,
+    paymentDao: database.paymentDao,
+    transactionDao: database.salesTransactionDao,
+    numberingService: numberingService,
+    movementEngine: movementEngine,
+    auditRepository: auditRepository,
+  );
+
+  final syncService = SyncService(auditRepository, salesRepository, dio);
+  syncService.start();
+
   runApp(
     MultiProvider(
       providers: [
@@ -73,9 +111,19 @@ void main() async {
         ChangeNotifierProvider(create: (_) => InsumoViewModel(inventoryRepository)),
         ChangeNotifierProvider(create: (_) => PurchaseViewModel(inventoryRepository)),
         ChangeNotifierProvider(create: (_) => ShrinkageViewModel(inventoryRepository, movementEngine)),
+        ChangeNotifierProvider(create: (_) => SaleViewModel(
+          salesRepository, 
+          inventoryRepository, 
+          authRepository,
+          database,
+        )),
+        Provider<AuthRepository>.value(value: authRepository),
         Provider<AuditRepositoryImpl>.value(value: auditRepository),
         Provider<AlertService>.value(value: alertService),
         Provider<MovementEngineImpl>.value(value: movementEngine),
+        Provider<SalesRepositoryImpl>.value(value: salesRepository),
+        Provider<DgiNumberingService>.value(value: numberingService),
+        Provider<SyncService>.value(value: syncService),
       ],
       child: MyApp(alertService: alertService),
     ),
@@ -186,13 +234,15 @@ class MyApp extends StatelessWidget {
         routes: {
           '/': (context) => const LoginView(),
           '/lock': (context) => const LockScreenView(),
-          '/home': (context) => const PlaceholderHome(),
+          '/home': (context) => const SaleView(),
+          '/sales': (context) => const SaleView(),
           '/inventory/items': (context) => const InsumoView(),
           '/inventory/suppliers': (context) => const SupplierView(),
           '/inventory/warehouses': (context) => const WarehouseView(),
           '/inventory/purchases': (context) => const PurchaseView(),
           '/inventory/shrinkage': (context) => const ShrinkageView(),
-          },      ),
+          },
+      ),
     );
   }
 }

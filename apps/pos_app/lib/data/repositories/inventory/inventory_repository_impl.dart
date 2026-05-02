@@ -1,10 +1,15 @@
 import '../../../domain/models/inventory/insumo.dart';
 import '../../../domain/models/inventory/inventory_movement.dart';
-import '../../../domain/models/inventory/recipe.dart';
+import '../../../domain/models/inventory/product.dart';
 import '../../../domain/models/inventory/supplier.dart';
 import '../../../domain/models/inventory/warehouse.dart';
 import '../../../domain/models/inventory/uom_conversion.dart';
 import '../../../domain/models/inventory/batch.dart';
+import '../../../domain/models/inventory/recipe.dart';
+import '../../models/inventory/insumo_entity.dart';
+import '../../models/inventory/uom_conversion_entity.dart';
+import '../../models/inventory/batch_entity.dart';
+import '../../mappers/inventory_mapper.dart';
 import '../../../domain/repositories/inventory/inventory_repository.dart';
 import '../../../data/database/app_database.dart';
 import '../../daos/inventory/insumo_dao.dart';
@@ -14,10 +19,6 @@ import '../../daos/inventory/supplier_dao.dart';
 import '../../daos/inventory/warehouse_dao.dart';
 import '../../daos/inventory/uom_conversion_dao.dart';
 import '../../daos/inventory/batch_dao.dart';
-import '../../models/inventory/insumo_entity.dart';
-import '../../models/inventory/uom_conversion_entity.dart';
-import '../../models/inventory/batch_entity.dart';
-import '../../mappers/inventory_mapper.dart';
 
 class InventoryRepositoryImpl implements InventoryRepository {
   final InsumoDao insumoDao;
@@ -82,6 +83,18 @@ class InventoryRepositoryImpl implements InventoryRepository {
   @override
   Future<void> saveInsumo(Insumo insumo) {
     return insumoDao.insertInsumos([InventoryMapper.toInsumoEntity(insumo)]);
+  }
+
+  @override
+  Future<List<Product>> getActiveProducts() async {
+    final entities = await _database.productDao.findAllActiveProducts();
+    return entities.map(InventoryMapper.toProductDomain).toList();
+  }
+
+  @override
+  Future<Product?> getProductById(String id) async {
+    final entity = await _database.productDao.findProductById(id);
+    return entity != null ? InventoryMapper.toProductDomain(entity) : null;
   }
 
   @override

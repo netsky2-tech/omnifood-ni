@@ -5,6 +5,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { IdentityModule } from '../../modules/identity/identity.module';
 import { InventoryModule } from '../../modules/inventory/inventory.module';
+import { SalesModule } from '../../modules/sales/sales.module';
 import { NotificationsModule } from '../../modules/notifications/notifications.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { Tenant } from '../../modules/tenant/entities/tenant.entity';
@@ -18,6 +19,9 @@ import { Supplier } from '../../modules/inventory/entities/supplier.entity';
 import { Warehouse } from '../../modules/inventory/entities/warehouse.entity';
 import { UomConversion } from '../../modules/inventory/entities/uom-conversion.entity';
 import { Batch } from '../../modules/inventory/entities/batch.entity';
+import { Invoice } from '../../modules/sales/entities/invoice.entity';
+import { InvoiceItem } from '../../modules/sales/entities/invoice-item.entity';
+import { Payment } from '../../modules/sales/entities/payment.entity';
 
 @Module({
   imports: [
@@ -47,12 +51,16 @@ import { Batch } from '../../modules/inventory/entities/batch.entity';
           Warehouse,
           UomConversion,
           Batch,
+          Invoice,
+          InvoiceItem,
+          Payment,
         ],
         synchronize: true, // Only for development
       }),
     }),
     IdentityModule,
     InventoryModule,
+    SalesModule,
     NotificationsModule,
   ],
   controllers: [AppController],
