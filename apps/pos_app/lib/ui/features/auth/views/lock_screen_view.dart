@@ -220,7 +220,7 @@ class _LockScreenViewState extends State<LockScreenView> {
                 ),
                 if (viewModel.isLoading)
                   Container(
-                    color: Colors.white.withOpacity(0.3),
+                    color: Colors.white.withValues(alpha: 0.3),
                     child: const Center(
                       child: CircularProgressIndicator(),
                     ),

@@ -36,7 +36,8 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Configuration (Could be loaded from .env)
-  const String baseUrl = String.fromEnvironment('API_URL', defaultValue: 'http://127.0.0.1:3000/api');
+  const String baseUrl = String.fromEnvironment('API_URL', defaultValue: 'http://192.168.0.6:3000/api');
+  //const String baseUrl = String.fromEnvironment('API_URL', defaultValue: 'http://127.0.0.1:3000/api');
   const String deviceId = String.fromEnvironment('DEVICE_ID', defaultValue: 'pos-terminal-001');
 
   // Initialize Database

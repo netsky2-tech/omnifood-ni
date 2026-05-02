@@ -450,12 +450,16 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
             if (widget.product.variants.isNotEmpty) ...[
               const Text('Seleccionar Variante:', style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              ...widget.product.variants.map((v) => RadioListTile<String>(
-                title: Text('${v.name} (+\$${v.priceAdjustment})'),
-                value: v.id,
+              RadioGroup<String>(
                 groupValue: _selectedVariantId,
                 onChanged: (val) => setState(() => _selectedVariantId = val),
-              )),
+                child: Column(
+                  children: widget.product.variants.map((v) => RadioListTile<String>(
+                    title: Text('${v.name} (+\$${v.priceAdjustment})'),
+                    value: v.id,
+                  )).toList(),
+                ),
+              ),
               const Divider(),
             ],
             if (widget.product.availableModifiers.isNotEmpty) ...[
