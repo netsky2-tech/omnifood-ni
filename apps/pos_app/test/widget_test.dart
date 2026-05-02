@@ -20,6 +20,8 @@ class FakeAuthRepository implements AuthRepository {
   @override
   Future<User?> getCurrentUser() async => null;
   @override
+  Future<String?> getAccessToken() async => null;
+  @override
   Future<void> logout() async {}
 }
 
