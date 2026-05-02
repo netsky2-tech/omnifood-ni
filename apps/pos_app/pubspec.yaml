@@ -46,6 +46,7 @@ dependencies:
   flutter_secure_storage: ^9.2.2
 
   uuid: any
+  shared_preferences: ^2.5.5
 dependency_overrides:
   analyzer: 6.4.1
 

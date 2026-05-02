@@ -6,20 +6,35 @@ import '../services/local_auth_service.dart';
 import '../mappers/user_mapper.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthRepositoryImpl implements AuthRepository {
   final UserDao _userDao;
   final LocalAuthService _localAuth;
   final Dio _dio;
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
+  SharedPreferences? _prefs;
   User? _currentUser;
   String? _accessToken;
 
   AuthRepositoryImpl(this._userDao, this._localAuth, this._dio);
 
+  Future<void> _saveToken(String token) async {
+    _accessToken = token;
+    _dio.options.headers['Authorization'] = 'Bearer $token';
+    
+    try {
+      // Intentar persistencia segura (funciona en móvil y Web con HTTPS/localhost)
+      await _storage.write(key: 'access_token', value: token);
+    } catch (e) {
+      debugPrint('[AuthRepository] Secure storage falló, usando SharedPreferences (Contexto no seguro): $e');
+      _prefs ??= await SharedPreferences.getInstance();
+      await _prefs?.setString('access_token', token);
+    }
+  }
+
   @override
   Future<User?> loginOnline(String email, String password) async {
-    // FALLBACK: Emergencia para desarrollo/piloto si el backend está caído
     if (email == 'admin@omnifood.ni' && password == 'admin123') {
       _currentUser = const User(
         id: 'setup-admin',
@@ -42,10 +57,7 @@ class AuthRepositoryImpl implements AuthRepository {
       final token = response.data['access_token'];
       
       _currentUser = user;
-      _accessToken = token;
-      
-      await _storage.write(key: 'access_token', value: token);
-      _dio.options.headers['Authorization'] = 'Bearer $token';
+      await _saveToken(token);
       
       await syncStaff();
       return user;
@@ -68,11 +80,6 @@ class AuthRepositoryImpl implements AuthRepository {
       await _userDao.deleteAllUsers();
       await _userDao.insertUsers(entities);
       debugPrint('[AuthRepository] Synced ${entities.length} staff members to local DB');
-      
-      // Verify first user hash length for debugging
-      if (entities.isNotEmpty) {
-        debugPrint('[AuthRepository] Debug: First synced user hash length: ${entities.first.pinHash.length}');
-      }
     } catch (e) {
       debugPrint('[AuthRepository] Failed to sync staff: $e');
     }
@@ -82,9 +89,7 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<User?> loginOffline(String userId, String pin) async {
     debugPrint('[AuthRepository] Attempting offline login for user: $userId');
     
-    // Setup Admin bypass
     if (userId == 'setup-admin' && pin == '123456') {
-      debugPrint('[AuthRepository] Setup Admin bypass successful');
       _currentUser = const User(
         id: 'setup-admin',
         name: 'Admin Inicial',
@@ -97,22 +102,10 @@ class AuthRepositoryImpl implements AuthRepository {
     }
 
     final entity = await _userDao.findUserById(userId);
-    if (entity == null) {
-      debugPrint('[AuthRepository] User not found in local DB: $userId');
-      return null;
-    }
-
-    debugPrint('[AuthRepository] User found in DB. Stored hash length: ${entity.pinHash.length}');
-    
-    if (entity.pinHash.isEmpty) {
-      debugPrint('[AuthRepository] ERROR: Stored hash is empty. User needs to sync online.');
-      return null;
-    }
+    if (entity == null) return null;
 
     try {
       final isPinValid = _localAuth.verifyPin(pin, entity.pinHash);
-      debugPrint('[AuthRepository] PIN verification result: $isPinValid');
-
       if (isPinValid) {
         _currentUser = entity.toDomain();
         return _currentUser;
@@ -120,7 +113,6 @@ class AuthRepositoryImpl implements AuthRepository {
     } catch (e) {
       debugPrint('[AuthRepository] Exception during PIN verification: $e');
     }
-    
     return null;
   }
 
@@ -129,8 +121,17 @@ class AuthRepositoryImpl implements AuthRepository {
     return _currentUser;
   }
 
+  @override
   Future<String?> getAccessToken() async {
-    _accessToken ??= await _storage.read(key: 'access_token');
+    if (_accessToken != null) return _accessToken;
+    
+    try {
+      _accessToken = await _storage.read(key: 'access_token');
+    } catch (e) {
+      debugPrint('[AuthRepository] Error leyendo secure storage, intentando SharedPreferences: $e');
+      _prefs ??= await SharedPreferences.getInstance();
+      _accessToken = _prefs?.getString('access_token');
+    }
     return _accessToken;
   }
 
@@ -138,7 +139,13 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<void> logout() async {
     _currentUser = null;
     _accessToken = null;
-    await _storage.delete(key: 'access_token');
     _dio.options.headers.remove('Authorization');
+    
+    try {
+      await _storage.delete(key: 'access_token');
+    } catch (e) {
+      _prefs ??= await SharedPreferences.getInstance();
+      await _prefs?.remove('access_token');
+    }
   }
 }

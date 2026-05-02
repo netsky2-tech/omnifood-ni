@@ -5,5 +5,6 @@ abstract class AuthRepository {
   Future<void> syncStaff();
   Future<User?> loginOffline(String userId, String pin);
   Future<User?> getCurrentUser();
+  Future<String?> getAccessToken();
   Future<void> logout();
 }
