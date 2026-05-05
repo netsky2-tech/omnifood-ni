@@ -23,11 +23,19 @@ class FakeAuthRepository implements AuthRepository {
   Future<String?> getAccessToken() async => null;
   @override
   Future<void> logout() async {}
+  @override
+  Future<List<User>> getAllUsers() async => [];
+  @override
+  Future<void> saveUser(User user, {String? pin}) async {}
+  @override
+  Future<void> deleteUser(String userId) async {}
 }
 
 class FakeUserDao implements UserDao {
   @override
   Future<List<UserEntity>> findAllActiveUsers() async => [];
+  @override
+  Future<List<UserEntity>> findAllUsers() async => [];
   @override
   Future<UserEntity?> findUserById(String id) async => null;
   @override
