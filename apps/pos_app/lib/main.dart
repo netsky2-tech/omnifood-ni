@@ -14,19 +14,31 @@ import 'data/services/local_auth_service.dart';
 import 'data/services/sync_service.dart';
 import 'ui/features/auth/viewmodels/login_viewmodel.dart';
 import 'ui/features/auth/viewmodels/lock_screen_viewmodel.dart';
-import 'ui/features/inventory/suppliers/supplier_view_model.dart';
-import 'ui/features/inventory/warehouses/warehouse_view_model.dart';
 import 'ui/features/inventory/items/insumo_view_model.dart';
 import 'ui/features/inventory/purchases/purchase_view_model.dart';
 import 'ui/features/inventory/shrinkage/shrinkage_view_model.dart';
-import 'ui/features/inventory/suppliers/supplier_view.dart';
-import 'ui/features/inventory/warehouses/warehouse_view.dart';
+import 'ui/features/inventory/recipes/recipe_view_model.dart';
+import 'ui/features/inventory/suppliers/supplier_view_model.dart';
+import 'ui/features/inventory/warehouses/warehouse_view_model.dart';
 import 'ui/features/inventory/items/insumo_view.dart';
 import 'ui/features/inventory/purchases/purchase_view.dart';
 import 'ui/features/inventory/shrinkage/shrinkage_view.dart';
+import 'ui/features/inventory/recipes/recipe_view.dart';
+import 'ui/features/inventory/suppliers/supplier_view.dart';
+import 'ui/features/inventory/warehouses/warehouse_view.dart';
 import 'data/repositories/sales/sales_repository_impl.dart';
 import 'presentation/features/sales/view_models/sale_view_model.dart';
 import 'ui/features/sales/sale_view.dart';
+import 'ui/features/sales/sales_history_view.dart';
+import 'presentation/features/sales/view_models/sales_history_view_model.dart';
+import 'ui/features/sales/reports/dgi_report_view_model.dart';
+import 'ui/features/sales/reports/dgi_report_view.dart';
+import 'ui/features/config/business_profile/business_profile_view_model.dart';
+import 'ui/features/config/business_profile/business_profile_view.dart';
+import 'ui/features/identity/audit/audit_log_view_model.dart';
+import 'ui/features/identity/audit/audit_log_view.dart';
+import 'ui/features/identity/users/user_management_view_model.dart';
+import 'ui/features/identity/users/user_management_view.dart';
 import 'ui/features/auth/views/login_view.dart';
 import 'ui/features/auth/views/lock_screen_view.dart';
 import 'domain/services/sales/dgi_numbering_service.dart';
@@ -75,6 +87,8 @@ void main() async {
     warehouseDao: database.warehouseDao,
     uomConversionDao: database.uomConversionDao,
     batchDao: database.batchDao,
+    purchaseDao: database.purchaseDao,
+    dio: dio,
     database: database,
   );
   final movementEngine = MovementEngineImpl(inventoryRepository, alertService);
@@ -110,8 +124,14 @@ void main() async {
         ChangeNotifierProvider(create: (_) => SupplierViewModel(inventoryRepository)),
         ChangeNotifierProvider(create: (_) => WarehouseViewModel(inventoryRepository)),
         ChangeNotifierProvider(create: (_) => InsumoViewModel(inventoryRepository)),
-        ChangeNotifierProvider(create: (_) => PurchaseViewModel(inventoryRepository)),
+        ChangeNotifierProvider(create: (_) => PurchaseViewModel(inventoryRepository, movementEngine)),
         ChangeNotifierProvider(create: (_) => ShrinkageViewModel(inventoryRepository, movementEngine)),
+        ChangeNotifierProvider(create: (_) => UserManagementViewModel(authRepository)),
+        ChangeNotifierProvider(create: (_) => RecipeViewModel(inventoryRepository)),
+        ChangeNotifierProvider(create: (_) => DgiReportViewModel(salesRepository, database)),
+        ChangeNotifierProvider(create: (_) => BusinessProfileViewModel(database.localConfigDao)),
+        ChangeNotifierProvider(create: (_) => AuditLogViewModel(auditRepository)),
+        ChangeNotifierProvider(create: (_) => SalesHistoryViewModel(database)),
         ChangeNotifierProvider(create: (_) => SaleViewModel(
           salesRepository, 
           inventoryRepository, 
@@ -242,6 +262,12 @@ class MyApp extends StatelessWidget {
           '/inventory/warehouses': (context) => const WarehouseView(),
           '/inventory/purchases': (context) => const PurchaseView(),
           '/inventory/shrinkage': (context) => const ShrinkageView(),
+          '/inventory/recipes': (context) => const RecipeView(),
+          '/sales/reports': (context) => const DgiReportView(),
+          '/sales/history': (context) => const SalesHistoryView(),
+          '/identity/users': (context) => const UserManagementView(),
+          '/config/profile': (context) => const BusinessProfileView(),
+          '/identity/audit': (context) => const AuditLogView(),
           },
       ),
     );

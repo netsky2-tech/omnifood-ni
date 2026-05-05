@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../../../../domain/models/inventory/insumo.dart';
+import '../../../../domain/models/inventory/product.dart';
 import '../../../../domain/models/inventory/warehouse.dart';
 import '../../../../domain/repositories/inventory/inventory_repository.dart';
 
@@ -8,6 +9,9 @@ class InsumoViewModel with ChangeNotifier {
 
   List<Insumo> _insumos = [];
   List<Insumo> get insumos => _insumos;
+
+  List<Product> _products = [];
+  List<Product> get products => _products;
 
   List<Warehouse> _warehouses = [];
   List<Warehouse> get warehouses => _warehouses;
@@ -22,6 +26,7 @@ class InsumoViewModel with ChangeNotifier {
     notifyListeners();
 
     _insumos = await repository.getActiveInsumos();
+    _products = await repository.getActiveProducts();
     _warehouses = await repository.getActiveWarehouses();
 
     _isLoading = false;
@@ -51,5 +56,25 @@ class InsumoViewModel with ChangeNotifier {
 
     await repository.saveInsumo(insumo);
     await loadInitialData();
+  }
+
+  Future<void> saveProductOptions({
+    required String productId,
+    required List<ProductVariant> variants,
+    required List<Modifier> modifiers,
+  }) async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      await repository.saveProductOptions(
+        productId: productId,
+        variants: variants,
+        modifiers: modifiers,
+      );
+      await loadInitialData();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 }

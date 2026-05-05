@@ -67,8 +67,8 @@ class _SaleViewState extends State<SaleView> {
         actions: [
           IconButton(
             icon: const Icon(Icons.assignment_return),
-            onPressed: () => _showReturnsDialog(context),
-            tooltip: 'Devoluciones / Notas de Crédito',
+            onPressed: () => Navigator.pushNamed(context, '/sales/history'),
+            tooltip: 'Historial de Ventas / Devoluciones',
           ),
           IconButton(
             icon: const Icon(Icons.history),
@@ -150,30 +150,8 @@ class _SaleViewState extends State<SaleView> {
     );
   }
 
-  void _showReturnsDialog(BuildContext context) {
-    final controller = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Devolución (Nota de Crédito)'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(hintText: 'Número de Factura...'),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCELAR')),
-          ElevatedButton(
-            onPressed: () {
-              context.read<SaleViewModel>().processReturn(controller.text, 'Devolución de cliente');
-              Navigator.pop(context);
-            }, 
-            child: const Text('BUSCAR'),
-          ),
-        ],
-      ),
-    );
-  }
+  // TODO: Implementar funcionalidad de devoluciones/notas de crédito
+  // void _showReturnsDialog(BuildContext context) { ... }
 
   void _showHoldTicketDialog(BuildContext context) {
     final controller = TextEditingController();

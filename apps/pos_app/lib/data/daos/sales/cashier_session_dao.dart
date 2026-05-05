@@ -3,6 +3,9 @@ import '../../models/sales/cashier_session_entity.dart';
 
 @dao
 abstract class CashierSessionDao {
+  @Query('SELECT * FROM cashier_sessions WHERE id = :id')
+  Future<CashierSessionEntity?> getSessionById(String id);
+
   @Query('SELECT * FROM cashier_sessions WHERE is_closed = 0 LIMIT 1')
   Future<CashierSessionEntity?> getActiveSession();
 

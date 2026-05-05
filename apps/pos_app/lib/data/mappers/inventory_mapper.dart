@@ -88,6 +88,16 @@ class InventoryMapper {
     );
   }
 
+  static RecipeEntity toRecipeEntity(Recipe domain) {
+    return RecipeEntity(
+      id: domain.id,
+      productId: domain.productId,
+      ingredientId: domain.ingredientId,
+      ingredientType: domain.ingredientType.name.toLowerCase(),
+      quantity: domain.quantity,
+    );
+  }
+
   static MovementEntity toMovementEntity(InventoryMovement domain) {
     return MovementEntity(
       id: domain.id,

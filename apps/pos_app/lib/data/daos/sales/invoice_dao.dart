@@ -15,6 +15,9 @@ abstract class InvoiceDao {
   @Query('SELECT * FROM invoices WHERE sync_status = :status')
   Future<List<InvoiceEntity>> getInvoicesBySyncStatus(String status);
 
+  @Query('SELECT * FROM invoices WHERE created_at >= :startTime AND created_at <= :endTime')
+  Future<List<InvoiceEntity>> getInvoicesByTimeRange(int startTime, int endTime);
+
   @Insert(onConflict: OnConflictStrategy.replace)
   Future<void> insertInvoice(InvoiceEntity invoice);
 

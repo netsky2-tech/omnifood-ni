@@ -1,7 +1,9 @@
+import '../../domain/models/audit_log.dart';
 import '../../domain/repositories/audit_repository.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../daos/audit_log_dao.dart';
 import '../models/audit_log_entity.dart';
+import '../mappers/audit_mapper.dart';
 import 'package:dio/dio.dart';
 
 class AuditRepositoryImpl implements AuditRepository {
@@ -50,5 +52,14 @@ class AuditRepositoryImpl implements AuditRepository {
     } catch (e) {
       // Offline or error
     }
+  }
+
+  @override
+  Future<List<AuditLog>> getLocalLogs({DateTime? start, DateTime? end, String? userId}) async {
+    final startTime = (start ?? DateTime.now().subtract(const Duration(days: 30))).toIso8601String();
+    final endTime = (end ?? DateTime.now()).toIso8601String();
+    
+    final entities = await _auditDao.findLogsWithFilters(startTime, endTime, userId ?? "");
+    return entities.map(AuditMapper.toDomain).toList();
   }
 }

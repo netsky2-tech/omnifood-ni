@@ -16,4 +16,8 @@ abstract class SalesRepository {
   Future<void> markAsSynced(String invoiceId);
   Future<void> voidInvoice(String invoiceId, String reason);
   Future<void> createCreditNote({required String originalInvoiceId, required String reason});
+
+  // Reporting
+  Future<List<Invoice>> getInvoicesBySessionId(String sessionId);
+  Future<List<Payment>> getPaymentsBySessionId(String sessionId);
 }

@@ -7,4 +7,9 @@ abstract class AuthRepository {
   Future<User?> getCurrentUser();
   Future<String?> getAccessToken();
   Future<void> logout();
+
+  // User Management
+  Future<List<User>> getAllUsers();
+  Future<void> saveUser(User user, {String? pin});
+  Future<void> deleteUser(String userId);
 }

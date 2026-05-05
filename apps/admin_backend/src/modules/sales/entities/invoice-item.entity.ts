@@ -3,9 +3,11 @@ import {
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
+  OneToMany,
   JoinColumn,
 } from 'typeorm';
 import { Invoice } from './invoice.entity';
+import { InvoiceItemModifier } from './invoice-item-modifier.entity';
 
 @Entity('invoice_items')
 export class InvoiceItem {
@@ -45,4 +47,15 @@ export class InvoiceItem {
 
   @Column('decimal', { precision: 12, scale: 2, default: 0 })
   discount: number;
+
+  @Column({ name: 'variant_id', nullable: true })
+  variantId: string;
+
+  @Column({ nullable: true })
+  notes: string;
+
+  @OneToMany(() => InvoiceItemModifier, (modifier) => modifier.item, {
+    cascade: true,
+  })
+  modifiers: InvoiceItemModifier[];
 }

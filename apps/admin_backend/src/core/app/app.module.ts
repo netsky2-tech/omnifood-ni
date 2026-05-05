@@ -22,6 +22,7 @@ import { Batch } from '../../modules/inventory/entities/batch.entity';
 import { Invoice } from '../../modules/sales/entities/invoice.entity';
 import { InvoiceItem } from '../../modules/sales/entities/invoice-item.entity';
 import { Payment } from '../../modules/sales/entities/payment.entity';
+import { InvoiceItemModifier } from '../../modules/sales/entities/invoice-item-modifier.entity';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { Payment } from '../../modules/sales/entities/payment.entity';
           Invoice,
           InvoiceItem,
           Payment,
+          InvoiceItemModifier,
         ],
         synchronize: true, // Only for development
       }),
