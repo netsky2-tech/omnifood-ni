@@ -164,7 +164,7 @@ class _AddIngredientDialogState extends State<AddIngredientDialog> {
           children: [
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: 'Insumo'),
-              value: _selectedInsumoId,
+              initialValue: _selectedInsumoId,
               items: viewModel.insumos.map((i) => DropdownMenuItem(
                 value: i.id,
                 child: Text(i.name),

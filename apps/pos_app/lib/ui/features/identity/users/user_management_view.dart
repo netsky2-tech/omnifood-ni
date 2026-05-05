@@ -166,7 +166,7 @@ class _UserDialogState extends State<UserDialog> {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<UserRole>(
-              value: _selectedRole,
+              initialValue: _selectedRole,
               decoration: const InputDecoration(labelText: 'Rol'),
               items: UserRole.values.map((r) => DropdownMenuItem(
                 value: r,
