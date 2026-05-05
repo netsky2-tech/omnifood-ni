@@ -332,6 +332,19 @@ class _$UserDao extends UserDao {
   }
 
   @override
+  Future<List<UserEntity>> findAllUsers() async {
+    return _queryAdapter.queryList('SELECT * FROM users',
+        mapper: (Map<String, Object?> row) => UserEntity(
+            id: row['id'] as String,
+            name: row['name'] as String,
+            role: row['role'] as String,
+            pinHash: row['pin_hash'] as String,
+            isActive: (row['is_active'] as int) != 0,
+            email: row['email'] as String?,
+            tenantId: row['tenant_id'] as String?));
+  }
+
+  @override
   Future<UserEntity?> findUserById(String id) async {
     return _queryAdapter.query('SELECT * FROM users WHERE id = ?1',
         mapper: (Map<String, Object?> row) => UserEntity(
@@ -385,7 +398,8 @@ class _$AuditDao extends AuditDao {
 
   @override
   Future<List<AuditLogEntity>> findAllLogs() async {
-    return _queryAdapter.queryList('SELECT * FROM audit_logs',
+    return _queryAdapter.queryList(
+        'SELECT * FROM audit_logs ORDER BY timestamp DESC',
         mapper: (Map<String, Object?> row) => AuditLogEntity(
             id: row['id'] as int?,
             userId: row['user_id'] as String,
@@ -394,6 +408,18 @@ class _$AuditDao extends AuditDao {
             deviceId: row['device_id'] as String,
             metadata: row['metadata'] as String?,
             isSynced: (row['is_synced'] as int) != 0));
+  }
+
+  @override
+  Future<List<AuditLogEntity>> findLogsWithFilters(
+    String start,
+    String end,
+    String userId,
+  ) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM audit_logs WHERE timestamp >= ?1 AND timestamp <= ?2 AND (?3 = \"\" OR user_id = ?3) ORDER BY timestamp DESC',
+        mapper: (Map<String, Object?> row) => AuditLogEntity(id: row['id'] as int?, userId: row['user_id'] as String, action: row['action'] as String, timestamp: row['timestamp'] as String, deviceId: row['device_id'] as String, metadata: row['metadata'] as String?, isSynced: (row['is_synced'] as int) != 0),
+        arguments: [start, end, userId]);
   }
 
   @override
@@ -704,6 +730,20 @@ class _$ProductDao extends ProductDao {
   }
 
   @override
+  Future<void> deleteVariantsByProductId(String productId) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM product_variants WHERE product_id = ?1',
+        arguments: [productId]);
+  }
+
+  @override
+  Future<void> deleteModifiersByProductId(String productId) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM product_modifiers WHERE product_id = ?1',
+        arguments: [productId]);
+  }
+
+  @override
   Future<void> insertProducts(List<ProductEntity> products) async {
     await _productEntityInsertionAdapter.insertList(
         products, OnConflictStrategy.replace);
@@ -757,6 +797,12 @@ class _$RecipeDao extends RecipeDao {
             ingredientType: row['ingredient_type'] as String,
             quantity: row['quantity'] as double),
         arguments: [productId]);
+  }
+
+  @override
+  Future<void> deleteRecipeById(String id) async {
+    await _queryAdapter
+        .queryNoReturn('DELETE FROM recipes WHERE id = ?1', arguments: [id]);
   }
 
   @override
@@ -1300,6 +1346,32 @@ class _$InvoiceDao extends InvoiceDao {
   }
 
   @override
+  Future<List<InvoiceEntity>> getInvoicesByTimeRange(
+    int startTime,
+    int endTime,
+  ) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM invoices WHERE created_at >= ?1 AND created_at <= ?2',
+        mapper: (Map<String, Object?> row) => InvoiceEntity(
+            id: row['id'] as String,
+            number: row['invoice_number'] as String,
+            createdAt: row['created_at'] as int,
+            userId: row['user_id'] as String,
+            subtotal: row['subtotal'] as double,
+            totalTax: row['total_tax'] as double,
+            total: row['total'] as double,
+            isCanceled: (row['is_canceled'] as int) != 0,
+            voidReason: row['void_reason'] as String?,
+            syncStatus: row['sync_status'] as String,
+            paymentStatus: row['payment_status'] as String,
+            customerId: row['customer_id'] as String?,
+            globalTaxOverride: (row['global_tax_override'] as int) != 0,
+            type: row['type'] as String,
+            relatedInvoiceId: row['related_invoice_id'] as String?),
+        arguments: [startTime, endTime]);
+  }
+
+  @override
   Future<String?> getLastInvoiceNumber() async {
     return _queryAdapter.query('SELECT MAX(invoice_number) FROM invoices',
         mapper: (Map<String, Object?> row) => row.values.first as String);
@@ -1417,6 +1489,17 @@ class _$PaymentDao extends PaymentDao {
             exchangeRate: row['exchange_rate'] as double,
             createdAt: row['created_at'] as int?),
         arguments: [invoiceId]);
+  }
+
+  @override
+  Future<List<PaymentEntity>> getPaymentsByTimeRange(
+    int startTime,
+    int endTime,
+  ) async {
+    return _queryAdapter.queryList(
+        'SELECT p.* FROM payments p INNER JOIN invoices i ON p.invoice_id = i.id WHERE i.created_at >= ?1 AND i.created_at <= ?2',
+        mapper: (Map<String, Object?> row) => PaymentEntity(id: row['id'] as String, invoiceId: row['invoice_id'] as String, method: row['method'] as String, amount: row['amount'] as double, currency: row['currency'] as String, exchangeRate: row['exchange_rate'] as double, createdAt: row['created_at'] as int?),
+        arguments: [startTime, endTime]);
   }
 
   @override
@@ -1733,6 +1816,22 @@ class _$CashierSessionDao extends CashierSessionDao {
       _cashierSessionEntityInsertionAdapter;
 
   final UpdateAdapter<CashierSessionEntity> _cashierSessionEntityUpdateAdapter;
+
+  @override
+  Future<CashierSessionEntity?> getSessionById(String id) async {
+    return _queryAdapter.query('SELECT * FROM cashier_sessions WHERE id = ?1',
+        mapper: (Map<String, Object?> row) => CashierSessionEntity(
+            id: row['id'] as String,
+            userId: row['user_id'] as String,
+            openedAt: row['opened_at'] as int,
+            closedAt: row['closed_at'] as int?,
+            openingBalance: row['opening_balance'] as double,
+            closingBalance: row['closing_balance'] as double?,
+            totalSales: row['total_sales'] as double?,
+            totalExpected: row['total_expected'] as double?,
+            isClosed: (row['is_closed'] as int) != 0),
+        arguments: [id]);
+  }
 
   @override
   Future<CashierSessionEntity?> getActiveSession() async {

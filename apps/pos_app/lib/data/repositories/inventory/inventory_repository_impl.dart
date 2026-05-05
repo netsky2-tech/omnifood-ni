@@ -6,10 +6,12 @@ import '../../../domain/models/inventory/warehouse.dart';
 import '../../../domain/models/inventory/uom_conversion.dart';
 import '../../../domain/models/inventory/batch.dart';
 import '../../../domain/models/inventory/recipe.dart';
+import '../../../domain/models/inventory/purchase.dart';
 import '../../models/inventory/insumo_entity.dart';
 import '../../models/inventory/uom_conversion_entity.dart';
 import '../../models/inventory/batch_entity.dart';
 import '../../mappers/inventory_mapper.dart';
+import '../../mappers/purchase_mapper.dart';
 import '../../../domain/repositories/inventory/inventory_repository.dart';
 import '../../../data/database/app_database.dart';
 import '../../daos/inventory/insumo_dao.dart';
@@ -19,6 +21,8 @@ import '../../daos/inventory/supplier_dao.dart';
 import '../../daos/inventory/warehouse_dao.dart';
 import '../../daos/inventory/uom_conversion_dao.dart';
 import '../../daos/inventory/batch_dao.dart';
+import '../../daos/inventory/purchase_dao.dart';
+import 'package:dio/dio.dart';
 
 class InventoryRepositoryImpl implements InventoryRepository {
   final InsumoDao insumoDao;
@@ -28,6 +32,8 @@ class InventoryRepositoryImpl implements InventoryRepository {
   final WarehouseDao warehouseDao;
   final UomConversionDao uomConversionDao;
   final BatchDao batchDao;
+  final PurchaseDao purchaseDao;
+  final Dio dio;
   final AppDatabase _database;
 
   InventoryRepositoryImpl({
@@ -38,6 +44,8 @@ class InventoryRepositoryImpl implements InventoryRepository {
     required this.warehouseDao,
     required this.uomConversionDao,
     required this.batchDao,
+    required this.purchaseDao,
+    required this.dio,
     required AppDatabase database,
   }) : _database = database;
 
@@ -98,9 +106,41 @@ class InventoryRepositoryImpl implements InventoryRepository {
   }
 
   @override
+  Future<void> saveProductOptions({
+    required String productId,
+    required List<ProductVariant> variants,
+    required List<Modifier> modifiers,
+  }) async {
+    await _database.productDao.deleteVariantsByProductId(productId);
+    await _database.productDao.deleteModifiersByProductId(productId);
+
+    if (variants.isNotEmpty) {
+      await _database.productDao.insertVariants(
+        variants.map((v) => InventoryMapper.toVariantEntity(productId, v)).toList(),
+      );
+    }
+
+    if (modifiers.isNotEmpty) {
+      await _database.productDao.insertModifiers(
+        modifiers.map((m) => InventoryMapper.toModifierEntity(productId, m)).toList(),
+      );
+    }
+  }
+
+  @override
   Future<List<Recipe>> getRecipeByProductId(String productId) async {
     final entities = await recipeDao.findRecipeByProductId(productId);
     return entities.map(InventoryMapper.toRecipeDomain).toList();
+  }
+
+  @override
+  Future<void> saveRecipe(Recipe recipe) {
+    return recipeDao.insertRecipes([InventoryMapper.toRecipeEntity(recipe)]);
+  }
+
+  @override
+  Future<void> deleteRecipe(String id) {
+    return recipeDao.deleteRecipeById(id);
   }
 
   @override
@@ -178,5 +218,30 @@ class InventoryRepositoryImpl implements InventoryRepository {
         isDefault: conversion.isDefault,
       )
     ]);
+  }
+
+  @override
+  Future<void> savePurchase(Purchase purchase) async {
+    await purchaseDao.insertPurchase(PurchaseMapper.toEntity(purchase));
+  }
+
+  @override
+  Future<void> queuePurchaseSync(Purchase purchase) async {
+    // First save locally (offline-first)
+    await savePurchase(purchase);
+
+    // Then try to sync immediately
+    try {
+      final response = await dio.post(
+        '/purchases/sync',
+        data: PurchaseMapper.toSyncJson(purchase),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        await purchaseDao.markAsSynced(purchase.id);
+      }
+    } on DioException {
+      // Sync failed, will be retried later by SyncService
+      // Purchase already saved locally - that's the key offline-first behavior
+    }
   }
 }

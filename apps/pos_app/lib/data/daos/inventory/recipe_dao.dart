@@ -9,6 +9,9 @@ abstract class RecipeDao {
 
   @Insert(onConflict: OnConflictStrategy.replace)
   Future<void> insertRecipes(List<RecipeEntity> recipes);
+
+  @Query('DELETE FROM recipes WHERE id = :id')
+  Future<void> deleteRecipeById(String id);
 }
 
 @dao
@@ -36,4 +39,10 @@ abstract class ProductDao {
 
   @Insert(onConflict: OnConflictStrategy.replace)
   Future<void> insertModifiers(List<ProductModifierEntity> modifiers);
+
+  @Query('DELETE FROM product_variants WHERE product_id = :productId')
+  Future<void> deleteVariantsByProductId(String productId);
+
+  @Query('DELETE FROM product_modifiers WHERE product_id = :productId')
+  Future<void> deleteModifiersByProductId(String productId);
 }

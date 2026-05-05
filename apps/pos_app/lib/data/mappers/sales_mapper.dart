@@ -259,6 +259,8 @@ class SalesMapper {
       'paymentStatus': invoice.paymentStatus.name,
       'customerId': invoice.customerId,
       'globalTaxOverride': invoice.globalTaxOverride,
+      'type': invoice.type.name,
+      'relatedInvoiceId': invoice.relatedInvoiceId,
       'items': items.map((item) => {
         'id': item.id,
         'productId': item.productId,
@@ -270,6 +272,12 @@ class SalesMapper {
         'taxAmount': item.taxAmount,
         'total': item.total,
         'discount': item.discount,
+        'variantId': item.variantId,
+        'notes': item.notes,
+        'modifiers': item.selectedModifiers.map((m) => ({
+          'name': m.name,
+          'extraPrice': m.extraPrice,
+        })).toList(),
       }).toList(),
       'payments': payments.map((payment) => {
         'id': payment.id,

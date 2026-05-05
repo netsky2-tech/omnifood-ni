@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import '../../domain/models/user.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../daos/user_dao.dart';
+import '../models/user_entity.dart';
 import '../services/local_auth_service.dart';
 import '../mappers/user_mapper.dart';
 import 'package:dio/dio.dart';
@@ -146,6 +147,41 @@ class AuthRepositoryImpl implements AuthRepository {
     } catch (e) {
       _prefs ??= await SharedPreferences.getInstance();
       await _prefs?.remove('access_token');
+    }
+  }
+
+  @override
+  Future<List<User>> getAllUsers() async {
+    final entities = await _userDao.findAllUsers();
+    return entities.map((e) => e.toDomain()).toList();
+  }
+
+  @override
+  Future<void> saveUser(User user, {String? pin}) async {
+    String? finalPinHash = user.pinHash;
+    if (pin != null && pin.isNotEmpty) {
+      finalPinHash = _localAuth.hashPin(pin);
+    }
+    
+    final updatedUser = user.copyWith(pinHash: finalPinHash);
+    await _userDao.insertUsers([updatedUser.toEntity()]);
+  }
+
+  @override
+  Future<void> deleteUser(String userId) async {
+    final user = await _userDao.findUserById(userId);
+    if (user != null) {
+      // In a real multi-tenant app, we might just mark as inactive
+      // but here we follow the request.
+      await _userDao.insertUsers([UserEntity(
+        id: user.id,
+        name: user.name,
+        role: user.role,
+        pinHash: user.pinHash,
+        isActive: false, // Soft delete
+        email: user.email,
+        tenantId: user.tenantId,
+      )]);
     }
   }
 }

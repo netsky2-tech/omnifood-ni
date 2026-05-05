@@ -3,10 +3,11 @@ import '../../models/inventory/insumo.dart';
 import '../../models/inventory/product.dart';
 import '../../models/inventory/batch.dart';
 import '../../models/inventory/uom_conversion.dart';
-import '../../models/inventory/recipe.dart'; 
+import '../../models/inventory/recipe.dart';
 import '../../models/inventory/inventory_movement.dart';
 import '../../models/inventory/supplier.dart';
 import '../../models/inventory/warehouse.dart';
+import '../../models/inventory/purchase.dart';
 
 abstract class InventoryRepository {
   AppDatabase get database;
@@ -20,8 +21,15 @@ abstract class InventoryRepository {
   // Products
   Future<List<Product>> getActiveProducts();
   Future<Product?> getProductById(String id);
+  Future<void> saveProductOptions({
+    required String productId,
+    required List<ProductVariant> variants,
+    required List<Modifier> modifiers,
+  });
 
   Future<List<Recipe>> getRecipeByProductId(String productId);
+  Future<void> saveRecipe(Recipe recipe);
+  Future<void> deleteRecipe(String id);
 
   Future<void> saveMovement(InventoryMovement movement);
 
@@ -40,4 +48,8 @@ abstract class InventoryRepository {
   // UOM Conversions
   Future<List<UomConversion>> getConversionsByInsumoId(String insumoId);
   Future<void> saveConversion(UomConversion conversion);
+
+  // Purchases
+  Future<void> savePurchase(Purchase purchase);
+  Future<void> queuePurchaseSync(Purchase purchase);
 }

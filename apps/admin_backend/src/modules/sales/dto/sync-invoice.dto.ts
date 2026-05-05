@@ -39,6 +39,28 @@ export class CreateInvoiceItemDto {
 
   @IsNumber()
   discount: number;
+
+  @IsString()
+  @IsOptional()
+  variantId?: string;
+
+  @IsString()
+  @IsOptional()
+  notes?: string;
+
+  @IsArray()
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => CreateModifierDto)
+  modifiers?: CreateModifierDto[];
+}
+
+export class CreateModifierDto {
+  @IsString()
+  name: string;
+
+  @IsNumber()
+  extraPrice: number;
 }
 
 export class CreatePaymentDto {
@@ -98,6 +120,14 @@ export class SyncInvoiceDto {
   @IsBoolean()
   @IsOptional()
   globalTaxOverride?: boolean;
+
+  @IsString()
+  @IsOptional()
+  type?: string;
+
+  @IsString()
+  @IsOptional()
+  relatedInvoiceId?: string;
 
   @IsArray()
   @ValidateNested({ each: true })

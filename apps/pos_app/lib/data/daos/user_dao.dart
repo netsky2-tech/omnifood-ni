@@ -6,6 +6,9 @@ abstract class UserDao {
   @Query('SELECT * FROM users WHERE is_active = 1')
   Future<List<UserEntity>> findAllActiveUsers();
 
+  @Query('SELECT * FROM users')
+  Future<List<UserEntity>> findAllUsers();
+
   @Query('SELECT * FROM users WHERE id = :id')
   Future<UserEntity?> findUserById(String id);
 

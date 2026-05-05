@@ -48,7 +48,7 @@ export class InvoicesService {
   async findAll(tenantId: string): Promise<Invoice[]> {
     return this.invoiceRepository.find({
       where: { tenant_id: tenantId },
-      relations: ['items', 'payments'],
+      relations: ['items', 'items.modifiers', 'payments'],
       order: { created_at: 'DESC' },
     });
   }
@@ -56,7 +56,7 @@ export class InvoicesService {
   async findOne(tenantId: string, id: string): Promise<Invoice | null> {
     const invoice = await this.invoiceRepository.findOne({
       where: { id, tenant_id: tenantId },
-      relations: ['items', 'payments'],
+      relations: ['items', 'items.modifiers', 'payments'],
     });
     return invoice;
   }

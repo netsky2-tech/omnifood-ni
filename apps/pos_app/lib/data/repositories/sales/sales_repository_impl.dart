@@ -281,4 +281,28 @@ class SalesRepositoryImpl implements SalesRepository {
     await numberingService.incrementNumber();
     await auditRepository.log('CREDIT_NOTE_CREATED', metadata: '{"original_id": "$originalInvoiceId", "new_id": "$creditNoteId"}');
   }
+
+  @override
+  Future<List<Invoice>> getInvoicesBySessionId(String sessionId) async {
+    final session = await database.cashierSessionDao.getSessionById(sessionId);
+    if (session == null) return [];
+
+    final startTime = session.openedAt;
+    final endTime = session.closedAt ?? DateTime.now().millisecondsSinceEpoch;
+
+    final entities = await invoiceDao.getInvoicesByTimeRange(startTime, endTime);
+    return entities.map(SalesMapper.toInvoiceDomain).toList();
+  }
+
+  @override
+  Future<List<Payment>> getPaymentsBySessionId(String sessionId) async {
+    final session = await database.cashierSessionDao.getSessionById(sessionId);
+    if (session == null) return [];
+
+    final startTime = session.openedAt;
+    final endTime = session.closedAt ?? DateTime.now().millisecondsSinceEpoch;
+
+    final entities = await paymentDao.getPaymentsByTimeRange(startTime, endTime);
+    return entities.map(SalesMapper.toPaymentDomain).toList();
+  }
 }

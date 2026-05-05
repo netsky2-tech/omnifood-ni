@@ -44,6 +44,7 @@ dependencies:
   json_annotation: ^4.8.1
   bcrypt: ^1.2.0
   flutter_secure_storage: ^9.2.2
+  intl: ^0.20.2
 
   uuid: any
   shared_preferences: ^2.5.5

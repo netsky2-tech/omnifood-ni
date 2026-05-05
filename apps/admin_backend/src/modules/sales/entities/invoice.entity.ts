@@ -65,6 +65,13 @@ export class Invoice {
   @OneToMany(() => Payment, (payment) => payment.invoice, { cascade: true })
   payments: Payment[];
 
+  @Column({ default: 'regular' })
+  type: string;
+
+  @Column({ name: 'related_invoice_id', nullable: true })
+  @Index()
+  relatedInvoiceId: string;
+
   @UpdateDateColumn()
   updated_at: Date;
 }

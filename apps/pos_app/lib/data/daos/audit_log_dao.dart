@@ -3,8 +3,11 @@ import '../models/audit_log_entity.dart';
 
 @dao
 abstract class AuditDao {
-  @Query('SELECT * FROM audit_logs')
+  @Query('SELECT * FROM audit_logs ORDER BY timestamp DESC')
   Future<List<AuditLogEntity>> findAllLogs();
+
+  @Query('SELECT * FROM audit_logs WHERE timestamp >= :start AND timestamp <= :end AND (:userId = "" OR user_id = :userId) ORDER BY timestamp DESC')
+  Future<List<AuditLogEntity>> findLogsWithFilters(String start, String end, String userId);
 
   @Query('SELECT * FROM audit_logs WHERE is_synced = 0')
   Future<List<AuditLogEntity>> findUnsyncedLogs();

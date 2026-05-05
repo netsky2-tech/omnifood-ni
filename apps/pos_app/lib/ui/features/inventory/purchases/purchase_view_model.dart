@@ -5,9 +5,11 @@ import '../../../../domain/models/inventory/purchase.dart';
 import '../../../../domain/models/inventory/uom_conversion.dart';
 import '../../../../domain/repositories/inventory/inventory_repository.dart';
 import '../../../../domain/models/inventory/inventory_movement.dart';
+import '../../../../domain/services/inventory/movement_engine.dart';
 
 class PurchaseViewModel with ChangeNotifier {
   final InventoryRepository repository;
+  final MovementEngine movementEngine;
 
   List<Insumo> _insumos = [];
   List<Insumo> get insumos => _insumos;
@@ -21,7 +23,10 @@ class PurchaseViewModel with ChangeNotifier {
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
-  PurchaseViewModel(this.repository);
+  String? _errorMessage;
+  String? get errorMessage => _errorMessage;
+
+  PurchaseViewModel(this.repository, this.movementEngine);
 
   Future<void> loadInitialData({String? insumoId}) async {
     _isLoading = true;
@@ -44,7 +49,45 @@ class PurchaseViewModel with ChangeNotifier {
     required double quantity,
     required double unitCost,
   }) async {
-    // Logic to be implemented...
+    _errorMessage = null;
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      // 1. Get the UOM conversion
+      final conversion = _conversions.firstWhere(
+        (c) => c.id == uomConversionId,
+        orElse: () => throw ArgumentError('Invalid conversion ID: $uomConversionId'),
+      );
+
+      // 2. Convert quantity to base unit (e.g., sacks -> grams)
+      final quantityInBaseUnit = quantity * conversion.factor;
+
+      // 3. Delegate to MovementEngine (calculates stock, WAC, creates movement)
+      await movementEngine.recordPurchase(insumoId, quantityInBaseUnit, unitCost);
+
+      // 4. Create and persist Purchase locally
+      final purchase = Purchase(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        insumoId: insumoId,
+        supplierId: supplierId,
+        quantity: quantityInBaseUnit,
+        unitCost: unitCost,
+        timestamp: DateTime.now(),
+      );
+      await repository.savePurchase(purchase);
+
+      // 5. Queue for sync with backend (offline-first)
+      await repository.queuePurchaseSync(purchase);
+
+      _isLoading = false;
+      notifyListeners();
+    } catch (e) {
+      _errorMessage = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      rethrow;
+    }
   }
 }
 
