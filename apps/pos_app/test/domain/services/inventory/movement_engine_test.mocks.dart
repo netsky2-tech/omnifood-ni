@@ -11,13 +11,14 @@ import 'package:pos_app/domain/models/inventory/batch.dart' as _i11;
 import 'package:pos_app/domain/models/inventory/insumo.dart' as _i5;
 import 'package:pos_app/domain/models/inventory/inventory_movement.dart' as _i8;
 import 'package:pos_app/domain/models/inventory/product.dart' as _i6;
+import 'package:pos_app/domain/models/inventory/purchase.dart' as _i13;
 import 'package:pos_app/domain/models/inventory/recipe.dart' as _i7;
 import 'package:pos_app/domain/models/inventory/supplier.dart' as _i9;
 import 'package:pos_app/domain/models/inventory/uom_conversion.dart' as _i12;
 import 'package:pos_app/domain/models/inventory/warehouse.dart' as _i10;
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart'
     as _i3;
-import 'package:pos_app/domain/services/alerts/alert_service.dart' as _i13;
+import 'package:pos_app/domain/services/alerts/alert_service.dart' as _i14;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values
@@ -141,6 +142,26 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i4.Future<_i6.Product?>);
 
   @override
+  _i4.Future<void> saveProductOptions({
+    required String? productId,
+    required List<_i6.ProductVariant>? variants,
+    required List<_i6.Modifier>? modifiers,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #saveProductOptions,
+          [],
+          {
+            #productId: productId,
+            #variants: variants,
+            #modifiers: modifiers,
+          },
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
   _i4.Future<List<_i7.Recipe>> getRecipeByProductId(String? productId) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -151,11 +172,42 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i4.Future<List<_i7.Recipe>>);
 
   @override
+  _i4.Future<void> saveRecipe(_i7.Recipe? recipe) => (super.noSuchMethod(
+        Invocation.method(
+          #saveRecipe,
+          [recipe],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> deleteRecipe(String? id) => (super.noSuchMethod(
+        Invocation.method(
+          #deleteRecipe,
+          [id],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
   _i4.Future<void> saveMovement(_i8.InventoryMovement? movement) =>
       (super.noSuchMethod(
         Invocation.method(
           #saveMovement,
           [movement],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> processMovements(List<_i8.InventoryMovement>? movements) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #processMovements,
+          [movements],
         ),
         returnValue: _i4.Future<void>.value(),
         returnValueForMissingStub: _i4.Future<void>.value(),
@@ -242,21 +294,69 @@ class MockInventoryRepository extends _i1.Mock
         returnValue: _i4.Future<void>.value(),
         returnValueForMissingStub: _i4.Future<void>.value(),
       ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> savePurchase(_i13.Purchase? purchase) => (super.noSuchMethod(
+        Invocation.method(
+          #savePurchase,
+          [purchase],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<List<_i8.InventoryMovement>> getUnsyncedMovements() =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getUnsyncedMovements,
+          [],
+        ),
+        returnValue: _i4.Future<List<_i8.InventoryMovement>>.value(
+            <_i8.InventoryMovement>[]),
+      ) as _i4.Future<List<_i8.InventoryMovement>>);
+
+  @override
+  _i4.Future<void> markMovementAsSynced(String? id) => (super.noSuchMethod(
+        Invocation.method(
+          #markMovementAsSynced,
+          [id],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<List<_i8.InventoryMovement>> getRecentMovementsByType(
+    _i8.MovementType? type,
+    int? limit,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getRecentMovementsByType,
+          [
+            type,
+            limit,
+          ],
+        ),
+        returnValue: _i4.Future<List<_i8.InventoryMovement>>.value(
+            <_i8.InventoryMovement>[]),
+      ) as _i4.Future<List<_i8.InventoryMovement>>);
 }
 
 /// A class which mocks [AlertService].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockAlertService extends _i1.Mock implements _i13.AlertService {
+class MockAlertService extends _i1.Mock implements _i14.AlertService {
   MockAlertService() {
     _i1.throwOnMissingStub(this);
   }
 
   @override
-  _i4.Stream<_i13.AlertMessage> get alertStream => (super.noSuchMethod(
+  _i4.Stream<_i14.AlertMessage> get alertStream => (super.noSuchMethod(
         Invocation.getter(#alertStream),
-        returnValue: _i4.Stream<_i13.AlertMessage>.empty(),
-      ) as _i4.Stream<_i13.AlertMessage>);
+        returnValue: _i4.Stream<_i14.AlertMessage>.empty(),
+      ) as _i4.Stream<_i14.AlertMessage>);
 
   @override
   void notifyLowStock(

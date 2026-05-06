@@ -32,6 +32,7 @@ abstract class InventoryRepository {
   Future<void> deleteRecipe(String id);
 
   Future<void> saveMovement(InventoryMovement movement);
+  Future<void> processMovements(List<InventoryMovement> movements);
 
   // Suppliers
   Future<List<Supplier>> getActiveSuppliers();
@@ -51,5 +52,7 @@ abstract class InventoryRepository {
 
   // Purchases
   Future<void> savePurchase(Purchase purchase);
-  Future<void> queuePurchaseSync(Purchase purchase);
+  Future<List<InventoryMovement>> getUnsyncedMovements();
+  Future<void> markMovementAsSynced(String id);
+  Future<List<InventoryMovement>> getRecentMovementsByType(MovementType type, int limit);
 }

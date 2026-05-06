@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { InventoryMovementController } from './inventory-movement.controller';
 import { PurchaseService } from './purchase.service';
 import { ShrinkageService } from './shrinkage.service';
+import { InventoryService } from './inventory.service';
 
 describe('InventoryController', () => {
   let controller: InventoryMovementController;
@@ -22,6 +23,12 @@ describe('InventoryController', () => {
           provide: ShrinkageService,
           useValue: {
             recordShrinkage: jest.fn(),
+          },
+        },
+        {
+          provide: InventoryService,
+          useValue: {
+            syncMovements: jest.fn(),
           },
         },
       ],

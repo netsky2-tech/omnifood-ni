@@ -43,6 +43,7 @@ import 'ui/features/auth/views/login_view.dart';
 import 'ui/features/auth/views/lock_screen_view.dart';
 import 'domain/services/sales/dgi_numbering_service.dart';
 import 'data/services/sales/dgi_numbering_service_impl.dart';
+import 'domain/usecases/inventory/process_sale_inventory_use_case.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -102,6 +103,9 @@ void main() async {
     end: 1000,
   );
 
+  final processInventoryUseCase = ProcessSaleInventoryUseCase(movementEngine);
+  final reverseInventoryUseCase = ReverseSaleInventoryUseCase(movementEngine);
+
   final salesRepository = SalesRepositoryImpl(
     database: database,
     invoiceDao: database.invoiceDao,
@@ -111,9 +115,16 @@ void main() async {
     numberingService: numberingService,
     movementEngine: movementEngine,
     auditRepository: auditRepository,
+    processInventoryUseCase: processInventoryUseCase,
+    reverseInventoryUseCase: reverseInventoryUseCase,
   );
 
-  final syncService = SyncService(auditRepository, salesRepository, dio);
+  final syncService = SyncService(
+    auditRepository,
+    salesRepository,
+    inventoryRepository,
+    dio,
+  );
   syncService.start();
 
   runApp(

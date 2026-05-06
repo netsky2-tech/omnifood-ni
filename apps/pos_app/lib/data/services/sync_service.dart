@@ -4,15 +4,23 @@ import 'package:dio/dio.dart';
 import '../../domain/repositories/audit_repository.dart';
 import '../../domain/repositories/sales/sales_repository.dart';
 
+import '../../domain/repositories/inventory/inventory_repository.dart';
+
 class SyncService {
   final AuditRepository _auditRepository;
   final SalesRepository _salesRepository;
+  final InventoryRepository _inventoryRepository;
   final Dio _dio;
   
   Timer? _timer;
   bool _isSyncing = false;
 
-  SyncService(this._auditRepository, this._salesRepository, this._dio);
+  SyncService(
+    this._auditRepository,
+    this._salesRepository,
+    this._inventoryRepository,
+    this._dio,
+  );
 
   void start() {
     // Sync every 5 minutes
@@ -39,6 +47,9 @@ class SyncService {
       
       // 2. Sync Sales
       await _syncSales();
+
+      // 3. Sync Inventory Movements
+      await _syncInventoryMovements();
       
       developer.log('Sync completed successfully', name: 'SyncService');
     } catch (e, stackTrace) {
@@ -70,6 +81,33 @@ class SyncService {
     } on DioException catch (e) {
       developer.log('Failed to sync sales: ${e.message}', name: 'SyncService');
       // We don't rethrow here to allow other sync operations to continue if added
+    }
+  }
+
+  Future<void> _syncInventoryMovements() async {
+    final unsynced = await _inventoryRepository.getUnsyncedMovements();
+    if (unsynced.isEmpty) return;
+
+    try {
+      final response = await _dio.post(
+        '/inventory/movements/sync',
+        data: unsynced.map((m) => m.toJson()).toList(),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        developer.log(
+          'Synced ${unsynced.length} inventory movements to cloud',
+          name: 'SyncService',
+        );
+
+        for (final movement in unsynced) {
+          await _inventoryRepository.markMovementAsSynced(movement.id);
+        }
+      }
+    } on DioException catch (e) {
+      developer.log(
+        'Failed to sync inventory movements: ${e.message}',
+        name: 'SyncService',
+      );
     }
   }
 }

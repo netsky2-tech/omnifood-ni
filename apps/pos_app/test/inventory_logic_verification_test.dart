@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
 import 'package:pos_app/domain/models/inventory/insumo.dart';
 import 'package:pos_app/domain/models/inventory/recipe.dart';
+import 'package:pos_app/domain/models/inventory/inventory_movement.dart';
 import 'package:mockito/annotations.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
 import 'package:pos_app/domain/services/alerts/alert_service.dart';
@@ -64,13 +65,81 @@ void main() {
       when(mockRepo.getInsumoById('milk')).thenAnswer((_) async => milkInsumo);
 
       // WHEN
-      await engine.recordSale(productId, 1);
+      await engine.recordSale(productId, 1.0);
 
       // THEN
-      verify(mockRepo.updateInsumoStock('coffee-beans', 982.0)).called(1);
-      verify(mockRepo.updateInsumoStock('milk', 1800.0)).called(1);
-      // AND 2 Kardex entries created
-      verify(mockRepo.saveMovement(any)).called(2);
+      verify(mockRepo.processMovements(argThat(predicate<List<InventoryMovement>>((list) {
+        return list.any((m) => m.insumoId == 'coffee-beans' && m.newStock == 982.0) &&
+               list.any((m) => m.insumoId == 'milk' && m.newStock == 1800.0);
+      })))).called(1);
+    });
+
+    test('GIVEN a recursive recipe (Product uses another Product) WHEN a sale is completed THEN all levels MUST be discounted', () async {
+      // GIVEN
+      // Product: "Combo Coffee + Cookie"
+      // -> Product: "Capuccino" (Recursive)
+      //    -> Insumo: "Coffee" (18g)
+      // -> Insumo: "Cookie" (1 unit)
+
+      const comboId = 'combo-1';
+      const capuccinoId = 'capuccino';
+
+      final comboRecipe = [
+        const Recipe(
+          id: 'cr1',
+          productId: comboId,
+          ingredientId: capuccinoId,
+          ingredientType: IngredientType.product,
+          quantity: 1.0,
+        ),
+        const Recipe(
+          id: 'cr2',
+          productId: comboId,
+          ingredientId: 'cookie',
+          ingredientType: IngredientType.insumo,
+          quantity: 1.0,
+        ),
+      ];
+
+      final capuccinoRecipe = [
+        const Recipe(
+          id: 'r1',
+          productId: capuccinoId,
+          ingredientId: 'coffee-beans',
+          ingredientType: IngredientType.insumo,
+          quantity: 18.0,
+        ),
+      ];
+
+      final coffeeInsumo = const Insumo(
+        id: 'coffee-beans',
+        name: 'Granos de Café',
+        consumptionUom: 'g',
+        stock: 1000.0,
+        averageCost: 0.05,
+      );
+
+      final cookieInsumo = const Insumo(
+        id: 'cookie',
+        name: 'Galleta',
+        consumptionUom: 'unit',
+        stock: 50.0,
+        averageCost: 0.5,
+      );
+
+      when(mockRepo.getRecipeByProductId(comboId)).thenAnswer((_) async => comboRecipe);
+      when(mockRepo.getRecipeByProductId(capuccinoId)).thenAnswer((_) async => capuccinoRecipe);
+      when(mockRepo.getInsumoById('coffee-beans')).thenAnswer((_) async => coffeeInsumo);
+      when(mockRepo.getInsumoById('cookie')).thenAnswer((_) async => cookieInsumo);
+
+      // WHEN
+      await engine.recordSale(comboId, 1.0);
+
+      // THEN
+      verify(mockRepo.processMovements(argThat(predicate<List<InventoryMovement>>((list) {
+        return list.any((m) => m.insumoId == 'coffee-beans' && m.newStock == 982.0) &&
+               list.any((m) => m.insumoId == 'cookie' && m.newStock == 49.0);
+      })))).called(1);
     });
   });
 }
