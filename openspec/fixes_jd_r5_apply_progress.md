@@ -57,3 +57,54 @@ Phase 1 complete. Ready for PR creation.
 - **Current work unit**: PR1 — Backend Tenant Isolation
 - **Base**: main (or feature branch for the chain)
 - **Changes**: ~180 lines (within 400-line budget)
+
+---
+
+## PR2: Invoice Unique Index
+
+### TDD Cycle Evidence
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|------|-----------|-------|------------|-----|-------|-------------|----------|
+| 2.1 | `invoice_entity_unique_index_test.dart` | Integration | ✅ 25/25 passed | ✅ Written | ✅ Passed | ✅ 3 cases | ✅ Clean |
+| 2.2 | N/A (codegen) | N/A | N/A | N/A | ✅ Generated | N/A | N/A |
+| 2.3 | `invoice_entity_unique_index_test.dart` | Integration | ✅ 25/25 passed | ✅ Written | ✅ Passed | ✅ 3 cases | ✅ Clean |
+
+### Test Summary
+- **Total tests written**: 3 new tests
+- **Total tests passing**: 28/28 (3 new + 25 existing)
+- **Layers used**: Integration (3)
+- **Approval tests**: None — no refactoring tasks
+- **Pure functions created**: 0 (database operations have side effects)
+
+### Files Changed
+
+| File | Action | What Was Done |
+|------|--------|---------------|
+| `apps/pos_app/lib/data/models/sales/invoice_entity.dart` | Modified | Added `@Index(value: ['invoice_number'], unique: true)` to `@Entity` annotation for DGI compliance |
+| `apps/pos_app/lib/data/daos/sales/invoice_dao.dart` | Modified | Changed `OnConflictStrategy.replace` to `OnConflictStrategy.abort` to properly detect duplicates |
+| `apps/pos_app/lib/data/database/app_database.g.dart` | Generated | Updated with `CREATE UNIQUE INDEX` statement and `INSERT OR ABORT` |
+| `apps/pos_app/test/data/models/sales/invoice_entity_unique_index_test.dart` | Created | 3 integration tests verifying unique constraint behavior |
+
+### Deviations from Design
+The original task only specified adding the unique index annotation. However, to make the unique constraint actually enforceable (and testable), the DAO's `OnConflictStrategy` had to be changed from `replace` to `abort`. Without this change, duplicates would be silently overwritten instead of throwing an error, defeating the purpose of DGI compliance which requires detecting duplicates to generate the next sequential number.
+
+### Issues Found
+1. **DAO conflict strategy incompatible with unique index**: The existing `OnConflictStrategy.replace` would silently overwrite duplicates. Changed to `abort` to properly surface constraint violations for DGI retry logic.
+
+### Test Coverage
+
+#### Unique Index Tests
+1. ✅ `should reject duplicate invoice number with constraint violation` — verifies SQLite throws UNIQUE constraint error
+2. ✅ `should allow different invoice numbers without constraint violation` — verifies normal inserts still work
+3. ✅ `should allow lookup by invoice number efficiently` — verifies the index supports efficient lookups
+
+### Status
+Phase 2 complete. Ready for PR creation.
+
+### PR Boundary
+- **Mode**: chained PR slice (PR 2 of 4)
+- **Chain strategy**: feature-branch-chain
+- **Current work unit**: PR2 — Invoice Unique Index
+- **Base**: PR1 branch (feature/jd-r5-pr1-backend-tenant-isolation)
+- **Changes**: ~45 lines (well within 400-line budget)

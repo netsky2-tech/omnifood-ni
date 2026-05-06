@@ -1,6 +1,11 @@
 import 'package:floor/floor.dart';
 
-@Entity(tableName: 'invoices')
+@Entity(
+  tableName: 'invoices',
+  indices: [
+    Index(value: ['invoice_number'], unique: true),
+  ],
+)
 class InvoiceEntity {
   @primaryKey
   final String id;
