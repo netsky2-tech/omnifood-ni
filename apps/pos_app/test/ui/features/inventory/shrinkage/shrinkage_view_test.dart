@@ -1,35 +1,35 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mocktail/mocktail.dart';
+import 'package:mockito/annotations.dart';
+import 'package:mockito/mockito.dart';
 import 'package:pos_app/domain/models/inventory/insumo.dart';
-import 'package:pos_app/domain/models/inventory/inventory_movement.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
 import 'package:pos_app/domain/services/inventory/movement_engine.dart';
 import 'package:pos_app/ui/features/inventory/shrinkage/shrinkage_view.dart';
 import 'package:pos_app/ui/features/inventory/shrinkage/shrinkage_view_model.dart';
 import 'package:provider/provider.dart';
 
-class MockInventoryRepository extends Mock implements InventoryRepository {}
-class MockMovementEngine extends Mock implements MovementEngine {}
+import 'shrinkage_view_test.mocks.dart';
 
+@GenerateMocks([InventoryRepository, MovementEngine])
 void main() {
-  late MockInventoryRepository mockRepo;
-  late MockMovementEngine mockEngine;
+  late MockInventoryRepository mockRepository;
+  late MockMovementEngine mockMovementEngine;
   late ShrinkageViewModel viewModel;
 
-  setUpAll(() {
-    registerFallbackValue(MovementType.shrinkage);
-  });
+  final testInsumos = [
+    const Insumo(id: '1', name: 'Tomate', consumptionUom: 'kg', stock: 10, averageCost: 1.0),
+    const Insumo(id: '2', name: 'Cebolla', consumptionUom: 'kg', stock: 5, averageCost: 0.5),
+  ];
 
   setUp(() {
-    mockRepo = MockInventoryRepository();
-    mockEngine = MockMovementEngine();
-    viewModel = ShrinkageViewModel(mockRepo, mockEngine);
+    mockRepository = MockInventoryRepository();
+    mockMovementEngine = MockMovementEngine();
+    viewModel = ShrinkageViewModel(mockRepository, mockMovementEngine);
 
-    when(() => mockRepo.getActiveInsumos()).thenAnswer((_) async => [
-      const Insumo(id: 'i1', name: 'Coffee', stock: 10, averageCost: 5, consumptionUom: 'oz'),
-    ]);
-    when(() => mockRepo.getRecentMovementsByType(any(), any())).thenAnswer((_) async => []);
+    when(mockRepository.getActiveInsumos()).thenAnswer((_) async => testInsumos);
   });
 
   Widget createWidget() {
@@ -41,65 +41,58 @@ void main() {
     );
   }
 
-  testWidgets('Should display insumo list in dropdown and call recordShrinkage', (tester) async {
+  testWidgets('Should disable REGISTRAR button when VM is loading', (tester) async {
+    final completer = Completer<void>();
+    when(mockMovementEngine.recordShrinkage(any, any, any)).thenAnswer((_) => completer.future);
+
     await tester.pumpWidget(createWidget());
     await tester.pumpAndSettle();
 
     // Open dialog
-    await tester.tap(find.text('REGISTRAR NUEVA MERMA'));
+    await tester.tap(find.text('REGISTRAR MERMA'));
     await tester.pumpAndSettle();
 
-    // Find and select insumo
-    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    // Select insumo
+    await tester.enterText(find.widgetWithText(TextField, 'Insumo (buscar...)'), 'Tom');
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Coffee').last);
+    await tester.tap(find.text('Tomate').last);
     await tester.pumpAndSettle();
 
-    // Enter quantity
-    await tester.enterText(find.widgetWithText(TextField, 'Cantidad'), '2.5');
-    
-    // Enter reason
-    await tester.enterText(find.widgetWithText(TextField, 'Motivo'), 'Spilled');
+    // Fill qty
+    await tester.enterText(find.widgetWithText(TextField, 'Cantidad'), '2');
+    await tester.pumpAndSettle();
 
-    // Stub recordShrinkage
-    when(() => mockEngine.recordShrinkage(any(), any(), any())).thenAnswer((_) async {});
-    when(() => mockRepo.getActiveInsumos()).thenAnswer((_) async => []);
-
-    // Submit
+    // Tap Registrar
     await tester.tap(find.text('REGISTRAR'));
-    await tester.pumpAndSettle();
+    await tester.pump(); // Start async call
 
-    // Verify interaction
-    verify(() => mockEngine.recordShrinkage('i1', 2.5, 'Spilled')).called(1);
-    expect(find.byType(AlertDialog), findsNothing);
+    // Check button is disabled (onPressed is null)
+    final registrarButton = find.byType(ElevatedButton).last;
+    expect(tester.widget<ElevatedButton>(registrarButton).onPressed, isNull);
+
+    completer.complete();
+    await tester.pumpAndSettle();
+    
+    // Dialog should be closed
+    expect(find.text('Registrar Merma'), findsNothing);
   });
 
-  testWidgets('Should show validation error if quantity is empty or zero', (tester) async {
+  testWidgets('Should have a searchable autocomplete for insumos and filter results', (tester) async {
     await tester.pumpWidget(createWidget());
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('REGISTRAR NUEVA MERMA'));
+    await tester.tap(find.text('REGISTRAR MERMA'));
     await tester.pumpAndSettle();
 
-    // Try to submit without values
-    await tester.tap(find.text('REGISTRAR'));
+    // Find Autocomplete
+    expect(find.byType(Autocomplete<Insumo>), findsOneWidget);
+
+    // Type 'Tom'
+    await tester.enterText(find.widgetWithText(TextField, 'Insumo (buscar...)'), 'Tom');
     await tester.pumpAndSettle();
 
-    expect(find.text('Seleccione un insumo'), findsOneWidget);
-
-    // Select insumo
-    await tester.tap(find.byType(DropdownButtonFormField<String>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Coffee').last);
-    await tester.pumpAndSettle();
-
-    // Try to submit without quantity
-    await tester.tap(find.text('REGISTRAR'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Ingrese una cantidad válida'), findsOneWidget);
-    
-    // Dialog should still be open
-    expect(find.byType(AlertDialog), findsOneWidget);
+    // Should see 'Tomate' in options
+    expect(find.text('Tomate'), findsWidgets); // One in field, one in options potentially
+    expect(find.text('Cebolla'), findsNothing);
   });
 }

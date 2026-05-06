@@ -26,4 +26,7 @@ abstract class InvoiceDao {
 
   @Query('SELECT MAX(invoice_number) FROM invoices')
   Future<String?> getLastInvoiceNumber();
+
+  @Query('UPDATE invoices SET sync_status = :status WHERE id IN (:ids)')
+  Future<void> updateSyncStatusForIds(List<String> ids, String status);
 }

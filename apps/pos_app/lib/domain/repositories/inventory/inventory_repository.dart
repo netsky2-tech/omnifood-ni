@@ -14,6 +14,7 @@ abstract class InventoryRepository {
 
   Future<List<Insumo>> getActiveInsumos();
   Future<Insumo?> getInsumoById(String id);
+  Future<List<Insumo>> getInsumosByIds(List<String> ids);
   Future<void> updateInsumoStock(String id, double newStock);
   Future<void> updateInsumoCost(String id, double newCost);
   Future<void> saveInsumo(Insumo insumo);
@@ -32,7 +33,8 @@ abstract class InventoryRepository {
   Future<void> deleteRecipe(String id);
 
   Future<void> saveMovement(InventoryMovement movement);
-  Future<void> processMovements(List<InventoryMovement> movements);
+  Future<List<InventoryMovement>> getUnsyncedMovements();
+  Future<void> markMovementAsSynced(String id);
 
   // Suppliers
   Future<List<Supplier>> getActiveSuppliers();
@@ -52,8 +54,5 @@ abstract class InventoryRepository {
 
   // Purchases
   Future<void> savePurchase(Purchase purchase);
-  Future<List<InventoryMovement>> getUnsyncedMovements();
-  Future<void> markMovementAsSynced(String id);
-  Future<void> markMovementAsFailed(String id);
-  Future<List<InventoryMovement>> getRecentMovementsByType(MovementType type, int limit);
+  Future<void> queuePurchaseSync(Purchase purchase);
 }

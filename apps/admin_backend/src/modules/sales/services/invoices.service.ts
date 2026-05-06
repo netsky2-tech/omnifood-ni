@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Invoice } from '../entities/invoice.entity';
+import { InvoiceItem } from '../entities/invoice-item.entity';
+import { Payment } from '../entities/payment.entity';
 import { SyncInvoiceDto } from '../dto/sync-invoice.dto';
 
 @Injectable()
@@ -9,39 +11,45 @@ export class InvoicesService {
   constructor(
     @InjectRepository(Invoice)
     private readonly invoiceRepository: Repository<Invoice>,
+    @InjectRepository(InvoiceItem)
+    private readonly itemRepository: Repository<InvoiceItem>,
+    @InjectRepository(Payment)
+    private readonly paymentRepository: Repository<Payment>,
   ) {}
 
   async syncInvoices(tenantId: string, dtos: SyncInvoiceDto[]): Promise<void> {
     for (const dto of dtos) {
-      const existing = await this.invoiceRepository.findOne({
-        where: { id: dto.id, tenant_id: tenantId },
-      });
+      // 1. Upsert Invoice
+      await this.invoiceRepository.upsert(
+        {
+          ...dto,
+          tenant_id: tenantId,
+          created_at: new Date(dto.createdAt),
+        },
+        ['id'],
+      );
 
-      if (existing) {
-        await this.invoiceRepository.save({
-          ...existing,
-          isCanceled: dto.isCanceled ?? existing.isCanceled,
-          voidReason: dto.voidReason ?? existing.voidReason,
-          paymentStatus: dto.paymentStatus,
-        });
-        continue;
+      // 2. Upsert Items
+      if (dto.items?.length > 0) {
+        await this.itemRepository.upsert(
+          dto.items.map((item) => ({
+            ...item,
+            invoiceId: dto.id,
+          })),
+          ['id'],
+        );
       }
 
-      const invoice = this.invoiceRepository.create({
-        ...dto,
-        tenant_id: tenantId,
-        created_at: new Date(dto.createdAt),
-        items: dto.items.map((item) => ({
-          ...item,
-          invoiceId: dto.id,
-        })),
-        payments: dto.payments.map((payment) => ({
-          ...payment,
-          invoiceId: dto.id,
-        })),
-      });
-
-      await this.invoiceRepository.save(invoice);
+      // 3. Upsert Payments
+      if (dto.payments?.length > 0) {
+        await this.paymentRepository.upsert(
+          dto.payments.map((payment) => ({
+            ...payment,
+            invoiceId: dto.id,
+          })),
+          ['id'],
+        );
+      }
     }
   }
 

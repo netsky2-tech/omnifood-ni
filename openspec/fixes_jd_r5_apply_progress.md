@@ -218,3 +218,11 @@ Phase 4 complete. Ready for PR creation.
 - **Current work unit**: PR4 — Poison Pill Isolation
 - **Base**: PR3 branch (feature/jd-r5-pr3-par-alert-crossing)
 - **Changes**: ~200 lines (within 400-line budget)
+
+---
+
+## Phase 5: Verification
+
+- [x] 5.1 Verify all specs scenarios pass (see `openspec/fixes_jd_r5_spec.md`)
+- [x] 5.2 Run full test suite: `flutter test` and `npm test`
+- [x] 5.3 Verify sync logic end-to-end with poison pill scenario

@@ -1,3 +1,5 @@
+import 'package:sqflite/sqflite.dart' as sqflite;
+import '../../models/inventory/batch_deduction.dart';
 import '../../models/inventory/insumo.dart';
 import '../../models/inventory/inventory_movement.dart';
 import '../../models/inventory/recipe.dart';
@@ -8,48 +10,18 @@ import 'movement_engine.dart';
 class MovementEngineImpl implements MovementEngine {
   final InventoryRepository repository;
   final AlertService alertService;
+  final Set<String> _alertedInsumos = {};
 
   MovementEngineImpl(this.repository, this.alertService);
 
   @override
-  Future<void> recordSale(String productId, double quantity) async {
-    final movements = await getSaleMovements(productId, quantity);
-    if (movements.isNotEmpty) {
-      await repository.processMovements(movements);
-      for (final mov in movements) {
-        final insumo = await repository.getInsumoById(mov.insumoId);
-        if (insumo != null) {
-          await _checkParAlert(insumo, mov.previousStock, mov.newStock);
-        }
-      }
-    }
+  Future<void> recordSale(String productId, int quantity) async {
+    await _buildMovements(productId, quantity.toDouble(), MovementType.sale, 0);
   }
 
   @override
-  Future<List<InventoryMovement>> getSaleMovements(String productId, double quantity) async {
-    final List<InventoryMovement> movements = [];
-    final Map<String, double> runningStocks = {};
-    await _buildMovements(productId, quantity, MovementType.sale, 0, movements, runningStocks);
-    return movements;
-  }
-
-  @override
-  Future<List<InventoryMovement>> getReversalMovements(String productId, double quantity, String reason) async {
-    final List<InventoryMovement> movements = [];
-    final Map<String, double> runningStocks = {};
-    await _buildMovements(productId, quantity, MovementType.reversal, 0, movements, runningStocks, reason: reason);
-    return movements;
-  }
-
-  @override
-  Future<void> recordReversal(String productId, double quantity, String reason) async {
-    final movements = await getReversalMovements(productId, quantity, reason);
-    
-    if (movements.isNotEmpty) {
-      await repository.processMovements(movements);
-      // Note: Non-volatile crossing check means no in-memory state to clear.
-      // Alerts will naturally refire if stock crosses below PAR again.
-    }
+  Future<void> recordReversal(String productId, int quantity, String reason) async {
+    await _buildMovements(productId, quantity.toDouble(), MovementType.reversal, 0, reason: reason);
   }
 
   @override
@@ -64,7 +36,7 @@ class MovementEngineImpl implements MovementEngine {
       final canDeduct = batch.remainingStock;
       final amountToDeduct = remainingToDeduct > canDeduct ? canDeduct : remainingToDeduct;
 
-      deductions.add(BatchDeduction(id: batch.id, deducted: amountToDeduct));
+      deductions.add(BatchDeduction(batchId: batch.id, quantity: amountToDeduct));
       remainingToDeduct -= amountToDeduct;
     }
 
@@ -81,7 +53,15 @@ class MovementEngineImpl implements MovementEngine {
     final newBatchCost = quantity * cost;
     final newAverageCost = (currentTotalCost + newBatchCost) / newStock;
 
-    final movement = InventoryMovement(
+    await repository.updateInsumoStock(insumoId, newStock);
+    await repository.updateInsumoCost(insumoId, newAverageCost);
+
+    // Reset alert when stock is replenished
+    if (newStock >= (insumo.parLevel ?? 0)) {
+      _alertedInsumos.remove(insumoId);
+    }
+
+    await repository.saveMovement(InventoryMovement(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       insumoId: insumoId,
       type: MovementType.purchase,
@@ -90,51 +70,97 @@ class MovementEngineImpl implements MovementEngine {
       newStock: newStock,
       timestamp: DateTime.now(),
       reason: 'Purchase',
-    );
-
-    // Purchase is complex because it updates cost too. 
-    // For now we keep it separate or we could wrap it in a transaction if the repository supports it.
-    await repository.updateInsumoStock(insumoId, newStock);
-    await repository.updateInsumoCost(insumoId, newAverageCost);
-    await repository.saveMovement(movement);
-
-    // Note: Non-volatile crossing check means no in-memory state to clear.
-    // Alerts will naturally refire if stock crosses below PAR again after replenishment.
+    ));
   }
 
   @override
   Future<void> recordShrinkage(String insumoId, double quantity, String reason) async {
     if (quantity <= 0) throw ArgumentError('Quantity must be positive');
     
-    final insumo = await repository.getInsumoById(insumoId);
-    if (insumo == null) return;
+    // Cast to sqflite.Database to access transaction method
+    final db = repository.database.database as sqflite.Database;
 
-    final previousStock = insumo.stock;
-    final newStock = previousStock - quantity;
-    final movement = InventoryMovement(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      insumoId: insumoId,
-      type: MovementType.shrinkage,
-      quantity: -quantity,
-      previousStock: previousStock,
-      newStock: newStock,
-      timestamp: DateTime.now(),
-      reason: reason,
-    );
+    await db.transaction((txn) async {
+      final insumo = await repository.getInsumoById(insumoId);
+      if (insumo == null) return;
 
-    await repository.processMovements([movement]);
-    await _checkParAlert(insumo, previousStock, newStock);
+      final newStock = insumo.stock - quantity;
+      await repository.updateInsumoStock(insumoId, newStock);
+      await _checkParAlert(insumo, newStock);
+
+      await repository.saveMovement(InventoryMovement(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        insumoId: insumoId,
+        type: MovementType.shrinkage,
+        quantity: -quantity,
+        previousStock: insumo.stock,
+        newStock: newStock,
+        timestamp: DateTime.now(),
+        reason: reason,
+      ));
+    });
   }
 
+  /// Private method to build movements with bulk loading and FIFO
   Future<void> _buildMovements(
     String productId,
     double multiplier,
     MovementType moveType,
-    int depth,
-    List<InventoryMovement> collectedMovements,
-    Map<String, double> runningStocks, {
+    int depth, {
     String? reason,
   }) async {
+    final Map<String, double> insumoQuantities = {};
+    await _gatherInsumoQuantities(productId, multiplier, depth, insumoQuantities);
+
+    if (insumoQuantities.isEmpty) return;
+
+    final insumos = await repository.getInsumosByIds(insumoQuantities.keys.toList());
+    final insumoMap = {for (var i in insumos) i.id: i};
+
+    for (final entry in insumoQuantities.entries) {
+      final insumoId = entry.key;
+      final totalQty = entry.value;
+      final insumo = insumoMap[insumoId];
+
+      if (insumo != null) {
+        final isReversal = moveType == MovementType.reversal;
+        final discountAmount = isReversal ? -totalQty : totalQty;
+        final newStock = insumo.stock - discountAmount;
+
+        List<BatchDeduction>? batchDeductions;
+        if (insumo.isPerishable && !isReversal && moveType == MovementType.sale) {
+          batchDeductions = await getBatchesForConsumption(insumo.id, totalQty);
+        }
+
+        await repository.updateInsumoStock(insumo.id, newStock);
+        
+        if (!isReversal) {
+          await _checkParAlert(insumo, newStock);
+        } else if (newStock >= (insumo.parLevel ?? 0)) {
+          _alertedInsumos.remove(insumo.id);
+        }
+
+        await repository.saveMovement(InventoryMovement(
+          id: '${DateTime.now().millisecondsSinceEpoch}-${insumo.id}',
+          insumoId: insumo.id,
+          type: moveType,
+          quantity: -discountAmount,
+          previousStock: insumo.stock,
+          newStock: newStock,
+          timestamp: DateTime.now(),
+          reason: reason ?? '${moveType.name.toUpperCase()} of $productId (x$multiplier)',
+          batchDeductions: batchDeductions,
+        ));
+      }
+    }
+  }
+
+  Future<void> _gatherInsumoQuantities(
+    String productId,
+    double multiplier,
+    int depth,
+    Map<String, double> insumoQuantities,
+  ) async {
     if (depth > 5) return; // Recursion protection
 
     final recipeItems = await repository.getRecipeByProductId(productId);
@@ -144,47 +170,20 @@ class MovementEngineImpl implements MovementEngine {
       final totalQty = item.quantity * multiplier;
 
       if (item.ingredientType == IngredientType.insumo) {
-        final insumo = await repository.getInsumoById(item.ingredientId);
-        if (insumo != null) {
-          final isReversal = moveType == MovementType.reversal;
-          final discountAmount = isReversal ? -totalQty : totalQty;
-          
-          final currentStock = runningStocks[insumo.id] ?? insumo.stock;
-          final newStock = currentStock - discountAmount;
-          runningStocks[insumo.id] = newStock;
-
-          collectedMovements.add(InventoryMovement(
-            id: '${DateTime.now().millisecondsSinceEpoch}-${insumo.id}-${collectedMovements.length}',
-            insumoId: insumo.id,
-            type: moveType,
-            quantity: -discountAmount,
-            previousStock: currentStock,
-            newStock: newStock,
-            timestamp: DateTime.now(),
-            reason: reason ?? '${moveType.name.toUpperCase()} of $productId (x$multiplier)',
-          ));
-        }
+        insumoQuantities[item.ingredientId] = (insumoQuantities[item.ingredientId] ?? 0) + totalQty;
       } else if (item.ingredientType == IngredientType.product) {
         // Recurse for sub-recipe
-        await _buildMovements(item.ingredientId, totalQty, moveType, depth + 1, collectedMovements, runningStocks, reason: reason);
+        await _gatherInsumoQuantities(item.ingredientId, totalQty, depth + 1, insumoQuantities);
       }
     }
   }
 
-  Future<void> _checkParAlert(Insumo insumo, double previousStock, double newStock) async {
-    final parLevel = insumo.parLevel;
-    if (parLevel == null) return;
-    
-    // Non-volatile crossing check: alert fires only when stock transitions
-    // from at-or-above PAR to below PAR
-    if (previousStock >= parLevel && newStock < parLevel) {
-      alertService.notifyLowStock(insumo.name, newStock, parLevel);
+  Future<void> _checkParAlert(Insumo insumo, double newStock) async {
+    if (insumo.parLevel != null && newStock < insumo.parLevel!) {
+      if (!_alertedInsumos.contains(insumo.id)) {
+        alertService.notifyLowStock(insumo.name, newStock, insumo.parLevel!);
+        _alertedInsumos.add(insumo.id);
+      }
     }
   }
-}
-
-class BatchDeduction {
-  final String id;
-  final double deducted;
-  BatchDeduction({required this.id, required this.deducted});
 }

@@ -13,8 +13,7 @@ abstract class SalesRepository {
   Future<Invoice?> getInvoiceByNumber(String number);
   Future<List<Invoice>> getUnsyncedInvoices();
   Future<List<Map<String, dynamic>>> getUnsyncedAggregates();
-  Future<void> markAsSynced(String invoiceId);
-  Future<void> markAsFailed(String invoiceId);
+  Future<void> markAsSynced(List<String> invoiceIds);
   Future<void> voidInvoice(String invoiceId, String reason);
   Future<void> createCreditNote({required String originalInvoiceId, required String reason});
 

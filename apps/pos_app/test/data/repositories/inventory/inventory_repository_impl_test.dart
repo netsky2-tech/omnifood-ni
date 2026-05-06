@@ -13,6 +13,7 @@ import 'package:pos_app/data/daos/inventory/purchase_dao.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:dio/dio.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
+import 'package:pos_app/data/models/inventory/insumo_entity.dart';
 
 import 'inventory_repository_impl_test.mocks.dart';
 
@@ -31,11 +32,13 @@ import 'inventory_repository_impl_test.mocks.dart';
 void main() {
   late InventoryRepositoryImpl repository;
   late MockMovementDao mockMovementDao;
+  late MockInsumoDao mockInsumoDao;
 
   setUp(() {
     mockMovementDao = MockMovementDao();
+    mockInsumoDao = MockInsumoDao();
     repository = InventoryRepositoryImpl(
-      insumoDao: MockInsumoDao(),
+      insumoDao: mockInsumoDao,
       recipeDao: MockRecipeDao(),
       movementDao: mockMovementDao,
       supplierDao: MockSupplierDao(),
@@ -46,6 +49,23 @@ void main() {
       dio: MockDio(),
       database: MockAppDatabase(),
     );
+  });
+
+  group('InventoryRepositoryImpl - Insumos', () {
+    test('getInsumosByIds should call InsumoDao', () async {
+      final entities = [
+        InsumoEntity(id: 'i1', name: 'Insumo 1', consumptionUom: 'u1', stock: 10, averageCost: 0),
+      ];
+
+      when(mockInsumoDao.findInsumosByIds(['i1']))
+          .thenAnswer((_) async => entities);
+
+      final result = await repository.getInsumosByIds(['i1']);
+
+      expect(result.length, 1);
+      expect(result[0].id, 'i1');
+      verify(mockInsumoDao.findInsumosByIds(['i1'])).called(1);
+    });
   });
 
   group('InventoryRepositoryImpl - Sync', () {

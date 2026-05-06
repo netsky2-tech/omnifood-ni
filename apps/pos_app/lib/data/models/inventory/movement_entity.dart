@@ -18,6 +18,8 @@ class MovementEntity {
   final String? userId;
   @ColumnInfo(name: 'is_synced')
   final bool isSynced;
+  @ColumnInfo(name: 'batch_deductions')
+  final String? batch_deductions;
 
   MovementEntity({
     required this.id,
@@ -30,5 +32,6 @@ class MovementEntity {
     this.reason,
     this.userId,
     this.isSynced = false,
+    this.batch_deductions,
   });
 }

@@ -1,6 +1,8 @@
+import 'dart:convert';
 import '../../domain/models/inventory/insumo.dart';
 import '../../domain/models/inventory/recipe.dart';
 import '../../domain/models/inventory/inventory_movement.dart';
+import '../../domain/models/inventory/batch_deduction.dart';
 import '../../domain/models/inventory/supplier.dart';
 import '../../domain/models/inventory/warehouse.dart';
 import '../../domain/models/inventory/product.dart';
@@ -99,6 +101,14 @@ class InventoryMapper {
   }
 
   static InventoryMovement toMovementDomain(MovementEntity entity) {
+    List<BatchDeduction>? batchDeductions;
+    if (entity.batch_deductions != null) {
+      final List<dynamic> jsonList = jsonDecode(entity.batch_deductions!);
+      batchDeductions = jsonList
+          .map((j) => BatchDeduction.fromJson(j as Map<String, dynamic>))
+          .toList();
+    }
+
     return InventoryMovement(
       id: entity.id,
       insumoId: entity.insumoId,
@@ -109,10 +119,18 @@ class InventoryMapper {
       timestamp: DateTime.parse(entity.timestamp),
       reason: entity.reason,
       userId: entity.userId,
+      batchDeductions: batchDeductions,
     );
   }
 
   static MovementEntity toMovementEntity(InventoryMovement domain) {
+    String? batchDeductionsJson;
+    if (domain.batchDeductions != null) {
+      batchDeductionsJson = jsonEncode(
+        domain.batchDeductions!.map((d) => d.toJson()).toList(),
+      );
+    }
+
     return MovementEntity(
       id: domain.id,
       insumoId: domain.insumoId,
@@ -123,6 +141,7 @@ class InventoryMapper {
       timestamp: domain.timestamp.toIso8601String(),
       reason: domain.reason,
       userId: domain.userId,
+      batch_deductions: batchDeductionsJson,
     );
   }
 

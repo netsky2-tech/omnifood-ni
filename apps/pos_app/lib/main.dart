@@ -7,6 +7,7 @@ import 'package:pos_app/presentation/services/alert_service_impl.dart';
 import 'package:pos_app/presentation/widgets/inventory_alert_overlay.dart';
 import 'package:pos_app/data/repositories/inventory/inventory_repository_impl.dart';
 import 'data/database/app_database.dart';
+import 'data/database/migrations.dart';
 import 'data/repositories/auth_repository_impl.dart';
 import 'domain/repositories/auth_repository.dart';
 import 'data/repositories/audit_repository_impl.dart';
@@ -54,7 +55,10 @@ void main() async {
   const String deviceId = String.fromEnvironment('DEVICE_ID', defaultValue: 'pos-terminal-001');
 
   // Initialize Database
-  final database = await $FloorAppDatabase.databaseBuilder('app_database.db').build();
+  final database = await $FloorAppDatabase
+      .databaseBuilder('app_database.db')
+      .addMigrations(allMigrations)
+      .build();
   
   // Initialize Services & Repositories
   final dio = Dio(BaseOptions(baseUrl: baseUrl));

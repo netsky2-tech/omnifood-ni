@@ -1,4 +1,5 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
+import 'batch_deduction.dart';
 
 part 'inventory_movement.freezed.dart';
 part 'inventory_movement.g.dart';
@@ -13,6 +14,7 @@ enum MovementType {
 
 @freezed
 class InventoryMovement with _$InventoryMovement {
+  @JsonSerializable(explicitToJson: true)
   const factory InventoryMovement({
     required String id,
     required String insumoId,
@@ -23,6 +25,7 @@ class InventoryMovement with _$InventoryMovement {
     required DateTime timestamp,
     String? reason,
     String? userId,
+    List<BatchDeduction>? batchDeductions,
   }) = _InventoryMovement;
 
   factory InventoryMovement.fromJson(Map<String, dynamic> json) => _$InventoryMovementFromJson(json);
