@@ -14,13 +14,13 @@ class MovementEngineImpl implements MovementEngine {
   MovementEngineImpl(this.repository, this.alertService);
 
   @override
-  Future<void> recordSale(String productId, int quantity) async {
-    await _processRecipe(productId, quantity.toDouble(), MovementType.sale, 0);
+  Future<void> recordSale(String productId, double quantity) async {
+    await _processRecipe(productId, quantity, MovementType.sale, 0);
   }
 
   @override
-  Future<void> recordReversal(String productId, int quantity, String reason) async {
-    await _processRecipe(productId, quantity.toDouble(), MovementType.reversal, 0, reason: reason);
+  Future<void> recordReversal(String productId, double quantity, String reason) async {
+    await _processRecipe(productId, quantity, MovementType.reversal, 0, reason: reason);
   }
 
   @override
