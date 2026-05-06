@@ -203,6 +203,17 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i4.Future<void>);
 
   @override
+  _i4.Future<void> processMovements(List<_i8.InventoryMovement>? movements) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #processMovements,
+          [movements],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
   _i4.Future<List<_i9.Supplier>> getActiveSuppliers() => (super.noSuchMethod(
         Invocation.method(
           #getActiveSuppliers,

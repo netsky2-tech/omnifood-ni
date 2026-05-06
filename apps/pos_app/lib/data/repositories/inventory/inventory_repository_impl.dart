@@ -149,6 +149,12 @@ class InventoryRepositoryImpl implements InventoryRepository {
   }
 
   @override
+  Future<void> processMovements(List<InventoryMovement> movements) {
+    final entities = movements.map(InventoryMapper.toMovementEntity).toList();
+    return _database.inventoryDao.processInventoryMovements(entities);
+  }
+
+  @override
   Future<List<Supplier>> getActiveSuppliers() async {
     final entities = await supplierDao.findAllActiveSuppliers();
     return entities.map(InventoryMapper.toSupplierDomain).toList();

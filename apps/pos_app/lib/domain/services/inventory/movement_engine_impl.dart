@@ -1,4 +1,3 @@
-import 'package:sqflite/sqflite.dart' as sqflite;
 import '../../models/inventory/insumo.dart';
 import '../../models/inventory/inventory_movement.dart';
 import '../../models/inventory/recipe.dart';
@@ -52,15 +51,7 @@ class MovementEngineImpl implements MovementEngine {
     final newBatchCost = quantity * cost;
     final newAverageCost = (currentTotalCost + newBatchCost) / newStock;
 
-    await repository.updateInsumoStock(insumoId, newStock);
-    await repository.updateInsumoCost(insumoId, newAverageCost);
-
-    // Reset alert when stock is replenished
-    if (newStock >= (insumo.parLevel ?? 0)) {
-      _alertedInsumos.remove(insumoId);
-    }
-
-    await repository.saveMovement(InventoryMovement(
+    final movement = InventoryMovement(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       insumoId: insumoId,
       type: MovementType.purchase,
@@ -69,35 +60,41 @@ class MovementEngineImpl implements MovementEngine {
       newStock: newStock,
       timestamp: DateTime.now(),
       reason: 'Purchase',
-    ));
+    );
+
+    // Purchase is complex because it updates cost too. 
+    // For now we keep it separate or we could wrap it in a transaction if the repository supports it.
+    await repository.updateInsumoStock(insumoId, newStock);
+    await repository.updateInsumoCost(insumoId, newAverageCost);
+    await repository.saveMovement(movement);
+
+    // Reset alert when stock is replenished
+    if (newStock >= (insumo.parLevel ?? 0)) {
+      _alertedInsumos.remove(insumoId);
+    }
   }
 
   @override
   Future<void> recordShrinkage(String insumoId, double quantity, String reason) async {
     if (quantity <= 0) throw ArgumentError('Quantity must be positive');
     
-    // Cast to sqflite.Database to access transaction method
-    final db = repository.database.database as sqflite.Database;
+    final insumo = await repository.getInsumoById(insumoId);
+    if (insumo == null) return;
 
-    await db.transaction((txn) async {
-      final insumo = await repository.getInsumoById(insumoId);
-      if (insumo == null) return;
+    final newStock = insumo.stock - quantity;
+    final movement = InventoryMovement(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      insumoId: insumoId,
+      type: MovementType.shrinkage,
+      quantity: -quantity,
+      previousStock: insumo.stock,
+      newStock: newStock,
+      timestamp: DateTime.now(),
+      reason: reason,
+    );
 
-      final newStock = insumo.stock - quantity;
-      await repository.updateInsumoStock(insumoId, newStock);
-      await _checkParAlert(insumo, newStock);
-
-      await repository.saveMovement(InventoryMovement(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        insumoId: insumoId,
-        type: MovementType.shrinkage,
-        quantity: -quantity,
-        previousStock: insumo.stock,
-        newStock: newStock,
-        timestamp: DateTime.now(),
-        reason: reason,
-      ));
-    });
+    await repository.processMovements([movement]);
+    await _checkParAlert(insumo, newStock);
   }
 
   /// Private recursive method to handle recipes and sub-recipes
@@ -106,6 +103,37 @@ class MovementEngineImpl implements MovementEngine {
     double multiplier,
     MovementType moveType,
     int depth, {
+    String? reason,
+  }) async {
+    final List<InventoryMovement> movements = [];
+    final Map<String, double> runningStocks = {};
+    
+    await _buildMovements(productId, multiplier, moveType, depth, movements, runningStocks, reason: reason);
+    
+    if (movements.isNotEmpty) {
+      await repository.processMovements(movements);
+      
+      // Post-transaction alerts
+      for (final mov in movements) {
+        final insumo = await repository.getInsumoById(mov.insumoId);
+        if (insumo != null) {
+          if (moveType != MovementType.reversal) {
+            await _checkParAlert(insumo, mov.newStock);
+          } else if (mov.newStock >= (insumo.parLevel ?? 0)) {
+            _alertedInsumos.remove(insumo.id);
+          }
+        }
+      }
+    }
+  }
+
+  Future<void> _buildMovements(
+    String productId,
+    double multiplier,
+    MovementType moveType,
+    int depth,
+    List<InventoryMovement> collectedMovements,
+    Map<String, double> runningStocks, {
     String? reason,
   }) async {
     if (depth > 5) return; // Recursion protection
@@ -121,22 +149,17 @@ class MovementEngineImpl implements MovementEngine {
         if (insumo != null) {
           final isReversal = moveType == MovementType.reversal;
           final discountAmount = isReversal ? -totalQty : totalQty;
-          final newStock = insumo.stock - discountAmount;
-
-          await repository.updateInsumoStock(insumo.id, newStock);
           
-          if (!isReversal) {
-            await _checkParAlert(insumo, newStock);
-          } else if (newStock >= (insumo.parLevel ?? 0)) {
-            _alertedInsumos.remove(insumo.id);
-          }
+          final currentStock = runningStocks[insumo.id] ?? insumo.stock;
+          final newStock = currentStock - discountAmount;
+          runningStocks[insumo.id] = newStock;
 
-          await repository.saveMovement(InventoryMovement(
-            id: '${DateTime.now().millisecondsSinceEpoch}-${insumo.id}',
+          collectedMovements.add(InventoryMovement(
+            id: '${DateTime.now().millisecondsSinceEpoch}-${insumo.id}-${collectedMovements.length}',
             insumoId: insumo.id,
             type: moveType,
             quantity: -discountAmount,
-            previousStock: insumo.stock,
+            previousStock: currentStock,
             newStock: newStock,
             timestamp: DateTime.now(),
             reason: reason ?? '${moveType.name.toUpperCase()} of $productId (x$multiplier)',
@@ -144,7 +167,7 @@ class MovementEngineImpl implements MovementEngine {
         }
       } else if (item.ingredientType == IngredientType.product) {
         // Recurse for sub-recipe
-        await _processRecipe(item.ingredientId, totalQty, moveType, depth + 1, reason: reason);
+        await _buildMovements(item.ingredientId, totalQty, moveType, depth + 1, collectedMovements, runningStocks, reason: reason);
       }
     }
   }

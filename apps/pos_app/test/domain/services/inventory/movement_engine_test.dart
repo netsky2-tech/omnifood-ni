@@ -50,8 +50,9 @@ void main() {
       await engine.recordSale(productId, 1);
 
       // THEN
-      verify(mockRepo.updateInsumoStock('ins-1', 982.0)).called(1);
-      verify(mockRepo.saveMovement(any)).called(1);
+      verify(mockRepo.processMovements(argThat(predicate<List<InventoryMovement>>((list) {
+        return list.length == 1 && list.first.newStock == 982.0 && list.first.insumoId == 'ins-1';
+      })))).called(1);
     });
   });
 
@@ -83,8 +84,9 @@ void main() {
       await engine.recordReversal(productId, 1, 'Canceled invoice');
 
       // THEN
-      verify(mockRepo.updateInsumoStock('ins-1', 1000.0)).called(1);
-      verify(mockRepo.saveMovement(argThat(predicate<InventoryMovement>((m) => m.type == MovementType.reversal)))).called(1);
+      verify(mockRepo.processMovements(argThat(predicate<List<InventoryMovement>>((list) {
+        return list.length == 1 && list.first.newStock == 1000.0 && list.first.type == MovementType.reversal;
+      })))).called(1);
     });
   });
 
@@ -127,7 +129,9 @@ void main() {
 
       // THEN
       // 2.0 units of syrup * 10.0g of sugar = 20.0g sugar discounted
-      verify(mockRepo.updateInsumoStock('sugar', 80.0)).called(1);
+      verify(mockRepo.processMovements(argThat(predicate<List<InventoryMovement>>((list) {
+        return list.any((m) => m.insumoId == 'sugar' && m.newStock == 80.0);
+      })))).called(1);
     });
 
     test('should trigger PAR alert when stock falls below threshold', () async {

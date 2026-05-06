@@ -7,6 +7,7 @@ import '../daos/audit_log_dao.dart';
 import '../daos/inventory/insumo_dao.dart';
 import '../daos/inventory/recipe_dao.dart';
 import '../daos/inventory/movement_dao.dart';
+import '../daos/inventory/inventory_dao.dart';
 import '../daos/inventory/purchase_dao.dart';
 import '../daos/inventory/supplier_dao.dart';
 import '../daos/inventory/warehouse_dao.dart';
@@ -77,6 +78,7 @@ abstract class AppDatabase extends FloorDatabase {
   ProductDao get productDao;
   RecipeDao get recipeDao;
   MovementDao get movementDao;
+  InventoryDao get inventoryDao;
   SupplierDao get supplierDao;
   WarehouseDao get warehouseDao;
   PurchaseDao get purchaseDao;
