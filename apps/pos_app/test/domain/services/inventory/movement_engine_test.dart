@@ -44,7 +44,7 @@ void main() {
       );
 
       when(mockRepo.getRecipeByProductId(productId)).thenAnswer((_) async => recipe);
-      when(mockRepo.getInsumoById('ins-1')).thenAnswer((_) async => initialInsumo);
+      when(mockRepo.getInsumosByIds(['ins-1'])).thenAnswer((_) async => [initialInsumo]);
 
       // WHEN
       await engine.recordSale(productId, 1);
@@ -77,7 +77,7 @@ void main() {
       );
 
       when(mockRepo.getRecipeByProductId(productId)).thenAnswer((_) async => recipe);
-      when(mockRepo.getInsumoById('ins-1')).thenAnswer((_) async => initialInsumo);
+      when(mockRepo.getInsumosByIds(['ins-1'])).thenAnswer((_) async => [initialInsumo]);
 
       // WHEN
       await engine.recordReversal(productId, 1, 'Canceled invoice');
@@ -120,7 +120,7 @@ void main() {
 
       when(mockRepo.getRecipeByProductId(productId)).thenAnswer((_) async => topRecipe);
       when(mockRepo.getRecipeByProductId('vanilla-syrup')).thenAnswer((_) async => subRecipe);
-      when(mockRepo.getInsumoById('sugar')).thenAnswer((_) async => initialSugar);
+      when(mockRepo.getInsumosByIds(['sugar'])).thenAnswer((_) async => [initialSugar]);
 
       // WHEN
       await engine.recordSale(productId, 1);
@@ -152,7 +152,7 @@ void main() {
       );
 
       when(mockRepo.getRecipeByProductId(productId)).thenAnswer((_) async => recipe);
-      when(mockRepo.getInsumoById('ins-1')).thenAnswer((_) async => initialInsumo);
+      when(mockRepo.getInsumosByIds(['ins-1'])).thenAnswer((_) async => [initialInsumo]);
 
       // WHEN
       await engine.recordSale(productId, 1); // Stock becomes 50.0 (< 60.0)
@@ -183,13 +183,13 @@ void main() {
       );
 
       when(mockRepo.getRecipeByProductId(productId)).thenAnswer((_) async => recipe);
-      when(mockRepo.getInsumoById('ins-1')).thenAnswer((_) async => initialInsumo);
+      when(mockRepo.getInsumosByIds(['ins-1'])).thenAnswer((_) async => [initialInsumo]);
 
       // WHEN
       await engine.recordSale(productId, 1); // Stock 90 (Trigger alert)
       
       // Update stock for second call simulation
-      when(mockRepo.getInsumoById('ins-1')).thenAnswer((_) async => initialInsumo.copyWith(stock: 90.0));
+      when(mockRepo.getInsumosByIds(['ins-1'])).thenAnswer((_) async => [initialInsumo.copyWith(stock: 90.0)]);
       await engine.recordSale(productId, 1); // Stock 80 (Should NOT trigger alert again)
 
       // THEN
