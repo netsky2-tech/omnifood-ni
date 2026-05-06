@@ -108,3 +108,57 @@ Phase 2 complete. Ready for PR creation.
 - **Current work unit**: PR2 — Invoice Unique Index
 - **Base**: PR1 branch (feature/jd-r5-pr1-backend-tenant-isolation)
 - **Changes**: ~45 lines (well within 400-line budget)
+
+---
+
+## PR3: PAR Alert Crossing Check
+
+### TDD Cycle Evidence
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|------|-----------|-------|------------|-----|-------|-------------|----------|
+| 3.1-3.4 | `movement_engine_test.dart` | Unit | ✅ 5/5 passed | ✅ Written | ✅ Passed | ✅ 6 cases | ✅ Clean |
+| 3.5 | `movement_engine_test.dart` | Unit | ✅ 5/5 passed | ✅ Written | ✅ Passed | ✅ 6 cases | ✅ Clean |
+
+### Test Summary
+- **Total tests written**: 6 new tests
+- **Total tests passing**: 11/11 (5 existing + 6 new)
+- **Layers used**: Unit (11)
+- **Approval tests**: None — no refactoring tasks
+- **Pure functions created**: 0 (logic embedded in service method)
+
+### Files Changed
+
+| File | Action | What Was Done |
+|------|--------|---------------|
+| `apps/pos_app/lib/domain/services/inventory/movement_engine_impl.dart` | Modified | Removed volatile `_alertedInsumos` Set; updated `_checkParAlert` to accept `previousStock` parameter; implemented non-volatile crossing check logic `previousStock >= parLevel && newStock < parLevel`; updated `recordSale` and `recordShrinkage` to pass `previousStock`; removed stale alert state cleanup from `recordReversal` and `recordPurchase` |
+| `apps/pos_app/test/domain/services/inventory/movement_engine_test.dart` | Modified | Added 6 new tests for PAR alert crossing check; added `createInsumo` helper function |
+
+### Deviations from Design
+None — implementation matches design spec exactly. The crossing check logic fires alerts only when stock transitions from at-or-above PAR to below PAR.
+
+### Issues Found
+1. **Legacy test behavior preserved**: The existing "deduplicate PAR alerts in same session" test still passes because:
+   - First call: Stock 100 -> 90 (crosses 95 threshold) → alert fires
+   - Second call: Stock 90 -> 80 (stays below 95) → no alert
+   - This matches the expected behavior of the crossing check.
+
+### Test Coverage
+
+#### PAR Alert Crossing Tests
+1. ✅ `should fire alert when stock crosses from above to below PAR via shrinkage` — verifies shrinkage triggers crossing check
+2. ✅ `should NOT fire alert when stock stays below PAR via shrinkage` — verifies no duplicate alerts when already below
+3. ✅ `should NOT fire alert when stock stays above PAR via shrinkage` — verifies no false alerts when above PAR
+4. ✅ `should fire alert when stock crosses from above to below PAR via sale` — verifies sales trigger crossing check
+5. ✅ `should fire alert again after replenishment crosses back above PAR then below again` — verifies alert refires after restocking
+6. ✅ `should NOT fire duplicate alert in same session when stock stays below PAR` — verifies no duplicate alerts in same session
+
+### Status
+Phase 3 complete. Ready for PR creation.
+
+### PR Boundary
+- **Mode**: chained PR slice (PR 3 of 4)
+- **Chain strategy**: feature-branch-chain
+- **Current work unit**: PR3 — PAR Alert Crossing Check
+- **Base**: PR2 branch (feature/jd-r5-pr2-invoice-unique-index)
+- **Changes**: ~60 lines (well within 400-line budget)
