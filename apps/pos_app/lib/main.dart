@@ -117,7 +117,12 @@ void main() async {
     processInventoryUseCase: processInventoryUseCase,
   );
 
-  final syncService = SyncService(auditRepository, salesRepository, dio);
+  final syncService = SyncService(
+    auditRepository,
+    salesRepository,
+    inventoryRepository,
+    dio,
+  );
   syncService.start();
 
   runApp(

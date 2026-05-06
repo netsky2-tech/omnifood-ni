@@ -232,22 +232,13 @@ class InventoryRepositoryImpl implements InventoryRepository {
   }
 
   @override
-  Future<void> queuePurchaseSync(Purchase purchase) async {
-    // First save locally (offline-first)
-    await savePurchase(purchase);
+  Future<List<InventoryMovement>> getUnsyncedMovements() async {
+    final entities = await movementDao.findUnsyncedMovements();
+    return entities.map(InventoryMapper.toMovementDomain).toList();
+  }
 
-    // Then try to sync immediately
-    try {
-      final response = await dio.post(
-        '/purchases/sync',
-        data: PurchaseMapper.toSyncJson(purchase),
-      );
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        await purchaseDao.markAsSynced(purchase.id);
-      }
-    } on DioException {
-      // Sync failed, will be retried later by SyncService
-      // Purchase already saved locally - that's the key offline-first behavior
-    }
+  @override
+  Future<void> markMovementAsSynced(String id) {
+    return movementDao.markAsSynced(id);
   }
 }
