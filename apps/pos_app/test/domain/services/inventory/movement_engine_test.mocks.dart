@@ -306,11 +306,21 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i4.Future<void>);
 
   @override
-  _i4.Future<void> queuePurchaseSync(_i13.Purchase? purchase) =>
+  _i4.Future<List<_i8.InventoryMovement>> getUnsyncedMovements() =>
       (super.noSuchMethod(
         Invocation.method(
-          #queuePurchaseSync,
-          [purchase],
+          #getUnsyncedMovements,
+          [],
+        ),
+        returnValue: _i4.Future<List<_i8.InventoryMovement>>.value(
+            <_i8.InventoryMovement>[]),
+      ) as _i4.Future<List<_i8.InventoryMovement>>);
+
+  @override
+  _i4.Future<void> markMovementAsSynced(String? id) => (super.noSuchMethod(
+        Invocation.method(
+          #markMovementAsSynced,
+          [id],
         ),
         returnValue: _i4.Future<void>.value(),
         returnValueForMissingStub: _i4.Future<void>.value(),

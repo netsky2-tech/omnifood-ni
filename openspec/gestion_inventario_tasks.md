@@ -21,9 +21,9 @@ The implementation is broken into 6 logical slices. Each slice is designed to be
 - [x] **TDD**: Unit tests for end-to-end sales deduction flow (Sale -> BOM Calculation -> DAO).
 
 ### PR 4: Sync & Backend Logic
-- [ ] Implement conflict-resolution sorting (timestamp ASC) in `apps/admin_backend/src/modules/inventory/inventory.service.ts`.
-- [ ] Extend `SyncService` in Flutter and NestJS to handle `InventoryMovement` synchronization.
-- [ ] **TDD**: Unit tests in backend for chronological sorting of movements.
+- [x] Implement conflict-resolution sorting (timestamp ASC) in `apps/admin_backend/src/modules/inventory/inventory.service.ts`.
+- [x] Extend `SyncService` in Flutter and NestJS to handle `InventoryMovement` synchronization.
+- [x] **TDD**: Unit tests in backend for chronological sorting of movements.
 
 ### PR 5: Shrinkage Implementation
 - [ ] Implement `ShrinkageView` (Flutter) replacing existing shell.

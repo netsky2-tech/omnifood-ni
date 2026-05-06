@@ -52,5 +52,6 @@ abstract class InventoryRepository {
 
   // Purchases
   Future<void> savePurchase(Purchase purchase);
-  Future<void> queuePurchaseSync(Purchase purchase);
+  Future<List<InventoryMovement>> getUnsyncedMovements();
+  Future<void> markMovementAsSynced(String id);
 }
