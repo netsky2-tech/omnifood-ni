@@ -47,6 +47,8 @@ import 'package:pos_app/domain/services/sales/dgi_numbering_service.dart'
     as _i32;
 import 'package:pos_app/domain/usecases/inventory/process_sale_inventory_use_case.dart'
     as _i38;
+import 'package:pos_app/domain/usecases/inventory/reverse_sale_inventory_use_case.dart'
+    as _i40;
 import 'package:sqflite/sqflite.dart' as _i23;
 
 // ignore_for_file: type=lint
@@ -953,6 +955,25 @@ class MockMovementEngine extends _i1.Mock implements _i24.MovementEngine {
       ) as _i22.Future<List<_i34.InventoryMovement>>);
 
   @override
+  _i22.Future<List<_i34.InventoryMovement>> getReversalMovements(
+    String? productId,
+    double? quantity,
+    String? reason,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getReversalMovements,
+          [
+            productId,
+            quantity,
+            reason,
+          ],
+        ),
+        returnValue: _i22.Future<List<_i34.InventoryMovement>>.value(
+            <_i34.InventoryMovement>[]),
+      ) as _i22.Future<List<_i34.InventoryMovement>>);
+
+  @override
   _i22.Future<void> recordPurchase(
     String? insumoId,
     double? quantity,
@@ -1105,6 +1126,42 @@ class MockProcessSaleInventoryUseCase extends _i1.Mock
         Invocation.method(
           #execute,
           [items],
+        ),
+        returnValue: _i22.Future<List<_i34.InventoryMovement>>.value(
+            <_i34.InventoryMovement>[]),
+      ) as _i22.Future<List<_i34.InventoryMovement>>);
+}
+
+/// A class which mocks [ReverseSaleInventoryUseCase].
+///
+/// See the documentation for Mockito's code generation for more information.
+class MockReverseSaleInventoryUseCase extends _i1.Mock
+    implements _i40.ReverseSaleInventoryUseCase {
+  MockReverseSaleInventoryUseCase() {
+    _i1.throwOnMissingStub(this);
+  }
+
+  @override
+  _i24.MovementEngine get engine => (super.noSuchMethod(
+        Invocation.getter(#engine),
+        returnValue: _FakeMovementEngine_23(
+          this,
+          Invocation.getter(#engine),
+        ),
+      ) as _i24.MovementEngine);
+
+  @override
+  _i22.Future<List<_i34.InventoryMovement>> execute(
+    List<_i39.InvoiceItem>? items,
+    String? reason,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #execute,
+          [
+            items,
+            reason,
+          ],
         ),
         returnValue: _i22.Future<List<_i34.InventoryMovement>>.value(
             <_i34.InventoryMovement>[]),

@@ -6,6 +6,7 @@ import { Insumo } from './entities/insumo.entity';
 import { InventoryMovement, MovementType } from './entities/inventory-movement.entity';
 import { CreateInventoryMovementDto } from './dto/create-inventory-movement.dto';
 import { LowStockEvent } from '../notifications/listeners/low-stock.listener';
+import { CostCalculatorService } from './cost-calculator.service';
 
 @Injectable()
 export class InventoryService {
@@ -16,6 +17,7 @@ export class InventoryService {
     private readonly movementRepo: Repository<InventoryMovement>,
     private readonly eventEmitter: EventEmitter2,
     private readonly dataSource: DataSource,
+    private readonly costCalculator: CostCalculatorService,
   ) {}
 
   async recordPurchase(
@@ -30,14 +32,16 @@ export class InventoryService {
       throw new NotFoundException(`Insumo with ID ${insumoId} not found`);
     }
 
-    const currentTotalCost = Number(insumo.stock) * Number(insumo.averageCost);
     const convertedQuantity = quantity * Number(insumo.conversionFactor);
-    const newBatchCost = quantity * cost; // cost is per purchase unit
-    const newStock = Number(insumo.stock) + convertedQuantity;
-    const newAverageCost = (currentTotalCost + newBatchCost) / newStock;
+    const newAverageCost = this.costCalculator.calculateAverageCost(
+      insumo.stock,
+      insumo.averageCost,
+      convertedQuantity,
+      cost / Number(insumo.conversionFactor), // Adjust cost to stock unit
+    );
 
-    insumo.stock = newStock;
-    insumo.averageCost = Number(newAverageCost.toFixed(8)); // Increased precision
+    insumo.stock = Number(insumo.stock) + convertedQuantity;
+    insumo.averageCost = newAverageCost;
 
     const updatedInsumo = await this.insumoRepo.save(insumo);
 

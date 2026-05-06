@@ -35,10 +35,16 @@ class MovementEngineImpl implements MovementEngine {
   }
 
   @override
-  Future<void> recordReversal(String productId, double quantity, String reason) async {
+  Future<List<InventoryMovement>> getReversalMovements(String productId, double quantity, String reason) async {
     final List<InventoryMovement> movements = [];
     final Map<String, double> runningStocks = {};
     await _buildMovements(productId, quantity, MovementType.reversal, 0, movements, runningStocks, reason: reason);
+    return movements;
+  }
+
+  @override
+  Future<void> recordReversal(String productId, double quantity, String reason) async {
+    final movements = await getReversalMovements(productId, quantity, reason);
     
     if (movements.isNotEmpty) {
       await repository.processMovements(movements);

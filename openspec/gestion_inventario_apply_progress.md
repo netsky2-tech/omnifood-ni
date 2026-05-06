@@ -23,6 +23,11 @@
 - [x] Implement `ShrinkageViewModel` with form validation.
 - [x] **TDD**: Widget tests for `ShrinkageView` (assert input validation and VM interaction).
 
+## PR 6: Cost Recalculation & Reversals
+- [x] Implement `ReverseSaleInventoryUseCase` for handling cancellations (DGI compliance).
+- [x] Implement `CostCalculatorService` in NestJS for theoretical cost update on purchase events.
+- [x] **TDD**: Unit tests for reversal movement generation and cost recalculation logic.
+
 ### TDD Cycle Evidence
 | Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
 |------|-----------|-------|------------|-----|-------|-------------|----------|
@@ -31,4 +36,7 @@
 | 4.2 | `inventory_repository_impl_test.dart` | Unit | N/A (new) | ✅ Written | ✅ Passed | ➖ Single | ✅ Clean |
 | 4.3 | `inventory.service.spec.ts` | Unit | ✅ 4/4 | ✅ Written | ✅ Passed | ✅ 2 cases | ✅ Clean |
 | 5.1 | `shrinkage_view_test.dart` | Widget | N/A (new) | ✅ Written | ✅ Passed | ✅ 2 cases | ✅ Clean |
+| 6.1 | `reverse_sale_inventory_use_case_test.dart` | Unit | N/A (new) | ✅ Written | ✅ Passed | ✅ 1 case | ✅ Clean |
+| 6.2 | `cost-calculator.service.spec.ts` | Unit | N/A (new) | ✅ Written | ✅ Passed | ✅ 3 cases | ✅ Clean |
+| 6.3 | `inventory.service.spec.ts` | Unit | ✅ 5/5 | ✅ Written | ✅ Passed | ✅ 2 cases | ✅ Clean |
 

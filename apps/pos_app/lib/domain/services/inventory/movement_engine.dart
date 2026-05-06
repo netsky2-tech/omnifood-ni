@@ -8,6 +8,9 @@ abstract class MovementEngine {
   /// Calculates and returns the movements for a sale without executing them.
   Future<List<InventoryMovement>> getSaleMovements(String productId, double quantity);
 
+  /// Calculates and returns the movements for a reversal without executing them.
+  Future<List<InventoryMovement>> getReversalMovements(String productId, double quantity, String reason);
+
   /// Records a purchase and updates stock and average cost.
   Future<void> recordPurchase(String insumoId, double quantity, double cost);
 

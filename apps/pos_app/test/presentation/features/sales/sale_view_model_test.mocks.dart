@@ -731,6 +731,23 @@ class MockInventoryRepository extends _i1.Mock
         returnValue: _i23.Future<void>.value(),
         returnValueForMissingStub: _i23.Future<void>.value(),
       ) as _i23.Future<void>);
+
+  @override
+  _i23.Future<List<_i33.InventoryMovement>> getRecentMovementsByType(
+    _i33.MovementType? type,
+    int? limit,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getRecentMovementsByType,
+          [
+            type,
+            limit,
+          ],
+        ),
+        returnValue: _i23.Future<List<_i33.InventoryMovement>>.value(
+            <_i33.InventoryMovement>[]),
+      ) as _i23.Future<List<_i33.InventoryMovement>>);
 }
 
 /// A class which mocks [AuthRepository].
