@@ -241,4 +241,10 @@ class InventoryRepositoryImpl implements InventoryRepository {
   Future<void> markMovementAsSynced(String id) {
     return movementDao.markAsSynced(id);
   }
+
+  @override
+  Future<List<InventoryMovement>> getRecentMovementsByType(MovementType type, int limit) async {
+    final entities = await movementDao.findMovementsByType(type.name, limit);
+    return entities.map(InventoryMapper.toMovementDomain).toList();
+  }
 }
