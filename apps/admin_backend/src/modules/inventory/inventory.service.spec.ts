@@ -2,7 +2,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { InventoryService } from './inventory.service';
 import { Insumo } from './entities/insumo.entity';
-import { InventoryMovement, MovementType } from './entities/inventory-movement.entity';
+import {
+  InventoryMovement,
+  MovementType,
+} from './entities/inventory-movement.entity';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DataSource } from 'typeorm';
 import { CostCalculatorService } from './cost-calculator.service';
@@ -10,11 +13,8 @@ import { CreateInventoryMovementDto } from './dto/create-inventory-movement.dto'
 
 describe('InventoryService', () => {
   let service: InventoryService;
-  let insumoRepo: any;
-  let movementRepo: any;
-  let eventEmitter: EventEmitter2;
-  let dataSource: any;
-  let costCalculator: CostCalculatorService;
+  let insumoRepo: { findOne: jest.Mock; save: jest.Mock };
+  let movementRepo: { create: jest.Mock; save: jest.Mock };
 
   // Helper function to create a mock insumo with tenant_id
   const createMockInsumo = (overrides: Partial<Insumo> = {}): Insumo => {
@@ -33,23 +33,26 @@ describe('InventoryService', () => {
   };
 
   beforeEach(async () => {
+    insumoRepo = {
+      findOne: jest.fn(),
+      save: jest.fn(),
+    };
+    movementRepo = {
+      create: jest.fn(),
+      save: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         InventoryService,
         CostCalculatorService,
         {
           provide: getRepositoryToken(Insumo),
-          useValue: {
-            findOne: jest.fn(),
-            save: jest.fn(),
-          },
+          useValue: insumoRepo,
         },
         {
           provide: getRepositoryToken(InventoryMovement),
-          useValue: {
-            create: jest.fn(),
-            save: jest.fn(),
-          },
+          useValue: movementRepo,
         },
         {
           provide: EventEmitter2,
@@ -60,23 +63,24 @@ describe('InventoryService', () => {
         {
           provide: DataSource,
           useValue: {
-            transaction: jest.fn().mockImplementation((cb) => cb({
-              getRepository: jest.fn().mockImplementation((entity) => {
-                if (entity === Insumo) return insumoRepo;
-                if (entity === InventoryMovement) return movementRepo;
-              }),
-            })),
+            transaction: jest
+              .fn()
+              .mockImplementation(
+                (cb: (m: Record<string, unknown>) => Promise<unknown>) =>
+                  cb({
+                    getRepository: (entity: unknown) => {
+                      if (entity === Insumo) return insumoRepo;
+                      if (entity === InventoryMovement) return movementRepo;
+                      return null;
+                    },
+                  }),
+              ),
           },
         },
       ],
     }).compile();
 
     service = module.get<InventoryService>(InventoryService);
-    insumoRepo = module.get(getRepositoryToken(Insumo));
-    movementRepo = module.get(getRepositoryToken(InventoryMovement));
-    eventEmitter = module.get(EventEmitter2);
-    dataSource = module.get(DataSource);
-    costCalculator = module.get(CostCalculatorService);
   });
 
   it('should be defined', () => {
@@ -97,7 +101,7 @@ describe('InventoryService', () => {
       jest.spyOn(insumoRepo, 'findOne').mockResolvedValue(existingInsumo);
       jest
         .spyOn(insumoRepo, 'save')
-        .mockImplementation(async (insumo) => insumo as Insumo);
+        .mockImplementation((insumo: Insumo) => Promise.resolve(insumo));
 
       const result = await service.recordPurchase(insumoId, 5, 130, 'tenant-A');
 
@@ -107,7 +111,7 @@ describe('InventoryService', () => {
           averageCost: 110,
         }),
       );
-      expect((result as any).averageCost).toBe(110);
+      expect(result.averageCost).toBe(110);
     });
 
     it('should handle zero initial stock correctly', async () => {
@@ -123,24 +127,24 @@ describe('InventoryService', () => {
       jest.spyOn(insumoRepo, 'findOne').mockResolvedValue(existingInsumo);
       jest
         .spyOn(insumoRepo, 'save')
-        .mockImplementation(async (insumo) => insumo as Insumo);
+        .mockImplementation((insumo: Insumo) => Promise.resolve(insumo));
 
       const result = await service.recordPurchase(insumoId, 10, 50, 'tenant-A');
 
-      expect((result as any).stock).toBe(10);
-      expect((result as any).averageCost).toBe(50);
+      expect(result.stock).toBe(10);
+      expect(result.averageCost).toBe(50);
     });
   });
 
   describe('syncMovements', () => {
-    it('should sort movements by timestamp ASC before processing', async () => {
+    it('should sort movements by timestamp ASC before processing', () => {
       const movements = [
         { timestamp: new Date('2026-05-05T10:00:05Z'), insumoId: '1' },
         { timestamp: new Date('2026-05-05T10:00:00Z'), insumoId: '2' },
         { timestamp: new Date('2026-05-05T10:00:10Z'), insumoId: '3' },
       ];
 
-      const sorted = await service.sortMovements(movements);
+      const sorted = service.sortMovements(movements);
 
       expect(sorted[0].insumoId).toBe('2');
       expect(sorted[1].insumoId).toBe('1');
@@ -169,11 +173,15 @@ describe('InventoryService', () => {
         },
       ];
 
-      const insumo = { id: 'ins-1', tenant_id: 'tenant-A', stock: 11 } as Insumo;
+      const insumo = {
+        id: 'ins-1',
+        tenant_id: 'tenant-A',
+        stock: 11,
+      } as Insumo;
       jest.spyOn(insumoRepo, 'findOne').mockResolvedValue(insumo);
-      jest.spyOn(insumoRepo, 'save').mockImplementation(async (i: any) => {
+      jest.spyOn(insumoRepo, 'save').mockImplementation((i: Insumo) => {
         insumo.stock = i.stock;
-        return i;
+        return Promise.resolve(i);
       });
 
       await service.syncMovements(movements, 'tenant-A');
@@ -196,13 +204,19 @@ describe('InventoryService', () => {
         },
       ];
 
-      const mockInsumo = createMockInsumo({ id: 'ins-1', tenant_id: 'tenant-A' });
-      const findOneSpy = jest.spyOn(insumoRepo, 'findOne').mockResolvedValue(mockInsumo);
+      const mockInsumo = createMockInsumo({
+        id: 'ins-1',
+        tenant_id: 'tenant-A',
+      });
+      const findOneSpy = jest
+        .spyOn(insumoRepo, 'findOne')
+        .mockResolvedValue(mockInsumo);
       jest.spyOn(insumoRepo, 'save').mockResolvedValue(mockInsumo);
       jest.spyOn(movementRepo, 'save').mockResolvedValue([]);
 
       await service.syncMovements(movements, 'tenant-A');
 
+      /* eslint-disable @typescript-eslint/no-unsafe-assignment -- Jest expect.objectContaining returns any */
       expect(findOneSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
@@ -211,6 +225,7 @@ describe('InventoryService', () => {
           }),
         }),
       );
+      /* eslint-enable @typescript-eslint/no-unsafe-assignment */
     });
   });
 
@@ -222,11 +237,14 @@ describe('InventoryService', () => {
         stock: 10,
         conversionFactor: 1,
       });
-      const findOneSpy = jest.spyOn(insumoRepo, 'findOne').mockResolvedValue(mockInsumo);
+      const findOneSpy = jest
+        .spyOn(insumoRepo, 'findOne')
+        .mockResolvedValue(mockInsumo);
       jest.spyOn(insumoRepo, 'save').mockResolvedValue(mockInsumo);
 
       await service.recordPurchase('ins-1', 5, 130, 'tenant-A');
 
+      /* eslint-disable @typescript-eslint/no-unsafe-assignment -- Jest expect.objectContaining returns any */
       expect(findOneSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
@@ -235,6 +253,7 @@ describe('InventoryService', () => {
           }),
         }),
       );
+      /* eslint-enable @typescript-eslint/no-unsafe-assignment */
     });
 
     it('should NOT return insumo from different tenant in recordPurchase (RED)', async () => {
@@ -246,13 +265,17 @@ describe('InventoryService', () => {
 
       // When tenant B queries, they should NOT get tenant A's insumo
       // The query with tenant_id filter should return null for tenant B
-      jest.spyOn(insumoRepo, 'findOne').mockImplementation((options: any) => {
-        const where = options?.where || {};
-        if (where.tenant_id === 'tenant-A' && where.id === 'ins-1') {
-          return Promise.resolve(tenantAInsumo);
-        }
-        return Promise.resolve(null);
-      });
+      jest
+        .spyOn(insumoRepo, 'findOne')
+        .mockImplementation(
+          (options: { where: { id?: string; tenant_id?: string } }) => {
+            const where = options?.where || {};
+            if (where.tenant_id === 'tenant-A' && where.id === 'ins-1') {
+              return Promise.resolve(tenantAInsumo);
+            }
+            return Promise.resolve(null);
+          },
+        );
 
       // Tenant B trying to access tenant A's insumo should get NotFoundException
       await expect(
@@ -280,13 +303,17 @@ describe('InventoryService', () => {
       });
 
       // Mock findOne to simulate tenant isolation
-      jest.spyOn(insumoRepo, 'findOne').mockImplementation((options: any) => {
-        const where = options?.where || {};
-        if (where.tenant_id === 'tenant-A' && where.id === 'ins-1') {
-          return Promise.resolve(tenantAInsumo);
-        }
-        return Promise.resolve(null);
-      });
+      jest
+        .spyOn(insumoRepo, 'findOne')
+        .mockImplementation(
+          (options: { where: { id?: string; tenant_id?: string } }) => {
+            const where = options?.where || {};
+            if (where.tenant_id === 'tenant-A' && where.id === 'ins-1') {
+              return Promise.resolve(tenantAInsumo);
+            }
+            return Promise.resolve(null);
+          },
+        );
 
       // When processing for tenant-B, findOne should return null (insumo not found)
       // The movement should be skipped

@@ -8,39 +8,34 @@ import { SyncInvoiceDto } from '../dto/sync-invoice.dto';
 
 describe('InvoicesService', () => {
   let service: InvoicesService;
-  let invoiceRepo: any;
-  let itemRepo: any;
-  let paymentRepo: any;
+  let invoiceRepo: { upsert: jest.Mock };
+  let itemRepo: { upsert: jest.Mock };
+  let paymentRepo: { upsert: jest.Mock };
 
   beforeEach(async () => {
+    invoiceRepo = { upsert: jest.fn() };
+    itemRepo = { upsert: jest.fn() };
+    paymentRepo = { upsert: jest.fn() };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         InvoicesService,
         {
           provide: getRepositoryToken(Invoice),
-          useValue: {
-            upsert: jest.fn(),
-          },
+          useValue: invoiceRepo,
         },
         {
           provide: getRepositoryToken(InvoiceItem),
-          useValue: {
-            upsert: jest.fn(),
-          },
+          useValue: itemRepo,
         },
         {
           provide: getRepositoryToken(Payment),
-          useValue: {
-            upsert: jest.fn(),
-          },
+          useValue: paymentRepo,
         },
       ],
     }).compile();
 
     service = module.get<InvoicesService>(InvoicesService);
-    invoiceRepo = module.get(getRepositoryToken(Invoice));
-    itemRepo = module.get(getRepositoryToken(InvoiceItem));
-    paymentRepo = module.get(getRepositoryToken(Payment));
   });
 
   it('should be defined', () => {

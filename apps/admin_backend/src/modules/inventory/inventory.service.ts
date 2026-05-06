@@ -3,7 +3,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Insumo } from './entities/insumo.entity';
-import { InventoryMovement, MovementType } from './entities/inventory-movement.entity';
+import {
+  InventoryMovement,
+  MovementType,
+} from './entities/inventory-movement.entity';
 import { CreateInventoryMovementDto } from './dto/create-inventory-movement.dto';
 import { LowStockEvent } from '../notifications/listeners/low-stock.listener';
 import { CostCalculatorService } from './cost-calculator.service';
@@ -61,12 +64,14 @@ export class InventoryService {
       );
     }
 
-
     return updatedInsumo;
   }
 
-  async syncMovements(movements: CreateInventoryMovementDto[], tenantId: string): Promise<void> {
-    const sorted = await this.sortMovements(
+  async syncMovements(
+    movements: CreateInventoryMovementDto[],
+    tenantId: string,
+  ): Promise<void> {
+    const sorted = this.sortMovements(
       movements.map((m) => ({
         ...m,
         timestamp: new Date(m.timestamp),
@@ -117,9 +122,7 @@ export class InventoryService {
     });
   }
 
-  async sortMovements<T extends { timestamp: Date }>(
-    movements: T[],
-  ): Promise<T[]> {
+  sortMovements<T extends { timestamp: Date }>(movements: T[]): T[] {
     return [...movements].sort(
       (a, b) => a.timestamp.getTime() - b.timestamp.getTime(),
     );
