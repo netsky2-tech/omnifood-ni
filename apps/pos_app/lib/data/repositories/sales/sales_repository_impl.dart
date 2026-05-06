@@ -1,3 +1,5 @@
+import 'package:pos_app/domain/usecases/inventory/process_sale_inventory_use_case.dart';
+import 'package:pos_app/data/mappers/inventory_mapper.dart';
 import 'package:uuid/uuid.dart';
 import 'package:pos_app/data/daos/sales/invoice_dao.dart';
 import 'package:pos_app/data/daos/sales/invoice_item_dao.dart';
@@ -25,6 +27,7 @@ class SalesRepositoryImpl implements SalesRepository {
   final DgiNumberingService numberingService;
   final MovementEngine movementEngine;
   final AuditRepository auditRepository;
+  final ProcessSaleInventoryUseCase processInventoryUseCase;
 
   SalesRepositoryImpl({
     required this.database,
@@ -35,6 +38,7 @@ class SalesRepositoryImpl implements SalesRepository {
     required this.numberingService,
     required this.movementEngine,
     required this.auditRepository,
+    required this.processInventoryUseCase,
   });
 
   @override
@@ -54,26 +58,11 @@ class SalesRepositoryImpl implements SalesRepository {
     final itemEntities = items.map(SalesMapper.toItemEntity).toList();
     final paymentEntities = payments.map(SalesMapper.toPaymentEntity).toList();
 
-    // Prepare inventory movements
-    final List<MovementEntity> movementEntities = [];
-    final now = DateTime.now().toIso8601String();
-
-    for (final item in items) {
-      final insumo = await transactionDao.getInsumoById(item.productId);
-      if (insumo != null) {
-        movementEntities.add(MovementEntity(
-          id: const Uuid().v4(),
-          insumoId: item.productId,
-          type: 'SALE',
-          quantity: -item.quantity,
-          previousStock: insumo.stock,
-          newStock: insumo.stock - item.quantity,
-          timestamp: now,
-          reason: 'Venta Factura: ${updatedInvoice.number}',
-          userId: updatedInvoice.userId,
-        ));
-      }
-    }
+    // Prepare inventory movements using the use case
+    final movements = await processInventoryUseCase.execute(items);
+    final movementEntities = movements
+        .map((m) => InventoryMapper.toMovementEntity(m.copyWith(userId: updatedInvoice.userId)))
+        .toList();
 
     try {
       await transactionDao.executeSaleTransaction(

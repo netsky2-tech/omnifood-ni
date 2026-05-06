@@ -14,12 +14,41 @@ class MovementEngineImpl implements MovementEngine {
 
   @override
   Future<void> recordSale(String productId, double quantity) async {
-    await _processRecipe(productId, quantity, MovementType.sale, 0);
+    final movements = await getSaleMovements(productId, quantity);
+    if (movements.isNotEmpty) {
+      await repository.processMovements(movements);
+      for (final mov in movements) {
+        final insumo = await repository.getInsumoById(mov.insumoId);
+        if (insumo != null) {
+          await _checkParAlert(insumo, mov.newStock);
+        }
+      }
+    }
+  }
+
+  @override
+  Future<List<InventoryMovement>> getSaleMovements(String productId, double quantity) async {
+    final List<InventoryMovement> movements = [];
+    final Map<String, double> runningStocks = {};
+    await _buildMovements(productId, quantity, MovementType.sale, 0, movements, runningStocks);
+    return movements;
   }
 
   @override
   Future<void> recordReversal(String productId, double quantity, String reason) async {
-    await _processRecipe(productId, quantity, MovementType.reversal, 0, reason: reason);
+    final List<InventoryMovement> movements = [];
+    final Map<String, double> runningStocks = {};
+    await _buildMovements(productId, quantity, MovementType.reversal, 0, movements, runningStocks, reason: reason);
+    
+    if (movements.isNotEmpty) {
+      await repository.processMovements(movements);
+      for (final mov in movements) {
+        final insumo = await repository.getInsumoById(mov.insumoId);
+        if (insumo != null && mov.newStock >= (insumo.parLevel ?? 0)) {
+          _alertedInsumos.remove(insumo.id);
+        }
+      }
+    }
   }
 
   @override
@@ -95,36 +124,6 @@ class MovementEngineImpl implements MovementEngine {
 
     await repository.processMovements([movement]);
     await _checkParAlert(insumo, newStock);
-  }
-
-  /// Private recursive method to handle recipes and sub-recipes
-  Future<void> _processRecipe(
-    String productId,
-    double multiplier,
-    MovementType moveType,
-    int depth, {
-    String? reason,
-  }) async {
-    final List<InventoryMovement> movements = [];
-    final Map<String, double> runningStocks = {};
-    
-    await _buildMovements(productId, multiplier, moveType, depth, movements, runningStocks, reason: reason);
-    
-    if (movements.isNotEmpty) {
-      await repository.processMovements(movements);
-      
-      // Post-transaction alerts
-      for (final mov in movements) {
-        final insumo = await repository.getInsumoById(mov.insumoId);
-        if (insumo != null) {
-          if (moveType != MovementType.reversal) {
-            await _checkParAlert(insumo, mov.newStock);
-          } else if (mov.newStock >= (insumo.parLevel ?? 0)) {
-            _alertedInsumos.remove(insumo.id);
-          }
-        }
-      }
-    }
   }
 
   Future<void> _buildMovements(

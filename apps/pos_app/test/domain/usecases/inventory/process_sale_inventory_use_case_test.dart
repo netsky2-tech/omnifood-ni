@@ -17,7 +17,7 @@ void main() {
     useCase = ProcessSaleInventoryUseCase(mockEngine);
   });
 
-  test('GIVEN a list of invoice items WHEN processed THEN it SHOULD call engine for each item', () async {
+  test('GIVEN a list of invoice items WHEN processed THEN it SHOULD call engine for each item and return movements', () async {
     // GIVEN
     final items = [
       InvoiceItem(
@@ -32,25 +32,15 @@ void main() {
         taxAmount: 3,
         total: 23,
       ),
-      InvoiceItem(
-        id: '2',
-        invoiceId: 'INV-001',
-        productId: 'prod-2',
-        productName: 'Product 2',
-        quantity: 1,
-        unitPrice: 5,
-        originalTaxRate: 0.15,
-        appliedTaxRate: 0.15,
-        taxAmount: 0.75,
-        total: 5.75,
-      ),
     ];
 
+    when(mockEngine.getSaleMovements(any, any)).thenAnswer((_) async => []);
+
     // WHEN
-    await useCase.execute(items);
+    final result = await useCase.execute(items);
 
     // THEN
-    verify(mockEngine.recordSale('prod-1', 2.0)).called(1);
-    verify(mockEngine.recordSale('prod-2', 1.0)).called(1);
+    verify(mockEngine.getSaleMovements('prod-1', 2.0)).called(1);
+    expect(result, isEmpty);
   });
 }

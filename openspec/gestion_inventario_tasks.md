@@ -17,8 +17,8 @@ The implementation is broken into 6 logical slices. Each slice is designed to be
 - [x] **TDD**: Integration tests for atomic rollback scenarios (ensure no partial stock deduction on error).
 
 ### PR 3: Sales Integration (Refactoring SalesRepositoryImpl)
-- [ ] Integrate `ProcessSaleInventoryUseCase` into `SalesRepositoryImpl`.
-- [ ] **TDD**: Unit tests for end-to-end sales deduction flow (Sale -> BOM Calculation -> DAO).
+- [x] Integrate `ProcessSaleInventoryUseCase` into `SalesRepositoryImpl`.
+- [x] **TDD**: Unit tests for end-to-end sales deduction flow (Sale -> BOM Calculation -> DAO).
 
 ### PR 4: Sync & Backend Logic
 - [ ] Implement conflict-resolution sorting (timestamp ASC) in `apps/admin_backend/src/modules/inventory/inventory.service.ts`.

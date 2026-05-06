@@ -6,9 +6,10 @@
 import 'dart:async' as _i3;
 
 import 'package:mockito/mockito.dart' as _i1;
+import 'package:pos_app/domain/models/inventory/inventory_movement.dart' as _i4;
 import 'package:pos_app/domain/services/inventory/movement_engine.dart' as _i2;
 import 'package:pos_app/domain/services/inventory/movement_engine_impl.dart'
-    as _i4;
+    as _i5;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values
@@ -47,6 +48,23 @@ class MockMovementEngine extends _i1.Mock implements _i2.MovementEngine {
         returnValue: _i3.Future<void>.value(),
         returnValueForMissingStub: _i3.Future<void>.value(),
       ) as _i3.Future<void>);
+
+  @override
+  _i3.Future<List<_i4.InventoryMovement>> getSaleMovements(
+    String? productId,
+    double? quantity,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getSaleMovements,
+          [
+            productId,
+            quantity,
+          ],
+        ),
+        returnValue: _i3.Future<List<_i4.InventoryMovement>>.value(
+            <_i4.InventoryMovement>[]),
+      ) as _i3.Future<List<_i4.InventoryMovement>>);
 
   @override
   _i3.Future<void> recordPurchase(
@@ -106,7 +124,7 @@ class MockMovementEngine extends _i1.Mock implements _i2.MovementEngine {
       ) as _i3.Future<void>);
 
   @override
-  _i3.Future<List<_i4.BatchDeduction>> getBatchesForConsumption(
+  _i3.Future<List<_i5.BatchDeduction>> getBatchesForConsumption(
     String? insumoId,
     double? quantity,
   ) =>
@@ -119,6 +137,6 @@ class MockMovementEngine extends _i1.Mock implements _i2.MovementEngine {
           ],
         ),
         returnValue:
-            _i3.Future<List<_i4.BatchDeduction>>.value(<_i4.BatchDeduction>[]),
-      ) as _i3.Future<List<_i4.BatchDeduction>>);
+            _i3.Future<List<_i5.BatchDeduction>>.value(<_i5.BatchDeduction>[]),
+      ) as _i3.Future<List<_i5.BatchDeduction>>);
 }

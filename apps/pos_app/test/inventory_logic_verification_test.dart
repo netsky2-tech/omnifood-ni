@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
 import 'package:pos_app/domain/models/inventory/insumo.dart';
 import 'package:pos_app/domain/models/inventory/recipe.dart';
+import 'package:pos_app/domain/models/inventory/inventory_movement.dart';
 import 'package:mockito/annotations.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
 import 'package:pos_app/domain/services/alerts/alert_service.dart';
@@ -67,10 +68,10 @@ void main() {
       await engine.recordSale(productId, 1.0);
 
       // THEN
-      verify(mockRepo.updateInsumoStock('coffee-beans', 982.0)).called(1);
-      verify(mockRepo.updateInsumoStock('milk', 1800.0)).called(1);
-      // AND 2 Kardex entries created
-      verify(mockRepo.saveMovement(any)).called(2);
+      verify(mockRepo.processMovements(argThat(predicate<List<InventoryMovement>>((list) {
+        return list.any((m) => m.insumoId == 'coffee-beans' && m.newStock == 982.0) &&
+               list.any((m) => m.insumoId == 'milk' && m.newStock == 1800.0);
+      })))).called(1);
     });
 
     test('GIVEN a recursive recipe (Product uses another Product) WHEN a sale is completed THEN all levels MUST be discounted', () async {
@@ -135,9 +136,10 @@ void main() {
       await engine.recordSale(comboId, 1.0);
 
       // THEN
-      verify(mockRepo.updateInsumoStock('coffee-beans', 982.0)).called(1);
-      verify(mockRepo.updateInsumoStock('cookie', 49.0)).called(1);
-      verify(mockRepo.saveMovement(any)).called(2);
+      verify(mockRepo.processMovements(argThat(predicate<List<InventoryMovement>>((list) {
+        return list.any((m) => m.insumoId == 'coffee-beans' && m.newStock == 982.0) &&
+               list.any((m) => m.insumoId == 'cookie' && m.newStock == 49.0);
+      })))).called(1);
     });
   });
 }

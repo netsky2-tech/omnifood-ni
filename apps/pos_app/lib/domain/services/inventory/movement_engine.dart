@@ -1,8 +1,12 @@
+import '../../models/inventory/inventory_movement.dart';
 import 'movement_engine_impl.dart';
 
 abstract class MovementEngine {
   /// Records a sale and discounts stock based on the product's recipe.
   Future<void> recordSale(String productId, double quantity);
+
+  /// Calculates and returns the movements for a sale without executing them.
+  Future<List<InventoryMovement>> getSaleMovements(String productId, double quantity);
 
   /// Records a purchase and updates stock and average cost.
   Future<void> recordPurchase(String insumoId, double quantity, double cost);
