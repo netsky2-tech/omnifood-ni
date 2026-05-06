@@ -31,6 +31,6 @@ The implementation is broken into 6 logical slices. Each slice is designed to be
 - [x] **TDD**: Widget tests for `ShrinkageView` (assert input validation and VM interaction).
 
 ### PR 6: Cost Recalculation & Reversals
-- [ ] Implement `ReverseSaleInventoryUseCase` for handling cancellations (DGI compliance).
-- [ ] Implement `CostCalculatorService` in NestJS for theoretical cost update on purchase events.
-- [ ] **TDD**: Unit tests for reversal movement generation and cost recalculation logic.
+- [x] Implement `ReverseSaleInventoryUseCase` for handling cancellations (DGI compliance).
+- [x] Implement `CostCalculatorService` in NestJS for theoretical cost update on purchase events.
+- [x] **TDD**: Unit tests for reversal movement generation and cost recalculation logic.
