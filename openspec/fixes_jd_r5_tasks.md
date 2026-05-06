@@ -45,11 +45,11 @@ Chain strategy: feature-branch-chain
 
 ## Phase 3: PAR Alert Crossing Check
 
-- [ ] 3.1 Modify `apps/pos_app/lib/domain/services/inventory/movement_engine_impl.dart` — update `_checkParAlert` signature to accept `previousStock` parameter
-- [ ] 3.2 Modify `movement_engine_impl.dart` — update `recordSale` to pass `previousStock` when creating Movement
-- [ ] 3.3 Modify `movement_engine_impl.dart` — update `recordShrinkage` to pass `previousStock` when creating Movement
-- [ ] 3.4 Implement crossing logic: `if (previousStock >= parLevel && newStock < parLevel) fire alert`
-- [ ] 3.5 Write unit test: verify alert fires on above→below crossing, silent on below→below, silent on above→above
+- [x] 3.1 Modify `apps/pos_app/lib/domain/services/inventory/movement_engine_impl.dart` — update `_checkParAlert` signature to accept `previousStock` parameter
+- [x] 3.2 Modify `movement_engine_impl.dart` — update `recordSale` to pass `previousStock` when creating Movement
+- [x] 3.3 Modify `movement_engine_impl.dart` — update `recordShrinkage` to pass `previousStock` when creating Movement
+- [x] 3.4 Implement crossing logic: `if (previousStock >= parLevel && newStock < parLevel) fire alert`
+- [x] 3.5 Write unit test: verify alert fires on above→below crossing, silent on below→below, silent on above→above
 
 ---
 
