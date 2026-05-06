@@ -32,6 +32,7 @@ abstract class InventoryRepository {
   Future<void> deleteRecipe(String id);
 
   Future<void> saveMovement(InventoryMovement movement);
+  Future<void> processMovements(List<InventoryMovement> movements);
 
   // Suppliers
   Future<List<Supplier>> getActiveSuppliers();
