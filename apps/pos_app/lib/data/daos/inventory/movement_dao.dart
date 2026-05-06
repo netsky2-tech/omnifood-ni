@@ -12,6 +12,9 @@ abstract class MovementDao {
   @Insert(onConflict: OnConflictStrategy.abort)
   Future<void> insertMovement(MovementEntity movement);
 
+  @Query('SELECT * FROM inventory_movements WHERE type = :type ORDER BY timestamp DESC LIMIT :limit')
+  Future<List<MovementEntity>> findMovementsByType(String type, int limit);
+
   @Query('UPDATE inventory_movements SET is_synced = 1 WHERE id = :id')
   Future<void> markAsSynced(String id);
 }

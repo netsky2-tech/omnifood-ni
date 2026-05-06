@@ -26,9 +26,9 @@ The implementation is broken into 6 logical slices. Each slice is designed to be
 - [x] **TDD**: Unit tests in backend for chronological sorting of movements.
 
 ### PR 5: Shrinkage Implementation
-- [ ] Implement `ShrinkageView` (Flutter) replacing existing shell.
-- [ ] Implement `ShrinkageViewModel` with form validation.
-- [ ] **TDD**: Widget tests for `ShrinkageView` (assert input validation and VM interaction).
+- [x] Implement `ShrinkageView` (Flutter) replacing existing shell.
+- [x] Implement `ShrinkageViewModel` with form validation.
+- [x] **TDD**: Widget tests for `ShrinkageView` (assert input validation and VM interaction).
 
 ### PR 6: Cost Recalculation & Reversals
 - [ ] Implement `ReverseSaleInventoryUseCase` for handling cancellations (DGI compliance).
