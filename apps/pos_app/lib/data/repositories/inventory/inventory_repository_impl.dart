@@ -243,6 +243,11 @@ class InventoryRepositoryImpl implements InventoryRepository {
   }
 
   @override
+  Future<void> markMovementAsFailed(String id) {
+    return movementDao.markAsFailed(id);
+  }
+
+  @override
   Future<List<InventoryMovement>> getRecentMovementsByType(MovementType type, int limit) async {
     final entities = await movementDao.findMovementsByType(type.name, limit);
     return entities.map(InventoryMapper.toMovementDomain).toList();

@@ -149,6 +149,31 @@ class SalesRepositoryImpl implements SalesRepository {
   }
 
   @override
+  Future<void> markAsFailed(String invoiceId) async {
+    final entity = await invoiceDao.getInvoiceById(invoiceId);
+    if (entity != null) {
+      final updated = InvoiceEntity(
+        id: entity.id,
+        number: entity.number,
+        createdAt: entity.createdAt,
+        userId: entity.userId,
+        subtotal: entity.subtotal,
+        totalTax: entity.totalTax,
+        total: entity.total,
+        isCanceled: entity.isCanceled,
+        voidReason: entity.voidReason,
+        syncStatus: 'failed',
+        paymentStatus: entity.paymentStatus,
+        type: entity.type,
+        customerId: entity.customerId,
+        globalTaxOverride: entity.globalTaxOverride,
+        relatedInvoiceId: entity.relatedInvoiceId,
+      );
+      await invoiceDao.updateInvoice(updated);
+    }
+  }
+
+  @override
   Future<void> voidInvoice(String invoiceId, String reason) async {
     final entity = await invoiceDao.getInvoiceById(invoiceId);
     if (entity != null) {

@@ -249,6 +249,16 @@ class MockSalesRepository extends _i1.Mock implements _i12.SalesRepository {
       ) as _i10.Future<void>);
 
   @override
+  _i10.Future<void> markAsFailed(String? invoiceId) => (super.noSuchMethod(
+        Invocation.method(
+          #markAsFailed,
+          [invoiceId],
+        ),
+        returnValue: _i10.Future<void>.value(),
+        returnValueForMissingStub: _i10.Future<void>.value(),
+      ) as _i10.Future<void>);
+
+  @override
   _i10.Future<void> voidInvoice(
     String? invoiceId,
     String? reason,
@@ -585,6 +595,16 @@ class MockInventoryRepository extends _i1.Mock
   _i10.Future<void> markMovementAsSynced(String? id) => (super.noSuchMethod(
         Invocation.method(
           #markMovementAsSynced,
+          [id],
+        ),
+        returnValue: _i10.Future<void>.value(),
+        returnValueForMissingStub: _i10.Future<void>.value(),
+      ) as _i10.Future<void>);
+
+  @override
+  _i10.Future<void> markMovementAsFailed(String? id) => (super.noSuchMethod(
+        Invocation.method(
+          #markMovementAsFailed,
           [id],
         ),
         returnValue: _i10.Future<void>.value(),

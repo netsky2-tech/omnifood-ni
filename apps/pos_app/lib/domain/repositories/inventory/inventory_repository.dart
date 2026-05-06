@@ -54,5 +54,6 @@ abstract class InventoryRepository {
   Future<void> savePurchase(Purchase purchase);
   Future<List<InventoryMovement>> getUnsyncedMovements();
   Future<void> markMovementAsSynced(String id);
+  Future<void> markMovementAsFailed(String id);
   Future<List<InventoryMovement>> getRecentMovementsByType(MovementType type, int limit);
 }
