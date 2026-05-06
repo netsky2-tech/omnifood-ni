@@ -55,12 +55,12 @@ Chain strategy: feature-branch-chain
 
 ## Phase 4: Poison Pill Isolation
 
-- [ ] 4.1 Modify `apps/pos_app/lib/data/services/sync_service.dart` — create `_syncBatchWithPoisonIsolation` method with binary search logic
-- [ ] 4.2 Update `syncUnsyncedSales` to use the new poison isolation method
-- [ ] 4.3 Update `syncUnsyncedMovements` to use the new poison isolation method
-- [ ] 4.4 Handle 4xx → binary search to isolate failing record
-- [ ] 4.5 Handle 5xx/network error → mark batch for retry later (no individual failures)
-- [ ] 4.6 Write unit test: inject mock 400 error on record #23 in batch of 50, verify only #23 marked failed
+- [x] 4.1 Modify `apps/pos_app/lib/data/services/sync_service.dart` — create `_syncBatchWithPoisonIsolation` method with binary search logic
+- [x] 4.2 Update `syncUnsyncedSales` to use the new poison isolation method
+- [x] 4.3 Update `syncUnsyncedMovements` to use the new poison isolation method
+- [x] 4.4 Handle 4xx → binary search to isolate failing record
+- [x] 4.5 Handle 5xx/network error → mark batch for retry later (no individual failures)
+- [x] 4.6 Write unit test: inject mock 400 error on record #23 in batch of 50, verify only #23 marked failed
 
 ---
 

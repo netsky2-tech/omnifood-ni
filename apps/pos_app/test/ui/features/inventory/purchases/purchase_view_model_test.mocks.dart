@@ -329,6 +329,16 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i4.Future<void>);
 
   @override
+  _i4.Future<void> markMovementAsFailed(String? id) => (super.noSuchMethod(
+        Invocation.method(
+          #markMovementAsFailed,
+          [id],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
   _i4.Future<List<_i8.InventoryMovement>> getRecentMovementsByType(
     _i8.MovementType? type,
     int? limit,

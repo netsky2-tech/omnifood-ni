@@ -17,4 +17,7 @@ abstract class MovementDao {
 
   @Query('UPDATE inventory_movements SET is_synced = 1 WHERE id = :id')
   Future<void> markAsSynced(String id);
+
+  @Query('UPDATE inventory_movements SET is_synced = -1 WHERE id = :id')
+  Future<void> markAsFailed(String id);
 }
