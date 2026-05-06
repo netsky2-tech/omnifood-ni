@@ -62,10 +62,9 @@ class SyncService {
       if (response.statusCode == 200 || response.statusCode == 201) {
         developer.log('Synced ${unsynced.length} sales to cloud', name: 'SyncService');
         
-        // Mark all as synced
-        for (final item in unsynced) {
-          await _salesRepository.markAsSynced(item['id']);
-        }
+        // Mark all as synced in bulk
+        final ids = unsynced.map((item) => item['id'] as String).toList();
+        await _salesRepository.markAsSynced(ids);
       }
     } on DioException catch (e) {
       developer.log('Failed to sync sales: ${e.message}', name: 'SyncService');

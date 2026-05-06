@@ -82,14 +82,17 @@ class SalesRepositoryImpl implements SalesRepository {
         [], 
         paymentEntities,
         movementEntities,
+        AuditLogEntity(
+          userId: updatedInvoice.userId,
+          action: 'SALE_CREATED',
+          timestamp: now,
+          deviceId: auditRepository.deviceId,
+          metadata: '{"invoice_id": "${updatedInvoice.id}", "number": "${updatedInvoice.number}", "total": ${updatedInvoice.total}}',
+        ),
+        false,
       );
 
       await numberingService.incrementNumber();
-
-      await auditRepository.log(
-        'SALE_CREATED',
-        metadata: '{"invoice_id": "${updatedInvoice.id}", "number": "${updatedInvoice.number}", "total": ${updatedInvoice.total}}',
-      );
     } catch (e) {
       rethrow;
     }
@@ -132,28 +135,9 @@ class SalesRepositoryImpl implements SalesRepository {
   }
 
   @override
-  Future<void> markAsSynced(String invoiceId) async {
-    final entity = await invoiceDao.getInvoiceById(invoiceId);
-    if (entity != null) {
-      final updated = InvoiceEntity(
-        id: entity.id,
-        number: entity.number,
-        createdAt: entity.createdAt,
-        userId: entity.userId,
-        subtotal: entity.subtotal,
-        totalTax: entity.totalTax,
-        total: entity.total,
-        isCanceled: entity.isCanceled,
-        voidReason: entity.voidReason,
-        syncStatus: 'synced',
-        paymentStatus: entity.paymentStatus,
-        type: entity.type,
-        customerId: entity.customerId,
-        globalTaxOverride: entity.globalTaxOverride,
-        relatedInvoiceId: entity.relatedInvoiceId,
-      );
-      await invoiceDao.updateInvoice(updated);
-    }
+  Future<void> markAsSynced(List<String> invoiceIds) async {
+    if (invoiceIds.isEmpty) return;
+    await invoiceDao.updateSyncStatusForIds(invoiceIds, 'synced');
   }
 
   @override
@@ -276,10 +260,17 @@ class SalesRepositoryImpl implements SalesRepository {
       [], 
       [], 
       movementEntities,
+      AuditLogEntity(
+        userId: original.userId,
+        action: 'CREDIT_NOTE_CREATED',
+        timestamp: now,
+        deviceId: auditRepository.deviceId,
+        metadata: '{"original_id": "$originalInvoiceId", "new_id": "$creditNoteId"}',
+      ),
+      false,
     );
 
     await numberingService.incrementNumber();
-    await auditRepository.log('CREDIT_NOTE_CREATED', metadata: '{"original_id": "$originalInvoiceId", "new_id": "$creditNoteId"}');
   }
 
   @override

@@ -15,6 +15,9 @@ class AuditRepositoryImpl implements AuditRepository {
   AuditRepositoryImpl(this._auditDao, this._authRepository, this._dio, this._deviceId);
 
   @override
+  String get deviceId => _deviceId;
+
+  @override
   Future<void> log(String action, {String? metadata}) async {
     final user = await _authRepository.getCurrentUser();
     if (user == null) return;

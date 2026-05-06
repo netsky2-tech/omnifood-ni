@@ -1702,6 +1702,18 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'is_synced': item.isSynced ? 1 : 0,
                   'batch_deductions': item.batch_deductions
                 }),
+        _auditLogEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'audit_logs',
+            (AuditLogEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'user_id': item.userId,
+                  'action': item.action,
+                  'timestamp': item.timestamp,
+                  'device_id': item.deviceId,
+                  'metadata': item.metadata,
+                  'is_synced': item.isSynced ? 1 : 0
+                }),
         _insumoEntityUpdateAdapter = UpdateAdapter(
             database,
             'insumos',
@@ -1735,6 +1747,8 @@ class _$SalesTransactionDao extends SalesTransactionDao {
 
   final InsertionAdapter<MovementEntity> _movementEntityInsertionAdapter;
 
+  final InsertionAdapter<AuditLogEntity> _auditLogEntityInsertionAdapter;
+
   final UpdateAdapter<InsumoEntity> _insumoEntityUpdateAdapter;
 
   @override
@@ -1751,6 +1765,52 @@ class _$SalesTransactionDao extends SalesTransactionDao {
             parLevel: row['par_level'] as double?,
             isActive: (row['is_active'] as int) != 0),
         arguments: [id]);
+  }
+
+  @override
+  Future<InvoiceEntity?> getInvoiceById(String id) async {
+    return _queryAdapter.query('SELECT * FROM invoices WHERE id = ?1',
+        mapper: (Map<String, Object?> row) => InvoiceEntity(
+            id: row['id'] as String,
+            number: row['invoice_number'] as String,
+            createdAt: row['created_at'] as int,
+            userId: row['user_id'] as String,
+            subtotal: row['subtotal'] as double,
+            totalTax: row['total_tax'] as double,
+            total: row['total'] as double,
+            isCanceled: (row['is_canceled'] as int) != 0,
+            voidReason: row['void_reason'] as String?,
+            syncStatus: row['sync_status'] as String,
+            paymentStatus: row['payment_status'] as String,
+            customerId: row['customer_id'] as String?,
+            globalTaxOverride: (row['global_tax_override'] as int) != 0,
+            type: row['type'] as String,
+            relatedInvoiceId: row['related_invoice_id'] as String?),
+        arguments: [id]);
+  }
+
+  @override
+  Future<List<InvoiceEntity>> getCreditNotesByRelatedId(
+      String relatedId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM invoices WHERE related_invoice_id = ?1',
+        mapper: (Map<String, Object?> row) => InvoiceEntity(
+            id: row['id'] as String,
+            number: row['invoice_number'] as String,
+            createdAt: row['created_at'] as int,
+            userId: row['user_id'] as String,
+            subtotal: row['subtotal'] as double,
+            totalTax: row['total_tax'] as double,
+            total: row['total'] as double,
+            isCanceled: (row['is_canceled'] as int) != 0,
+            voidReason: row['void_reason'] as String?,
+            syncStatus: row['sync_status'] as String,
+            paymentStatus: row['payment_status'] as String,
+            customerId: row['customer_id'] as String?,
+            globalTaxOverride: (row['global_tax_override'] as int) != 0,
+            type: row['type'] as String,
+            relatedInvoiceId: row['related_invoice_id'] as String?),
+        arguments: [relatedId]);
   }
 
   @override
@@ -1785,6 +1845,12 @@ class _$SalesTransactionDao extends SalesTransactionDao {
   }
 
   @override
+  Future<void> insertAuditLog(AuditLogEntity log) async {
+    await _auditLogEntityInsertionAdapter.insert(
+        log, OnConflictStrategy.replace);
+  }
+
+  @override
   Future<void> updateInsumo(InsumoEntity insumo) async {
     await _insumoEntityUpdateAdapter.update(insumo, OnConflictStrategy.replace);
   }
@@ -1796,17 +1862,25 @@ class _$SalesTransactionDao extends SalesTransactionDao {
     List<InvoiceItemModifierEntity> modifiers,
     List<PaymentEntity> payments,
     List<MovementEntity> movements,
+    AuditLogEntity? auditLog,
+    bool shouldFail,
   ) async {
     if (database is sqflite.Transaction) {
       await super.executeSaleTransaction(
-          invoice, items, modifiers, payments, movements);
+          invoice, items, modifiers, payments, movements, auditLog, shouldFail);
     } else {
       await (database as sqflite.Database)
           .transaction<void>((transaction) async {
         final transactionDatabase = _$AppDatabase(changeListener)
           ..database = transaction;
         await transactionDatabase.salesTransactionDao.executeSaleTransaction(
-            invoice, items, modifiers, payments, movements);
+            invoice,
+            items,
+            modifiers,
+            payments,
+            movements,
+            auditLog,
+            shouldFail);
       });
     }
   }
