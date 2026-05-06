@@ -1,4 +1,4 @@
-import 'movement_engine_impl.dart';
+import '../../models/inventory/batch_deduction.dart';
 
 abstract class MovementEngine {
   /// Records a sale and discounts stock based on the product's recipe.

@@ -45,10 +45,10 @@ void main() {
 
       // THEN
       expect(batches.length, 2);
-      expect(batches[0].id, 'b1');
-      expect(batches[0].deducted, 5.0);
-      expect(batches[1].id, 'b2');
-      expect(batches[1].deducted, 2.0);
+      expect(batches[0].batchId, 'b1');
+      expect(batches[0].quantity, 5.0);
+      expect(batches[1].batchId, 'b2');
+      expect(batches[1].quantity, 2.0);
     });
   });
 }

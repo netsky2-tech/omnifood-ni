@@ -1,4 +1,5 @@
 import 'package:sqflite/sqflite.dart' as sqflite;
+import '../../models/inventory/batch_deduction.dart';
 import '../../models/inventory/insumo.dart';
 import '../../models/inventory/inventory_movement.dart';
 import '../../models/inventory/recipe.dart';
@@ -15,12 +16,12 @@ class MovementEngineImpl implements MovementEngine {
 
   @override
   Future<void> recordSale(String productId, int quantity) async {
-    await _processRecipe(productId, quantity.toDouble(), MovementType.sale, 0);
+    await _buildMovements(productId, quantity.toDouble(), MovementType.sale, 0);
   }
 
   @override
   Future<void> recordReversal(String productId, int quantity, String reason) async {
-    await _processRecipe(productId, quantity.toDouble(), MovementType.reversal, 0, reason: reason);
+    await _buildMovements(productId, quantity.toDouble(), MovementType.reversal, 0, reason: reason);
   }
 
   @override
@@ -35,7 +36,7 @@ class MovementEngineImpl implements MovementEngine {
       final canDeduct = batch.remainingStock;
       final amountToDeduct = remainingToDeduct > canDeduct ? canDeduct : remainingToDeduct;
 
-      deductions.add(BatchDeduction(id: batch.id, deducted: amountToDeduct));
+      deductions.add(BatchDeduction(batchId: batch.id, quantity: amountToDeduct));
       remainingToDeduct -= amountToDeduct;
     }
 
@@ -100,14 +101,66 @@ class MovementEngineImpl implements MovementEngine {
     });
   }
 
-  /// Private recursive method to handle recipes and sub-recipes
-  Future<void> _processRecipe(
+  /// Private method to build movements with bulk loading and FIFO
+  Future<void> _buildMovements(
     String productId,
     double multiplier,
     MovementType moveType,
     int depth, {
     String? reason,
   }) async {
+    final Map<String, double> insumoQuantities = {};
+    await _gatherInsumoQuantities(productId, multiplier, depth, insumoQuantities);
+
+    if (insumoQuantities.isEmpty) return;
+
+    final insumos = await repository.getInsumosByIds(insumoQuantities.keys.toList());
+    final insumoMap = {for (var i in insumos) i.id: i};
+
+    for (final entry in insumoQuantities.entries) {
+      final insumoId = entry.key;
+      final totalQty = entry.value;
+      final insumo = insumoMap[insumoId];
+
+      if (insumo != null) {
+        final isReversal = moveType == MovementType.reversal;
+        final discountAmount = isReversal ? -totalQty : totalQty;
+        final newStock = insumo.stock - discountAmount;
+
+        List<BatchDeduction>? batchDeductions;
+        if (insumo.isPerishable && !isReversal && moveType == MovementType.sale) {
+          batchDeductions = await getBatchesForConsumption(insumo.id, totalQty);
+        }
+
+        await repository.updateInsumoStock(insumo.id, newStock);
+        
+        if (!isReversal) {
+          await _checkParAlert(insumo, newStock);
+        } else if (newStock >= (insumo.parLevel ?? 0)) {
+          _alertedInsumos.remove(insumo.id);
+        }
+
+        await repository.saveMovement(InventoryMovement(
+          id: '${DateTime.now().millisecondsSinceEpoch}-${insumo.id}',
+          insumoId: insumo.id,
+          type: moveType,
+          quantity: -discountAmount,
+          previousStock: insumo.stock,
+          newStock: newStock,
+          timestamp: DateTime.now(),
+          reason: reason ?? '${moveType.name.toUpperCase()} of $productId (x$multiplier)',
+          batchDeductions: batchDeductions,
+        ));
+      }
+    }
+  }
+
+  Future<void> _gatherInsumoQuantities(
+    String productId,
+    double multiplier,
+    int depth,
+    Map<String, double> insumoQuantities,
+  ) async {
     if (depth > 5) return; // Recursion protection
 
     final recipeItems = await repository.getRecipeByProductId(productId);
@@ -117,34 +170,10 @@ class MovementEngineImpl implements MovementEngine {
       final totalQty = item.quantity * multiplier;
 
       if (item.ingredientType == IngredientType.insumo) {
-        final insumo = await repository.getInsumoById(item.ingredientId);
-        if (insumo != null) {
-          final isReversal = moveType == MovementType.reversal;
-          final discountAmount = isReversal ? -totalQty : totalQty;
-          final newStock = insumo.stock - discountAmount;
-
-          await repository.updateInsumoStock(insumo.id, newStock);
-          
-          if (!isReversal) {
-            await _checkParAlert(insumo, newStock);
-          } else if (newStock >= (insumo.parLevel ?? 0)) {
-            _alertedInsumos.remove(insumo.id);
-          }
-
-          await repository.saveMovement(InventoryMovement(
-            id: '${DateTime.now().millisecondsSinceEpoch}-${insumo.id}',
-            insumoId: insumo.id,
-            type: moveType,
-            quantity: -discountAmount,
-            previousStock: insumo.stock,
-            newStock: newStock,
-            timestamp: DateTime.now(),
-            reason: reason ?? '${moveType.name.toUpperCase()} of $productId (x$multiplier)',
-          ));
-        }
+        insumoQuantities[item.ingredientId] = (insumoQuantities[item.ingredientId] ?? 0) + totalQty;
       } else if (item.ingredientType == IngredientType.product) {
         // Recurse for sub-recipe
-        await _processRecipe(item.ingredientId, totalQty, moveType, depth + 1, reason: reason);
+        await _gatherInsumoQuantities(item.ingredientId, totalQty, depth + 1, insumoQuantities);
       }
     }
   }
@@ -157,10 +186,4 @@ class MovementEngineImpl implements MovementEngine {
       }
     }
   }
-}
-
-class BatchDeduction {
-  final String id;
-  final double deducted;
-  BatchDeduction({required this.id, required this.deducted});
 }
