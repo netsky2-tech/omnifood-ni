@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../../domain/models/inventory/insumo.dart';
 import 'shrinkage_view_model.dart';
 
 class ShrinkageView extends StatefulWidget {
@@ -10,6 +11,9 @@ class ShrinkageView extends StatefulWidget {
 }
 
 class _ShrinkageViewState extends State<ShrinkageView> {
+  final _qtyController = TextEditingController();
+  final _reasonController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
@@ -19,12 +23,19 @@ class _ShrinkageViewState extends State<ShrinkageView> {
   }
 
   @override
+  void dispose() {
+    _qtyController.dispose();
+    _reasonController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Registro de Mermas')),
       body: Consumer<ShrinkageViewModel>(
         builder: (context, vm, child) {
-          if (vm.isLoading) return const Center(child: CircularProgressIndicator());
+          if (vm.isLoading && vm.insumos.isEmpty) return const Center(child: CircularProgressIndicator());
           
           return Padding(
             padding: const EdgeInsets.all(16.0),
@@ -40,45 +51,79 @@ class _ShrinkageViewState extends State<ShrinkageView> {
 
   void _showShrinkageForm(BuildContext context) {
     final vm = context.read<ShrinkageViewModel>();
-    String? selectedInsumoId;
-    final qtyController = TextEditingController();
-    final reasonController = TextEditingController();
+    Insumo? selectedInsumo;
+    _qtyController.clear();
+    _reasonController.clear();
 
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Registrar Merma'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButtonFormField<String>(
-                decoration: const InputDecoration(labelText: 'Insumo'),
-                items: vm.insumos.map((i) => DropdownMenuItem(value: i.id, child: Text(i.name))).toList(),
-                onChanged: (val) => setState(() => selectedInsumoId = val),
+      barrierDismissible: false,
+      builder: (dialogContext) => ChangeNotifierProvider<ShrinkageViewModel>.value(
+        value: vm,
+        child: Consumer<ShrinkageViewModel>(
+          builder: (context, vm, child) => StatefulBuilder(
+            builder: (context, setState) => AlertDialog(
+              title: const Text('Registrar Merma'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Autocomplete<Insumo>(
+                    displayStringForOption: (Insumo option) => option.name,
+                    optionsBuilder: (TextEditingValue textEditingValue) {
+                      if (textEditingValue.text == '') {
+                        return const Iterable<Insumo>.empty();
+                      }
+                      return vm.insumos.where((Insumo option) {
+                        return option.name.toLowerCase().contains(textEditingValue.text.toLowerCase());
+                      });
+                    },
+                    onSelected: (Insumo selection) {
+                      setState(() => selectedInsumo = selection);
+                    },
+                    fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                      return TextField(
+                        controller: controller,
+                        focusNode: focusNode,
+                        decoration: const InputDecoration(labelText: 'Insumo (buscar...)'),
+                      );
+                    },
+                  ),
+              TextField(
+                controller: _qtyController,
+                decoration: const InputDecoration(labelText: 'Cantidad'),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
               ),
-              TextField(controller: qtyController, decoration: const InputDecoration(labelText: 'Cantidad'), keyboardType: TextInputType.number),
-              TextField(controller: reasonController, decoration: const InputDecoration(labelText: 'Motivo')),
+              TextField(
+                controller: _reasonController,
+                decoration: const InputDecoration(labelText: 'Motivo'),
+              ),
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCELAR')),
+            TextButton(
+              onPressed: vm.isLoading ? null : () => Navigator.pop(context),
+              child: const Text('CANCELAR'),
+            ),
             ElevatedButton(
-              onPressed: () {
-                if (selectedInsumoId != null) {
-                  vm.recordShrinkage(
-                    insumoId: selectedInsumoId!,
-                    quantity: double.tryParse(qtyController.text) ?? 0,
-                    reason: reasonController.text,
-                  );
-                  Navigator.pop(context);
-                }
-              },
-              child: const Text('REGISTRAR'),
+              onPressed: (vm.isLoading || selectedInsumo == null)
+                  ? null
+                  : () async {
+                      await vm.recordShrinkage(
+                        insumoId: selectedInsumo!.id,
+                        quantity: double.tryParse(_qtyController.text) ?? 0,
+                        reason: _reasonController.text,
+                      );
+                      if (context.mounted) Navigator.pop(context);
+                    },
+              child: vm.isLoading
+                  ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Text('REGISTRAR'),
             ),
           ],
         ),
       ),
-    );
-  }
+    ),
+  ),
+);
+}
 }

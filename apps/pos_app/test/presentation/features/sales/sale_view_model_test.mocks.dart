@@ -369,10 +369,11 @@ class MockSalesRepository extends _i1.Mock implements _i24.SalesRepository {
       ) as _i22.Future<List<Map<String, dynamic>>>);
 
   @override
-  _i22.Future<void> markAsSynced(String? invoiceId) => (super.noSuchMethod(
+  _i22.Future<void> markAsSynced(List<String>? invoiceIds) =>
+      (super.noSuchMethod(
         Invocation.method(
           #markAsSynced,
-          [invoiceId],
+          [invoiceIds],
         ),
         returnValue: _i22.Future<void>.value(),
         returnValueForMissingStub: _i22.Future<void>.value(),

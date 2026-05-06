@@ -37,11 +37,11 @@ Chain strategy: feature-branch-chain
 
 ## Phase 2: Inventory Engine Refactor (FIFO & Performance)
 
-- [ ] 2.1 Refactor `MovementEngineImpl._buildMovements` to use `inventoryRepository.getInsumosByIds` for bulk loading
-- [ ] 2.2 Implement FIFO batch consumption logic in `_buildMovements` calling `getBatchesForConsumption`
-- [ ] 2.3 Ensure `batchDeductions` are attached to generated `InventoryMovement` records
-- [ ] 2.4 Test: Verify `_buildMovements` executes exactly 1 repository call for all recipe ingredients
-- [ ] 2.5 Test: Verify FIFO logic exhausts batches in expiration date order and records deductions
+- [x] 2.1 Refactor `MovementEngineImpl._buildMovements` to use `inventoryRepository.getInsumosByIds` for bulk loading
+- [x] 2.2 Implement FIFO batch consumption logic in `_buildMovements` calling `getBatchesForConsumption`
+- [x] 2.3 Ensure `batchDeductions` are attached to generated `InventoryMovement` records
+- [x] 2.4 Test: Verify `_buildMovements` executes exactly 1 repository call for all recipe ingredients
+- [x] 2.5 Test: Verify FIFO logic exhausts batches in expiration date order and records deductions
 
 ## Phase 3: Sales Integrity & Performance (Integrity)
 
@@ -59,7 +59,7 @@ Chain strategy: feature-branch-chain
 
 ## Phase 5: UI UX Guards (UX)
 
-- [ ] 5.1 Add `isLoading` check to disable "REGISTRAR" button in `apps/pos_app/lib/ui/features/inventory/shrinkage/shrinkage_view.dart`
-- [ ] 5.2 Implement `dispose()` for `qtyController` and `reasonController` in `ShrinkageView`
-- [ ] 5.3 Replace `DropdownButtonFormField` with a searchable autocomplete widget for insumo selection
-- [ ] 5.4 Test: Verify search filtering logic in the new autocomplete widget
+- [x] 5.1 Add `isLoading` check to disable "REGISTRAR" button in `apps/pos_app/lib/ui/features/inventory/shrinkage/shrinkage_view.dart`
+- [x] 5.2 Implement `dispose()` for `qtyController` and `reasonController` in `ShrinkageView`
+- [x] 5.3 Replace `DropdownButtonFormField` with a searchable autocomplete widget for insumo selection
+- [x] 5.4 Test: Verify search filtering logic in the new autocomplete widget
