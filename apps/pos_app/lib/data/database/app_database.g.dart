@@ -903,6 +903,13 @@ class _$MovementDao extends MovementDao {
   }
 
   @override
+  Future<void> markAsFailed(String id) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE inventory_movements SET is_synced = -1 WHERE id = ?1',
+        arguments: [id]);
+  }
+
+  @override
   Future<void> insertMovement(MovementEntity movement) async {
     await _movementEntityInsertionAdapter.insert(
         movement, OnConflictStrategy.abort);
