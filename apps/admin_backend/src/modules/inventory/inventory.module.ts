@@ -11,6 +11,7 @@ import { Batch } from './entities/batch.entity';
 import { InventoryService } from './inventory.service';
 import { PurchaseService } from './purchase.service';
 import { ShrinkageService } from './shrinkage.service';
+import { CostCalculatorService } from './cost-calculator.service';
 import { InventoryMovementController } from './inventory-movement.controller';
 
 @Module({
@@ -27,7 +28,18 @@ import { InventoryMovementController } from './inventory-movement.controller';
     ]),
   ],
   controllers: [InventoryMovementController],
-  providers: [InventoryService, PurchaseService, ShrinkageService],
-  exports: [TypeOrmModule, InventoryService, PurchaseService, ShrinkageService],
+  providers: [
+    InventoryService,
+    PurchaseService,
+    ShrinkageService,
+    CostCalculatorService,
+  ],
+  exports: [
+    TypeOrmModule,
+    InventoryService,
+    PurchaseService,
+    ShrinkageService,
+    CostCalculatorService,
+  ],
 })
 export class InventoryModule {}

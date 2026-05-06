@@ -203,6 +203,17 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i4.Future<void>);
 
   @override
+  _i4.Future<void> processMovements(List<_i8.InventoryMovement>? movements) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #processMovements,
+          [movements],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
   _i4.Future<List<_i9.Supplier>> getActiveSuppliers() => (super.noSuchMethod(
         Invocation.method(
           #getActiveSuppliers,
@@ -295,15 +306,42 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i4.Future<void>);
 
   @override
-  _i4.Future<void> queuePurchaseSync(_i13.Purchase? purchase) =>
+  _i4.Future<List<_i8.InventoryMovement>> getUnsyncedMovements() =>
       (super.noSuchMethod(
         Invocation.method(
-          #queuePurchaseSync,
-          [purchase],
+          #getUnsyncedMovements,
+          [],
+        ),
+        returnValue: _i4.Future<List<_i8.InventoryMovement>>.value(
+            <_i8.InventoryMovement>[]),
+      ) as _i4.Future<List<_i8.InventoryMovement>>);
+
+  @override
+  _i4.Future<void> markMovementAsSynced(String? id) => (super.noSuchMethod(
+        Invocation.method(
+          #markMovementAsSynced,
+          [id],
         ),
         returnValue: _i4.Future<void>.value(),
         returnValueForMissingStub: _i4.Future<void>.value(),
       ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<List<_i8.InventoryMovement>> getRecentMovementsByType(
+    _i8.MovementType? type,
+    int? limit,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getRecentMovementsByType,
+          [
+            type,
+            limit,
+          ],
+        ),
+        returnValue: _i4.Future<List<_i8.InventoryMovement>>.value(
+            <_i8.InventoryMovement>[]),
+      ) as _i4.Future<List<_i8.InventoryMovement>>);
 }
 
 /// A class which mocks [AlertService].

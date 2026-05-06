@@ -149,6 +149,12 @@ class InventoryRepositoryImpl implements InventoryRepository {
   }
 
   @override
+  Future<void> processMovements(List<InventoryMovement> movements) {
+    final entities = movements.map(InventoryMapper.toMovementEntity).toList();
+    return _database.inventoryDao.processInventoryMovements(entities);
+  }
+
+  @override
   Future<List<Supplier>> getActiveSuppliers() async {
     final entities = await supplierDao.findAllActiveSuppliers();
     return entities.map(InventoryMapper.toSupplierDomain).toList();
@@ -226,22 +232,19 @@ class InventoryRepositoryImpl implements InventoryRepository {
   }
 
   @override
-  Future<void> queuePurchaseSync(Purchase purchase) async {
-    // First save locally (offline-first)
-    await savePurchase(purchase);
+  Future<List<InventoryMovement>> getUnsyncedMovements() async {
+    final entities = await movementDao.findUnsyncedMovements();
+    return entities.map(InventoryMapper.toMovementDomain).toList();
+  }
 
-    // Then try to sync immediately
-    try {
-      final response = await dio.post(
-        '/purchases/sync',
-        data: PurchaseMapper.toSyncJson(purchase),
-      );
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        await purchaseDao.markAsSynced(purchase.id);
-      }
-    } on DioException {
-      // Sync failed, will be retried later by SyncService
-      // Purchase already saved locally - that's the key offline-first behavior
-    }
+  @override
+  Future<void> markMovementAsSynced(String id) {
+    return movementDao.markAsSynced(id);
+  }
+
+  @override
+  Future<List<InventoryMovement>> getRecentMovementsByType(MovementType type, int limit) async {
+    final entities = await movementDao.findMovementsByType(type.name, limit);
+    return entities.map(InventoryMapper.toMovementDomain).toList();
   }
 }

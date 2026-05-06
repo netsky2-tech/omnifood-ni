@@ -98,6 +98,20 @@ class InventoryMapper {
     );
   }
 
+  static InventoryMovement toMovementDomain(MovementEntity entity) {
+    return InventoryMovement(
+      id: entity.id,
+      insumoId: entity.insumoId,
+      type: MovementType.values.byName(entity.type.toLowerCase()),
+      quantity: entity.quantity,
+      previousStock: entity.previousStock,
+      newStock: entity.newStock,
+      timestamp: DateTime.parse(entity.timestamp),
+      reason: entity.reason,
+      userId: entity.userId,
+    );
+  }
+
   static MovementEntity toMovementEntity(InventoryMovement domain) {
     return MovementEntity(
       id: domain.id,

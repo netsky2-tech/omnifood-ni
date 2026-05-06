@@ -1,3 +1,4 @@
+import '../../models/inventory/inventory_movement.dart';
 import '../../services/inventory/movement_engine.dart';
 import '../../models/sales/invoice_item.dart';
 
@@ -6,9 +7,12 @@ class ProcessSaleInventoryUseCase {
 
   ProcessSaleInventoryUseCase(this.engine);
 
-  Future<void> execute(List<InvoiceItem> items) async {
+  Future<List<InventoryMovement>> execute(List<InvoiceItem> items) async {
+    final List<InventoryMovement> allMovements = [];
     for (final item in items) {
-      await engine.recordSale(item.productId, item.quantity);
+      final movements = await engine.getSaleMovements(item.productId, item.quantity);
+      allMovements.addAll(movements);
     }
+    return allMovements;
   }
 }
