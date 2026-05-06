@@ -24,9 +24,10 @@ export class InventoryService {
     insumoId: string,
     quantity: number,
     cost: number,
+    tenantId: string,
   ): Promise<Insumo> {
     const insumo = await this.insumoRepo.findOne({
-      where: { id: insumoId },
+      where: { id: insumoId, tenant_id: tenantId },
     });
     if (!insumo) {
       throw new NotFoundException(`Insumo with ID ${insumoId} not found`);
@@ -64,7 +65,7 @@ export class InventoryService {
     return updatedInsumo;
   }
 
-  async syncMovements(movements: CreateInventoryMovementDto[]): Promise<void> {
+  async syncMovements(movements: CreateInventoryMovementDto[], tenantId: string): Promise<void> {
     const sorted = await this.sortMovements(
       movements.map((m) => ({
         ...m,
@@ -78,7 +79,7 @@ export class InventoryService {
 
       for (const mov of sorted) {
         const insumo = await insumoRepo.findOne({
-          where: { id: mov.insumoId },
+          where: { id: mov.insumoId, tenant_id: tenantId },
         });
         if (!insumo) continue;
 

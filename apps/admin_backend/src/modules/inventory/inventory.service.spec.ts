@@ -16,6 +16,22 @@ describe('InventoryService', () => {
   let dataSource: any;
   let costCalculator: CostCalculatorService;
 
+  // Helper function to create a mock insumo with tenant_id
+  const createMockInsumo = (overrides: Partial<Insumo> = {}): Insumo => {
+    return {
+      id: 'ins-1',
+      tenant_id: 'tenant-A',
+      name: 'Test Insumo',
+      stock: 10,
+      averageCost: 100,
+      conversionFactor: 1,
+      purchaseUom: 'unit',
+      consumptionUom: 'unit',
+      is_active: true,
+      ...overrides,
+    } as Insumo;
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -72,6 +88,7 @@ describe('InventoryService', () => {
       const insumoId = 'ins-1';
       const existingInsumo = {
         id: insumoId,
+        tenant_id: 'tenant-A',
         stock: 10,
         averageCost: 100,
         conversionFactor: 1,
@@ -82,7 +99,7 @@ describe('InventoryService', () => {
         .spyOn(insumoRepo, 'save')
         .mockImplementation(async (insumo) => insumo as Insumo);
 
-      const result = await service.recordPurchase(insumoId, 5, 130);
+      const result = await service.recordPurchase(insumoId, 5, 130, 'tenant-A');
 
       expect(insumoRepo.save).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -97,6 +114,7 @@ describe('InventoryService', () => {
       const insumoId = 'ins-2';
       const existingInsumo = {
         id: insumoId,
+        tenant_id: 'tenant-A',
         stock: 0,
         averageCost: 0,
         conversionFactor: 1,
@@ -107,7 +125,7 @@ describe('InventoryService', () => {
         .spyOn(insumoRepo, 'save')
         .mockImplementation(async (insumo) => insumo as Insumo);
 
-      const result = await service.recordPurchase(insumoId, 10, 50);
+      const result = await service.recordPurchase(insumoId, 10, 50, 'tenant-A');
 
       expect((result as any).stock).toBe(10);
       expect((result as any).averageCost).toBe(50);
@@ -151,18 +169,131 @@ describe('InventoryService', () => {
         },
       ];
 
-      const insumo = { id: 'ins-1', stock: 11 } as Insumo;
+      const insumo = { id: 'ins-1', tenant_id: 'tenant-A', stock: 11 } as Insumo;
       jest.spyOn(insumoRepo, 'findOne').mockResolvedValue(insumo);
       jest.spyOn(insumoRepo, 'save').mockImplementation(async (i: any) => {
         insumo.stock = i.stock;
         return i;
       });
 
-      await service.syncMovements(movements);
+      await service.syncMovements(movements, 'tenant-A');
 
       expect(insumoRepo.save).toHaveBeenCalledTimes(2);
       expect(insumo.stock).toBe(8);
       expect(movementRepo.save).toHaveBeenCalledTimes(2);
+    });
+
+    it('should include tenant_id in findOne query for syncMovements (RED)', async () => {
+      const movements: CreateInventoryMovementDto[] = [
+        {
+          id: 'mov-1',
+          insumoId: 'ins-1',
+          type: MovementType.SALE,
+          quantity: 2,
+          previousStock: 10,
+          newStock: 8,
+          timestamp: '2026-05-05T10:00:00Z',
+        },
+      ];
+
+      const mockInsumo = createMockInsumo({ id: 'ins-1', tenant_id: 'tenant-A' });
+      const findOneSpy = jest.spyOn(insumoRepo, 'findOne').mockResolvedValue(mockInsumo);
+      jest.spyOn(insumoRepo, 'save').mockResolvedValue(mockInsumo);
+      jest.spyOn(movementRepo, 'save').mockResolvedValue([]);
+
+      await service.syncMovements(movements, 'tenant-A');
+
+      expect(findOneSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            id: 'ins-1',
+            tenant_id: 'tenant-A',
+          }),
+        }),
+      );
+    });
+  });
+
+  describe('tenant isolation', () => {
+    it('should include tenant_id in findOne query for recordPurchase (RED)', async () => {
+      const mockInsumo = createMockInsumo({
+        id: 'ins-1',
+        tenant_id: 'tenant-A',
+        stock: 10,
+        conversionFactor: 1,
+      });
+      const findOneSpy = jest.spyOn(insumoRepo, 'findOne').mockResolvedValue(mockInsumo);
+      jest.spyOn(insumoRepo, 'save').mockResolvedValue(mockInsumo);
+
+      await service.recordPurchase('ins-1', 5, 130, 'tenant-A');
+
+      expect(findOneSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            id: 'ins-1',
+            tenant_id: 'tenant-A',
+          }),
+        }),
+      );
+    });
+
+    it('should NOT return insumo from different tenant in recordPurchase (RED)', async () => {
+      // Tenant A's insumo
+      const tenantAInsumo = createMockInsumo({
+        id: 'ins-1',
+        tenant_id: 'tenant-A',
+      });
+
+      // When tenant B queries, they should NOT get tenant A's insumo
+      // The query with tenant_id filter should return null for tenant B
+      jest.spyOn(insumoRepo, 'findOne').mockImplementation((options: any) => {
+        const where = options?.where || {};
+        if (where.tenant_id === 'tenant-A' && where.id === 'ins-1') {
+          return Promise.resolve(tenantAInsumo);
+        }
+        return Promise.resolve(null);
+      });
+
+      // Tenant B trying to access tenant A's insumo should get NotFoundException
+      await expect(
+        service.recordPurchase('ins-1', 5, 130, 'tenant-B'),
+      ).rejects.toThrow('Insumo with ID ins-1 not found');
+    });
+
+    it('should NOT return insumo from different tenant in syncMovements (RED)', async () => {
+      const movements: CreateInventoryMovementDto[] = [
+        {
+          id: 'mov-1',
+          insumoId: 'ins-1',
+          type: MovementType.SALE,
+          quantity: 2,
+          previousStock: 10,
+          newStock: 8,
+          timestamp: '2026-05-05T10:00:00Z',
+        },
+      ];
+
+      // Tenant A's insumo
+      const tenantAInsumo = createMockInsumo({
+        id: 'ins-1',
+        tenant_id: 'tenant-A',
+      });
+
+      // Mock findOne to simulate tenant isolation
+      jest.spyOn(insumoRepo, 'findOne').mockImplementation((options: any) => {
+        const where = options?.where || {};
+        if (where.tenant_id === 'tenant-A' && where.id === 'ins-1') {
+          return Promise.resolve(tenantAInsumo);
+        }
+        return Promise.resolve(null);
+      });
+
+      // When processing for tenant-B, findOne should return null (insumo not found)
+      // The movement should be skipped
+      await service.syncMovements(movements, 'tenant-B');
+
+      // Since no insumo was found for tenant-B, save should not be called
+      expect(insumoRepo.save).not.toHaveBeenCalled();
     });
   });
 });
