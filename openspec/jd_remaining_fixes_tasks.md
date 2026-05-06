@@ -45,17 +45,17 @@ Chain strategy: feature-branch-chain
 
 ## Phase 3: Sales Integrity & Performance (Integrity)
 
-- [ ] 3.1 Update `SalesTransactionDao.executeSaleTransaction` to insert `SALE_CREATED` audit entry inside the transaction
-- [ ] 3.2 Implement cumulative total validation in `SalesRepositoryImpl.createCreditNote`
-- [ ] 3.3 Refactor `SalesRepositoryImpl.markAsSynced` to use `invoiceDao.updateSyncStatusForIds`
-- [ ] 3.4 Test: Verify `SALE_CREATED` audit entry is rolled back if sale persistence fails
-- [ ] 3.5 Test: Verify credit note rejection when `existing_totals + new_total > original_invoice_total`
+- [x] 3.1 Update `SalesTransactionDao.executeSaleTransaction` to insert `SALE_CREATED` audit entry inside the transaction
+- [x] 3.2 Implement cumulative total validation in `SalesRepositoryImpl.createCreditNote`
+- [x] 3.3 Refactor `SalesRepositoryImpl.markAsSynced` to use `invoiceDao.updateSyncStatusForIds`
+- [x] 3.4 Test: Verify `SALE_CREATED` audit entry is rolled back if sale persistence fails
+- [x] 3.5 Test: Verify credit note rejection when `existing_totals + new_total > original_invoice_total`
 
 ## Phase 4: Backend Sync Reconciliation (Infrastructure)
 
-- [ ] 4.1 Update `SyncInvoiceDto` in `apps/admin_backend/src/modules/sales/dto/sync-invoice.dto.ts` for items/payments
-- [ ] 4.2 Implement child entity reconciliation using TypeORM `upsert` in `InvoicesService.syncInvoices`
-- [ ] 4.3 Test: Verify backend re-sync of existing invoice updates items/payments status via `ON CONFLICT`
+- [x] 4.1 Update `SyncInvoiceDto` in `apps/admin_backend/src/modules/sales/dto/sync-invoice.dto.ts` for items/payments
+- [x] 4.2 Implement child entity reconciliation using TypeORM `upsert` in `InvoicesService.syncInvoices`
+- [x] 4.3 Test: Verify backend re-sync of existing invoice updates items/payments status via `ON CONFLICT`
 
 ## Phase 5: UI UX Guards (UX)
 
