@@ -37,9 +37,9 @@ Chain strategy: feature-branch-chain
 
 ## Phase 2: POS Invoice Uniqueness
 
-- [ ] 2.1 Modify `apps/pos_app/lib/data/models/sales/invoice_entity.dart` — add `@Index(value: ['number'], unique: true)` to `@Entity` annotation
-- [ ] 2.2 Run code generation: `flutter pub run build_runner build --delete-conflicting-outputs`
-- [ ] 2.3 Write integration test: attempt duplicate invoice insert, verify SQLite constraint error
+- [x] 2.1 Modify `apps/pos_app/lib/data/models/sales/invoice_entity.dart` — add `@Index(value: ['number'], unique: true)` to `@Entity` annotation
+- [x] 2.2 Run code generation: `flutter pub run build_runner build --delete-conflicting-outputs`
+- [x] 2.3 Write integration test: attempt duplicate invoice insert, verify SQLite constraint error
 
 ---
 
