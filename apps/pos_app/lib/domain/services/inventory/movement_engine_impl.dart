@@ -8,7 +8,6 @@ import 'movement_engine.dart';
 class MovementEngineImpl implements MovementEngine {
   final InventoryRepository repository;
   final AlertService alertService;
-  final Set<String> _alertedInsumos = {};
 
   MovementEngineImpl(this.repository, this.alertService);
 
@@ -20,7 +19,7 @@ class MovementEngineImpl implements MovementEngine {
       for (final mov in movements) {
         final insumo = await repository.getInsumoById(mov.insumoId);
         if (insumo != null) {
-          await _checkParAlert(insumo, mov.newStock);
+          await _checkParAlert(insumo, mov.previousStock, mov.newStock);
         }
       }
     }
@@ -48,12 +47,8 @@ class MovementEngineImpl implements MovementEngine {
     
     if (movements.isNotEmpty) {
       await repository.processMovements(movements);
-      for (final mov in movements) {
-        final insumo = await repository.getInsumoById(mov.insumoId);
-        if (insumo != null && mov.newStock >= (insumo.parLevel ?? 0)) {
-          _alertedInsumos.remove(insumo.id);
-        }
-      }
+      // Note: Non-volatile crossing check means no in-memory state to clear.
+      // Alerts will naturally refire if stock crosses below PAR again.
     }
   }
 
@@ -103,10 +98,8 @@ class MovementEngineImpl implements MovementEngine {
     await repository.updateInsumoCost(insumoId, newAverageCost);
     await repository.saveMovement(movement);
 
-    // Reset alert when stock is replenished
-    if (newStock >= (insumo.parLevel ?? 0)) {
-      _alertedInsumos.remove(insumoId);
-    }
+    // Note: Non-volatile crossing check means no in-memory state to clear.
+    // Alerts will naturally refire if stock crosses below PAR again after replenishment.
   }
 
   @override
@@ -116,20 +109,21 @@ class MovementEngineImpl implements MovementEngine {
     final insumo = await repository.getInsumoById(insumoId);
     if (insumo == null) return;
 
-    final newStock = insumo.stock - quantity;
+    final previousStock = insumo.stock;
+    final newStock = previousStock - quantity;
     final movement = InventoryMovement(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       insumoId: insumoId,
       type: MovementType.shrinkage,
       quantity: -quantity,
-      previousStock: insumo.stock,
+      previousStock: previousStock,
       newStock: newStock,
       timestamp: DateTime.now(),
       reason: reason,
     );
 
     await repository.processMovements([movement]);
-    await _checkParAlert(insumo, newStock);
+    await _checkParAlert(insumo, previousStock, newStock);
   }
 
   Future<void> _buildMovements(
@@ -177,12 +171,14 @@ class MovementEngineImpl implements MovementEngine {
     }
   }
 
-  Future<void> _checkParAlert(Insumo insumo, double newStock) async {
-    if (insumo.parLevel != null && newStock < insumo.parLevel!) {
-      if (!_alertedInsumos.contains(insumo.id)) {
-        alertService.notifyLowStock(insumo.name, newStock, insumo.parLevel!);
-        _alertedInsumos.add(insumo.id);
-      }
+  Future<void> _checkParAlert(Insumo insumo, double previousStock, double newStock) async {
+    final parLevel = insumo.parLevel;
+    if (parLevel == null) return;
+    
+    // Non-volatile crossing check: alert fires only when stock transitions
+    // from at-or-above PAR to below PAR
+    if (previousStock >= parLevel && newStock < parLevel) {
+      alertService.notifyLowStock(insumo.name, newStock, parLevel);
     }
   }
 }
