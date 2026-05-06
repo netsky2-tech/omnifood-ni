@@ -86,6 +86,8 @@ class _$AppDatabase extends AppDatabase {
 
   MovementDao? _movementDaoInstance;
 
+  InventoryDao? _inventoryDaoInstance;
+
   SupplierDao? _supplierDaoInstance;
 
   WarehouseDao? _warehouseDaoInstance;
@@ -220,6 +222,11 @@ class _$AppDatabase extends AppDatabase {
   @override
   MovementDao get movementDao {
     return _movementDaoInstance ??= _$MovementDao(database, changeListener);
+  }
+
+  @override
+  InventoryDao get inventoryDao {
+    return _inventoryDaoInstance ??= _$InventoryDao(database, changeListener);
   }
 
   @override
@@ -886,6 +893,67 @@ class _$MovementDao extends MovementDao {
   Future<void> insertMovement(MovementEntity movement) async {
     await _movementEntityInsertionAdapter.insert(
         movement, OnConflictStrategy.abort);
+  }
+}
+
+class _$InventoryDao extends InventoryDao {
+  _$InventoryDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _movementEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'inventory_movements',
+            (MovementEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'insumo_id': item.insumoId,
+                  'type': item.type,
+                  'quantity': item.quantity,
+                  'previous_stock': item.previousStock,
+                  'new_stock': item.newStock,
+                  'timestamp': item.timestamp,
+                  'reason': item.reason,
+                  'user_id': item.userId,
+                  'is_synced': item.isSynced ? 1 : 0
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<MovementEntity> _movementEntityInsertionAdapter;
+
+  @override
+  Future<void> updateStock(
+    String id,
+    double newStock,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE insumos SET stock = ?2 WHERE id = ?1',
+        arguments: [id, newStock]);
+  }
+
+  @override
+  Future<void> insertMovement(MovementEntity movement) async {
+    await _movementEntityInsertionAdapter.insert(
+        movement, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> processInventoryMovements(List<MovementEntity> movements) async {
+    if (database is sqflite.Transaction) {
+      await super.processInventoryMovements(movements);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.inventoryDao
+            .processInventoryMovements(movements);
+      });
+    }
   }
 }
 

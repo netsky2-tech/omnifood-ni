@@ -13,8 +13,8 @@ The implementation is broken into 6 logical slices. Each slice is designed to be
 - [x] **TDD**: Unit tests for BOM calculations (raw material requirements vs. product quantity).
 
 ### PR 2: Inventory DAO & Transaction Handling
-- [ ] Modify `apps/pos_app/lib/data/daos/inventory/inventory_dao.dart` adding `@transaction` method `processInventoryMovements`.
-- [ ] **TDD**: Integration tests for atomic rollback scenarios (ensure no partial stock deduction on error).
+- [x] Modify `apps/pos_app/lib/data/daos/inventory/inventory_dao.dart` adding `@transaction` method `processInventoryMovements`.
+- [x] **TDD**: Integration tests for atomic rollback scenarios (ensure no partial stock deduction on error).
 
 ### PR 3: Sales Integration (Refactoring SalesRepositoryImpl)
 - [ ] Integrate `ProcessSaleInventoryUseCase` into `SalesRepositoryImpl`.
