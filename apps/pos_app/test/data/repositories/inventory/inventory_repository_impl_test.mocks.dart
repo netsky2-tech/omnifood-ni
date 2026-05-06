@@ -535,6 +535,16 @@ class MockMovementDao extends _i1.Mock implements _i13.MovementDao {
         returnValue: _i28.Future<void>.value(),
         returnValueForMissingStub: _i28.Future<void>.value(),
       ) as _i28.Future<void>);
+
+  @override
+  _i28.Future<void> markAsFailed(String? id) => (super.noSuchMethod(
+        Invocation.method(
+          #markAsFailed,
+          [id],
+        ),
+        returnValue: _i28.Future<void>.value(),
+        returnValueForMissingStub: _i28.Future<void>.value(),
+      ) as _i28.Future<void>);
 }
 
 /// A class which mocks [SupplierDao].
