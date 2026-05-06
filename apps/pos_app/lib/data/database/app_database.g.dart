@@ -118,7 +118,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 10,
+      version: 11,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -150,7 +150,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `recipes` (`id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `ingredient_id` TEXT NOT NULL, `ingredient_type` TEXT NOT NULL, `quantity` REAL NOT NULL, FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `inventory_movements` (`id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `type` TEXT NOT NULL, `quantity` REAL NOT NULL, `previous_stock` REAL NOT NULL, `new_stock` REAL NOT NULL, `timestamp` TEXT NOT NULL, `reason` TEXT, `user_id` TEXT, `is_synced` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `inventory_movements` (`id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `type` TEXT NOT NULL, `quantity` REAL NOT NULL, `previous_stock` REAL NOT NULL, `new_stock` REAL NOT NULL, `timestamp` TEXT NOT NULL, `reason` TEXT, `user_id` TEXT, `is_synced` INTEGER NOT NULL, `batch_deductions` TEXT, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `suppliers` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `phone` TEXT, `contact_person` TEXT, `credit_terms` TEXT, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
@@ -579,6 +579,27 @@ class _$InsumoDao extends InsumoDao {
   }
 
   @override
+  Future<List<InsumoEntity>> findInsumosByIds(List<String> ids) async {
+    const offset = 1;
+    final _sqliteVariablesForIds =
+        Iterable<String>.generate(ids.length, (i) => '?${i + offset}')
+            .join(',');
+    return _queryAdapter.queryList(
+        'SELECT * FROM insumos WHERE id IN (' + _sqliteVariablesForIds + ')',
+        mapper: (Map<String, Object?> row) => InsumoEntity(
+            id: row['id'] as String,
+            name: row['name'] as String,
+            consumptionUom: row['consumption_uom'] as String,
+            warehouseId: row['warehouse_id'] as String?,
+            isPerishable: (row['is_perishable'] as int) != 0,
+            stock: row['stock'] as double,
+            averageCost: row['average_cost'] as double,
+            parLevel: row['par_level'] as double?,
+            isActive: (row['is_active'] as int) != 0),
+        arguments: [...ids]);
+  }
+
+  @override
   Future<void> updateStock(
     String id,
     double newStock,
@@ -830,7 +851,8 @@ class _$MovementDao extends MovementDao {
                   'timestamp': item.timestamp,
                   'reason': item.reason,
                   'user_id': item.userId,
-                  'is_synced': item.isSynced ? 1 : 0
+                  'is_synced': item.isSynced ? 1 : 0,
+                  'batch_deductions': item.batch_deductions
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -855,7 +877,8 @@ class _$MovementDao extends MovementDao {
             timestamp: row['timestamp'] as String,
             reason: row['reason'] as String?,
             userId: row['user_id'] as String?,
-            isSynced: (row['is_synced'] as int) != 0));
+            isSynced: (row['is_synced'] as int) != 0,
+            batch_deductions: row['batch_deductions'] as String?));
   }
 
   @override
@@ -872,7 +895,8 @@ class _$MovementDao extends MovementDao {
             timestamp: row['timestamp'] as String,
             reason: row['reason'] as String?,
             userId: row['user_id'] as String?,
-            isSynced: (row['is_synced'] as int) != 0));
+            isSynced: (row['is_synced'] as int) != 0,
+            batch_deductions: row['batch_deductions'] as String?));
   }
 
   @override
@@ -1378,6 +1402,22 @@ class _$InvoiceDao extends InvoiceDao {
   }
 
   @override
+  Future<void> updateSyncStatusForIds(
+    List<String> ids,
+    String status,
+  ) async {
+    const offset = 2;
+    final _sqliteVariablesForIds =
+        Iterable<String>.generate(ids.length, (i) => '?${i + offset}')
+            .join(',');
+    await _queryAdapter.queryNoReturn(
+        'UPDATE invoices SET sync_status = ?1 WHERE id IN (' +
+            _sqliteVariablesForIds +
+            ')',
+        arguments: [status, ...ids]);
+  }
+
+  @override
   Future<void> insertInvoice(InvoiceEntity invoice) async {
     await _invoiceEntityInsertionAdapter.insert(
         invoice, OnConflictStrategy.replace);
@@ -1659,7 +1699,8 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'timestamp': item.timestamp,
                   'reason': item.reason,
                   'user_id': item.userId,
-                  'is_synced': item.isSynced ? 1 : 0
+                  'is_synced': item.isSynced ? 1 : 0,
+                  'batch_deductions': item.batch_deductions
                 }),
         _insumoEntityUpdateAdapter = UpdateAdapter(
             database,

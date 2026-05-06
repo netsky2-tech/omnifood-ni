@@ -9,6 +9,9 @@ abstract class InsumoDao {
   @Query('SELECT * FROM insumos WHERE id = :id')
   Future<InsumoEntity?> findInsumoById(String id);
 
+  @Query('SELECT * FROM insumos WHERE id IN (:ids)')
+  Future<List<InsumoEntity>> findInsumosByIds(List<String> ids);
+
   @Insert(onConflict: OnConflictStrategy.replace)
   Future<void> insertInsumos(List<InsumoEntity> insumos);
 

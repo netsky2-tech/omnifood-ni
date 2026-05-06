@@ -54,5 +54,41 @@ void main() {
       expect(movements.length, 1);
       expect(movements.first.type, 'SALE');
     });
+
+    test('should save and retrieve batch_deductions in MovementEntity', () async {
+      final movement = MovementEntity(
+        id: 'mov-batch-1',
+        insumoId: 'ins-1',
+        type: 'SALE',
+        quantity: -2.0,
+        previousStock: 10.0,
+        newStock: 8.0,
+        timestamp: DateTime.now().toIso8601String(),
+        batch_deductions: '[{"batchId":"b1","quantity":2.0}]',
+      );
+
+      await database.movementDao.insertMovement(movement);
+
+      final retrieved = await database.movementDao.findAllMovements();
+      final savedMovement = retrieved.firstWhere((m) => m.id == 'mov-batch-1');
+      expect(savedMovement.batch_deductions, '[{"batchId":"b1","quantity":2.0}]');
+    });
+
+    test('should find insumos by multiple ids', () async {
+      final insumos = [
+        InsumoEntity(id: 'i1', name: 'Insumo 1', consumptionUom: 'u1', stock: 10, averageCost: 0),
+        InsumoEntity(id: 'i2', name: 'Insumo 2', consumptionUom: 'u2', stock: 20, averageCost: 0),
+        InsumoEntity(id: 'i3', name: 'Insumo 3', consumptionUom: 'u3', stock: 30, averageCost: 0),
+      ];
+      await database.insumoDao.insertInsumos(insumos);
+
+      final result = await database.insumoDao.findInsumosByIds(['i1', 'i3']);
+
+      expect(result.length, 2);
+      expect(result.any((e) => e.id == 'i1'), true);
+      expect(result.any((e) => e.id == 'i3'), true);
+      expect(result.any((e) => e.id == 'i2'), false);
+    });
   });
 }
+

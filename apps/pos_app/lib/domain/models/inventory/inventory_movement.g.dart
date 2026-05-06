@@ -18,6 +18,9 @@ _$InventoryMovementImpl _$$InventoryMovementImplFromJson(
       timestamp: DateTime.parse(json['timestamp'] as String),
       reason: json['reason'] as String?,
       userId: json['userId'] as String?,
+      batchDeductions: (json['batchDeductions'] as List<dynamic>?)
+          ?.map((e) => BatchDeduction.fromJson(e as Map<String, dynamic>))
+          .toList(),
     );
 
 Map<String, dynamic> _$$InventoryMovementImplToJson(
@@ -32,6 +35,8 @@ Map<String, dynamic> _$$InventoryMovementImplToJson(
       'timestamp': instance.timestamp.toIso8601String(),
       'reason': instance.reason,
       'userId': instance.userId,
+      'batchDeductions':
+          instance.batchDeductions?.map((e) => e.toJson()).toList(),
     };
 
 const _$MovementTypeEnumMap = {

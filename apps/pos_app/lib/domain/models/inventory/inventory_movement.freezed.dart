@@ -29,6 +29,8 @@ mixin _$InventoryMovement {
   DateTime get timestamp => throw _privateConstructorUsedError;
   String? get reason => throw _privateConstructorUsedError;
   String? get userId => throw _privateConstructorUsedError;
+  List<BatchDeduction>? get batchDeductions =>
+      throw _privateConstructorUsedError;
 
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
   @JsonKey(ignore: true)
@@ -51,7 +53,8 @@ abstract class $InventoryMovementCopyWith<$Res> {
       double newStock,
       DateTime timestamp,
       String? reason,
-      String? userId});
+      String? userId,
+      List<BatchDeduction>? batchDeductions});
 }
 
 /// @nodoc
@@ -76,6 +79,7 @@ class _$InventoryMovementCopyWithImpl<$Res, $Val extends InventoryMovement>
     Object? timestamp = null,
     Object? reason = freezed,
     Object? userId = freezed,
+    Object? batchDeductions = freezed,
   }) {
     return _then(_value.copyWith(
       id: null == id
@@ -114,6 +118,10 @@ class _$InventoryMovementCopyWithImpl<$Res, $Val extends InventoryMovement>
           ? _value.userId
           : userId // ignore: cast_nullable_to_non_nullable
               as String?,
+      batchDeductions: freezed == batchDeductions
+          ? _value.batchDeductions
+          : batchDeductions // ignore: cast_nullable_to_non_nullable
+              as List<BatchDeduction>?,
     ) as $Val);
   }
 }
@@ -135,7 +143,8 @@ abstract class _$$InventoryMovementImplCopyWith<$Res>
       double newStock,
       DateTime timestamp,
       String? reason,
-      String? userId});
+      String? userId,
+      List<BatchDeduction>? batchDeductions});
 }
 
 /// @nodoc
@@ -158,6 +167,7 @@ class __$$InventoryMovementImplCopyWithImpl<$Res>
     Object? timestamp = null,
     Object? reason = freezed,
     Object? userId = freezed,
+    Object? batchDeductions = freezed,
   }) {
     return _then(_$InventoryMovementImpl(
       id: null == id
@@ -196,12 +206,17 @@ class __$$InventoryMovementImplCopyWithImpl<$Res>
           ? _value.userId
           : userId // ignore: cast_nullable_to_non_nullable
               as String?,
+      batchDeductions: freezed == batchDeductions
+          ? _value._batchDeductions
+          : batchDeductions // ignore: cast_nullable_to_non_nullable
+              as List<BatchDeduction>?,
     ));
   }
 }
 
 /// @nodoc
-@JsonSerializable()
+
+@JsonSerializable(explicitToJson: true)
 class _$InventoryMovementImpl implements _InventoryMovement {
   const _$InventoryMovementImpl(
       {required this.id,
@@ -212,7 +227,9 @@ class _$InventoryMovementImpl implements _InventoryMovement {
       required this.newStock,
       required this.timestamp,
       this.reason,
-      this.userId});
+      this.userId,
+      final List<BatchDeduction>? batchDeductions})
+      : _batchDeductions = batchDeductions;
 
   factory _$InventoryMovementImpl.fromJson(Map<String, dynamic> json) =>
       _$$InventoryMovementImplFromJson(json);
@@ -235,10 +252,19 @@ class _$InventoryMovementImpl implements _InventoryMovement {
   final String? reason;
   @override
   final String? userId;
+  final List<BatchDeduction>? _batchDeductions;
+  @override
+  List<BatchDeduction>? get batchDeductions {
+    final value = _batchDeductions;
+    if (value == null) return null;
+    if (_batchDeductions is EqualUnmodifiableListView) return _batchDeductions;
+    // ignore: implicit_dynamic_type
+    return EqualUnmodifiableListView(value);
+  }
 
   @override
   String toString() {
-    return 'InventoryMovement(id: $id, insumoId: $insumoId, type: $type, quantity: $quantity, previousStock: $previousStock, newStock: $newStock, timestamp: $timestamp, reason: $reason, userId: $userId)';
+    return 'InventoryMovement(id: $id, insumoId: $insumoId, type: $type, quantity: $quantity, previousStock: $previousStock, newStock: $newStock, timestamp: $timestamp, reason: $reason, userId: $userId, batchDeductions: $batchDeductions)';
   }
 
   @override
@@ -259,13 +285,25 @@ class _$InventoryMovementImpl implements _InventoryMovement {
             (identical(other.timestamp, timestamp) ||
                 other.timestamp == timestamp) &&
             (identical(other.reason, reason) || other.reason == reason) &&
-            (identical(other.userId, userId) || other.userId == userId));
+            (identical(other.userId, userId) || other.userId == userId) &&
+            const DeepCollectionEquality()
+                .equals(other._batchDeductions, _batchDeductions));
   }
 
   @JsonKey(ignore: true)
   @override
-  int get hashCode => Object.hash(runtimeType, id, insumoId, type, quantity,
-      previousStock, newStock, timestamp, reason, userId);
+  int get hashCode => Object.hash(
+      runtimeType,
+      id,
+      insumoId,
+      type,
+      quantity,
+      previousStock,
+      newStock,
+      timestamp,
+      reason,
+      userId,
+      const DeepCollectionEquality().hash(_batchDeductions));
 
   @JsonKey(ignore: true)
   @override
@@ -292,7 +330,8 @@ abstract class _InventoryMovement implements InventoryMovement {
       required final double newStock,
       required final DateTime timestamp,
       final String? reason,
-      final String? userId}) = _$InventoryMovementImpl;
+      final String? userId,
+      final List<BatchDeduction>? batchDeductions}) = _$InventoryMovementImpl;
 
   factory _InventoryMovement.fromJson(Map<String, dynamic> json) =
       _$InventoryMovementImpl.fromJson;
@@ -315,6 +354,8 @@ abstract class _InventoryMovement implements InventoryMovement {
   String? get reason;
   @override
   String? get userId;
+  @override
+  List<BatchDeduction>? get batchDeductions;
   @override
   @JsonKey(ignore: true)
   _$$InventoryMovementImplCopyWith<_$InventoryMovementImpl> get copyWith =>

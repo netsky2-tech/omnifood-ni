@@ -65,6 +65,12 @@ class InventoryRepositoryImpl implements InventoryRepository {
   }
 
   @override
+  Future<List<Insumo>> getInsumosByIds(List<String> ids) async {
+    final entities = await insumoDao.findInsumosByIds(ids);
+    return entities.map(InventoryMapper.toInsumoDomain).toList();
+  }
+
+  @override
   Future<void> updateInsumoStock(String id, double newStock) {
     return insumoDao.updateStock(id, newStock);
   }
@@ -146,6 +152,17 @@ class InventoryRepositoryImpl implements InventoryRepository {
   @override
   Future<void> saveMovement(InventoryMovement movement) {
     return movementDao.insertMovement(InventoryMapper.toMovementEntity(movement));
+  }
+
+  @override
+  Future<List<InventoryMovement>> getUnsyncedMovements() async {
+    final entities = await movementDao.findUnsyncedMovements();
+    return entities.map(InventoryMapper.toMovementDomain).toList();
+  }
+
+  @override
+  Future<void> markMovementAsSynced(String id) {
+    return movementDao.markAsSynced(id);
   }
 
   @override
