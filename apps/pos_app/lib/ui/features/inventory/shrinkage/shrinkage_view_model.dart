@@ -28,7 +28,14 @@ class ShrinkageViewModel with ChangeNotifier {
     required double quantity,
     required String reason,
   }) async {
-    await movementEngine.recordShrinkage(insumoId, quantity, reason);
-    await loadInsumos();
+    _isLoading = true;
+    notifyListeners();
+    try {
+      await movementEngine.recordShrinkage(insumoId, quantity, reason);
+      await loadInsumos();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 }
