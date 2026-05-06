@@ -104,6 +104,7 @@ void main() async {
   );
 
   final processInventoryUseCase = ProcessSaleInventoryUseCase(movementEngine);
+  final reverseInventoryUseCase = ReverseSaleInventoryUseCase(movementEngine);
 
   final salesRepository = SalesRepositoryImpl(
     database: database,
@@ -115,6 +116,7 @@ void main() async {
     movementEngine: movementEngine,
     auditRepository: auditRepository,
     processInventoryUseCase: processInventoryUseCase,
+    reverseInventoryUseCase: reverseInventoryUseCase,
   );
 
   final syncService = SyncService(

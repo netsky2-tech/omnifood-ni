@@ -10,6 +10,7 @@ import 'package:pos_app/domain/services/sales/dgi_numbering_service.dart';
 import 'package:pos_app/domain/services/inventory/movement_engine.dart';
 import 'package:pos_app/domain/repositories/audit_repository.dart';
 import 'package:pos_app/domain/usecases/inventory/process_sale_inventory_use_case.dart';
+import 'package:pos_app/domain/usecases/inventory/reverse_sale_inventory_use_case.dart';
 import 'package:pos_app/data/repositories/sales/sales_repository_impl.dart';
 import 'package:pos_app/domain/models/sales/invoice.dart';
 import 'package:pos_app/domain/models/sales/invoice_item.dart';
@@ -28,6 +29,7 @@ import 'sales_repository_impl_test.mocks.dart';
   MovementEngine,
   AuditRepository,
   ProcessSaleInventoryUseCase,
+  ReverseSaleInventoryUseCase,
 ])
 void main() {
   late SalesRepositoryImpl repository;
@@ -40,6 +42,7 @@ void main() {
   late MockMovementEngine mockMovementEngine;
   late MockAuditRepository mockAuditRepository;
   late MockProcessSaleInventoryUseCase mockProcessInventoryUseCase;
+  late MockReverseSaleInventoryUseCase mockReverseInventoryUseCase;
 
   setUp(() {
     mockDatabase = MockAppDatabase();
@@ -51,6 +54,7 @@ void main() {
     mockMovementEngine = MockMovementEngine();
     mockAuditRepository = MockAuditRepository();
     mockProcessInventoryUseCase = MockProcessSaleInventoryUseCase();
+    mockReverseInventoryUseCase = MockReverseSaleInventoryUseCase();
 
     repository = SalesRepositoryImpl(
       database: mockDatabase,
@@ -62,6 +66,7 @@ void main() {
       movementEngine: mockMovementEngine,
       auditRepository: mockAuditRepository,
       processInventoryUseCase: mockProcessInventoryUseCase,
+      reverseInventoryUseCase: mockReverseInventoryUseCase,
     );
   });
 

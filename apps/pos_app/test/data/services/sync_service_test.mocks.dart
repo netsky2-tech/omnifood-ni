@@ -590,6 +590,23 @@ class MockInventoryRepository extends _i1.Mock
         returnValue: _i10.Future<void>.value(),
         returnValueForMissingStub: _i10.Future<void>.value(),
       ) as _i10.Future<void>);
+
+  @override
+  _i10.Future<List<_i20.InventoryMovement>> getRecentMovementsByType(
+    _i20.MovementType? type,
+    int? limit,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getRecentMovementsByType,
+          [
+            type,
+            limit,
+          ],
+        ),
+        returnValue: _i10.Future<List<_i20.InventoryMovement>>.value(
+            <_i20.InventoryMovement>[]),
+      ) as _i10.Future<List<_i20.InventoryMovement>>);
 }
 
 /// A class which mocks [Dio].

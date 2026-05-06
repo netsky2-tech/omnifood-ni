@@ -1,4 +1,5 @@
 import 'package:pos_app/domain/usecases/inventory/process_sale_inventory_use_case.dart';
+import 'package:pos_app/domain/usecases/inventory/reverse_sale_inventory_use_case.dart';
 import 'package:pos_app/data/mappers/inventory_mapper.dart';
 import 'package:uuid/uuid.dart';
 import 'package:pos_app/data/daos/sales/invoice_dao.dart';
@@ -28,6 +29,7 @@ class SalesRepositoryImpl implements SalesRepository {
   final MovementEngine movementEngine;
   final AuditRepository auditRepository;
   final ProcessSaleInventoryUseCase processInventoryUseCase;
+  final ReverseSaleInventoryUseCase reverseInventoryUseCase;
 
   SalesRepositoryImpl({
     required this.database,
@@ -39,6 +41,7 @@ class SalesRepositoryImpl implements SalesRepository {
     required this.movementEngine,
     required this.auditRepository,
     required this.processInventoryUseCase,
+    required this.reverseInventoryUseCase,
   });
 
   @override
@@ -168,25 +171,17 @@ class SalesRepositoryImpl implements SalesRepository {
       );
       await invoiceDao.updateInvoice(updated);
 
-      final items = await itemDao.getItemsByInvoiceId(invoiceId);
-      final now = DateTime.now().toIso8601String();
+      final itemEntities = await itemDao.getItemsByInvoiceId(invoiceId);
+      final items = itemEntities.map(SalesMapper.toItemDomain).toList();
+      
+      final movements = await reverseInventoryUseCase.execute(items, 'Anulación Factura: ${entity.number}');
+      final movementEntities = movements
+          .map((m) => InventoryMapper.toMovementEntity(m.copyWith(userId: entity.userId)))
+          .toList();
 
-      for (final item in items) {
-        final insumo = await transactionDao.getInsumoById(item.productId);
-        if (insumo != null) {
-          await database.movementDao.insertMovement(MovementEntity(
-            id: const Uuid().v4(),
-            insumoId: item.productId,
-            type: 'VOID_SALE',
-            quantity: item.quantity,
-            previousStock: insumo.stock,
-            newStock: insumo.stock + item.quantity,
-            timestamp: now,
-            reason: 'Anulación Factura: ${entity.number}',
-            userId: entity.userId,
-          ));
-          await database.insumoDao.updateStock(item.productId, insumo.stock + item.quantity);
-        }
+      for (final movEntity in movementEntities) {
+        await database.movementDao.insertMovement(movEntity);
+        await database.insumoDao.updateStock(movEntity.insumoId, movEntity.newStock);
       }
 
       await auditRepository.log(
@@ -238,26 +233,12 @@ class SalesRepositoryImpl implements SalesRepository {
       notes: reason,
     )).toList();
 
-    // Reversing stock (adding back)
-    final List<MovementEntity> movementEntities = [];
-    final now = DateTime.now().toIso8601String();
-
-    for (final item in items) {
-      final insumo = await transactionDao.getInsumoById(item.productId);
-      if (insumo != null) {
-        movementEntities.add(MovementEntity(
-          id: const Uuid().v4(),
-          insumoId: item.productId,
-          type: 'RETURN',
-          quantity: item.quantity,
-          previousStock: insumo.stock,
-          newStock: insumo.stock + item.quantity,
-          timestamp: now,
-          reason: 'Devolución Factura: ${original.number}',
-          userId: original.userId,
-        ));
-      }
-    }
+    // Reversing stock (adding back) using UseCase for BOM support
+    final domainItems = items.map(SalesMapper.toItemDomain).toList();
+    final movements = await reverseInventoryUseCase.execute(domainItems, 'Devolución Factura: ${original.number}');
+    final movementEntities = movements
+        .map((m) => InventoryMapper.toMovementEntity(m.copyWith(userId: original.userId)))
+        .toList();
 
     await transactionDao.executeSaleTransaction(
       creditNoteEntity,
