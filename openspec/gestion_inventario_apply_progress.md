@@ -18,6 +18,11 @@
 - [x] Extend `SyncService` in Flutter and NestJS to handle `InventoryMovement` synchronization.
 - [x] **TDD**: Unit tests in backend for chronological sorting of movements.
 
+## PR 5: Shrinkage Implementation
+- [x] Implement `ShrinkageView` (Flutter) replacing existing shell.
+- [x] Implement `ShrinkageViewModel` with form validation.
+- [x] **TDD**: Widget tests for `ShrinkageView` (assert input validation and VM interaction).
+
 ### TDD Cycle Evidence
 | Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
 |------|-----------|-------|------------|-----|-------|-------------|----------|
@@ -25,4 +30,5 @@
 | 4.2 | `sync_service_test.dart` | Unit | N/A (new) | ✅ Written | ✅ Passed | ➖ Single | ✅ Clean |
 | 4.2 | `inventory_repository_impl_test.dart` | Unit | N/A (new) | ✅ Written | ✅ Passed | ➖ Single | ✅ Clean |
 | 4.3 | `inventory.service.spec.ts` | Unit | ✅ 4/4 | ✅ Written | ✅ Passed | ✅ 2 cases | ✅ Clean |
+| 5.1 | `shrinkage_view_test.dart` | Widget | N/A (new) | ✅ Written | ✅ Passed | ✅ 2 cases | ✅ Clean |
 

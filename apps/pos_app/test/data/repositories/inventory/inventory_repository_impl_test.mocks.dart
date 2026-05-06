@@ -510,6 +510,23 @@ class MockMovementDao extends _i1.Mock implements _i13.MovementDao {
       ) as _i28.Future<void>);
 
   @override
+  _i28.Future<List<_i32.MovementEntity>> findMovementsByType(
+    String? type,
+    int? limit,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #findMovementsByType,
+          [
+            type,
+            limit,
+          ],
+        ),
+        returnValue: _i28.Future<List<_i32.MovementEntity>>.value(
+            <_i32.MovementEntity>[]),
+      ) as _i28.Future<List<_i32.MovementEntity>>);
+
+  @override
   _i28.Future<void> markAsSynced(String? id) => (super.noSuchMethod(
         Invocation.method(
           #markAsSynced,

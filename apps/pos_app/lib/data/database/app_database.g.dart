@@ -883,6 +883,17 @@ class _$MovementDao extends MovementDao {
   }
 
   @override
+  Future<List<MovementEntity>> findMovementsByType(
+    String type,
+    int limit,
+  ) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM inventory_movements WHERE type = ?1 ORDER BY timestamp DESC LIMIT ?2',
+        mapper: (Map<String, Object?> row) => MovementEntity(id: row['id'] as String, insumoId: row['insumo_id'] as String, type: row['type'] as String, quantity: row['quantity'] as double, previousStock: row['previous_stock'] as double, newStock: row['new_stock'] as double, timestamp: row['timestamp'] as String, reason: row['reason'] as String?, userId: row['user_id'] as String?, isSynced: (row['is_synced'] as int) != 0),
+        arguments: [type, limit]);
+  }
+
+  @override
   Future<void> markAsSynced(String id) async {
     await _queryAdapter.queryNoReturn(
         'UPDATE inventory_movements SET is_synced = 1 WHERE id = ?1',
