@@ -116,5 +116,5 @@ Para garantizar la durabilidad en el entorno:
 **Fee de Implementación:** Cobro único por configuración de hardware y carga de menú/inventario inicial.
 Suscripción Mensual:
 **Plan Básico:** $25 - $30/mes (1 usuario, inventario básico).
-**Plan Pro:** $50/mes (Multi-usuario, Recetas, KDS).
+**Plan Pro:** $60/mes (Multi-usuario, Recetas, KDS).
 **Soporte Técnico:** Contrato de asistencia técnica (requerido por DGI para autorizar el sistema al cliente).

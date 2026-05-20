@@ -1,0 +1,11 @@
+Fecha,Concepto,Categoria,Tipo,Monto (USD),Saldo Acumulado,Notas
+2026-05-18,Suscripcion Gemini,IA,Gasto,-20.00,-20.00,Costo mensual fijo
+2026-05-18,Suscripcion GPT,IA,Gasto,-20.00,-40.00,Costo mensual fijo
+2026-05-18,Suscripcion OpenGo,IA,Gasto,-5.00,-45.00,Costo mensual fijo
+2026-05-18,Pago Internet,Infraestructura,Gasto,-20.00,-65.00,Costo mensual fijo
+2026-05-19,Dominio .com (Hostinger),Infraestructura,Gasto,-15.00,-80.00,Anual - omnifoodni.com
+2026-05-19,Hosting VPS KVM2 (Hostinger),Infraestructura,Gasto,-96.00,-176.00,Anual - Servidor NestJS/Postgres
+2026-05-19,Google Play Dev Account,Publicacion,Gasto,-25.00,-201.00,Unico pago - Registro desarrollador
+2026-06-01,Setup Fee - Cliente 1,Venta Software,Ingreso,200.00,-1.00,Primer cliente Food Park (AIO)
+2026-07-01,SaaS - Cliente 1,Recurrente,Ingreso,60.00,59.00,Primer mes suscripcion
+2026-07-01,Gastos Mensuales (IA+Net),Operacion,Gasto,-65.00,-6.00,Cargos recurrentes mes 2
