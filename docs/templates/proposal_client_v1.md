@@ -1,4 +1,4 @@
-# Propuesta Técnico-Económica: OmniFood NI
+# Propuesta Técnico-Económica: OmniCore POS
 
 **Fecha**: {{FECHA}}
 **Cliente**: {{NOMBRE_CLIENTE / NEGOCIO}}
@@ -7,7 +7,7 @@
 ---
 
 ## 1. Introducción
-OmniFood NI es un sistema de Punto de Venta (POS) modular y unificado de última generación, diseñado para operar de forma ultra-resiliente bajo las condiciones reales del mercado nicaragüense. Nuestra arquitectura **Offline-First** y de **Red Local** garantiza la continuidad de sus operaciones frente a los cortes de internet y de energía eléctrica comunes en Managua.
+OmniCore POS es el sistema de Punto de Venta (POS) de la suite OmniCore Platform, diseñado para operar de forma ultra-resiliente bajo las condiciones reales del mercado nicaragüense. Nuestra arquitectura **Offline-First** y de **Red Local** garantiza la continuidad de sus operaciones frente a los cortes de internet y de energía eléctrica comunes en Managua.
 
 ## 2. Nuestra Propuesta de Valor
 
@@ -30,14 +30,14 @@ Incluye:
 ### 3.2 Suscripción de Servicio (SaaS)
 **Cuota Mensual: $60.00** (Plan Pro - Diseñado para crecer con su negocio)
 Incluye:
-- Licencia de uso del POS OmniFood NI.
+- Licencia de uso del POS OmniCore POS.
 - **Escalabilidad de Dispositivos**: Puede iniciar operando con **una sola tablet con impresora térmica integrada (58mm)**. Cuando su negocio migre a restaurante, la misma suscripción le permite activar la red local LAN para conectar la caja central (80mm), comanderas de meseros y pantallas KDS en cocina, sin costo de licencia de software adicional.
 - Sincronización transaccional por deltas y almacenamiento seguro en la nube.
 - Respaldo de bitácoras de auditoría (*Audit Trail*) inalterables exigidas por DGI.
 - Actualizaciones de software gratuitas (mejoras operativas y parches legales).
 
 ## 4. Hardware Soportado y Recomendado
-El cliente adquiere el hardware recomendado por su cuenta con los proveedores sugeridos. OmniFood NI es compatible con:
+El cliente adquiere el hardware recomendado por su cuenta con los proveedores sugeridos. La suite OmniCore POS es compatible con:
 - **Caja Principal**: Dispositivos táctiles All-in-One (Windows/Linux) con impresora térmica de 80mm.
 - **Meseros**: Dispositivos móviles Android portátiles (Handhelds) con impresora integrada de 58mm.
 - **Cocina/Barra**: Pantallas KDS (tablets Android o monitores HDMI estándar).
@@ -49,5 +49,5 @@ El cliente adquiere el hardware recomendado por su cuenta con los proveedores su
 4. Despliegue técnico y Go-Live en 72 horas hábiles tras la entrega de datos.
 
 ---
-**OmniFood NI** - *Resiliencia sobre Conectividad*
+**OmniCore POS** - *Resiliencia sobre Conectividad*
 Contact: {{TU_CONTACTO}}

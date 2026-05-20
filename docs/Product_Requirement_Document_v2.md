@@ -1,11 +1,17 @@
-# Documento de Requerimientos de Producto (PRD) Master: OmniFood NI
-## Plataforma POS Modular, Offline-First y Multi-Tenant para Nicaragua
+# Documento de Requerimientos de Producto (PRD) Master: OmniCore POS
+## Plataforma POS Modular, Offline-First y Multi-Tenant (OmniCore Platform)
 
 ---
 
 ## 1. Visión del Producto y Objetivos Estratégicos
 
-OmniFood NI es un sistema de Punto de Venta (POS) modular y unificado, diseñado para operar de forma resiliente bajo las condiciones del mercado nicaragüense. Inicialmente optimizado para gastronomía (cafeterías y restaurantes), su arquitectura permite expandirse a retail general (tiendas de ropa, farmacias y minimarkets) mediante una base de datos extensible y configuración modular sin alterar la base del sistema.
+**OmniCore POS** es la aplicación de punto de venta táctica de la suite **OmniCore Platform**, diseñada para operar de forma resiliente bajo las condiciones reales del mercado nicaragüense. La plataforma se compone de una suite integrada de sub-servicios:
+- **OmniCore POS**: Aplicación nativa de venta y facturación offline-first para cajas registradoras y tablets.
+- **OmniServe**: Sub-marca/módulo móvil para comandas inalámbricas de meseros y KDS de cocina.
+- **OmniCommerce**: Sub-marca/módulo del panel administrativo en la nube (BOH, conciliaciones, inventarios y multi-tenant).
+- **OmniOps**: Sub-marca/módulo para la gestión y sincronización de compras, deltas de Kardex y mermas.
+
+Su arquitectura modular y el catálogo flexible de base de datos permiten expandirse desde gastronomía general (cafeterías y restaurantes) hasta retail general (tiendas de ropa, farmacias y minimarkets) sin alterar el núcleo central del sistema.
 
 ### Pilares Fundamentales
 1. **Offline-First Absoluto**: El POS debe facturar, procesar inventario y permitir el login de empleados sin conexión a internet. La base de datos local SQLite (Floor/Drift) es la fuente de la verdad; la nube es un espejo consistente y asíncrono.

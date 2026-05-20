@@ -1,4 +1,4 @@
-# Task Manager para OmniFood NI
+# Task Manager para OmniCore Platform
 
 ## Fase 1: Motor de Inventario y MVP Pilot (Semanas 1-4)
 
@@ -68,8 +68,8 @@ Objetivo: Convertir el software en un producto escalable y protegido legalmente.
   - **Pricing & Proposal**: Finalizar template de cotización profesional y calculadora de márgenes.
   - **SLA & Support**: Redactar el contrato de soporte mensual que justifica los $60/mes.
 - Protección de Propiedad Intelectual (MIFIC)
-  - Registro de Marca: Iniciar el trámite en el Registro de la Propiedad Intelectual (Managua) para proteger el nombre "OmniFood NI".
-  - Depósito de Obra (Software): Registrar el código fuente para tener respaldo legal ante posibles plagios en el food park.
+  - Registro de Marca: Iniciar el trámite en el Registro de la Propiedad Intelectual (Managua) para proteger el nombre "OmniCore Platform" y sus marcas asociadas (OmniCore POS, OmniServe, OmniCommerce, OmniOps).
+  - Depósito de Obra (Software): Registrar el código fuente para tener respaldo legal ante posibles plagios.
 - Seguridad y Auditoría Proactiva
   - Log de Auditoría (Audit Trail): Registro inalterable de quién abrió caja, quién hizo un descuento y quién anuló una factura. Esto es lo que más valoran los dueños de negocios para evitar robos hormiga.
   - Cifrado de Datos en Reposo: Asegurar que si roban la tablet/terminal, la base de datos SQLite no pueda ser leída por terceros.

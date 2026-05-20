@@ -1,4 +1,4 @@
-# Estrategia y Control Financiero: OmniFood NI
+# Estrategia y Control Financiero: OmniCore Platform
 
 ## 1. Filosofía de Inversión
 Este proyecto se maneja bajo un modelo de **Bootstrap Eficiente**. Los ingresos generados deben reinvertirse siguiendo esta prioridad:
@@ -12,7 +12,7 @@ Este proyecto se maneja bajo un modelo de **Bootstrap Eficiente**. Los ingresos 
 - **Plan Elegido**: VPS KVM 2 (8GB RAM, 2 Cores). 
   - *Justificación*: NestJS + PostgreSQL (con RLS) requieren mínimo 4GB para operar sin lag en sincronización. Los 8GB permiten escalabilidad para los primeros 5-10 clientes simultáneos.
 - **Ubicación**: Data Center USA East (Baja latencia con Nicaragua).
-- **Dominio**: `omnifoodni.com` (Costo aprox. $15/año).
+- **Dominio**: `omnicoreplatform.com` (Costo aprox. $15/año).
 
 ### Despliegue Móvil (Android/iOS)
 - **Android (Prioridad 1)**: Pago único de **$25.00** por Google Play Console. Es vital para la distribución profesional en los terminales AIO del Food Park.
