@@ -102,6 +102,27 @@ class MockSaleViewModel extends _i1.Mock implements _i2.SaleViewModel {
       ) as String);
 
   @override
+  bool get canManageCashDrawer => (super.noSuchMethod(
+        Invocation.getter(#canManageCashDrawer),
+        returnValue: false,
+        returnValueForMissingStub: false,
+      ) as bool);
+
+  @override
+  bool get canVoidInvoice => (super.noSuchMethod(
+        Invocation.getter(#canVoidInvoice),
+        returnValue: false,
+        returnValueForMissingStub: false,
+      ) as bool);
+
+  @override
+  bool get isSupervisorOverrideActive => (super.noSuchMethod(
+        Invocation.getter(#isSupervisorOverrideActive),
+        returnValue: false,
+        returnValueForMissingStub: false,
+      ) as bool);
+
+  @override
   double get subtotal => (super.noSuchMethod(
         Invocation.getter(#subtotal),
         returnValue: 0.0,
@@ -142,6 +163,24 @@ class MockSaleViewModel extends _i1.Mock implements _i2.SaleViewModel {
         returnValue: false,
         returnValueForMissingStub: false,
       ) as bool);
+
+  @override
+  void grantSupervisorOverride() => super.noSuchMethod(
+        Invocation.method(
+          #grantSupervisorOverride,
+          [],
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  void applyManualDiscount(double? discountAmount) => super.noSuchMethod(
+        Invocation.method(
+          #applyManualDiscount,
+          [discountAmount],
+        ),
+        returnValueForMissingStub: null,
+      );
 
   @override
   void clearError() => super.noSuchMethod(

@@ -15,8 +15,29 @@ void main() {
     viewModel = LoginViewModel(authRepository);
   });
 
-  test('sets generic offline error when fallback auth fails and pending sync is false', () async {
+  test('uses offline fallback when online login fails', () async {
+    final offlineUser = User(
+      id: 'u-1',
+      name: 'Cashier One',
+      role: UserRole.cashier,
+      isActive: true,
+      email: 'cashier@omnifood.ni',
+      tenantId: 'tenant-1',
+    );
+
     when(() => authRepository.loginOnline(any(), any())).thenAnswer((_) async => null);
+    when(() => authRepository.loginOffline(any(), any())).thenAnswer((_) async => offlineUser);
+
+    final result = await viewModel.login('cashier@omnifood.ni', '1234');
+
+    expect(result, isTrue);
+    expect(viewModel.error, isNull);
+    verify(() => authRepository.loginOffline('cashier@omnifood.ni', '1234')).called(1);
+  });
+
+  test('sets generic offline error when online and fallback auth both fail', () async {
+    when(() => authRepository.loginOnline(any(), any())).thenAnswer((_) async => null);
+    when(() => authRepository.loginOffline(any(), any())).thenAnswer((_) async => null);
 
     final result = await viewModel.login('cashier@omnifood.ni', 'bad');
 
@@ -25,6 +46,7 @@ void main() {
       viewModel.error,
       equals('Error de autenticación. Verifique sus credenciales o conexión.'),
     );
+    verify(() => authRepository.loginOffline('cashier@omnifood.ni', 'bad')).called(1);
   });
 
   test('clears error when login succeeds after offline fallback', () async {

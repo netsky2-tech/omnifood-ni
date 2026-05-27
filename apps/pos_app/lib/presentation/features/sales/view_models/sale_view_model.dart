@@ -8,6 +8,7 @@ import '../../../../domain/models/sales/cart_item.dart';
 import '../../../../domain/models/sales/hold_ticket.dart';
 import '../../../../domain/models/sales/promotion.dart';
 import '../../../../domain/models/inventory/product.dart';
+import '../../../../domain/models/user.dart';
 import '../../../../domain/repositories/sales/sales_repository.dart';
 import '../../../../domain/repositories/inventory/inventory_repository.dart';
 import '../../../../domain/repositories/auth_repository.dart';
@@ -25,6 +26,7 @@ class SaleViewModel extends ChangeNotifier {
     checkActiveSession();
     loadHoldTickets();
     loadPromotions();
+    _loadCurrentUserRole();
   }
 
   final List<CartItem> _cart = [];
@@ -60,6 +62,52 @@ class SaleViewModel extends ChangeNotifier {
 
   String? _errorMessage;
   String? get errorMessage => _errorMessage;
+
+  UserRole? _currentUserRole;
+  UserRole? get currentUserRole => _currentUserRole;
+  bool get canManageCashDrawer =>
+      _currentUserRole == UserRole.owner || _currentUserRole == UserRole.manager;
+  bool get canVoidInvoice =>
+      _currentUserRole == UserRole.owner || _currentUserRole == UserRole.manager;
+
+  bool _isSupervisorOverrideActive = false;
+  bool get isSupervisorOverrideActive => _isSupervisorOverrideActive;
+
+  bool get _requiresSupervisorForRestrictedActions =>
+      _currentUserRole == UserRole.cashier || _currentUserRole == UserRole.waiter;
+
+  void grantSupervisorOverride() {
+    _isSupervisorOverrideActive = true;
+    notifyListeners();
+  }
+
+  void _consumeOverride() {
+    if (!_isSupervisorOverrideActive) return;
+    _isSupervisorOverrideActive = false;
+    notifyListeners();
+  }
+
+  void applyManualDiscount(double discountAmount) {
+    if (discountAmount <= 0) {
+      return;
+    }
+
+    if (_requiresSupervisorForRestrictedActions && !_isSupervisorOverrideActive) {
+      _errorMessage = 'Acceso denegado.';
+      notifyListeners();
+      return;
+    }
+
+    _totalDiscounts += discountAmount;
+    _errorMessage = null;
+    notifyListeners();
+  }
+
+  Future<void> _loadCurrentUserRole() async {
+    final user = await _authRepository.getCurrentUser();
+    _currentUserRole = user?.role;
+    notifyListeners();
+  }
 
   double get subtotal {
     final rawSubtotal = _cart.fold(0.0, (sum, item) => sum + item.subtotal + item.modifiersTotal);
@@ -214,6 +262,12 @@ class SaleViewModel extends ChangeNotifier {
     final user = await _authRepository.getCurrentUser();
     if (user == null) {
       _errorMessage = 'Debe iniciar sesión para abrir caja.';
+      notifyListeners();
+      return;
+    }
+
+    if (user.role == UserRole.waiter) {
+      _errorMessage = 'Acceso denegado.';
       notifyListeners();
       return;
     }
@@ -396,9 +450,18 @@ class SaleViewModel extends ChangeNotifier {
     }
 
     clearCart();
+    _consumeOverride();
   }
 
   Future<void> processReturn(String invoiceNumber, String reason) async {
+    final currentUser = await _authRepository.getCurrentUser();
+    final role = currentUser?.role;
+    if (role == UserRole.cashier || role == UserRole.waiter) {
+      _errorMessage = 'Acceso denegado.';
+      notifyListeners();
+      return;
+    }
+
     _isLoading = true;
     notifyListeners();
     try {
@@ -421,6 +484,28 @@ class SaleViewModel extends ChangeNotifier {
       _errorMessage = null;
     } catch (e) {
       _errorMessage = 'Error al procesar devolución: $e';
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> voidInvoice(String invoiceId, String reason) async {
+    final currentUser = await _authRepository.getCurrentUser();
+    final role = currentUser?.role;
+    if (role == UserRole.cashier || role == UserRole.waiter) {
+      _errorMessage = 'Acceso denegado.';
+      notifyListeners();
+      return;
+    }
+
+    _isLoading = true;
+    notifyListeners();
+    try {
+      await _salesRepository.voidInvoice(invoiceId, reason);
+      _errorMessage = null;
+    } catch (e) {
+      _errorMessage = 'Error al anular factura: $e';
     } finally {
       _isLoading = false;
       notifyListeners();

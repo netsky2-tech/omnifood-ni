@@ -92,16 +92,18 @@ class _SaleViewState extends State<SaleView> {
             },
             tooltip: 'Sincronizar con la Nube',
           ),
-          IconButton(
-            icon: const Icon(Icons.point_of_sale),
-            onPressed: () => _requestSupervisorOverrideForManualDrawer(context),
-            tooltip: 'Abrir Gaveta Manual',
-          ),
-          IconButton(
-            icon: const Icon(Icons.lock_open),
-            onPressed: () => _requestSupervisorOverrideForCloseBox(context),
-            tooltip: 'Cerrar Caja',
-          ),
+          if (viewModel.canManageCashDrawer)
+            IconButton(
+              icon: const Icon(Icons.point_of_sale),
+              onPressed: () => _requestSupervisorOverrideForManualDrawer(context),
+              tooltip: 'Abrir Gaveta Manual',
+            ),
+          if (viewModel.canManageCashDrawer)
+            IconButton(
+              icon: const Icon(Icons.lock_open),
+              onPressed: () => _requestSupervisorOverrideForCloseBox(context),
+              tooltip: 'Cerrar Caja',
+            ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () => viewModel.loadProducts(),
@@ -604,6 +606,7 @@ class _BoxOpeningScreenState extends State<BoxOpeningScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final viewModel = context.watch<SaleViewModel>();
     final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
       body: Center(
@@ -637,10 +640,12 @@ class _BoxOpeningScreenState extends State<BoxOpeningScreen> {
               ),
               const SizedBox(height: 24),
               ElevatedButton(
-                onPressed: () {
-                  final balance = double.tryParse(controller.text) ?? 0.0;
-                  context.read<SaleViewModel>().openSession(balance);
-                },
+                onPressed: viewModel.canManageCashDrawer
+                    ? () {
+                        final balance = double.tryParse(controller.text) ?? 0.0;
+                        context.read<SaleViewModel>().openSession(balance);
+                      }
+                    : null,
                 child: const Text('ABRIR CAJA'),
               ),
             ],
@@ -764,6 +769,14 @@ class CartSummary extends StatelessWidget {
         
         const SizedBox(height: 16),
         ElevatedButton(
+          onPressed: viewModel.cart.isEmpty
+              ? null
+              : () => _requestSupervisorOverrideForManualDiscount(context),
+          child: const Text('DESCUENTO MANUAL'),
+        ),
+
+        const SizedBox(height: 8),
+        ElevatedButton(
           onPressed: viewModel.cart.isEmpty 
             ? null 
             : () => _showCheckoutDialog(context),
@@ -777,6 +790,84 @@ class CartSummary extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) => const CheckoutDialog(),
+    );
+  }
+
+  Future<void> _requestSupervisorOverrideForManualDiscount(BuildContext context) async {
+    final amount = await _promptManualDiscountAmount(context);
+    if (!context.mounted || amount == null || amount <= 0) return;
+
+    final viewModel = context.read<SaleViewModel>();
+    viewModel.applyManualDiscount(amount);
+
+    if (viewModel.errorMessage != 'Acceso denegado.') {
+      return;
+    }
+
+    final authRepo = context.read<AuthRepository>();
+    final auditRepo = context.read<AuditRepository>();
+
+    final authorized = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => SupervisorOverrideModal(
+        onAuthorize: (request) {
+          final pin = request.method == SupervisorAuthorizationMethod.pin
+              ? request.credential
+              : null;
+          final totp = request.method == SupervisorAuthorizationMethod.totp
+              ? request.credential
+              : null;
+          return authRepo.authorizeOverride(
+            supervisorId: request.supervisorId,
+            pin: pin,
+            totpCode: totp,
+          );
+        },
+        onAuditSuccess: (request) {
+          final method =
+              request.method == SupervisorAuthorizationMethod.pin ? 'PIN' : 'TOTP';
+          return auditRepo.logForensic(
+            'SUPERVISOR_OVERRIDE_MANUAL_DISCOUNT',
+            metodoAutorizacion: method,
+            usuarioAutorizadorId: request.supervisorId,
+            metadata: 'manual_discount',
+          );
+        },
+      ),
+    );
+
+    if (!context.mounted || authorized != true) return;
+
+    viewModel.grantSupervisorOverride();
+    viewModel.applyManualDiscount(amount);
+  }
+
+  Future<double?> _promptManualDiscountAmount(BuildContext context) async {
+    final controller = TextEditingController();
+    return showDialog<double>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Descuento manual'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: 'Monto de descuento'),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(
+              dialogContext,
+              double.tryParse(controller.text.trim()),
+            ),
+            child: const Text('Aplicar'),
+          ),
+        ],
+      ),
     );
   }
 }

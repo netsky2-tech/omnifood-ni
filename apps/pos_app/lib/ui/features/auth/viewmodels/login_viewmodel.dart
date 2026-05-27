@@ -17,7 +17,8 @@ class LoginViewModel extends ChangeNotifier {
     _error = null;
     notifyListeners();
 
-    final user = await _authRepository.loginOnline(email, password);
+    final onlineUser = await _authRepository.loginOnline(email, password);
+    final user = onlineUser ?? await _authRepository.loginOffline(email, password);
     
     _isLoading = false;
     if (user == null) {

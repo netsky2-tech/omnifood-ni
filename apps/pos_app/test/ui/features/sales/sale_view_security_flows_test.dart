@@ -4,6 +4,7 @@ import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:pos_app/data/services/sync_service.dart';
 import 'package:pos_app/domain/models/sales/cashier_session.dart';
+import 'package:pos_app/domain/models/sales/cart_item.dart';
 import 'package:pos_app/domain/models/sales/payment.dart';
 import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/domain/repositories/audit_repository.dart';
@@ -53,12 +54,12 @@ void main() {
     when(mockViewModel.isLoading).thenReturn(false);
     when(mockViewModel.filteredProducts).thenReturn([]);
     when(mockViewModel.cart).thenReturn([]);
+    when(mockViewModel.canManageCashDrawer).thenReturn(true);
     when(mockViewModel.sessionExpected).thenReturn({
       PaymentMethod.cash: 100,
       PaymentMethod.card: 0,
       PaymentMethod.qr: 0,
     });
-
     when(mockAuthRepository.getCurrentUser()).thenAnswer((_) async => currentUser);
     when(mockAuthRepository.getAllUsers()).thenAnswer((_) async => [currentUser]);
     when(mockAuditRepository.logForensic(any, metadata: anyNamed('metadata'), metodoAutorizacion: anyNamed('metodoAutorizacion'), usuarioAutorizadorId: anyNamed('usuarioAutorizadorId')))
@@ -202,4 +203,96 @@ void main() {
       usuarioAutorizadorId: 'supervisor-1',
     )).called(1);
   });
+
+  testWidgets('triggers supervisor modal for gated manual discount action', (tester) async {
+    when(mockViewModel.cart).thenReturn([
+      CartItem(
+        productId: 'p-1',
+        productName: 'Producto',
+        quantity: 1,
+        unitPrice: 20,
+        taxRate: 0.15,
+      ),
+    ]);
+    when(mockViewModel.errorMessage).thenReturn('Acceso denegado.');
+    when(mockAuthRepository.authorizeOverride(
+      supervisorId: anyNamed('supervisorId'),
+      pin: anyNamed('pin'),
+      totpCode: anyNamed('totpCode'),
+    )).thenAnswer((_) async => true);
+
+    await tester.pumpWidget(_buildTestApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('DESCUENTO MANUAL'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Descuento manual'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).last, '10');
+    await tester.tap(find.text('Aplicar'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Autorización de supervisor'), findsOneWidget);
+  });
+
+  testWidgets('authorizes discount override and retries discount with one-transaction VM semantics', (tester) async {
+    when(mockViewModel.cart).thenReturn([
+      CartItem(
+        productId: 'p-1',
+        productName: 'Producto',
+        quantity: 1,
+        unitPrice: 20,
+        taxRate: 0.15,
+      ),
+    ]);
+    when(mockViewModel.errorMessage).thenReturn('Acceso denegado.');
+    when(mockAuthRepository.authorizeOverride(
+      supervisorId: anyNamed('supervisorId'),
+      pin: anyNamed('pin'),
+      totpCode: anyNamed('totpCode'),
+    )).thenAnswer((_) async => true);
+
+    await tester.pumpWidget(_buildTestApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('DESCUENTO MANUAL'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, '10');
+    await tester.tap(find.text('Aplicar'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byWidgetPredicate((widget) {
+      return widget is TextField && widget.decoration?.labelText == 'ID supervisor';
+    }), 'supervisor-1');
+    await tester.enterText(find.byWidgetPredicate((widget) {
+      return widget is TextField && widget.decoration?.labelText == 'PIN';
+    }), '1234');
+    await tester.tap(find.text('Autorizar'));
+    await tester.pumpAndSettle();
+
+    verify(mockViewModel.applyManualDiscount(10.0)).called(2);
+    verify(mockViewModel.grantSupervisorOverride()).called(1);
+    verify(mockAuditRepository.logForensic(
+      'SUPERVISOR_OVERRIDE_MANUAL_DISCOUNT',
+      metadata: 'manual_discount',
+      metodoAutorizacion: 'PIN',
+      usuarioAutorizadorId: 'supervisor-1',
+    )).called(1);
+  });
+
+  testWidgets('disables open cash action on box opening screen for waiter role', (tester) async {
+    when(mockViewModel.activeSession).thenReturn(null);
+    when(mockViewModel.canManageCashDrawer).thenReturn(false);
+
+    await tester.pumpWidget(_buildTestApp());
+    await tester.pumpAndSettle();
+
+    final openCashButton = tester.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'ABRIR CAJA'));
+    expect(openCashButton.onPressed, isNull);
+
+    await tester.tap(find.text('ABRIR CAJA'));
+    await tester.pumpAndSettle();
+    verifyNever(mockViewModel.openSession(any));
+  });
+
 }
