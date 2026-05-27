@@ -95,13 +95,13 @@ class _SaleViewState extends State<SaleView> {
           if (viewModel.canManageCashDrawer)
             IconButton(
               icon: const Icon(Icons.point_of_sale),
-              onPressed: () => _requestSupervisorOverrideForManualDrawer(context),
+              onPressed: () => _requestSupervisorOverrideForManualDrawer(),
               tooltip: 'Abrir Gaveta Manual',
             ),
           if (viewModel.canManageCashDrawer)
             IconButton(
               icon: const Icon(Icons.lock_open),
-              onPressed: () => _requestSupervisorOverrideForCloseBox(context),
+              onPressed: () => _requestSupervisorOverrideForCloseBox(),
               tooltip: 'Cerrar Caja',
             ),
           IconButton(
@@ -194,7 +194,7 @@ class _SaleViewState extends State<SaleView> {
     );
   }
 
-  Future<void> _requestSupervisorOverrideForCloseBox(BuildContext context) async {
+  Future<void> _requestSupervisorOverrideForCloseBox() async {
     final authRepo = context.read<AuthRepository>();
     final auditRepo = context.read<AuditRepository>();
 
@@ -228,7 +228,7 @@ class _SaleViewState extends State<SaleView> {
     }
   }
 
-  Future<void> _requestSupervisorOverrideForManualDrawer(BuildContext context) async {
+  Future<void> _requestSupervisorOverrideForManualDrawer() async {
     final justification = await _promptJustification(context);
     if (!mounted || justification == null || justification.trim().isEmpty) return;
 

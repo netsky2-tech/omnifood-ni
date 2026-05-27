@@ -19,6 +19,7 @@ class MovementEntity {
   @ColumnInfo(name: 'is_synced')
   final bool isSynced;
   @ColumnInfo(name: 'batch_deductions')
+  // ignore: non_constant_identifier_names
   final String? batch_deductions;
 
   MovementEntity({
@@ -32,6 +33,7 @@ class MovementEntity {
     this.reason,
     this.userId,
     this.isSynced = false,
+    // ignore: non_constant_identifier_names
     this.batch_deductions,
   });
 }

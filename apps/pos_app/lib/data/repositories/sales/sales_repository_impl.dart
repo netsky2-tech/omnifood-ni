@@ -17,7 +17,6 @@ import 'package:pos_app/data/daos/sales/sales_transaction_dao.dart';
 import 'package:pos_app/domain/services/sales/dgi_numbering_service.dart';
 import 'package:pos_app/data/models/sales/invoice_entity.dart';
 import 'package:pos_app/data/models/sales/invoice_item_entity.dart';
-import 'package:pos_app/data/models/inventory/movement_entity.dart';
 
 class SalesRepositoryImpl implements SalesRepository {
   final AppDatabase database;
@@ -131,7 +130,6 @@ class SalesRepositoryImpl implements SalesRepository {
     await invoiceDao.updateSyncStatusForIds(invoiceIds, 'synced');
   }
 
-  @override
   Future<void> markAsFailed(String invoiceId) async {
     final entity = await invoiceDao.getInvoiceById(invoiceId);
     if (entity != null) {

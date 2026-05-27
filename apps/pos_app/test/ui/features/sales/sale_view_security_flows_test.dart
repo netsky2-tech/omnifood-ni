@@ -66,7 +66,7 @@ void main() {
         .thenAnswer((_) async {});
   });
 
-  Widget _buildTestApp() {
+  Widget buildTestApp() {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider<SaleViewModel>.value(value: mockViewModel),
@@ -85,7 +85,7 @@ void main() {
       totpCode: anyNamed('totpCode'),
     )).thenAnswer((_) async => true);
 
-    await tester.pumpWidget(_buildTestApp());
+    await tester.pumpWidget(buildTestApp());
     await tester.pumpAndSettle();
 
     await tester.tap(find.byTooltip('Cerrar Caja'));
@@ -124,7 +124,7 @@ void main() {
       totpCode: anyNamed('totpCode'),
     )).thenAnswer((_) async => true);
 
-    await tester.pumpWidget(_buildTestApp());
+    await tester.pumpWidget(buildTestApp());
     await tester.pumpAndSettle();
 
     await tester.tap(find.byTooltip('Cerrar Caja'));
@@ -167,7 +167,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(_buildTestApp());
+    await tester.pumpWidget(buildTestApp());
     await tester.pumpAndSettle();
 
     when(mockAuthRepository.authorizeOverride(
@@ -221,7 +221,7 @@ void main() {
       totpCode: anyNamed('totpCode'),
     )).thenAnswer((_) async => true);
 
-    await tester.pumpWidget(_buildTestApp());
+    await tester.pumpWidget(buildTestApp());
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('DESCUENTO MANUAL'));
@@ -252,7 +252,7 @@ void main() {
       totpCode: anyNamed('totpCode'),
     )).thenAnswer((_) async => true);
 
-    await tester.pumpWidget(_buildTestApp());
+    await tester.pumpWidget(buildTestApp());
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('DESCUENTO MANUAL'));
@@ -284,7 +284,7 @@ void main() {
     when(mockViewModel.activeSession).thenReturn(null);
     when(mockViewModel.canManageCashDrawer).thenReturn(false);
 
-    await tester.pumpWidget(_buildTestApp());
+    await tester.pumpWidget(buildTestApp());
     await tester.pumpAndSettle();
 
     final openCashButton = tester.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'ABRIR CAJA'));

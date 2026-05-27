@@ -38,9 +38,12 @@ describe('ReportsController RBAC', () => {
   const signToken = (jwtService: JwtService, role: UserRole) =>
     jwtService.sign({ sub: 'user-1', role, tenant_id: 'tenant-1' });
 
+  const getHttpServer = (): Parameters<typeof request>[0] =>
+    app.getHttpServer() as Parameters<typeof request>[0];
+
   it('returns 403 for CASHIER role on X report route', async () => {
     const jwtService = app.get(JwtService);
-    await request(app.getHttpServer())
+    await request(getHttpServer())
       .get('/sales/reports/x')
       .set('Authorization', `Bearer ${signToken(jwtService, UserRole.CASHIER)}`)
       .expect(403);
@@ -48,7 +51,7 @@ describe('ReportsController RBAC', () => {
 
   it('returns 403 for WAITER role on Z report route', async () => {
     const jwtService = app.get(JwtService);
-    await request(app.getHttpServer())
+    await request(getHttpServer())
       .get('/sales/reports/z')
       .set('Authorization', `Bearer ${signToken(jwtService, UserRole.WAITER)}`)
       .expect(403);
@@ -56,7 +59,7 @@ describe('ReportsController RBAC', () => {
 
   it('allows MANAGER on X report route', async () => {
     const jwtService = app.get(JwtService);
-    await request(app.getHttpServer())
+    await request(getHttpServer())
       .get('/sales/reports/x')
       .set('Authorization', `Bearer ${signToken(jwtService, UserRole.MANAGER)}`)
       .expect(200);

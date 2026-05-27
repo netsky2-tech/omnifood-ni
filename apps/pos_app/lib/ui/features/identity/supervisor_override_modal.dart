@@ -86,7 +86,7 @@ class _SupervisorOverrideModalState extends State<SupervisorOverrideModal> {
           ),
           const SizedBox(height: 8),
           DropdownButtonFormField<SupervisorAuthorizationMethod>(
-            value: _method,
+            initialValue: _method,
             items: const [
               DropdownMenuItem(value: SupervisorAuthorizationMethod.pin, child: Text('PIN')),
               DropdownMenuItem(value: SupervisorAuthorizationMethod.totp, child: Text('TOTP')),
