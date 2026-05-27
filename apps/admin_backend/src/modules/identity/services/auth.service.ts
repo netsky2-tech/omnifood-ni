@@ -46,10 +46,19 @@ export class AuthService {
   ) {}
 
   async login(email: string, pass: string) {
-    const user = await this.userRepository.findOne({
-      where: { email },
-      select: ['id', 'name', 'email', 'password_hash', 'role', 'tenant_id'],
-    });
+    let user: Pick<
+      User,
+      'id' | 'name' | 'email' | 'password_hash' | 'role' | 'tenant_id'
+    > | null = null;
+
+    try {
+      user = await this.userRepository.findOne({
+        where: { email },
+        select: ['id', 'name', 'email', 'password_hash', 'role', 'tenant_id'],
+      });
+    } catch {
+      user = null;
+    }
 
     if (!user || !(await bcrypt.compare(pass, user.password_hash))) {
       throw new UnauthorizedException('Credenciales inválidas');
