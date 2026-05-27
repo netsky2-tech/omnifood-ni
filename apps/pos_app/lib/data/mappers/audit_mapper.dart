@@ -1,7 +1,9 @@
 import '../../domain/models/audit_log.dart';
 import '../models/audit_log_entity.dart';
+import 'package:uuid/uuid.dart';
 
 class AuditMapper {
+  static const _uuid = Uuid();
   static AuditLog toDomain(AuditLogEntity entity) {
     return AuditLog(
       id: entity.id,
@@ -11,6 +13,11 @@ class AuditMapper {
       deviceId: entity.deviceId,
       metadata: entity.metadata,
       isSynced: entity.isSynced,
+      sequenceNo: entity.sequenceNo,
+      prevHash: entity.prevHash,
+      entryHash: entity.entryHash,
+      metodoAutorizacion: entity.metodoAutorizacion,
+      usuarioAutorizadorId: entity.usuarioAutorizadorId,
     );
   }
 
@@ -23,6 +30,12 @@ class AuditMapper {
       deviceId: domain.deviceId,
       metadata: domain.metadata,
       isSynced: domain.isSynced,
+      sequenceNo: domain.sequenceNo,
+      prevHash: domain.prevHash,
+      entryHash: domain.entryHash,
+      metodoAutorizacion: domain.metodoAutorizacion,
+      usuarioAutorizadorId: domain.usuarioAutorizadorId,
+      remoteRefUuid: _uuid.v4(),
     );
   }
 }

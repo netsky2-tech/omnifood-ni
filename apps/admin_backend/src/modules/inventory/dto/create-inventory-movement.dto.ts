@@ -1,4 +1,14 @@
-import { IsEnum, IsNumber, IsOptional, IsString, IsUUID, IsDateString, IsArray, ArrayMaxSize, ValidateNested } from 'class-validator';
+import {
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  IsDateString,
+  IsArray,
+  ArrayMaxSize,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { MovementType } from '../entities/inventory-movement.entity';
 

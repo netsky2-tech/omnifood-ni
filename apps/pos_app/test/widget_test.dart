@@ -12,7 +12,14 @@ import 'package:pos_app/domain/services/alerts/alert_service.dart';
 // Manual fakes for smoke test
 class FakeAuthRepository implements AuthRepository {
   @override
+  bool get isPendingSync => false;
+  @override
+  DateTime? get lastSyncTimestamp => null;
+
+  @override
   Future<User?> loginOnline(String email, String password) async => null;
+  @override
+  Future<bool> authorizeOverride({required String supervisorId, String? pin, String? totpCode}) async => false;
   @override
   Future<void> syncStaff() async {}
   @override
@@ -38,6 +45,8 @@ class FakeUserDao implements UserDao {
   Future<List<UserEntity>> findAllUsers() async => [];
   @override
   Future<UserEntity?> findUserById(String id) async => null;
+  @override
+  Future<UserEntity?> findUserByEmail(String email) async => null;
   @override
   Future<void> insertUsers(List<UserEntity> users) async {}
   @override

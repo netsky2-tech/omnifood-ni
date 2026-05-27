@@ -4,6 +4,7 @@ import 'package:sqflite/sqflite.dart' as sqflite;
 
 import '../daos/user_dao.dart';
 import '../daos/audit_log_dao.dart';
+import '../daos/security_profile_dao.dart';
 import '../daos/inventory/insumo_dao.dart';
 import '../daos/inventory/recipe_dao.dart';
 import '../daos/inventory/movement_dao.dart';
@@ -24,6 +25,7 @@ import 'package:pos_app/data/daos/sales/promotion_dao.dart';
 import 'package:pos_app/data/daos/local_config_dao.dart';
 import 'package:pos_app/data/models/user_entity.dart';
 import 'package:pos_app/data/models/audit_log_entity.dart';
+import 'package:pos_app/data/models/security_profile_entity.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/data/models/inventory/insumo_entity.dart';
 import 'package:pos_app/data/models/inventory/product_entity.dart';
@@ -45,8 +47,9 @@ import 'package:pos_app/data/models/sales/promotion_entity.dart';
 
 part 'app_database.g.dart'; // generated code
 
-@Database(version: 11, entities: [
+@Database(version: 14, entities: [
   UserEntity,
+  SecurityProfileEntity,
   AuditLogEntity,
   LocalConfigEntity,
   InsumoEntity,
@@ -72,6 +75,7 @@ part 'app_database.g.dart'; // generated code
 ])
 abstract class AppDatabase extends FloorDatabase {
   UserDao get userDao;
+  SecurityProfileDao get securityProfileDao;
   AuditDao get auditDao;
   LocalConfigDao get localConfigDao;
   InsumoDao get insumoDao;

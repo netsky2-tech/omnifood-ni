@@ -74,14 +74,13 @@ class SalesRepositoryImpl implements SalesRepository {
         [], 
         paymentEntities,
         movementEntities,
-        AuditLogEntity(
-          userId: updatedInvoice.userId,
-          action: 'SALE_CREATED',
-          timestamp: now,
-          deviceId: auditRepository.deviceId,
-          metadata: '{"invoice_id": "${updatedInvoice.id}", "number": "${updatedInvoice.number}", "total": ${updatedInvoice.total}}',
-        ),
+        null, // Audit log is written separately
         false,
+      );
+
+      await auditRepository.log(
+        'SALE_CREATED',
+        metadata: '{"invoice_id": "${updatedInvoice.id}", "number": "${updatedInvoice.number}", "total": ${updatedInvoice.total}}',
       );
 
       await numberingService.incrementNumber();
@@ -255,14 +254,13 @@ class SalesRepositoryImpl implements SalesRepository {
       [], 
       [], 
       movementEntities,
-      AuditLogEntity(
-        userId: original.userId,
-        action: 'CREDIT_NOTE_CREATED',
-        timestamp: now,
-        deviceId: auditRepository.deviceId,
-        metadata: '{"original_id": "$originalInvoiceId", "new_id": "$creditNoteId"}',
-      ),
+      null, // Audit log is written separately
       false,
+    );
+
+    await auditRepository.log(
+      'CREDIT_NOTE_CREATED',
+      metadata: '{"original_id": "$originalInvoiceId", "new_id": "$creditNoteId"}',
     );
 
     await numberingService.incrementNumber();

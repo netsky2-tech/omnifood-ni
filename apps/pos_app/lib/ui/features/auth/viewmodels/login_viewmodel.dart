@@ -21,7 +21,7 @@ class LoginViewModel extends ChangeNotifier {
     
     _isLoading = false;
     if (user == null) {
-      _error = 'Error de autenticación. Verifique sus credenciales.';
+      _error = 'Error de autenticación. Verifique sus credenciales o conexión.';
       notifyListeners();
       return false;
     }

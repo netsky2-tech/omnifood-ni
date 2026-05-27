@@ -29,6 +29,16 @@ mixin _$AuditLog {
   String get deviceId => throw _privateConstructorUsedError;
   String? get metadata => throw _privateConstructorUsedError; // JSON string
   bool get isSynced => throw _privateConstructorUsedError;
+  @JsonKey(name: 'sequence_no')
+  int get sequenceNo => throw _privateConstructorUsedError;
+  @JsonKey(name: 'prev_hash')
+  String get prevHash => throw _privateConstructorUsedError;
+  @JsonKey(name: 'entry_hash')
+  String get entryHash => throw _privateConstructorUsedError;
+  @JsonKey(name: 'metodo_autorizacion')
+  String? get metodoAutorizacion => throw _privateConstructorUsedError;
+  @JsonKey(name: 'usuario_autorizador_id')
+  String? get usuarioAutorizadorId => throw _privateConstructorUsedError;
 
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
   @JsonKey(ignore: true)
@@ -48,7 +58,12 @@ abstract class $AuditLogCopyWith<$Res> {
       DateTime timestamp,
       @JsonKey(name: 'device_id') String deviceId,
       String? metadata,
-      bool isSynced});
+      bool isSynced,
+      @JsonKey(name: 'sequence_no') int sequenceNo,
+      @JsonKey(name: 'prev_hash') String prevHash,
+      @JsonKey(name: 'entry_hash') String entryHash,
+      @JsonKey(name: 'metodo_autorizacion') String? metodoAutorizacion,
+      @JsonKey(name: 'usuario_autorizador_id') String? usuarioAutorizadorId});
 }
 
 /// @nodoc
@@ -71,6 +86,11 @@ class _$AuditLogCopyWithImpl<$Res, $Val extends AuditLog>
     Object? deviceId = null,
     Object? metadata = freezed,
     Object? isSynced = null,
+    Object? sequenceNo = null,
+    Object? prevHash = null,
+    Object? entryHash = null,
+    Object? metodoAutorizacion = freezed,
+    Object? usuarioAutorizadorId = freezed,
   }) {
     return _then(_value.copyWith(
       id: freezed == id
@@ -101,6 +121,26 @@ class _$AuditLogCopyWithImpl<$Res, $Val extends AuditLog>
           ? _value.isSynced
           : isSynced // ignore: cast_nullable_to_non_nullable
               as bool,
+      sequenceNo: null == sequenceNo
+          ? _value.sequenceNo
+          : sequenceNo // ignore: cast_nullable_to_non_nullable
+              as int,
+      prevHash: null == prevHash
+          ? _value.prevHash
+          : prevHash // ignore: cast_nullable_to_non_nullable
+              as String,
+      entryHash: null == entryHash
+          ? _value.entryHash
+          : entryHash // ignore: cast_nullable_to_non_nullable
+              as String,
+      metodoAutorizacion: freezed == metodoAutorizacion
+          ? _value.metodoAutorizacion
+          : metodoAutorizacion // ignore: cast_nullable_to_non_nullable
+              as String?,
+      usuarioAutorizadorId: freezed == usuarioAutorizadorId
+          ? _value.usuarioAutorizadorId
+          : usuarioAutorizadorId // ignore: cast_nullable_to_non_nullable
+              as String?,
     ) as $Val);
   }
 }
@@ -120,7 +160,12 @@ abstract class _$$AuditLogImplCopyWith<$Res>
       DateTime timestamp,
       @JsonKey(name: 'device_id') String deviceId,
       String? metadata,
-      bool isSynced});
+      bool isSynced,
+      @JsonKey(name: 'sequence_no') int sequenceNo,
+      @JsonKey(name: 'prev_hash') String prevHash,
+      @JsonKey(name: 'entry_hash') String entryHash,
+      @JsonKey(name: 'metodo_autorizacion') String? metodoAutorizacion,
+      @JsonKey(name: 'usuario_autorizador_id') String? usuarioAutorizadorId});
 }
 
 /// @nodoc
@@ -141,6 +186,11 @@ class __$$AuditLogImplCopyWithImpl<$Res>
     Object? deviceId = null,
     Object? metadata = freezed,
     Object? isSynced = null,
+    Object? sequenceNo = null,
+    Object? prevHash = null,
+    Object? entryHash = null,
+    Object? metodoAutorizacion = freezed,
+    Object? usuarioAutorizadorId = freezed,
   }) {
     return _then(_$AuditLogImpl(
       id: freezed == id
@@ -171,6 +221,26 @@ class __$$AuditLogImplCopyWithImpl<$Res>
           ? _value.isSynced
           : isSynced // ignore: cast_nullable_to_non_nullable
               as bool,
+      sequenceNo: null == sequenceNo
+          ? _value.sequenceNo
+          : sequenceNo // ignore: cast_nullable_to_non_nullable
+              as int,
+      prevHash: null == prevHash
+          ? _value.prevHash
+          : prevHash // ignore: cast_nullable_to_non_nullable
+              as String,
+      entryHash: null == entryHash
+          ? _value.entryHash
+          : entryHash // ignore: cast_nullable_to_non_nullable
+              as String,
+      metodoAutorizacion: freezed == metodoAutorizacion
+          ? _value.metodoAutorizacion
+          : metodoAutorizacion // ignore: cast_nullable_to_non_nullable
+              as String?,
+      usuarioAutorizadorId: freezed == usuarioAutorizadorId
+          ? _value.usuarioAutorizadorId
+          : usuarioAutorizadorId // ignore: cast_nullable_to_non_nullable
+              as String?,
     ));
   }
 }
@@ -185,7 +255,12 @@ class _$AuditLogImpl implements _AuditLog {
       required this.timestamp,
       @JsonKey(name: 'device_id') required this.deviceId,
       this.metadata,
-      this.isSynced = false});
+      this.isSynced = false,
+      @JsonKey(name: 'sequence_no') required this.sequenceNo,
+      @JsonKey(name: 'prev_hash') required this.prevHash,
+      @JsonKey(name: 'entry_hash') required this.entryHash,
+      @JsonKey(name: 'metodo_autorizacion') this.metodoAutorizacion,
+      @JsonKey(name: 'usuario_autorizador_id') this.usuarioAutorizadorId});
 
   factory _$AuditLogImpl.fromJson(Map<String, dynamic> json) =>
       _$$AuditLogImplFromJson(json);
@@ -208,10 +283,25 @@ class _$AuditLogImpl implements _AuditLog {
   @override
   @JsonKey()
   final bool isSynced;
+  @override
+  @JsonKey(name: 'sequence_no')
+  final int sequenceNo;
+  @override
+  @JsonKey(name: 'prev_hash')
+  final String prevHash;
+  @override
+  @JsonKey(name: 'entry_hash')
+  final String entryHash;
+  @override
+  @JsonKey(name: 'metodo_autorizacion')
+  final String? metodoAutorizacion;
+  @override
+  @JsonKey(name: 'usuario_autorizador_id')
+  final String? usuarioAutorizadorId;
 
   @override
   String toString() {
-    return 'AuditLog(id: $id, userId: $userId, action: $action, timestamp: $timestamp, deviceId: $deviceId, metadata: $metadata, isSynced: $isSynced)';
+    return 'AuditLog(id: $id, userId: $userId, action: $action, timestamp: $timestamp, deviceId: $deviceId, metadata: $metadata, isSynced: $isSynced, sequenceNo: $sequenceNo, prevHash: $prevHash, entryHash: $entryHash, metodoAutorizacion: $metodoAutorizacion, usuarioAutorizadorId: $usuarioAutorizadorId)';
   }
 
   @override
@@ -229,13 +319,35 @@ class _$AuditLogImpl implements _AuditLog {
             (identical(other.metadata, metadata) ||
                 other.metadata == metadata) &&
             (identical(other.isSynced, isSynced) ||
-                other.isSynced == isSynced));
+                other.isSynced == isSynced) &&
+            (identical(other.sequenceNo, sequenceNo) ||
+                other.sequenceNo == sequenceNo) &&
+            (identical(other.prevHash, prevHash) ||
+                other.prevHash == prevHash) &&
+            (identical(other.entryHash, entryHash) ||
+                other.entryHash == entryHash) &&
+            (identical(other.metodoAutorizacion, metodoAutorizacion) ||
+                other.metodoAutorizacion == metodoAutorizacion) &&
+            (identical(other.usuarioAutorizadorId, usuarioAutorizadorId) ||
+                other.usuarioAutorizadorId == usuarioAutorizadorId));
   }
 
   @JsonKey(ignore: true)
   @override
   int get hashCode => Object.hash(
-      runtimeType, id, userId, action, timestamp, deviceId, metadata, isSynced);
+      runtimeType,
+      id,
+      userId,
+      action,
+      timestamp,
+      deviceId,
+      metadata,
+      isSynced,
+      sequenceNo,
+      prevHash,
+      entryHash,
+      metodoAutorizacion,
+      usuarioAutorizadorId);
 
   @JsonKey(ignore: true)
   @override
@@ -259,7 +371,13 @@ abstract class _AuditLog implements AuditLog {
       required final DateTime timestamp,
       @JsonKey(name: 'device_id') required final String deviceId,
       final String? metadata,
-      final bool isSynced}) = _$AuditLogImpl;
+      final bool isSynced,
+      @JsonKey(name: 'sequence_no') required final int sequenceNo,
+      @JsonKey(name: 'prev_hash') required final String prevHash,
+      @JsonKey(name: 'entry_hash') required final String entryHash,
+      @JsonKey(name: 'metodo_autorizacion') final String? metodoAutorizacion,
+      @JsonKey(name: 'usuario_autorizador_id')
+      final String? usuarioAutorizadorId}) = _$AuditLogImpl;
 
   factory _AuditLog.fromJson(Map<String, dynamic> json) =
       _$AuditLogImpl.fromJson;
@@ -280,6 +398,21 @@ abstract class _AuditLog implements AuditLog {
   String? get metadata;
   @override // JSON string
   bool get isSynced;
+  @override
+  @JsonKey(name: 'sequence_no')
+  int get sequenceNo;
+  @override
+  @JsonKey(name: 'prev_hash')
+  String get prevHash;
+  @override
+  @JsonKey(name: 'entry_hash')
+  String get entryHash;
+  @override
+  @JsonKey(name: 'metodo_autorizacion')
+  String? get metodoAutorizacion;
+  @override
+  @JsonKey(name: 'usuario_autorizador_id')
+  String? get usuarioAutorizadorId;
   @override
   @JsonKey(ignore: true)
   _$$AuditLogImplCopyWith<_$AuditLogImpl> get copyWith =>

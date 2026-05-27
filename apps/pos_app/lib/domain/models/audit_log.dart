@@ -13,6 +13,11 @@ class AuditLog with _$AuditLog {
     @JsonKey(name: 'device_id') required String deviceId,
     String? metadata, // JSON string
     @Default(false) bool isSynced,
+    @JsonKey(name: 'sequence_no') required int sequenceNo,
+    @JsonKey(name: 'prev_hash') required String prevHash,
+    @JsonKey(name: 'entry_hash') required String entryHash,
+    @JsonKey(name: 'metodo_autorizacion') String? metodoAutorizacion,
+    @JsonKey(name: 'usuario_autorizador_id') String? usuarioAutorizadorId,
   }) = _AuditLog;
 
   factory AuditLog.fromJson(Map<String, dynamic> json) => _$AuditLogFromJson(json);

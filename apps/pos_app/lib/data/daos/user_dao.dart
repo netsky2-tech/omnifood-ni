@@ -12,6 +12,9 @@ abstract class UserDao {
   @Query('SELECT * FROM users WHERE id = :id')
   Future<UserEntity?> findUserById(String id);
 
+  @Query('SELECT * FROM users WHERE email = :email LIMIT 1')
+  Future<UserEntity?> findUserByEmail(String email);
+
   @Insert(onConflict: OnConflictStrategy.replace)
   Future<void> insertUsers(List<UserEntity> users);
 

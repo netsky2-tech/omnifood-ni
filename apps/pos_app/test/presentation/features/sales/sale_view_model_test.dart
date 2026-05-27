@@ -8,6 +8,11 @@ import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/daos/sales/cashier_session_dao.dart';
 import 'package:pos_app/data/daos/sales/hold_ticket_dao.dart';
 import 'package:pos_app/data/daos/sales/promotion_dao.dart';
+import 'package:pos_app/data/models/sales/cashier_session_entity.dart';
+import 'package:pos_app/domain/models/inventory/product.dart';
+import 'package:pos_app/domain/models/sales/cashier_session.dart';
+import 'package:pos_app/domain/models/sales/payment.dart';
+import 'package:pos_app/domain/models/user.dart';
 import 'sale_view_model_test.mocks.dart';
 import 'package:mockito/annotations.dart';
 
@@ -61,5 +66,89 @@ void main() {
     expect(viewModel.cart, isEmpty);
     expect(viewModel.total, 0.0);
     expect(viewModel.activeSession, isNull);
+  });
+
+  test('openSession persists CARTERA_MESERO model', () async {
+    when(mockAuthRepo.getCurrentUser()).thenAnswer(
+      (_) async => const User(
+        id: 'u-1',
+        name: 'Waiter',
+        role: UserRole.waiter,
+        isActive: true,
+      ),
+    );
+    when(mockSessionDao.insertSession(any)).thenAnswer((_) async {});
+
+    await viewModel.openSession(
+      200,
+      tipoModelo: CashSessionModel.carteraMesero,
+    );
+
+    final captured = verify(mockSessionDao.insertSession(captureAny)).captured.single as CashierSessionEntity;
+    expect(captured.tipoModelo, 'CARTERA_MESERO');
+  });
+
+  test('finalizeSale in CARTERA_MESERO tracks only cash expected', () async {
+    when(mockAuthRepo.getCurrentUser()).thenAnswer(
+      (_) async => const User(
+        id: 'u-1',
+        name: 'Waiter',
+        role: UserRole.waiter,
+        isActive: true,
+      ),
+    );
+    when(mockSessionDao.insertSession(any)).thenAnswer((_) async {});
+    when(mockSalesRepo.saveSale(invoice: anyNamed('invoice'), items: anyNamed('items'), payments: anyNamed('payments')))
+        .thenAnswer((_) async {});
+
+    await viewModel.openSession(100, tipoModelo: CashSessionModel.carteraMesero);
+    viewModel.addToCart(
+      Product(
+        id: 'p1',
+        sku: 'SKU-1',
+        name: 'Prod',
+        uom: 'unit',
+        sellPrice: 100,
+        stock: 10,
+        averageCost: 10,
+      ),
+    );
+
+    await viewModel.finalizeSale([PaymentMethod.cash, PaymentMethod.card]);
+
+    expect(viewModel.sessionExpected[PaymentMethod.cash], greaterThan(100));
+    expect(viewModel.sessionExpected[PaymentMethod.card], 0.0);
+  });
+
+  test('finalizeSale in CAJA_CENTRAL tracks cash and card expected totals', () async {
+    when(mockAuthRepo.getCurrentUser()).thenAnswer(
+      (_) async => const User(
+        id: 'u-1',
+        name: 'Cashier',
+        role: UserRole.cashier,
+        isActive: true,
+      ),
+    );
+    when(mockSessionDao.insertSession(any)).thenAnswer((_) async {});
+    when(mockSalesRepo.saveSale(invoice: anyNamed('invoice'), items: anyNamed('items'), payments: anyNamed('payments')))
+        .thenAnswer((_) async {});
+
+    await viewModel.openSession(100, tipoModelo: CashSessionModel.cajaCentral);
+    viewModel.addToCart(
+      Product(
+        id: 'p1',
+        sku: 'SKU-1',
+        name: 'Prod',
+        uom: 'unit',
+        sellPrice: 100,
+        stock: 10,
+        averageCost: 10,
+      ),
+    );
+
+    await viewModel.finalizeSale([PaymentMethod.cash, PaymentMethod.card]);
+
+    expect(viewModel.sessionExpected[PaymentMethod.cash], greaterThan(100));
+    expect(viewModel.sessionExpected[PaymentMethod.card], greaterThan(0));
   });
 }

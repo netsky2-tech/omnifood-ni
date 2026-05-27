@@ -4,6 +4,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { User } from './entities/user.entity';
 import { AuditLog } from './entities/audit-log.entity';
+import { SecurityProfile } from './entities/security-profile.entity';
 import { AuthService } from './services/auth.service';
 import { UserService } from './services/user.service';
 import { AuthController } from './controllers/auth.controller';
@@ -12,7 +13,7 @@ import { UsersController } from './controllers/users.controller';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, AuditLog]),
+    TypeOrmModule.forFeature([User, AuditLog, SecurityProfile]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

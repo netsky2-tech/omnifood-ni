@@ -48,6 +48,9 @@ dependencies:
 
   uuid: any
   shared_preferences: ^2.5.5
+  crypto: ^3.0.7
+  otp: ^3.2.0
+  encrypt: ^5.0.3
 dependency_overrides:
   analyzer: 6.4.1
 

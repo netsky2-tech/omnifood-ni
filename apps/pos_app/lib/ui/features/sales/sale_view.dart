@@ -6,7 +6,9 @@ import '../../../domain/models/sales/cart_item.dart';
 import '../../../data/services/sync_service.dart';
 import '../../../domain/models/sales/payment.dart';
 import '../../../domain/repositories/auth_repository.dart';
+import '../../../domain/repositories/audit_repository.dart';
 import '../../widgets/app_drawer.dart';
+import '../../features/identity/supervisor_override_modal.dart';
 
 class SaleView extends StatefulWidget {
   const SaleView({super.key});
@@ -91,8 +93,13 @@ class _SaleViewState extends State<SaleView> {
             tooltip: 'Sincronizar con la Nube',
           ),
           IconButton(
+            icon: const Icon(Icons.point_of_sale),
+            onPressed: () => _requestSupervisorOverrideForManualDrawer(context),
+            tooltip: 'Abrir Gaveta Manual',
+          ),
+          IconButton(
             icon: const Icon(Icons.lock_open),
-            onPressed: () => _showCloseBoxDialog(context),
+            onPressed: () => _requestSupervisorOverrideForCloseBox(context),
             tooltip: 'Cerrar Caja',
           ),
           IconButton(
@@ -182,6 +189,101 @@ class _SaleViewState extends State<SaleView> {
     showDialog(
       context: context,
       builder: (context) => const CloseBoxDialog(),
+    );
+  }
+
+  Future<void> _requestSupervisorOverrideForCloseBox(BuildContext context) async {
+    final authRepo = context.read<AuthRepository>();
+    final auditRepo = context.read<AuditRepository>();
+
+    final authorized = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => SupervisorOverrideModal(
+        onAuthorize: (request) {
+          final pin = request.method == SupervisorAuthorizationMethod.pin ? request.credential : null;
+          final totp = request.method == SupervisorAuthorizationMethod.totp ? request.credential : null;
+          return authRepo.authorizeOverride(
+            supervisorId: request.supervisorId,
+            pin: pin,
+            totpCode: totp,
+          );
+        },
+        onAuditSuccess: (request) {
+          final method = request.method == SupervisorAuthorizationMethod.pin ? 'PIN' : 'TOTP';
+          return auditRepo.logForensic(
+            'SUPERVISOR_OVERRIDE_CLOSE_SESSION',
+            metodoAutorizacion: method,
+            usuarioAutorizadorId: request.supervisorId,
+            metadata: 'close_box',
+          );
+        },
+      ),
+    );
+
+    if (!mounted) return;
+    if (authorized == true) {
+      _showCloseBoxDialog(context);
+    }
+  }
+
+  Future<void> _requestSupervisorOverrideForManualDrawer(BuildContext context) async {
+    final justification = await _promptJustification(context);
+    if (!mounted || justification == null || justification.trim().isEmpty) return;
+
+    final authRepo = context.read<AuthRepository>();
+    final auditRepo = context.read<AuditRepository>();
+
+    final authorized = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => SupervisorOverrideModal(
+        onAuthorize: (request) {
+          final pin = request.method == SupervisorAuthorizationMethod.pin ? request.credential : null;
+          final totp = request.method == SupervisorAuthorizationMethod.totp ? request.credential : null;
+          return authRepo.authorizeOverride(
+            supervisorId: request.supervisorId,
+            pin: pin,
+            totpCode: totp,
+          );
+        },
+        onAuditSuccess: (request) {
+          final method = request.method == SupervisorAuthorizationMethod.pin ? 'PIN' : 'TOTP';
+          return auditRepo.logForensic(
+            'DRAWER_OPENED_MANUALLY',
+            metodoAutorizacion: method,
+            usuarioAutorizadorId: request.supervisorId,
+            metadata: 'manual_drawer_open:$justification',
+          );
+        },
+      ),
+    );
+
+    if (!mounted) return;
+    if (authorized == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Apertura manual de gaveta autorizada y auditada.')),
+      );
+    }
+  }
+
+  Future<String?> _promptJustification(BuildContext context) async {
+    final controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Justificación requerida'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(labelText: 'Motivo de apertura manual'),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancelar')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, controller.text.trim()),
+            child: const Text('Continuar'),
+          ),
+        ],
+      ),
     );
   }
 }

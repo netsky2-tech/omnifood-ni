@@ -6,8 +6,10 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
+  OneToOne,
 } from 'typeorm';
 import { Tenant } from '../../tenant/entities/tenant.entity';
+import { SecurityProfile } from './security-profile.entity';
 
 export enum UserRole {
   OWNER = 'OWNER',
@@ -37,8 +39,8 @@ export class User {
   @Column({ select: false, nullable: true })
   password_hash: string;
 
-  @Column({ select: false })
-  pin_hash: string;
+  @OneToOne(() => SecurityProfile, (profile) => profile.user)
+  security_profile: SecurityProfile;
 
   @Column({
     type: 'enum',

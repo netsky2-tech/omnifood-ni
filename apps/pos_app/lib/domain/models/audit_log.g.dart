@@ -15,6 +15,11 @@ _$AuditLogImpl _$$AuditLogImplFromJson(Map<String, dynamic> json) =>
       deviceId: json['device_id'] as String,
       metadata: json['metadata'] as String?,
       isSynced: json['isSynced'] as bool? ?? false,
+      sequenceNo: json['sequence_no'] as int,
+      prevHash: json['prev_hash'] as String,
+      entryHash: json['entry_hash'] as String,
+      metodoAutorizacion: json['metodo_autorizacion'] as String?,
+      usuarioAutorizadorId: json['usuario_autorizador_id'] as String?,
     );
 
 Map<String, dynamic> _$$AuditLogImplToJson(_$AuditLogImpl instance) =>
@@ -26,4 +31,9 @@ Map<String, dynamic> _$$AuditLogImplToJson(_$AuditLogImpl instance) =>
       'device_id': instance.deviceId,
       'metadata': instance.metadata,
       'isSynced': instance.isSynced,
+      'sequence_no': instance.sequenceNo,
+      'prev_hash': instance.prevHash,
+      'entry_hash': instance.entryHash,
+      'metodo_autorizacion': instance.metodoAutorizacion,
+      'usuario_autorizador_id': instance.usuarioAutorizadorId,
     };

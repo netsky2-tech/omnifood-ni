@@ -23,8 +23,6 @@ mixin _$User {
   String get id => throw _privateConstructorUsedError;
   String get name => throw _privateConstructorUsedError;
   UserRole get role => throw _privateConstructorUsedError;
-  @JsonKey(name: 'pin_hash')
-  String? get pinHash => throw _privateConstructorUsedError;
   @JsonKey(defaultValue: true)
   bool get isActive => throw _privateConstructorUsedError;
   String? get email => throw _privateConstructorUsedError;
@@ -45,7 +43,6 @@ abstract class $UserCopyWith<$Res> {
       {String id,
       String name,
       UserRole role,
-      @JsonKey(name: 'pin_hash') String? pinHash,
       @JsonKey(defaultValue: true) bool isActive,
       String? email,
       @JsonKey(name: 'tenant_id') String? tenantId});
@@ -67,7 +64,6 @@ class _$UserCopyWithImpl<$Res, $Val extends User>
     Object? id = null,
     Object? name = null,
     Object? role = null,
-    Object? pinHash = freezed,
     Object? isActive = null,
     Object? email = freezed,
     Object? tenantId = freezed,
@@ -85,10 +81,6 @@ class _$UserCopyWithImpl<$Res, $Val extends User>
           ? _value.role
           : role // ignore: cast_nullable_to_non_nullable
               as UserRole,
-      pinHash: freezed == pinHash
-          ? _value.pinHash
-          : pinHash // ignore: cast_nullable_to_non_nullable
-              as String?,
       isActive: null == isActive
           ? _value.isActive
           : isActive // ignore: cast_nullable_to_non_nullable
@@ -116,7 +108,6 @@ abstract class _$$UserImplCopyWith<$Res> implements $UserCopyWith<$Res> {
       {String id,
       String name,
       UserRole role,
-      @JsonKey(name: 'pin_hash') String? pinHash,
       @JsonKey(defaultValue: true) bool isActive,
       String? email,
       @JsonKey(name: 'tenant_id') String? tenantId});
@@ -135,7 +126,6 @@ class __$$UserImplCopyWithImpl<$Res>
     Object? id = null,
     Object? name = null,
     Object? role = null,
-    Object? pinHash = freezed,
     Object? isActive = null,
     Object? email = freezed,
     Object? tenantId = freezed,
@@ -153,10 +143,6 @@ class __$$UserImplCopyWithImpl<$Res>
           ? _value.role
           : role // ignore: cast_nullable_to_non_nullable
               as UserRole,
-      pinHash: freezed == pinHash
-          ? _value.pinHash
-          : pinHash // ignore: cast_nullable_to_non_nullable
-              as String?,
       isActive: null == isActive
           ? _value.isActive
           : isActive // ignore: cast_nullable_to_non_nullable
@@ -180,7 +166,6 @@ class _$UserImpl implements _User {
       {required this.id,
       required this.name,
       required this.role,
-      @JsonKey(name: 'pin_hash') this.pinHash,
       @JsonKey(defaultValue: true) required this.isActive,
       this.email,
       @JsonKey(name: 'tenant_id') this.tenantId});
@@ -195,9 +180,6 @@ class _$UserImpl implements _User {
   @override
   final UserRole role;
   @override
-  @JsonKey(name: 'pin_hash')
-  final String? pinHash;
-  @override
   @JsonKey(defaultValue: true)
   final bool isActive;
   @override
@@ -208,7 +190,7 @@ class _$UserImpl implements _User {
 
   @override
   String toString() {
-    return 'User(id: $id, name: $name, role: $role, pinHash: $pinHash, isActive: $isActive, email: $email, tenantId: $tenantId)';
+    return 'User(id: $id, name: $name, role: $role, isActive: $isActive, email: $email, tenantId: $tenantId)';
   }
 
   @override
@@ -219,7 +201,6 @@ class _$UserImpl implements _User {
             (identical(other.id, id) || other.id == id) &&
             (identical(other.name, name) || other.name == name) &&
             (identical(other.role, role) || other.role == role) &&
-            (identical(other.pinHash, pinHash) || other.pinHash == pinHash) &&
             (identical(other.isActive, isActive) ||
                 other.isActive == isActive) &&
             (identical(other.email, email) || other.email == email) &&
@@ -229,8 +210,8 @@ class _$UserImpl implements _User {
 
   @JsonKey(ignore: true)
   @override
-  int get hashCode => Object.hash(
-      runtimeType, id, name, role, pinHash, isActive, email, tenantId);
+  int get hashCode =>
+      Object.hash(runtimeType, id, name, role, isActive, email, tenantId);
 
   @JsonKey(ignore: true)
   @override
@@ -251,7 +232,6 @@ abstract class _User implements User {
       {required final String id,
       required final String name,
       required final UserRole role,
-      @JsonKey(name: 'pin_hash') final String? pinHash,
       @JsonKey(defaultValue: true) required final bool isActive,
       final String? email,
       @JsonKey(name: 'tenant_id') final String? tenantId}) = _$UserImpl;
@@ -264,9 +244,6 @@ abstract class _User implements User {
   String get name;
   @override
   UserRole get role;
-  @override
-  @JsonKey(name: 'pin_hash')
-  String? get pinHash;
   @override
   @JsonKey(defaultValue: true)
   bool get isActive;

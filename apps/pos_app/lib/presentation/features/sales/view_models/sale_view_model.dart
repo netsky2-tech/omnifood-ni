@@ -207,7 +207,10 @@ class SaleViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> openSession(double balance) async {
+  Future<void> openSession(
+    double balance, {
+    CashSessionModel tipoModelo = CashSessionModel.cajaCentral,
+  }) async {
     final user = await _authRepository.getCurrentUser();
     if (user == null) {
       _errorMessage = 'Debe iniciar sesión para abrir caja.';
@@ -219,6 +222,7 @@ class SaleViewModel extends ChangeNotifier {
       id: const Uuid().v4(),
       userId: user.id,
       openedAt: DateTime.now(),
+      tipoModelo: tipoModelo,
       openingBalance: balance,
     );
     await _database.cashierSessionDao.insertSession(SalesMapper.toSessionEntity(session));
@@ -385,6 +389,9 @@ class SaleViewModel extends ChangeNotifier {
 
     // Update expected totals
     for (final p in payments) {
+      if (_activeSession?.tipoModelo == CashSessionModel.carteraMesero && p.method != PaymentMethod.cash) {
+        continue;
+      }
       _sessionExpected[p.method] = (_sessionExpected[p.method] ?? 0.0) + p.amount;
     }
 

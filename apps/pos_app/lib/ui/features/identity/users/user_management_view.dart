@@ -196,7 +196,6 @@ class _UserDialogState extends State<UserDialog> {
               email: _emailController.text.isEmpty ? null : _emailController.text,
               role: _selectedRole,
               isActive: widget.user?.isActive ?? true,
-              pinHash: widget.user?.pinHash,
             );
             viewModel.saveUser(user, pin: _pinController.text.isEmpty ? null : _pinController.text);
             Navigator.pop(context);

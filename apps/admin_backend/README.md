@@ -35,4 +35,9 @@ npm run test:e2e
 ## 📝 Base de Datos
 El proyecto utiliza **TypeORM**. Asegurate de tener configuradas las variables de entorno correspondientes para la conexión a PostgreSQL. El sistema espera que el schema tenga habilitado RLS para el aislamiento de tenants.
 
+## 🔎 Notas de Ingesta Forense (Identity)
+- El endpoint `/identity/audit` valida cadena forense por evento (`sequence_no`, `prev_hash`, `entry_hash`) para preservar inmutabilidad operativa.
+- La ingesta mantiene lectura retrocompatible del campo de acción (`action` o `tipo_accion`) y normaliza persistencia en `action`.
+- Esta normalización elimina necesidad de dual-write temporal en el contrato de sincronización, sin romper clientes previos.
+
 Para más guías específicas del motor, revisá el archivo [GEMINI.md](./GEMINI.md) local.

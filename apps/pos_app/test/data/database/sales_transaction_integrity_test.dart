@@ -34,11 +34,15 @@ void main() {
       );
 
       final auditLog = AuditLogEntity(
-        userId: 'u1',
+        remoteRefUuid: '11111111-1111-4111-8111-111111111111',
+        userId: 'u-1',
         action: 'SALE_CREATED',
         timestamp: DateTime.now().toIso8601String(),
-        deviceId: 'device1',
-        metadata: '{"invoice_id": "inv1"}',
+        deviceId: 'device-1',
+        metadata: '{"invoice_id": "${invoice.id}"}',
+        sequenceNo: 1,
+        prevHash: 'none',
+        entryHash: 'hash',
       );
 
       // This will fail to compile initially because auditLog parameter doesn't exist
@@ -74,11 +78,15 @@ void main() {
       );
 
       final auditLog = AuditLogEntity(
-        userId: 'u1',
+        remoteRefUuid: '22222222-2222-4222-8222-222222222222',
+        userId: 'u-1',
         action: 'SALE_CREATED',
         timestamp: DateTime.now().toIso8601String(),
-        deviceId: 'device1',
-        metadata: '{"invoice_id": "inv1"}',
+        deviceId: 'device-1',
+        metadata: '{"invoice_id": "${invoice.id}"}',
+        sequenceNo: 1,
+        prevHash: 'none',
+        entryHash: 'hash',
       );
 
       // Force failure by inserting duplicate invoice afterwards in the same transaction

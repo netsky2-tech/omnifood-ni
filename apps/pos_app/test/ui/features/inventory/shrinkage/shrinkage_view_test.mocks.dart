@@ -421,6 +421,42 @@ class MockMovementEngine extends _i1.Mock implements _i14.MovementEngine {
       ) as _i4.Future<void>);
 
   @override
+  _i4.Future<List<_i8.InventoryMovement>> getSaleMovements(
+    String? productId,
+    double? quantity,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getSaleMovements,
+          [
+            productId,
+            quantity,
+          ],
+        ),
+        returnValue: _i4.Future<List<_i8.InventoryMovement>>.value(
+            <_i8.InventoryMovement>[]),
+      ) as _i4.Future<List<_i8.InventoryMovement>>);
+
+  @override
+  _i4.Future<List<_i8.InventoryMovement>> getReversalMovements(
+    String? productId,
+    double? quantity,
+    String? reason,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getReversalMovements,
+          [
+            productId,
+            quantity,
+            reason,
+          ],
+        ),
+        returnValue: _i4.Future<List<_i8.InventoryMovement>>.value(
+            <_i8.InventoryMovement>[]),
+      ) as _i4.Future<List<_i8.InventoryMovement>>);
+
+  @override
   _i4.Future<List<_i15.BatchDeduction>> getBatchesForConsumption(
     String? insumoId,
     double? quantity,

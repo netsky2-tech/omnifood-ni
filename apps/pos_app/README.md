@@ -33,4 +33,9 @@ flutter run
 ## ⚠️ Nota sobre Dependencias
 Debido a conflictos entre `floor_generator` y las versiones más recientes de `freezed`, se utiliza un **override** para el paquete `analyzer` (versión 6.4.1) en el `pubspec.yaml`. No subir esta versión sin previa verificación de compatibilidad.
 
+## 🔐 Notas de Identidad y Auditoría Offline
+- La autorización de supervisor para acciones restringidas se valida localmente (PIN/TOTP) usando `SecurityProfile` en SQLite.
+- La bitácora forense se registra primero en local con cadena inmutable (`sequence_no`, `prev_hash`, `entry_hash`) antes de sincronizar.
+- Si no hay conectividad, el POS mantiene operación y marca los eventos para sincronización eventual.
+
 Para más guías específicas del frente, revisá el archivo [GEMINI.md](./GEMINI.md) local.

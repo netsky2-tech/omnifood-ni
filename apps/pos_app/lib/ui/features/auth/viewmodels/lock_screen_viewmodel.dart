@@ -36,7 +36,6 @@ class LockScreenViewModel extends ChangeNotifier {
         name: 'Admin Inicial (Setup)',
         email: 'admin@omnifood.ni',
         role: UserRole.owner,
-        pinHash: '', 
         isActive: true,
       ));
     }

@@ -11,6 +11,9 @@ _$CashierSessionImpl _$$CashierSessionImplFromJson(Map<String, dynamic> json) =>
       id: json['id'] as String,
       userId: json['userId'] as String,
       openedAt: DateTime.parse(json['openedAt'] as String),
+      tipoModelo:
+          $enumDecodeNullable(_$CashSessionModelEnumMap, json['tipo_modelo']) ??
+              CashSessionModel.cajaCentral,
       closedAt: json['closedAt'] == null
           ? null
           : DateTime.parse(json['closedAt'] as String),
@@ -27,6 +30,7 @@ Map<String, dynamic> _$$CashierSessionImplToJson(
       'id': instance.id,
       'userId': instance.userId,
       'openedAt': instance.openedAt.toIso8601String(),
+      'tipo_modelo': _$CashSessionModelEnumMap[instance.tipoModelo]!,
       'closedAt': instance.closedAt?.toIso8601String(),
       'openingBalance': instance.openingBalance,
       'closingBalance': instance.closingBalance,
@@ -34,3 +38,8 @@ Map<String, dynamic> _$$CashierSessionImplToJson(
       'totalExpected': instance.totalExpected,
       'isClosed': instance.isClosed,
     };
+
+const _$CashSessionModelEnumMap = {
+  CashSessionModel.cajaCentral: 'CAJA_CENTRAL',
+  CashSessionModel.carteraMesero: 'CARTERA_MESERO',
+};

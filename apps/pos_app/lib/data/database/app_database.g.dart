@@ -74,6 +74,8 @@ class _$AppDatabase extends AppDatabase {
 
   UserDao? _userDaoInstance;
 
+  SecurityProfileDao? _securityProfileDaoInstance;
+
   AuditDao? _auditDaoInstance;
 
   LocalConfigDao? _localConfigDaoInstance;
@@ -120,7 +122,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 11,
+      version: 14,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -138,7 +140,9 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `users` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `role` TEXT NOT NULL, `pin_hash` TEXT NOT NULL, `is_active` INTEGER NOT NULL, `email` TEXT, `tenant_id` TEXT, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `audit_logs` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `user_id` TEXT NOT NULL, `action` TEXT NOT NULL, `timestamp` TEXT NOT NULL, `device_id` TEXT NOT NULL, `metadata` TEXT, `is_synced` INTEGER NOT NULL)');
+            'CREATE TABLE IF NOT EXISTS `security_profiles` (`user_id` TEXT NOT NULL, `pin_hash` TEXT, `totp_secret_seed` TEXT, `is_totp_enabled` INTEGER NOT NULL, `is_pin_enabled` INTEGER NOT NULL, PRIMARY KEY (`user_id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `audit_logs` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `user_id` TEXT NOT NULL, `action` TEXT NOT NULL, `timestamp` TEXT NOT NULL, `device_id` TEXT NOT NULL, `metadata` TEXT, `is_synced` INTEGER NOT NULL, `sequence_no` INTEGER NOT NULL, `prev_hash` TEXT NOT NULL, `entry_hash` TEXT NOT NULL, `metodo_autorizacion` TEXT, `usuario_autorizador_id` TEXT, `remote_ref_uuid` TEXT NOT NULL)');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `local_configs` (`key` TEXT NOT NULL, `value` TEXT NOT NULL, `description` TEXT, PRIMARY KEY (`key`))');
         await database.execute(
@@ -174,7 +178,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `tax_configurations` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `rate` REAL NOT NULL, `is_active` INTEGER NOT NULL, `is_default` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `cashier_sessions` (`id` TEXT NOT NULL, `user_id` TEXT NOT NULL, `opened_at` INTEGER NOT NULL, `closed_at` INTEGER, `opening_balance` REAL NOT NULL, `closing_balance` REAL, `total_sales` REAL, `total_expected` REAL, `is_closed` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `cashier_sessions` (`id` TEXT NOT NULL, `user_id` TEXT NOT NULL, `opened_at` INTEGER NOT NULL, `tipo_modelo` TEXT NOT NULL, `closed_at` INTEGER, `opening_balance` REAL NOT NULL, `closing_balance` REAL, `total_sales` REAL, `total_expected` REAL, `is_closed` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `hold_tickets` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `global_tax_exempt` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
@@ -193,6 +197,12 @@ class _$AppDatabase extends AppDatabase {
   @override
   UserDao get userDao {
     return _userDaoInstance ??= _$UserDao(database, changeListener);
+  }
+
+  @override
+  SecurityProfileDao get securityProfileDao {
+    return _securityProfileDaoInstance ??=
+        _$SecurityProfileDao(database, changeListener);
   }
 
   @override
@@ -368,6 +378,20 @@ class _$UserDao extends UserDao {
   }
 
   @override
+  Future<UserEntity?> findUserByEmail(String email) async {
+    return _queryAdapter.query('SELECT * FROM users WHERE email = ?1 LIMIT 1',
+        mapper: (Map<String, Object?> row) => UserEntity(
+            id: row['id'] as String,
+            name: row['name'] as String,
+            role: row['role'] as String,
+            pinHash: row['pin_hash'] as String,
+            isActive: (row['is_active'] as int) != 0,
+            email: row['email'] as String?,
+            tenantId: row['tenant_id'] as String?),
+        arguments: [email]);
+  }
+
+  @override
   Future<void> deleteAllUsers() async {
     await _queryAdapter.queryNoReturn('DELETE FROM users');
   }
@@ -376,6 +400,78 @@ class _$UserDao extends UserDao {
   Future<void> insertUsers(List<UserEntity> users) async {
     await _userEntityInsertionAdapter.insertList(
         users, OnConflictStrategy.replace);
+  }
+}
+
+class _$SecurityProfileDao extends SecurityProfileDao {
+  _$SecurityProfileDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _securityProfileEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'security_profiles',
+            (SecurityProfileEntity item) => <String, Object?>{
+                  'user_id': item.userId,
+                  'pin_hash': item.pinHash,
+                  'totp_secret_seed': item.totpSecretSeed,
+                  'is_totp_enabled': item.isTotpEnabled ? 1 : 0,
+                  'is_pin_enabled': item.isPinEnabled ? 1 : 0
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<SecurityProfileEntity>
+      _securityProfileEntityInsertionAdapter;
+
+  @override
+  Future<SecurityProfileEntity?> findByUserId(String userId) async {
+    return _queryAdapter.query(
+        'SELECT * FROM security_profiles WHERE user_id = ?1 LIMIT 1',
+        mapper: (Map<String, Object?> row) => SecurityProfileEntity(
+            userId: row['user_id'] as String,
+            pinHash: row['pin_hash'] as String?,
+            totpSecretSeed: row['totp_secret_seed'] as String?,
+            isTotpEnabled: (row['is_totp_enabled'] as int) != 0,
+            isPinEnabled: (row['is_pin_enabled'] as int) != 0),
+        arguments: [userId]);
+  }
+
+  @override
+  Future<void> deleteAll() async {
+    await _queryAdapter.queryNoReturn('DELETE FROM security_profiles');
+  }
+
+  @override
+  Future<List<SecurityProfileEntity>> findLegacyPlaintextTotpSeeds() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM security_profiles WHERE totp_secret_seed IS NOT NULL AND totp_secret_seed != \'\' AND lower(substr(totp_secret_seed, 1, 3)) != \'enc\'',
+        mapper: (Map<String, Object?> row) => SecurityProfileEntity(
+            userId: row['user_id'] as String,
+            pinHash: row['pin_hash'] as String?,
+            totpSecretSeed: row['totp_secret_seed'] as String?,
+            isTotpEnabled: (row['is_totp_enabled'] as int) != 0,
+            isPinEnabled: (row['is_pin_enabled'] as int) != 0));
+  }
+
+  @override
+  Future<void> updateTotpSecretSeed(
+    String userId,
+    String encryptedSeed,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE security_profiles SET totp_secret_seed = ?2 WHERE user_id = ?1',
+        arguments: [userId, encryptedSeed]);
+  }
+
+  @override
+  Future<void> insertProfiles(List<SecurityProfileEntity> profiles) async {
+    await _securityProfileEntityInsertionAdapter.insertList(
+        profiles, OnConflictStrategy.replace);
   }
 }
 
@@ -394,7 +490,13 @@ class _$AuditDao extends AuditDao {
                   'timestamp': item.timestamp,
                   'device_id': item.deviceId,
                   'metadata': item.metadata,
-                  'is_synced': item.isSynced ? 1 : 0
+                  'is_synced': item.isSynced ? 1 : 0,
+                  'sequence_no': item.sequenceNo,
+                  'prev_hash': item.prevHash,
+                  'entry_hash': item.entryHash,
+                  'metodo_autorizacion': item.metodoAutorizacion,
+                  'usuario_autorizador_id': item.usuarioAutorizadorId,
+                  'remote_ref_uuid': item.remoteRefUuid
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -416,7 +518,13 @@ class _$AuditDao extends AuditDao {
             timestamp: row['timestamp'] as String,
             deviceId: row['device_id'] as String,
             metadata: row['metadata'] as String?,
-            isSynced: (row['is_synced'] as int) != 0));
+            isSynced: (row['is_synced'] as int) != 0,
+            sequenceNo: row['sequence_no'] as int,
+            prevHash: row['prev_hash'] as String,
+            entryHash: row['entry_hash'] as String,
+            metodoAutorizacion: row['metodo_autorizacion'] as String?,
+            usuarioAutorizadorId: row['usuario_autorizador_id'] as String?,
+            remoteRefUuid: row['remote_ref_uuid'] as String));
   }
 
   @override
@@ -427,7 +535,7 @@ class _$AuditDao extends AuditDao {
   ) async {
     return _queryAdapter.queryList(
         'SELECT * FROM audit_logs WHERE timestamp >= ?1 AND timestamp <= ?2 AND (?3 = \"\" OR user_id = ?3) ORDER BY timestamp DESC',
-        mapper: (Map<String, Object?> row) => AuditLogEntity(id: row['id'] as int?, userId: row['user_id'] as String, action: row['action'] as String, timestamp: row['timestamp'] as String, deviceId: row['device_id'] as String, metadata: row['metadata'] as String?, isSynced: (row['is_synced'] as int) != 0),
+        mapper: (Map<String, Object?> row) => AuditLogEntity(id: row['id'] as int?, userId: row['user_id'] as String, action: row['action'] as String, timestamp: row['timestamp'] as String, deviceId: row['device_id'] as String, metadata: row['metadata'] as String?, isSynced: (row['is_synced'] as int) != 0, sequenceNo: row['sequence_no'] as int, prevHash: row['prev_hash'] as String, entryHash: row['entry_hash'] as String, metodoAutorizacion: row['metodo_autorizacion'] as String?, usuarioAutorizadorId: row['usuario_autorizador_id'] as String?, remoteRefUuid: row['remote_ref_uuid'] as String),
         arguments: [start, end, userId]);
   }
 
@@ -442,7 +550,37 @@ class _$AuditDao extends AuditDao {
             timestamp: row['timestamp'] as String,
             deviceId: row['device_id'] as String,
             metadata: row['metadata'] as String?,
-            isSynced: (row['is_synced'] as int) != 0));
+            isSynced: (row['is_synced'] as int) != 0,
+            sequenceNo: row['sequence_no'] as int,
+            prevHash: row['prev_hash'] as String,
+            entryHash: row['entry_hash'] as String,
+            metodoAutorizacion: row['metodo_autorizacion'] as String?,
+            usuarioAutorizadorId: row['usuario_autorizador_id'] as String?,
+            remoteRefUuid: row['remote_ref_uuid'] as String));
+  }
+
+  @override
+  Future<int?> getLastSequenceNo() async {
+    return _queryAdapter.query(
+        'SELECT sequence_no FROM audit_logs ORDER BY id DESC LIMIT 1',
+        mapper: (Map<String, Object?> row) => row.values.first as int);
+  }
+
+  @override
+  Future<String?> getLastEntryHash() async {
+    return _queryAdapter.query(
+        'SELECT entry_hash FROM audit_logs ORDER BY id DESC LIMIT 1',
+        mapper: (Map<String, Object?> row) => row.values.first as String);
+  }
+
+  @override
+  Future<void> updateMetadataById(
+    int id,
+    String metadata,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE audit_logs SET metadata = ?2 WHERE id = ?1',
+        arguments: [id, metadata]);
   }
 
   @override
@@ -915,7 +1053,7 @@ class _$MovementDao extends MovementDao {
   ) async {
     return _queryAdapter.queryList(
         'SELECT * FROM inventory_movements WHERE type = ?1 ORDER BY timestamp DESC LIMIT ?2',
-        mapper: (Map<String, Object?> row) => MovementEntity(id: row['id'] as String, insumoId: row['insumo_id'] as String, type: row['type'] as String, quantity: row['quantity'] as double, previousStock: row['previous_stock'] as double, newStock: row['new_stock'] as double, timestamp: row['timestamp'] as String, reason: row['reason'] as String?, userId: row['user_id'] as String?, isSynced: (row['is_synced'] as int) != 0),
+        mapper: (Map<String, Object?> row) => MovementEntity(id: row['id'] as String, insumoId: row['insumo_id'] as String, type: row['type'] as String, quantity: row['quantity'] as double, previousStock: row['previous_stock'] as double, newStock: row['new_stock'] as double, timestamp: row['timestamp'] as String, reason: row['reason'] as String?, userId: row['user_id'] as String?, isSynced: (row['is_synced'] as int) != 0, batch_deductions: row['batch_deductions'] as String?),
         arguments: [type, limit]);
   }
 
@@ -958,7 +1096,8 @@ class _$InventoryDao extends InventoryDao {
                   'timestamp': item.timestamp,
                   'reason': item.reason,
                   'user_id': item.userId,
-                  'is_synced': item.isSynced ? 1 : 0
+                  'is_synced': item.isSynced ? 1 : 0,
+                  'batch_deductions': item.batch_deductions
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -1800,7 +1939,13 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'timestamp': item.timestamp,
                   'device_id': item.deviceId,
                   'metadata': item.metadata,
-                  'is_synced': item.isSynced ? 1 : 0
+                  'is_synced': item.isSynced ? 1 : 0,
+                  'sequence_no': item.sequenceNo,
+                  'prev_hash': item.prevHash,
+                  'entry_hash': item.entryHash,
+                  'metodo_autorizacion': item.metodoAutorizacion,
+                  'usuario_autorizador_id': item.usuarioAutorizadorId,
+                  'remote_ref_uuid': item.remoteRefUuid
                 }),
         _insumoEntityUpdateAdapter = UpdateAdapter(
             database,
@@ -1986,6 +2131,7 @@ class _$CashierSessionDao extends CashierSessionDao {
                   'id': item.id,
                   'user_id': item.userId,
                   'opened_at': item.openedAt,
+                  'tipo_modelo': item.tipoModelo,
                   'closed_at': item.closedAt,
                   'opening_balance': item.openingBalance,
                   'closing_balance': item.closingBalance,
@@ -2001,6 +2147,7 @@ class _$CashierSessionDao extends CashierSessionDao {
                   'id': item.id,
                   'user_id': item.userId,
                   'opened_at': item.openedAt,
+                  'tipo_modelo': item.tipoModelo,
                   'closed_at': item.closedAt,
                   'opening_balance': item.openingBalance,
                   'closing_balance': item.closingBalance,
@@ -2027,6 +2174,7 @@ class _$CashierSessionDao extends CashierSessionDao {
             id: row['id'] as String,
             userId: row['user_id'] as String,
             openedAt: row['opened_at'] as int,
+            tipoModelo: row['tipo_modelo'] as String,
             closedAt: row['closed_at'] as int?,
             openingBalance: row['opening_balance'] as double,
             closingBalance: row['closing_balance'] as double?,
@@ -2044,6 +2192,7 @@ class _$CashierSessionDao extends CashierSessionDao {
             id: row['id'] as String,
             userId: row['user_id'] as String,
             openedAt: row['opened_at'] as int,
+            tipoModelo: row['tipo_modelo'] as String,
             closedAt: row['closed_at'] as int?,
             openingBalance: row['opening_balance'] as double,
             closingBalance: row['closing_balance'] as double?,
@@ -2060,6 +2209,7 @@ class _$CashierSessionDao extends CashierSessionDao {
             id: row['id'] as String,
             userId: row['user_id'] as String,
             openedAt: row['opened_at'] as int,
+            tipoModelo: row['tipo_modelo'] as String,
             closedAt: row['closed_at'] as int?,
             openingBalance: row['opening_balance'] as double,
             closingBalance: row['closing_balance'] as double?,

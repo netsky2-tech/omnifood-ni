@@ -8,6 +8,7 @@ import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { User } from '../entities/user.entity';
 import { AuditLog } from '../entities/audit-log.entity';
+import { SecurityProfile } from '../entities/security-profile.entity';
 import { CreateUserDto, UpdateUserDto } from '../dto/user-management.dto';
 
 @Injectable()
@@ -17,6 +18,8 @@ export class UserService {
     private userRepository: Repository<User>,
     @InjectRepository(AuditLog)
     private auditRepository: Repository<AuditLog>,
+    @InjectRepository(SecurityProfile)
+    private securityProfileRepository: Repository<SecurityProfile>,
   ) {}
 
   async findByTenant(tenantId: string): Promise<User[]> {
@@ -53,11 +56,16 @@ export class UserService {
       user.password_hash = await bcrypt.hash(dto.password, 10);
     }
 
-    if (dto.pin) {
-      user.pin_hash = await bcrypt.hash(dto.pin, 10);
-    }
-
     const savedUser = await this.userRepository.save(user);
+
+    if (dto.pin) {
+      const profile = this.securityProfileRepository.create({
+        user_id: savedUser.id,
+        pin_hash: await bcrypt.hash(dto.pin, 10),
+        is_pin_enabled: true,
+      });
+      await this.securityProfileRepository.save(profile);
+    }
 
     await this.logAction('USER_CREATED', savedUser.id, tenantId, adminId);
 
@@ -84,11 +92,19 @@ export class UserService {
       user.password_hash = await bcrypt.hash(dto.password, 10);
     }
 
-    if (dto.pin) {
-      user.pin_hash = await bcrypt.hash(dto.pin, 10);
-    }
-
     const updatedUser = await this.userRepository.save(user);
+
+    if (dto.pin) {
+      const existingProfile = await this.securityProfileRepository.findOne({
+        where: { user_id: updatedUser.id },
+      });
+      const profile =
+        existingProfile ??
+        this.securityProfileRepository.create({ user_id: updatedUser.id });
+      profile.pin_hash = await bcrypt.hash(dto.pin, 10);
+      profile.is_pin_enabled = true;
+      await this.securityProfileRepository.save(profile);
+    }
 
     await this.logAction('USER_UPDATED', updatedUser.id, tenantId, adminId);
 
