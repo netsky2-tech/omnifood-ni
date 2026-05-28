@@ -5,15 +5,22 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { User } from './entities/user.entity';
 import { AuditLog } from './entities/audit-log.entity';
 import { SecurityProfile } from './entities/security-profile.entity';
+import { AuditIntegrityAlert } from './entities/audit-integrity-alert.entity';
 import { AuthService } from './services/auth.service';
 import { UserService } from './services/user.service';
+import { AuditIntegrityService } from './services/audit-integrity.service';
 import { AuthController } from './controllers/auth.controller';
 import { AuditController } from './controllers/audit.controller';
 import { UsersController } from './controllers/users.controller';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, AuditLog, SecurityProfile]),
+    TypeOrmModule.forFeature([
+      User,
+      AuditLog,
+      SecurityProfile,
+      AuditIntegrityAlert,
+    ]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -24,7 +31,7 @@ import { UsersController } from './controllers/users.controller';
     }),
   ],
   controllers: [AuthController, AuditController, UsersController],
-  providers: [AuthService, UserService],
-  exports: [AuthService, UserService],
+  providers: [AuthService, UserService, AuditIntegrityService],
+  exports: [AuthService, UserService, AuditIntegrityService],
 })
 export class IdentityModule {}

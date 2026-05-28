@@ -159,6 +159,36 @@ describe('AuditController', () => {
       expect(mockQueryRunner.manager.insert).toHaveBeenCalled();
     });
 
+    it('should keep ingest on INSERT-only path (compatible with immutable DB trigger)', async () => {
+      const payload =
+        'user_1|DRAWER_OPEN|dev_1|2023-01-01T00:00:00.000Z|1|GENESIS|PIN|supervisor_1|{}';
+      const hash = crypto.createHash('sha256').update(payload).digest('hex');
+
+      const dto = {
+        logs: [
+          {
+            id: 'log-insert-only',
+            action: 'DRAWER_OPEN',
+            timestamp: '2023-01-01T00:00:00.000Z',
+            device_id: 'dev_1',
+            sequence_no: 1,
+            prev_hash: 'GENESIS',
+            entry_hash: hash,
+            metodo_autorizacion: 'PIN',
+            usuario_autorizador_id: 'supervisor_1',
+            metadata: {},
+          },
+        ],
+      };
+
+      const req: AuthenticatedRequest = { user: { sub: 'user_1' } };
+      const result = await controller.pushLogs('tenant_1', dto, req);
+
+      expect(result).toEqual({ status: 'success', count: 1 });
+      expect(mockQueryRunner.manager.insert).toHaveBeenCalledTimes(1);
+      expect(mockQueryRunner.manager.save).not.toHaveBeenCalled();
+    });
+
     it('should reject out-of-order sequence continuity on persistence path', async () => {
       mockQueryRunner.manager.findOne.mockResolvedValue({
         sequence_no: 4,

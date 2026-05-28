@@ -8,9 +8,11 @@ import { InventoryModule } from '../../modules/inventory/inventory.module';
 import { SalesModule } from '../../modules/sales/sales.module';
 import { NotificationsModule } from '../../modules/notifications/notifications.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ScheduleModule } from '@nestjs/schedule';
 import { Tenant } from '../../modules/tenant/entities/tenant.entity';
 import { User } from '../../modules/identity/entities/user.entity';
 import { AuditLog } from '../../modules/identity/entities/audit-log.entity';
+import { AuditIntegrityAlert } from '../../modules/identity/entities/audit-integrity-alert.entity';
 import { SecurityProfile } from '../../modules/identity/entities/security-profile.entity';
 import { Insumo } from '../../modules/inventory/entities/insumo.entity';
 import { Product } from '../../modules/inventory/entities/product.entity';
@@ -40,6 +42,7 @@ export const createTypeOrmOptions = (
     User,
     SecurityProfile,
     AuditLog,
+    AuditIntegrityAlert,
     Insumo,
     Product,
     Recipe,
@@ -62,6 +65,7 @@ export const createTypeOrmOptions = (
       isGlobal: true,
     }),
     EventEmitterModule.forRoot(),
+    ScheduleModule.forRoot(),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
