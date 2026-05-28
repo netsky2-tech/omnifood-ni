@@ -1,4 +1,3 @@
-import 'package:sqflite/sqflite.dart' as sqflite;
 import '../../models/inventory/batch_deduction.dart';
 import '../../models/inventory/insumo.dart';
 import '../../models/inventory/inventory_movement.dart';
@@ -76,29 +75,34 @@ class MovementEngineImpl implements MovementEngine {
   @override
   Future<void> recordShrinkage(String insumoId, double quantity, String reason) async {
     if (quantity <= 0) throw ArgumentError('Quantity must be positive');
-    
-    // Cast to sqflite.Database to access transaction method
-    final db = repository.database.database as sqflite.Database;
 
-    await db.transaction((txn) async {
-      final insumo = await repository.getInsumoById(insumoId);
-      if (insumo == null) return;
+    final insumo = await repository.getInsumoById(insumoId);
+    if (insumo == null) return;
 
-      final newStock = insumo.stock - quantity;
-      await repository.updateInsumoStock(insumoId, newStock);
-      await _checkParAlert(insumo, newStock);
+    final newStock = insumo.stock - quantity;
+    await repository.updateInsumoStock(insumoId, newStock);
+    await _checkParAlert(insumo, newStock);
 
-      await repository.saveMovement(InventoryMovement(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        insumoId: insumoId,
-        type: MovementType.shrinkage,
-        quantity: -quantity,
-        previousStock: insumo.stock,
-        newStock: newStock,
-        timestamp: DateTime.now(),
-        reason: reason,
-      ));
-    });
+    await repository.saveMovement(InventoryMovement(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      insumoId: insumoId,
+      type: MovementType.shrinkage,
+      quantity: -quantity,
+      previousStock: insumo.stock,
+      newStock: newStock,
+      timestamp: DateTime.now(),
+      reason: reason,
+    ));
+  }
+
+  @override
+  Future<List<InventoryMovement>> getSaleMovements(String productId, double quantity) async {
+    return await _generateMovements(productId, quantity, MovementType.sale, 0);
+  }
+
+  @override
+  Future<List<InventoryMovement>> getReversalMovements(String productId, double quantity, String reason) async {
+    return await _generateMovements(productId, quantity, MovementType.reversal, 0, reason: reason);
   }
 
   /// Private method to build movements with bulk loading and FIFO
@@ -153,6 +157,53 @@ class MovementEngineImpl implements MovementEngine {
         ));
       }
     }
+  }
+
+  Future<List<InventoryMovement>> _generateMovements(
+    String productId,
+    double multiplier,
+    MovementType moveType,
+    int depth, {
+    String? reason,
+  }) async {
+    final Map<String, double> insumoQuantities = {};
+    await _gatherInsumoQuantities(productId, multiplier, depth, insumoQuantities);
+
+    if (insumoQuantities.isEmpty) return [];
+
+    final insumos = await repository.getInsumosByIds(insumoQuantities.keys.toList());
+    final insumoMap = {for (var i in insumos) i.id: i};
+    final List<InventoryMovement> movements = [];
+
+    for (final entry in insumoQuantities.entries) {
+      final insumoId = entry.key;
+      final totalQty = entry.value;
+      final insumo = insumoMap[insumoId];
+
+      if (insumo != null) {
+        final isReversal = moveType == MovementType.reversal;
+        final discountAmount = isReversal ? -totalQty : totalQty;
+        final newStock = insumo.stock - discountAmount;
+
+        List<BatchDeduction>? batchDeductions;
+        if (insumo.isPerishable && !isReversal && moveType == MovementType.sale) {
+          batchDeductions = await getBatchesForConsumption(insumo.id, totalQty);
+        }
+
+        movements.add(InventoryMovement(
+          id: '\${DateTime.now().millisecondsSinceEpoch}-\${insumo.id}',
+          insumoId: insumo.id,
+          type: moveType,
+          quantity: -discountAmount,
+          previousStock: insumo.stock,
+          newStock: newStock,
+          timestamp: DateTime.now(),
+          reason: reason ?? '\${moveType.name.toUpperCase()} of $productId (x$multiplier)',
+          batchDeductions: batchDeductions,
+        ));
+      }
+    }
+    return movements;
   }
 
   Future<void> _gatherInsumoQuantities(

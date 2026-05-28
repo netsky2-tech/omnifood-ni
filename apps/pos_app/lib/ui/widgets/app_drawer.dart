@@ -37,6 +37,11 @@ class _AppDrawerState extends State<AppDrawer> {
       (_currentUser!.role == UserRole.owner ||
           _currentUser!.role == UserRole.manager);
 
+  bool get _canAccessDgiReports =>
+      _currentUser != null &&
+      (_currentUser!.role == UserRole.owner ||
+          _currentUser!.role == UserRole.manager);
+
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
@@ -74,14 +79,15 @@ class _AppDrawerState extends State<AppDrawer> {
               Navigator.pushNamed(context, '/sales/history');
             },
           ),
-          ListTile(
-            leading: const Icon(Icons.analytics),
-            title: const Text('Reportes DGI'),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.pushNamed(context, '/sales/reports');
-            },
-          ),
+          if (_canAccessDgiReports)
+            ListTile(
+              leading: const Icon(Icons.analytics),
+              title: const Text('Reportes DGI'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/sales/reports');
+              },
+            ),
           const Divider(),
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),

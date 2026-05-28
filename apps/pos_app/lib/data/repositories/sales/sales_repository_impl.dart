@@ -17,7 +17,6 @@ import 'package:pos_app/data/daos/sales/sales_transaction_dao.dart';
 import 'package:pos_app/domain/services/sales/dgi_numbering_service.dart';
 import 'package:pos_app/data/models/sales/invoice_entity.dart';
 import 'package:pos_app/data/models/sales/invoice_item_entity.dart';
-import 'package:pos_app/data/models/inventory/movement_entity.dart';
 
 class SalesRepositoryImpl implements SalesRepository {
   final AppDatabase database;
@@ -74,14 +73,13 @@ class SalesRepositoryImpl implements SalesRepository {
         [], 
         paymentEntities,
         movementEntities,
-        AuditLogEntity(
-          userId: updatedInvoice.userId,
-          action: 'SALE_CREATED',
-          timestamp: now,
-          deviceId: auditRepository.deviceId,
-          metadata: '{"invoice_id": "${updatedInvoice.id}", "number": "${updatedInvoice.number}", "total": ${updatedInvoice.total}}',
-        ),
+        null, // Audit log is written separately
         false,
+      );
+
+      await auditRepository.log(
+        'SALE_CREATED',
+        metadata: '{"invoice_id": "${updatedInvoice.id}", "number": "${updatedInvoice.number}", "total": ${updatedInvoice.total}}',
       );
 
       await numberingService.incrementNumber();
@@ -132,7 +130,6 @@ class SalesRepositoryImpl implements SalesRepository {
     await invoiceDao.updateSyncStatusForIds(invoiceIds, 'synced');
   }
 
-  @override
   Future<void> markAsFailed(String invoiceId) async {
     final entity = await invoiceDao.getInvoiceById(invoiceId);
     if (entity != null) {
@@ -255,14 +252,13 @@ class SalesRepositoryImpl implements SalesRepository {
       [], 
       [], 
       movementEntities,
-      AuditLogEntity(
-        userId: original.userId,
-        action: 'CREDIT_NOTE_CREATED',
-        timestamp: now,
-        deviceId: auditRepository.deviceId,
-        metadata: '{"original_id": "$originalInvoiceId", "new_id": "$creditNoteId"}',
-      ),
+      null, // Audit log is written separately
       false,
+    );
+
+    await auditRepository.log(
+      'CREDIT_NOTE_CREATED',
+      metadata: '{"original_id": "$originalInvoiceId", "new_id": "$creditNoteId"}',
     );
 
     await numberingService.incrementNumber();

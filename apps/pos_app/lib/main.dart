@@ -45,6 +45,7 @@ import 'ui/features/auth/views/lock_screen_view.dart';
 import 'domain/services/sales/dgi_numbering_service.dart';
 import 'data/services/sales/dgi_numbering_service_impl.dart';
 import 'domain/usecases/inventory/process_sale_inventory_use_case.dart';
+import 'domain/usecases/inventory/reverse_sale_inventory_use_case.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -63,7 +64,12 @@ void main() async {
   // Initialize Services & Repositories
   final dio = Dio(BaseOptions(baseUrl: baseUrl));
   final localAuthService = LocalAuthService();
-  final authRepository = AuthRepositoryImpl(database.userDao, localAuthService, dio);
+  final authRepository = AuthRepositoryImpl(
+    database.userDao,
+    database.securityProfileDao,
+    localAuthService,
+    dio,
+  );
 
   // Add Auth Interceptor
   dio.interceptors.add(InterceptorsWrapper(
@@ -126,7 +132,6 @@ void main() async {
   final syncService = SyncService(
     auditRepository,
     salesRepository,
-    inventoryRepository,
     dio,
   );
   syncService.start();

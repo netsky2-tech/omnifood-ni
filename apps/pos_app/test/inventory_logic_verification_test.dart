@@ -61,16 +61,18 @@ void main() {
       );
 
       when(mockRepo.getRecipeByProductId(productId)).thenAnswer((_) async => recipe);
-      when(mockRepo.getInsumoById('coffee-beans')).thenAnswer((_) async => coffeeInsumo);
-      when(mockRepo.getInsumoById('milk')).thenAnswer((_) async => milkInsumo);
+      when(mockRepo.getInsumosByIds(['coffee-beans', 'milk']))
+          .thenAnswer((_) async => [coffeeInsumo, milkInsumo]);
 
       // WHEN
-      await engine.recordSale(productId, 1.0);
+      await engine.recordSale(productId, 1);
 
       // THEN
-      verify(mockRepo.processMovements(argThat(predicate<List<InventoryMovement>>((list) {
-        return list.any((m) => m.insumoId == 'coffee-beans' && m.newStock == 982.0) &&
-               list.any((m) => m.insumoId == 'milk' && m.newStock == 1800.0);
+      verify(mockRepo.saveMovement(argThat(predicate<InventoryMovement>((m) {
+        return m.insumoId == 'coffee-beans' && m.newStock == 982.0;
+      })))).called(1);
+      verify(mockRepo.saveMovement(argThat(predicate<InventoryMovement>((m) {
+        return m.insumoId == 'milk' && m.newStock == 1800.0;
       })))).called(1);
     });
 
@@ -129,16 +131,18 @@ void main() {
 
       when(mockRepo.getRecipeByProductId(comboId)).thenAnswer((_) async => comboRecipe);
       when(mockRepo.getRecipeByProductId(capuccinoId)).thenAnswer((_) async => capuccinoRecipe);
-      when(mockRepo.getInsumoById('coffee-beans')).thenAnswer((_) async => coffeeInsumo);
-      when(mockRepo.getInsumoById('cookie')).thenAnswer((_) async => cookieInsumo);
+      when(mockRepo.getInsumosByIds(['coffee-beans', 'cookie']))
+          .thenAnswer((_) async => [coffeeInsumo, cookieInsumo]);
 
       // WHEN
-      await engine.recordSale(comboId, 1.0);
+      await engine.recordSale(comboId, 1);
 
       // THEN
-      verify(mockRepo.processMovements(argThat(predicate<List<InventoryMovement>>((list) {
-        return list.any((m) => m.insumoId == 'coffee-beans' && m.newStock == 982.0) &&
-               list.any((m) => m.insumoId == 'cookie' && m.newStock == 49.0);
+      verify(mockRepo.saveMovement(argThat(predicate<InventoryMovement>((m) {
+        return m.insumoId == 'coffee-beans' && m.newStock == 982.0;
+      })))).called(1);
+      verify(mockRepo.saveMovement(argThat(predicate<InventoryMovement>((m) {
+        return m.insumoId == 'cookie' && m.newStock == 49.0;
       })))).called(1);
     });
   });

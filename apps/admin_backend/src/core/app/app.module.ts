@@ -8,9 +8,12 @@ import { InventoryModule } from '../../modules/inventory/inventory.module';
 import { SalesModule } from '../../modules/sales/sales.module';
 import { NotificationsModule } from '../../modules/notifications/notifications.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ScheduleModule } from '@nestjs/schedule';
 import { Tenant } from '../../modules/tenant/entities/tenant.entity';
 import { User } from '../../modules/identity/entities/user.entity';
 import { AuditLog } from '../../modules/identity/entities/audit-log.entity';
+import { AuditIntegrityAlert } from '../../modules/identity/entities/audit-integrity-alert.entity';
+import { SecurityProfile } from '../../modules/identity/entities/security-profile.entity';
 import { Insumo } from '../../modules/inventory/entities/insumo.entity';
 import { Product } from '../../modules/inventory/entities/product.entity';
 import { Recipe } from '../../modules/inventory/entities/recipe.entity';
@@ -24,41 +27,50 @@ import { InvoiceItem } from '../../modules/sales/entities/invoice-item.entity';
 import { Payment } from '../../modules/sales/entities/payment.entity';
 import { InvoiceItemModifier } from '../../modules/sales/entities/invoice-item-modifier.entity';
 
+export const createTypeOrmOptions = (
+  configService: ConfigService,
+  nodeEnv: string = process.env.NODE_ENV ?? 'development',
+) => ({
+  type: 'postgres' as const,
+  host: configService.get<string>('DB_HOST', '127.0.0.1'),
+  port: configService.get<number>('DB_PORT', 5432),
+  username: configService.get<string>('DB_USERNAME', 'postgres'),
+  password: configService.get<string>('DB_PASSWORD', 'admin'),
+  database: configService.get<string>('DB_DATABASE', 'omnifood'),
+  entities: [
+    Tenant,
+    User,
+    SecurityProfile,
+    AuditLog,
+    AuditIntegrityAlert,
+    Insumo,
+    Product,
+    Recipe,
+    InventoryMovement,
+    Supplier,
+    Warehouse,
+    UomConversion,
+    Batch,
+    Invoice,
+    InvoiceItem,
+    Payment,
+    InvoiceItemModifier,
+  ],
+  synchronize: nodeEnv !== 'test',
+});
+
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
     EventEmitterModule.forRoot(),
+    ScheduleModule.forRoot(),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
-        host: configService.get<string>('DB_HOST', '127.0.0.1'),
-        port: configService.get<number>('DB_PORT', 5432),
-        username: configService.get<string>('DB_USERNAME', 'postgres'),
-        password: configService.get<string>('DB_PASSWORD', 'admin'),
-        database: configService.get<string>('DB_DATABASE', 'omnifood'),
-        entities: [
-          Tenant,
-          User,
-          AuditLog,
-          Insumo,
-          Product,
-          Recipe,
-          InventoryMovement,
-          Supplier,
-          Warehouse,
-          UomConversion,
-          Batch,
-          Invoice,
-          InvoiceItem,
-          Payment,
-          InvoiceItemModifier,
-        ],
-        synchronize: true, // Only for development
-      }),
+      useFactory: (configService: ConfigService) =>
+        createTypeOrmOptions(configService),
     }),
     IdentityModule,
     InventoryModule,

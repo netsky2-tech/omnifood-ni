@@ -35,7 +35,7 @@ void main() {
     ];
     const reason = 'Customer returned items';
 
-    when(mockEngine.getReversalMovements(any, any, any)).thenAnswer((_) async => []);
+    when(mockEngine.getReversalMovements('prod-1', 2.0, reason)).thenAnswer((_) async => []);
 
     // WHEN
     final result = await useCase.execute(items, reason);

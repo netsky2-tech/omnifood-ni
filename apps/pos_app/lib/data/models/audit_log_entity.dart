@@ -13,6 +13,18 @@ class AuditLogEntity {
   final String? metadata;
   @ColumnInfo(name: 'is_synced')
   final bool isSynced;
+  @ColumnInfo(name: 'sequence_no')
+  final int sequenceNo;
+  @ColumnInfo(name: 'prev_hash')
+  final String prevHash;
+  @ColumnInfo(name: 'entry_hash')
+  final String entryHash;
+  @ColumnInfo(name: 'metodo_autorizacion')
+  final String? metodoAutorizacion;
+  @ColumnInfo(name: 'usuario_autorizador_id')
+  final String? usuarioAutorizadorId;
+  @ColumnInfo(name: 'remote_ref_uuid')
+  final String remoteRefUuid;
 
   AuditLogEntity({
     this.id,
@@ -22,5 +34,11 @@ class AuditLogEntity {
     required this.deviceId,
     this.metadata,
     this.isSynced = false,
+    required this.sequenceNo,
+    required this.prevHash,
+    required this.entryHash,
+    this.metodoAutorizacion,
+    this.usuarioAutorizadorId,
+    required this.remoteRefUuid,
   });
 }

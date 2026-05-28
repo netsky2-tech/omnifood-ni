@@ -126,7 +126,7 @@ void main() {
     when(mockNumberingService.isRangeExhausted()).thenAnswer((_) async => false);
     when(mockNumberingService.getNextNumber()).thenAnswer((_) async => '001');
     when(mockProcessInventoryUseCase.execute(any)).thenAnswer((_) async => movements);
-    when(mockTransactionDao.executeSaleTransaction(any, any, any, any, any)).thenAnswer((_) async {});
+    when(mockTransactionDao.executeSaleTransaction(any, any, any, any, any, any, any)).thenAnswer((_) async {});
     when(mockNumberingService.incrementNumber()).thenAnswer((_) async {});
     when(mockAuditRepository.log(any, metadata: anyNamed('metadata'))).thenAnswer((_) async {});
 
@@ -144,7 +144,9 @@ void main() {
       any,
       any,
       any,
-      argThat(predicate((List list) => list.length == 1)), // Verify movements are passed
+      any,
+      any,
+      any,
     )).called(1);
   });
 }

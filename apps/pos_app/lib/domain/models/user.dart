@@ -20,7 +20,6 @@ class User with _$User {
     required String id,
     required String name,
     required UserRole role,
-    @JsonKey(name: 'pin_hash') String? pinHash,
     @JsonKey(defaultValue: true) required bool isActive,
     String? email,
     @JsonKey(name: 'tenant_id') String? tenantId,

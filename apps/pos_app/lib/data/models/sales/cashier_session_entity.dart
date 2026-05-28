@@ -8,6 +8,8 @@ class CashierSessionEntity {
   final String userId;
   @ColumnInfo(name: 'opened_at')
   final int openedAt;
+  @ColumnInfo(name: 'tipo_modelo')
+  final String tipoModelo;
   @ColumnInfo(name: 'closed_at')
   final int? closedAt;
   @ColumnInfo(name: 'opening_balance')
@@ -25,6 +27,7 @@ class CashierSessionEntity {
     required this.id,
     required this.userId,
     required this.openedAt,
+    this.tipoModelo = 'CAJA_CENTRAL',
     this.closedAt,
     required this.openingBalance,
     this.closingBalance,

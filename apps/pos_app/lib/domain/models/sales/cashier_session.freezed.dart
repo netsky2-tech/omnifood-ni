@@ -23,6 +23,8 @@ mixin _$CashierSession {
   String get id => throw _privateConstructorUsedError;
   String get userId => throw _privateConstructorUsedError;
   DateTime get openedAt => throw _privateConstructorUsedError;
+  @JsonKey(name: 'tipo_modelo')
+  CashSessionModel get tipoModelo => throw _privateConstructorUsedError;
   DateTime? get closedAt => throw _privateConstructorUsedError;
   double get openingBalance => throw _privateConstructorUsedError;
   double? get closingBalance => throw _privateConstructorUsedError;
@@ -46,6 +48,7 @@ abstract class $CashierSessionCopyWith<$Res> {
       {String id,
       String userId,
       DateTime openedAt,
+      @JsonKey(name: 'tipo_modelo') CashSessionModel tipoModelo,
       DateTime? closedAt,
       double openingBalance,
       double? closingBalance,
@@ -70,6 +73,7 @@ class _$CashierSessionCopyWithImpl<$Res, $Val extends CashierSession>
     Object? id = null,
     Object? userId = null,
     Object? openedAt = null,
+    Object? tipoModelo = null,
     Object? closedAt = freezed,
     Object? openingBalance = null,
     Object? closingBalance = freezed,
@@ -90,6 +94,10 @@ class _$CashierSessionCopyWithImpl<$Res, $Val extends CashierSession>
           ? _value.openedAt
           : openedAt // ignore: cast_nullable_to_non_nullable
               as DateTime,
+      tipoModelo: null == tipoModelo
+          ? _value.tipoModelo
+          : tipoModelo // ignore: cast_nullable_to_non_nullable
+              as CashSessionModel,
       closedAt: freezed == closedAt
           ? _value.closedAt
           : closedAt // ignore: cast_nullable_to_non_nullable
@@ -130,6 +138,7 @@ abstract class _$$CashierSessionImplCopyWith<$Res>
       {String id,
       String userId,
       DateTime openedAt,
+      @JsonKey(name: 'tipo_modelo') CashSessionModel tipoModelo,
       DateTime? closedAt,
       double openingBalance,
       double? closingBalance,
@@ -152,6 +161,7 @@ class __$$CashierSessionImplCopyWithImpl<$Res>
     Object? id = null,
     Object? userId = null,
     Object? openedAt = null,
+    Object? tipoModelo = null,
     Object? closedAt = freezed,
     Object? openingBalance = null,
     Object? closingBalance = freezed,
@@ -172,6 +182,10 @@ class __$$CashierSessionImplCopyWithImpl<$Res>
           ? _value.openedAt
           : openedAt // ignore: cast_nullable_to_non_nullable
               as DateTime,
+      tipoModelo: null == tipoModelo
+          ? _value.tipoModelo
+          : tipoModelo // ignore: cast_nullable_to_non_nullable
+              as CashSessionModel,
       closedAt: freezed == closedAt
           ? _value.closedAt
           : closedAt // ignore: cast_nullable_to_non_nullable
@@ -207,6 +221,8 @@ class _$CashierSessionImpl implements _CashierSession {
       {required this.id,
       required this.userId,
       required this.openedAt,
+      @JsonKey(name: 'tipo_modelo')
+      this.tipoModelo = CashSessionModel.cajaCentral,
       this.closedAt,
       required this.openingBalance,
       this.closingBalance,
@@ -224,6 +240,9 @@ class _$CashierSessionImpl implements _CashierSession {
   @override
   final DateTime openedAt;
   @override
+  @JsonKey(name: 'tipo_modelo')
+  final CashSessionModel tipoModelo;
+  @override
   final DateTime? closedAt;
   @override
   final double openingBalance;
@@ -239,7 +258,7 @@ class _$CashierSessionImpl implements _CashierSession {
 
   @override
   String toString() {
-    return 'CashierSession(id: $id, userId: $userId, openedAt: $openedAt, closedAt: $closedAt, openingBalance: $openingBalance, closingBalance: $closingBalance, totalSales: $totalSales, totalExpected: $totalExpected, isClosed: $isClosed)';
+    return 'CashierSession(id: $id, userId: $userId, openedAt: $openedAt, tipoModelo: $tipoModelo, closedAt: $closedAt, openingBalance: $openingBalance, closingBalance: $closingBalance, totalSales: $totalSales, totalExpected: $totalExpected, isClosed: $isClosed)';
   }
 
   @override
@@ -251,6 +270,8 @@ class _$CashierSessionImpl implements _CashierSession {
             (identical(other.userId, userId) || other.userId == userId) &&
             (identical(other.openedAt, openedAt) ||
                 other.openedAt == openedAt) &&
+            (identical(other.tipoModelo, tipoModelo) ||
+                other.tipoModelo == tipoModelo) &&
             (identical(other.closedAt, closedAt) ||
                 other.closedAt == closedAt) &&
             (identical(other.openingBalance, openingBalance) ||
@@ -267,8 +288,18 @@ class _$CashierSessionImpl implements _CashierSession {
 
   @JsonKey(ignore: true)
   @override
-  int get hashCode => Object.hash(runtimeType, id, userId, openedAt, closedAt,
-      openingBalance, closingBalance, totalSales, totalExpected, isClosed);
+  int get hashCode => Object.hash(
+      runtimeType,
+      id,
+      userId,
+      openedAt,
+      tipoModelo,
+      closedAt,
+      openingBalance,
+      closingBalance,
+      totalSales,
+      totalExpected,
+      isClosed);
 
   @JsonKey(ignore: true)
   @override
@@ -290,6 +321,7 @@ abstract class _CashierSession implements CashierSession {
       {required final String id,
       required final String userId,
       required final DateTime openedAt,
+      @JsonKey(name: 'tipo_modelo') final CashSessionModel tipoModelo,
       final DateTime? closedAt,
       required final double openingBalance,
       final double? closingBalance,
@@ -306,6 +338,9 @@ abstract class _CashierSession implements CashierSession {
   String get userId;
   @override
   DateTime get openedAt;
+  @override
+  @JsonKey(name: 'tipo_modelo')
+  CashSessionModel get tipoModelo;
   @override
   DateTime? get closedAt;
   @override

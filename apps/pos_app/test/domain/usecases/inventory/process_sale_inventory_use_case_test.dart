@@ -34,7 +34,7 @@ void main() {
       ),
     ];
 
-    when(mockEngine.getSaleMovements(any, any)).thenAnswer((_) async => []);
+    when(mockEngine.getSaleMovements('prod-1', 2.0)).thenAnswer((_) async => []);
 
     // WHEN
     final result = await useCase.execute(items);

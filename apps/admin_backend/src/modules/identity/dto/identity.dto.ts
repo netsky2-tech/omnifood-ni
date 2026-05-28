@@ -36,8 +36,16 @@ export class CreateAuditLogDto {
   id: string;
 
   @IsString()
-  @IsNotEmpty()
-  action: string;
+  @IsOptional()
+  user_id?: string;
+
+  @IsString()
+  @IsOptional()
+  action?: string;
+
+  @IsString()
+  @IsOptional()
+  tipo_accion?: string;
 
   @IsString()
   @IsOptional()
@@ -51,6 +59,25 @@ export class CreateAuditLogDto {
   @IsNotEmpty()
   device_id: string;
 
+  @IsNotEmpty()
+  sequence_no: number;
+
+  @IsString()
+  @IsNotEmpty()
+  prev_hash: string;
+
+  @IsString()
+  @IsNotEmpty()
+  entry_hash: string;
+
+  @IsString()
+  @IsOptional()
+  metodo_autorizacion?: string;
+
+  @IsString()
+  @IsOptional()
+  usuario_autorizador_id?: string;
+
   @IsString()
   @IsNotEmpty()
   timestamp: string;
@@ -58,6 +85,14 @@ export class CreateAuditLogDto {
   @IsObject()
   @IsOptional()
   metadata?: Record<string, unknown>;
+
+  @IsString()
+  @IsOptional()
+  metadata_raw?: string;
+
+  @IsString()
+  @IsOptional()
+  hash_version?: string;
 }
 
 export class PushAuditLogsDto {

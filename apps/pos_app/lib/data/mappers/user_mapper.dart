@@ -7,7 +7,6 @@ extension UserMapper on UserEntity {
       id: id,
       name: name,
       role: UserRole.values.firstWhere((e) => e.toString().split('.').last.toUpperCase() == role.toUpperCase()),
-      pinHash: pinHash,
       isActive: isActive,
       email: email,
       tenantId: tenantId,
@@ -21,7 +20,7 @@ extension UserEntityMapper on User {
       id: id,
       name: name,
       role: role.toString().split('.').last.toUpperCase(),
-      pinHash: pinHash ?? '',
+      pinHash: '', // Deprecated, moved to SecurityProfile
       isActive: isActive,
       email: email,
       tenantId: tenantId,

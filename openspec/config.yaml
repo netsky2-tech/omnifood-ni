@@ -4,8 +4,8 @@ schema: spec-driven
 context: |
   Tech stack: Flutter, NestJS, SQLite, PostgreSQL
   Architecture: Clean Architecture, Hexagonal, Tactic DDD
-  Testing: Not yet established
-  Style: Conventional Commits, standard linting
+  Testing: Jest (unit/e2e) for admin_backend, flutter_test (unit/widget) for pos_app
+  Style: Conventional Commits, ESLint + Prettier (NestJS), flutter_lints (Flutter)
 
 strict_tdd: true
 
@@ -13,13 +13,18 @@ testing:
   admin_backend:
     runner: jest
     command: npm test
+    coverage: npm run test:cov
     e2e: npm run test:e2e
     lint: npm run lint
+    build: npm run build
+    formatter: npm run format
   pos_app:
     runner: flutter_test
     command: flutter test
+    coverage: flutter test --coverage
     lint: flutter analyze
-    codegen: flutter pub run build_runner build
+    codegen: flutter pub run build_runner build --delete-conflicting-outputs
+    build_smoke: flutter build web
 
 rules:
   proposal:

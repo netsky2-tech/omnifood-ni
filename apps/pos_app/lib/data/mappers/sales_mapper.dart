@@ -89,6 +89,9 @@ class SalesMapper {
       id: entity.id,
       userId: entity.userId,
       openedAt: DateTime.fromMillisecondsSinceEpoch(entity.openedAt),
+      tipoModelo: entity.tipoModelo == 'CARTERA_MESERO'
+          ? CashSessionModel.carteraMesero
+          : CashSessionModel.cajaCentral,
       closedAt: entity.closedAt != null
           ? DateTime.fromMillisecondsSinceEpoch(entity.closedAt!)
           : null,
@@ -105,6 +108,9 @@ class SalesMapper {
       id: domain.id,
       userId: domain.userId,
       openedAt: domain.openedAt.millisecondsSinceEpoch,
+      tipoModelo: domain.tipoModelo == CashSessionModel.carteraMesero
+          ? 'CARTERA_MESERO'
+          : 'CAJA_CENTRAL',
       closedAt: domain.closedAt?.millisecondsSinceEpoch,
       openingBalance: domain.openingBalance,
       closingBalance: domain.closingBalance,

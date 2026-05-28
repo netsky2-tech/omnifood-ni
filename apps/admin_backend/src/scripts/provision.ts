@@ -3,6 +3,7 @@ import { AppModule } from '../core/app/app.module';
 import { DataSource } from 'typeorm';
 import { Tenant } from '../modules/tenant/entities/tenant.entity';
 import { User, UserRole } from '../modules/identity/entities/user.entity';
+import { SecurityProfile } from '../modules/identity/entities/security-profile.entity';
 import * as bcrypt from 'bcrypt';
 import * as readline from 'readline';
 
@@ -51,10 +52,15 @@ async function provision() {
       user.role = UserRole.OWNER;
       user.tenant_id = savedTenant.id;
       user.password_hash = await bcrypt.hash(ownerPass, 10);
-      user.pin_hash = await bcrypt.hash(ownerPin, 10);
       user.is_active = true;
 
       const savedUser = await manager.save(user);
+      const profile = new SecurityProfile();
+      profile.user_id = savedUser.id;
+      profile.pin_hash = await bcrypt.hash(ownerPin, 10);
+      profile.is_pin_enabled = true;
+      profile.is_totp_enabled = false;
+      await manager.save(profile);
       console.log(`✅ Usuario OWNER creado: ${savedUser.id}`);
     });
 

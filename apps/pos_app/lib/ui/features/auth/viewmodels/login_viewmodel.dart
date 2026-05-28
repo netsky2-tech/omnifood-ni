@@ -17,11 +17,12 @@ class LoginViewModel extends ChangeNotifier {
     _error = null;
     notifyListeners();
 
-    final user = await _authRepository.loginOnline(email, password);
+    final onlineUser = await _authRepository.loginOnline(email, password);
+    final user = onlineUser ?? await _authRepository.loginOffline(email, password);
     
     _isLoading = false;
     if (user == null) {
-      _error = 'Error de autenticación. Verifique sus credenciales.';
+      _error = 'Error de autenticación. Verifique sus credenciales o conexión.';
       notifyListeners();
       return false;
     }

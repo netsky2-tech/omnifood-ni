@@ -3,6 +3,8 @@ import {
   Post,
   Body,
   Get,
+  Req,
+  Headers,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
@@ -29,7 +31,16 @@ export class AuthController {
   @UseGuards(AuthGuard)
   @UseInterceptors(TenantInterceptor)
   @Get('staff')
-  async getStaff(@GetTenantId() tenantId: string) {
-    return this.authService.getStaffForSync(tenantId || '');
+  async getStaff(
+    @GetTenantId() tenantId: string,
+    @Req() req: { user?: { role?: string; sub?: string } },
+    @Headers('x-offline-sync-scope') syncScope?: string,
+  ) {
+    return this.authService.getStaffForSync(
+      tenantId || '',
+      req.user?.role,
+      req.user?.sub,
+      syncScope,
+    );
   }
 }

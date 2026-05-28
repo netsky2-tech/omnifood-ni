@@ -1,8 +1,8 @@
 # Propuesta Técnico-Económica: OmniCore POS
 
-**Fecha**: {{FECHA}}
-**Cliente**: {{NOMBRE_CLIENTE / NEGOCIO}}
-**Referencia**: {{ID_COTIZACION}}
+**Fecha**: 20/05/2026
+**Cliente**: SOHO
+**Referencia**: OE-001OM
 
 ---
 
@@ -50,4 +50,4 @@ El cliente adquiere el hardware recomendado por su cuenta con los proveedores su
 
 ---
 **OmniCore POS** - *Resiliencia sobre Conectividad*
-Contact: {{TU_CONTACTO}}
+Contacto: +505 8194 8526
