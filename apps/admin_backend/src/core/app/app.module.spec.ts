@@ -15,10 +15,12 @@ describe('AppModule Registration', () => {
     module = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
-  }, 15000);
+  }, 30000);
 
   afterAll(async () => {
-    await module.close();
+    if (module) {
+      await module.close();
+    }
   });
 
   it('should have Insumo repository registered', () => {

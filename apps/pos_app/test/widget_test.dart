@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:pos_app/main.dart';
@@ -78,5 +79,10 @@ void main() {
 
     // Verify that login screen is shown
     expect(find.text('INGRESAR'), findsOneWidget);
+
+    final materialApp = tester.widget<MaterialApp>(find.byType(MaterialApp));
+    expect(materialApp.routes, isNotNull);
+    expect(materialApp.routes!.containsKey('/identity/users'), isTrue);
+    expect(materialApp.routes!.containsKey('/identity/audit'), isTrue);
   });
 }
