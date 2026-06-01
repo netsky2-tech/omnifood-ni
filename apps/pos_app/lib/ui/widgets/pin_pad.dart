@@ -14,27 +14,35 @@ class PinPad extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        childAspectRatio: 1.5,
-        mainAxisSpacing: 16, // stack-md
-        crossAxisSpacing: 16,
-      ),
-      itemCount: 12,
-      itemBuilder: (context, index) {
-        if (index == 9) {
-          return _buildButton(context, 'C', onClear, color: const Color(0xFFBA1A1A));
-        } else if (index == 10) {
-          return _buildButton(context, '0', () => onKeyPressed('0'));
-        } else if (index == 11) {
-          return _buildButton(context, '⌫', onDelete, color: const Color(0xFF79573F));
-        } else {
-          final number = (index + 1).toString();
-          return _buildButton(context, number, () => onKeyPressed(number));
-        }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compactHeight = constraints.maxHeight.isFinite && constraints.maxHeight < 320;
+        final spacing = compactHeight ? 8.0 : 16.0;
+        final aspectRatio = compactHeight ? 1.2 : 1.5;
+
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            childAspectRatio: aspectRatio,
+            mainAxisSpacing: spacing,
+            crossAxisSpacing: spacing,
+          ),
+          itemCount: 12,
+          itemBuilder: (context, index) {
+            if (index == 9) {
+              return _buildButton(context, 'C', onClear, color: const Color(0xFFBA1A1A));
+            } else if (index == 10) {
+              return _buildButton(context, '0', () => onKeyPressed('0'));
+            } else if (index == 11) {
+              return _buildButton(context, '⌫', onDelete, color: const Color(0xFF79573F));
+            } else {
+              final number = (index + 1).toString();
+              return _buildButton(context, number, () => onKeyPressed(number));
+            }
+          },
+        );
       },
     );
   }

@@ -78,4 +78,26 @@ void main() {
 
     expect(find.text('Reportes DGI'), findsOneWidget);
   });
+
+  testWidgets('shows identity management and safe area for active users', (tester) async {
+    tester.view.physicalSize = const Size(1200, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    when(() => authRepository.getCurrentUser()).thenAnswer(
+      (_) async => const User(id: 'u-4', name: 'Owner', role: UserRole.owner, isActive: true),
+    );
+    when(() => authRepository.getAllUsers()).thenAnswer(
+      (_) async => const [
+        User(id: 'u-5', name: 'Active Cashier', role: UserRole.cashier, isActive: true),
+      ],
+    );
+
+    await tester.pumpWidget(buildApp());
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SafeArea), findsAtLeastNWidgets(1));
+    expect(find.text('Gestión de Usuarios'), findsOneWidget);
+  });
 }

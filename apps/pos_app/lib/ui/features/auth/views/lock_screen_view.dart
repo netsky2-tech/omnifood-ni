@@ -202,7 +202,7 @@ class _LockScreenViewState extends State<LockScreenView> {
                           ),
                         ),
                       ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 450),
+                        constraints: const BoxConstraints(maxWidth: 450, maxHeight: 340),
                         child: AbsorbPointer(
                           absorbing: viewModel.isLoading,
                           child: Opacity(

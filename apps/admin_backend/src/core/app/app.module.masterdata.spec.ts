@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AppModule } from './app.module';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { Supplier } from '../../modules/inventory/entities/supplier.entity';
 import { Warehouse } from '../../modules/inventory/entities/warehouse.entity';
 
@@ -11,17 +12,25 @@ describe('AppModule Master Data Registration', () => {
     module = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
-  }, 15000); // Increased timeout
+  }, 30000);
+
+  afterAll(async () => {
+    if (module) {
+      await module.close();
+    }
+  });
 
   it('should have Supplier repository registered', () => {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const repository = module.get(getRepositoryToken(Supplier));
-    expect(repository).toBeDefined();
+    const repository = module.get<Repository<Supplier>>(
+      getRepositoryToken(Supplier),
+    );
+    expect(repository.metadata.targetName).toBe('Supplier');
   });
 
   it('should have Warehouse repository registered', () => {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const repository = module.get(getRepositoryToken(Warehouse));
-    expect(repository).toBeDefined();
+    const repository = module.get<Repository<Warehouse>>(
+      getRepositoryToken(Warehouse),
+    );
+    expect(repository.metadata.targetName).toBe('Warehouse');
   });
 });

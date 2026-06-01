@@ -86,9 +86,10 @@ class _UserManagementViewState extends State<UserManagementView> {
   }
 
   void _showUserDialog(BuildContext context, {User? user}) {
+    final viewModel = context.read<UserManagementViewModel>();
     showDialog(
       context: context,
-      builder: (context) => UserDialog(user: user),
+      builder: (context) => UserDialog(user: user, viewModel: viewModel),
     );
   }
 
@@ -123,7 +124,9 @@ class _UserManagementViewState extends State<UserManagementView> {
 
 class UserDialog extends StatefulWidget {
   final User? user;
-  const UserDialog({super.key, this.user});
+  final UserManagementViewModel viewModel;
+
+  const UserDialog({super.key, this.user, required this.viewModel});
 
   @override
   State<UserDialog> createState() => _UserDialogState();
@@ -147,8 +150,6 @@ class _UserDialogState extends State<UserDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final viewModel = context.read<UserManagementViewModel>();
-
     return AlertDialog(
       title: Text(widget.user == null ? 'Nuevo Usuario' : 'Editar Usuario'),
       content: SingleChildScrollView(
@@ -189,16 +190,21 @@ class _UserDialogState extends State<UserDialog> {
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCELAR')),
         ElevatedButton(
-          onPressed: () {
+          onPressed: () async {
             final user = User(
-              id: widget.user?.id ?? viewModel.generateId(),
+              id: widget.user?.id ?? widget.viewModel.generateId(),
               name: _nameController.text,
               email: _emailController.text.isEmpty ? null : _emailController.text,
               role: _selectedRole,
               isActive: widget.user?.isActive ?? true,
             );
-            viewModel.saveUser(user, pin: _pinController.text.isEmpty ? null : _pinController.text);
-            Navigator.pop(context);
+            await widget.viewModel.saveUser(
+              user,
+              pin: _pinController.text.isEmpty ? null : _pinController.text,
+            );
+            if (context.mounted) {
+              Navigator.pop(context);
+            }
           },
           child: const Text('GUARDAR'),
         ),
