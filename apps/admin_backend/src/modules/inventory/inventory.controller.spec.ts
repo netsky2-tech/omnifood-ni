@@ -1,12 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { InventoryMovementController } from './inventory-movement.controller';
-import { PurchaseService } from './purchase.service';
+import { InventoryPurchaseService } from './inventory-purchase.service';
 import { ShrinkageService } from './shrinkage.service';
 import { InventoryService } from './inventory.service';
 
 describe('InventoryController', () => {
   let controller: InventoryMovementController;
-  let purchaseService: PurchaseService;
+  let purchaseService: InventoryPurchaseService;
   let shrinkageService: ShrinkageService;
 
   beforeEach(async () => {
@@ -14,7 +14,7 @@ describe('InventoryController', () => {
       controllers: [InventoryMovementController],
       providers: [
         {
-          provide: PurchaseService,
+          provide: InventoryPurchaseService,
           useValue: {
             recordPurchase: jest.fn(),
           },
@@ -37,7 +37,9 @@ describe('InventoryController', () => {
     controller = module.get<InventoryMovementController>(
       InventoryMovementController,
     );
-    purchaseService = module.get<PurchaseService>(PurchaseService);
+    purchaseService = module.get<InventoryPurchaseService>(
+      InventoryPurchaseService,
+    );
     shrinkageService = module.get<ShrinkageService>(ShrinkageService);
   });
 
@@ -49,17 +51,22 @@ describe('InventoryController', () => {
     it('should call purchaseService recordPurchase', async () => {
       const dto = {
         insumoId: 'ins-123',
-        supplierId: 'sup-456',
         quantity: 10,
-        cost: 50,
+        unitCost: 50,
+        currency: 'NIO' as const,
+        invoiceDate: '2026-01-10',
       };
-      await controller.recordPurchase(dto);
+      await controller.recordPurchase(dto, 'tenant-A');
       // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(purchaseService.recordPurchase).toHaveBeenCalledWith(
-        'ins-123',
-        'sup-456',
-        10,
-        50,
+        expect.objectContaining({
+          tenantId: 'tenant-A',
+          insumoId: 'ins-123',
+          quantity: 10,
+          unitCost: 50,
+          currency: 'NIO',
+          invoiceDate: '2026-01-10',
+        }),
       );
     });
   });

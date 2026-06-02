@@ -43,7 +43,7 @@ dependencies:
   floor_annotation: ^1.5.0
   json_annotation: ^4.8.1
   bcrypt: ^1.2.0
-  flutter_secure_storage: ^9.2.2
+  flutter_secure_storage: ^10.0.0
   intl: ^0.20.2
 
   uuid: any

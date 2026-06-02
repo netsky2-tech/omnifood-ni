@@ -48,6 +48,10 @@ export class CreateInvoiceItemDto {
   @IsOptional()
   notes?: string;
 
+  @IsString()
+  @IsOptional()
+  recipeVersionId?: string;
+
   @IsArray()
   @IsOptional()
   @ValidateNested({ each: true })

@@ -132,6 +132,7 @@ void main() async {
   final syncService = SyncService(
     auditRepository,
     salesRepository,
+    inventoryRepository,
     dio,
   );
   syncService.start();

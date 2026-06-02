@@ -35,10 +35,10 @@ export class Batch {
   @Column({ type: 'date' })
   expiration_date: Date;
 
-  @Column('decimal', { precision: 12, scale: 4 })
+  @Column('decimal', { precision: 14, scale: 4 })
   remaining_stock: number;
 
-  @Column('decimal', { precision: 12, scale: 2 })
+  @Column('decimal', { precision: 14, scale: 4 })
   cost: number;
 
   @CreateDateColumn()

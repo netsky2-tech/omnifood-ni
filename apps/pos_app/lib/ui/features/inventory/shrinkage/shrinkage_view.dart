@@ -12,7 +12,6 @@ class ShrinkageView extends StatefulWidget {
 
 class _ShrinkageViewState extends State<ShrinkageView> {
   final _qtyController = TextEditingController();
-  final _reasonController = TextEditingController();
 
   @override
   void initState() {
@@ -25,7 +24,6 @@ class _ShrinkageViewState extends State<ShrinkageView> {
   @override
   void dispose() {
     _qtyController.dispose();
-    _reasonController.dispose();
     super.dispose();
   }
 
@@ -52,8 +50,8 @@ class _ShrinkageViewState extends State<ShrinkageView> {
   void _showShrinkageForm(BuildContext context) {
     final vm = context.read<ShrinkageViewModel>();
     Insumo? selectedInsumo;
+    String selectedShrinkageType = shrinkageTypes.first;
     _qtyController.clear();
-    _reasonController.clear();
 
     showDialog(
       context: context,
@@ -93,10 +91,25 @@ class _ShrinkageViewState extends State<ShrinkageView> {
                 decoration: const InputDecoration(labelText: 'Cantidad'),
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
               ),
-              TextField(
-                controller: _reasonController,
-                decoration: const InputDecoration(labelText: 'Motivo'),
+              DropdownButtonFormField<String>(
+                initialValue: selectedShrinkageType,
+                decoration: const InputDecoration(labelText: 'Tipo de merma'),
+                items: shrinkageTypes
+                    .map((type) => DropdownMenuItem(value: type, child: Text(type)))
+                    .toList(),
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() => selectedShrinkageType = value);
+                },
               ),
+              if (vm.forensicNotice != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    vm.forensicNotice!,
+                    style: const TextStyle(color: Colors.orange),
+                  ),
+                ),
             ],
           ),
           actions: [
@@ -111,7 +124,7 @@ class _ShrinkageViewState extends State<ShrinkageView> {
                       await vm.recordShrinkage(
                         insumoId: selectedInsumo!.id,
                         quantity: double.tryParse(_qtyController.text) ?? 0,
-                        reason: _reasonController.text,
+                        shrinkageType: selectedShrinkageType,
                       );
                       if (context.mounted) Navigator.pop(context);
                     },

@@ -1,16 +1,16 @@
 import { Controller, Post, Body, UseInterceptors } from '@nestjs/common';
-import { PurchaseService } from './purchase.service';
 import { ShrinkageService } from './shrinkage.service';
 import { InventoryService } from './inventory.service';
 import { SyncMovementsDto } from './dto/create-inventory-movement.dto';
 import { GetTenantId } from '../../core/decorators/tenant.decorator';
 import { TenantInterceptor } from '../../core/database/rls.interceptor';
+import { InventoryPurchaseService } from './inventory-purchase.service';
 
 @Controller('inventory')
 @UseInterceptors(TenantInterceptor)
 export class InventoryMovementController {
   constructor(
-    private readonly purchaseService: PurchaseService,
+    private readonly purchaseService: InventoryPurchaseService,
     private readonly shrinkageService: ShrinkageService,
     private readonly inventoryService: InventoryService,
   ) {}
@@ -28,17 +28,23 @@ export class InventoryMovementController {
     @Body()
     dto: {
       insumoId: string;
-      supplierId: string;
       quantity: number;
-      cost: number;
+      unitCost: number;
+      currency: 'NIO' | 'USD';
+      invoiceDate: string;
+      supplierName?: string;
     },
+    @GetTenantId() tenantId: string,
   ) {
-    return this.purchaseService.recordPurchase(
-      dto.insumoId,
-      dto.supplierId,
-      dto.quantity,
-      dto.cost,
-    );
+    return this.purchaseService.recordPurchase({
+      tenantId,
+      insumoId: dto.insumoId,
+      quantity: dto.quantity,
+      unitCost: dto.unitCost,
+      currency: dto.currency,
+      invoiceDate: dto.invoiceDate,
+      supplierName: dto.supplierName,
+    });
   }
 
   @Post('shrinkage')

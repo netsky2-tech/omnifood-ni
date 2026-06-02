@@ -44,7 +44,7 @@ export class Recipe {
   })
   ingredientType: IngredientType;
 
-  @Column('decimal', { precision: 12, scale: 4 })
+  @Column('decimal', { precision: 14, scale: 4 })
   quantity: number;
 
   @CreateDateColumn()

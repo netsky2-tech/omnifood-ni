@@ -20,7 +20,7 @@ void main() {
   late ShrinkageViewModel viewModel;
 
   final testInsumos = [
-    const Insumo(id: '1', name: 'Tomate', consumptionUom: 'kg', stock: 10, averageCost: 1.0),
+    const Insumo(id: '1', name: 'Tomate', consumptionUom: 'kg', stock: 10, averageCost: 800.0),
     const Insumo(id: '2', name: 'Cebolla', consumptionUom: 'kg', stock: 5, averageCost: 0.5),
   ];
 
@@ -94,5 +94,29 @@ void main() {
     // Should see 'Tomate' in options
     expect(find.text('Tomate'), findsWidgets); // One in field, one in options potentially
     expect(find.text('Cebolla'), findsNothing);
+  });
+
+  testWidgets('Shows forensic notice for high-value shrinkage adjustments', (tester) async {
+    when(mockMovementEngine.recordShrinkage(any, any, any)).thenAnswer((_) async {});
+
+    await tester.pumpWidget(createWidget());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('REGISTRAR MERMA'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextField, 'Insumo (buscar...)'), 'Tom');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Tomate').last);
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextField, 'Cantidad'), '2.5');
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('REGISTRAR'));
+    await tester.pumpAndSettle();
+
+    expect(viewModel.forensicNotice, isNotNull);
+    expect(viewModel.forensicNotice, contains('alto valor'));
   });
 }
