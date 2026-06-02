@@ -3,6 +3,15 @@ import '../../../../domain/models/inventory/insumo.dart';
 import '../../../../domain/repositories/inventory/inventory_repository.dart';
 import '../../../../domain/services/inventory/movement_engine.dart';
 
+const shrinkageTypes = <String>[
+  'VENCIMIENTO',
+  'DESECHO_COCINA',
+  'DETERIORO_BODEGA',
+  'CORTESIA_DEGUSTACION',
+];
+
+const highValueAdjustmentThresholdNio = 1500.0;
+
 class ShrinkageViewModel with ChangeNotifier {
   final InventoryRepository repository;
   final MovementEngine movementEngine;
@@ -12,6 +21,9 @@ class ShrinkageViewModel with ChangeNotifier {
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
+
+  String? _forensicNotice;
+  String? get forensicNotice => _forensicNotice;
 
   ShrinkageViewModel(this.repository, this.movementEngine);
 
@@ -26,12 +38,22 @@ class ShrinkageViewModel with ChangeNotifier {
   Future<void> recordShrinkage({
     required String insumoId,
     required double quantity,
-    required String reason,
+    required String shrinkageType,
   }) async {
+    if (!shrinkageTypes.contains(shrinkageType)) {
+      throw ArgumentError('Invalid shrinkage type');
+    }
+
     _isLoading = true;
     notifyListeners();
     try {
-      await movementEngine.recordShrinkage(insumoId, quantity, reason);
+      final insumo = _insumos.firstWhere((item) => item.id == insumoId);
+      final valuationNio = quantity * insumo.averageCost;
+      _forensicNotice = valuationNio > highValueAdjustmentThresholdNio
+          ? 'Ajuste de alto valor. Se notificó al administrador.'
+          : null;
+
+      await movementEngine.recordShrinkage(insumoId, quantity, shrinkageType);
       await loadInsumos();
     } finally {
       _isLoading = false;

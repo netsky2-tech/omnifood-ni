@@ -402,6 +402,23 @@ class MockSaleViewModel extends _i1.Mock implements _i2.SaleViewModel {
       ) as _i9.Future<void>);
 
   @override
+  _i9.Future<void> voidInvoice(
+    String? invoiceId,
+    String? reason,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #voidInvoice,
+          [
+            invoiceId,
+            reason,
+          ],
+        ),
+        returnValue: _i9.Future<void>.value(),
+        returnValueForMissingStub: _i9.Future<void>.value(),
+      ) as _i9.Future<void>);
+
+  @override
   void addListener(_i11.VoidCallback? listener) => super.noSuchMethod(
         Invocation.method(
           #addListener,
