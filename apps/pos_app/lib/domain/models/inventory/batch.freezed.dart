@@ -23,6 +23,7 @@ mixin _$Batch {
   String get id => throw _privateConstructorUsedError;
   String get insumoId => throw _privateConstructorUsedError;
   String get batchNumber => throw _privateConstructorUsedError;
+  DateTime? get receivedDate => throw _privateConstructorUsedError;
   DateTime get expirationDate => throw _privateConstructorUsedError;
   double get remainingStock => throw _privateConstructorUsedError;
   double get cost => throw _privateConstructorUsedError;
@@ -41,6 +42,7 @@ abstract class $BatchCopyWith<$Res> {
       {String id,
       String insumoId,
       String batchNumber,
+      DateTime? receivedDate,
       DateTime expirationDate,
       double remainingStock,
       double cost});
@@ -62,6 +64,7 @@ class _$BatchCopyWithImpl<$Res, $Val extends Batch>
     Object? id = null,
     Object? insumoId = null,
     Object? batchNumber = null,
+    Object? receivedDate = freezed,
     Object? expirationDate = null,
     Object? remainingStock = null,
     Object? cost = null,
@@ -79,6 +82,10 @@ class _$BatchCopyWithImpl<$Res, $Val extends Batch>
           ? _value.batchNumber
           : batchNumber // ignore: cast_nullable_to_non_nullable
               as String,
+      receivedDate: freezed == receivedDate
+          ? _value.receivedDate
+          : receivedDate // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
       expirationDate: null == expirationDate
           ? _value.expirationDate
           : expirationDate // ignore: cast_nullable_to_non_nullable
@@ -106,6 +113,7 @@ abstract class _$$BatchImplCopyWith<$Res> implements $BatchCopyWith<$Res> {
       {String id,
       String insumoId,
       String batchNumber,
+      DateTime? receivedDate,
       DateTime expirationDate,
       double remainingStock,
       double cost});
@@ -125,6 +133,7 @@ class __$$BatchImplCopyWithImpl<$Res>
     Object? id = null,
     Object? insumoId = null,
     Object? batchNumber = null,
+    Object? receivedDate = freezed,
     Object? expirationDate = null,
     Object? remainingStock = null,
     Object? cost = null,
@@ -142,6 +151,10 @@ class __$$BatchImplCopyWithImpl<$Res>
           ? _value.batchNumber
           : batchNumber // ignore: cast_nullable_to_non_nullable
               as String,
+      receivedDate: freezed == receivedDate
+          ? _value.receivedDate
+          : receivedDate // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
       expirationDate: null == expirationDate
           ? _value.expirationDate
           : expirationDate // ignore: cast_nullable_to_non_nullable
@@ -165,6 +178,7 @@ class _$BatchImpl implements _Batch {
       {required this.id,
       required this.insumoId,
       required this.batchNumber,
+      this.receivedDate,
       required this.expirationDate,
       required this.remainingStock,
       required this.cost});
@@ -179,6 +193,8 @@ class _$BatchImpl implements _Batch {
   @override
   final String batchNumber;
   @override
+  final DateTime? receivedDate;
+  @override
   final DateTime expirationDate;
   @override
   final double remainingStock;
@@ -187,7 +203,7 @@ class _$BatchImpl implements _Batch {
 
   @override
   String toString() {
-    return 'Batch(id: $id, insumoId: $insumoId, batchNumber: $batchNumber, expirationDate: $expirationDate, remainingStock: $remainingStock, cost: $cost)';
+    return 'Batch(id: $id, insumoId: $insumoId, batchNumber: $batchNumber, receivedDate: $receivedDate, expirationDate: $expirationDate, remainingStock: $remainingStock, cost: $cost)';
   }
 
   @override
@@ -200,6 +216,8 @@ class _$BatchImpl implements _Batch {
                 other.insumoId == insumoId) &&
             (identical(other.batchNumber, batchNumber) ||
                 other.batchNumber == batchNumber) &&
+            (identical(other.receivedDate, receivedDate) ||
+                other.receivedDate == receivedDate) &&
             (identical(other.expirationDate, expirationDate) ||
                 other.expirationDate == expirationDate) &&
             (identical(other.remainingStock, remainingStock) ||
@@ -210,7 +228,7 @@ class _$BatchImpl implements _Batch {
   @JsonKey(ignore: true)
   @override
   int get hashCode => Object.hash(runtimeType, id, insumoId, batchNumber,
-      expirationDate, remainingStock, cost);
+      receivedDate, expirationDate, remainingStock, cost);
 
   @JsonKey(ignore: true)
   @override
@@ -231,6 +249,7 @@ abstract class _Batch implements Batch {
       {required final String id,
       required final String insumoId,
       required final String batchNumber,
+      final DateTime? receivedDate,
       required final DateTime expirationDate,
       required final double remainingStock,
       required final double cost}) = _$BatchImpl;
@@ -243,6 +262,8 @@ abstract class _Batch implements Batch {
   String get insumoId;
   @override
   String get batchNumber;
+  @override
+  DateTime? get receivedDate;
   @override
   DateTime get expirationDate;
   @override

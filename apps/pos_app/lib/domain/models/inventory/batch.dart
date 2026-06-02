@@ -9,6 +9,7 @@ class Batch with _$Batch {
     required String id,
     required String insumoId,
     required String batchNumber,
+    DateTime? receivedDate,
     required DateTime expirationDate,
     required double remainingStock,
     required double cost,

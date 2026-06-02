@@ -713,4 +713,16 @@ class MockSyncService extends _i1.Mock implements _i16.SyncService {
         returnValue: _i9.Future<void>.value(),
         returnValueForMissingStub: _i9.Future<void>.value(),
       ) as _i9.Future<void>);
+
+  @override
+  Map<String, Object> buildOrderedBatchEnvelopeForTest(
+          List<dynamic>? unsynced) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #buildOrderedBatchEnvelopeForTest,
+          [unsynced],
+        ),
+        returnValue: <String, Object>{},
+        returnValueForMissingStub: <String, Object>{},
+      ) as Map<String, Object>);
 }

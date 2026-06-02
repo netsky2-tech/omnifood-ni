@@ -12,6 +12,7 @@ import 'package:pos_app/domain/repositories/auth_repository.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
 import 'package:pos_app/ui/features/identity/supervisor_override_modal.dart';
 import 'package:pos_app/ui/features/sales/sale_view.dart';
+import 'package:pos_app/ui/widgets/app_drawer.dart';
 import 'package:provider/provider.dart';
 
 import 'sale_view_security_flows_test.mocks.dart';
@@ -55,6 +56,7 @@ void main() {
     when(mockViewModel.filteredProducts).thenReturn([]);
     when(mockViewModel.cart).thenReturn([]);
     when(mockViewModel.canManageCashDrawer).thenReturn(true);
+    when(mockViewModel.currentUserRole).thenReturn(UserRole.cashier);
     when(mockViewModel.sessionExpected).thenReturn({
       PaymentMethod.cash: 100,
       PaymentMethod.card: 0,
@@ -282,7 +284,7 @@ void main() {
 
   testWidgets('disables open cash action on box opening screen for waiter role', (tester) async {
     when(mockViewModel.activeSession).thenReturn(null);
-    when(mockViewModel.canManageCashDrawer).thenReturn(false);
+    when(mockViewModel.currentUserRole).thenReturn(UserRole.waiter);
 
     await tester.pumpWidget(buildTestApp());
     await tester.pumpAndSettle();
@@ -293,6 +295,39 @@ void main() {
     await tester.tap(find.text('ABRIR CAJA'));
     await tester.pumpAndSettle();
     verifyNever(mockViewModel.openSession(any));
+  });
+
+  testWidgets('keeps sales shell drawer accessible when there is no active session', (tester) async {
+    when(mockViewModel.activeSession).thenReturn(null);
+
+    await tester.pumpWidget(buildTestApp());
+    await tester.pumpAndSettle();
+
+    expect(find.byType(Scaffold), findsOneWidget);
+    expect(find.text('APERTURA DE CAJA'), findsOneWidget);
+
+    final scaffoldState = tester.state<ScaffoldState>(find.byType(Scaffold));
+    scaffoldState.openDrawer();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AppDrawer), findsOneWidget);
+    expect(find.text('INVENTARIO'), findsOneWidget);
+    expect(find.text('Insumos'), findsOneWidget);
+  });
+
+  testWidgets('allows cashier to open session from box opening screen', (tester) async {
+    when(mockViewModel.activeSession).thenReturn(null);
+
+    await tester.pumpWidget(buildTestApp());
+    await tester.pumpAndSettle();
+
+    final openCashButton = tester.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'ABRIR CAJA'));
+    expect(openCashButton.onPressed, isNotNull);
+
+    await tester.tap(find.text('ABRIR CAJA'));
+    await tester.pump();
+
+    verify(mockViewModel.openSession(0)).called(1);
   });
 
 }

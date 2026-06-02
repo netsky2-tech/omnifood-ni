@@ -5,6 +5,8 @@ import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { User } from '../entities/user.entity';
 import { UserRole } from '../entities/user.entity';
+import { AuthenticatedUserDto, StaffSyncUserDto } from '../dto/identity.dto';
+import { resolveInventoryBohPermissions } from '../guards/roles.guard';
 
 const SYNC_SCOPE = {
   POS_AUTH_CONTINUITY: 'pos-auth-continuity',
@@ -12,22 +14,7 @@ const SYNC_SCOPE = {
 
 type SyncScope = (typeof SYNC_SCOPE)[keyof typeof SYNC_SCOPE];
 
-type StaffSyncItem = {
-  id: string;
-  name: string;
-  role: UserRole;
-  is_active: boolean;
-  email: string;
-  tenant_id: string;
-  security_profile: {
-    user_id: string;
-    pin_hash: string | null;
-    totp_secret_seed: string | null;
-    is_totp_enabled: boolean;
-    is_pin_enabled: boolean;
-    scope: 'self' | 'authorizer' | 'masked' | 'full';
-  } | null;
-};
+type StaffSyncItem = {} & StaffSyncUserDto;
 
 const USER_ROLE_VALUES = new Set<string>(Object.values(UserRole));
 
@@ -79,7 +66,8 @@ export class AuthService {
         name: user.name,
         role: user.role,
         tenant_id: user.tenant_id,
-      },
+        permissions: resolveInventoryBohPermissions(user.role),
+      } satisfies AuthenticatedUserDto,
     };
   }
 
@@ -190,6 +178,7 @@ export class AuthService {
         is_active: user.is_active,
         email: user.email,
         tenant_id: user.tenant_id,
+        permissions: resolveInventoryBohPermissions(user.role),
         security_profile: user.security_profile
           ? (() => {
               const isSelf = scopedContinuityAllowed && user.id === requesterId;

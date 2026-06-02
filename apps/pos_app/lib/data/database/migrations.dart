@@ -36,9 +36,25 @@ final migration13_14 = Migration(13, 14, (database) async {
   """);
 });
 
+final migration14_15 = Migration(14, 15, (database) async {
+  await database.execute("ALTER TABLE purchases ADD COLUMN invoice_date TEXT NOT NULL DEFAULT ''");
+  await database.execute("ALTER TABLE purchases ADD COLUMN currency TEXT NOT NULL DEFAULT 'NIO'");
+  await database.execute("ALTER TABLE purchases ADD COLUMN bcn_rate REAL NOT NULL DEFAULT 1");
+  await database.execute("ALTER TABLE purchases ADD COLUMN unit_cost_nio REAL");
+  await database.execute("ALTER TABLE purchases ADD COLUMN cpp_before_nio REAL");
+  await database.execute("ALTER TABLE purchases ADD COLUMN projected_cpp_nio REAL");
+  await database.execute("ALTER TABLE purchases ADD COLUMN lot_code TEXT");
+  await database.execute("ALTER TABLE purchases ADD COLUMN received_date TEXT");
+  await database.execute("ALTER TABLE purchases ADD COLUMN expiration_date TEXT");
+  await database.execute("ALTER TABLE purchases ADD COLUMN requires_batch_tracking INTEGER NOT NULL DEFAULT 0");
+  await database.execute("ALTER TABLE batches ADD COLUMN received_date TEXT");
+  await database.execute("UPDATE purchases SET invoice_date = substr(timestamp, 1, 10) WHERE invoice_date = ''");
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
   migration12_13,
   migration13_14,
+  migration14_15,
 ];

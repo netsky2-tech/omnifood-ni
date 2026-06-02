@@ -3,6 +3,8 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/models/inventory/insumo_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
+import 'package:pos_app/data/models/inventory/purchase_entity.dart';
+import 'package:pos_app/data/models/inventory/batch_entity.dart';
 
 void main() {
   late AppDatabase database;
@@ -88,6 +90,48 @@ void main() {
       expect(result.any((e) => e.id == 'i1'), true);
       expect(result.any((e) => e.id == 'i3'), true);
       expect(result.any((e) => e.id == 'i2'), false);
+    });
+
+    test('should persist purchase FX preview fields and batch received date', () async {
+      await database.purchaseDao.insertPurchase(
+        PurchaseEntity(
+          id: 'pur-1',
+          insumoId: 'ins-1',
+          supplierId: 'sup-1',
+          quantity: 12,
+          unitCost: 10,
+          timestamp: DateTime.now().toIso8601String(),
+          invoiceDate: '2026-01-10',
+          currency: 'USD',
+          bcnRate: 36.5,
+          unitCostNio: 365,
+          cppBeforeNio: 200,
+          projectedCppNio: 250,
+          lotCode: 'LOT-1',
+          receivedDate: '2026-01-10',
+          expirationDate: '2026-02-10',
+          requiresBatchTracking: true,
+        ),
+      );
+      await database.batchDao.insertBatch(
+        BatchEntity(
+          id: 'bat-1',
+          insumoId: 'ins-1',
+          batchNumber: 'LOT-1',
+          receivedDate: '2026-01-10',
+          expirationDate: '2026-02-10',
+          remainingStock: 12,
+          cost: 365,
+        ),
+      );
+
+      final purchases = await database.purchaseDao.findAllPurchases();
+      final batches = await database.batchDao.findActiveBatchesByInsumoId('ins-1');
+
+      expect(purchases.single.currency, 'USD');
+      expect(purchases.single.projectedCppNio, 250);
+      expect(purchases.single.requiresBatchTracking, true);
+      expect(batches.single.receivedDate, '2026-01-10');
     });
   });
 }

@@ -122,7 +122,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 14,
+      version: 15,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -162,11 +162,11 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `warehouses` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `description` TEXT, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `purchases` (`id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `supplier_id` TEXT NOT NULL, `quantity` REAL NOT NULL, `unit_cost` REAL NOT NULL, `timestamp` TEXT NOT NULL, `is_synced` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `purchases` (`id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `supplier_id` TEXT NOT NULL, `quantity` REAL NOT NULL, `unit_cost` REAL NOT NULL, `timestamp` TEXT NOT NULL, `invoice_date` TEXT NOT NULL, `currency` TEXT NOT NULL, `bcn_rate` REAL NOT NULL, `unit_cost_nio` REAL, `cpp_before_nio` REAL, `projected_cpp_nio` REAL, `lot_code` TEXT, `received_date` TEXT, `expiration_date` TEXT, `requires_batch_tracking` INTEGER NOT NULL, `is_synced` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `uom_conversions` (`id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `unit_name` TEXT NOT NULL, `factor` REAL NOT NULL, `is_default` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `batches` (`id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `batch_number` TEXT NOT NULL, `expiration_date` TEXT NOT NULL, `remaining_stock` REAL NOT NULL, `cost` REAL NOT NULL, `is_synced` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `batches` (`id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `batch_number` TEXT NOT NULL, `received_date` TEXT, `expiration_date` TEXT NOT NULL, `remaining_stock` REAL NOT NULL, `cost` REAL NOT NULL, `is_synced` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `invoices` (`id` TEXT NOT NULL, `invoice_number` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `user_id` TEXT NOT NULL, `subtotal` REAL NOT NULL, `total_tax` REAL NOT NULL, `total` REAL NOT NULL, `is_canceled` INTEGER NOT NULL, `void_reason` TEXT, `sync_status` TEXT NOT NULL, `payment_status` TEXT NOT NULL, `customer_id` TEXT, `global_tax_override` INTEGER NOT NULL, `type` TEXT NOT NULL, `related_invoice_id` TEXT, PRIMARY KEY (`id`))');
         await database.execute(
@@ -1303,6 +1303,16 @@ class _$PurchaseDao extends PurchaseDao {
                   'quantity': item.quantity,
                   'unit_cost': item.unitCost,
                   'timestamp': item.timestamp,
+                  'invoice_date': item.invoiceDate,
+                  'currency': item.currency,
+                  'bcn_rate': item.bcnRate,
+                  'unit_cost_nio': item.unitCostNio,
+                  'cpp_before_nio': item.cppBeforeNio,
+                  'projected_cpp_nio': item.projectedCppNio,
+                  'lot_code': item.lotCode,
+                  'received_date': item.receivedDate,
+                  'expiration_date': item.expirationDate,
+                  'requires_batch_tracking': item.requiresBatchTracking ? 1 : 0,
                   'is_synced': item.isSynced ? 1 : 0
                 });
 
@@ -1325,6 +1335,40 @@ class _$PurchaseDao extends PurchaseDao {
             quantity: row['quantity'] as double,
             unitCost: row['unit_cost'] as double,
             timestamp: row['timestamp'] as String,
+            invoiceDate: row['invoice_date'] as String,
+            currency: row['currency'] as String,
+            bcnRate: row['bcn_rate'] as double,
+            unitCostNio: row['unit_cost_nio'] as double?,
+            cppBeforeNio: row['cpp_before_nio'] as double?,
+            projectedCppNio: row['projected_cpp_nio'] as double?,
+            lotCode: row['lot_code'] as String?,
+            receivedDate: row['received_date'] as String?,
+            expirationDate: row['expiration_date'] as String?,
+            requiresBatchTracking: (row['requires_batch_tracking'] as int) != 0,
+            isSynced: (row['is_synced'] as int) != 0));
+  }
+
+  @override
+  Future<List<PurchaseEntity>> findAllPurchases() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM purchases ORDER BY timestamp DESC',
+        mapper: (Map<String, Object?> row) => PurchaseEntity(
+            id: row['id'] as String,
+            insumoId: row['insumo_id'] as String,
+            supplierId: row['supplier_id'] as String,
+            quantity: row['quantity'] as double,
+            unitCost: row['unit_cost'] as double,
+            timestamp: row['timestamp'] as String,
+            invoiceDate: row['invoice_date'] as String,
+            currency: row['currency'] as String,
+            bcnRate: row['bcn_rate'] as double,
+            unitCostNio: row['unit_cost_nio'] as double?,
+            cppBeforeNio: row['cpp_before_nio'] as double?,
+            projectedCppNio: row['projected_cpp_nio'] as double?,
+            lotCode: row['lot_code'] as String?,
+            receivedDate: row['received_date'] as String?,
+            expirationDate: row['expiration_date'] as String?,
+            requiresBatchTracking: (row['requires_batch_tracking'] as int) != 0,
             isSynced: (row['is_synced'] as int) != 0));
   }
 
@@ -1400,6 +1444,7 @@ class _$BatchDao extends BatchDao {
                   'id': item.id,
                   'insumo_id': item.insumoId,
                   'batch_number': item.batchNumber,
+                  'received_date': item.receivedDate,
                   'expiration_date': item.expirationDate,
                   'remaining_stock': item.remainingStock,
                   'cost': item.cost,
@@ -1413,6 +1458,7 @@ class _$BatchDao extends BatchDao {
                   'id': item.id,
                   'insumo_id': item.insumoId,
                   'batch_number': item.batchNumber,
+                  'received_date': item.receivedDate,
                   'expiration_date': item.expirationDate,
                   'remaining_stock': item.remainingStock,
                   'cost': item.cost,
@@ -1433,7 +1479,7 @@ class _$BatchDao extends BatchDao {
   Future<List<BatchEntity>> findActiveBatchesByInsumoId(String insumoId) async {
     return _queryAdapter.queryList(
         'SELECT * FROM batches WHERE insumo_id = ?1 AND remaining_stock > 0 ORDER BY expiration_date ASC',
-        mapper: (Map<String, Object?> row) => BatchEntity(id: row['id'] as String, insumoId: row['insumo_id'] as String, batchNumber: row['batch_number'] as String, expirationDate: row['expiration_date'] as String, remainingStock: row['remaining_stock'] as double, cost: row['cost'] as double, isSynced: (row['is_synced'] as int) != 0),
+        mapper: (Map<String, Object?> row) => BatchEntity(id: row['id'] as String, insumoId: row['insumo_id'] as String, batchNumber: row['batch_number'] as String, receivedDate: row['received_date'] as String?, expirationDate: row['expiration_date'] as String, remainingStock: row['remaining_stock'] as double, cost: row['cost'] as double, isSynced: (row['is_synced'] as int) != 0),
         arguments: [insumoId]);
   }
 

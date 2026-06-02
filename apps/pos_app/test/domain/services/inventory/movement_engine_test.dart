@@ -346,4 +346,49 @@ void main() {
       verify(mockAlerts.notifyLowStock('Milk', 80.0, 100.0)).called(1);
     });
   });
+
+  group('MovementEngine - recordAdjustment', () {
+    test('should apply a positive compensating adjustment as a new movement', () async {
+      final insumo = createInsumo(
+        id: 'beans-1',
+        name: 'Beans',
+        stock: 5.0,
+        parLevel: 3.0,
+      );
+
+      when(mockRepo.getInsumoById('beans-1')).thenAnswer((_) async => insumo);
+
+      await engine.recordAdjustment('beans-1', 2.0, 'Conteo físico | Motivo: Sobrante');
+
+      verify(mockRepo.updateInsumoStock('beans-1', 7.0)).called(1);
+      verify(mockRepo.saveMovement(argThat(predicate<InventoryMovement>((m) {
+        return m.type == MovementType.adjustment &&
+            m.quantity == 2.0 &&
+            m.previousStock == 5.0 &&
+            m.newStock == 7.0;
+      })))).called(1);
+    });
+
+    test('should apply a negative compensating adjustment and trigger PAR alert when crossing below', () async {
+      final insumo = createInsumo(
+        id: 'milk-1',
+        name: 'Milk',
+        stock: 10.0,
+        parLevel: 9.0,
+      );
+
+      when(mockRepo.getInsumoById('milk-1')).thenAnswer((_) async => insumo);
+
+      await engine.recordAdjustment('milk-1', -2.0, 'Conteo físico | Motivo: Faltante');
+
+      verify(mockRepo.updateInsumoStock('milk-1', 8.0)).called(1);
+      verify(mockAlerts.notifyLowStock('Milk', 8.0, 9.0)).called(1);
+      verify(mockRepo.saveMovement(argThat(predicate<InventoryMovement>((m) {
+        return m.type == MovementType.adjustment &&
+            m.quantity == -2.0 &&
+            m.previousStock == 10.0 &&
+            m.newStock == 8.0;
+      })))).called(1);
+    });
+  });
 }

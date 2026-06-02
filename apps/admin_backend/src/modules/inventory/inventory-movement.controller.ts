@@ -2,6 +2,7 @@ import { Controller, Post, Body, UseInterceptors } from '@nestjs/common';
 import { ShrinkageService } from './shrinkage.service';
 import { InventoryService } from './inventory.service';
 import { SyncMovementsDto } from './dto/create-inventory-movement.dto';
+import { PurchaseDocumentDto } from './dto/purchase-document.dto';
 import { GetTenantId } from '../../core/decorators/tenant.decorator';
 import { TenantInterceptor } from '../../core/database/rls.interceptor';
 import { InventoryPurchaseService } from './inventory-purchase.service';
@@ -24,16 +25,23 @@ export class InventoryMovementController {
   }
 
   @Post('purchase')
+  async previewPurchase(
+    @Body() dto: PurchaseDocumentDto,
+    @GetTenantId() tenantId: string,
+  ) {
+    return this.purchaseService.previewPurchase({
+      tenantId,
+      insumoId: dto.insumoId,
+      quantity: dto.quantity,
+      unitCost: dto.unitCost,
+      currency: dto.currency,
+      invoiceDate: dto.invoiceDate,
+    });
+  }
+
+  @Post('purchases')
   async recordPurchase(
-    @Body()
-    dto: {
-      insumoId: string;
-      quantity: number;
-      unitCost: number;
-      currency: 'NIO' | 'USD';
-      invoiceDate: string;
-      supplierName?: string;
-    },
+    @Body() dto: PurchaseDocumentDto,
     @GetTenantId() tenantId: string,
   ) {
     return this.purchaseService.recordPurchase({
@@ -44,6 +52,9 @@ export class InventoryMovementController {
       currency: dto.currency,
       invoiceDate: dto.invoiceDate,
       supplierName: dto.supplierName,
+      lotCode: dto.lotCode,
+      receivedDate: dto.receivedDate,
+      expirationDate: dto.expirationDate,
     });
   }
 

@@ -1016,8 +1016,10 @@ class MockMovementEngine extends _i1.Mock implements _i25.MovementEngine {
   _i23.Future<void> recordPurchase(
     String? insumoId,
     double? quantity,
-    double? cost,
-  ) =>
+    double? cost, {
+    String? movementId,
+    String? reason,
+  }) =>
       (super.noSuchMethod(
         Invocation.method(
           #recordPurchase,
@@ -1026,6 +1028,10 @@ class MockMovementEngine extends _i1.Mock implements _i25.MovementEngine {
             quantity,
             cost,
           ],
+          {
+            #movementId: movementId,
+            #reason: reason,
+          },
         ),
         returnValue: _i23.Future<void>.value(),
         returnValueForMissingStub: _i23.Future<void>.value(),
@@ -1043,6 +1049,25 @@ class MockMovementEngine extends _i1.Mock implements _i25.MovementEngine {
           [
             insumoId,
             quantity,
+            reason,
+          ],
+        ),
+        returnValue: _i23.Future<void>.value(),
+        returnValueForMissingStub: _i23.Future<void>.value(),
+      ) as _i23.Future<void>);
+
+  @override
+  _i23.Future<void> recordAdjustment(
+    String? insumoId,
+    double? quantityDelta,
+    String? reason,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #recordAdjustment,
+          [
+            insumoId,
+            quantityDelta,
             reason,
           ],
         ),

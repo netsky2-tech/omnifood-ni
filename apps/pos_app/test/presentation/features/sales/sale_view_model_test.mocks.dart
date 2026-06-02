@@ -628,6 +628,17 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i24.Future<void>);
 
   @override
+  _i24.Future<List<_i34.InventoryMovement>> getAllMovements() =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getAllMovements,
+          [],
+        ),
+        returnValue: _i24.Future<List<_i34.InventoryMovement>>.value(
+            <_i34.InventoryMovement>[]),
+      ) as _i24.Future<List<_i34.InventoryMovement>>);
+
+  @override
   _i24.Future<List<_i34.InventoryMovement>> getUnsyncedMovements() =>
       (super.noSuchMethod(
         Invocation.method(
@@ -750,6 +761,26 @@ class MockInventoryRepository extends _i1.Mock
         Invocation.method(
           #queuePurchaseSync,
           [purchase],
+        ),
+        returnValue: _i24.Future<void>.value(),
+        returnValueForMissingStub: _i24.Future<void>.value(),
+      ) as _i24.Future<void>);
+
+  @override
+  _i24.Future<List<_i39.Purchase>> getUnsyncedPurchases() =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getUnsyncedPurchases,
+          [],
+        ),
+        returnValue: _i24.Future<List<_i39.Purchase>>.value(<_i39.Purchase>[]),
+      ) as _i24.Future<List<_i39.Purchase>>);
+
+  @override
+  _i24.Future<void> markPurchaseAsSynced(String? id) => (super.noSuchMethod(
+        Invocation.method(
+          #markPurchaseAsSynced,
+          [id],
         ),
         returnValue: _i24.Future<void>.value(),
         returnValueForMissingStub: _i24.Future<void>.value(),

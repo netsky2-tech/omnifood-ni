@@ -8,6 +8,7 @@ import 'dart:async' as _i4;
 import 'package:mockito/mockito.dart' as _i1;
 import 'package:pos_app/data/database/app_database.dart' as _i2;
 import 'package:pos_app/domain/models/inventory/batch.dart' as _i11;
+import 'package:pos_app/domain/models/inventory/forensic_alert.dart' as _i15;
 import 'package:pos_app/domain/models/inventory/insumo.dart' as _i5;
 import 'package:pos_app/domain/models/inventory/inventory_movement.dart' as _i8;
 import 'package:pos_app/domain/models/inventory/product.dart' as _i6;
@@ -213,6 +214,17 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i4.Future<void>);
 
   @override
+  _i4.Future<List<_i8.InventoryMovement>> getAllMovements() =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getAllMovements,
+          [],
+        ),
+        returnValue: _i4.Future<List<_i8.InventoryMovement>>.value(
+            <_i8.InventoryMovement>[]),
+      ) as _i4.Future<List<_i8.InventoryMovement>>);
+
+  @override
   _i4.Future<List<_i8.InventoryMovement>> getUnsyncedMovements() =>
       (super.noSuchMethod(
         Invocation.method(
@@ -335,6 +347,25 @@ class MockInventoryRepository extends _i1.Mock
         returnValue: _i4.Future<void>.value(),
         returnValueForMissingStub: _i4.Future<void>.value(),
       ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<List<_i13.Purchase>> getUnsyncedPurchases() => (super.noSuchMethod(
+        Invocation.method(
+          #getUnsyncedPurchases,
+          [],
+        ),
+        returnValue: _i4.Future<List<_i13.Purchase>>.value(<_i13.Purchase>[]),
+      ) as _i4.Future<List<_i13.Purchase>>);
+
+  @override
+  _i4.Future<void> markPurchaseAsSynced(String? id) => (super.noSuchMethod(
+        Invocation.method(
+          #markPurchaseAsSynced,
+          [id],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
 }
 
 /// A class which mocks [AlertService].
@@ -350,6 +381,28 @@ class MockAlertService extends _i1.Mock implements _i14.AlertService {
         Invocation.getter(#alertStream),
         returnValue: _i4.Stream<_i14.AlertMessage>.empty(),
       ) as _i4.Stream<_i14.AlertMessage>);
+
+  @override
+  _i4.Stream<List<_i15.ForensicAlert>> get sessionAlertsStream =>
+      (super.noSuchMethod(
+        Invocation.getter(#sessionAlertsStream),
+        returnValue: _i4.Stream<List<_i15.ForensicAlert>>.empty(),
+      ) as _i4.Stream<List<_i15.ForensicAlert>>);
+
+  @override
+  List<_i15.ForensicAlert> get sessionAlerts => (super.noSuchMethod(
+        Invocation.getter(#sessionAlerts),
+        returnValue: <_i15.ForensicAlert>[],
+      ) as List<_i15.ForensicAlert>);
+
+  @override
+  void publishAlert(_i15.ForensicAlert? alert) => super.noSuchMethod(
+        Invocation.method(
+          #publishAlert,
+          [alert],
+        ),
+        returnValueForMissingStub: null,
+      );
 
   @override
   void notifyLowStock(

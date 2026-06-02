@@ -214,6 +214,17 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i4.Future<void>);
 
   @override
+  _i4.Future<List<_i8.InventoryMovement>> getAllMovements() =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getAllMovements,
+          [],
+        ),
+        returnValue: _i4.Future<List<_i8.InventoryMovement>>.value(
+            <_i8.InventoryMovement>[]),
+      ) as _i4.Future<List<_i8.InventoryMovement>>);
+
+  @override
   _i4.Future<List<_i8.InventoryMovement>> getUnsyncedMovements() =>
       (super.noSuchMethod(
         Invocation.method(
@@ -336,6 +347,25 @@ class MockInventoryRepository extends _i1.Mock
         returnValue: _i4.Future<void>.value(),
         returnValueForMissingStub: _i4.Future<void>.value(),
       ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<List<_i13.Purchase>> getUnsyncedPurchases() => (super.noSuchMethod(
+        Invocation.method(
+          #getUnsyncedPurchases,
+          [],
+        ),
+        returnValue: _i4.Future<List<_i13.Purchase>>.value(<_i13.Purchase>[]),
+      ) as _i4.Future<List<_i13.Purchase>>);
+
+  @override
+  _i4.Future<void> markPurchaseAsSynced(String? id) => (super.noSuchMethod(
+        Invocation.method(
+          #markPurchaseAsSynced,
+          [id],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
 }
 
 /// A class which mocks [MovementEngine].
@@ -367,8 +397,10 @@ class MockMovementEngine extends _i1.Mock implements _i14.MovementEngine {
   _i4.Future<void> recordPurchase(
     String? insumoId,
     double? quantity,
-    double? cost,
-  ) =>
+    double? cost, {
+    String? movementId,
+    String? reason,
+  }) =>
       (super.noSuchMethod(
         Invocation.method(
           #recordPurchase,
@@ -377,6 +409,10 @@ class MockMovementEngine extends _i1.Mock implements _i14.MovementEngine {
             quantity,
             cost,
           ],
+          {
+            #movementId: movementId,
+            #reason: reason,
+          },
         ),
         returnValue: _i4.Future<void>.value(),
         returnValueForMissingStub: _i4.Future<void>.value(),
@@ -394,6 +430,25 @@ class MockMovementEngine extends _i1.Mock implements _i14.MovementEngine {
           [
             insumoId,
             quantity,
+            reason,
+          ],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> recordAdjustment(
+    String? insumoId,
+    double? quantityDelta,
+    String? reason,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #recordAdjustment,
+          [
+            insumoId,
+            quantityDelta,
             reason,
           ],
         ),

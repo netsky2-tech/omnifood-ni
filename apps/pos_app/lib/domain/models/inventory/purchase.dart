@@ -12,6 +12,16 @@ class Purchase with _$Purchase {
     required double quantity,
     required double unitCost,
     required DateTime timestamp,
+    required DateTime invoiceDate,
+    @Default('NIO') String currency,
+    @Default(1) double bcnRate,
+    @JsonKey(name: 'unit_cost_nio') double? unitCostNio,
+    @JsonKey(name: 'cpp_before_nio') double? cppBeforeNio,
+    @JsonKey(name: 'projected_cpp_nio') double? projectedCppNio,
+    @JsonKey(name: 'lot_code') String? lotCode,
+    @JsonKey(name: 'received_date') DateTime? receivedDate,
+    @JsonKey(name: 'expiration_date') DateTime? expirationDate,
+    @JsonKey(name: 'requires_batch_tracking') @Default(false) bool requiresBatchTracking,
   }) = _Purchase;
 
   factory Purchase.fromJson(Map<String, dynamic> json) => _$PurchaseFromJson(json);

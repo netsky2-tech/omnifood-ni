@@ -779,6 +779,17 @@ class MockPurchaseDao extends _i1.Mock implements _i18.PurchaseDao {
       ) as _i29.Future<List<_i38.PurchaseEntity>>);
 
   @override
+  _i29.Future<List<_i38.PurchaseEntity>> findAllPurchases() =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #findAllPurchases,
+          [],
+        ),
+        returnValue: _i29.Future<List<_i38.PurchaseEntity>>.value(
+            <_i38.PurchaseEntity>[]),
+      ) as _i29.Future<List<_i38.PurchaseEntity>>);
+
+  @override
   _i29.Future<void> markAsSynced(String? id) => (super.noSuchMethod(
         Invocation.method(
           #markAsSynced,

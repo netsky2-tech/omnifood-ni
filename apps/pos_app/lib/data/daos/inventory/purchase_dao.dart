@@ -9,6 +9,9 @@ abstract class PurchaseDao {
   @Query('SELECT * FROM purchases WHERE is_synced = 0')
   Future<List<PurchaseEntity>> findUnsyncedPurchases();
 
+  @Query('SELECT * FROM purchases ORDER BY timestamp DESC')
+  Future<List<PurchaseEntity>> findAllPurchases();
+
   @Query('UPDATE purchases SET is_synced = 1 WHERE id = :id')
   Future<void> markAsSynced(String id);
 }

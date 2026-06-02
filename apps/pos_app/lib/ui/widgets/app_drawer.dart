@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../domain/repositories/auth_repository.dart';
 import '../../../domain/models/user.dart';
+import '../features/inventory/boh/boh_permissions.dart';
 
 class AppDrawer extends StatefulWidget {
   const AppDrawer({super.key});
@@ -41,6 +42,8 @@ class _AppDrawerState extends State<AppDrawer> {
       _currentUser != null &&
       (_currentUser!.role == UserRole.owner ||
           _currentUser!.role == UserRole.manager);
+
+  bool get _canAccessBohShell => canAccessAnyBoh(_currentUser?.role);
 
   @override
   Widget build(BuildContext context) {
@@ -114,19 +117,25 @@ class _AppDrawerState extends State<AppDrawer> {
                     onTap: () => Navigator.pushNamed(context, '/inventory/warehouses'),
                   ),
                   ListTile(
-                    leading: const Icon(Icons.add_shopping_cart),
-                    title: const Text('Compras'),
-                    onTap: () => Navigator.pushNamed(context, '/inventory/purchases'),
-                  ),
-                  ListTile(
                     leading: const Icon(Icons.remove_shopping_cart),
                     title: const Text('Mermas'),
                     onTap: () => Navigator.pushNamed(context, '/inventory/shrinkage'),
                   ),
                   ListTile(
-                    leading: const Icon(Icons.receipt_long),
-                    title: const Text('Recetas'),
-                    onTap: () => Navigator.pushNamed(context, '/inventory/recipes'),
+                    leading: const Icon(Icons.account_tree_outlined),
+                    title: const Text('Inventario BOH'),
+                    subtitle: Text(
+                      _canAccessBohShell
+                          ? 'Compras, producción, conteos, alertas y kardex.'
+                          : 'Disponible solo para administración y gerencia.',
+                    ),
+                    enabled: _canAccessBohShell,
+                    onTap: _canAccessBohShell
+                        ? () {
+                            Navigator.pop(context);
+                            Navigator.pushNamed(context, '/inventory/boh');
+                          }
+                        : null,
                   ),
                   const Divider(),
                   const Padding(

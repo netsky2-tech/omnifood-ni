@@ -6,7 +6,9 @@ import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import '../../domain/repositories/audit_repository.dart';
 import '../../domain/repositories/sales/sales_repository.dart';
+import '../../domain/models/inventory/inventory_movement.dart';
 import '../../domain/repositories/inventory/inventory_repository.dart';
+import '../../domain/models/inventory/purchase.dart';
 
 const Map<String, String> syncRole = {
   'EDGE_SERVER': 'EDGE_SERVER',
@@ -59,6 +61,7 @@ class SyncService {
       await _auditRepository.syncLogs();
       
       // 2. Sync inventory outbox deltas
+      await _syncPurchaseDocuments();
       await _syncInventoryOutbox();
       
       developer.log('Sync completed successfully', name: 'SyncService');
@@ -75,7 +78,9 @@ class SyncService {
   }
 
   Future<void> _syncInventoryOutbox() async {
-    final unsynced = await _inventoryRepository.getUnsyncedMovements();
+    final unsynced = (await _inventoryRepository.getUnsyncedMovements())
+        .where((movement) => movement.type != MovementType.purchase)
+        .toList(growable: false);
     if (unsynced.isEmpty) return;
 
     final ordered = _orderByReplaySemantics(unsynced);
@@ -101,6 +106,47 @@ class SyncService {
         stackTrace: stackTrace,
       );
     }
+  }
+
+  Future<void> _syncPurchaseDocuments() async {
+    final unsyncedPurchases = await _inventoryRepository.getUnsyncedPurchases();
+    if (unsyncedPurchases.isEmpty) return;
+
+    for (final purchase in unsyncedPurchases) {
+      try {
+        final response = await _dio.post(
+          '/inventory/purchases',
+          data: _buildPurchasePayload(purchase),
+        );
+
+        if (response.statusCode == 200 || response.statusCode == 201) {
+          await _inventoryRepository.markPurchaseAsSynced(purchase.id);
+          await _inventoryRepository.markMovementAsSynced(purchase.id);
+        }
+      } on DioException catch (e) {
+        developer.log(
+          'Failed to sync purchase ${purchase.id}: ${e.message}',
+          name: 'SyncService',
+        );
+      }
+    }
+  }
+
+  Map<String, Object?> _buildPurchasePayload(Purchase purchase) {
+    return {
+      'insumoId': purchase.insumoId,
+      'quantity': purchase.quantity,
+      'unitCost': purchase.unitCost,
+      'currency': purchase.currency,
+      'invoiceDate': purchase.invoiceDate.toIso8601String().split('T').first,
+      'supplierName': purchase.supplierId,
+      'lotCode': purchase.lotCode,
+      'receivedDate': purchase.receivedDate?.toIso8601String().split('T').first,
+      'expirationDate': purchase.expirationDate
+          ?.toIso8601String()
+          .split('T')
+          .first,
+    };
   }
 
   Future<Response<dynamic>> _postBatchEnvelope(List<dynamic> unsynced) {

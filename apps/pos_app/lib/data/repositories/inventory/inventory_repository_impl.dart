@@ -155,6 +155,12 @@ class InventoryRepositoryImpl implements InventoryRepository {
   }
 
   @override
+  Future<List<InventoryMovement>> getAllMovements() async {
+    final entities = await movementDao.findAllMovements();
+    return entities.map(InventoryMapper.toMovementDomain).toList(growable: false);
+  }
+
+  @override
   Future<List<InventoryMovement>> getUnsyncedMovements() async {
     final entities = await movementDao.findUnsyncedMovements();
     return entities.map(InventoryMapper.toMovementDomain).toList();
@@ -194,6 +200,7 @@ class InventoryRepositoryImpl implements InventoryRepository {
       id: e.id,
       insumoId: e.insumoId,
       batchNumber: e.batchNumber,
+      receivedDate: e.receivedDate == null ? null : DateTime.parse(e.receivedDate!),
       expirationDate: DateTime.parse(e.expirationDate),
       remainingStock: e.remainingStock,
       cost: e.cost,
@@ -206,6 +213,7 @@ class InventoryRepositoryImpl implements InventoryRepository {
       id: batch.id,
       insumoId: batch.insumoId,
       batchNumber: batch.batchNumber,
+      receivedDate: batch.receivedDate?.toIso8601String(),
       expirationDate: batch.expirationDate.toIso8601String(),
       remainingStock: batch.remainingStock,
       cost: batch.cost,
@@ -244,21 +252,17 @@ class InventoryRepositoryImpl implements InventoryRepository {
 
   @override
   Future<void> queuePurchaseSync(Purchase purchase) async {
-    // First save locally (offline-first)
     await savePurchase(purchase);
+  }
 
-    // Then try to sync immediately
-    try {
-      final response = await dio.post(
-        '/purchases/sync',
-        data: PurchaseMapper.toSyncJson(purchase),
-      );
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        await purchaseDao.markAsSynced(purchase.id);
-      }
-    } on DioException {
-      // Sync failed, will be retried later by SyncService
-      // Purchase already saved locally - that's the key offline-first behavior
-    }
+  @override
+  Future<List<Purchase>> getUnsyncedPurchases() async {
+    final entities = await purchaseDao.findUnsyncedPurchases();
+    return entities.map(PurchaseMapper.toDomain).toList(growable: false);
+  }
+
+  @override
+  Future<void> markPurchaseAsSynced(String id) {
+    return purchaseDao.markAsSynced(id);
   }
 }

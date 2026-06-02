@@ -18,12 +18,22 @@ import 'ui/features/auth/viewmodels/lock_screen_viewmodel.dart';
 import 'ui/features/inventory/items/insumo_view_model.dart';
 import 'ui/features/inventory/purchases/purchase_view_model.dart';
 import 'ui/features/inventory/shrinkage/shrinkage_view_model.dart';
+import 'ui/features/inventory/alerts/forensic_alert_view_model.dart';
+import 'ui/features/inventory/boh/boh_navigation_shell_view.dart';
+import 'ui/features/inventory/boh/boh_permissions.dart';
+import 'ui/features/inventory/counts/physical_count_view.dart';
+import 'ui/features/inventory/counts/physical_count_view_model.dart';
+import 'ui/features/inventory/kardex/kardex_view.dart';
+import 'ui/features/inventory/kardex/kardex_view_model.dart';
+import 'ui/features/inventory/production/production_order_view_model.dart';
 import 'ui/features/inventory/recipes/recipe_view_model.dart';
 import 'ui/features/inventory/suppliers/supplier_view_model.dart';
 import 'ui/features/inventory/warehouses/warehouse_view_model.dart';
 import 'ui/features/inventory/items/insumo_view.dart';
 import 'ui/features/inventory/purchases/purchase_view.dart';
 import 'ui/features/inventory/shrinkage/shrinkage_view.dart';
+import 'ui/features/inventory/alerts/forensic_alert_view.dart';
+import 'ui/features/inventory/production/production_order_view.dart';
 import 'ui/features/inventory/recipes/recipe_view.dart';
 import 'ui/features/inventory/suppliers/supplier_view.dart';
 import 'ui/features/inventory/warehouses/warehouse_view.dart';
@@ -147,6 +157,10 @@ void main() async {
         ChangeNotifierProvider(create: (_) => InsumoViewModel(inventoryRepository)),
         ChangeNotifierProvider(create: (_) => PurchaseViewModel(inventoryRepository, movementEngine)),
         ChangeNotifierProvider(create: (_) => ShrinkageViewModel(inventoryRepository, movementEngine)),
+        ChangeNotifierProvider(create: (_) => ForensicAlertViewModel(alertService)),
+        ChangeNotifierProvider(create: (_) => PhysicalCountViewModel(inventoryRepository, movementEngine)),
+        ChangeNotifierProvider(create: (_) => KardexViewModel(inventoryRepository)),
+        ChangeNotifierProvider(create: (_) => ProductionOrderViewModel(inventoryRepository)),
         ChangeNotifierProvider(create: (_) => UserManagementViewModel(authRepository)),
         ChangeNotifierProvider(create: (_) => RecipeViewModel(inventoryRepository)),
         ChangeNotifierProvider(create: (_) => DgiReportViewModel(salesRepository, database)),
@@ -174,7 +188,12 @@ void main() async {
 
 class MyApp extends StatelessWidget {
   final AlertService alertService;
-  const MyApp({super.key, required this.alertService});
+  final String initialRoute;
+  const MyApp({
+    super.key,
+    required this.alertService,
+    this.initialRoute = '/',
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -272,18 +291,51 @@ class MyApp extends StatelessWidget {
             color: Colors.white,
           ),
         ),
-        initialRoute: '/',
+        initialRoute: initialRoute,
         routes: {
           '/': (context) => const LoginView(),
           '/lock': (context) => const LockScreenView(),
           '/home': (context) => const SaleView(),
           '/sales': (context) => const SaleView(),
+          '/inventory/boh': (context) => const BohRouteGuard(
+            permission: BohPermission.shell,
+            featureLabel: 'Inventario BOH',
+            child: BohNavigationShellView(),
+          ),
           '/inventory/items': (context) => const InsumoView(),
           '/inventory/suppliers': (context) => const SupplierView(),
           '/inventory/warehouses': (context) => const WarehouseView(),
-          '/inventory/purchases': (context) => const PurchaseView(),
+          '/inventory/purchases': (context) => const BohRouteGuard(
+            permission: BohPermission.purchasesView,
+            featureLabel: 'Compras BOH',
+            child: PurchaseView(),
+          ),
           '/inventory/shrinkage': (context) => const ShrinkageView(),
-          '/inventory/recipes': (context) => const RecipeView(),
+          '/inventory/alerts': (context) => const BohRouteGuard(
+            permission: BohPermission.alertsView,
+            featureLabel: 'Alertas BOH',
+            child: ForensicAlertView(),
+          ),
+          '/inventory/counts': (context) => const BohRouteGuard(
+            permission: BohPermission.countsView,
+            featureLabel: 'Conteos y ajustes BOH',
+            child: PhysicalCountView(),
+          ),
+          '/inventory/kardex': (context) => const BohRouteGuard(
+            permission: BohPermission.kardexView,
+            featureLabel: 'Kardex BOH',
+            child: KardexView(),
+          ),
+          '/inventory/production': (context) => const BohRouteGuard(
+            permission: BohPermission.productionView,
+            featureLabel: 'Producción BOH',
+            child: ProductionOrderView(),
+          ),
+          '/inventory/recipes': (context) => const BohRouteGuard(
+            permission: BohPermission.recipesView,
+            featureLabel: 'Recetas BOH',
+            child: RecipeView(),
+          ),
           '/sales/reports': (context) => const DgiReportView(),
           '/sales/history': (context) => const SalesHistoryView(),
           '/identity/users': (context) => const UserManagementView(),

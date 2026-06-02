@@ -43,7 +43,13 @@ class MovementEngineImpl implements MovementEngine {
   }
 
   @override
-  Future<void> recordPurchase(String insumoId, double quantity, double cost) async {
+  Future<void> recordPurchase(
+    String insumoId,
+    double quantity,
+    double cost, {
+    String? movementId,
+    String? reason,
+  }) async {
     final insumo = await repository.getInsumoById(insumoId);
     if (insumo == null) return;
 
@@ -61,14 +67,14 @@ class MovementEngineImpl implements MovementEngine {
     }
 
     await repository.saveMovement(InventoryMovement(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: movementId ?? DateTime.now().millisecondsSinceEpoch.toString(),
       insumoId: insumoId,
       type: MovementType.purchase,
       quantity: quantity,
       previousStock: insumo.stock,
       newStock: newStock,
       timestamp: DateTime.now(),
-      reason: 'Purchase',
+      reason: reason ?? 'Purchase',
     ));
   }
 
@@ -88,6 +94,36 @@ class MovementEngineImpl implements MovementEngine {
       insumoId: insumoId,
       type: MovementType.shrinkage,
       quantity: -quantity,
+      previousStock: insumo.stock,
+      newStock: newStock,
+      timestamp: DateTime.now(),
+      reason: reason,
+    ));
+  }
+
+  @override
+  Future<void> recordAdjustment(String insumoId, double quantityDelta, String reason) async {
+    if (quantityDelta == 0) {
+      throw ArgumentError('Adjustment delta must be non-zero');
+    }
+
+    final insumo = await repository.getInsumoById(insumoId);
+    if (insumo == null) return;
+
+    final newStock = insumo.stock + quantityDelta;
+    await repository.updateInsumoStock(insumoId, newStock);
+
+    if (quantityDelta < 0) {
+      await _checkParAlert(insumo, newStock);
+    } else if (newStock >= (insumo.parLevel ?? 0)) {
+      _alertedInsumos.remove(insumoId);
+    }
+
+    await repository.saveMovement(InventoryMovement(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      insumoId: insumoId,
+      type: MovementType.adjustment,
+      quantity: quantityDelta,
       previousStock: insumo.stock,
       newStock: newStock,
       timestamp: DateTime.now(),

@@ -48,7 +48,9 @@ class FakeAuditRepository implements AuditRepository {
 
 class FakeInventoryRepository implements InventoryRepository {
   List<InventoryMovement> unsynced = [];
+  List<Purchase> unsyncedPurchases = [];
   final List<String> syncedIds = [];
+  final List<String> syncedPurchaseIds = [];
 
   @override
   Future<List<InventoryMovement>> getUnsyncedMovements() async => unsynced;
@@ -56,6 +58,14 @@ class FakeInventoryRepository implements InventoryRepository {
   @override
   Future<void> markMovementAsSynced(String id) async {
     syncedIds.add(id);
+  }
+
+  @override
+  Future<List<Purchase>> getUnsyncedPurchases() async => unsyncedPurchases;
+
+  @override
+  Future<void> markPurchaseAsSynced(String id) async {
+    syncedPurchaseIds.add(id);
   }
 
   @override
@@ -89,6 +99,8 @@ class FakeInventoryRepository implements InventoryRepository {
   Future<void> deleteRecipe(String id) async => throw UnimplementedError();
   @override
   Future<void> saveMovement(InventoryMovement movement) async => throw UnimplementedError();
+  @override
+  Future<List<InventoryMovement>> getAllMovements() async => throw UnimplementedError();
   @override
   Future<List<Supplier>> getActiveSuppliers() async => throw UnimplementedError();
   @override
@@ -219,6 +231,61 @@ void main() {
     await syncService.triggerManualSync();
 
     expect(mockInventoryRepository.unsynced.length, 1);
+  });
+
+  test('syncs purchase documents before generic movement replay', () async {
+    mockInventoryRepository.unsynced = [
+      InventoryMovement(
+        id: 'purchase-1',
+        insumoId: 'i-9',
+        type: MovementType.purchase,
+        quantity: 2,
+        previousStock: 1,
+        newStock: 3,
+        timestamp: DateTime.parse('2026-01-01T12:00:00Z'),
+      ),
+      InventoryMovement(
+        id: 'sale-1',
+        insumoId: 'i-9',
+        type: MovementType.sale,
+        quantity: -1,
+        previousStock: 3,
+        newStock: 2,
+        timestamp: DateTime.parse('2026-01-01T12:05:00Z'),
+      ),
+    ];
+    mockInventoryRepository.unsyncedPurchases = [
+      Purchase(
+        id: 'purchase-1',
+        insumoId: 'i-9',
+        supplierId: 'supplier-1',
+        quantity: 2,
+        unitCost: 10,
+        timestamp: DateTime.parse('2026-01-01T12:00:00Z'),
+        invoiceDate: DateTime(2026, 1, 1),
+        currency: 'USD',
+        bcnRate: 36.5,
+        unitCostNio: 365,
+        projectedCppNio: 200,
+        lotCode: 'LOT-1',
+        receivedDate: DateTime(2026, 1, 1),
+        expirationDate: DateTime(2026, 2, 1),
+        requiresBatchTracking: true,
+      ),
+    ];
+
+    await syncService.triggerManualSync();
+
+    expect(mockInventoryRepository.syncedPurchaseIds, contains('purchase-1'));
+    expect(mockInventoryRepository.syncedIds, contains('purchase-1'));
+    expect(
+      capturedPosts.any((post) => post.path == '/inventory/purchases'),
+      true,
+    );
+    expect(
+      capturedPosts.any((post) => post.path == '/v1/sync/batch'),
+      true,
+    );
   });
 
   test('sync standalone inventory record without throwing', () async {

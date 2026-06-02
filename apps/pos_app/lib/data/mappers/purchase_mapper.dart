@@ -11,6 +11,16 @@ class PurchaseMapper {
       quantity: purchase.quantity,
       unitCost: purchase.unitCost,
       timestamp: purchase.timestamp.toIso8601String(),
+      invoiceDate: purchase.invoiceDate.toIso8601String(),
+      currency: purchase.currency,
+      bcnRate: purchase.bcnRate,
+      unitCostNio: purchase.unitCostNio,
+      cppBeforeNio: purchase.cppBeforeNio,
+      projectedCppNio: purchase.projectedCppNio,
+      lotCode: purchase.lotCode,
+      receivedDate: purchase.receivedDate?.toIso8601String(),
+      expirationDate: purchase.expirationDate?.toIso8601String(),
+      requiresBatchTracking: purchase.requiresBatchTracking,
       isSynced: false,
     );
   }
@@ -24,6 +34,20 @@ class PurchaseMapper {
       quantity: entity.quantity,
       unitCost: entity.unitCost,
       timestamp: DateTime.parse(entity.timestamp),
+      invoiceDate: DateTime.parse(entity.invoiceDate),
+      currency: entity.currency,
+      bcnRate: entity.bcnRate,
+      unitCostNio: entity.unitCostNio,
+      cppBeforeNio: entity.cppBeforeNio,
+      projectedCppNio: entity.projectedCppNio,
+      lotCode: entity.lotCode,
+      receivedDate: entity.receivedDate == null
+          ? null
+          : DateTime.parse(entity.receivedDate!),
+      expirationDate: entity.expirationDate == null
+          ? null
+          : DateTime.parse(entity.expirationDate!),
+      requiresBatchTracking: entity.requiresBatchTracking,
     );
   }
 
@@ -35,6 +59,17 @@ class PurchaseMapper {
       'supplierId': purchase.supplierId,
       'quantity': purchase.quantity,
       'unitCost': purchase.unitCost,
+      'invoiceDate': purchase.invoiceDate.toIso8601String().split('T').first,
+      'currency': purchase.currency,
+      'bcnRate': purchase.bcnRate,
+      'unitCostNio': purchase.unitCostNio,
+      'projectedCppNio': purchase.projectedCppNio,
+      'lotCode': purchase.lotCode,
+      'receivedDate': purchase.receivedDate?.toIso8601String().split('T').first,
+      'expirationDate': purchase.expirationDate
+          ?.toIso8601String()
+          .split('T')
+          .first,
       'timestamp': purchase.timestamp.toIso8601String(),
     };
   }
@@ -48,6 +83,18 @@ class PurchaseMapper {
       quantity: (json['quantity'] as num).toDouble(),
       unitCost: (json['unitCost'] as num).toDouble(),
       timestamp: DateTime.parse(json['timestamp'] as String),
+      invoiceDate: DateTime.parse(json['invoiceDate'] as String),
+      currency: json['currency'] as String? ?? 'NIO',
+      bcnRate: (json['bcnRate'] as num?)?.toDouble() ?? 1,
+      unitCostNio: (json['unitCostNio'] as num?)?.toDouble(),
+      projectedCppNio: (json['projectedCppNio'] as num?)?.toDouble(),
+      lotCode: json['lotCode'] as String?,
+      receivedDate: json['receivedDate'] == null
+          ? null
+          : DateTime.parse(json['receivedDate'] as String),
+      expirationDate: json['expirationDate'] == null
+          ? null
+          : DateTime.parse(json['expirationDate'] as String),
     );
   }
 }

@@ -5,6 +5,7 @@ import '../../../domain/models/inventory/product.dart';
 import '../../../domain/models/sales/cart_item.dart';
 import '../../../data/services/sync_service.dart';
 import '../../../domain/models/sales/payment.dart';
+import '../../../domain/models/user.dart';
 import '../../../domain/repositories/auth_repository.dart';
 import '../../../domain/repositories/audit_repository.dart';
 import '../../widgets/app_drawer.dart';
@@ -36,6 +37,7 @@ class _SaleViewState extends State<SaleView> {
   Widget build(BuildContext context) {
     final viewModel = context.watch<SaleViewModel>();
     final colorScheme = Theme.of(context).colorScheme;
+    final hasActiveSession = viewModel.activeSession != null;
 
     // Listener for errors (Visual Feedback)
     if (viewModel.errorMessage != null) {
@@ -53,10 +55,6 @@ class _SaleViewState extends State<SaleView> {
         );
         viewModel.clearError();
       });
-    }
-
-    if (viewModel.activeSession == null) {
-      return const BoxOpeningScreen();
     }
 
     return Scaffold(
@@ -92,13 +90,13 @@ class _SaleViewState extends State<SaleView> {
             },
             tooltip: 'Sincronizar con la Nube',
           ),
-          if (viewModel.canManageCashDrawer)
+          if (hasActiveSession && viewModel.canManageCashDrawer)
             IconButton(
               icon: const Icon(Icons.point_of_sale),
               onPressed: () => _requestSupervisorOverrideForManualDrawer(),
               tooltip: 'Abrir Gaveta Manual',
             ),
-          if (viewModel.canManageCashDrawer)
+          if (hasActiveSession && viewModel.canManageCashDrawer)
             IconButton(
               icon: const Icon(Icons.lock_open),
               onPressed: () => _requestSupervisorOverrideForCloseBox(),
@@ -111,44 +109,49 @@ class _SaleViewState extends State<SaleView> {
         ],
       ),
       drawer: const AppDrawer(),
-      body: Row(
-        children: [
-          // Product Grid
-          Expanded(
-            flex: 3,
-            child: Container(
-              color: colorScheme.surfaceContainerLow,
-              child: viewModel.isLoading 
-                ? const Center(child: CircularProgressIndicator())
-                : viewModel.filteredProducts.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.search_off, size: 64, color: colorScheme.outline),
-                          const SizedBox(height: 16),
-                          Text(
-                            'No se encontraron productos',
-                            style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: colorScheme.outline),
-                          ),
-                        ],
-                      ),
-                    )
-                  : ProductGrid(products: viewModel.filteredProducts),
-            ),
-          ),
-          
-          // Sidebar Cart
-          Container(
-            width: 400,
-            decoration: BoxDecoration(
-              border: Border(left: BorderSide(color: colorScheme.outlineVariant)),
-              color: colorScheme.surface,
-            ),
-            child: const CartSidebar(),
-          ),
-        ],
-      ),
+      body: hasActiveSession
+          ? Row(
+              children: [
+                // Product Grid
+                Expanded(
+                  flex: 3,
+                  child: Container(
+                    color: colorScheme.surfaceContainerLow,
+                    child: viewModel.isLoading
+                        ? const Center(child: CircularProgressIndicator())
+                        : viewModel.filteredProducts.isEmpty
+                            ? Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.search_off, size: 64, color: colorScheme.outline),
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      'No se encontraron productos',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyLarge
+                                          ?.copyWith(color: colorScheme.outline),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            : ProductGrid(products: viewModel.filteredProducts),
+                  ),
+                ),
+
+                // Sidebar Cart
+                Container(
+                  width: 400,
+                  decoration: BoxDecoration(
+                    border: Border(left: BorderSide(color: colorScheme.outlineVariant)),
+                    color: colorScheme.surface,
+                  ),
+                  child: const CartSidebar(),
+                ),
+              ],
+            )
+          : const BoxOpeningContent(),
     );
   }
 
@@ -590,6 +593,20 @@ class BoxOpeningScreen extends StatefulWidget {
 }
 
 class _BoxOpeningScreenState extends State<BoxOpeningScreen> {
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(body: BoxOpeningContent());
+  }
+}
+
+class BoxOpeningContent extends StatefulWidget {
+  const BoxOpeningContent({super.key});
+
+  @override
+  State<BoxOpeningContent> createState() => _BoxOpeningContentState();
+}
+
+class _BoxOpeningContentState extends State<BoxOpeningContent> {
   late final TextEditingController controller;
 
   @override
@@ -608,48 +625,46 @@ class _BoxOpeningScreenState extends State<BoxOpeningScreen> {
   Widget build(BuildContext context) {
     final viewModel = context.watch<SaleViewModel>();
     final colorScheme = Theme.of(context).colorScheme;
-    return Scaffold(
-      body: Center(
-        child: Container(
-          width: 400,
-          padding: const EdgeInsets.all(32),
-          decoration: BoxDecoration(
-            color: colorScheme.surface,
-            border: Border.all(color: colorScheme.outline, width: 2),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.account_balance_wallet, size: 80, color: colorScheme.primary),
-              const SizedBox(height: 24),
-              const Text('APERTURA DE CAJA', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 16),
-              TextField(
-                controller: controller,
-                decoration: const InputDecoration(
-                  labelText: 'Fondo de Caja Inicial',
-                  prefixText: '\$ ',
-                ),
-                keyboardType: TextInputType.number,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 20),
-                onTap: () {
-                  controller.selection = TextSelection(baseOffset: 0, extentOffset: controller.text.length);
-                },
+    return Center(
+      child: Container(
+        width: 400,
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: colorScheme.surface,
+          border: Border.all(color: colorScheme.outline, width: 2),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.account_balance_wallet, size: 80, color: colorScheme.primary),
+            const SizedBox(height: 24),
+            const Text('APERTURA DE CAJA', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                labelText: 'Fondo de Caja Inicial',
+                prefixText: '\$ ',
               ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: viewModel.canManageCashDrawer
-                    ? () {
-                        final balance = double.tryParse(controller.text) ?? 0.0;
-                        context.read<SaleViewModel>().openSession(balance);
-                      }
-                    : null,
-                child: const Text('ABRIR CAJA'),
-              ),
-            ],
-          ),
+              keyboardType: TextInputType.number,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 20),
+              onTap: () {
+                controller.selection = TextSelection(baseOffset: 0, extentOffset: controller.text.length);
+              },
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: viewModel.currentUserRole != null && viewModel.currentUserRole != UserRole.waiter
+                  ? () {
+                      final balance = double.tryParse(controller.text) ?? 0.0;
+                      context.read<SaleViewModel>().openSession(balance);
+                    }
+                  : null,
+              child: const Text('ABRIR CAJA'),
+            ),
+          ],
         ),
       ),
     );
