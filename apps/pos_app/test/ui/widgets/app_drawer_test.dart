@@ -140,4 +140,28 @@ void main() {
 
     expect(find.text('BOH Shell Screen'), findsOneWidget);
   });
+
+  testWidgets(
+    'drawer has no direct inventory shortcuts (BOH is the only inventory portal)',
+    (tester) async {
+      tester.view.physicalSize = const Size(1200, 2000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      when(() => authRepository.getCurrentUser()).thenAnswer(
+        (_) async => const User(id: 'u-7', name: 'Owner', role: UserRole.owner, isActive: true),
+      );
+      when(() => authRepository.getAllUsers()).thenAnswer((_) async => const []);
+
+      await tester.pumpWidget(buildApp());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Insumos'), findsNothing);
+      expect(find.text('Proveedores'), findsNothing);
+      expect(find.text('Bodegas'), findsNothing);
+      expect(find.text('Mermas'), findsNothing);
+      expect(find.text('Inventario BOH'), findsOneWidget);
+    },
+  );
 }

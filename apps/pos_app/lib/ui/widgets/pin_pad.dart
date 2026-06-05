@@ -16,9 +16,15 @@ class PinPad extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final compactHeight = constraints.maxHeight.isFinite && constraints.maxHeight < 320;
-        final spacing = compactHeight ? 8.0 : 16.0;
-        final aspectRatio = compactHeight ? 1.2 : 1.5;
+        final spacing = constraints.maxHeight.isFinite && constraints.maxHeight < 320 ? 8.0 : 16.0;
+        final double aspectRatio;
+        if (constraints.maxHeight.isFinite) {
+          final cellWidth = (constraints.maxWidth - 2 * spacing) / 3;
+          final cellHeight = (constraints.maxHeight - 3 * spacing) / 4;
+          aspectRatio = (cellWidth / cellHeight).clamp(0.5, 2.5);
+        } else {
+          aspectRatio = 1.5;
+        }
 
         return GridView.builder(
           shrinkWrap: true,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:pos_app/main.dart';
+import 'package:pos_app/ui/features/inventory/boh/boh_navigation_shell_view.dart';
 import 'package:pos_app/domain/models/inventory/forensic_alert.dart';
 import 'package:pos_app/ui/features/auth/viewmodels/login_viewmodel.dart';
 import 'package:pos_app/ui/features/auth/viewmodels/lock_screen_viewmodel.dart';
@@ -10,8 +11,15 @@ import 'package:pos_app/data/daos/user_dao.dart';
 import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/data/models/user_entity.dart';
 import 'package:pos_app/domain/services/alerts/alert_service.dart';
+import 'package:pos_app/ui/features/inventory/shrinkage/shrinkage_view_model.dart';
+import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
+import 'package:pos_app/domain/services/inventory/movement_engine.dart';
+import 'package:mocktail/mocktail.dart';
 
 // Manual fakes for smoke test
+class MockInventoryRepository extends Mock implements InventoryRepository {}
+class MockMovementEngine extends Mock implements MovementEngine {}
+
 class FakeAuthRepository implements AuthRepository {
   FakeAuthRepository({this.currentUser});
 
@@ -74,7 +82,31 @@ class FakeAlertService implements AlertService {
   void publishAlert(ForensicAlert alert) {}
 
   @override
-  void notifyLowStock(String insumoName, double currentStock, double parLevel) {}
+  Future<void> acknowledgeAlert(
+    String alertId, {
+    required String note,
+    required String actorLabel,
+  }) async {}
+
+  @override
+  Future<void> resolveAlert(
+    String alertId, {
+    required String note,
+    required String actorLabel,
+  }) async {}
+
+  @override
+  Future<void> hydrateInbox() async {}
+
+  @override
+  void notifyLowStock(
+    String insumoName,
+    double currentStock,
+    double parLevel, {
+    String? sourceMovementId,
+    String? sourceDocumentId,
+    String? sourceDocumentType,
+  }) {}
 }
 
 void main() {
@@ -82,11 +114,16 @@ void main() {
     final fakeAuth = FakeAuthRepository(currentUser: currentUser);
     final fakeUserDao = FakeUserDao();
     final fakeAlertService = FakeAlertService();
+    final mockInventoryRepo = MockInventoryRepository();
+    final mockMovementEngine = MockMovementEngine();
+    when(() => mockInventoryRepo.getActiveInsumos()).thenAnswer((_) async => []);
+    when(() => mockInventoryRepo.getInsumoById(any())).thenAnswer((_) async => null);
 
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => LoginViewModel(fakeAuth)),
         ChangeNotifierProvider(create: (_) => LockScreenViewModel(fakeAuth, fakeUserDao)),
+        ChangeNotifierProvider(create: (_) => ShrinkageViewModel(mockInventoryRepo, mockMovementEngine)),
         Provider<AuthRepository>.value(value: fakeAuth),
       ],
       child: MyApp(
@@ -145,7 +182,71 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Inventario BOH'), findsOneWidget);
+    expect(find.text('Ítems'), findsOneWidget);
+    expect(find.text('Proveedores'), findsOneWidget);
+    expect(find.text('Almacenes'), findsOneWidget);
     expect(find.text('Compras'), findsOneWidget);
-    expect(find.text('Producción'), findsOneWidget);
+  });
+
+  testWidgets('Shrinkage route denies waiter access (S-RBAC-SHRINK deny path)', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      buildApp(
+        initialRoute: '/inventory/shrinkage',
+        currentUser: const User(
+          id: 'u-waiter-shrink',
+          name: 'Waiter',
+          role: UserRole.waiter,
+          isActive: true,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Acceso restringido'), findsOneWidget);
+    expect(
+      find.textContaining('No tenés permisos para acceder a Mermas BOH.'),
+      findsOneWidget,
+    );
+    expect(find.byType(BohRouteGuard), findsOneWidget);
+  });
+
+  testWidgets('Shrinkage route denies cashier access (S-RBAC-SHRINK deny path)', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      buildApp(
+        initialRoute: '/inventory/shrinkage',
+        currentUser: const User(
+          id: 'u-cashier-shrink',
+          name: 'Cashier',
+          role: UserRole.cashier,
+          isActive: true,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Acceso restringido'), findsOneWidget);
+    expect(
+      find.textContaining('No tenés permisos para acceder a Mermas BOH.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('Shrinkage route allows manager access (S-RBAC-SHRINK allow path)', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      buildApp(
+        initialRoute: '/inventory/shrinkage',
+        currentUser: const User(
+          id: 'u-manager-shrink',
+          name: 'Manager',
+          role: UserRole.manager,
+          isActive: true,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(BohRouteGuard), findsOneWidget);
+    expect(find.text('Acceso restringido'), findsNothing);
+    tester.takeException();
   });
 }

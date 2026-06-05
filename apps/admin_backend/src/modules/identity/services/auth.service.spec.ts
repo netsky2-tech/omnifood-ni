@@ -209,6 +209,7 @@ describe('AuthService', () => {
       totp_secret_seed: 'seed-manager',
     });
     expect(scopedResult.staff[1]).toMatchObject({
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       permissions: expect.arrayContaining(['inventory.boh.shell']),
     });
   });

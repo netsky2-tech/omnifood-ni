@@ -46,8 +46,10 @@ describe('InventoryPurchaseService', () => {
     jest.clearAllMocks();
     manager.createQueryBuilder.mockReturnValue(queryBuilder);
     transaction.mockImplementation(
-      async (_isolation: string, handler: (entityManager: typeof manager) => unknown) =>
-        handler(manager),
+      (
+        _isolation: string,
+        handler: (entityManager: typeof manager) => unknown,
+      ) => handler(manager),
     );
     findOne.mockResolvedValue(perishableInsumo);
     queryBuilder.getOne.mockResolvedValue({ ...perishableInsumo });
@@ -55,7 +57,7 @@ describe('InventoryPurchaseService', () => {
       (_entity: unknown, payload: Record<string, unknown>) => payload,
     );
     manager.save.mockImplementation(
-      async (_entity: unknown, payload: Record<string, unknown>) => payload,
+      (_entity: unknown, payload: Record<string, unknown>) => payload,
     );
 
     const module: TestingModule = await Test.createTestingModule({
