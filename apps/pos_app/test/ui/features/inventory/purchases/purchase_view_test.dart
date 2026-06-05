@@ -5,12 +5,9 @@ import 'package:pos_app/domain/models/inventory/batch.dart';
 import 'package:pos_app/domain/models/inventory/batch_deduction.dart';
 import 'package:pos_app/domain/models/inventory/inventory_movement.dart';
 import 'package:pos_app/domain/models/inventory/insumo.dart';
-import 'package:pos_app/domain/models/inventory/product.dart';
 import 'package:pos_app/domain/models/inventory/purchase.dart';
-import 'package:pos_app/domain/models/inventory/recipe.dart';
 import 'package:pos_app/domain/models/inventory/supplier.dart';
 import 'package:pos_app/domain/models/inventory/uom_conversion.dart';
-import 'package:pos_app/domain/models/inventory/warehouse.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
 import 'package:pos_app/domain/services/inventory/movement_engine.dart';
 import 'package:pos_app/ui/features/inventory/purchases/purchase_view.dart';
@@ -75,7 +72,7 @@ class _FakeMovementEngine implements MovementEngine {
   Future<List<InventoryMovement>> getSaleMovements(String productId, double quantity) async => const [];
 
   @override
-  Future<void> recordAdjustment(String insumoId, double quantityDelta, String reason) async {}
+  Future<void> recordAdjustment(String insumoId, double quantityDelta, String reason, {String? movementId}) async {}
 
   @override
   Future<void> recordPurchase(String insumoId, double quantity, double cost, {String? movementId, String? reason}) async {}
@@ -88,6 +85,9 @@ class _FakeMovementEngine implements MovementEngine {
 
   @override
   Future<void> recordShrinkage(String insumoId, double quantity, String reason) async {}
+
+  @override
+  Future<List<InventoryMovement>> recordProduction({required String recipeProductId, required String producedInsumoId, required double quantity, required String reason}) async => const [];
 }
 
 void main() {
@@ -122,13 +122,13 @@ void main() {
     await tester.tap(find.text('USD').last);
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.widgetWithText(TextFormField, 'Quantity'), '2');
-    await tester.enterText(find.widgetWithText(TextFormField, 'Unit cost'), '10');
-    await tester.enterText(find.widgetWithText(TextFormField, 'BCN FX rate'), '36.5');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Cantidad'), '2');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Costo unitario'), '10');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Tasa de cambio BCN'), '36.5');
     await tester.pumpAndSettle();
 
-    expect(find.text('BCN rate source'), findsOneWidget);
-    expect(find.text('Lot code'), findsOneWidget);
-    expect(find.text('Projected CPP'), findsOneWidget);
+    expect(find.text('Origen tasa BCN'), findsOneWidget);
+    expect(find.text('Código de lote'), findsOneWidget);
+    expect(find.text('CPP proyectado'), findsOneWidget);
   });
 }

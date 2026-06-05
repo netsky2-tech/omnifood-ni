@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:pos_app/domain/models/inventory/count_session_document.dart';
 import 'package:pos_app/domain/models/inventory/insumo.dart';
-import 'package:pos_app/domain/models/inventory/inventory_movement.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
 import 'package:pos_app/domain/services/inventory/movement_engine.dart';
 import 'package:pos_app/ui/features/inventory/counts/physical_count_view.dart';
@@ -13,10 +13,13 @@ class _MockInventoryRepository extends Mock implements InventoryRepository {}
 
 class _MockMovementEngine extends Mock implements MovementEngine {}
 
+class _FakeCountSessionDocument extends Fake implements CountSessionDocument {}
+
 void main() {
   late _MockInventoryRepository repository;
   late _MockMovementEngine movementEngine;
   late PhysicalCountViewModel viewModel;
+  var storedSessions = <CountSessionDocument>[];
 
   const milk = Insumo(
     id: 'milk',
@@ -35,7 +38,12 @@ void main() {
     );
   }
 
+  setUpAll(() {
+    registerFallbackValue(_FakeCountSessionDocument());
+  });
+
   setUp(() {
+    storedSessions = <CountSessionDocument>[];
     repository = _MockInventoryRepository();
     movementEngine = _MockMovementEngine();
     viewModel = PhysicalCountViewModel(
@@ -44,66 +52,57 @@ void main() {
       clock: () => DateTime(2026, 6, 2, 10, 30),
     );
     when(() => repository.getActiveInsumos()).thenAnswer((_) async => const <Insumo>[milk]);
+    when(() => repository.getCountSessionDocuments())
+        .thenAnswer((_) async => storedSessions);
+    when(() => repository.saveCountSessionDocument(any()))
+        .thenAnswer((invocation) async {
+      storedSessions = [invocation.positionalArguments.first as CountSessionDocument];
+    });
   });
 
-  testWidgets('renders an explicit empty state with a creation CTA', (tester) async {
-    when(() => repository.getAllMovements()).thenAnswer((_) async => const <InventoryMovement>[]);
-
+  testWidgets('renders a count-session workspace with session creation CTA', (tester) async {
     await tester.pumpWidget(buildApp());
     await tester.pumpAndSettle();
 
-    expect(find.text('Conteo Físico / Ajustes'), findsOneWidget);
-    expect(find.text('Todavía no hay conteos físicos aplicados en esta terminal.'), findsOneWidget);
-    expect(find.text('NUEVO CONTEO / AJUSTE'), findsOneWidget);
+    expect(find.text('Conteos físicos BOH'), findsOneWidget);
+    expect(find.text('ABRIR SESIÓN DE CONTEO'), findsOneWidget);
+    expect(find.text('Todavía no hay sesiones de conteo en esta terminal.'), findsOneWidget);
   });
 
-  testWidgets('creates a local compensating adjustment from the form flow', (tester) async {
-    var movementLoads = 0;
-    when(() => repository.getAllMovements()).thenAnswer(
-      (_) async {
-        movementLoads += 1;
-        if (movementLoads == 1) {
-          return const <InventoryMovement>[];
-        }
-
-        return <InventoryMovement>[
-          InventoryMovement(
-            id: 'adj-1',
+  testWidgets('renders posted session detail with approved variance and movement references', (tester) async {
+    storedSessions = [
+      CountSessionDocument(
+        id: 'count-1',
+        warehouseId: 'wh-1',
+        warehouseName: 'Bodega Central',
+        cutoffAt: DateTime(2026, 6, 2, 10, 30),
+        status: CountSessionStatus.posted,
+        createdAt: DateTime(2026, 6, 2, 10),
+        updatedAt: DateTime(2026, 6, 2, 11),
+        postedAt: DateTime(2026, 6, 2, 11),
+        movementReferences: const ['count-1:line-1'],
+        lines: const [
+          CountSessionLineDocument(
+            id: 'line-1',
             insumoId: 'milk',
-            type: MovementType.adjustment,
-            quantity: -2,
-            previousStock: 10,
-            newStock: 8,
-            timestamp: DateTime(2026, 6, 2, 10, 30),
-            reason: 'Conteo físico | Motivo: Diferencia de cierre | Notas: Quedó menos producto del esperado',
+            insumoName: 'Leche Entera',
+            uom: 'L',
+            theoreticalQuantity: 10,
+            approvedEntryIndex: 0,
+            entries: [
+              CountLineEntryDocument(countedQuantity: 8),
+            ],
           ),
-        ];
-      },
-    );
-    when(() => repository.getInsumoById('milk')).thenAnswer((_) async => milk);
-    when(() => movementEngine.recordAdjustment('milk', -2, any())).thenAnswer((_) async {});
+        ],
+      ),
+    ];
 
     await tester.pumpWidget(buildApp());
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('NUEVO CONTEO / AJUSTE'));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byType(DropdownButtonFormField<String>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Leche Entera').last);
-    await tester.pumpAndSettle();
-
-    await tester.enterText(find.widgetWithText(TextField, 'Cantidad contada'), '8');
-    await tester.enterText(find.widgetWithText(TextField, 'Motivo'), 'Diferencia de cierre');
-    await tester.enterText(find.widgetWithText(TextField, 'Notas'), 'Quedó menos producto del esperado');
-
-    await tester.tap(find.text('APLICAR AJUSTE'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Leche Entera'), findsOneWidget);
-    expect(find.textContaining('Esperado: 10.00 L'), findsOneWidget);
-    expect(find.textContaining('Contado: 8.00 L'), findsOneWidget);
-    expect(find.textContaining('Variación: -2.00 L'), findsOneWidget);
+    expect(find.textContaining('Bodega Central'), findsAtLeastNWidgets(1));
+    expect(find.text('Estado: posted'), findsAtLeastNWidgets(1));
+    expect(find.textContaining('Variación aprobada: -2.00 L'), findsOneWidget);
+    expect(find.textContaining('Referencias de ajuste: 1'), findsOneWidget);
   });
 }

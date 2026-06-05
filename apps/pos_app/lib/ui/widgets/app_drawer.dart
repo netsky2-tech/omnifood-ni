@@ -102,31 +102,11 @@ class _AppDrawerState extends State<AppDrawer> {
                     child: Text('INVENTARIO', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                   ),
                   ListTile(
-                    leading: const Icon(Icons.inventory_2),
-                    title: const Text('Insumos'),
-                    onTap: () => Navigator.pushNamed(context, '/inventory/items'),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.local_shipping),
-                    title: const Text('Proveedores'),
-                    onTap: () => Navigator.pushNamed(context, '/inventory/suppliers'),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.warehouse),
-                    title: const Text('Bodegas'),
-                    onTap: () => Navigator.pushNamed(context, '/inventory/warehouses'),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.remove_shopping_cart),
-                    title: const Text('Mermas'),
-                    onTap: () => Navigator.pushNamed(context, '/inventory/shrinkage'),
-                  ),
-                  ListTile(
                     leading: const Icon(Icons.account_tree_outlined),
                     title: const Text('Inventario BOH'),
                     subtitle: Text(
                       _canAccessBohShell
-                          ? 'Compras, producción, conteos, alertas y kardex.'
+                          ? 'Ítems, proveedores, almacenes, compras, producción, conteos, alertas, kardex, recetas y mermas.'
                           : 'Disponible solo para administración y gerencia.',
                     ),
                     enabled: _canAccessBohShell,

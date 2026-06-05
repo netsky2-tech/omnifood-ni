@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:pos_app/domain/models/inventory/count_session_document.dart';
 import 'package:pos_app/domain/models/inventory/insumo.dart';
-import 'package:pos_app/domain/models/inventory/inventory_movement.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
 import 'package:pos_app/domain/services/inventory/movement_engine.dart';
 import 'package:pos_app/ui/features/inventory/counts/physical_count_view_model.dart';
@@ -10,10 +10,13 @@ class _MockInventoryRepository extends Mock implements InventoryRepository {}
 
 class _MockMovementEngine extends Mock implements MovementEngine {}
 
+class _FakeCountSessionDocument extends Fake implements CountSessionDocument {}
+
 void main() {
   late _MockInventoryRepository repository;
   late _MockMovementEngine movementEngine;
   late PhysicalCountViewModel viewModel;
+  var storedSessions = <CountSessionDocument>[];
 
   const milk = Insumo(
     id: 'milk',
@@ -24,7 +27,12 @@ void main() {
     parLevel: 3,
   );
 
+  setUpAll(() {
+    registerFallbackValue(_FakeCountSessionDocument());
+  });
+
   setUp(() {
+    storedSessions = <CountSessionDocument>[];
     repository = _MockInventoryRepository();
     movementEngine = _MockMovementEngine();
     viewModel = PhysicalCountViewModel(
@@ -32,87 +40,126 @@ void main() {
       movementEngine,
       clock: () => DateTime(2026, 6, 2, 10, 30),
     );
+    when(() => repository.getCountSessionDocuments())
+        .thenAnswer((_) async => storedSessions);
+    when(() => repository.saveCountSessionDocument(any()))
+        .thenAnswer((invocation) async {
+      storedSessions = [invocation.positionalArguments.first as CountSessionDocument];
+    });
   });
 
-  test('loadInitialData exposes local adjustment history for the screen', () async {
+  test('startSession freezes the theoretical baseline from active insumos', () async {
     when(() => repository.getActiveInsumos()).thenAnswer((_) async => const <Insumo>[milk]);
-    when(() => repository.getAllMovements()).thenAnswer(
-      (_) async => <InventoryMovement>[
-        InventoryMovement(
-          id: 'adj-1',
-          insumoId: 'milk',
-          type: MovementType.adjustment,
-          quantity: -2,
-          previousStock: 10,
-          newStock: 8,
-          timestamp: DateTime(2026, 6, 2, 9),
-          reason: 'Conteo físico | Motivo: Diferencia de apertura | Notas: Jarra incompleta',
-        ),
-      ],
-    );
 
     await viewModel.loadInitialData();
+    await viewModel.startSession(
+      warehouseId: 'wh-1',
+      warehouseName: 'Bodega Central',
+    );
 
     expect(viewModel.availableInsumos, hasLength(1));
-    expect(viewModel.history, hasLength(1));
-    expect(viewModel.history.first.insumoName, 'Leche Entera');
-    expect(viewModel.history.first.expectedQuantity, 10);
-    expect(viewModel.history.first.countedQuantity, 8);
-    expect(viewModel.history.first.variance, -2);
+    expect(viewModel.sessions, hasLength(1));
+    expect(viewModel.sessions.first.status, CountSessionStatus.open);
+    expect(viewModel.sessions.first.lines.single.theoreticalQuantity, 10);
   });
 
-  test('applyPhysicalCount posts a compensating local adjustment and refreshes history', () async {
+  test('recordCount preserves disputed first count and recount approval candidate', () async {
     when(() => repository.getActiveInsumos()).thenAnswer((_) async => const <Insumo>[milk]);
-    when(() => repository.getInsumoById('milk')).thenAnswer((_) async => milk);
-    when(() => movementEngine.recordAdjustment('milk', -2, any())).thenAnswer((_) async {});
-    when(() => repository.getAllMovements()).thenAnswer(
-      (_) async => <InventoryMovement>[
-        InventoryMovement(
-          id: 'adj-2',
-          insumoId: 'milk',
-          type: MovementType.adjustment,
-          quantity: -2,
-          previousStock: 10,
-          newStock: 8,
-          timestamp: DateTime(2026, 6, 2, 10, 30),
-          reason: 'Conteo físico | Motivo: Diferencia de cierre | Notas: Quedó menos producto del esperado',
-        ),
-      ],
-    );
 
     await viewModel.loadInitialData();
-    await viewModel.applyPhysicalCount(
-      insumoId: 'milk',
-      countedQuantity: 8,
-      reason: 'Diferencia de cierre',
-      notes: 'Quedó menos producto del esperado',
+    await viewModel.startSession(
+      warehouseId: 'wh-1',
+      warehouseName: 'Bodega Central',
     );
+    final sessionId = viewModel.sessions.single.id;
+    final lineId = viewModel.sessions.single.lines.single.id;
+
+    await viewModel.recordCount(
+      sessionId: sessionId,
+      lineId: lineId,
+      countedQuantity: 9,
+      disputed: true,
+      notes: 'Jarra incompleta',
+    );
+    await viewModel.recordCount(
+      sessionId: sessionId,
+      lineId: lineId,
+      countedQuantity: 10,
+      notes: 'Reconteo gerente',
+    );
+
+    final line = viewModel.selectedSession!.lines.single;
+    expect(viewModel.selectedSession!.status, CountSessionStatus.recount);
+    expect(line.entries, hasLength(2));
+    expect(line.entries.first.disputed, isTrue);
+    expect(line.approvedEntryIndex, 1);
+    expect(line.approvedCountedQuantity, 10);
+    expect(line.variance, 0);
+  });
+
+  test('approveAndPostSession records only compensating adjustments linked to the session', () async {
+    when(() => repository.getActiveInsumos()).thenAnswer((_) async => const <Insumo>[milk]);
+    when(() => repository.getInsumoById('milk')).thenAnswer((_) async => milk);
+    when(
+      () => movementEngine.recordAdjustment(
+        'milk',
+        -2,
+        any(),
+        movementId: any(named: 'movementId'),
+      ),
+    ).thenAnswer((_) async {});
+
+    await viewModel.loadInitialData();
+    await viewModel.startSession(
+      warehouseId: 'wh-1',
+      warehouseName: 'Bodega Central',
+    );
+    final sessionId = viewModel.sessions.single.id;
+    final lineId = viewModel.sessions.single.lines.single.id;
+
+    await viewModel.recordCount(
+      sessionId: sessionId,
+      lineId: lineId,
+      countedQuantity: 8,
+      notes: 'Faltante real',
+    );
+    await viewModel.requestApproval(sessionId);
+    await viewModel.approveSession(sessionId);
+    await viewModel.postSession(sessionId);
 
     verify(
       () => movementEngine.recordAdjustment(
         'milk',
         -2,
-        'Conteo físico | Motivo: Diferencia de cierre | Notas: Quedó menos producto del esperado',
+        any(),
+        movementId: any(named: 'movementId'),
       ),
     ).called(1);
-    expect(viewModel.history, hasLength(1));
-    expect(viewModel.history.first.countedQuantity, 8);
-    expect(viewModel.statusMessage, contains('aplicado localmente'));
+    expect(viewModel.selectedSession!.status, CountSessionStatus.posted);
+    expect(viewModel.selectedSession!.movementReferences, hasLength(1));
+    expect(viewModel.selectedSession!.lines.single.variance, -2);
   });
 
-  test('applyPhysicalCount rejects a count without variance', () async {
+  test('postSession rejects a count without variance', () async {
     when(() => repository.getActiveInsumos()).thenAnswer((_) async => const <Insumo>[milk]);
-    when(() => repository.getInsumoById('milk')).thenAnswer((_) async => milk);
-    when(() => repository.getAllMovements()).thenAnswer((_) async => const <InventoryMovement>[]);
 
     await viewModel.loadInitialData();
+    await viewModel.startSession(
+      warehouseId: 'wh-1',
+      warehouseName: 'Bodega Central',
+    );
+    final sessionId = viewModel.sessions.single.id;
+    final lineId = viewModel.sessions.single.lines.single.id;
+    await viewModel.recordCount(
+      sessionId: sessionId,
+      lineId: lineId,
+      countedQuantity: 10,
+    );
+    await viewModel.requestApproval(sessionId);
+    await viewModel.approveSession(sessionId);
 
     expect(
-      () => viewModel.applyPhysicalCount(
-        insumoId: 'milk',
-        countedQuantity: 10,
-        reason: 'Sin diferencia',
-      ),
+      () => viewModel.postSession(sessionId),
       throwsArgumentError,
     );
   });

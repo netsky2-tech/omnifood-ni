@@ -10,6 +10,9 @@ abstract class RecipeDao {
   @Insert(onConflict: OnConflictStrategy.replace)
   Future<void> insertRecipes(List<RecipeEntity> recipes);
 
+  @Query('DELETE FROM recipes WHERE product_id = :productId')
+  Future<void> deleteRecipesByProductId(String productId);
+
   @Query('DELETE FROM recipes WHERE id = :id')
   Future<void> deleteRecipeById(String id);
 }

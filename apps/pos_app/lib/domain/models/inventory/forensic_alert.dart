@@ -11,6 +11,14 @@ class ForensicAlert with _$ForensicAlert {
     required String severity,
     required String message,
     required DateTime createdAt,
+    @Default('active') String status,
+    String? note,
+    String? actorLabel,
+    DateTime? actedAt,
+    String? sourceMovementId,
+    String? sourceDocumentId,
+    String? sourceDocumentType,
+    @Default(false) bool isSynced,
     Map<String, dynamic>? metadata,
   }) = _ForensicAlert;
 

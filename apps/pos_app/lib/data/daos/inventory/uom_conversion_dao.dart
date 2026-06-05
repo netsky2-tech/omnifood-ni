@@ -8,4 +8,7 @@ abstract class UomConversionDao {
 
   @Insert(onConflict: OnConflictStrategy.replace)
   Future<void> insertConversions(List<UomConversionEntity> conversions);
+
+  @Query('DELETE FROM uom_conversions WHERE id = :id')
+  Future<void> deleteConversionById(String id);
 }

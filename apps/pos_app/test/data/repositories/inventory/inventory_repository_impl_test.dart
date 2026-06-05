@@ -5,11 +5,14 @@ import 'package:pos_app/data/repositories/inventory/inventory_repository_impl.da
 import 'package:pos_app/data/daos/inventory/insumo_dao.dart';
 import 'package:pos_app/data/daos/inventory/movement_dao.dart';
 import 'package:pos_app/data/daos/inventory/recipe_dao.dart';
+import 'package:pos_app/data/daos/inventory/recipe_version_document_dao.dart';
+import 'package:pos_app/data/daos/inventory/production_order_document_dao.dart';
 import 'package:pos_app/data/daos/inventory/supplier_dao.dart';
 import 'package:pos_app/data/daos/inventory/warehouse_dao.dart';
 import 'package:pos_app/data/daos/inventory/uom_conversion_dao.dart';
 import 'package:pos_app/data/daos/inventory/batch_dao.dart';
 import 'package:pos_app/data/daos/inventory/purchase_dao.dart';
+import 'package:pos_app/data/daos/inventory/forensic_alert_dao.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:dio/dio.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
@@ -20,12 +23,15 @@ import 'inventory_repository_impl_test.mocks.dart';
 @GenerateMocks([
   InsumoDao,
   RecipeDao,
+  RecipeVersionDocumentDao,
+  ProductionOrderDocumentDao,
   MovementDao,
   SupplierDao,
   WarehouseDao,
   UomConversionDao,
   BatchDao,
   PurchaseDao,
+  ForensicAlertDao,
   Dio,
   AppDatabase,
 ])
@@ -40,12 +46,15 @@ void main() {
     repository = InventoryRepositoryImpl(
       insumoDao: mockInsumoDao,
       recipeDao: MockRecipeDao(),
+      recipeVersionDocumentDao: MockRecipeVersionDocumentDao(),
+      productionOrderDocumentDao: MockProductionOrderDocumentDao(),
       movementDao: mockMovementDao,
       supplierDao: MockSupplierDao(),
       warehouseDao: MockWarehouseDao(),
       uomConversionDao: MockUomConversionDao(),
       batchDao: MockBatchDao(),
       purchaseDao: MockPurchaseDao(),
+      forensicAlertDao: MockForensicAlertDao(),
       dio: MockDio(),
       database: MockAppDatabase(),
     );

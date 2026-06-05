@@ -52,10 +52,40 @@ void main() {
     );
 
     await Future<void>.delayed(Duration.zero);
-    viewModel.acknowledgeAlert('alert-2');
+    await viewModel.acknowledgeAlert(
+      'alert-2',
+      note: 'Revisado por gerente',
+      actorLabel: 'manager-1',
+    );
     viewModel.setFilter(AlertStatusFilter.acknowledged);
 
     expect(viewModel.visibleAlerts, hasLength(1));
     expect(viewModel.statusFor(viewModel.visibleAlerts.first), 'Reconocida');
+    expect(viewModel.visibleAlerts.first.note, 'Revisado por gerente');
+    expect(viewModel.visibleAlerts.first.actorLabel, 'manager-1');
+  });
+
+  test('resolves an alert and keeps it visible in all filter with lifecycle metadata', () async {
+    alertService.publishAlert(
+      ForensicAlert(
+        id: 'alert-3',
+        alertType: 'LOW_STOCK',
+        severity: 'high',
+        message: 'Stock bajo en azúcar.',
+        createdAt: DateTime(2026, 6, 1, 12),
+      ),
+    );
+
+    await Future<void>.delayed(Duration.zero);
+    await viewModel.resolveAlert(
+      'alert-3',
+      note: 'Compra registrada y stock recuperado',
+      actorLabel: 'manager-2',
+    );
+    viewModel.setFilter(AlertStatusFilter.all);
+
+    expect(viewModel.visibleAlerts, hasLength(1));
+    expect(viewModel.statusFor(viewModel.visibleAlerts.first), 'Resuelta');
+    expect(viewModel.visibleAlerts.first.note, contains('stock recuperado'));
   });
 }

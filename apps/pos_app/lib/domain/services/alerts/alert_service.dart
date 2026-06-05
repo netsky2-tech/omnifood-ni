@@ -6,7 +6,25 @@ abstract class AlertService {
   List<ForensicAlert> get sessionAlerts;
 
   void publishAlert(ForensicAlert alert);
-  void notifyLowStock(String insumoName, double currentStock, double parLevel);
+  Future<void> acknowledgeAlert(
+    String alertId, {
+    required String note,
+    required String actorLabel,
+  });
+  Future<void> resolveAlert(
+    String alertId, {
+    required String note,
+    required String actorLabel,
+  });
+  Future<void> hydrateInbox();
+  void notifyLowStock(
+    String insumoName,
+    double currentStock,
+    double parLevel, {
+    String? sourceMovementId,
+    String? sourceDocumentId,
+    String? sourceDocumentType,
+  });
 }
 
 class AlertMessage {

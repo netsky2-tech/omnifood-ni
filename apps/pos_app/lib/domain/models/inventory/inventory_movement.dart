@@ -7,6 +7,7 @@ part 'inventory_movement.g.dart';
 enum MovementType {
   sale,
   purchase,
+  production,
   shrinkage,
   adjustment,
   reversal,

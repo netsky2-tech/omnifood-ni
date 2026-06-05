@@ -93,11 +93,34 @@ class MockMovementEngine extends _i1.Mock implements _i2.MovementEngine {
       ) as _i3.Future<void>);
 
   @override
+  _i3.Future<List<_i4.InventoryMovement>> recordProduction({
+    required String? recipeProductId,
+    required String? producedInsumoId,
+    required double? quantity,
+    required String? reason,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #recordProduction,
+          [],
+          {
+            #recipeProductId: recipeProductId,
+            #producedInsumoId: producedInsumoId,
+            #quantity: quantity,
+            #reason: reason,
+          },
+        ),
+        returnValue: _i3.Future<List<_i4.InventoryMovement>>.value(
+            <_i4.InventoryMovement>[]),
+      ) as _i3.Future<List<_i4.InventoryMovement>>);
+
+  @override
   _i3.Future<void> recordAdjustment(
     String? insumoId,
     double? quantityDelta,
-    String? reason,
-  ) =>
+    String? reason, {
+    String? movementId,
+  }) =>
       (super.noSuchMethod(
         Invocation.method(
           #recordAdjustment,
@@ -106,6 +129,7 @@ class MockMovementEngine extends _i1.Mock implements _i2.MovementEngine {
             quantityDelta,
             reason,
           ],
+          {#movementId: movementId},
         ),
         returnValue: _i3.Future<void>.value(),
         returnValueForMissingStub: _i3.Future<void>.value(),

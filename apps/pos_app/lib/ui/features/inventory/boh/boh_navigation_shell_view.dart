@@ -38,6 +38,24 @@ class BohNavigationShellView extends StatelessWidget {
               ),
               const SizedBox(height: 24),
               _BohDestinationCard(
+                title: 'Ítems',
+                description: 'Catálogo operativo, PAR y atributos inventariables.',
+                routeName: '/inventory/items',
+                enabled: hasBohPermission(role, BohPermission.shell),
+              ),
+              _BohDestinationCard(
+                title: 'Proveedores',
+                description: 'Directorio BOH y condiciones operativas de compra.',
+                routeName: '/inventory/suppliers',
+                enabled: hasBohPermission(role, BohPermission.shell),
+              ),
+              _BohDestinationCard(
+                title: 'Almacenes',
+                description: 'Ubicaciones y contexto de conteo/recepción.',
+                routeName: '/inventory/warehouses',
+                enabled: hasBohPermission(role, BohPermission.shell),
+              ),
+              _BohDestinationCard(
                 title: 'Compras',
                 description: 'Recepción, revisión y seguimiento de compras.',
                 routeName: '/inventory/purchases',
@@ -72,6 +90,12 @@ class BohNavigationShellView extends StatelessWidget {
                 description: 'Versionado y control de fórmulas operativas.',
                 routeName: '/inventory/recipes',
                 enabled: hasBohPermission(role, BohPermission.recipesView),
+              ),
+              _BohDestinationCard(
+                title: 'Mermas',
+                description: 'Registros de merma, destrucción y control operativo.',
+                routeName: '/inventory/shrinkage',
+                enabled: hasBohPermission(role, BohPermission.shrinkageView),
               ),
             ],
           ),

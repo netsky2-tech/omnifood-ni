@@ -17,8 +17,21 @@ abstract class MovementEngine {
   /// Records manual shrinkage.
   Future<void> recordShrinkage(String insumoId, double quantity, String reason);
 
+  /// Records a local-first production close using the active recipe graph.
+  Future<List<InventoryMovement>> recordProduction({
+    required String recipeProductId,
+    required String producedInsumoId,
+    required double quantity,
+    required String reason,
+  });
+
   /// Records a compensating inventory adjustment from a physical count.
-  Future<void> recordAdjustment(String insumoId, double quantityDelta, String reason);
+  Future<void> recordAdjustment(
+    String insumoId,
+    double quantityDelta,
+    String reason, {
+    String? movementId,
+  });
 
   /// Records a reversal (DGI compliance) when a sale is canceled.
   Future<void> recordReversal(String productId, int quantity, String reason);

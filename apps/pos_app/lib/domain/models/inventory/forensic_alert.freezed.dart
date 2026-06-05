@@ -25,6 +25,14 @@ mixin _$ForensicAlert {
   String get severity => throw _privateConstructorUsedError;
   String get message => throw _privateConstructorUsedError;
   DateTime get createdAt => throw _privateConstructorUsedError;
+  String get status => throw _privateConstructorUsedError;
+  String? get note => throw _privateConstructorUsedError;
+  String? get actorLabel => throw _privateConstructorUsedError;
+  DateTime? get actedAt => throw _privateConstructorUsedError;
+  String? get sourceMovementId => throw _privateConstructorUsedError;
+  String? get sourceDocumentId => throw _privateConstructorUsedError;
+  String? get sourceDocumentType => throw _privateConstructorUsedError;
+  bool get isSynced => throw _privateConstructorUsedError;
   Map<String, dynamic>? get metadata => throw _privateConstructorUsedError;
 
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
@@ -45,6 +53,14 @@ abstract class $ForensicAlertCopyWith<$Res> {
       String severity,
       String message,
       DateTime createdAt,
+      String status,
+      String? note,
+      String? actorLabel,
+      DateTime? actedAt,
+      String? sourceMovementId,
+      String? sourceDocumentId,
+      String? sourceDocumentType,
+      bool isSynced,
       Map<String, dynamic>? metadata});
 }
 
@@ -66,6 +82,14 @@ class _$ForensicAlertCopyWithImpl<$Res, $Val extends ForensicAlert>
     Object? severity = null,
     Object? message = null,
     Object? createdAt = null,
+    Object? status = null,
+    Object? note = freezed,
+    Object? actorLabel = freezed,
+    Object? actedAt = freezed,
+    Object? sourceMovementId = freezed,
+    Object? sourceDocumentId = freezed,
+    Object? sourceDocumentType = freezed,
+    Object? isSynced = null,
     Object? metadata = freezed,
   }) {
     return _then(_value.copyWith(
@@ -89,6 +113,38 @@ class _$ForensicAlertCopyWithImpl<$Res, $Val extends ForensicAlert>
           ? _value.createdAt
           : createdAt // ignore: cast_nullable_to_non_nullable
               as DateTime,
+      status: null == status
+          ? _value.status
+          : status // ignore: cast_nullable_to_non_nullable
+              as String,
+      note: freezed == note
+          ? _value.note
+          : note // ignore: cast_nullable_to_non_nullable
+              as String?,
+      actorLabel: freezed == actorLabel
+          ? _value.actorLabel
+          : actorLabel // ignore: cast_nullable_to_non_nullable
+              as String?,
+      actedAt: freezed == actedAt
+          ? _value.actedAt
+          : actedAt // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
+      sourceMovementId: freezed == sourceMovementId
+          ? _value.sourceMovementId
+          : sourceMovementId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      sourceDocumentId: freezed == sourceDocumentId
+          ? _value.sourceDocumentId
+          : sourceDocumentId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      sourceDocumentType: freezed == sourceDocumentType
+          ? _value.sourceDocumentType
+          : sourceDocumentType // ignore: cast_nullable_to_non_nullable
+              as String?,
+      isSynced: null == isSynced
+          ? _value.isSynced
+          : isSynced // ignore: cast_nullable_to_non_nullable
+              as bool,
       metadata: freezed == metadata
           ? _value.metadata
           : metadata // ignore: cast_nullable_to_non_nullable
@@ -111,6 +167,14 @@ abstract class _$$ForensicAlertImplCopyWith<$Res>
       String severity,
       String message,
       DateTime createdAt,
+      String status,
+      String? note,
+      String? actorLabel,
+      DateTime? actedAt,
+      String? sourceMovementId,
+      String? sourceDocumentId,
+      String? sourceDocumentType,
+      bool isSynced,
       Map<String, dynamic>? metadata});
 }
 
@@ -130,6 +194,14 @@ class __$$ForensicAlertImplCopyWithImpl<$Res>
     Object? severity = null,
     Object? message = null,
     Object? createdAt = null,
+    Object? status = null,
+    Object? note = freezed,
+    Object? actorLabel = freezed,
+    Object? actedAt = freezed,
+    Object? sourceMovementId = freezed,
+    Object? sourceDocumentId = freezed,
+    Object? sourceDocumentType = freezed,
+    Object? isSynced = null,
     Object? metadata = freezed,
   }) {
     return _then(_$ForensicAlertImpl(
@@ -153,6 +225,38 @@ class __$$ForensicAlertImplCopyWithImpl<$Res>
           ? _value.createdAt
           : createdAt // ignore: cast_nullable_to_non_nullable
               as DateTime,
+      status: null == status
+          ? _value.status
+          : status // ignore: cast_nullable_to_non_nullable
+              as String,
+      note: freezed == note
+          ? _value.note
+          : note // ignore: cast_nullable_to_non_nullable
+              as String?,
+      actorLabel: freezed == actorLabel
+          ? _value.actorLabel
+          : actorLabel // ignore: cast_nullable_to_non_nullable
+              as String?,
+      actedAt: freezed == actedAt
+          ? _value.actedAt
+          : actedAt // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
+      sourceMovementId: freezed == sourceMovementId
+          ? _value.sourceMovementId
+          : sourceMovementId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      sourceDocumentId: freezed == sourceDocumentId
+          ? _value.sourceDocumentId
+          : sourceDocumentId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      sourceDocumentType: freezed == sourceDocumentType
+          ? _value.sourceDocumentType
+          : sourceDocumentType // ignore: cast_nullable_to_non_nullable
+              as String?,
+      isSynced: null == isSynced
+          ? _value.isSynced
+          : isSynced // ignore: cast_nullable_to_non_nullable
+              as bool,
       metadata: freezed == metadata
           ? _value._metadata
           : metadata // ignore: cast_nullable_to_non_nullable
@@ -170,6 +274,14 @@ class _$ForensicAlertImpl implements _ForensicAlert {
       required this.severity,
       required this.message,
       required this.createdAt,
+      this.status = 'active',
+      this.note,
+      this.actorLabel,
+      this.actedAt,
+      this.sourceMovementId,
+      this.sourceDocumentId,
+      this.sourceDocumentType,
+      this.isSynced = false,
       final Map<String, dynamic>? metadata})
       : _metadata = metadata;
 
@@ -186,6 +298,24 @@ class _$ForensicAlertImpl implements _ForensicAlert {
   final String message;
   @override
   final DateTime createdAt;
+  @override
+  @JsonKey()
+  final String status;
+  @override
+  final String? note;
+  @override
+  final String? actorLabel;
+  @override
+  final DateTime? actedAt;
+  @override
+  final String? sourceMovementId;
+  @override
+  final String? sourceDocumentId;
+  @override
+  final String? sourceDocumentType;
+  @override
+  @JsonKey()
+  final bool isSynced;
   final Map<String, dynamic>? _metadata;
   @override
   Map<String, dynamic>? get metadata {
@@ -198,7 +328,7 @@ class _$ForensicAlertImpl implements _ForensicAlert {
 
   @override
   String toString() {
-    return 'ForensicAlert(id: $id, alertType: $alertType, severity: $severity, message: $message, createdAt: $createdAt, metadata: $metadata)';
+    return 'ForensicAlert(id: $id, alertType: $alertType, severity: $severity, message: $message, createdAt: $createdAt, status: $status, note: $note, actorLabel: $actorLabel, actedAt: $actedAt, sourceMovementId: $sourceMovementId, sourceDocumentId: $sourceDocumentId, sourceDocumentType: $sourceDocumentType, isSynced: $isSynced, metadata: $metadata)';
   }
 
   @override
@@ -214,13 +344,40 @@ class _$ForensicAlertImpl implements _ForensicAlert {
             (identical(other.message, message) || other.message == message) &&
             (identical(other.createdAt, createdAt) ||
                 other.createdAt == createdAt) &&
+            (identical(other.status, status) || other.status == status) &&
+            (identical(other.note, note) || other.note == note) &&
+            (identical(other.actorLabel, actorLabel) ||
+                other.actorLabel == actorLabel) &&
+            (identical(other.actedAt, actedAt) || other.actedAt == actedAt) &&
+            (identical(other.sourceMovementId, sourceMovementId) ||
+                other.sourceMovementId == sourceMovementId) &&
+            (identical(other.sourceDocumentId, sourceDocumentId) ||
+                other.sourceDocumentId == sourceDocumentId) &&
+            (identical(other.sourceDocumentType, sourceDocumentType) ||
+                other.sourceDocumentType == sourceDocumentType) &&
+            (identical(other.isSynced, isSynced) ||
+                other.isSynced == isSynced) &&
             const DeepCollectionEquality().equals(other._metadata, _metadata));
   }
 
   @JsonKey(ignore: true)
   @override
-  int get hashCode => Object.hash(runtimeType, id, alertType, severity, message,
-      createdAt, const DeepCollectionEquality().hash(_metadata));
+  int get hashCode => Object.hash(
+      runtimeType,
+      id,
+      alertType,
+      severity,
+      message,
+      createdAt,
+      status,
+      note,
+      actorLabel,
+      actedAt,
+      sourceMovementId,
+      sourceDocumentId,
+      sourceDocumentType,
+      isSynced,
+      const DeepCollectionEquality().hash(_metadata));
 
   @JsonKey(ignore: true)
   @override
@@ -243,6 +400,14 @@ abstract class _ForensicAlert implements ForensicAlert {
       required final String severity,
       required final String message,
       required final DateTime createdAt,
+      final String status,
+      final String? note,
+      final String? actorLabel,
+      final DateTime? actedAt,
+      final String? sourceMovementId,
+      final String? sourceDocumentId,
+      final String? sourceDocumentType,
+      final bool isSynced,
       final Map<String, dynamic>? metadata}) = _$ForensicAlertImpl;
 
   factory _ForensicAlert.fromJson(Map<String, dynamic> json) =
@@ -258,6 +423,22 @@ abstract class _ForensicAlert implements ForensicAlert {
   String get message;
   @override
   DateTime get createdAt;
+  @override
+  String get status;
+  @override
+  String? get note;
+  @override
+  String? get actorLabel;
+  @override
+  DateTime? get actedAt;
+  @override
+  String? get sourceMovementId;
+  @override
+  String? get sourceDocumentId;
+  @override
+  String? get sourceDocumentType;
+  @override
+  bool get isSynced;
   @override
   Map<String, dynamic>? get metadata;
   @override

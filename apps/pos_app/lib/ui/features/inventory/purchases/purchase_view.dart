@@ -67,11 +67,11 @@ class _PurchaseViewState extends State<PurchaseView> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _sectionCard(
-                    title: 'Receiving document',
+                    title: 'Documento de recepción',
                     child: Column(
                       children: [
                         DropdownButtonFormField<String>(
-                          value: _selectedInsumoId,
+                          initialValue: _selectedInsumoId,
                           decoration: const InputDecoration(labelText: 'Insumo'),
                           items: vm.insumos
                               .map((i) => DropdownMenuItem(value: i.id, child: Text(i.name)))
@@ -85,32 +85,32 @@ class _PurchaseViewState extends State<PurchaseView> {
                               await vm.loadInitialData(insumoId: value);
                             }
                           },
-                          validator: (value) => value == null ? 'Select an item' : null,
+                          validator: (value) => value == null ? 'Seleccioná un insumo' : null,
                         ),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
-                          value: _selectedUomId,
-                          decoration: const InputDecoration(labelText: 'Presentation'),
+                          initialValue: _selectedUomId,
+                          decoration: const InputDecoration(labelText: 'Presentación'),
                           items: vm.conversions
                               .map((c) => DropdownMenuItem(value: c.id, child: Text(c.unitName)))
                               .toList(growable: false),
                           onChanged: (value) => setState(() => _selectedUomId = value),
-                          validator: (value) => value == null ? 'Select a presentation' : null,
+                          validator: (value) => value == null ? 'Seleccioná una presentación' : null,
                         ),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
-                          value: _selectedSupplierId,
-                          decoration: const InputDecoration(labelText: 'Supplier'),
+                          initialValue: _selectedSupplierId,
+                          decoration: const InputDecoration(labelText: 'Proveedor'),
                           items: vm.suppliers
                               .map((s) => DropdownMenuItem(value: s.id, child: Text(s.name)))
                               .toList(growable: false),
                           onChanged: (value) => setState(() => _selectedSupplierId = value),
-                          validator: (value) => value == null ? 'Select a supplier' : null,
+                          validator: (value) => value == null ? 'Seleccioná un proveedor' : null,
                         ),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
-                          value: _currency,
-                          decoration: const InputDecoration(labelText: 'Currency'),
+                          initialValue: _currency,
+                          decoration: const InputDecoration(labelText: 'Moneda'),
                           items: purchaseCurrencies
                               .map((currency) => DropdownMenuItem(value: currency, child: Text(currency)))
                               .toList(growable: false),
@@ -118,7 +118,7 @@ class _PurchaseViewState extends State<PurchaseView> {
                         ),
                         const SizedBox(height: 12),
                         _dateField(
-                          label: 'Invoice date',
+                          label: 'Fecha de factura',
                           value: _invoiceDate,
                           onTap: () async {
                             final picked = await _pickDate(context, _invoiceDate);
@@ -130,28 +130,28 @@ class _PurchaseViewState extends State<PurchaseView> {
                         const SizedBox(height: 12),
                         TextFormField(
                           controller: _qtyController,
-                          decoration: const InputDecoration(labelText: 'Quantity'),
+                          decoration: const InputDecoration(labelText: 'Cantidad'),
                           keyboardType: const TextInputType.numberWithOptions(decimal: true),
                           onChanged: (_) => setState(() {}),
                           validator: (value) => (double.tryParse(value ?? '') ?? 0) > 0
                               ? null
-                              : 'Enter a valid quantity',
+                              : 'Ingresá una cantidad válida',
                         ),
                         const SizedBox(height: 12),
                         TextFormField(
                           controller: _costController,
-                          decoration: const InputDecoration(labelText: 'Unit cost'),
+                          decoration: const InputDecoration(labelText: 'Costo unitario'),
                           keyboardType: const TextInputType.numberWithOptions(decimal: true),
                           onChanged: (_) => setState(() {}),
                           validator: (value) => (double.tryParse(value ?? '') ?? 0) > 0
                               ? null
-                              : 'Enter a valid unit cost',
+                              : 'Ingresá un costo unitario válido',
                         ),
                         if (_currency == 'USD') ...[
                           const SizedBox(height: 12),
                           TextFormField(
                             controller: _bcnRateController,
-                            decoration: const InputDecoration(labelText: 'BCN FX rate'),
+                            decoration: const InputDecoration(labelText: 'Tasa de cambio BCN'),
                             keyboardType: const TextInputType.numberWithOptions(decimal: true),
                             onChanged: (_) => setState(() {}),
                           ),
@@ -162,31 +162,31 @@ class _PurchaseViewState extends State<PurchaseView> {
                   if (review != null) ...[
                     const SizedBox(height: 24),
                     _sectionCard(
-                      title: 'Review',
+                      title: 'Revisión',
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _reviewRow('Invoice date', _formatDate(_invoiceDate)),
-                          _reviewRow('BCN rate source', _currency == 'USD' ? 'BCN official rate' : 'NIO document rate'),
-                          _reviewRow('BCN FX', review.bcnRate.toStringAsFixed(4)),
-                          _reviewRow('NIO unit cost', review.unitCostNio.toStringAsFixed(4)),
-                          _reviewRow('Current CPP', review.previousCppNio.toStringAsFixed(4)),
-                          _reviewRow('Projected CPP', review.projectedCppNio.toStringAsFixed(4)),
+                          _reviewRow('Fecha de factura', _formatDate(_invoiceDate)),
+                          _reviewRow('Origen tasa BCN', _currency == 'USD' ? 'Tasa oficial BCN' : 'Tasa del documento NIO'),
+                          _reviewRow('Tasa BCN', review.bcnRate.toStringAsFixed(4)),
+                          _reviewRow('Costo unitario NIO', review.unitCostNio.toStringAsFixed(4)),
+                          _reviewRow('CPP actual', review.previousCppNio.toStringAsFixed(4)),
+                          _reviewRow('CPP proyectado', review.projectedCppNio.toStringAsFixed(4)),
                           if (review.requiresBatchTracking) ...[
                             const SizedBox(height: 16),
                             TextFormField(
                               controller: _lotCodeController,
-                              decoration: const InputDecoration(labelText: 'Lot code'),
+                              decoration: const InputDecoration(labelText: 'Código de lote'),
                               validator: (value) {
                                 if (!review.requiresBatchTracking) return null;
                                 return (value == null || value.isEmpty)
-                                    ? 'Lot code is required'
+                                    ? 'El código de lote es obligatorio'
                                     : null;
                               },
                             ),
                             const SizedBox(height: 12),
                             _dateField(
-                              label: 'Received date',
+                              label: 'Fecha de recepción',
                               value: _receivedDate,
                               onTap: () async {
                                 final picked = await _pickDate(context, _receivedDate ?? _invoiceDate);
@@ -197,7 +197,7 @@ class _PurchaseViewState extends State<PurchaseView> {
                             ),
                             const SizedBox(height: 12),
                             _dateField(
-                              label: 'Expiration date',
+                              label: 'Fecha de vencimiento',
                               value: _expirationDate,
                               onTap: () async {
                                 final picked = await _pickDate(context, _expirationDate ?? _invoiceDate);
@@ -214,7 +214,7 @@ class _PurchaseViewState extends State<PurchaseView> {
                   if (vm.fifoRows.isNotEmpty) ...[
                     const SizedBox(height: 24),
                     _sectionCard(
-                      title: 'FIFO lots',
+                      title: 'Lotes FIFO',
                       child: Column(
                         children: vm.fifoRows
                             .map((row) => Container(
@@ -225,11 +225,15 @@ class _PurchaseViewState extends State<PurchaseView> {
                                   child: Row(
                                     children: [
                                       Expanded(child: Text(row.batchNumber)),
-                                      Expanded(child: Text(row.remainingStock.toStringAsFixed(2), textAlign: TextAlign.end)),
+                                      Expanded(child: Text(
+                                        row.remainingStock.toStringAsFixed(2),
+                                        textAlign: TextAlign.end,
+                                        style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
+                                      )),
                                       const SizedBox(width: 12),
                                       Expanded(child: Text(_formatDate(row.expirationDate), textAlign: TextAlign.end)),
                                       const SizedBox(width: 12),
-                                      _statusChip(row.isExpired ? 'Expired' : row.isNearExpiry ? 'Near expiry' : 'FIFO'),
+                                      _statusChip(row.isExpired ? 'Vencido' : row.isNearExpiry ? 'Por vencer' : 'FIFO'),
                                     ],
                                   ),
                                 ))
@@ -242,7 +246,7 @@ class _PurchaseViewState extends State<PurchaseView> {
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: review == null ? null : () => _confirmAndSave(context, vm, review),
-                      child: const Text('POST PURCHASE'),
+                      child: const Text('REGISTRAR COMPRA'),
                     ),
                   ),
                   if (vm.errorMessage != null) ...[
@@ -284,18 +288,18 @@ class _PurchaseViewState extends State<PurchaseView> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text('Confirm posting', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                  const Text('Confirmar registro', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 12),
-                  Text('This will post the reviewed purchase at ${review.projectedCppNio.toStringAsFixed(4)} CPP.'),
+                  Text('Se registrará la compra revisada con CPP ${review.projectedCppNio.toStringAsFixed(4)}.'),
                   const SizedBox(height: 16),
                   OutlinedButton(
                     onPressed: () => Navigator.of(context).pop(false),
-                    child: const Text('CANCEL'),
+                    child: const Text('CANCELAR'),
                   ),
                   const SizedBox(height: 8),
                   ElevatedButton(
                     onPressed: () => Navigator.of(context).pop(true),
-                    child: const Text('CONFIRM POST'),
+                    child: const Text('CONFIRMAR REGISTRO'),
                   ),
                 ],
               ),
@@ -349,7 +353,7 @@ class _PurchaseViewState extends State<PurchaseView> {
       onTap: onTap,
       child: InputDecorator(
         decoration: InputDecoration(labelText: label),
-        child: Text(value == null ? 'Select date' : _formatDate(value)),
+        child: Text(value == null ? 'Seleccioná una fecha' : _formatDate(value)),
       ),
     );
   }
@@ -360,7 +364,10 @@ class _PurchaseViewState extends State<PurchaseView> {
       child: Row(
         children: [
           Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w700))),
-          Text(value),
+          Text(
+            value,
+            style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
+          ),
         ],
       ),
     );

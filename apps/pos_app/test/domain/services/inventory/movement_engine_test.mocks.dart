@@ -7,19 +7,26 @@ import 'dart:async' as _i4;
 
 import 'package:mockito/mockito.dart' as _i1;
 import 'package:pos_app/data/database/app_database.dart' as _i2;
-import 'package:pos_app/domain/models/inventory/batch.dart' as _i11;
-import 'package:pos_app/domain/models/inventory/forensic_alert.dart' as _i15;
+import 'package:pos_app/domain/models/inventory/batch.dart' as _i13;
+import 'package:pos_app/domain/models/inventory/count_session_document.dart'
+    as _i9;
+import 'package:pos_app/domain/models/inventory/forensic_alert.dart' as _i16;
 import 'package:pos_app/domain/models/inventory/insumo.dart' as _i5;
-import 'package:pos_app/domain/models/inventory/inventory_movement.dart' as _i8;
+import 'package:pos_app/domain/models/inventory/inventory_movement.dart'
+    as _i10;
 import 'package:pos_app/domain/models/inventory/product.dart' as _i6;
-import 'package:pos_app/domain/models/inventory/purchase.dart' as _i13;
+import 'package:pos_app/domain/models/inventory/production_order_document.dart'
+    as _i17;
+import 'package:pos_app/domain/models/inventory/purchase.dart' as _i15;
 import 'package:pos_app/domain/models/inventory/recipe.dart' as _i7;
-import 'package:pos_app/domain/models/inventory/supplier.dart' as _i9;
-import 'package:pos_app/domain/models/inventory/uom_conversion.dart' as _i12;
-import 'package:pos_app/domain/models/inventory/warehouse.dart' as _i10;
+import 'package:pos_app/domain/models/inventory/recipe_version_document.dart'
+    as _i8;
+import 'package:pos_app/domain/models/inventory/supplier.dart' as _i11;
+import 'package:pos_app/domain/models/inventory/uom_conversion.dart' as _i14;
+import 'package:pos_app/domain/models/inventory/warehouse.dart' as _i12;
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart'
     as _i3;
-import 'package:pos_app/domain/services/alerts/alert_service.dart' as _i14;
+import 'package:pos_app/domain/services/alerts/alert_service.dart' as _i18;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values
@@ -153,6 +160,16 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i4.Future<_i6.Product?>);
 
   @override
+  _i4.Future<void> saveProduct(_i6.Product? product) => (super.noSuchMethod(
+        Invocation.method(
+          #saveProduct,
+          [product],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
   _i4.Future<void> saveProductOptions({
     required String? productId,
     required List<_i6.ProductVariant>? variants,
@@ -203,7 +220,115 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i4.Future<void>);
 
   @override
-  _i4.Future<void> saveMovement(_i8.InventoryMovement? movement) =>
+  _i4.Future<void> replaceRecipesForProduct(
+    String? productId,
+    List<_i7.Recipe>? recipes,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #replaceRecipesForProduct,
+          [
+            productId,
+            recipes,
+          ],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<List<_i8.RecipeVersionDocument>> getRecipeVersionDocuments(
+          String? productId) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getRecipeVersionDocuments,
+          [productId],
+        ),
+        returnValue: _i4.Future<List<_i8.RecipeVersionDocument>>.value(
+            <_i8.RecipeVersionDocument>[]),
+      ) as _i4.Future<List<_i8.RecipeVersionDocument>>);
+
+  @override
+  _i4.Future<void> saveRecipeVersionDocument(
+          _i8.RecipeVersionDocument? document) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #saveRecipeVersionDocument,
+          [document],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<List<_i8.RecipeVersionDocument>>
+      getUnsyncedRecipeVersionDocuments() => (super.noSuchMethod(
+            Invocation.method(
+              #getUnsyncedRecipeVersionDocuments,
+              [],
+            ),
+            returnValue: _i4.Future<List<_i8.RecipeVersionDocument>>.value(
+                <_i8.RecipeVersionDocument>[]),
+          ) as _i4.Future<List<_i8.RecipeVersionDocument>>);
+
+  @override
+  _i4.Future<void> markRecipeVersionDocumentAsSynced(String? id) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #markRecipeVersionDocumentAsSynced,
+          [id],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<List<_i9.CountSessionDocument>> getCountSessionDocuments() =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getCountSessionDocuments,
+          [],
+        ),
+        returnValue: _i4.Future<List<_i9.CountSessionDocument>>.value(
+            <_i9.CountSessionDocument>[]),
+      ) as _i4.Future<List<_i9.CountSessionDocument>>);
+
+  @override
+  _i4.Future<void> saveCountSessionDocument(
+          _i9.CountSessionDocument? session) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #saveCountSessionDocument,
+          [session],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<List<_i9.CountSessionDocument>>
+      getUnsyncedCountSessionDocuments() => (super.noSuchMethod(
+            Invocation.method(
+              #getUnsyncedCountSessionDocuments,
+              [],
+            ),
+            returnValue: _i4.Future<List<_i9.CountSessionDocument>>.value(
+                <_i9.CountSessionDocument>[]),
+          ) as _i4.Future<List<_i9.CountSessionDocument>>);
+
+  @override
+  _i4.Future<void> markCountSessionDocumentAsSynced(String? id) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #markCountSessionDocumentAsSynced,
+          [id],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> saveMovement(_i10.InventoryMovement? movement) =>
       (super.noSuchMethod(
         Invocation.method(
           #saveMovement,
@@ -214,26 +339,26 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i4.Future<void>);
 
   @override
-  _i4.Future<List<_i8.InventoryMovement>> getAllMovements() =>
+  _i4.Future<List<_i10.InventoryMovement>> getAllMovements() =>
       (super.noSuchMethod(
         Invocation.method(
           #getAllMovements,
           [],
         ),
-        returnValue: _i4.Future<List<_i8.InventoryMovement>>.value(
-            <_i8.InventoryMovement>[]),
-      ) as _i4.Future<List<_i8.InventoryMovement>>);
+        returnValue: _i4.Future<List<_i10.InventoryMovement>>.value(
+            <_i10.InventoryMovement>[]),
+      ) as _i4.Future<List<_i10.InventoryMovement>>);
 
   @override
-  _i4.Future<List<_i8.InventoryMovement>> getUnsyncedMovements() =>
+  _i4.Future<List<_i10.InventoryMovement>> getUnsyncedMovements() =>
       (super.noSuchMethod(
         Invocation.method(
           #getUnsyncedMovements,
           [],
         ),
-        returnValue: _i4.Future<List<_i8.InventoryMovement>>.value(
-            <_i8.InventoryMovement>[]),
-      ) as _i4.Future<List<_i8.InventoryMovement>>);
+        returnValue: _i4.Future<List<_i10.InventoryMovement>>.value(
+            <_i10.InventoryMovement>[]),
+      ) as _i4.Future<List<_i10.InventoryMovement>>);
 
   @override
   _i4.Future<void> markMovementAsSynced(String? id) => (super.noSuchMethod(
@@ -246,16 +371,16 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i4.Future<void>);
 
   @override
-  _i4.Future<List<_i9.Supplier>> getActiveSuppliers() => (super.noSuchMethod(
+  _i4.Future<List<_i11.Supplier>> getActiveSuppliers() => (super.noSuchMethod(
         Invocation.method(
           #getActiveSuppliers,
           [],
         ),
-        returnValue: _i4.Future<List<_i9.Supplier>>.value(<_i9.Supplier>[]),
-      ) as _i4.Future<List<_i9.Supplier>>);
+        returnValue: _i4.Future<List<_i11.Supplier>>.value(<_i11.Supplier>[]),
+      ) as _i4.Future<List<_i11.Supplier>>);
 
   @override
-  _i4.Future<void> saveSupplier(_i9.Supplier? supplier) => (super.noSuchMethod(
+  _i4.Future<void> saveSupplier(_i11.Supplier? supplier) => (super.noSuchMethod(
         Invocation.method(
           #saveSupplier,
           [supplier],
@@ -265,16 +390,16 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i4.Future<void>);
 
   @override
-  _i4.Future<List<_i10.Warehouse>> getActiveWarehouses() => (super.noSuchMethod(
+  _i4.Future<List<_i12.Warehouse>> getActiveWarehouses() => (super.noSuchMethod(
         Invocation.method(
           #getActiveWarehouses,
           [],
         ),
-        returnValue: _i4.Future<List<_i10.Warehouse>>.value(<_i10.Warehouse>[]),
-      ) as _i4.Future<List<_i10.Warehouse>>);
+        returnValue: _i4.Future<List<_i12.Warehouse>>.value(<_i12.Warehouse>[]),
+      ) as _i4.Future<List<_i12.Warehouse>>);
 
   @override
-  _i4.Future<void> saveWarehouse(_i10.Warehouse? warehouse) =>
+  _i4.Future<void> saveWarehouse(_i12.Warehouse? warehouse) =>
       (super.noSuchMethod(
         Invocation.method(
           #saveWarehouse,
@@ -285,17 +410,17 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i4.Future<void>);
 
   @override
-  _i4.Future<List<_i11.Batch>> getBatchesByInsumoId(String? insumoId) =>
+  _i4.Future<List<_i13.Batch>> getBatchesByInsumoId(String? insumoId) =>
       (super.noSuchMethod(
         Invocation.method(
           #getBatchesByInsumoId,
           [insumoId],
         ),
-        returnValue: _i4.Future<List<_i11.Batch>>.value(<_i11.Batch>[]),
-      ) as _i4.Future<List<_i11.Batch>>);
+        returnValue: _i4.Future<List<_i13.Batch>>.value(<_i13.Batch>[]),
+      ) as _i4.Future<List<_i13.Batch>>);
 
   @override
-  _i4.Future<void> saveBatch(_i11.Batch? batch) => (super.noSuchMethod(
+  _i4.Future<void> saveBatch(_i13.Batch? batch) => (super.noSuchMethod(
         Invocation.method(
           #saveBatch,
           [batch],
@@ -305,7 +430,7 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i4.Future<void>);
 
   @override
-  _i4.Future<List<_i12.UomConversion>> getConversionsByInsumoId(
+  _i4.Future<List<_i14.UomConversion>> getConversionsByInsumoId(
           String? insumoId) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -313,11 +438,11 @@ class MockInventoryRepository extends _i1.Mock
           [insumoId],
         ),
         returnValue:
-            _i4.Future<List<_i12.UomConversion>>.value(<_i12.UomConversion>[]),
-      ) as _i4.Future<List<_i12.UomConversion>>);
+            _i4.Future<List<_i14.UomConversion>>.value(<_i14.UomConversion>[]),
+      ) as _i4.Future<List<_i14.UomConversion>>);
 
   @override
-  _i4.Future<void> saveConversion(_i12.UomConversion? conversion) =>
+  _i4.Future<void> saveConversion(_i14.UomConversion? conversion) =>
       (super.noSuchMethod(
         Invocation.method(
           #saveConversion,
@@ -328,7 +453,17 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i4.Future<void>);
 
   @override
-  _i4.Future<void> savePurchase(_i13.Purchase? purchase) => (super.noSuchMethod(
+  _i4.Future<void> deleteConversion(String? id) => (super.noSuchMethod(
+        Invocation.method(
+          #deleteConversion,
+          [id],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> savePurchase(_i15.Purchase? purchase) => (super.noSuchMethod(
         Invocation.method(
           #savePurchase,
           [purchase],
@@ -338,7 +473,7 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i4.Future<void>);
 
   @override
-  _i4.Future<void> queuePurchaseSync(_i13.Purchase? purchase) =>
+  _i4.Future<void> queuePurchaseSync(_i15.Purchase? purchase) =>
       (super.noSuchMethod(
         Invocation.method(
           #queuePurchaseSync,
@@ -349,13 +484,22 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i4.Future<void>);
 
   @override
-  _i4.Future<List<_i13.Purchase>> getUnsyncedPurchases() => (super.noSuchMethod(
+  _i4.Future<List<_i15.Purchase>> getPurchaseHistory() => (super.noSuchMethod(
+        Invocation.method(
+          #getPurchaseHistory,
+          [],
+        ),
+        returnValue: _i4.Future<List<_i15.Purchase>>.value(<_i15.Purchase>[]),
+      ) as _i4.Future<List<_i15.Purchase>>);
+
+  @override
+  _i4.Future<List<_i15.Purchase>> getUnsyncedPurchases() => (super.noSuchMethod(
         Invocation.method(
           #getUnsyncedPurchases,
           [],
         ),
-        returnValue: _i4.Future<List<_i13.Purchase>>.value(<_i13.Purchase>[]),
-      ) as _i4.Future<List<_i13.Purchase>>);
+        returnValue: _i4.Future<List<_i15.Purchase>>.value(<_i15.Purchase>[]),
+      ) as _i4.Future<List<_i15.Purchase>>);
 
   @override
   _i4.Future<void> markPurchaseAsSynced(String? id) => (super.noSuchMethod(
@@ -366,37 +510,125 @@ class MockInventoryRepository extends _i1.Mock
         returnValue: _i4.Future<void>.value(),
         returnValueForMissingStub: _i4.Future<void>.value(),
       ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<List<_i16.ForensicAlert>> getForensicAlerts() =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getForensicAlerts,
+          [],
+        ),
+        returnValue:
+            _i4.Future<List<_i16.ForensicAlert>>.value(<_i16.ForensicAlert>[]),
+      ) as _i4.Future<List<_i16.ForensicAlert>>);
+
+  @override
+  _i4.Future<void> saveForensicAlert(_i16.ForensicAlert? alert) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #saveForensicAlert,
+          [alert],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<List<_i16.ForensicAlert>> getUnsyncedForensicAlerts() =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getUnsyncedForensicAlerts,
+          [],
+        ),
+        returnValue:
+            _i4.Future<List<_i16.ForensicAlert>>.value(<_i16.ForensicAlert>[]),
+      ) as _i4.Future<List<_i16.ForensicAlert>>);
+
+  @override
+  _i4.Future<void> markForensicAlertAsSynced(String? id) => (super.noSuchMethod(
+        Invocation.method(
+          #markForensicAlertAsSynced,
+          [id],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<List<_i17.ProductionOrderDocument>>
+      getProductionOrderDocuments() => (super.noSuchMethod(
+            Invocation.method(
+              #getProductionOrderDocuments,
+              [],
+            ),
+            returnValue: _i4.Future<List<_i17.ProductionOrderDocument>>.value(
+                <_i17.ProductionOrderDocument>[]),
+          ) as _i4.Future<List<_i17.ProductionOrderDocument>>);
+
+  @override
+  _i4.Future<void> saveProductionOrderDocument(
+          _i17.ProductionOrderDocument? document) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #saveProductionOrderDocument,
+          [document],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<List<_i17.ProductionOrderDocument>>
+      getUnsyncedProductionOrders() => (super.noSuchMethod(
+            Invocation.method(
+              #getUnsyncedProductionOrders,
+              [],
+            ),
+            returnValue: _i4.Future<List<_i17.ProductionOrderDocument>>.value(
+                <_i17.ProductionOrderDocument>[]),
+          ) as _i4.Future<List<_i17.ProductionOrderDocument>>);
+
+  @override
+  _i4.Future<void> markProductionOrderDocumentAsSynced(String? id) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #markProductionOrderDocumentAsSynced,
+          [id],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
 }
 
 /// A class which mocks [AlertService].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockAlertService extends _i1.Mock implements _i14.AlertService {
+class MockAlertService extends _i1.Mock implements _i18.AlertService {
   MockAlertService() {
     _i1.throwOnMissingStub(this);
   }
 
   @override
-  _i4.Stream<_i14.AlertMessage> get alertStream => (super.noSuchMethod(
+  _i4.Stream<_i18.AlertMessage> get alertStream => (super.noSuchMethod(
         Invocation.getter(#alertStream),
-        returnValue: _i4.Stream<_i14.AlertMessage>.empty(),
-      ) as _i4.Stream<_i14.AlertMessage>);
+        returnValue: _i4.Stream<_i18.AlertMessage>.empty(),
+      ) as _i4.Stream<_i18.AlertMessage>);
 
   @override
-  _i4.Stream<List<_i15.ForensicAlert>> get sessionAlertsStream =>
+  _i4.Stream<List<_i16.ForensicAlert>> get sessionAlertsStream =>
       (super.noSuchMethod(
         Invocation.getter(#sessionAlertsStream),
-        returnValue: _i4.Stream<List<_i15.ForensicAlert>>.empty(),
-      ) as _i4.Stream<List<_i15.ForensicAlert>>);
+        returnValue: _i4.Stream<List<_i16.ForensicAlert>>.empty(),
+      ) as _i4.Stream<List<_i16.ForensicAlert>>);
 
   @override
-  List<_i15.ForensicAlert> get sessionAlerts => (super.noSuchMethod(
+  List<_i16.ForensicAlert> get sessionAlerts => (super.noSuchMethod(
         Invocation.getter(#sessionAlerts),
-        returnValue: <_i15.ForensicAlert>[],
-      ) as List<_i15.ForensicAlert>);
+        returnValue: <_i16.ForensicAlert>[],
+      ) as List<_i16.ForensicAlert>);
 
   @override
-  void publishAlert(_i15.ForensicAlert? alert) => super.noSuchMethod(
+  void publishAlert(_i16.ForensicAlert? alert) => super.noSuchMethod(
         Invocation.method(
           #publishAlert,
           [alert],
@@ -405,11 +637,62 @@ class MockAlertService extends _i1.Mock implements _i14.AlertService {
       );
 
   @override
+  _i4.Future<void> acknowledgeAlert(
+    String? alertId, {
+    required String? note,
+    required String? actorLabel,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #acknowledgeAlert,
+          [alertId],
+          {
+            #note: note,
+            #actorLabel: actorLabel,
+          },
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> resolveAlert(
+    String? alertId, {
+    required String? note,
+    required String? actorLabel,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #resolveAlert,
+          [alertId],
+          {
+            #note: note,
+            #actorLabel: actorLabel,
+          },
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> hydrateInbox() => (super.noSuchMethod(
+        Invocation.method(
+          #hydrateInbox,
+          [],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
   void notifyLowStock(
     String? insumoName,
     double? currentStock,
-    double? parLevel,
-  ) =>
+    double? parLevel, {
+    String? sourceMovementId,
+    String? sourceDocumentId,
+    String? sourceDocumentType,
+  }) =>
       super.noSuchMethod(
         Invocation.method(
           #notifyLowStock,
@@ -418,6 +701,11 @@ class MockAlertService extends _i1.Mock implements _i14.AlertService {
             currentStock,
             parLevel,
           ],
+          {
+            #sourceMovementId: sourceMovementId,
+            #sourceDocumentId: sourceDocumentId,
+            #sourceDocumentType: sourceDocumentType,
+          },
         ),
         returnValueForMissingStub: null,
       );

@@ -50,10 +50,12 @@ class _KardexViewState extends State<KardexView> {
                         ),
                         const SizedBox(height: 8),
                         const Text(
-                          'Fuente actual: movimientos guardados en SQLite de esta terminal POS. La vista es auditable para la sesión/dispositivo, sin inventar persistencia BOH que todavía no existe en esta pantalla.',
+                          'Fuente operativa: SQLite local como verdad de esta terminal POS, enriquecida con documentos BOH y estados de sincronización cuando existen.',
                         ),
                         const SizedBox(height: 8),
-                        const Text('Costo/valor histórico no disponible todavía'),
+                        const Text(
+                          'Los costos históricos se muestran cuando el documento origen está disponible; los movimientos legados sin metadata conservan N/D de forma explícita.',
+                        ),
                         if (viewModel.errorMessage != null) ...[
                           const SizedBox(height: 8),
                           Text(
@@ -121,26 +123,28 @@ class _KardexViewState extends State<KardexView> {
                                   scrollDirection: Axis.horizontal,
                                   child: SingleChildScrollView(
                                     child: DataTable(
-                                      columns: const [
-                                        DataColumn(label: Text('Fecha')),
-                                        DataColumn(label: Text('Tipo')),
-                                        DataColumn(label: Text('Referencia')),
-                                        DataColumn(label: Text('Cantidad')),
-                                        DataColumn(label: Text('Stock final')),
-                                        DataColumn(label: Text('Costo unit.')),
-                                        DataColumn(label: Text('Valor')),
+                                       columns: const [
+                                         DataColumn(label: Text('Fecha')),
+                                         DataColumn(label: Text('Tipo')),
+                                         DataColumn(label: Text('Referencia')),
+                                         DataColumn(label: Text('Documento')),
+                                         DataColumn(label: Text('Cantidad')),
+                                         DataColumn(label: Text('Stock final')),
+                                         DataColumn(label: Text('Costo unit.')),
+                                         DataColumn(label: Text('Valor')),
                                       ],
                                       rows: viewModel.visibleEntries
                                           .map(
                                             (entry) => DataRow(
                                               cells: [
-                                                DataCell(Text(entry.dateLabel), onTap: () => _showDetailSheet(context, entry)),
-                                                DataCell(Text(entry.typeLabel.toUpperCase()), onTap: () => _showDetailSheet(context, entry)),
-                                                DataCell(Text(entry.referenceLabel), onTap: () => _showDetailSheet(context, entry)),
-                                                DataCell(Text(entry.quantityLabel), onTap: () => _showDetailSheet(context, entry)),
-                                                DataCell(Text(entry.stockAfterLabel), onTap: () => _showDetailSheet(context, entry)),
-                                                DataCell(Text(entry.unitCostLabel), onTap: () => _showDetailSheet(context, entry)),
-                                                DataCell(Text(entry.totalValueLabel), onTap: () => _showDetailSheet(context, entry)),
+                                                 DataCell(Text(entry.dateLabel), onTap: () => _showDetailSheet(context, entry)),
+                                                 DataCell(Text(entry.typeLabel.toUpperCase()), onTap: () => _showDetailSheet(context, entry)),
+                                                 DataCell(Text(entry.referenceLabel), onTap: () => _showDetailSheet(context, entry)),
+                                                 DataCell(Text(entry.sourceDocumentLabel), onTap: () => _showDetailSheet(context, entry)),
+                                                  DataCell(Text(entry.quantityLabel, style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])), onTap: () => _showDetailSheet(context, entry)),
+                                                  DataCell(Text(entry.stockAfterLabel, style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])), onTap: () => _showDetailSheet(context, entry)),
+                                                  DataCell(Text(entry.unitCostLabel, style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])), onTap: () => _showDetailSheet(context, entry)),
+                                                  DataCell(Text(entry.totalValueLabel, style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])), onTap: () => _showDetailSheet(context, entry)),
                                               ],
                                             ),
                                           )
@@ -174,9 +178,13 @@ class _KardexViewState extends State<KardexView> {
             Text('ID: ${entry.id}'),
             Text('Referencia: ${entry.referenceLabel}'),
             Text('Tipo: ${entry.typeLabel}'),
+            Text('Documento origen: ${entry.sourceDocumentLabel}'),
             Text('Fecha: ${entry.dateLabel}'),
-            Text('Stock previo: ${entry.stockBeforeLabel}'),
-            Text('Stock final: ${entry.stockAfterLabel}'),
+            Text('Stock previo: ${entry.stockBeforeLabel}', style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])),
+            Text('Stock final: ${entry.stockAfterLabel}', style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])),
+            Text('Costo unitario: ${entry.unitCostLabel}', style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])),
+            Text('Valor total: ${entry.totalValueLabel}', style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])),
+            Text('Alertas relacionadas: ${entry.relatedAlertCount}', style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])),
             Text('Detalle operativo: ${entry.reasonLabel}'),
             const SizedBox(height: 12),
           ],

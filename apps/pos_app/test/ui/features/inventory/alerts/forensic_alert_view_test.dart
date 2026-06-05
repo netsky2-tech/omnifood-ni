@@ -33,8 +33,8 @@ void main() {
     await tester.pumpWidget(buildApp());
     await tester.pumpAndSettle();
 
-    expect(find.text('Todavía no hay alertas BOH activas en esta sesión.'), findsOneWidget);
-    expect(find.text('Estado local: sesión actual únicamente.'), findsOneWidget);
+    expect(find.text('Todavía no hay alertas BOH activas para esta tienda.'), findsOneWidget);
+    expect(find.text('Bandeja persistente BOH.'), findsOneWidget);
   });
 
   testWidgets('renders alert details and acknowledges an alert from the screen', (tester) async {
@@ -50,6 +50,7 @@ void main() {
           'currentStock': 1.5,
           'parLevel': 3.0,
           'originDocument': 'session-low-stock',
+          'sourceMovementId': 'mov-1',
         },
       ),
     );
@@ -65,11 +66,47 @@ void main() {
     await tester.tap(find.text('RECONOCER'));
     await tester.pumpAndSettle();
 
+    await tester.enterText(find.byType(TextField).last, 'Gerencia enterada');
+    await tester.tap(find.text('CONFIRMAR RECONOCIMIENTO'));
+    await tester.pumpAndSettle();
+
     expect(find.text('Reconocida'), findsOneWidget);
+    expect(find.text('Movimiento origen: mov-1'), findsOneWidget);
+    expect(find.text('Gerencia enterada'), findsOneWidget);
 
     await tester.tap(find.text('Reconocidas'));
     await tester.pumpAndSettle();
 
     expect(find.text('Stock bajo en Base de Café.'), findsOneWidget);
+  });
+
+  testWidgets('renders resolved alerts with traceability metadata', (tester) async {
+    alertService.publishAlert(
+      ForensicAlert(
+        id: 'alert-2',
+        alertType: 'COUNT_VARIANCE',
+        severity: 'critical',
+        message: 'Conteo con variación relevante.',
+        createdAt: DateTime(2026, 6, 2, 10),
+        status: 'resolved',
+        note: 'Compensado con ajuste aprobado',
+        actorLabel: 'auditor-1',
+        sourceDocumentId: 'count-1',
+        sourceDocumentType: 'COUNT_SESSION',
+        metadata: const <String, dynamic>{
+          'item': 'Leche',
+        },
+      ),
+    );
+
+    await tester.pumpWidget(buildApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Todas'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Resuelta'), findsOneWidget);
+    expect(find.text('Documento origen: COUNT_SESSION · count-1'), findsOneWidget);
+    expect(find.text('Compensado con ajuste aprobado'), findsOneWidget);
   });
 }

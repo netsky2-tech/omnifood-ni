@@ -11,6 +11,10 @@ import 'package:pos_app/domain/models/inventory/recipe.dart';
 import 'package:pos_app/domain/models/inventory/supplier.dart';
 import 'package:pos_app/domain/models/inventory/warehouse.dart';
 import 'package:pos_app/domain/models/inventory/purchase.dart';
+import 'package:pos_app/domain/models/inventory/count_session_document.dart';
+import 'package:pos_app/domain/models/inventory/forensic_alert.dart';
+import 'package:pos_app/domain/models/inventory/recipe_version_document.dart';
+import 'package:pos_app/domain/models/inventory/production_order_document.dart';
 import 'package:pos_app/domain/models/audit_log.dart';
 import 'package:pos_app/domain/repositories/audit_repository.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
@@ -49,8 +53,17 @@ class FakeAuditRepository implements AuditRepository {
 class FakeInventoryRepository implements InventoryRepository {
   List<InventoryMovement> unsynced = [];
   List<Purchase> unsyncedPurchases = [];
+  List<CountSessionDocument> unsyncedCountSessions = [];
+  List<RecipeVersionDocument> unsyncedRecipeVersions = [];
+  List<ProductionOrderDocument> unsyncedProductionOrders = [];
+  List<ForensicAlert> forensicAlerts = [];
+  List<ForensicAlert> unsyncedForensicAlerts = [];
   final List<String> syncedIds = [];
   final List<String> syncedPurchaseIds = [];
+  final List<String> syncedCountSessionIds = [];
+  final List<String> syncedRecipeVersionIds = [];
+  final List<String> syncedProductionOrderIds = [];
+  final List<String> syncedForensicAlertIds = [];
 
   @override
   Future<List<InventoryMovement>> getUnsyncedMovements() async => unsynced;
@@ -67,6 +80,56 @@ class FakeInventoryRepository implements InventoryRepository {
   Future<void> markPurchaseAsSynced(String id) async {
     syncedPurchaseIds.add(id);
   }
+
+  @override
+  Future<List<CountSessionDocument>> getUnsyncedCountSessionDocuments() async =>
+      unsyncedCountSessions;
+
+  @override
+  Future<void> markCountSessionDocumentAsSynced(String id) async {
+    syncedCountSessionIds.add(id);
+  }
+
+  @override
+  Future<List<RecipeVersionDocument>> getUnsyncedRecipeVersionDocuments() async =>
+      unsyncedRecipeVersions;
+
+  @override
+  Future<void> markRecipeVersionDocumentAsSynced(String id) async {
+    syncedRecipeVersionIds.add(id);
+  }
+
+  @override
+  Future<List<ProductionOrderDocument>> getUnsyncedProductionOrders() async =>
+      unsyncedProductionOrders;
+
+  @override
+  Future<void> markProductionOrderDocumentAsSynced(String id) async {
+    syncedProductionOrderIds.add(id);
+  }
+
+  @override
+  Future<List<ForensicAlert>> getForensicAlerts() async => forensicAlerts;
+
+  @override
+  Future<void> saveForensicAlert(ForensicAlert alert) async {
+    forensicAlerts = [
+      alert,
+      ...forensicAlerts.where((existing) => existing.id != alert.id),
+    ];
+  }
+
+  @override
+  Future<List<ForensicAlert>> getUnsyncedForensicAlerts() async =>
+      unsyncedForensicAlerts;
+
+  @override
+  Future<void> markForensicAlertAsSynced(String id) async {
+    syncedForensicAlertIds.add(id);
+  }
+
+  @override
+  Future<List<Purchase>> getPurchaseHistory() async => const <Purchase>[];
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -121,6 +184,22 @@ class FakeInventoryRepository implements InventoryRepository {
   Future<void> savePurchase(Purchase purchase) async => throw UnimplementedError();
   @override
   Future<void> queuePurchaseSync(Purchase purchase) async => throw UnimplementedError();
+  @override
+  Future<List<CountSessionDocument>> getCountSessionDocuments() async =>
+      throw UnimplementedError();
+  @override
+  Future<void> saveCountSessionDocument(CountSessionDocument session) async =>
+      throw UnimplementedError();
+  @override
+  Future<List<ProductionOrderDocument>> getProductionOrderDocuments() async => throw UnimplementedError();
+  @override
+  Future<void> saveProductionOrderDocument(ProductionOrderDocument document) async => throw UnimplementedError();
+  @override
+  Future<List<RecipeVersionDocument>> getRecipeVersionDocuments(String productId) async => throw UnimplementedError();
+  @override
+  Future<void> saveRecipeVersionDocument(RecipeVersionDocument document) async => throw UnimplementedError();
+  @override
+  Future<void> replaceRecipesForProduct(String productId, List<Recipe> recipes) async => throw UnimplementedError();
 }
 
 void main() {
@@ -132,6 +211,7 @@ void main() {
   var postCalls = 0;
   DioException? forcedError;
   final List<CapturedPost> capturedPosts = [];
+  final Map<String, Object?> capturedGets = {};
 
   setUp(() {
     mockAuditRepository = FakeAuditRepository();
@@ -140,6 +220,7 @@ void main() {
     postCalls = 0;
     forcedError = null;
     capturedPosts.clear();
+    capturedGets.clear();
     dio = Dio();
     dio.interceptors.add(
       InterceptorsWrapper(
@@ -151,6 +232,17 @@ void main() {
               handler.reject(forcedError!);
               return;
             }
+          }
+          if (options.method.toUpperCase() == 'GET' &&
+              capturedGets.containsKey(options.path)) {
+            handler.resolve(
+              Response<dynamic>(
+                data: capturedGets[options.path],
+                statusCode: 200,
+                requestOptions: options,
+              ),
+            );
+            return;
           }
           handler.resolve(
             Response<dynamic>(
@@ -288,6 +380,123 @@ void main() {
     );
   });
 
+  test('syncs recipe version and production documents before generic inventory replay', () async {
+    mockInventoryRepository.unsyncedRecipeVersions = [
+      RecipeVersionDocument(
+        id: 'rv-1',
+        productId: 'prod-1',
+        productName: 'Vanilla Latte',
+        versionNumber: 8,
+        yieldQuantity: 10,
+        technicalShrinkPct: 6,
+        createdAt: DateTime(2026, 6, 2, 10),
+        components: const [
+          RecipeVersionComponentDocument(
+            ingredientId: 'ins-1',
+            ingredientName: 'Leche',
+            ingredientType: 'INSUMO',
+            grossQuantity: 1,
+            netQuantity: 0.94,
+            technicalShrinkPct: 6,
+          ),
+        ],
+      ),
+    ];
+    mockInventoryRepository.unsyncedProductionOrders = [
+      ProductionOrderDocument(
+        id: 'po-1',
+        recipeVersionId: 'rv-1',
+        recipeProductId: 'prod-1',
+        recipeProductName: 'Vanilla Latte',
+        producedInsumoId: 'ins-1',
+        producedInsumoName: 'Base',
+        plannedQuantity: 10,
+        actualQuantity: 9,
+        producedBatchNumber: 'PB-1',
+        producedExpirationDate: DateTime(2026, 7, 1),
+        operationDate: DateTime(2026, 6, 2, 10),
+        status: 'CLOSED_PENDING_SYNC',
+        movementReferences: const ['mov-prod-1'],
+      ),
+    ];
+    mockInventoryRepository.unsynced = [
+      InventoryMovement(
+        id: 'mov-sale-1',
+        insumoId: 'i-1',
+        type: MovementType.sale,
+        quantity: -1,
+        previousStock: 3,
+        newStock: 2,
+        timestamp: DateTime.parse('2026-06-02T11:00:00Z'),
+      ),
+    ];
+
+    await syncService.triggerManualSync();
+
+    expect(mockInventoryRepository.syncedRecipeVersionIds, contains('rv-1'));
+    expect(mockInventoryRepository.syncedProductionOrderIds, contains('po-1'));
+    expect(mockInventoryRepository.syncedIds, contains('mov-prod-1'));
+    expect(capturedPosts.any((post) => post.path == '/inventory/recipes/versions'), true);
+    expect(capturedPosts.any((post) => post.path == '/inventory/production-orders/close'), true);
+  });
+
+  test('syncs count session documents before generic inventory replay and marks linked adjustments', () async {
+    mockInventoryRepository.unsyncedCountSessions = [
+      CountSessionDocument(
+        id: 'count-1',
+        warehouseId: 'wh-1',
+        warehouseName: 'Bodega Central',
+        cutoffAt: DateTime(2026, 6, 2, 10),
+        status: CountSessionStatus.posted,
+        createdAt: DateTime(2026, 6, 2, 9),
+        updatedAt: DateTime(2026, 6, 2, 10),
+        postedAt: DateTime(2026, 6, 2, 10),
+        movementReferences: const ['count-1:line-1'],
+        lines: const [
+          CountSessionLineDocument(
+            id: 'line-1',
+            insumoId: 'ins-1',
+            insumoName: 'Leche',
+            uom: 'L',
+            theoreticalQuantity: 15,
+            approvedEntryIndex: 1,
+            entries: [
+              CountLineEntryDocument(
+                countedQuantity: 9,
+                countedAt: null,
+                disputed: true,
+              ),
+              CountLineEntryDocument(
+                countedQuantity: 10,
+                countedAt: null,
+              ),
+            ],
+          ),
+        ],
+      ),
+    ];
+    mockInventoryRepository.unsynced = [
+      InventoryMovement(
+        id: 'count-1:line-1',
+        insumoId: 'ins-1',
+        type: MovementType.adjustment,
+        quantity: -5,
+        previousStock: 15,
+        newStock: 10,
+        timestamp: DateTime.parse('2026-06-02T10:00:00Z'),
+      ),
+    ];
+
+    await syncService.triggerManualSync();
+
+    expect(mockInventoryRepository.syncedCountSessionIds, contains('count-1'));
+    expect(mockInventoryRepository.syncedIds, contains('count-1:line-1'));
+    expect(
+      capturedPosts.any((post) => post.path == '/inventory/count-sessions'),
+      true,
+    );
+  });
+
   test('sync standalone inventory record without throwing', () async {
     final outboxRecord = InventoryMovement(
       id: 'mov-30',
@@ -362,5 +571,47 @@ void main() {
 
     expect(firstRecord['idempotencyKey'], secondRecord['idempotencyKey']);
     expect(firstRecord['sourceSequence'], secondRecord['sourceSequence']);
+  });
+
+  test('syncs alert lifecycle documents and refreshes the persistent inbox', () async {
+    mockInventoryRepository.unsyncedForensicAlerts = [
+      ForensicAlert(
+        id: 'alert-1',
+        alertType: 'LOW_STOCK',
+        severity: 'high',
+        message: 'Stock bajo en leche.',
+        createdAt: DateTime(2026, 6, 2, 10),
+        status: 'acknowledged',
+        note: 'Revisado por gerente',
+        actorLabel: 'manager-1',
+        actedAt: DateTime(2026, 6, 2, 10, 5),
+        sourceMovementId: 'mov-1',
+        sourceDocumentId: 'purchase-1',
+        sourceDocumentType: 'PURCHASE',
+        isSynced: false,
+      ),
+    ];
+    mockInventoryRepository.forensicAlerts = const <ForensicAlert>[];
+    capturedGets['/inventory/alerts'] = {
+      'alerts': [
+        {
+          'id': 'alert-remote',
+          'alertType': 'COUNT_VARIANCE',
+          'severity': 'critical',
+          'message': 'Conteo con variación relevante.',
+          'status': 'active',
+          'createdAt': '2026-06-02T11:00:00.000Z',
+          'sourceMovementId': 'mov-9',
+          'sourceDocumentId': 'count-1',
+          'sourceDocumentType': 'COUNT_SESSION',
+        }
+      ],
+    };
+
+    await syncService.triggerManualSync();
+
+    expect(mockInventoryRepository.syncedForensicAlertIds, contains('alert-1'));
+    expect(capturedPosts.any((post) => post.path == '/inventory/alerts/alert-1/lifecycle'), true);
+    expect(mockInventoryRepository.forensicAlerts.single.id, 'alert-remote');
   });
 }

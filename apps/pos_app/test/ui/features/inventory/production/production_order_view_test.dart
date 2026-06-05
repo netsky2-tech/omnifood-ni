@@ -1,27 +1,41 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:provider/provider.dart';
+import 'package:pos_app/domain/models/inventory/inventory_movement.dart';
 import 'package:pos_app/domain/models/inventory/insumo.dart';
+import 'package:pos_app/domain/models/inventory/product.dart';
+import 'package:pos_app/domain/models/inventory/production_order_document.dart';
+import 'package:pos_app/domain/models/inventory/recipe_version_document.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
+import 'package:pos_app/domain/services/inventory/movement_engine.dart';
 import 'package:pos_app/ui/features/inventory/production/production_order_view.dart';
 import 'package:pos_app/ui/features/inventory/production/production_order_view_model.dart';
-import 'package:provider/provider.dart';
 
 class _MockInventoryRepository extends Mock implements InventoryRepository {}
+class _MockMovementEngine extends Mock implements MovementEngine {}
+
+class _FakeProductionOrderDocument extends Fake implements ProductionOrderDocument {}
 
 void main() {
   late _MockInventoryRepository repository;
+  late _MockMovementEngine movementEngine;
   late ProductionOrderViewModel viewModel;
 
-  const insumos = <Insumo>[
-    Insumo(
-      id: 'coffee-base',
-      name: 'Base de Café',
-      consumptionUom: 'kg',
-      stock: 12,
-      averageCost: 90,
-    ),
-  ];
+  final recipeVersion = RecipeVersionDocument(
+    id: 'rv-1',
+    productId: 'prod-syrup',
+    productName: 'Jarabe',
+    versionNumber: 1,
+    yieldQuantity: 4,
+    technicalShrinkPct: 3,
+    createdAt: DateTime(2026, 6, 1),
+    components: const [],
+  );
+
+  setUpAll(() {
+    registerFallbackValue(_FakeProductionOrderDocument());
+  });
 
   Widget buildApp() {
     return MaterialApp(
@@ -34,43 +48,53 @@ void main() {
 
   setUp(() {
     repository = _MockInventoryRepository();
-    when(() => repository.getActiveInsumos()).thenAnswer((_) async => insumos);
+    movementEngine = _MockMovementEngine();
+    when(() => repository.getActiveInsumos()).thenAnswer(
+      (_) async => const [
+        Insumo(id: 'ins-1', name: 'Base de Café', consumptionUom: 'kg', stock: 12, averageCost: 90),
+      ],
+    );
+    when(() => repository.getActiveProducts()).thenAnswer(
+      (_) async => const [
+        Product(id: 'prod-syrup', name: 'Jarabe', uom: 'lt', stock: 0, averageCost: 0, sellPrice: 0),
+      ],
+    );
+    when(() => repository.getRecipeVersionDocuments(any())).thenAnswer((_) async => [recipeVersion]);
+    when(() => repository.getProductionOrderDocuments()).thenAnswer((_) async => const <ProductionOrderDocument>[]);
+    when(() => repository.saveProductionOrderDocument(any())).thenAnswer((_) async {});
+    when(
+      () => movementEngine.recordProduction(
+        recipeProductId: any(named: 'recipeProductId'),
+        producedInsumoId: any(named: 'producedInsumoId'),
+        quantity: any(named: 'quantity'),
+        reason: any(named: 'reason'),
+      ),
+    ).thenAnswer(
+      (_) async => [
+        InventoryMovement(
+          id: 'mov-1',
+          insumoId: 'ins-1',
+          type: MovementType.production,
+          quantity: 1,
+          previousStock: 0,
+          newStock: 1,
+          timestamp: DateTime(2026, 6, 1, 8, 30),
+        ),
+      ],
+    );
     viewModel = ProductionOrderViewModel(
       repository,
+      movementEngine,
       createId: () => 'order-1',
       clock: () => DateTime(2026, 6, 1, 8, 30),
     );
   });
 
-  testWidgets('renders an explicit empty production state with a CTA', (tester) async {
+  testWidgets('renders close-order CTA and operational copy', (tester) async {
     await tester.pumpWidget(buildApp());
     await tester.pumpAndSettle();
 
-    expect(find.text('Todavía no hay órdenes de producción locales.'), findsOneWidget);
-    expect(find.text('INICIAR ORDEN DE PRODUCCIÓN'), findsOneWidget);
-  });
-
-  testWidgets('creates and renders a local production order from the dialog flow', (tester) async {
-    await tester.pumpWidget(buildApp());
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('INICIAR ORDEN DE PRODUCCIÓN'));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byType(DropdownButtonFormField<String>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Base de Café').last);
-    await tester.pumpAndSettle();
-
-    await tester.enterText(find.widgetWithText(TextField, 'Referencia de receta / versión'), 'rv-2026-06');
-    await tester.enterText(find.widgetWithText(TextField, 'Cantidad a producir'), '4.5');
-
-    await tester.tap(find.text('INICIAR'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Base de Café'), findsOneWidget);
-    expect(find.text('Referencia receta: rv-2026-06'), findsOneWidget);
-    expect(find.text('Cantidad: 4.50'), findsOneWidget);
-    expect(find.text('Pendiente BOH'), findsOneWidget);
+    expect(find.text('CONFIRMAR Y CERRAR ORDEN'), findsOneWidget);
+    expect(find.textContaining('Cerrá producción localmente'), findsOneWidget);
   });
 }

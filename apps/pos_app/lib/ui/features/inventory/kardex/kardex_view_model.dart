@@ -2,8 +2,10 @@ import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
+import 'package:pos_app/domain/models/inventory/forensic_alert.dart';
 import 'package:pos_app/domain/models/inventory/insumo.dart';
 import 'package:pos_app/domain/models/inventory/inventory_movement.dart';
+import 'package:pos_app/domain/models/inventory/purchase.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
 
 enum KardexTypeFilter { all, purchase, sale, shrinkage, adjustment, reversal }
@@ -23,6 +25,8 @@ class KardexEntryViewData {
     required this.unitCostLabel,
     required this.totalValueLabel,
     required this.reasonLabel,
+    required this.sourceDocumentLabel,
+    required this.relatedAlertCount,
   });
 
   final String id;
@@ -37,6 +41,8 @@ class KardexEntryViewData {
   final String unitCostLabel;
   final String totalValueLabel;
   final String reasonLabel;
+  final String sourceDocumentLabel;
+  final int relatedAlertCount;
 }
 
 class KardexViewModel extends ChangeNotifier {
@@ -106,9 +112,22 @@ class KardexViewModel extends ChangeNotifier {
       final insumoNames = <String, String>{
         for (final insumo in insumos) insumo.id: insumo.name,
       };
+      final purchases = await _repository.getPurchaseHistory();
+      final purchaseById = <String, Purchase>{
+        for (final purchase in purchases) purchase.id: purchase,
+      };
+      final alerts = await _repository.getForensicAlerts();
+      final alertCountByMovementId = _buildAlertCountByMovement(alerts);
 
       final nextEntries = movements
-          .map((movement) => _toEntry(movement, insumoNames))
+          .map(
+            (movement) => _toEntry(
+              movement,
+              insumoNames,
+              purchaseById,
+              alertCountByMovementId,
+            ),
+          )
           .toList(growable: false)
         ..sort((left, right) => right.timestamp.compareTo(left.timestamp));
 
@@ -164,15 +183,28 @@ class KardexViewModel extends ChangeNotifier {
   KardexEntryViewData _toEntry(
     InventoryMovement movement,
     Map<String, String> insumoNames,
+    Map<String, Purchase> purchaseById,
+    Map<String, int> alertCountByMovementId,
   ) {
     final numberFormat = NumberFormat('0.00');
     final dateFormat = DateFormat('yyyy-MM-dd HH:mm');
+    final purchase = purchaseById[movement.id];
+    final unitCostLabel = purchase == null
+        ? valuationUnavailableLabel
+        : numberFormat.format(purchase.unitCostNio ?? purchase.unitCost);
+    final totalValueLabel = purchase == null
+        ? valuationUnavailableLabel
+        : numberFormat.format(
+            (purchase.unitCostNio ?? purchase.unitCost) * purchase.quantity,
+          );
+    final sourceDocumentLabel = _resolveSourceDocumentLabel(movement, purchase);
 
     return KardexEntryViewData(
       id: movement.id,
       referenceLabel: insumoNames[movement.insumoId] ?? movement.insumoId,
       typeLabel: switch (movement.type) {
         MovementType.purchase => 'Compra',
+        MovementType.production => 'Producción',
         MovementType.sale => 'Venta',
         MovementType.shrinkage => 'Merma',
         MovementType.adjustment => 'Ajuste',
@@ -184,11 +216,42 @@ class KardexViewModel extends ChangeNotifier {
       quantityLabel: numberFormat.format(movement.quantity),
       stockAfterLabel: numberFormat.format(movement.newStock),
       stockBeforeLabel: numberFormat.format(movement.previousStock),
-      unitCostLabel: valuationUnavailableLabel,
-      totalValueLabel: valuationUnavailableLabel,
+      unitCostLabel: unitCostLabel,
+      totalValueLabel: totalValueLabel,
       reasonLabel: movement.reason?.trim().isNotEmpty == true
           ? movement.reason!.trim()
           : 'Sin detalle operativo',
+      sourceDocumentLabel: sourceDocumentLabel,
+      relatedAlertCount: alertCountByMovementId[movement.id] ?? 0,
     );
+  }
+
+  Map<String, int> _buildAlertCountByMovement(List<ForensicAlert> alerts) {
+    final counts = <String, int>{};
+    for (final alert in alerts) {
+      final movementId = alert.sourceMovementId ?? alert.metadata?['sourceMovementId']?.toString();
+      if (movementId == null || movementId.isEmpty) {
+        continue;
+      }
+      counts[movementId] = (counts[movementId] ?? 0) + 1;
+    }
+    return counts;
+  }
+
+  String _resolveSourceDocumentLabel(
+    InventoryMovement movement,
+    Purchase? purchase,
+  ) {
+    if (purchase != null) {
+      return 'PURCHASE · ${purchase.id}';
+    }
+    if (movement.reason?.startsWith('COUNT_SESSION:') ?? false) {
+      return 'COUNT_SESSION · ${movement.reason!.split('|').first.replaceFirst('COUNT_SESSION:', '')}';
+    }
+    if (movement.reason?.startsWith('PRODUCTION_') ?? false) {
+      final suffix = movement.reason!.split(':').last;
+      return 'PRODUCTION · $suffix';
+    }
+    return 'Sin documento ligado';
   }
 }

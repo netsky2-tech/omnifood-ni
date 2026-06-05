@@ -2,41 +2,12 @@ import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
+import 'package:pos_app/domain/models/inventory/count_session_document.dart';
 import 'package:pos_app/domain/models/inventory/insumo.dart';
-import 'package:pos_app/domain/models/inventory/inventory_movement.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
 import 'package:pos_app/domain/services/inventory/movement_engine.dart';
 
 typedef PhysicalCountClock = DateTime Function();
-
-@immutable
-class PhysicalCountHistoryEntry {
-  const PhysicalCountHistoryEntry({
-    required this.id,
-    required this.insumoId,
-    required this.insumoName,
-    required this.expectedQuantity,
-    required this.countedQuantity,
-    required this.variance,
-    required this.uom,
-    required this.reason,
-    required this.notes,
-    required this.appliedAt,
-    required this.appliedAtLabel,
-  });
-
-  final String id;
-  final String insumoId;
-  final String insumoName;
-  final double expectedQuantity;
-  final double countedQuantity;
-  final double variance;
-  final String uom;
-  final String reason;
-  final String notes;
-  final DateTime appliedAt;
-  final String appliedAtLabel;
-}
 
 class PhysicalCountViewModel extends ChangeNotifier {
   PhysicalCountViewModel(
@@ -45,22 +16,37 @@ class PhysicalCountViewModel extends ChangeNotifier {
     PhysicalCountClock? clock,
   }) : _clock = clock ?? DateTime.now;
 
-  static const String _reasonPrefix = 'Conteo físico';
-
   final InventoryRepository _repository;
   final MovementEngine _movementEngine;
   final PhysicalCountClock _clock;
 
-  final List<PhysicalCountHistoryEntry> _history = <PhysicalCountHistoryEntry>[];
+  final List<CountSessionDocument> _sessions = <CountSessionDocument>[];
   List<Insumo> _availableInsumos = <Insumo>[];
+  String? _selectedSessionId;
   bool _isLoading = false;
   String? _errorMessage;
   String? _statusMessage;
 
-  UnmodifiableListView<PhysicalCountHistoryEntry> get history =>
-      UnmodifiableListView<PhysicalCountHistoryEntry>(_history);
+  UnmodifiableListView<CountSessionDocument> get sessions =>
+      UnmodifiableListView<CountSessionDocument>(_sessions);
 
   List<Insumo> get availableInsumos => List<Insumo>.unmodifiable(_availableInsumos);
+
+  CountSessionDocument? get selectedSession {
+    if (_sessions.isEmpty) {
+      return null;
+    }
+    if (_selectedSessionId == null) {
+      return _sessions.first;
+    }
+    for (final session in _sessions) {
+      if (session.id == _selectedSessionId) {
+        return session;
+      }
+    }
+    return _sessions.first;
+  }
+
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   String? get statusMessage => _statusMessage;
@@ -72,147 +58,204 @@ class PhysicalCountViewModel extends ChangeNotifier {
 
     try {
       final insumos = await _repository.getActiveInsumos();
-      final movements = await _repository.getAllMovements();
-      final insumoMap = <String, Insumo>{for (final insumo in insumos) insumo.id: insumo};
-      final adjustments = movements
-          .where((movement) => movement.type == MovementType.adjustment)
-          .map((movement) => _toHistoryEntry(movement, insumoMap[movement.insumoId]))
-          .toList(growable: false)
-        ..sort((left, right) => right.appliedAt.compareTo(left.appliedAt));
+      final sessions = await _repository.getCountSessionDocuments();
+      sessions.sort((left, right) => right.updatedAt.compareTo(left.updatedAt));
 
       _availableInsumos = insumos;
-      _history
+      _sessions
         ..clear()
-        ..addAll(adjustments);
+        ..addAll(sessions);
+      _selectedSessionId ??= _sessions.isEmpty ? null : _sessions.first.id;
       _statusMessage ??=
-          'Modo local: cada conteo aplica un movimiento compensatorio sólo en SQLite/Kardex de esta terminal.';
+          'Modo local: cada sesión congela su baseline en SQLite y sincroniza el documento BOH después.';
     } catch (error) {
-      _errorMessage = 'No se pudo cargar el historial local de conteos: $error';
+      _errorMessage = 'No se pudo cargar el workspace local de conteos: $error';
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  double theoreticalQuantityFor(String insumoId) {
-    for (final insumo in _availableInsumos) {
-      if (insumo.id == insumoId) {
-        return insumo.stock;
-      }
-    }
-    return 0;
+  Future<void> startSession({
+    required String warehouseId,
+    required String warehouseName,
+  }) async {
+    final now = _clock();
+    final session = CountSessionDocument(
+      id: 'count-${now.microsecondsSinceEpoch}',
+      warehouseId: warehouseId,
+      warehouseName: warehouseName,
+      cutoffAt: now,
+      status: CountSessionStatus.open,
+      createdAt: now,
+      updatedAt: now,
+      lines: _availableInsumos
+          .map(
+            (insumo) => CountSessionLineDocument(
+              id: '${now.microsecondsSinceEpoch}-${insumo.id}',
+              insumoId: insumo.id,
+              insumoName: insumo.name,
+              uom: insumo.consumptionUom,
+              theoreticalQuantity: insumo.stock,
+            ),
+          )
+          .toList(growable: false),
+    );
+
+    await _repository.saveCountSessionDocument(session);
+    _selectedSessionId = session.id;
+    await loadInitialData();
+  }
+
+  void selectSession(String sessionId) {
+    _selectedSessionId = sessionId;
+    notifyListeners();
   }
 
   double calculateVariance({
     required double theoreticalQuantity,
     required double countedQuantity,
-  }) {
-    return countedQuantity - theoreticalQuantity;
-  }
+  }) =>
+      countedQuantity - theoreticalQuantity;
 
-  Future<void> applyPhysicalCount({
-    required String insumoId,
+  Future<void> recordCount({
+    required String sessionId,
+    required String lineId,
     required double countedQuantity,
-    required String reason,
     String notes = '',
+    bool disputed = false,
   }) async {
-    if (insumoId.trim().isEmpty) {
-      throw ArgumentError('Insumo is required');
-    }
     if (countedQuantity < 0) {
       throw ArgumentError('Counted quantity must be zero or positive');
     }
 
-    final normalizedReason = reason.trim();
-    if (normalizedReason.isEmpty) {
-      throw ArgumentError('Reason is required');
-    }
+    final session = _requireSession(sessionId);
+    final updatedLines = session.lines.map((line) {
+      if (line.id != lineId) {
+        return line;
+      }
 
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
+      final updatedEntries = List<CountLineEntryDocument>.from(line.entries)
+        ..add(
+          CountLineEntryDocument(
+            countedQuantity: countedQuantity,
+            countedAt: _clock(),
+            notes: notes.trim().isEmpty ? null : notes.trim(),
+            actorLabel: 'Operador local',
+            disputed: disputed,
+          ),
+        );
 
-    try {
-      final insumo = await _repository.getInsumoById(insumoId);
-      if (insumo == null) {
-        throw ArgumentError('Insumo not found');
+      return line.copyWith(
+        approvedEntryIndex: disputed ? line.approvedEntryIndex : updatedEntries.length - 1,
+        entries: updatedEntries,
+      );
+    }).toList(growable: false);
+
+    await _repository.saveCountSessionDocument(
+      session.copyWith(
+        status: updatedLines.any((line) => line.hasDispute)
+            ? CountSessionStatus.recount
+            : CountSessionStatus.counting,
+        updatedAt: _clock(),
+        lines: updatedLines,
+        isSynced: false,
+      ),
+    );
+
+    await loadInitialData();
+  }
+
+  Future<void> requestApproval(String sessionId) async {
+    final session = _requireSession(sessionId);
+    await _repository.saveCountSessionDocument(
+      session.copyWith(
+        status: CountSessionStatus.approvalPending,
+        updatedAt: _clock(),
+        isSynced: false,
+      ),
+    );
+    await loadInitialData();
+  }
+
+  Future<void> approveSession(String sessionId) async {
+    final session = _requireSession(sessionId);
+    final updatedLines = session.lines
+        .map((line) => line.approvedEntryIndex != null || line.entries.isEmpty
+            ? line
+            : line.copyWith(approvedEntryIndex: line.entries.length - 1))
+        .toList(growable: false);
+
+    await _repository.saveCountSessionDocument(
+      session.copyWith(
+        status: CountSessionStatus.approved,
+        updatedAt: _clock(),
+        lines: updatedLines,
+        isSynced: false,
+      ),
+    );
+    await loadInitialData();
+  }
+
+  Future<void> postSession(String sessionId) async {
+    final session = _requireSession(sessionId);
+    final movementReferences = <String>[];
+
+    for (final line in session.lines) {
+      final approvedCount = line.approvedCountedQuantity;
+      if (approvedCount == null) {
+        continue;
       }
 
       final variance = calculateVariance(
-        theoreticalQuantity: insumo.stock,
-        countedQuantity: countedQuantity,
+        theoreticalQuantity: line.theoreticalQuantity,
+        countedQuantity: approvedCount,
       );
       if (variance == 0) {
-        throw ArgumentError('No variance to compensate');
+        continue;
       }
 
-      final normalizedNotes = notes.trim();
+      final movementId = '${session.id}:${line.id}';
       await _movementEngine.recordAdjustment(
-        insumoId,
+        line.insumoId,
         variance,
-        buildAdjustmentReason(reason: normalizedReason, notes: normalizedNotes),
+        buildPostingReason(sessionId: session.id, lineId: line.id),
+        movementId: movementId,
       );
-
-      _statusMessage =
-          'Ajuste compensatorio aplicado localmente a las ${DateFormat('HH:mm').format(_clock())}. Pendiente de conciliación BOH global.';
-      await loadInitialData();
-    } catch (error) {
-      _errorMessage = 'No se pudo aplicar el conteo físico: $error';
-      rethrow;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
+      movementReferences.add(movementId);
     }
-  }
 
-  String buildAdjustmentReason({
-    required String reason,
-    String notes = '',
-  }) {
-    final normalizedReason = reason.trim();
-    final normalizedNotes = notes.trim();
-    if (normalizedNotes.isEmpty) {
-      return '$_reasonPrefix | Motivo: $normalizedReason';
+    if (movementReferences.isEmpty) {
+      throw ArgumentError('No variance to compensate');
     }
-    return '$_reasonPrefix | Motivo: $normalizedReason | Notas: $normalizedNotes';
-  }
 
-  PhysicalCountHistoryEntry _toHistoryEntry(
-    InventoryMovement movement,
-    Insumo? insumo,
-  ) {
-    final dateFormat = DateFormat('yyyy-MM-dd HH:mm');
-    final detail = _parseReason(movement.reason ?? _reasonPrefix);
-
-    return PhysicalCountHistoryEntry(
-      id: movement.id,
-      insumoId: movement.insumoId,
-      insumoName: insumo?.name ?? movement.insumoId,
-      expectedQuantity: movement.previousStock,
-      countedQuantity: movement.newStock,
-      variance: movement.quantity,
-      uom: insumo?.consumptionUom ?? '',
-      reason: detail.reason,
-      notes: detail.notes,
-      appliedAt: movement.timestamp,
-      appliedAtLabel: dateFormat.format(movement.timestamp.toLocal()),
+    _statusMessage =
+        'Sesión posteada a las ${DateFormat('HH:mm').format(_clock())}. Pendiente de replay BOH.';
+    await _repository.saveCountSessionDocument(
+      session.copyWith(
+        status: CountSessionStatus.posted,
+        updatedAt: _clock(),
+        postedAt: _clock(),
+        movementReferences: movementReferences,
+        isSynced: false,
+      ),
     );
+    await loadInitialData();
   }
 
-  ({String reason, String notes}) _parseReason(String rawReason) {
-    final parts = rawReason.split('|').map((part) => part.trim()).toList(growable: false);
-    var reason = rawReason.trim();
-    var notes = '';
+  String buildPostingReason({
+    required String sessionId,
+    required String lineId,
+  }) {
+    return 'COUNT_SESSION:$sessionId|LINE:$lineId|AJUSTE_CONTEO';
+  }
 
-    for (final part in parts) {
-      if (part.startsWith('Motivo:')) {
-        reason = part.replaceFirst('Motivo:', '').trim();
-      }
-      if (part.startsWith('Notas:')) {
-        notes = part.replaceFirst('Notas:', '').trim();
+  CountSessionDocument _requireSession(String sessionId) {
+    for (final session in _sessions) {
+      if (session.id == sessionId) {
+        return session;
       }
     }
-
-    return (reason: reason, notes: notes);
+    throw ArgumentError('Count session not found');
   }
 }

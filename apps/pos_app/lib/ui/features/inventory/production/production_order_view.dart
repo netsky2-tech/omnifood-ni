@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../../domain/models/inventory/production_order.dart';
+
+import '../../../../../domain/models/inventory/recipe_version_document.dart';
+import 'production_order_detail_card.dart';
 import 'production_order_view_model.dart';
 
 class ProductionOrderView extends StatefulWidget {
@@ -27,6 +29,7 @@ class _ProductionOrderViewState extends State<ProductionOrderView> {
         builder: (context, viewModel, child) {
           if (viewModel.isLoading &&
               viewModel.availableInsumos.isEmpty &&
+              viewModel.availableRecipeVersions.isEmpty &&
               viewModel.orders.isEmpty) {
             return const Center(child: CircularProgressIndicator());
           }
@@ -37,20 +40,19 @@ class _ProductionOrderViewState extends State<ProductionOrderView> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Card(
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    side: BorderSide(color: Theme.of(context).colorScheme.outline),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Órdenes de producción',
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
+                        Text('Cierre operativo', style: Theme.of(context).textTheme.titleLarge),
                         const SizedBox(height: 8),
-                        Text(
-                          viewModel.statusMessage ??
-                              'Creá una orden local para dejar lista la operación BOH.',
-                        ),
+                        Text(viewModel.statusMessage ?? 'Todavía no hay cierres operativos locales.'),
                         if (viewModel.errorMessage != null) ...[
                           const SizedBox(height: 8),
                           Text(
@@ -59,12 +61,12 @@ class _ProductionOrderViewState extends State<ProductionOrderView> {
                           ),
                         ],
                         const SizedBox(height: 16),
-                        ElevatedButton.icon(
-                          onPressed: viewModel.availableInsumos.isEmpty || viewModel.isLoading
+                        FilledButton.icon(
+                          onPressed: viewModel.availableRecipeVersions.isEmpty || viewModel.availableInsumos.isEmpty
                               ? null
-                              : () => _showCreateOrderDialog(context, viewModel),
-                          icon: const Icon(Icons.playlist_add),
-                          label: const Text('INICIAR ORDEN DE PRODUCCIÓN'),
+                              : () => _showCloseOrderDialog(context, viewModel),
+                          icon: const Icon(Icons.task_alt),
+                          label: const Text('CONFIRMAR Y CERRAR ORDEN'),
                         ),
                       ],
                     ),
@@ -73,17 +75,13 @@ class _ProductionOrderViewState extends State<ProductionOrderView> {
                 const SizedBox(height: 16),
                 Expanded(
                   child: viewModel.orders.isEmpty
-                      ? _EmptyProductionState(canCreate: viewModel.availableInsumos.isNotEmpty)
+                      ? const Center(child: Text('No hay órdenes de producción cerradas localmente.'))
                       : ListView.separated(
                           itemCount: viewModel.orders.length,
                           separatorBuilder: (context, index) => const SizedBox(height: 12),
-                          itemBuilder: (context, index) {
-                            final order = viewModel.orders[index];
-                            return _ProductionOrderCard(
-                              order: order,
-                              insumoName: viewModel.resolveInsumoName(order.producedInsumoId),
-                            );
-                          },
+                          itemBuilder: (context, index) => ProductionOrderDetailCard(
+                            order: viewModel.orders[index],
+                          ),
                         ),
                 ),
               ],
@@ -94,26 +92,51 @@ class _ProductionOrderViewState extends State<ProductionOrderView> {
     );
   }
 
-  Future<void> _showCreateOrderDialog(
+  Future<void> _showCloseOrderDialog(
     BuildContext context,
     ProductionOrderViewModel viewModel,
   ) async {
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
-    final recipeVersionController = TextEditingController();
-    final quantityController = TextEditingController();
+    RecipeVersionDocument? selectedVersion;
     String? producedInsumoId;
-    String? validationMessage;
+    final plannedController = TextEditingController(text: '1');
+    final actualController = TextEditingController(text: '1');
+    final batchController = TextEditingController();
+    final expiryController = TextEditingController(text: DateTime.now().add(const Duration(days: 30)).toIso8601String().split('T').first);
+    final varianceController = TextEditingController();
 
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Nueva orden de producción'),
-          content: SingleChildScrollView(
+        builder: (context, setState) => Dialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                Text('Cerrar producción', style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 16),
+                SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                  DropdownButtonFormField<RecipeVersionDocument>(
+                  initialValue: selectedVersion,
+                  decoration: const InputDecoration(labelText: 'Versión de receta'),
+                  items: viewModel.availableRecipeVersions
+                      .map(
+                        (version) => DropdownMenuItem<RecipeVersionDocument>(
+                          value: version,
+                          child: Text('${version.productName} • V${version.versionNumber}'),
+                        ),
+                      )
+                      .toList(growable: false),
+                  onChanged: (value) => setState(() => selectedVersion = value),
+                ),
+                const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
+                  initialValue: producedInsumoId,
                   decoration: const InputDecoration(labelText: 'Insumo producido'),
                   items: viewModel.availableInsumos
                       .map(
@@ -122,128 +145,79 @@ class _ProductionOrderViewState extends State<ProductionOrderView> {
                           child: Text(insumo.name),
                         ),
                       )
-                      .toList(),
+                      .toList(growable: false),
                   onChanged: (value) => setState(() => producedInsumoId = value),
                 ),
                 const SizedBox(height: 12),
-                TextField(
-                  controller: recipeVersionController,
-                  decoration: const InputDecoration(
-                    labelText: 'Referencia de receta / versión',
-                    helperText: 'Capturá el identificador operativo mientras llega la integración completa.',
-                  ),
-                ),
+                      TextField(
+                        controller: plannedController,
+                        decoration: const InputDecoration(labelText: 'Cantidad planificada'),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
+                      ),
                 const SizedBox(height: 12),
-                TextField(
-                  controller: quantityController,
-                  decoration: const InputDecoration(labelText: 'Cantidad a producir'),
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                ),
-                if (validationMessage != null) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    validationMessage!,
-                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                      TextField(
+                        controller: actualController,
+                        decoration: const InputDecoration(labelText: 'Cantidad real recibida'),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
+                      ),
+                const SizedBox(height: 12),
+                      TextField(
+                  controller: batchController,
+                  decoration: const InputDecoration(labelText: 'Lote de salida'),
+                      ),
+                const SizedBox(height: 12),
+                      TextField(
+                  controller: expiryController,
+                  decoration: const InputDecoration(labelText: 'Expiración del lote'),
+                      ),
+                const SizedBox(height: 12),
+                      TextField(
+                  controller: varianceController,
+                  decoration: const InputDecoration(labelText: 'Motivo de variación'),
+                      ),
+                    ],
                   ),
-                ],
+                ),
+                const SizedBox(height: 16),
+                OutlinedButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('CANCELAR'),
+                ),
+                const SizedBox(height: 8),
+                FilledButton(
+                  onPressed: selectedVersion == null || producedInsumoId == null || batchController.text.trim().isEmpty
+                      ? null
+                      : () async {
+                          await viewModel.closeOrderLocally(
+                            recipeVersion: selectedVersion!,
+                            producedInsumoId: producedInsumoId!,
+                            plannedQuantity: double.tryParse(plannedController.text.trim()) ?? 0,
+                            actualQuantity: double.tryParse(actualController.text.trim()) ?? 0,
+                            producedBatchNumber: batchController.text.trim(),
+                            producedExpirationDate: DateTime.parse(expiryController.text.trim()),
+                            varianceReason: varianceController.text.trim().isEmpty
+                                ? null
+                                : varianceController.text.trim(),
+                          );
+                          if (dialogContext.mounted) {
+                            Navigator.pop(dialogContext);
+                          }
+                        },
+                  child: const Text('CERRAR ORDEN'),
+                ),
               ],
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('CANCELAR'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final parsedQuantity = double.tryParse(quantityController.text.trim()) ?? 0;
-                if (producedInsumoId == null ||
-                    recipeVersionController.text.trim().isEmpty ||
-                    parsedQuantity <= 0) {
-                  setState(() {
-                    validationMessage = 'Completá insumo, referencia de receta y una cantidad válida.';
-                  });
-                  return;
-                }
-
-                await viewModel.startLocalOrder(
-                  producedInsumoId: producedInsumoId!,
-                  recipeVersionId: recipeVersionController.text,
-                  orderQuantity: parsedQuantity,
-                );
-
-                if (dialogContext.mounted) {
-                  Navigator.pop(dialogContext);
-                  scaffoldMessenger.showSnackBar(
-                    const SnackBar(content: Text('Orden de producción registrada localmente.')),
-                  );
-                }
-              },
-              child: const Text('INICIAR'),
-            ),
-          ],
         ),
       ),
     );
 
-  }
-}
-
-class _EmptyProductionState extends StatelessWidget {
-  const _EmptyProductionState({required this.canCreate});
-
-  final bool canCreate;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.factory_outlined, size: 56, color: Theme.of(context).colorScheme.outline),
-          const SizedBox(height: 12),
-          Text(
-            'Todavía no hay órdenes de producción locales.',
-            style: Theme.of(context).textTheme.titleMedium,
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            canCreate
-                ? 'Usá el CTA superior para iniciar la primera orden usable de BOH.'
-                : 'No hay insumos disponibles para iniciar producción todavía.',
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ProductionOrderCard extends StatelessWidget {
-  const _ProductionOrderCard({required this.order, required this.insumoName});
-
-  final ProductionOrder order;
-  final String insumoName;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(insumoName, style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Text('Referencia receta: ${order.recipeVersionId}'),
-            Text('Cantidad: ${order.orderQuantity.toStringAsFixed(order.orderQuantity.truncateToDouble() == order.orderQuantity ? 0 : 2)}'),
-            Text('Fecha operativa: ${order.operationDate.toLocal()}'),
-            const SizedBox(height: 8),
-            const Chip(label: Text('Pendiente BOH')),
-          ],
-        ),
-      ),
-    );
+    plannedController.dispose();
+    actualController.dispose();
+    batchController.dispose();
+    expiryController.dispose();
+    varianceController.dispose();
   }
 }
