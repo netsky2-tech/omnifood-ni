@@ -12,6 +12,8 @@ class Insumo with _$Insumo {
     required double stock,
     required double averageCost,
     double? parLevel,
+    double? stockMin,
+    double? stockMax,
     @JsonKey(name: 'warehouse_id') String? warehouseId,
     @Default(false) @JsonKey(name: 'is_perishable') bool isPerishable,
   }) = _Insumo;

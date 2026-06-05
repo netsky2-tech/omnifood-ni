@@ -22,6 +22,8 @@ class InventoryMapper {
       stock: entity.stock,
       averageCost: entity.averageCost,
       parLevel: entity.parLevel,
+      stockMin: entity.stockMin,
+      stockMax: entity.stockMax,
       warehouseId: entity.warehouseId,
       isPerishable: entity.isPerishable,
     );
@@ -35,6 +37,8 @@ class InventoryMapper {
       stock: domain.stock,
       averageCost: domain.averageCost,
       parLevel: domain.parLevel,
+      stockMin: domain.stockMin,
+      stockMax: domain.stockMax,
       warehouseId: domain.warehouseId,
       isPerishable: domain.isPerishable,
     );
@@ -160,6 +164,9 @@ class InventoryMapper {
       isActive: entity.isActive,
       sku: entity.sku,
       barcode: entity.barcode,
+      category: entity.category,
+      isPrepared: entity.isPrepared,
+      createdAt: entity.createdAt,
       variants: variants,
       availableModifiers: modifiers,
     );
@@ -176,6 +183,9 @@ class InventoryMapper {
       isActive: domain.isActive,
       sku: domain.sku,
       barcode: domain.barcode,
+      category: domain.category,
+      isPrepared: domain.isPrepared,
+      createdAt: domain.createdAt,
     );
   }
 

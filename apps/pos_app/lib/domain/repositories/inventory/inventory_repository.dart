@@ -4,10 +4,14 @@ import '../../models/inventory/product.dart';
 import '../../models/inventory/batch.dart';
 import '../../models/inventory/uom_conversion.dart';
 import '../../models/inventory/recipe.dart';
+import '../../models/inventory/recipe_version_document.dart';
+import '../../models/inventory/count_session_document.dart';
+import '../../models/inventory/forensic_alert.dart';
 import '../../models/inventory/inventory_movement.dart';
 import '../../models/inventory/supplier.dart';
 import '../../models/inventory/warehouse.dart';
 import '../../models/inventory/purchase.dart';
+import '../../models/inventory/production_order_document.dart';
 
 abstract class InventoryRepository {
   AppDatabase get database;
@@ -22,6 +26,7 @@ abstract class InventoryRepository {
   // Products
   Future<List<Product>> getActiveProducts();
   Future<Product?> getProductById(String id);
+  Future<void> saveProduct(Product product);
   Future<void> saveProductOptions({
     required String productId,
     required List<ProductVariant> variants,
@@ -31,6 +36,16 @@ abstract class InventoryRepository {
   Future<List<Recipe>> getRecipeByProductId(String productId);
   Future<void> saveRecipe(Recipe recipe);
   Future<void> deleteRecipe(String id);
+  Future<void> replaceRecipesForProduct(String productId, List<Recipe> recipes);
+  Future<List<RecipeVersionDocument>> getRecipeVersionDocuments(String productId);
+  Future<void> saveRecipeVersionDocument(RecipeVersionDocument document);
+  Future<List<RecipeVersionDocument>> getUnsyncedRecipeVersionDocuments();
+  Future<void> markRecipeVersionDocumentAsSynced(String id);
+
+  Future<List<CountSessionDocument>> getCountSessionDocuments();
+  Future<void> saveCountSessionDocument(CountSessionDocument session);
+  Future<List<CountSessionDocument>> getUnsyncedCountSessionDocuments();
+  Future<void> markCountSessionDocumentAsSynced(String id);
 
   Future<void> saveMovement(InventoryMovement movement);
   Future<List<InventoryMovement>> getAllMovements();
@@ -52,10 +67,22 @@ abstract class InventoryRepository {
   // UOM Conversions
   Future<List<UomConversion>> getConversionsByInsumoId(String insumoId);
   Future<void> saveConversion(UomConversion conversion);
+  Future<void> deleteConversion(String id);
 
   // Purchases
   Future<void> savePurchase(Purchase purchase);
   Future<void> queuePurchaseSync(Purchase purchase);
+  Future<List<Purchase>> getPurchaseHistory();
   Future<List<Purchase>> getUnsyncedPurchases();
   Future<void> markPurchaseAsSynced(String id);
+
+  Future<List<ForensicAlert>> getForensicAlerts();
+  Future<void> saveForensicAlert(ForensicAlert alert);
+  Future<List<ForensicAlert>> getUnsyncedForensicAlerts();
+  Future<void> markForensicAlertAsSynced(String id);
+
+  Future<List<ProductionOrderDocument>> getProductionOrderDocuments();
+  Future<void> saveProductionOrderDocument(ProductionOrderDocument document);
+  Future<List<ProductionOrderDocument>> getUnsyncedProductionOrders();
+  Future<void> markProductionOrderDocumentAsSynced(String id);
 }

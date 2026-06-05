@@ -99,19 +99,25 @@ void main() async {
     deviceId,
   );
 
-  final alertService = AlertServiceImpl();
   final inventoryRepository = InventoryRepositoryImpl(
     insumoDao: database.insumoDao,
     recipeDao: database.recipeDao,
+    recipeVersionDocumentDao: database.recipeVersionDocumentDao,
+    countSessionDao: database.countSessionDao,
+    countLineDao: database.countLineDao,
+    forensicAlertDao: database.forensicAlertDao,
     movementDao: database.movementDao,
     supplierDao: database.supplierDao,
     warehouseDao: database.warehouseDao,
     uomConversionDao: database.uomConversionDao,
     batchDao: database.batchDao,
     purchaseDao: database.purchaseDao,
+    productionOrderDocumentDao: database.productionOrderDocumentDao,
     dio: dio,
     database: database,
   );
+  final alertService = AlertServiceImpl(inventoryRepository);
+  await alertService.hydrateInbox();
   final movementEngine = MovementEngineImpl(inventoryRepository, alertService);
 
   // Sales Module Initialization
@@ -154,13 +160,13 @@ void main() async {
         ChangeNotifierProvider(create: (_) => LockScreenViewModel(authRepository, database.userDao)),
         ChangeNotifierProvider(create: (_) => SupplierViewModel(inventoryRepository)),
         ChangeNotifierProvider(create: (_) => WarehouseViewModel(inventoryRepository)),
-        ChangeNotifierProvider(create: (_) => InsumoViewModel(inventoryRepository)),
+        ChangeNotifierProvider(create: (_) => InsumoViewModel(inventoryRepository, alertService: alertService)),
         ChangeNotifierProvider(create: (_) => PurchaseViewModel(inventoryRepository, movementEngine)),
         ChangeNotifierProvider(create: (_) => ShrinkageViewModel(inventoryRepository, movementEngine)),
         ChangeNotifierProvider(create: (_) => ForensicAlertViewModel(alertService)),
         ChangeNotifierProvider(create: (_) => PhysicalCountViewModel(inventoryRepository, movementEngine)),
         ChangeNotifierProvider(create: (_) => KardexViewModel(inventoryRepository)),
-        ChangeNotifierProvider(create: (_) => ProductionOrderViewModel(inventoryRepository)),
+        ChangeNotifierProvider(create: (_) => ProductionOrderViewModel(inventoryRepository, movementEngine)),
         ChangeNotifierProvider(create: (_) => UserManagementViewModel(authRepository)),
         ChangeNotifierProvider(create: (_) => RecipeViewModel(inventoryRepository)),
         ChangeNotifierProvider(create: (_) => DgiReportViewModel(salesRepository, database)),
@@ -302,15 +308,31 @@ class MyApp extends StatelessWidget {
             featureLabel: 'Inventario BOH',
             child: BohNavigationShellView(),
           ),
-          '/inventory/items': (context) => const InsumoView(),
-          '/inventory/suppliers': (context) => const SupplierView(),
-          '/inventory/warehouses': (context) => const WarehouseView(),
+          '/inventory/items': (context) => const BohRouteGuard(
+            permission: BohPermission.shell,
+            featureLabel: 'Ítems BOH',
+            child: InsumoView(),
+          ),
+          '/inventory/suppliers': (context) => const BohRouteGuard(
+            permission: BohPermission.shell,
+            featureLabel: 'Proveedores BOH',
+            child: SupplierView(),
+          ),
+          '/inventory/warehouses': (context) => const BohRouteGuard(
+            permission: BohPermission.shell,
+            featureLabel: 'Almacenes BOH',
+            child: WarehouseView(),
+          ),
           '/inventory/purchases': (context) => const BohRouteGuard(
             permission: BohPermission.purchasesView,
             featureLabel: 'Compras BOH',
             child: PurchaseView(),
           ),
-          '/inventory/shrinkage': (context) => const ShrinkageView(),
+          '/inventory/shrinkage': (context) => const BohRouteGuard(
+            permission: BohPermission.shrinkageView,
+            featureLabel: 'Mermas BOH',
+            child: ShrinkageView(),
+          ),
           '/inventory/alerts': (context) => const BohRouteGuard(
             permission: BohPermission.alertsView,
             featureLabel: 'Alertas BOH',

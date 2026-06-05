@@ -86,6 +86,14 @@ class _$AppDatabase extends AppDatabase {
 
   RecipeDao? _recipeDaoInstance;
 
+  RecipeVersionDocumentDao? _recipeVersionDocumentDaoInstance;
+
+  CountSessionDao? _countSessionDaoInstance;
+
+  CountLineDao? _countLineDaoInstance;
+
+  ForensicAlertDao? _forensicAlertDaoInstance;
+
   MovementDao? _movementDaoInstance;
 
   InventoryDao? _inventoryDaoInstance;
@@ -95,6 +103,8 @@ class _$AppDatabase extends AppDatabase {
   WarehouseDao? _warehouseDaoInstance;
 
   PurchaseDao? _purchaseDaoInstance;
+
+  ProductionOrderDocumentDao? _productionOrderDocumentDaoInstance;
 
   UomConversionDao? _uomConversionDaoInstance;
 
@@ -122,7 +132,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 15,
+      version: 20,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -146,15 +156,23 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `local_configs` (`key` TEXT NOT NULL, `value` TEXT NOT NULL, `description` TEXT, PRIMARY KEY (`key`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `insumos` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `consumption_uom` TEXT NOT NULL, `warehouse_id` TEXT, `is_perishable` INTEGER NOT NULL, `stock` REAL NOT NULL, `average_cost` REAL NOT NULL, `par_level` REAL, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `insumos` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `consumption_uom` TEXT NOT NULL, `warehouse_id` TEXT, `is_perishable` INTEGER NOT NULL, `stock` REAL NOT NULL, `average_cost` REAL NOT NULL, `par_level` REAL, `stock_min` REAL, `stock_max` REAL, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `products` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `uom` TEXT NOT NULL, `stock` REAL NOT NULL, `average_cost` REAL NOT NULL, `sell_price` REAL NOT NULL, `is_active` INTEGER NOT NULL, `sku` TEXT, `barcode` TEXT, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `products` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `uom` TEXT NOT NULL, `stock` REAL NOT NULL, `average_cost` REAL NOT NULL, `sell_price` REAL NOT NULL, `is_active` INTEGER NOT NULL, `sku` TEXT, `barcode` TEXT, `category` TEXT, `is_prepared` INTEGER NOT NULL, `created_at` TEXT, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `product_variants` (`id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `name` TEXT NOT NULL, `price_adjustment` REAL NOT NULL, FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `product_modifiers` (`id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `name` TEXT NOT NULL, `extra_price` REAL NOT NULL, FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `recipes` (`id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `ingredient_id` TEXT NOT NULL, `ingredient_type` TEXT NOT NULL, `quantity` REAL NOT NULL, FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `recipe_version_documents` (`id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `product_name` TEXT NOT NULL, `version_number` INTEGER NOT NULL, `yield_quantity` REAL NOT NULL, `technical_shrink_pct` REAL NOT NULL, `created_at` TEXT NOT NULL, `version_note` TEXT, `published_at` TEXT, `components_json` TEXT NOT NULL, `is_synced` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `count_session_documents` (`id` TEXT NOT NULL, `warehouse_id` TEXT NOT NULL, `warehouse_name` TEXT NOT NULL, `cutoff_at` TEXT NOT NULL, `status` TEXT NOT NULL, `created_at` TEXT NOT NULL, `updated_at` TEXT NOT NULL, `notes` TEXT, `posted_at` TEXT, `movement_references_json` TEXT NOT NULL, `is_synced` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `count_lines` (`id` TEXT NOT NULL, `session_id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `insumo_name` TEXT NOT NULL, `uom` TEXT NOT NULL, `theoretical_quantity` REAL NOT NULL, `approved_entry_index` INTEGER, `entries_json` TEXT NOT NULL, FOREIGN KEY (`session_id`) REFERENCES `count_session_documents` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `forensic_alerts` (`id` TEXT NOT NULL, `alert_type` TEXT NOT NULL, `severity` TEXT NOT NULL, `message` TEXT NOT NULL, `created_at` TEXT NOT NULL, `status` TEXT NOT NULL, `note` TEXT, `actor_label` TEXT, `acted_at` TEXT, `source_movement_id` TEXT, `source_document_id` TEXT, `source_document_type` TEXT, `metadata_json` TEXT, `is_synced` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `inventory_movements` (`id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `type` TEXT NOT NULL, `quantity` REAL NOT NULL, `previous_stock` REAL NOT NULL, `new_stock` REAL NOT NULL, `timestamp` TEXT NOT NULL, `reason` TEXT, `user_id` TEXT, `is_synced` INTEGER NOT NULL, `batch_deductions` TEXT, PRIMARY KEY (`id`))');
         await database.execute(
@@ -163,6 +181,8 @@ class _$AppDatabase extends AppDatabase {
             'CREATE TABLE IF NOT EXISTS `warehouses` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `description` TEXT, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `purchases` (`id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `supplier_id` TEXT NOT NULL, `quantity` REAL NOT NULL, `unit_cost` REAL NOT NULL, `timestamp` TEXT NOT NULL, `invoice_date` TEXT NOT NULL, `currency` TEXT NOT NULL, `bcn_rate` REAL NOT NULL, `unit_cost_nio` REAL, `cpp_before_nio` REAL, `projected_cpp_nio` REAL, `lot_code` TEXT, `received_date` TEXT, `expiration_date` TEXT, `requires_batch_tracking` INTEGER NOT NULL, `is_synced` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `production_order_documents` (`id` TEXT NOT NULL, `recipe_version_id` TEXT NOT NULL, `recipe_product_id` TEXT NOT NULL, `recipe_product_name` TEXT NOT NULL, `produced_insumo_id` TEXT NOT NULL, `produced_insumo_name` TEXT NOT NULL, `planned_quantity` REAL NOT NULL, `actual_quantity` REAL NOT NULL, `produced_batch_number` TEXT NOT NULL, `produced_expiration_date` TEXT NOT NULL, `operation_date` TEXT NOT NULL, `status` TEXT NOT NULL, `variance_reason` TEXT, `closed_at` TEXT, `movement_references_json` TEXT NOT NULL, `is_synced` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `uom_conversions` (`id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `unit_name` TEXT NOT NULL, `factor` REAL NOT NULL, `is_default` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
@@ -232,6 +252,29 @@ class _$AppDatabase extends AppDatabase {
   }
 
   @override
+  RecipeVersionDocumentDao get recipeVersionDocumentDao {
+    return _recipeVersionDocumentDaoInstance ??=
+        _$RecipeVersionDocumentDao(database, changeListener);
+  }
+
+  @override
+  CountSessionDao get countSessionDao {
+    return _countSessionDaoInstance ??=
+        _$CountSessionDao(database, changeListener);
+  }
+
+  @override
+  CountLineDao get countLineDao {
+    return _countLineDaoInstance ??= _$CountLineDao(database, changeListener);
+  }
+
+  @override
+  ForensicAlertDao get forensicAlertDao {
+    return _forensicAlertDaoInstance ??=
+        _$ForensicAlertDao(database, changeListener);
+  }
+
+  @override
   MovementDao get movementDao {
     return _movementDaoInstance ??= _$MovementDao(database, changeListener);
   }
@@ -254,6 +297,12 @@ class _$AppDatabase extends AppDatabase {
   @override
   PurchaseDao get purchaseDao {
     return _purchaseDaoInstance ??= _$PurchaseDao(database, changeListener);
+  }
+
+  @override
+  ProductionOrderDocumentDao get productionOrderDocumentDao {
+    return _productionOrderDocumentDaoInstance ??=
+        _$ProductionOrderDocumentDao(database, changeListener);
   }
 
   @override
@@ -666,6 +715,8 @@ class _$InsumoDao extends InsumoDao {
                   'stock': item.stock,
                   'average_cost': item.averageCost,
                   'par_level': item.parLevel,
+                  'stock_min': item.stockMin,
+                  'stock_max': item.stockMax,
                   'is_active': item.isActive ? 1 : 0
                 }),
         _insumoEntityUpdateAdapter = UpdateAdapter(
@@ -681,6 +732,8 @@ class _$InsumoDao extends InsumoDao {
                   'stock': item.stock,
                   'average_cost': item.averageCost,
                   'par_level': item.parLevel,
+                  'stock_min': item.stockMin,
+                  'stock_max': item.stockMax,
                   'is_active': item.isActive ? 1 : 0
                 });
 
@@ -706,6 +759,8 @@ class _$InsumoDao extends InsumoDao {
             stock: row['stock'] as double,
             averageCost: row['average_cost'] as double,
             parLevel: row['par_level'] as double?,
+            stockMin: row['stock_min'] as double?,
+            stockMax: row['stock_max'] as double?,
             isActive: (row['is_active'] as int) != 0));
   }
 
@@ -721,6 +776,8 @@ class _$InsumoDao extends InsumoDao {
             stock: row['stock'] as double,
             averageCost: row['average_cost'] as double,
             parLevel: row['par_level'] as double?,
+            stockMin: row['stock_min'] as double?,
+            stockMax: row['stock_max'] as double?,
             isActive: (row['is_active'] as int) != 0),
         arguments: [id]);
   }
@@ -742,6 +799,8 @@ class _$InsumoDao extends InsumoDao {
             stock: row['stock'] as double,
             averageCost: row['average_cost'] as double,
             parLevel: row['par_level'] as double?,
+            stockMin: row['stock_min'] as double?,
+            stockMax: row['stock_max'] as double?,
             isActive: (row['is_active'] as int) != 0),
         arguments: [...ids]);
   }
@@ -785,7 +844,10 @@ class _$ProductDao extends ProductDao {
                   'sell_price': item.sellPrice,
                   'is_active': item.isActive ? 1 : 0,
                   'sku': item.sku,
-                  'barcode': item.barcode
+                  'barcode': item.barcode,
+                  'category': item.category,
+                  'is_prepared': item.isPrepared ? 1 : 0,
+                  'created_at': item.createdAt
                 }),
         _productVariantEntityInsertionAdapter = InsertionAdapter(
             database,
@@ -832,7 +894,10 @@ class _$ProductDao extends ProductDao {
             sellPrice: row['sell_price'] as double,
             isActive: (row['is_active'] as int) != 0,
             sku: row['sku'] as String?,
-            barcode: row['barcode'] as String?));
+            barcode: row['barcode'] as String?,
+            category: row['category'] as String?,
+            isPrepared: (row['is_prepared'] as int) != 0,
+            createdAt: row['created_at'] as String?));
   }
 
   @override
@@ -847,7 +912,10 @@ class _$ProductDao extends ProductDao {
             sellPrice: row['sell_price'] as double,
             isActive: (row['is_active'] as int) != 0,
             sku: row['sku'] as String?,
-            barcode: row['barcode'] as String?),
+            barcode: row['barcode'] as String?,
+            category: row['category'] as String?,
+            isPrepared: (row['is_prepared'] as int) != 0,
+            createdAt: row['created_at'] as String?),
         arguments: [id]);
   }
 
@@ -893,7 +961,10 @@ class _$ProductDao extends ProductDao {
             sellPrice: row['sell_price'] as double,
             isActive: (row['is_active'] as int) != 0,
             sku: row['sku'] as String?,
-            barcode: row['barcode'] as String?),
+            barcode: row['barcode'] as String?,
+            category: row['category'] as String?,
+            isPrepared: (row['is_prepared'] as int) != 0,
+            createdAt: row['created_at'] as String?),
         arguments: [sku, barcode]);
   }
 
@@ -968,6 +1039,13 @@ class _$RecipeDao extends RecipeDao {
   }
 
   @override
+  Future<void> deleteRecipesByProductId(String productId) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM recipes WHERE product_id = ?1',
+        arguments: [productId]);
+  }
+
+  @override
   Future<void> deleteRecipeById(String id) async {
     await _queryAdapter
         .queryNoReturn('DELETE FROM recipes WHERE id = ?1', arguments: [id]);
@@ -977,6 +1055,306 @@ class _$RecipeDao extends RecipeDao {
   Future<void> insertRecipes(List<RecipeEntity> recipes) async {
     await _recipeEntityInsertionAdapter.insertList(
         recipes, OnConflictStrategy.replace);
+  }
+}
+
+class _$RecipeVersionDocumentDao extends RecipeVersionDocumentDao {
+  _$RecipeVersionDocumentDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _recipeVersionDocumentEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'recipe_version_documents',
+            (RecipeVersionDocumentEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'product_id': item.productId,
+                  'product_name': item.productName,
+                  'version_number': item.versionNumber,
+                  'yield_quantity': item.yieldQuantity,
+                  'technical_shrink_pct': item.technicalShrinkPct,
+                  'created_at': item.createdAt,
+                  'version_note': item.versionNote,
+                  'published_at': item.publishedAt,
+                  'components_json': item.componentsJson,
+                  'is_synced': item.isSynced ? 1 : 0
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<RecipeVersionDocumentEntity>
+      _recipeVersionDocumentEntityInsertionAdapter;
+
+  @override
+  Future<List<RecipeVersionDocumentEntity>> findByProductId(
+      String productId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM recipe_version_documents WHERE product_id = ?1 ORDER BY version_number DESC',
+        mapper: (Map<String, Object?> row) => RecipeVersionDocumentEntity(id: row['id'] as String, productId: row['product_id'] as String, productName: row['product_name'] as String, versionNumber: row['version_number'] as int, yieldQuantity: row['yield_quantity'] as double, technicalShrinkPct: row['technical_shrink_pct'] as double, createdAt: row['created_at'] as String, componentsJson: row['components_json'] as String, versionNote: row['version_note'] as String?, publishedAt: row['published_at'] as String?, isSynced: (row['is_synced'] as int) != 0),
+        arguments: [productId]);
+  }
+
+  @override
+  Future<List<RecipeVersionDocumentEntity>> findUnsynced() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM recipe_version_documents WHERE is_synced = 0 ORDER BY created_at ASC',
+        mapper: (Map<String, Object?> row) => RecipeVersionDocumentEntity(
+            id: row['id'] as String,
+            productId: row['product_id'] as String,
+            productName: row['product_name'] as String,
+            versionNumber: row['version_number'] as int,
+            yieldQuantity: row['yield_quantity'] as double,
+            technicalShrinkPct: row['technical_shrink_pct'] as double,
+            createdAt: row['created_at'] as String,
+            componentsJson: row['components_json'] as String,
+            versionNote: row['version_note'] as String?,
+            publishedAt: row['published_at'] as String?,
+            isSynced: (row['is_synced'] as int) != 0));
+  }
+
+  @override
+  Future<void> markAsSynced(String id) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE recipe_version_documents SET is_synced = 1 WHERE id = ?1',
+        arguments: [id]);
+  }
+
+  @override
+  Future<void> upsertDocument(RecipeVersionDocumentEntity entity) async {
+    await _recipeVersionDocumentEntityInsertionAdapter.insert(
+        entity, OnConflictStrategy.replace);
+  }
+}
+
+class _$CountSessionDao extends CountSessionDao {
+  _$CountSessionDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _countSessionDocumentEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'count_session_documents',
+            (CountSessionDocumentEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'warehouse_id': item.warehouseId,
+                  'warehouse_name': item.warehouseName,
+                  'cutoff_at': item.cutoffAt,
+                  'status': item.status,
+                  'created_at': item.createdAt,
+                  'updated_at': item.updatedAt,
+                  'notes': item.notes,
+                  'posted_at': item.postedAt,
+                  'movement_references_json': item.movementReferencesJson,
+                  'is_synced': item.isSynced ? 1 : 0
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<CountSessionDocumentEntity>
+      _countSessionDocumentEntityInsertionAdapter;
+
+  @override
+  Future<List<CountSessionDocumentEntity>> findAllDocuments() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM count_session_documents ORDER BY updated_at DESC',
+        mapper: (Map<String, Object?> row) => CountSessionDocumentEntity(
+            id: row['id'] as String,
+            warehouseId: row['warehouse_id'] as String,
+            warehouseName: row['warehouse_name'] as String,
+            cutoffAt: row['cutoff_at'] as String,
+            status: row['status'] as String,
+            createdAt: row['created_at'] as String,
+            updatedAt: row['updated_at'] as String,
+            movementReferencesJson: row['movement_references_json'] as String,
+            notes: row['notes'] as String?,
+            postedAt: row['posted_at'] as String?,
+            isSynced: (row['is_synced'] as int) != 0));
+  }
+
+  @override
+  Future<List<CountSessionDocumentEntity>> findUnsynced() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM count_session_documents WHERE is_synced = 0 ORDER BY created_at ASC',
+        mapper: (Map<String, Object?> row) => CountSessionDocumentEntity(
+            id: row['id'] as String,
+            warehouseId: row['warehouse_id'] as String,
+            warehouseName: row['warehouse_name'] as String,
+            cutoffAt: row['cutoff_at'] as String,
+            status: row['status'] as String,
+            createdAt: row['created_at'] as String,
+            updatedAt: row['updated_at'] as String,
+            movementReferencesJson: row['movement_references_json'] as String,
+            notes: row['notes'] as String?,
+            postedAt: row['posted_at'] as String?,
+            isSynced: (row['is_synced'] as int) != 0));
+  }
+
+  @override
+  Future<void> markAsSynced(String id) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE count_session_documents SET is_synced = 1 WHERE id = ?1',
+        arguments: [id]);
+  }
+
+  @override
+  Future<void> upsertDocument(CountSessionDocumentEntity entity) async {
+    await _countSessionDocumentEntityInsertionAdapter.insert(
+        entity, OnConflictStrategy.replace);
+  }
+}
+
+class _$CountLineDao extends CountLineDao {
+  _$CountLineDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _countLineEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'count_lines',
+            (CountLineEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'session_id': item.sessionId,
+                  'insumo_id': item.insumoId,
+                  'insumo_name': item.insumoName,
+                  'uom': item.uom,
+                  'theoretical_quantity': item.theoreticalQuantity,
+                  'approved_entry_index': item.approvedEntryIndex,
+                  'entries_json': item.entriesJson
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<CountLineEntity> _countLineEntityInsertionAdapter;
+
+  @override
+  Future<List<CountLineEntity>> findBySessionId(String sessionId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM count_lines WHERE session_id = ?1 ORDER BY id ASC',
+        mapper: (Map<String, Object?> row) => CountLineEntity(
+            id: row['id'] as String,
+            sessionId: row['session_id'] as String,
+            insumoId: row['insumo_id'] as String,
+            insumoName: row['insumo_name'] as String,
+            uom: row['uom'] as String,
+            theoreticalQuantity: row['theoretical_quantity'] as double,
+            entriesJson: row['entries_json'] as String,
+            approvedEntryIndex: row['approved_entry_index'] as int?),
+        arguments: [sessionId]);
+  }
+
+  @override
+  Future<void> deleteBySessionId(String sessionId) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM count_lines WHERE session_id = ?1',
+        arguments: [sessionId]);
+  }
+
+  @override
+  Future<void> insertLines(List<CountLineEntity> lines) async {
+    await _countLineEntityInsertionAdapter.insertList(
+        lines, OnConflictStrategy.replace);
+  }
+}
+
+class _$ForensicAlertDao extends ForensicAlertDao {
+  _$ForensicAlertDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _forensicAlertEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'forensic_alerts',
+            (ForensicAlertEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'alert_type': item.alertType,
+                  'severity': item.severity,
+                  'message': item.message,
+                  'created_at': item.createdAt,
+                  'status': item.status,
+                  'note': item.note,
+                  'actor_label': item.actorLabel,
+                  'acted_at': item.actedAt,
+                  'source_movement_id': item.sourceMovementId,
+                  'source_document_id': item.sourceDocumentId,
+                  'source_document_type': item.sourceDocumentType,
+                  'metadata_json': item.metadataJson,
+                  'is_synced': item.isSynced ? 1 : 0
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<ForensicAlertEntity>
+      _forensicAlertEntityInsertionAdapter;
+
+  @override
+  Future<List<ForensicAlertEntity>> findAllAlerts() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM forensic_alerts ORDER BY created_at DESC',
+        mapper: (Map<String, Object?> row) => ForensicAlertEntity(
+            id: row['id'] as String,
+            alertType: row['alert_type'] as String,
+            severity: row['severity'] as String,
+            message: row['message'] as String,
+            createdAt: row['created_at'] as String,
+            status: row['status'] as String,
+            note: row['note'] as String?,
+            actorLabel: row['actor_label'] as String?,
+            actedAt: row['acted_at'] as String?,
+            sourceMovementId: row['source_movement_id'] as String?,
+            sourceDocumentId: row['source_document_id'] as String?,
+            sourceDocumentType: row['source_document_type'] as String?,
+            metadataJson: row['metadata_json'] as String?,
+            isSynced: (row['is_synced'] as int) != 0));
+  }
+
+  @override
+  Future<List<ForensicAlertEntity>> findUnsyncedLifecycleAlerts() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM forensic_alerts WHERE is_synced = 0 AND status != \'active\' ORDER BY created_at ASC',
+        mapper: (Map<String, Object?> row) => ForensicAlertEntity(
+            id: row['id'] as String,
+            alertType: row['alert_type'] as String,
+            severity: row['severity'] as String,
+            message: row['message'] as String,
+            createdAt: row['created_at'] as String,
+            status: row['status'] as String,
+            note: row['note'] as String?,
+            actorLabel: row['actor_label'] as String?,
+            actedAt: row['acted_at'] as String?,
+            sourceMovementId: row['source_movement_id'] as String?,
+            sourceDocumentId: row['source_document_id'] as String?,
+            sourceDocumentType: row['source_document_type'] as String?,
+            metadataJson: row['metadata_json'] as String?,
+            isSynced: (row['is_synced'] as int) != 0));
+  }
+
+  @override
+  Future<void> markAsSynced(String id) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE forensic_alerts SET is_synced = 1 WHERE id = ?1',
+        arguments: [id]);
+  }
+
+  @override
+  Future<void> upsertAlert(ForensicAlertEntity entity) async {
+    await _forensicAlertEntityInsertionAdapter.insert(
+        entity, OnConflictStrategy.replace);
   }
 }
 
@@ -1386,6 +1764,102 @@ class _$PurchaseDao extends PurchaseDao {
   }
 }
 
+class _$ProductionOrderDocumentDao extends ProductionOrderDocumentDao {
+  _$ProductionOrderDocumentDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _productionOrderDocumentEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'production_order_documents',
+            (ProductionOrderDocumentEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'recipe_version_id': item.recipeVersionId,
+                  'recipe_product_id': item.recipeProductId,
+                  'recipe_product_name': item.recipeProductName,
+                  'produced_insumo_id': item.producedInsumoId,
+                  'produced_insumo_name': item.producedInsumoName,
+                  'planned_quantity': item.plannedQuantity,
+                  'actual_quantity': item.actualQuantity,
+                  'produced_batch_number': item.producedBatchNumber,
+                  'produced_expiration_date': item.producedExpirationDate,
+                  'operation_date': item.operationDate,
+                  'status': item.status,
+                  'variance_reason': item.varianceReason,
+                  'closed_at': item.closedAt,
+                  'movement_references_json': item.movementReferencesJson,
+                  'is_synced': item.isSynced ? 1 : 0
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<ProductionOrderDocumentEntity>
+      _productionOrderDocumentEntityInsertionAdapter;
+
+  @override
+  Future<List<ProductionOrderDocumentEntity>> findAllDocuments() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM production_order_documents ORDER BY operation_date DESC',
+        mapper: (Map<String, Object?> row) => ProductionOrderDocumentEntity(
+            id: row['id'] as String,
+            recipeVersionId: row['recipe_version_id'] as String,
+            recipeProductId: row['recipe_product_id'] as String,
+            recipeProductName: row['recipe_product_name'] as String,
+            producedInsumoId: row['produced_insumo_id'] as String,
+            producedInsumoName: row['produced_insumo_name'] as String,
+            plannedQuantity: row['planned_quantity'] as double,
+            actualQuantity: row['actual_quantity'] as double,
+            producedBatchNumber: row['produced_batch_number'] as String,
+            producedExpirationDate: row['produced_expiration_date'] as String,
+            operationDate: row['operation_date'] as String,
+            status: row['status'] as String,
+            movementReferencesJson: row['movement_references_json'] as String,
+            varianceReason: row['variance_reason'] as String?,
+            closedAt: row['closed_at'] as String?,
+            isSynced: (row['is_synced'] as int) != 0));
+  }
+
+  @override
+  Future<List<ProductionOrderDocumentEntity>> findUnsynced() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM production_order_documents WHERE is_synced = 0 ORDER BY operation_date ASC',
+        mapper: (Map<String, Object?> row) => ProductionOrderDocumentEntity(
+            id: row['id'] as String,
+            recipeVersionId: row['recipe_version_id'] as String,
+            recipeProductId: row['recipe_product_id'] as String,
+            recipeProductName: row['recipe_product_name'] as String,
+            producedInsumoId: row['produced_insumo_id'] as String,
+            producedInsumoName: row['produced_insumo_name'] as String,
+            plannedQuantity: row['planned_quantity'] as double,
+            actualQuantity: row['actual_quantity'] as double,
+            producedBatchNumber: row['produced_batch_number'] as String,
+            producedExpirationDate: row['produced_expiration_date'] as String,
+            operationDate: row['operation_date'] as String,
+            status: row['status'] as String,
+            movementReferencesJson: row['movement_references_json'] as String,
+            varianceReason: row['variance_reason'] as String?,
+            closedAt: row['closed_at'] as String?,
+            isSynced: (row['is_synced'] as int) != 0));
+  }
+
+  @override
+  Future<void> markAsSynced(String id) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE production_order_documents SET is_synced = 1 WHERE id = ?1',
+        arguments: [id]);
+  }
+
+  @override
+  Future<void> upsertDocument(ProductionOrderDocumentEntity entity) async {
+    await _productionOrderDocumentEntityInsertionAdapter.insert(
+        entity, OnConflictStrategy.replace);
+  }
+}
+
 class _$UomConversionDao extends UomConversionDao {
   _$UomConversionDao(
     this.database,
@@ -1423,6 +1897,13 @@ class _$UomConversionDao extends UomConversionDao {
             factor: row['factor'] as double,
             isDefault: (row['is_default'] as int) != 0),
         arguments: [insumoId]);
+  }
+
+  @override
+  Future<void> deleteConversionById(String id) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM uom_conversions WHERE id = ?1',
+        arguments: [id]);
   }
 
   @override
@@ -2006,6 +2487,8 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'stock': item.stock,
                   'average_cost': item.averageCost,
                   'par_level': item.parLevel,
+                  'stock_min': item.stockMin,
+                  'stock_max': item.stockMax,
                   'is_active': item.isActive ? 1 : 0
                 });
 
@@ -2042,6 +2525,8 @@ class _$SalesTransactionDao extends SalesTransactionDao {
             stock: row['stock'] as double,
             averageCost: row['average_cost'] as double,
             parLevel: row['par_level'] as double?,
+            stockMin: row['stock_min'] as double?,
+            stockMax: row['stock_max'] as double?,
             isActive: (row['is_active'] as int) != 0),
         arguments: [id]);
   }

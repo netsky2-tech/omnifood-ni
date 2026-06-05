@@ -26,6 +26,8 @@ mixin _$Insumo {
   double get stock => throw _privateConstructorUsedError;
   double get averageCost => throw _privateConstructorUsedError;
   double? get parLevel => throw _privateConstructorUsedError;
+  double? get stockMin => throw _privateConstructorUsedError;
+  double? get stockMax => throw _privateConstructorUsedError;
   @JsonKey(name: 'warehouse_id')
   String? get warehouseId => throw _privateConstructorUsedError;
   @JsonKey(name: 'is_perishable')
@@ -48,6 +50,8 @@ abstract class $InsumoCopyWith<$Res> {
       double stock,
       double averageCost,
       double? parLevel,
+      double? stockMin,
+      double? stockMax,
       @JsonKey(name: 'warehouse_id') String? warehouseId,
       @JsonKey(name: 'is_perishable') bool isPerishable});
 }
@@ -71,6 +75,8 @@ class _$InsumoCopyWithImpl<$Res, $Val extends Insumo>
     Object? stock = null,
     Object? averageCost = null,
     Object? parLevel = freezed,
+    Object? stockMin = freezed,
+    Object? stockMax = freezed,
     Object? warehouseId = freezed,
     Object? isPerishable = null,
   }) {
@@ -99,6 +105,14 @@ class _$InsumoCopyWithImpl<$Res, $Val extends Insumo>
           ? _value.parLevel
           : parLevel // ignore: cast_nullable_to_non_nullable
               as double?,
+      stockMin: freezed == stockMin
+          ? _value.stockMin
+          : stockMin // ignore: cast_nullable_to_non_nullable
+              as double?,
+      stockMax: freezed == stockMax
+          ? _value.stockMax
+          : stockMax // ignore: cast_nullable_to_non_nullable
+              as double?,
       warehouseId: freezed == warehouseId
           ? _value.warehouseId
           : warehouseId // ignore: cast_nullable_to_non_nullable
@@ -125,6 +139,8 @@ abstract class _$$InsumoImplCopyWith<$Res> implements $InsumoCopyWith<$Res> {
       double stock,
       double averageCost,
       double? parLevel,
+      double? stockMin,
+      double? stockMax,
       @JsonKey(name: 'warehouse_id') String? warehouseId,
       @JsonKey(name: 'is_perishable') bool isPerishable});
 }
@@ -146,6 +162,8 @@ class __$$InsumoImplCopyWithImpl<$Res>
     Object? stock = null,
     Object? averageCost = null,
     Object? parLevel = freezed,
+    Object? stockMin = freezed,
+    Object? stockMax = freezed,
     Object? warehouseId = freezed,
     Object? isPerishable = null,
   }) {
@@ -174,6 +192,14 @@ class __$$InsumoImplCopyWithImpl<$Res>
           ? _value.parLevel
           : parLevel // ignore: cast_nullable_to_non_nullable
               as double?,
+      stockMin: freezed == stockMin
+          ? _value.stockMin
+          : stockMin // ignore: cast_nullable_to_non_nullable
+              as double?,
+      stockMax: freezed == stockMax
+          ? _value.stockMax
+          : stockMax // ignore: cast_nullable_to_non_nullable
+              as double?,
       warehouseId: freezed == warehouseId
           ? _value.warehouseId
           : warehouseId // ignore: cast_nullable_to_non_nullable
@@ -196,6 +222,8 @@ class _$InsumoImpl implements _Insumo {
       required this.stock,
       required this.averageCost,
       this.parLevel,
+      this.stockMin,
+      this.stockMax,
       @JsonKey(name: 'warehouse_id') this.warehouseId,
       @JsonKey(name: 'is_perishable') this.isPerishable = false});
 
@@ -215,6 +243,10 @@ class _$InsumoImpl implements _Insumo {
   @override
   final double? parLevel;
   @override
+  final double? stockMin;
+  @override
+  final double? stockMax;
+  @override
   @JsonKey(name: 'warehouse_id')
   final String? warehouseId;
   @override
@@ -223,7 +255,7 @@ class _$InsumoImpl implements _Insumo {
 
   @override
   String toString() {
-    return 'Insumo(id: $id, name: $name, consumptionUom: $consumptionUom, stock: $stock, averageCost: $averageCost, parLevel: $parLevel, warehouseId: $warehouseId, isPerishable: $isPerishable)';
+    return 'Insumo(id: $id, name: $name, consumptionUom: $consumptionUom, stock: $stock, averageCost: $averageCost, parLevel: $parLevel, stockMin: $stockMin, stockMax: $stockMax, warehouseId: $warehouseId, isPerishable: $isPerishable)';
   }
 
   @override
@@ -240,6 +272,10 @@ class _$InsumoImpl implements _Insumo {
                 other.averageCost == averageCost) &&
             (identical(other.parLevel, parLevel) ||
                 other.parLevel == parLevel) &&
+            (identical(other.stockMin, stockMin) ||
+                other.stockMin == stockMin) &&
+            (identical(other.stockMax, stockMax) ||
+                other.stockMax == stockMax) &&
             (identical(other.warehouseId, warehouseId) ||
                 other.warehouseId == warehouseId) &&
             (identical(other.isPerishable, isPerishable) ||
@@ -249,7 +285,7 @@ class _$InsumoImpl implements _Insumo {
   @JsonKey(ignore: true)
   @override
   int get hashCode => Object.hash(runtimeType, id, name, consumptionUom, stock,
-      averageCost, parLevel, warehouseId, isPerishable);
+      averageCost, parLevel, stockMin, stockMax, warehouseId, isPerishable);
 
   @JsonKey(ignore: true)
   @override
@@ -273,6 +309,8 @@ abstract class _Insumo implements Insumo {
       required final double stock,
       required final double averageCost,
       final double? parLevel,
+      final double? stockMin,
+      final double? stockMax,
       @JsonKey(name: 'warehouse_id') final String? warehouseId,
       @JsonKey(name: 'is_perishable') final bool isPerishable}) = _$InsumoImpl;
 
@@ -290,6 +328,10 @@ abstract class _Insumo implements Insumo {
   double get averageCost;
   @override
   double? get parLevel;
+  @override
+  double? get stockMin;
+  @override
+  double? get stockMax;
   @override
   @JsonKey(name: 'warehouse_id')
   String? get warehouseId;

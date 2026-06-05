@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../../../domain/models/inventory/insumo.dart';
 import '../../../domain/models/inventory/inventory_movement.dart';
 import '../../../domain/models/inventory/product.dart';
@@ -6,7 +8,11 @@ import '../../../domain/models/inventory/warehouse.dart';
 import '../../../domain/models/inventory/uom_conversion.dart';
 import '../../../domain/models/inventory/batch.dart';
 import '../../../domain/models/inventory/recipe.dart';
+import '../../../domain/models/inventory/recipe_version_document.dart';
+import '../../../domain/models/inventory/count_session_document.dart';
+import '../../../domain/models/inventory/forensic_alert.dart';
 import '../../../domain/models/inventory/purchase.dart';
+import '../../../domain/models/inventory/production_order_document.dart';
 import '../../models/inventory/insumo_entity.dart';
 import '../../models/inventory/uom_conversion_entity.dart';
 import '../../models/inventory/batch_entity.dart';
@@ -19,9 +25,19 @@ import '../../daos/inventory/movement_dao.dart';
 import '../../daos/inventory/recipe_dao.dart';
 import '../../daos/inventory/supplier_dao.dart';
 import '../../daos/inventory/warehouse_dao.dart';
+import '../../daos/inventory/count_line_dao.dart';
+import '../../daos/inventory/count_session_dao.dart';
+import '../../daos/inventory/forensic_alert_dao.dart';
 import '../../daos/inventory/uom_conversion_dao.dart';
 import '../../daos/inventory/batch_dao.dart';
 import '../../daos/inventory/purchase_dao.dart';
+import '../../daos/inventory/recipe_version_document_dao.dart';
+import '../../daos/inventory/production_order_document_dao.dart';
+import '../../models/inventory/recipe_version_document_entity.dart';
+import '../../models/inventory/count_line_entity.dart';
+import '../../models/inventory/count_session_document_entity.dart';
+import '../../models/inventory/forensic_alert_entity.dart';
+import '../../models/inventory/production_order_document_entity.dart';
 import 'package:dio/dio.dart';
 
 class InventoryRepositoryImpl implements InventoryRepository {
@@ -30,9 +46,14 @@ class InventoryRepositoryImpl implements InventoryRepository {
   final MovementDao movementDao;
   final SupplierDao supplierDao;
   final WarehouseDao warehouseDao;
+  final CountSessionDao? countSessionDao;
+  final CountLineDao? countLineDao;
+  final ForensicAlertDao forensicAlertDao;
   final UomConversionDao uomConversionDao;
   final BatchDao batchDao;
   final PurchaseDao purchaseDao;
+  final RecipeVersionDocumentDao recipeVersionDocumentDao;
+  final ProductionOrderDocumentDao productionOrderDocumentDao;
   final Dio dio;
   final AppDatabase _database;
 
@@ -42,9 +63,14 @@ class InventoryRepositoryImpl implements InventoryRepository {
     required this.movementDao,
     required this.supplierDao,
     required this.warehouseDao,
+    this.countSessionDao,
+    this.countLineDao,
+    required this.forensicAlertDao,
     required this.uomConversionDao,
     required this.batchDao,
     required this.purchaseDao,
+    required this.recipeVersionDocumentDao,
+    required this.productionOrderDocumentDao,
     required this.dio,
     required AppDatabase database,
   }) : _database = database;
@@ -112,6 +138,13 @@ class InventoryRepositoryImpl implements InventoryRepository {
   }
 
   @override
+  Future<void> saveProduct(Product product) {
+    return _database.productDao.insertProducts([
+      InventoryMapper.toProductEntity(product),
+    ]);
+  }
+
+  @override
   Future<void> saveProductOptions({
     required String productId,
     required List<ProductVariant> variants,
@@ -147,6 +180,132 @@ class InventoryRepositoryImpl implements InventoryRepository {
   @override
   Future<void> deleteRecipe(String id) {
     return recipeDao.deleteRecipeById(id);
+  }
+
+  @override
+  Future<void> replaceRecipesForProduct(String productId, List<Recipe> recipes) async {
+    await recipeDao.deleteRecipesByProductId(productId);
+    if (recipes.isEmpty) {
+      return;
+    }
+    await recipeDao.insertRecipes(
+      recipes.map(InventoryMapper.toRecipeEntity).toList(growable: false),
+    );
+  }
+
+  @override
+  Future<List<RecipeVersionDocument>> getRecipeVersionDocuments(String productId) async {
+    final entities = await recipeVersionDocumentDao.findByProductId(productId);
+    return entities.map(_toRecipeVersionDocument).toList(growable: false);
+  }
+
+  @override
+  Future<void> saveRecipeVersionDocument(RecipeVersionDocument document) {
+    return recipeVersionDocumentDao.upsertDocument(
+      RecipeVersionDocumentEntity(
+        id: document.id,
+        productId: document.productId,
+        productName: document.productName,
+        versionNumber: document.versionNumber,
+        yieldQuantity: document.yieldQuantity,
+        technicalShrinkPct: document.technicalShrinkPct,
+        createdAt: document.createdAt.toIso8601String(),
+        versionNote: document.versionNote,
+        publishedAt: document.publishedAt?.toIso8601String(),
+        componentsJson: document.encodeComponents(),
+        isSynced: document.isSynced,
+      ),
+    );
+  }
+
+  @override
+  Future<List<RecipeVersionDocument>> getUnsyncedRecipeVersionDocuments() async {
+    final entities = await recipeVersionDocumentDao.findUnsynced();
+    return entities.map(_toRecipeVersionDocument).toList(growable: false);
+  }
+
+  @override
+  Future<void> markRecipeVersionDocumentAsSynced(String id) {
+    return recipeVersionDocumentDao.markAsSynced(id);
+  }
+
+  @override
+  Future<List<CountSessionDocument>> getCountSessionDocuments() async {
+    final sessionDao = _requireCountSessionDao();
+    final lineDao = _requireCountLineDao();
+    final sessions = await sessionDao.findAllDocuments();
+    final documents = <CountSessionDocument>[];
+
+    for (final session in sessions) {
+      final lines = await lineDao.findBySessionId(session.id);
+      documents.add(_toCountSessionDocument(session, lines));
+    }
+
+    return documents;
+  }
+
+  @override
+  Future<void> saveCountSessionDocument(CountSessionDocument session) async {
+    final sessionDao = _requireCountSessionDao();
+    final lineDao = _requireCountLineDao();
+
+    await sessionDao.upsertDocument(
+      CountSessionDocumentEntity(
+        id: session.id,
+        warehouseId: session.warehouseId,
+        warehouseName: session.warehouseName,
+        cutoffAt: session.cutoffAt.toIso8601String(),
+        status: session.status,
+        createdAt: session.createdAt.toIso8601String(),
+        updatedAt: session.updatedAt.toIso8601String(),
+        notes: session.notes,
+        postedAt: session.postedAt?.toIso8601String(),
+        movementReferencesJson: session.encodeMovementReferences(),
+        isSynced: session.isSynced,
+      ),
+    );
+
+    await lineDao.deleteBySessionId(session.id);
+    if (session.lines.isNotEmpty) {
+      await lineDao.insertLines(
+        session.lines
+            .map(
+              (line) => CountLineEntity(
+                id: line.id,
+                sessionId: session.id,
+                insumoId: line.insumoId,
+                insumoName: line.insumoName,
+                uom: line.uom,
+                theoreticalQuantity: line.theoreticalQuantity,
+                approvedEntryIndex: line.approvedEntryIndex,
+                entriesJson: jsonEncode(
+                  line.entries.map((entry) => entry.toJson()).toList(growable: false),
+                ),
+              ),
+            )
+            .toList(growable: false),
+      );
+    }
+  }
+
+  @override
+  Future<List<CountSessionDocument>> getUnsyncedCountSessionDocuments() async {
+    final sessionDao = _requireCountSessionDao();
+    final lineDao = _requireCountLineDao();
+    final sessions = await sessionDao.findUnsynced();
+    final documents = <CountSessionDocument>[];
+
+    for (final session in sessions) {
+      final lines = await lineDao.findBySessionId(session.id);
+      documents.add(_toCountSessionDocument(session, lines));
+    }
+
+    return documents;
+  }
+
+  @override
+  Future<void> markCountSessionDocumentAsSynced(String id) {
+    return _requireCountSessionDao().markAsSynced(id);
   }
 
   @override
@@ -246,6 +405,11 @@ class InventoryRepositoryImpl implements InventoryRepository {
   }
 
   @override
+  Future<void> deleteConversion(String id) {
+    return uomConversionDao.deleteConversionById(id);
+  }
+
+  @override
   Future<void> savePurchase(Purchase purchase) async {
     await purchaseDao.insertPurchase(PurchaseMapper.toEntity(purchase));
   }
@@ -262,7 +426,213 @@ class InventoryRepositoryImpl implements InventoryRepository {
   }
 
   @override
+  Future<List<Purchase>> getPurchaseHistory() async {
+    final entities = await purchaseDao.findAllPurchases();
+    return entities.map(PurchaseMapper.toDomain).toList(growable: false);
+  }
+
+  @override
   Future<void> markPurchaseAsSynced(String id) {
     return purchaseDao.markAsSynced(id);
+  }
+
+  @override
+  Future<List<ForensicAlert>> getForensicAlerts() async {
+    final entities = await forensicAlertDao.findAllAlerts();
+    return entities.map(_toForensicAlert).toList(growable: false);
+  }
+
+  @override
+  Future<void> saveForensicAlert(ForensicAlert alert) {
+    return forensicAlertDao.upsertAlert(
+      ForensicAlertEntity(
+        id: alert.id,
+        alertType: alert.alertType,
+        severity: alert.severity,
+        message: alert.message,
+        createdAt: alert.createdAt.toIso8601String(),
+        status: alert.status,
+        note: alert.note,
+        actorLabel: alert.actorLabel,
+        actedAt: alert.actedAt?.toIso8601String(),
+        sourceMovementId: alert.sourceMovementId,
+        sourceDocumentId: alert.sourceDocumentId,
+        sourceDocumentType: alert.sourceDocumentType,
+        metadataJson:
+            alert.metadata == null ? null : jsonEncode(alert.metadata),
+        isSynced: alert.isSynced,
+      ),
+    );
+  }
+
+  @override
+  Future<List<ForensicAlert>> getUnsyncedForensicAlerts() async {
+    final entities = await forensicAlertDao.findUnsyncedLifecycleAlerts();
+    return entities.map(_toForensicAlert).toList(growable: false);
+  }
+
+  @override
+  Future<void> markForensicAlertAsSynced(String id) {
+    return forensicAlertDao.markAsSynced(id);
+  }
+
+  @override
+  Future<List<ProductionOrderDocument>> getProductionOrderDocuments() async {
+    final entities = await productionOrderDocumentDao.findAllDocuments();
+    return entities.map(_toProductionOrderDocument).toList(growable: false);
+  }
+
+  @override
+  Future<void> saveProductionOrderDocument(ProductionOrderDocument document) {
+    return productionOrderDocumentDao.upsertDocument(
+      ProductionOrderDocumentEntity(
+        id: document.id,
+        recipeVersionId: document.recipeVersionId,
+        recipeProductId: document.recipeProductId,
+        recipeProductName: document.recipeProductName,
+        producedInsumoId: document.producedInsumoId,
+        producedInsumoName: document.producedInsumoName,
+        plannedQuantity: document.plannedQuantity,
+        actualQuantity: document.actualQuantity,
+        producedBatchNumber: document.producedBatchNumber,
+        producedExpirationDate: document.producedExpirationDate.toIso8601String(),
+        operationDate: document.operationDate.toIso8601String(),
+        status: document.status,
+        varianceReason: document.varianceReason,
+        closedAt: document.closedAt?.toIso8601String(),
+        movementReferencesJson: document.encodeMovementReferences(),
+        isSynced: document.isSynced,
+      ),
+    );
+  }
+
+  @override
+  Future<List<ProductionOrderDocument>> getUnsyncedProductionOrders() async {
+    final entities = await productionOrderDocumentDao.findUnsynced();
+    return entities.map(_toProductionOrderDocument).toList(growable: false);
+  }
+
+  @override
+  Future<void> markProductionOrderDocumentAsSynced(String id) {
+    return productionOrderDocumentDao.markAsSynced(id);
+  }
+
+  CountSessionDao _requireCountSessionDao() {
+    final dao = countSessionDao;
+    if (dao == null) {
+      throw StateError('CountSessionDao is not configured');
+    }
+    return dao;
+  }
+
+  CountLineDao _requireCountLineDao() {
+    final dao = countLineDao;
+    if (dao == null) {
+      throw StateError('CountLineDao is not configured');
+    }
+    return dao;
+  }
+
+  CountSessionDocument _toCountSessionDocument(
+    CountSessionDocumentEntity session,
+    List<CountLineEntity> lines,
+  ) {
+    return CountSessionDocument(
+      id: session.id,
+      warehouseId: session.warehouseId,
+      warehouseName: session.warehouseName,
+      cutoffAt: DateTime.parse(session.cutoffAt),
+      status: session.status,
+      createdAt: DateTime.parse(session.createdAt),
+      updatedAt: DateTime.parse(session.updatedAt),
+      notes: session.notes,
+      postedAt: session.postedAt == null ? null : DateTime.parse(session.postedAt!),
+      movementReferences:
+          CountSessionDocument.decodeMovementReferences(session.movementReferencesJson),
+      lines: lines
+          .map(
+            (line) => CountSessionLineDocument(
+              id: line.id,
+              insumoId: line.insumoId,
+              insumoName: line.insumoName,
+              uom: line.uom,
+              theoreticalQuantity: line.theoreticalQuantity,
+              approvedEntryIndex: line.approvedEntryIndex,
+              entries: (jsonDecode(line.entriesJson) as List<dynamic>)
+                  .map(
+                    (entry) => CountLineEntryDocument.fromJson(
+                      Map<String, dynamic>.from(entry as Map),
+                    ),
+                  )
+                  .toList(growable: false),
+            ),
+          )
+          .toList(growable: false),
+      isSynced: session.isSynced,
+    );
+  }
+
+  RecipeVersionDocument _toRecipeVersionDocument(RecipeVersionDocumentEntity entity) {
+    return RecipeVersionDocument(
+      id: entity.id,
+      productId: entity.productId,
+      productName: entity.productName,
+      versionNumber: entity.versionNumber,
+      yieldQuantity: entity.yieldQuantity,
+      technicalShrinkPct: entity.technicalShrinkPct,
+      createdAt: DateTime.parse(entity.createdAt),
+      versionNote: entity.versionNote,
+      publishedAt: entity.publishedAt == null ? null : DateTime.parse(entity.publishedAt!),
+      isSynced: entity.isSynced,
+      components: RecipeVersionDocument.decodeComponents(entity.componentsJson),
+    );
+  }
+
+  ProductionOrderDocument _toProductionOrderDocument(
+    ProductionOrderDocumentEntity entity,
+  ) {
+    return ProductionOrderDocument(
+      id: entity.id,
+      recipeVersionId: entity.recipeVersionId,
+      recipeProductId: entity.recipeProductId,
+      recipeProductName: entity.recipeProductName,
+      producedInsumoId: entity.producedInsumoId,
+      producedInsumoName: entity.producedInsumoName,
+      plannedQuantity: entity.plannedQuantity,
+      actualQuantity: entity.actualQuantity,
+      producedBatchNumber: entity.producedBatchNumber,
+      producedExpirationDate: DateTime.parse(entity.producedExpirationDate),
+      operationDate: DateTime.parse(entity.operationDate),
+      status: entity.status,
+      varianceReason: entity.varianceReason,
+      closedAt: entity.closedAt == null ? null : DateTime.parse(entity.closedAt!),
+      movementReferences: ProductionOrderDocument.decodeMovementReferences(
+        entity.movementReferencesJson,
+      ),
+      isSynced: entity.isSynced,
+    );
+  }
+
+  ForensicAlert _toForensicAlert(ForensicAlertEntity entity) {
+    return ForensicAlert(
+      id: entity.id,
+      alertType: entity.alertType,
+      severity: entity.severity,
+      message: entity.message,
+      createdAt: DateTime.parse(entity.createdAt),
+      status: entity.status,
+      note: entity.note,
+      actorLabel: entity.actorLabel,
+      actedAt: entity.actedAt == null ? null : DateTime.parse(entity.actedAt!),
+      sourceMovementId: entity.sourceMovementId,
+      sourceDocumentId: entity.sourceDocumentId,
+      sourceDocumentType: entity.sourceDocumentType,
+      isSynced: entity.isSynced,
+      metadata: entity.metadataJson == null
+          ? null
+          : Map<String, dynamic>.from(
+              jsonDecode(entity.metadataJson!) as Map<String, dynamic>,
+            ),
+    );
   }
 }
