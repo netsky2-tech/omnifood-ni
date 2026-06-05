@@ -101,3 +101,44 @@ export class PushAuditLogsDto {
   @Type(() => CreateAuditLogDto)
   logs: CreateAuditLogDto[];
 }
+
+export const inventoryBohPermissionValues = [
+  'inventory.boh.shell',
+  'inventory.boh.purchases.view',
+  'inventory.boh.production.view',
+  'inventory.boh.counts.view',
+  'inventory.boh.alerts.view',
+  'inventory.boh.kardex.view',
+  'inventory.boh.recipes.view',
+] as const;
+
+export type InventoryBohPermissionDto =
+  (typeof inventoryBohPermissionValues)[number];
+
+export class AuthenticatedUserDto {
+  id: string;
+  name: string;
+  role: string;
+  tenant_id: string;
+  permissions: InventoryBohPermissionDto[];
+}
+
+export class StaffSyncSecurityProfileDto {
+  user_id: string;
+  pin_hash: string | null;
+  totp_secret_seed: string | null;
+  is_totp_enabled: boolean;
+  is_pin_enabled: boolean;
+  scope: 'self' | 'authorizer' | 'masked' | 'full';
+}
+
+export class StaffSyncUserDto {
+  id: string;
+  name: string;
+  role: string;
+  is_active: boolean;
+  email: string;
+  tenant_id: string;
+  permissions: InventoryBohPermissionDto[];
+  security_profile: StaffSyncSecurityProfileDto | null;
+}

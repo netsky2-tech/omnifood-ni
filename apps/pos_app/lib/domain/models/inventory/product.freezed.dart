@@ -29,6 +29,9 @@ mixin _$Product {
   bool get isActive => throw _privateConstructorUsedError;
   String? get sku => throw _privateConstructorUsedError;
   String? get barcode => throw _privateConstructorUsedError;
+  String? get category => throw _privateConstructorUsedError;
+  bool get isPrepared => throw _privateConstructorUsedError;
+  String? get createdAt => throw _privateConstructorUsedError;
   List<ProductVariant> get variants => throw _privateConstructorUsedError;
   List<Modifier> get availableModifiers => throw _privateConstructorUsedError;
 
@@ -52,6 +55,9 @@ abstract class $ProductCopyWith<$Res> {
       bool isActive,
       String? sku,
       String? barcode,
+      String? category,
+      bool isPrepared,
+      String? createdAt,
       List<ProductVariant> variants,
       List<Modifier> availableModifiers});
 }
@@ -78,6 +84,9 @@ class _$ProductCopyWithImpl<$Res, $Val extends Product>
     Object? isActive = null,
     Object? sku = freezed,
     Object? barcode = freezed,
+    Object? category = freezed,
+    Object? isPrepared = null,
+    Object? createdAt = freezed,
     Object? variants = null,
     Object? availableModifiers = null,
   }) {
@@ -118,6 +127,18 @@ class _$ProductCopyWithImpl<$Res, $Val extends Product>
           ? _value.barcode
           : barcode // ignore: cast_nullable_to_non_nullable
               as String?,
+      category: freezed == category
+          ? _value.category
+          : category // ignore: cast_nullable_to_non_nullable
+              as String?,
+      isPrepared: null == isPrepared
+          ? _value.isPrepared
+          : isPrepared // ignore: cast_nullable_to_non_nullable
+              as bool,
+      createdAt: freezed == createdAt
+          ? _value.createdAt
+          : createdAt // ignore: cast_nullable_to_non_nullable
+              as String?,
       variants: null == variants
           ? _value.variants
           : variants // ignore: cast_nullable_to_non_nullable
@@ -147,6 +168,9 @@ abstract class _$$ProductImplCopyWith<$Res> implements $ProductCopyWith<$Res> {
       bool isActive,
       String? sku,
       String? barcode,
+      String? category,
+      bool isPrepared,
+      String? createdAt,
       List<ProductVariant> variants,
       List<Modifier> availableModifiers});
 }
@@ -171,6 +195,9 @@ class __$$ProductImplCopyWithImpl<$Res>
     Object? isActive = null,
     Object? sku = freezed,
     Object? barcode = freezed,
+    Object? category = freezed,
+    Object? isPrepared = null,
+    Object? createdAt = freezed,
     Object? variants = null,
     Object? availableModifiers = null,
   }) {
@@ -211,6 +238,18 @@ class __$$ProductImplCopyWithImpl<$Res>
           ? _value.barcode
           : barcode // ignore: cast_nullable_to_non_nullable
               as String?,
+      category: freezed == category
+          ? _value.category
+          : category // ignore: cast_nullable_to_non_nullable
+              as String?,
+      isPrepared: null == isPrepared
+          ? _value.isPrepared
+          : isPrepared // ignore: cast_nullable_to_non_nullable
+              as bool,
+      createdAt: freezed == createdAt
+          ? _value.createdAt
+          : createdAt // ignore: cast_nullable_to_non_nullable
+              as String?,
       variants: null == variants
           ? _value._variants
           : variants // ignore: cast_nullable_to_non_nullable
@@ -236,6 +275,9 @@ class _$ProductImpl implements _Product {
       this.isActive = true,
       this.sku,
       this.barcode,
+      this.category,
+      this.isPrepared = false,
+      this.createdAt,
       final List<ProductVariant> variants = const [],
       final List<Modifier> availableModifiers = const []})
       : _variants = variants,
@@ -263,6 +305,13 @@ class _$ProductImpl implements _Product {
   final String? sku;
   @override
   final String? barcode;
+  @override
+  final String? category;
+  @override
+  @JsonKey()
+  final bool isPrepared;
+  @override
+  final String? createdAt;
   final List<ProductVariant> _variants;
   @override
   @JsonKey()
@@ -284,7 +333,7 @@ class _$ProductImpl implements _Product {
 
   @override
   String toString() {
-    return 'Product(id: $id, name: $name, uom: $uom, stock: $stock, averageCost: $averageCost, sellPrice: $sellPrice, isActive: $isActive, sku: $sku, barcode: $barcode, variants: $variants, availableModifiers: $availableModifiers)';
+    return 'Product(id: $id, name: $name, uom: $uom, stock: $stock, averageCost: $averageCost, sellPrice: $sellPrice, isActive: $isActive, sku: $sku, barcode: $barcode, category: $category, isPrepared: $isPrepared, createdAt: $createdAt, variants: $variants, availableModifiers: $availableModifiers)';
   }
 
   @override
@@ -304,6 +353,12 @@ class _$ProductImpl implements _Product {
                 other.isActive == isActive) &&
             (identical(other.sku, sku) || other.sku == sku) &&
             (identical(other.barcode, barcode) || other.barcode == barcode) &&
+            (identical(other.category, category) ||
+                other.category == category) &&
+            (identical(other.isPrepared, isPrepared) ||
+                other.isPrepared == isPrepared) &&
+            (identical(other.createdAt, createdAt) ||
+                other.createdAt == createdAt) &&
             const DeepCollectionEquality().equals(other._variants, _variants) &&
             const DeepCollectionEquality()
                 .equals(other._availableModifiers, _availableModifiers));
@@ -322,6 +377,9 @@ class _$ProductImpl implements _Product {
       isActive,
       sku,
       barcode,
+      category,
+      isPrepared,
+      createdAt,
       const DeepCollectionEquality().hash(_variants),
       const DeepCollectionEquality().hash(_availableModifiers));
 
@@ -350,6 +408,9 @@ abstract class _Product implements Product {
       final bool isActive,
       final String? sku,
       final String? barcode,
+      final String? category,
+      final bool isPrepared,
+      final String? createdAt,
       final List<ProductVariant> variants,
       final List<Modifier> availableModifiers}) = _$ProductImpl;
 
@@ -373,6 +434,12 @@ abstract class _Product implements Product {
   String? get sku;
   @override
   String? get barcode;
+  @override
+  String? get category;
+  @override
+  bool get isPrepared;
+  @override
+  String? get createdAt;
   @override
   List<ProductVariant> get variants;
   @override

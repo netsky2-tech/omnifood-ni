@@ -8,6 +8,8 @@ class BatchEntity {
   final String insumoId;
   @ColumnInfo(name: 'batch_number')
   final String batchNumber;
+  @ColumnInfo(name: 'received_date')
+  final String? receivedDate;
   @ColumnInfo(name: 'expiration_date')
   final String expirationDate;
   @ColumnInfo(name: 'remaining_stock')
@@ -20,6 +22,7 @@ class BatchEntity {
     required this.id,
     required this.insumoId,
     required this.batchNumber,
+    this.receivedDate,
     required this.expirationDate,
     required this.remainingStock,
     required this.cost,

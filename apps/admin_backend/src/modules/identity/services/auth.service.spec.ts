@@ -82,6 +82,7 @@ describe('AuthService', () => {
     expect(result[0]).toMatchObject({
       id: 'u-1',
       role: UserRole.CASHIER,
+      permissions: [],
       security_profile: {
         user_id: 'u-1',
         pin_hash: '$2b$10$hash',
@@ -125,7 +126,9 @@ describe('AuthService', () => {
     const result = (await service.getStaffForSync(
       'tenant-1',
       UserRole.CASHIER,
-    )) as Array<{ security_profile: Record<string, unknown> | null }>;
+    )) as unknown as Array<{
+      security_profile: Record<string, unknown> | null;
+    }>;
 
     expect(qb.addSelect).not.toHaveBeenCalledWith('security_profile.pin_hash');
     expect(result[0].security_profile).toMatchObject({
@@ -134,6 +137,9 @@ describe('AuthService', () => {
       totp_secret_seed: null,
       is_totp_enabled: true,
       is_pin_enabled: true,
+    });
+    expect(result[0]).toMatchObject({
+      permissions: [],
     });
   });
 
@@ -187,7 +193,7 @@ describe('AuthService', () => {
       'cashier-1',
       'pos-auth-continuity',
     );
-    const scopedResult = result as {
+    const scopedResult = result as unknown as {
       staff: Array<{ security_profile: Record<string, unknown> | null }>;
     };
 
@@ -201,6 +207,10 @@ describe('AuthService', () => {
       user_id: 'supervisor-1',
       pin_hash: '$2b$10$manager',
       totp_secret_seed: 'seed-manager',
+    });
+    expect(scopedResult.staff[1]).toMatchObject({
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      permissions: expect.arrayContaining(['inventory.boh.shell']),
     });
   });
 
@@ -236,7 +246,9 @@ describe('AuthService', () => {
     const result = (await service.getStaffForSync(
       'tenant-1',
       'SUPERVISOR',
-    )) as Array<{ security_profile: Record<string, unknown> | null }>;
+    )) as unknown as Array<{
+      security_profile: Record<string, unknown> | null;
+    }>;
 
     expect(qb.addSelect).not.toHaveBeenCalledWith('security_profile.pin_hash');
     expect(result[0].security_profile).toMatchObject({
@@ -283,7 +295,9 @@ describe('AuthService', () => {
       UserRole.CASHIER,
       'u-4',
       'all-users',
-    )) as Array<{ security_profile: Record<string, unknown> | null }>;
+    )) as unknown as Array<{
+      security_profile: Record<string, unknown> | null;
+    }>;
 
     expect(qb.addSelect).not.toHaveBeenCalledWith('security_profile.pin_hash');
     expect(result[0].security_profile).toMatchObject({
@@ -358,7 +372,7 @@ describe('AuthService', () => {
       'cashier-self',
       'pos-auth-continuity',
     );
-    const scopedResult = result as {
+    const scopedResult = result as unknown as {
       staff: Array<{ security_profile: Record<string, unknown> | null }>;
     };
 
@@ -480,7 +494,9 @@ describe('AuthService', () => {
     const result = (await service.getStaffForSync(
       'tenant-1',
       UserRole.MANAGER,
-    )) as Array<{ security_profile: Record<string, unknown> | null }>;
+    )) as unknown as Array<{
+      security_profile: Record<string, unknown> | null;
+    }>;
 
     expect(result[0].security_profile).toBeNull();
   });

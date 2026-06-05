@@ -51,7 +51,7 @@ class _LoginViewState extends State<LoginView> {
                   controller: _passwordController,
                   obscureText: true,
                   decoration: const InputDecoration(
-                    labelText: 'Password',
+                    labelText: 'Contraseña',
                   ),
                 ),
                 if (viewModel.error != null) ...[

@@ -7,9 +7,14 @@ import '../daos/audit_log_dao.dart';
 import '../daos/security_profile_dao.dart';
 import '../daos/inventory/insumo_dao.dart';
 import '../daos/inventory/recipe_dao.dart';
+import '../daos/inventory/recipe_version_document_dao.dart';
+import '../daos/inventory/count_line_dao.dart';
+import '../daos/inventory/count_session_dao.dart';
+import '../daos/inventory/forensic_alert_dao.dart';
 import '../daos/inventory/movement_dao.dart';
 import '../daos/inventory/inventory_dao.dart';
 import '../daos/inventory/purchase_dao.dart';
+import '../daos/inventory/production_order_document_dao.dart';
 import '../daos/inventory/supplier_dao.dart';
 import '../daos/inventory/warehouse_dao.dart';
 import '../daos/inventory/uom_conversion_dao.dart';
@@ -30,10 +35,15 @@ import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/data/models/inventory/insumo_entity.dart';
 import 'package:pos_app/data/models/inventory/product_entity.dart';
 import 'package:pos_app/data/models/inventory/recipe_entity.dart';
+import 'package:pos_app/data/models/inventory/recipe_version_document_entity.dart';
+import 'package:pos_app/data/models/inventory/count_line_entity.dart';
+import 'package:pos_app/data/models/inventory/count_session_document_entity.dart';
+import 'package:pos_app/data/models/inventory/forensic_alert_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
 import 'package:pos_app/data/models/inventory/supplier_entity.dart';
 import 'package:pos_app/data/models/inventory/warehouse_entity.dart';
 import 'package:pos_app/data/models/inventory/purchase_entity.dart';
+import 'package:pos_app/data/models/inventory/production_order_document_entity.dart';
 import 'package:pos_app/data/models/inventory/uom_conversion_entity.dart';
 import 'package:pos_app/data/models/inventory/batch_entity.dart';
 import 'package:pos_app/data/models/sales/invoice_entity.dart';
@@ -47,7 +57,7 @@ import 'package:pos_app/data/models/sales/promotion_entity.dart';
 
 part 'app_database.g.dart'; // generated code
 
-@Database(version: 14, entities: [
+@Database(version: 20, entities: [
   UserEntity,
   SecurityProfileEntity,
   AuditLogEntity,
@@ -57,10 +67,15 @@ part 'app_database.g.dart'; // generated code
   ProductVariantEntity,
   ProductModifierEntity,
   RecipeEntity,
+  RecipeVersionDocumentEntity,
+  CountSessionDocumentEntity,
+  CountLineEntity,
+  ForensicAlertEntity,
   MovementEntity,
   SupplierEntity,
   WarehouseEntity,
   PurchaseEntity,
+  ProductionOrderDocumentEntity,
   UomConversionEntity,
   BatchEntity,
   InvoiceEntity,
@@ -81,11 +96,16 @@ abstract class AppDatabase extends FloorDatabase {
   InsumoDao get insumoDao;
   ProductDao get productDao;
   RecipeDao get recipeDao;
+  RecipeVersionDocumentDao get recipeVersionDocumentDao;
+  CountSessionDao get countSessionDao;
+  CountLineDao get countLineDao;
+  ForensicAlertDao get forensicAlertDao;
   MovementDao get movementDao;
   InventoryDao get inventoryDao;
   SupplierDao get supplierDao;
   WarehouseDao get warehouseDao;
   PurchaseDao get purchaseDao;
+  ProductionOrderDocumentDao get productionOrderDocumentDao;
   UomConversionDao get uomConversionDao;
   BatchDao get batchDao;
   InvoiceDao get invoiceDao;

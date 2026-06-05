@@ -15,6 +15,12 @@ class ProductEntity {
   final bool isActive;
   final String? sku;
   final String? barcode;
+  @ColumnInfo(name: 'category')
+  final String? category;
+  @ColumnInfo(name: 'is_prepared')
+  final bool isPrepared;
+  @ColumnInfo(name: 'created_at')
+  final String? createdAt;
 
   ProductEntity({
     required this.id,
@@ -26,6 +32,9 @@ class ProductEntity {
     this.isActive = true,
     this.sku,
     this.barcode,
+    this.category,
+    this.isPrepared = false,
+    this.createdAt,
   });
 }
 

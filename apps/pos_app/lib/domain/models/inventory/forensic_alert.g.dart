@@ -13,6 +13,16 @@ _$ForensicAlertImpl _$$ForensicAlertImplFromJson(Map<String, dynamic> json) =>
       severity: json['severity'] as String,
       message: json['message'] as String,
       createdAt: DateTime.parse(json['createdAt'] as String),
+      status: json['status'] as String? ?? 'active',
+      note: json['note'] as String?,
+      actorLabel: json['actorLabel'] as String?,
+      actedAt: json['actedAt'] == null
+          ? null
+          : DateTime.parse(json['actedAt'] as String),
+      sourceMovementId: json['sourceMovementId'] as String?,
+      sourceDocumentId: json['sourceDocumentId'] as String?,
+      sourceDocumentType: json['sourceDocumentType'] as String?,
+      isSynced: json['isSynced'] as bool? ?? false,
       metadata: json['metadata'] as Map<String, dynamic>?,
     );
 
@@ -23,5 +33,13 @@ Map<String, dynamic> _$$ForensicAlertImplToJson(_$ForensicAlertImpl instance) =>
       'severity': instance.severity,
       'message': instance.message,
       'createdAt': instance.createdAt.toIso8601String(),
+      'status': instance.status,
+      'note': instance.note,
+      'actorLabel': instance.actorLabel,
+      'actedAt': instance.actedAt?.toIso8601String(),
+      'sourceMovementId': instance.sourceMovementId,
+      'sourceDocumentId': instance.sourceDocumentId,
+      'sourceDocumentType': instance.sourceDocumentType,
+      'isSynced': instance.isSynced,
       'metadata': instance.metadata,
     };

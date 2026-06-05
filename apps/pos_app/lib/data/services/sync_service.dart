@@ -6,7 +6,13 @@ import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import '../../domain/repositories/audit_repository.dart';
 import '../../domain/repositories/sales/sales_repository.dart';
+import '../../domain/models/inventory/inventory_movement.dart';
 import '../../domain/repositories/inventory/inventory_repository.dart';
+import '../../domain/models/inventory/purchase.dart';
+import '../../domain/models/inventory/count_session_document.dart';
+import '../../domain/models/inventory/forensic_alert.dart';
+import '../../domain/models/inventory/recipe_version_document.dart';
+import '../../domain/models/inventory/production_order_document.dart';
 
 const Map<String, String> syncRole = {
   'EDGE_SERVER': 'EDGE_SERVER',
@@ -59,7 +65,13 @@ class SyncService {
       await _auditRepository.syncLogs();
       
       // 2. Sync inventory outbox deltas
+      await _syncPurchaseDocuments();
+      await _syncRecipeVersionDocuments();
+      await _syncProductionOrderDocuments();
+      await _syncCountSessionDocuments();
+      await _syncAlertLifecycleDocuments();
       await _syncInventoryOutbox();
+      await _refreshAlertInbox();
       
       developer.log('Sync completed successfully', name: 'SyncService');
     } catch (e, stackTrace) {
@@ -75,7 +87,13 @@ class SyncService {
   }
 
   Future<void> _syncInventoryOutbox() async {
-    final unsynced = await _inventoryRepository.getUnsyncedMovements();
+    final unsynced = (await _inventoryRepository.getUnsyncedMovements())
+        .where(
+          (movement) =>
+              movement.type != MovementType.purchase &&
+              !(movement.reason?.startsWith('COUNT_SESSION:') ?? false),
+        )
+        .toList(growable: false);
     if (unsynced.isEmpty) return;
 
     final ordered = _orderByReplaySemantics(unsynced);
@@ -101,6 +119,275 @@ class SyncService {
         stackTrace: stackTrace,
       );
     }
+  }
+
+  Future<void> _syncPurchaseDocuments() async {
+    final unsyncedPurchases = await _inventoryRepository.getUnsyncedPurchases();
+    if (unsyncedPurchases.isEmpty) return;
+
+    for (final purchase in unsyncedPurchases) {
+      try {
+        final response = await _dio.post(
+          '/inventory/purchases',
+          data: _buildPurchasePayload(purchase),
+        );
+
+        if (response.statusCode == 200 || response.statusCode == 201) {
+          await _inventoryRepository.markPurchaseAsSynced(purchase.id);
+          await _inventoryRepository.markMovementAsSynced(purchase.id);
+        }
+      } on DioException catch (e) {
+        developer.log(
+          'Failed to sync purchase ${purchase.id}: ${e.message}',
+          name: 'SyncService',
+        );
+      }
+    }
+  }
+
+  Future<void> _syncRecipeVersionDocuments() async {
+    final unsynced = await _inventoryRepository.getUnsyncedRecipeVersionDocuments();
+    if (unsynced.isEmpty) {
+      return;
+    }
+
+    for (final document in unsynced) {
+      try {
+        final response = await _dio.post(
+          '/inventory/recipes/versions',
+          data: _buildRecipeVersionPayload(document),
+        );
+        if (response.statusCode == 200 || response.statusCode == 201) {
+          await _inventoryRepository.markRecipeVersionDocumentAsSynced(document.id);
+        }
+      } on DioException catch (e) {
+        developer.log(
+          'Failed to sync recipe version ${document.id}: ${e.message}',
+          name: 'SyncService',
+        );
+      }
+    }
+  }
+
+  Future<void> _syncProductionOrderDocuments() async {
+    final unsynced = await _inventoryRepository.getUnsyncedProductionOrders();
+    if (unsynced.isEmpty) {
+      return;
+    }
+
+    for (final document in unsynced) {
+      try {
+        final response = await _dio.post(
+          '/inventory/production-orders/close',
+          data: _buildProductionOrderPayload(document),
+        );
+        if (response.statusCode == 200 || response.statusCode == 201) {
+          await _inventoryRepository.markProductionOrderDocumentAsSynced(document.id);
+          for (final movementId in document.movementReferences) {
+            await _inventoryRepository.markMovementAsSynced(movementId);
+          }
+        }
+      } on DioException catch (e) {
+        developer.log(
+          'Failed to sync production order ${document.id}: ${e.message}',
+          name: 'SyncService',
+        );
+      }
+    }
+  }
+
+  Future<void> _syncCountSessionDocuments() async {
+    final unsynced = await _inventoryRepository.getUnsyncedCountSessionDocuments();
+    if (unsynced.isEmpty) {
+      return;
+    }
+
+    for (final document in unsynced) {
+      try {
+        final response = await _dio.post(
+          '/inventory/count-sessions',
+          data: _buildCountSessionPayload(document),
+        );
+        if (response.statusCode == 200 || response.statusCode == 201) {
+          await _inventoryRepository.markCountSessionDocumentAsSynced(document.id);
+          for (final movementId in document.movementReferences) {
+            await _inventoryRepository.markMovementAsSynced(movementId);
+          }
+        }
+      } on DioException catch (e) {
+        developer.log(
+          'Failed to sync count session ${document.id}: ${e.message}',
+          name: 'SyncService',
+        );
+      }
+    }
+  }
+
+  Future<void> _syncAlertLifecycleDocuments() async {
+    final unsynced = await _inventoryRepository.getUnsyncedForensicAlerts();
+    if (unsynced.isEmpty) {
+      return;
+    }
+
+    for (final alert in unsynced) {
+      try {
+        final response = await _dio.post(
+          '/inventory/alerts/${alert.id}/lifecycle',
+          data: _buildAlertLifecyclePayload(alert),
+        );
+        if (response.statusCode == 200 || response.statusCode == 201) {
+          await _inventoryRepository.markForensicAlertAsSynced(alert.id);
+        }
+      } on DioException catch (e) {
+        developer.log(
+          'Failed to sync alert lifecycle ${alert.id}: ${e.message}',
+          name: 'SyncService',
+        );
+      }
+    }
+  }
+
+  Future<void> _refreshAlertInbox() async {
+    try {
+      final response = await _dio.get('/inventory/alerts');
+      final payload = response.data;
+      final alertsPayload = payload is Map<String, dynamic>
+          ? payload['alerts'] as List<dynamic>? ?? const <dynamic>[]
+          : const <dynamic>[];
+
+      for (final row in alertsPayload) {
+        final map = Map<String, dynamic>.from(row as Map);
+        await _inventoryRepository.saveForensicAlert(
+          ForensicAlert(
+            id: map['id'] as String,
+            alertType: map['alertType'] as String,
+            severity: map['severity'] as String,
+            message: map['message'] as String,
+            createdAt: DateTime.parse(map['createdAt'] as String),
+            status: (map['status'] as String?) ?? 'active',
+            note: map['note'] as String?,
+            actorLabel: map['actorLabel'] as String?,
+            actedAt: map['actedAt'] == null
+                ? null
+                : DateTime.parse(map['actedAt'] as String),
+            sourceMovementId: map['sourceMovementId'] as String?,
+            sourceDocumentId: map['sourceDocumentId'] as String?,
+            sourceDocumentType: map['sourceDocumentType'] as String?,
+            isSynced: true,
+          ),
+        );
+      }
+    } on DioException catch (e) {
+      developer.log(
+        'Failed to refresh forensic alerts: ${e.message}',
+        name: 'SyncService',
+      );
+    }
+  }
+
+  Map<String, Object?> _buildPurchasePayload(Purchase purchase) {
+    return {
+      'insumoId': purchase.insumoId,
+      'quantity': purchase.quantity,
+      'unitCost': purchase.unitCost,
+      'currency': purchase.currency,
+      'invoiceDate': purchase.invoiceDate.toIso8601String().split('T').first,
+      'supplierName': purchase.supplierId,
+      'lotCode': purchase.lotCode,
+      'receivedDate': purchase.receivedDate?.toIso8601String().split('T').first,
+      'expirationDate': purchase.expirationDate
+          ?.toIso8601String()
+          .split('T')
+          .first,
+    };
+  }
+
+  Map<String, Object?> _buildRecipeVersionPayload(RecipeVersionDocument document) {
+    return {
+      'id': document.id,
+      'productId': document.productId,
+      'productName': document.productName,
+      'versionNumber': document.versionNumber,
+      'yieldQuantity': document.yieldQuantity,
+      'technicalShrinkPct': document.technicalShrinkPct,
+      'versionNote': document.versionNote,
+      'createdAt': document.createdAt.toIso8601String(),
+      'publishedAt': document.publishedAt?.toIso8601String(),
+      'components': document.components
+          .map(
+            (component) => {
+              'ingredientId': component.ingredientId,
+              'ingredientName': component.ingredientName,
+              'ingredientType': component.ingredientType,
+              'grossQuantity': component.grossQuantity,
+              'technicalShrinkPct': component.technicalShrinkPct,
+              'referenceVersionId': component.referenceVersionId,
+            },
+          )
+          .toList(growable: false),
+    };
+  }
+
+  Map<String, Object?> _buildProductionOrderPayload(ProductionOrderDocument document) {
+    return {
+      'id': document.id,
+      'recipeVersionId': document.recipeVersionId,
+      'producedInsumoId': document.producedInsumoId,
+      'producedBatchNumber': document.producedBatchNumber,
+      'producedExpirationDate': document.producedExpirationDate.toIso8601String(),
+      'plannedQuantity': document.plannedQuantity,
+      'actualQuantity': document.actualQuantity,
+      'varianceReason': document.varianceReason,
+      'operationDate': document.operationDate.toIso8601String(),
+      'movementReferences': document.movementReferences,
+    };
+  }
+
+  Map<String, Object?> _buildCountSessionPayload(CountSessionDocument document) {
+    return {
+      'id': document.id,
+      'warehouseId': document.warehouseId,
+      'warehouseName': document.warehouseName,
+      'cutoffAt': document.cutoffAt.toIso8601String(),
+      'status': document.status,
+      'createdAt': document.createdAt.toIso8601String(),
+      'updatedAt': document.updatedAt.toIso8601String(),
+      'postedAt': document.postedAt?.toIso8601String(),
+      'notes': document.notes,
+      'movementReferences': document.movementReferences,
+      'lines': document.lines
+          .map(
+            (line) => {
+              'id': line.id,
+              'insumoId': line.insumoId,
+              'insumoName': line.insumoName,
+              'uom': line.uom,
+              'theoreticalQuantity': line.theoreticalQuantity,
+              'approvedEntryIndex': line.approvedEntryIndex,
+              'entries': line.entries
+                  .map(
+                    (entry) => {
+                      'countedQuantity': entry.countedQuantity,
+                      'countedAt': entry.countedAt?.toIso8601String(),
+                      'notes': entry.notes,
+                      'actorLabel': entry.actorLabel,
+                      'disputed': entry.disputed,
+                    },
+                  )
+                  .toList(growable: false),
+            },
+          )
+          .toList(growable: false),
+    };
+  }
+
+  Map<String, Object?> _buildAlertLifecyclePayload(ForensicAlert alert) {
+    return {
+      'status': alert.status,
+      'actorLabel': alert.actorLabel,
+      'note': alert.note,
+      'actedAt': alert.actedAt?.toIso8601String() ?? alert.createdAt.toIso8601String(),
+    };
   }
 
   Future<Response<dynamic>> _postBatchEnvelope(List<dynamic> unsynced) {

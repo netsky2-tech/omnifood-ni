@@ -3,9 +3,46 @@ import '../../../../domain/models/inventory/insumo.dart';
 import '../../../../domain/models/inventory/supplier.dart';
 import '../../../../domain/models/inventory/purchase.dart';
 import '../../../../domain/models/inventory/uom_conversion.dart';
+import '../../../../domain/models/inventory/batch.dart';
 import '../../../../domain/repositories/inventory/inventory_repository.dart';
 import '../../../../domain/models/inventory/inventory_movement.dart';
 import '../../../../domain/services/inventory/movement_engine.dart';
+
+const purchaseCurrencies = ['NIO', 'USD'];
+
+class PurchaseReviewData {
+  const PurchaseReviewData({
+    required this.quantityInBaseUnit,
+    required this.bcnRate,
+    required this.unitCostNio,
+    required this.previousCppNio,
+    required this.projectedCppNio,
+    required this.requiresBatchTracking,
+  });
+
+  final double quantityInBaseUnit;
+  final double bcnRate;
+  final double unitCostNio;
+  final double previousCppNio;
+  final double projectedCppNio;
+  final bool requiresBatchTracking;
+}
+
+class PurchaseFifoRow {
+  const PurchaseFifoRow({
+    required this.batchNumber,
+    required this.remainingStock,
+    required this.expirationDate,
+    required this.isExpired,
+    required this.isNearExpiry,
+  });
+
+  final String batchNumber;
+  final double remainingStock;
+  final DateTime expirationDate;
+  final bool isExpired;
+  final bool isNearExpiry;
+}
 
 class PurchaseViewModel with ChangeNotifier {
   final InventoryRepository repository;
@@ -19,6 +56,9 @@ class PurchaseViewModel with ChangeNotifier {
 
   List<UomConversion> _conversions = [];
   List<UomConversion> get conversions => _conversions;
+
+  List<PurchaseFifoRow> _fifoRows = [];
+  List<PurchaseFifoRow> get fifoRows => _fifoRows;
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
@@ -36,6 +76,7 @@ class PurchaseViewModel with ChangeNotifier {
     _suppliers = await repository.getActiveSuppliers();
     if (insumoId != null) {
       _conversions = await repository.getConversionsByInsumoId(insumoId);
+      _fifoRows = await _loadFifoRows(insumoId);
     }
 
     _isLoading = false;
@@ -48,37 +89,79 @@ class PurchaseViewModel with ChangeNotifier {
     required String uomConversionId,
     required double quantity,
     required double unitCost,
+    required DateTime invoiceDate,
+    required String currency,
+    double? bcnRate,
+    String? lotCode,
+    DateTime? receivedDate,
+    DateTime? expirationDate,
   }) async {
     _errorMessage = null;
     _isLoading = true;
     notifyListeners();
 
     try {
-      // 1. Get the UOM conversion
-      final conversion = _conversions.firstWhere(
-        (c) => c.id == uomConversionId,
-        orElse: () => throw ArgumentError('Invalid conversion ID: $uomConversionId'),
+      final review = buildPurchaseReview(
+        insumoId: insumoId,
+        uomConversionId: uomConversionId,
+        quantity: quantity,
+        unitCost: unitCost,
+        currency: currency,
+        bcnRate: bcnRate,
+      );
+      final purchaseId = DateTime.now().millisecondsSinceEpoch.toString();
+
+      if (review.requiresBatchTracking) {
+        if (lotCode == null || lotCode.isEmpty || receivedDate == null || expirationDate == null) {
+          throw ArgumentError(
+            'Lot code, received date, and expiration date are required for batch-managed items.',
+          );
+        }
+      }
+
+      await movementEngine.recordPurchase(
+        insumoId,
+        review.quantityInBaseUnit,
+        review.unitCostNio,
+        movementId: purchaseId,
+        reason: 'Purchase $currency @ ${review.unitCostNio.toStringAsFixed(4)} NIO',
       );
 
-      // 2. Convert quantity to base unit (e.g., sacks -> grams)
-      final quantityInBaseUnit = quantity * conversion.factor;
-
-      // 3. Delegate to MovementEngine (calculates stock, WAC, creates movement)
-      await movementEngine.recordPurchase(insumoId, quantityInBaseUnit, unitCost);
-
-      // 4. Create and persist Purchase locally
       final purchase = Purchase(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        id: purchaseId,
         insumoId: insumoId,
         supplierId: supplierId,
-        quantity: quantityInBaseUnit,
+        quantity: review.quantityInBaseUnit,
         unitCost: unitCost,
         timestamp: DateTime.now(),
+        invoiceDate: invoiceDate,
+        currency: currency,
+        bcnRate: review.bcnRate,
+        unitCostNio: review.unitCostNio,
+        cppBeforeNio: review.previousCppNio,
+        projectedCppNio: review.projectedCppNio,
+        lotCode: lotCode,
+        receivedDate: receivedDate,
+        expirationDate: expirationDate,
+        requiresBatchTracking: review.requiresBatchTracking,
       );
-      await repository.savePurchase(purchase);
-
-      // 5. Queue for sync with backend (offline-first)
       await repository.queuePurchaseSync(purchase);
+
+      if (review.requiresBatchTracking && lotCode != null && receivedDate != null && expirationDate != null) {
+        await repository.saveBatch(
+          Batch(
+            id: purchaseId,
+            insumoId: insumoId,
+            batchNumber: lotCode,
+            receivedDate: receivedDate,
+            expirationDate: expirationDate,
+            remainingStock: review.quantityInBaseUnit,
+            cost: review.unitCostNio,
+          ),
+        );
+      }
+
+      _fifoRows = await _loadFifoRows(insumoId);
 
       _isLoading = false;
       notifyListeners();
@@ -88,6 +171,61 @@ class PurchaseViewModel with ChangeNotifier {
       notifyListeners();
       rethrow;
     }
+  }
+
+  PurchaseReviewData buildPurchaseReview({
+    required String insumoId,
+    required String uomConversionId,
+    required double quantity,
+    required double unitCost,
+    required String currency,
+    double? bcnRate,
+  }) {
+    final insumo = _insumos.firstWhere(
+      (item) => item.id == insumoId,
+      orElse: () => throw ArgumentError('Invalid insumo ID: $insumoId'),
+    );
+    final conversion = _conversions.firstWhere(
+      (c) => c.id == uomConversionId,
+      orElse: () => throw ArgumentError('Invalid conversion ID: $uomConversionId'),
+    );
+
+    final resolvedBcnRate =
+        currency == 'USD' ? (bcnRate ?? 36.5).toDouble() : 1.0;
+    final quantityInBaseUnit = quantity * conversion.factor;
+    final unitCostNio = unitCost * resolvedBcnRate;
+    final previousTotalCost = insumo.stock * insumo.averageCost;
+    final purchaseTotalCost = quantityInBaseUnit * unitCostNio;
+    final projectedStock = insumo.stock + quantityInBaseUnit;
+    final projectedCpp = projectedStock == 0
+        ? 0
+        : (previousTotalCost + purchaseTotalCost) / projectedStock;
+
+    return PurchaseReviewData(
+      quantityInBaseUnit: quantityInBaseUnit,
+      bcnRate: resolvedBcnRate,
+      unitCostNio: double.parse(unitCostNio.toStringAsFixed(4)),
+      previousCppNio: double.parse(insumo.averageCost.toStringAsFixed(4)),
+      projectedCppNio: double.parse(projectedCpp.toStringAsFixed(4)),
+      requiresBatchTracking: insumo.isPerishable,
+    );
+  }
+
+  Future<List<PurchaseFifoRow>> _loadFifoRows(String insumoId) async {
+    final now = DateTime.now();
+    final batches = await repository.getBatchesByInsumoId(insumoId);
+    return batches
+        .map(
+          (batch) => PurchaseFifoRow(
+            batchNumber: batch.batchNumber,
+            remainingStock: batch.remainingStock,
+            expirationDate: batch.expirationDate,
+            isExpired: batch.expirationDate.isBefore(now),
+            isNearExpiry: !batch.expirationDate.isBefore(now) &&
+                batch.expirationDate.difference(now).inDays <= 7,
+          ),
+        )
+        .toList(growable: false);
   }
 }
 

@@ -15,6 +15,9 @@ class Product with _$Product {
     @Default(true) bool isActive,
     String? sku,
     String? barcode,
+    String? category,
+    @Default(false) bool isPrepared,
+    String? createdAt,
     @Default([]) List<ProductVariant> variants,
     @Default([]) List<Modifier> availableModifiers,
   }) = _Product;

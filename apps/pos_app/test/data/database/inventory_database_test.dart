@@ -3,6 +3,13 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/models/inventory/insumo_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
+import 'package:pos_app/data/models/inventory/purchase_entity.dart';
+import 'package:pos_app/data/models/inventory/batch_entity.dart';
+import 'package:pos_app/data/models/inventory/count_line_entity.dart';
+import 'package:pos_app/data/models/inventory/count_session_document_entity.dart';
+import 'package:pos_app/data/models/inventory/recipe_version_document_entity.dart';
+import 'package:pos_app/data/models/inventory/production_order_document_entity.dart';
+import 'package:pos_app/data/models/inventory/forensic_alert_entity.dart';
 
 void main() {
   late AppDatabase database;
@@ -88,6 +95,150 @@ void main() {
       expect(result.any((e) => e.id == 'i1'), true);
       expect(result.any((e) => e.id == 'i3'), true);
       expect(result.any((e) => e.id == 'i2'), false);
+    });
+
+    test('should persist purchase FX preview fields and batch received date', () async {
+      await database.purchaseDao.insertPurchase(
+        PurchaseEntity(
+          id: 'pur-1',
+          insumoId: 'ins-1',
+          supplierId: 'sup-1',
+          quantity: 12,
+          unitCost: 10,
+          timestamp: DateTime.now().toIso8601String(),
+          invoiceDate: '2026-01-10',
+          currency: 'USD',
+          bcnRate: 36.5,
+          unitCostNio: 365,
+          cppBeforeNio: 200,
+          projectedCppNio: 250,
+          lotCode: 'LOT-1',
+          receivedDate: '2026-01-10',
+          expirationDate: '2026-02-10',
+          requiresBatchTracking: true,
+        ),
+      );
+      await database.batchDao.insertBatch(
+        BatchEntity(
+          id: 'bat-1',
+          insumoId: 'ins-1',
+          batchNumber: 'LOT-1',
+          receivedDate: '2026-01-10',
+          expirationDate: '2026-02-10',
+          remainingStock: 12,
+          cost: 365,
+        ),
+      );
+
+      final purchases = await database.purchaseDao.findAllPurchases();
+      final batches = await database.batchDao.findActiveBatchesByInsumoId('ins-1');
+
+      expect(purchases.single.currency, 'USD');
+      expect(purchases.single.projectedCppNio, 250);
+      expect(purchases.single.requiresBatchTracking, true);
+      expect(batches.single.receivedDate, '2026-01-10');
+    });
+
+    test('should persist recipe versions and production receipt documents', () async {
+      await database.recipeVersionDocumentDao.upsertDocument(
+        const RecipeVersionDocumentEntity(
+          id: 'rv-1',
+          productId: 'prod-1',
+          productName: 'Vanilla Latte',
+          versionNumber: 8,
+          yieldQuantity: 10,
+          technicalShrinkPct: 6,
+          createdAt: '2026-06-02T10:00:00.000Z',
+          componentsJson: '[{"ingredientId":"ins-1"}]',
+        ),
+      );
+      await database.productionOrderDocumentDao.upsertDocument(
+        const ProductionOrderDocumentEntity(
+          id: 'prod-order-1',
+          recipeVersionId: 'rv-1',
+          recipeProductId: 'prod-1',
+          recipeProductName: 'Vanilla Latte',
+          producedInsumoId: 'ins-1',
+          producedInsumoName: 'Base',
+          plannedQuantity: 10,
+          actualQuantity: 9,
+          producedBatchNumber: 'PB-1',
+          producedExpirationDate: '2026-07-01T00:00:00.000Z',
+          operationDate: '2026-06-02T10:00:00.000Z',
+          status: 'CLOSED_PENDING_SYNC',
+          movementReferencesJson: '["mov-1","mov-2"]',
+        ),
+      );
+
+      final recipeDocs = await database.recipeVersionDocumentDao.findByProductId('prod-1');
+      final productionDocs = await database.productionOrderDocumentDao.findAllDocuments();
+
+      expect(recipeDocs.single.versionNumber, 8);
+      expect(productionDocs.single.movementReferencesJson, '["mov-1","mov-2"]');
+    });
+
+    test('should persist count sessions and nested count lines', () async {
+      await database.countSessionDao.upsertDocument(
+        const CountSessionDocumentEntity(
+          id: 'count-1',
+          warehouseId: 'wh-1',
+          warehouseName: 'Bodega Central',
+          cutoffAt: '2026-06-02T10:00:00.000Z',
+          status: 'approved',
+          createdAt: '2026-06-02T09:00:00.000Z',
+          updatedAt: '2026-06-02T10:00:00.000Z',
+          movementReferencesJson: '["count-1:line-1"]',
+        ),
+      );
+      await database.countLineDao.insertLines(const [
+        CountLineEntity(
+          id: 'line-1',
+          sessionId: 'count-1',
+          insumoId: 'ins-1',
+          insumoName: 'Leche',
+          uom: 'L',
+          theoreticalQuantity: 15,
+          approvedEntryIndex: 1,
+          entriesJson:
+              '[{"countedQuantity":9,"disputed":true},{"countedQuantity":10,"disputed":false}]',
+        ),
+      ]);
+
+      final sessions = await database.countSessionDao.findAllDocuments();
+      final lines = await database.countLineDao.findBySessionId('count-1');
+
+      expect(sessions.single.status, 'approved');
+      expect(sessions.single.movementReferencesJson, '["count-1:line-1"]');
+      expect(lines.single.approvedEntryIndex, 1);
+      expect(lines.single.entriesJson, contains('countedQuantity'));
+    });
+
+    test('should persist forensic alert lifecycle state and source references', () async {
+      await database.forensicAlertDao.upsertAlert(
+        const ForensicAlertEntity(
+          id: 'alert-1',
+          alertType: 'LOW_STOCK',
+          severity: 'high',
+          message: 'Stock bajo en leche.',
+          createdAt: '2026-06-02T10:00:00.000Z',
+          status: 'acknowledged',
+          note: 'Revisado',
+          actorLabel: 'manager-1',
+          actedAt: '2026-06-02T10:05:00.000Z',
+          sourceMovementId: 'mov-1',
+          sourceDocumentId: 'purchase-1',
+          sourceDocumentType: 'PURCHASE',
+          metadataJson: '{"item":"Leche"}',
+        ),
+      );
+
+      final alerts = await database.forensicAlertDao.findAllAlerts();
+      final unsynced = await database.forensicAlertDao.findUnsyncedLifecycleAlerts();
+
+      expect(alerts.single.status, 'acknowledged');
+      expect(alerts.single.sourceMovementId, 'mov-1');
+      expect(alerts.single.metadataJson, contains('Leche'));
+      expect(unsynced.single.id, 'alert-1');
     });
   });
 }

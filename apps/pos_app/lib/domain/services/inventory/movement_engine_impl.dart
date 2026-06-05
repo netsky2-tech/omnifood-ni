@@ -43,7 +43,13 @@ class MovementEngineImpl implements MovementEngine {
   }
 
   @override
-  Future<void> recordPurchase(String insumoId, double quantity, double cost) async {
+  Future<void> recordPurchase(
+    String insumoId,
+    double quantity,
+    double cost, {
+    String? movementId,
+    String? reason,
+  }) async {
     final insumo = await repository.getInsumoById(insumoId);
     if (insumo == null) return;
 
@@ -61,14 +67,14 @@ class MovementEngineImpl implements MovementEngine {
     }
 
     await repository.saveMovement(InventoryMovement(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: movementId ?? DateTime.now().millisecondsSinceEpoch.toString(),
       insumoId: insumoId,
       type: MovementType.purchase,
       quantity: quantity,
       previousStock: insumo.stock,
       newStock: newStock,
       timestamp: DateTime.now(),
-      reason: 'Purchase',
+      reason: reason ?? 'Purchase',
     ));
   }
 
@@ -88,6 +94,113 @@ class MovementEngineImpl implements MovementEngine {
       insumoId: insumoId,
       type: MovementType.shrinkage,
       quantity: -quantity,
+      previousStock: insumo.stock,
+      newStock: newStock,
+      timestamp: DateTime.now(),
+      reason: reason,
+    ));
+  }
+
+  @override
+  Future<List<InventoryMovement>> recordProduction({
+    required String recipeProductId,
+    required String producedInsumoId,
+    required double quantity,
+    required String reason,
+  }) async {
+    if (quantity <= 0) {
+      throw ArgumentError('Production quantity must be greater than zero');
+    }
+
+    final timestamp = DateTime.now();
+    final Map<String, double> insumoQuantities = {};
+    await _gatherInsumoQuantities(recipeProductId, quantity, 0, insumoQuantities);
+
+    final inputInsumos = await repository.getInsumosByIds(
+      insumoQuantities.keys.toList(growable: false),
+    );
+    final inputInsumoMap = {for (final insumo in inputInsumos) insumo.id: insumo};
+    final movements = <InventoryMovement>[];
+    double totalConsumedCost = 0;
+
+    for (final entry in insumoQuantities.entries) {
+      final insumo = inputInsumoMap[entry.key];
+      if (insumo == null) {
+        continue;
+      }
+
+      final previousStock = insumo.stock;
+      final newStock = previousStock - entry.value;
+      totalConsumedCost += entry.value * insumo.averageCost;
+
+      await repository.updateInsumoStock(insumo.id, newStock);
+      await _checkParAlert(insumo, newStock);
+
+      final movement = InventoryMovement(
+        id: '${timestamp.millisecondsSinceEpoch}-${insumo.id}-consume',
+        insumoId: insumo.id,
+        type: MovementType.production,
+        quantity: -entry.value,
+        previousStock: previousStock,
+        newStock: newStock,
+        timestamp: timestamp,
+        reason: reason,
+      );
+      await repository.saveMovement(movement);
+      movements.add(movement);
+    }
+
+    final producedInsumo = await repository.getInsumoById(producedInsumoId);
+    if (producedInsumo != null) {
+      final previousStock = producedInsumo.stock;
+      final newStock = previousStock + quantity;
+      await repository.updateInsumoStock(producedInsumo.id, newStock);
+
+      final producedMovement = InventoryMovement(
+        id: '${timestamp.millisecondsSinceEpoch}-${producedInsumo.id}-receipt',
+        insumoId: producedInsumo.id,
+        type: MovementType.production,
+        quantity: quantity,
+        previousStock: previousStock,
+        newStock: newStock,
+        timestamp: timestamp,
+        reason: '$reason | consumedCost=${totalConsumedCost.toStringAsFixed(2)}',
+      );
+      await repository.saveMovement(producedMovement);
+      movements.add(producedMovement);
+    }
+
+    return movements;
+  }
+
+  @override
+  Future<void> recordAdjustment(
+    String insumoId,
+    double quantityDelta,
+    String reason, {
+    String? movementId,
+  }) async {
+    if (quantityDelta == 0) {
+      throw ArgumentError('Adjustment delta must be non-zero');
+    }
+
+    final insumo = await repository.getInsumoById(insumoId);
+    if (insumo == null) return;
+
+    final newStock = insumo.stock + quantityDelta;
+    await repository.updateInsumoStock(insumoId, newStock);
+
+    if (quantityDelta < 0) {
+      await _checkParAlert(insumo, newStock);
+    } else if (newStock >= (insumo.parLevel ?? 0)) {
+      _alertedInsumos.remove(insumoId);
+    }
+
+    await repository.saveMovement(InventoryMovement(
+      id: movementId ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      insumoId: insumoId,
+      type: MovementType.adjustment,
+      quantity: quantityDelta,
       previousStock: insumo.stock,
       newStock: newStock,
       timestamp: DateTime.now(),

@@ -42,6 +42,7 @@ Map<String, dynamic> _$$InventoryMovementImplToJson(
 const _$MovementTypeEnumMap = {
   MovementType.sale: 'sale',
   MovementType.purchase: 'purchase',
+  MovementType.production: 'production',
   MovementType.shrinkage: 'shrinkage',
   MovementType.adjustment: 'adjustment',
   MovementType.reversal: 'reversal',

@@ -23,12 +23,6 @@ class _SupplierViewState extends State<SupplierView> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Directorio de Proveedores'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () => _showSupplierForm(context),
-          ),
-        ],
       ),
       body: Consumer<SupplierViewModel>(
         builder: (context, vm, child) {
@@ -37,20 +31,56 @@ class _SupplierViewState extends State<SupplierView> {
           }
 
           if (vm.suppliers.isEmpty) {
-            return const Center(child: Text('No hay proveedores registrados.'));
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'No hay proveedores registrados.',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: () => _showSupplierForm(context),
+                      icon: const Icon(Icons.add),
+                      label: const Text('REGISTRAR PRIMER PROVEEDOR'),
+                    ),
+                  ],
+                ),
+              ),
+            );
           }
 
-          return ListView.builder(
-            itemCount: vm.suppliers.length,
-            itemBuilder: (context, index) {
-              final supplier = vm.suppliers[index];
-              return ListTile(
-                title: Text(supplier.name),
-                subtitle: Text(supplier.phone ?? 'Sin teléfono'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => _showSupplierForm(context, supplier: supplier),
-              );
-            },
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () => _showSupplierForm(context),
+                    icon: const Icon(Icons.add),
+                    label: const Text('REGISTRAR PROVEEDOR'),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: vm.suppliers.length,
+                  itemBuilder: (context, index) {
+                    final supplier = vm.suppliers[index];
+                    return ListTile(
+                      title: Text(supplier.name),
+                      subtitle: Text(supplier.phone ?? 'Sin teléfono'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => _showSupplierForm(context, supplier: supplier),
+                    );
+                  },
+                ),
+              ),
+            ],
           );
         },
       ),

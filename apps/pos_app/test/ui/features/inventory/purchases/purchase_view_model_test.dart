@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
+import 'package:pos_app/domain/models/inventory/batch.dart';
+import 'package:pos_app/domain/models/inventory/insumo.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
 import 'package:pos_app/domain/services/inventory/movement_engine.dart';
 import 'package:pos_app/domain/models/inventory/uom_conversion.dart';
@@ -19,8 +21,20 @@ void main() {
     mockEngine = MockMovementEngine();
     viewModel = PurchaseViewModel(mockRepo, mockEngine);
     // Default stubs needed by loadInitialData
-    when(mockRepo.getActiveInsumos()).thenAnswer((_) async => []);
+    when(mockRepo.getActiveInsumos()).thenAnswer(
+      (_) async => [
+        const Insumo(
+          id: 'i1',
+          name: 'Leche',
+          consumptionUom: 'ml',
+          stock: 100,
+          averageCost: 2,
+          isPerishable: true,
+        ),
+      ],
+    );
     when(mockRepo.getActiveSuppliers()).thenAnswer((_) async => []);
+    when(mockRepo.getBatchesByInsumoId('i1')).thenAnswer((_) async => []);
   });
 
   group('recordPurchase', () {
@@ -38,15 +52,21 @@ void main() {
       // But we can use a trick: in the real app, conversions are loaded from repo.
       // For this test, let's assume loadInitialData was called and we mock the repo call.
       
-      when(mockRepo.getActiveInsumos()).thenAnswer((_) async => []);
       when(mockRepo.getActiveSuppliers()).thenAnswer((_) async => []);
       when(mockRepo.getConversionsByInsumoId('i1')).thenAnswer((_) async => [conversion]);
-      
       await viewModel.loadInitialData(insumoId: 'i1');
 
-      when(mockEngine.recordPurchase('i1', 45360, 100)).thenAnswer((_) async {});
-      when(mockRepo.savePurchase(any)).thenAnswer((_) async {});
+      when(
+        mockEngine.recordPurchase(
+          'i1',
+          45360,
+          3650,
+          movementId: anyNamed('movementId'),
+          reason: anyNamed('reason'),
+        ),
+      ).thenAnswer((_) async {});
       when(mockRepo.queuePurchaseSync(any)).thenAnswer((_) async {});
+      when(mockRepo.saveBatch(any)).thenAnswer((_) async {});
 
       // Act
       await viewModel.recordPurchase(
@@ -55,12 +75,26 @@ void main() {
         uomConversionId: 'c1',
         quantity: 2,
         unitCost: 100,
+        invoiceDate: DateTime(2026, 1, 10),
+        currency: 'USD',
+        bcnRate: 36.5,
+        lotCode: 'LOT-1',
+        receivedDate: DateTime(2026, 1, 10),
+        expirationDate: DateTime(2026, 2, 10),
       );
 
       // Assert
-      verify(mockEngine.recordPurchase('i1', 45360, 100)).called(1);
-      verify(mockRepo.savePurchase(any)).called(1);
+      verify(
+        mockEngine.recordPurchase(
+          'i1',
+          45360,
+          3650,
+          movementId: anyNamed('movementId'),
+          reason: anyNamed('reason'),
+        ),
+      ).called(1);
       verify(mockRepo.queuePurchaseSync(any)).called(1);
+      verify(mockRepo.saveBatch(any)).called(1);
       expect(viewModel.isLoading, false);
       expect(viewModel.errorMessage, isNull);
     });
@@ -81,9 +115,41 @@ void main() {
           uomConversionId: 'invalid',
           quantity: 2,
           unitCost: 100,
+          invoiceDate: DateTime(2026, 1, 10),
+          currency: 'NIO',
         ),
         throwsArgumentError,
       );
+    });
+
+    test('builds FIFO state with near-expiry and expired batches', () async {
+      when(mockRepo.getConversionsByInsumoId('i1')).thenAnswer((_) async => [conversion]);
+      when(mockRepo.getBatchesByInsumoId('i1')).thenAnswer(
+        (_) async => [
+          Batch(
+            id: 'b1',
+            insumoId: 'i1',
+            batchNumber: 'EXP',
+            expirationDate: DateTime.now().subtract(const Duration(days: 1)),
+            remainingStock: 2,
+            cost: 10,
+          ),
+          Batch(
+            id: 'b2',
+            insumoId: 'i1',
+            batchNumber: 'NEAR',
+            expirationDate: DateTime.now().add(const Duration(days: 3)),
+            remainingStock: 3,
+            cost: 10,
+          ),
+        ],
+      );
+
+      await viewModel.loadInitialData(insumoId: 'i1');
+
+      expect(viewModel.fifoRows, hasLength(2));
+      expect(viewModel.fifoRows.first.isExpired, true);
+      expect(viewModel.fifoRows.last.isNearExpiry, true);
     });
   });
 }

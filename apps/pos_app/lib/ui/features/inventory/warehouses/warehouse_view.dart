@@ -23,12 +23,6 @@ class _WarehouseViewState extends State<WarehouseView> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Gestión de Almacenes'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () => _showWarehouseForm(context),
-          ),
-        ],
       ),
       body: Consumer<WarehouseViewModel>(
         builder: (context, vm, child) {
@@ -37,20 +31,56 @@ class _WarehouseViewState extends State<WarehouseView> {
           }
 
           if (vm.warehouses.isEmpty) {
-            return const Center(child: Text('No hay almacenes registrados.'));
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'No hay almacenes registrados.',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: () => _showWarehouseForm(context),
+                      icon: const Icon(Icons.add),
+                      label: const Text('REGISTRAR PRIMER ALMACÉN'),
+                    ),
+                  ],
+                ),
+              ),
+            );
           }
 
-          return ListView.builder(
-            itemCount: vm.warehouses.length,
-            itemBuilder: (context, index) {
-              final warehouse = vm.warehouses[index];
-              return ListTile(
-                title: Text(warehouse.name),
-                subtitle: Text(warehouse.description ?? 'Sin descripción'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => _showWarehouseForm(context, warehouse: warehouse),
-              );
-            },
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () => _showWarehouseForm(context),
+                    icon: const Icon(Icons.add),
+                    label: const Text('REGISTRAR ALMACÉN'),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: vm.warehouses.length,
+                  itemBuilder: (context, index) {
+                    final warehouse = vm.warehouses[index];
+                    return ListTile(
+                      title: Text(warehouse.name),
+                      subtitle: Text(warehouse.description ?? 'Sin descripción'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => _showWarehouseForm(context, warehouse: warehouse),
+                    );
+                  },
+                ),
+              ),
+            ],
           );
         },
       ),

@@ -13,6 +13,8 @@ _$InsumoImpl _$$InsumoImplFromJson(Map<String, dynamic> json) => _$InsumoImpl(
       stock: (json['stock'] as num).toDouble(),
       averageCost: (json['averageCost'] as num).toDouble(),
       parLevel: (json['parLevel'] as num?)?.toDouble(),
+      stockMin: (json['stockMin'] as num?)?.toDouble(),
+      stockMax: (json['stockMax'] as num?)?.toDouble(),
       warehouseId: json['warehouse_id'] as String?,
       isPerishable: json['is_perishable'] as bool? ?? false,
     );
@@ -25,6 +27,8 @@ Map<String, dynamic> _$$InsumoImplToJson(_$InsumoImpl instance) =>
       'stock': instance.stock,
       'averageCost': instance.averageCost,
       'parLevel': instance.parLevel,
+      'stockMin': instance.stockMin,
+      'stockMax': instance.stockMax,
       'warehouse_id': instance.warehouseId,
       'is_perishable': instance.isPerishable,
     };

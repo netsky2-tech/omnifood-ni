@@ -40,19 +40,25 @@ class _ItemOptionsEditorState extends State<ItemOptionsEditor> {
               Tab(text: 'MODIFICADORES (Extras)'),
             ],
           ),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.save),
-              onPressed: () => widget.onSave(_variants, _modifiers),
-              tooltip: 'Guardar cambios',
-            ),
-          ],
         ),
         body: TabBarView(
           children: [
             _buildProductVariantsTab(),
             _buildModifiersTab(),
           ],
+        ),
+        bottomNavigationBar: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.save),
+                label: const Text('GUARDAR CAMBIOS'),
+                onPressed: () => widget.onSave(_variants, _modifiers),
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -137,7 +143,7 @@ class _ItemOptionsEditorState extends State<ItemOptionsEditor> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(variant == null ? 'Nueva ProductVariante' : 'Editar ProductVariante'),
+        title: Text(variant == null ? 'Nueva variante' : 'Editar variante'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [

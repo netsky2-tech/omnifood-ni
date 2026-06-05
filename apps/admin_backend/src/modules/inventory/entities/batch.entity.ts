@@ -32,6 +32,9 @@ export class Batch {
   @Column()
   batch_number: string;
 
+  @Column({ type: 'date', name: 'received_date' })
+  received_date: Date;
+
   @Column({ type: 'date' })
   expiration_date: Date;
 

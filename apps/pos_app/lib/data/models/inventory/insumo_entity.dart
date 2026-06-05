@@ -16,6 +16,10 @@ class InsumoEntity {
   final double averageCost;
   @ColumnInfo(name: 'par_level')
   final double? parLevel;
+  @ColumnInfo(name: 'stock_min')
+  final double? stockMin;
+  @ColumnInfo(name: 'stock_max')
+  final double? stockMax;
   @ColumnInfo(name: 'is_active')
   final bool isActive;
 
@@ -28,6 +32,8 @@ class InsumoEntity {
     required this.stock,
     required this.averageCost,
     this.parLevel,
+    this.stockMin,
+    this.stockMax,
     this.isActive = true,
   });
 }
