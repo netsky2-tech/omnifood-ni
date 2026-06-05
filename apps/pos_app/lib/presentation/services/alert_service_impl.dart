@@ -93,7 +93,7 @@ class AlertServiceImpl implements AlertService {
           'parLevel': parLevel,
           'originDocument': 'session-low-stock',
           'movementType': 'LOW_STOCK_THRESHOLD',
-          ?'sourceMovementId': sourceMovementId,
+          if (sourceMovementId != null) 'sourceMovementId': sourceMovementId,
         },
       ),
     );
