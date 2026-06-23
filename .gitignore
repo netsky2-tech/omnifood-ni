@@ -17,6 +17,8 @@
 **/node_modules/
 **/dist/
 **/npm-debug.log*
+**/.env
+**/coverage/
 
 # Flutter / Dart
 **/.dart_tool/
