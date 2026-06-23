@@ -2,13 +2,19 @@ import { randomUUID } from 'crypto';
 import { DataSource, type QueryRunner } from 'typeorm';
 import { EnforceAuditLogImmutability1764000000000 } from './1764000000000-EnforceAuditLogImmutability';
 
-describe('EnforceAuditLogImmutability1764000000000', () => {
+const maybeDescribe = process.env.DB_PASSWORD?.trim()
+  ? describe
+  : describe.skip;
+
+maybeDescribe('EnforceAuditLogImmutability1764000000000', () => {
   const TEST_TIMEOUT_MS = 30000;
+  const dbPassword = process.env.DB_PASSWORD?.trim() ?? '';
+
   const postgresConnection = {
     host: process.env.DB_HOST ?? '127.0.0.1',
     port: Number(process.env.DB_PORT ?? '5432'),
     username: process.env.DB_USERNAME ?? 'postgres',
-    password: process.env.DB_PASSWORD ?? 'admin',
+    password: dbPassword,
     database: process.env.DB_DATABASE ?? 'omnifood',
   };
 

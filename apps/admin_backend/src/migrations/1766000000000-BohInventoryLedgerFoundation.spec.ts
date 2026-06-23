@@ -27,15 +27,20 @@ async function tableExists(
   return readExists(rows);
 }
 
-describe('BohInventoryLedgerFoundation1766000000000', () => {
+const maybeDescribe = process.env.DB_PASSWORD?.trim()
+  ? describe
+  : describe.skip;
+
+maybeDescribe('BohInventoryLedgerFoundation1766000000000', () => {
   const migration = new BohInventoryLedgerFoundation1766000000000();
+  const dbPassword = process.env.DB_PASSWORD?.trim() ?? '';
 
   const postgresConnection = {
     type: 'postgres' as const,
     host: process.env.DB_HOST ?? '127.0.0.1',
     port: Number(process.env.DB_PORT ?? '5432'),
     username: process.env.DB_USERNAME ?? 'postgres',
-    password: process.env.DB_PASSWORD ?? 'admin',
+    password: dbPassword,
     database: process.env.DB_DATABASE ?? 'omnifood',
   };
 

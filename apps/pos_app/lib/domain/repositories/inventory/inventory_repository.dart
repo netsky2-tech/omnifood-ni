@@ -12,6 +12,8 @@ import '../../models/inventory/supplier.dart';
 import '../../models/inventory/warehouse.dart';
 import '../../models/inventory/purchase.dart';
 import '../../models/inventory/production_order_document.dart';
+import '../../models/catalog/catalog_value.dart';
+import '../../models/catalog/catalog_type.dart';
 
 abstract class InventoryRepository {
   AppDatabase get database;
@@ -68,6 +70,15 @@ abstract class InventoryRepository {
   Future<List<UomConversion>> getConversionsByInsumoId(String insumoId);
   Future<void> saveConversion(UomConversion conversion);
   Future<void> deleteConversion(String id);
+
+  // Administrable master catalogs (offline mirror of the Admin backend).
+  // Values are tenant-administrable; types are protocol invariants.
+  Future<List<CatalogValue>> getActiveCatalog(CatalogType type);
+  Future<List<CatalogValue>> getAllCatalog(CatalogType type);
+  Future<CatalogValue?> findCatalogByCode(CatalogType type, String code);
+  Future<void> upsertCatalogValues(List<CatalogValue> values);
+  Future<void> setCatalogActive(String id, bool isActive);
+  Future<int> countCatalogValues();
 
   // Purchases
   Future<void> savePurchase(Purchase purchase);

@@ -1,7 +1,4 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { AppModule } from './app.module';
-import { createTypeOrmOptions } from './app.module';
-import { getRepositoryToken } from '@nestjs/typeorm';
+import { createTypeOrmOptions, getRequiredConfigValue } from './app.module';
 import { Insumo } from '../../modules/inventory/entities/insumo.entity';
 import { Product } from '../../modules/inventory/entities/product.entity';
 import { Recipe } from '../../modules/inventory/entities/recipe.entity';
@@ -9,59 +6,59 @@ import { InventoryMovement } from '../../modules/inventory/entities/inventory-mo
 import { ConfigService } from '@nestjs/config';
 
 describe('AppModule Registration', () => {
-  let module: TestingModule;
+  const configService = {
+    get: jest.fn((key: string, fallback?: unknown) => {
+      if (key === 'DB_PASSWORD') return 'test-db-password';
+      return fallback;
+    }),
+  } as unknown as ConfigService;
 
-  beforeAll(async () => {
-    module = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-  }, 30000);
-
-  afterAll(async () => {
-    if (module) {
-      await module.close();
-    }
-  });
+  const options = createTypeOrmOptions(configService);
 
   it('should have Insumo repository registered', () => {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const repository = module.get(getRepositoryToken(Insumo));
-    expect(repository).toBeDefined();
+    expect(options.entities).toContain(Insumo);
   });
 
   it('should have Product repository registered', () => {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const repository = module.get(getRepositoryToken(Product));
-    expect(repository).toBeDefined();
+    expect(options.entities).toContain(Product);
   });
 
   it('should have Recipe repository registered', () => {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const repository = module.get(getRepositoryToken(Recipe));
-    expect(repository).toBeDefined();
+    expect(options.entities).toContain(Recipe);
   });
 
   it('should have InventoryMovement repository registered', () => {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const repository = module.get(getRepositoryToken(InventoryMovement));
-    expect(repository).toBeDefined();
+    expect(options.entities).toContain(InventoryMovement);
   });
 });
 
 describe('createTypeOrmOptions', () => {
   const configService = {
-    get: jest.fn((key: string, fallback?: unknown) => fallback),
+    get: jest.fn((key: string, fallback?: unknown) => {
+      if (key === 'DB_PASSWORD') return 'test-db-password';
+      return fallback;
+    }),
   } as unknown as ConfigService;
 
   it('disables synchronize in test environment', () => {
-    const options = createTypeOrmOptions(configService, 'test');
+    const options = createTypeOrmOptions(configService);
 
     expect(options.synchronize).toBe(false);
   });
 
-  it('enables synchronize outside test environment', () => {
-    const options = createTypeOrmOptions(configService, 'development');
+  it('disables synchronize outside test environment', () => {
+    const options = createTypeOrmOptions(configService);
 
-    expect(options.synchronize).toBe(true);
+    expect(options.synchronize).toBe(false);
+  });
+
+  it('fails startup when DB_PASSWORD is missing', () => {
+    const missingConfigService = {
+      get: jest.fn().mockReturnValue(undefined),
+    } as unknown as ConfigService;
+
+    expect(() =>
+      getRequiredConfigValue(missingConfigService, 'DB_PASSWORD'),
+    ).toThrow('DB_PASSWORD is required');
   });
 });

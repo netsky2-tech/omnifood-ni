@@ -5,6 +5,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { IdentityModule } from '../../modules/identity/identity.module';
 import { InventoryModule } from '../../modules/inventory/inventory.module';
+import { CatalogModule } from '../../modules/catalog/catalog.module';
 import { SalesModule } from '../../modules/sales/sales.module';
 import { NotificationsModule } from '../../modules/notifications/notifications.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
@@ -22,20 +23,29 @@ import { Supplier } from '../../modules/inventory/entities/supplier.entity';
 import { Warehouse } from '../../modules/inventory/entities/warehouse.entity';
 import { UomConversion } from '../../modules/inventory/entities/uom-conversion.entity';
 import { Batch } from '../../modules/inventory/entities/batch.entity';
+import { CatalogValue } from '../../modules/catalog/entities/catalog-value.entity';
 import { Invoice } from '../../modules/sales/entities/invoice.entity';
 import { InvoiceItem } from '../../modules/sales/entities/invoice-item.entity';
 import { Payment } from '../../modules/sales/entities/payment.entity';
 import { InvoiceItemModifier } from '../../modules/sales/entities/invoice-item-modifier.entity';
 
-export const createTypeOrmOptions = (
+export const getRequiredConfigValue = (
   configService: ConfigService,
-  nodeEnv: string = process.env.NODE_ENV ?? 'development',
-) => ({
+  key: string,
+): string => {
+  const value = configService.get<string>(key)?.trim();
+  if (!value) {
+    throw new Error(`${key} is required`);
+  }
+  return value;
+};
+
+export const createTypeOrmOptions = (configService: ConfigService) => ({
   type: 'postgres' as const,
   host: configService.get<string>('DB_HOST', '127.0.0.1'),
   port: configService.get<number>('DB_PORT', 5432),
   username: configService.get<string>('DB_USERNAME', 'postgres'),
-  password: configService.get<string>('DB_PASSWORD', 'admin'),
+  password: getRequiredConfigValue(configService, 'DB_PASSWORD'),
   database: configService.get<string>('DB_DATABASE', 'omnifood'),
   entities: [
     Tenant,
@@ -51,12 +61,13 @@ export const createTypeOrmOptions = (
     Warehouse,
     UomConversion,
     Batch,
+    CatalogValue,
     Invoice,
     InvoiceItem,
     Payment,
     InvoiceItemModifier,
   ],
-  synchronize: nodeEnv !== 'test',
+  synchronize: false,
 });
 
 @Module({
@@ -74,6 +85,7 @@ export const createTypeOrmOptions = (
     }),
     IdentityModule,
     InventoryModule,
+    CatalogModule,
     SalesModule,
     NotificationsModule,
   ],

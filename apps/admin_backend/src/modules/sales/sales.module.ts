@@ -16,6 +16,16 @@ import { InventoryMovement } from '../inventory/entities/inventory-movement.enti
 import { InventorySyncReceipt } from '../inventory/entities/inventory-sync-receipt.entity';
 import { InventoryModule } from '../inventory/inventory.module';
 
+export const getRequiredSalesJwtSecret = (
+  configService: ConfigService,
+): string => {
+  const secret = configService.get<string>('JWT_SECRET')?.trim();
+  if (!secret) {
+    throw new Error('JWT_SECRET is required');
+  }
+  return secret;
+};
+
 @Module({
   imports: [
     ConfigModule,
@@ -24,7 +34,7 @@ import { InventoryModule } from '../inventory/inventory.module';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET', 'super-secret'),
+        secret: getRequiredSalesJwtSecret(configService),
       }),
     }),
     TypeOrmModule.forFeature([

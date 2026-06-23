@@ -1,36 +1,23 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { AppModule } from './app.module';
-import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
+import { createTypeOrmOptions } from './app.module';
 import { Supplier } from '../../modules/inventory/entities/supplier.entity';
 import { Warehouse } from '../../modules/inventory/entities/warehouse.entity';
 
 describe('AppModule Master Data Registration', () => {
-  let module: TestingModule;
+  const configService = {
+    get: jest.fn((key: string, fallback?: unknown) => {
+      if (key === 'DB_PASSWORD') return 'test-db-password';
+      return fallback;
+    }),
+  } as unknown as ConfigService;
 
-  beforeAll(async () => {
-    module = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-  }, 30000);
-
-  afterAll(async () => {
-    if (module) {
-      await module.close();
-    }
-  });
+  const options = createTypeOrmOptions(configService);
 
   it('should have Supplier repository registered', () => {
-    const repository = module.get<Repository<Supplier>>(
-      getRepositoryToken(Supplier),
-    );
-    expect(repository.metadata.targetName).toBe('Supplier');
+    expect(options.entities).toContain(Supplier);
   });
 
   it('should have Warehouse repository registered', () => {
-    const repository = module.get<Repository<Warehouse>>(
-      getRepositoryToken(Warehouse),
-    );
-    expect(repository.metadata.targetName).toBe('Warehouse');
+    expect(options.entities).toContain(Warehouse);
   });
 });

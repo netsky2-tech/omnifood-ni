@@ -3,18 +3,28 @@ import {
   NestInterceptor,
   ExecutionContext,
   CallHandler,
+  UnauthorizedException,
 } from '@nestjs/common';
+import { Request } from 'express';
 import { Observable } from 'rxjs';
+
+interface RequestWithTenantUser extends Request {
+  user?: {
+    tenant_id?: string;
+  };
+}
 
 @Injectable()
 export class TenantInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
-    // In a real RLS setup, this interceptor would set the tenant context
-    // in the DB session. For now, we ensure the tenant_id from JWT
-    // is available for services and repositories.
+    const request = context.switchToHttp().getRequest<RequestWithTenantUser>();
+    if (!request.user?.tenant_id?.trim()) {
+      throw new UnauthorizedException('Tenant context is required');
+    }
 
-    // Logic to set DB session variable would go here if using a
-    // transactional approach or a connection-bound session.
+    // Services that access RLS-protected tables must bind this tenant to a
+    // transaction-scoped PostgreSQL session variable before querying.
+    // CatalogService does this with set_config('app.tenant_id', $1, true).
 
     return next.handle();
   }

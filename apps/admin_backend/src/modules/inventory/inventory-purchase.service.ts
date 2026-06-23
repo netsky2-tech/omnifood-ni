@@ -118,8 +118,8 @@ export class InventoryPurchaseService {
           tenant_id: input.tenantId,
           insumo_id: insumo.id,
           batch_number: input.lotCode,
-          received_date: new Date(input.receivedDate!),
-          expiration_date: new Date(input.expirationDate!),
+          received_date: new Date(input.receivedDate),
+          expiration_date: new Date(input.expirationDate),
           remaining_stock: round4(input.quantity),
           cost: preview.unitCostNio,
         });
@@ -142,26 +142,30 @@ export class InventoryPurchaseService {
     },
     insumo: Insumo,
   ): Promise<PurchasePreview> {
-    const bcnRate = await this.resolveBcnRate(input.currency, input.invoiceDate);
+    const bcnRate = await this.resolveBcnRate(
+      input.currency,
+      input.invoiceDate,
+    );
     const unitCostNio = round4(input.unitCost * bcnRate);
     const previousStock = round4(Number(insumo.stock));
     const previousCppNio = round4(Number(insumo.averageCost));
     const projectedStock = round4(previousStock + input.quantity);
     const projectedCppNio =
       projectedStock === 0
-          ? 0
-          : round4(
-              ((previousStock * previousCppNio) +
-                      (input.quantity * unitCostNio)) /
-                  projectedStock,
-            );
+        ? 0
+        : round4(
+            (previousStock * previousCppNio + input.quantity * unitCostNio) /
+              projectedStock,
+          );
 
     return {
       invoiceDate: input.invoiceDate,
       currency: input.currency,
       bcnRate,
       bcnRateSource:
-          input.currency === CURRENCY.USD ? 'BCN official rate' : 'NIO document rate',
+        input.currency === CURRENCY.USD
+          ? 'BCN official rate'
+          : 'NIO document rate',
       unitCostNio,
       previousCppNio,
       projectedCppNio,

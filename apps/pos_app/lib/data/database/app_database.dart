@@ -19,6 +19,7 @@ import '../daos/inventory/supplier_dao.dart';
 import '../daos/inventory/warehouse_dao.dart';
 import '../daos/inventory/uom_conversion_dao.dart';
 import '../daos/inventory/batch_dao.dart';
+import '../daos/catalog/catalog_value_dao.dart';
 import 'package:pos_app/data/daos/sales/invoice_dao.dart';
 import 'package:pos_app/data/daos/sales/invoice_item_dao.dart';
 import 'package:pos_app/data/daos/sales/payment_dao.dart';
@@ -46,6 +47,7 @@ import 'package:pos_app/data/models/inventory/purchase_entity.dart';
 import 'package:pos_app/data/models/inventory/production_order_document_entity.dart';
 import 'package:pos_app/data/models/inventory/uom_conversion_entity.dart';
 import 'package:pos_app/data/models/inventory/batch_entity.dart';
+import 'package:pos_app/data/models/catalog/catalog_value_entity.dart';
 import 'package:pos_app/data/models/sales/invoice_entity.dart';
 import 'package:pos_app/data/models/sales/invoice_item_entity.dart';
 import 'package:pos_app/data/models/sales/invoice_item_modifier_entity.dart';
@@ -57,7 +59,7 @@ import 'package:pos_app/data/models/sales/promotion_entity.dart';
 
 part 'app_database.g.dart'; // generated code
 
-@Database(version: 20, entities: [
+@Database(version: 21, entities: [
   UserEntity,
   SecurityProfileEntity,
   AuditLogEntity,
@@ -78,6 +80,7 @@ part 'app_database.g.dart'; // generated code
   ProductionOrderDocumentEntity,
   UomConversionEntity,
   BatchEntity,
+  CatalogValueEntity,
   InvoiceEntity,
   InvoiceItemEntity,
   InvoiceItemModifierEntity,
@@ -108,6 +111,7 @@ abstract class AppDatabase extends FloorDatabase {
   ProductionOrderDocumentDao get productionOrderDocumentDao;
   UomConversionDao get uomConversionDao;
   BatchDao get batchDao;
+  CatalogValueDao get catalogValueDao;
   InvoiceDao get invoiceDao;
   InvoiceItemDao get invoiceItemDao;
   PaymentDao get paymentDao;
