@@ -7,6 +7,7 @@ import '../../../../domain/models/inventory/batch.dart';
 import '../../../../domain/repositories/inventory/inventory_repository.dart';
 import '../../../../domain/models/inventory/inventory_movement.dart';
 import '../../../../domain/services/inventory/movement_engine.dart';
+import '../../../../domain/services/inventory/uom_conversion_calculator.dart';
 
 const purchaseCurrencies = ['NIO', 'USD'];
 
@@ -112,7 +113,10 @@ class PurchaseViewModel with ChangeNotifier {
       final purchaseId = DateTime.now().millisecondsSinceEpoch.toString();
 
       if (review.requiresBatchTracking) {
-        if (lotCode == null || lotCode.isEmpty || receivedDate == null || expirationDate == null) {
+        if (lotCode == null ||
+            lotCode.isEmpty ||
+            receivedDate == null ||
+            expirationDate == null) {
           throw ArgumentError(
             'Lot code, received date, and expiration date are required for batch-managed items.',
           );
@@ -124,7 +128,8 @@ class PurchaseViewModel with ChangeNotifier {
         review.quantityInBaseUnit,
         review.unitCostNio,
         movementId: purchaseId,
-        reason: 'Purchase $currency @ ${review.unitCostNio.toStringAsFixed(4)} NIO',
+        reason:
+            'Purchase $currency @ ${review.unitCostNio.toStringAsFixed(4)} NIO',
       );
 
       final purchase = Purchase(
@@ -147,7 +152,10 @@ class PurchaseViewModel with ChangeNotifier {
       );
       await repository.queuePurchaseSync(purchase);
 
-      if (review.requiresBatchTracking && lotCode != null && receivedDate != null && expirationDate != null) {
+      if (review.requiresBatchTracking &&
+          lotCode != null &&
+          receivedDate != null &&
+          expirationDate != null) {
         await repository.saveBatch(
           Batch(
             id: purchaseId,
@@ -187,13 +195,19 @@ class PurchaseViewModel with ChangeNotifier {
     );
     final conversion = _conversions.firstWhere(
       (c) => c.id == uomConversionId,
-      orElse: () => throw ArgumentError('Invalid conversion ID: $uomConversionId'),
+      orElse: () =>
+          throw ArgumentError('Invalid conversion ID: $uomConversionId'),
     );
 
-    final resolvedBcnRate =
-        currency == 'USD' ? (bcnRate ?? 36.5).toDouble() : 1.0;
-    final quantityInBaseUnit = quantity * conversion.factor;
-    final unitCostNio = unitCost * resolvedBcnRate;
+    final resolvedBcnRate = currency == 'USD'
+        ? (bcnRate ?? 36.5).toDouble()
+        : 1.0;
+    final quantityInBaseUnit = const UomConversionCalculator()
+        .toInventoryBaseQuantity(
+          purchaseQuantity: quantity,
+          factorToInventoryBase: conversion.factor,
+        );
+    final unitCostNio = (unitCost * resolvedBcnRate) / conversion.factor;
     final previousTotalCost = insumo.stock * insumo.averageCost;
     final purchaseTotalCost = quantityInBaseUnit * unitCostNio;
     final projectedStock = insumo.stock + quantityInBaseUnit;
@@ -221,7 +235,8 @@ class PurchaseViewModel with ChangeNotifier {
             remainingStock: batch.remainingStock,
             expirationDate: batch.expirationDate,
             isExpired: batch.expirationDate.isBefore(now),
-            isNearExpiry: !batch.expirationDate.isBefore(now) &&
+            isNearExpiry:
+                !batch.expirationDate.isBefore(now) &&
                 batch.expirationDate.difference(now).inDays <= 7,
           ),
         )

@@ -110,6 +110,8 @@ class _$AppDatabase extends AppDatabase {
 
   BatchDao? _batchDaoInstance;
 
+  CatalogValueDao? _catalogValueDaoInstance;
+
   InvoiceDao? _invoiceDaoInstance;
 
   InvoiceItemDao? _invoiceItemDaoInstance;
@@ -132,7 +134,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 20,
+      version: 21,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -187,6 +189,8 @@ class _$AppDatabase extends AppDatabase {
             'CREATE TABLE IF NOT EXISTS `uom_conversions` (`id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `unit_name` TEXT NOT NULL, `factor` REAL NOT NULL, `is_default` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `batches` (`id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `batch_number` TEXT NOT NULL, `received_date` TEXT, `expiration_date` TEXT NOT NULL, `remaining_stock` REAL NOT NULL, `cost` REAL NOT NULL, `is_synced` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `catalog_values` (`id` TEXT NOT NULL, `catalog_type` TEXT NOT NULL, `code` TEXT NOT NULL, `name` TEXT NOT NULL, `is_active` INTEGER NOT NULL, `sort_order` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `invoices` (`id` TEXT NOT NULL, `invoice_number` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `user_id` TEXT NOT NULL, `subtotal` REAL NOT NULL, `total_tax` REAL NOT NULL, `total` REAL NOT NULL, `is_canceled` INTEGER NOT NULL, `void_reason` TEXT, `sync_status` TEXT NOT NULL, `payment_status` TEXT NOT NULL, `customer_id` TEXT, `global_tax_override` INTEGER NOT NULL, `type` TEXT NOT NULL, `related_invoice_id` TEXT, PRIMARY KEY (`id`))');
         await database.execute(
@@ -314,6 +318,12 @@ class _$AppDatabase extends AppDatabase {
   @override
   BatchDao get batchDao {
     return _batchDaoInstance ??= _$BatchDao(database, changeListener);
+  }
+
+  @override
+  CatalogValueDao get catalogValueDao {
+    return _catalogValueDaoInstance ??=
+        _$CatalogValueDao(database, changeListener);
   }
 
   @override
@@ -1973,6 +1983,82 @@ class _$BatchDao extends BatchDao {
   @override
   Future<void> updateBatch(BatchEntity batch) async {
     await _batchEntityUpdateAdapter.update(batch, OnConflictStrategy.replace);
+  }
+}
+
+class _$CatalogValueDao extends CatalogValueDao {
+  _$CatalogValueDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _catalogValueEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'catalog_values',
+            (CatalogValueEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'catalog_type': item.catalogType,
+                  'code': item.code,
+                  'name': item.name,
+                  'is_active': item.isActive ? 1 : 0,
+                  'sort_order': item.sortOrder
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<CatalogValueEntity>
+      _catalogValueEntityInsertionAdapter;
+
+  @override
+  Future<List<CatalogValueEntity>> findActiveByType(String type) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM catalog_values WHERE catalog_type = ?1 AND is_active = 1 ORDER BY sort_order ASC, name ASC',
+        mapper: (Map<String, Object?> row) => CatalogValueEntity(id: row['id'] as String, catalogType: row['catalog_type'] as String, code: row['code'] as String, name: row['name'] as String, isActive: (row['is_active'] as int) != 0, sortOrder: row['sort_order'] as int),
+        arguments: [type]);
+  }
+
+  @override
+  Future<List<CatalogValueEntity>> findAllByType(String type) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM catalog_values WHERE catalog_type = ?1 ORDER BY sort_order ASC, name ASC',
+        mapper: (Map<String, Object?> row) => CatalogValueEntity(id: row['id'] as String, catalogType: row['catalog_type'] as String, code: row['code'] as String, name: row['name'] as String, isActive: (row['is_active'] as int) != 0, sortOrder: row['sort_order'] as int),
+        arguments: [type]);
+  }
+
+  @override
+  Future<CatalogValueEntity?> findByTypeAndCode(
+    String type,
+    String code,
+  ) async {
+    return _queryAdapter.query(
+        'SELECT * FROM catalog_values WHERE catalog_type = ?1 AND code = ?2 LIMIT 1',
+        mapper: (Map<String, Object?> row) => CatalogValueEntity(id: row['id'] as String, catalogType: row['catalog_type'] as String, code: row['code'] as String, name: row['name'] as String, isActive: (row['is_active'] as int) != 0, sortOrder: row['sort_order'] as int),
+        arguments: [type, code]);
+  }
+
+  @override
+  Future<void> setActive(
+    String id,
+    bool isActive,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE catalog_values SET is_active = ?2 WHERE id = ?1',
+        arguments: [id, isActive ? 1 : 0]);
+  }
+
+  @override
+  Future<int?> countAll() async {
+    return _queryAdapter.query('SELECT COUNT(*) FROM catalog_values',
+        mapper: (Map<String, Object?> row) => row.values.first as int);
+  }
+
+  @override
+  Future<void> insertCatalogValues(List<CatalogValueEntity> values) async {
+    await _catalogValueEntityInsertionAdapter.insertList(
+        values, OnConflictStrategy.replace);
   }
 }
 

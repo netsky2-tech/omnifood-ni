@@ -1,41 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../domain/models/inventory/insumo.dart';
+import '../../../../domain/models/catalog/catalog_value.dart';
 import 'insumo_view_model.dart';
 import '../../../../domain/models/inventory/product.dart';
 import '../../../../domain/models/inventory/uom_conversion.dart';
 import '../../../design_system/design_system.dart';
 import 'item_options_editor.dart';
-
-const List<String> commonConsumptionUoms = [
-  'kg',
-  'g',
-  'lb',
-  'oz',
-  'l',
-  'ml',
-  'gal',
-  'un',
-  'doc',
-  'caja',
-  'paquete',
-  'saco',
-  'servicio',
-  'hora',
-];
-
-const List<String> commonProductUoms = ['un', 'doc', 'caja', 'paquete', 'servicio', 'kg', 'g', 'l', 'ml'];
-
-const List<String> productCategoryPresets = <String>[
-  'Comida',
-  'Bebida caliente',
-  'Bebida fría',
-  'Panadería',
-  'Snack',
-  'Retail',
-  'Limpieza',
-  'Otros',
-];
 
 class InsumoView extends StatefulWidget {
   const InsumoView({super.key});
@@ -69,12 +40,7 @@ class _InsumoViewState extends State<InsumoView> {
             ],
           ),
         ),
-        body: TabBarView(
-          children: [
-            _buildInsumosTab(),
-            _buildProductsTab(),
-          ],
-        ),
+        body: TabBarView(children: [_buildInsumosTab(), _buildProductsTab()]),
       ),
     );
   }
@@ -82,7 +48,8 @@ class _InsumoViewState extends State<InsumoView> {
   Widget _buildInsumosTab() {
     return Consumer<InsumoViewModel>(
       builder: (context, vm, child) {
-        if (vm.isLoading) return const Center(child: CircularProgressIndicator());
+        if (vm.isLoading)
+          return const Center(child: CircularProgressIndicator());
         if (vm.insumos.isEmpty) {
           return DsEmptyState(
             icon: Icons.inventory_2_outlined,
@@ -111,7 +78,8 @@ class _InsumoViewState extends State<InsumoView> {
             Expanded(
               child: ListView.separated(
                 itemCount: vm.insumos.length,
-                separatorBuilder: (context, _) => const Divider(height: 1, thickness: 1),
+                separatorBuilder: (context, _) =>
+                    const Divider(height: 1, thickness: 1),
                 itemBuilder: (context, index) {
                   final insumo = vm.insumos[index];
                   return _InsumoListRow(
@@ -130,7 +98,8 @@ class _InsumoViewState extends State<InsumoView> {
   Widget _buildProductsTab() {
     return Consumer<InsumoViewModel>(
       builder: (context, vm, child) {
-        if (vm.isLoading) return const Center(child: CircularProgressIndicator());
+        if (vm.isLoading)
+          return const Center(child: CircularProgressIndicator());
         if (vm.products.isEmpty) {
           return DsEmptyState(
             icon: Icons.local_mall_outlined,
@@ -159,7 +128,8 @@ class _InsumoViewState extends State<InsumoView> {
             Expanded(
               child: ListView.separated(
                 itemCount: vm.products.length,
-                separatorBuilder: (context, _) => const Divider(height: 1, thickness: 1),
+                separatorBuilder: (context, _) =>
+                    const Divider(height: 1, thickness: 1),
                 itemBuilder: (context, index) {
                   final product = vm.products[index];
                   return _ProductListRow(
@@ -182,7 +152,10 @@ class _InsumoViewState extends State<InsumoView> {
       context: context,
       builder: (dialogContext) {
         return Dialog(
-          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 24,
+          ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(4),
             side: BorderSide(
@@ -214,7 +187,10 @@ class _InsumoViewState extends State<InsumoView> {
                       children: [
                         _InsumoAttributeGrid(insumo: insumo),
                         const SizedBox(height: 16),
-                        _PresentationsSection(viewModel: vm, insumoId: insumo.id),
+                        _PresentationsSection(
+                          viewModel: vm,
+                          insumoId: insumo.id,
+                        ),
                         const SizedBox(height: 16),
                         Wrap(
                           spacing: 8,
@@ -225,21 +201,30 @@ class _InsumoViewState extends State<InsumoView> {
                               label: 'VER COMPRAS',
                               onPressed: () {
                                 Navigator.pop(dialogContext);
-                                Navigator.pushNamed(context, '/inventory/purchases');
+                                Navigator.pushNamed(
+                                  context,
+                                  '/inventory/purchases',
+                                );
                               },
                             ),
                             DsSecondaryButton(
                               label: 'VER KARDEX',
                               onPressed: () {
                                 Navigator.pop(dialogContext);
-                                Navigator.pushNamed(context, '/inventory/kardex');
+                                Navigator.pushNamed(
+                                  context,
+                                  '/inventory/kardex',
+                                );
                               },
                             ),
                             DsSecondaryButton(
                               label: 'VER RECETAS',
                               onPressed: () {
                                 Navigator.pop(dialogContext);
-                                Navigator.pushNamed(context, '/inventory/recipes');
+                                Navigator.pushNamed(
+                                  context,
+                                  '/inventory/recipes',
+                                );
                               },
                             ),
                           ],
@@ -279,12 +264,22 @@ class _InsumoViewState extends State<InsumoView> {
     final vm = context.read<InsumoViewModel>();
     final formKey = GlobalKey<FormState>();
     final nameController = TextEditingController(text: insumo?.name ?? '');
-    final parController = TextEditingController(text: insumo?.parLevel?.toString() ?? '');
-    final stockMinController = TextEditingController(text: insumo?.stockMin?.toString() ?? '');
-    final stockMaxController = TextEditingController(text: insumo?.stockMax?.toString() ?? '');
-    final stockController = TextEditingController(text: insumo?.stock.toString() ?? '0');
-    final uomOptions = _buildUomOptions(insumo?.consumptionUom);
-    String selectedUom = insumo?.consumptionUom ?? uomOptions.first;
+    final parController = TextEditingController(
+      text: insumo?.parLevel?.toString() ?? '',
+    );
+    final stockMinController = TextEditingController(
+      text: insumo?.stockMin?.toString() ?? '',
+    );
+    final stockMaxController = TextEditingController(
+      text: insumo?.stockMax?.toString() ?? '',
+    );
+    final stockController = TextEditingController(
+      text: insumo?.stock.toString() ?? '0',
+    );
+    final uomOptions = _buildUomOptions(vm.uomOptions, insumo?.consumptionUom);
+    String selectedUom =
+        insumo?.consumptionUom ??
+        (uomOptions.isNotEmpty ? uomOptions.first : '');
     String? selectedWarehouseId = insumo?.warehouseId;
     bool isPerishable = insumo?.isPerishable ?? false;
 
@@ -306,17 +301,21 @@ class _InsumoViewState extends State<InsumoView> {
                     TextFormField(
                       controller: nameController,
                       decoration: const InputDecoration(labelText: 'Nombre'),
-                      validator: (v) => v == null || v.isEmpty ? 'Requerido' : null,
+                      validator: (v) =>
+                          v == null || v.isEmpty ? 'Requerido' : null,
                     ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
                       initialValue: selectedUom,
                       decoration: const InputDecoration(
                         labelText: 'Unidad de medida',
-                        helperText: 'Unidad base en la que se controla el stock.',
+                        helperText:
+                            'Unidad base en la que se controla el stock.',
                       ),
                       items: uomOptions
-                          .map((u) => DropdownMenuItem(value: u, child: Text(u)))
+                          .map(
+                            (u) => DropdownMenuItem(value: u, child: Text(u)),
+                          )
                           .toList(growable: false),
                       onChanged: (val) {
                         if (val != null) {
@@ -329,18 +328,24 @@ class _InsumoViewState extends State<InsumoView> {
                       controller: stockController,
                       decoration: const InputDecoration(
                         labelText: 'Stock actual',
-                        helperText: 'Para materia prima recién registrada suele ser 0.',
+                        helperText:
+                            'Para materia prima recién registrada suele ser 0.',
                       ),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
                       controller: parController,
                       decoration: const InputDecoration(
                         labelText: 'Nivel de reorden (PAR)',
-                        helperText: 'Stock mínimo que dispara alerta de reposición.',
+                        helperText:
+                            'Stock mínimo que dispara alerta de reposición.',
                       ),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
@@ -349,7 +354,9 @@ class _InsumoViewState extends State<InsumoView> {
                         labelText: 'Stock mínimo',
                         helperText: 'Umbral inferior (PRD §3).',
                       ),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
@@ -358,21 +365,31 @@ class _InsumoViewState extends State<InsumoView> {
                         labelText: 'Stock máximo',
                         helperText: 'Tope sugerido para evitar sobrestock.',
                       ),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
                       initialValue: selectedWarehouseId,
                       decoration: const InputDecoration(labelText: 'Almacén'),
                       items: vm.warehouses
-                          .map((w) => DropdownMenuItem(value: w.id, child: Text(w.name)))
+                          .map(
+                            (w) => DropdownMenuItem(
+                              value: w.id,
+                              child: Text(w.name),
+                            ),
+                          )
                           .toList(growable: false),
-                      onChanged: (val) => setState(() => selectedWarehouseId = val),
+                      onChanged: (val) =>
+                          setState(() => selectedWarehouseId = val),
                     ),
                     const SizedBox(height: 8),
                     SwitchListTile(
                       title: const Text('¿Es perecedero?'),
-                      subtitle: const Text('Habilita control de lotes y vencimiento'),
+                      subtitle: const Text(
+                        'Habilita control de lotes y vencimiento',
+                      ),
                       value: isPerishable,
                       onChanged: (val) => setState(() => isPerishable = val),
                       contentPadding: EdgeInsets.zero,
@@ -383,7 +400,10 @@ class _InsumoViewState extends State<InsumoView> {
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCELAR')),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('CANCELAR'),
+            ),
             ElevatedButton(
               onPressed: () {
                 if (formKey.currentState?.validate() ?? false) {
@@ -415,14 +435,36 @@ class _InsumoViewState extends State<InsumoView> {
     final formKey = GlobalKey<FormState>();
     final nameController = TextEditingController(text: product?.name ?? '');
     final skuController = TextEditingController(text: product?.sku ?? '');
-    final barcodeController = TextEditingController(text: product?.barcode ?? '');
-    final categoryController = TextEditingController(text: product?.category ?? '');
-    final stockController = TextEditingController(text: product?.stock.toString() ?? '0');
-    final costController = TextEditingController(text: product?.averageCost.toString() ?? '0');
-    final priceController = TextEditingController(text: product?.sellPrice.toString() ?? '0');
-    final uomOptions = _buildProductUomOptions(product?.uom);
-    String selectedUom = product?.uom ?? uomOptions.first;
+    final barcodeController = TextEditingController(
+      text: product?.barcode ?? '',
+    );
+    final categoryController = TextEditingController(
+      text: product?.category ?? '',
+    );
+    final stockController = TextEditingController(
+      text: product?.stock.toString() ?? '0',
+    );
+    final costController = TextEditingController(
+      text: product?.averageCost.toString() ?? '0',
+    );
+    final priceController = TextEditingController(
+      text: product?.sellPrice.toString() ?? '0',
+    );
+    final uomOptions = _buildUomOptions(vm.uomOptions, product?.uom);
+    String selectedUom =
+        product?.uom ?? (uomOptions.isNotEmpty ? uomOptions.first : '');
     bool isPrepared = product?.isPrepared ?? true;
+    // Sales product type comes from the administrable SALES_PRODUCT_TYPE
+    // catalog (e.g. PREPARADO / REVENTA). It maps back to the persisted
+    // isPrepared flag until the Product schema migrates to a type-code column.
+    final typeOptions = _buildProductTypeOptions(
+      vm,
+      product?.isPrepared ?? isPrepared,
+    );
+    String selectedProductType = typeOptions.isNotEmpty
+        ? typeOptions.first.code
+        : '';
+    final categoryNameOptions = _buildCategoryOptions(vm, product?.category);
 
     showDialog(
       context: context,
@@ -442,7 +484,8 @@ class _InsumoViewState extends State<InsumoView> {
                     TextFormField(
                       controller: nameController,
                       decoration: const InputDecoration(labelText: 'Nombre'),
-                      validator: (v) => v == null || v.isEmpty ? 'Requerido' : null,
+                      validator: (v) =>
+                          v == null || v.isEmpty ? 'Requerido' : null,
                     ),
                     const SizedBox(height: 16),
                     Row(
@@ -457,7 +500,9 @@ class _InsumoViewState extends State<InsumoView> {
                         Expanded(
                           child: TextFormField(
                             controller: barcodeController,
-                            decoration: const InputDecoration(labelText: 'Código de barras'),
+                            decoration: const InputDecoration(
+                              labelText: 'Código de barras',
+                            ),
                           ),
                         ),
                       ],
@@ -466,13 +511,23 @@ class _InsumoViewState extends State<InsumoView> {
                     DropdownButtonFormField<String>(
                       initialValue: categoryController.text.isEmpty
                           ? null
-                          : categoryController.text,
+                          : (categoryNameOptions.contains(
+                                  categoryController.text,
+                                )
+                                ? categoryController.text
+                                : null),
                       decoration: const InputDecoration(
                         labelText: 'Categoría',
-                        helperText: 'O escribí una nueva si no está en la lista.',
+                        helperText:
+                            'Categorías administrables. Gestionalas desde el Admin.',
                       ),
-                      items: productCategoryPresets
-                          .map((c) => DropdownMenuItem<String>(value: c, child: Text(c)))
+                      items: categoryNameOptions
+                          .map(
+                            (c) => DropdownMenuItem<String>(
+                              value: c,
+                              child: Text(c),
+                            ),
+                          )
                           .toList(growable: false),
                       onChanged: (val) {
                         if (val != null) {
@@ -480,14 +535,19 @@ class _InsumoViewState extends State<InsumoView> {
                         }
                       },
                     ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: categoryController,
-                      decoration: const InputDecoration(
-                        labelText: 'Categoría personalizada',
-                        helperText: 'Si elegiste una arriba, este campo queda en blanco.',
+                    if (categoryController.text.isNotEmpty &&
+                        !categoryNameOptions.contains(
+                          categoryController.text,
+                        )) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Categoría actual "${categoryController.text}" no está en el catálogo.',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                          fontSize: 12,
+                        ),
                       ),
-                    ),
+                    ],
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
                       initialValue: selectedUom,
@@ -496,7 +556,9 @@ class _InsumoViewState extends State<InsumoView> {
                         helperText: 'Unidad con la que se vende en el POS.',
                       ),
                       items: uomOptions
-                          .map((u) => DropdownMenuItem(value: u, child: Text(u)))
+                          .map(
+                            (u) => DropdownMenuItem(value: u, child: Text(u)),
+                          )
                           .toList(growable: false),
                       onChanged: (val) {
                         if (val != null) {
@@ -509,9 +571,12 @@ class _InsumoViewState extends State<InsumoView> {
                       controller: stockController,
                       decoration: const InputDecoration(
                         labelText: 'Stock inicial',
-                        helperText: 'Para reventa, suele ser la cantidad física actual.',
+                        helperText:
+                            'Para reventa, suele ser la cantidad física actual.',
                       ),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
@@ -519,7 +584,9 @@ class _InsumoViewState extends State<InsumoView> {
                       decoration: const InputDecoration(
                         labelText: 'Costo promedio (NIO)',
                       ),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
@@ -527,7 +594,9 @@ class _InsumoViewState extends State<InsumoView> {
                       decoration: const InputDecoration(
                         labelText: 'Precio de venta (NIO)',
                       ),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       validator: (v) {
                         final n = double.tryParse(v ?? '');
                         if (n == null || n < 0) return 'Precio inválido';
@@ -538,7 +607,10 @@ class _InsumoViewState extends State<InsumoView> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        border: Border.all(color: const Color(0xFF767777), width: 1),
+                        border: Border.all(
+                          color: const Color(0xFF767777),
+                          width: 1,
+                        ),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Column(
@@ -553,16 +625,31 @@ class _InsumoViewState extends State<InsumoView> {
                             ),
                           ),
                           const SizedBox(height: 8),
-                          SwitchListTile(
-                            title: const Text('¿Lleva receta?'),
-                            subtitle: Text(
-                              isPrepared
-                                  ? 'Se descontará stock de insumos vía BOM al vender.'
-                                  : 'Reventa directa. Stock controlado por compras.',
+                          DropdownButtonFormField<String>(
+                            initialValue: typeOptions.isNotEmpty
+                                ? selectedProductType
+                                : null,
+                            decoration: const InputDecoration(
+                              labelText: 'Tipo',
+                              helperText:
+                                  'PREPARADO descuenta insumos vía BOM; REVENTA es directa.',
                             ),
-                            value: isPrepared,
-                            onChanged: (val) => setState(() => isPrepared = val),
-                            contentPadding: EdgeInsets.zero,
+                            items: typeOptions
+                                .map(
+                                  (t) => DropdownMenuItem<String>(
+                                    value: t.code,
+                                    child: Text(t.name),
+                                  ),
+                                )
+                                .toList(growable: false),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() {
+                                  selectedProductType = val;
+                                  isPrepared = vm.isPreparedForTypeCode(val);
+                                });
+                              }
+                            },
                           ),
                         ],
                       ),
@@ -573,7 +660,10 @@ class _InsumoViewState extends State<InsumoView> {
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCELAR')),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('CANCELAR'),
+            ),
             ElevatedButton(
               onPressed: () {
                 if (formKey.currentState?.validate() ?? false) {
@@ -581,9 +671,13 @@ class _InsumoViewState extends State<InsumoView> {
                     id: product?.id,
                     name: nameController.text,
                     sku: skuController.text.isEmpty ? null : skuController.text,
-                    barcode: barcodeController.text.isEmpty ? null : barcodeController.text,
-                    category: categoryController.text.isEmpty ? null : categoryController.text,
-                    isPrepared: isPrepared,
+                    barcode: barcodeController.text.isEmpty
+                        ? null
+                        : barcodeController.text,
+                    category: categoryController.text.isEmpty
+                        ? null
+                        : categoryController.text,
+                    isPrepared: vm.isPreparedForTypeCode(selectedProductType),
                     uom: selectedUom,
                     stock: double.tryParse(stockController.text) ?? 0,
                     averageCost: double.tryParse(costController.text) ?? 0,
@@ -600,20 +694,43 @@ class _InsumoViewState extends State<InsumoView> {
     );
   }
 
-  List<String> _buildUomOptions(String? current) {
-    final options = <String>[...commonConsumptionUoms];
+  List<String> _buildUomOptions(List<String> catalog, String? current) {
+    final options = <String>[...catalog];
     if (current != null && current.isNotEmpty && !options.contains(current)) {
       options.insert(0, current);
     }
-    return options;
+    // Defensive: a DropdownButtonFormField needs at least one item. In
+    // production the catalog is seeded/synced so this branch is never hit; it
+    // only guards against an unprovisioned local catalog.
+    return options.isEmpty ? const [''] : options;
   }
 
-  List<String> _buildProductUomOptions(String? current) {
-    final options = <String>[...commonProductUoms];
-    if (current != null && current.isNotEmpty && !options.contains(current)) {
-      options.insert(0, current);
-    }
-    return options;
+  /// Sales product type options from the administrable catalog, ordered so the
+  /// product's current type appears first (so the dropdown opens on it).
+  List<CatalogValue> _buildProductTypeOptions(
+    InsumoViewModel vm,
+    bool currentIsPrepared,
+  ) {
+    final catalog = vm.productTypeCatalog;
+    if (catalog.isEmpty) return const <CatalogValue>[];
+    final currentCode = vm.defaultProductTypeCode(currentIsPrepared);
+    final sorted = <CatalogValue>[...catalog]
+      ..sort((a, b) {
+        if (a.code == currentCode) return -1;
+        if (b.code == currentCode) return 1;
+        return a.sortOrder.compareTo(b.sortOrder);
+      });
+    return sorted;
+  }
+
+  /// Sales product category display names from the administrable catalog. If
+  /// the product already holds a legacy category not in the catalog, it is
+  /// injected first so it still renders (and is flagged in the UI).
+  List<String> _buildCategoryOptions(InsumoViewModel vm, String? current) {
+    final names = vm.productCategoryNames;
+    if (current == null || current.isEmpty) return names;
+    if (names.contains(current)) return names;
+    return <String>[current, ...names];
   }
 }
 
@@ -641,7 +758,10 @@ class _InsumoListRow extends StatelessWidget {
                 children: [
                   Text(
                     insumo.name,
-                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                    ),
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -693,7 +813,10 @@ class _ProductListRow extends StatelessWidget {
                 children: [
                   Text(
                     product.name,
-                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                    ),
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -710,7 +833,9 @@ class _ProductListRow extends StatelessWidget {
             ),
             DsStatusChip(
               label: product.isPrepared ? 'PREPARADO' : 'REVENTA',
-              tone: product.isPrepared ? DsChipTone.primary : DsChipTone.neutral,
+              tone: product.isPrepared
+                  ? DsChipTone.primary
+                  : DsChipTone.neutral,
             ),
             const SizedBox(width: 8),
             DsStatusChip(label: stockLabel, tone: stockTone),
@@ -744,9 +869,7 @@ class _DetailHeader extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 16, 8, 16),
       decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: colorScheme.outlineVariant),
-        ),
+        border: Border(bottom: BorderSide(color: colorScheme.outlineVariant)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -813,17 +936,23 @@ class _InsumoAttributeGrid extends StatelessWidget {
         children: [
           _Attr(label: 'Stock actual', value: insumo.stock.toStringAsFixed(2)),
           _Attr(label: 'Unidad', value: insumo.consumptionUom),
-          _Attr(label: 'PAR', value: insumo.parLevel?.toStringAsFixed(2) ?? '—'),
-          _Attr(label: 'Stock mínimo', value: insumo.stockMin?.toStringAsFixed(2) ?? '—'),
-          _Attr(label: 'Stock máximo', value: insumo.stockMax?.toStringAsFixed(2) ?? '—'),
+          _Attr(
+            label: 'PAR',
+            value: insumo.parLevel?.toStringAsFixed(2) ?? '—',
+          ),
+          _Attr(
+            label: 'Stock mínimo',
+            value: insumo.stockMin?.toStringAsFixed(2) ?? '—',
+          ),
+          _Attr(
+            label: 'Stock máximo',
+            value: insumo.stockMax?.toStringAsFixed(2) ?? '—',
+          ),
           _Attr(
             label: 'Costo promedio',
             value: 'C\$${insumo.averageCost.toStringAsFixed(2)}',
           ),
-          _Attr(
-            label: 'Perecedero',
-            value: insumo.isPerishable ? 'Sí' : 'No',
-          ),
+          _Attr(label: 'Perecedero', value: insumo.isPerishable ? 'Sí' : 'No'),
         ],
       ),
     );
@@ -867,7 +996,10 @@ class _Attr extends StatelessWidget {
 }
 
 class _PresentationsSection extends StatefulWidget {
-  const _PresentationsSection({required this.viewModel, required this.insumoId});
+  const _PresentationsSection({
+    required this.viewModel,
+    required this.insumoId,
+  });
 
   final InsumoViewModel viewModel;
   final String insumoId;
@@ -907,7 +1039,10 @@ class _PresentationsSectionState extends State<_PresentationsSection> {
       child: list.isEmpty
           ? const Text(
               'Sin presentaciones. Las compras requieren al menos una presentación para registrar la unidad de compra.',
-              style: TextStyle(fontStyle: FontStyle.italic, color: Color(0xFF414849)),
+              style: TextStyle(
+                fontStyle: FontStyle.italic,
+                color: Color(0xFF414849),
+              ),
             )
           : Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -915,7 +1050,8 @@ class _PresentationsSectionState extends State<_PresentationsSection> {
                   .map(
                     (c) => _PresentationRow(
                       conversion: c,
-                      onEdit: () => _showPresentationForm(context, conversion: c),
+                      onEdit: () =>
+                          _showPresentationForm(context, conversion: c),
                       onDelete: () => _confirmDelete(context, c),
                     ),
                   )
@@ -924,10 +1060,15 @@ class _PresentationsSectionState extends State<_PresentationsSection> {
     );
   }
 
-  Future<void> _showPresentationForm(BuildContext context, {UomConversion? conversion}) async {
+  Future<void> _showPresentationForm(
+    BuildContext context, {
+    UomConversion? conversion,
+  }) async {
     final vm = widget.viewModel;
     final formKey = GlobalKey<FormState>();
-    final nameController = TextEditingController(text: conversion?.unitName ?? '');
+    final nameController = TextEditingController(
+      text: conversion?.unitName ?? '',
+    );
     final factorController = TextEditingController(
       text: conversion?.factor.toString() ?? '1',
     );
@@ -938,7 +1079,9 @@ class _PresentationsSectionState extends State<_PresentationsSection> {
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setState) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-          title: Text(conversion == null ? 'Nueva presentación' : 'Editar presentación'),
+          title: Text(
+            conversion == null ? 'Nueva presentación' : 'Editar presentación',
+          ),
           content: SizedBox(
             width: 480,
             child: Form(
@@ -953,16 +1096,20 @@ class _PresentationsSectionState extends State<_PresentationsSection> {
                       labelText: 'Unidad',
                       helperText: 'Ej: Caja, Saco 25kg, Unidad',
                     ),
-                    validator: (v) => v == null || v.isEmpty ? 'Requerido' : null,
+                    validator: (v) =>
+                        v == null || v.isEmpty ? 'Requerido' : null,
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: factorController,
                     decoration: const InputDecoration(
-                      labelText: 'Factor de conversión',
-                      helperText: '1 unidad de stock = N unidades de compra.',
+                      labelText: 'Unidades base por unidad de compra',
+                      helperText:
+                          '1 unidad de compra = N unidades base de inventario. Ej: 1 lb = 0.4536 kg.',
                     ),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     validator: (v) {
                       final n = double.tryParse(v ?? '');
                       if (n == null || n <= 0) return 'Factor inválido';
@@ -972,7 +1119,9 @@ class _PresentationsSectionState extends State<_PresentationsSection> {
                   const SizedBox(height: 8),
                   SwitchListTile(
                     title: const Text('Marcar como default'),
-                    subtitle: const Text('Se sugiere al registrar compras de este insumo.'),
+                    subtitle: const Text(
+                      'Se sugiere al registrar compras de este insumo.',
+                    ),
                     value: isDefault,
                     onChanged: (val) => setState(() => isDefault = val),
                     contentPadding: EdgeInsets.zero,
@@ -991,7 +1140,9 @@ class _PresentationsSectionState extends State<_PresentationsSection> {
                 if (formKey.currentState?.validate() ?? false) {
                   vm.saveConversion(
                     UomConversion(
-                      id: conversion?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
+                      id:
+                          conversion?.id ??
+                          DateTime.now().millisecondsSinceEpoch.toString(),
                       insumoId: widget.insumoId,
                       unitName: nameController.text,
                       factor: double.parse(factorController.text),
@@ -1009,13 +1160,18 @@ class _PresentationsSectionState extends State<_PresentationsSection> {
     );
   }
 
-  Future<void> _confirmDelete(BuildContext context, UomConversion conversion) async {
+  Future<void> _confirmDelete(
+    BuildContext context,
+    UomConversion conversion,
+  ) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
         title: const Text('Eliminar presentación'),
-        content: Text('¿Eliminar "${conversion.unitName}"? Esta acción no se puede deshacer.'),
+        content: Text(
+          '¿Eliminar "${conversion.unitName}"? Esta acción no se puede deshacer.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
@@ -1072,13 +1228,16 @@ class _PresentationRow extends StatelessWidget {
                     ),
                     if (conversion.isDefault) ...[
                       const SizedBox(width: 8),
-                      const DsStatusChip(label: 'DEFAULT', tone: DsChipTone.primary),
+                      const DsStatusChip(
+                        label: 'DEFAULT',
+                        tone: DsChipTone.primary,
+                      ),
                     ],
                   ],
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Factor: ${conversion.factor.toStringAsFixed(4)}',
+                  '1 unidad de compra = ${conversion.factor.toStringAsFixed(4)} unidades base',
                   style: TextStyle(
                     color: colorScheme.onSurfaceVariant,
                     fontSize: 12,
@@ -1088,9 +1247,16 @@ class _PresentationRow extends StatelessWidget {
               ],
             ),
           ),
-          IconButton(icon: const Icon(Icons.edit_outlined, size: 18), onPressed: onEdit),
           IconButton(
-            icon: Icon(Icons.delete_outline, size: 18, color: colorScheme.error),
+            icon: const Icon(Icons.edit_outlined, size: 18),
+            onPressed: onEdit,
+          ),
+          IconButton(
+            icon: Icon(
+              Icons.delete_outline,
+              size: 18,
+              color: colorScheme.error,
+            ),
             onPressed: onDelete,
           ),
         ],
@@ -1107,7 +1273,8 @@ class _StockStatus {
 }
 
 _StockStatus _stockStatus(Insumo insumo) {
-  if (insumo.stock <= 0) return const _StockStatus('SIN STOCK', DsChipTone.danger);
+  if (insumo.stock <= 0)
+    return const _StockStatus('SIN STOCK', DsChipTone.danger);
   if (insumo.parLevel != null && insumo.stock < insumo.parLevel!) {
     return const _StockStatus('BAJO PAR', DsChipTone.warning);
   }

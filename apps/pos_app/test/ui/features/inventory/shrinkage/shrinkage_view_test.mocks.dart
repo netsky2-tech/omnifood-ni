@@ -7,18 +7,20 @@ import 'dart:async' as _i4;
 
 import 'package:mockito/mockito.dart' as _i1;
 import 'package:pos_app/data/database/app_database.dart' as _i2;
+import 'package:pos_app/domain/models/catalog/catalog_type.dart' as _i16;
+import 'package:pos_app/domain/models/catalog/catalog_value.dart' as _i15;
 import 'package:pos_app/domain/models/inventory/batch.dart' as _i13;
-import 'package:pos_app/domain/models/inventory/batch_deduction.dart' as _i19;
+import 'package:pos_app/domain/models/inventory/batch_deduction.dart' as _i21;
 import 'package:pos_app/domain/models/inventory/count_session_document.dart'
     as _i9;
-import 'package:pos_app/domain/models/inventory/forensic_alert.dart' as _i16;
+import 'package:pos_app/domain/models/inventory/forensic_alert.dart' as _i18;
 import 'package:pos_app/domain/models/inventory/insumo.dart' as _i5;
 import 'package:pos_app/domain/models/inventory/inventory_movement.dart'
     as _i10;
 import 'package:pos_app/domain/models/inventory/product.dart' as _i6;
 import 'package:pos_app/domain/models/inventory/production_order_document.dart'
-    as _i17;
-import 'package:pos_app/domain/models/inventory/purchase.dart' as _i15;
+    as _i19;
+import 'package:pos_app/domain/models/inventory/purchase.dart' as _i17;
 import 'package:pos_app/domain/models/inventory/recipe.dart' as _i7;
 import 'package:pos_app/domain/models/inventory/recipe_version_document.dart'
     as _i8;
@@ -27,7 +29,7 @@ import 'package:pos_app/domain/models/inventory/uom_conversion.dart' as _i14;
 import 'package:pos_app/domain/models/inventory/warehouse.dart' as _i12;
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart'
     as _i3;
-import 'package:pos_app/domain/services/inventory/movement_engine.dart' as _i18;
+import 'package:pos_app/domain/services/inventory/movement_engine.dart' as _i20;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values
@@ -464,7 +466,83 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i4.Future<void>);
 
   @override
-  _i4.Future<void> savePurchase(_i15.Purchase? purchase) => (super.noSuchMethod(
+  _i4.Future<List<_i15.CatalogValue>> getActiveCatalog(
+          _i16.CatalogType? type) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getActiveCatalog,
+          [type],
+        ),
+        returnValue:
+            _i4.Future<List<_i15.CatalogValue>>.value(<_i15.CatalogValue>[]),
+      ) as _i4.Future<List<_i15.CatalogValue>>);
+
+  @override
+  _i4.Future<List<_i15.CatalogValue>> getAllCatalog(_i16.CatalogType? type) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getAllCatalog,
+          [type],
+        ),
+        returnValue:
+            _i4.Future<List<_i15.CatalogValue>>.value(<_i15.CatalogValue>[]),
+      ) as _i4.Future<List<_i15.CatalogValue>>);
+
+  @override
+  _i4.Future<_i15.CatalogValue?> findCatalogByCode(
+    _i16.CatalogType? type,
+    String? code,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #findCatalogByCode,
+          [
+            type,
+            code,
+          ],
+        ),
+        returnValue: _i4.Future<_i15.CatalogValue?>.value(),
+      ) as _i4.Future<_i15.CatalogValue?>);
+
+  @override
+  _i4.Future<void> upsertCatalogValues(List<_i15.CatalogValue>? values) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #upsertCatalogValues,
+          [values],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> setCatalogActive(
+    String? id,
+    bool? isActive,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #setCatalogActive,
+          [
+            id,
+            isActive,
+          ],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<int> countCatalogValues() => (super.noSuchMethod(
+        Invocation.method(
+          #countCatalogValues,
+          [],
+        ),
+        returnValue: _i4.Future<int>.value(0),
+      ) as _i4.Future<int>);
+
+  @override
+  _i4.Future<void> savePurchase(_i17.Purchase? purchase) => (super.noSuchMethod(
         Invocation.method(
           #savePurchase,
           [purchase],
@@ -474,7 +552,7 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i4.Future<void>);
 
   @override
-  _i4.Future<void> queuePurchaseSync(_i15.Purchase? purchase) =>
+  _i4.Future<void> queuePurchaseSync(_i17.Purchase? purchase) =>
       (super.noSuchMethod(
         Invocation.method(
           #queuePurchaseSync,
@@ -485,22 +563,22 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i4.Future<void>);
 
   @override
-  _i4.Future<List<_i15.Purchase>> getPurchaseHistory() => (super.noSuchMethod(
+  _i4.Future<List<_i17.Purchase>> getPurchaseHistory() => (super.noSuchMethod(
         Invocation.method(
           #getPurchaseHistory,
           [],
         ),
-        returnValue: _i4.Future<List<_i15.Purchase>>.value(<_i15.Purchase>[]),
-      ) as _i4.Future<List<_i15.Purchase>>);
+        returnValue: _i4.Future<List<_i17.Purchase>>.value(<_i17.Purchase>[]),
+      ) as _i4.Future<List<_i17.Purchase>>);
 
   @override
-  _i4.Future<List<_i15.Purchase>> getUnsyncedPurchases() => (super.noSuchMethod(
+  _i4.Future<List<_i17.Purchase>> getUnsyncedPurchases() => (super.noSuchMethod(
         Invocation.method(
           #getUnsyncedPurchases,
           [],
         ),
-        returnValue: _i4.Future<List<_i15.Purchase>>.value(<_i15.Purchase>[]),
-      ) as _i4.Future<List<_i15.Purchase>>);
+        returnValue: _i4.Future<List<_i17.Purchase>>.value(<_i17.Purchase>[]),
+      ) as _i4.Future<List<_i17.Purchase>>);
 
   @override
   _i4.Future<void> markPurchaseAsSynced(String? id) => (super.noSuchMethod(
@@ -513,18 +591,18 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i4.Future<void>);
 
   @override
-  _i4.Future<List<_i16.ForensicAlert>> getForensicAlerts() =>
+  _i4.Future<List<_i18.ForensicAlert>> getForensicAlerts() =>
       (super.noSuchMethod(
         Invocation.method(
           #getForensicAlerts,
           [],
         ),
         returnValue:
-            _i4.Future<List<_i16.ForensicAlert>>.value(<_i16.ForensicAlert>[]),
-      ) as _i4.Future<List<_i16.ForensicAlert>>);
+            _i4.Future<List<_i18.ForensicAlert>>.value(<_i18.ForensicAlert>[]),
+      ) as _i4.Future<List<_i18.ForensicAlert>>);
 
   @override
-  _i4.Future<void> saveForensicAlert(_i16.ForensicAlert? alert) =>
+  _i4.Future<void> saveForensicAlert(_i18.ForensicAlert? alert) =>
       (super.noSuchMethod(
         Invocation.method(
           #saveForensicAlert,
@@ -535,15 +613,15 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i4.Future<void>);
 
   @override
-  _i4.Future<List<_i16.ForensicAlert>> getUnsyncedForensicAlerts() =>
+  _i4.Future<List<_i18.ForensicAlert>> getUnsyncedForensicAlerts() =>
       (super.noSuchMethod(
         Invocation.method(
           #getUnsyncedForensicAlerts,
           [],
         ),
         returnValue:
-            _i4.Future<List<_i16.ForensicAlert>>.value(<_i16.ForensicAlert>[]),
-      ) as _i4.Future<List<_i16.ForensicAlert>>);
+            _i4.Future<List<_i18.ForensicAlert>>.value(<_i18.ForensicAlert>[]),
+      ) as _i4.Future<List<_i18.ForensicAlert>>);
 
   @override
   _i4.Future<void> markForensicAlertAsSynced(String? id) => (super.noSuchMethod(
@@ -556,19 +634,19 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i4.Future<void>);
 
   @override
-  _i4.Future<List<_i17.ProductionOrderDocument>>
+  _i4.Future<List<_i19.ProductionOrderDocument>>
       getProductionOrderDocuments() => (super.noSuchMethod(
             Invocation.method(
               #getProductionOrderDocuments,
               [],
             ),
-            returnValue: _i4.Future<List<_i17.ProductionOrderDocument>>.value(
-                <_i17.ProductionOrderDocument>[]),
-          ) as _i4.Future<List<_i17.ProductionOrderDocument>>);
+            returnValue: _i4.Future<List<_i19.ProductionOrderDocument>>.value(
+                <_i19.ProductionOrderDocument>[]),
+          ) as _i4.Future<List<_i19.ProductionOrderDocument>>);
 
   @override
   _i4.Future<void> saveProductionOrderDocument(
-          _i17.ProductionOrderDocument? document) =>
+          _i19.ProductionOrderDocument? document) =>
       (super.noSuchMethod(
         Invocation.method(
           #saveProductionOrderDocument,
@@ -579,15 +657,15 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i4.Future<void>);
 
   @override
-  _i4.Future<List<_i17.ProductionOrderDocument>>
+  _i4.Future<List<_i19.ProductionOrderDocument>>
       getUnsyncedProductionOrders() => (super.noSuchMethod(
             Invocation.method(
               #getUnsyncedProductionOrders,
               [],
             ),
-            returnValue: _i4.Future<List<_i17.ProductionOrderDocument>>.value(
-                <_i17.ProductionOrderDocument>[]),
-          ) as _i4.Future<List<_i17.ProductionOrderDocument>>);
+            returnValue: _i4.Future<List<_i19.ProductionOrderDocument>>.value(
+                <_i19.ProductionOrderDocument>[]),
+          ) as _i4.Future<List<_i19.ProductionOrderDocument>>);
 
   @override
   _i4.Future<void> markProductionOrderDocumentAsSynced(String? id) =>
@@ -604,7 +682,7 @@ class MockInventoryRepository extends _i1.Mock
 /// A class which mocks [MovementEngine].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockMovementEngine extends _i1.Mock implements _i18.MovementEngine {
+class MockMovementEngine extends _i1.Mock implements _i20.MovementEngine {
   MockMovementEngine() {
     _i1.throwOnMissingStub(this);
   }
@@ -769,7 +847,7 @@ class MockMovementEngine extends _i1.Mock implements _i18.MovementEngine {
       ) as _i4.Future<List<_i10.InventoryMovement>>);
 
   @override
-  _i4.Future<List<_i19.BatchDeduction>> getBatchesForConsumption(
+  _i4.Future<List<_i21.BatchDeduction>> getBatchesForConsumption(
     String? insumoId,
     double? quantity,
   ) =>
@@ -781,7 +859,7 @@ class MockMovementEngine extends _i1.Mock implements _i18.MovementEngine {
             quantity,
           ],
         ),
-        returnValue: _i4.Future<List<_i19.BatchDeduction>>.value(
-            <_i19.BatchDeduction>[]),
-      ) as _i4.Future<List<_i19.BatchDeduction>>);
+        returnValue: _i4.Future<List<_i21.BatchDeduction>>.value(
+            <_i21.BatchDeduction>[]),
+      ) as _i4.Future<List<_i21.BatchDeduction>>);
 }

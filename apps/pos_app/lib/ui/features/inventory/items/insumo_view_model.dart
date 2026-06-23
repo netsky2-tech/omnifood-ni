@@ -6,10 +6,19 @@ import '../../../../domain/models/inventory/product.dart';
 import '../../../../domain/models/inventory/warehouse.dart';
 import '../../../../domain/models/inventory/uom_conversion.dart';
 import '../../../../domain/models/inventory/forensic_alert.dart';
+import '../../../../domain/models/catalog/catalog_value.dart';
+import '../../../../domain/models/catalog/catalog_type.dart';
 import '../../../../domain/repositories/inventory/inventory_repository.dart';
 import '../../../../domain/services/alerts/alert_service.dart';
 
 const highValueAlterationThresholdNio = 1500.0;
+
+/// Catalog code used to mark a sales product as prepared (carries a recipe/BOM
+/// and deducts insumo stock on sale). The opposite code (`REVENTA`) means
+/// direct resale. Both codes are tenant-administrable values in the
+/// `SALES_PRODUCT_TYPE` catalog; this constant only maps the prepared flag
+/// persisted on the (still bool-based) Product entity to its catalog code.
+const preparedProductTypeCode = 'PREPARADO';
 
 class InsumoViewModel with ChangeNotifier {
   InsumoViewModel(this.repository, {AlertService? alertService, Uuid? uuid})
@@ -29,6 +38,40 @@ class InsumoViewModel with ChangeNotifier {
   List<Warehouse> _warehouses = [];
   List<Warehouse> get warehouses => _warehouses;
 
+  // Administrable master catalogs (offline mirror). Replaces the former
+  // hardcoded UI presets (commonConsumptionUoms, commonProductUoms,
+  // productCategoryPresets) — these are now tenant-administrable via the
+  // Admin backend and cached locally for offline-first operation.
+  List<CatalogValue> _uomCatalog = [];
+  List<CatalogValue> get uomCatalog => _uomCatalog;
+
+  List<CatalogValue> _productCategoryCatalog = [];
+  List<CatalogValue> get productCategoryCatalog => _productCategoryCatalog;
+
+  List<CatalogValue> _productTypeCatalog = [];
+  List<CatalogValue> get productTypeCatalog => _productTypeCatalog;
+
+  /// UOM codes for dropdowns (inventory consumption + sales). Empty until the
+  /// local catalog is provisioned (migration seed or Admin sync).
+  List<String> get uomOptions =>
+      _uomCatalog.map((u) => u.code).toList(growable: false);
+
+  /// Sales product category display names for the product form dropdown.
+  List<String> get productCategoryNames =>
+      _productCategoryCatalog.map((c) => c.name).toList(growable: false);
+
+  /// Sales product type codes (e.g. PREPARADO, REVENTA) for the product form.
+  List<String> get productTypeCodes =>
+      _productTypeCatalog.map((t) => t.code).toList(growable: false);
+
+  /// Maps the catalog type code to the persisted prepared flag.
+  bool isPreparedForTypeCode(String? typeCode) =>
+      typeCode == preparedProductTypeCode;
+
+  /// Inverse mapping: derives the catalog type code from the persisted flag.
+  String defaultProductTypeCode(bool isPrepared) =>
+      isPrepared ? preparedProductTypeCode : 'REVENTA';
+
   final Map<String, List<UomConversion>> _conversionsByInsumo = {};
   List<UomConversion> conversionsFor(String insumoId) =>
       List.unmodifiable(_conversionsByInsumo[insumoId] ?? const <UomConversion>[]);
@@ -43,6 +86,14 @@ class InsumoViewModel with ChangeNotifier {
     _insumos = await repository.getActiveInsumos();
     _products = await repository.getActiveProducts();
     _warehouses = await repository.getActiveWarehouses();
+
+    // Load administrable master catalogs (offline-first: read from local cache
+    // seeded by migration and kept fresh by Admin sync).
+    _uomCatalog = await repository.getActiveCatalog(CatalogType.uom);
+    _productCategoryCatalog =
+        await repository.getActiveCatalog(CatalogType.salesProductCategory);
+    _productTypeCatalog =
+        await repository.getActiveCatalog(CatalogType.salesProductType);
 
     _isLoading = false;
     notifyListeners();

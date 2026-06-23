@@ -13,9 +13,12 @@ import '../../../domain/models/inventory/count_session_document.dart';
 import '../../../domain/models/inventory/forensic_alert.dart';
 import '../../../domain/models/inventory/purchase.dart';
 import '../../../domain/models/inventory/production_order_document.dart';
+import '../../../domain/models/catalog/catalog_value.dart';
+import '../../../domain/models/catalog/catalog_type.dart';
 import '../../models/inventory/insumo_entity.dart';
 import '../../models/inventory/uom_conversion_entity.dart';
 import '../../models/inventory/batch_entity.dart';
+import '../../models/catalog/catalog_value_entity.dart';
 import '../../mappers/inventory_mapper.dart';
 import '../../mappers/purchase_mapper.dart';
 import '../../../domain/repositories/inventory/inventory_repository.dart';
@@ -407,6 +410,74 @@ class InventoryRepositoryImpl implements InventoryRepository {
   @override
   Future<void> deleteConversion(String id) {
     return uomConversionDao.deleteConversionById(id);
+  }
+
+  // --- Administrable master catalogs (offline mirror) ---
+
+  @override
+  Future<List<CatalogValue>> getActiveCatalog(CatalogType type) async {
+    final entities = await _database.catalogValueDao.findActiveByType(type.value);
+    return entities.map(_toCatalogDomain).toList();
+  }
+
+  @override
+  Future<List<CatalogValue>> getAllCatalog(CatalogType type) async {
+    final entities = await _database.catalogValueDao.findAllByType(type.value);
+    return entities.map(_toCatalogDomain).toList();
+  }
+
+  @override
+  Future<CatalogValue?> findCatalogByCode(CatalogType type, String code) async {
+    final entity =
+        await _database.catalogValueDao.findByTypeAndCode(type.value, code);
+    return entity == null ? null : _toCatalogDomain(entity);
+  }
+
+  @override
+  Future<void> upsertCatalogValues(List<CatalogValue> values) {
+    return _database.catalogValueDao.insertCatalogValues(
+      values.map(_toCatalogEntity).toList(growable: false),
+    );
+  }
+
+  @override
+  Future<void> setCatalogActive(String id, bool isActive) {
+    return _database.catalogValueDao.setActive(id, isActive);
+  }
+
+  @override
+  Future<int> countCatalogValues() async {
+    final count = await _database.catalogValueDao.countAll();
+    return count ?? 0;
+  }
+
+  CatalogValue _toCatalogDomain(CatalogValueEntity entity) {
+    final type = CatalogType.fromString(entity.catalogType);
+    if (type == null) {
+      throw StateError(
+        'Unknown catalog_type "${entity.catalogType}" for catalog value '
+        '${entity.id}; local DB contains a value for an unsupported protocol type.',
+      );
+    }
+    return CatalogValue(
+      id: entity.id,
+      catalogType: type,
+      code: entity.code,
+      name: entity.name,
+      isActive: entity.isActive,
+      sortOrder: entity.sortOrder,
+    );
+  }
+
+  CatalogValueEntity _toCatalogEntity(CatalogValue domain) {
+    return CatalogValueEntity(
+      id: domain.id,
+      catalogType: domain.catalogType.value,
+      code: domain.code,
+      name: domain.name,
+      isActive: domain.isActive,
+      sortOrder: domain.sortOrder,
+    );
   }
 
   @override
