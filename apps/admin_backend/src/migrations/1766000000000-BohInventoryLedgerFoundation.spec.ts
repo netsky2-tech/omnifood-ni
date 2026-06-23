@@ -27,12 +27,13 @@ async function tableExists(
   return readExists(rows);
 }
 
-describe('BohInventoryLedgerFoundation1766000000000', () => {
+const maybeDescribe = process.env.DB_PASSWORD?.trim()
+  ? describe
+  : describe.skip;
+
+maybeDescribe('BohInventoryLedgerFoundation1766000000000', () => {
   const migration = new BohInventoryLedgerFoundation1766000000000();
-  const dbPassword = process.env.DB_PASSWORD?.trim();
-  if (!dbPassword) {
-    throw new Error('DB_PASSWORD is required');
-  }
+  const dbPassword = process.env.DB_PASSWORD?.trim() ?? '';
 
   const postgresConnection = {
     type: 'postgres' as const,
