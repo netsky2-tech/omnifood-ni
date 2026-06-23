@@ -36,6 +36,7 @@ import {
   FORENSIC_ALERT_DISPATCHER,
   ForensicAlertService,
 } from './forensic-alert.service';
+import { UomConversionCalculator } from './uom-conversion-calculator';
 
 @Module({
   imports: [
@@ -72,6 +73,7 @@ import {
     CostCalculatorService,
     InventoryAdjustmentService,
     ForensicAlertService,
+    UomConversionCalculator,
     {
       provide: FORENSIC_ALERT_DISPATCHER,
       useValue: {
@@ -97,6 +99,7 @@ import {
     CostCalculatorService,
     InventoryAdjustmentService,
     ForensicAlertService,
+    UomConversionCalculator,
   ],
 })
 export class InventoryModule {}

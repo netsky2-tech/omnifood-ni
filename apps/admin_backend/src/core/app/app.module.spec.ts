@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AppModule } from './app.module';
-import { createTypeOrmOptions } from './app.module';
+import { createTypeOrmOptions, getRequiredConfigValue } from './app.module';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Insumo } from '../../modules/inventory/entities/insumo.entity';
 import { Product } from '../../modules/inventory/entities/product.entity';
@@ -12,6 +12,8 @@ describe('AppModule Registration', () => {
   let module: TestingModule;
 
   beforeAll(async () => {
+    process.env.JWT_SECRET = 'test-jwt-secret';
+
     module = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -50,7 +52,10 @@ describe('AppModule Registration', () => {
 
 describe('createTypeOrmOptions', () => {
   const configService = {
-    get: jest.fn((key: string, fallback?: unknown) => fallback),
+    get: jest.fn((key: string, fallback?: unknown) => {
+      if (key === 'DB_PASSWORD') return 'test-db-password';
+      return fallback;
+    }),
   } as unknown as ConfigService;
 
   it('disables synchronize in test environment', () => {
@@ -59,9 +64,18 @@ describe('createTypeOrmOptions', () => {
     expect(options.synchronize).toBe(false);
   });
 
-  it('enables synchronize outside test environment', () => {
+  it('disables synchronize outside test environment', () => {
     const options = createTypeOrmOptions(configService, 'development');
 
-    expect(options.synchronize).toBe(true);
+    expect(options.synchronize).toBe(false);
+  });
+
+  it('fails startup when DB_PASSWORD is missing', () => {
+    const missingConfigService = {
+      get: jest.fn().mockReturnValue(undefined),
+    } as unknown as ConfigService;
+
+    expect(() => getRequiredConfigValue(missingConfigService, 'DB_PASSWORD'))
+      .toThrow('DB_PASSWORD is required');
   });
 });

@@ -10,11 +10,12 @@ import { JwtModule, JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 
 describe('ReportsController RBAC', () => {
+  const jwtSecret = 'test-jwt-secret';
   let app: INestApplication;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [JwtModule.register({ secret: 'super-secret' })],
+      imports: [JwtModule.register({ secret: jwtSecret })],
       controllers: [ReportsController],
       providers: [
         Reflector,
@@ -22,7 +23,7 @@ describe('ReportsController RBAC', () => {
         AuthGuard,
         {
           provide: ConfigService,
-          useValue: { get: () => 'super-secret' },
+          useValue: { get: () => jwtSecret },
         },
       ],
     }).compile();

@@ -4,11 +4,16 @@ import { EnforceAuditLogImmutability1764000000000 } from './1764000000000-Enforc
 
 describe('EnforceAuditLogImmutability1764000000000', () => {
   const TEST_TIMEOUT_MS = 30000;
+  const dbPassword = process.env.DB_PASSWORD?.trim();
+  if (!dbPassword) {
+    throw new Error('DB_PASSWORD is required');
+  }
+
   const postgresConnection = {
     host: process.env.DB_HOST ?? '127.0.0.1',
     port: Number(process.env.DB_PORT ?? '5432'),
     username: process.env.DB_USERNAME ?? 'postgres',
-    password: process.env.DB_PASSWORD ?? 'admin',
+    password: dbPassword,
     database: process.env.DB_DATABASE ?? 'omnifood',
   };
 

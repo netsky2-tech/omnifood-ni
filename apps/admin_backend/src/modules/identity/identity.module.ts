@@ -13,6 +13,16 @@ import { AuthController } from './controllers/auth.controller';
 import { AuditController } from './controllers/audit.controller';
 import { UsersController } from './controllers/users.controller';
 
+export const getRequiredIdentityJwtSecret = (
+  configService: ConfigService,
+): string => {
+  const secret = configService.get<string>('JWT_SECRET')?.trim();
+  if (!secret) {
+    throw new Error('JWT_SECRET is required');
+  }
+  return secret;
+};
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -25,7 +35,7 @@ import { UsersController } from './controllers/users.controller';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET', 'super-secret'),
+        secret: getRequiredIdentityJwtSecret(configService),
         signOptions: { expiresIn: '1d' },
       }),
     }),
