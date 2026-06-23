@@ -61,7 +61,9 @@ describe('CatalogService', () => {
         CatalogService,
         {
           provide: DataSource,
-          useValue: { createQueryRunner: jest.fn().mockReturnValue(queryRunner) },
+          useValue: {
+            createQueryRunner: jest.fn().mockReturnValue(queryRunner),
+          },
         },
       ],
     }).compile();
@@ -71,13 +73,17 @@ describe('CatalogService', () => {
 
   describe('list', () => {
     it('returns only active values by default, ordered', async () => {
-      const rows = [makeRow({ code: 'kg' }), makeRow({ id: 'cat-2', code: 'g' })];
+      const rows = [
+        makeRow({ code: 'kg' }),
+        makeRow({ id: 'cat-2', code: 'g' }),
+      ];
       repo.find.mockResolvedValue(rows);
 
       const result = await service.list(CATALOG_TYPE.UOM, 'tenant-A');
 
       expect(repo.find).toHaveBeenCalledWith(
         expect.objectContaining({
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           where: expect.objectContaining({
             tenant_id: 'tenant-A',
             catalog_type: CATALOG_TYPE.UOM,
@@ -99,7 +105,11 @@ describe('CatalogService', () => {
       await service.list(CATALOG_TYPE.UOM, 'tenant-A', true);
       expect(repo.find).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.not.objectContaining({ is_active: expect.any(Boolean) }),
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          where: expect.not.objectContaining({
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+            is_active: expect.any(Boolean),
+          }),
         }),
       );
     });
@@ -156,7 +166,12 @@ describe('CatalogService', () => {
         sort_order: 5,
       });
       expect(repo.save).toHaveBeenCalledWith(
-        expect.objectContaining({ name: 'Kilo', is_active: false, sort_order: 5, code: 'kg' }),
+        expect.objectContaining({
+          name: 'Kilo',
+          is_active: false,
+          sort_order: 5,
+          code: 'kg',
+        }),
       );
     });
   });
@@ -212,7 +227,9 @@ describe('CatalogService', () => {
     });
 
     it('throws NotFoundException for an unknown type', () => {
-      expect(() => CatalogService.resolveType('NOPE')).toThrow(NotFoundException);
+      expect(() => CatalogService.resolveType('NOPE')).toThrow(
+        NotFoundException,
+      );
     });
   });
 });

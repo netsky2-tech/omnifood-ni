@@ -10,6 +10,7 @@ describe('AppModule Master Data Registration', () => {
 
   beforeAll(async () => {
     process.env.JWT_SECRET = 'test-jwt-secret';
+    process.env.DB_PASSWORD = 'test-db-password';
 
     module = await Test.createTestingModule({
       imports: [AppModule],

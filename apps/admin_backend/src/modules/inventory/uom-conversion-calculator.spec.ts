@@ -1,4 +1,7 @@
-import { UomConversionCalculator, roundToScale } from './uom-conversion-calculator';
+import {
+  UomConversionCalculator,
+  roundToScale,
+} from './uom-conversion-calculator';
 
 describe('UomConversionCalculator', () => {
   const calculator = new UomConversionCalculator();

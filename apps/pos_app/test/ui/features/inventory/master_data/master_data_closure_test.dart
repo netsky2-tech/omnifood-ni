@@ -164,8 +164,9 @@ void main() {
       when(() => repository.getActiveCatalog(any())).thenAnswer((inv) async {
         final type = inv.positionalArguments.first as CatalogType;
         if (type == CatalogType.uom) return _seededUomCatalog;
-        if (type == CatalogType.salesProductCategory)
+        if (type == CatalogType.salesProductCategory) {
           return _seededProductCategories;
+        }
         if (type == CatalogType.salesProductType) return _seededProductTypes;
         return const <CatalogValue>[];
       });

@@ -21,11 +21,13 @@ export const CATALOG_TYPE = {
   SALES_PRODUCT_TYPE: 'SALES_PRODUCT_TYPE',
 } as const;
 
-export type CatalogType =
-  (typeof CATALOG_TYPE)[keyof typeof CATALOG_TYPE];
+export type CatalogType = (typeof CATALOG_TYPE)[keyof typeof CATALOG_TYPE];
 
-export const CATALOG_TYPES: readonly CatalogType[] = Object.values(CATALOG_TYPE);
+export const CATALOG_TYPES: readonly CatalogType[] =
+  Object.values(CATALOG_TYPE);
 
 export function isCatalogType(value: unknown): value is CatalogType {
-  return typeof value === 'string' && CATALOG_TYPES.includes(value as CatalogType);
+  return (
+    typeof value === 'string' && CATALOG_TYPES.includes(value as CatalogType)
+  );
 }

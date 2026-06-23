@@ -13,6 +13,7 @@ describe('AppModule Registration', () => {
 
   beforeAll(async () => {
     process.env.JWT_SECRET = 'test-jwt-secret';
+    process.env.DB_PASSWORD = 'test-db-password';
 
     module = await Test.createTestingModule({
       imports: [AppModule],
@@ -59,13 +60,13 @@ describe('createTypeOrmOptions', () => {
   } as unknown as ConfigService;
 
   it('disables synchronize in test environment', () => {
-    const options = createTypeOrmOptions(configService, 'test');
+    const options = createTypeOrmOptions(configService);
 
     expect(options.synchronize).toBe(false);
   });
 
   it('disables synchronize outside test environment', () => {
-    const options = createTypeOrmOptions(configService, 'development');
+    const options = createTypeOrmOptions(configService);
 
     expect(options.synchronize).toBe(false);
   });
@@ -75,7 +76,8 @@ describe('createTypeOrmOptions', () => {
       get: jest.fn().mockReturnValue(undefined),
     } as unknown as ConfigService;
 
-    expect(() => getRequiredConfigValue(missingConfigService, 'DB_PASSWORD'))
-      .toThrow('DB_PASSWORD is required');
+    expect(() =>
+      getRequiredConfigValue(missingConfigService, 'DB_PASSWORD'),
+    ).toThrow('DB_PASSWORD is required');
   });
 });

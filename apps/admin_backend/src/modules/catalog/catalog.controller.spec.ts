@@ -47,21 +47,21 @@ describe('CatalogController', () => {
   it('GET :type delegates to service.list with the resolved type and tenant', async () => {
     service.list.mockResolvedValue([]);
     await controller.list('UOM', undefined, 'tenant-A');
-    expect(service.list).toHaveBeenCalledWith(
+    expect(service.list.mock.calls[0]).toEqual([
       CATALOG_TYPE.UOM,
       'tenant-A',
       false,
-    );
+    ]);
   });
 
   it('GET :type?includeInactive=true forwards the flag', async () => {
     service.list.mockResolvedValue([]);
     await controller.list('UOM', 'true', 'tenant-A');
-    expect(service.list).toHaveBeenCalledWith(
+    expect(service.list.mock.calls[0]).toEqual([
       CATALOG_TYPE.UOM,
       'tenant-A',
       true,
-    );
+    ]);
   });
 
   it('GET :type fails closed when tenant context is missing', async () => {
@@ -70,18 +70,18 @@ describe('CatalogController', () => {
     await expect(controller.list('UOM', undefined, undefined)).rejects.toThrow(
       UnauthorizedException,
     );
-    expect(service.list).not.toHaveBeenCalled();
+    expect(service.list.mock.calls).toHaveLength(0);
   });
 
   it('POST :type delegates to service.create', async () => {
     const dto = { code: 'kg', name: 'Kilogramo' };
     service.create.mockResolvedValue({ id: 'x' } as never);
     await controller.create('UOM', dto, 'tenant-A');
-    expect(service.create).toHaveBeenCalledWith(
+    expect(service.create.mock.calls[0]).toEqual([
       CATALOG_TYPE.UOM,
       'tenant-A',
       dto,
-    );
+    ]);
   });
 
   it('PATCH :type/:id delegates to service.update', async () => {
@@ -92,27 +92,27 @@ describe('CatalogController', () => {
       { name: 'Preparado' },
       'tenant-A',
     );
-    expect(service.update).toHaveBeenCalledWith(
+    expect(service.update.mock.calls[0]).toEqual([
       CATALOG_TYPE.SALES_PRODUCT_TYPE,
       'x',
       'tenant-A',
       { name: 'Preparado' },
-    );
+    ]);
   });
 
   it('DELETE :type/:id soft-deactivates', async () => {
     await controller.deactivate('UOM', 'x', 'tenant-A');
-    expect(service.deactivate).toHaveBeenCalledWith(
+    expect(service.deactivate.mock.calls[0]).toEqual([
       CATALOG_TYPE.UOM,
       'x',
       'tenant-A',
-    );
+    ]);
   });
 
   it('POST seed-defaults delegates to service.seedDefaults', async () => {
     service.seedDefaults.mockResolvedValue(42);
     const result = await controller.seedDefaults('tenant-A');
-    expect(service.seedDefaults).toHaveBeenCalledWith('tenant-A');
+    expect(service.seedDefaults.mock.calls[0]).toEqual(['tenant-A']);
     expect(result).toEqual({ inserted: 42 });
   });
 });
@@ -173,7 +173,7 @@ describe('CatalogController HTTP guards and route precedence', () => {
       .get('/catalogs/UOM')
       .set('Authorization', `Bearer ${signToken({ role: UserRole.MANAGER })}`)
       .expect(401);
-    expect(service.list).not.toHaveBeenCalled();
+    expect(service.list.mock.calls).toHaveLength(0);
   });
 
   it('returns 403 for insufficient role', async () => {
@@ -184,7 +184,7 @@ describe('CatalogController HTTP guards and route precedence', () => {
         `Bearer ${signToken({ role: UserRole.CASHIER, tenant_id: 'tenant-A' })}`,
       )
       .expect(403);
-    expect(service.list).not.toHaveBeenCalled();
+    expect(service.list.mock.calls).toHaveLength(0);
   });
 
   it('routes POST seed-defaults to the static handler, not POST :type', async () => {
@@ -197,7 +197,7 @@ describe('CatalogController HTTP guards and route precedence', () => {
       .expect(201)
       .expect({ inserted: 42 });
 
-    expect(service.seedDefaults).toHaveBeenCalledWith('tenant-A');
-    expect(service.create).not.toHaveBeenCalled();
+    expect(service.seedDefaults.mock.calls[0]).toEqual(['tenant-A']);
+    expect(service.create.mock.calls).toHaveLength(0);
   });
 });

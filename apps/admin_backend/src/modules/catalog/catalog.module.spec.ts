@@ -7,7 +7,9 @@ describe('CatalogModule configuration', () => {
       get: jest.fn().mockReturnValue('configured-secret'),
     } as unknown as ConfigService;
 
-    expect(getRequiredCatalogJwtSecret(configService)).toBe('configured-secret');
+    expect(getRequiredCatalogJwtSecret(configService)).toBe(
+      'configured-secret',
+    );
   });
 
   it('fails startup when JWT_SECRET is missing', () => {

@@ -53,9 +53,7 @@ export class UomConversionCalculator {
     factorToInventoryBase: number,
   ): number {
     if (factorToInventoryBase <= 0) {
-      throw new Error(
-        'factorToInventoryBase must be > 0',
-      );
+      throw new Error('factorToInventoryBase must be > 0');
     }
     return roundToScale(
       inventoryBaseQuantity / factorToInventoryBase,

@@ -40,10 +40,7 @@ export const getRequiredConfigValue = (
   return value;
 };
 
-export const createTypeOrmOptions = (
-  configService: ConfigService,
-  nodeEnv: string = process.env.NODE_ENV ?? 'development',
-) => ({
+export const createTypeOrmOptions = (configService: ConfigService) => ({
   type: 'postgres' as const,
   host: configService.get<string>('DB_HOST', '127.0.0.1'),
   port: configService.get<number>('DB_PORT', 5432),

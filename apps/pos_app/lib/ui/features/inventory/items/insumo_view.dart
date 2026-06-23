@@ -48,8 +48,9 @@ class _InsumoViewState extends State<InsumoView> {
   Widget _buildInsumosTab() {
     return Consumer<InsumoViewModel>(
       builder: (context, vm, child) {
-        if (vm.isLoading)
+        if (vm.isLoading) {
           return const Center(child: CircularProgressIndicator());
+        }
         if (vm.insumos.isEmpty) {
           return DsEmptyState(
             icon: Icons.inventory_2_outlined,
@@ -98,8 +99,9 @@ class _InsumoViewState extends State<InsumoView> {
   Widget _buildProductsTab() {
     return Consumer<InsumoViewModel>(
       builder: (context, vm, child) {
-        if (vm.isLoading)
+        if (vm.isLoading) {
           return const Center(child: CircularProgressIndicator());
+        }
         if (vm.products.isEmpty) {
           return DsEmptyState(
             icon: Icons.local_mall_outlined,
@@ -1273,8 +1275,9 @@ class _StockStatus {
 }
 
 _StockStatus _stockStatus(Insumo insumo) {
-  if (insumo.stock <= 0)
+  if (insumo.stock <= 0) {
     return const _StockStatus('SIN STOCK', DsChipTone.danger);
+  }
   if (insumo.parLevel != null && insumo.stock < insumo.parLevel!) {
     return const _StockStatus('BAJO PAR', DsChipTone.warning);
   }
