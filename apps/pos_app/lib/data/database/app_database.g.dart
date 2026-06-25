@@ -134,7 +134,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 21,
+      version: 22,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -194,7 +194,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `invoices` (`id` TEXT NOT NULL, `invoice_number` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `user_id` TEXT NOT NULL, `subtotal` REAL NOT NULL, `total_tax` REAL NOT NULL, `total` REAL NOT NULL, `is_canceled` INTEGER NOT NULL, `void_reason` TEXT, `sync_status` TEXT NOT NULL, `payment_status` TEXT NOT NULL, `customer_id` TEXT, `global_tax_override` INTEGER NOT NULL, `type` TEXT NOT NULL, `related_invoice_id` TEXT, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `invoice_items` (`id` TEXT NOT NULL, `invoice_id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `product_name` TEXT NOT NULL, `quantity` REAL NOT NULL, `unit_price` REAL NOT NULL, `original_tax_rate` REAL NOT NULL, `applied_tax_rate` REAL NOT NULL, `tax_amount` REAL NOT NULL, `total` REAL NOT NULL, `discount` REAL NOT NULL, `variant_id` TEXT, `notes` TEXT, FOREIGN KEY (`invoice_id`) REFERENCES `invoices` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `invoice_items` (`id` TEXT NOT NULL, `invoice_id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `product_name` TEXT NOT NULL, `quantity` REAL NOT NULL, `unit_price` REAL NOT NULL, `original_tax_rate` REAL NOT NULL, `applied_tax_rate` REAL NOT NULL, `tax_amount` REAL NOT NULL, `total` REAL NOT NULL, `discount` REAL NOT NULL, `variant_id` TEXT, `notes` TEXT, `recipe_version_id` TEXT, FOREIGN KEY (`invoice_id`) REFERENCES `invoices` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `invoice_item_modifiers` (`id` TEXT NOT NULL, `invoice_item_id` TEXT NOT NULL, `name` TEXT NOT NULL, `extra_price` REAL NOT NULL, FOREIGN KEY (`invoice_item_id`) REFERENCES `invoice_items` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
@@ -1106,6 +1106,25 @@ class _$RecipeVersionDocumentDao extends RecipeVersionDocumentDao {
         'SELECT * FROM recipe_version_documents WHERE product_id = ?1 ORDER BY version_number DESC',
         mapper: (Map<String, Object?> row) => RecipeVersionDocumentEntity(id: row['id'] as String, productId: row['product_id'] as String, productName: row['product_name'] as String, versionNumber: row['version_number'] as int, yieldQuantity: row['yield_quantity'] as double, technicalShrinkPct: row['technical_shrink_pct'] as double, createdAt: row['created_at'] as String, componentsJson: row['components_json'] as String, versionNote: row['version_note'] as String?, publishedAt: row['published_at'] as String?, isSynced: (row['is_synced'] as int) != 0),
         arguments: [productId]);
+  }
+
+  @override
+  Future<RecipeVersionDocumentEntity?> findById(String id) async {
+    return _queryAdapter.query(
+        'SELECT * FROM recipe_version_documents WHERE id = ?1',
+        mapper: (Map<String, Object?> row) => RecipeVersionDocumentEntity(
+            id: row['id'] as String,
+            productId: row['product_id'] as String,
+            productName: row['product_name'] as String,
+            versionNumber: row['version_number'] as int,
+            yieldQuantity: row['yield_quantity'] as double,
+            technicalShrinkPct: row['technical_shrink_pct'] as double,
+            createdAt: row['created_at'] as String,
+            componentsJson: row['components_json'] as String,
+            versionNote: row['version_note'] as String?,
+            publishedAt: row['published_at'] as String?,
+            isSynced: (row['is_synced'] as int) != 0),
+        arguments: [id]);
   }
 
   @override
@@ -2291,7 +2310,8 @@ class _$InvoiceItemDao extends InvoiceItemDao {
                   'total': item.total,
                   'discount': item.discount,
                   'variant_id': item.variantId,
-                  'notes': item.notes
+                  'notes': item.notes,
+                  'recipe_version_id': item.recipeVersionId
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -2319,7 +2339,8 @@ class _$InvoiceItemDao extends InvoiceItemDao {
             total: row['total'] as double,
             discount: row['discount'] as double,
             variantId: row['variant_id'] as String?,
-            notes: row['notes'] as String?),
+            notes: row['notes'] as String?,
+            recipeVersionId: row['recipe_version_id'] as String?),
         arguments: [invoiceId]);
   }
 
@@ -2503,7 +2524,8 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'total': item.total,
                   'discount': item.discount,
                   'variant_id': item.variantId,
-                  'notes': item.notes
+                  'notes': item.notes,
+                  'recipe_version_id': item.recipeVersionId
                 }),
         _invoiceItemModifierEntityInsertionAdapter = InsertionAdapter(
             database,
@@ -2560,6 +2582,27 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'usuario_autorizador_id': item.usuarioAutorizadorId,
                   'remote_ref_uuid': item.remoteRefUuid
                 }),
+        _invoiceEntityUpdateAdapter = UpdateAdapter(
+            database,
+            'invoices',
+            ['id'],
+            (InvoiceEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'invoice_number': item.number,
+                  'created_at': item.createdAt,
+                  'user_id': item.userId,
+                  'subtotal': item.subtotal,
+                  'total_tax': item.totalTax,
+                  'total': item.total,
+                  'is_canceled': item.isCanceled ? 1 : 0,
+                  'void_reason': item.voidReason,
+                  'sync_status': item.syncStatus,
+                  'payment_status': item.paymentStatus,
+                  'customer_id': item.customerId,
+                  'global_tax_override': item.globalTaxOverride ? 1 : 0,
+                  'type': item.type,
+                  'related_invoice_id': item.relatedInvoiceId
+                }),
         _insumoEntityUpdateAdapter = UpdateAdapter(
             database,
             'insumos',
@@ -2596,6 +2639,8 @@ class _$SalesTransactionDao extends SalesTransactionDao {
   final InsertionAdapter<MovementEntity> _movementEntityInsertionAdapter;
 
   final InsertionAdapter<AuditLogEntity> _auditLogEntityInsertionAdapter;
+
+  final UpdateAdapter<InvoiceEntity> _invoiceEntityUpdateAdapter;
 
   final UpdateAdapter<InsumoEntity> _insumoEntityUpdateAdapter;
 
@@ -2701,6 +2746,12 @@ class _$SalesTransactionDao extends SalesTransactionDao {
   }
 
   @override
+  Future<void> updateInvoice(InvoiceEntity invoice) async {
+    await _invoiceEntityUpdateAdapter.update(
+        invoice, OnConflictStrategy.replace);
+  }
+
+  @override
   Future<void> updateInsumo(InsumoEntity insumo) async {
     await _insumoEntityUpdateAdapter.update(insumo, OnConflictStrategy.replace);
   }
@@ -2731,6 +2782,27 @@ class _$SalesTransactionDao extends SalesTransactionDao {
             movements,
             auditLog,
             shouldFail);
+      });
+    }
+  }
+
+  @override
+  Future<void> executeVoidTransaction(
+    List<MovementEntity> movements,
+    InvoiceEntity canceledInvoice,
+    AuditLogEntity? auditLog,
+    bool shouldFail,
+  ) async {
+    if (database is sqflite.Transaction) {
+      await super.executeVoidTransaction(
+          movements, canceledInvoice, auditLog, shouldFail);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.salesTransactionDao.executeVoidTransaction(
+            movements, canceledInvoice, auditLog, shouldFail);
       });
     }
   }

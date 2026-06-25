@@ -79,7 +79,10 @@ describe('RecipeService', () => {
   });
 
   it('returns deterministic ordered snapshot by insumo id', async () => {
-    recipeVersionRepo.findOne.mockResolvedValue({ id: 'v3' });
+    recipeVersionRepo.findOne.mockResolvedValue({
+      id: 'v3',
+      product_id: 'prod-1',
+    });
     recipeDetailRepo.find.mockResolvedValue([
       { insumo_id: 'ins-9' },
       { insumo_id: 'ins-1' },
@@ -90,5 +93,17 @@ describe('RecipeService', () => {
     expect(recipeDetailRepo.find).toHaveBeenCalledWith(
       expect.objectContaining({ order: { insumo_id: 'ASC' } }),
     );
+  });
+
+  it('rejects snapshot when recipe version belongs to another product', async () => {
+    recipeVersionRepo.findOne.mockResolvedValue({
+      id: 'v3',
+      product_id: 'prod-other',
+    });
+
+    await expect(
+      service.getSnapshot('v3', 'tenant-A', 'prod-1'),
+    ).rejects.toThrow('does not belong to product prod-1');
+    expect(recipeDetailRepo.find).not.toHaveBeenCalled();
   });
 });

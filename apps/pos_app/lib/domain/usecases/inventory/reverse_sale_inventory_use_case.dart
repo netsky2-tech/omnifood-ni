@@ -10,7 +10,12 @@ class ReverseSaleInventoryUseCase {
   Future<List<InventoryMovement>> execute(List<InvoiceItem> items, String reason) async {
     final List<InventoryMovement> allMovements = [];
     for (final item in items) {
-      final movements = await engine.getReversalMovements(item.productId, item.quantity, reason);
+      final movements = await engine.getReversalMovements(
+        item.productId,
+        item.quantity,
+        reason,
+        recipeVersionId: item.recipeVersionId,
+      );
       allMovements.addAll(movements);
     }
     return allMovements;

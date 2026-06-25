@@ -20,6 +20,7 @@ class InvoiceItem with _$InvoiceItem {
     @Default(0.0) double discount,
     String? variantId,
     String? notes,
+    String? recipeVersionId,
     @Default([]) List<Modifier> selectedModifiers,
   }) = _InvoiceItem;
 

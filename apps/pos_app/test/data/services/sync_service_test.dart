@@ -47,6 +47,9 @@ class FakeAuditRepository implements AuditRepository {
   Future<void> logForensic(String action, {String? metadata, String? metodoAutorizacion, String? usuarioAutorizadorId}) async {}
 
   @override
+  Future<AuditLog?> prepareLog(String action, {String? metadata}) async => null;
+
+  @override
   Future<List<AuditLog>> getLocalLogs({DateTime? start, DateTime? end, String? userId}) async => [];
 }
 

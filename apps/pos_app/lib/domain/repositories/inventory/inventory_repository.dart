@@ -40,6 +40,8 @@ abstract class InventoryRepository {
   Future<void> deleteRecipe(String id);
   Future<void> replaceRecipesForProduct(String productId, List<Recipe> recipes);
   Future<List<RecipeVersionDocument>> getRecipeVersionDocuments(String productId);
+  Future<String?> getActiveRecipeVersionId(String productId);
+  Future<RecipeVersionDocument?> getRecipeVersionDocumentById(String id);
   Future<void> saveRecipeVersionDocument(RecipeVersionDocument document);
   Future<List<RecipeVersionDocument>> getUnsyncedRecipeVersionDocuments();
   Future<void> markRecipeVersionDocumentAsSynced(String id);

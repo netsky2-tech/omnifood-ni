@@ -603,6 +603,16 @@ class MockRecipeVersionDocumentDao extends _i1.Mock
       ) as _i35.Future<List<_i39.RecipeVersionDocumentEntity>>);
 
   @override
+  _i35.Future<_i39.RecipeVersionDocumentEntity?> findById(String? id) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #findById,
+          [id],
+        ),
+        returnValue: _i35.Future<_i39.RecipeVersionDocumentEntity?>.value(),
+      ) as _i35.Future<_i39.RecipeVersionDocumentEntity?>);
+
+  @override
   _i35.Future<List<_i39.RecipeVersionDocumentEntity>> findUnsynced() =>
       (super.noSuchMethod(
         Invocation.method(

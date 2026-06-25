@@ -34,13 +34,64 @@ void main() {
       ),
     ];
 
-    when(mockEngine.getSaleMovements('prod-1', 2.0)).thenAnswer((_) async => []);
+    when(mockEngine.getSaleMovements('prod-1', 2.0,
+            recipeVersionId: argThat(isNull, named: 'recipeVersionId')))
+        .thenAnswer((_) async => []);
 
     // WHEN
     final result = await useCase.execute(items);
 
     // THEN
-    verify(mockEngine.getSaleMovements('prod-1', 2.0)).called(1);
+    verify(mockEngine.getSaleMovements('prod-1', 2.0,
+        recipeVersionId: argThat(isNull, named: 'recipeVersionId'))).called(1);
     expect(result, isEmpty);
+  });
+
+  test('GIVEN items with recipeVersionId WHEN processed THEN it SHOULD pass recipeVersionId to engine per line', () async {
+    // GIVEN
+    final items = [
+      InvoiceItem(
+        id: '1',
+        invoiceId: 'INV-001',
+        productId: 'prod-1',
+        productName: 'Burger',
+        quantity: 2,
+        unitPrice: 10,
+        originalTaxRate: 0.15,
+        appliedTaxRate: 0.15,
+        taxAmount: 3,
+        total: 23,
+        recipeVersionId: 'rv-historical-1',
+      ),
+      InvoiceItem(
+        id: '2',
+        invoiceId: 'INV-001',
+        productId: 'prod-2',
+        productName: 'Salad',
+        quantity: 1,
+        unitPrice: 15,
+        originalTaxRate: 0.15,
+        appliedTaxRate: 0.15,
+        taxAmount: 2.25,
+        total: 17.25,
+        recipeVersionId: 'rv-historical-2',
+      ),
+    ];
+
+    when(mockEngine.getSaleMovements('prod-1', 2.0,
+            recipeVersionId: 'rv-historical-1'))
+        .thenAnswer((_) async => []);
+    when(mockEngine.getSaleMovements('prod-2', 1.0,
+            recipeVersionId: 'rv-historical-2'))
+        .thenAnswer((_) async => []);
+
+    // WHEN
+    await useCase.execute(items);
+
+    // THEN — per-line recipeVersionId forwarded, not document-level
+    verify(mockEngine.getSaleMovements('prod-1', 2.0,
+        recipeVersionId: 'rv-historical-1')).called(1);
+    verify(mockEngine.getSaleMovements('prod-2', 1.0,
+        recipeVersionId: 'rv-historical-2')).called(1);
   });
 }

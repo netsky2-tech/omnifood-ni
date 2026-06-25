@@ -66,10 +66,10 @@ class _FakeMovementEngine implements MovementEngine {
   Future<List<BatchDeduction>> getBatchesForConsumption(String insumoId, double quantity) async => const [];
 
   @override
-  Future<List<InventoryMovement>> getReversalMovements(String productId, double quantity, String reason) async => const [];
+  Future<List<InventoryMovement>> getReversalMovements(String productId, double quantity, String reason, {String? recipeVersionId}) async => const [];
 
   @override
-  Future<List<InventoryMovement>> getSaleMovements(String productId, double quantity) async => const [];
+  Future<List<InventoryMovement>> getSaleMovements(String productId, double quantity, {String? recipeVersionId}) async => const [];
 
   @override
   Future<void> recordAdjustment(String insumoId, double quantityDelta, String reason, {String? movementId}) async {}

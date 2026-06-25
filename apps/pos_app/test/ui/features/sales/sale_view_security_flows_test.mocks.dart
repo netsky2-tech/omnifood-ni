@@ -630,6 +630,21 @@ class MockAuditRepository extends _i1.Mock implements _i14.AuditRepository {
       ) as _i9.Future<void>);
 
   @override
+  _i9.Future<_i15.AuditLog?> prepareLog(
+    String? action, {
+    String? metadata,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #prepareLog,
+          [action],
+          {#metadata: metadata},
+        ),
+        returnValue: _i9.Future<_i15.AuditLog?>.value(),
+        returnValueForMissingStub: _i9.Future<_i15.AuditLog?>.value(),
+      ) as _i9.Future<_i15.AuditLog?>);
+
+  @override
   _i9.Future<void> logForensic(
     String? action, {
     String? metadata,

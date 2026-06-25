@@ -252,6 +252,27 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i4.Future<List<_i8.RecipeVersionDocument>>);
 
   @override
+  _i4.Future<String?> getActiveRecipeVersionId(String? productId) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getActiveRecipeVersionId,
+          [productId],
+        ),
+        returnValue: _i4.Future<String?>.value(),
+      ) as _i4.Future<String?>);
+
+  @override
+  _i4.Future<_i8.RecipeVersionDocument?> getRecipeVersionDocumentById(
+          String? id) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getRecipeVersionDocumentById,
+          [id],
+        ),
+        returnValue: _i4.Future<_i8.RecipeVersionDocument?>.value(),
+      ) as _i4.Future<_i8.RecipeVersionDocument?>);
+
+  @override
   _i4.Future<void> saveRecipeVersionDocument(
           _i8.RecipeVersionDocument? document) =>
       (super.noSuchMethod(
@@ -813,8 +834,9 @@ class MockMovementEngine extends _i1.Mock implements _i20.MovementEngine {
   @override
   _i4.Future<List<_i10.InventoryMovement>> getSaleMovements(
     String? productId,
-    double? quantity,
-  ) =>
+    double? quantity, {
+    String? recipeVersionId,
+  }) =>
       (super.noSuchMethod(
         Invocation.method(
           #getSaleMovements,
@@ -822,6 +844,7 @@ class MockMovementEngine extends _i1.Mock implements _i20.MovementEngine {
             productId,
             quantity,
           ],
+          {#recipeVersionId: recipeVersionId},
         ),
         returnValue: _i4.Future<List<_i10.InventoryMovement>>.value(
             <_i10.InventoryMovement>[]),
@@ -831,8 +854,9 @@ class MockMovementEngine extends _i1.Mock implements _i20.MovementEngine {
   _i4.Future<List<_i10.InventoryMovement>> getReversalMovements(
     String? productId,
     double? quantity,
-    String? reason,
-  ) =>
+    String? reason, {
+    String? recipeVersionId,
+  }) =>
       (super.noSuchMethod(
         Invocation.method(
           #getReversalMovements,
@@ -841,6 +865,7 @@ class MockMovementEngine extends _i1.Mock implements _i20.MovementEngine {
             quantity,
             reason,
           ],
+          {#recipeVersionId: recipeVersionId},
         ),
         returnValue: _i4.Future<List<_i10.InventoryMovement>>.value(
             <_i10.InventoryMovement>[]),

@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { RecipeVersion } from './entities/recipe-version.entity';
@@ -94,6 +98,7 @@ export class RecipeService {
   async getSnapshot(
     recipeVersionId: string,
     tenantId: string,
+    productId?: string,
   ): Promise<{
     recipeVersion: RecipeVersion;
     components: RecipeDetail[];
@@ -105,6 +110,12 @@ export class RecipeService {
     if (!recipeVersion) {
       throw new NotFoundException(
         `Recipe version ${recipeVersionId} not found`,
+      );
+    }
+
+    if (productId && recipeVersion.product_id !== productId) {
+      throw new BadRequestException(
+        `Recipe version ${recipeVersionId} does not belong to product ${productId}`,
       );
     }
 

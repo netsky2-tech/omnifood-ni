@@ -143,6 +143,7 @@ void main() async {
     auditRepository: auditRepository,
     processInventoryUseCase: processInventoryUseCase,
     reverseInventoryUseCase: reverseInventoryUseCase,
+    inventoryRepository: inventoryRepository,
   );
 
   final syncService = SyncService(
