@@ -157,8 +157,9 @@ class MockMovementEngine extends _i1.Mock implements _i2.MovementEngine {
   @override
   _i3.Future<List<_i4.InventoryMovement>> getSaleMovements(
     String? productId,
-    double? quantity,
-  ) =>
+    double? quantity, {
+    String? recipeVersionId,
+  }) =>
       (super.noSuchMethod(
         Invocation.method(
           #getSaleMovements,
@@ -166,6 +167,7 @@ class MockMovementEngine extends _i1.Mock implements _i2.MovementEngine {
             productId,
             quantity,
           ],
+          {#recipeVersionId: recipeVersionId},
         ),
         returnValue: _i3.Future<List<_i4.InventoryMovement>>.value(
             <_i4.InventoryMovement>[]),
@@ -175,8 +177,9 @@ class MockMovementEngine extends _i1.Mock implements _i2.MovementEngine {
   _i3.Future<List<_i4.InventoryMovement>> getReversalMovements(
     String? productId,
     double? quantity,
-    String? reason,
-  ) =>
+    String? reason, {
+    String? recipeVersionId,
+  }) =>
       (super.noSuchMethod(
         Invocation.method(
           #getReversalMovements,
@@ -185,6 +188,7 @@ class MockMovementEngine extends _i1.Mock implements _i2.MovementEngine {
             quantity,
             reason,
           ],
+          {#recipeVersionId: recipeVersionId},
         ),
         returnValue: _i3.Future<List<_i4.InventoryMovement>>.value(
             <_i4.InventoryMovement>[]),

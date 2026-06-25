@@ -33,6 +33,7 @@ mixin _$InvoiceItem {
   double get discount => throw _privateConstructorUsedError;
   String? get variantId => throw _privateConstructorUsedError;
   String? get notes => throw _privateConstructorUsedError;
+  String? get recipeVersionId => throw _privateConstructorUsedError;
   List<Modifier> get selectedModifiers => throw _privateConstructorUsedError;
 
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
@@ -61,6 +62,7 @@ abstract class $InvoiceItemCopyWith<$Res> {
       double discount,
       String? variantId,
       String? notes,
+      String? recipeVersionId,
       List<Modifier> selectedModifiers});
 }
 
@@ -90,6 +92,7 @@ class _$InvoiceItemCopyWithImpl<$Res, $Val extends InvoiceItem>
     Object? discount = null,
     Object? variantId = freezed,
     Object? notes = freezed,
+    Object? recipeVersionId = freezed,
     Object? selectedModifiers = null,
   }) {
     return _then(_value.copyWith(
@@ -145,6 +148,10 @@ class _$InvoiceItemCopyWithImpl<$Res, $Val extends InvoiceItem>
           ? _value.notes
           : notes // ignore: cast_nullable_to_non_nullable
               as String?,
+      recipeVersionId: freezed == recipeVersionId
+          ? _value.recipeVersionId
+          : recipeVersionId // ignore: cast_nullable_to_non_nullable
+              as String?,
       selectedModifiers: null == selectedModifiers
           ? _value.selectedModifiers
           : selectedModifiers // ignore: cast_nullable_to_non_nullable
@@ -175,6 +182,7 @@ abstract class _$$InvoiceItemImplCopyWith<$Res>
       double discount,
       String? variantId,
       String? notes,
+      String? recipeVersionId,
       List<Modifier> selectedModifiers});
 }
 
@@ -202,6 +210,7 @@ class __$$InvoiceItemImplCopyWithImpl<$Res>
     Object? discount = null,
     Object? variantId = freezed,
     Object? notes = freezed,
+    Object? recipeVersionId = freezed,
     Object? selectedModifiers = null,
   }) {
     return _then(_$InvoiceItemImpl(
@@ -257,6 +266,10 @@ class __$$InvoiceItemImplCopyWithImpl<$Res>
           ? _value.notes
           : notes // ignore: cast_nullable_to_non_nullable
               as String?,
+      recipeVersionId: freezed == recipeVersionId
+          ? _value.recipeVersionId
+          : recipeVersionId // ignore: cast_nullable_to_non_nullable
+              as String?,
       selectedModifiers: null == selectedModifiers
           ? _value._selectedModifiers
           : selectedModifiers // ignore: cast_nullable_to_non_nullable
@@ -282,6 +295,7 @@ class _$InvoiceItemImpl implements _InvoiceItem {
       this.discount = 0.0,
       this.variantId,
       this.notes,
+      this.recipeVersionId,
       final List<Modifier> selectedModifiers = const []})
       : _selectedModifiers = selectedModifiers;
 
@@ -315,6 +329,8 @@ class _$InvoiceItemImpl implements _InvoiceItem {
   final String? variantId;
   @override
   final String? notes;
+  @override
+  final String? recipeVersionId;
   final List<Modifier> _selectedModifiers;
   @override
   @JsonKey()
@@ -327,7 +343,7 @@ class _$InvoiceItemImpl implements _InvoiceItem {
 
   @override
   String toString() {
-    return 'InvoiceItem(id: $id, invoiceId: $invoiceId, productId: $productId, productName: $productName, quantity: $quantity, unitPrice: $unitPrice, originalTaxRate: $originalTaxRate, appliedTaxRate: $appliedTaxRate, taxAmount: $taxAmount, total: $total, discount: $discount, variantId: $variantId, notes: $notes, selectedModifiers: $selectedModifiers)';
+    return 'InvoiceItem(id: $id, invoiceId: $invoiceId, productId: $productId, productName: $productName, quantity: $quantity, unitPrice: $unitPrice, originalTaxRate: $originalTaxRate, appliedTaxRate: $appliedTaxRate, taxAmount: $taxAmount, total: $total, discount: $discount, variantId: $variantId, notes: $notes, recipeVersionId: $recipeVersionId, selectedModifiers: $selectedModifiers)';
   }
 
   @override
@@ -358,6 +374,8 @@ class _$InvoiceItemImpl implements _InvoiceItem {
             (identical(other.variantId, variantId) ||
                 other.variantId == variantId) &&
             (identical(other.notes, notes) || other.notes == notes) &&
+            (identical(other.recipeVersionId, recipeVersionId) ||
+                other.recipeVersionId == recipeVersionId) &&
             const DeepCollectionEquality()
                 .equals(other._selectedModifiers, _selectedModifiers));
   }
@@ -379,6 +397,7 @@ class _$InvoiceItemImpl implements _InvoiceItem {
       discount,
       variantId,
       notes,
+      recipeVersionId,
       const DeepCollectionEquality().hash(_selectedModifiers));
 
   @JsonKey(ignore: true)
@@ -410,6 +429,7 @@ abstract class _InvoiceItem implements InvoiceItem {
       final double discount,
       final String? variantId,
       final String? notes,
+      final String? recipeVersionId,
       final List<Modifier> selectedModifiers}) = _$InvoiceItemImpl;
 
   factory _InvoiceItem.fromJson(Map<String, dynamic> json) =
@@ -441,6 +461,8 @@ abstract class _InvoiceItem implements InvoiceItem {
   String? get variantId;
   @override
   String? get notes;
+  @override
+  String? get recipeVersionId;
   @override
   List<Modifier> get selectedModifiers;
   @override

@@ -37,10 +37,23 @@ abstract class MovementEngine {
   Future<void> recordReversal(String productId, int quantity, String reason);
 
   /// Generates sale movements without recording them (for transaction blocks).
-  Future<List<InventoryMovement>> getSaleMovements(String productId, double quantity);
+  /// When [recipeVersionId] is provided, the top-level BOM explosion uses that
+  /// historical recipe version instead of the mutable active recipe (UC-05).
+  Future<List<InventoryMovement>> getSaleMovements(
+    String productId,
+    double quantity, {
+    String? recipeVersionId,
+  });
 
   /// Generates reversal movements without recording them.
-  Future<List<InventoryMovement>> getReversalMovements(String productId, double quantity, String reason);
+  /// When [recipeVersionId] is provided, the explosion mirrors the original
+  /// sale's version binding so the reversal matches the historical BOM.
+  Future<List<InventoryMovement>> getReversalMovements(
+    String productId,
+    double quantity,
+    String reason, {
+    String? recipeVersionId,
+  });
 
   Future<List<BatchDeduction>> getBatchesForConsumption(String insumoId, double quantity);
 }

@@ -186,6 +186,7 @@ class SalesMapper {
       discount: entity.discount,
       variantId: entity.variantId,
       notes: entity.notes,
+      recipeVersionId: entity.recipeVersionId,
       selectedModifiers: modifiers,
     );
   }
@@ -205,6 +206,7 @@ class SalesMapper {
       discount: domain.discount,
       variantId: domain.variantId,
       notes: domain.notes,
+      recipeVersionId: domain.recipeVersionId,
     );
   }
 
@@ -280,6 +282,7 @@ class SalesMapper {
         'discount': item.discount,
         'variantId': item.variantId,
         'notes': item.notes,
+        'recipeVersionId': item.recipeVersionId,
         'modifiers': item.selectedModifiers.map((m) => ({
           'name': m.name,
           'extraPrice': m.extraPrice,

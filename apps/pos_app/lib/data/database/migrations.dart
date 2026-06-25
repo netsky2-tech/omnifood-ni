@@ -1,7 +1,9 @@
 import 'package:floor/floor.dart';
 
 final migration10_11 = Migration(10, 11, (database) async {
-  await database.execute('ALTER TABLE inventory_movements ADD COLUMN batch_deductions TEXT');
+  await database.execute(
+    'ALTER TABLE inventory_movements ADD COLUMN batch_deductions TEXT',
+  );
 });
 
 final migration11_12 = Migration(11, 12, (database) async {
@@ -17,12 +19,18 @@ final migration11_12 = Migration(11, 12, (database) async {
 });
 
 final migration12_13 = Migration(12, 13, (database) async {
-  await database.execute("ALTER TABLE cashier_sessions ADD COLUMN tipo_modelo TEXT NOT NULL DEFAULT 'CAJA_CENTRAL'");
-  await database.execute("UPDATE cashier_sessions SET tipo_modelo = 'CAJA_CENTRAL' WHERE tipo_modelo IS NULL OR tipo_modelo = ''");
+  await database.execute(
+    "ALTER TABLE cashier_sessions ADD COLUMN tipo_modelo TEXT NOT NULL DEFAULT 'CAJA_CENTRAL'",
+  );
+  await database.execute(
+    "UPDATE cashier_sessions SET tipo_modelo = 'CAJA_CENTRAL' WHERE tipo_modelo IS NULL OR tipo_modelo = ''",
+  );
 });
 
 final migration13_14 = Migration(13, 14, (database) async {
-  await database.execute("ALTER TABLE audit_logs ADD COLUMN remote_ref_uuid TEXT");
+  await database.execute(
+    "ALTER TABLE audit_logs ADD COLUMN remote_ref_uuid TEXT",
+  );
   await database.execute("""
     UPDATE audit_logs
     SET remote_ref_uuid = lower(
@@ -37,18 +45,34 @@ final migration13_14 = Migration(13, 14, (database) async {
 });
 
 final migration14_15 = Migration(14, 15, (database) async {
-  await database.execute("ALTER TABLE purchases ADD COLUMN invoice_date TEXT NOT NULL DEFAULT ''");
-  await database.execute("ALTER TABLE purchases ADD COLUMN currency TEXT NOT NULL DEFAULT 'NIO'");
-  await database.execute("ALTER TABLE purchases ADD COLUMN bcn_rate REAL NOT NULL DEFAULT 1");
+  await database.execute(
+    "ALTER TABLE purchases ADD COLUMN invoice_date TEXT NOT NULL DEFAULT ''",
+  );
+  await database.execute(
+    "ALTER TABLE purchases ADD COLUMN currency TEXT NOT NULL DEFAULT 'NIO'",
+  );
+  await database.execute(
+    "ALTER TABLE purchases ADD COLUMN bcn_rate REAL NOT NULL DEFAULT 1",
+  );
   await database.execute("ALTER TABLE purchases ADD COLUMN unit_cost_nio REAL");
-  await database.execute("ALTER TABLE purchases ADD COLUMN cpp_before_nio REAL");
-  await database.execute("ALTER TABLE purchases ADD COLUMN projected_cpp_nio REAL");
+  await database.execute(
+    "ALTER TABLE purchases ADD COLUMN cpp_before_nio REAL",
+  );
+  await database.execute(
+    "ALTER TABLE purchases ADD COLUMN projected_cpp_nio REAL",
+  );
   await database.execute("ALTER TABLE purchases ADD COLUMN lot_code TEXT");
   await database.execute("ALTER TABLE purchases ADD COLUMN received_date TEXT");
-  await database.execute("ALTER TABLE purchases ADD COLUMN expiration_date TEXT");
-  await database.execute("ALTER TABLE purchases ADD COLUMN requires_batch_tracking INTEGER NOT NULL DEFAULT 0");
+  await database.execute(
+    "ALTER TABLE purchases ADD COLUMN expiration_date TEXT",
+  );
+  await database.execute(
+    "ALTER TABLE purchases ADD COLUMN requires_batch_tracking INTEGER NOT NULL DEFAULT 0",
+  );
   await database.execute("ALTER TABLE batches ADD COLUMN received_date TEXT");
-  await database.execute("UPDATE purchases SET invoice_date = substr(timestamp, 1, 10) WHERE invoice_date = ''");
+  await database.execute(
+    "UPDATE purchases SET invoice_date = substr(timestamp, 1, 10) WHERE invoice_date = ''",
+  );
 });
 
 final migration15_16 = Migration(15, 16, (database) async {
@@ -148,7 +172,9 @@ final migration18_19 = Migration(18, 19, (database) async {
 
 final migration19_20 = Migration(19, 20, (database) async {
   await database.execute("ALTER TABLE products ADD COLUMN category TEXT");
-  await database.execute("ALTER TABLE products ADD COLUMN is_prepared INTEGER NOT NULL DEFAULT 0");
+  await database.execute(
+    "ALTER TABLE products ADD COLUMN is_prepared INTEGER NOT NULL DEFAULT 0",
+  );
   await database.execute("ALTER TABLE products ADD COLUMN created_at TEXT");
 });
 
@@ -177,7 +203,14 @@ final migration20_21 = Migration(20, 21, (database) async {
       'INSERT OR IGNORE INTO catalog_values '
       '(id, catalog_type, code, name, is_active, sort_order) '
       'VALUES (?, ?, ?, ?, ?, ?)',
-      <Object>[entry.id, entry.type, entry.code, entry.name, 1, entry.sortOrder],
+      <Object>[
+        entry.id,
+        entry.type,
+        entry.code,
+        entry.name,
+        1,
+        entry.sortOrder,
+      ],
     );
   }
 });
@@ -199,47 +232,278 @@ class _CatalogSeedEntry {
 
 const List<_CatalogSeedEntry> _defaultCatalogSeed = <_CatalogSeedEntry>[
   // UOM (shared by inventory + sales)
-  _CatalogSeedEntry(id: 'seed-uom-kg', type: 'UOM', code: 'kg', name: 'Kilogramo', sortOrder: 0),
-  _CatalogSeedEntry(id: 'seed-uom-g', type: 'UOM', code: 'g', name: 'Gramo', sortOrder: 1),
-  _CatalogSeedEntry(id: 'seed-uom-lb', type: 'UOM', code: 'lb', name: 'Libra', sortOrder: 2),
-  _CatalogSeedEntry(id: 'seed-uom-oz', type: 'UOM', code: 'oz', name: 'Onza', sortOrder: 3),
-  _CatalogSeedEntry(id: 'seed-uom-l', type: 'UOM', code: 'l', name: 'Litro', sortOrder: 4),
-  _CatalogSeedEntry(id: 'seed-uom-ml', type: 'UOM', code: 'ml', name: 'Mililitro', sortOrder: 5),
-  _CatalogSeedEntry(id: 'seed-uom-gal', type: 'UOM', code: 'gal', name: 'Galón', sortOrder: 6),
-  _CatalogSeedEntry(id: 'seed-uom-un', type: 'UOM', code: 'un', name: 'Unidad', sortOrder: 7),
-  _CatalogSeedEntry(id: 'seed-uom-doc', type: 'UOM', code: 'doc', name: 'Docena', sortOrder: 8),
-  _CatalogSeedEntry(id: 'seed-uom-caja', type: 'UOM', code: 'caja', name: 'Caja', sortOrder: 9),
-  _CatalogSeedEntry(id: 'seed-uom-paquete', type: 'UOM', code: 'paquete', name: 'Paquete', sortOrder: 10),
-  _CatalogSeedEntry(id: 'seed-uom-saco', type: 'UOM', code: 'saco', name: 'Saco', sortOrder: 11),
-  _CatalogSeedEntry(id: 'seed-uom-servicio', type: 'UOM', code: 'servicio', name: 'Servicio', sortOrder: 12),
-  _CatalogSeedEntry(id: 'seed-uom-hora', type: 'UOM', code: 'hora', name: 'Hora', sortOrder: 13),
+  _CatalogSeedEntry(
+    id: 'seed-uom-kg',
+    type: 'UOM',
+    code: 'kg',
+    name: 'Kilogramo',
+    sortOrder: 0,
+  ),
+  _CatalogSeedEntry(
+    id: 'seed-uom-g',
+    type: 'UOM',
+    code: 'g',
+    name: 'Gramo',
+    sortOrder: 1,
+  ),
+  _CatalogSeedEntry(
+    id: 'seed-uom-lb',
+    type: 'UOM',
+    code: 'lb',
+    name: 'Libra',
+    sortOrder: 2,
+  ),
+  _CatalogSeedEntry(
+    id: 'seed-uom-oz',
+    type: 'UOM',
+    code: 'oz',
+    name: 'Onza',
+    sortOrder: 3,
+  ),
+  _CatalogSeedEntry(
+    id: 'seed-uom-l',
+    type: 'UOM',
+    code: 'l',
+    name: 'Litro',
+    sortOrder: 4,
+  ),
+  _CatalogSeedEntry(
+    id: 'seed-uom-ml',
+    type: 'UOM',
+    code: 'ml',
+    name: 'Mililitro',
+    sortOrder: 5,
+  ),
+  _CatalogSeedEntry(
+    id: 'seed-uom-gal',
+    type: 'UOM',
+    code: 'gal',
+    name: 'Galón',
+    sortOrder: 6,
+  ),
+  _CatalogSeedEntry(
+    id: 'seed-uom-un',
+    type: 'UOM',
+    code: 'un',
+    name: 'Unidad',
+    sortOrder: 7,
+  ),
+  _CatalogSeedEntry(
+    id: 'seed-uom-doc',
+    type: 'UOM',
+    code: 'doc',
+    name: 'Docena',
+    sortOrder: 8,
+  ),
+  _CatalogSeedEntry(
+    id: 'seed-uom-caja',
+    type: 'UOM',
+    code: 'caja',
+    name: 'Caja',
+    sortOrder: 9,
+  ),
+  _CatalogSeedEntry(
+    id: 'seed-uom-paquete',
+    type: 'UOM',
+    code: 'paquete',
+    name: 'Paquete',
+    sortOrder: 10,
+  ),
+  _CatalogSeedEntry(
+    id: 'seed-uom-saco',
+    type: 'UOM',
+    code: 'saco',
+    name: 'Saco',
+    sortOrder: 11,
+  ),
+  _CatalogSeedEntry(
+    id: 'seed-uom-servicio',
+    type: 'UOM',
+    code: 'servicio',
+    name: 'Servicio',
+    sortOrder: 12,
+  ),
+  _CatalogSeedEntry(
+    id: 'seed-uom-hora',
+    type: 'UOM',
+    code: 'hora',
+    name: 'Hora',
+    sortOrder: 13,
+  ),
   // Inventory categories
-  _CatalogSeedEntry(id: 'seed-icat-abarrotes', type: 'INVENTORY_CATEGORY', code: 'ABARROTOS', name: 'Abarrotes', sortOrder: 0),
-  _CatalogSeedEntry(id: 'seed-icat-lacteos', type: 'INVENTORY_CATEGORY', code: 'LACTEOS', name: 'Lácteos', sortOrder: 1),
-  _CatalogSeedEntry(id: 'seed-icat-carnes', type: 'INVENTORY_CATEGORY', code: 'CARNES', name: 'Carnes', sortOrder: 2),
-  _CatalogSeedEntry(id: 'seed-icat-verduras', type: 'INVENTORY_CATEGORY', code: 'VERDURAS', name: 'Verduras', sortOrder: 3),
-  _CatalogSeedEntry(id: 'seed-icat-frutas', type: 'INVENTORY_CATEGORY', code: 'FRUTAS', name: 'Frutas', sortOrder: 4),
-  _CatalogSeedEntry(id: 'seed-icat-granos', type: 'INVENTORY_CATEGORY', code: 'GRANOS', name: 'Granos', sortOrder: 5),
-  _CatalogSeedEntry(id: 'seed-icat-bebidas', type: 'INVENTORY_CATEGORY', code: 'BEBIDAS', name: 'Bebidas', sortOrder: 6),
-  _CatalogSeedEntry(id: 'seed-icat-insumos-pos', type: 'INVENTORY_CATEGORY', code: 'INSUMOS_POS', name: 'Insumos POS', sortOrder: 7),
-  _CatalogSeedEntry(id: 'seed-icat-otros', type: 'INVENTORY_CATEGORY', code: 'OTROS', name: 'Otros', sortOrder: 8),
+  _CatalogSeedEntry(
+    id: 'seed-icat-abarrotes',
+    type: 'INVENTORY_CATEGORY',
+    code: 'ABARROTOS',
+    name: 'Abarrotes',
+    sortOrder: 0,
+  ),
+  _CatalogSeedEntry(
+    id: 'seed-icat-lacteos',
+    type: 'INVENTORY_CATEGORY',
+    code: 'LACTEOS',
+    name: 'Lácteos',
+    sortOrder: 1,
+  ),
+  _CatalogSeedEntry(
+    id: 'seed-icat-carnes',
+    type: 'INVENTORY_CATEGORY',
+    code: 'CARNES',
+    name: 'Carnes',
+    sortOrder: 2,
+  ),
+  _CatalogSeedEntry(
+    id: 'seed-icat-verduras',
+    type: 'INVENTORY_CATEGORY',
+    code: 'VERDURAS',
+    name: 'Verduras',
+    sortOrder: 3,
+  ),
+  _CatalogSeedEntry(
+    id: 'seed-icat-frutas',
+    type: 'INVENTORY_CATEGORY',
+    code: 'FRUTAS',
+    name: 'Frutas',
+    sortOrder: 4,
+  ),
+  _CatalogSeedEntry(
+    id: 'seed-icat-granos',
+    type: 'INVENTORY_CATEGORY',
+    code: 'GRANOS',
+    name: 'Granos',
+    sortOrder: 5,
+  ),
+  _CatalogSeedEntry(
+    id: 'seed-icat-bebidas',
+    type: 'INVENTORY_CATEGORY',
+    code: 'BEBIDAS',
+    name: 'Bebidas',
+    sortOrder: 6,
+  ),
+  _CatalogSeedEntry(
+    id: 'seed-icat-insumos-pos',
+    type: 'INVENTORY_CATEGORY',
+    code: 'INSUMOS_POS',
+    name: 'Insumos POS',
+    sortOrder: 7,
+  ),
+  _CatalogSeedEntry(
+    id: 'seed-icat-otros',
+    type: 'INVENTORY_CATEGORY',
+    code: 'OTROS',
+    name: 'Otros',
+    sortOrder: 8,
+  ),
   // Inventory types
-  _CatalogSeedEntry(id: 'seed-itype-materia-prima', type: 'INVENTORY_TYPE', code: 'MATERIA_PRIMA', name: 'Materia prima', sortOrder: 0),
-  _CatalogSeedEntry(id: 'seed-itype-empaque', type: 'INVENTORY_TYPE', code: 'EMPAQUE', name: 'Empaque', sortOrder: 1),
-  _CatalogSeedEntry(id: 'seed-itype-no-comestible', type: 'INVENTORY_TYPE', code: 'NO_COMESTIBLE', name: 'No comestible', sortOrder: 2),
+  _CatalogSeedEntry(
+    id: 'seed-itype-materia-prima',
+    type: 'INVENTORY_TYPE',
+    code: 'MATERIA_PRIMA',
+    name: 'Materia prima',
+    sortOrder: 0,
+  ),
+  _CatalogSeedEntry(
+    id: 'seed-itype-empaque',
+    type: 'INVENTORY_TYPE',
+    code: 'EMPAQUE',
+    name: 'Empaque',
+    sortOrder: 1,
+  ),
+  _CatalogSeedEntry(
+    id: 'seed-itype-no-comestible',
+    type: 'INVENTORY_TYPE',
+    code: 'NO_COMESTIBLE',
+    name: 'No comestible',
+    sortOrder: 2,
+  ),
   // Sales product categories
-  _CatalogSeedEntry(id: 'seed-pcat-comida', type: 'SALES_PRODUCT_CATEGORY', code: 'COMIDA', name: 'Comida', sortOrder: 0),
-  _CatalogSeedEntry(id: 'seed-pcat-bebida-caliente', type: 'SALES_PRODUCT_CATEGORY', code: 'BEBIDA_CALIENTE', name: 'Bebida caliente', sortOrder: 1),
-  _CatalogSeedEntry(id: 'seed-pcat-bebida-fria', type: 'SALES_PRODUCT_CATEGORY', code: 'BEBIDA_FRIA', name: 'Bebida fría', sortOrder: 2),
-  _CatalogSeedEntry(id: 'seed-pcat-panaderia', type: 'SALES_PRODUCT_CATEGORY', code: 'PANADERIA', name: 'Panadería', sortOrder: 3),
-  _CatalogSeedEntry(id: 'seed-pcat-snack', type: 'SALES_PRODUCT_CATEGORY', code: 'SNACK', name: 'Snack', sortOrder: 4),
-  _CatalogSeedEntry(id: 'seed-pcat-retail', type: 'SALES_PRODUCT_CATEGORY', code: 'RETAIL', name: 'Retail', sortOrder: 5),
-  _CatalogSeedEntry(id: 'seed-pcat-limpieza', type: 'SALES_PRODUCT_CATEGORY', code: 'LIMPIEZA', name: 'Limpieza', sortOrder: 6),
-  _CatalogSeedEntry(id: 'seed-pcat-otros', type: 'SALES_PRODUCT_CATEGORY', code: 'OTROS', name: 'Otros', sortOrder: 7),
+  _CatalogSeedEntry(
+    id: 'seed-pcat-comida',
+    type: 'SALES_PRODUCT_CATEGORY',
+    code: 'COMIDA',
+    name: 'Comida',
+    sortOrder: 0,
+  ),
+  _CatalogSeedEntry(
+    id: 'seed-pcat-bebida-caliente',
+    type: 'SALES_PRODUCT_CATEGORY',
+    code: 'BEBIDA_CALIENTE',
+    name: 'Bebida caliente',
+    sortOrder: 1,
+  ),
+  _CatalogSeedEntry(
+    id: 'seed-pcat-bebida-fria',
+    type: 'SALES_PRODUCT_CATEGORY',
+    code: 'BEBIDA_FRIA',
+    name: 'Bebida fría',
+    sortOrder: 2,
+  ),
+  _CatalogSeedEntry(
+    id: 'seed-pcat-panaderia',
+    type: 'SALES_PRODUCT_CATEGORY',
+    code: 'PANADERIA',
+    name: 'Panadería',
+    sortOrder: 3,
+  ),
+  _CatalogSeedEntry(
+    id: 'seed-pcat-snack',
+    type: 'SALES_PRODUCT_CATEGORY',
+    code: 'SNACK',
+    name: 'Snack',
+    sortOrder: 4,
+  ),
+  _CatalogSeedEntry(
+    id: 'seed-pcat-retail',
+    type: 'SALES_PRODUCT_CATEGORY',
+    code: 'RETAIL',
+    name: 'Retail',
+    sortOrder: 5,
+  ),
+  _CatalogSeedEntry(
+    id: 'seed-pcat-limpieza',
+    type: 'SALES_PRODUCT_CATEGORY',
+    code: 'LIMPIEZA',
+    name: 'Limpieza',
+    sortOrder: 6,
+  ),
+  _CatalogSeedEntry(
+    id: 'seed-pcat-otros',
+    type: 'SALES_PRODUCT_CATEGORY',
+    code: 'OTROS',
+    name: 'Otros',
+    sortOrder: 7,
+  ),
   // Sales product types
-  _CatalogSeedEntry(id: 'seed-ptype-preparado', type: 'SALES_PRODUCT_TYPE', code: 'PREPARADO', name: 'Preparado (lleva receta/BOM)', sortOrder: 0),
-  _CatalogSeedEntry(id: 'seed-ptype-reventa', type: 'SALES_PRODUCT_TYPE', code: 'REVENTA', name: 'Reventa directa', sortOrder: 1),
+  _CatalogSeedEntry(
+    id: 'seed-ptype-preparado',
+    type: 'SALES_PRODUCT_TYPE',
+    code: 'PREPARADO',
+    name: 'Preparado (lleva receta/BOM)',
+    sortOrder: 0,
+  ),
+  _CatalogSeedEntry(
+    id: 'seed-ptype-reventa',
+    type: 'SALES_PRODUCT_TYPE',
+    code: 'REVENTA',
+    name: 'Reventa directa',
+    sortOrder: 1,
+  ),
 ];
+
+/// Adds per-line `recipe_version_id` to `invoice_items` so historical sales
+/// keep the recipe version used at sale time (PRD UC-05). Nullable because
+/// legacy rows and non-prepared products do not carry a version binding.
+final migration21_22 = Migration(21, 22, (database) async {
+  final columns = await database.rawQuery('PRAGMA table_info(invoice_items)');
+  final hasRecipeVersionId = columns.any(
+    (column) => column['name'] == 'recipe_version_id',
+  );
+  if (!hasRecipeVersionId) {
+    await database.execute(
+      'ALTER TABLE invoice_items ADD COLUMN recipe_version_id TEXT',
+    );
+  }
+});
 
 final allMigrations = [
   migration10_11,
@@ -253,4 +517,5 @@ final allMigrations = [
   migration18_19,
   migration19_20,
   migration20_21,
+  migration21_22,
 ];

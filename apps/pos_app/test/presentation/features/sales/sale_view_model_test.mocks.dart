@@ -738,6 +738,27 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i30.Future<List<_i40.RecipeVersionDocument>>);
 
   @override
+  _i30.Future<String?> getActiveRecipeVersionId(String? productId) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getActiveRecipeVersionId,
+          [productId],
+        ),
+        returnValue: _i30.Future<String?>.value(),
+      ) as _i30.Future<String?>);
+
+  @override
+  _i30.Future<_i40.RecipeVersionDocument?> getRecipeVersionDocumentById(
+          String? id) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getRecipeVersionDocumentById,
+          [id],
+        ),
+        returnValue: _i30.Future<_i40.RecipeVersionDocument?>.value(),
+      ) as _i30.Future<_i40.RecipeVersionDocument?>);
+
+  @override
   _i30.Future<void> saveRecipeVersionDocument(
           _i40.RecipeVersionDocument? document) =>
       (super.noSuchMethod(

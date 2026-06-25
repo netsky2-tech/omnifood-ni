@@ -34,6 +34,8 @@ class InvoiceItemEntity {
   @ColumnInfo(name: 'variant_id')
   final String? variantId;
   final String? notes;
+  @ColumnInfo(name: 'recipe_version_id')
+  final String? recipeVersionId;
 
   InvoiceItemEntity({
     required this.id,
@@ -49,5 +51,6 @@ class InvoiceItemEntity {
     this.discount = 0.0,
     this.variantId,
     this.notes,
+    this.recipeVersionId,
   });
 }

@@ -5,14 +5,25 @@ import {
   ManyToOne,
   OneToMany,
   JoinColumn,
+  Index,
 } from 'typeorm';
 import { Invoice } from './invoice.entity';
 import { InvoiceItemModifier } from './invoice-item-modifier.entity';
 
 @Entity('invoice_items')
+@Index(['tenant_id'])
 export class InvoiceItem {
   @PrimaryGeneratedColumn('uuid')
   id: string;
+
+  /// Tenant isolation column. The POS sync payload controls the `id`
+  /// (client UUID), so without a `tenant_id` an id collision across
+  /// tenants would let one tenant's item row be overwritten by another
+  /// through `upsert(... ['id'])`. Persisting and indexing `tenant_id`
+  /// plus an ownership check before upsert prevents cross-tenant
+  /// overwrite. Mirrors the tenant_id already on `invoices`.
+  @Column({ name: 'tenant_id' })
+  tenant_id: string;
 
   @Column({ name: 'invoice_id' })
   invoiceId: string;
@@ -53,6 +64,13 @@ export class InvoiceItem {
 
   @Column({ nullable: true })
   notes: string;
+
+  /// Historical recipe version bound at sale time (PRD UC-05). Nullable
+  /// because legacy rows and non-prepared products do not carry a binding.
+  /// When present, the backend prefers this over the mutable active recipe
+  /// for BOM explosion and historical recosting.
+  @Column({ name: 'recipe_version_id', nullable: true })
+  recipeVersionId: string;
 
   @OneToMany(() => InvoiceItemModifier, (modifier) => modifier.item, {
     cascade: true,

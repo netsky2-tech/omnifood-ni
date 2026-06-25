@@ -10,7 +10,11 @@ class ProcessSaleInventoryUseCase {
   Future<List<InventoryMovement>> execute(List<InvoiceItem> items) async {
     final List<InventoryMovement> allMovements = [];
     for (final item in items) {
-      final movements = await engine.getSaleMovements(item.productId, item.quantity);
+      final movements = await engine.getSaleMovements(
+        item.productId,
+        item.quantity,
+        recipeVersionId: item.recipeVersionId,
+      );
       allMovements.addAll(movements);
     }
     return allMovements;

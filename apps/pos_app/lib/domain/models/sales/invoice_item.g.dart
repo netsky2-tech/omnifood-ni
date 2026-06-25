@@ -21,6 +21,7 @@ _$InvoiceItemImpl _$$InvoiceItemImplFromJson(Map<String, dynamic> json) =>
       discount: (json['discount'] as num?)?.toDouble() ?? 0.0,
       variantId: json['variantId'] as String?,
       notes: json['notes'] as String?,
+      recipeVersionId: json['recipeVersionId'] as String?,
       selectedModifiers: (json['selectedModifiers'] as List<dynamic>?)
               ?.map((e) => Modifier.fromJson(e as Map<String, dynamic>))
               .toList() ??
@@ -42,5 +43,6 @@ Map<String, dynamic> _$$InvoiceItemImplToJson(_$InvoiceItemImpl instance) =>
       'discount': instance.discount,
       'variantId': instance.variantId,
       'notes': instance.notes,
+      'recipeVersionId': instance.recipeVersionId,
       'selectedModifiers': instance.selectedModifiers,
     };

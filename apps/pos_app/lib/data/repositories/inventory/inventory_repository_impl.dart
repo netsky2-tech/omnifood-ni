@@ -158,13 +158,17 @@ class InventoryRepositoryImpl implements InventoryRepository {
 
     if (variants.isNotEmpty) {
       await _database.productDao.insertVariants(
-        variants.map((v) => InventoryMapper.toVariantEntity(productId, v)).toList(),
+        variants
+            .map((v) => InventoryMapper.toVariantEntity(productId, v))
+            .toList(),
       );
     }
 
     if (modifiers.isNotEmpty) {
       await _database.productDao.insertModifiers(
-        modifiers.map((m) => InventoryMapper.toModifierEntity(productId, m)).toList(),
+        modifiers
+            .map((m) => InventoryMapper.toModifierEntity(productId, m))
+            .toList(),
       );
     }
   }
@@ -186,7 +190,10 @@ class InventoryRepositoryImpl implements InventoryRepository {
   }
 
   @override
-  Future<void> replaceRecipesForProduct(String productId, List<Recipe> recipes) async {
+  Future<void> replaceRecipesForProduct(
+    String productId,
+    List<Recipe> recipes,
+  ) async {
     await recipeDao.deleteRecipesByProductId(productId);
     if (recipes.isEmpty) {
       return;
@@ -197,9 +204,29 @@ class InventoryRepositoryImpl implements InventoryRepository {
   }
 
   @override
-  Future<List<RecipeVersionDocument>> getRecipeVersionDocuments(String productId) async {
+  Future<List<RecipeVersionDocument>> getRecipeVersionDocuments(
+    String productId,
+  ) async {
     final entities = await recipeVersionDocumentDao.findByProductId(productId);
     return entities.map(_toRecipeVersionDocument).toList(growable: false);
+  }
+
+  @override
+  Future<String?> getActiveRecipeVersionId(String productId) async {
+    final entities = await recipeVersionDocumentDao.findByProductId(productId);
+    if (entities.isEmpty) return null;
+    final published = entities
+        .where((e) => e.publishedAt != null)
+        .toList(growable: false);
+    if (published.isEmpty) return null;
+    published.sort((a, b) => b.versionNumber.compareTo(a.versionNumber));
+    return published.first.id;
+  }
+
+  @override
+  Future<RecipeVersionDocument?> getRecipeVersionDocumentById(String id) async {
+    final entity = await recipeVersionDocumentDao.findById(id);
+    return entity == null ? null : _toRecipeVersionDocument(entity);
   }
 
   @override
@@ -222,7 +249,8 @@ class InventoryRepositoryImpl implements InventoryRepository {
   }
 
   @override
-  Future<List<RecipeVersionDocument>> getUnsyncedRecipeVersionDocuments() async {
+  Future<List<RecipeVersionDocument>>
+  getUnsyncedRecipeVersionDocuments() async {
     final entities = await recipeVersionDocumentDao.findUnsynced();
     return entities.map(_toRecipeVersionDocument).toList(growable: false);
   }
@@ -282,7 +310,9 @@ class InventoryRepositoryImpl implements InventoryRepository {
                 theoreticalQuantity: line.theoreticalQuantity,
                 approvedEntryIndex: line.approvedEntryIndex,
                 entriesJson: jsonEncode(
-                  line.entries.map((entry) => entry.toJson()).toList(growable: false),
+                  line.entries
+                      .map((entry) => entry.toJson())
+                      .toList(growable: false),
                 ),
               ),
             )
@@ -313,13 +343,17 @@ class InventoryRepositoryImpl implements InventoryRepository {
 
   @override
   Future<void> saveMovement(InventoryMovement movement) {
-    return movementDao.insertMovement(InventoryMapper.toMovementEntity(movement));
+    return movementDao.insertMovement(
+      InventoryMapper.toMovementEntity(movement),
+    );
   }
 
   @override
   Future<List<InventoryMovement>> getAllMovements() async {
     final entities = await movementDao.findAllMovements();
-    return entities.map(InventoryMapper.toMovementDomain).toList(growable: false);
+    return entities
+        .map(InventoryMapper.toMovementDomain)
+        .toList(growable: false);
   }
 
   @override
@@ -341,7 +375,9 @@ class InventoryRepositoryImpl implements InventoryRepository {
 
   @override
   Future<void> saveSupplier(Supplier supplier) {
-    return supplierDao.insertSuppliers([InventoryMapper.toSupplierEntity(supplier)]);
+    return supplierDao.insertSuppliers([
+      InventoryMapper.toSupplierEntity(supplier),
+    ]);
   }
 
   @override
@@ -352,46 +388,60 @@ class InventoryRepositoryImpl implements InventoryRepository {
 
   @override
   Future<void> saveWarehouse(Warehouse warehouse) {
-    return warehouseDao.insertWarehouses([InventoryMapper.toWarehouseEntity(warehouse)]);
+    return warehouseDao.insertWarehouses([
+      InventoryMapper.toWarehouseEntity(warehouse),
+    ]);
   }
 
   @override
   Future<List<Batch>> getBatchesByInsumoId(String insumoId) async {
     final entities = await batchDao.findActiveBatchesByInsumoId(insumoId);
-    return entities.map((e) => Batch(
-      id: e.id,
-      insumoId: e.insumoId,
-      batchNumber: e.batchNumber,
-      receivedDate: e.receivedDate == null ? null : DateTime.parse(e.receivedDate!),
-      expirationDate: DateTime.parse(e.expirationDate),
-      remainingStock: e.remainingStock,
-      cost: e.cost,
-    )).toList();
+    return entities
+        .map(
+          (e) => Batch(
+            id: e.id,
+            insumoId: e.insumoId,
+            batchNumber: e.batchNumber,
+            receivedDate: e.receivedDate == null
+                ? null
+                : DateTime.parse(e.receivedDate!),
+            expirationDate: DateTime.parse(e.expirationDate),
+            remainingStock: e.remainingStock,
+            cost: e.cost,
+          ),
+        )
+        .toList();
   }
 
   @override
   Future<void> saveBatch(Batch batch) {
-    return batchDao.insertBatch(BatchEntity(
-      id: batch.id,
-      insumoId: batch.insumoId,
-      batchNumber: batch.batchNumber,
-      receivedDate: batch.receivedDate?.toIso8601String(),
-      expirationDate: batch.expirationDate.toIso8601String(),
-      remainingStock: batch.remainingStock,
-      cost: batch.cost,
-    ));
+    return batchDao.insertBatch(
+      BatchEntity(
+        id: batch.id,
+        insumoId: batch.insumoId,
+        batchNumber: batch.batchNumber,
+        receivedDate: batch.receivedDate?.toIso8601String(),
+        expirationDate: batch.expirationDate.toIso8601String(),
+        remainingStock: batch.remainingStock,
+        cost: batch.cost,
+      ),
+    );
   }
 
   @override
   Future<List<UomConversion>> getConversionsByInsumoId(String insumoId) async {
     final entities = await uomConversionDao.findConversionsByInsumoId(insumoId);
-    return entities.map((e) => UomConversion(
-      id: e.id,
-      insumoId: e.insumoId,
-      unitName: e.unitName,
-      factor: e.factor,
-      isDefault: e.isDefault,
-    )).toList();
+    return entities
+        .map(
+          (e) => UomConversion(
+            id: e.id,
+            insumoId: e.insumoId,
+            unitName: e.unitName,
+            factor: e.factor,
+            isDefault: e.isDefault,
+          ),
+        )
+        .toList();
   }
 
   @override
@@ -403,7 +453,7 @@ class InventoryRepositoryImpl implements InventoryRepository {
         unitName: conversion.unitName,
         factor: conversion.factor,
         isDefault: conversion.isDefault,
-      )
+      ),
     ]);
   }
 
@@ -416,7 +466,9 @@ class InventoryRepositoryImpl implements InventoryRepository {
 
   @override
   Future<List<CatalogValue>> getActiveCatalog(CatalogType type) async {
-    final entities = await _database.catalogValueDao.findActiveByType(type.value);
+    final entities = await _database.catalogValueDao.findActiveByType(
+      type.value,
+    );
     return entities.map(_toCatalogDomain).toList();
   }
 
@@ -428,8 +480,10 @@ class InventoryRepositoryImpl implements InventoryRepository {
 
   @override
   Future<CatalogValue?> findCatalogByCode(CatalogType type, String code) async {
-    final entity =
-        await _database.catalogValueDao.findByTypeAndCode(type.value, code);
+    final entity = await _database.catalogValueDao.findByTypeAndCode(
+      type.value,
+      code,
+    );
     return entity == null ? null : _toCatalogDomain(entity);
   }
 
@@ -529,8 +583,9 @@ class InventoryRepositoryImpl implements InventoryRepository {
         sourceMovementId: alert.sourceMovementId,
         sourceDocumentId: alert.sourceDocumentId,
         sourceDocumentType: alert.sourceDocumentType,
-        metadataJson:
-            alert.metadata == null ? null : jsonEncode(alert.metadata),
+        metadataJson: alert.metadata == null
+            ? null
+            : jsonEncode(alert.metadata),
         isSynced: alert.isSynced,
       ),
     );
@@ -566,7 +621,8 @@ class InventoryRepositoryImpl implements InventoryRepository {
         plannedQuantity: document.plannedQuantity,
         actualQuantity: document.actualQuantity,
         producedBatchNumber: document.producedBatchNumber,
-        producedExpirationDate: document.producedExpirationDate.toIso8601String(),
+        producedExpirationDate: document.producedExpirationDate
+            .toIso8601String(),
         operationDate: document.operationDate.toIso8601String(),
         status: document.status,
         varianceReason: document.varianceReason,
@@ -617,9 +673,12 @@ class InventoryRepositoryImpl implements InventoryRepository {
       createdAt: DateTime.parse(session.createdAt),
       updatedAt: DateTime.parse(session.updatedAt),
       notes: session.notes,
-      postedAt: session.postedAt == null ? null : DateTime.parse(session.postedAt!),
-      movementReferences:
-          CountSessionDocument.decodeMovementReferences(session.movementReferencesJson),
+      postedAt: session.postedAt == null
+          ? null
+          : DateTime.parse(session.postedAt!),
+      movementReferences: CountSessionDocument.decodeMovementReferences(
+        session.movementReferencesJson,
+      ),
       lines: lines
           .map(
             (line) => CountSessionLineDocument(
@@ -643,7 +702,9 @@ class InventoryRepositoryImpl implements InventoryRepository {
     );
   }
 
-  RecipeVersionDocument _toRecipeVersionDocument(RecipeVersionDocumentEntity entity) {
+  RecipeVersionDocument _toRecipeVersionDocument(
+    RecipeVersionDocumentEntity entity,
+  ) {
     return RecipeVersionDocument(
       id: entity.id,
       productId: entity.productId,
@@ -653,7 +714,9 @@ class InventoryRepositoryImpl implements InventoryRepository {
       technicalShrinkPct: entity.technicalShrinkPct,
       createdAt: DateTime.parse(entity.createdAt),
       versionNote: entity.versionNote,
-      publishedAt: entity.publishedAt == null ? null : DateTime.parse(entity.publishedAt!),
+      publishedAt: entity.publishedAt == null
+          ? null
+          : DateTime.parse(entity.publishedAt!),
       isSynced: entity.isSynced,
       components: RecipeVersionDocument.decodeComponents(entity.componentsJson),
     );
@@ -676,7 +739,9 @@ class InventoryRepositoryImpl implements InventoryRepository {
       operationDate: DateTime.parse(entity.operationDate),
       status: entity.status,
       varianceReason: entity.varianceReason,
-      closedAt: entity.closedAt == null ? null : DateTime.parse(entity.closedAt!),
+      closedAt: entity.closedAt == null
+          ? null
+          : DateTime.parse(entity.closedAt!),
       movementReferences: ProductionOrderDocument.decodeMovementReferences(
         entity.movementReferencesJson,
       ),

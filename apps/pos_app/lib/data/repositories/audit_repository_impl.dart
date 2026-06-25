@@ -23,7 +23,7 @@ class AuditRepositoryImpl implements AuditRepository {
   @override
   String get deviceId => _deviceId;
 
-  @override
+@override
   Future<void> log(String action, {String? metadata}) async {
     return logForensic(action, metadata: metadata);
   }
@@ -35,8 +35,33 @@ class AuditRepositoryImpl implements AuditRepository {
     String? metodoAutorizacion,
     String? usuarioAutorizadorId,
   }) async {
+    final entity = await _buildAuditEntity(
+      action,
+      metadata: metadata,
+      metodoAutorizacion: metodoAutorizacion,
+      usuarioAutorizadorId: usuarioAutorizadorId,
+    );
+    if (entity == null) return;
+    await _auditDao.insertLog(entity);
+  }
+
+  @override
+  Future<AuditLog?> prepareLog(String action, {String? metadata}) async {
+    final entity = await _buildAuditEntity(action, metadata: metadata);
+    if (entity == null) return null;
+    return AuditMapper.toDomain(entity);
+  }
+
+  /// Builds the forensic, hash-chained [AuditLogEntity] WITHOUT persisting
+  /// it. Returns `null` when there is no current user (mirrors [log]).
+  Future<AuditLogEntity?> _buildAuditEntity(
+    String action, {
+    String? metadata,
+    String? metodoAutorizacion,
+    String? usuarioAutorizadorId,
+  }) async {
     final user = await _authRepository.getCurrentUser();
-    if (user == null) return;
+    if (user == null) return null;
 
     final lastSeq = await _auditDao.getLastSequenceNo();
     final nextSeq = (lastSeq ?? 0) + 1;
@@ -56,7 +81,7 @@ class AuditRepositoryImpl implements AuditRepository {
       canonicalMetadata: canonicalMetadata,
     );
 
-    final entity = AuditLogEntity(
+    return AuditLogEntity(
       userId: user.id,
       action: action,
       timestamp: timestamp,
@@ -70,8 +95,6 @@ class AuditRepositoryImpl implements AuditRepository {
       usuarioAutorizadorId: usuarioAutorizadorId,
       remoteRefUuid: _uuid.v4(),
     );
-
-    await _auditDao.insertLog(entity);
   }
 
   @override

@@ -6,6 +6,9 @@ abstract class RecipeVersionDocumentDao {
   @Query('SELECT * FROM recipe_version_documents WHERE product_id = :productId ORDER BY version_number DESC')
   Future<List<RecipeVersionDocumentEntity>> findByProductId(String productId);
 
+  @Query('SELECT * FROM recipe_version_documents WHERE id = :id')
+  Future<RecipeVersionDocumentEntity?> findById(String id);
+
   @Query('SELECT * FROM recipe_version_documents WHERE is_synced = 0 ORDER BY created_at ASC')
   Future<List<RecipeVersionDocumentEntity>> findUnsynced();
 
