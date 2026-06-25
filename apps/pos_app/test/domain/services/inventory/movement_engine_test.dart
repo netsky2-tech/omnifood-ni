@@ -5,6 +5,7 @@ import 'package:pos_app/domain/models/inventory/insumo.dart';
 import 'package:pos_app/domain/models/inventory/recipe.dart';
 import 'package:pos_app/domain/models/inventory/recipe_version_document.dart';
 import 'package:pos_app/domain/models/inventory/inventory_movement.dart';
+import 'package:pos_app/domain/models/inventory/uom_conversion.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
 import 'package:pos_app/domain/services/alerts/alert_service.dart';
 import 'package:pos_app/domain/services/inventory/movement_engine_impl.dart';
@@ -918,6 +919,720 @@ void main() {
           engine.recordSale(root, 1),
           throwsA(isA<StateError>()),
         );
+      },
+    );
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Slice 2.2: versioned BOM quantity correctness (gross + yield scaling)
+  // and UOM compatibility validation.
+  // ─────────────────────────────────────────────────────────────────────────
+  group('MovementEngine - versioned BOM gross/yield scaling (Slice 2.2)', () {
+    test(
+      'scales insumo consumption by saleQuantity / yieldQuantity using '
+      'grossQuantity (recipe yields 10, gross 5kg, sell 2 -> deduct 1kg)',
+      () async {
+        const productId = 'soup-1';
+        const versionId = 'rv-soup-yield';
+
+        final versionDocument = RecipeVersionDocument(
+          id: versionId,
+          productId: productId,
+          productName: 'Soup',
+          versionNumber: 1,
+          yieldQuantity: 10,
+          technicalShrinkPct: 0,
+          createdAt: DateTime(2026, 6, 1),
+          components: const [
+            RecipeVersionComponentDocument(
+              ingredientId: 'veg-1',
+              ingredientName: 'Vegetables',
+              ingredientType: 'INSUMO',
+              grossQuantity: 5,
+              netQuantity: 5,
+              technicalShrinkPct: 0,
+            ),
+          ],
+        );
+
+        const insumo = Insumo(
+          id: 'veg-1',
+          name: 'Vegetables',
+          consumptionUom: 'kg',
+          stock: 100.0,
+          averageCost: 2.0,
+        );
+
+        when(
+          mockRepo.getRecipeVersionDocumentById(versionId),
+        ).thenAnswer((_) async => versionDocument);
+        when(
+          mockRepo.getInsumosByIds(['veg-1']),
+        ).thenAnswer((_) async => const [insumo]);
+
+        final movements = await engine.getSaleMovements(
+          productId,
+          2.0,
+          recipeVersionId: versionId,
+        );
+
+        expect(movements, hasLength(1));
+        expect(movements.first.insumoId, 'veg-1');
+        // 5 kg gross * 2 portions / 10 yield = 1.0 kg deducted.
+        expect(movements.first.newStock, 100.0 - 1.0);
+      },
+    );
+
+    test(
+      'uses grossQuantity (not netQuantity) for stock consumption when '
+      'technical shrink is present',
+      () async {
+        // gross=10, shrink=20 -> net=8. Selling 1 of a 5-portion batch must
+        // deduct gross/yield = 10/5 = 2.0 (the gross physically consumed),
+        // NOT net/yield = 8/5 = 1.6.
+        const productId = 'stew-1';
+        const versionId = 'rv-stew-gross';
+
+        final versionDocument = RecipeVersionDocument(
+          id: versionId,
+          productId: productId,
+          productName: 'Stew',
+          versionNumber: 1,
+          yieldQuantity: 5,
+          technicalShrinkPct: 0,
+          createdAt: DateTime(2026, 6, 1),
+          components: const [
+            RecipeVersionComponentDocument(
+              ingredientId: 'meat-1',
+              ingredientName: 'Meat',
+              ingredientType: 'INSUMO',
+              grossQuantity: 10,
+              netQuantity: 8,
+              technicalShrinkPct: 20,
+            ),
+          ],
+        );
+
+        const insumo = Insumo(
+          id: 'meat-1',
+          name: 'Meat',
+          consumptionUom: 'kg',
+          stock: 50.0,
+          averageCost: 3.0,
+        );
+
+        when(
+          mockRepo.getRecipeVersionDocumentById(versionId),
+        ).thenAnswer((_) async => versionDocument);
+        when(
+          mockRepo.getInsumosByIds(['meat-1']),
+        ).thenAnswer((_) async => const [insumo]);
+
+        final movements = await engine.getSaleMovements(
+          productId,
+          1.0,
+          recipeVersionId: versionId,
+        );
+
+        expect(movements, hasLength(1));
+        expect(movements.first.newStock, 50.0 - 2.0);
+      },
+    );
+
+    test(
+      'reversal scales add-back by saleQuantity / yieldQuantity using '
+      'grossQuantity',
+      () async {
+        const productId = 'soup-1';
+        const versionId = 'rv-soup-rev-yield';
+
+        final versionDocument = RecipeVersionDocument(
+          id: versionId,
+          productId: productId,
+          productName: 'Soup',
+          versionNumber: 1,
+          yieldQuantity: 10,
+          technicalShrinkPct: 0,
+          createdAt: DateTime(2026, 6, 1),
+          components: const [
+            RecipeVersionComponentDocument(
+              ingredientId: 'veg-1',
+              ingredientName: 'Vegetables',
+              ingredientType: 'INSUMO',
+              grossQuantity: 5,
+              netQuantity: 5,
+              technicalShrinkPct: 0,
+            ),
+          ],
+        );
+
+        const insumo = Insumo(
+          id: 'veg-1',
+          name: 'Vegetables',
+          consumptionUom: 'kg',
+          stock: 99.0, // after a 2-portion sale deducted 1kg from 100
+          averageCost: 2.0,
+        );
+
+        when(
+          mockRepo.getRecipeVersionDocumentById(versionId),
+        ).thenAnswer((_) async => versionDocument);
+        when(
+          mockRepo.getInsumosByIds(['veg-1']),
+        ).thenAnswer((_) async => const [insumo]);
+
+        final movements = await engine.getReversalMovements(
+          productId,
+          2.0,
+          'Anulación Factura: 010',
+          recipeVersionId: versionId,
+        );
+
+        expect(movements, hasLength(1));
+        expect(movements.first.type, MovementType.reversal);
+        // Add back 5 * 2 / 10 = 1.0 kg.
+        expect(movements.first.newStock, 99.0 + 1.0);
+      },
+    );
+  });
+
+  group('MovementEngine - versioned BOM quantity validation (Slice 2.2)', () {
+    RecipeVersionDocument docWith({
+      required double yieldQuantity,
+      double gross = 5,
+      double net = 5,
+      double shrink = 0,
+    }) {
+      return RecipeVersionDocument(
+        id: 'rv-validate',
+        productId: 'prod-validate',
+        productName: 'Validate',
+        versionNumber: 1,
+        yieldQuantity: yieldQuantity,
+        technicalShrinkPct: 0,
+        createdAt: DateTime(2026, 6, 1),
+        components: [
+          RecipeVersionComponentDocument(
+            ingredientId: 'ins-v',
+            ingredientName: 'V',
+            ingredientType: 'INSUMO',
+            grossQuantity: gross,
+            netQuantity: net,
+            technicalShrinkPct: shrink,
+          ),
+        ],
+      );
+    }
+
+    test('throws StateError when yieldQuantity <= 0 before any movement', () async {
+      final doc = docWith(yieldQuantity: 0);
+      when(
+        mockRepo.getRecipeVersionDocumentById('rv-validate'),
+      ).thenAnswer((_) async => doc);
+
+      await expectLater(
+        engine.getSaleMovements('prod-validate', 1.0, recipeVersionId: 'rv-validate'),
+        throwsA(isA<StateError>()),
+      );
+      verifyNever(mockRepo.getInsumosByIds(any));
+      verifyNever(mockRepo.saveMovement(any));
+    });
+
+    test('throws StateError when component grossQuantity <= 0 before any movement', () async {
+      final doc = docWith(yieldQuantity: 10, gross: 0, net: 0);
+      when(
+        mockRepo.getRecipeVersionDocumentById('rv-validate'),
+      ).thenAnswer((_) async => doc);
+
+      await expectLater(
+        engine.getSaleMovements('prod-validate', 1.0, recipeVersionId: 'rv-validate'),
+        throwsA(isA<StateError>()),
+      );
+      verifyNever(mockRepo.getInsumosByIds(any));
+      verifyNever(mockRepo.saveMovement(any));
+    });
+
+    test('throws StateError when component technicalShrinkPct is out of [0,100)', () async {
+      // shrink = 100 is invalid (must be < 100). net kept consistent so the
+      // failure is isolated to the shrink-range guard.
+      final doc = docWith(yieldQuantity: 10, gross: 5, net: 0, shrink: 100);
+      when(
+        mockRepo.getRecipeVersionDocumentById('rv-validate'),
+      ).thenAnswer((_) async => doc);
+
+      await expectLater(
+        engine.getSaleMovements('prod-validate', 1.0, recipeVersionId: 'rv-validate'),
+        throwsA(isA<StateError>()),
+      );
+      verifyNever(mockRepo.getInsumosByIds(any));
+      verifyNever(mockRepo.saveMovement(any));
+    });
+
+    test('throws StateError when netQuantity does not match gross*(1-shrink/100) within 4dp', () async {
+      // gross=5, shrink=20 -> expected net 4.0; stored 3.5 is a mismatch.
+      final doc = docWith(yieldQuantity: 10, gross: 5, net: 3.5, shrink: 20);
+      when(
+        mockRepo.getRecipeVersionDocumentById('rv-validate'),
+      ).thenAnswer((_) async => doc);
+
+      await expectLater(
+        engine.getSaleMovements('prod-validate', 1.0, recipeVersionId: 'rv-validate'),
+        throwsA(isA<StateError>()),
+      );
+      verifyNever(mockRepo.getInsumosByIds(any));
+      verifyNever(mockRepo.saveMovement(any));
+    });
+
+    test('accepts a netQuantity that matches gross*(1-shrink/100) at 4dp', () async {
+      // gross=1, shrink=6 -> net = 0.94 (4dp). Valid document must explode.
+      final doc = docWith(yieldQuantity: 10, gross: 1, net: 0.94, shrink: 6);
+      const insumo = Insumo(
+        id: 'ins-v',
+        name: 'V',
+        consumptionUom: 'kg',
+        stock: 100.0,
+        averageCost: 1.0,
+      );
+      when(
+        mockRepo.getRecipeVersionDocumentById('rv-validate'),
+      ).thenAnswer((_) async => doc);
+      when(
+        mockRepo.getInsumosByIds(['ins-v']),
+      ).thenAnswer((_) async => const [insumo]);
+
+      final movements = await engine.getSaleMovements(
+        'prod-validate',
+        10.0,
+        recipeVersionId: 'rv-validate',
+      );
+
+      // 1 kg gross * 10 portions / 10 yield = 1.0 kg deducted.
+      expect(movements, hasLength(1));
+      expect(movements.first.newStock, 100.0 - 1.0);
+    });
+  });
+
+  group('MovementEngine - versioned BOM UOM compatibility (Slice 2.2)', () {
+    test(
+      'treats a missing componentUom as the insumo base consumption UOM '
+      '(backward compatible, factor 1)',
+      () async {
+        const productId = 'rice-1';
+        const versionId = 'rv-rice-legacy';
+        final versionDocument = RecipeVersionDocument(
+          id: versionId,
+          productId: productId,
+          productName: 'Rice',
+          versionNumber: 1,
+          yieldQuantity: 10,
+          technicalShrinkPct: 0,
+          createdAt: DateTime(2026, 6, 1),
+          components: const [
+            // Legacy document: no componentUom.
+            RecipeVersionComponentDocument(
+              ingredientId: 'rice-ins',
+              ingredientName: 'Rice',
+              ingredientType: 'INSUMO',
+              grossQuantity: 5,
+              netQuantity: 5,
+              technicalShrinkPct: 0,
+            ),
+          ],
+        );
+        const insumo = Insumo(
+          id: 'rice-ins',
+          name: 'Rice',
+          consumptionUom: 'kg',
+          stock: 100.0,
+          averageCost: 1.0,
+        );
+
+        when(
+          mockRepo.getRecipeVersionDocumentById(versionId),
+        ).thenAnswer((_) async => versionDocument);
+        when(
+          mockRepo.getInsumosByIds(['rice-ins']),
+        ).thenAnswer((_) async => const [insumo]);
+        // No conversions registered — must NOT be consulted when UOM defaults
+        // to the base unit.
+        when(
+          mockRepo.getConversionsByInsumoId('rice-ins'),
+        ).thenAnswer((_) async => const <UomConversion>[]);
+
+        final movements = await engine.getSaleMovements(
+          productId,
+          2.0,
+          recipeVersionId: versionId,
+        );
+
+        expect(movements, hasLength(1));
+        // 5 * 2 / 10 = 1.0 kg, no conversion applied.
+        expect(movements.first.newStock, 100.0 - 1.0);
+        verifyNever(mockRepo.getConversionsByInsumoId('rice-ins'));
+      },
+    );
+
+    test(
+      'accepts an explicit componentUom equal to the insumo base consumption '
+      'UOM (factor 1, no conversion lookup)',
+      () async {
+        const productId = 'rice-2';
+        const versionId = 'rv-rice-sameuom';
+        final versionDocument = RecipeVersionDocument(
+          id: versionId,
+          productId: productId,
+          productName: 'Rice',
+          versionNumber: 1,
+          yieldQuantity: 10,
+          technicalShrinkPct: 0,
+          createdAt: DateTime(2026, 6, 1),
+          components: const [
+            RecipeVersionComponentDocument(
+              ingredientId: 'rice-ins',
+              ingredientName: 'Rice',
+              ingredientType: 'INSUMO',
+              grossQuantity: 5,
+              netQuantity: 5,
+              technicalShrinkPct: 0,
+              componentUom: 'kg',
+            ),
+          ],
+        );
+        const insumo = Insumo(
+          id: 'rice-ins',
+          name: 'Rice',
+          consumptionUom: 'kg',
+          stock: 100.0,
+          averageCost: 1.0,
+        );
+
+        when(
+          mockRepo.getRecipeVersionDocumentById(versionId),
+        ).thenAnswer((_) async => versionDocument);
+        when(
+          mockRepo.getInsumosByIds(['rice-ins']),
+        ).thenAnswer((_) async => const [insumo]);
+        when(
+          mockRepo.getConversionsByInsumoId('rice-ins'),
+        ).thenAnswer((_) async => const <UomConversion>[]);
+
+        final movements = await engine.getSaleMovements(
+          productId,
+          2.0,
+          recipeVersionId: versionId,
+        );
+
+        expect(movements, hasLength(1));
+        expect(movements.first.newStock, 100.0 - 1.0);
+        verifyNever(mockRepo.getConversionsByInsumoId('rice-ins'));
+      },
+    );
+
+    test(
+      'applies a registered UOM conversion with deterministic 4dp rounding '
+      'when componentUom differs from the base consumption UOM',
+      () async {
+        const productId = 'beef-dish';
+        const versionId = 'rv-beef-conv';
+        final versionDocument = RecipeVersionDocument(
+          id: versionId,
+          productId: productId,
+          productName: 'Beef Dish',
+          versionNumber: 1,
+          yieldQuantity: 10,
+          technicalShrinkPct: 0,
+          createdAt: DateTime(2026, 6, 1),
+          components: const [
+            RecipeVersionComponentDocument(
+              ingredientId: 'beef-1',
+              ingredientName: 'Beef',
+              ingredientType: 'INSUMO',
+              grossQuantity: 10, // expressed in lb
+              netQuantity: 10,
+              technicalShrinkPct: 0,
+              componentUom: 'lb',
+            ),
+          ],
+        );
+        const insumo = Insumo(
+          id: 'beef-1',
+          name: 'Beef',
+          consumptionUom: 'kg',
+          stock: 100.0,
+          averageCost: 5.0,
+        );
+        // 1 lb = 0.453592 kg (factor = base units per component unit).
+        const conversion = UomConversion(
+          id: 'uc-lb',
+          insumoId: 'beef-1',
+          unitName: 'lb',
+          factor: 0.453592,
+        );
+
+        when(
+          mockRepo.getRecipeVersionDocumentById(versionId),
+        ).thenAnswer((_) async => versionDocument);
+        when(
+          mockRepo.getInsumosByIds(['beef-1']),
+        ).thenAnswer((_) async => const [insumo]);
+        when(
+          mockRepo.getConversionsByInsumoId('beef-1'),
+        ).thenAnswer((_) async => const [conversion]);
+
+        final movements = await engine.getSaleMovements(
+          productId,
+          1.0,
+          recipeVersionId: versionId,
+        );
+
+        expect(movements, hasLength(1));
+        // 10 lb * 0.453592 kg/lb * 1 portion / 10 yield = 0.453592 -> 4dp 0.4536
+        expect(movements.first.insumoId, 'beef-1');
+        expect(movements.first.newStock, 100.0 - 0.4536);
+        verify(mockRepo.getConversionsByInsumoId('beef-1')).called(1);
+      },
+    );
+
+    test(
+      'throws StateError when insumo componentUom is incompatible with the '
+      'base consumption UOM and no conversion is registered',
+      () async {
+        const productId = 'beef-dish';
+        const versionId = 'rv-beef-incompat';
+        final versionDocument = RecipeVersionDocument(
+          id: versionId,
+          productId: productId,
+          productName: 'Beef Dish',
+          versionNumber: 1,
+          yieldQuantity: 10,
+          technicalShrinkPct: 0,
+          createdAt: DateTime(2026, 6, 1),
+          components: const [
+            RecipeVersionComponentDocument(
+              ingredientId: 'beef-1',
+              ingredientName: 'Beef',
+              ingredientType: 'INSUMO',
+              grossQuantity: 10,
+              netQuantity: 10,
+              technicalShrinkPct: 0,
+              componentUom: 'gal',
+            ),
+          ],
+        );
+        const insumo = Insumo(
+          id: 'beef-1',
+          name: 'Beef',
+          consumptionUom: 'kg',
+          stock: 100.0,
+          averageCost: 5.0,
+        );
+
+        when(
+          mockRepo.getRecipeVersionDocumentById(versionId),
+        ).thenAnswer((_) async => versionDocument);
+        when(
+          mockRepo.getInsumosByIds(['beef-1']),
+        ).thenAnswer((_) async => const [insumo]);
+        when(
+          mockRepo.getConversionsByInsumoId('beef-1'),
+        ).thenAnswer((_) async => const <UomConversion>[]);
+
+        await expectLater(
+          engine.getSaleMovements(productId, 1.0, recipeVersionId: versionId),
+          throwsA(isA<StateError>()),
+        );
+        // No movement must be persisted for a truly incompatible document.
+        verifyNever(mockRepo.saveMovement(any));
+      },
+    );
+
+    test(
+      'applies the per-component UOM factor (not a shared per-insumo factor) '
+      'when duplicate components reference the same insumo with different '
+      'valid UOMs',
+      () async {
+        // Slice 2.2 review blocker: two components both reference beef-1 — one
+        // expressed in lb (converted), one in kg (base). Each line MUST carry
+        // its own factor BEFORE aggregation; a per-insumo factor map would
+        // reuse the wrong factor for one of the duplicate lines.
+        const productId = 'beef-dish';
+        const versionId = 'rv-beef-dup';
+        final versionDocument = RecipeVersionDocument(
+          id: versionId,
+          productId: productId,
+          productName: 'Beef Dish',
+          versionNumber: 1,
+          yieldQuantity: 10,
+          technicalShrinkPct: 0,
+          createdAt: DateTime(2026, 6, 1),
+          components: const [
+            RecipeVersionComponentDocument(
+              ingredientId: 'beef-1',
+              ingredientName: 'Beef (lb)',
+              ingredientType: 'INSUMO',
+              grossQuantity: 10, // lb
+              netQuantity: 10,
+              technicalShrinkPct: 0,
+              componentUom: 'lb',
+            ),
+            RecipeVersionComponentDocument(
+              ingredientId: 'beef-1',
+              ingredientName: 'Beef (kg)',
+              ingredientType: 'INSUMO',
+              grossQuantity: 2, // kg (base)
+              netQuantity: 2,
+              technicalShrinkPct: 0,
+              componentUom: 'kg',
+            ),
+          ],
+        );
+        const insumo = Insumo(
+          id: 'beef-1',
+          name: 'Beef',
+          consumptionUom: 'kg',
+          stock: 100.0,
+          averageCost: 5.0,
+        );
+        // 1 lb = 0.453592 kg (factor = base units per component unit).
+        const conversion = UomConversion(
+          id: 'uc-lb',
+          insumoId: 'beef-1',
+          unitName: 'lb',
+          factor: 0.453592,
+        );
+
+        when(
+          mockRepo.getRecipeVersionDocumentById(versionId),
+        ).thenAnswer((_) async => versionDocument);
+        when(
+          mockRepo.getInsumosByIds(['beef-1']),
+        ).thenAnswer((_) async => const [insumo]);
+        when(
+          mockRepo.getConversionsByInsumoId('beef-1'),
+        ).thenAnswer((_) async => const [conversion]);
+
+        final movements = await engine.getSaleMovements(
+          productId,
+          1.0,
+          recipeVersionId: versionId,
+        );
+
+        expect(movements, hasLength(1));
+        expect(movements.first.insumoId, 'beef-1');
+        // Line 1 (lb): 10 * 0.453592 * (1/10) = 0.453592 -> 4dp 0.4536
+        // Line 2 (kg): 2 * 1.0 * (1/10) = 0.2 -> 4dp 0.2
+        // Aggregated AFTER conversion: 0.4536 + 0.2 = 0.6536
+        // (A buggy per-insumo factor would reuse 1.0 for the lb line and
+        // deduct 1.2 instead of 0.6536.)
+        expect(movements.first.newStock, 100.0 - 0.6536);
+        // The lb conversion must be looked up exactly once (for the lb line),
+        // proving the kg line did not need it and the lb line did.
+        verify(mockRepo.getConversionsByInsumoId('beef-1')).called(1);
+      },
+    );
+
+    test(
+      'matches UOM labels case- and whitespace-insensitively so " KG " equals '
+      '"kg" (factor 1, no conversion lookup)',
+      () async {
+        const productId = 'rice-3';
+        const versionId = 'rv-rice-normalized';
+        final versionDocument = RecipeVersionDocument(
+          id: versionId,
+          productId: productId,
+          productName: 'Rice',
+          versionNumber: 1,
+          yieldQuantity: 10,
+          technicalShrinkPct: 0,
+          createdAt: DateTime(2026, 6, 1),
+          components: const [
+            RecipeVersionComponentDocument(
+              ingredientId: 'rice-ins',
+              ingredientName: 'Rice',
+              ingredientType: 'INSUMO',
+              grossQuantity: 5,
+              netQuantity: 5,
+              technicalShrinkPct: 0,
+              componentUom: ' KG ', // differs by case + whitespace
+            ),
+          ],
+        );
+        const insumo = Insumo(
+          id: 'rice-ins',
+          name: 'Rice',
+          consumptionUom: 'kg',
+          stock: 100.0,
+          averageCost: 1.0,
+        );
+
+        when(
+          mockRepo.getRecipeVersionDocumentById(versionId),
+        ).thenAnswer((_) async => versionDocument);
+        when(
+          mockRepo.getInsumosByIds(['rice-ins']),
+        ).thenAnswer((_) async => const [insumo]);
+        when(
+          mockRepo.getConversionsByInsumoId('rice-ins'),
+        ).thenAnswer((_) async => const <UomConversion>[]);
+
+        final movements = await engine.getSaleMovements(
+          productId,
+          2.0,
+          recipeVersionId: versionId,
+        );
+
+        expect(movements, hasLength(1));
+        // " KG " normalizes to "kg" == base -> factor 1, no conversion.
+        // 5 * 2 / 10 = 1.0 kg deducted.
+        expect(movements.first.newStock, 100.0 - 1.0);
+        verifyNever(mockRepo.getConversionsByInsumoId('rice-ins'));
+      },
+    );
+
+    test(
+      'throws StateError when a versioned insumo component references a '
+      'missing local insumo before any movement is generated',
+      () async {
+        // Slice 2.2 review blocker: a versioned document must never silently
+        // skip a missing insumo. Partial movement generation would corrupt
+        // stock.
+        const productId = 'burger-1';
+        const versionId = 'rv-missing-insumo';
+        final versionDocument = RecipeVersionDocument(
+          id: versionId,
+          productId: productId,
+          productName: 'Burger',
+          versionNumber: 1,
+          yieldQuantity: 10,
+          technicalShrinkPct: 0,
+          createdAt: DateTime(2026, 6, 1),
+          components: const [
+            RecipeVersionComponentDocument(
+              ingredientId: 'ghost-1',
+              ingredientName: 'Ghost',
+              ingredientType: 'INSUMO',
+              grossQuantity: 5,
+              netQuantity: 5,
+              technicalShrinkPct: 0,
+            ),
+          ],
+        );
+
+        when(
+          mockRepo.getRecipeVersionDocumentById(versionId),
+        ).thenAnswer((_) async => versionDocument);
+        // The insumo does not exist locally.
+        when(
+          mockRepo.getInsumosByIds(['ghost-1']),
+        ).thenAnswer((_) async => const <Insumo>[]);
+
+        await expectLater(
+          engine.getSaleMovements(productId, 1.0, recipeVersionId: versionId),
+          throwsA(isA<StateError>()),
+        );
+
+        // No movement must be persisted for a document with a missing insumo.
+        verifyNever(mockRepo.saveMovement(any));
       },
     );
   });

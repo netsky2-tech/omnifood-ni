@@ -9,6 +9,11 @@ class RecipeVersionComponentDocument {
     required this.netQuantity,
     required this.technicalShrinkPct,
     this.referenceVersionId,
+    // Slice 2.2: UOM the component quantity is expressed in. Nullable for
+    // backward compatibility with documents synced/stored before this slice;
+    // a missing UOM is treated as the insumo's base consumption UOM at
+    // movement-processing time (see MovementEngineImpl).
+    this.componentUom,
   });
 
   final String ingredientId;
@@ -18,6 +23,7 @@ class RecipeVersionComponentDocument {
   final double netQuantity;
   final double technicalShrinkPct;
   final String? referenceVersionId;
+  final String? componentUom;
 
   Map<String, Object?> toJson() => {
         'ingredientId': ingredientId,
@@ -27,6 +33,7 @@ class RecipeVersionComponentDocument {
         'netQuantity': netQuantity,
         'technicalShrinkPct': technicalShrinkPct,
         'referenceVersionId': referenceVersionId,
+        'componentUom': componentUom,
       };
 
   factory RecipeVersionComponentDocument.fromJson(Map<String, dynamic> json) {
@@ -38,6 +45,8 @@ class RecipeVersionComponentDocument {
       netQuantity: (json['netQuantity'] as num).toDouble(),
       technicalShrinkPct: (json['technicalShrinkPct'] as num).toDouble(),
       referenceVersionId: json['referenceVersionId'] as String?,
+      // Missing in legacy documents → null → resolved to base UOM at processing.
+      componentUom: json['componentUom'] as String?,
     );
   }
 }

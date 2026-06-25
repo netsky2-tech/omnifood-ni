@@ -205,6 +205,16 @@ class RecipeViewModel extends ChangeNotifier {
               netQuantity: component.netQuantity,
               technicalShrinkPct: component.technicalShrinkPct,
               referenceVersionId: component.referenceVersionId,
+              // Slice 2.2: capture the insumo's base consumption UOM for each
+              // insumo leaf component so the published version explicitly
+              // records the unit its quantities are expressed in. Sub-recipe
+              // components have no insumo base UOM and stay null. This makes
+              // the "components are stored in the base consumption UOM"
+              // assumption explicit and lets the movement engine validate UOM
+              // compatibility at processing time.
+              componentUom: component.ingredientType == IngredientType.insumo
+                  ? _resolveInsumoConsumptionUom(component.ingredientId)
+                  : null,
             ),
           )
           .toList(growable: false),
@@ -333,6 +343,18 @@ class RecipeViewModel extends ChangeNotifier {
           orElse: () => null,
         );
     return insumo?.name ?? '$productId:${recipe.ingredientId}';
+  }
+
+  /// Slice 2.2: resolves the base consumption UOM for an insumo referenced by
+  /// a draft component. Returns null when the insumo cannot be located locally
+  /// (the movement engine will then default a missing componentUom to the
+  /// insumo base UOM at processing time).
+  String? _resolveInsumoConsumptionUom(String insumoId) {
+    final insumo = _insumos.cast<Insumo?>().firstWhere(
+          (candidate) => candidate?.id == insumoId,
+          orElse: () => null,
+        );
+    return insumo?.consumptionUom;
   }
 
   RecipeVersionDocument? _findVersion(String? id) {

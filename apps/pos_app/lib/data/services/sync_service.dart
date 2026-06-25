@@ -322,6 +322,10 @@ class SyncService {
               'grossQuantity': component.grossQuantity,
               'technicalShrinkPct': component.technicalShrinkPct,
               'referenceVersionId': component.referenceVersionId,
+              // Slice 2.2: include the component UOM so the backend can
+              // validate/convert against the insumo base consumption UOM once
+              // a recipe-version ingestion endpoint exists.
+              'componentUom': component.componentUom,
             },
           )
           .toList(growable: false),

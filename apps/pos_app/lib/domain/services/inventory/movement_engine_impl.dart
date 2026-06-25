@@ -2,15 +2,21 @@ import '../../models/inventory/batch_deduction.dart';
 import '../../models/inventory/insumo.dart';
 import '../../models/inventory/inventory_movement.dart';
 import '../../models/inventory/recipe.dart';
+import '../../models/inventory/recipe_version_document.dart';
+import '../../models/inventory/uom_conversion.dart';
 import '../../repositories/inventory/inventory_repository.dart';
 import '../alerts/alert_service.dart';
 import 'movement_engine.dart';
+import 'uom_conversion_calculator.dart';
 
 class MovementEngineImpl implements MovementEngine {
   final InventoryRepository repository;
   final AlertService alertService;
   final Set<String> _alertedInsumos = {};
   static const int _maxBomDepth = 5;
+  // Slice 2.2: tolerance for the netQuantity == gross*(1-shrink/100) invariant,
+  // expressed at the inventory 4dp scale.
+  static const double _netQuantityTolerance = 0.0001;
 
   MovementEngineImpl(this.repository, this.alertService);
 
@@ -444,8 +450,16 @@ class MovementEngineImpl implements MovementEngine {
     // bound (top-level historical binding). Sub-recipes fall back to the
     // simple recipe table in this slice — full multi-level versioned BOM is
     // deferred (see batch_02_recipes.md).
+    final bool isVersionedTopLevel = recipeVersionId != null && depth == 0;
     List<_BomLine> lines;
-    if (recipeVersionId != null && depth == 0) {
+    // Multiplier applied to each line's quantity. For the simple recipe table
+    // the line quantity is already per-portion, so the multiplier is the sale
+    // quantity. For a versioned top-level document the component grossQuantity
+    // is the amount needed to produce the WHOLE yieldQuantity batch, so each
+    // line is scaled by saleQuantity / yieldQuantity.
+    final double portionMultiplier;
+
+    if (isVersionedTopLevel) {
       final document = await repository.getRecipeVersionDocumentById(
         recipeVersionId,
       );
@@ -467,18 +481,46 @@ class MovementEngineImpl implements MovementEngine {
           'movements for a mismatched historical version binding.',
         );
       }
-      lines = document.components
-          .map(
-            (c) => _BomLine(
-              ingredientId: c.ingredientId,
-              ingredientType: _parseIngredientType(c.ingredientType),
-              quantity: c.netQuantity,
-            ),
-          )
-          .toList(growable: false);
+      // Slice 2.2: validate quantity integrity (yield > 0, gross > 0, shrink
+      // in [0,100), net == gross*(1-shrink/100) within 4dp) before any
+      // movement is generated. A malformed historical document must never
+      // silently produce wrong insumo deductions.
+      _validateVersionedDocumentQuantities(document, recipeVersionId);
+      // Slice 2.2: resolve UOM compatibility per insumo leaf component. Each
+      // component's quantity is converted to the insumo base consumption UOM
+      // (factor 1 when already in base UOM; the registered conversion factor
+      // otherwise; StateError when truly incompatible). Missing componentUom
+      // defaults to the insumo base consumption UOM for backward compatibility
+      // with documents synced/stored before this slice.
+      final conversionFactors = await _resolveUomConversionFactors(
+        document,
+        recipeVersionId,
+      );
+      portionMultiplier = multiplier / document.yieldQuantity;
+      // Slice 2.2 review blocker: the conversion factor is resolved PER
+      // COMPONENT (indexed), not per insumo id, so duplicate components that
+      // reference the same insumo with different componentUom values each
+      // carry their own factor BEFORE aggregation (aggregate after
+      // conversion, not before).
+      lines = <_BomLine>[];
+      for (var i = 0; i < document.components.length; i++) {
+        final c = document.components[i];
+        lines.add(
+          _BomLine(
+            ingredientId: c.ingredientId,
+            ingredientType: _parseIngredientType(c.ingredientType),
+            // Slice 2.2: stock/cost consumption is driven by the GROSS
+            // quantity (the amount physically consumed), scaled by the
+            // yield factor — not the net (post-shrink) quantity.
+            quantity: c.grossQuantity,
+            conversionFactor: conversionFactors[i],
+          ),
+        );
+      }
     } else {
       final recipeItems = await repository.getRecipeByProductId(productId);
       if (recipeItems.isEmpty) return;
+      portionMultiplier = multiplier;
       lines = recipeItems
           .map(
             (r) => _BomLine(
@@ -492,7 +534,17 @@ class MovementEngineImpl implements MovementEngine {
 
     final childVisited = {...visited, productId};
     for (final line in lines) {
-      final totalQty = line.quantity * multiplier;
+      // Slice 2.2: keep the versioned top-level path (and any converted line)
+      // deterministic at the inventory NUMERIC(14,4) scale so gross/yield/UOM
+      // scaling never accumulates float drift across the explosion.
+      final double totalQty;
+      if (isVersionedTopLevel || line.conversionFactor != 1.0) {
+        totalQty = UomConversionCalculator.roundToInventoryScale(
+          line.quantity * line.conversionFactor * portionMultiplier,
+        );
+      } else {
+        totalQty = line.quantity * portionMultiplier;
+      }
 
       if (line.ingredientType == IngredientType.insumo) {
         insumoQuantities[line.ingredientId] =
@@ -508,6 +560,155 @@ class MovementEngineImpl implements MovementEngine {
         );
       }
     }
+  }
+
+  /// Slice 2.2: validates the quantity integrity of a versioned recipe
+  /// document before any movement is generated.
+  ///
+  /// Rules:
+  /// - `yieldQuantity > 0`
+  /// - per component: `grossQuantity > 0`, `technicalShrinkPct` in `[0, 100)`,
+  ///   and `netQuantity` matches `grossQuantity * (1 - technicalShrinkPct/100)`
+  ///   within a 4dp tolerance.
+  ///
+  /// Throws [StateError] on the first violation so a malformed historical
+  /// document can never silently drive wrong insumo deductions.
+  void _validateVersionedDocumentQuantities(
+    RecipeVersionDocument document,
+    String versionId,
+  ) {
+    if (document.yieldQuantity <= 0) {
+      throw StateError(
+        'Recipe version $versionId has yieldQuantity ${document.yieldQuantity}; '
+        'must be > 0. Refusing to generate movements from an invalid document.',
+      );
+    }
+    for (final c in document.components) {
+      if (c.grossQuantity <= 0) {
+        throw StateError(
+          'Recipe version $versionId component ${c.ingredientId} has '
+          'grossQuantity ${c.grossQuantity}; must be > 0.',
+        );
+      }
+      if (c.technicalShrinkPct < 0 || c.technicalShrinkPct >= 100) {
+        throw StateError(
+          'Recipe version $versionId component ${c.ingredientId} has '
+          'technicalShrinkPct ${c.technicalShrinkPct}; must be in [0, 100).',
+        );
+      }
+      final expectedNet = UomConversionCalculator.roundToInventoryScale(
+        c.grossQuantity * (1 - c.technicalShrinkPct / 100),
+      );
+      if ((c.netQuantity - expectedNet).abs() > _netQuantityTolerance) {
+        throw StateError(
+          'Recipe version $versionId component ${c.ingredientId} netQuantity '
+          '${c.netQuantity} does not match gross*(1-shrink/100) = $expectedNet '
+          'within $_netQuantityTolerance tolerance.',
+        );
+      }
+    }
+  }
+
+  /// Slice 2.2: resolves, per component of a versioned document, the
+  /// conversion factor from that component's UOM to the insumo base
+  /// consumption UOM.
+  ///
+  /// Returns a [List] of factors ALIGNED WITH [document.components] (one
+  /// factor per component, by index). Each BOM line carries its OWN factor so
+  /// duplicate components that reference the same insumo with different
+  /// `componentUom` values are converted independently BEFORE aggregation
+  /// (Slice 2.2 review blocker — a per-insumo factor map would reuse the
+  /// wrong factor for one of the duplicate lines, corrupting stock).
+  ///
+  /// Compatibility rule (per insumo component):
+  /// - missing/empty `componentUom` → treated as the insumo base consumption
+  ///   UOM (factor 1, backward compatible with pre-2.2 documents).
+  /// - `componentUom` == insumo `consumptionUom` (case/whitespace-insensitive)
+  ///   → factor 1.
+  /// - otherwise → a registered `UomConversion` with a matching `unitName`
+  ///   (case/whitespace-insensitive) and a positive `factor` must exist; its
+  ///   `factor` (base units per component unit) is used.
+  /// - a missing local insumo → throws [StateError]. A versioned document must
+  ///   never silently skip a missing insumo, otherwise partial movements would
+  ///   corrupt stock (Slice 2.2 review blocker).
+  ///
+  /// Sub-recipe (product) components keep factor 1 (their UOM is resolved
+  /// recursively via the simple recipe table). Throws [StateError] for a
+  /// missing insumo or a truly incompatible insumo component before any
+  /// movement is generated.
+  Future<List<double>> _resolveUomConversionFactors(
+    RecipeVersionDocument document,
+    String versionId,
+  ) async {
+    final insumoComponentIds = document.components
+        .where((c) => _parseIngredientType(c.ingredientType) == IngredientType.insumo)
+        .map((c) => c.ingredientId)
+        .toSet()
+        .toList(growable: false);
+    final Map<String, Insumo> insumoById;
+    if (insumoComponentIds.isEmpty) {
+      insumoById = const {};
+    } else {
+      final insumos = await repository.getInsumosByIds(insumoComponentIds);
+      insumoById = {for (final i in insumos) i.id: i};
+    }
+
+    // One factor per component, aligned with document.components order.
+    final factors = List<double>.filled(document.components.length, 1.0);
+    for (var i = 0; i < document.components.length; i++) {
+      final c = document.components[i];
+      if (_parseIngredientType(c.ingredientType) != IngredientType.insumo) {
+        // Sub-recipe components recurse via the simple recipe table; no UOM
+        // conversion at this level. Factor stays 1.0 (unused for insumo
+        // aggregation).
+        continue;
+      }
+      final insumo = insumoById[c.ingredientId];
+      if (insumo == null) {
+        // Slice 2.2 review blocker: a versioned document must never silently
+        // skip a missing insumo. Partial movement generation would corrupt
+        // stock, so fail before any movement is generated.
+        throw StateError(
+          'Recipe version $versionId component ${c.ingredientId} references '
+          'a missing local insumo. Refusing to generate partial movements '
+          'from an incomplete versioned document.',
+        );
+      }
+      final normalizedComponentUom = _normalizeUom(c.componentUom);
+      final normalizedBaseUom = _normalizeUom(insumo.consumptionUom);
+      if (normalizedComponentUom.isEmpty ||
+          normalizedComponentUom == normalizedBaseUom) {
+        factors[i] = 1.0;
+        continue;
+      }
+      final conversions = await repository.getConversionsByInsumoId(insumo.id);
+      UomConversion? match;
+      for (final conv in conversions) {
+        if (_normalizeUom(conv.unitName) == normalizedComponentUom &&
+            conv.factor > 0) {
+          match = conv;
+          break;
+        }
+      }
+      if (match == null) {
+        throw StateError(
+          'Recipe version $versionId component ${c.ingredientId} UOM '
+          '"${c.componentUom}" is incompatible with insumo base consumption '
+          'UOM "${insumo.consumptionUom}" and no registered conversion '
+          'exists. Refusing to generate movements from an incompatible '
+          'document.',
+        );
+      }
+      factors[i] = match.factor;
+    }
+    return factors;
+  }
+
+  /// Slice 2.2: normalizes a UOM label for comparison by trimming surrounding
+  /// whitespace and lowercasing, so `kg`, ` KG ` and `Kg` all match.
+  String _normalizeUom(String? uom) {
+    if (uom == null) return '';
+    return uom.trim().toLowerCase();
   }
 
   IngredientType _parseIngredientType(String raw) {
@@ -542,9 +743,14 @@ class _BomLine {
     required this.ingredientId,
     required this.ingredientType,
     required this.quantity,
+    // Slice 2.2: factor converting this line's quantity to the insumo base
+    // consumption UOM (1.0 for the simple recipe table and for versioned
+    // components already expressed in the base UOM).
+    this.conversionFactor = 1.0,
   });
 
   final String ingredientId;
   final IngredientType ingredientType;
   final double quantity;
+  final double conversionFactor;
 }
