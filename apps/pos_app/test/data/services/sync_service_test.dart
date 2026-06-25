@@ -401,6 +401,7 @@ void main() {
             grossQuantity: 1,
             netQuantity: 0.94,
             technicalShrinkPct: 6,
+            componentUom: 'lt',
           ),
         ],
       ),
@@ -441,6 +442,18 @@ void main() {
     expect(mockInventoryRepository.syncedIds, contains('mov-prod-1'));
     expect(capturedPosts.any((post) => post.path == '/inventory/recipes/versions'), true);
     expect(capturedPosts.any((post) => post.path == '/inventory/production-orders/close'), true);
+    // Slice 2.2: the recipe version payload must include the component UOM so
+    // the backend can validate/convert against the insumo base consumption UOM.
+    final recipeVersionPost = capturedPosts.firstWhere(
+      (post) => post.path == '/inventory/recipes/versions',
+    );
+    final recipeVersionComponents =
+        (recipeVersionPost.body as Map<String, Object?>)['components']
+            as List<dynamic>;
+    expect(
+      (recipeVersionComponents.first as Map<String, Object?>)['componentUom'],
+      'lt',
+    );
   });
 
   test('syncs count session documents before generic inventory replay and marks linked adjustments', () async {

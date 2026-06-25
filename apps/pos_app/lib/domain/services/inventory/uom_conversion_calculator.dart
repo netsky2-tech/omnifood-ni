@@ -60,6 +60,13 @@ class UomConversionCalculator {
       inventoryScale,
     );
   }
+
+  /// Round an arbitrary quantity to the inventory decimal scale (NUMERIC(14,4)),
+  /// half-away-from-zero. Exposed so non-purchase flows (e.g. recipe BOM
+  /// gross/yield/UOM scaling in the movement engine) stay deterministic and
+  /// consistent with the rest of the inventory source of truth.
+  static double roundToInventoryScale(double value) =>
+      _roundToScale(value, inventoryScale);
 }
 
 /// Round half-away-from-zero to a fixed decimal scale (matches NUMERIC(14,4)).

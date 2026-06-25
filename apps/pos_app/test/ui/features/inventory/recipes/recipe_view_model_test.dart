@@ -103,4 +103,84 @@ void main() {
     expect(repository.storedRecipes.last.quantity, 0.2);
     expect(viewModel.statusMessage, contains('V1'));
   });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Slice 2.2: publish must capture each insumo component's base consumption
+  // UOM so the versioned document explicitly records the unit its quantities
+  // are expressed in (UOM compatibility assumption).
+  // ─────────────────────────────────────────────────────────────────────────
+  test(
+    'publish captures the insumo base consumption UOM on each insumo '
+    'component and leaves sub-recipe components without a UOM',
+    () async {
+      await viewModel.loadInitialData();
+      await viewModel.selectProduct(repository._products.first);
+
+      viewModel.addDraftComponent(
+        ingredientId: 'ins-1',
+        ingredientName: 'Leche',
+        ingredientType: IngredientType.insumo,
+        grossQuantity: 1,
+        technicalShrinkPct: 10,
+      );
+      viewModel.addDraftComponent(
+        ingredientId: 'prod-syrup',
+        ingredientName: 'Jarabe de la Casa',
+        ingredientType: IngredientType.product,
+        grossQuantity: 0.2,
+        technicalShrinkPct: 0,
+        referenceVersionId: 'rv-sub-3',
+      );
+
+      await viewModel.publishDraftVersion(
+        yieldQuantity: 10,
+        technicalShrinkPct: 6,
+        versionNote: 'UOM capture',
+      );
+
+      final components = repository.storedDocuments.single.components;
+      // Insumo leaf component carries the insumo base consumption UOM ('lt').
+      final leche = components.firstWhere((c) => c.ingredientId == 'ins-1');
+      expect(leche.componentUom, 'lt');
+      // Sub-recipe component has no insumo base UOM to bind.
+      final syrup = components.firstWhere((c) => c.ingredientId == 'prod-syrup');
+      expect(syrup.componentUom, isNull);
+    },
+  );
+
+  test(
+    'round-trips a componentUom through document JSON encode/decode so '
+    'synced/stored documents preserve the unit',
+    () async {
+      final component = const RecipeVersionComponentDocument(
+        ingredientId: 'ins-1',
+        ingredientName: 'Leche',
+        ingredientType: 'INSUMO',
+        grossQuantity: 1,
+        netQuantity: 0.9,
+        technicalShrinkPct: 10,
+        componentUom: 'lt',
+      );
+      final encoded = component.toJson();
+      expect(encoded['componentUom'], 'lt');
+
+      final decoded = RecipeVersionComponentDocument.fromJson(
+        Map<String, dynamic>.from(encoded),
+      );
+      expect(decoded.componentUom, 'lt');
+
+      // Legacy document without componentUom decodes to null (backward compat).
+      final legacy = RecipeVersionComponentDocument.fromJson(
+        const <String, dynamic>{
+          'ingredientId': 'ins-1',
+          'ingredientName': 'Leche',
+          'ingredientType': 'INSUMO',
+          'grossQuantity': 1,
+          'netQuantity': 1,
+          'technicalShrinkPct': 0,
+        },
+      );
+      expect(legacy.componentUom, isNull);
+    },
+  );
 }
