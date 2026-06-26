@@ -76,7 +76,7 @@ describe('Recipe version ingestion route (integration)', () => {
     `${input.tenantId}:${input.dto.id}`;
 
   const ingestPosVersionMock = jest.fn(
-    async (input: IngestPosVersionInput): Promise<IngestPosVersionResult> => {
+    (input: IngestPosVersionInput): Promise<IngestPosVersionResult> => {
       const persistenceKey = buildPersistenceKey(input);
       const existing = persistedDocuments.get(persistenceKey);
 
@@ -88,10 +88,10 @@ describe('Recipe version ingestion route (integration)', () => {
           writeCount: existing.writeCount + 1,
         });
 
-        return {
+        return Promise.resolve({
           recipeVersionId: existing.recipeVersionId,
           replaced: true,
-        };
+        });
       }
 
       const created: PersistedRecipeDocument = {
@@ -104,10 +104,10 @@ describe('Recipe version ingestion route (integration)', () => {
 
       persistedDocuments.set(persistenceKey, created);
 
-      return {
+      return Promise.resolve({
         recipeVersionId: created.recipeVersionId,
         replaced: false,
-      };
+      });
     },
   ) as jest.MockedFunction<RecipeIngestionHandler>;
 

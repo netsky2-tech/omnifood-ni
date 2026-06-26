@@ -24,9 +24,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * Plus a unique partial index for idempotent ingestion by
  * (tenant_id, pos_document_id).
  */
-export class AddRecipeVersionIngestionColumns1771000000000
-  implements MigrationInterface
-{
+export class AddRecipeVersionIngestionColumns1771000000000 implements MigrationInterface {
   name = 'AddRecipeVersionIngestionColumns1771000000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

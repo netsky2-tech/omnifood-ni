@@ -94,7 +94,13 @@ describe('InventoryController', () => {
   });
 
   it('keeps the recipe ingestion route protected by auth + role guards', () => {
-    const handler = InventoryMovementController.prototype.ingestRecipeVersion;
+    const descriptor = Object.getOwnPropertyDescriptor(
+      InventoryMovementController.prototype,
+      'ingestRecipeVersion',
+    ) as TypedPropertyDescriptor<(...args: never[]) => unknown> | undefined;
+    const handler = descriptor?.value;
+
+    expect(handler).toBeDefined();
 
     expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toEqual([
       AuthGuard,
@@ -212,7 +218,7 @@ describe('InventoryController', () => {
         ],
       };
 
-      await controller.ingestRecipeVersion(dto as never, 'tenant-A');
+      await controller.ingestRecipeVersion(dto, 'tenant-A');
 
       // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(recipeService.ingestPosVersion).toHaveBeenCalledWith({
