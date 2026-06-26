@@ -21,7 +21,7 @@ Resumen ejecutivo del estado real tras los merges **PR #32** (Batch 1), **PR #34
 | Batch | Estado | Resumen |
 |-------|--------|---------|
 | 1 — Cimientos y Datos Maestros | **Mayoritariamente hecho** | Catálogos administrables + regla UOM + doc de topología (D3) + DAO/pantalla de insumos entregados. Diferidos: sync download de catálogos, FKs de catálogo en schema producto/insumo, precisión 4dp en entity Flutter, integración UOM en compras (→3b), dead `InventoryController` (chore). |
-| 2 — ADN del Plato (Recipes/BOM) | **Parcial-alto** | Slice 2.1 (PR #34) y Slice 2.2 (PR #36) mergeados. Resta: ingesta backend de recipe-version, BOM multi-nivel versionado completo, UI jerárquica profunda, CPP teórico (→3b). |
+| 2 — ADN del Plato (Recipes/BOM) | **Parcial-alto** | Slice 2.1 (PR #34) y Slice 2.2 (PR #36) mergeados. La ingesta backend de `recipe-version` ya quedó cubierta de forma acotada (`POST /inventory/recipes/versions`, tenant/UOM/idempotencia, single-level). Resta: BOM multi-nivel versionado completo, UI jerárquica profunda, CPP teórico (→3b). |
 | 3a — Kardex Inmutable | **No iniciado — próximo batch mayor** | Prerequisito de 3b y 6b. **No** requiere CPP ni BOM multi-nivel completo. |
 | 3b — Factura/Compra + CPP + BCN | No iniciado | Depende de 3a. |
 | 3c — Sync Offline Determinista | No iniciado | |
@@ -33,7 +33,7 @@ Resumen ejecutivo del estado real tras los merges **PR #32** (Batch 1), **PR #34
 
 **Diferidos confirmados (no bloquean 3a):**
 - **Batch 1:** sync download de catálogos · FKs de catálogo en schema producto/insumo · precisión 4dp entity Flutter · integración UOM en flujo de compras (→3b) · dead `InventoryController` (chore).
-- **Batch 2:** ingesta backend recipe-version · BOM multi-nivel versionado completo · UI jerárquica profunda · CPP teórico (→3b).
+- **Batch 2:** BOM multi-nivel versionado completo · UI jerárquica profunda · CPP teórico (→3b). *(La ingesta backend de recipe-version ya quedó resuelta en alcance single-level.)*
 
 ## Matriz de cobertura PRD → Batch
 
@@ -85,7 +85,7 @@ Antes de iniciar Batch 3a, orden recomendado de limpieza de deuda pendiente. Cad
 | # | Limpieza | Origen | Notas |
 |---|----------|--------|-------|
 | 1 | **Docs truth pass** | Transversal | Alinear roadmap/batches con estado real (este cambio). |
-| 2 | **Ingesta backend de recipe-version** | Batch 2 | Exponer controlador que consuma `POST /inventory/recipes/versions` (el POS ya lo POSTea; el backend no tiene controller). Incluye validación/conversión UOM lado backend. |
+| 2 | **Ingesta backend de recipe-version** | Batch 2 | ✅ Completado en alcance acotado: controlador para `POST /inventory/recipes/versions`, persistencia idempotente por `(tenant_id, pos_document_id)`, validación/conversión UOM para insumos y rechazo explícito de `SUB_RECIPE` hasta tener BOM multi-nivel versionado. |
 | 3 | **Sync download de catálogos** | Batch 1 | Wiring en `SyncService` para refrescar caché local desde `/catalogs`. |
 | 4 | **Dead `InventoryController` chore** | Batch 1 | Eliminar `inventory.controller.ts` muerto (no registrado, ruta duplicada). |
 

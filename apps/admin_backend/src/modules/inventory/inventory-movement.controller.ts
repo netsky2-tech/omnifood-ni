@@ -1,11 +1,23 @@
-import { Controller, Post, Body, UseInterceptors } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
 import { ShrinkageService } from './shrinkage.service';
 import { InventoryService } from './inventory.service';
+import { RecipeService } from './recipe.service';
 import { SyncMovementsDto } from './dto/create-inventory-movement.dto';
 import { PurchaseDocumentDto } from './dto/purchase-document.dto';
+import { SyncRecipeVersionDocumentDto } from './dto/sync-recipe-version-document.dto';
 import { GetTenantId } from '../../core/decorators/tenant.decorator';
 import { TenantInterceptor } from '../../core/database/rls.interceptor';
 import { InventoryPurchaseService } from './inventory-purchase.service';
+import { AuthGuard } from '../identity/guards/auth.guard';
+import { RolesGuard } from '../identity/guards/roles.guard';
+import { Roles } from '../../core/decorators/roles.decorator';
+import { UserRole } from '../identity/entities/user.entity';
 
 @Controller('inventory')
 @UseInterceptors(TenantInterceptor)
@@ -14,6 +26,7 @@ export class InventoryMovementController {
     private readonly purchaseService: InventoryPurchaseService,
     private readonly shrinkageService: ShrinkageService,
     private readonly inventoryService: InventoryService,
+    private readonly recipeService: RecipeService,
   ) {}
 
   @Post('movements/sync')
@@ -67,5 +80,15 @@ export class InventoryMovementController {
       dto.quantity,
       dto.reason,
     );
+  }
+
+  @Post('recipes/versions')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  async ingestRecipeVersion(
+    @Body() dto: SyncRecipeVersionDocumentDto,
+    @GetTenantId() tenantId: string,
+  ) {
+    return this.recipeService.ingestPosVersion({ tenantId, dto });
   }
 }
