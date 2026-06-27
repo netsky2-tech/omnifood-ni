@@ -51,6 +51,7 @@ export const getRequiredIdentityJwtSecret = (
     RolesGuard,
   ],
   exports: [
+    JwtModule,
     AuthService,
     UserService,
     AuditIntegrityService,
