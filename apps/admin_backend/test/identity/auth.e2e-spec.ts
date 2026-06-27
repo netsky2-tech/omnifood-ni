@@ -33,6 +33,6 @@ describe('AuthController (e2e)', () => {
   });
 
   afterAll(async () => {
-    await app.close();
+    await app?.close();
   });
 });
