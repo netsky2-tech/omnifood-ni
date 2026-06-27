@@ -2,20 +2,20 @@ name: Admin Backend CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
     paths:
-      - 'apps/admin_backend/**'
-      - '.github/workflows/admin-backend-ci.yml'
+      - "apps/admin_backend/**"
+      - ".github/workflows/admin-backend-ci.yml"
   pull_request:
-    branches: [ main ]
+    branches: [main]
     paths:
-      - 'apps/admin_backend/**'
-      - '.github/workflows/admin-backend-ci.yml'
+      - "apps/admin_backend/**"
+      - ".github/workflows/admin-backend-ci.yml"
 
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
-    
+
     defaults:
       run:
         working-directory: apps/admin_backend
@@ -41,8 +41,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: 'npm'
+          node-version: "22"
+          cache: "npm"
           cache-dependency-path: apps/admin_backend/package-lock.json
 
       - name: Install dependencies
@@ -50,6 +50,16 @@ jobs:
 
       - name: Run lint
         run: npm run lint
+
+      - name: Fail on focused tests (it.only / describe.only)
+        # Match the POS app safeguard: focused backend tests would let CI go
+        # green while skipping most of the Nest suite.
+        run: |
+          if grep -rnE '\b(it|test|describe)(\.concurrent)?\.only\(|\b(fit|fdescribe)\(' src/ test/; then
+            echo "::error::Focused tests (it.only/test.only/describe.only/fit/fdescribe) are forbidden in CI. Remove the focused marker."
+            exit 1
+          fi
+          echo "No focused tests found."
 
       - name: Run unit tests
         run: npm test
@@ -67,7 +77,7 @@ jobs:
   build:
     needs: lint-and-test
     runs-on: ubuntu-latest
-    
+
     defaults:
       run:
         working-directory: apps/admin_backend
@@ -78,8 +88,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: 'npm'
+          node-version: "22"
+          cache: "npm"
           cache-dependency-path: apps/admin_backend/package-lock.json
 
       - name: Install dependencies

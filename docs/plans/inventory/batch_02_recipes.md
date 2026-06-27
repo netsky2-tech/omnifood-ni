@@ -2,7 +2,7 @@
 
 Definir cómo se componen los productos finales a partir de insumos. **Remedia** el módulo de recetas existente (con comparador de versiones) y completa el vínculo histórico de versiones.
 
-> **Estado:** Parcial-alto. Slice 2.1 (PR #34) y Slice 2.2 (PR #36) mergeados. Resta ingesta backend de recipe-version (limpieza pre-Batch 3 recomendada), BOM multi-nivel versionado completo, UI jerárquica profunda y CPP teórico (→3b).
+> **Estado:** Parcial-alto. Slice 2.1 (PR #34) y Slice 2.2 (PR #36) mergeados. La limpieza pre-Batch 3 ya cubre la ingesta backend de `recipe-version` (`POST /inventory/recipes/versions`) con idempotencia + validación tenant/UOM, pero siguen diferidos el BOM multi-nivel versionado completo, la UI jerárquica profunda y el CPP teórico (→3b).
 
 ## Estado actual
 - `RecetaEntity`/`RecetaDetalleEntity` existen con soporte de sub-recetas anidadas.
@@ -43,7 +43,7 @@ Definir cómo se componen los productos finales a partir de insumos. **Remedia**
 
 ## Limpieza pre-Batch 3 recomendada
 
-- [ ] **Ingesta de versiones de receta en el backend**: el POS sincroniza hacia `/inventory/recipes/versions` (incluyendo `componentUom` en el payload), pero el backend aún no expone un controlador que la consuma. La validación/conversión de UOM del lado backend queda diferida a ese endpoint. → **Ítem #2 de la limpieza pre-Batch 3 del roadmap.**
+- [x] **Ingesta de versiones de receta en el backend**: el backend ya expone `POST /inventory/recipes/versions`, persiste snapshots tenant-scoped de forma idempotente por `(tenant_id, pos_document_id)`, recalcula `RecipeDetail.quantity` en unidad base de consumo por unidad vendida y valida `componentUom` contra la unidad base o una conversión positiva registrada. **Alcance explícito:** `SUB_RECIPE` se rechaza con `400` en este slice para evitar corrupción silenciosa; el BOM multi-nivel versionado completo sigue diferido. → **Ítem #2 de la limpieza pre-Batch 3 del roadmap: completado de forma acotada.**
 
 ## Diferido de Slice 2.1 (no sobre-construir)
 
@@ -62,7 +62,7 @@ Slice 2.2 corrige la matemática de cantidad de la explosión BOM versionada (br
 - **Costo teórico CPP**: el cálculo de costo teórico basado en CPP actual sigue pendiente; es dependencia del Batch 3b. Slice 2.2 no toca costing. **No es prerequisito de 3a.**
 - **Explosión BOM versionada multi-nivel completa**: el `MovementEngine` sigue usando el `RecipeVersionDocument` solo en el nivel superior (depth 0). Las sub-recetas continúan usando la tabla simple `recipes` con el fallback existente. La explosión multi-nivel versionada completa (resolviendo `referenceVersionId` de sub-recetas versionadas) sigue diferida. **No es prerequisito de 3a.**
 - **Selector de UOM por componente en la UI**: para evitar churn de UI amplio, Slice 2.2 NO agrega un selector de UOM. El `RecipeViewModel` captura automáticamente el `consumptionUom` del insumo al publicar (`componentUom`), de modo que las versiones nuevas siempre quedan en la unidad base de consumo. La conversión solo se aplica al procesar documentos donde el `componentUom` difiere de la base y existe una conversión registrada.
-- **Ingesta de versiones de receta en el backend**: el POS sincroniza hacia `/inventory/recipes/versions` (ahora incluyendo `componentUom` en el payload), pero el backend aún no expone un controlador que la consuma. La validación/conversión de UOM del lado backend queda diferida a ese endpoint. → **Limpieza pre-Batch 3.**
+- **Explosión BOM versionada multi-nivel en backend**: `POST /inventory/recipes/versions` ya ingiere snapshots single-level y normaliza consumo por unidad vendida, pero los componentes `SUB_RECIPE` aún se rechazan con `400` para no simular una explosión recursiva incompleta. La resolución multi-nivel versionada sigue diferida.
 - **Validación de compatibilidad de UOM para sub-recetas (componentes product)**: la validación de UOM aplica solo a componentes insumo (hojas que consumen stock). Los componentes sub-receta no tienen unidad base de insumo contra la cual validar.
 
 ## Reglas de negocio críticas

@@ -12,6 +12,8 @@ import { AuditIntegrityService } from './services/audit-integrity.service';
 import { AuthController } from './controllers/auth.controller';
 import { AuditController } from './controllers/audit.controller';
 import { UsersController } from './controllers/users.controller';
+import { AuthGuard } from './guards/auth.guard';
+import { RolesGuard } from './guards/roles.guard';
 
 export const getRequiredIdentityJwtSecret = (
   configService: ConfigService,
@@ -41,7 +43,20 @@ export const getRequiredIdentityJwtSecret = (
     }),
   ],
   controllers: [AuthController, AuditController, UsersController],
-  providers: [AuthService, UserService, AuditIntegrityService],
-  exports: [AuthService, UserService, AuditIntegrityService],
+  providers: [
+    AuthService,
+    UserService,
+    AuditIntegrityService,
+    AuthGuard,
+    RolesGuard,
+  ],
+  exports: [
+    JwtModule,
+    AuthService,
+    UserService,
+    AuditIntegrityService,
+    AuthGuard,
+    RolesGuard,
+  ],
 })
 export class IdentityModule {}
