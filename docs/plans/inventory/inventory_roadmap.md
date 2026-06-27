@@ -22,7 +22,7 @@ Resumen ejecutivo del estado real tras los merges **PR #32** (Batch 1), **PR #34
 |-------|--------|---------|
 | 1 — Cimientos y Datos Maestros | **Mayoritariamente hecho** | Catálogos administrables + regla UOM + doc de topología (D3) + DAO/pantalla de insumos entregados. Diferidos: sync download de catálogos, FKs de catálogo en schema producto/insumo, precisión 4dp en entity Flutter, integración UOM en compras (→3b), dead `InventoryController` (chore). |
 | 2 — ADN del Plato (Recipes/BOM) | **Parcial-alto** | Slice 2.1 (PR #34) y Slice 2.2 (PR #36) mergeados. La ingesta backend de `recipe-version` ya quedó cubierta de forma acotada (`POST /inventory/recipes/versions`, tenant/UOM/idempotencia, single-level). Resta: BOM multi-nivel versionado completo, UI jerárquica profunda, CPP teórico (→3b). |
-| 3a — Kardex Inmutable | **No iniciado — próximo batch mayor** | Prerequisito de 3b y 6b. **No** requiere CPP ni BOM multi-nivel completo. |
+| 3a — Kardex Inmutable | **Parcial** | Slice 3a.1 now enforces backend `inventory_kardex` append-only immutability with DB-level UPDATE/DELETE rejection tests. Remaining work: balance invariant, local SQLite parity, costing freeze, concurrency proof. |
 | 3b — Factura/Compra + CPP + BCN | No iniciado | Depende de 3a. |
 | 3c — Sync Offline Determinista | No iniciado | |
 | 4 — Mermas y Ajustes | No iniciado | |
@@ -43,7 +43,7 @@ Resumen ejecutivo del estado real tras los merges **PR #32** (Batch 1), **PR #34
 | §1 Topología B | Tablet autónoma + deltas (sin stock absoluto) | 3c | Brecha |
 | §2.1 Recetas/BOM | Sub-recetas multi-nivel, rendimiento, UOM binarias | 2 | Parcial-alto (2.1/2.2 mergeados; multi-nivel versionado diferido) |
 | §2.2 CPP Multi-moneda | CPP en NIO, FX BCN por fecha de factura | 3b | Pendiente (Batch 3b) |
-| §2.3 Kardex Inmutable | Append-only, auditoría, sin DELETE/UPDATE | 3a | Parcial (principio compensatorio aplicado en POS void; Kardex formal pendiente 3a) |
+| §2.3 Kardex Inmutable | Append-only, auditoría, sin DELETE/UPDATE | 3a | Parcial (backend `inventory_kardex` now rejects UPDATE/DELETE at DB level; remaining invariants still pending in 3a) |
 | §2.4 Mermas | Tipificación PRD, impacto CPP, plato o insumo | 4 | Brecha (taxonomía) |
 | §2.5 Producción | Orden, salida masiva + entrada, costeo | 5 | Parcial |
 | §3 Modelo de datos | Esquema relacional core | 1, 3a | Parcial (insumos/catálogos hechos; FKs catálogo en schema + Kardex formal pendientes) |
@@ -67,7 +67,7 @@ Resumen ejecutivo del estado real tras los merges **PR #32** (Batch 1), **PR #34
 |---|-------|------|--------|--------|
 | 1 | [Cimientos y Datos Maestros](batch_01_foundations.md) | Insumos, UOM, Topology B (inmediata) + A (futura), precisión decimal | Original (remediación) | Mayoritariamente hecho |
 | 2 | [ADN del Plato](batch_02_recipes.md) | Recetas, BOM, versionamiento UC-05, vínculo histórico | Original (remediación) | Parcial-alto (2.1/2.2 mergeados) |
-| 3a | [Kardex Inmutable](batch_03a_kardex_invariants.md) | Append-only, esquema auditoría, invariantes, concurrencia | Split de Batch 3 | No iniciado — próximo |
+| 3a | [Kardex Inmutable](batch_03a_kardex_invariants.md) | Append-only, esquema auditoría, invariantes, concurrencia | Split de Batch 3 | Parcial (Slice 3a.1 backend append-only guard done) |
 | 3b | [Factura de Compra + CPP + BCN](batch_03b_purchase_invoice_cpp.md) | Intake factura, identidad fiscal, FX BCN, CPP NIO | Split de Batch 3 | No iniciado |
 | 3c | [Sync Offline Determinista](batch_03c_offline_sync_contract.md) | Deltas, idempotencia, secuencia, reintentos, Topología B | Split de Batch 3 | No iniciado |
 | 4 | [Mermas y Ajustes](batch_04_mermas_ajustes.md) | Taxonomía PRD, conteo físico, alertas forenses | Original (remediación) | No iniciado |
