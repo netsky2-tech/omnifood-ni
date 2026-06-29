@@ -52,6 +52,14 @@ export class InventoryMovement {
   @Column('decimal', {
     precision: 14,
     scale: 4,
+    nullable: true,
+    name: 'average_cost_after_nio',
+  })
+  averageCostAfterNio: number | null;
+
+  @Column('decimal', {
+    precision: 14,
+    scale: 4,
     nullable: false,
     name: 'unit_cost_nio',
   })

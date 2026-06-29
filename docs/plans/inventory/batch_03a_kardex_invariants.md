@@ -7,13 +7,14 @@ Núcleo contable: garantizar que el Kardex sea **estrictamente append-only** con
 - UI de Kardex funcional.
 - Slice 3a.1 status: backend `inventory_kardex` is the authoritative movement-history table today, and this slice enforces PostgreSQL append-only guards there.
 - Slice 3a.2 status: backend `inventory_kardex` now validates the pre-existing history during migration, rejects inserts whose stored `stock_before` / `stock_after` diverge from the running balance for the same `tenant_id + insumo_id`, and serializes same-stream inserts with a transaction-scoped advisory lock so concurrent writers cannot bypass that invariant.
+- Slice 3a.3 status: new backend ledger inserts now stamp `unit_cost_nio`, `stock_after`, and `average_cost_after_nio` at insert time so later cost changes do not mutate the historical economic snapshot.
 - Slice 3a.1 note: local POS SQLite still stores movement history in `inventory_movements` without an explicit DB-level append-only trigger/rule yet; that remains outside this slice.
 
 ## Brechas a remediar
 - [x] **Backend append-only strictness at data level (`inventory_kardex`)**: PostgreSQL trigger rejects DELETE/UPDATE for the authoritative backend kardex log.
 - [ ] **Remaining append-only parity**: add the equivalent explicit local SQLite/Floor guard for `inventory_movements` so offline storage matches the backend guarantee.
 - [x] Running-balance invariant: `existencia_posterior` (`stock_after` / `new_stock`) matches the per-item historical sum through migration-time baseline validation + INSERT trigger enforcement + DB-backed rejection tests.
-- [ ] Congelamiento de costeo: cada línea estampa `costo_unitario_movimiento_nio`, `existencia_posterior`, `costo_promedio_posterior_nio` en el instante del movimiento.
+- [x] Cost snapshot freeze: each new backend row now stamps `unit_cost_nio`, `stock_after`, and `average_cost_after_nio` at movement insert time without retro-recomputing older rows.
 - [x] Narrow concurrency protection for this slice (NFR): an advisory transaction lock on `tenant_id + insumo_id` serializes same-stream inserts so a stale baseline cannot bypass the running-balance invariant. Full FIFO / sync architecture remains in 3c.
 
 ## Alcance técnico
@@ -37,6 +38,7 @@ Núcleo contable: garantizar que el Kardex sea **estrictamente append-only** con
 - [x] Running-balance invariant test (insert N movements → verify coherent `existencia_posterior`).
 - [x] Backend Postgres test coverage rejects UPDATE/DELETE and keeps INSERT working for `inventory_kardex`.
 - [x] Concurrency isolation is proven for the running-balance invariant (two simultaneous inserts on the same `tenant_id + insumo_id` cannot bypass the validated baseline).
+- [x] New backend ledger rows freeze their cost snapshot fields at insert time without mutating historical rows.
 
 ## PRD cubierto
 §2.3 Kardex Inmutable · §3 Modelo de datos (kardex) · NFR Concurrencia · NFR Decimal

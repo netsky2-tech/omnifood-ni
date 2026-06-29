@@ -57,6 +57,9 @@ export class PurchaseService {
         quantity: consumptionQuantity,
         previousStock: previousStock,
         newStock: newTotalStock,
+        averageCostAfterNio: Number(newAverageCost.toFixed(4)),
+        unitCostNio: Number(cost.toFixed(4)),
+        totalCostNio: Number(newBatchCost.toFixed(4)),
         reason: `Purchase from ${supplier.name}`,
       });
       await manager.save(movement);

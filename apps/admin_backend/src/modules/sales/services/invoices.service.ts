@@ -19,6 +19,10 @@ import {
   type NegativeStockPolicy,
 } from '../../inventory/entities/insumo.entity';
 
+const SCALE_4 = 4;
+
+const round4 = (value: number): number => Number(value.toFixed(SCALE_4));
+
 @Injectable()
 export class InvoicesService {
   private readonly logger = new Logger(InvoicesService.name);
@@ -197,6 +201,9 @@ export class InvoicesService {
           movementType,
         );
         const unitCostNio = Number((insumo.averageCost ?? 0).toFixed(4));
+        const averageCostAfterNio = Number(
+          (insumo.averageCost ?? 0).toFixed(4),
+        );
         insumo.stock = newStock;
         insumo.existenciaActual = newStock;
         await manager.save(Insumo, insumo);
@@ -219,6 +226,7 @@ export class InvoicesService {
             quantity: normalizedQuantity,
             previousStock,
             newStock,
+            averageCostAfterNio,
             unitCostNio,
             totalCostNio: Number(
               (Math.abs(normalizedQuantity) * unitCostNio).toFixed(4),
@@ -266,18 +274,28 @@ export class InvoicesService {
 
       const previousStock = Number(insumo.stock);
       const delta = Number(movement.quantity);
-      const newStock = Number((previousStock + delta).toFixed(4));
+      const newStock = round4(previousStock + delta);
       this.assertNegativeStockPolicy(
         insumo.negativeStockPolicy,
         newStock,
         movement.insumoId,
         record.documentType as MovementType,
       );
-      const unitCostNio = Number(
-        (movement.unitCostNio ?? Number(insumo.averageCost)).toFixed(4),
+      const previousAverageCostNio = round4(Number(insumo.averageCost ?? 0));
+      const unitCostNio = this.resolveDeltaUnitCostNio(
+        movement.unitCostNio,
+        previousAverageCostNio,
+        delta,
+      );
+      const averageCostAfterNio = this.calculateAverageCostAfterDelta(
+        previousStock,
+        previousAverageCostNio,
+        delta,
+        unitCostNio,
       );
       insumo.stock = newStock;
       insumo.existenciaActual = newStock;
+      insumo.averageCost = averageCostAfterNio;
       await manager.save(Insumo, insumo);
 
       await manager.save(
@@ -288,6 +306,7 @@ export class InvoicesService {
           quantity: delta,
           previousStock,
           newStock,
+          averageCostAfterNio,
           unitCostNio,
           totalCostNio: Number((Math.abs(delta) * unitCostNio).toFixed(4)),
           idempotencyKey: `${record.idempotencyKey}:${movement.insumoId}`,
@@ -317,6 +336,45 @@ export class InvoicesService {
       order: { id: 'DESC' },
     });
     return original?.id ?? null;
+  }
+
+  private resolveDeltaUnitCostNio(
+    unitCostNio: number | undefined,
+    previousAverageCostNio: number,
+    delta: number,
+  ): number {
+    if (typeof unitCostNio === 'number') {
+      return round4(unitCostNio);
+    }
+
+    if (delta > 0) {
+      throw new BadRequestException(
+        'Inbound synced inventory deltas must include unitCostNio to freeze a valid cost snapshot',
+      );
+    }
+
+    return previousAverageCostNio;
+  }
+
+  private calculateAverageCostAfterDelta(
+    previousStock: number,
+    previousAverageCostNio: number,
+    delta: number,
+    unitCostNio: number,
+  ): number {
+    if (delta <= 0) {
+      return previousAverageCostNio;
+    }
+
+    const resultingStock = previousStock + delta;
+    if (resultingStock === 0) {
+      return 0;
+    }
+
+    return round4(
+      (previousStock * previousAverageCostNio + delta * unitCostNio) /
+        resultingStock,
+    );
   }
 
   private async resolveExplodedMovements(

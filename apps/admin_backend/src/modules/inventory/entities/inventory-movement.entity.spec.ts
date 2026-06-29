@@ -13,6 +13,7 @@ describe('InventoryMovement Entity', () => {
     movement.quantity = -18.5;
     movement.previousStock = 1000;
     movement.newStock = 981.5;
+    movement.averageCostAfterNio = 12.75;
     movement.reason = 'Venta POS #123';
 
     expect(movement.insumoId).toBe('insumo-123');
@@ -20,6 +21,7 @@ describe('InventoryMovement Entity', () => {
     expect(movement.quantity).toBe(-18.5);
     expect(movement.previousStock).toBe(1000);
     expect(movement.newStock).toBe(981.5);
+    expect(movement.averageCostAfterNio).toBe(12.75);
     expect(movement.reason).toBe('Venta POS #123');
   });
 });

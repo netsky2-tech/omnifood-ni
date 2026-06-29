@@ -101,6 +101,7 @@ describe('ProductionService', () => {
         reason: 'PRODUCTION_RECEIPT:v3',
         unitCostNio: 0.75,
         totalCostNio: 3,
+        averageCostAfterNio: 3,
       }),
     );
   });

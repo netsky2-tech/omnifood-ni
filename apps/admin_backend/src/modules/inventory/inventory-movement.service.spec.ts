@@ -108,10 +108,73 @@ describe('InventoryMovementService', () => {
         newStock: 12,
         unitCostNio: 40,
         totalCostNio: 80,
+        averageCostAfterNio: 48.3333,
       }),
     );
     expect(manager.update).not.toHaveBeenCalled();
     expect(manager.delete).not.toHaveBeenCalled();
+  });
+
+  it('freezes each purchase cost snapshot even when later purchases change the current average cost', async () => {
+    let state = {
+      id: 'ins-1',
+      tenant_id: 'tenant-A',
+      stock: 10,
+      existenciaActual: 10,
+      averageCost: 50,
+    };
+
+    const movementSnapshots: Array<Record<string, unknown>> = [];
+
+    getOneMock.mockImplementation(() => Promise.resolve({ ...state }));
+    createMock.mockImplementation((_entity: unknown, payload: unknown) => {
+      const movement = payload as Record<string, unknown>;
+      movementSnapshots.push({ ...movement });
+      return payload;
+    });
+    saveMock.mockImplementation((entity: unknown, payload: unknown) => {
+      if (entity !== InventoryMovement) {
+        const updated = payload as {
+          stock: number;
+          existenciaActual: number;
+          averageCost: number;
+        };
+        state = {
+          ...state,
+          stock: updated.stock,
+          existenciaActual: updated.existenciaActual,
+          averageCost: updated.averageCost,
+        };
+      }
+
+      return Promise.resolve(payload);
+    });
+
+    await service.postPurchaseMovement({
+      tenantId: 'tenant-A',
+      insumoId: 'ins-1',
+      quantity: 2,
+      unitCostNio: 40,
+    });
+    await service.postPurchaseMovement({
+      tenantId: 'tenant-A',
+      insumoId: 'ins-1',
+      quantity: 4,
+      unitCostNio: 30,
+    });
+
+    expect(movementSnapshots).toEqual([
+      expect.objectContaining({
+        unitCostNio: 40,
+        newStock: 12,
+        averageCostAfterNio: 48.3333,
+      }),
+      expect.objectContaining({
+        unitCostNio: 30,
+        newStock: 16,
+        averageCostAfterNio: 43.75,
+      }),
+    ]);
   });
 
   it('keeps deterministic NUMERIC(14,4) precision across 1000 fractional operations', async () => {

@@ -104,6 +104,7 @@ export class InventoryPurchaseService {
         quantity: round4(input.quantity),
         previousStock: preview.previousStock,
         newStock: preview.projectedStock,
+        averageCostAfterNio: preview.projectedCppNio,
         unitCostNio: preview.unitCostNio,
         totalCostNio: round4(input.quantity * preview.unitCostNio),
         reason: input.supplierName

@@ -77,6 +77,7 @@ describe('ShrinkageService', () => {
         quantity: -2.3456,
         unitCostNio: 800,
         totalCostNio: 1876.48,
+        averageCostAfterNio: 800,
       }),
     );
     expect(forensicAlertService.create).toHaveBeenCalledTimes(1);

@@ -35,6 +35,10 @@ export class CreateInventoryMovementDto {
   timestamp: string;
 
   @IsOptional()
+  @IsNumber()
+  unitCostNio?: number;
+
+  @IsOptional()
   @IsString()
   reason?: string;
 

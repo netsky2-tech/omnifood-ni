@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -10,6 +14,14 @@ import {
 import { CreateInventoryMovementDto } from './dto/create-inventory-movement.dto';
 import { LowStockEvent } from '../notifications/listeners/low-stock.listener';
 import { CostCalculatorService } from './cost-calculator.service';
+
+const SCALE_4 = 4;
+
+const round4 = (value: number): number => Number(value.toFixed(SCALE_4));
+
+type SyncedInventoryMovement = CreateInventoryMovementDto & {
+  unitCostNio?: number;
+};
 
 @Injectable()
 export class InventoryService {
@@ -75,7 +87,7 @@ export class InventoryService {
       movements.map((m) => ({
         ...m,
         timestamp: new Date(m.timestamp),
-      })),
+      })) as Array<SyncedInventoryMovement & { timestamp: Date }>,
     );
 
     await this.dataSource.transaction(async (manager) => {
@@ -90,36 +102,92 @@ export class InventoryService {
 
         // Conflict Resolution: Recalculate stock based on backend state
         // instead of trusting client's absolute newStock
-        const previousStock = Number(insumo.stock);
-        let newStock = previousStock;
-
-        if (
-          mov.type === MovementType.SALE ||
-          mov.type === MovementType.SHRINKAGE
-        ) {
-          newStock = previousStock - Number(mov.quantity);
-        } else if (
-          mov.type === MovementType.PURCHASE ||
-          mov.type === MovementType.REVERSAL ||
-          mov.type === MovementType.ADJUSTMENT
-        ) {
-          // Adjustments could be positive or negative, but usually quantity is signed
-          // For now we'll treat it as additive if it's an adjustment
-          newStock = previousStock + Number(mov.quantity);
-        }
+        const previousStock = round4(Number(insumo.stock));
+        const previousAverageCostNio = round4(Number(insumo.averageCost ?? 0));
+        const normalizedQuantity = round4(Number(mov.quantity));
+        const stockDelta = this.resolveStockDelta(mov.type, normalizedQuantity);
+        const newStock = round4(previousStock + stockDelta);
+        const unitCostNio = this.resolveUnitCostNio(
+          mov,
+          previousAverageCostNio,
+          stockDelta,
+        );
+        const averageCostAfterNio = this.calculateAverageCostAfterMovement(
+          previousStock,
+          previousAverageCostNio,
+          stockDelta,
+          unitCostNio,
+        );
 
         insumo.stock = newStock;
+        insumo.existenciaActual = newStock;
+        insumo.averageCost = averageCostAfterNio;
         await insumoRepo.save(insumo);
 
         const movement = movementRepo.create({
           ...mov,
           previousStock,
           newStock,
+          averageCostAfterNio,
+          unitCostNio,
+          totalCostNio: round4(Math.abs(normalizedQuantity) * unitCostNio),
           timestamp: mov.timestamp,
         });
         await movementRepo.save(movement);
       }
     });
+  }
+
+  private resolveStockDelta(type: MovementType, quantity: number): number {
+    switch (type) {
+      case MovementType.SALE:
+      case MovementType.SHRINKAGE:
+        return -Math.abs(quantity);
+      case MovementType.PURCHASE:
+      case MovementType.PRODUCTION:
+      case MovementType.REVERSAL:
+        return Math.abs(quantity);
+      case MovementType.ADJUSTMENT:
+        return quantity;
+    }
+  }
+
+  private resolveUnitCostNio(
+    movement: SyncedInventoryMovement,
+    previousAverageCostNio: number,
+    stockDelta: number,
+  ): number {
+    if (typeof movement.unitCostNio === 'number') {
+      return round4(movement.unitCostNio);
+    }
+
+    if (stockDelta > 0) {
+      throw new BadRequestException(
+        'Synced inbound movements must include unitCostNio to freeze a valid cost snapshot',
+      );
+    }
+
+    return previousAverageCostNio;
+  }
+
+  private calculateAverageCostAfterMovement(
+    previousStock: number,
+    previousAverageCostNio: number,
+    stockDelta: number,
+    unitCostNio: number,
+  ): number {
+    if (stockDelta <= 0) {
+      return previousAverageCostNio;
+    }
+
+    return round4(
+      this.costCalculator.calculateAverageCost(
+        previousStock,
+        previousAverageCostNio,
+        stockDelta,
+        unitCostNio,
+      ),
+    );
   }
 
   sortMovements<T extends { timestamp: Date }>(movements: T[]): T[] {

@@ -49,6 +49,7 @@ describe('InventoryAdjustmentService', () => {
       newStock: 16.5,
       unitCostNio: 12.25,
       totalCostNio: -42.875,
+      averageCostAfterNio: 12.25,
     });
     save.mockResolvedValue({ id: 'adj-1' });
 
@@ -68,6 +69,7 @@ describe('InventoryAdjustmentService', () => {
         newStock: 20,
         reason: 'wrong-sign',
         compensationForKardexId: 'mov-1',
+        averageCostAfterNio: 12.25,
       }),
     );
   });
@@ -82,6 +84,7 @@ describe('InventoryAdjustmentService', () => {
       newStock: 5.25,
       unitCostNio: 9.5,
       totalCostNio: null,
+      averageCostAfterNio: null,
     });
     save.mockResolvedValue({ id: 'adj-2' });
 
@@ -96,6 +99,7 @@ describe('InventoryAdjustmentService', () => {
       expect.objectContaining({
         quantity: -1.25,
         totalCostNio: null,
+        averageCostAfterNio: null,
         reason: 'count-reset',
         compensationForKardexId: 'mov-2',
       }),
