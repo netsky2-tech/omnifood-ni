@@ -6,14 +6,15 @@ Núcleo contable: garantizar que el Kardex sea **estrictamente append-only** con
 - `KardexEntity` existe con campos de auditoría y tipos de movimiento.
 - UI de Kardex funcional.
 - Slice 3a.1 status: backend `inventory_kardex` is the authoritative movement-history table today, and this slice enforces PostgreSQL append-only guards there.
+- Slice 3a.2 status: backend `inventory_kardex` now validates the pre-existing history during migration, rejects inserts whose stored `stock_before` / `stock_after` diverge from the running balance for the same `tenant_id + insumo_id`, and serializes same-stream inserts with a transaction-scoped advisory lock so concurrent writers cannot bypass that invariant.
 - Slice 3a.1 note: local POS SQLite still stores movement history in `inventory_movements` without an explicit DB-level append-only trigger/rule yet; that remains outside this slice.
 
 ## Brechas a remediar
 - [x] **Backend append-only strictness at data level (`inventory_kardex`)**: PostgreSQL trigger rejects DELETE/UPDATE for the authoritative backend kardex log.
 - [ ] **Remaining append-only parity**: add the equivalent explicit local SQLite/Floor guard for `inventory_movements` so offline storage matches the backend guarantee.
-- [ ] Invariante de saldo: `existencia_posterior` debe coincidir siempre con la suma histórica de movimientos del insumo (test que detecte desbalances).
+- [x] Running-balance invariant: `existencia_posterior` (`stock_after` / `new_stock`) matches the per-item historical sum through migration-time baseline validation + INSERT trigger enforcement + DB-backed rejection tests.
 - [ ] Congelamiento de costeo: cada línea estampa `costo_unitario_movimiento_nio`, `existencia_posterior`, `costo_promedio_posterior_nio` en el instante del movimiento.
-- [ ] Concurrencia (NFR): SERIALIZABLE o FIFO por ítem al insertar movimientos del mismo insumo, para evitar race conditions en CPP.
+- [x] Narrow concurrency protection for this slice (NFR): an advisory transaction lock on `tenant_id + insumo_id` serializes same-stream inserts so a stale baseline cannot bypass the running-balance invariant. Full FIFO / sync architecture remains in 3c.
 
 ## Alcance técnico
 
@@ -33,9 +34,9 @@ Núcleo contable: garantizar que el Kardex sea **estrictamente append-only** con
 ## DoD (Criterios de aceptación)
 - [x] Backend `inventory_kardex` has DB-enforced append-only protection (no solo código).
 - [ ] Local offline movement store has equivalent DB-enforced append-only protection.
-- [ ] Test de invariante de saldo (insertar N movimientos → verificar `existencia_posterior` coherente).
+- [x] Running-balance invariant test (insert N movements → verify coherent `existencia_posterior`).
 - [x] Backend Postgres test coverage rejects UPDATE/DELETE and keeps INSERT working for `inventory_kardex`.
-- [ ] Aislamiento de concurrencia demostrado (dos inserciones simultáneas no corrompen CPP).
+- [x] Concurrency isolation is proven for the running-balance invariant (two simultaneous inserts on the same `tenant_id + insumo_id` cannot bypass the validated baseline).
 
 ## PRD cubierto
 §2.3 Kardex Inmutable · §3 Modelo de datos (kardex) · NFR Concurrencia · NFR Decimal
