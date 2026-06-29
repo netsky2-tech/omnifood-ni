@@ -227,6 +227,83 @@ describe('InventoryService', () => {
       );
       /* eslint-enable @typescript-eslint/no-unsafe-assignment */
     });
+
+    it('rejects inbound synced movements that cannot freeze a cost snapshot', async () => {
+      const movements: CreateInventoryMovementDto[] = [
+        {
+          id: 'mov-3',
+          insumoId: 'ins-1',
+          type: MovementType.PURCHASE,
+          quantity: 5,
+          previousStock: 8,
+          newStock: 13,
+          timestamp: '2026-05-05T10:00:00Z',
+        },
+      ];
+
+      const insumo = createMockInsumo({
+        id: 'ins-1',
+        tenant_id: 'tenant-A',
+        stock: 8,
+        averageCost: 4.25,
+      });
+      jest.spyOn(insumoRepo, 'findOne').mockResolvedValue(insumo);
+
+      await expect(
+        service.syncMovements(movements, 'tenant-A'),
+      ).rejects.toThrow(
+        'Synced inbound movements must include unitCostNio to freeze a valid cost snapshot',
+      );
+      expect(movementRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('stamps weighted post-purchase snapshots for synced purchase movements', async () => {
+      const movements: Array<
+        CreateInventoryMovementDto & { unitCostNio: number }
+      > = [
+        {
+          id: 'mov-4',
+          insumoId: 'ins-1',
+          type: MovementType.PURCHASE,
+          quantity: 5,
+          previousStock: 8,
+          newStock: 13,
+          timestamp: '2026-05-05T10:00:00Z',
+          unitCostNio: 7.5,
+        },
+      ];
+
+      const insumo = createMockInsumo({
+        id: 'ins-1',
+        tenant_id: 'tenant-A',
+        stock: 8,
+        averageCost: 4.25,
+      });
+      jest.spyOn(insumoRepo, 'findOne').mockResolvedValue(insumo);
+      jest.spyOn(insumoRepo, 'save').mockImplementation((i: Insumo) => {
+        insumo.stock = i.stock;
+        insumo.averageCost = i.averageCost;
+        return Promise.resolve(i);
+      });
+
+      await service.syncMovements(movements, 'tenant-A');
+
+      expect(insumoRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          stock: 13,
+          averageCost: 5.5,
+        }),
+      );
+      expect(movementRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MovementType.PURCHASE,
+          newStock: 13,
+          unitCostNio: 7.5,
+          totalCostNio: 37.5,
+          averageCostAfterNio: 5.5,
+        }),
+      );
+    });
   });
 
   describe('tenant isolation', () => {

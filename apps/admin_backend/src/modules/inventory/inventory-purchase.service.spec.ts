@@ -150,8 +150,71 @@ describe('InventoryPurchaseService', () => {
       expect.objectContaining({
         type: 'PURCHASE',
         unitCostNio: 73,
+        averageCostAfterNio: 57.6667,
       }),
     );
+  });
+
+  it('keeps earlier purchase snapshots frozen when a later entry recalculates the current average cost', async () => {
+    resolveBcnRateByDate.mockResolvedValue(1);
+
+    const state = {
+      stock: 10,
+      averageCost: 50,
+      existenciaActual: 10,
+    };
+    const movementSnapshots: Array<Record<string, unknown>> = [];
+
+    queryBuilder.getOne.mockImplementation(() =>
+      Promise.resolve({
+        ...perishableInsumo,
+        ...state,
+        is_perishable: false,
+      }),
+    );
+    manager.create.mockImplementation((_entity: unknown, payload: unknown) => {
+      const created = payload as Record<string, unknown>;
+      movementSnapshots.push({ ...created });
+      return payload;
+    });
+    manager.save.mockImplementation((entity: unknown, payload: unknown) => {
+      if (entity === Insumo) {
+        const updated = payload as Partial<Insumo>;
+        state.stock = Number(updated.stock);
+        state.averageCost = Number(updated.averageCost);
+        state.existenciaActual = Number(updated.existenciaActual);
+      }
+
+      return payload;
+    });
+
+    await service.recordPurchase({
+      tenantId: 'tenant-A',
+      insumoId: 'ins-1',
+      quantity: 2,
+      unitCost: 40,
+      currency: CURRENCY.NIO,
+      invoiceDate: '2026-01-03',
+    });
+    await service.recordPurchase({
+      tenantId: 'tenant-A',
+      insumoId: 'ins-1',
+      quantity: 4,
+      unitCost: 30,
+      currency: CURRENCY.NIO,
+      invoiceDate: '2026-01-04',
+    });
+
+    expect(movementSnapshots).toEqual([
+      expect.objectContaining({
+        unitCostNio: 40,
+        averageCostAfterNio: 48.3333,
+      }),
+      expect.objectContaining({
+        unitCostNio: 30,
+        averageCostAfterNio: 43.75,
+      }),
+    ]);
   });
 
   it('rejects perishable purchases without batch metadata', async () => {

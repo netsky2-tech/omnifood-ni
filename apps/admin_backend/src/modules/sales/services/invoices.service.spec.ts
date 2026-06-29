@@ -13,7 +13,10 @@ import { InventorySyncReceipt } from '../../inventory/entities/inventory-sync-re
 import { RecipeService } from '../../inventory/recipe.service';
 import { BomExplosionService } from '../../inventory/bom-explosion.service';
 import { DataSource } from 'typeorm';
-import { NEGATIVE_STOCK_POLICY } from '../../inventory/entities/insumo.entity';
+import {
+  Insumo,
+  NEGATIVE_STOCK_POLICY,
+} from '../../inventory/entities/insumo.entity';
 
 describe('InvoicesService', () => {
   let service: InvoicesService;
@@ -488,7 +491,79 @@ describe('InvoicesService', () => {
         ['id'],
       );
       expect(movementRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({ type: MovementType.SALE }),
+        expect.objectContaining({
+          type: MovementType.SALE,
+          unitCostNio: 2,
+          averageCostAfterNio: 2,
+        }),
+      );
+    });
+
+    it('keeps historical SALE snapshots frozen when later ledger inserts use a different cost context', async () => {
+      receiptRepo.findOne.mockResolvedValue(null);
+      recipeService.findActiveVersion.mockResolvedValue(null);
+      txManager
+        .createQueryBuilder()
+        .getOne.mockResolvedValueOnce({
+          stock: 10,
+          averageCost: 2,
+          id: 'ins-1',
+          tenant_id: 'tenant-1',
+          negativeStockPolicy: NEGATIVE_STOCK_POLICY.RESTRICT,
+        })
+        .mockResolvedValueOnce({
+          stock: 8,
+          averageCost: 4.25,
+          id: 'ins-1',
+          tenant_id: 'tenant-1',
+          negativeStockPolicy: NEGATIVE_STOCK_POLICY.RESTRICT,
+        });
+
+      await service.syncBatch('tenant-1', [
+        {
+          idempotencyKey: 'sale-freeze-1',
+          sourceDeviceId: 'd1',
+          sourceSequence: 1,
+          documentType: 'SALE',
+          invoice: baseInvoice,
+        },
+        {
+          idempotencyKey: 'purchase-after-sale-1',
+          sourceDeviceId: 'd1',
+          sourceSequence: 2,
+          documentType: 'PURCHASE',
+          movements: [{ insumoId: 'ins-1', quantity: 5, unitCostNio: 7.5 }],
+        },
+      ]);
+
+      const movementCalls = movementRepo.create.mock.calls as Array<
+        [Record<string, unknown>]
+      >;
+      const firstMovement = movementCalls[0][0];
+      const secondMovement = movementCalls[1][0];
+
+      expect(firstMovement).toEqual(
+        expect.objectContaining({
+          type: MovementType.SALE,
+          unitCostNio: 2,
+          averageCostAfterNio: 2,
+        }),
+      );
+      expect(secondMovement).toEqual(
+        expect.objectContaining({
+          type: MovementType.PURCHASE,
+          unitCostNio: 7.5,
+          averageCostAfterNio: 5.5,
+        }),
+      );
+      expect(txManager.save).toHaveBeenCalledWith(
+        Insumo,
+        expect.objectContaining({
+          id: 'ins-1',
+          stock: 13,
+          existenciaActual: 13,
+          averageCost: 5.5,
+        }),
       );
     });
 
@@ -883,6 +958,41 @@ describe('InvoicesService', () => {
       ]);
 
       expect(movementRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects positive inbound deltas without unitCostNio before any inventory side effects', async () => {
+      receiptRepo.findOne.mockResolvedValue(null);
+      const lockedInsumo = {
+        id: 'ins-raw',
+        stock: 20,
+        averageCost: 3.5,
+        negativeStockPolicy: NEGATIVE_STOCK_POLICY.RESTRICT,
+        tenant_id: 'tenant-1',
+      };
+      txManager.createQueryBuilder().getOne.mockResolvedValue(lockedInsumo);
+
+      await expect(
+        service.syncBatch('tenant-1', [
+          {
+            idempotencyKey: 'missing-unit-cost-1',
+            sourceDeviceId: 'd-edge',
+            sourceSequence: 5,
+            documentType: 'PURCHASE',
+            movements: [{ insumoId: 'ins-raw', quantity: 5 }],
+          },
+        ]),
+      ).rejects.toThrow(
+        'Inbound synced inventory deltas must include unitCostNio to freeze a valid cost snapshot',
+      );
+
+      expect(lockedInsumo).toMatchObject({
+        stock: 20,
+        averageCost: 3.5,
+      });
+      expect(lockedInsumo).not.toHaveProperty('existenciaActual');
+      expect(movementRepo.create).not.toHaveBeenCalled();
+      expect(txManager.save).not.toHaveBeenCalled();
+      expect(receiptRepo.save).not.toHaveBeenCalled();
     });
 
     it('rolls back invoice/items when a later inventory movement fails (tx atomicity)', async () => {

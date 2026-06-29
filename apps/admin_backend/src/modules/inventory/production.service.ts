@@ -103,6 +103,7 @@ export class ProductionService {
 
         const previousStock = Number(insumo.stock);
         const newStock = round4(previousStock - consumedTotal);
+        const averageCostAfterNio = round4(Number(insumo.averageCost));
 
         insumo.stock = newStock;
         insumo.existenciaActual = newStock;
@@ -125,6 +126,7 @@ export class ProductionService {
             quantity: round4(-consumedTotal),
             previousStock,
             newStock,
+            averageCostAfterNio,
             unitCostNio: averageUnitCost,
             totalCostNio: round4(consumedTotal * averageUnitCost),
             reason: `PRODUCTION_CONSUME:${input.recipeVersionId}`,
@@ -142,6 +144,7 @@ export class ProductionService {
       if (producedInsumo) {
         const previousStock = Number(producedInsumo.stock);
         const newStock = round4(previousStock + input.orderQuantity);
+        const averageCostAfterNio = round4(Number(producedInsumo.averageCost));
         producedInsumo.stock = newStock;
         producedInsumo.existenciaActual = newStock;
         await manager.save(Insumo, producedInsumo);
@@ -160,6 +163,7 @@ export class ProductionService {
             quantity: round4(input.orderQuantity),
             previousStock,
             newStock,
+            averageCostAfterNio,
             unitCostNio: producedUnitCostNio,
             totalCostNio: round4(input.orderQuantity * producedUnitCostNio),
             reason: `PRODUCTION_RECEIPT:${input.recipeVersionId}`,

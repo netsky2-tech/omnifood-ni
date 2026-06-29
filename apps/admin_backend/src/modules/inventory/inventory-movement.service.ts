@@ -64,6 +64,7 @@ export class InventoryMovementService {
         quantity,
         previousStock,
         newStock: resultingStock,
+        averageCostAfterNio: resultingCppNio,
         unitCostNio,
         totalCostNio: round4(purchaseTotalCostNio),
         reason: input.reason,

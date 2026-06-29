@@ -77,6 +77,7 @@ export class ShrinkageService {
         quantity: -normalizedQuantity,
         previousStock: previousStock,
         newStock: newStock,
+        averageCostAfterNio: unitCostNio,
         unitCostNio,
         totalCostNio,
         reason: reason,

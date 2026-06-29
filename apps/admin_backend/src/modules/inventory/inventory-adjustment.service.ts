@@ -28,6 +28,7 @@ export class InventoryAdjustmentService {
         quantity: -Number(original.quantity),
         previousStock: Number(original.newStock),
         newStock: Number(original.previousStock),
+        averageCostAfterNio: original.averageCostAfterNio ?? null,
         unitCostNio: original.unitCostNio,
         totalCostNio:
           original.totalCostNio !== null && original.totalCostNio !== undefined
