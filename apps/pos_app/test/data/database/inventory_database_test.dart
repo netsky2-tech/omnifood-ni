@@ -1,8 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pos_app/data/database/migrations.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/models/inventory/insumo_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
+import 'package:pos_app/data/models/inventory/movement_sync_state_entity.dart';
 import 'package:pos_app/data/models/inventory/purchase_entity.dart';
 import 'package:pos_app/data/models/inventory/batch_entity.dart';
 import 'package:pos_app/data/models/inventory/count_line_entity.dart';
@@ -20,7 +22,10 @@ void main() {
   });
 
   setUp(() async {
-    database = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
+    database = await $FloorAppDatabase
+        .inMemoryDatabaseBuilder()
+        .addCallback(inventoryMovementAppendOnlyCallback)
+        .build();
   });
 
   tearDown(() async {
@@ -79,6 +84,96 @@ void main() {
       final retrieved = await database.movementDao.findAllMovements();
       final savedMovement = retrieved.firstWhere((m) => m.id == 'mov-batch-1');
       expect(savedMovement.batch_deductions, '[{"batchId":"b1","quantity":2.0}]');
+    });
+
+    test('keeps movement rows immutable while sync state moves through pending failed and synced', () async {
+      final movement = MovementEntity(
+        id: 'mov-sync-1',
+        insumoId: 'ins-1',
+        type: 'SALE',
+        quantity: -2.0,
+        previousStock: 10.0,
+        newStock: 8.0,
+        timestamp: '2026-06-30T10:00:00.000Z',
+      );
+
+      await database.movementDao.insertMovement(movement);
+
+      final pending = await database.movementDao.findUnsyncedMovements();
+      expect(pending.map((item) => item.id), contains('mov-sync-1'));
+
+      await database.movementSyncStateDao.upsertSyncState(
+        const MovementSyncStateEntity(
+          movementId: 'mov-sync-1',
+          syncStatus: MovementSyncStateStatus.failed,
+          lastAttemptedAt: '2026-06-30T10:01:00.000Z',
+          lastError: 'timeout',
+        ),
+      );
+
+      final failedState = await database.movementSyncStateDao.findByMovementId(
+        'mov-sync-1',
+      );
+      final stillUnsynced = await database.movementDao.findUnsyncedMovements();
+      final historyAfterFailure = await database.movementDao.findAllMovements();
+
+      expect(failedState?.syncStatus, MovementSyncStateStatus.failed);
+      expect(stillUnsynced.map((item) => item.id), contains('mov-sync-1'));
+      expect(historyAfterFailure.single.newStock, 8.0);
+
+      await database.movementSyncStateDao.upsertSyncState(
+        const MovementSyncStateEntity(
+          movementId: 'mov-sync-1',
+          syncStatus: MovementSyncStateStatus.synced,
+          lastAttemptedAt: '2026-06-30T10:02:00.000Z',
+          syncedAt: '2026-06-30T10:02:00.000Z',
+        ),
+      );
+
+      final syncedState = await database.movementSyncStateDao.findByMovementId(
+        'mov-sync-1',
+      );
+      final unsyncedAfterSuccess = await database.movementDao.findUnsyncedMovements();
+      final historyAfterSuccess = await database.movementDao.findAllMovements();
+
+      expect(syncedState?.syncStatus, MovementSyncStateStatus.synced);
+      expect(unsyncedAfterSuccess, isEmpty);
+      expect(historyAfterSuccess.single.id, 'mov-sync-1');
+      expect(historyAfterSuccess.single.quantity, -2.0);
+    });
+
+    test('rejects direct updates and deletes on inventory_movements', () async {
+      final movement = MovementEntity(
+        id: 'mov-append-only',
+        insumoId: 'ins-1',
+        type: 'SALE',
+        quantity: -1.0,
+        previousStock: 5.0,
+        newStock: 4.0,
+        timestamp: '2026-06-30T11:00:00.000Z',
+      );
+
+      await database.movementDao.insertMovement(movement);
+
+      await expectLater(
+        database.database.rawUpdate(
+          'UPDATE inventory_movements SET reason = ? WHERE id = ?',
+          ['tampered', 'mov-append-only'],
+        ),
+        throwsA(isA<Exception>()),
+      );
+
+      await expectLater(
+        database.database.rawDelete(
+          'DELETE FROM inventory_movements WHERE id = ?',
+          ['mov-append-only'],
+        ),
+        throwsA(isA<Exception>()),
+      );
+
+      final persisted = await database.movementDao.findAllMovements();
+      expect(persisted.single.id, 'mov-append-only');
+      expect(persisted.single.reason, isNull);
     });
 
     test('should find insumos by multiple ids', () async {

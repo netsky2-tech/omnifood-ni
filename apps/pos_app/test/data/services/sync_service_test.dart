@@ -62,6 +62,7 @@ class FakeInventoryRepository implements InventoryRepository {
   List<ForensicAlert> forensicAlerts = [];
   List<ForensicAlert> unsyncedForensicAlerts = [];
   final List<String> syncedIds = [];
+  final List<String> failedIds = [];
   final List<String> syncedPurchaseIds = [];
   final List<String> syncedCountSessionIds = [];
   final List<String> syncedRecipeVersionIds = [];
@@ -74,6 +75,11 @@ class FakeInventoryRepository implements InventoryRepository {
   @override
   Future<void> markMovementAsSynced(String id) async {
     syncedIds.add(id);
+  }
+
+  @override
+  Future<void> markMovementAsFailed(String id, {String? error}) async {
+    failedIds.add(id);
   }
 
   @override
@@ -299,6 +305,7 @@ void main() {
 
     await syncService.triggerManualSync();
     expect(mockInventoryRepository.syncedIds, isEmpty);
+    expect(mockInventoryRepository.failedIds, ['mov-23']);
   });
 
   test('does not post when there are no unsynced sales', () async {
@@ -373,6 +380,7 @@ void main() {
 
     expect(mockInventoryRepository.syncedPurchaseIds, contains('purchase-1'));
     expect(mockInventoryRepository.syncedIds, contains('purchase-1'));
+    expect(mockInventoryRepository.failedIds, isEmpty);
     expect(
       capturedPosts.any((post) => post.path == '/inventory/purchases'),
       true,
@@ -629,5 +637,42 @@ void main() {
     expect(mockInventoryRepository.syncedForensicAlertIds, contains('alert-1'));
     expect(capturedPosts.any((post) => post.path == '/inventory/alerts/alert-1/lifecycle'), true);
     expect(mockInventoryRepository.forensicAlerts.single.id, 'alert-remote');
+  });
+
+  test('marks linked movement ids as failed without mutating movement history on document sync errors', () async {
+    mockInventoryRepository.unsyncedProductionOrders = [
+      ProductionOrderDocument(
+        id: 'po-1',
+        recipeVersionId: 'rv-1',
+        recipeProductId: 'prod-1',
+        recipeProductName: 'Vanilla Latte',
+        producedInsumoId: 'ins-1',
+        producedInsumoName: 'Base',
+        plannedQuantity: 10,
+        actualQuantity: 9,
+        producedBatchNumber: 'PB-1',
+        producedExpirationDate: DateTime(2026, 7, 1),
+        operationDate: DateTime(2026, 6, 2, 10),
+        status: 'CLOSED_PENDING_SYNC',
+        movementReferences: const ['mov-prod-1', 'mov-prod-2'],
+      ),
+    ];
+    forcedError = DioException(
+      requestOptions: RequestOptions(path: '/inventory/production-orders/close'),
+      response: Response(
+        data: {'error': 'production sync failed'},
+        statusCode: 400,
+        requestOptions: RequestOptions(path: '/inventory/production-orders/close'),
+      ),
+      type: DioExceptionType.badResponse,
+    );
+
+    await syncService.triggerManualSync();
+
+    expect(mockInventoryRepository.syncedIds, isEmpty);
+    expect(
+      mockInventoryRepository.failedIds,
+      containsAll(const ['mov-prod-1', 'mov-prod-2']),
+    );
   });
 }

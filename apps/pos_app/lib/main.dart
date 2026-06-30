@@ -69,6 +69,7 @@ void main() async {
   final database = await $FloorAppDatabase
       .databaseBuilder('app_database.db')
       .addMigrations(allMigrations)
+      .addCallback(inventoryMovementAppendOnlyCallback)
       .build();
   
   // Initialize Services & Repositories
@@ -107,6 +108,7 @@ void main() async {
     countLineDao: database.countLineDao,
     forensicAlertDao: database.forensicAlertDao,
     movementDao: database.movementDao,
+    movementSyncStateDao: database.movementSyncStateDao,
     supplierDao: database.supplierDao,
     warehouseDao: database.warehouseDao,
     uomConversionDao: database.uomConversionDao,

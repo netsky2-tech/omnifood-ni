@@ -110,6 +110,10 @@ class SyncService {
       }
     } on DioException catch (e) {
       developer.log('Failed to sync sales: ${e.message}', name: 'SyncService');
+      await _markMovementsAsFailed(
+        ordered,
+        error: e.message,
+      );
       // We don't rethrow here to allow other sync operations to continue if added
     } catch (e, stackTrace) {
       developer.log(
@@ -117,6 +121,10 @@ class SyncService {
         name: 'SyncService',
         error: e,
         stackTrace: stackTrace,
+      );
+      await _markMovementsAsFailed(
+        ordered,
+        error: e.toString(),
       );
     }
   }
@@ -140,6 +148,10 @@ class SyncService {
         developer.log(
           'Failed to sync purchase ${purchase.id}: ${e.message}',
           name: 'SyncService',
+        );
+        await _inventoryRepository.markMovementAsFailed(
+          purchase.id,
+          error: e.message,
         );
       }
     }
@@ -192,6 +204,10 @@ class SyncService {
           'Failed to sync production order ${document.id}: ${e.message}',
           name: 'SyncService',
         );
+        await _markMovementIdsAsFailed(
+          document.movementReferences,
+          error: e.message,
+        );
       }
     }
   }
@@ -219,7 +235,35 @@ class SyncService {
           'Failed to sync count session ${document.id}: ${e.message}',
           name: 'SyncService',
         );
+        await _markMovementIdsAsFailed(
+          document.movementReferences,
+          error: e.message,
+        );
       }
+    }
+  }
+
+  Future<void> _markMovementsAsFailed(
+    Iterable<dynamic> movements, {
+    String? error,
+  }) async {
+    for (final movement in movements) {
+      await _inventoryRepository.markMovementAsFailed(
+        movement.id,
+        error: error,
+      );
+    }
+  }
+
+  Future<void> _markMovementIdsAsFailed(
+    Iterable<String> movementIds, {
+    String? error,
+  }) async {
+    for (final movementId in movementIds) {
+      await _inventoryRepository.markMovementAsFailed(
+        movementId,
+        error: error,
+      );
     }
   }
 
