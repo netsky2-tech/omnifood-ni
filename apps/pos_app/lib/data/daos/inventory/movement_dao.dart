@@ -6,7 +6,14 @@ abstract class MovementDao {
   @Query('SELECT * FROM inventory_movements ORDER BY timestamp DESC')
   Future<List<MovementEntity>> findAllMovements();
 
-  @Query('SELECT * FROM inventory_movements WHERE is_synced = 0')
+  @Query('''
+    SELECT inventory_movements.*
+    FROM inventory_movements
+    LEFT JOIN inventory_movement_sync_state
+      ON inventory_movement_sync_state.movement_id = inventory_movements.id
+    WHERE inventory_movement_sync_state.sync_status IS NULL
+      OR inventory_movement_sync_state.sync_status != 'synced'
+  ''')
   Future<List<MovementEntity>> findUnsyncedMovements();
 
   @Insert(onConflict: OnConflictStrategy.abort)
@@ -14,10 +21,4 @@ abstract class MovementDao {
 
   @Query('SELECT * FROM inventory_movements WHERE type = :type ORDER BY timestamp DESC LIMIT :limit')
   Future<List<MovementEntity>> findMovementsByType(String type, int limit);
-
-  @Query('UPDATE inventory_movements SET is_synced = 1 WHERE id = :id')
-  Future<void> markAsSynced(String id);
-
-  @Query('UPDATE inventory_movements SET is_synced = -1 WHERE id = :id')
-  Future<void> markAsFailed(String id);
 }

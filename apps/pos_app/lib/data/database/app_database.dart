@@ -12,6 +12,7 @@ import '../daos/inventory/count_line_dao.dart';
 import '../daos/inventory/count_session_dao.dart';
 import '../daos/inventory/forensic_alert_dao.dart';
 import '../daos/inventory/movement_dao.dart';
+import '../daos/inventory/movement_sync_state_dao.dart';
 import '../daos/inventory/inventory_dao.dart';
 import '../daos/inventory/purchase_dao.dart';
 import '../daos/inventory/production_order_document_dao.dart';
@@ -41,6 +42,7 @@ import 'package:pos_app/data/models/inventory/count_line_entity.dart';
 import 'package:pos_app/data/models/inventory/count_session_document_entity.dart';
 import 'package:pos_app/data/models/inventory/forensic_alert_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
+import 'package:pos_app/data/models/inventory/movement_sync_state_entity.dart';
 import 'package:pos_app/data/models/inventory/supplier_entity.dart';
 import 'package:pos_app/data/models/inventory/warehouse_entity.dart';
 import 'package:pos_app/data/models/inventory/purchase_entity.dart';
@@ -59,7 +61,7 @@ import 'package:pos_app/data/models/sales/promotion_entity.dart';
 
 part 'app_database.g.dart'; // generated code
 
-@Database(version: 22, entities: [
+@Database(version: 23, entities: [
   UserEntity,
   SecurityProfileEntity,
   AuditLogEntity,
@@ -74,6 +76,7 @@ part 'app_database.g.dart'; // generated code
   CountLineEntity,
   ForensicAlertEntity,
   MovementEntity,
+  MovementSyncStateEntity,
   SupplierEntity,
   WarehouseEntity,
   PurchaseEntity,
@@ -104,6 +107,7 @@ abstract class AppDatabase extends FloorDatabase {
   CountLineDao get countLineDao;
   ForensicAlertDao get forensicAlertDao;
   MovementDao get movementDao;
+  MovementSyncStateDao get movementSyncStateDao;
   InventoryDao get inventoryDao;
   SupplierDao get supplierDao;
   WarehouseDao get warehouseDao;

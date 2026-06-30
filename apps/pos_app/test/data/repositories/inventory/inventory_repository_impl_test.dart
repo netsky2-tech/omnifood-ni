@@ -4,6 +4,7 @@ import 'package:mockito/annotations.dart';
 import 'package:pos_app/data/repositories/inventory/inventory_repository_impl.dart';
 import 'package:pos_app/data/daos/inventory/insumo_dao.dart';
 import 'package:pos_app/data/daos/inventory/movement_dao.dart';
+import 'package:pos_app/data/daos/inventory/movement_sync_state_dao.dart';
 import 'package:pos_app/data/daos/inventory/recipe_dao.dart';
 import 'package:pos_app/data/daos/inventory/recipe_version_document_dao.dart';
 import 'package:pos_app/data/daos/inventory/production_order_document_dao.dart';
@@ -16,6 +17,7 @@ import 'package:pos_app/data/daos/inventory/forensic_alert_dao.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:dio/dio.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
+import 'package:pos_app/data/models/inventory/movement_sync_state_entity.dart';
 import 'package:pos_app/data/models/inventory/insumo_entity.dart';
 import 'package:pos_app/data/models/inventory/recipe_version_document_entity.dart';
 
@@ -27,6 +29,7 @@ import 'inventory_repository_impl_test.mocks.dart';
   RecipeVersionDocumentDao,
   ProductionOrderDocumentDao,
   MovementDao,
+  MovementSyncStateDao,
   SupplierDao,
   WarehouseDao,
   UomConversionDao,
@@ -39,11 +42,13 @@ import 'inventory_repository_impl_test.mocks.dart';
 void main() {
   late InventoryRepositoryImpl repository;
   late MockMovementDao mockMovementDao;
+  late MockMovementSyncStateDao mockMovementSyncStateDao;
   late MockInsumoDao mockInsumoDao;
   late MockRecipeVersionDocumentDao mockRecipeVersionDocumentDao;
 
   setUp(() {
     mockMovementDao = MockMovementDao();
+    mockMovementSyncStateDao = MockMovementSyncStateDao();
     mockInsumoDao = MockInsumoDao();
     mockRecipeVersionDocumentDao = MockRecipeVersionDocumentDao();
     repository = InventoryRepositoryImpl(
@@ -52,6 +57,7 @@ void main() {
       recipeVersionDocumentDao: mockRecipeVersionDocumentDao,
       productionOrderDocumentDao: MockProductionOrderDocumentDao(),
       movementDao: mockMovementDao,
+      movementSyncStateDao: mockMovementSyncStateDao,
       supplierDao: MockSupplierDao(),
       warehouseDao: MockWarehouseDao(),
       uomConversionDao: MockUomConversionDao(),
@@ -98,7 +104,6 @@ void main() {
           previousStock: 10,
           newStock: 9,
           timestamp: DateTime.now().toIso8601String(),
-          isSynced: false,
         ),
       ];
 
@@ -113,12 +118,57 @@ void main() {
       verify(mockMovementDao.findUnsyncedMovements()).called(1);
     });
 
-    test('markMovementAsSynced should call MovementDao', () async {
-      when(mockMovementDao.markAsSynced(any)).thenAnswer((_) async => {});
+    test('markMovementAsSynced should upsert sync state', () async {
+      when(
+        mockMovementSyncStateDao.upsertSyncState(any),
+      ).thenAnswer((_) async => {});
 
       await repository.markMovementAsSynced('1');
 
-      verify(mockMovementDao.markAsSynced('1')).called(1);
+      verify(
+        mockMovementSyncStateDao.upsertSyncState(
+          argThat(
+            isA<MovementSyncStateEntity>().having(
+              (state) => state.movementId,
+              'movementId',
+              '1',
+            ).having(
+              (state) => state.syncStatus,
+              'syncStatus',
+              MovementSyncStateStatus.synced,
+            ),
+          ),
+        ),
+      ).called(1);
+      verifyNever(mockMovementDao.findAllMovements());
+    });
+
+    test('markMovementAsFailed should upsert failed sync state', () async {
+      when(
+        mockMovementSyncStateDao.upsertSyncState(any),
+      ).thenAnswer((_) async => {});
+
+      await repository.markMovementAsFailed('1', error: 'timeout');
+
+      verify(
+        mockMovementSyncStateDao.upsertSyncState(
+          argThat(
+            isA<MovementSyncStateEntity>().having(
+              (state) => state.movementId,
+              'movementId',
+              '1',
+            ).having(
+              (state) => state.syncStatus,
+              'syncStatus',
+              MovementSyncStateStatus.failed,
+            ).having(
+              (state) => state.lastError,
+              'lastError',
+              'timeout',
+            ),
+          ),
+        ),
+      ).called(1);
     });
   });
 

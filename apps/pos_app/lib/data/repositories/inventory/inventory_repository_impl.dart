@@ -34,12 +34,14 @@ import '../../daos/inventory/forensic_alert_dao.dart';
 import '../../daos/inventory/uom_conversion_dao.dart';
 import '../../daos/inventory/batch_dao.dart';
 import '../../daos/inventory/purchase_dao.dart';
+import '../../daos/inventory/movement_sync_state_dao.dart';
 import '../../daos/inventory/recipe_version_document_dao.dart';
 import '../../daos/inventory/production_order_document_dao.dart';
 import '../../models/inventory/recipe_version_document_entity.dart';
 import '../../models/inventory/count_line_entity.dart';
 import '../../models/inventory/count_session_document_entity.dart';
 import '../../models/inventory/forensic_alert_entity.dart';
+import '../../models/inventory/movement_sync_state_entity.dart';
 import '../../models/inventory/production_order_document_entity.dart';
 import 'package:dio/dio.dart';
 
@@ -47,6 +49,7 @@ class InventoryRepositoryImpl implements InventoryRepository {
   final InsumoDao insumoDao;
   final RecipeDao recipeDao;
   final MovementDao movementDao;
+  final MovementSyncStateDao movementSyncStateDao;
   final SupplierDao supplierDao;
   final WarehouseDao warehouseDao;
   final CountSessionDao? countSessionDao;
@@ -64,6 +67,7 @@ class InventoryRepositoryImpl implements InventoryRepository {
     required this.insumoDao,
     required this.recipeDao,
     required this.movementDao,
+    required this.movementSyncStateDao,
     required this.supplierDao,
     required this.warehouseDao,
     this.countSessionDao,
@@ -364,7 +368,27 @@ class InventoryRepositoryImpl implements InventoryRepository {
 
   @override
   Future<void> markMovementAsSynced(String id) {
-    return movementDao.markAsSynced(id);
+    final now = DateTime.now().toUtc().toIso8601String();
+    return movementSyncStateDao.upsertSyncState(
+      MovementSyncStateEntity(
+        movementId: id,
+        syncStatus: MovementSyncStateStatus.synced,
+        lastAttemptedAt: now,
+        syncedAt: now,
+      ),
+    );
+  }
+
+  @override
+  Future<void> markMovementAsFailed(String id, {String? error}) {
+    return movementSyncStateDao.upsertSyncState(
+      MovementSyncStateEntity(
+        movementId: id,
+        syncStatus: MovementSyncStateStatus.failed,
+        lastAttemptedAt: DateTime.now().toUtc().toIso8601String(),
+        lastError: error,
+      ),
+    );
   }
 
   @override

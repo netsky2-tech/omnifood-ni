@@ -1,4 +1,34 @@
 import 'package:floor/floor.dart';
+import 'package:sqflite/sqflite.dart' as sqflite;
+
+Future<void> _createInventoryMovementAppendOnlyTriggers(
+  sqflite.DatabaseExecutor database,
+) async {
+  await database.execute('''
+    CREATE TRIGGER IF NOT EXISTS inventory_movements_block_update
+    BEFORE UPDATE ON inventory_movements
+    BEGIN
+      SELECT RAISE(ABORT, 'inventory_movements is append-only');
+    END;
+  ''');
+
+  await database.execute('''
+    CREATE TRIGGER IF NOT EXISTS inventory_movements_block_delete
+    BEFORE DELETE ON inventory_movements
+    BEGIN
+      SELECT RAISE(ABORT, 'inventory_movements is append-only');
+    END;
+  ''');
+}
+
+final inventoryMovementAppendOnlyCallback = Callback(
+  onCreate: (database, _) async {
+    await _createInventoryMovementAppendOnlyTriggers(database);
+  },
+  onOpen: (database) async {
+    await _createInventoryMovementAppendOnlyTriggers(database);
+  },
+);
 
 final migration10_11 = Migration(10, 11, (database) async {
   await database.execute(
@@ -505,6 +535,123 @@ final migration21_22 = Migration(21, 22, (database) async {
   }
 });
 
+final migration22_23 = Migration(22, 23, (database) async {
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS inventory_movement_sync_state_legacy (
+      movement_id TEXT NOT NULL PRIMARY KEY,
+      sync_status TEXT NOT NULL,
+      last_attempted_at TEXT,
+      synced_at TEXT,
+      last_error TEXT
+    )
+  ''');
+
+  await database.execute('DELETE FROM inventory_movement_sync_state_legacy');
+
+  await database.execute('''
+    INSERT OR REPLACE INTO inventory_movement_sync_state_legacy (
+      movement_id,
+      sync_status,
+      last_attempted_at,
+      synced_at,
+      last_error
+    )
+    SELECT
+      id,
+      CASE
+        WHEN is_synced = 1 THEN 'synced'
+        WHEN is_synced = -1 THEN 'failed'
+      END,
+      NULL,
+      NULL,
+      NULL
+    FROM inventory_movements
+    WHERE is_synced IN (1, -1)
+  ''');
+
+  await database.execute('DROP TABLE IF EXISTS inventory_movement_sync_state');
+  await database.execute('DROP TABLE IF EXISTS inventory_movements_new');
+
+  await database.execute('''
+    CREATE TABLE inventory_movements_new (
+      id TEXT NOT NULL PRIMARY KEY,
+      insumo_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      quantity REAL NOT NULL,
+      previous_stock REAL NOT NULL,
+      new_stock REAL NOT NULL,
+      timestamp TEXT NOT NULL,
+      reason TEXT,
+      user_id TEXT,
+      batch_deductions TEXT
+    )
+  ''');
+
+  await database.execute('''
+    INSERT INTO inventory_movements_new (
+      id,
+      insumo_id,
+      type,
+      quantity,
+      previous_stock,
+      new_stock,
+      timestamp,
+      reason,
+      user_id,
+      batch_deductions
+    )
+    SELECT
+      id,
+      insumo_id,
+      type,
+      quantity,
+      previous_stock,
+      new_stock,
+      timestamp,
+      reason,
+      user_id,
+      batch_deductions
+    FROM inventory_movements
+  ''');
+
+  await database.execute('DROP TABLE inventory_movements');
+  await database.execute(
+    'ALTER TABLE inventory_movements_new RENAME TO inventory_movements',
+  );
+
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS inventory_movement_sync_state (
+      movement_id TEXT NOT NULL PRIMARY KEY,
+      sync_status TEXT NOT NULL,
+      last_attempted_at TEXT,
+      synced_at TEXT,
+      last_error TEXT,
+      FOREIGN KEY (movement_id) REFERENCES inventory_movements(id) ON DELETE CASCADE
+    )
+  ''');
+
+  await database.execute('''
+    INSERT OR REPLACE INTO inventory_movement_sync_state (
+      movement_id,
+      sync_status,
+      last_attempted_at,
+      synced_at,
+      last_error
+    )
+    SELECT
+      movement_id,
+      sync_status,
+      last_attempted_at,
+      synced_at,
+      last_error
+    FROM inventory_movement_sync_state_legacy
+  ''');
+
+  await database.execute('DROP TABLE inventory_movement_sync_state_legacy');
+
+  await _createInventoryMovementAppendOnlyTriggers(database);
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -518,4 +665,5 @@ final allMigrations = [
   migration19_20,
   migration20_21,
   migration21_22,
+  migration22_23,
 ];

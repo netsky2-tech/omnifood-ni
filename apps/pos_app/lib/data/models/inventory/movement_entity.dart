@@ -16,8 +16,6 @@ class MovementEntity {
   final String? reason;
   @ColumnInfo(name: 'user_id')
   final String? userId;
-  @ColumnInfo(name: 'is_synced')
-  final bool isSynced;
   @ColumnInfo(name: 'batch_deductions')
   // ignore: non_constant_identifier_names
   final String? batch_deductions;
@@ -32,7 +30,6 @@ class MovementEntity {
     required this.timestamp,
     this.reason,
     this.userId,
-    this.isSynced = false,
     // ignore: non_constant_identifier_names
     this.batch_deductions,
   });

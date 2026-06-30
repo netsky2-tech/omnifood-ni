@@ -395,6 +395,21 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i4.Future<void>);
 
   @override
+  _i4.Future<void> markMovementAsFailed(
+    String? id, {
+    String? error,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #markMovementAsFailed,
+          [id],
+          {#error: error},
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
   _i4.Future<List<_i11.Supplier>> getActiveSuppliers() => (super.noSuchMethod(
         Invocation.method(
           #getActiveSuppliers,

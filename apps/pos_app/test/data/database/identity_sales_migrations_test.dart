@@ -117,4 +117,104 @@ void main() {
 
     await db.close();
   });
+
+  test(
+    'migration22_23 moves movement sync state out of inventory_movements',
+    () async {
+      final db = await databaseFactory.openDatabase(
+        dbPath,
+        options: OpenDatabaseOptions(
+          version: 22,
+          onConfigure: (database) async {
+            await database.execute('PRAGMA foreign_keys = ON');
+          },
+          onCreate: (database, version) async {
+            await database.execute('''
+            CREATE TABLE inventory_movements (
+              id TEXT NOT NULL PRIMARY KEY,
+              insumo_id TEXT NOT NULL,
+              type TEXT NOT NULL,
+              quantity REAL NOT NULL,
+              previous_stock REAL NOT NULL,
+              new_stock REAL NOT NULL,
+              timestamp TEXT NOT NULL,
+              reason TEXT,
+              user_id TEXT,
+              is_synced INTEGER NOT NULL DEFAULT 0,
+              batch_deductions TEXT
+            )
+          ''');
+          },
+        ),
+      );
+
+      await db.insert('inventory_movements', {
+        'id': 'mov-pending',
+        'insumo_id': 'ins-1',
+        'type': 'SALE',
+        'quantity': -1.0,
+        'previous_stock': 5.0,
+        'new_stock': 4.0,
+        'timestamp': '2026-06-30T12:00:00.000Z',
+        'is_synced': 0,
+      });
+      await db.insert('inventory_movements', {
+        'id': 'mov-synced',
+        'insumo_id': 'ins-1',
+        'type': 'SALE',
+        'quantity': -2.0,
+        'previous_stock': 4.0,
+        'new_stock': 2.0,
+        'timestamp': '2026-06-30T12:01:00.000Z',
+        'is_synced': 1,
+      });
+      await db.insert('inventory_movements', {
+        'id': 'mov-failed',
+        'insumo_id': 'ins-1',
+        'type': 'SALE',
+        'quantity': -1.0,
+        'previous_stock': 2.0,
+        'new_stock': 1.0,
+        'timestamp': '2026-06-30T12:02:00.000Z',
+        'is_synced': -1,
+      });
+
+      final foreignKeysEnabled = await db.rawQuery('PRAGMA foreign_keys');
+
+      await migration22_23.migrate(db);
+
+      final movementColumns = await db.rawQuery(
+        'PRAGMA table_info(inventory_movements)',
+      );
+      final foreignKeyViolations = await db.rawQuery(
+        'PRAGMA foreign_key_check',
+      );
+      final syncRows = await db.query(
+        'inventory_movement_sync_state',
+        orderBy: 'movement_id ASC',
+      );
+
+      expect(foreignKeysEnabled.single['foreign_keys'], 1);
+      expect(
+        movementColumns.where((column) => column['name'] == 'is_synced'),
+        isEmpty,
+      );
+      expect(foreignKeyViolations, isEmpty);
+      expect(syncRows, hasLength(2));
+      expect(syncRows[0]['movement_id'], 'mov-failed');
+      expect(syncRows[0]['sync_status'], 'failed');
+      expect(syncRows[1]['movement_id'], 'mov-synced');
+      expect(syncRows[1]['sync_status'], 'synced');
+
+      await expectLater(
+        db.rawUpdate('UPDATE inventory_movements SET reason = ? WHERE id = ?', [
+          'tampered',
+          'mov-pending',
+        ]),
+        throwsA(isA<Exception>()),
+      );
+
+      await db.close();
+    },
+  );
 }

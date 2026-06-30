@@ -55,6 +55,7 @@ abstract class InventoryRepository {
   Future<List<InventoryMovement>> getAllMovements();
   Future<List<InventoryMovement>> getUnsyncedMovements();
   Future<void> markMovementAsSynced(String id);
+  Future<void> markMovementAsFailed(String id, {String? error});
 
   // Suppliers
   Future<List<Supplier>> getActiveSuppliers();

@@ -8,11 +8,11 @@ Núcleo contable: garantizar que el Kardex sea **estrictamente append-only** con
 - Slice 3a.1 status: backend `inventory_kardex` is the authoritative movement-history table today, and this slice enforces PostgreSQL append-only guards there.
 - Slice 3a.2 status: backend `inventory_kardex` now validates the pre-existing history during migration, rejects inserts whose stored `stock_before` / `stock_after` diverge from the running balance for the same `tenant_id + insumo_id`, and serializes same-stream inserts with a transaction-scoped advisory lock so concurrent writers cannot bypass that invariant.
 - Slice 3a.3 status: new backend ledger inserts now stamp `unit_cost_nio`, `stock_after`, and `average_cost_after_nio` at insert time so later cost changes do not mutate the historical economic snapshot.
-- Slice 3a.1 note: local POS SQLite still stores movement history in `inventory_movements` without an explicit DB-level append-only trigger/rule yet; that remains outside this slice.
+- Slice 3a.4 status: local POS SQLite now keeps `inventory_movements` append-only via SQLite triggers and tracks sync acknowledgement in a separate `inventory_movement_sync_state` table so sync no longer mutates historical movement rows.
 
 ## Brechas a remediar
 - [x] **Backend append-only strictness at data level (`inventory_kardex`)**: PostgreSQL trigger rejects DELETE/UPDATE for the authoritative backend kardex log.
-- [ ] **Remaining append-only parity**: add the equivalent explicit local SQLite/Floor guard for `inventory_movements` so offline storage matches the backend guarantee.
+- [x] **Remaining append-only parity**: local SQLite/Floor now rejects `UPDATE`/`DELETE` on `inventory_movements` and stores sync status outside the immutable ledger rows.
 - [x] Running-balance invariant: `existencia_posterior` (`stock_after` / `new_stock`) matches the per-item historical sum through migration-time baseline validation + INSERT trigger enforcement + DB-backed rejection tests.
 - [x] Cost snapshot freeze: each new backend row now stamps `unit_cost_nio`, `stock_after`, and `average_cost_after_nio` at movement insert time without retro-recomputing older rows.
 - [x] Narrow concurrency protection for this slice (NFR): an advisory transaction lock on `tenant_id + insumo_id` serializes same-stream inserts so a stale baseline cannot bypass the running-balance invariant. Full FIFO / sync architecture remains in 3c.
@@ -34,7 +34,7 @@ Núcleo contable: garantizar que el Kardex sea **estrictamente append-only** con
 
 ## DoD (Criterios de aceptación)
 - [x] Backend `inventory_kardex` has DB-enforced append-only protection (no solo código).
-- [ ] Local offline movement store has equivalent DB-enforced append-only protection.
+- [x] Local offline movement store has equivalent DB-enforced append-only protection.
 - [x] Running-balance invariant test (insert N movements → verify coherent `existencia_posterior`).
 - [x] Backend Postgres test coverage rejects UPDATE/DELETE and keeps INSERT working for `inventory_kardex`.
 - [x] Concurrency isolation is proven for the running-balance invariant (two simultaneous inserts on the same `tenant_id + insumo_id` cannot bypass the validated baseline).
