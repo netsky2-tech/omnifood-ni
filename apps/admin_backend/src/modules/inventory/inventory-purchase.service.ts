@@ -262,7 +262,7 @@ export class InventoryPurchaseService {
     },
     insumo: Insumo,
   ): Promise<PurchasePreview> {
-    const bcnRate = await this.resolveBcnRate(input.currency, input.bcnRate);
+    const bcnRate = this.resolveBcnRate(input.currency, input.bcnRate);
     const unitCostNio = round4(input.unitCost * bcnRate);
     const previousStock = round4(Number(insumo.stock));
     const previousCppNio = round4(Number(insumo.averageCost));
@@ -292,10 +292,7 @@ export class InventoryPurchaseService {
     };
   }
 
-  private async resolveBcnRate(
-    currency: Currency,
-    bcnRate?: number,
-  ): Promise<number> {
+  private resolveBcnRate(currency: Currency, bcnRate?: number): number {
     if (currency === CURRENCY.NIO) {
       return 1;
     }

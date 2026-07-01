@@ -166,7 +166,9 @@ describe('InventoryPurchaseService', () => {
       expirationDate: '2026-02-03',
     });
 
-    const savedEntities = manager.save.mock.calls.map(([entity]) => entity);
+    const savedEntities = manager.save.mock.calls.map(
+      ([entity]: [unknown, ...unknown[]]) => entity,
+    );
     expect(savedEntities.indexOf(PurchaseDocument)).toBeLessThan(
       savedEntities.indexOf(InventoryMovement),
     );
