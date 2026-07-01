@@ -12,7 +12,12 @@ import {
   InventoryMovement,
   MovementType,
 } from './entities/inventory-movement.entity';
-import { PurchaseCurrency } from './dto/purchase-document.dto';
+import {
+  PurchaseCurrency,
+  type PurchaseFxRateMode,
+  PURCHASE_FX_RATE_MODE,
+  resolvePurchaseFxRateMode,
+} from './dto/purchase-document.dto';
 import { Supplier } from './entities/supplier.entity';
 import { PurchaseDocument } from './entities/purchase-document.entity';
 
@@ -25,6 +30,11 @@ type Currency = PurchaseCurrency;
 
 const SCALE_4 = 4;
 const POSTGRES_UNIQUE_VIOLATION = '23505';
+const BCN_RATE_SOURCE = {
+  NIO: 'NIO document rate',
+  EXPLICIT: 'Document-provided BCN rate',
+  OFFICIAL: 'Official BCN rate by invoice date',
+} as const;
 const round4 = (value: number): number => Number(value.toFixed(SCALE_4));
 
 interface QueryFailedDriverError {
@@ -69,6 +79,7 @@ export class InventoryPurchaseService {
     currency: Currency;
     invoiceDate: string;
     entryTimestamp: string;
+    fxRateMode?: PurchaseFxRateMode;
     bcnRate?: number;
   }): Promise<PurchasePreview> {
     const tenantId = this.requireTenantId(input.tenantId);
@@ -89,6 +100,7 @@ export class InventoryPurchaseService {
     currency: Currency;
     invoiceDate: string;
     entryTimestamp: string;
+    fxRateMode?: PurchaseFxRateMode;
     bcnRate?: number;
     lotCode?: string;
     receivedDate?: string;
@@ -143,7 +155,7 @@ export class InventoryPurchaseService {
             );
           }
 
-          const preview = this.buildPreview(input, insumo);
+          const preview = await this.buildPreview(input, insumo);
 
           if (preview.requiresBatchTracking) {
             this.assertBatchMetadata(input);
@@ -252,18 +264,24 @@ export class InventoryPurchaseService {
     return normalizedInvoiceNumber;
   }
 
-  private buildPreview(
+  private async buildPreview(
     input: {
       quantity: number;
       unitCost: number;
       currency: Currency;
       invoiceDate: string;
+      fxRateMode?: PurchaseFxRateMode;
       bcnRate?: number;
     },
     insumo: Insumo,
-  ): PurchasePreview {
-    const bcnRate = this.resolveBcnRate(input.currency, input.bcnRate);
-    const unitCostNio = round4(input.unitCost * bcnRate);
+  ): Promise<PurchasePreview> {
+    const rateResolution = await this.resolveBcnRate({
+      currency: input.currency,
+      invoiceDate: input.invoiceDate,
+      fxRateMode: input.fxRateMode,
+      bcnRate: input.bcnRate,
+    });
+    const unitCostNio = round4(input.unitCost * rateResolution.bcnRate);
     const previousStock = round4(Number(insumo.stock));
     const previousCppNio = round4(Number(insumo.averageCost));
     const projectedStock = round4(previousStock + input.quantity);
@@ -278,11 +296,8 @@ export class InventoryPurchaseService {
     return {
       invoiceDate: input.invoiceDate,
       currency: input.currency,
-      bcnRate,
-      bcnRateSource:
-        input.currency === CURRENCY.USD
-          ? 'Document-provided BCN rate'
-          : 'NIO document rate',
+      bcnRate: rateResolution.bcnRate,
+      bcnRateSource: rateResolution.bcnRateSource,
       unitCostNio,
       previousCppNio,
       projectedCppNio,
@@ -292,11 +307,41 @@ export class InventoryPurchaseService {
     };
   }
 
-  private resolveBcnRate(currency: Currency, bcnRate?: number): number {
-    if (currency === CURRENCY.NIO) {
-      return 1;
+  private async resolveBcnRate(input: {
+    currency: Currency;
+    invoiceDate: string;
+    fxRateMode?: PurchaseFxRateMode;
+    bcnRate?: number;
+  }): Promise<{
+    bcnRate: number;
+    bcnRateSource: string;
+  }> {
+    if (input.currency === CURRENCY.NIO) {
+      return {
+        bcnRate: 1,
+        bcnRateSource: BCN_RATE_SOURCE.NIO,
+      };
     }
 
+    if (
+      resolvePurchaseFxRateMode(input.fxRateMode) ===
+      PURCHASE_FX_RATE_MODE.OFFICIAL
+    ) {
+      return {
+        bcnRate: round4(
+          await this.fxRateResolver.resolveBcnRateByDate(input.invoiceDate),
+        ),
+        bcnRateSource: BCN_RATE_SOURCE.OFFICIAL,
+      };
+    }
+
+    return {
+      bcnRate: this.resolveExplicitBcnRate(input.bcnRate),
+      bcnRateSource: BCN_RATE_SOURCE.EXPLICIT,
+    };
+  }
+
+  private resolveExplicitBcnRate(bcnRate?: number): number {
     if (bcnRate == null || bcnRate <= 0) {
       throw new BadRequestException(
         'USD purchases require an explicit BCN exchange rate',

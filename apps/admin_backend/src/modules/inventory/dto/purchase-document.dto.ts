@@ -4,6 +4,7 @@ import {
   IsIn,
   IsNotEmpty,
   IsNumber,
+  IsOptional,
   IsString,
   Min,
   ValidateIf,
@@ -16,6 +17,20 @@ export const PURCHASE_CURRENCY = {
 
 export type PurchaseCurrency =
   (typeof PURCHASE_CURRENCY)[keyof typeof PURCHASE_CURRENCY];
+
+export const PURCHASE_FX_RATE_MODE = {
+  EXPLICIT: 'explicit',
+  OFFICIAL: 'official',
+} as const;
+
+export type PurchaseFxRateMode =
+  (typeof PURCHASE_FX_RATE_MODE)[keyof typeof PURCHASE_FX_RATE_MODE];
+
+export const DEFAULT_PURCHASE_FX_RATE_MODE = PURCHASE_FX_RATE_MODE.EXPLICIT;
+
+export const resolvePurchaseFxRateMode = (
+  fxRateMode?: PurchaseFxRateMode,
+): PurchaseFxRateMode => fxRateMode ?? DEFAULT_PURCHASE_FX_RATE_MODE;
 
 export class PurchaseDocumentDto {
   @IsString()
@@ -63,9 +78,16 @@ export class PurchaseDocumentDto {
   @IsDateString()
   entryTimestamp: string;
 
+  @IsOptional()
+  @IsIn(Object.values(PURCHASE_FX_RATE_MODE))
+  fxRateMode?: PurchaseFxRateMode;
+
   @ValidateIf(
     (dto: PurchaseDocumentDto) =>
-      dto.currency === PURCHASE_CURRENCY.USD || dto.bcnRate != null,
+      dto.bcnRate != null ||
+      (dto.currency === PURCHASE_CURRENCY.USD &&
+        resolvePurchaseFxRateMode(dto.fxRateMode) ===
+          PURCHASE_FX_RATE_MODE.EXPLICIT),
   )
   @IsNumber()
   @Min(0.0001)

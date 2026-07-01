@@ -6,8 +6,9 @@
 - Return `404 Not Found` when no official rate exists for the requested invoice date.
 
 ## Intentionally unchanged
-- Purchase preview/posting still uses the explicit document `bcnRate` captured in Batch 3b.1.
+- Purchase preview/posting still defaults to the explicit document `bcnRate` captured in Batch 3b.1.
+- Backend official BCN resolution for purchase preview/posting is opt-in only via request mode; no default repricing was introduced.
 - No BCN external fetcher.
 - No POS autofill/cache.
-- No purchase repricing against official backend rates yet.
+- No automatic purchase repricing against official backend rates yet.
 - No correction flow.

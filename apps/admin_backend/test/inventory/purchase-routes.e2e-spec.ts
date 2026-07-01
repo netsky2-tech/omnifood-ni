@@ -38,6 +38,12 @@ interface ConflictResponseBody {
   statusCode: number;
 }
 
+interface NotFoundResponseBody {
+  error: string;
+  message: string;
+  statusCode: number;
+}
+
 interface RecordPurchaseResponseBody {
   purchaseDocument: PurchaseDocumentResponseBody;
   insumo: InsumoResponseBody;
@@ -102,6 +108,15 @@ const validPurchasePayload = {
   invoiceDate: '2026-01-03',
   entryTimestamp: '2026-01-03T08:15:00.000Z',
   bcnRate: 36.5,
+};
+
+const officialModePurchasePayload = {
+  ...validPurchasePayload,
+  id: 'purchase-doc-official-1',
+  invoiceNumber: 'INV-2001',
+  invoiceDate: '2026-01-06',
+  entryTimestamp: '2026-01-06T08:15:00.000Z',
+  fxRateMode: 'official' as const,
 };
 
 const INVENTORY_API_PREFIX = '/api/inventory';
@@ -459,6 +474,69 @@ describe('Inventory purchase routes (integration)', () => {
     });
   });
 
+  it('returns 201 for purchase preview in official mode and resolves BCN FX by invoice date', async () => {
+    const token = signToken();
+    resolveBcnRateByDate.mockResolvedValueOnce(36.7123);
+
+    const response = await request(app.getHttpServer())
+      .post(`${INVENTORY_API_PREFIX}/purchase`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        ...officialModePurchasePayload,
+        bcnRate: undefined,
+      })
+      .expect(201);
+
+    const body = response.body as PurchasePreviewResponseBody;
+    expect(body).toMatchObject({
+      invoiceDate: officialModePurchasePayload.invoiceDate,
+      currency: officialModePurchasePayload.currency,
+      bcnRate: 36.7123,
+      bcnRateSource: 'Official BCN rate by invoice date',
+      unitCostNio: 367.123,
+      previousCppNio: 50,
+      projectedCppNio: 102.8538,
+      previousStock: 10,
+      projectedStock: 12,
+      requiresBatchTracking: false,
+    });
+    expect(resolveBcnRateByDate).toHaveBeenCalledWith('2026-01-06');
+  });
+
+  it('returns 404 for purchase preview in official mode when no BCN FX rate exists for the invoice date', async () => {
+    const token = signToken();
+    resolveBcnRateByDate.mockRejectedValueOnce(
+      new NotFoundException(
+        'No official BCN FX rate found for invoiceDate 2026-01-08',
+      ),
+    );
+
+    const response = await request(app.getHttpServer())
+      .post(`${INVENTORY_API_PREFIX}/purchase`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        ...officialModePurchasePayload,
+        invoiceDate: '2026-01-08',
+        entryTimestamp: '2026-01-08T08:15:00.000Z',
+        bcnRate: undefined,
+      })
+      .expect(404);
+
+    const body = response.body as NotFoundResponseBody;
+    expect(body).toEqual({
+      error: 'Not Found',
+      message: 'No official BCN FX rate found for invoiceDate 2026-01-08',
+      statusCode: 404,
+    });
+    expect(resolveBcnRateByDate).toHaveBeenCalledWith('2026-01-08');
+    expect(repositoryFindOne).toHaveBeenCalledWith({
+      where: {
+        id: officialModePurchasePayload.insumoId,
+        tenant_id: 'tenant-A',
+      },
+    });
+  });
+
   it('returns 403 for purchase posting when the authenticated role lacks permission', async () => {
     const token = signToken({ role: UserRole.CASHIER });
 
@@ -549,6 +627,80 @@ describe('Inventory purchase routes (integration)', () => {
       "SELECT set_config('app.tenant_id', $1, true)",
       ['tenant-A'],
     );
+  });
+
+  it('returns 201 for purchase posting in official mode and persists the resolved BCN rate', async () => {
+    const token = signToken();
+    resolveBcnRateByDate.mockResolvedValueOnce(36.95);
+
+    const response = await request(app.getHttpServer())
+      .post(`${INVENTORY_API_PREFIX}/purchases`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        ...officialModePurchasePayload,
+        bcnRate: undefined,
+      })
+      .expect(201);
+
+    const body = response.body as RecordPurchaseResponseBody;
+    expect(body.purchaseDocument).toEqual({
+      id: officialModePurchasePayload.id,
+      tenant_id: 'tenant-A',
+      insumo_id: officialModePurchasePayload.insumoId,
+      supplier_id: officialModePurchasePayload.supplierId,
+      invoice_number: officialModePurchasePayload.invoiceNumber,
+      invoice_date: new Date(officialModePurchasePayload.invoiceDate).toJSON(),
+      entry_date: new Date(officialModePurchasePayload.invoiceDate).toJSON(),
+      entry_timestamp: new Date(
+        officialModePurchasePayload.entryTimestamp,
+      ).toJSON(),
+      quantity: officialModePurchasePayload.quantity,
+      unit_cost: officialModePurchasePayload.unitCost,
+      currency: officialModePurchasePayload.currency,
+      bcn_rate: 36.95,
+      unit_cost_nio: 369.5,
+      projected_cpp_nio: 103.25,
+      lot_code: null,
+      received_date: null,
+      expiration_date: null,
+    });
+    expect(body.preview).toMatchObject({
+      bcnRate: 36.95,
+      bcnRateSource: 'Official BCN rate by invoice date',
+      unitCostNio: 369.5,
+      projectedCppNio: 103.25,
+    });
+    expect(resolveBcnRateByDate).toHaveBeenCalledWith('2026-01-06');
+  });
+
+  it('returns 404 for purchase posting in official mode when no BCN FX rate exists for the invoice date', async () => {
+    const token = signToken();
+    resolveBcnRateByDate.mockRejectedValueOnce(
+      new NotFoundException(
+        'No official BCN FX rate found for invoiceDate 2026-01-08',
+      ),
+    );
+
+    const response = await request(app.getHttpServer())
+      .post(`${INVENTORY_API_PREFIX}/purchases`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        ...officialModePurchasePayload,
+        invoiceDate: '2026-01-08',
+        entryTimestamp: '2026-01-08T08:15:00.000Z',
+        bcnRate: undefined,
+      })
+      .expect(404);
+
+    const body = response.body as NotFoundResponseBody;
+    expect(body).toEqual({
+      error: 'Not Found',
+      message: 'No official BCN FX rate found for invoiceDate 2026-01-08',
+      statusCode: 404,
+    });
+    expect(resolveBcnRateByDate).toHaveBeenCalledWith('2026-01-08');
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(manager.save).not.toHaveBeenCalled();
   });
 
   it('returns 409 for purchase posting when the invoice is already registered', async () => {

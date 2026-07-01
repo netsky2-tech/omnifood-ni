@@ -120,6 +120,30 @@ describe('InventoryPurchaseService', () => {
     expect(preview.requiresBatchTracking).toBe(true);
   });
 
+  it('resolves the official USD rate by invoice date when official mode is requested', async () => {
+    resolveBcnRateByDate.mockResolvedValue(36.7123);
+
+    const preview = await service.previewPurchase({
+      id: 'preview-doc-official-1',
+      tenantId: 'tenant-A',
+      insumoId: 'ins-1',
+      supplierId: 'sup-1',
+      invoiceNumber: 'INV-PREVIEW-OFFICIAL-1',
+      quantity: 2,
+      unitCost: 10,
+      currency: CURRENCY.USD,
+      invoiceDate: '2026-01-06',
+      entryTimestamp: '2026-01-06T08:00:00.000Z',
+      fxRateMode: 'official',
+    });
+
+    expect(resolveBcnRateByDate).toHaveBeenCalledWith('2026-01-06');
+    expect(preview.bcnRate).toBe(36.7123);
+    expect(preview.bcnRateSource).toBe('Official BCN rate by invoice date');
+    expect(preview.unitCostNio).toBe(367.123);
+    expect(preview.projectedCppNio).toBe(102.8538);
+  });
+
   it('keeps NIO purchases in NIO-only CPP input rounded to 4 decimals', async () => {
     queryBuilder.getOne.mockResolvedValue({
       ...perishableInsumo,
@@ -166,6 +190,8 @@ describe('InventoryPurchaseService', () => {
       expirationDate: '2026-02-03',
     });
 
+    expect(resolveBcnRateByDate).not.toHaveBeenCalled();
+
     const savedEntities = manager.save.mock.calls.map(
       ([entity]: [unknown, ...unknown[]]) => entity,
     );
@@ -205,6 +231,39 @@ describe('InventoryPurchaseService', () => {
       }),
     );
     expect(result.purchaseDocument.id).toBe('purchase-doc-1');
+  });
+
+  it('persists the resolved official USD rate during purchase posting when official mode is requested', async () => {
+    queryBuilder.getOne.mockResolvedValue({
+      ...perishableInsumo,
+      is_perishable: false,
+    });
+    resolveBcnRateByDate.mockResolvedValue(36.95);
+
+    await service.recordPurchase({
+      id: 'purchase-doc-official-1',
+      tenantId: 'tenant-A',
+      insumoId: 'ins-1',
+      supplierId: 'sup-1',
+      invoiceNumber: 'INV-OFFICIAL-1001',
+      quantity: 2,
+      unitCost: 10,
+      currency: CURRENCY.USD,
+      invoiceDate: '2026-01-07',
+      entryTimestamp: '2026-01-07T08:15:00.000Z',
+      fxRateMode: 'official',
+    });
+
+    expect(resolveBcnRateByDate).toHaveBeenCalledWith('2026-01-07');
+    expect(manager.save).toHaveBeenCalledWith(
+      PurchaseDocument,
+      expect.objectContaining({
+        invoice_number: 'INV-OFFICIAL-1001',
+        bcn_rate: 36.95,
+        unit_cost_nio: 369.5,
+        projected_cpp_nio: 103.25,
+      }),
+    );
   });
 
   it('binds the tenant RLS context before reading or saving purchase documents', async () => {
@@ -340,6 +399,30 @@ describe('InventoryPurchaseService', () => {
       }),
     ).rejects.toThrow('USD purchases require an explicit BCN exchange rate');
     expect(resolveBcnRateByDate).not.toHaveBeenCalled();
+  });
+
+  it('surfaces the official-rate error when official mode cannot resolve the invoice date', async () => {
+    resolveBcnRateByDate.mockRejectedValueOnce(
+      new Error('No official BCN FX rate found for invoiceDate 2026-01-08'),
+    );
+
+    await expect(
+      service.previewPurchase({
+        id: 'preview-doc-official-missing-1',
+        tenantId: 'tenant-A',
+        insumoId: 'ins-1',
+        supplierId: 'sup-1',
+        invoiceNumber: 'INV-PREVIEW-OFFICIAL-MISSING-1',
+        quantity: 1,
+        unitCost: 10,
+        currency: CURRENCY.USD,
+        invoiceDate: '2026-01-08',
+        entryTimestamp: '2026-01-08T08:00:00.000Z',
+        fxRateMode: 'official',
+      }),
+    ).rejects.toThrow(
+      'No official BCN FX rate found for invoiceDate 2026-01-08',
+    );
   });
 
   it('rejects whitespace-only invoice identifiers at the service boundary', async () => {

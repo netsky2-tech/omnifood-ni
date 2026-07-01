@@ -154,6 +154,7 @@ describe('InventoryController', () => {
         currency: 'USD' as const,
         invoiceDate: '2026-01-10',
         entryTimestamp: '2026-01-10T08:15:00.000Z',
+        fxRateMode: 'official' as const,
         bcnRate: 36.5,
       };
 
@@ -165,6 +166,7 @@ describe('InventoryController', () => {
           tenantId: 'tenant-A',
           currency: 'USD',
           invoiceDate: '2026-01-10',
+          fxRateMode: 'official',
         }),
       );
     });
@@ -178,6 +180,7 @@ describe('InventoryController', () => {
         quantity: 10,
         unitCost: 50,
         currency: 'NIO' as const,
+        fxRateMode: 'explicit' as const,
         invoiceDate: '2026-01-10',
         entryTimestamp: '2026-01-10T08:15:00.000Z',
       };
@@ -192,6 +195,7 @@ describe('InventoryController', () => {
           quantity: 10,
           unitCost: 50,
           currency: 'NIO',
+          fxRateMode: 'explicit',
           invoiceDate: '2026-01-10',
           entryTimestamp: '2026-01-10T08:15:00.000Z',
         }),
