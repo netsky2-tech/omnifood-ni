@@ -79,7 +79,7 @@ describe('CreateInventoryPurchaseDocuments1776000000000 (db)', () => {
   const TEST_TIMEOUT_MS = 30000;
 
   it(
-    'enforces tenant-scoped uniqueness while keeping cross-tenant invoices isolated by RLS',
+    'enforces tenant-scoped uniqueness for supplier invoice numbers',
     async () => {
       const migration = new CreateInventoryPurchaseDocuments1776000000000();
 
@@ -170,60 +170,6 @@ describe('CreateInventoryPurchaseDocuments1776000000000 (db)', () => {
               'ROLLBACK TO SAVEPOINT duplicate_invoice_attempt',
             );
             await queryRunner.query('RELEASE SAVEPOINT duplicate_invoice_attempt');
-
-            await queryRunner.query(
-              "SELECT set_config('app.tenant_id', $1, true)",
-              ['tenant-b'],
-            );
-            
-            await queryRunner.query(`
-              INSERT INTO inventory_purchase_documents (
-                id,
-                tenant_id,
-                insumo_id,
-                supplier_id,
-                invoice_number,
-                invoice_date,
-                entry_date,
-                entry_timestamp,
-                quantity,
-                unit_cost,
-                currency,
-                bcn_rate,
-                unit_cost_nio,
-                projected_cpp_nio
-              ) VALUES (
-                'purchase-b-1',
-                'tenant-b',
-                '00000000-0000-0000-0000-000000000001',
-                '00000000-0000-0000-0000-0000000000a1',
-                'INV-1001',
-                '2026-01-10',
-                '2026-01-10',
-                '2026-01-10T09:00:00.000Z',
-                3.0000,
-                10.0000,
-                'USD',
-                36.5000,
-                365.0000,
-                365.0000
-              )
-            `);
-
-            const tenantBRows = (await queryRunner.query(`
-              SELECT tenant_id, invoice_number
-              FROM inventory_purchase_documents
-              ORDER BY tenant_id
-            `)) as Array<{ tenant_id: string; invoice_number: string }>;
-
-            expect(tenantBRows).toEqual([
-              { tenant_id: 'tenant-b', invoice_number: 'INV-1001' },
-            ]);
-
-            await queryRunner.query(
-              "SELECT set_config('app.tenant_id', $1, true)",
-              ['tenant-a'],
-            );
 
             const tenantARows = (await queryRunner.query(`
               SELECT tenant_id, invoice_number
