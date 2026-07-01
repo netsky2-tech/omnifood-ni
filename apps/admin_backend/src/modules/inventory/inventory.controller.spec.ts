@@ -8,6 +8,7 @@ import { UserRole } from '../identity/entities/user.entity';
 import { AuthGuard } from '../identity/guards/auth.guard';
 import { RolesGuard } from '../identity/guards/roles.guard';
 import { InventoryMovementController } from './inventory-movement.controller';
+import { FxRateResolverService } from './fx-rate-resolver.service';
 import { InventoryPurchaseService } from './inventory-purchase.service';
 import { ShrinkageService } from './shrinkage.service';
 import { InventoryService } from './inventory.service';
@@ -19,6 +20,7 @@ describe('InventoryController', () => {
   let shrinkageService: ShrinkageService;
   let recipeService: RecipeService;
   let configService: ConfigService;
+  const getBcnRateByInvoiceDate = jest.fn();
 
   const jwtServiceMock = {
     verifyAsync: jest.fn(),
@@ -36,6 +38,12 @@ describe('InventoryController', () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [InventoryMovementController],
       providers: [
+        {
+          provide: FxRateResolverService,
+          useValue: {
+            getBcnRateByInvoiceDate,
+          },
+        },
         {
           provide: InventoryPurchaseService,
           useValue: {
@@ -90,7 +98,11 @@ describe('InventoryController', () => {
   });
 
   const expectRouteToRequireInventoryWriterRole = (
-    handlerName: 'previewPurchase' | 'recordPurchase' | 'ingestRecipeVersion',
+    handlerName:
+      | 'previewPurchase'
+      | 'recordPurchase'
+      | 'ingestRecipeVersion'
+      | 'getBcnFxRate',
   ): void => {
     const descriptor = Object.getOwnPropertyDescriptor(
       InventoryMovementController.prototype,
@@ -124,6 +136,10 @@ describe('InventoryController', () => {
 
   it('keeps the purchase posting route protected by auth + role guards', () => {
     expectRouteToRequireInventoryWriterRole('recordPurchase');
+  });
+
+  it('keeps the BCN FX lookup route protected by auth + role guards', () => {
+    expectRouteToRequireInventoryWriterRole('getBcnFxRate');
   });
 
   describe('recordPurchase', () => {
@@ -221,6 +237,14 @@ describe('InventoryController', () => {
         5,
         'Test',
       );
+    });
+  });
+
+  describe('getBcnFxRate', () => {
+    it('delegates the invoice date query to FxRateResolverService', async () => {
+      await controller.getBcnFxRate({ invoiceDate: '2026-01-03' });
+
+      expect(getBcnRateByInvoiceDate).toHaveBeenCalledWith('2026-01-03');
     });
   });
 

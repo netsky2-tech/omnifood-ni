@@ -23,6 +23,7 @@ import { Supplier } from '../../modules/inventory/entities/supplier.entity';
 import { Warehouse } from '../../modules/inventory/entities/warehouse.entity';
 import { UomConversion } from '../../modules/inventory/entities/uom-conversion.entity';
 import { Batch } from '../../modules/inventory/entities/batch.entity';
+import { BcnFxRate } from '../../modules/inventory/entities/bcn-fx-rate.entity';
 import { PurchaseDocument } from '../../modules/inventory/entities/purchase-document.entity';
 import { CatalogValue } from '../../modules/catalog/entities/catalog-value.entity';
 import { Invoice } from '../../modules/sales/entities/invoice.entity';
@@ -62,6 +63,7 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
     Warehouse,
     UomConversion,
     Batch,
+    BcnFxRate,
     PurchaseDocument,
     CatalogValue,
     Invoice,
