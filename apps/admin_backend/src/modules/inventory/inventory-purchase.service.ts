@@ -143,7 +143,7 @@ export class InventoryPurchaseService {
             );
           }
 
-          const preview = await this.buildPreview(input, insumo);
+          const preview = this.buildPreview(input, insumo);
 
           if (preview.requiresBatchTracking) {
             this.assertBatchMetadata(input);
