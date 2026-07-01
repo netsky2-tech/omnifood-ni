@@ -192,7 +192,7 @@ describe('CreateInventoryPurchaseDocuments1776000000000 (db)', () => {
                 unit_cost_nio,
                 projected_cpp_nio
               ) VALUES (
-                'purchase-b-1',
+                'purchase-b-2',
                 'tenant-b',
                 '00000000-0000-0000-0000-000000000001',
                 '00000000-0000-0000-0000-0000000000a1',
