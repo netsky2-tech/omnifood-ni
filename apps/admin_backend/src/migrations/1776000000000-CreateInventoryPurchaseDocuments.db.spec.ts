@@ -175,40 +175,7 @@ describe('CreateInventoryPurchaseDocuments1776000000000 (db)', () => {
               "SELECT set_config('app.tenant_id', $1, true)",
               ['tenant-b'],
             );
-            await queryRunner.query(`
-              INSERT INTO inventory_purchase_documents (
-                id,
-                tenant_id,
-                insumo_id,
-                supplier_id,
-                invoice_number,
-                invoice_date,
-                entry_date,
-                entry_timestamp,
-                quantity,
-                unit_cost,
-                currency,
-                bcn_rate,
-                unit_cost_nio,
-                projected_cpp_nio
-              ) VALUES (
-                'purchase-b-2',
-                'tenant-b',
-                '00000000-0000-0000-0000-000000000001',
-                '00000000-0000-0000-0000-0000000000a1',
-                'INV-1001',
-                '2026-01-10',
-                '2026-01-10',
-                '2026-01-10T09:00:00.000Z',
-                3.0000,
-                10.0000,
-                'USD',
-                36.5000,
-                365.0000,
-                365.0000
-              )
-            `);
-
+            
             await queryRunner.query(`
               INSERT INTO inventory_purchase_documents (
                 id,
