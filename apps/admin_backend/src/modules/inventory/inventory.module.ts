@@ -8,6 +8,7 @@ import { Supplier } from './entities/supplier.entity';
 import { Warehouse } from './entities/warehouse.entity';
 import { UomConversion } from './entities/uom-conversion.entity';
 import { Batch } from './entities/batch.entity';
+import { PurchaseDocument } from './entities/purchase-document.entity';
 import { RecipeVersion } from './entities/recipe-version.entity';
 import { RecipeDetail } from './entities/recipe-detail.entity';
 import { ProductionOrder } from './entities/production-order.entity';
@@ -51,6 +52,7 @@ import { IdentityModule } from '../identity/identity.module';
       Warehouse,
       UomConversion,
       Batch,
+      PurchaseDocument,
       RecipeVersion,
       RecipeDetail,
       ProductionOrder,

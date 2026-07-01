@@ -8,6 +8,8 @@ import {
 import { Batch } from './entities/batch.entity';
 import { Insumo } from './entities/insumo.entity';
 import { InventoryMovement } from './entities/inventory-movement.entity';
+import { Supplier } from './entities/supplier.entity';
+import { PurchaseDocument } from './entities/purchase-document.entity';
 
 describe('InventoryPurchaseService', () => {
   let service: InventoryPurchaseService;
@@ -17,6 +19,8 @@ describe('InventoryPurchaseService', () => {
 
   const manager = {
     createQueryBuilder: jest.fn(),
+    findOne: jest.fn(),
+    query: jest.fn(),
     save: jest.fn(),
     create: jest.fn(),
   };
@@ -41,6 +45,11 @@ describe('InventoryPurchaseService', () => {
     existenciaActual: 10,
     is_perishable: true,
   };
+  const supplier = {
+    id: 'sup-1',
+    tenant_id: 'tenant-A',
+    name: 'Proveedor X',
+  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -53,9 +62,21 @@ describe('InventoryPurchaseService', () => {
     );
     findOne.mockResolvedValue(perishableInsumo);
     queryBuilder.getOne.mockResolvedValue({ ...perishableInsumo });
+    manager.findOne.mockImplementation((entity: unknown) => {
+      if (entity === Supplier) {
+        return Promise.resolve(supplier);
+      }
+
+      if (entity === PurchaseDocument) {
+        return Promise.resolve(null);
+      }
+
+      return Promise.resolve(null);
+    });
     manager.create.mockImplementation(
       (_entity: unknown, payload: Record<string, unknown>) => payload,
     );
+    manager.query.mockResolvedValue(undefined);
     manager.save.mockImplementation(
       (_entity: unknown, payload: Record<string, unknown>) => payload,
     );
@@ -77,19 +98,23 @@ describe('InventoryPurchaseService', () => {
     service = module.get<InventoryPurchaseService>(InventoryPurchaseService);
   });
 
-  it('converts USD purchase using BCN rate for invoice date', async () => {
-    resolveBcnRateByDate.mockResolvedValue(36.5);
-
+  it('uses the explicit USD document rate without resolver fallback', async () => {
     const preview = await service.previewPurchase({
+      id: 'preview-doc-1',
       tenantId: 'tenant-A',
       insumoId: 'ins-1',
+      supplierId: 'sup-1',
+      invoiceNumber: 'INV-PREVIEW-1',
       quantity: 10,
       unitCost: 2,
       currency: CURRENCY.USD,
       invoiceDate: '2026-01-01',
+      entryTimestamp: '2026-01-01T08:00:00.000Z',
+      bcnRate: 36.5,
     });
 
-    expect(resolveBcnRateByDate).toHaveBeenCalledWith('2026-01-01');
+    expect(resolveBcnRateByDate).not.toHaveBeenCalled();
+    expect(preview.bcnRate).toBe(36.5);
     expect(preview.unitCostNio).toBe(73);
     expect(preview.projectedCppNio).toBe(61.5);
     expect(preview.requiresBatchTracking).toBe(true);
@@ -106,12 +131,16 @@ describe('InventoryPurchaseService', () => {
     });
 
     const preview = await service.previewPurchase({
+      id: 'preview-doc-2',
       tenantId: 'tenant-A',
       insumoId: 'ins-1',
+      supplierId: 'sup-1',
+      invoiceNumber: 'INV-PREVIEW-2',
       quantity: 1,
       unitCost: 10.123456,
       currency: CURRENCY.NIO,
       invoiceDate: '2026-01-02',
+      entryTimestamp: '2026-01-02T08:00:00.000Z',
     });
 
     expect(resolveBcnRateByDate).not.toHaveBeenCalled();
@@ -120,20 +149,38 @@ describe('InventoryPurchaseService', () => {
   });
 
   it('persists a batch for perishable purchases during posting', async () => {
-    resolveBcnRateByDate.mockResolvedValue(36.5);
-
-    await service.recordPurchase({
+    const result = await service.recordPurchase({
+      id: 'purchase-doc-1',
       tenantId: 'tenant-A',
       insumoId: 'ins-1',
+      supplierId: 'sup-1',
+      invoiceNumber: 'INV-1001',
       quantity: 5,
       unitCost: 2,
       currency: CURRENCY.USD,
       invoiceDate: '2026-01-03',
-      supplierName: 'Proveedor X',
+      entryTimestamp: '2026-01-03T08:15:00.000Z',
+      bcnRate: 36.5,
       lotCode: 'LOT-9',
       receivedDate: '2026-01-03',
       expirationDate: '2026-02-03',
     });
+
+    const savedEntities = manager.save.mock.calls.map(([entity]) => entity);
+    expect(savedEntities.indexOf(PurchaseDocument)).toBeLessThan(
+      savedEntities.indexOf(InventoryMovement),
+    );
+    expect(manager.save).toHaveBeenCalledWith(
+      PurchaseDocument,
+      expect.objectContaining({
+        id: 'purchase-doc-1',
+        supplier_id: 'sup-1',
+        invoice_number: 'INV-1001',
+        invoice_date: new Date('2026-01-03'),
+        entry_date: new Date('2026-01-03'),
+        entry_timestamp: new Date('2026-01-03T08:15:00.000Z'),
+      }),
+    );
 
     expect(manager.save).toHaveBeenCalledWith(
       Batch,
@@ -149,9 +196,38 @@ describe('InventoryPurchaseService', () => {
       InventoryMovement,
       expect.objectContaining({
         type: 'PURCHASE',
+        sourceDocumentType: 'PURCHASE',
+        sourceDocumentId: 'purchase-doc-1',
         unitCostNio: 73,
         averageCostAfterNio: 57.6667,
       }),
+    );
+    expect(result.purchaseDocument.id).toBe('purchase-doc-1');
+  });
+
+  it('binds the tenant RLS context before reading or saving purchase documents', async () => {
+    await service.recordPurchase({
+      id: 'purchase-doc-rls-1',
+      tenantId: 'tenant-A',
+      insumoId: 'ins-1',
+      supplierId: 'sup-1',
+      invoiceNumber: 'INV-RLS-1',
+      quantity: 2,
+      unitCost: 10,
+      currency: CURRENCY.NIO,
+      invoiceDate: '2026-01-03',
+      entryTimestamp: '2026-01-03T08:15:00.000Z',
+      lotCode: 'LOT-9',
+      receivedDate: '2026-01-03',
+      expirationDate: '2026-02-03',
+    });
+
+    expect(manager.query).toHaveBeenCalledWith(
+      "SELECT set_config('app.tenant_id', $1, true)",
+      ['tenant-A'],
+    );
+    expect(manager.query.mock.invocationCallOrder[0]).toBeLessThan(
+      manager.findOne.mock.invocationCallOrder[0],
     );
   });
 
@@ -174,7 +250,9 @@ describe('InventoryPurchaseService', () => {
     );
     manager.create.mockImplementation((_entity: unknown, payload: unknown) => {
       const created = payload as Record<string, unknown>;
-      movementSnapshots.push({ ...created });
+      if (_entity === InventoryMovement) {
+        movementSnapshots.push({ ...created });
+      }
       return payload;
     });
     manager.save.mockImplementation((entity: unknown, payload: unknown) => {
@@ -189,20 +267,28 @@ describe('InventoryPurchaseService', () => {
     });
 
     await service.recordPurchase({
+      id: 'purchase-doc-2',
       tenantId: 'tenant-A',
       insumoId: 'ins-1',
+      supplierId: 'sup-1',
+      invoiceNumber: 'INV-1002',
       quantity: 2,
       unitCost: 40,
       currency: CURRENCY.NIO,
       invoiceDate: '2026-01-03',
+      entryTimestamp: '2026-01-03T09:00:00.000Z',
     });
     await service.recordPurchase({
+      id: 'purchase-doc-3',
       tenantId: 'tenant-A',
       insumoId: 'ins-1',
+      supplierId: 'sup-1',
+      invoiceNumber: 'INV-1003',
       quantity: 4,
       unitCost: 30,
       currency: CURRENCY.NIO,
       invoiceDate: '2026-01-04',
+      entryTimestamp: '2026-01-04T09:00:00.000Z',
     });
 
     expect(movementSnapshots).toEqual([
@@ -220,15 +306,91 @@ describe('InventoryPurchaseService', () => {
   it('rejects perishable purchases without batch metadata', async () => {
     await expect(
       service.recordPurchase({
+        id: 'purchase-doc-4',
         tenantId: 'tenant-A',
         insumoId: 'ins-1',
+        supplierId: 'sup-1',
+        invoiceNumber: 'INV-1004',
         quantity: 5,
         unitCost: 20,
         currency: CURRENCY.NIO,
         invoiceDate: '2026-01-03',
+        entryTimestamp: '2026-01-03T10:00:00.000Z',
       }),
     ).rejects.toThrow(
       'Batch-managed purchases require lotCode, receivedDate, and expirationDate',
+    );
+  });
+
+  it('rejects USD purchases without an explicit bcnRate', async () => {
+    await expect(
+      service.previewPurchase({
+        id: 'preview-doc-3',
+        tenantId: 'tenant-A',
+        insumoId: 'ins-1',
+        supplierId: 'sup-1',
+        invoiceNumber: 'INV-PREVIEW-3',
+        quantity: 5,
+        unitCost: 2,
+        currency: CURRENCY.USD,
+        invoiceDate: '2026-01-03',
+        entryTimestamp: '2026-01-03T08:00:00.000Z',
+      }),
+    ).rejects.toThrow('USD purchases require an explicit BCN exchange rate');
+    expect(resolveBcnRateByDate).not.toHaveBeenCalled();
+  });
+
+  it('rejects whitespace-only invoice identifiers at the service boundary', async () => {
+    await expect(
+      service.recordPurchase({
+        id: 'purchase-doc-whitespace-1',
+        tenantId: 'tenant-A',
+        insumoId: 'ins-1',
+        supplierId: 'sup-1',
+        invoiceNumber: '   ',
+        quantity: 1,
+        unitCost: 2,
+        currency: CURRENCY.NIO,
+        invoiceDate: '2026-01-05',
+        entryTimestamp: '2026-01-05T10:00:00.000Z',
+      }),
+    ).rejects.toThrow('invoiceNumber is required');
+    expect(manager.query).not.toHaveBeenCalled();
+  });
+
+  it('rejects duplicate invoice numbers for the same tenant and supplier', async () => {
+    manager.findOne.mockImplementation((entity: unknown) => {
+      if (entity === Supplier) {
+        return Promise.resolve(supplier);
+      }
+
+      if (entity === PurchaseDocument) {
+        return Promise.resolve({
+          id: 'purchase-doc-existing',
+          tenant_id: 'tenant-A',
+          supplier_id: 'sup-1',
+          invoice_number: 'INV-1005',
+        });
+      }
+
+      return Promise.resolve(null);
+    });
+
+    await expect(
+      service.recordPurchase({
+        id: 'purchase-doc-5',
+        tenantId: 'tenant-A',
+        insumoId: 'ins-1',
+        supplierId: 'sup-1',
+        invoiceNumber: 'INV-1005',
+        quantity: 1,
+        unitCost: 2,
+        currency: CURRENCY.NIO,
+        invoiceDate: '2026-01-05',
+        entryTimestamp: '2026-01-05T10:00:00.000Z',
+      }),
+    ).rejects.toThrow(
+      'Purchase invoice INV-1005 is already registered for supplier sup-1',
     );
   });
 });

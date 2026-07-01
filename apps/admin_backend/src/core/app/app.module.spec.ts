@@ -3,6 +3,7 @@ import { Insumo } from '../../modules/inventory/entities/insumo.entity';
 import { Product } from '../../modules/inventory/entities/product.entity';
 import { Recipe } from '../../modules/inventory/entities/recipe.entity';
 import { InventoryMovement } from '../../modules/inventory/entities/inventory-movement.entity';
+import { PurchaseDocument } from '../../modules/inventory/entities/purchase-document.entity';
 import { ConfigService } from '@nestjs/config';
 
 describe('AppModule Registration', () => {
@@ -29,6 +30,10 @@ describe('AppModule Registration', () => {
 
   it('should have InventoryMovement repository registered', () => {
     expect(options.entities).toContain(InventoryMovement);
+  });
+
+  it('should have PurchaseDocument repository registered', () => {
+    expect(options.entities).toContain(PurchaseDocument);
   });
 });
 

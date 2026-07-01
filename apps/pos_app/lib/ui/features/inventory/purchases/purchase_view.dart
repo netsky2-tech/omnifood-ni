@@ -13,7 +13,8 @@ class _PurchaseViewState extends State<PurchaseView> {
   final _formKey = GlobalKey<FormState>();
   final _qtyController = TextEditingController();
   final _costController = TextEditingController();
-  final _bcnRateController = TextEditingController(text: '36.5');
+  final _invoiceNumberController = TextEditingController();
+  final _bcnRateController = TextEditingController();
   final _lotCodeController = TextEditingController();
   String? _selectedInsumoId;
   String? _selectedSupplierId;
@@ -35,6 +36,7 @@ class _PurchaseViewState extends State<PurchaseView> {
   void dispose() {
     _qtyController.dispose();
     _costController.dispose();
+    _invoiceNumberController.dispose();
     _bcnRateController.dispose();
     _lotCodeController.dispose();
     super.dispose();
@@ -129,6 +131,15 @@ class _PurchaseViewState extends State<PurchaseView> {
                         ),
                         const SizedBox(height: 12),
                         TextFormField(
+                          controller: _invoiceNumberController,
+                          decoration: const InputDecoration(labelText: 'Número de factura'),
+                          onChanged: (_) => setState(() {}),
+                          validator: (value) => (value == null || value.trim().isEmpty)
+                              ? 'Ingresá el número de factura'
+                              : null,
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
                           controller: _qtyController,
                           decoration: const InputDecoration(labelText: 'Cantidad'),
                           keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -154,6 +165,12 @@ class _PurchaseViewState extends State<PurchaseView> {
                             decoration: const InputDecoration(labelText: 'Tasa de cambio BCN'),
                             keyboardType: const TextInputType.numberWithOptions(decimal: true),
                             onChanged: (_) => setState(() {}),
+                            validator: (value) {
+                              if (_currency != 'USD') return null;
+                              return (double.tryParse(value ?? '') ?? 0) > 0
+                                  ? null
+                                  : 'Ingresá una tasa BCN válida';
+                            },
                           ),
                         ],
                       ],
@@ -166,8 +183,9 @@ class _PurchaseViewState extends State<PurchaseView> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          _reviewRow('Número de factura', _invoiceNumberController.text.trim()),
                           _reviewRow('Fecha de factura', _formatDate(_invoiceDate)),
-                          _reviewRow('Origen tasa BCN', _currency == 'USD' ? 'Tasa oficial BCN' : 'Tasa del documento NIO'),
+                          _reviewRow('Origen tasa BCN', _currency == 'USD' ? 'Tasa ingresada en documento' : 'Tasa del documento NIO'),
                           _reviewRow('Tasa BCN', review.bcnRate.toStringAsFixed(4)),
                           _reviewRow('Costo unitario NIO', review.unitCostNio.toStringAsFixed(4)),
                           _reviewRow('CPP actual', review.previousCppNio.toStringAsFixed(4)),
@@ -245,7 +263,7 @@ class _PurchaseViewState extends State<PurchaseView> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: review == null ? null : () => _confirmAndSave(context, vm, review),
+                      onPressed: vm.isLoading ? null : () => _confirmAndSave(context, vm),
                       child: const Text('REGISTRAR COMPRA'),
                     ),
                   ),
@@ -265,17 +283,23 @@ class _PurchaseViewState extends State<PurchaseView> {
   bool _canBuildReview(PurchaseViewModel vm) {
     return _selectedInsumoId != null &&
         _selectedUomId != null &&
+        _invoiceNumberController.text.trim().isNotEmpty &&
         (double.tryParse(_qtyController.text) ?? 0) > 0 &&
         (double.tryParse(_costController.text) ?? 0) > 0 &&
+        (_currency != 'USD' || (double.tryParse(_bcnRateController.text) ?? 0) > 0) &&
         vm.insumos.isNotEmpty;
   }
 
   Future<void> _confirmAndSave(
     BuildContext context,
     PurchaseViewModel vm,
-    PurchaseReviewData review,
   ) async {
     if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    final review = _buildValidatedReview(vm);
+    if (review == null) {
       return;
     }
 
@@ -313,6 +337,7 @@ class _PurchaseViewState extends State<PurchaseView> {
     await vm.recordPurchase(
       insumoId: _selectedInsumoId!,
       supplierId: _selectedSupplierId!,
+      invoiceNumber: _invoiceNumberController.text.trim(),
       uomConversionId: _selectedUomId!,
       quantity: double.parse(_qtyController.text),
       unitCost: double.parse(_costController.text),
@@ -322,6 +347,21 @@ class _PurchaseViewState extends State<PurchaseView> {
       lotCode: _lotCodeController.text.isEmpty ? null : _lotCodeController.text,
       receivedDate: _receivedDate,
       expirationDate: _expirationDate,
+    );
+  }
+
+  PurchaseReviewData? _buildValidatedReview(PurchaseViewModel vm) {
+    if (!_canBuildReview(vm)) {
+      return null;
+    }
+
+    return vm.buildPurchaseReview(
+      insumoId: _selectedInsumoId!,
+      uomConversionId: _selectedUomId!,
+      quantity: double.parse(_qtyController.text),
+      unitCost: double.parse(_costController.text),
+      currency: _currency,
+      bcnRate: double.tryParse(_bcnRateController.text),
     );
   }
 

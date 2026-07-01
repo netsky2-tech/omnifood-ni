@@ -38,33 +38,46 @@ export class InventoryMovementController {
   }
 
   @Post('purchase')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
   async previewPurchase(
     @Body() dto: PurchaseDocumentDto,
     @GetTenantId() tenantId: string,
   ) {
     return this.purchaseService.previewPurchase({
+      id: dto.id,
       tenantId,
       insumoId: dto.insumoId,
+      supplierId: dto.supplierId,
+      invoiceNumber: dto.invoiceNumber,
       quantity: dto.quantity,
       unitCost: dto.unitCost,
       currency: dto.currency,
       invoiceDate: dto.invoiceDate,
+      entryTimestamp: dto.entryTimestamp,
+      bcnRate: dto.bcnRate,
     });
   }
 
   @Post('purchases')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
   async recordPurchase(
     @Body() dto: PurchaseDocumentDto,
     @GetTenantId() tenantId: string,
   ) {
     return this.purchaseService.recordPurchase({
+      id: dto.id,
       tenantId,
       insumoId: dto.insumoId,
+      supplierId: dto.supplierId,
+      invoiceNumber: dto.invoiceNumber,
       quantity: dto.quantity,
       unitCost: dto.unitCost,
       currency: dto.currency,
       invoiceDate: dto.invoiceDate,
-      supplierName: dto.supplierName,
+      entryTimestamp: dto.entryTimestamp,
+      bcnRate: dto.bcnRate,
       lotCode: dto.lotCode,
       receivedDate: dto.receivedDate,
       expirationDate: dto.expirationDate,

@@ -83,7 +83,15 @@ export class InventoryMovement {
   sourceSequence: string;
 
   @Column({ nullable: true, name: 'source_document_id', default: '' })
-  reason: string;
+  sourceDocumentId: string;
+
+  get reason(): string {
+    return this.sourceDocumentId;
+  }
+
+  set reason(value: string) {
+    this.sourceDocumentId = value;
+  }
 
   @Column({ name: 'source_document_type', default: 'SYSTEM' })
   sourceDocumentType: string;

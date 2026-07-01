@@ -8,6 +8,8 @@ class PurchaseEntity {
   final String insumoId;
   @ColumnInfo(name: 'supplier_id')
   final String supplierId;
+  @ColumnInfo(name: 'invoice_number')
+  final String invoiceNumber;
   final double quantity;
   @ColumnInfo(name: 'unit_cost')
   final double unitCost;
@@ -38,6 +40,7 @@ class PurchaseEntity {
     required this.id,
     required this.insumoId,
     required this.supplierId,
+    required this.invoiceNumber,
     required this.quantity,
     required this.unitCost,
     required this.timestamp,

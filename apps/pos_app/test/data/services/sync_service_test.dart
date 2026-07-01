@@ -361,6 +361,7 @@ void main() {
         id: 'purchase-1',
         insumoId: 'i-9',
         supplierId: 'supplier-1',
+        invoiceNumber: 'INV-1001',
         quantity: 2,
         unitCost: 10,
         timestamp: DateTime.parse('2026-01-01T12:00:00Z'),
@@ -389,6 +390,54 @@ void main() {
       capturedPosts.any((post) => post.path == '/v1/sync/batch'),
       true,
     );
+    final purchasePost = capturedPosts.firstWhere(
+      (post) => post.path == '/inventory/purchases',
+    );
+    final purchaseBody = purchasePost.body as Map<String, Object?>;
+    expect(purchaseBody['id'], 'purchase-1');
+    expect(purchaseBody['supplierId'], 'supplier-1');
+    expect(purchaseBody['invoiceNumber'], 'INV-1001');
+    expect(purchaseBody['invoiceDate'], '2026-01-01');
+    expect(purchaseBody['entryTimestamp'], '2026-01-01T12:00:00.000Z');
+    expect(purchaseBody['bcnRate'], 36.5);
+    expect(purchaseBody.containsKey('supplierName'), isFalse);
+  });
+
+  test('does not sync purchase documents that lack fiscal identity or explicit USD bcnRate', () async {
+    mockInventoryRepository.unsynced = [
+      InventoryMovement(
+        id: 'purchase-legacy-1',
+        insumoId: 'i-9',
+        type: MovementType.purchase,
+        quantity: 2,
+        previousStock: 1,
+        newStock: 3,
+        timestamp: DateTime.parse('2026-01-01T12:00:00Z'),
+      ),
+    ];
+    mockInventoryRepository.unsyncedPurchases = [
+      Purchase(
+        id: 'purchase-legacy-1',
+        insumoId: 'i-9',
+        supplierId: 'supplier-1',
+        invoiceNumber: '',
+        quantity: 2,
+        unitCost: 10,
+        timestamp: DateTime.parse('2026-01-01T12:00:00Z'),
+        invoiceDate: DateTime(2026, 1, 1),
+        currency: 'USD',
+        bcnRate: 0,
+      ),
+    ];
+
+    await syncService.triggerManualSync();
+
+    expect(
+      capturedPosts.any((post) => post.path == '/inventory/purchases'),
+      isFalse,
+    );
+    expect(mockInventoryRepository.syncedPurchaseIds, isEmpty);
+    expect(mockInventoryRepository.failedIds, contains('purchase-legacy-1'));
   });
 
   test('syncs recipe version and production documents before generic inventory replay', () async {

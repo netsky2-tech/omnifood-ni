@@ -87,6 +87,7 @@ class PurchaseViewModel with ChangeNotifier {
   Future<void> recordPurchase({
     required String insumoId,
     required String supplierId,
+    required String invoiceNumber,
     required String uomConversionId,
     required double quantity,
     required double unitCost,
@@ -102,6 +103,18 @@ class PurchaseViewModel with ChangeNotifier {
     notifyListeners();
 
     try {
+      final normalizedSupplierId = supplierId.trim();
+      final normalizedInvoiceNumber = invoiceNumber.trim();
+
+      if (normalizedInvoiceNumber.isEmpty) {
+        throw ArgumentError('Invoice number is required.');
+      }
+
+      await _assertNoDuplicateLocalInvoice(
+        supplierId: normalizedSupplierId,
+        invoiceNumber: normalizedInvoiceNumber,
+      );
+
       final review = buildPurchaseReview(
         insumoId: insumoId,
         uomConversionId: uomConversionId,
@@ -111,6 +124,7 @@ class PurchaseViewModel with ChangeNotifier {
         bcnRate: bcnRate,
       );
       final purchaseId = DateTime.now().millisecondsSinceEpoch.toString();
+      final entryTimestamp = DateTime.now();
 
       if (review.requiresBatchTracking) {
         if (lotCode == null ||
@@ -123,22 +137,23 @@ class PurchaseViewModel with ChangeNotifier {
         }
       }
 
-      await movementEngine.recordPurchase(
-        insumoId,
-        review.quantityInBaseUnit,
-        review.unitCostNio,
-        movementId: purchaseId,
-        reason:
-            'Purchase $currency @ ${review.unitCostNio.toStringAsFixed(4)} NIO',
-      );
+        await movementEngine.recordPurchase(
+          insumoId,
+          review.quantityInBaseUnit,
+          review.unitCostNio,
+          movementId: purchaseId,
+          reason:
+            'Purchase $currency invoice $normalizedInvoiceNumber @ ${review.unitCostNio.toStringAsFixed(4)} NIO',
+        );
 
       final purchase = Purchase(
         id: purchaseId,
         insumoId: insumoId,
-        supplierId: supplierId,
+        supplierId: normalizedSupplierId,
+        invoiceNumber: normalizedInvoiceNumber,
         quantity: review.quantityInBaseUnit,
         unitCost: unitCost,
-        timestamp: DateTime.now(),
+        timestamp: entryTimestamp,
         invoiceDate: invoiceDate,
         currency: currency,
         bcnRate: review.bcnRate,
@@ -200,7 +215,7 @@ class PurchaseViewModel with ChangeNotifier {
     );
 
     final resolvedBcnRate = currency == 'USD'
-        ? (bcnRate ?? 36.5).toDouble()
+        ? _requireExplicitBcnRate(bcnRate)
         : 1.0;
     final quantityInBaseUnit = const UomConversionCalculator()
         .toInventoryBaseQuantity(
@@ -223,6 +238,32 @@ class PurchaseViewModel with ChangeNotifier {
       projectedCppNio: double.parse(projectedCpp.toStringAsFixed(4)),
       requiresBatchTracking: insumo.isPerishable,
     );
+  }
+
+  double _requireExplicitBcnRate(double? bcnRate) {
+    if (bcnRate == null || bcnRate <= 0) {
+      throw ArgumentError('USD purchases require an explicit BCN exchange rate.');
+    }
+
+    return bcnRate.toDouble();
+  }
+
+  Future<void> _assertNoDuplicateLocalInvoice({
+    required String supplierId,
+    required String invoiceNumber,
+  }) async {
+    final purchases = await repository.getPurchaseHistory();
+    final alreadyExists = purchases.any(
+      (purchase) =>
+          purchase.supplierId.trim() == supplierId &&
+          purchase.invoiceNumber.trim() == invoiceNumber,
+    );
+
+    if (alreadyExists) {
+      throw ArgumentError(
+        'Purchase invoice $invoiceNumber is already registered for supplier $supplierId.',
+      );
+    }
   }
 
   Future<List<PurchaseFifoRow>> _loadFifoRows(String insumoId) async {
@@ -254,7 +295,7 @@ extension PurchaseX on Purchase {
       previousStock: 0, // Should be fetched from repo
       newStock: quantity, // Should be calculated
       timestamp: timestamp,
-      reason: 'Purchase from $supplierId',
+      reason: 'Purchase invoice $invoiceNumber from $supplierId',
     );
   }
 }

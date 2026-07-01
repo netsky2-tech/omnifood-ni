@@ -52,6 +52,9 @@ class _FakeInventoryRepository implements InventoryRepository {
   Future<void> savePurchase(Purchase purchase) async {}
 
   @override
+  Future<List<Purchase>> getPurchaseHistory() async => const [];
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 
   @override
@@ -62,6 +65,8 @@ class _FakeInventoryRepository implements InventoryRepository {
 }
 
 class _FakeMovementEngine implements MovementEngine {
+  int recordPurchaseCalls = 0;
+
   @override
   Future<List<BatchDeduction>> getBatchesForConsumption(String insumoId, double quantity) async => const [];
 
@@ -75,7 +80,9 @@ class _FakeMovementEngine implements MovementEngine {
   Future<void> recordAdjustment(String insumoId, double quantityDelta, String reason, {String? movementId}) async {}
 
   @override
-  Future<void> recordPurchase(String insumoId, double quantity, double cost, {String? movementId, String? reason}) async {}
+  Future<void> recordPurchase(String insumoId, double quantity, double cost, {String? movementId, String? reason}) async {
+    recordPurchaseCalls += 1;
+  }
 
   @override
   Future<void> recordReversal(String productId, int quantity, String reason) async {}
@@ -122,6 +129,7 @@ void main() {
     await tester.tap(find.text('USD').last);
     await tester.pumpAndSettle();
 
+    await tester.enterText(find.widgetWithText(TextFormField, 'Número de factura'), 'INV-1001');
     await tester.enterText(find.widgetWithText(TextFormField, 'Cantidad'), '2');
     await tester.enterText(find.widgetWithText(TextFormField, 'Costo unitario'), '10');
     await tester.enterText(find.widgetWithText(TextFormField, 'Tasa de cambio BCN'), '36.5');
@@ -130,5 +138,99 @@ void main() {
     expect(find.text('Origen tasa BCN'), findsOneWidget);
     expect(find.text('Código de lote'), findsOneWidget);
     expect(find.text('CPP proyectado'), findsOneWidget);
+  });
+
+  testWidgets('blocks submission and surfaces validation when invoice number is missing', (tester) async {
+    final engine = _FakeMovementEngine();
+    final viewModel = PurchaseViewModel(_FakeInventoryRepository(), engine);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<PurchaseViewModel>.value(
+        value: viewModel,
+        child: const MaterialApp(home: PurchaseView()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(DropdownButtonFormField<String>).at(0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Yogurt').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(DropdownButtonFormField<String>).at(1));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Caja').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(DropdownButtonFormField<String>).at(2));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Proveedor 1').last);
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'Cantidad'), '2');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Costo unitario'), '10');
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.widgetWithText(ElevatedButton, 'REGISTRAR COMPRA'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.widgetWithText(ElevatedButton, 'REGISTRAR COMPRA'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ingresá el número de factura'), findsOneWidget);
+    expect(find.text('Confirmar registro'), findsNothing);
+    expect(engine.recordPurchaseCalls, 0);
+  });
+
+  testWidgets('blocks USD submission and surfaces validation when BCN rate is missing', (tester) async {
+    final engine = _FakeMovementEngine();
+    final viewModel = PurchaseViewModel(_FakeInventoryRepository(), engine);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<PurchaseViewModel>.value(
+        value: viewModel,
+        child: const MaterialApp(home: PurchaseView()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(DropdownButtonFormField<String>).at(0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Yogurt').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(DropdownButtonFormField<String>).at(1));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Caja').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(DropdownButtonFormField<String>).at(2));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Proveedor 1').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(DropdownButtonFormField<String>).at(3));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('USD').last);
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'Número de factura'), 'INV-1001');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Cantidad'), '2');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Costo unitario'), '10');
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.widgetWithText(ElevatedButton, 'REGISTRAR COMPRA'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.widgetWithText(ElevatedButton, 'REGISTRAR COMPRA'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ingresá una tasa BCN válida'), findsOneWidget);
+    expect(find.text('Confirmar registro'), findsNothing);
+    expect(engine.recordPurchaseCalls, 0);
   });
 }
