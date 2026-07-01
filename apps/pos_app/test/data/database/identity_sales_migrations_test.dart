@@ -217,4 +217,63 @@ void main() {
       await db.close();
     },
   );
+
+  test('migration23_24 adds invoice_number without inventing legacy purchase identity', () async {
+    final db = await databaseFactory.openDatabase(
+      dbPath,
+      options: OpenDatabaseOptions(
+        version: 23,
+        onCreate: (database, version) async {
+          await database.execute('''
+            CREATE TABLE purchases (
+              id TEXT NOT NULL PRIMARY KEY,
+              insumo_id TEXT NOT NULL,
+              supplier_id TEXT NOT NULL,
+              quantity REAL NOT NULL,
+              unit_cost REAL NOT NULL,
+              timestamp TEXT NOT NULL,
+              invoice_date TEXT NOT NULL,
+              currency TEXT NOT NULL,
+              bcn_rate REAL NOT NULL,
+              unit_cost_nio REAL,
+              cpp_before_nio REAL,
+              projected_cpp_nio REAL,
+              lot_code TEXT,
+              received_date TEXT,
+              expiration_date TEXT,
+              requires_batch_tracking INTEGER NOT NULL,
+              is_synced INTEGER NOT NULL DEFAULT 0
+            )
+          ''');
+        },
+      ),
+    );
+
+    await db.insert('purchases', {
+      'id': 'purchase-legacy-1',
+      'insumo_id': 'ins-1',
+      'supplier_id': 'sup-1',
+      'quantity': 2.0,
+      'unit_cost': 10.0,
+      'timestamp': '2026-01-01T12:00:00.000Z',
+      'invoice_date': '2026-01-01',
+      'currency': 'USD',
+      'bcn_rate': 36.5,
+      'requires_batch_tracking': 0,
+      'is_synced': 0,
+    });
+
+    await migration23_24.migrate(db);
+
+    final columns = await db.rawQuery('PRAGMA table_info(purchases)');
+    final rows = await db.query('purchases');
+
+    expect(
+      columns.where((column) => column['name'] == 'invoice_number'),
+      hasLength(1),
+    );
+    expect(rows.single['invoice_number'], '');
+
+    await db.close();
+  });
 }

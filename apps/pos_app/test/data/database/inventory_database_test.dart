@@ -198,6 +198,7 @@ void main() {
           id: 'pur-1',
           insumoId: 'ins-1',
           supplierId: 'sup-1',
+          invoiceNumber: 'INV-1001',
           quantity: 12,
           unitCost: 10,
           timestamp: DateTime.now().toIso8601String(),
@@ -229,6 +230,7 @@ void main() {
       final batches = await database.batchDao.findActiveBatchesByInsumoId('ins-1');
 
       expect(purchases.single.currency, 'USD');
+      expect(purchases.single.invoiceNumber, 'INV-1001');
       expect(purchases.single.projectedCppNio, 250);
       expect(purchases.single.requiresBatchTracking, true);
       expect(batches.single.receivedDate, '2026-01-10');

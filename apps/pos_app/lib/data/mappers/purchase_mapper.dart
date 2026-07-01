@@ -8,6 +8,7 @@ class PurchaseMapper {
       id: purchase.id,
       insumoId: purchase.insumoId,
       supplierId: purchase.supplierId,
+      invoiceNumber: purchase.invoiceNumber,
       quantity: purchase.quantity,
       unitCost: purchase.unitCost,
       timestamp: purchase.timestamp.toIso8601String(),
@@ -31,6 +32,7 @@ class PurchaseMapper {
       id: entity.id,
       insumoId: entity.insumoId,
       supplierId: entity.supplierId,
+      invoiceNumber: entity.invoiceNumber,
       quantity: entity.quantity,
       unitCost: entity.unitCost,
       timestamp: DateTime.parse(entity.timestamp),
@@ -57,6 +59,7 @@ class PurchaseMapper {
       'id': purchase.id,
       'insumoId': purchase.insumoId,
       'supplierId': purchase.supplierId,
+      'invoiceNumber': purchase.invoiceNumber,
       'quantity': purchase.quantity,
       'unitCost': purchase.unitCost,
       'invoiceDate': purchase.invoiceDate.toIso8601String().split('T').first,
@@ -70,22 +73,30 @@ class PurchaseMapper {
           ?.toIso8601String()
           .split('T')
           .first,
-      'timestamp': purchase.timestamp.toIso8601String(),
+      'entryTimestamp': purchase.timestamp.toIso8601String(),
     };
   }
 
   /// Maps backend response to domain Purchase
   static Purchase fromResponse(Map<String, dynamic> json) {
+    final currency = json['currency'] as String? ?? 'NIO';
+    final rawBcnRate = (json['bcnRate'] as num?)?.toDouble();
+
+    if (currency == 'USD' && (rawBcnRate == null || rawBcnRate <= 0)) {
+      throw StateError('USD purchase responses require an explicit bcnRate.');
+    }
+
     return Purchase(
       id: json['id'] as String,
       insumoId: json['insumoId'] as String,
       supplierId: json['supplierId'] as String,
+      invoiceNumber: json['invoiceNumber'] as String,
       quantity: (json['quantity'] as num).toDouble(),
       unitCost: (json['unitCost'] as num).toDouble(),
       timestamp: DateTime.parse(json['timestamp'] as String),
       invoiceDate: DateTime.parse(json['invoiceDate'] as String),
-      currency: json['currency'] as String? ?? 'NIO',
-      bcnRate: (json['bcnRate'] as num?)?.toDouble() ?? 1,
+      currency: currency,
+      bcnRate: rawBcnRate ?? 1,
       unitCostNio: (json['unitCostNio'] as num?)?.toDouble(),
       projectedCppNio: (json['projectedCppNio'] as num?)?.toDouble(),
       lotCode: json['lotCode'] as String?,

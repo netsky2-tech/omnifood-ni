@@ -23,6 +23,7 @@ mixin _$Purchase {
   String get id => throw _privateConstructorUsedError;
   String get insumoId => throw _privateConstructorUsedError;
   String get supplierId => throw _privateConstructorUsedError;
+  String get invoiceNumber => throw _privateConstructorUsedError;
   double get quantity => throw _privateConstructorUsedError;
   double get unitCost => throw _privateConstructorUsedError;
   DateTime get timestamp => throw _privateConstructorUsedError;
@@ -59,6 +60,7 @@ abstract class $PurchaseCopyWith<$Res> {
       {String id,
       String insumoId,
       String supplierId,
+      String invoiceNumber,
       double quantity,
       double unitCost,
       DateTime timestamp,
@@ -90,6 +92,7 @@ class _$PurchaseCopyWithImpl<$Res, $Val extends Purchase>
     Object? id = null,
     Object? insumoId = null,
     Object? supplierId = null,
+    Object? invoiceNumber = null,
     Object? quantity = null,
     Object? unitCost = null,
     Object? timestamp = null,
@@ -116,6 +119,10 @@ class _$PurchaseCopyWithImpl<$Res, $Val extends Purchase>
       supplierId: null == supplierId
           ? _value.supplierId
           : supplierId // ignore: cast_nullable_to_non_nullable
+              as String,
+      invoiceNumber: null == invoiceNumber
+          ? _value.invoiceNumber
+          : invoiceNumber // ignore: cast_nullable_to_non_nullable
               as String,
       quantity: null == quantity
           ? _value.quantity
@@ -185,6 +192,7 @@ abstract class _$$PurchaseImplCopyWith<$Res>
       {String id,
       String insumoId,
       String supplierId,
+      String invoiceNumber,
       double quantity,
       double unitCost,
       DateTime timestamp,
@@ -214,6 +222,7 @@ class __$$PurchaseImplCopyWithImpl<$Res>
     Object? id = null,
     Object? insumoId = null,
     Object? supplierId = null,
+    Object? invoiceNumber = null,
     Object? quantity = null,
     Object? unitCost = null,
     Object? timestamp = null,
@@ -240,6 +249,10 @@ class __$$PurchaseImplCopyWithImpl<$Res>
       supplierId: null == supplierId
           ? _value.supplierId
           : supplierId // ignore: cast_nullable_to_non_nullable
+              as String,
+      invoiceNumber: null == invoiceNumber
+          ? _value.invoiceNumber
+          : invoiceNumber // ignore: cast_nullable_to_non_nullable
               as String,
       quantity: null == quantity
           ? _value.quantity
@@ -304,6 +317,7 @@ class _$PurchaseImpl implements _Purchase {
       {required this.id,
       required this.insumoId,
       required this.supplierId,
+      required this.invoiceNumber,
       required this.quantity,
       required this.unitCost,
       required this.timestamp,
@@ -328,6 +342,8 @@ class _$PurchaseImpl implements _Purchase {
   final String insumoId;
   @override
   final String supplierId;
+  @override
+  final String invoiceNumber;
   @override
   final double quantity;
   @override
@@ -366,7 +382,7 @@ class _$PurchaseImpl implements _Purchase {
 
   @override
   String toString() {
-    return 'Purchase(id: $id, insumoId: $insumoId, supplierId: $supplierId, quantity: $quantity, unitCost: $unitCost, timestamp: $timestamp, invoiceDate: $invoiceDate, currency: $currency, bcnRate: $bcnRate, unitCostNio: $unitCostNio, cppBeforeNio: $cppBeforeNio, projectedCppNio: $projectedCppNio, lotCode: $lotCode, receivedDate: $receivedDate, expirationDate: $expirationDate, requiresBatchTracking: $requiresBatchTracking)';
+    return 'Purchase(id: $id, insumoId: $insumoId, supplierId: $supplierId, invoiceNumber: $invoiceNumber, quantity: $quantity, unitCost: $unitCost, timestamp: $timestamp, invoiceDate: $invoiceDate, currency: $currency, bcnRate: $bcnRate, unitCostNio: $unitCostNio, cppBeforeNio: $cppBeforeNio, projectedCppNio: $projectedCppNio, lotCode: $lotCode, receivedDate: $receivedDate, expirationDate: $expirationDate, requiresBatchTracking: $requiresBatchTracking)';
   }
 
   @override
@@ -379,6 +395,8 @@ class _$PurchaseImpl implements _Purchase {
                 other.insumoId == insumoId) &&
             (identical(other.supplierId, supplierId) ||
                 other.supplierId == supplierId) &&
+            (identical(other.invoiceNumber, invoiceNumber) ||
+                other.invoiceNumber == invoiceNumber) &&
             (identical(other.quantity, quantity) ||
                 other.quantity == quantity) &&
             (identical(other.unitCost, unitCost) ||
@@ -412,6 +430,7 @@ class _$PurchaseImpl implements _Purchase {
       id,
       insumoId,
       supplierId,
+      invoiceNumber,
       quantity,
       unitCost,
       timestamp,
@@ -445,6 +464,7 @@ abstract class _Purchase implements Purchase {
       {required final String id,
       required final String insumoId,
       required final String supplierId,
+      required final String invoiceNumber,
       required final double quantity,
       required final double unitCost,
       required final DateTime timestamp,
@@ -469,6 +489,8 @@ abstract class _Purchase implements Purchase {
   String get insumoId;
   @override
   String get supplierId;
+  @override
+  String get invoiceNumber;
   @override
   double get quantity;
   @override

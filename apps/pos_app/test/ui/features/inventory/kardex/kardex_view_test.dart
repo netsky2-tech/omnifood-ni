@@ -136,6 +136,7 @@ void main() {
           id: 'purchase-1',
           insumoId: 'coffee',
           supplierId: 'supplier-1',
+          invoiceNumber: 'INV-1001',
           quantity: 3,
           unitCost: 10,
           timestamp: DateTime(2026, 6, 1, 8, 15),

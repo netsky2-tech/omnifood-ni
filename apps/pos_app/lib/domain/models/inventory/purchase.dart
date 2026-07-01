@@ -9,6 +9,7 @@ class Purchase with _$Purchase {
     required String id,
     required String insumoId,
     required String supplierId,
+    required String invoiceNumber,
     required double quantity,
     required double unitCost,
     required DateTime timestamp,

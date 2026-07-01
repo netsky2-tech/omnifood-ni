@@ -652,6 +652,12 @@ final migration22_23 = Migration(22, 23, (database) async {
   await _createInventoryMovementAppendOnlyTriggers(database);
 });
 
+final migration23_24 = Migration(23, 24, (database) async {
+  await database.execute(
+    "ALTER TABLE purchases ADD COLUMN invoice_number TEXT NOT NULL DEFAULT ''",
+  );
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -666,4 +672,5 @@ final allMigrations = [
   migration20_21,
   migration21_22,
   migration22_23,
+  migration23_24,
 ];

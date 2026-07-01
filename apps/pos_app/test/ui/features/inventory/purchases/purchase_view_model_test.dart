@@ -36,6 +36,7 @@ void main() {
     );
     when(mockRepo.getActiveSuppliers()).thenAnswer((_) async => []);
     when(mockRepo.getBatchesByInsumoId('i1')).thenAnswer((_) async => []);
+    when(mockRepo.getPurchaseHistory()).thenAnswer((_) async => const []);
   });
 
   group('recordPurchase', () {
@@ -75,6 +76,7 @@ void main() {
       await viewModel.recordPurchase(
         insumoId: 'i1',
         supplierId: 's1',
+        invoiceNumber: 'INV-1001',
         uomConversionId: 'c1',
         quantity: 2,
         unitCost: 100,
@@ -129,6 +131,7 @@ void main() {
       await viewModel.recordPurchase(
         insumoId: 'i1',
         supplierId: 's1',
+        invoiceNumber: 'INV-1002',
         uomConversionId: 'lb-kg',
         quantity: 50,
         unitCost: 10,
@@ -173,6 +176,7 @@ void main() {
         () => viewModel.recordPurchase(
           insumoId: 'i1',
           supplierId: 's1',
+          invoiceNumber: 'INV-1003',
           uomConversionId: 'invalid',
           quantity: 2,
           unitCost: 100,
@@ -181,6 +185,148 @@ void main() {
         ),
         throwsArgumentError,
       );
+    });
+
+    test('rejects USD purchase without explicit bcnRate', () async {
+      when(
+        mockRepo.getConversionsByInsumoId('i1'),
+      ).thenAnswer((_) async => [conversion]);
+      await viewModel.loadInitialData(insumoId: 'i1');
+
+      await expectLater(
+        () => viewModel.recordPurchase(
+          insumoId: 'i1',
+          supplierId: 's1',
+          invoiceNumber: 'INV-USD-1',
+          uomConversionId: 'c1',
+          quantity: 2,
+          unitCost: 100,
+          invoiceDate: DateTime(2026, 1, 10),
+          currency: 'USD',
+          lotCode: 'LOT-1',
+          receivedDate: DateTime(2026, 1, 10),
+          expirationDate: DateTime(2026, 2, 10),
+        ),
+        throwsArgumentError,
+      );
+      verifyNever(
+        mockEngine.recordPurchase(
+          any,
+          any,
+          any,
+          movementId: anyNamed('movementId'),
+          reason: anyNamed('reason'),
+        ),
+      );
+    });
+
+    test('blocks duplicate supplier invoice before local stock mutation', () async {
+      when(
+        mockRepo.getConversionsByInsumoId('i1'),
+      ).thenAnswer((_) async => [conversion]);
+      when(mockRepo.getPurchaseHistory()).thenAnswer(
+        (_) async => [
+          Purchase(
+            id: 'existing-purchase',
+            insumoId: 'i1',
+            supplierId: 's1',
+            invoiceNumber: 'INV-1001',
+            quantity: 1,
+            unitCost: 50,
+            timestamp: DateTime(2026, 1, 9),
+            invoiceDate: DateTime(2026, 1, 9),
+            bcnRate: 1,
+          ),
+        ],
+      );
+      await viewModel.loadInitialData(insumoId: 'i1');
+
+      await expectLater(
+        () => viewModel.recordPurchase(
+          insumoId: 'i1',
+          supplierId: 's1',
+          invoiceNumber: ' INV-1001 ',
+          uomConversionId: 'c1',
+          quantity: 2,
+          unitCost: 100,
+          invoiceDate: DateTime(2026, 1, 10),
+          currency: 'NIO',
+          lotCode: 'LOT-1',
+          receivedDate: DateTime(2026, 1, 10),
+          expirationDate: DateTime(2026, 2, 10),
+        ),
+        throwsArgumentError,
+      );
+
+      verifyNever(
+        mockEngine.recordPurchase(
+          any,
+          any,
+          any,
+          movementId: anyNamed('movementId'),
+          reason: anyNamed('reason'),
+        ),
+      );
+      verifyNever(mockRepo.queuePurchaseSync(any));
+    });
+
+    test('allows the same invoice number for a different supplier', () async {
+      when(
+        mockRepo.getConversionsByInsumoId('i1'),
+      ).thenAnswer((_) async => [conversion]);
+      when(mockRepo.getPurchaseHistory()).thenAnswer(
+        (_) async => [
+          Purchase(
+            id: 'existing-purchase',
+            insumoId: 'i1',
+            supplierId: 'other-supplier',
+            invoiceNumber: 'INV-1001',
+            quantity: 1,
+            unitCost: 50,
+            timestamp: DateTime(2026, 1, 9),
+            invoiceDate: DateTime(2026, 1, 9),
+            bcnRate: 1,
+          ),
+        ],
+      );
+      await viewModel.loadInitialData(insumoId: 'i1');
+
+      when(
+        mockEngine.recordPurchase(
+          'i1',
+          45360,
+          0.0044,
+          movementId: anyNamed('movementId'),
+          reason: anyNamed('reason'),
+        ),
+      ).thenAnswer((_) async {});
+      when(mockRepo.queuePurchaseSync(any)).thenAnswer((_) async {});
+      when(mockRepo.saveBatch(any)).thenAnswer((_) async {});
+
+      await viewModel.recordPurchase(
+        insumoId: 'i1',
+        supplierId: 's1',
+        invoiceNumber: 'INV-1001',
+        uomConversionId: 'c1',
+        quantity: 2,
+        unitCost: 100,
+        invoiceDate: DateTime(2026, 1, 10),
+        currency: 'NIO',
+        lotCode: 'LOT-1',
+        receivedDate: DateTime(2026, 1, 10),
+        expirationDate: DateTime(2026, 2, 10),
+      );
+
+      verify(
+        mockEngine.recordPurchase(
+          'i1',
+          45360,
+          0.0044,
+          movementId: anyNamed('movementId'),
+          reason: anyNamed('reason'),
+        ),
+      ).called(1);
+      verify(mockRepo.queuePurchaseSync(any)).called(1);
     });
 
     test('builds FIFO state with near-expiry and expired batches', () async {

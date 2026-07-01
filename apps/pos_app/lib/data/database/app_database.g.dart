@@ -136,7 +136,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 23,
+      version: 24,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -186,7 +186,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `warehouses` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `description` TEXT, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `purchases` (`id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `supplier_id` TEXT NOT NULL, `quantity` REAL NOT NULL, `unit_cost` REAL NOT NULL, `timestamp` TEXT NOT NULL, `invoice_date` TEXT NOT NULL, `currency` TEXT NOT NULL, `bcn_rate` REAL NOT NULL, `unit_cost_nio` REAL, `cpp_before_nio` REAL, `projected_cpp_nio` REAL, `lot_code` TEXT, `received_date` TEXT, `expiration_date` TEXT, `requires_batch_tracking` INTEGER NOT NULL, `is_synced` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `purchases` (`id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `supplier_id` TEXT NOT NULL, `invoice_number` TEXT NOT NULL, `quantity` REAL NOT NULL, `unit_cost` REAL NOT NULL, `timestamp` TEXT NOT NULL, `invoice_date` TEXT NOT NULL, `currency` TEXT NOT NULL, `bcn_rate` REAL NOT NULL, `unit_cost_nio` REAL, `cpp_before_nio` REAL, `projected_cpp_nio` REAL, `lot_code` TEXT, `received_date` TEXT, `expiration_date` TEXT, `requires_batch_tracking` INTEGER NOT NULL, `is_synced` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `production_order_documents` (`id` TEXT NOT NULL, `recipe_version_id` TEXT NOT NULL, `recipe_product_id` TEXT NOT NULL, `recipe_product_name` TEXT NOT NULL, `produced_insumo_id` TEXT NOT NULL, `produced_insumo_name` TEXT NOT NULL, `planned_quantity` REAL NOT NULL, `actual_quantity` REAL NOT NULL, `produced_batch_number` TEXT NOT NULL, `produced_expiration_date` TEXT NOT NULL, `operation_date` TEXT NOT NULL, `status` TEXT NOT NULL, `variance_reason` TEXT, `closed_at` TEXT, `movement_references_json` TEXT NOT NULL, `is_synced` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
@@ -1744,6 +1744,7 @@ class _$PurchaseDao extends PurchaseDao {
                   'id': item.id,
                   'insumo_id': item.insumoId,
                   'supplier_id': item.supplierId,
+                  'invoice_number': item.invoiceNumber,
                   'quantity': item.quantity,
                   'unit_cost': item.unitCost,
                   'timestamp': item.timestamp,
@@ -1776,6 +1777,7 @@ class _$PurchaseDao extends PurchaseDao {
             id: row['id'] as String,
             insumoId: row['insumo_id'] as String,
             supplierId: row['supplier_id'] as String,
+            invoiceNumber: row['invoice_number'] as String,
             quantity: row['quantity'] as double,
             unitCost: row['unit_cost'] as double,
             timestamp: row['timestamp'] as String,
@@ -1800,6 +1802,7 @@ class _$PurchaseDao extends PurchaseDao {
             id: row['id'] as String,
             insumoId: row['insumo_id'] as String,
             supplierId: row['supplier_id'] as String,
+            invoiceNumber: row['invoice_number'] as String,
             quantity: row['quantity'] as double,
             unitCost: row['unit_cost'] as double,
             timestamp: row['timestamp'] as String,

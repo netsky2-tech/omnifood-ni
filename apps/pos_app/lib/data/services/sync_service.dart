@@ -135,6 +135,7 @@ class SyncService {
 
     for (final purchase in unsyncedPurchases) {
       try {
+        _assertPurchaseDocumentReady(purchase);
         final response = await _dio.post(
           '/inventory/purchases',
           data: _buildPurchasePayload(purchase),
@@ -153,7 +154,34 @@ class SyncService {
           purchase.id,
           error: e.message,
         );
+      } catch (e, stackTrace) {
+        developer.log(
+          'Skipped purchase ${purchase.id}: $e',
+          name: 'SyncService',
+          error: e,
+          stackTrace: stackTrace,
+        );
+        await _inventoryRepository.markMovementAsFailed(
+          purchase.id,
+          error: e.toString(),
+        );
       }
+    }
+  }
+
+  void _assertPurchaseDocumentReady(Purchase purchase) {
+    if (purchase.supplierId.trim().isEmpty) {
+      throw StateError('Purchase ${purchase.id} is missing supplierId.');
+    }
+
+    if (purchase.invoiceNumber.trim().isEmpty) {
+      throw StateError('Purchase ${purchase.id} is missing invoiceNumber.');
+    }
+
+    if (purchase.currency == 'USD' && purchase.bcnRate <= 0) {
+      throw StateError(
+        'Purchase ${purchase.id} is missing an explicit USD bcnRate.',
+      );
     }
   }
 
@@ -331,12 +359,16 @@ class SyncService {
 
   Map<String, Object?> _buildPurchasePayload(Purchase purchase) {
     return {
+      'id': purchase.id,
       'insumoId': purchase.insumoId,
+      'supplierId': purchase.supplierId,
+      'invoiceNumber': purchase.invoiceNumber,
       'quantity': purchase.quantity,
       'unitCost': purchase.unitCost,
       'currency': purchase.currency,
       'invoiceDate': purchase.invoiceDate.toIso8601String().split('T').first,
-      'supplierName': purchase.supplierId,
+      'entryTimestamp': purchase.timestamp.toUtc().toIso8601String(),
+      'bcnRate': purchase.bcnRate,
       'lotCode': purchase.lotCode,
       'receivedDate': purchase.receivedDate?.toIso8601String().split('T').first,
       'expirationDate': purchase.expirationDate

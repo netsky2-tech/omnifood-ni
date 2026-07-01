@@ -89,19 +89,16 @@ describe('InventoryController', () => {
     configService = module.get<ConfigService>(ConfigService);
   });
 
-  it('should be defined', () => {
-    expect(controller).toBeDefined();
-  });
-
-  it('keeps the recipe ingestion route protected by auth + role guards', () => {
+  const expectRouteToRequireInventoryWriterRole = (
+    handlerName: 'previewPurchase' | 'recordPurchase' | 'ingestRecipeVersion',
+  ): void => {
     const descriptor = Object.getOwnPropertyDescriptor(
       InventoryMovementController.prototype,
-      'ingestRecipeVersion',
+      handlerName,
     ) as TypedPropertyDescriptor<(...args: never[]) => unknown> | undefined;
     const handler = descriptor?.value;
 
     expect(handler).toBeDefined();
-
     expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toEqual([
       AuthGuard,
       RolesGuard,
@@ -110,17 +107,38 @@ describe('InventoryController', () => {
       UserRole.OWNER,
       UserRole.MANAGER,
     ]);
+  };
+
+  it('should be defined', () => {
+    expect(controller).toBeDefined();
+  });
+
+  it('keeps the recipe ingestion route protected by auth + role guards', () => {
+    expectRouteToRequireInventoryWriterRole('ingestRecipeVersion');
     expect(configService).toBeDefined();
+  });
+
+  it('keeps the purchase preview route protected by auth + role guards', () => {
+    expectRouteToRequireInventoryWriterRole('previewPurchase');
+  });
+
+  it('keeps the purchase posting route protected by auth + role guards', () => {
+    expectRouteToRequireInventoryWriterRole('recordPurchase');
   });
 
   describe('recordPurchase', () => {
     it('should call purchaseService previewPurchase for review payload', async () => {
       const dto = {
+        id: 'purchase-doc-1',
         insumoId: 'ins-123',
+        supplierId: 'sup-1',
+        invoiceNumber: 'INV-1001',
         quantity: 10,
         unitCost: 50,
         currency: 'USD' as const,
         invoiceDate: '2026-01-10',
+        entryTimestamp: '2026-01-10T08:15:00.000Z',
+        bcnRate: 36.5,
       };
 
       await controller.previewPurchase(dto, 'tenant-A');
@@ -137,11 +155,15 @@ describe('InventoryController', () => {
 
     it('should call purchaseService recordPurchase', async () => {
       const dto = {
+        id: 'purchase-doc-1',
         insumoId: 'ins-123',
+        supplierId: 'sup-1',
+        invoiceNumber: 'INV-1001',
         quantity: 10,
         unitCost: 50,
         currency: 'NIO' as const,
         invoiceDate: '2026-01-10',
+        entryTimestamp: '2026-01-10T08:15:00.000Z',
       };
       await controller.recordPurchase(dto, 'tenant-A');
       // eslint-disable-next-line @typescript-eslint/unbound-method
@@ -149,21 +171,28 @@ describe('InventoryController', () => {
         expect.objectContaining({
           tenantId: 'tenant-A',
           insumoId: 'ins-123',
+          supplierId: 'sup-1',
+          invoiceNumber: 'INV-1001',
           quantity: 10,
           unitCost: 50,
           currency: 'NIO',
           invoiceDate: '2026-01-10',
+          entryTimestamp: '2026-01-10T08:15:00.000Z',
         }),
       );
     });
 
     it('should pass batch capture metadata when provided', async () => {
       const dto = {
+        id: 'purchase-doc-2',
         insumoId: 'ins-321',
+        supplierId: 'sup-1',
+        invoiceNumber: 'INV-1002',
         quantity: 4,
         unitCost: 20,
         currency: 'NIO' as const,
         invoiceDate: '2026-01-12',
+        entryTimestamp: '2026-01-12T09:00:00.000Z',
         lotCode: 'LOT-001',
         receivedDate: '2026-01-12',
         expirationDate: '2026-02-12',

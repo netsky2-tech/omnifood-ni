@@ -1,9 +1,9 @@
+import { Transform } from 'class-transformer';
 import {
   IsDateString,
   IsIn,
   IsNotEmpty,
   IsNumber,
-  IsOptional,
   IsString,
   Min,
   ValidateIf,
@@ -20,7 +20,31 @@ export type PurchaseCurrency =
 export class PurchaseDocumentDto {
   @IsString()
   @IsNotEmpty()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  id: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
   insumoId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  supplierId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  invoiceNumber: string;
 
   @IsNumber()
   @Min(0.0001)
@@ -36,13 +60,23 @@ export class PurchaseDocumentDto {
   @IsDateString()
   invoiceDate: string;
 
-  @IsOptional()
-  @IsString()
-  supplierName?: string;
+  @IsDateString()
+  entryTimestamp: string;
+
+  @ValidateIf(
+    (dto: PurchaseDocumentDto) =>
+      dto.currency === PURCHASE_CURRENCY.USD || dto.bcnRate != null,
+  )
+  @IsNumber()
+  @Min(0.0001)
+  bcnRate?: number;
 
   @ValidateIf((dto: PurchaseDocumentDto) => dto.lotCode != null)
   @IsString()
   @IsNotEmpty()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
   lotCode?: string;
 
   @ValidateIf((dto: PurchaseDocumentDto) => dto.receivedDate != null)
