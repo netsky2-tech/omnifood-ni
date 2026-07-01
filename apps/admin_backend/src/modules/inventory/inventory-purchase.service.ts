@@ -252,7 +252,7 @@ export class InventoryPurchaseService {
     return normalizedInvoiceNumber;
   }
 
-  private async buildPreview(
+  private buildPreview(
     input: {
       quantity: number;
       unitCost: number;
@@ -261,7 +261,7 @@ export class InventoryPurchaseService {
       bcnRate?: number;
     },
     insumo: Insumo,
-  ): Promise<PurchasePreview> {
+  ): PurchasePreview {
     const bcnRate = this.resolveBcnRate(input.currency, input.bcnRate);
     const unitCostNio = round4(input.unitCost * bcnRate);
     const previousStock = round4(Number(insumo.stock));
