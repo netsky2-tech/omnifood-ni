@@ -6,6 +6,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import * as request from 'supertest';
 import { App } from 'supertest/types';
 import { InventoryMovementController } from '../../src/modules/inventory/inventory-movement.controller';
+import { FxRateResolverService } from '../../src/modules/inventory/fx-rate-resolver.service';
+import { FX_RATE_RESOLVER } from '../../src/modules/inventory/inventory-purchase.service';
 import { InventoryPurchaseService } from '../../src/modules/inventory/inventory-purchase.service';
 import { InventoryService } from '../../src/modules/inventory/inventory.service';
 import {
@@ -42,6 +44,8 @@ const validRecipeVersionPayload = {
   ],
 };
 
+const INVENTORY_API_PREFIX = '/api/inventory';
+
 type RecipeIngestionHandler = (
   input: IngestPosVersionInput,
 ) => Promise<IngestPosVersionResult>;
@@ -71,6 +75,10 @@ describe('Recipe version ingestion route (integration)', () => {
   let app: INestApplication<App>;
   let jwtService: JwtService;
   const persistedDocuments = new Map<string, PersistedRecipeDocument>();
+  const fxRateResolverService = {
+    getBcnRateByInvoiceDate: jest.fn(),
+    resolveBcnRateByDate: jest.fn(),
+  };
 
   const buildPersistenceKey = (input: IngestPosVersionInput): string =>
     `${input.tenantId}:${input.dto.id}`;
@@ -127,6 +135,14 @@ describe('Recipe version ingestion route (integration)', () => {
           },
         },
         {
+          provide: FxRateResolverService,
+          useValue: fxRateResolverService,
+        },
+        {
+          provide: FX_RATE_RESOLVER,
+          useExisting: FxRateResolverService,
+        },
+        {
           provide: ShrinkageService,
           useValue: {
             recordShrinkage: jest.fn(),
@@ -158,6 +174,7 @@ describe('Recipe version ingestion route (integration)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
+    app.setGlobalPrefix('api');
     app.useGlobalPipes(
       new ValidationPipe({
         whitelist: true,
@@ -200,7 +217,7 @@ describe('Recipe version ingestion route (integration)', () => {
 
   it('returns 401 when no bearer token is provided', async () => {
     await request(app.getHttpServer())
-      .post('/inventory/recipes/versions')
+      .post(`${INVENTORY_API_PREFIX}/recipes/versions`)
       .send(validRecipeVersionPayload)
       .expect(401);
 
@@ -211,7 +228,7 @@ describe('Recipe version ingestion route (integration)', () => {
     const token = signToken({ tenant_id: undefined });
 
     const response = await request(app.getHttpServer())
-      .post('/inventory/recipes/versions')
+      .post(`${INVENTORY_API_PREFIX}/recipes/versions`)
       .set('Authorization', `Bearer ${token}`)
       .send(validRecipeVersionPayload)
       .expect(401);
@@ -230,7 +247,7 @@ describe('Recipe version ingestion route (integration)', () => {
     };
 
     await request(app.getHttpServer())
-      .post('/inventory/recipes/versions')
+      .post(`${INVENTORY_API_PREFIX}/recipes/versions`)
       .set('Authorization', `Bearer ${token}`)
       .send(invalidPayload)
       .expect(400);
@@ -242,7 +259,7 @@ describe('Recipe version ingestion route (integration)', () => {
     const token = signToken({ tenant_id: 'tenant-XYZ' });
 
     const response = await request(app.getHttpServer())
-      .post('/inventory/recipes/versions')
+      .post(`${INVENTORY_API_PREFIX}/recipes/versions`)
       .set('Authorization', `Bearer ${token}`)
       .send(validRecipeVersionPayload)
       .expect(201);
@@ -267,13 +284,13 @@ describe('Recipe version ingestion route (integration)', () => {
     const token = signToken({ tenant_id: tenantId });
 
     const firstResponse = await request(app.getHttpServer())
-      .post('/inventory/recipes/versions')
+      .post(`${INVENTORY_API_PREFIX}/recipes/versions`)
       .set('Authorization', `Bearer ${token}`)
       .send(validRecipeVersionPayload)
       .expect(201);
 
     const secondResponse = await request(app.getHttpServer())
-      .post('/inventory/recipes/versions')
+      .post(`${INVENTORY_API_PREFIX}/recipes/versions`)
       .set('Authorization', `Bearer ${token}`)
       .send(validRecipeVersionPayload)
       .expect(201);

@@ -1,4 +1,8 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import {
+  INestApplication,
+  NotFoundException,
+  ValidationPipe,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
@@ -8,6 +12,7 @@ import { App } from 'supertest/types';
 import { DataSource } from 'typeorm';
 import { TenantInterceptor } from '../../src/core/database/rls.interceptor';
 import { InventoryMovementController } from '../../src/modules/inventory/inventory-movement.controller';
+import { FxRateResolverService } from '../../src/modules/inventory/fx-rate-resolver.service';
 import {
   FX_RATE_RESOLVER,
   type PurchasePreview,
@@ -72,6 +77,20 @@ interface UnauthorizedResponseBody {
   message: string;
 }
 
+interface BadRequestResponseBody {
+  message: string[];
+  error: string;
+  statusCode: number;
+}
+
+interface BcnFxRateResponseBody {
+  invoiceDate: string;
+  effectiveDate: string;
+  rateNio: number;
+  message?: string;
+  statusCode?: number;
+}
+
 const validPurchasePayload = {
   id: 'purchase-doc-1',
   insumoId: 'ins-1',
@@ -84,6 +103,8 @@ const validPurchasePayload = {
   entryTimestamp: '2026-01-03T08:15:00.000Z',
   bcnRate: 36.5,
 };
+
+const INVENTORY_API_PREFIX = '/api/inventory';
 
 const buildInsumoRecord = (
   overrides: Partial<InsumoResponseBody> = {},
@@ -100,6 +121,7 @@ const buildInsumoRecord = (
 describe('Inventory purchase routes (integration)', () => {
   let app: INestApplication<App>;
   let jwtService: JwtService;
+  const getBcnRateByInvoiceDate = jest.fn();
   const resolveBcnRateByDate = jest.fn();
   const repositoryFindOne = jest.fn();
   const transaction = jest.fn();
@@ -127,9 +149,18 @@ describe('Inventory purchase routes (integration)', () => {
   let existingPurchaseDocument: { id: string } | null = null;
 
   beforeAll(async () => {
+    const fxRateResolverService = {
+      getBcnRateByInvoiceDate,
+      resolveBcnRateByDate,
+    };
+
     const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [InventoryMovementController],
       providers: [
+        {
+          provide: FxRateResolverService,
+          useValue: fxRateResolverService,
+        },
         InventoryPurchaseService,
         {
           provide: DataSource,
@@ -137,7 +168,7 @@ describe('Inventory purchase routes (integration)', () => {
         },
         {
           provide: FX_RATE_RESOLVER,
-          useValue: { resolveBcnRateByDate },
+          useExisting: FxRateResolverService,
         },
         {
           provide: ShrinkageService,
@@ -173,6 +204,7 @@ describe('Inventory purchase routes (integration)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
+    app.setGlobalPrefix('api');
     app.useGlobalPipes(
       new ValidationPipe({
         whitelist: true,
@@ -231,6 +263,11 @@ describe('Inventory purchase routes (integration)', () => {
         handler: (entityManager: typeof manager) => unknown,
       ) => handler(manager),
     );
+    getBcnRateByInvoiceDate.mockResolvedValue({
+      invoiceDate: '2026-01-03',
+      effectiveDate: '2026-01-03',
+      rateNio: 36.5,
+    });
     resolveBcnRateByDate.mockResolvedValue(1);
   });
 
@@ -259,18 +296,115 @@ describe('Inventory purchase routes (integration)', () => {
 
   it('returns 401 for purchase preview when no bearer token is provided', async () => {
     await request(app.getHttpServer())
-      .post('/inventory/purchase')
+      .post(`${INVENTORY_API_PREFIX}/purchase`)
       .send(validPurchasePayload)
       .expect(401);
 
     expect(repositoryFindOne).not.toHaveBeenCalled();
   });
 
+  it('returns 401 for BCN FX lookup when no bearer token is provided', async () => {
+    await request(app.getHttpServer())
+      .get(`${INVENTORY_API_PREFIX}/fx/bcn?invoiceDate=2026-01-03`)
+      .expect(401);
+
+    expect(getBcnRateByInvoiceDate).not.toHaveBeenCalled();
+  });
+
+  it('returns 200 with the persisted BCN FX rate for an authenticated valid request', async () => {
+    const token = signToken();
+
+    const response = await request(app.getHttpServer())
+      .get(`${INVENTORY_API_PREFIX}/fx/bcn`)
+      .query({ invoiceDate: '2026-01-03' })
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    const body = response.body as BcnFxRateResponseBody;
+    expect(body).toEqual({
+      invoiceDate: '2026-01-03',
+      effectiveDate: '2026-01-03',
+      rateNio: 36.5,
+    });
+    expect(getBcnRateByInvoiceDate).toHaveBeenCalledWith('2026-01-03');
+  });
+
+  it('returns 404 when the requested BCN FX rate does not exist', async () => {
+    const token = signToken();
+    getBcnRateByInvoiceDate.mockRejectedValueOnce(
+      new NotFoundException(
+        'No official BCN FX rate found for invoiceDate 2026-01-04',
+      ),
+    );
+
+    const response = await request(app.getHttpServer())
+      .get(`${INVENTORY_API_PREFIX}/fx/bcn`)
+      .query({ invoiceDate: '2026-01-04' })
+      .set('Authorization', `Bearer ${token}`)
+      .expect(404);
+
+    const body = response.body as BcnFxRateResponseBody;
+    expect(body.message).toBe(
+      'No official BCN FX rate found for invoiceDate 2026-01-04',
+    );
+    expect(body.statusCode).toBe(404);
+  });
+
+  it('returns 400 when invoiceDate is missing from the BCN FX lookup query', async () => {
+    const token = signToken();
+
+    const response = await request(app.getHttpServer())
+      .get(`${INVENTORY_API_PREFIX}/fx/bcn`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(400);
+
+    const body = response.body as BadRequestResponseBody;
+    expect(body.error).toBe('Bad Request');
+    expect(body.message).toEqual(
+      expect.arrayContaining(['invoiceDate should not be empty']),
+    );
+    expect(getBcnRateByInvoiceDate).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when invoiceDate is malformed for the BCN FX lookup query', async () => {
+    const token = signToken();
+
+    const response = await request(app.getHttpServer())
+      .get(`${INVENTORY_API_PREFIX}/fx/bcn`)
+      .query({ invoiceDate: '2026/01/03' })
+      .set('Authorization', `Bearer ${token}`)
+      .expect(400);
+
+    const body = response.body as BadRequestResponseBody;
+    expect(body.error).toBe('Bad Request');
+    expect(body.message).toEqual(
+      expect.arrayContaining(['invoiceDate must be in YYYY-MM-DD format']),
+    );
+    expect(getBcnRateByInvoiceDate).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when unexpected query params are sent to the BCN FX lookup route', async () => {
+    const token = signToken();
+
+    const response = await request(app.getHttpServer())
+      .get(`${INVENTORY_API_PREFIX}/fx/bcn`)
+      .query({ invoiceDate: '2026-01-03', source: 'manual' })
+      .set('Authorization', `Bearer ${token}`)
+      .expect(400);
+
+    const body = response.body as BadRequestResponseBody;
+    expect(body.error).toBe('Bad Request');
+    expect(body.message).toEqual(
+      expect.arrayContaining(['property source should not exist']),
+    );
+    expect(getBcnRateByInvoiceDate).not.toHaveBeenCalled();
+  });
+
   it('returns 401 for purchase preview when the authenticated token lacks tenant context', async () => {
     const token = signToken({ tenant_id: undefined });
 
     const response = await request(app.getHttpServer())
-      .post('/inventory/purchase')
+      .post(`${INVENTORY_API_PREFIX}/purchase`)
       .set('Authorization', `Bearer ${token}`)
       .send(validPurchasePayload)
       .expect(401);
@@ -284,7 +418,7 @@ describe('Inventory purchase routes (integration)', () => {
     const token = signToken();
 
     await request(app.getHttpServer())
-      .post('/inventory/purchase')
+      .post(`${INVENTORY_API_PREFIX}/purchase`)
       .set('Authorization', `Bearer ${token}`)
       .send({
         ...validPurchasePayload,
@@ -299,7 +433,7 @@ describe('Inventory purchase routes (integration)', () => {
     const token = signToken({ tenant_id: 'tenant-XYZ' });
 
     const response = await request(app.getHttpServer())
-      .post('/inventory/purchase')
+      .post(`${INVENTORY_API_PREFIX}/purchase`)
       .set('Authorization', `Bearer ${token}`)
       .send(validPurchasePayload)
       .expect(201);
@@ -329,7 +463,7 @@ describe('Inventory purchase routes (integration)', () => {
     const token = signToken({ role: UserRole.CASHIER });
 
     await request(app.getHttpServer())
-      .post('/inventory/purchases')
+      .post(`${INVENTORY_API_PREFIX}/purchases`)
       .set('Authorization', `Bearer ${token}`)
       .send(validPurchasePayload)
       .expect(403);
@@ -339,7 +473,7 @@ describe('Inventory purchase routes (integration)', () => {
 
   it('returns 401 for purchase posting when no bearer token is provided', async () => {
     await request(app.getHttpServer())
-      .post('/inventory/purchases')
+      .post(`${INVENTORY_API_PREFIX}/purchases`)
       .send(validPurchasePayload)
       .expect(401);
 
@@ -350,7 +484,7 @@ describe('Inventory purchase routes (integration)', () => {
     const token = signToken({ tenant_id: undefined });
 
     const response = await request(app.getHttpServer())
-      .post('/inventory/purchases')
+      .post(`${INVENTORY_API_PREFIX}/purchases`)
       .set('Authorization', `Bearer ${token}`)
       .send(validPurchasePayload)
       .expect(401);
@@ -364,7 +498,7 @@ describe('Inventory purchase routes (integration)', () => {
     const token = signToken();
 
     const response = await request(app.getHttpServer())
-      .post('/inventory/purchases')
+      .post(`${INVENTORY_API_PREFIX}/purchases`)
       .set('Authorization', `Bearer ${token}`)
       .send(validPurchasePayload)
       .expect(201);
@@ -422,7 +556,7 @@ describe('Inventory purchase routes (integration)', () => {
     existingPurchaseDocument = { id: 'purchase-doc-duplicate' };
 
     const response = await request(app.getHttpServer())
-      .post('/inventory/purchases')
+      .post(`${INVENTORY_API_PREFIX}/purchases`)
       .set('Authorization', `Bearer ${token}`)
       .send(validPurchasePayload)
       .expect(409);

@@ -17,6 +17,7 @@ import { Shrinkage } from './entities/shrinkage.entity';
 import { ShrinkageDetail } from './entities/shrinkage-detail.entity';
 import { InventorySyncOutbox } from './entities/inventory-sync-outbox.entity';
 import { InventorySyncReceipt } from './entities/inventory-sync-receipt.entity';
+import { BcnFxRate } from './entities/bcn-fx-rate.entity';
 import { InventoryService } from './inventory.service';
 import { PurchaseService } from './purchase.service';
 import { ShrinkageService } from './shrinkage.service';
@@ -61,6 +62,7 @@ import { IdentityModule } from '../identity/identity.module';
       ShrinkageDetail,
       InventorySyncOutbox,
       InventorySyncReceipt,
+      BcnFxRate,
     ]),
   ],
   controllers: [InventoryMovementController],
@@ -78,6 +80,7 @@ import { IdentityModule } from '../identity/identity.module';
     InventoryAdjustmentService,
     ForensicAlertService,
     UomConversionCalculator,
+    FxRateResolverService,
     {
       provide: FORENSIC_ALERT_DISPATCHER,
       useValue: {
@@ -86,7 +89,7 @@ import { IdentityModule } from '../identity/identity.module';
     },
     {
       provide: FX_RATE_RESOLVER,
-      useClass: FxRateResolverService,
+      useExisting: FxRateResolverService,
     },
   ],
   exports: [

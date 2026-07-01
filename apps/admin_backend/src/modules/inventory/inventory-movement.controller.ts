@@ -1,7 +1,9 @@
 import {
+  Get,
   Controller,
   Post,
   Body,
+  Query,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
@@ -18,11 +20,14 @@ import { AuthGuard } from '../identity/guards/auth.guard';
 import { RolesGuard } from '../identity/guards/roles.guard';
 import { Roles } from '../../core/decorators/roles.decorator';
 import { UserRole } from '../identity/entities/user.entity';
+import { FxRateResolverService } from './fx-rate-resolver.service';
+import { GetBcnFxRateQueryDto } from './dto/get-bcn-fx-rate-query.dto';
 
 @Controller('inventory')
 @UseInterceptors(TenantInterceptor)
 export class InventoryMovementController {
   constructor(
+    private readonly fxRateResolverService: FxRateResolverService,
     private readonly purchaseService: InventoryPurchaseService,
     private readonly shrinkageService: ShrinkageService,
     private readonly inventoryService: InventoryService,
@@ -57,6 +62,15 @@ export class InventoryMovementController {
       entryTimestamp: dto.entryTimestamp,
       bcnRate: dto.bcnRate,
     });
+  }
+
+  @Get('fx/bcn')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  async getBcnFxRate(@Query() query: GetBcnFxRateQueryDto) {
+    return this.fxRateResolverService.getBcnRateByInvoiceDate(
+      query.invoiceDate,
+    );
   }
 
   @Post('purchases')
