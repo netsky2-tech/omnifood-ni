@@ -60,6 +60,7 @@ export class InventoryMovementController {
       currency: dto.currency,
       invoiceDate: dto.invoiceDate,
       entryTimestamp: dto.entryTimestamp,
+      fxRateMode: dto.fxRateMode,
       bcnRate: dto.bcnRate,
     });
   }
@@ -91,6 +92,7 @@ export class InventoryMovementController {
       currency: dto.currency,
       invoiceDate: dto.invoiceDate,
       entryTimestamp: dto.entryTimestamp,
+      fxRateMode: dto.fxRateMode,
       bcnRate: dto.bcnRate,
       lotCode: dto.lotCode,
       receivedDate: dto.receivedDate,
