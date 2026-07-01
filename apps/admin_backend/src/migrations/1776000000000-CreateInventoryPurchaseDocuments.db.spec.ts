@@ -128,6 +128,7 @@ describe('CreateInventoryPurchaseDocuments1776000000000 (db)', () => {
               )
             `);
 
+            await queryRunner.query('SAVEPOINT duplicate_invoice_attempt');
             await expect(
               queryRunner.query(`
                 INSERT INTO inventory_purchase_documents (
@@ -165,6 +166,10 @@ describe('CreateInventoryPurchaseDocuments1776000000000 (db)', () => {
             ).rejects.toThrow(
               'uq_inventory_purchase_documents_tenant_supplier_invoice',
             );
+            await queryRunner.query(
+              'ROLLBACK TO SAVEPOINT duplicate_invoice_attempt',
+            );
+            await queryRunner.query('RELEASE SAVEPOINT duplicate_invoice_attempt');
 
             await queryRunner.query(
               "SELECT set_config('app.tenant_id', $1, true)",
