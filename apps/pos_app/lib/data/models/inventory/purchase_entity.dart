@@ -19,6 +19,8 @@ class PurchaseEntity {
   final String currency;
   @ColumnInfo(name: 'bcn_rate')
   final double bcnRate;
+  @ColumnInfo(name: 'fx_rate_mode')
+  final String? fxRateMode;
   @ColumnInfo(name: 'unit_cost_nio')
   final double? unitCostNio;
   @ColumnInfo(name: 'cpp_before_nio')
@@ -47,6 +49,7 @@ class PurchaseEntity {
     required this.invoiceDate,
     required this.currency,
     required this.bcnRate,
+    this.fxRateMode = 'explicit',
     this.unitCostNio,
     this.cppBeforeNio,
     this.projectedCppNio,

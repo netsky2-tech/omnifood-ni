@@ -30,6 +30,7 @@ mixin _$Purchase {
   DateTime get invoiceDate => throw _privateConstructorUsedError;
   String get currency => throw _privateConstructorUsedError;
   double get bcnRate => throw _privateConstructorUsedError;
+  String? get fxRateMode => throw _privateConstructorUsedError;
   @JsonKey(name: 'unit_cost_nio')
   double? get unitCostNio => throw _privateConstructorUsedError;
   @JsonKey(name: 'cpp_before_nio')
@@ -67,6 +68,7 @@ abstract class $PurchaseCopyWith<$Res> {
       DateTime invoiceDate,
       String currency,
       double bcnRate,
+      String? fxRateMode,
       @JsonKey(name: 'unit_cost_nio') double? unitCostNio,
       @JsonKey(name: 'cpp_before_nio') double? cppBeforeNio,
       @JsonKey(name: 'projected_cpp_nio') double? projectedCppNio,
@@ -99,6 +101,7 @@ class _$PurchaseCopyWithImpl<$Res, $Val extends Purchase>
     Object? invoiceDate = null,
     Object? currency = null,
     Object? bcnRate = null,
+    Object? fxRateMode = freezed,
     Object? unitCostNio = freezed,
     Object? cppBeforeNio = freezed,
     Object? projectedCppNio = freezed,
@@ -148,6 +151,10 @@ class _$PurchaseCopyWithImpl<$Res, $Val extends Purchase>
           ? _value.bcnRate
           : bcnRate // ignore: cast_nullable_to_non_nullable
               as double,
+      fxRateMode: freezed == fxRateMode
+          ? _value.fxRateMode
+          : fxRateMode // ignore: cast_nullable_to_non_nullable
+              as String?,
       unitCostNio: freezed == unitCostNio
           ? _value.unitCostNio
           : unitCostNio // ignore: cast_nullable_to_non_nullable
@@ -199,6 +206,7 @@ abstract class _$$PurchaseImplCopyWith<$Res>
       DateTime invoiceDate,
       String currency,
       double bcnRate,
+      String? fxRateMode,
       @JsonKey(name: 'unit_cost_nio') double? unitCostNio,
       @JsonKey(name: 'cpp_before_nio') double? cppBeforeNio,
       @JsonKey(name: 'projected_cpp_nio') double? projectedCppNio,
@@ -229,6 +237,7 @@ class __$$PurchaseImplCopyWithImpl<$Res>
     Object? invoiceDate = null,
     Object? currency = null,
     Object? bcnRate = null,
+    Object? fxRateMode = freezed,
     Object? unitCostNio = freezed,
     Object? cppBeforeNio = freezed,
     Object? projectedCppNio = freezed,
@@ -278,6 +287,10 @@ class __$$PurchaseImplCopyWithImpl<$Res>
           ? _value.bcnRate
           : bcnRate // ignore: cast_nullable_to_non_nullable
               as double,
+      fxRateMode: freezed == fxRateMode
+          ? _value.fxRateMode
+          : fxRateMode // ignore: cast_nullable_to_non_nullable
+              as String?,
       unitCostNio: freezed == unitCostNio
           ? _value.unitCostNio
           : unitCostNio // ignore: cast_nullable_to_non_nullable
@@ -324,6 +337,7 @@ class _$PurchaseImpl implements _Purchase {
       required this.invoiceDate,
       this.currency = 'NIO',
       this.bcnRate = 1,
+      this.fxRateMode,
       @JsonKey(name: 'unit_cost_nio') this.unitCostNio,
       @JsonKey(name: 'cpp_before_nio') this.cppBeforeNio,
       @JsonKey(name: 'projected_cpp_nio') this.projectedCppNio,
@@ -359,6 +373,8 @@ class _$PurchaseImpl implements _Purchase {
   @JsonKey()
   final double bcnRate;
   @override
+  final String? fxRateMode;
+  @override
   @JsonKey(name: 'unit_cost_nio')
   final double? unitCostNio;
   @override
@@ -382,7 +398,7 @@ class _$PurchaseImpl implements _Purchase {
 
   @override
   String toString() {
-    return 'Purchase(id: $id, insumoId: $insumoId, supplierId: $supplierId, invoiceNumber: $invoiceNumber, quantity: $quantity, unitCost: $unitCost, timestamp: $timestamp, invoiceDate: $invoiceDate, currency: $currency, bcnRate: $bcnRate, unitCostNio: $unitCostNio, cppBeforeNio: $cppBeforeNio, projectedCppNio: $projectedCppNio, lotCode: $lotCode, receivedDate: $receivedDate, expirationDate: $expirationDate, requiresBatchTracking: $requiresBatchTracking)';
+    return 'Purchase(id: $id, insumoId: $insumoId, supplierId: $supplierId, invoiceNumber: $invoiceNumber, quantity: $quantity, unitCost: $unitCost, timestamp: $timestamp, invoiceDate: $invoiceDate, currency: $currency, bcnRate: $bcnRate, fxRateMode: $fxRateMode, unitCostNio: $unitCostNio, cppBeforeNio: $cppBeforeNio, projectedCppNio: $projectedCppNio, lotCode: $lotCode, receivedDate: $receivedDate, expirationDate: $expirationDate, requiresBatchTracking: $requiresBatchTracking)';
   }
 
   @override
@@ -408,6 +424,8 @@ class _$PurchaseImpl implements _Purchase {
             (identical(other.currency, currency) ||
                 other.currency == currency) &&
             (identical(other.bcnRate, bcnRate) || other.bcnRate == bcnRate) &&
+            (identical(other.fxRateMode, fxRateMode) ||
+                other.fxRateMode == fxRateMode) &&
             (identical(other.unitCostNio, unitCostNio) ||
                 other.unitCostNio == unitCostNio) &&
             (identical(other.cppBeforeNio, cppBeforeNio) ||
@@ -437,6 +455,7 @@ class _$PurchaseImpl implements _Purchase {
       invoiceDate,
       currency,
       bcnRate,
+      fxRateMode,
       unitCostNio,
       cppBeforeNio,
       projectedCppNio,
@@ -471,6 +490,7 @@ abstract class _Purchase implements Purchase {
       required final DateTime invoiceDate,
       final String currency,
       final double bcnRate,
+      final String? fxRateMode,
       @JsonKey(name: 'unit_cost_nio') final double? unitCostNio,
       @JsonKey(name: 'cpp_before_nio') final double? cppBeforeNio,
       @JsonKey(name: 'projected_cpp_nio') final double? projectedCppNio,
@@ -503,6 +523,8 @@ abstract class _Purchase implements Purchase {
   String get currency;
   @override
   double get bcnRate;
+  @override
+  String? get fxRateMode;
   @override
   @JsonKey(name: 'unit_cost_nio')
   double? get unitCostNio;

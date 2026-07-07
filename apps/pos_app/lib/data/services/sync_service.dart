@@ -29,7 +29,7 @@ class SyncService {
   final Dio _dio;
   static const int _batchEnvelopeLimit = 500;
   final SyncRole _role;
-  
+
   Timer? _timer;
   bool _isSyncing = false;
 
@@ -56,14 +56,14 @@ class SyncService {
 
   Future<void> triggerManualSync() async {
     if (_isSyncing) return;
-    
+
     _isSyncing = true;
     try {
       developer.log('Starting sync...', name: 'SyncService');
-      
+
       // 1. Sync Audit Logs
       await _auditRepository.syncLogs();
-      
+
       // 2. Sync inventory outbox deltas
       await _syncPurchaseDocuments();
       await _syncRecipeVersionDocuments();
@@ -72,7 +72,7 @@ class SyncService {
       await _syncAlertLifecycleDocuments();
       await _syncInventoryOutbox();
       await _refreshAlertInbox();
-      
+
       developer.log('Sync completed successfully', name: 'SyncService');
     } catch (e, stackTrace) {
       developer.log(
@@ -103,17 +103,17 @@ class SyncService {
           ? await _postBatchEnvelope(ordered)
           : await _postStandaloneDeltas(ordered);
       if (response.statusCode == 200 || response.statusCode == 201) {
-        developer.log('Synced ${ordered.length} inventory deltas to cloud', name: 'SyncService');
+        developer.log(
+          'Synced ${ordered.length} inventory deltas to cloud',
+          name: 'SyncService',
+        );
         for (final movement in ordered) {
           await _inventoryRepository.markMovementAsSynced(movement.id);
         }
       }
     } on DioException catch (e) {
       developer.log('Failed to sync sales: ${e.message}', name: 'SyncService');
-      await _markMovementsAsFailed(
-        ordered,
-        error: e.message,
-      );
+      await _markMovementsAsFailed(ordered, error: e.message);
       // We don't rethrow here to allow other sync operations to continue if added
     } catch (e, stackTrace) {
       developer.log(
@@ -122,10 +122,7 @@ class SyncService {
         error: e,
         stackTrace: stackTrace,
       );
-      await _markMovementsAsFailed(
-        ordered,
-        error: e.toString(),
-      );
+      await _markMovementsAsFailed(ordered, error: e.toString());
     }
   }
 
@@ -178,15 +175,21 @@ class SyncService {
       throw StateError('Purchase ${purchase.id} is missing invoiceNumber.');
     }
 
-    if (purchase.currency == 'USD' && purchase.bcnRate <= 0) {
+    if (_requiresExplicitBcnRate(purchase) && purchase.bcnRate <= 0) {
       throw StateError(
         'Purchase ${purchase.id} is missing an explicit USD bcnRate.',
       );
     }
   }
 
+  bool _requiresExplicitBcnRate(Purchase purchase) {
+    return purchase.currency == 'USD' &&
+        purchase.fxRateMode != purchaseFxRateModeOfficial;
+  }
+
   Future<void> _syncRecipeVersionDocuments() async {
-    final unsynced = await _inventoryRepository.getUnsyncedRecipeVersionDocuments();
+    final unsynced = await _inventoryRepository
+        .getUnsyncedRecipeVersionDocuments();
     if (unsynced.isEmpty) {
       return;
     }
@@ -198,7 +201,9 @@ class SyncService {
           data: _buildRecipeVersionPayload(document),
         );
         if (response.statusCode == 200 || response.statusCode == 201) {
-          await _inventoryRepository.markRecipeVersionDocumentAsSynced(document.id);
+          await _inventoryRepository.markRecipeVersionDocumentAsSynced(
+            document.id,
+          );
         }
       } on DioException catch (e) {
         developer.log(
@@ -222,7 +227,9 @@ class SyncService {
           data: _buildProductionOrderPayload(document),
         );
         if (response.statusCode == 200 || response.statusCode == 201) {
-          await _inventoryRepository.markProductionOrderDocumentAsSynced(document.id);
+          await _inventoryRepository.markProductionOrderDocumentAsSynced(
+            document.id,
+          );
           for (final movementId in document.movementReferences) {
             await _inventoryRepository.markMovementAsSynced(movementId);
           }
@@ -241,7 +248,8 @@ class SyncService {
   }
 
   Future<void> _syncCountSessionDocuments() async {
-    final unsynced = await _inventoryRepository.getUnsyncedCountSessionDocuments();
+    final unsynced = await _inventoryRepository
+        .getUnsyncedCountSessionDocuments();
     if (unsynced.isEmpty) {
       return;
     }
@@ -253,7 +261,9 @@ class SyncService {
           data: _buildCountSessionPayload(document),
         );
         if (response.statusCode == 200 || response.statusCode == 201) {
-          await _inventoryRepository.markCountSessionDocumentAsSynced(document.id);
+          await _inventoryRepository.markCountSessionDocumentAsSynced(
+            document.id,
+          );
           for (final movementId in document.movementReferences) {
             await _inventoryRepository.markMovementAsSynced(movementId);
           }
@@ -288,10 +298,7 @@ class SyncService {
     String? error,
   }) async {
     for (final movementId in movementIds) {
-      await _inventoryRepository.markMovementAsFailed(
-        movementId,
-        error: error,
-      );
+      await _inventoryRepository.markMovementAsFailed(movementId, error: error);
     }
   }
 
@@ -358,7 +365,7 @@ class SyncService {
   }
 
   Map<String, Object?> _buildPurchasePayload(Purchase purchase) {
-    return {
+    final payload = <String, Object?>{
       'id': purchase.id,
       'insumoId': purchase.insumoId,
       'supplierId': purchase.supplierId,
@@ -368,7 +375,6 @@ class SyncService {
       'currency': purchase.currency,
       'invoiceDate': purchase.invoiceDate.toIso8601String().split('T').first,
       'entryTimestamp': purchase.timestamp.toUtc().toIso8601String(),
-      'bcnRate': purchase.bcnRate,
       'lotCode': purchase.lotCode,
       'receivedDate': purchase.receivedDate?.toIso8601String().split('T').first,
       'expirationDate': purchase.expirationDate
@@ -376,9 +382,21 @@ class SyncService {
           .split('T')
           .first,
     };
+
+    if (purchase.fxRateMode != null) {
+      payload['fxRateMode'] = purchase.fxRateMode;
+    }
+
+    if (_requiresExplicitBcnRate(purchase)) {
+      payload['bcnRate'] = purchase.bcnRate;
+    }
+
+    return payload;
   }
 
-  Map<String, Object?> _buildRecipeVersionPayload(RecipeVersionDocument document) {
+  Map<String, Object?> _buildRecipeVersionPayload(
+    RecipeVersionDocument document,
+  ) {
     return {
       'id': document.id,
       'productId': document.productId,
@@ -408,13 +426,16 @@ class SyncService {
     };
   }
 
-  Map<String, Object?> _buildProductionOrderPayload(ProductionOrderDocument document) {
+  Map<String, Object?> _buildProductionOrderPayload(
+    ProductionOrderDocument document,
+  ) {
     return {
       'id': document.id,
       'recipeVersionId': document.recipeVersionId,
       'producedInsumoId': document.producedInsumoId,
       'producedBatchNumber': document.producedBatchNumber,
-      'producedExpirationDate': document.producedExpirationDate.toIso8601String(),
+      'producedExpirationDate': document.producedExpirationDate
+          .toIso8601String(),
       'plannedQuantity': document.plannedQuantity,
       'actualQuantity': document.actualQuantity,
       'varianceReason': document.varianceReason,
@@ -423,7 +444,9 @@ class SyncService {
     };
   }
 
-  Map<String, Object?> _buildCountSessionPayload(CountSessionDocument document) {
+  Map<String, Object?> _buildCountSessionPayload(
+    CountSessionDocument document,
+  ) {
     return {
       'id': document.id,
       'warehouseId': document.warehouseId,
@@ -466,7 +489,8 @@ class SyncService {
       'status': alert.status,
       'actorLabel': alert.actorLabel,
       'note': alert.note,
-      'actedAt': alert.actedAt?.toIso8601String() ?? alert.createdAt.toIso8601String(),
+      'actedAt':
+          alert.actedAt?.toIso8601String() ?? alert.createdAt.toIso8601String(),
     };
   }
 
@@ -490,9 +514,7 @@ class SyncService {
       '/v1/sync/batch',
       data: {'records': records},
       options: Options(
-        headers: {
-          HttpHeaders.contentTypeHeader: 'application/json',
-        },
+        headers: {HttpHeaders.contentTypeHeader: 'application/json'},
       ),
     );
   }
@@ -500,36 +522,44 @@ class SyncService {
   Map<String, Object> _buildBatchEnvelope(List<dynamic> unsynced) {
     final records = unsynced.take(_batchEnvelopeLimit).toList(growable: false);
 
-    final mappedRecords = records.asMap().entries.map((entry) {
-      final index = entry.key;
-      final movement = entry.value;
-      final movementId = movement.id.toString();
-      final movementType = _enumName(movement.type).toUpperCase();
-      final sourceSequence = _resolveSourceSequence(
-        movement,
-        fallbackSequence: index + 1,
-      );
+    final mappedRecords = records
+        .asMap()
+        .entries
+        .map((entry) {
+          final index = entry.key;
+          final movement = entry.value;
+          final movementId = movement.id.toString();
+          final movementType = _enumName(movement.type).toUpperCase();
+          final sourceSequence = _resolveSourceSequence(
+            movement,
+            fallbackSequence: index + 1,
+          );
 
-      return {
-        'idempotencyKey': 'inventory:$movementId',
-        'sourceDeviceId': 'pos-standalone',
-        'sourceSequence': sourceSequence,
-        'documentType': movementType,
-        'movements': [
-          {
-            'insumoId': movement.insumoId,
-            'quantity': movement.quantity,
-            ..._valuationFields(movement),
-          }
-        ],
-      };
-    }).toList(growable: false);
+          return {
+            'idempotencyKey': 'inventory:$movementId',
+            'sourceDeviceId': 'pos-standalone',
+            'sourceSequence': sourceSequence,
+            'documentType': movementType,
+            'movements': [
+              {
+                'insumoId': movement.insumoId,
+                'quantity': movement.quantity,
+                ..._valuationFields(movement),
+              },
+            ],
+          };
+        })
+        .toList(growable: false);
 
     return {'records': mappedRecords};
   }
 
-  int _resolveSourceSequence(dynamic movement, {required int fallbackSequence}) {
-    final persistedSequence = _tryReadField(movement, 'sourceSequence') ??
+  int _resolveSourceSequence(
+    dynamic movement, {
+    required int fallbackSequence,
+  }) {
+    final persistedSequence =
+        _tryReadField(movement, 'sourceSequence') ??
         _tryReadField(movement, 'localSequence');
     if (persistedSequence is int) {
       return persistedSequence;
@@ -575,7 +605,8 @@ class SyncService {
 
   int? _tryParsePersistedSequence(dynamic movement) {
     final persistedSequence =
-        _tryReadField(movement, 'sourceSequence') ?? _tryReadField(movement, 'localSequence');
+        _tryReadField(movement, 'sourceSequence') ??
+        _tryReadField(movement, 'localSequence');
     if (persistedSequence is int) {
       return persistedSequence;
     }

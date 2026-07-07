@@ -1,6 +1,11 @@
 import '../../domain/models/inventory/purchase.dart';
 import '../models/inventory/purchase_entity.dart';
 
+bool _shouldSyncExplicitBcnRate(Purchase purchase) {
+  return purchase.currency == 'USD' &&
+      purchase.fxRateMode != purchaseFxRateModeOfficial;
+}
+
 class PurchaseMapper {
   /// Maps domain Purchase to entity for local persistence
   static PurchaseEntity toEntity(Purchase purchase) {
@@ -15,6 +20,7 @@ class PurchaseMapper {
       invoiceDate: purchase.invoiceDate.toIso8601String(),
       currency: purchase.currency,
       bcnRate: purchase.bcnRate,
+      fxRateMode: purchase.fxRateMode,
       unitCostNio: purchase.unitCostNio,
       cppBeforeNio: purchase.cppBeforeNio,
       projectedCppNio: purchase.projectedCppNio,
@@ -39,6 +45,7 @@ class PurchaseMapper {
       invoiceDate: DateTime.parse(entity.invoiceDate),
       currency: entity.currency,
       bcnRate: entity.bcnRate,
+      fxRateMode: entity.fxRateMode,
       unitCostNio: entity.unitCostNio,
       cppBeforeNio: entity.cppBeforeNio,
       projectedCppNio: entity.projectedCppNio,
@@ -55,7 +62,7 @@ class PurchaseMapper {
 
   /// Maps Purchase to JSON for backend sync
   static Map<String, dynamic> toSyncJson(Purchase purchase) {
-    return {
+    final payload = <String, dynamic>{
       'id': purchase.id,
       'insumoId': purchase.insumoId,
       'supplierId': purchase.supplierId,
@@ -64,7 +71,6 @@ class PurchaseMapper {
       'unitCost': purchase.unitCost,
       'invoiceDate': purchase.invoiceDate.toIso8601String().split('T').first,
       'currency': purchase.currency,
-      'bcnRate': purchase.bcnRate,
       'unitCostNio': purchase.unitCostNio,
       'projectedCppNio': purchase.projectedCppNio,
       'lotCode': purchase.lotCode,
@@ -75,6 +81,16 @@ class PurchaseMapper {
           .first,
       'entryTimestamp': purchase.timestamp.toIso8601String(),
     };
+
+    if (purchase.fxRateMode != null) {
+      payload['fxRateMode'] = purchase.fxRateMode;
+    }
+
+    if (_shouldSyncExplicitBcnRate(purchase)) {
+      payload['bcnRate'] = purchase.bcnRate;
+    }
+
+    return payload;
   }
 
   /// Maps backend response to domain Purchase
@@ -97,6 +113,7 @@ class PurchaseMapper {
       invoiceDate: DateTime.parse(json['invoiceDate'] as String),
       currency: currency,
       bcnRate: rawBcnRate ?? 1,
+      fxRateMode: json['fxRateMode'] as String?,
       unitCostNio: (json['unitCostNio'] as num?)?.toDouble(),
       projectedCppNio: (json['projectedCppNio'] as num?)?.toDouble(),
       lotCode: json['lotCode'] as String?,

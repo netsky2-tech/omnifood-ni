@@ -658,6 +658,10 @@ final migration23_24 = Migration(23, 24, (database) async {
   );
 });
 
+final migration24_25 = Migration(24, 25, (database) async {
+  await database.execute('ALTER TABLE purchases ADD COLUMN fx_rate_mode TEXT');
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -673,4 +677,5 @@ final allMigrations = [
   migration21_22,
   migration22_23,
   migration23_24,
+  migration24_25,
 ];

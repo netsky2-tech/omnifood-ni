@@ -152,14 +152,14 @@ class PurchaseViewModel with ChangeNotifier {
         }
       }
 
-        await movementEngine.recordPurchase(
-          insumoId,
-          review.quantityInBaseUnit,
-          review.unitCostNio,
-          movementId: purchaseId,
-          reason:
+      await movementEngine.recordPurchase(
+        insumoId,
+        review.quantityInBaseUnit,
+        review.unitCostNio,
+        movementId: purchaseId,
+        reason:
             'Purchase $currency invoice $normalizedInvoiceNumber @ ${review.unitCostNio.toStringAsFixed(4)} NIO',
-        );
+      );
 
       final purchase = Purchase(
         id: purchaseId,
@@ -172,6 +172,7 @@ class PurchaseViewModel with ChangeNotifier {
         invoiceDate: invoiceDate,
         currency: currency,
         bcnRate: review.bcnRate,
+        fxRateMode: _resolveFxRateMode(currency),
         unitCostNio: review.unitCostNio,
         cppBeforeNio: review.previousCppNio,
         projectedCppNio: review.projectedCppNio,
@@ -261,7 +262,9 @@ class PurchaseViewModel with ChangeNotifier {
     notifyListeners();
 
     try {
-      final rate = await repository.fetchOfficialBcnRateByInvoiceDate(invoiceDate);
+      final rate = await repository.fetchOfficialBcnRateByInvoiceDate(
+        invoiceDate,
+      );
       _hasOfficialBcnRate = true;
       _bcnRateLookupMessage = officialBcnRateLoadedMessage;
       return rate;
@@ -328,10 +331,20 @@ class PurchaseViewModel with ChangeNotifier {
 
   double _requireExplicitBcnRate(double? bcnRate) {
     if (bcnRate == null || bcnRate <= 0) {
-      throw ArgumentError('USD purchases require an explicit BCN exchange rate.');
+      throw ArgumentError(
+        'USD purchases require an explicit BCN exchange rate.',
+      );
     }
 
     return bcnRate.toDouble();
+  }
+
+  String _resolveFxRateMode(String currency) {
+    if (currency == 'USD' && _hasOfficialBcnRate) {
+      return purchaseFxRateModeOfficial;
+    }
+
+    return purchaseFxRateModeExplicit;
   }
 
   Future<void> _assertNoDuplicateLocalInvoice({
