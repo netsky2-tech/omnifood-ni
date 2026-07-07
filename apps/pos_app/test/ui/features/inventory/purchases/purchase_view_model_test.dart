@@ -98,29 +98,78 @@ void main() {
           reason: anyNamed('reason'),
         ),
       ).called(1);
-      verify(mockRepo.queuePurchaseSync(any)).called(1);
+      final queuedPurchase =
+          verify(mockRepo.queuePurchaseSync(captureAny)).captured.single
+              as Purchase;
+      expect(queuedPurchase.fxRateMode, purchaseFxRateModeExplicit);
       verify(mockRepo.saveBatch(any)).called(1);
       expect(viewModel.isLoading, false);
       expect(viewModel.errorMessage, isNull);
     });
 
-    test('converts 50 lb purchase quantity, base unit cost, and total through review flow', () async {
-      final lbToKg = UomConversion(
-        id: 'lb-kg',
-        insumoId: 'i1',
-        unitName: 'lb',
-        factor: 0.453592,
-      );
+    test(
+      'stores official fxRateMode after a successful official lookup',
+      () async {
+        when(
+          mockRepo.getConversionsByInsumoId('i1'),
+        ).thenAnswer((_) async => [conversion]);
+        when(
+          mockRepo.fetchOfficialBcnRateByInvoiceDate(DateTime(2026, 1, 10)),
+        ).thenAnswer((_) async => 36.7123);
+        await viewModel.loadInitialData(insumoId: 'i1');
+        await viewModel.fetchOfficialBcnRate(DateTime(2026, 1, 10));
+
+        when(
+          mockEngine.recordPurchase(
+            any,
+            any,
+            any,
+            movementId: anyNamed('movementId'),
+            reason: anyNamed('reason'),
+          ),
+        ).thenAnswer((_) async {});
+        when(mockRepo.queuePurchaseSync(any)).thenAnswer((_) async {});
+        when(mockRepo.saveBatch(any)).thenAnswer((_) async {});
+
+        await viewModel.recordPurchase(
+          insumoId: 'i1',
+          supplierId: 's1',
+          invoiceNumber: 'INV-OFFICIAL-1',
+          uomConversionId: 'c1',
+          quantity: 2,
+          unitCost: 100,
+          invoiceDate: DateTime(2026, 1, 10),
+          currency: 'USD',
+          bcnRate: 36.7123,
+          lotCode: 'LOT-1',
+          receivedDate: DateTime(2026, 1, 10),
+          expirationDate: DateTime(2026, 2, 10),
+        );
+
+        final queuedPurchase =
+            verify(mockRepo.queuePurchaseSync(captureAny)).captured.single
+                as Purchase;
+        expect(queuedPurchase.fxRateMode, purchaseFxRateModeOfficial);
+        expect(queuedPurchase.bcnRate, 36.7123);
+      },
+    );
+
+    test('falls back to explicit fxRateMode after a manual override', () async {
       when(
         mockRepo.getConversionsByInsumoId('i1'),
-      ).thenAnswer((_) async => [lbToKg]);
+      ).thenAnswer((_) async => [conversion]);
+      when(
+        mockRepo.fetchOfficialBcnRateByInvoiceDate(DateTime(2026, 1, 10)),
+      ).thenAnswer((_) async => 36.7123);
       await viewModel.loadInitialData(insumoId: 'i1');
+      await viewModel.fetchOfficialBcnRate(DateTime(2026, 1, 10));
+      viewModel.markOfficialBcnRateOverriddenManually();
 
       when(
         mockEngine.recordPurchase(
-          'i1',
-          22.6796,
-          22.0462,
+          any,
+          any,
+          any,
           movementId: anyNamed('movementId'),
           reason: anyNamed('reason'),
         ),
@@ -131,37 +180,87 @@ void main() {
       await viewModel.recordPurchase(
         insumoId: 'i1',
         supplierId: 's1',
-        invoiceNumber: 'INV-1002',
-        uomConversionId: 'lb-kg',
-        quantity: 50,
-        unitCost: 10,
+        invoiceNumber: 'INV-MANUAL-1',
+        uomConversionId: 'c1',
+        quantity: 2,
+        unitCost: 100,
         invoiceDate: DateTime(2026, 1, 10),
-        currency: 'NIO',
-        lotCode: 'LOT-LB',
+        currency: 'USD',
+        bcnRate: 36.9,
+        lotCode: 'LOT-1',
         receivedDate: DateTime(2026, 1, 10),
         expirationDate: DateTime(2026, 2, 10),
       );
 
-      verify(
-        mockEngine.recordPurchase(
-          'i1',
-          22.6796,
-          22.0462,
-          movementId: anyNamed('movementId'),
-          reason: anyNamed('reason'),
-        ),
-      ).called(1);
-      final queuedPurchase = verify(
-        mockRepo.queuePurchaseSync(captureAny),
-      ).captured.single as Purchase;
-      expect(queuedPurchase.quantity, 22.6796);
-      expect(queuedPurchase.unitCostNio, 22.0462);
-      expect(
-        (queuedPurchase.quantity * queuedPurchase.unitCostNio!).toStringAsFixed(0),
-        '500',
-      );
-      verify(mockRepo.saveBatch(any)).called(1);
+      final queuedPurchase =
+          verify(mockRepo.queuePurchaseSync(captureAny)).captured.single
+              as Purchase;
+      expect(queuedPurchase.fxRateMode, purchaseFxRateModeExplicit);
+      expect(queuedPurchase.bcnRate, 36.9);
     });
+
+    test(
+      'converts 50 lb purchase quantity, base unit cost, and total through review flow',
+      () async {
+        final lbToKg = UomConversion(
+          id: 'lb-kg',
+          insumoId: 'i1',
+          unitName: 'lb',
+          factor: 0.453592,
+        );
+        when(
+          mockRepo.getConversionsByInsumoId('i1'),
+        ).thenAnswer((_) async => [lbToKg]);
+        await viewModel.loadInitialData(insumoId: 'i1');
+
+        when(
+          mockEngine.recordPurchase(
+            'i1',
+            22.6796,
+            22.0462,
+            movementId: anyNamed('movementId'),
+            reason: anyNamed('reason'),
+          ),
+        ).thenAnswer((_) async {});
+        when(mockRepo.queuePurchaseSync(any)).thenAnswer((_) async {});
+        when(mockRepo.saveBatch(any)).thenAnswer((_) async {});
+
+        await viewModel.recordPurchase(
+          insumoId: 'i1',
+          supplierId: 's1',
+          invoiceNumber: 'INV-1002',
+          uomConversionId: 'lb-kg',
+          quantity: 50,
+          unitCost: 10,
+          invoiceDate: DateTime(2026, 1, 10),
+          currency: 'NIO',
+          lotCode: 'LOT-LB',
+          receivedDate: DateTime(2026, 1, 10),
+          expirationDate: DateTime(2026, 2, 10),
+        );
+
+        verify(
+          mockEngine.recordPurchase(
+            'i1',
+            22.6796,
+            22.0462,
+            movementId: anyNamed('movementId'),
+            reason: anyNamed('reason'),
+          ),
+        ).called(1);
+        final queuedPurchase =
+            verify(mockRepo.queuePurchaseSync(captureAny)).captured.single
+                as Purchase;
+        expect(queuedPurchase.quantity, 22.6796);
+        expect(queuedPurchase.unitCostNio, 22.0462);
+        expect(
+          (queuedPurchase.quantity * queuedPurchase.unitCostNio!)
+              .toStringAsFixed(0),
+          '500',
+        );
+        verify(mockRepo.saveBatch(any)).called(1);
+      },
+    );
 
     test('throws error when conversion ID is invalid', () async {
       // Arrange
@@ -220,55 +319,58 @@ void main() {
       );
     });
 
-    test('blocks duplicate supplier invoice before local stock mutation', () async {
-      when(
-        mockRepo.getConversionsByInsumoId('i1'),
-      ).thenAnswer((_) async => [conversion]);
-      when(mockRepo.getPurchaseHistory()).thenAnswer(
-        (_) async => [
-          Purchase(
-            id: 'existing-purchase',
+    test(
+      'blocks duplicate supplier invoice before local stock mutation',
+      () async {
+        when(
+          mockRepo.getConversionsByInsumoId('i1'),
+        ).thenAnswer((_) async => [conversion]);
+        when(mockRepo.getPurchaseHistory()).thenAnswer(
+          (_) async => [
+            Purchase(
+              id: 'existing-purchase',
+              insumoId: 'i1',
+              supplierId: 's1',
+              invoiceNumber: 'INV-1001',
+              quantity: 1,
+              unitCost: 50,
+              timestamp: DateTime(2026, 1, 9),
+              invoiceDate: DateTime(2026, 1, 9),
+              bcnRate: 1,
+            ),
+          ],
+        );
+        await viewModel.loadInitialData(insumoId: 'i1');
+
+        await expectLater(
+          () => viewModel.recordPurchase(
             insumoId: 'i1',
             supplierId: 's1',
-            invoiceNumber: 'INV-1001',
-            quantity: 1,
-            unitCost: 50,
-            timestamp: DateTime(2026, 1, 9),
-            invoiceDate: DateTime(2026, 1, 9),
-            bcnRate: 1,
+            invoiceNumber: ' INV-1001 ',
+            uomConversionId: 'c1',
+            quantity: 2,
+            unitCost: 100,
+            invoiceDate: DateTime(2026, 1, 10),
+            currency: 'NIO',
+            lotCode: 'LOT-1',
+            receivedDate: DateTime(2026, 1, 10),
+            expirationDate: DateTime(2026, 2, 10),
           ),
-        ],
-      );
-      await viewModel.loadInitialData(insumoId: 'i1');
+          throwsArgumentError,
+        );
 
-      await expectLater(
-        () => viewModel.recordPurchase(
-          insumoId: 'i1',
-          supplierId: 's1',
-          invoiceNumber: ' INV-1001 ',
-          uomConversionId: 'c1',
-          quantity: 2,
-          unitCost: 100,
-          invoiceDate: DateTime(2026, 1, 10),
-          currency: 'NIO',
-          lotCode: 'LOT-1',
-          receivedDate: DateTime(2026, 1, 10),
-          expirationDate: DateTime(2026, 2, 10),
-        ),
-        throwsArgumentError,
-      );
-
-      verifyNever(
-        mockEngine.recordPurchase(
-          any,
-          any,
-          any,
-          movementId: anyNamed('movementId'),
-          reason: anyNamed('reason'),
-        ),
-      );
-      verifyNever(mockRepo.queuePurchaseSync(any));
-    });
+        verifyNever(
+          mockEngine.recordPurchase(
+            any,
+            any,
+            any,
+            movementId: anyNamed('movementId'),
+            reason: anyNamed('reason'),
+          ),
+        );
+        verifyNever(mockRepo.queuePurchaseSync(any));
+      },
+    );
 
     test('allows the same invoice number for a different supplier', () async {
       when(
@@ -382,21 +484,24 @@ void main() {
       expect(viewModel.bcnRateLookupMessage, officialBcnRateDateChangedMessage);
     });
 
-    test('switches to manual source when the cashier edits the BCN rate', () async {
-      when(
-        mockRepo.fetchOfficialBcnRateByInvoiceDate(DateTime(2026, 1, 10)),
-      ).thenAnswer((_) async => 36.7123);
+    test(
+      'switches to manual source when the cashier edits the BCN rate',
+      () async {
+        when(
+          mockRepo.fetchOfficialBcnRateByInvoiceDate(DateTime(2026, 1, 10)),
+        ).thenAnswer((_) async => 36.7123);
 
-      await viewModel.fetchOfficialBcnRate(DateTime(2026, 1, 10));
+        await viewModel.fetchOfficialBcnRate(DateTime(2026, 1, 10));
 
-      viewModel.markOfficialBcnRateOverriddenManually();
+        viewModel.markOfficialBcnRateOverriddenManually();
 
-      expect(viewModel.hasOfficialBcnRate, false);
-      expect(
-        viewModel.bcnRateLookupMessage,
-        officialBcnRateManualOverrideMessage,
-      );
-    });
+        expect(viewModel.hasOfficialBcnRate, false);
+        expect(
+          viewModel.bcnRateLookupMessage,
+          officialBcnRateManualOverrideMessage,
+        );
+      },
+    );
 
     test('keeps the flow manual-first when the lookup fails', () async {
       when(

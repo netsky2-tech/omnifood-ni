@@ -3,8 +3,10 @@
 Flujo de primera clase para la **factura de compra**: identidad fiscal, fecha fiscal, fuente/caché BCN, cálculo CPP en NIO y corrección por movimiento compensatorio. Cierra UC-01 (compra USD: FX BCN por fecha de factura).
 
 ## Estado actual
-- UI de compras existe con proveedores y presentaciones.
-- CPP básico implementado; FX BCN parcial.
+- UI de compras existe con proveedores, presentaciones, número de factura y fecha fiscal.
+- El lookup oficial BCN por `invoiceDate` ya existe en backend + POS como flujo opt-in con fallback manual offline-safe.
+- El POS ya persiste `fxRateMode` (`explicit | official`) en compras nuevas, mantiene `bcnRate` local aun cuando la fuente fue oficial y sincroniza `fxRateMode` hacia backend.
+- Sigue faltando el cierre integral del batch: identidad fiscal completa, corrección compensatoria y trazabilidad backend/reporting de la procedencia FX más allá del contrato de sync.
 
 ## Brechas a remediar
 - [ ] **Identidad de factura de proveedor**: persistir número de factura, proveedor, CAE/clave fiscal (si aplica), fecha de emisión (fiscal) y fecha de digitación por separado.
