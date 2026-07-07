@@ -20,6 +20,7 @@ import 'package:pos_app/data/models/inventory/movement_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_sync_state_entity.dart';
 import 'package:pos_app/data/models/inventory/insumo_entity.dart';
 import 'package:pos_app/data/models/inventory/recipe_version_document_entity.dart';
+import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
 
 import 'inventory_repository_impl_test.mocks.dart';
 
@@ -41,12 +42,14 @@ import 'inventory_repository_impl_test.mocks.dart';
 ])
 void main() {
   late InventoryRepositoryImpl repository;
+  late MockDio mockDio;
   late MockMovementDao mockMovementDao;
   late MockMovementSyncStateDao mockMovementSyncStateDao;
   late MockInsumoDao mockInsumoDao;
   late MockRecipeVersionDocumentDao mockRecipeVersionDocumentDao;
 
   setUp(() {
+    mockDio = MockDio();
     mockMovementDao = MockMovementDao();
     mockMovementSyncStateDao = MockMovementSyncStateDao();
     mockInsumoDao = MockInsumoDao();
@@ -64,7 +67,7 @@ void main() {
       batchDao: MockBatchDao(),
       purchaseDao: MockPurchaseDao(),
       forensicAlertDao: MockForensicAlertDao(),
-      dio: MockDio(),
+      dio: mockDio,
       database: MockAppDatabase(),
     );
   });
@@ -94,6 +97,89 @@ void main() {
   });
 
   group('InventoryRepositoryImpl - Sync', () {
+    test('fetchOfficialBcnRateByInvoiceDate requests and parses the backend lookup', () async {
+      when(
+        mockDio.get(
+          '/inventory/fx/bcn',
+          queryParameters: {'invoiceDate': '2026-01-10'},
+        ),
+      ).thenAnswer(
+        (_) async => Response<Map<String, dynamic>>(
+          data: const {
+            'invoiceDate': '2026-01-10',
+            'effectiveDate': '2026-01-10',
+            'rateNio': 36.7123,
+          },
+          requestOptions: RequestOptions(path: '/inventory/fx/bcn'),
+        ),
+      );
+
+      final result = await repository.fetchOfficialBcnRateByInvoiceDate(
+        DateTime(2026, 1, 10),
+      );
+
+      expect(result, 36.7123);
+      verify(
+        mockDio.get(
+          '/inventory/fx/bcn',
+          queryParameters: {'invoiceDate': '2026-01-10'},
+        ),
+      ).called(1);
+    });
+
+    test('fetchOfficialBcnRateByInvoiceDate surfaces 404 lookups as manual fallback guidance', () async {
+      when(
+        mockDio.get(
+          '/inventory/fx/bcn',
+          queryParameters: {'invoiceDate': '2026-01-10'},
+        ),
+      ).thenThrow(
+        DioException(
+          requestOptions: RequestOptions(path: '/inventory/fx/bcn'),
+          response: Response<void>(
+            statusCode: 404,
+            requestOptions: RequestOptions(path: '/inventory/fx/bcn'),
+          ),
+        ),
+      );
+
+      await expectLater(
+        () => repository.fetchOfficialBcnRateByInvoiceDate(DateTime(2026, 1, 10)),
+        throwsA(
+          isA<OfficialBcnRateLookupException>().having(
+            (OfficialBcnRateLookupException error) => error.message,
+            'message',
+            'No official BCN rate is available for 2026-01-10. Enter the BCN rate manually to continue.',
+          ),
+        ),
+      );
+    });
+
+    test('fetchOfficialBcnRateByInvoiceDate keeps manual entry available when offline', () async {
+      when(
+        mockDio.get(
+          '/inventory/fx/bcn',
+          queryParameters: {'invoiceDate': '2026-01-10'},
+        ),
+      ).thenThrow(
+        DioException(
+          requestOptions: RequestOptions(path: '/inventory/fx/bcn'),
+          type: DioExceptionType.connectionError,
+        ),
+      );
+
+      await expectLater(
+        () => repository.fetchOfficialBcnRateByInvoiceDate(DateTime(2026, 1, 10)),
+        throwsA(
+          isA<OfficialBcnRateLookupException>().having(
+            (OfficialBcnRateLookupException error) => error.message,
+            'message',
+            'Official BCN lookup is unavailable offline. Enter the BCN rate manually to continue.',
+          ),
+        ),
+      );
+    });
+
     test('getUnsyncedMovements should call MovementDao', () async {
       final entities = [
         MovementEntity(
