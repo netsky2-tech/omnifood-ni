@@ -15,6 +15,15 @@ import '../../models/inventory/production_order_document.dart';
 import '../../models/catalog/catalog_value.dart';
 import '../../models/catalog/catalog_type.dart';
 
+class OfficialBcnRateLookupException implements Exception {
+  const OfficialBcnRateLookupException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 abstract class InventoryRepository {
   AppDatabase get database;
 
@@ -89,6 +98,7 @@ abstract class InventoryRepository {
   Future<List<Purchase>> getPurchaseHistory();
   Future<List<Purchase>> getUnsyncedPurchases();
   Future<void> markPurchaseAsSynced(String id);
+  Future<double> fetchOfficialBcnRateByInvoiceDate(DateTime invoiceDate);
 
   Future<List<ForensicAlert>> getForensicAlerts();
   Future<void> saveForensicAlert(ForensicAlert alert);

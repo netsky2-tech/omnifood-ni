@@ -361,4 +361,60 @@ void main() {
       expect(viewModel.fifoRows.last.isNearExpiry, true);
     });
   });
+
+  group('fetchOfficialBcnRate', () {
+    test('stores the official source state when the lookup succeeds', () async {
+      when(
+        mockRepo.fetchOfficialBcnRateByInvoiceDate(DateTime(2026, 1, 10)),
+      ).thenAnswer((_) async => 36.7123);
+
+      final result = await viewModel.fetchOfficialBcnRate(
+        DateTime(2026, 1, 10),
+      );
+
+      expect(result, 36.7123);
+      expect(viewModel.hasOfficialBcnRate, true);
+      expect(viewModel.bcnRateLookupMessage, officialBcnRateLoadedMessage);
+
+      viewModel.markOfficialBcnRateStaleForInvoiceDateChange();
+
+      expect(viewModel.hasOfficialBcnRate, false);
+      expect(viewModel.bcnRateLookupMessage, officialBcnRateDateChangedMessage);
+    });
+
+    test('switches to manual source when the cashier edits the BCN rate', () async {
+      when(
+        mockRepo.fetchOfficialBcnRateByInvoiceDate(DateTime(2026, 1, 10)),
+      ).thenAnswer((_) async => 36.7123);
+
+      await viewModel.fetchOfficialBcnRate(DateTime(2026, 1, 10));
+
+      viewModel.markOfficialBcnRateOverriddenManually();
+
+      expect(viewModel.hasOfficialBcnRate, false);
+      expect(
+        viewModel.bcnRateLookupMessage,
+        officialBcnRateManualOverrideMessage,
+      );
+    });
+
+    test('keeps the flow manual-first when the lookup fails', () async {
+      when(
+        mockRepo.fetchOfficialBcnRateByInvoiceDate(DateTime(2026, 1, 10)),
+      ).thenThrow(
+        const OfficialBcnRateLookupException(
+          'Official BCN lookup is unavailable offline. Enter the BCN rate manually to continue.',
+        ),
+      );
+
+      final result = await viewModel.fetchOfficialBcnRate(
+        DateTime(2026, 1, 10),
+      );
+
+      expect(result, isNull);
+      expect(viewModel.hasOfficialBcnRate, false);
+      expect(viewModel.bcnRateLookupMessage, contains('manually'));
+      expect(viewModel.errorMessage, isNull);
+    });
+  });
 }

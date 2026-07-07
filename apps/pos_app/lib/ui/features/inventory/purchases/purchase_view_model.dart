@@ -10,6 +10,12 @@ import '../../../../domain/services/inventory/movement_engine.dart';
 import '../../../../domain/services/inventory/uom_conversion_calculator.dart';
 
 const purchaseCurrencies = ['NIO', 'USD'];
+const officialBcnRateLoadedMessage =
+    'Official BCN rate loaded for the invoice date.';
+const officialBcnRateDateChangedMessage =
+    'Invoice date changed. Refetch the official BCN rate or keep a manual rate.';
+const officialBcnRateManualOverrideMessage =
+    'BCN rate edited manually. The rate source is now manual.';
 
 class PurchaseReviewData {
   const PurchaseReviewData({
@@ -63,6 +69,15 @@ class PurchaseViewModel with ChangeNotifier {
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
+
+  bool _isFetchingOfficialBcnRate = false;
+  bool get isFetchingOfficialBcnRate => _isFetchingOfficialBcnRate;
+
+  bool _hasOfficialBcnRate = false;
+  bool get hasOfficialBcnRate => _hasOfficialBcnRate;
+
+  String? _bcnRateLookupMessage;
+  String? get bcnRateLookupMessage => _bcnRateLookupMessage;
 
   String? _errorMessage;
   String? get errorMessage => _errorMessage;
@@ -238,6 +253,77 @@ class PurchaseViewModel with ChangeNotifier {
       projectedCppNio: double.parse(projectedCpp.toStringAsFixed(4)),
       requiresBatchTracking: insumo.isPerishable,
     );
+  }
+
+  Future<double?> fetchOfficialBcnRate(DateTime invoiceDate) async {
+    _isFetchingOfficialBcnRate = true;
+    _bcnRateLookupMessage = null;
+    notifyListeners();
+
+    try {
+      final rate = await repository.fetchOfficialBcnRateByInvoiceDate(invoiceDate);
+      _hasOfficialBcnRate = true;
+      _bcnRateLookupMessage = officialBcnRateLoadedMessage;
+      return rate;
+    } on OfficialBcnRateLookupException catch (error) {
+      _hasOfficialBcnRate = false;
+      _bcnRateLookupMessage = error.message;
+      return null;
+    } catch (_) {
+      _hasOfficialBcnRate = false;
+      _bcnRateLookupMessage =
+          'Could not load the official BCN rate. Enter the BCN rate manually to continue.';
+      return null;
+    } finally {
+      _isFetchingOfficialBcnRate = false;
+      notifyListeners();
+    }
+  }
+
+  void clearOfficialBcnRateSource() {
+    _setOfficialBcnRateState(hasOfficialBcnRate: false, lookupMessage: null);
+  }
+
+  void markOfficialBcnRateStaleForInvoiceDateChange() {
+    if (_hasOfficialBcnRate) {
+      _setOfficialBcnRateState(
+        hasOfficialBcnRate: false,
+        lookupMessage: officialBcnRateDateChangedMessage,
+      );
+      return;
+    }
+
+    if (_bcnRateLookupMessage != null) {
+      clearOfficialBcnRateSource();
+    }
+  }
+
+  void markOfficialBcnRateOverriddenManually() {
+    if (_hasOfficialBcnRate) {
+      _setOfficialBcnRateState(
+        hasOfficialBcnRate: false,
+        lookupMessage: officialBcnRateManualOverrideMessage,
+      );
+      return;
+    }
+
+    if (_bcnRateLookupMessage != null) {
+      clearOfficialBcnRateSource();
+    }
+  }
+
+  void _setOfficialBcnRateState({
+    required bool hasOfficialBcnRate,
+    required String? lookupMessage,
+  }) {
+    if (_hasOfficialBcnRate == hasOfficialBcnRate &&
+        _bcnRateLookupMessage == lookupMessage) {
+      return;
+    }
+
+    _hasOfficialBcnRate = hasOfficialBcnRate;
+    _bcnRateLookupMessage = lookupMessage;
+    notifyListeners();
   }
 
   double _requireExplicitBcnRate(double? bcnRate) {

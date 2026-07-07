@@ -586,6 +586,45 @@ class InventoryRepositoryImpl implements InventoryRepository {
   }
 
   @override
+  Future<double> fetchOfficialBcnRateByInvoiceDate(DateTime invoiceDate) async {
+    final formattedInvoiceDate = _formatInvoiceDate(invoiceDate);
+
+    try {
+      final response = await dio.get<Map<String, dynamic>>(
+        '/inventory/fx/bcn',
+        queryParameters: {'invoiceDate': formattedInvoiceDate},
+      );
+
+      final payload = response.data;
+      final rawRate = payload?['rateNio'];
+      if (rawRate is num) {
+        return rawRate.toDouble();
+      }
+
+      if (rawRate is String) {
+        final parsedRate = double.tryParse(rawRate);
+        if (parsedRate != null) {
+          return parsedRate;
+        }
+      }
+
+      throw OfficialBcnRateLookupException(
+        'Official BCN lookup returned an invalid rate. Enter the BCN rate manually to continue.',
+      );
+    } on DioException catch (error) {
+      throw OfficialBcnRateLookupException(
+        _mapOfficialBcnRateLookupMessage(error, formattedInvoiceDate),
+      );
+    } on OfficialBcnRateLookupException {
+      rethrow;
+    } catch (_) {
+      throw const OfficialBcnRateLookupException(
+        'Could not load the official BCN rate. Enter the BCN rate manually to continue.',
+      );
+    }
+  }
+
+  @override
   Future<List<ForensicAlert>> getForensicAlerts() async {
     final entities = await forensicAlertDao.findAllAlerts();
     return entities.map(_toForensicAlert).toList(growable: false);
@@ -794,5 +833,31 @@ class InventoryRepositoryImpl implements InventoryRepository {
               jsonDecode(entity.metadataJson!) as Map<String, dynamic>,
             ),
     );
+  }
+
+  String _formatInvoiceDate(DateTime invoiceDate) {
+    final month = invoiceDate.month.toString().padLeft(2, '0');
+    final day = invoiceDate.day.toString().padLeft(2, '0');
+    return '${invoiceDate.year}-$month-$day';
+  }
+
+  String _mapOfficialBcnRateLookupMessage(
+    DioException error,
+    String formattedInvoiceDate,
+  ) {
+    final statusCode = error.response?.statusCode;
+    if (statusCode == 404) {
+      return 'No official BCN rate is available for $formattedInvoiceDate. Enter the BCN rate manually to continue.';
+    }
+
+    final isOfflineFailure = error.type == DioExceptionType.connectionError ||
+        error.type == DioExceptionType.connectionTimeout ||
+        error.type == DioExceptionType.receiveTimeout ||
+        error.type == DioExceptionType.sendTimeout;
+    if (isOfflineFailure) {
+      return 'Official BCN lookup is unavailable offline. Enter the BCN rate manually to continue.';
+    }
+
+    return 'Could not load the official BCN rate. Enter the BCN rate manually to continue.';
   }
 }

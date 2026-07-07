@@ -2130,6 +2130,17 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i30.Future<void>);
 
   @override
+  _i30.Future<double> fetchOfficialBcnRateByInvoiceDate(
+          DateTime? invoiceDate) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #fetchOfficialBcnRateByInvoiceDate,
+          [invoiceDate],
+        ),
+        returnValue: _i30.Future<double>.value(0.0),
+      ) as _i30.Future<double>);
+
+  @override
   _i30.Future<List<_i63.ForensicAlert>> getForensicAlerts() =>
       (super.noSuchMethod(
         Invocation.method(
