@@ -117,3 +117,12 @@ export class PurchaseDocumentDto {
   @IsDateString()
   expirationDate?: string;
 }
+
+export class PurchaseCorrectionDto {
+  @IsString()
+  @IsNotEmpty()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  reason: string;
+}

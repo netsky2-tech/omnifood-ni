@@ -5,6 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { DataSource, QueryFailedError } from 'typeorm';
 import { Batch } from './entities/batch.entity';
 import { Insumo } from './entities/insumo.entity';
@@ -30,6 +31,12 @@ type Currency = PurchaseCurrency;
 
 const SCALE_4 = 4;
 const POSTGRES_UNIQUE_VIOLATION = '23505';
+const PURCHASE_CORRECTION_UNIQUE_INDEX =
+  'idx_inventory_purchase_documents_one_correction_per_origin';
+const PURCHASE_DOCUMENT_TYPE = {
+  PURCHASE: 'PURCHASE',
+  CORRECTION: 'PURCHASE_CORRECTION',
+} as const;
 const BCN_RATE_SOURCE = {
   NIO: 'NIO document rate',
   EXPLICIT: 'Document-provided BCN rate',
@@ -39,6 +46,7 @@ const round4 = (value: number): number => Number(value.toFixed(SCALE_4));
 
 interface QueryFailedDriverError {
   code?: string;
+  constraint?: string;
 }
 
 export interface FxRateResolver {
@@ -248,6 +256,182 @@ export class InventoryPurchaseService {
     }
   }
 
+  async correctPurchase(input: {
+    tenantId: string;
+    purchaseDocumentId: string;
+    reason: string;
+    actorUserId?: string;
+  }) {
+    const tenantId = this.requireTenantId(input.tenantId);
+    const reason = this.requireCorrectionReason(input.reason);
+
+    try {
+      return await this.dataSource.transaction(
+        'SERIALIZABLE',
+        async (manager) => {
+          await manager.query("SELECT set_config('app.tenant_id', $1, true)", [
+            tenantId,
+          ]);
+
+          const originalDocument = await manager.findOne(PurchaseDocument, {
+            where: {
+              id: input.purchaseDocumentId,
+              tenant_id: tenantId,
+            },
+          });
+
+          if (!originalDocument) {
+            throw new NotFoundException(
+              `Purchase document ${input.purchaseDocumentId} not found`,
+            );
+          }
+
+          const existingCorrection = await manager.findOne(PurchaseDocument, {
+            where: {
+              tenant_id: tenantId,
+              correction_for_purchase_document_id: originalDocument.id,
+            },
+          });
+
+          if (existingCorrection) {
+            throw new ConflictException(
+              `Purchase document ${originalDocument.id} has already been corrected`,
+            );
+          }
+
+          const originalMovement = await manager.findOne(InventoryMovement, {
+            where: {
+              tenant_id: tenantId,
+              sourceDocumentId: originalDocument.id,
+              sourceDocumentType: PURCHASE_DOCUMENT_TYPE.PURCHASE,
+            },
+          });
+
+          if (!originalMovement) {
+            throw new NotFoundException(
+              `Purchase movement for document ${originalDocument.id} not found`,
+            );
+          }
+
+          const insumo = await manager
+            .createQueryBuilder(Insumo, 'insumo')
+            .setLock('pessimistic_write')
+            .where('insumo.id = :insumoId', {
+              insumoId: originalDocument.insumo_id,
+            })
+            .andWhere('insumo.tenant_id = :tenantId', { tenantId })
+            .getOne();
+
+          if (!insumo) {
+            throw new NotFoundException(
+              `Insumo ${originalDocument.insumo_id} not found`,
+            );
+          }
+
+          const previousStock = round4(Number(insumo.stock));
+          const previousCppNio = round4(Number(insumo.averageCost));
+          const correctedQuantity = round4(-Number(originalMovement.quantity));
+          const correctedTotalCostNio = round4(
+            -Number(originalMovement.totalCostNio),
+          );
+          const newStock = round4(previousStock + correctedQuantity);
+          const projectedCppNio =
+            newStock === 0
+              ? 0
+              : round4(
+                  (previousStock * previousCppNio + correctedTotalCostNio) /
+                    newStock,
+                );
+
+          const correctionDocumentId = randomUUID();
+          const correctionDocument = manager.create(PurchaseDocument, {
+            id: correctionDocumentId,
+            tenant_id: tenantId,
+            insumo_id: originalDocument.insumo_id,
+            supplier_id: originalDocument.supplier_id,
+            invoice_number: `${originalDocument.invoice_number}#CORRECTION-${correctionDocumentId}`,
+            document_type: PURCHASE_DOCUMENT_TYPE.CORRECTION,
+            correction_reason: reason,
+            correction_for_purchase_document_id: originalDocument.id,
+            fiscal_authorization_code:
+              originalDocument.fiscal_authorization_code,
+            invoice_date: originalDocument.invoice_date,
+            entry_date: new Date(),
+            entry_timestamp: new Date(),
+            quantity: correctedQuantity,
+            unit_cost: Number(originalDocument.unit_cost),
+            currency: originalDocument.currency,
+            bcn_rate: Number(originalDocument.bcn_rate),
+            unit_cost_nio: Number(originalDocument.unit_cost_nio),
+            projected_cpp_nio: projectedCppNio,
+            lot_code: originalDocument.lot_code,
+            received_date: originalDocument.received_date,
+            expiration_date: originalDocument.expiration_date,
+          });
+          await manager.save(PurchaseDocument, correctionDocument);
+
+          insumo.stock = newStock;
+          insumo.existenciaActual = newStock;
+          insumo.averageCost = projectedCppNio;
+          const savedInsumo = await manager.save(Insumo, insumo);
+
+          const compensatingMovement = manager.create(InventoryMovement, {
+            tenant_id: tenantId,
+            insumoId: originalMovement.insumoId,
+            type: MovementType.ADJUSTMENT,
+            quantity: correctedQuantity,
+            previousStock,
+            newStock,
+            averageCostAfterNio: projectedCppNio,
+            unitCostNio: Number(originalMovement.unitCostNio),
+            totalCostNio: correctedTotalCostNio,
+            sourceDocumentId: correctionDocument.id,
+            sourceDocumentType: PURCHASE_DOCUMENT_TYPE.CORRECTION,
+            compensationForKardexId: originalMovement.id,
+            user_id: input.actorUserId,
+          });
+
+          const movement = await manager.save(
+            InventoryMovement,
+            compensatingMovement,
+          );
+
+          return {
+            correctionDocument,
+            movement,
+            insumo: savedInsumo,
+          };
+        },
+      );
+    } catch (error) {
+      if (
+        this.isPostgresUniqueViolation(error, PURCHASE_CORRECTION_UNIQUE_INDEX)
+      ) {
+        throw new ConflictException(
+          `Purchase document ${input.purchaseDocumentId} has already been corrected`,
+        );
+      }
+
+      throw error;
+    }
+  }
+
+  private isPostgresUniqueViolation(
+    error: unknown,
+    constraint?: string,
+  ): boolean {
+    if (!(error instanceof QueryFailedError)) {
+      return false;
+    }
+
+    const driverError = error.driverError as QueryFailedDriverError | undefined;
+
+    return (
+      driverError?.code === POSTGRES_UNIQUE_VIOLATION &&
+      (!constraint || driverError.constraint === constraint)
+    );
+  }
+
   private requireTenantId(tenantId: string): string {
     const normalizedTenantId = tenantId.trim();
 
@@ -266,6 +450,16 @@ export class InventoryPurchaseService {
     }
 
     return normalizedInvoiceNumber;
+  }
+
+  private requireCorrectionReason(reason: string): string {
+    const normalizedReason = reason.trim();
+
+    if (!normalizedReason) {
+      throw new BadRequestException('correction reason is required');
+    }
+
+    return normalizedReason;
   }
 
   private async buildPreview(

@@ -21,6 +21,18 @@ import { Supplier } from './supplier.entity';
   ['tenant_id', 'supplier_id', 'invoice_number'],
   { unique: true },
 )
+@Index('idx_inventory_purchase_documents_correction_origin', [
+  'tenant_id',
+  'correction_for_purchase_document_id',
+])
+@Index(
+  'idx_inventory_purchase_documents_one_correction_per_origin',
+  ['tenant_id', 'correction_for_purchase_document_id'],
+  {
+    unique: true,
+    where: 'correction_for_purchase_document_id IS NOT NULL',
+  },
+)
 export class PurchaseDocument {
   @PrimaryColumn({ type: 'varchar' })
   id: string;
@@ -48,6 +60,19 @@ export class PurchaseDocument {
 
   @Column({ type: 'varchar' })
   invoice_number: string;
+
+  @Column({ type: 'varchar', name: 'document_type', default: 'PURCHASE' })
+  document_type: string;
+
+  @Column({ type: 'varchar', nullable: true, name: 'correction_reason' })
+  correction_reason: string | null;
+
+  @Column({
+    type: 'varchar',
+    nullable: true,
+    name: 'correction_for_purchase_document_id',
+  })
+  correction_for_purchase_document_id: string | null;
 
   @Column({
     type: 'varchar',

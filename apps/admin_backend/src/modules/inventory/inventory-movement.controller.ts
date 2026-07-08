@@ -3,6 +3,7 @@ import {
   Controller,
   Post,
   Body,
+  Param,
   Query,
   UseGuards,
   UseInterceptors,
@@ -11,7 +12,10 @@ import { ShrinkageService } from './shrinkage.service';
 import { InventoryService } from './inventory.service';
 import { RecipeService } from './recipe.service';
 import { SyncMovementsDto } from './dto/create-inventory-movement.dto';
-import { PurchaseDocumentDto } from './dto/purchase-document.dto';
+import {
+  PurchaseCorrectionDto,
+  PurchaseDocumentDto,
+} from './dto/purchase-document.dto';
 import { SyncRecipeVersionDocumentDto } from './dto/sync-recipe-version-document.dto';
 import { GetTenantId } from '../../core/decorators/tenant.decorator';
 import { TenantInterceptor } from '../../core/database/rls.interceptor';
@@ -99,6 +103,21 @@ export class InventoryMovementController {
       lotCode: dto.lotCode,
       receivedDate: dto.receivedDate,
       expirationDate: dto.expirationDate,
+    });
+  }
+
+  @Post('purchases/:id/correction')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  async correctPurchase(
+    @Param('id') id: string,
+    @Body() dto: PurchaseCorrectionDto,
+    @GetTenantId() tenantId: string,
+  ) {
+    return this.purchaseService.correctPurchase({
+      tenantId,
+      purchaseDocumentId: id,
+      reason: dto.reason,
     });
   }
 

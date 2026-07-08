@@ -14,7 +14,7 @@ Flujo de primera clase para la **factura de compra**: identidad fiscal, fecha fi
 - [x] **Identidad de factura de proveedor**: persistir número de factura, proveedor, CAE/clave fiscal (si aplica), fecha de emisión (fiscal) y fecha de digitación por separado.
 - [x] **Fecha fiscal vs fecha de digitación**: el FX se toma de la **fecha de la factura** (PRD UC-01), no de hoy ni de la fecha de digitación.
 - [x] **Fuente/caché BCN determinista backend**: servicio que obtiene el tipo de cambio oficial BCN por `fecha_emision`, consulta primero persistencia local exacta y puede usar BCN/proxy para persistir la fecha exacta. Si la fuente carece de cambio para una fecha, la regla queda **respaldada por fuente oficial**: no inventar el cambio, no asumir fallback a "último cambio hábil" — ver D2. Aún faltan UX/operación completa y reporting de trazabilidad para cerrar el batch integral.
-- [ ] Corrección de factura errónea **solo por movimiento compensatorio** (append-only), nunca editando la línea original.
+- [x] Corrección de factura errónea **solo por movimiento compensatorio** (append-only), nunca editando la línea original. Implementado en backend con `POST /inventory/purchases/:id/correction`, documento de corrección enlazado y movimiento compensatorio enlazado al Kardex original.
 - [ ] Campos de auditoría de la compra vinculados al `documento_origen_id` del Kardex.
 
 ## Alcance técnico
@@ -48,7 +48,7 @@ Flujo de primera clase para la **factura de compra**: identidad fiscal, fecha fi
 - [x] Registro de compra con identidad fiscal completa (número, proveedor, CAE/clave fiscal opcional, fecha emisión, fecha digitación).
 - [ ] `CalculadoraCPP` con tests exhaustivos: stock cero, stock negativo temporal, compra USD, compra retroactiva (fecha pasada).
 - [ ] FX BCN por `fecha_emision` con caché; test de fecha sin cambio publicado (regla documentada con respaldo de fuente, no fallback asumido a "último cambio hábil").
-- [ ] Corrección de factura solo vía movimiento compensatorio (test que demuestre la línea original queda intacta).
+- [x] Corrección de factura solo vía movimiento compensatorio (test que demuestre la línea original queda intacta).
 - [ ] Generación automática de línea Kardex `ENTRADA_COMPRA` por cada detalle.
 
 ## PRD cubierto
