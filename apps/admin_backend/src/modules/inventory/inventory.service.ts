@@ -83,6 +83,8 @@ export class InventoryService {
     movements: CreateInventoryMovementDto[],
     tenantId: string,
   ): Promise<void> {
+    this.rejectPurchaseEntryMovementsWithoutSourceLinkage(movements);
+
     const sorted = this.sortMovements(
       movements.map((m) => ({
         ...m,
@@ -138,12 +140,29 @@ export class InventoryService {
     });
   }
 
+  private rejectPurchaseEntryMovementsWithoutSourceLinkage(
+    movements: CreateInventoryMovementDto[],
+  ): void {
+    const hasPurchaseEntryMovement = movements.some(
+      (movement) => movement.type === MovementType.ENTRADA_COMPRA,
+    );
+
+    if (!hasPurchaseEntryMovement) {
+      return;
+    }
+
+    throw new BadRequestException(
+      'ENTRADA_COMPRA movements must be posted through the purchase document workflow because generic sync does not include source document linkage',
+    );
+  }
+
   private resolveStockDelta(type: MovementType, quantity: number): number {
     switch (type) {
       case MovementType.SALE:
       case MovementType.SHRINKAGE:
         return -Math.abs(quantity);
       case MovementType.PURCHASE:
+      case MovementType.ENTRADA_COMPRA:
       case MovementType.PRODUCTION:
       case MovementType.REVERSAL:
         return Math.abs(quantity);

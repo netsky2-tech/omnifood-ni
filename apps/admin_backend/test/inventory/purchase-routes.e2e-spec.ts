@@ -20,7 +20,10 @@ import {
   InventoryPurchaseService,
 } from '../../src/modules/inventory/inventory-purchase.service';
 import { PurchaseDocument } from '../../src/modules/inventory/entities/purchase-document.entity';
-import { InventoryMovement } from '../../src/modules/inventory/entities/inventory-movement.entity';
+import {
+  InventoryMovement,
+  MovementType,
+} from '../../src/modules/inventory/entities/inventory-movement.entity';
 import { Supplier } from '../../src/modules/inventory/entities/supplier.entity';
 import { InventoryService } from '../../src/modules/inventory/inventory.service';
 import { RecipeService } from '../../src/modules/inventory/recipe.service';
@@ -652,6 +655,14 @@ describe('Inventory purchase routes (integration)', () => {
     expect(manager.query).toHaveBeenCalledWith(
       "SELECT set_config('app.tenant_id', $1, true)",
       ['tenant-A'],
+    );
+    expect(manager.save).toHaveBeenCalledWith(
+      InventoryMovement,
+      expect.objectContaining({
+        type: MovementType.ENTRADA_COMPRA,
+        sourceDocumentId: validPurchasePayload.id,
+        sourceDocumentType: 'PURCHASE',
+      }),
     );
   });
 

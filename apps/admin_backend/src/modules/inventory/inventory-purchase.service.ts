@@ -210,7 +210,7 @@ export class InventoryPurchaseService {
           const movement = manager.create(InventoryMovement, {
             tenant_id: tenantId,
             insumoId: insumo.id,
-            type: MovementType.PURCHASE,
+            type: MovementType.ENTRADA_COMPRA,
             quantity: round4(input.quantity),
             previousStock: preview.previousStock,
             newStock: preview.projectedStock,

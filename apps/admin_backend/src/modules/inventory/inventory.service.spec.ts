@@ -304,6 +304,33 @@ describe('InventoryService', () => {
         }),
       );
     });
+
+    it('rejects generic sync ENTRADA_COMPRA movements because the DTO has no source document linkage', async () => {
+      const movements: Array<
+        CreateInventoryMovementDto & { unitCostNio: number }
+      > = [
+        {
+          id: 'mov-entrada-1',
+          insumoId: 'ins-1',
+          type: MovementType.ENTRADA_COMPRA,
+          quantity: 5,
+          previousStock: 8,
+          newStock: 13,
+          timestamp: '2026-05-05T10:00:00Z',
+          unitCostNio: 7.5,
+        },
+      ];
+
+      await expect(
+        service.syncMovements(movements, 'tenant-A'),
+      ).rejects.toThrow(
+        'ENTRADA_COMPRA movements must be posted through the purchase document workflow because generic sync does not include source document linkage',
+      );
+      expect(insumoRepo.findOne).not.toHaveBeenCalled();
+      expect(insumoRepo.save).not.toHaveBeenCalled();
+      expect(movementRepo.create).not.toHaveBeenCalled();
+      expect(movementRepo.save).not.toHaveBeenCalled();
+    });
   });
 
   describe('tenant isolation', () => {

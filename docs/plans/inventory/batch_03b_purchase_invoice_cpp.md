@@ -16,7 +16,7 @@ Flujo de primera clase para la **factura de compra**: identidad fiscal, fecha fi
 - [x] **Fuente/caché BCN determinista backend**: servicio que obtiene el tipo de cambio oficial BCN por `fecha_emision`, consulta primero persistencia local exacta (`inventory_bcn_fx_rates.effective_date`) y puede usar BCN/proxy para persistir únicamente la fecha exacta solicitada. Si la respuesta mensual trae otras fechas pero no la fecha exacta, retorna `NotFound` y no escribe caché; la ruta operacional es captura manual/offline-safe. La regla queda **respaldada por fuente oficial**: no inventar el cambio, no asumir fallback a "último cambio hábil" — ver D2. Aún faltan UX/operación completa y reporting de trazabilidad para cerrar el batch integral.
 - [x] **CalculadoraCPP**: el backend expone una API explícita de cálculo CPP de compra en `CostCalculatorService.calculatePurchaseCpp`, redondea a 4 decimales y el flujo de compras la usa para preview/posting en lugar de duplicar la fórmula.
 - [x] Corrección de factura errónea **solo por movimiento compensatorio** (append-only), nunca editando la línea original. Implementado en backend con `POST /inventory/purchases/:id/correction`, documento de corrección enlazado y movimiento compensatorio enlazado al Kardex original.
-- [ ] Campos de auditoría de la compra vinculados al `documento_origen_id` del Kardex.
+- [x] Campos de auditoría de la compra vinculados al `documento_origen_id` del Kardex: el posting backend genera un Kardex `ENTRADA_COMPRA` con `sourceDocumentId` apuntando al documento de compra y `sourceDocumentType = 'PURCHASE'`. En el modelo actual la compra representa un único detalle, por lo que se registra exactamente una línea Kardex por documento/detalle sin rediseñar agregados multi-línea.
 
 ## Alcance técnico
 
@@ -50,7 +50,7 @@ Flujo de primera clase para la **factura de compra**: identidad fiscal, fecha fi
 - [x] `CalculadoraCPP` con tests exhaustivos: stock cero, stock negativo temporal, compra USD, compra retroactiva (fecha pasada).
 - [x] FX BCN por `fecha_emision` con caché; test de fecha sin cambio publicado (regla documentada con respaldo de fuente, no fallback asumido a "último cambio hábil"). Cubierto por `fx-rate-resolver.service.spec.ts`: una respuesta mensual con fechas cercanas pero sin la fecha exacta lanza `NotFoundException` y no hace `upsert`.
 - [x] Corrección de factura solo vía movimiento compensatorio (test que demuestre la línea original queda intacta).
-- [ ] Generación automática de línea Kardex `ENTRADA_COMPRA` por cada detalle.
+- [x] Generación automática de línea Kardex `ENTRADA_COMPRA` por cada detalle. Cubierto por `inventory-purchase.service.spec.ts`: el documento actual de un único detalle emite exactamente una línea Kardex `ENTRADA_COMPRA` con enlace `sourceDocumentId/sourceDocumentType`; `purchase-routes.e2e-spec.ts` valida el contrato de ruta.
 
 ## PRD cubierto
 
