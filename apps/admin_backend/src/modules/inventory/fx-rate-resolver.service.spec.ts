@@ -168,12 +168,13 @@ describe('FxRateResolverService', () => {
     });
   });
 
-  it('does not use a different monthly rate when the exact invoice date is absent', async () => {
+  it('throws NotFoundException without upsert or nearby-date fallback when the monthly BCN response lacks the exact invoice date', async () => {
     findOneMock.mockResolvedValue(null);
     fetchMock.mockResolvedValue(
       createFetchResponse(`
           <Detalle_TC>
             <Tc><Fecha>06/01/2026</Fecha><Valor>36.8000</Valor></Tc>
+            <Tc><Fecha>08/01/2026</Fecha><Valor>36.8100</Valor></Tc>
           </Detalle_TC>`),
     );
 
@@ -182,6 +183,10 @@ describe('FxRateResolverService', () => {
         'No official BCN FX rate found for invoiceDate 2026-01-07',
       ),
     );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(findOneMock).toHaveBeenCalledWith({
+      where: { effective_date: '2026-01-07' },
+    });
     expect(upsertMock).not.toHaveBeenCalled();
   });
 
