@@ -11,6 +11,7 @@ export class CreateInventoryPurchaseDocuments1776000000000 implements MigrationI
         insumo_id uuid NOT NULL,
         supplier_id uuid NOT NULL,
         invoice_number varchar NOT NULL,
+        fiscal_authorization_code varchar,
         invoice_date date NOT NULL,
         entry_date date NOT NULL,
         entry_timestamp timestamptz NOT NULL,

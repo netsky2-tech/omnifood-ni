@@ -370,6 +370,7 @@ class SyncService {
       'insumoId': purchase.insumoId,
       'supplierId': purchase.supplierId,
       'invoiceNumber': purchase.invoiceNumber,
+      'fiscalAuthorizationCode': purchase.fiscalAuthorizationCode,
       'quantity': purchase.quantity,
       'unitCost': purchase.unitCost,
       'currency': purchase.currency,

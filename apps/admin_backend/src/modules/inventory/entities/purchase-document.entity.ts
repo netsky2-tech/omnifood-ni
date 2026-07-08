@@ -49,6 +49,13 @@ export class PurchaseDocument {
   @Column({ type: 'varchar' })
   invoice_number: string;
 
+  @Column({
+    type: 'varchar',
+    nullable: true,
+    name: 'fiscal_authorization_code',
+  })
+  fiscal_authorization_code: string | null;
+
   @Column({ type: 'date' })
   invoice_date: Date;
 

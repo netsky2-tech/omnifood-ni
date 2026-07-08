@@ -165,9 +165,19 @@ Future<void> _selectDropdownValue(
   required int index,
   required String value,
 }) async {
-  await tester.tap(find.byType(DropdownButtonFormField<String>).at(index));
+  final dropdown = find.byType(DropdownButtonFormField<String>).at(index);
+
+  await tester.ensureVisible(dropdown);
   await tester.pumpAndSettle();
-  await tester.tap(find.text(value).last);
+  expect(dropdown, findsOneWidget);
+
+  await tester.tap(dropdown);
+  await tester.pumpAndSettle();
+
+  final menuItem = find.text(value).last;
+  expect(menuItem, findsOneWidget);
+
+  await tester.tap(menuItem);
   await tester.pumpAndSettle();
 }
 

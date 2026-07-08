@@ -67,6 +67,7 @@ void main() {
       insumoId: 'ins-1',
       supplierId: 'sup-1',
       invoiceNumber: 'INV-1003',
+      fiscalAuthorizationCode: 'CAE-ABC-123',
       quantity: 2,
       unitCost: 10,
       timestamp: DateTime.parse('2026-01-10T08:00:00.000Z'),
@@ -81,9 +82,35 @@ void main() {
     final syncJson = PurchaseMapper.toSyncJson(purchase);
 
     expect(entity.fxRateMode, purchaseFxRateModeOfficial);
+    expect(entity.fiscalAuthorizationCode, 'CAE-ABC-123');
     expect(roundtrip.fxRateMode, purchaseFxRateModeOfficial);
+    expect(roundtrip.fiscalAuthorizationCode, 'CAE-ABC-123');
     expect(syncJson['fxRateMode'], purchaseFxRateModeOfficial);
+    expect(syncJson['fiscalAuthorizationCode'], 'CAE-ABC-123');
     expect(syncJson.containsKey('bcnRate'), isFalse);
+  });
+
+  test('preserves missing legacy fiscal authorization code as null', () {
+    final entity = PurchaseMapper.toEntity(
+      Purchase(
+        id: 'purchase-legacy-fiscal-1',
+        insumoId: 'ins-1',
+        supplierId: 'sup-1',
+        invoiceNumber: 'INV-LEGACY-FISCAL-1',
+        quantity: 2,
+        unitCost: 10,
+        timestamp: DateTime.parse('2026-01-10T08:00:00.000Z'),
+        invoiceDate: DateTime(2026, 1, 10),
+        currency: 'NIO',
+      ),
+    );
+
+    final roundtrip = PurchaseMapper.toDomain(entity);
+    final syncJson = PurchaseMapper.toSyncJson(roundtrip);
+
+    expect(entity.fiscalAuthorizationCode, isNull);
+    expect(roundtrip.fiscalAuthorizationCode, isNull);
+    expect(syncJson['fiscalAuthorizationCode'], isNull);
   });
 
   test(

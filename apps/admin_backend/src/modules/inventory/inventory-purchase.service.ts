@@ -74,6 +74,7 @@ export class InventoryPurchaseService {
     insumoId: string;
     supplierId: string;
     invoiceNumber: string;
+    fiscalAuthorizationCode?: string;
     quantity: number;
     unitCost: number;
     currency: Currency;
@@ -95,6 +96,7 @@ export class InventoryPurchaseService {
     insumoId: string;
     supplierId: string;
     invoiceNumber: string;
+    fiscalAuthorizationCode?: string;
     quantity: number;
     unitCost: number;
     currency: Currency;
@@ -169,6 +171,8 @@ export class InventoryPurchaseService {
             insumo_id: input.insumoId,
             supplier_id: input.supplierId,
             invoice_number: invoiceNumber,
+            fiscal_authorization_code:
+              input.fiscalAuthorizationCode?.trim() || null,
             invoice_date: new Date(input.invoiceDate),
             entry_date: entryDate,
             entry_timestamp: entryTimestamp,

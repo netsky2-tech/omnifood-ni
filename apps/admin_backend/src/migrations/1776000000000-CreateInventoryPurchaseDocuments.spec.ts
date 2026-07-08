@@ -27,6 +27,7 @@ describe('CreateInventoryPurchaseDocuments1776000000000', () => {
     );
     expect(sql).toContain('supplier_id uuid NOT NULL');
     expect(sql).toContain('invoice_number varchar NOT NULL');
+    expect(sql).toContain('fiscal_authorization_code varchar');
     expect(sql).toContain('entry_timestamp timestamptz NOT NULL');
     expect(sql).toContain(
       'uq_inventory_purchase_documents_tenant_supplier_invoice',

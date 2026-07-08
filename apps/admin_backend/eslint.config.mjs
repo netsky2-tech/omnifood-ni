@@ -29,6 +29,18 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-floating-promises': 'warn',
       '@typescript-eslint/no-unsafe-argument': 'warn',
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "CallExpression[callee.object.name=/^(describe|it|test)$/][callee.property.name='only']",
+          message: 'Focused Jest tests must not be committed.',
+        },
+        {
+          selector: "CallExpression[callee.name=/^(fdescribe|fit)$/]",
+          message: 'Focused Jest tests must not be committed.',
+        },
+      ],
       "prettier/prettier": ["error", { endOfLine: "auto" }],
     },
   },

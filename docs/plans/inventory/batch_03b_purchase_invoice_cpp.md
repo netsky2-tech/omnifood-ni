@@ -7,12 +7,12 @@ Flujo de primera clase para la **factura de compra**: identidad fiscal, fecha fi
 - UI de compras existe con proveedores, presentaciones, número de factura y fecha fiscal.
 - El lookup oficial BCN por `invoiceDate` ya existe en backend + POS como flujo opt-in con fallback manual offline-safe, y el backend ahora soporta transporte proxy/configurable para consultar BCN cuando falta una tasa exacta local.
 - El POS ya persiste `fxRateMode` (`explicit | official`) en compras nuevas, mantiene `bcnRate` local aun cuando la fuente fue oficial y sincroniza `fxRateMode` hacia backend.
-- Sigue faltando el cierre integral del batch: identidad fiscal completa, corrección compensatoria y trazabilidad backend/reporting de la procedencia FX más allá del contrato de sync.
+- La identidad fiscal de factura de proveedor ya cubre número, proveedor, CAE/clave fiscal opcional, fecha fiscal y fecha de digitación separadas en backend y POS. Sigue faltando el cierre integral del batch: corrección compensatoria y trazabilidad backend/reporting de la procedencia FX más allá del contrato de sync.
 
 ## Brechas a remediar
 
-- [ ] **Identidad de factura de proveedor**: persistir número de factura, proveedor, CAE/clave fiscal (si aplica), fecha de emisión (fiscal) y fecha de digitación por separado.
-- [ ] **Fecha fiscal vs fecha de digitación**: el FX se toma de la **fecha de la factura** (PRD UC-01), no de hoy. Hoy probablemente usa fecha de digitación.
+- [x] **Identidad de factura de proveedor**: persistir número de factura, proveedor, CAE/clave fiscal (si aplica), fecha de emisión (fiscal) y fecha de digitación por separado.
+- [x] **Fecha fiscal vs fecha de digitación**: el FX se toma de la **fecha de la factura** (PRD UC-01), no de hoy ni de la fecha de digitación.
 - [x] **Fuente/caché BCN determinista backend**: servicio que obtiene el tipo de cambio oficial BCN por `fecha_emision`, consulta primero persistencia local exacta y puede usar BCN/proxy para persistir la fecha exacta. Si la fuente carece de cambio para una fecha, la regla queda **respaldada por fuente oficial**: no inventar el cambio, no asumir fallback a "último cambio hábil" — ver D2. Aún faltan UX/operación completa y reporting de trazabilidad para cerrar el batch integral.
 - [ ] Corrección de factura errónea **solo por movimiento compensatorio** (append-only), nunca editando la línea original.
 - [ ] Campos de auditoría de la compra vinculados al `documento_origen_id` del Kardex.
@@ -45,7 +45,7 @@ Flujo de primera clase para la **factura de compra**: identidad fiscal, fecha fi
 
 ## DoD (Criterios de aceptación)
 
-- [ ] Registro de compra con identidad fiscal completa (número, proveedor, fecha emisión, fecha digitación).
+- [x] Registro de compra con identidad fiscal completa (número, proveedor, CAE/clave fiscal opcional, fecha emisión, fecha digitación).
 - [ ] `CalculadoraCPP` con tests exhaustivos: stock cero, stock negativo temporal, compra USD, compra retroactiva (fecha pasada).
 - [ ] FX BCN por `fecha_emision` con caché; test de fecha sin cambio publicado (regla documentada con respaldo de fuente, no fallback asumido a "último cambio hábil").
 - [ ] Corrección de factura solo vía movimiento compensatorio (test que demuestre la línea original queda intacta).

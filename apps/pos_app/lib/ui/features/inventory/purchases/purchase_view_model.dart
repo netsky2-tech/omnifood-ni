@@ -103,6 +103,7 @@ class PurchaseViewModel with ChangeNotifier {
     required String insumoId,
     required String supplierId,
     required String invoiceNumber,
+    String? fiscalAuthorizationCode,
     required String uomConversionId,
     required double quantity,
     required double unitCost,
@@ -120,6 +121,7 @@ class PurchaseViewModel with ChangeNotifier {
     try {
       final normalizedSupplierId = supplierId.trim();
       final normalizedInvoiceNumber = invoiceNumber.trim();
+      final normalizedFiscalAuthorizationCode = fiscalAuthorizationCode?.trim();
 
       if (normalizedInvoiceNumber.isEmpty) {
         throw ArgumentError('Invoice number is required.');
@@ -166,6 +168,11 @@ class PurchaseViewModel with ChangeNotifier {
         insumoId: insumoId,
         supplierId: normalizedSupplierId,
         invoiceNumber: normalizedInvoiceNumber,
+        fiscalAuthorizationCode:
+            normalizedFiscalAuthorizationCode == null ||
+                normalizedFiscalAuthorizationCode.isEmpty
+            ? null
+            : normalizedFiscalAuthorizationCode,
         quantity: review.quantityInBaseUnit,
         unitCost: unitCost,
         timestamp: entryTimestamp,

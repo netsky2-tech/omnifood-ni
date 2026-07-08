@@ -61,6 +61,14 @@ export class PurchaseDocumentDto {
   )
   invoiceNumber: string;
 
+  @ValidateIf((dto: PurchaseDocumentDto) => dto.fiscalAuthorizationCode != null)
+  @IsString()
+  @IsNotEmpty()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  fiscalAuthorizationCode?: string;
+
   @IsNumber()
   @Min(0.0001)
   quantity: number;
