@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { DataSource } from 'typeorm';
+import { ConflictException } from '@nestjs/common';
+import { DataSource, QueryFailedError } from 'typeorm';
 import {
   CURRENCY,
   FX_RATE_RESOLVER,
@@ -534,6 +535,319 @@ describe('InventoryPurchaseService', () => {
       }),
     ).rejects.toThrow(
       'Purchase invoice INV-1005 is already registered for supplier sup-1',
+    );
+  });
+
+  it('corrects a purchase append-only with a compensating movement while leaving the original records intact', async () => {
+    const originalDocument: Partial<PurchaseDocument> = {
+      id: 'purchase-doc-original-1',
+      tenant_id: 'tenant-A',
+      insumo_id: 'ins-1',
+      supplier_id: 'sup-1',
+      invoice_number: 'INV-ORIGINAL-1',
+      fiscal_authorization_code: 'CAE-001',
+      invoice_date: new Date('2026-01-03'),
+      entry_date: new Date('2026-01-03'),
+      entry_timestamp: new Date('2026-01-03T08:15:00.000Z'),
+      quantity: 5,
+      unit_cost: 2,
+      currency: CURRENCY.USD,
+      bcn_rate: 36.5,
+      unit_cost_nio: 73,
+      projected_cpp_nio: 57.6667,
+      lot_code: 'LOT-9',
+      received_date: new Date('2026-01-03'),
+      expiration_date: new Date('2026-02-03'),
+    };
+    const originalMovement: Partial<InventoryMovement> = {
+      id: '9001',
+      tenant_id: 'tenant-A',
+      insumoId: 'ins-1',
+      type: 'PURCHASE' as InventoryMovement['type'],
+      quantity: 5,
+      previousStock: 10,
+      newStock: 15,
+      averageCostAfterNio: 57.6667,
+      unitCostNio: 73,
+      totalCostNio: 365,
+      sourceDocumentId: 'purchase-doc-original-1',
+      sourceDocumentType: 'PURCHASE',
+      compensationForKardexId: null,
+    };
+    const originalDocumentSnapshot = { ...originalDocument };
+    const originalMovementSnapshot = { ...originalMovement };
+
+    queryBuilder.getOne.mockResolvedValue({
+      ...perishableInsumo,
+      stock: 15,
+      existenciaActual: 15,
+      averageCost: 57.6667,
+      is_perishable: false,
+    });
+    manager.findOne.mockImplementation((entity: unknown, options?: unknown) => {
+      if (entity === PurchaseDocument) {
+        const where = (options as { where?: Record<string, unknown> })?.where;
+
+        if (where?.id === 'purchase-doc-original-1') {
+          return Promise.resolve(originalDocument);
+        }
+
+        if (
+          where?.correction_for_purchase_document_id ===
+          'purchase-doc-original-1'
+        ) {
+          return Promise.resolve(null);
+        }
+      }
+
+      if (entity === InventoryMovement) {
+        return Promise.resolve(originalMovement);
+      }
+
+      return Promise.resolve(null);
+    });
+
+    const result = await service.correctPurchase({
+      tenantId: 'tenant-A',
+      purchaseDocumentId: 'purchase-doc-original-1',
+      reason: 'Wrong invoice entered',
+    });
+
+    expect(originalDocument).toEqual(originalDocumentSnapshot);
+    expect(originalMovement).toEqual(originalMovementSnapshot);
+    expect(manager.save).not.toHaveBeenCalledWith(
+      PurchaseDocument,
+      originalDocument,
+    );
+    expect(manager.save).not.toHaveBeenCalledWith(
+      InventoryMovement,
+      originalMovement,
+    );
+    const saveCalls = manager.save.mock.calls as Array<[unknown, unknown]>;
+    const savedCorrectionDocument = saveCalls.find(
+      ([entity]) => entity === PurchaseDocument,
+    )?.[1] as Partial<PurchaseDocument> | undefined;
+
+    expect(savedCorrectionDocument).toEqual(
+      expect.objectContaining({
+        tenant_id: 'tenant-A',
+        document_type: 'PURCHASE_CORRECTION',
+        correction_reason: 'Wrong invoice entered',
+        correction_for_purchase_document_id: 'purchase-doc-original-1',
+        quantity: -5,
+      }),
+    );
+    expect(savedCorrectionDocument?.invoice_number).toContain(
+      'INV-ORIGINAL-1#CORRECTION-',
+    );
+    expect(manager.save).toHaveBeenCalledWith(
+      InventoryMovement,
+      expect.objectContaining({
+        tenant_id: 'tenant-A',
+        type: 'ADJUSTMENT',
+        quantity: -5,
+        previousStock: 15,
+        newStock: 10,
+        unitCostNio: 73,
+        totalCostNio: -365,
+        sourceDocumentId: savedCorrectionDocument?.id,
+        sourceDocumentType: 'PURCHASE_CORRECTION',
+        compensationForKardexId: '9001',
+      }),
+    );
+    const savedCompensatingMovement = saveCalls.find(
+      ([entity]) => entity === InventoryMovement,
+    )?.[1] as Partial<InventoryMovement> & { reason?: string };
+    expect(savedCompensatingMovement?.reason).toBeUndefined();
+    expect(result.correctionDocument).toEqual(
+      expect.objectContaining({
+        document_type: 'PURCHASE_CORRECTION',
+        correction_for_purchase_document_id: 'purchase-doc-original-1',
+      }),
+    );
+  });
+
+  it('does not correct a purchase document outside the requested tenant scope', async () => {
+    manager.findOne.mockImplementation((entity: unknown) => {
+      if (entity === PurchaseDocument) {
+        return Promise.resolve(null);
+      }
+
+      return Promise.resolve(null);
+    });
+
+    await expect(
+      service.correctPurchase({
+        tenantId: 'tenant-B',
+        purchaseDocumentId: 'purchase-doc-original-1',
+        reason: 'Wrong invoice entered',
+      }),
+    ).rejects.toThrow('Purchase document purchase-doc-original-1 not found');
+
+    expect(manager.save).not.toHaveBeenCalled();
+  });
+
+  it('rejects an already corrected purchase without appending another correction document or movement', async () => {
+    const originalDocument: Partial<PurchaseDocument> = {
+      id: 'purchase-doc-original-1',
+      tenant_id: 'tenant-A',
+      insumo_id: 'ins-1',
+      supplier_id: 'sup-1',
+      invoice_number: 'INV-ORIGINAL-1',
+    };
+    const existingCorrection: Partial<PurchaseDocument> = {
+      id: 'purchase-doc-correction-1',
+      tenant_id: 'tenant-A',
+      correction_for_purchase_document_id: 'purchase-doc-original-1',
+    };
+
+    manager.findOne.mockImplementation((entity: unknown, options?: unknown) => {
+      if (entity === PurchaseDocument) {
+        const where = (options as { where?: Record<string, unknown> })?.where;
+
+        if (where?.id === 'purchase-doc-original-1') {
+          return Promise.resolve(originalDocument);
+        }
+
+        if (
+          where?.correction_for_purchase_document_id ===
+          'purchase-doc-original-1'
+        ) {
+          return Promise.resolve(existingCorrection);
+        }
+      }
+
+      return Promise.resolve(null);
+    });
+
+    await expect(
+      service.correctPurchase({
+        tenantId: 'tenant-A',
+        purchaseDocumentId: 'purchase-doc-original-1',
+        reason: 'Wrong invoice entered',
+      }),
+    ).rejects.toThrow(
+      'Purchase document purchase-doc-original-1 has already been corrected',
+    );
+
+    expect(manager.save).not.toHaveBeenCalledWith(
+      PurchaseDocument,
+      expect.objectContaining({
+        document_type: 'PURCHASE_CORRECTION',
+      }),
+    );
+    expect(manager.save).not.toHaveBeenCalledWith(
+      InventoryMovement,
+      expect.objectContaining({
+        sourceDocumentType: 'PURCHASE_CORRECTION',
+      }),
+    );
+  });
+
+  it('maps duplicate correction unique-index failures to ConflictException without appending another movement', async () => {
+    const originalDocument: Partial<PurchaseDocument> = {
+      id: 'purchase-doc-original-1',
+      tenant_id: 'tenant-A',
+      insumo_id: 'ins-1',
+      supplier_id: 'sup-1',
+      invoice_number: 'INV-ORIGINAL-1',
+      fiscal_authorization_code: null,
+      invoice_date: new Date('2026-01-01'),
+      unit_cost: 73,
+      currency: CURRENCY.NIO,
+      bcn_rate: 1,
+      unit_cost_nio: 73,
+      lot_code: null,
+      received_date: null,
+      expiration_date: null,
+    };
+    const originalMovement: Partial<InventoryMovement> = {
+      id: '9001',
+      tenant_id: 'tenant-A',
+      insumoId: 'ins-1',
+      type: 'PURCHASE' as InventoryMovement['type'],
+      quantity: 5,
+      previousStock: 10,
+      newStock: 15,
+      averageCostAfterNio: 57.6667,
+      unitCostNio: 73,
+      totalCostNio: 365,
+      sourceDocumentId: 'purchase-doc-original-1',
+      sourceDocumentType: 'PURCHASE',
+      compensationForKardexId: null,
+    };
+    const duplicateCorrectionError = new QueryFailedError(
+      'INSERT INTO inventory_purchase_documents ...',
+      [],
+      Object.assign(new Error('duplicate correction'), {
+        code: '23505',
+        constraint:
+          'idx_inventory_purchase_documents_one_correction_per_origin',
+      }),
+    );
+
+    queryBuilder.getOne.mockResolvedValue({
+      ...perishableInsumo,
+      stock: 15,
+      existenciaActual: 15,
+      averageCost: 57.6667,
+      is_perishable: false,
+    });
+    manager.findOne.mockImplementation((entity: unknown, options?: unknown) => {
+      if (entity === PurchaseDocument) {
+        const where = (options as { where?: Record<string, unknown> })?.where;
+
+        if (where?.id === 'purchase-doc-original-1') {
+          return Promise.resolve(originalDocument);
+        }
+
+        if (
+          where?.correction_for_purchase_document_id ===
+          'purchase-doc-original-1'
+        ) {
+          return Promise.resolve(null);
+        }
+      }
+
+      if (entity === InventoryMovement) {
+        return Promise.resolve(originalMovement);
+      }
+
+      return Promise.resolve(null);
+    });
+    manager.save.mockImplementation((entity: unknown, payload: unknown) => {
+      if (entity === PurchaseDocument) {
+        return Promise.reject(duplicateCorrectionError);
+      }
+
+      return Promise.resolve(payload);
+    });
+
+    const promise = service.correctPurchase({
+      tenantId: 'tenant-A',
+      purchaseDocumentId: 'purchase-doc-original-1',
+      reason: 'Wrong invoice entered',
+    });
+
+    await expect(promise).rejects.toThrow(ConflictException);
+    await expect(promise).rejects.toMatchObject({
+      response: {
+        message:
+          'Purchase document purchase-doc-original-1 has already been corrected',
+      },
+      status: 409,
+    });
+    expect(manager.save).toHaveBeenCalledWith(
+      PurchaseDocument,
+      expect.objectContaining({
+        document_type: 'PURCHASE_CORRECTION',
+      }),
+    );
+    expect(manager.save).not.toHaveBeenCalledWith(
+      InventoryMovement,
+      expect.objectContaining({
+        sourceDocumentType: 'PURCHASE_CORRECTION',
+      }),
     );
   });
 });

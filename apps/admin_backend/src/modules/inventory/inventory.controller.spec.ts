@@ -49,6 +49,7 @@ describe('InventoryController', () => {
           useValue: {
             previewPurchase: jest.fn(),
             recordPurchase: jest.fn(),
+            correctPurchase: jest.fn(),
           },
         },
         {
@@ -101,6 +102,7 @@ describe('InventoryController', () => {
     handlerName:
       | 'previewPurchase'
       | 'recordPurchase'
+      | 'correctPurchase'
       | 'ingestRecipeVersion'
       | 'getBcnFxRate',
   ): void => {
@@ -136,6 +138,10 @@ describe('InventoryController', () => {
 
   it('keeps the purchase posting route protected by auth + role guards', () => {
     expectRouteToRequireInventoryWriterRole('recordPurchase');
+  });
+
+  it('keeps the purchase correction route protected by auth + role guards', () => {
+    expectRouteToRequireInventoryWriterRole('correctPurchase');
   });
 
   it('keeps the BCN FX lookup route protected by auth + role guards', () => {
@@ -228,6 +234,21 @@ describe('InventoryController', () => {
           expirationDate: '2026-02-12',
         }),
       );
+    });
+
+    it('should call purchaseService correctPurchase for append-only corrections', async () => {
+      await controller.correctPurchase(
+        'purchase-doc-1',
+        { reason: 'Wrong invoice entered' },
+        'tenant-A',
+      );
+
+      // eslint-disable-next-line @typescript-eslint/unbound-method
+      expect(purchaseService.correctPurchase).toHaveBeenCalledWith({
+        tenantId: 'tenant-A',
+        purchaseDocumentId: 'purchase-doc-1',
+        reason: 'Wrong invoice entered',
+      });
     });
   });
 

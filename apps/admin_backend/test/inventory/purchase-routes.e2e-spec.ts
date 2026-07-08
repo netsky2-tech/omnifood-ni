@@ -19,6 +19,7 @@ import {
   InventoryPurchaseService,
 } from '../../src/modules/inventory/inventory-purchase.service';
 import { PurchaseDocument } from '../../src/modules/inventory/entities/purchase-document.entity';
+import { InventoryMovement } from '../../src/modules/inventory/entities/inventory-movement.entity';
 import { Supplier } from '../../src/modules/inventory/entities/supplier.entity';
 import { InventoryService } from '../../src/modules/inventory/inventory.service';
 import { RecipeService } from '../../src/modules/inventory/recipe.service';
@@ -752,6 +753,62 @@ describe('Inventory purchase routes (integration)', () => {
           invoice_number: validPurchasePayload.invoiceNumber,
         },
       }),
+    );
+  });
+
+  it('returns 409 for repeated purchase correction without appending another correction document or movement', async () => {
+    const token = signToken();
+    const originalDocument = {
+      id: 'purchase-doc-original-1',
+      tenant_id: 'tenant-A',
+      insumo_id: validPurchasePayload.insumoId,
+      supplier_id: validPurchasePayload.supplierId,
+      invoice_number: 'INV-ORIGINAL-1',
+    };
+    const existingCorrection = {
+      id: 'purchase-doc-correction-1',
+      tenant_id: 'tenant-A',
+      correction_for_purchase_document_id: originalDocument.id,
+    };
+
+    manager.findOne.mockImplementation((entity: unknown, options?: unknown) => {
+      if (entity === PurchaseDocument) {
+        const where = (options as { where?: Record<string, unknown> })?.where;
+
+        if (where?.id === originalDocument.id) {
+          return Promise.resolve(originalDocument);
+        }
+
+        if (
+          where?.correction_for_purchase_document_id === originalDocument.id
+        ) {
+          return Promise.resolve(existingCorrection);
+        }
+      }
+
+      return Promise.resolve(null);
+    });
+
+    const response = await request(app.getHttpServer())
+      .post(
+        `${INVENTORY_API_PREFIX}/purchases/${originalDocument.id}/correction`,
+      )
+      .set('Authorization', `Bearer ${token}`)
+      .send({ reason: 'Wrong invoice entered' })
+      .expect(409);
+
+    const body = response.body as ConflictResponseBody;
+    expect(body.message).toBe(
+      'Purchase document purchase-doc-original-1 has already been corrected',
+    );
+    expect(body.statusCode).toBe(409);
+    expect(manager.save).not.toHaveBeenCalledWith(
+      PurchaseDocument,
+      expect.objectContaining({ document_type: 'PURCHASE_CORRECTION' }),
+    );
+    expect(manager.save).not.toHaveBeenCalledWith(
+      InventoryMovement,
+      expect.objectContaining({ sourceDocumentType: 'PURCHASE_CORRECTION' }),
     );
   });
 });
