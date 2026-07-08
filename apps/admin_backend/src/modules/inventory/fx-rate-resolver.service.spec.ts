@@ -6,17 +6,43 @@ import { Repository } from 'typeorm';
 import { BcnFxRate } from './entities/bcn-fx-rate.entity';
 import { FxRateResolverService } from './fx-rate-resolver.service';
 
+type FetchInput = Parameters<typeof fetch>[0];
+type FetchInit = Parameters<typeof fetch>[1];
+
 describe('FxRateResolverService', () => {
   let service: FxRateResolverService;
-  let repository: jest.Mocked<Repository<BcnFxRate>>;
+  let findOneMock: jest.MockedFunction<Repository<BcnFxRate>['findOne']>;
+  let upsertMock: jest.MockedFunction<Repository<BcnFxRate>['upsert']>;
   let configService: { get: jest.Mock };
-  const fetchMock = jest.fn();
+  const fetchMock = jest.fn<
+    ReturnType<typeof fetch>,
+    Parameters<typeof fetch>
+  >();
   const originalFetch = global.fetch;
+
+  const createUpsertResult = (): Awaited<
+    ReturnType<Repository<BcnFxRate>['upsert']>
+  > => ({
+    identifiers: [],
+    generatedMaps: [],
+    raw: [],
+  });
+
+  const createFetchResponse = (body: string, init?: ResponseInit): Response =>
+    new Response(body, init);
 
   beforeEach(async () => {
     fetchMock.mockReset();
     global.fetch = fetchMock;
     configService = { get: jest.fn() };
+    findOneMock = jest.fn<
+      ReturnType<Repository<BcnFxRate>['findOne']>,
+      Parameters<Repository<BcnFxRate>['findOne']>
+    >();
+    upsertMock = jest.fn<
+      ReturnType<Repository<BcnFxRate>['upsert']>,
+      Parameters<Repository<BcnFxRate>['upsert']>
+    >();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -28,15 +54,14 @@ describe('FxRateResolverService', () => {
         {
           provide: getRepositoryToken(BcnFxRate),
           useValue: {
-            findOne: jest.fn(),
-            upsert: jest.fn(),
+            findOne: findOneMock,
+            upsert: upsertMock,
           },
         },
       ],
     }).compile();
 
     service = module.get<FxRateResolverService>(FxRateResolverService);
-    repository = module.get(getRepositoryToken(BcnFxRate));
   });
 
   afterAll(() => {
@@ -44,7 +69,7 @@ describe('FxRateResolverService', () => {
   });
 
   it('returns the persisted BCN rate for the requested invoice date', async () => {
-    repository.findOne.mockResolvedValue({
+    findOneMock.mockResolvedValue({
       id: 'fx-rate-1',
       effective_date: '2026-01-03',
       rate_nio: 36.5123,
@@ -62,8 +87,8 @@ describe('FxRateResolverService', () => {
   });
 
   it('uses the configured proxy URL as the first transport endpoint', async () => {
-    repository.findOne.mockResolvedValue(null);
-    repository.upsert.mockResolvedValue({} as never);
+    findOneMock.mockResolvedValue(null);
+    upsertMock.mockResolvedValue(createUpsertResult());
     configService.get.mockImplementation((key: string) => {
       if (key === 'BCN_PROXY_URL') {
         return 'https://fx-proxy.example.test/bcn';
@@ -75,10 +100,9 @@ describe('FxRateResolverService', () => {
 
       return undefined;
     });
-    fetchMock.mockResolvedValue({
-      ok: true,
-      text: () =>
-        Promise.resolve(`
+    let capturedFetchInput: FetchInput | undefined;
+    let capturedFetchInit: FetchInit;
+    const bcnResponse = createFetchResponse(`
           <soap:Envelope>
             <soap:Body>
               <RecuperaTC_MesResponse>
@@ -89,8 +113,15 @@ describe('FxRateResolverService', () => {
                 </RecuperaTC_MesResult>
               </RecuperaTC_MesResponse>
             </soap:Body>
-          </soap:Envelope>`),
-    });
+          </soap:Envelope>`);
+    fetchMock.mockImplementation(
+      (input: FetchInput, init?: FetchInit): Promise<Response> => {
+        capturedFetchInput = input;
+        capturedFetchInit = init;
+
+        return Promise.resolve(bcnResponse);
+      },
+    );
 
     await expect(
       service.getBcnRateByInvoiceDate('2026-01-04'),
@@ -100,28 +131,23 @@ describe('FxRateResolverService', () => {
       rateNio: 36.6123,
     });
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      'https://fx-proxy.example.test/bcn',
-      expect.objectContaining({
-        method: 'POST',
-        headers: expect.objectContaining({
-          SOAPAction: 'http://servicios.bcn.gob.ni/RecuperaTC_Mes',
-        }),
-      }),
-    );
-    expect(repository.upsert).toHaveBeenCalledWith(
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(capturedFetchInput).toBe('https://fx-proxy.example.test/bcn');
+    expect(capturedFetchInit?.method).toBe('POST');
+    expect(capturedFetchInit?.headers).toMatchObject({
+      SOAPAction: 'http://servicios.bcn.gob.ni/RecuperaTC_Mes',
+    });
+    expect(upsertMock).toHaveBeenCalledWith(
       { effective_date: '2026-01-04', rate_nio: 36.6123 },
       ['effective_date'],
     );
   });
 
   it('parses legacy any-wrapped monthly SOAP responses', async () => {
-    repository.findOne.mockResolvedValue(null);
-    repository.upsert.mockResolvedValue({} as never);
-    fetchMock.mockResolvedValue({
-      ok: true,
-      text: () =>
-        Promise.resolve(`
+    findOneMock.mockResolvedValue(null);
+    upsertMock.mockResolvedValue(createUpsertResult());
+    fetchMock.mockResolvedValue(
+      createFetchResponse(`
           <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
             <soap:Body>
               <RecuperaTC_MesResponse xmlns="http://servicios.bcn.gob.ni/">
@@ -131,7 +157,7 @@ describe('FxRateResolverService', () => {
               </RecuperaTC_MesResponse>
             </soap:Body>
           </soap:Envelope>`),
-    });
+    );
 
     await expect(
       service.getBcnRateByInvoiceDate('2026-01-05'),
@@ -143,26 +169,24 @@ describe('FxRateResolverService', () => {
   });
 
   it('does not use a different monthly rate when the exact invoice date is absent', async () => {
-    repository.findOne.mockResolvedValue(null);
-    fetchMock.mockResolvedValue({
-      ok: true,
-      text: () =>
-        Promise.resolve(`
+    findOneMock.mockResolvedValue(null);
+    fetchMock.mockResolvedValue(
+      createFetchResponse(`
           <Detalle_TC>
             <Tc><Fecha>06/01/2026</Fecha><Valor>36.8000</Valor></Tc>
           </Detalle_TC>`),
-    });
+    );
 
     await expect(service.getBcnRateByInvoiceDate('2026-01-07')).rejects.toThrow(
       new NotFoundException(
         'No official BCN FX rate found for invoiceDate 2026-01-07',
       ),
     );
-    expect(repository.upsert).not.toHaveBeenCalled();
+    expect(upsertMock).not.toHaveBeenCalled();
   });
 
   it('returns safe not-found semantics when the network fails', async () => {
-    repository.findOne.mockResolvedValue(null);
+    findOneMock.mockResolvedValue(null);
     fetchMock.mockRejectedValue(new Error('proxy unavailable'));
 
     await expect(service.getBcnRateByInvoiceDate('2026-01-08')).rejects.toThrow(
@@ -170,11 +194,11 @@ describe('FxRateResolverService', () => {
         'No official BCN FX rate found for invoiceDate 2026-01-08',
       ),
     );
-    expect(repository.upsert).not.toHaveBeenCalled();
+    expect(upsertMock).not.toHaveBeenCalled();
   });
 
   it('returns safe not-found semantics when the BCN request times out', async () => {
-    repository.findOne.mockResolvedValue(null);
+    findOneMock.mockResolvedValue(null);
     configService.get.mockImplementation((key: string) => {
       if (key === 'BCN_TIMEOUT') {
         return '5';
@@ -188,17 +212,21 @@ describe('FxRateResolverService', () => {
         callback();
         return 0 as unknown as NodeJS.Timeout;
       });
-    fetchMock.mockImplementation((_url: string, init?: RequestInit) => {
-      if (init?.signal?.aborted) {
-        return Promise.reject(new Error('BCN request aborted'));
-      }
+    let capturedFetchInit: FetchInit;
+    fetchMock.mockImplementation(
+      (_input: FetchInput, init?: FetchInit): Promise<Response> => {
+        capturedFetchInit = init;
+        if (init?.signal?.aborted) {
+          return Promise.reject(new Error('BCN request aborted'));
+        }
 
-      return new Promise((_resolve, reject) => {
-        init?.signal?.addEventListener('abort', () => {
-          reject(new Error('BCN request aborted'));
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            reject(new Error('BCN request aborted'));
+          });
         });
-      });
-    });
+      },
+    );
 
     try {
       await expect(
@@ -208,78 +236,67 @@ describe('FxRateResolverService', () => {
           'No official BCN FX rate found for invoiceDate 2026-01-09',
         ),
       );
-      expect(fetchMock).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({ signal: expect.any(AbortSignal) }),
-      );
-      expect(repository.upsert).not.toHaveBeenCalled();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(capturedFetchInit?.signal).toBeInstanceOf(AbortSignal);
+      expect(upsertMock).not.toHaveBeenCalled();
     } finally {
       setTimeoutSpy.mockRestore();
     }
   });
 
   it('returns safe not-found semantics when BCN responds with HTTP non-OK', async () => {
-    repository.findOne.mockResolvedValue(null);
-    fetchMock.mockResolvedValue({
-      ok: false,
-      status: 503,
-      text: () => Promise.resolve('Service unavailable'),
-    });
+    findOneMock.mockResolvedValue(null);
+    fetchMock.mockResolvedValue(
+      createFetchResponse('Service unavailable', { status: 503 }),
+    );
 
     await expect(service.getBcnRateByInvoiceDate('2026-01-10')).rejects.toThrow(
       new NotFoundException(
         'No official BCN FX rate found for invoiceDate 2026-01-10',
       ),
     );
-    expect(repository.upsert).not.toHaveBeenCalled();
+    expect(upsertMock).not.toHaveBeenCalled();
   });
 
   it('returns safe not-found semantics for malformed SOAP without rate nodes', async () => {
-    repository.findOne.mockResolvedValue(null);
-    fetchMock.mockResolvedValue({
-      ok: true,
-      text: () => Promise.resolve('<soap:Envelope><broken>'),
-    });
+    findOneMock.mockResolvedValue(null);
+    fetchMock.mockResolvedValue(createFetchResponse('<soap:Envelope><broken>'));
 
     await expect(service.getBcnRateByInvoiceDate('2026-01-11')).rejects.toThrow(
       new NotFoundException(
         'No official BCN FX rate found for invoiceDate 2026-01-11',
       ),
     );
-    expect(repository.upsert).not.toHaveBeenCalled();
+    expect(upsertMock).not.toHaveBeenCalled();
   });
 
   it('returns safe not-found semantics for invalid rate and date nodes', async () => {
-    repository.findOne.mockResolvedValue(null);
-    fetchMock.mockResolvedValue({
-      ok: true,
-      text: () =>
-        Promise.resolve(`
+    findOneMock.mockResolvedValue(null);
+    fetchMock.mockResolvedValue(
+      createFetchResponse(`
           <Detalle_TC>
             <Tc><Fecha>12/01/2026</Fecha><Valor>not-a-rate</Valor></Tc>
             <Tc><Fecha>invalid-date</Fecha><Valor>36.9000</Valor></Tc>
           </Detalle_TC>`),
-    });
+    );
 
     await expect(service.getBcnRateByInvoiceDate('2026-01-12')).rejects.toThrow(
       new NotFoundException(
         'No official BCN FX rate found for invoiceDate 2026-01-12',
       ),
     );
-    expect(repository.upsert).not.toHaveBeenCalled();
+    expect(upsertMock).not.toHaveBeenCalled();
   });
 
   it('normalizes full ISO invoice datetimes to the canonical official rate date', async () => {
-    repository.findOne.mockResolvedValue(null);
-    repository.upsert.mockResolvedValue({} as never);
-    fetchMock.mockResolvedValue({
-      ok: true,
-      text: () =>
-        Promise.resolve(`
+    findOneMock.mockResolvedValue(null);
+    upsertMock.mockResolvedValue(createUpsertResult());
+    fetchMock.mockResolvedValue(
+      createFetchResponse(`
           <Detalle_TC>
             <Tc><Fecha>13/01/2026</Fecha><Valor>36.9012</Valor></Tc>
           </Detalle_TC>`),
-    });
+    );
 
     await expect(
       service.getBcnRateByInvoiceDate('2026-01-13T23:59:59.000Z'),
@@ -288,17 +305,17 @@ describe('FxRateResolverService', () => {
       effectiveDate: '2026-01-13',
       rateNio: 36.9012,
     });
-    expect(repository.findOne).toHaveBeenCalledWith({
+    expect(findOneMock).toHaveBeenCalledWith({
       where: { effective_date: '2026-01-13' },
     });
-    expect(repository.upsert).toHaveBeenCalledWith(
+    expect(upsertMock).toHaveBeenCalledWith(
       { effective_date: '2026-01-13', rate_nio: 36.9012 },
       ['effective_date'],
     );
   });
 
   it('throws NotFoundException when no BCN rate exists for the requested invoice date', async () => {
-    repository.findOne.mockResolvedValue(null);
+    findOneMock.mockResolvedValue(null);
 
     await expect(service.getBcnRateByInvoiceDate('2026-01-04')).rejects.toThrow(
       new NotFoundException(
