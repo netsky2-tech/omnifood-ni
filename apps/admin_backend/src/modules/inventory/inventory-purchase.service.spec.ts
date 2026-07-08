@@ -8,7 +8,10 @@ import {
 } from './inventory-purchase.service';
 import { Batch } from './entities/batch.entity';
 import { Insumo } from './entities/insumo.entity';
-import { InventoryMovement } from './entities/inventory-movement.entity';
+import {
+  InventoryMovement,
+  MovementType,
+} from './entities/inventory-movement.entity';
 import { Supplier } from './entities/supplier.entity';
 import { PurchaseDocument } from './entities/purchase-document.entity';
 import { CostCalculatorService } from './cost-calculator.service';
@@ -303,7 +306,7 @@ describe('InventoryPurchaseService', () => {
     expect(manager.save).toHaveBeenCalledWith(
       InventoryMovement,
       expect.objectContaining({
-        type: 'PURCHASE',
+        type: MovementType.ENTRADA_COMPRA,
         sourceDocumentType: 'PURCHASE',
         sourceDocumentId: 'purchase-doc-1',
         unitCostNio: 73,
@@ -311,6 +314,48 @@ describe('InventoryPurchaseService', () => {
       }),
     );
     expect(result.purchaseDocument.id).toBe('purchase-doc-1');
+  });
+
+  it('automatically appends one ENTRADA_COMPRA Kardex line for the current single-detail purchase document', async () => {
+    queryBuilder.getOne.mockResolvedValue({
+      ...perishableInsumo,
+      is_perishable: false,
+    });
+
+    await service.recordPurchase({
+      id: 'purchase-doc-kardex-entry-1',
+      tenantId: 'tenant-A',
+      insumoId: 'ins-1',
+      supplierId: 'sup-1',
+      invoiceNumber: 'INV-KARDEX-ENTRY-1',
+      quantity: 3,
+      unitCost: 20,
+      currency: CURRENCY.NIO,
+      invoiceDate: '2026-01-08',
+      entryTimestamp: '2026-01-08T08:15:00.000Z',
+    });
+
+    const inventoryMovementSaves = manager.save.mock.calls.filter(
+      ([entity]: [unknown, ...unknown[]]) => entity === InventoryMovement,
+    ) as Array<[unknown, Partial<InventoryMovement>]>;
+
+    expect(inventoryMovementSaves).toHaveLength(1);
+    const savedMovement = inventoryMovementSaves[0]?.[1];
+
+    expect(savedMovement).toEqual(
+      expect.objectContaining({
+        tenant_id: 'tenant-A',
+        insumoId: 'ins-1',
+        type: MovementType.ENTRADA_COMPRA,
+        quantity: 3,
+        previousStock: 10,
+        newStock: 13,
+        unitCostNio: 20,
+        totalCostNio: 60,
+        sourceDocumentId: 'purchase-doc-kardex-entry-1',
+        sourceDocumentType: 'PURCHASE',
+      }),
+    );
   });
 
   it('persists optional fiscal authorization code while keeping invoice and capture dates independent', async () => {
