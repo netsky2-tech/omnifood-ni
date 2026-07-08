@@ -11,6 +11,7 @@ import * as request from 'supertest';
 import { App } from 'supertest/types';
 import { DataSource } from 'typeorm';
 import { TenantInterceptor } from '../../src/core/database/rls.interceptor';
+import { CostCalculatorService } from '../../src/modules/inventory/cost-calculator.service';
 import { InventoryMovementController } from '../../src/modules/inventory/inventory-movement.controller';
 import { FxRateResolverService } from '../../src/modules/inventory/fx-rate-resolver.service';
 import {
@@ -180,6 +181,7 @@ describe('Inventory purchase routes (integration)', () => {
           useValue: fxRateResolverService,
         },
         InventoryPurchaseService,
+        CostCalculatorService,
         {
           provide: DataSource,
           useValue: dataSource,

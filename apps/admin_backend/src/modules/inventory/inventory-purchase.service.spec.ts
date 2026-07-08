@@ -11,9 +11,11 @@ import { Insumo } from './entities/insumo.entity';
 import { InventoryMovement } from './entities/inventory-movement.entity';
 import { Supplier } from './entities/supplier.entity';
 import { PurchaseDocument } from './entities/purchase-document.entity';
+import { CostCalculatorService } from './cost-calculator.service';
 
 describe('InventoryPurchaseService', () => {
   let service: InventoryPurchaseService;
+  let costCalculator: CostCalculatorService;
   const resolveBcnRateByDate = jest.fn();
   const transaction = jest.fn();
   const findOne = jest.fn();
@@ -85,6 +87,7 @@ describe('InventoryPurchaseService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         InventoryPurchaseService,
+        CostCalculatorService,
         {
           provide: DataSource,
           useValue: dataSource,
@@ -97,6 +100,7 @@ describe('InventoryPurchaseService', () => {
     }).compile();
 
     service = module.get<InventoryPurchaseService>(InventoryPurchaseService);
+    costCalculator = module.get<CostCalculatorService>(CostCalculatorService);
   });
 
   it('uses the explicit USD document rate without resolver fallback', async () => {
@@ -119,6 +123,35 @@ describe('InventoryPurchaseService', () => {
     expect(preview.unitCostNio).toBe(73);
     expect(preview.projectedCppNio).toBe(61.5);
     expect(preview.requiresBatchTracking).toBe(true);
+  });
+
+  it('delegates purchase CPP calculation to the official calculator API', async () => {
+    const calculatePurchaseCpp = jest.spyOn(
+      costCalculator,
+      'calculatePurchaseCpp',
+    );
+
+    await service.previewPurchase({
+      id: 'preview-doc-calculator-1',
+      tenantId: 'tenant-A',
+      insumoId: 'ins-1',
+      supplierId: 'sup-1',
+      invoiceNumber: 'INV-PREVIEW-CALCULATOR-1',
+      quantity: 3,
+      unitCost: 20,
+      currency: CURRENCY.NIO,
+      invoiceDate: '2026-01-02',
+      entryTimestamp: '2026-01-10T08:00:00.000Z',
+    });
+
+    expect(calculatePurchaseCpp).toHaveBeenCalledWith({
+      currentStock: 10,
+      currentCppNio: 50,
+      entryQuantity: 3,
+      entryUnitCost: 20,
+      currency: CURRENCY.NIO,
+      bcnRateNio: 1,
+    });
   });
 
   it('resolves the official USD rate by invoice date when official mode is requested', async () => {
@@ -165,6 +198,29 @@ describe('InventoryPurchaseService', () => {
     expect(resolveBcnRateByDate).toHaveBeenCalledWith('2026-01-06');
     expect(preview.bcnRate).toBe(36.8123);
     expect(preview.bcnRateSource).toBe('Official BCN rate by invoice date');
+  });
+
+  it('uses the retroactive invoice date, not the capture timestamp, for official USD rates', async () => {
+    resolveBcnRateByDate.mockResolvedValue(36.42);
+
+    const preview = await service.previewPurchase({
+      id: 'preview-doc-retroactive-1',
+      tenantId: 'tenant-A',
+      insumoId: 'ins-1',
+      supplierId: 'sup-1',
+      invoiceNumber: 'INV-PREVIEW-RETROACTIVE-1',
+      quantity: 2,
+      unitCost: 10,
+      currency: CURRENCY.USD,
+      invoiceDate: '2026-01-05',
+      entryTimestamp: '2026-01-10T23:45:00.000Z',
+      fxRateMode: 'official',
+    });
+
+    expect(resolveBcnRateByDate).toHaveBeenCalledWith('2026-01-05');
+    expect(resolveBcnRateByDate).not.toHaveBeenCalledWith('2026-01-10');
+    expect(preview.bcnRate).toBe(36.42);
+    expect(preview.unitCostNio).toBe(364.2);
   });
 
   it('keeps NIO purchases in NIO-only CPP input rounded to 4 decimals', async () => {
