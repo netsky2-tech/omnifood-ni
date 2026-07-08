@@ -329,7 +329,9 @@ export class InventoryPurchaseService {
     ) {
       return {
         bcnRate: round4(
-          await this.fxRateResolver.resolveBcnRateByDate(input.invoiceDate),
+          await this.fxRateResolver.resolveBcnRateByDate(
+            this.normalizeOfficialFxInvoiceDate(input.invoiceDate),
+          ),
         ),
         bcnRateSource: BCN_RATE_SOURCE.OFFICIAL,
       };
@@ -349,6 +351,13 @@ export class InventoryPurchaseService {
     }
 
     return round4(bcnRate);
+  }
+
+  private normalizeOfficialFxInvoiceDate(invoiceDate: string): string {
+    const trimmedInvoiceDate = invoiceDate.trim();
+    const isoDate = trimmedInvoiceDate.match(/^(\d{4}-\d{2}-\d{2})(?:$|T)/);
+
+    return isoDate ? isoDate[1] : trimmedInvoiceDate;
   }
 
   private assertBatchMetadata(input: {

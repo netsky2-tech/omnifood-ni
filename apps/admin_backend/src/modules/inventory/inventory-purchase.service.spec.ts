@@ -144,6 +144,28 @@ describe('InventoryPurchaseService', () => {
     expect(preview.projectedCppNio).toBe(102.8538);
   });
 
+  it('normalizes full ISO invoice datetimes before official USD rate lookup', async () => {
+    resolveBcnRateByDate.mockResolvedValue(36.8123);
+
+    const preview = await service.previewPurchase({
+      id: 'preview-doc-official-datetime-1',
+      tenantId: 'tenant-A',
+      insumoId: 'ins-1',
+      supplierId: 'sup-1',
+      invoiceNumber: 'INV-PREVIEW-OFFICIAL-DATETIME-1',
+      quantity: 2,
+      unitCost: 10,
+      currency: CURRENCY.USD,
+      invoiceDate: '2026-01-06T23:59:59.000Z',
+      entryTimestamp: '2026-01-06T23:59:59.000Z',
+      fxRateMode: 'official',
+    });
+
+    expect(resolveBcnRateByDate).toHaveBeenCalledWith('2026-01-06');
+    expect(preview.bcnRate).toBe(36.8123);
+    expect(preview.bcnRateSource).toBe('Official BCN rate by invoice date');
+  });
+
   it('keeps NIO purchases in NIO-only CPP input rounded to 4 decimals', async () => {
     queryBuilder.getOne.mockResolvedValue({
       ...perishableInsumo,
