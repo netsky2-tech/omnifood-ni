@@ -21,6 +21,7 @@ import {
 } from './dto/purchase-document.dto';
 import { Supplier } from './entities/supplier.entity';
 import { PurchaseDocument } from './entities/purchase-document.entity';
+import { CostCalculatorService } from './cost-calculator.service';
 
 export const CURRENCY = {
   NIO: 'NIO',
@@ -72,6 +73,7 @@ export interface PurchasePreview {
 export class InventoryPurchaseService {
   constructor(
     private readonly dataSource: DataSource,
+    private readonly costCalculator: CostCalculatorService,
     @Inject(FX_RATE_RESOLVER)
     private readonly fxRateResolver: FxRateResolver,
   ) {}
@@ -479,28 +481,25 @@ export class InventoryPurchaseService {
       fxRateMode: input.fxRateMode,
       bcnRate: input.bcnRate,
     });
-    const unitCostNio = round4(input.unitCost * rateResolution.bcnRate);
-    const previousStock = round4(Number(insumo.stock));
-    const previousCppNio = round4(Number(insumo.averageCost));
-    const projectedStock = round4(previousStock + input.quantity);
-    const projectedCppNio =
-      projectedStock === 0
-        ? 0
-        : round4(
-            (previousStock * previousCppNio + input.quantity * unitCostNio) /
-              projectedStock,
-          );
+    const cpp = this.costCalculator.calculatePurchaseCpp({
+      currentStock: Number(insumo.stock),
+      currentCppNio: Number(insumo.averageCost),
+      entryQuantity: input.quantity,
+      entryUnitCost: input.unitCost,
+      currency: input.currency,
+      bcnRateNio: rateResolution.bcnRate,
+    });
 
     return {
       invoiceDate: input.invoiceDate,
       currency: input.currency,
       bcnRate: rateResolution.bcnRate,
       bcnRateSource: rateResolution.bcnRateSource,
-      unitCostNio,
-      previousCppNio,
-      projectedCppNio,
-      previousStock,
-      projectedStock,
+      unitCostNio: cpp.unitCostNio,
+      previousCppNio: cpp.previousCppNio,
+      projectedCppNio: cpp.projectedCppNio,
+      previousStock: cpp.previousStock,
+      projectedStock: cpp.projectedStock,
       requiresBatchTracking: Boolean(insumo.is_perishable),
     };
   }

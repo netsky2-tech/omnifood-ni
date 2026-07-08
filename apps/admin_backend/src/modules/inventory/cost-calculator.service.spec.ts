@@ -56,4 +56,89 @@ describe('CostCalculatorService', () => {
       expect(result).toBe(0);
     });
   });
+
+  describe('calculatePurchaseCpp', () => {
+    it('calculates CPP for zero stock using the NIO entry cost', () => {
+      const result = service.calculatePurchaseCpp({
+        currentStock: 0,
+        currentCppNio: 0,
+        entryQuantity: 10,
+        entryUnitCost: 12.34567,
+        currency: 'NIO',
+      });
+
+      expect(result).toEqual({
+        previousStock: 0,
+        previousCppNio: 0,
+        projectedStock: 10,
+        unitCostNio: 12.3457,
+        projectedCppNio: 12.3457,
+      });
+    });
+
+    it('calculates CPP when stock is temporarily negative', () => {
+      const result = service.calculatePurchaseCpp({
+        currentStock: -5,
+        currentCppNio: 50,
+        entryQuantity: 10,
+        entryUnitCost: 80,
+        currency: 'NIO',
+      });
+
+      // (-5 * 50 + 10 * 80) / (-5 + 10) = 550 / 5 = 110
+      expect(result).toEqual({
+        previousStock: -5,
+        previousCppNio: 50,
+        projectedStock: 5,
+        unitCostNio: 80,
+        projectedCppNio: 110,
+      });
+    });
+
+    it('returns zero CPP when a purchase exactly offsets temporary negative stock', () => {
+      const result = service.calculatePurchaseCpp({
+        currentStock: -10,
+        currentCppNio: 50,
+        entryQuantity: 10,
+        entryUnitCost: 80,
+        currency: 'NIO',
+      });
+
+      expect(result).toEqual({
+        previousStock: -10,
+        previousCppNio: 50,
+        projectedStock: 0,
+        unitCostNio: 80,
+        projectedCppNio: 0,
+      });
+    });
+
+    it('converts USD unit cost with the provided BCN rate before CPP', () => {
+      const result = service.calculatePurchaseCpp({
+        currentStock: 8,
+        currentCppNio: 40,
+        entryQuantity: 4,
+        entryUnitCost: 2.5,
+        currency: 'USD',
+        bcnRateNio: 36.7123,
+      });
+
+      expect(result.unitCostNio).toBe(91.7808);
+      expect(result.projectedCppNio).toBe(57.2603);
+    });
+
+    it('rounds purchase CPP outputs to 4 decimals', () => {
+      const result = service.calculatePurchaseCpp({
+        currentStock: 3,
+        currentCppNio: 1.11119,
+        entryQuantity: 2,
+        entryUnitCost: 2.22229,
+        currency: 'NIO',
+      });
+
+      expect(result.previousCppNio).toBe(1.1112);
+      expect(result.unitCostNio).toBe(2.2223);
+      expect(result.projectedCppNio).toBe(1.5556);
+    });
+  });
 });
