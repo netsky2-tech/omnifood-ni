@@ -662,6 +662,12 @@ final migration24_25 = Migration(24, 25, (database) async {
   await database.execute('ALTER TABLE purchases ADD COLUMN fx_rate_mode TEXT');
 });
 
+final migration25_26 = Migration(25, 26, (database) async {
+  await database.execute(
+    'ALTER TABLE purchases ADD COLUMN fiscal_authorization_code TEXT',
+  );
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -678,4 +684,5 @@ final allMigrations = [
   migration22_23,
   migration23_24,
   migration24_25,
+  migration25_26,
 ];

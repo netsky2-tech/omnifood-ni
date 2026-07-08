@@ -56,6 +56,7 @@ interface PurchaseDocumentResponseBody {
   insumo_id: string;
   supplier_id: string;
   invoice_number: string;
+  fiscal_authorization_code: string | null;
   invoice_date: string;
   entry_date: string;
   entry_timestamp: string;
@@ -102,6 +103,7 @@ const validPurchasePayload = {
   insumoId: 'ins-1',
   supplierId: 'sup-1',
   invoiceNumber: 'INV-1001',
+  fiscalAuthorizationCode: 'CAE-ABC-123',
   quantity: 2,
   unitCost: 10,
   currency: 'USD' as const,
@@ -444,6 +446,26 @@ describe('Inventory purchase routes (integration)', () => {
     expect(repositoryFindOne).not.toHaveBeenCalled();
   });
 
+  it('returns 400 for purchase preview when fiscalAuthorizationCode is blank after trimming', async () => {
+    const token = signToken();
+
+    const response = await request(app.getHttpServer())
+      .post(`${INVENTORY_API_PREFIX}/purchase`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        ...validPurchasePayload,
+        fiscalAuthorizationCode: '   ',
+      })
+      .expect(400);
+
+    const body = response.body as BadRequestResponseBody;
+    expect(body.error).toBe('Bad Request');
+    expect(body.message).toEqual(
+      expect.arrayContaining(['fiscalAuthorizationCode should not be empty']),
+    );
+    expect(repositoryFindOne).not.toHaveBeenCalled();
+  });
+
   it('accepts an authenticated manager purchase preview request and forwards tenant context', async () => {
     const token = signToken({ tenant_id: 'tenant-XYZ' });
 
@@ -589,6 +611,7 @@ describe('Inventory purchase routes (integration)', () => {
         insumo_id: validPurchasePayload.insumoId,
         supplier_id: validPurchasePayload.supplierId,
         invoice_number: validPurchasePayload.invoiceNumber,
+        fiscal_authorization_code: validPurchasePayload.fiscalAuthorizationCode,
         invoice_date: new Date(validPurchasePayload.invoiceDate).toJSON(),
         entry_date: new Date(validPurchasePayload.invoiceDate).toJSON(),
         entry_timestamp: new Date(validPurchasePayload.entryTimestamp).toJSON(),
@@ -649,6 +672,8 @@ describe('Inventory purchase routes (integration)', () => {
       insumo_id: officialModePurchasePayload.insumoId,
       supplier_id: officialModePurchasePayload.supplierId,
       invoice_number: officialModePurchasePayload.invoiceNumber,
+      fiscal_authorization_code:
+        officialModePurchasePayload.fiscalAuthorizationCode,
       invoice_date: new Date(officialModePurchasePayload.invoiceDate).toJSON(),
       entry_date: new Date(officialModePurchasePayload.invoiceDate).toJSON(),
       entry_timestamp: new Date(

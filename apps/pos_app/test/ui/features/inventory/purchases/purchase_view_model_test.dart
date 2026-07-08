@@ -77,6 +77,7 @@ void main() {
         insumoId: 'i1',
         supplierId: 's1',
         invoiceNumber: 'INV-1001',
+        fiscalAuthorizationCode: '  CAE-ABC-123  ',
         uomConversionId: 'c1',
         quantity: 2,
         unitCost: 100,
@@ -102,6 +103,7 @@ void main() {
           verify(mockRepo.queuePurchaseSync(captureAny)).captured.single
               as Purchase;
       expect(queuedPurchase.fxRateMode, purchaseFxRateModeExplicit);
+      expect(queuedPurchase.fiscalAuthorizationCode, 'CAE-ABC-123');
       verify(mockRepo.saveBatch(any)).called(1);
       expect(viewModel.isLoading, false);
       expect(viewModel.errorMessage, isNull);

@@ -10,6 +10,8 @@ class PurchaseEntity {
   final String supplierId;
   @ColumnInfo(name: 'invoice_number')
   final String invoiceNumber;
+  @ColumnInfo(name: 'fiscal_authorization_code')
+  final String? fiscalAuthorizationCode;
   final double quantity;
   @ColumnInfo(name: 'unit_cost')
   final double unitCost;
@@ -43,6 +45,7 @@ class PurchaseEntity {
     required this.insumoId,
     required this.supplierId,
     required this.invoiceNumber,
+    this.fiscalAuthorizationCode,
     required this.quantity,
     required this.unitCost,
     required this.timestamp,

@@ -24,6 +24,7 @@ mixin _$Purchase {
   String get insumoId => throw _privateConstructorUsedError;
   String get supplierId => throw _privateConstructorUsedError;
   String get invoiceNumber => throw _privateConstructorUsedError;
+  String? get fiscalAuthorizationCode => throw _privateConstructorUsedError;
   double get quantity => throw _privateConstructorUsedError;
   double get unitCost => throw _privateConstructorUsedError;
   DateTime get timestamp => throw _privateConstructorUsedError;
@@ -62,6 +63,7 @@ abstract class $PurchaseCopyWith<$Res> {
       String insumoId,
       String supplierId,
       String invoiceNumber,
+      String? fiscalAuthorizationCode,
       double quantity,
       double unitCost,
       DateTime timestamp,
@@ -95,6 +97,7 @@ class _$PurchaseCopyWithImpl<$Res, $Val extends Purchase>
     Object? insumoId = null,
     Object? supplierId = null,
     Object? invoiceNumber = null,
+    Object? fiscalAuthorizationCode = freezed,
     Object? quantity = null,
     Object? unitCost = null,
     Object? timestamp = null,
@@ -127,6 +130,10 @@ class _$PurchaseCopyWithImpl<$Res, $Val extends Purchase>
           ? _value.invoiceNumber
           : invoiceNumber // ignore: cast_nullable_to_non_nullable
               as String,
+      fiscalAuthorizationCode: freezed == fiscalAuthorizationCode
+          ? _value.fiscalAuthorizationCode
+          : fiscalAuthorizationCode // ignore: cast_nullable_to_non_nullable
+              as String?,
       quantity: null == quantity
           ? _value.quantity
           : quantity // ignore: cast_nullable_to_non_nullable
@@ -200,6 +207,7 @@ abstract class _$$PurchaseImplCopyWith<$Res>
       String insumoId,
       String supplierId,
       String invoiceNumber,
+      String? fiscalAuthorizationCode,
       double quantity,
       double unitCost,
       DateTime timestamp,
@@ -231,6 +239,7 @@ class __$$PurchaseImplCopyWithImpl<$Res>
     Object? insumoId = null,
     Object? supplierId = null,
     Object? invoiceNumber = null,
+    Object? fiscalAuthorizationCode = freezed,
     Object? quantity = null,
     Object? unitCost = null,
     Object? timestamp = null,
@@ -263,6 +272,10 @@ class __$$PurchaseImplCopyWithImpl<$Res>
           ? _value.invoiceNumber
           : invoiceNumber // ignore: cast_nullable_to_non_nullable
               as String,
+      fiscalAuthorizationCode: freezed == fiscalAuthorizationCode
+          ? _value.fiscalAuthorizationCode
+          : fiscalAuthorizationCode // ignore: cast_nullable_to_non_nullable
+              as String?,
       quantity: null == quantity
           ? _value.quantity
           : quantity // ignore: cast_nullable_to_non_nullable
@@ -331,6 +344,7 @@ class _$PurchaseImpl implements _Purchase {
       required this.insumoId,
       required this.supplierId,
       required this.invoiceNumber,
+      this.fiscalAuthorizationCode,
       required this.quantity,
       required this.unitCost,
       required this.timestamp,
@@ -358,6 +372,8 @@ class _$PurchaseImpl implements _Purchase {
   final String supplierId;
   @override
   final String invoiceNumber;
+  @override
+  final String? fiscalAuthorizationCode;
   @override
   final double quantity;
   @override
@@ -398,7 +414,7 @@ class _$PurchaseImpl implements _Purchase {
 
   @override
   String toString() {
-    return 'Purchase(id: $id, insumoId: $insumoId, supplierId: $supplierId, invoiceNumber: $invoiceNumber, quantity: $quantity, unitCost: $unitCost, timestamp: $timestamp, invoiceDate: $invoiceDate, currency: $currency, bcnRate: $bcnRate, fxRateMode: $fxRateMode, unitCostNio: $unitCostNio, cppBeforeNio: $cppBeforeNio, projectedCppNio: $projectedCppNio, lotCode: $lotCode, receivedDate: $receivedDate, expirationDate: $expirationDate, requiresBatchTracking: $requiresBatchTracking)';
+    return 'Purchase(id: $id, insumoId: $insumoId, supplierId: $supplierId, invoiceNumber: $invoiceNumber, fiscalAuthorizationCode: $fiscalAuthorizationCode, quantity: $quantity, unitCost: $unitCost, timestamp: $timestamp, invoiceDate: $invoiceDate, currency: $currency, bcnRate: $bcnRate, fxRateMode: $fxRateMode, unitCostNio: $unitCostNio, cppBeforeNio: $cppBeforeNio, projectedCppNio: $projectedCppNio, lotCode: $lotCode, receivedDate: $receivedDate, expirationDate: $expirationDate, requiresBatchTracking: $requiresBatchTracking)';
   }
 
   @override
@@ -413,6 +429,9 @@ class _$PurchaseImpl implements _Purchase {
                 other.supplierId == supplierId) &&
             (identical(other.invoiceNumber, invoiceNumber) ||
                 other.invoiceNumber == invoiceNumber) &&
+            (identical(
+                    other.fiscalAuthorizationCode, fiscalAuthorizationCode) ||
+                other.fiscalAuthorizationCode == fiscalAuthorizationCode) &&
             (identical(other.quantity, quantity) ||
                 other.quantity == quantity) &&
             (identical(other.unitCost, unitCost) ||
@@ -443,26 +462,28 @@ class _$PurchaseImpl implements _Purchase {
 
   @JsonKey(ignore: true)
   @override
-  int get hashCode => Object.hash(
-      runtimeType,
-      id,
-      insumoId,
-      supplierId,
-      invoiceNumber,
-      quantity,
-      unitCost,
-      timestamp,
-      invoiceDate,
-      currency,
-      bcnRate,
-      fxRateMode,
-      unitCostNio,
-      cppBeforeNio,
-      projectedCppNio,
-      lotCode,
-      receivedDate,
-      expirationDate,
-      requiresBatchTracking);
+  int get hashCode => Object.hashAll([
+        runtimeType,
+        id,
+        insumoId,
+        supplierId,
+        invoiceNumber,
+        fiscalAuthorizationCode,
+        quantity,
+        unitCost,
+        timestamp,
+        invoiceDate,
+        currency,
+        bcnRate,
+        fxRateMode,
+        unitCostNio,
+        cppBeforeNio,
+        projectedCppNio,
+        lotCode,
+        receivedDate,
+        expirationDate,
+        requiresBatchTracking
+      ]);
 
   @JsonKey(ignore: true)
   @override
@@ -484,6 +505,7 @@ abstract class _Purchase implements Purchase {
       required final String insumoId,
       required final String supplierId,
       required final String invoiceNumber,
+      final String? fiscalAuthorizationCode,
       required final double quantity,
       required final double unitCost,
       required final DateTime timestamp,
@@ -511,6 +533,8 @@ abstract class _Purchase implements Purchase {
   String get supplierId;
   @override
   String get invoiceNumber;
+  @override
+  String? get fiscalAuthorizationCode;
   @override
   double get quantity;
   @override

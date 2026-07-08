@@ -226,6 +226,7 @@ describe('InventoryPurchaseService', () => {
         id: 'purchase-doc-1',
         supplier_id: 'sup-1',
         invoice_number: 'INV-1001',
+        fiscal_authorization_code: null,
         invoice_date: new Date('2026-01-03'),
         entry_date: new Date('2026-01-03'),
         entry_timestamp: new Date('2026-01-03T08:15:00.000Z'),
@@ -253,6 +254,41 @@ describe('InventoryPurchaseService', () => {
       }),
     );
     expect(result.purchaseDocument.id).toBe('purchase-doc-1');
+  });
+
+  it('persists optional fiscal authorization code while keeping invoice and capture dates independent', async () => {
+    resolveBcnRateByDate.mockResolvedValue(36.95);
+    queryBuilder.getOne.mockResolvedValue({
+      ...perishableInsumo,
+      is_perishable: false,
+    });
+
+    await service.recordPurchase({
+      id: 'purchase-doc-fiscal-identity-1',
+      tenantId: 'tenant-A',
+      insumoId: 'ins-1',
+      supplierId: 'sup-1',
+      invoiceNumber: 'INV-FISCAL-1001',
+      fiscalAuthorizationCode: '  CAE-ABC-123  ',
+      quantity: 2,
+      unitCost: 10,
+      currency: CURRENCY.USD,
+      invoiceDate: '2026-01-07',
+      entryTimestamp: '2026-01-09T23:45:00.000Z',
+      fxRateMode: 'official',
+    });
+
+    expect(resolveBcnRateByDate).toHaveBeenCalledWith('2026-01-07');
+    expect(manager.save).toHaveBeenCalledWith(
+      PurchaseDocument,
+      expect.objectContaining({
+        fiscal_authorization_code: 'CAE-ABC-123',
+        invoice_date: new Date('2026-01-07'),
+        entry_date: new Date('2026-01-09'),
+        entry_timestamp: new Date('2026-01-09T23:45:00.000Z'),
+        bcn_rate: 36.95,
+      }),
+    );
   });
 
   it('persists the resolved official USD rate during purchase posting when official mode is requested', async () => {

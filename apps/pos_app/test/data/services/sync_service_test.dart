@@ -467,6 +467,7 @@ void main() {
         insumoId: 'i-9',
         supplierId: 'supplier-1',
         invoiceNumber: 'INV-1001',
+        fiscalAuthorizationCode: 'CAE-ABC-123',
         quantity: 2,
         unitCost: 10,
         timestamp: DateTime.parse('2026-01-01T12:00:00Z'),
@@ -500,6 +501,7 @@ void main() {
     expect(purchaseBody['id'], 'purchase-1');
     expect(purchaseBody['supplierId'], 'supplier-1');
     expect(purchaseBody['invoiceNumber'], 'INV-1001');
+    expect(purchaseBody['fiscalAuthorizationCode'], 'CAE-ABC-123');
     expect(purchaseBody['invoiceDate'], '2026-01-01');
     expect(purchaseBody['entryTimestamp'], '2026-01-01T12:00:00.000Z');
     expect(purchaseBody['fxRateMode'], purchaseFxRateModeExplicit);
@@ -643,6 +645,7 @@ void main() {
         final reloadedPurchases = await purchaseRepository
             .getUnsyncedPurchases();
         expect(reloadedPurchases.single.fxRateMode, isNull);
+        expect(reloadedPurchases.single.fiscalAuthorizationCode, isNull);
 
         final service = SyncService(
           mockAuditRepository,
@@ -658,6 +661,7 @@ void main() {
         );
         final purchaseBody = purchasePost.body as Map<String, Object?>;
         expect(purchaseBody['id'], 'purchase-legacy-migrated-1');
+        expect(purchaseBody['fiscalAuthorizationCode'], isNull);
         expect(purchaseBody.containsKey('fxRateMode'), isFalse);
         expect(purchaseBody['bcnRate'], 36.5);
         expect(

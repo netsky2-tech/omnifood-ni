@@ -14,6 +14,7 @@ class _PurchaseViewState extends State<PurchaseView> {
   final _qtyController = TextEditingController();
   final _costController = TextEditingController();
   final _invoiceNumberController = TextEditingController();
+  final _fiscalAuthorizationCodeController = TextEditingController();
   final _bcnRateController = TextEditingController();
   final _lotCodeController = TextEditingController();
   String? _selectedInsumoId;
@@ -37,6 +38,7 @@ class _PurchaseViewState extends State<PurchaseView> {
     _qtyController.dispose();
     _costController.dispose();
     _invoiceNumberController.dispose();
+    _fiscalAuthorizationCodeController.dispose();
     _bcnRateController.dispose();
     _lotCodeController.dispose();
     super.dispose();
@@ -215,6 +217,14 @@ class _PurchaseViewState extends State<PurchaseView> {
                         ),
                         const SizedBox(height: 12),
                         TextFormField(
+                          controller: _fiscalAuthorizationCodeController,
+                          decoration: const InputDecoration(
+                            labelText: 'Fiscal authorization code',
+                          ),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
                           controller: _qtyController,
                           decoration: const InputDecoration(
                             labelText: 'Cantidad',
@@ -314,6 +324,13 @@ class _PurchaseViewState extends State<PurchaseView> {
                             'Número de factura',
                             _invoiceNumberController.text.trim(),
                           ),
+                          if (_fiscalAuthorizationCodeController.text
+                              .trim()
+                              .isNotEmpty)
+                            _reviewRow(
+                              'Fiscal authorization code',
+                              _fiscalAuthorizationCodeController.text.trim(),
+                            ),
                           _reviewRow(
                             'Fecha de factura',
                             _formatDate(_invoiceDate),
@@ -551,6 +568,7 @@ class _PurchaseViewState extends State<PurchaseView> {
       insumoId: _selectedInsumoId!,
       supplierId: _selectedSupplierId!,
       invoiceNumber: _invoiceNumberController.text.trim(),
+      fiscalAuthorizationCode: _fiscalAuthorizationCodeController.text.trim(),
       uomConversionId: _selectedUomId!,
       quantity: double.parse(_qtyController.text),
       unitCost: double.parse(_costController.text),
