@@ -16,6 +16,12 @@ class MovementEntity {
   final String? reason;
   @ColumnInfo(name: 'user_id')
   final String? userId;
+  @ColumnInfo(name: 'unit_cost_nio')
+  final double? unitCostNio;
+  @ColumnInfo(name: 'source_document_type')
+  final String? sourceDocumentType;
+  @ColumnInfo(name: 'source_document_id')
+  final String? sourceDocumentId;
   @ColumnInfo(name: 'batch_deductions')
   // ignore: non_constant_identifier_names
   final String? batch_deductions;
@@ -30,6 +36,9 @@ class MovementEntity {
     required this.timestamp,
     this.reason,
     this.userId,
+    this.unitCostNio,
+    this.sourceDocumentType,
+    this.sourceDocumentId,
     // ignore: non_constant_identifier_names
     this.batch_deductions,
   });

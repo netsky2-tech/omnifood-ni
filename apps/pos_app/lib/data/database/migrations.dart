@@ -759,6 +759,37 @@ final migration26_27 = Migration(26, 27, (database) async {
   ''');
 });
 
+final migration27_28 = Migration(27, 28, (database) async {
+  final movementTable = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'inventory_movements'",
+  );
+  if (movementTable.isEmpty) {
+    return;
+  }
+
+  final columns = await database.rawQuery(
+    'PRAGMA table_info(inventory_movements)',
+  );
+  final existingColumnNames = columns
+      .map((column) => column['name'] as String)
+      .toSet();
+
+  Future<void> addColumnIfMissing(String columnName, String definition) async {
+    if (!existingColumnNames.contains(columnName)) {
+      await database.execute(
+        'ALTER TABLE inventory_movements ADD COLUMN $definition',
+      );
+    }
+  }
+
+  await addColumnIfMissing('unit_cost_nio', 'unit_cost_nio REAL');
+  await addColumnIfMissing(
+    'source_document_type',
+    'source_document_type TEXT',
+  );
+  await addColumnIfMissing('source_document_id', 'source_document_id TEXT');
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -777,4 +808,5 @@ final allMigrations = [
   migration24_25,
   migration25_26,
   migration26_27,
+  migration27_28,
 ];

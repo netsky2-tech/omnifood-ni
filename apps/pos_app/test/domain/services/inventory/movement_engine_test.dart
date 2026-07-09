@@ -85,6 +85,138 @@ void main() {
     });
   });
 
+  group('MovementEngine - recordProductShrinkage', () {
+    test(
+      'explodes a prepared product merma into ingredient deltas with frozen CPP and source metadata',
+      () async {
+        const productId = 'burger-plate';
+        final recipe = [
+          const Recipe(
+            id: 'r-bun',
+            productId: productId,
+            ingredientId: 'bun',
+            ingredientType: IngredientType.insumo,
+            quantity: 2,
+          ),
+          const Recipe(
+            id: 'r-patty',
+            productId: productId,
+            ingredientId: 'patty',
+            ingredientType: IngredientType.insumo,
+            quantity: 1,
+          ),
+        ];
+        const bun = Insumo(
+          id: 'bun',
+          name: 'Bun',
+          consumptionUom: 'unit',
+          stock: 10,
+          averageCost: 8.5,
+        );
+        const patty = Insumo(
+          id: 'patty',
+          name: 'Patty',
+          consumptionUom: 'unit',
+          stock: 5,
+          averageCost: 45,
+        );
+
+        when(
+          mockRepo.getRecipeByProductId(productId),
+        ).thenAnswer((_) async => recipe);
+        when(
+          mockRepo.getInsumosByIds(['bun', 'patty']),
+        ).thenAnswer((_) async => [bun, patty]);
+
+        await engine.recordProductShrinkage(
+          productId: productId,
+          quantity: 2,
+          reason: 'VENCIDO | observation:Expired plated meals',
+        );
+
+        verify(mockRepo.updateInsumoStock('bun', 6)).called(1);
+        verify(mockRepo.updateInsumoStock('patty', 3)).called(1);
+        verify(
+          mockRepo.saveMovement(
+            argThat(
+              predicate<InventoryMovement>(
+                (movement) =>
+                    movement.insumoId == 'bun' &&
+                    movement.type == MovementType.shrinkage &&
+                    movement.quantity == -4 &&
+                    movement.unitCostNio == 8.5 &&
+                    movement.sourceDocumentType == 'PRODUCT_MERMA' &&
+                    movement.sourceDocumentId == productId,
+              ),
+            ),
+          ),
+        ).called(1);
+        verify(
+          mockRepo.saveMovement(
+            argThat(
+              predicate<InventoryMovement>(
+                (movement) =>
+                    movement.insumoId == 'patty' &&
+                    movement.quantity == -2 &&
+                    movement.unitCostNio == 45 &&
+                    movement.sourceDocumentType == 'PRODUCT_MERMA' &&
+                    movement.sourceDocumentId == productId,
+              ),
+            ),
+          ),
+        ).called(1);
+      },
+    );
+
+    test('allows virtual negative stock for product merma ingredient deltas', () async {
+      const productId = 'sample-plate';
+      final recipe = [
+        const Recipe(
+          id: 'r-cheese',
+          productId: productId,
+          ingredientId: 'cheese',
+          ingredientType: IngredientType.insumo,
+          quantity: 3,
+        ),
+      ];
+      const cheese = Insumo(
+        id: 'cheese',
+        name: 'Cheese',
+        consumptionUom: 'g',
+        stock: 1,
+        averageCost: 0.25,
+      );
+
+      when(
+        mockRepo.getRecipeByProductId(productId),
+      ).thenAnswer((_) async => recipe);
+      when(
+        mockRepo.getInsumosByIds(['cheese']),
+      ).thenAnswer((_) async => [cheese]);
+
+      await engine.recordProductShrinkage(
+        productId: productId,
+        quantity: 1,
+        reason: 'DESECHO_COCINA | observation:Kitchen discard',
+      );
+
+      verify(mockRepo.updateInsumoStock('cheese', -2)).called(1);
+      verify(
+        mockRepo.saveMovement(
+          argThat(
+            predicate<InventoryMovement>(
+              (movement) =>
+                  movement.insumoId == 'cheese' &&
+                  movement.previousStock == 1 &&
+                  movement.newStock == -2 &&
+                  movement.unitCostNio == 0.25,
+            ),
+          ),
+        ),
+      ).called(1);
+    });
+  });
+
   group('MovementEngine - recordReversal', () {
     test('should increase stock correctly for a product reversal', () async {
       // GIVEN

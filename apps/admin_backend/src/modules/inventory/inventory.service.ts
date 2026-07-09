@@ -84,6 +84,7 @@ export class InventoryService {
     tenantId: string,
   ): Promise<void> {
     this.rejectPurchaseEntryMovementsWithoutSourceLinkage(movements);
+    this.rejectCountAdjustmentsWithoutSessionDocument(movements);
 
     const sorted = this.sortMovements(
       movements.map((m) => ({
@@ -138,6 +139,25 @@ export class InventoryService {
         await movementRepo.save(movement);
       }
     });
+  }
+
+  private rejectCountAdjustmentsWithoutSessionDocument(
+    movements: CreateInventoryMovementDto[],
+  ): void {
+    const hasCountAdjustment = movements.some(
+      (movement) =>
+        movement.type === MovementType.ADJUSTMENT &&
+        (movement.reason?.startsWith('COUNT_SESSION:') ||
+          movement.reason === 'AJUSTE_CONTEO'),
+    );
+
+    if (!hasCountAdjustment) {
+      return;
+    }
+
+    throw new BadRequestException(
+      'AJUSTE_CONTEO movements must be posted through the count-session document workflow because generic sync cannot prove SesionConteo traceability',
+    );
   }
 
   private rejectPurchaseEntryMovementsWithoutSourceLinkage(

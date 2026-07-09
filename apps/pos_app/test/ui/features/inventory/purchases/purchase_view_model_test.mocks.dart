@@ -795,6 +795,26 @@ class MockMovementEngine extends _i1.Mock implements _i20.MovementEngine {
       ) as _i4.Future<void>);
 
   @override
+  _i4.Future<void> recordProductShrinkage({
+    required String? productId,
+    required double? quantity,
+    required String? reason,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #recordProductShrinkage,
+          [],
+          {
+            #productId: productId,
+            #quantity: quantity,
+            #reason: reason,
+          },
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
   _i4.Future<List<_i10.InventoryMovement>> recordProduction({
     required String? recipeProductId,
     required String? producedInsumoId,

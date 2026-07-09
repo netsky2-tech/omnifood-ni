@@ -17,6 +17,13 @@ abstract class MovementEngine {
   /// Records manual shrinkage.
   Future<void> recordShrinkage(String insumoId, double quantity, String reason);
 
+  /// Records BOH shrinkage for a prepared product as ingredient deltas.
+  Future<void> recordProductShrinkage({
+    required String productId,
+    required double quantity,
+    required String reason,
+  });
+
   /// Records a local-first production close using the active recipe graph.
   Future<List<InventoryMovement>> recordProduction({
     required String recipeProductId,
