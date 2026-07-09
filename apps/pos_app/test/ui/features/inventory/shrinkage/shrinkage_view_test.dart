@@ -6,6 +6,7 @@ import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:pos_app/domain/models/inventory/batch.dart';
 import 'package:pos_app/domain/models/inventory/insumo.dart';
+import 'package:pos_app/domain/models/inventory/product.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
 import 'package:pos_app/domain/services/inventory/movement_engine.dart';
 import 'package:pos_app/ui/features/inventory/shrinkage/shrinkage_view.dart';
@@ -56,6 +57,17 @@ void main() {
       cost: 820,
     ),
   ];
+  final testProducts = [
+    const Product(
+      id: 'burger-plate',
+      name: 'Burger Plate',
+      uom: 'plate',
+      stock: 0,
+      averageCost: 62,
+      sellPrice: 180,
+      isPrepared: true,
+    ),
+  ];
 
   setUp(() {
     mockRepository = MockInventoryRepository();
@@ -68,6 +80,9 @@ void main() {
     when(
       mockRepository.getBatchesByInsumoId(any),
     ).thenAnswer((_) async => testBatches);
+    when(
+      mockRepository.getActiveProducts(),
+    ).thenAnswer((_) async => testProducts);
   });
 
   Widget createWidget() {
@@ -77,6 +92,19 @@ void main() {
         child: const ShrinkageView(),
       ),
     );
+  }
+
+  Future<void> tapWhenVisible(WidgetTester tester, Finder finder) async {
+    await tester.ensureVisible(finder);
+    await tester.pumpAndSettle();
+    await tester.tap(finder);
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> selectFirstBatch(WidgetTester tester) async {
+    await tapWhenVisible(tester, find.text('Lote exacto a ajustar'));
+    await tester.tap(find.textContaining('LOT-001').last);
+    await tester.pumpAndSettle();
   }
 
   testWidgets('Should disable REGISTRAR button when VM is loading', (
@@ -113,14 +141,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Lote exacto a ajustar'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.textContaining('LOT-001').last);
-    await tester.pumpAndSettle();
+    await selectFirstBatch(tester);
 
     // Tap Registrar
-    await tester.tap(find.text('REGISTRAR'));
-    await tester.pumpAndSettle();
+    await tapWhenVisible(tester, find.text('REGISTRAR'));
     await tester.tap(find.text('CONFIRMAR MERMA'));
     await tester.pump(); // Start async call
 
@@ -192,10 +216,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Lote exacto a ajustar'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.textContaining('LOT-001').last);
-    await tester.pumpAndSettle();
+    await selectFirstBatch(tester);
 
     await tester.tap(find.text('REGISTRAR'));
     await tester.pumpAndSettle();
@@ -231,10 +252,7 @@ void main() {
       expect(find.textContaining('FIFO 1: LOT-001'), findsOneWidget);
       expect(find.textContaining('FIFO 2: LOT-002'), findsOneWidget);
 
-      await tester.tap(find.text('Lote exacto a ajustar'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.textContaining('LOT-001').last);
-      await tester.pumpAndSettle();
+      await selectFirstBatch(tester);
 
       await tester.enterText(find.widgetWithText(TextField, 'Cantidad'), '2');
       await tester.pumpAndSettle();
@@ -245,8 +263,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('REGISTRAR'));
-      await tester.pumpAndSettle();
+      await tapWhenVisible(tester, find.text('REGISTRAR'));
 
       expect(find.text('Confirmar ajuste destructivo'), findsOneWidget);
       expect(find.text('Batch FIFO seleccionado: LOT-001'), findsOneWidget);
@@ -287,10 +304,7 @@ void main() {
     await tester.enterText(find.widgetWithText(TextField, 'Cantidad'), '1');
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Lote exacto a ajustar'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.textContaining('LOT-001').last);
-    await tester.pumpAndSettle();
+    await selectFirstBatch(tester);
 
     final registrarButton = find.widgetWithText(ElevatedButton, 'REGISTRAR');
     expect(tester.widget<ElevatedButton>(registrarButton).onPressed, isNull);
@@ -302,5 +316,56 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.widget<ElevatedButton>(registrarButton).onPressed, isNotNull);
+  });
+
+  testWidgets('Can record shrinkage against a prepared product target', (
+    tester,
+  ) async {
+    when(
+      mockMovementEngine.recordProductShrinkage(
+        productId: anyNamed('productId'),
+        quantity: anyNamed('quantity'),
+        reason: anyNamed('reason'),
+      ),
+    ).thenAnswer((_) async {});
+
+    await tester.pumpWidget(createWidget());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('REGISTRAR MERMA'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(DropdownButtonFormField<ShrinkageTargetType>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Producto').last);
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Producto (buscar...)'),
+      'Burger',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Burger Plate').last);
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextField, 'Cantidad'), '2');
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Observation'),
+      'Expired plated product',
+    );
+    await tester.pumpAndSettle();
+
+    await tapWhenVisible(tester, find.text('REGISTRAR'));
+    await tester.tap(find.text('CONFIRMAR MERMA'));
+    await tester.pumpAndSettle();
+
+    verify(
+      mockMovementEngine.recordProductShrinkage(
+        productId: 'burger-plate',
+        quantity: 2,
+        reason: 'VENCIDO | observation:Expired plated product',
+      ),
+    ).called(1);
+    verifyNever(mockMovementEngine.recordShrinkage(any, any, any));
   });
 }
