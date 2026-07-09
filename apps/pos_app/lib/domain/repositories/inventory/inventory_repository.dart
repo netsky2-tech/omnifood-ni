@@ -24,6 +24,45 @@ class OfficialBcnRateLookupException implements Exception {
   String toString() => message;
 }
 
+class MovementSyncMetadata {
+  const MovementSyncMetadata({
+    required this.movementId,
+    required this.terminalId,
+    required this.flowType,
+    required this.localSequence,
+    required this.idempotencyKey,
+    this.syncStatus = 'pending',
+    this.lastResultCode,
+    this.lastError,
+  });
+
+  final String movementId;
+  final String terminalId;
+  final String flowType;
+  final int localSequence;
+  final String idempotencyKey;
+  final String syncStatus;
+  final String? lastResultCode;
+  final String? lastError;
+
+  MovementSyncMetadata copyWith({
+    String? syncStatus,
+    String? lastResultCode,
+    String? lastError,
+  }) {
+    return MovementSyncMetadata(
+      movementId: movementId,
+      terminalId: terminalId,
+      flowType: flowType,
+      localSequence: localSequence,
+      idempotencyKey: idempotencyKey,
+      syncStatus: syncStatus ?? this.syncStatus,
+      lastResultCode: lastResultCode ?? this.lastResultCode,
+      lastError: lastError ?? this.lastError,
+    );
+  }
+}
+
 abstract class InventoryRepository {
   AppDatabase get database;
 
@@ -48,7 +87,9 @@ abstract class InventoryRepository {
   Future<void> saveRecipe(Recipe recipe);
   Future<void> deleteRecipe(String id);
   Future<void> replaceRecipesForProduct(String productId, List<Recipe> recipes);
-  Future<List<RecipeVersionDocument>> getRecipeVersionDocuments(String productId);
+  Future<List<RecipeVersionDocument>> getRecipeVersionDocuments(
+    String productId,
+  );
   Future<String?> getActiveRecipeVersionId(String productId);
   Future<RecipeVersionDocument?> getRecipeVersionDocumentById(String id);
   Future<void> saveRecipeVersionDocument(RecipeVersionDocument document);
@@ -109,4 +150,18 @@ abstract class InventoryRepository {
   Future<void> saveProductionOrderDocument(ProductionOrderDocument document);
   Future<List<ProductionOrderDocument>> getUnsyncedProductionOrders();
   Future<void> markProductionOrderDocumentAsSynced(String id);
+}
+
+abstract class InventorySyncMetadataRepository {
+  Future<List<MovementSyncMetadata>> reserveMovementSyncMetadata(
+    List<String> movementIds, {
+    required String terminalId,
+    required String flowType,
+  });
+
+  Future<void> recordMovementRetryState(
+    String movementId, {
+    required String resultCode,
+    String? error,
+  });
 }

@@ -45,7 +45,8 @@ import '../../models/inventory/movement_sync_state_entity.dart';
 import '../../models/inventory/production_order_document_entity.dart';
 import 'package:dio/dio.dart';
 
-class InventoryRepositoryImpl implements InventoryRepository {
+class InventoryRepositoryImpl
+    implements InventoryRepository, InventorySyncMetadataRepository {
   final InsumoDao insumoDao;
   final RecipeDao recipeDao;
   final MovementDao movementDao;
@@ -367,27 +368,129 @@ class InventoryRepositoryImpl implements InventoryRepository {
   }
 
   @override
-  Future<void> markMovementAsSynced(String id) {
-    final now = DateTime.now().toUtc().toIso8601String();
-    return movementSyncStateDao.upsertSyncState(
+  Future<List<MovementSyncMetadata>> reserveMovementSyncMetadata(
+    List<String> movementIds, {
+    required String terminalId,
+    required String flowType,
+  }) async {
+    if (movementIds.isEmpty) return const <MovementSyncMetadata>[];
+
+    final existingRows = await movementSyncStateDao.findByMovementIds(
+      movementIds,
+    );
+    final existingById = {for (final row in existingRows) row.movementId: row};
+    var nextSequence =
+        (await movementSyncStateDao.findMaxLocalSequence(
+              terminalId,
+              flowType,
+            ) ??
+            0) +
+        1;
+
+    final reserved = <MovementSyncMetadata>[];
+    for (final movementId in movementIds) {
+      final existing = existingById[movementId];
+      if (existing != null &&
+          existing.terminalId != null &&
+          existing.flowType != null &&
+          existing.localSequence != null &&
+          existing.idempotencyKey != null) {
+        reserved.add(_toMovementSyncMetadata(existing));
+        continue;
+      }
+
+      final state = MovementSyncStateEntity(
+        movementId: movementId,
+        syncStatus: existing?.syncStatus ?? MovementSyncStateStatus.pending,
+        lastAttemptedAt: existing?.lastAttemptedAt,
+        syncedAt: existing?.syncedAt,
+        lastError: existing?.lastError,
+        terminalId: terminalId,
+        flowType: flowType,
+        localSequence: nextSequence,
+        idempotencyKey: '$flowType:$terminalId:$movementId',
+        lastResultCode: existing?.lastResultCode,
+      );
+      nextSequence += 1;
+      await movementSyncStateDao.upsertSyncState(state);
+      reserved.add(_toMovementSyncMetadata(state));
+    }
+    return reserved;
+  }
+
+  @override
+  Future<void> recordMovementRetryState(
+    String movementId, {
+    required String resultCode,
+    String? error,
+  }) async {
+    final existing = await movementSyncStateDao.findByMovementId(movementId);
+    await movementSyncStateDao.upsertSyncState(
       MovementSyncStateEntity(
-        movementId: id,
-        syncStatus: MovementSyncStateStatus.synced,
-        lastAttemptedAt: now,
-        syncedAt: now,
+        movementId: movementId,
+        syncStatus: MovementSyncStateStatus.failed,
+        lastAttemptedAt: DateTime.now().toUtc().toIso8601String(),
+        lastError: error,
+        terminalId: existing?.terminalId,
+        flowType: existing?.flowType,
+        localSequence: existing?.localSequence,
+        idempotencyKey: existing?.idempotencyKey,
+        lastResultCode: resultCode,
       ),
     );
   }
 
   @override
+  Future<void> markMovementAsSynced(String id) {
+    final now = DateTime.now().toUtc().toIso8601String();
+    return movementSyncStateDao.findByMovementId(id).then((existing) {
+      return movementSyncStateDao.upsertSyncState(
+        MovementSyncStateEntity(
+          movementId: id,
+          syncStatus: MovementSyncStateStatus.synced,
+          lastAttemptedAt: now,
+          syncedAt: now,
+          terminalId: existing?.terminalId,
+          flowType: existing?.flowType,
+          localSequence: existing?.localSequence,
+          idempotencyKey: existing?.idempotencyKey,
+          lastResultCode: existing?.lastResultCode,
+        ),
+      );
+    });
+  }
+
+  @override
   Future<void> markMovementAsFailed(String id, {String? error}) {
-    return movementSyncStateDao.upsertSyncState(
-      MovementSyncStateEntity(
-        movementId: id,
-        syncStatus: MovementSyncStateStatus.failed,
-        lastAttemptedAt: DateTime.now().toUtc().toIso8601String(),
-        lastError: error,
-      ),
+    return movementSyncStateDao.findByMovementId(id).then((existing) {
+      return movementSyncStateDao.upsertSyncState(
+        MovementSyncStateEntity(
+          movementId: id,
+          syncStatus: MovementSyncStateStatus.failed,
+          lastAttemptedAt: DateTime.now().toUtc().toIso8601String(),
+          lastError: error,
+          terminalId: existing?.terminalId,
+          flowType: existing?.flowType,
+          localSequence: existing?.localSequence,
+          idempotencyKey: existing?.idempotencyKey,
+          lastResultCode: existing?.lastResultCode,
+        ),
+      );
+    });
+  }
+
+  MovementSyncMetadata _toMovementSyncMetadata(MovementSyncStateEntity state) {
+    return MovementSyncMetadata(
+      movementId: state.movementId,
+      terminalId: state.terminalId ?? 'pos-standalone',
+      flowType: state.flowType ?? 'inventory',
+      localSequence: state.localSequence ?? 0,
+      idempotencyKey:
+          state.idempotencyKey ??
+          'inventory:pos-standalone:${state.movementId}',
+      syncStatus: state.syncStatus,
+      lastResultCode: state.lastResultCode,
+      lastError: state.lastError,
     );
   }
 
@@ -850,7 +953,8 @@ class InventoryRepositoryImpl implements InventoryRepository {
       return 'No official BCN rate is available for $formattedInvoiceDate. Enter the BCN rate manually to continue.';
     }
 
-    final isOfflineFailure = error.type == DioExceptionType.connectionError ||
+    final isOfflineFailure =
+        error.type == DioExceptionType.connectionError ||
         error.type == DioExceptionType.connectionTimeout ||
         error.type == DioExceptionType.receiveTimeout ||
         error.type == DioExceptionType.sendTimeout;

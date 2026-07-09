@@ -12,6 +12,18 @@ class MovementSyncStateStatus {
 
 @Entity(
   tableName: 'inventory_movement_sync_state',
+  indices: [
+    Index(
+      value: ['terminal_id', 'flow_type', 'local_sequence'],
+      name: 'idx_movement_sync_state_stream_sequence',
+      unique: true,
+    ),
+    Index(
+      value: ['idempotency_key'],
+      name: 'idx_movement_sync_state_idempotency_key',
+      unique: true,
+    ),
+  ],
   foreignKeys: [
     ForeignKey(
       childColumns: ['movement_id'],
@@ -38,11 +50,31 @@ class MovementSyncStateEntity {
   @ColumnInfo(name: 'last_error')
   final String? lastError;
 
+  @ColumnInfo(name: 'terminal_id')
+  final String? terminalId;
+
+  @ColumnInfo(name: 'flow_type')
+  final String? flowType;
+
+  @ColumnInfo(name: 'local_sequence')
+  final int? localSequence;
+
+  @ColumnInfo(name: 'idempotency_key')
+  final String? idempotencyKey;
+
+  @ColumnInfo(name: 'last_result_code')
+  final String? lastResultCode;
+
   const MovementSyncStateEntity({
     required this.movementId,
     required this.syncStatus,
     this.lastAttemptedAt,
     this.syncedAt,
     this.lastError,
+    this.terminalId,
+    this.flowType,
+    this.localSequence,
+    this.idempotencyKey,
+    this.lastResultCode,
   });
 }

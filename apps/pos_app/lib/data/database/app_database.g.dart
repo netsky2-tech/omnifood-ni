@@ -136,7 +136,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 26,
+      version: 27,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -180,7 +180,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `inventory_movements` (`id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `type` TEXT NOT NULL, `quantity` REAL NOT NULL, `previous_stock` REAL NOT NULL, `new_stock` REAL NOT NULL, `timestamp` TEXT NOT NULL, `reason` TEXT, `user_id` TEXT, `batch_deductions` TEXT, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `inventory_movement_sync_state` (`movement_id` TEXT NOT NULL, `sync_status` TEXT NOT NULL, `last_attempted_at` TEXT, `synced_at` TEXT, `last_error` TEXT, FOREIGN KEY (`movement_id`) REFERENCES `inventory_movements` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE, PRIMARY KEY (`movement_id`))');
+            'CREATE TABLE IF NOT EXISTS `inventory_movement_sync_state` (`movement_id` TEXT NOT NULL, `sync_status` TEXT NOT NULL, `last_attempted_at` TEXT, `synced_at` TEXT, `last_error` TEXT, `terminal_id` TEXT, `flow_type` TEXT, `local_sequence` INTEGER, `idempotency_key` TEXT, `last_result_code` TEXT, FOREIGN KEY (`movement_id`) REFERENCES `inventory_movements` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE, PRIMARY KEY (`movement_id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `suppliers` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `phone` TEXT, `contact_person` TEXT, `credit_terms` TEXT, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
@@ -213,6 +213,10 @@ class _$AppDatabase extends AppDatabase {
             'CREATE TABLE IF NOT EXISTS `hold_ticket_items` (`id` TEXT NOT NULL, `hold_ticket_id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `product_name` TEXT NOT NULL, `quantity` REAL NOT NULL, `unit_price` REAL NOT NULL, `tax_rate` REAL NOT NULL, FOREIGN KEY (`hold_ticket_id`) REFERENCES `hold_tickets` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `promotions` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `type` TEXT NOT NULL, `target_product_id` TEXT NOT NULL, `buy_quantity` INTEGER NOT NULL, `get_quantity` INTEGER NOT NULL, `discount_value` REAL NOT NULL, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE UNIQUE INDEX `idx_movement_sync_state_stream_sequence` ON `inventory_movement_sync_state` (`terminal_id`, `flow_type`, `local_sequence`)');
+        await database.execute(
+            'CREATE UNIQUE INDEX `idx_movement_sync_state_idempotency_key` ON `inventory_movement_sync_state` (`idempotency_key`)');
         await database.execute(
             'CREATE UNIQUE INDEX `index_invoices_invoice_number` ON `invoices` (`invoice_number`)');
 
@@ -1446,7 +1450,7 @@ class _$MovementDao extends MovementDao {
   @override
   Future<List<MovementEntity>> findUnsyncedMovements() async {
     return _queryAdapter.queryList(
-        'SELECT inventory_movements.*     FROM inventory_movements     LEFT JOIN inventory_movement_sync_state       ON inventory_movement_sync_state.movement_id = inventory_movements.id     WHERE inventory_movement_sync_state.sync_status IS NULL       OR inventory_movement_sync_state.sync_status != \'synced\'',
+        'SELECT inventory_movements.*     FROM inventory_movements     LEFT JOIN inventory_movement_sync_state       ON inventory_movement_sync_state.movement_id = inventory_movements.id     WHERE inventory_movement_sync_state.sync_status IS NULL       OR inventory_movement_sync_state.sync_status != \'synced\'     ORDER BY CASE WHEN inventory_movement_sync_state.local_sequence IS NULL THEN 1 ELSE 0 END ASC,       inventory_movement_sync_state.local_sequence ASC,       inventory_movements.timestamp ASC,       inventory_movements.id ASC',
         mapper: (Map<String, Object?> row) => MovementEntity(
             id: row['id'] as String,
             insumoId: row['insumo_id'] as String,
@@ -1491,7 +1495,12 @@ class _$MovementSyncStateDao extends MovementSyncStateDao {
                   'sync_status': item.syncStatus,
                   'last_attempted_at': item.lastAttemptedAt,
                   'synced_at': item.syncedAt,
-                  'last_error': item.lastError
+                  'last_error': item.lastError,
+                  'terminal_id': item.terminalId,
+                  'flow_type': item.flowType,
+                  'local_sequence': item.localSequence,
+                  'idempotency_key': item.idempotencyKey,
+                  'last_result_code': item.lastResultCode
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -1512,8 +1521,39 @@ class _$MovementSyncStateDao extends MovementSyncStateDao {
             syncStatus: row['sync_status'] as String,
             lastAttemptedAt: row['last_attempted_at'] as String?,
             syncedAt: row['synced_at'] as String?,
-            lastError: row['last_error'] as String?),
+            lastError: row['last_error'] as String?,
+            terminalId: row['terminal_id'] as String?,
+            flowType: row['flow_type'] as String?,
+            localSequence: row['local_sequence'] as int?,
+            idempotencyKey: row['idempotency_key'] as String?,
+            lastResultCode: row['last_result_code'] as String?),
         arguments: [movementId]);
+  }
+
+  @override
+  Future<List<MovementSyncStateEntity>> findByMovementIds(
+      List<String> movementIds) async {
+    const offset = 1;
+    final _sqliteVariablesForMovementIds =
+        Iterable<String>.generate(movementIds.length, (i) => '?${i + offset}')
+            .join(',');
+    return _queryAdapter.queryList(
+        'SELECT * FROM inventory_movement_sync_state     WHERE movement_id IN (' +
+            _sqliteVariablesForMovementIds +
+            ')',
+        mapper: (Map<String, Object?> row) => MovementSyncStateEntity(movementId: row['movement_id'] as String, syncStatus: row['sync_status'] as String, lastAttemptedAt: row['last_attempted_at'] as String?, syncedAt: row['synced_at'] as String?, lastError: row['last_error'] as String?, terminalId: row['terminal_id'] as String?, flowType: row['flow_type'] as String?, localSequence: row['local_sequence'] as int?, idempotencyKey: row['idempotency_key'] as String?, lastResultCode: row['last_result_code'] as String?),
+        arguments: [...movementIds]);
+  }
+
+  @override
+  Future<int?> findMaxLocalSequence(
+    String terminalId,
+    String flowType,
+  ) async {
+    return _queryAdapter.query(
+        'SELECT COALESCE(MAX(local_sequence), 0)     FROM inventory_movement_sync_state     WHERE terminal_id = ?1 AND flow_type = ?2',
+        mapper: (Map<String, Object?> row) => row.values.first as int,
+        arguments: [terminalId, flowType]);
   }
 
   @override

@@ -805,6 +805,34 @@ class MockMovementSyncStateDao extends _i1.Mock
         ),
         returnValue: _i36.Future<_i43.MovementSyncStateEntity?>.value(),
       ) as _i36.Future<_i43.MovementSyncStateEntity?>);
+
+  @override
+  _i36.Future<List<_i43.MovementSyncStateEntity>> findByMovementIds(
+          List<String>? movementIds) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #findByMovementIds,
+          [movementIds],
+        ),
+        returnValue: _i36.Future<List<_i43.MovementSyncStateEntity>>.value(
+            <_i43.MovementSyncStateEntity>[]),
+      ) as _i36.Future<List<_i43.MovementSyncStateEntity>>);
+
+  @override
+  _i36.Future<int?> findMaxLocalSequence(
+    String? terminalId,
+    String? flowType,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #findMaxLocalSequence,
+          [
+            terminalId,
+            flowType,
+          ],
+        ),
+        returnValue: _i36.Future<int?>.value(),
+      ) as _i36.Future<int?>);
 }
 
 /// A class which mocks [SupplierDao].

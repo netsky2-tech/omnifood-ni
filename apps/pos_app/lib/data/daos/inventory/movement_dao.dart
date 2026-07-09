@@ -13,12 +13,18 @@ abstract class MovementDao {
       ON inventory_movement_sync_state.movement_id = inventory_movements.id
     WHERE inventory_movement_sync_state.sync_status IS NULL
       OR inventory_movement_sync_state.sync_status != 'synced'
+    ORDER BY CASE WHEN inventory_movement_sync_state.local_sequence IS NULL THEN 1 ELSE 0 END ASC,
+      inventory_movement_sync_state.local_sequence ASC,
+      inventory_movements.timestamp ASC,
+      inventory_movements.id ASC
   ''')
   Future<List<MovementEntity>> findUnsyncedMovements();
 
   @Insert(onConflict: OnConflictStrategy.abort)
   Future<void> insertMovement(MovementEntity movement);
 
-  @Query('SELECT * FROM inventory_movements WHERE type = :type ORDER BY timestamp DESC LIMIT :limit')
+  @Query(
+    'SELECT * FROM inventory_movements WHERE type = :type ORDER BY timestamp DESC LIMIT :limit',
+  )
   Future<List<MovementEntity>> findMovementsByType(String type, int limit);
 }

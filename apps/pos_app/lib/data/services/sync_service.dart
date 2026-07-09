@@ -96,24 +96,37 @@ class SyncService {
         .toList(growable: false);
     if (unsynced.isEmpty) return;
 
-    final ordered = _orderByReplaySemantics(unsynced);
+    final replayCandidates = _orderByReplaySemantics(unsynced);
+    final candidatesForSend = replayCandidates
+        .take(_batchEnvelopeLimit)
+        .toList(growable: false);
+    final metadata = await _reserveMovementSyncMetadata(candidatesForSend);
+    final metadataByMovementId = {
+      for (final item in metadata) item.movementId: item,
+    };
+    final orderedBatch = _orderByReservedMetadata(
+      candidatesForSend,
+      metadataByMovementId,
+    );
 
     try {
       final response = _role == syncRole['EDGE_SERVER']
-          ? await _postBatchEnvelope(ordered)
-          : await _postStandaloneDeltas(ordered);
+          ? await _postBatchEnvelope(orderedBatch, metadataByMovementId)
+          : await _postStandaloneDeltas(orderedBatch, metadataByMovementId);
       if (response.statusCode == 200 || response.statusCode == 201) {
         developer.log(
-          'Synced ${ordered.length} inventory deltas to cloud',
+          'Synced ${orderedBatch.length} inventory deltas to cloud',
           name: 'SyncService',
         );
-        for (final movement in ordered) {
-          await _inventoryRepository.markMovementAsSynced(movement.id);
-        }
+        await _applyInventorySyncResults(
+          orderedBatch,
+          metadataByMovementId,
+          response.data,
+        );
       }
     } on DioException catch (e) {
       developer.log('Failed to sync sales: ${e.message}', name: 'SyncService');
-      await _markMovementsAsFailed(ordered, error: e.message);
+      await _markMovementsAsFailed(orderedBatch, error: e.message);
       // We don't rethrow here to allow other sync operations to continue if added
     } catch (e, stackTrace) {
       developer.log(
@@ -122,7 +135,7 @@ class SyncService {
         error: e,
         stackTrace: stackTrace,
       );
-      await _markMovementsAsFailed(ordered, error: e.toString());
+      await _markMovementsAsFailed(orderedBatch, error: e.toString());
     }
   }
 
@@ -495,8 +508,11 @@ class SyncService {
     };
   }
 
-  Future<Response<dynamic>> _postBatchEnvelope(List<dynamic> unsynced) {
-    final envelope = _buildBatchEnvelope(unsynced);
+  Future<Response<dynamic>> _postBatchEnvelope(
+    List<dynamic> unsynced,
+    Map<String, MovementSyncMetadata> metadataByMovementId,
+  ) {
+    final envelope = _buildBatchEnvelope(unsynced, metadataByMovementId);
     return _dio.post(
       '/v1/sync/batch',
       data: gzip.encode(utf8.encode(jsonEncode(envelope))),
@@ -509,8 +525,14 @@ class SyncService {
     );
   }
 
-  Future<Response<dynamic>> _postStandaloneDeltas(List<dynamic> unsynced) {
-    final records = _buildBatchEnvelope(unsynced)['records'];
+  Future<Response<dynamic>> _postStandaloneDeltas(
+    List<dynamic> unsynced,
+    Map<String, MovementSyncMetadata> metadataByMovementId,
+  ) {
+    final records = _buildBatchEnvelope(
+      unsynced,
+      metadataByMovementId,
+    )['records'];
     return _dio.post(
       '/v1/sync/batch',
       data: {'records': records},
@@ -520,7 +542,12 @@ class SyncService {
     );
   }
 
-  Map<String, Object> _buildBatchEnvelope(List<dynamic> unsynced) {
+  static const String _inventoryFlowType = 'inventory';
+
+  Map<String, Object> _buildBatchEnvelope(
+    List<dynamic> unsynced, [
+    Map<String, MovementSyncMetadata> metadataByMovementId = const {},
+  ]) {
     final records = unsynced.take(_batchEnvelopeLimit).toList(growable: false);
 
     final mappedRecords = records
@@ -531,14 +558,22 @@ class SyncService {
           final movement = entry.value;
           final movementId = movement.id.toString();
           final movementType = _enumName(movement.type).toUpperCase();
-          final sourceSequence = _resolveSourceSequence(
-            movement,
-            fallbackSequence: index + 1,
-          );
+          final syncMetadata = metadataByMovementId[movementId];
+          final terminalId =
+              syncMetadata?.terminalId ?? _auditRepository.deviceId;
+          final flowType = syncMetadata?.flowType ?? _inventoryFlowType;
+          final sourceSequence =
+              syncMetadata?.localSequence ??
+              _resolveSourceSequence(movement, fallbackSequence: index + 1);
+          final idempotencyKey =
+              syncMetadata?.idempotencyKey ??
+              '$flowType:$terminalId:$movementId';
 
           return {
-            'idempotencyKey': 'inventory:$movementId',
-            'sourceDeviceId': 'pos-standalone',
+            'idempotencyKey': idempotencyKey,
+            'terminalId': terminalId,
+            'sourceDeviceId': terminalId,
+            'flowType': flowType,
             'sourceSequence': sourceSequence,
             'documentType': movementType,
             'movements': [
@@ -588,6 +623,38 @@ class SyncService {
     if (!hasPersistedSequence) {
       return unsynced;
     }
+
+    indexed.sort((a, b) {
+      final aSeq = a.sequence;
+      final bSeq = b.sequence;
+      if (aSeq != null && bSeq != null) {
+        final bySeq = aSeq.compareTo(bSeq);
+        if (bySeq != 0) return bySeq;
+      }
+      if (aSeq != null) return -1;
+      if (bSeq != null) return 1;
+      return a.originalIndex.compareTo(b.originalIndex);
+    });
+
+    return indexed.map((entry) => entry.movement).toList(growable: false);
+  }
+
+  List<dynamic> _orderByReservedMetadata(
+    List<dynamic> movements,
+    Map<String, MovementSyncMetadata> metadataByMovementId,
+  ) {
+    final indexed = movements
+        .asMap()
+        .entries
+        .map(
+          (entry) => _OrderedMovement(
+            movement: entry.value,
+            originalIndex: entry.key,
+            sequence:
+                metadataByMovementId[entry.value.id.toString()]?.localSequence,
+          ),
+        )
+        .toList(growable: false);
 
     indexed.sort((a, b) {
       final aSeq = a.sequence;
@@ -659,6 +726,169 @@ class SyncService {
   @visibleForTesting
   Map<String, Object> buildOrderedBatchEnvelopeForTest(List<dynamic> unsynced) {
     return _buildBatchEnvelope(_orderByReplaySemantics(unsynced));
+  }
+
+  Future<void> _applyInventorySyncResults(
+    List<dynamic> ordered,
+    Map<String, MovementSyncMetadata> metadataByMovementId,
+    dynamic responseData,
+  ) async {
+    final resultsByKey = _parseSyncResults(responseData);
+
+    for (final movement in ordered) {
+      final movementId = movement.id.toString();
+      final metadata = metadataByMovementId[movementId];
+      final result = resultsByKey[metadata?.idempotencyKey];
+      if (metadata == null || result == null) {
+        await _recordMovementRetryState(
+          movementId,
+          resultCode: 'MISSING_RESULT',
+          error: 'Backend did not return a result for movement $movementId',
+        );
+        continue;
+      }
+
+      if (result.shouldMarkSynced(metadata)) {
+        await _inventoryRepository.markMovementAsSynced(movementId);
+      } else {
+        await _recordMovementRetryState(
+          movementId,
+          resultCode: result.code ?? result.status,
+          error: result.message,
+        );
+      }
+    }
+  }
+
+  Future<List<MovementSyncMetadata>> _reserveMovementSyncMetadata(
+    List<dynamic> ordered,
+  ) async {
+    final repository = _inventoryRepository;
+    if (repository is InventorySyncMetadataRepository) {
+      return (repository as InventorySyncMetadataRepository)
+          .reserveMovementSyncMetadata(
+            ordered
+                .map((movement) => movement.id.toString())
+                .toList(growable: false),
+            terminalId: _auditRepository.deviceId,
+            flowType: _inventoryFlowType,
+          );
+    }
+
+    return ordered
+        .asMap()
+        .entries
+        .map((entry) {
+          final movementId = entry.value.id.toString();
+          return MovementSyncMetadata(
+            movementId: movementId,
+            terminalId: _auditRepository.deviceId,
+            flowType: _inventoryFlowType,
+            localSequence: entry.key + 1,
+            idempotencyKey:
+                '$_inventoryFlowType:${_auditRepository.deviceId}:$movementId',
+          );
+        })
+        .toList(growable: false);
+  }
+
+  Future<void> _recordMovementRetryState(
+    String movementId, {
+    required String resultCode,
+    String? error,
+  }) async {
+    final repository = _inventoryRepository;
+    if (repository is InventorySyncMetadataRepository) {
+      await (repository as InventorySyncMetadataRepository)
+          .recordMovementRetryState(
+            movementId,
+            resultCode: resultCode,
+            error: error,
+          );
+      return;
+    }
+    await _inventoryRepository.markMovementAsFailed(
+      movementId,
+      error: error ?? resultCode,
+    );
+  }
+
+  Map<String, _SyncBatchResultItem> _parseSyncResults(dynamic responseData) {
+    if (responseData is! Map) return const {};
+    final rawResults = responseData['results'];
+    if (rawResults is! List) return const {};
+
+    final parsed = <String, _SyncBatchResultItem>{};
+    for (final raw in rawResults) {
+      if (raw is! Map) continue;
+      final result = _SyncBatchResultItem.tryFromJson(
+        Map<String, dynamic>.from(raw),
+      );
+      if (result == null) continue;
+      parsed[result.idempotencyKey] = result;
+    }
+    return parsed;
+  }
+}
+
+class _SyncBatchResultItem {
+  const _SyncBatchResultItem({
+    required this.idempotencyKey,
+    required this.terminalId,
+    required this.flowType,
+    required this.sourceSequence,
+    required this.status,
+    this.code,
+    this.message,
+  });
+
+  final String idempotencyKey;
+  final String terminalId;
+  final String flowType;
+  final int sourceSequence;
+  final String status;
+  final String? code;
+  final String? message;
+
+  static _SyncBatchResultItem? tryFromJson(Map<String, dynamic> json) {
+    final idempotencyKey = json['idempotencyKey'];
+    final terminalId = json['terminalId'] ?? json['sourceDeviceId'];
+    final flowType = json['flowType'];
+    final sourceSequence = json['sourceSequence'];
+    final status = json['status'];
+    if (idempotencyKey is! String ||
+        terminalId is! String ||
+        flowType is! String ||
+        sourceSequence is! int ||
+        status is! String) {
+      return null;
+    }
+    final code = json['code'];
+    final message = json['message'];
+    if ((code != null && code is! String) ||
+        (message != null && message is! String)) {
+      return null;
+    }
+
+    return _SyncBatchResultItem(
+      idempotencyKey: idempotencyKey,
+      terminalId: terminalId,
+      flowType: flowType,
+      sourceSequence: sourceSequence,
+      status: status,
+      code: code,
+      message: message,
+    );
+  }
+
+  bool shouldMarkSynced(MovementSyncMetadata metadata) {
+    final matchesRecord =
+        idempotencyKey == metadata.idempotencyKey &&
+        terminalId == metadata.terminalId &&
+        flowType == metadata.flowType &&
+        sourceSequence == metadata.localSequence;
+    if (!matchesRecord) return false;
+    return status == 'ACCEPTED' || status == 'DUPLICATE';
   }
 }
 

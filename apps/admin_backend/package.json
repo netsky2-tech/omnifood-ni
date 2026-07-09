@@ -15,6 +15,7 @@
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:db": "jest --config ./test/jest-db.json --runInBand",
+    "test:no-only": "node -e \"const fs=require('fs'),path=require('path');const bad=[];function walk(d){for(const e of fs.readdirSync(d,{withFileTypes:true})){const p=path.join(d,e.name);if(e.isDirectory())walk(p);else if(/\\.spec\\.ts$/.test(e.name)&&/\\b(?:it|test|describe)\\.only\\s*\\(/.test(fs.readFileSync(p,'utf8')))bad.push(p)}}walk('src');if(bad.length){console.error('Focused tests committed with .only:\\n'+bad.join('\\n'));process.exit(1)}\"",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
