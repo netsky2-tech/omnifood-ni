@@ -124,6 +124,16 @@ export class InventoryMovementController {
 
   @Post('shrinkage')
   async recordShrinkage(@Body() dto: CreateShrinkageDto) {
+    if (dto.targetType === 'PRODUCT') {
+      return this.shrinkageService.recordProductShrinkage({
+        productId: dto.productId ?? '',
+        quantity: dto.quantity,
+        reason: dto.reason,
+        observation: dto.observation,
+        recipeVersionId: dto.recipeVersionId,
+      });
+    }
+
     return this.shrinkageService.recordShrinkage(
       dto.insumoId,
       dto.quantity,
