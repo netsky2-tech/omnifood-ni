@@ -13,12 +13,14 @@ import { InventoryPurchaseService } from './inventory-purchase.service';
 import { ShrinkageService } from './shrinkage.service';
 import { InventoryService } from './inventory.service';
 import { RecipeService } from './recipe.service';
+import { CountSessionService } from './count-session.service';
 
 describe('InventoryController', () => {
   let controller: InventoryMovementController;
   let purchaseService: InventoryPurchaseService;
   let shrinkageService: ShrinkageService;
   let recipeService: RecipeService;
+  let countSessionService: CountSessionService;
   let configService: ConfigService;
   const getBcnRateByInvoiceDate = jest.fn();
 
@@ -70,6 +72,12 @@ describe('InventoryController', () => {
             ingestPosVersion: jest.fn(),
           },
         },
+        {
+          provide: CountSessionService,
+          useValue: {
+            replayCountSession: jest.fn(),
+          },
+        },
         AuthGuard,
         RolesGuard,
         {
@@ -95,6 +103,7 @@ describe('InventoryController', () => {
     );
     shrinkageService = module.get<ShrinkageService>(ShrinkageService);
     recipeService = module.get<RecipeService>(RecipeService);
+    countSessionService = module.get<CountSessionService>(CountSessionService);
     configService = module.get<ConfigService>(ConfigService);
   });
 
@@ -308,6 +317,41 @@ describe('InventoryController', () => {
       expect(recipeService.ingestPosVersion).toHaveBeenCalledWith({
         tenantId: 'tenant-A',
         dto,
+      });
+    });
+  });
+
+  describe('recordCountSession', () => {
+    it('delegates tenant + count-session document to CountSessionService', async () => {
+      const dto = {
+        id: 'count-1',
+        warehouseId: 'wh-1',
+        warehouseName: 'Bodega Central',
+        cutoffAt: '2026-06-02T10:00:00.000Z',
+        status: 'posted' as const,
+        createdAt: '2026-06-02T09:00:00.000Z',
+        updatedAt: '2026-06-02T10:00:00.000Z',
+        postedAt: '2026-06-02T10:00:00.000Z',
+        movementReferences: ['count-1:line-1'],
+        lines: [
+          {
+            id: 'line-1',
+            insumoId: 'ins-1',
+            insumoName: 'Leche',
+            uom: 'L',
+            theoreticalQuantity: 15,
+            approvedEntryIndex: 0,
+            entries: [{ countedQuantity: 10 }],
+          },
+        ],
+      };
+
+      await controller.recordCountSession(dto, 'tenant-A');
+
+      // eslint-disable-next-line @typescript-eslint/unbound-method
+      expect(countSessionService.replayCountSession).toHaveBeenCalledWith({
+        tenantId: 'tenant-A',
+        document: dto,
       });
     });
   });

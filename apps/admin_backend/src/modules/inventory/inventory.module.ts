@@ -40,6 +40,7 @@ import {
 } from './forensic-alert.service';
 import { UomConversionCalculator } from './uom-conversion-calculator';
 import { IdentityModule } from '../identity/identity.module';
+import { CountSessionService } from './count-session.service';
 
 @Module({
   imports: [
@@ -78,6 +79,7 @@ import { IdentityModule } from '../identity/identity.module';
     ShrinkageService,
     CostCalculatorService,
     InventoryAdjustmentService,
+    CountSessionService,
     ForensicAlertService,
     UomConversionCalculator,
     FxRateResolverService,
@@ -105,6 +107,7 @@ import { IdentityModule } from '../identity/identity.module';
     ShrinkageService,
     CostCalculatorService,
     InventoryAdjustmentService,
+    CountSessionService,
     ForensicAlertService,
     UomConversionCalculator,
   ],
