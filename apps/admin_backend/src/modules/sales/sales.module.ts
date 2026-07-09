@@ -14,6 +14,7 @@ import { AuthGuard } from '../identity/guards/auth.guard';
 import { RolesGuard } from '../identity/guards/roles.guard';
 import { InventoryMovement } from '../inventory/entities/inventory-movement.entity';
 import { InventorySyncReceipt } from '../inventory/entities/inventory-sync-receipt.entity';
+import { InventorySyncOutbox } from '../inventory/entities/inventory-sync-outbox.entity';
 import { InventoryModule } from '../inventory/inventory.module';
 
 export const getRequiredSalesJwtSecret = (
@@ -44,6 +45,7 @@ export const getRequiredSalesJwtSecret = (
       InvoiceItemModifier,
       InventoryMovement,
       InventorySyncReceipt,
+      InventorySyncOutbox,
     ]),
   ],
   controllers: [InvoicesController, SyncBatchController, ReportsController],

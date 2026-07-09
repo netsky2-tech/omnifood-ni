@@ -18,4 +18,32 @@ describe('Ledger foundation entities', () => {
     expect(new InventorySyncOutbox()).toBeDefined();
     expect(new InventorySyncReceipt()).toBeDefined();
   });
+
+  it('exposes deterministic sync metadata fields on receipt and outbox entities', () => {
+    const receipt = Object.assign(new InventorySyncReceipt(), {
+      flow_type: 'inventory',
+      payload_hash: 'hash-1',
+      result_status: 'ACCEPTED',
+      result_code: 'APPLIED',
+    });
+    const outbox = Object.assign(new InventorySyncOutbox(), {
+      flow_type: 'inventory',
+      payload_hash: 'hash-2',
+      status: 'STAGED_FUTURE',
+      result_code: 'WAITING_FOR_SEQUENCE_2',
+    });
+
+    expect(receipt).toMatchObject({
+      flow_type: 'inventory',
+      payload_hash: 'hash-1',
+      result_status: 'ACCEPTED',
+      result_code: 'APPLIED',
+    });
+    expect(outbox).toMatchObject({
+      flow_type: 'inventory',
+      payload_hash: 'hash-2',
+      status: 'STAGED_FUTURE',
+      result_code: 'WAITING_FOR_SEQUENCE_2',
+    });
+  });
 });

@@ -59,4 +59,58 @@ describe('SyncBatchController', () => {
       duplicates: 0,
     });
   });
+
+  it('returns the deterministic per-record envelope for mixed outcomes without throwing a whole-batch error', async () => {
+    invoicesService.syncBatch.mockResolvedValue({
+      received: 3,
+      processed: 1,
+      duplicates: 0,
+      results: [
+        {
+          idempotencyKey: 'ok-1',
+          terminalId: 'd1',
+          flowType: 'inventory',
+          sourceSequence: 1,
+          status: 'ACCEPTED',
+          retryable: false,
+          code: 'APPLIED',
+        },
+        {
+          idempotencyKey: 'future-3',
+          terminalId: 'd1',
+          flowType: 'inventory',
+          sourceSequence: 3,
+          status: 'STAGED_FUTURE',
+          retryable: true,
+          code: 'WAITING_FOR_SEQUENCE_2',
+        },
+        {
+          idempotencyKey: 'bad-2',
+          terminalId: 'd1',
+          flowType: 'inventory',
+          sourceSequence: 2,
+          status: 'REJECTED',
+          retryable: true,
+          code: 'BUSINESS_RULE_VALIDATION',
+        },
+      ],
+    });
+
+    await expect(
+      controller.syncBatch('tenant-1', { records: [] }),
+    ).resolves.toEqual({
+      status: 'success',
+      received: 3,
+      processed: 1,
+      duplicates: 0,
+      results: [
+        expect.objectContaining({ status: 'ACCEPTED', code: 'APPLIED' }),
+        expect.objectContaining({
+          status: 'STAGED_FUTURE',
+          retryable: true,
+        }),
+        expect.objectContaining({ status: 'REJECTED', retryable: true }),
+      ],
+    });
+  });
 });

@@ -1,15 +1,17 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { InvoicesService } from './invoices.service';
+import { calculateSyncPayloadHash, InvoicesService } from './invoices.service';
 import { Invoice } from '../entities/invoice.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
 import { Payment } from '../entities/payment.entity';
 import { SyncInvoiceDto } from '../dto/sync-invoice.dto';
+import { SyncBatchRecordDto } from '../dto/sync-batch.dto';
 import {
   InventoryMovement,
   MovementType,
 } from '../../inventory/entities/inventory-movement.entity';
 import { InventorySyncReceipt } from '../../inventory/entities/inventory-sync-receipt.entity';
+import { InventorySyncOutbox } from '../../inventory/entities/inventory-sync-outbox.entity';
 import { RecipeService } from '../../inventory/recipe.service';
 import { BomExplosionService } from '../../inventory/bom-explosion.service';
 import { DataSource } from 'typeorm';
@@ -29,6 +31,12 @@ describe('InvoicesService', () => {
     manager: { findOne: jest.Mock; save: jest.Mock };
   };
   let receiptRepo: { findOne: jest.Mock; create: jest.Mock; save: jest.Mock };
+  let outboxRepo: {
+    findOne: jest.Mock;
+    create: jest.Mock;
+    save: jest.Mock;
+    delete: jest.Mock;
+  };
   let recipeService: { findActiveVersion: jest.Mock; getSnapshot: jest.Mock };
   let bomExplosionService: { explode: jest.Mock };
   let dataSource: { transaction: jest.Mock };
@@ -60,6 +68,12 @@ describe('InvoicesService', () => {
       findOne: jest.fn(),
       create: jest.fn((x: unknown) => x),
       save: jest.fn(),
+    };
+    outboxRepo = {
+      findOne: jest.fn(),
+      create: jest.fn((x: unknown) => x),
+      save: jest.fn(),
+      delete: jest.fn(),
     };
     recipeService = {
       findActiveVersion: jest.fn(),
@@ -133,6 +147,10 @@ describe('InvoicesService', () => {
         {
           provide: getRepositoryToken(InventorySyncReceipt),
           useValue: receiptRepo,
+        },
+        {
+          provide: getRepositoryToken(InventorySyncOutbox),
+          useValue: outboxRepo,
         },
         {
           provide: RecipeService,
@@ -584,6 +602,337 @@ describe('InvoicesService', () => {
 
       expect(result).toEqual({ received: 1, processed: 0, duplicates: 1 });
       expect(invoiceRepo.upsert).not.toHaveBeenCalled();
+    });
+
+    it('returns DUPLICATE without reapplying inventory when idempotency key and payload hash match', async () => {
+      const duplicateRecord: SyncBatchRecordDto = {
+        idempotencyKey: 'dup-hash',
+        sourceDeviceId: 'd1',
+        sourceSequence: 1,
+        flowType: 'inventory',
+        documentType: 'PURCHASE',
+        movements: [{ insumoId: 'ins-1', quantity: 2, unitCostNio: 4 }],
+      };
+      receiptRepo.findOne
+        .mockResolvedValueOnce({
+          id: 'r-existing',
+          idempotency_key: 'dup-hash',
+          payload_hash: calculateSyncPayloadHash(duplicateRecord),
+          result_status: 'ACCEPTED',
+          result_code: 'APPLIED',
+          source_device_id: 'd1',
+          source_sequence: '1',
+          flow_type: 'inventory',
+        })
+        .mockResolvedValueOnce(null);
+
+      const result = await service.syncBatch('tenant-1', [duplicateRecord]);
+
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          idempotencyKey: 'dup-hash',
+          status: 'DUPLICATE',
+          retryable: false,
+          code: 'DUPLICATE_REPLAY',
+        }),
+      ]);
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+      expect(movementRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('returns IDEMPOTENCY_MISMATCH when the same key is reused with a different payload hash', async () => {
+      receiptRepo.findOne
+        .mockResolvedValueOnce({
+          id: 'r-existing',
+          idempotency_key: 'same-key',
+          payload_hash: 'different-hash',
+          result_status: 'ACCEPTED',
+          source_device_id: 'd1',
+          source_sequence: '1',
+          flow_type: 'inventory',
+        })
+        .mockResolvedValueOnce(null);
+
+      const result = await service.syncBatch('tenant-1', [
+        {
+          idempotencyKey: 'same-key',
+          sourceDeviceId: 'd1',
+          sourceSequence: 1,
+          flowType: 'inventory',
+          documentType: 'PURCHASE',
+          movements: [{ insumoId: 'ins-1', quantity: 2, unitCostNio: 4 }],
+        },
+      ]);
+
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          idempotencyKey: 'same-key',
+          status: 'IDEMPOTENCY_MISMATCH',
+          retryable: false,
+          code: 'CRITICAL_PAYLOAD_MISMATCH',
+        }),
+      ]);
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+    });
+
+    it('returns IDEMPOTENCY_MISMATCH when a staged future key is retried with a different payload hash', async () => {
+      const stagedRecord: SyncBatchRecordDto = {
+        idempotencyKey: 'future-same-key',
+        sourceDeviceId: 'd1',
+        sourceSequence: 3,
+        flowType: 'inventory',
+        documentType: 'PURCHASE',
+        movements: [{ insumoId: 'ins-1', quantity: 2, unitCostNio: 4 }],
+      };
+      receiptRepo.findOne.mockResolvedValue(null);
+      outboxRepo.findOne.mockImplementation(
+        ({ where }: { where: Record<string, unknown> }) => {
+          if (where.idempotency_key === 'future-same-key') {
+            return Promise.resolve({
+              id: 'staged-future-same-key',
+              idempotency_key: 'future-same-key',
+              payload_hash: 'different-staged-payload-hash',
+              source_device_id: 'd1',
+              source_sequence: '3',
+              flow_type: 'inventory',
+              status: 'STAGED_FUTURE',
+            });
+          }
+          return Promise.resolve(null);
+        },
+      );
+
+      const result = await service.syncBatch('tenant-1', [stagedRecord]);
+
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          idempotencyKey: 'future-same-key',
+          status: 'IDEMPOTENCY_MISMATCH',
+          retryable: false,
+          code: 'CRITICAL_STAGED_PAYLOAD_MISMATCH',
+        }),
+      ]);
+      expect(outboxRepo.save).not.toHaveBeenCalled();
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+    });
+
+    it('returns a per-record mismatch instead of throwing when another staged future has the same stream sequence', async () => {
+      const conflictingFuture: SyncBatchRecordDto = {
+        idempotencyKey: 'future-conflict-key',
+        sourceDeviceId: 'd1',
+        sourceSequence: 4,
+        flowType: 'inventory',
+        documentType: 'PURCHASE',
+        movements: [{ insumoId: 'ins-2', quantity: 1, unitCostNio: 6 }],
+      };
+      receiptRepo.findOne.mockResolvedValue(null);
+      outboxRepo.findOne.mockImplementation(
+        ({ where }: { where: Record<string, unknown> }) => {
+          if (where.source_sequence === '4') {
+            return Promise.resolve({
+              id: 'staged-sequence-4',
+              idempotency_key: 'different-key',
+              payload_hash: 'different-staged-hash',
+              source_device_id: 'd1',
+              source_sequence: '4',
+              flow_type: 'inventory',
+              status: 'STAGED_FUTURE',
+            });
+          }
+          return Promise.resolve(null);
+        },
+      );
+
+      await expect(
+        service.syncBatch('tenant-1', [conflictingFuture]),
+      ).resolves.toMatchObject({
+        received: 1,
+        results: [
+          expect.objectContaining({
+            idempotencyKey: 'future-conflict-key',
+            status: 'IDEMPOTENCY_MISMATCH',
+            retryable: false,
+            code: 'CRITICAL_STAGED_SEQUENCE_PAYLOAD_MISMATCH',
+          }),
+        ],
+      });
+      expect(outboxRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('returns STAGED_FUTURE and persists the payload hash on the first out-of-order request', async () => {
+      const futureRecord: SyncBatchRecordDto = {
+        idempotencyKey: 'future-first-stage',
+        sourceDeviceId: 'd1',
+        sourceSequence: 5,
+        flowType: 'inventory',
+        documentType: 'PURCHASE',
+        movements: [{ insumoId: 'ins-1', quantity: 3, unitCostNio: 7 }],
+      };
+      receiptRepo.findOne.mockResolvedValue(null);
+      outboxRepo.findOne.mockResolvedValue(null);
+
+      const result = await service.syncBatch('tenant-1', [futureRecord]);
+
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          idempotencyKey: 'future-first-stage',
+          status: 'STAGED_FUTURE',
+          retryable: true,
+          code: 'WAITING_FOR_SEQUENCE_1',
+        }),
+      ]);
+      expect(outboxRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          idempotency_key: 'future-first-stage',
+          source_sequence: '5',
+          payload_hash: calculateSyncPayloadHash(futureRecord),
+          payload: futureRecord,
+          status: 'STAGED_FUTURE',
+        }),
+      );
+      expect(outboxRepo.save).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns deterministic STAGED_FUTURE when a concurrent retry hits the staged unique index', async () => {
+      const retriedFuture: SyncBatchRecordDto = {
+        idempotencyKey: 'future-race',
+        sourceDeviceId: 'd1',
+        sourceSequence: 6,
+        flowType: 'inventory',
+        documentType: 'PURCHASE',
+        movements: [{ insumoId: 'ins-1', quantity: 1, unitCostNio: 2 }],
+      };
+      const payloadHash = calculateSyncPayloadHash(retriedFuture);
+      receiptRepo.findOne.mockResolvedValue(null);
+      outboxRepo.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          id: 'staged-race',
+          idempotency_key: 'future-race',
+          payload_hash: payloadHash,
+          source_device_id: 'd1',
+          source_sequence: '6',
+          flow_type: 'inventory',
+          status: 'STAGED_FUTURE',
+        });
+      outboxRepo.save.mockRejectedValueOnce({ code: '23505' });
+
+      const result = await service.syncBatch('tenant-1', [retriedFuture]);
+
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          idempotencyKey: 'future-race',
+          status: 'STAGED_FUTURE',
+          retryable: true,
+          code: 'WAITING_FOR_SEQUENCE_1',
+        }),
+      ]);
+    });
+
+    it('blocks later same-stream records when the expected sequence fails business validation', async () => {
+      receiptRepo.findOne.mockResolvedValue(null);
+      outboxRepo.findOne.mockResolvedValue(null);
+      recipeService.findActiveVersion.mockResolvedValue(null);
+      txManager.createQueryBuilder().getOne.mockResolvedValue({
+        id: 'prod-1',
+        stock: 0,
+        averageCost: 3.25,
+        negativeStockPolicy: NEGATIVE_STOCK_POLICY.RESTRICT,
+        tenant_id: 'tenant-1',
+      });
+
+      const result = await service.syncBatch('tenant-1', [
+        {
+          idempotencyKey: 'bad-1',
+          sourceDeviceId: 'd1',
+          sourceSequence: 1,
+          flowType: 'inventory',
+          documentType: 'SALE',
+          invoice: {
+            ...baseInvoice,
+            items: [{ ...baseInvoice.items[0], quantity: 1.5 }],
+          },
+        },
+        {
+          idempotencyKey: 'blocked-2',
+          sourceDeviceId: 'd1',
+          sourceSequence: 2,
+          flowType: 'inventory',
+          documentType: 'PURCHASE',
+          movements: [{ insumoId: 'ins-1', quantity: 2, unitCostNio: 4 }],
+        },
+      ]);
+
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          idempotencyKey: 'bad-1',
+          status: 'REJECTED',
+          retryable: true,
+          code: 'BUSINESS_RULE_VALIDATION',
+        }),
+        expect.objectContaining({
+          idempotencyKey: 'blocked-2',
+          status: 'BLOCKED_BY_PRIOR_FAILURE',
+          retryable: true,
+          code: 'WAITING_FOR_SEQUENCE_1',
+        }),
+      ]);
+      expect(outboxRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('stages future sequence records and drains them once the missing sequence is accepted', async () => {
+      receiptRepo.findOne.mockResolvedValue(null);
+      outboxRepo.findOne.mockResolvedValueOnce({
+        id: 'staged-2',
+        tenant_id: 'tenant-1',
+        idempotency_key: 'future-2',
+        source_device_id: 'd1',
+        source_sequence: '2',
+        flow_type: 'inventory',
+        document_type: 'PURCHASE',
+        payload_hash:
+          '3f726f8dff7fc64d72d90115f896d73c360d7050570b1fbd54d7ac54b7a7161a',
+        payload: {
+          idempotencyKey: 'future-2',
+          sourceDeviceId: 'd1',
+          sourceSequence: 2,
+          flowType: 'inventory',
+          documentType: 'PURCHASE',
+          movements: [{ insumoId: 'ins-1', quantity: 2, unitCostNio: 4 }],
+        },
+      });
+      txManager.createQueryBuilder().getOne.mockResolvedValue({
+        id: 'ins-1',
+        stock: 10,
+        averageCost: 2,
+        negativeStockPolicy: NEGATIVE_STOCK_POLICY.RESTRICT,
+        tenant_id: 'tenant-1',
+      });
+
+      const result = await service.syncBatch('tenant-1', [
+        {
+          idempotencyKey: 'gap-1',
+          sourceDeviceId: 'd1',
+          sourceSequence: 1,
+          flowType: 'inventory',
+          documentType: 'PURCHASE',
+          movements: [{ insumoId: 'ins-1', quantity: 1, unitCostNio: 3 }],
+        },
+      ]);
+
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          idempotencyKey: 'gap-1',
+          status: 'ACCEPTED',
+        }),
+        expect.objectContaining({
+          idempotencyKey: 'future-2',
+          status: 'ACCEPTED',
+        }),
+      ]);
+      expect(outboxRepo.delete).toHaveBeenCalledWith({ id: 'staged-2' });
+      expect(dataSource.transaction).toHaveBeenCalledTimes(2);
     });
 
     it('appends SALE_CANCEL reversal movement without invoice deletion', async () => {
