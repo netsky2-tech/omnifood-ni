@@ -1035,6 +1035,42 @@ void main() {
   );
 
   test(
+    'syncs product merma valuation and source metadata without absolute stock fields',
+    () async {
+      final unsynced = [
+        InventoryMovement(
+          id: 'merma-product-1:bun',
+          insumoId: 'bun',
+          type: MovementType.shrinkage,
+          quantity: -4,
+          previousStock: 10,
+          newStock: 6,
+          timestamp: DateTime.parse('2026-01-01T12:00:00Z'),
+          unitCostNio: 8.5,
+          sourceDocumentType: 'PRODUCT_MERMA',
+          sourceDocumentId: 'burger-plate',
+        ),
+      ];
+
+      final body = syncService.buildOrderedBatchEnvelopeForTest(unsynced);
+      final record =
+          (body['records'] as List<dynamic>).single as Map<String, dynamic>;
+      final movement =
+          (record['movements'] as List<dynamic>).single as Map<String, dynamic>;
+
+      expect(movement['insumoId'], 'bun');
+      expect(movement['quantity'], -4);
+      expect(movement['unitCostNio'], 8.5);
+      expect(movement['sourceDocumentType'], 'PRODUCT_MERMA');
+      expect(movement['sourceDocumentId'], 'burger-plate');
+      expect(movement.containsKey('previousStock'), isFalse);
+      expect(movement.containsKey('newStock'), isFalse);
+      expect(record.containsKey('previousStock'), isFalse);
+      expect(record.containsKey('newStock'), isFalse);
+    },
+  );
+
+  test(
     'keeps idempotencyKey and sourceSequence stable across replays',
     () async {
       final unsynced = [

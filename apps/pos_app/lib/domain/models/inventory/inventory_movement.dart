@@ -26,6 +26,9 @@ class InventoryMovement with _$InventoryMovement {
     required DateTime timestamp,
     String? reason,
     String? userId,
+    double? unitCostNio,
+    String? sourceDocumentType,
+    String? sourceDocumentId,
     List<BatchDeduction>? batchDeductions,
   }) = _InventoryMovement;
 
