@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/database/migrations.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -281,6 +282,92 @@ void main() {
   );
 
   test(
+    'migration26_27 backfills deterministic movement sync metadata by replay order',
+    () async {
+      final db = await databaseFactory.openDatabase(
+        dbPath,
+        options: OpenDatabaseOptions(
+          version: 26,
+          onCreate: (database, version) async {
+            await database.execute('''
+            CREATE TABLE inventory_movements (
+              id TEXT NOT NULL PRIMARY KEY,
+              insumo_id TEXT NOT NULL,
+              type TEXT NOT NULL,
+              quantity REAL NOT NULL,
+              previous_stock REAL NOT NULL,
+              new_stock REAL NOT NULL,
+              timestamp TEXT NOT NULL,
+              reason TEXT,
+              user_id TEXT,
+              batch_deductions TEXT
+            )
+          ''');
+            await database.execute('''
+            CREATE TABLE inventory_movement_sync_state (
+              movement_id TEXT NOT NULL PRIMARY KEY,
+              sync_status TEXT NOT NULL,
+              last_attempted_at TEXT,
+              synced_at TEXT,
+              last_error TEXT,
+              FOREIGN KEY (movement_id) REFERENCES inventory_movements(id) ON DELETE CASCADE
+            )
+          ''');
+          },
+        ),
+      );
+
+      await db.insert('inventory_movements', {
+        'id': 'mov-newer',
+        'insumo_id': 'ins-1',
+        'type': 'SALE',
+        'quantity': -1.0,
+        'previous_stock': 5.0,
+        'new_stock': 4.0,
+        'timestamp': '2026-06-30T12:01:00.000Z',
+      });
+      await db.insert('inventory_movements', {
+        'id': 'mov-older',
+        'insumo_id': 'ins-1',
+        'type': 'SALE',
+        'quantity': -2.0,
+        'previous_stock': 4.0,
+        'new_stock': 2.0,
+        'timestamp': '2026-06-30T12:00:00.000Z',
+      });
+      await db.insert('inventory_movement_sync_state', {
+        'movement_id': 'mov-older',
+        'sync_status': 'failed',
+        'last_error': 'timeout',
+      });
+
+      await migration26_27.migrate(db);
+
+      final rows = await db.query(
+        'inventory_movement_sync_state',
+        orderBy: 'local_sequence ASC',
+      );
+      // pos-standalone is a legacy provenance fallback for historical rows,
+      // not the runtime terminal identity used by new POS sync attempts.
+      expect(rows.map((row) => row['movement_id']), ['mov-older', 'mov-newer']);
+      expect(
+        rows.map((row) => row['terminal_id']),
+        everyElement('pos-standalone'),
+      );
+      expect(rows.map((row) => row['flow_type']), everyElement('inventory'));
+      expect(rows.map((row) => row['local_sequence']), [1, 2]);
+      expect(rows.map((row) => row['idempotency_key']), [
+        'inventory:pos-standalone:mov-older',
+        'inventory:pos-standalone:mov-newer',
+      ]);
+      expect(rows.first['sync_status'], 'failed');
+      expect(rows.first['last_error'], 'timeout');
+
+      await db.close();
+    },
+  );
+
+  test(
     'migration24_25 leaves legacy purchase fxRateMode provenance unknown',
     () async {
       final db = await databaseFactory.openDatabase(
@@ -341,6 +428,31 @@ void main() {
       expect(rows.single['fx_rate_mode'], isNull);
 
       await db.close();
+    },
+  );
+
+  test(
+    'fresh schema creates deterministic movement sync metadata indexes',
+    () async {
+      final database = await $FloorAppDatabase
+          .inMemoryDatabaseBuilder()
+          .build();
+      try {
+        final indexes = await database.database.rawQuery(
+          "PRAGMA index_list('inventory_movement_sync_state')",
+        );
+        final indexNames = indexes.map((row) => row['name']).toSet();
+
+        expect(
+          indexNames,
+          containsAll(const [
+            'idx_movement_sync_state_stream_sequence',
+            'idx_movement_sync_state_idempotency_key',
+          ]),
+        );
+      } finally {
+        await database.close();
+      }
     },
   );
 }
