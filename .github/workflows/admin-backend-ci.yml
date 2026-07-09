@@ -7,7 +7,9 @@ on:
       - "apps/admin_backend/**"
       - ".github/workflows/admin-backend-ci.yml"
   pull_request:
-    branches: [main]
+    branches:
+      - main
+      - "feat/**"
     paths:
       - "apps/admin_backend/**"
       - ".github/workflows/admin-backend-ci.yml"
