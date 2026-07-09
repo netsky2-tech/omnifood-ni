@@ -27,6 +27,8 @@ import { UserRole } from '../identity/entities/user.entity';
 import { FxRateResolverService } from './fx-rate-resolver.service';
 import { GetBcnFxRateQueryDto } from './dto/get-bcn-fx-rate-query.dto';
 import { CreateShrinkageDto } from './dto/create-shrinkage.dto';
+import { CountSessionService } from './count-session.service';
+import { CountSessionDocumentDto } from './dto/count-session-document.dto';
 
 @Controller('inventory')
 @UseInterceptors(TenantInterceptor)
@@ -37,6 +39,7 @@ export class InventoryMovementController {
     private readonly shrinkageService: ShrinkageService,
     private readonly inventoryService: InventoryService,
     private readonly recipeService: RecipeService,
+    private readonly countSessionService: CountSessionService,
   ) {}
 
   @Post('movements/sync')
@@ -140,6 +143,17 @@ export class InventoryMovementController {
       dto.reason,
       dto.observation,
     );
+  }
+
+  @Post('count-sessions')
+  async recordCountSession(
+    @Body() dto: CountSessionDocumentDto,
+    @GetTenantId() tenantId: string,
+  ) {
+    return this.countSessionService.replayCountSession({
+      tenantId,
+      document: dto,
+    });
   }
 
   @Post('recipes/versions')
