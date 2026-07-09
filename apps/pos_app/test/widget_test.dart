@@ -14,6 +14,7 @@ import 'package:pos_app/domain/services/alerts/alert_service.dart';
 import 'package:pos_app/ui/features/inventory/shrinkage/shrinkage_view_model.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
 import 'package:pos_app/domain/services/inventory/movement_engine.dart';
+import 'package:pos_app/domain/models/inventory/product.dart';
 import 'package:mocktail/mocktail.dart';
 
 // Manual fakes for smoke test
@@ -117,6 +118,7 @@ void main() {
     final mockInventoryRepo = MockInventoryRepository();
     final mockMovementEngine = MockMovementEngine();
     when(() => mockInventoryRepo.getActiveInsumos()).thenAnswer((_) async => []);
+    when(() => mockInventoryRepo.getActiveProducts()).thenAnswer((_) async => const <Product>[]);
     when(() => mockInventoryRepo.getInsumoById(any())).thenAnswer((_) async => null);
 
     return MultiProvider(

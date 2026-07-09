@@ -139,6 +139,13 @@ class _FakeMovementEngine implements MovementEngine {
   ) async {}
 
   @override
+  Future<void> recordProductShrinkage({
+    required String productId,
+    required double quantity,
+    required String reason,
+  }) async {}
+
+  @override
   Future<List<InventoryMovement>> recordProduction({
     required String recipeProductId,
     required String producedInsumoId,

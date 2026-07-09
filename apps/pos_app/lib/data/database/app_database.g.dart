@@ -136,7 +136,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 27,
+      version: 28,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -178,7 +178,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `forensic_alerts` (`id` TEXT NOT NULL, `alert_type` TEXT NOT NULL, `severity` TEXT NOT NULL, `message` TEXT NOT NULL, `created_at` TEXT NOT NULL, `status` TEXT NOT NULL, `note` TEXT, `actor_label` TEXT, `acted_at` TEXT, `source_movement_id` TEXT, `source_document_id` TEXT, `source_document_type` TEXT, `metadata_json` TEXT, `is_synced` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `inventory_movements` (`id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `type` TEXT NOT NULL, `quantity` REAL NOT NULL, `previous_stock` REAL NOT NULL, `new_stock` REAL NOT NULL, `timestamp` TEXT NOT NULL, `reason` TEXT, `user_id` TEXT, `batch_deductions` TEXT, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `inventory_movements` (`id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `type` TEXT NOT NULL, `quantity` REAL NOT NULL, `previous_stock` REAL NOT NULL, `new_stock` REAL NOT NULL, `timestamp` TEXT NOT NULL, `reason` TEXT, `user_id` TEXT, `unit_cost_nio` REAL, `source_document_type` TEXT, `source_document_id` TEXT, `batch_deductions` TEXT, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `inventory_movement_sync_state` (`movement_id` TEXT NOT NULL, `sync_status` TEXT NOT NULL, `last_attempted_at` TEXT, `synced_at` TEXT, `last_error` TEXT, `terminal_id` TEXT, `flow_type` TEXT, `local_sequence` INTEGER, `idempotency_key` TEXT, `last_result_code` TEXT, FOREIGN KEY (`movement_id`) REFERENCES `inventory_movements` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE, PRIMARY KEY (`movement_id`))');
         await database.execute(
@@ -1419,6 +1419,9 @@ class _$MovementDao extends MovementDao {
                   'timestamp': item.timestamp,
                   'reason': item.reason,
                   'user_id': item.userId,
+                  'unit_cost_nio': item.unitCostNio,
+                  'source_document_type': item.sourceDocumentType,
+                  'source_document_id': item.sourceDocumentId,
                   'batch_deductions': item.batch_deductions
                 });
 
@@ -1444,6 +1447,9 @@ class _$MovementDao extends MovementDao {
             timestamp: row['timestamp'] as String,
             reason: row['reason'] as String?,
             userId: row['user_id'] as String?,
+            unitCostNio: row['unit_cost_nio'] as double?,
+            sourceDocumentType: row['source_document_type'] as String?,
+            sourceDocumentId: row['source_document_id'] as String?,
             batch_deductions: row['batch_deductions'] as String?));
   }
 
@@ -1461,6 +1467,9 @@ class _$MovementDao extends MovementDao {
             timestamp: row['timestamp'] as String,
             reason: row['reason'] as String?,
             userId: row['user_id'] as String?,
+            unitCostNio: row['unit_cost_nio'] as double?,
+            sourceDocumentType: row['source_document_type'] as String?,
+            sourceDocumentId: row['source_document_id'] as String?,
             batch_deductions: row['batch_deductions'] as String?));
   }
 
@@ -1471,7 +1480,7 @@ class _$MovementDao extends MovementDao {
   ) async {
     return _queryAdapter.queryList(
         'SELECT * FROM inventory_movements WHERE type = ?1 ORDER BY timestamp DESC LIMIT ?2',
-        mapper: (Map<String, Object?> row) => MovementEntity(id: row['id'] as String, insumoId: row['insumo_id'] as String, type: row['type'] as String, quantity: row['quantity'] as double, previousStock: row['previous_stock'] as double, newStock: row['new_stock'] as double, timestamp: row['timestamp'] as String, reason: row['reason'] as String?, userId: row['user_id'] as String?, batch_deductions: row['batch_deductions'] as String?),
+        mapper: (Map<String, Object?> row) => MovementEntity(id: row['id'] as String, insumoId: row['insumo_id'] as String, type: row['type'] as String, quantity: row['quantity'] as double, previousStock: row['previous_stock'] as double, newStock: row['new_stock'] as double, timestamp: row['timestamp'] as String, reason: row['reason'] as String?, userId: row['user_id'] as String?, unitCostNio: row['unit_cost_nio'] as double?, sourceDocumentType: row['source_document_type'] as String?, sourceDocumentId: row['source_document_id'] as String?, batch_deductions: row['batch_deductions'] as String?),
         arguments: [type, limit]);
   }
 
@@ -1581,6 +1590,9 @@ class _$InventoryDao extends InventoryDao {
                   'timestamp': item.timestamp,
                   'reason': item.reason,
                   'user_id': item.userId,
+                  'unit_cost_nio': item.unitCostNio,
+                  'source_document_type': item.sourceDocumentType,
+                  'source_document_id': item.sourceDocumentId,
                   'batch_deductions': item.batch_deductions
                 });
 
@@ -2649,6 +2661,9 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'timestamp': item.timestamp,
                   'reason': item.reason,
                   'user_id': item.userId,
+                  'unit_cost_nio': item.unitCostNio,
+                  'source_document_type': item.sourceDocumentType,
+                  'source_document_id': item.sourceDocumentId,
                   'batch_deductions': item.batch_deductions
                 }),
         _auditLogEntityInsertionAdapter = InsertionAdapter(

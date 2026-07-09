@@ -18,6 +18,9 @@ _$InventoryMovementImpl _$$InventoryMovementImplFromJson(
       timestamp: DateTime.parse(json['timestamp'] as String),
       reason: json['reason'] as String?,
       userId: json['userId'] as String?,
+      unitCostNio: (json['unitCostNio'] as num?)?.toDouble(),
+      sourceDocumentType: json['sourceDocumentType'] as String?,
+      sourceDocumentId: json['sourceDocumentId'] as String?,
       batchDeductions: (json['batchDeductions'] as List<dynamic>?)
           ?.map((e) => BatchDeduction.fromJson(e as Map<String, dynamic>))
           .toList(),
@@ -35,6 +38,9 @@ Map<String, dynamic> _$$InventoryMovementImplToJson(
       'timestamp': instance.timestamp.toIso8601String(),
       'reason': instance.reason,
       'userId': instance.userId,
+      'unitCostNio': instance.unitCostNio,
+      'sourceDocumentType': instance.sourceDocumentType,
+      'sourceDocumentId': instance.sourceDocumentId,
       'batchDeductions':
           instance.batchDeductions?.map((e) => e.toJson()).toList(),
     };

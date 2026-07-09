@@ -694,10 +694,20 @@ class SyncService {
 
   Map<String, Object> _valuationFields(dynamic movement) {
     final unitCostNio = _tryReadField(movement, 'unitCostNio');
-    if (unitCostNio == null) {
-      return const {};
+    final sourceDocumentType = _tryReadField(movement, 'sourceDocumentType');
+    final sourceDocumentId = _tryReadField(movement, 'sourceDocumentId');
+
+    final fields = <String, Object>{};
+    if (unitCostNio != null) {
+      fields['unitCostNio'] = unitCostNio;
     }
-    return {'unitCostNio': unitCostNio};
+    if (sourceDocumentType != null) {
+      fields['sourceDocumentType'] = sourceDocumentType;
+    }
+    if (sourceDocumentId != null) {
+      fields['sourceDocumentId'] = sourceDocumentId;
+    }
+    return fields;
   }
 
   dynamic _tryReadField(dynamic target, String fieldName) {
@@ -712,6 +722,10 @@ class SyncService {
           return target.localSequence;
         case 'unitCostNio':
           return target.unitCostNio;
+        case 'sourceDocumentType':
+          return target.sourceDocumentType;
+        case 'sourceDocumentId':
+          return target.sourceDocumentId;
         case 'timestamp':
           return target.timestamp;
         case 'id':

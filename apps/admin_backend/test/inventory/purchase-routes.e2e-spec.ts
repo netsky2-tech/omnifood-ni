@@ -12,6 +12,7 @@ import { App } from 'supertest/types';
 import { DataSource } from 'typeorm';
 import { TenantInterceptor } from '../../src/core/database/rls.interceptor';
 import { CostCalculatorService } from '../../src/modules/inventory/cost-calculator.service';
+import { CountSessionService } from '../../src/modules/inventory/count-session.service';
 import { InventoryMovementController } from '../../src/modules/inventory/inventory-movement.controller';
 import { FxRateResolverService } from '../../src/modules/inventory/fx-rate-resolver.service';
 import {
@@ -209,6 +210,12 @@ describe('Inventory purchase routes (integration)', () => {
           provide: RecipeService,
           useValue: {
             ingestPosVersion: jest.fn(),
+          },
+        },
+        {
+          provide: CountSessionService,
+          useValue: {
+            replayCountSession: jest.fn(),
           },
         },
         TenantInterceptor,

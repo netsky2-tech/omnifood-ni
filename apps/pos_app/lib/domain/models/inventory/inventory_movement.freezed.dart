@@ -29,6 +29,9 @@ mixin _$InventoryMovement {
   DateTime get timestamp => throw _privateConstructorUsedError;
   String? get reason => throw _privateConstructorUsedError;
   String? get userId => throw _privateConstructorUsedError;
+  double? get unitCostNio => throw _privateConstructorUsedError;
+  String? get sourceDocumentType => throw _privateConstructorUsedError;
+  String? get sourceDocumentId => throw _privateConstructorUsedError;
   List<BatchDeduction>? get batchDeductions =>
       throw _privateConstructorUsedError;
 
@@ -54,6 +57,9 @@ abstract class $InventoryMovementCopyWith<$Res> {
       DateTime timestamp,
       String? reason,
       String? userId,
+      double? unitCostNio,
+      String? sourceDocumentType,
+      String? sourceDocumentId,
       List<BatchDeduction>? batchDeductions});
 }
 
@@ -79,6 +85,9 @@ class _$InventoryMovementCopyWithImpl<$Res, $Val extends InventoryMovement>
     Object? timestamp = null,
     Object? reason = freezed,
     Object? userId = freezed,
+    Object? unitCostNio = freezed,
+    Object? sourceDocumentType = freezed,
+    Object? sourceDocumentId = freezed,
     Object? batchDeductions = freezed,
   }) {
     return _then(_value.copyWith(
@@ -118,6 +127,18 @@ class _$InventoryMovementCopyWithImpl<$Res, $Val extends InventoryMovement>
           ? _value.userId
           : userId // ignore: cast_nullable_to_non_nullable
               as String?,
+      unitCostNio: freezed == unitCostNio
+          ? _value.unitCostNio
+          : unitCostNio // ignore: cast_nullable_to_non_nullable
+              as double?,
+      sourceDocumentType: freezed == sourceDocumentType
+          ? _value.sourceDocumentType
+          : sourceDocumentType // ignore: cast_nullable_to_non_nullable
+              as String?,
+      sourceDocumentId: freezed == sourceDocumentId
+          ? _value.sourceDocumentId
+          : sourceDocumentId // ignore: cast_nullable_to_non_nullable
+              as String?,
       batchDeductions: freezed == batchDeductions
           ? _value.batchDeductions
           : batchDeductions // ignore: cast_nullable_to_non_nullable
@@ -144,6 +165,9 @@ abstract class _$$InventoryMovementImplCopyWith<$Res>
       DateTime timestamp,
       String? reason,
       String? userId,
+      double? unitCostNio,
+      String? sourceDocumentType,
+      String? sourceDocumentId,
       List<BatchDeduction>? batchDeductions});
 }
 
@@ -167,6 +191,9 @@ class __$$InventoryMovementImplCopyWithImpl<$Res>
     Object? timestamp = null,
     Object? reason = freezed,
     Object? userId = freezed,
+    Object? unitCostNio = freezed,
+    Object? sourceDocumentType = freezed,
+    Object? sourceDocumentId = freezed,
     Object? batchDeductions = freezed,
   }) {
     return _then(_$InventoryMovementImpl(
@@ -206,6 +233,18 @@ class __$$InventoryMovementImplCopyWithImpl<$Res>
           ? _value.userId
           : userId // ignore: cast_nullable_to_non_nullable
               as String?,
+      unitCostNio: freezed == unitCostNio
+          ? _value.unitCostNio
+          : unitCostNio // ignore: cast_nullable_to_non_nullable
+              as double?,
+      sourceDocumentType: freezed == sourceDocumentType
+          ? _value.sourceDocumentType
+          : sourceDocumentType // ignore: cast_nullable_to_non_nullable
+              as String?,
+      sourceDocumentId: freezed == sourceDocumentId
+          ? _value.sourceDocumentId
+          : sourceDocumentId // ignore: cast_nullable_to_non_nullable
+              as String?,
       batchDeductions: freezed == batchDeductions
           ? _value._batchDeductions
           : batchDeductions // ignore: cast_nullable_to_non_nullable
@@ -228,6 +267,9 @@ class _$InventoryMovementImpl implements _InventoryMovement {
       required this.timestamp,
       this.reason,
       this.userId,
+      this.unitCostNio,
+      this.sourceDocumentType,
+      this.sourceDocumentId,
       final List<BatchDeduction>? batchDeductions})
       : _batchDeductions = batchDeductions;
 
@@ -252,6 +294,12 @@ class _$InventoryMovementImpl implements _InventoryMovement {
   final String? reason;
   @override
   final String? userId;
+  @override
+  final double? unitCostNio;
+  @override
+  final String? sourceDocumentType;
+  @override
+  final String? sourceDocumentId;
   final List<BatchDeduction>? _batchDeductions;
   @override
   List<BatchDeduction>? get batchDeductions {
@@ -264,7 +312,7 @@ class _$InventoryMovementImpl implements _InventoryMovement {
 
   @override
   String toString() {
-    return 'InventoryMovement(id: $id, insumoId: $insumoId, type: $type, quantity: $quantity, previousStock: $previousStock, newStock: $newStock, timestamp: $timestamp, reason: $reason, userId: $userId, batchDeductions: $batchDeductions)';
+    return 'InventoryMovement(id: $id, insumoId: $insumoId, type: $type, quantity: $quantity, previousStock: $previousStock, newStock: $newStock, timestamp: $timestamp, reason: $reason, userId: $userId, unitCostNio: $unitCostNio, sourceDocumentType: $sourceDocumentType, sourceDocumentId: $sourceDocumentId, batchDeductions: $batchDeductions)';
   }
 
   @override
@@ -286,6 +334,12 @@ class _$InventoryMovementImpl implements _InventoryMovement {
                 other.timestamp == timestamp) &&
             (identical(other.reason, reason) || other.reason == reason) &&
             (identical(other.userId, userId) || other.userId == userId) &&
+            (identical(other.unitCostNio, unitCostNio) ||
+                other.unitCostNio == unitCostNio) &&
+            (identical(other.sourceDocumentType, sourceDocumentType) ||
+                other.sourceDocumentType == sourceDocumentType) &&
+            (identical(other.sourceDocumentId, sourceDocumentId) ||
+                other.sourceDocumentId == sourceDocumentId) &&
             const DeepCollectionEquality()
                 .equals(other._batchDeductions, _batchDeductions));
   }
@@ -303,6 +357,9 @@ class _$InventoryMovementImpl implements _InventoryMovement {
       timestamp,
       reason,
       userId,
+      unitCostNio,
+      sourceDocumentType,
+      sourceDocumentId,
       const DeepCollectionEquality().hash(_batchDeductions));
 
   @JsonKey(ignore: true)
@@ -331,6 +388,9 @@ abstract class _InventoryMovement implements InventoryMovement {
       required final DateTime timestamp,
       final String? reason,
       final String? userId,
+      final double? unitCostNio,
+      final String? sourceDocumentType,
+      final String? sourceDocumentId,
       final List<BatchDeduction>? batchDeductions}) = _$InventoryMovementImpl;
 
   factory _InventoryMovement.fromJson(Map<String, dynamic> json) =
@@ -354,6 +414,12 @@ abstract class _InventoryMovement implements InventoryMovement {
   String? get reason;
   @override
   String? get userId;
+  @override
+  double? get unitCostNio;
+  @override
+  String? get sourceDocumentType;
+  @override
+  String? get sourceDocumentId;
   @override
   List<BatchDeduction>? get batchDeductions;
   @override
