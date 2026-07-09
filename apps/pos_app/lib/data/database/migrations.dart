@@ -668,6 +668,97 @@ final migration25_26 = Migration(25, 26, (database) async {
   );
 });
 
+final migration26_27 = Migration(26, 27, (database) async {
+  final syncTable = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'inventory_movement_sync_state'",
+  );
+  final movementTable = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'inventory_movements'",
+  );
+  if (syncTable.isEmpty || movementTable.isEmpty) {
+    return;
+  }
+
+  final columns = await database.rawQuery(
+    'PRAGMA table_info(inventory_movement_sync_state)',
+  );
+  final existingColumnNames = columns
+      .map((column) => column['name'] as String)
+      .toSet();
+
+  Future<void> addColumnIfMissing(String columnName, String definition) async {
+    if (!existingColumnNames.contains(columnName)) {
+      await database.execute(
+        'ALTER TABLE inventory_movement_sync_state ADD COLUMN $definition',
+      );
+    }
+  }
+
+  await addColumnIfMissing('terminal_id', 'terminal_id TEXT');
+  await addColumnIfMissing('flow_type', 'flow_type TEXT');
+  await addColumnIfMissing('local_sequence', 'local_sequence INTEGER');
+  await addColumnIfMissing('idempotency_key', 'idempotency_key TEXT');
+  await addColumnIfMissing('last_result_code', 'last_result_code TEXT');
+
+  // Legacy provenance fallback for rows created before durable sync metadata
+  // existed. Runtime terminal identity still comes from the audit/device source.
+  await database.execute('''
+    INSERT OR IGNORE INTO inventory_movement_sync_state (
+      movement_id,
+      sync_status,
+      terminal_id,
+      flow_type,
+      local_sequence,
+      idempotency_key
+    )
+    SELECT
+      id,
+      'pending',
+      'pos-standalone',
+      'inventory',
+      ROW_NUMBER() OVER (ORDER BY timestamp ASC, id ASC),
+      'inventory:pos-standalone:' || id
+    FROM inventory_movements
+  ''');
+
+  await database.execute('''
+    UPDATE inventory_movement_sync_state
+    SET
+      terminal_id = COALESCE(NULLIF(terminal_id, ''), 'pos-standalone'),
+      flow_type = COALESCE(NULLIF(flow_type, ''), 'inventory'),
+      local_sequence = COALESCE(
+        local_sequence,
+        (
+          SELECT ranked.sequence
+          FROM (
+            SELECT
+              id,
+              ROW_NUMBER() OVER (ORDER BY timestamp ASC, id ASC) AS sequence
+            FROM inventory_movements
+          ) ranked
+          WHERE ranked.id = inventory_movement_sync_state.movement_id
+        )
+      ),
+      idempotency_key = COALESCE(
+        NULLIF(idempotency_key, ''),
+        'inventory:pos-standalone:' || movement_id
+      )
+    WHERE movement_id IN (SELECT id FROM inventory_movements)
+  ''');
+
+  await database.execute('''
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_movement_sync_state_stream_sequence
+    ON inventory_movement_sync_state (terminal_id, flow_type, local_sequence)
+    WHERE local_sequence IS NOT NULL
+  ''');
+
+  await database.execute('''
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_movement_sync_state_idempotency_key
+    ON inventory_movement_sync_state (idempotency_key)
+    WHERE idempotency_key IS NOT NULL
+  ''');
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -685,4 +776,5 @@ final allMigrations = [
   migration23_24,
   migration24_25,
   migration25_26,
+  migration26_27,
 ];

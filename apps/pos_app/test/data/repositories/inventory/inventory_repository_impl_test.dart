@@ -97,88 +97,101 @@ void main() {
   });
 
   group('InventoryRepositoryImpl - Sync', () {
-    test('fetchOfficialBcnRateByInvoiceDate requests and parses the backend lookup', () async {
-      when(
-        mockDio.get(
-          '/inventory/fx/bcn',
-          queryParameters: {'invoiceDate': '2026-01-10'},
-        ),
-      ).thenAnswer(
-        (_) async => Response<Map<String, dynamic>>(
-          data: const {
-            'invoiceDate': '2026-01-10',
-            'effectiveDate': '2026-01-10',
-            'rateNio': 36.7123,
-          },
-          requestOptions: RequestOptions(path: '/inventory/fx/bcn'),
-        ),
-      );
-
-      final result = await repository.fetchOfficialBcnRateByInvoiceDate(
-        DateTime(2026, 1, 10),
-      );
-
-      expect(result, 36.7123);
-      verify(
-        mockDio.get(
-          '/inventory/fx/bcn',
-          queryParameters: {'invoiceDate': '2026-01-10'},
-        ),
-      ).called(1);
-    });
-
-    test('fetchOfficialBcnRateByInvoiceDate surfaces 404 lookups as manual fallback guidance', () async {
-      when(
-        mockDio.get(
-          '/inventory/fx/bcn',
-          queryParameters: {'invoiceDate': '2026-01-10'},
-        ),
-      ).thenThrow(
-        DioException(
-          requestOptions: RequestOptions(path: '/inventory/fx/bcn'),
-          response: Response<void>(
-            statusCode: 404,
+    test(
+      'fetchOfficialBcnRateByInvoiceDate requests and parses the backend lookup',
+      () async {
+        when(
+          mockDio.get(
+            '/inventory/fx/bcn',
+            queryParameters: {'invoiceDate': '2026-01-10'},
+          ),
+        ).thenAnswer(
+          (_) async => Response<Map<String, dynamic>>(
+            data: const {
+              'invoiceDate': '2026-01-10',
+              'effectiveDate': '2026-01-10',
+              'rateNio': 36.7123,
+            },
             requestOptions: RequestOptions(path: '/inventory/fx/bcn'),
           ),
-        ),
-      );
+        );
 
-      await expectLater(
-        () => repository.fetchOfficialBcnRateByInvoiceDate(DateTime(2026, 1, 10)),
-        throwsA(
-          isA<OfficialBcnRateLookupException>().having(
-            (OfficialBcnRateLookupException error) => error.message,
-            'message',
-            'No official BCN rate is available for 2026-01-10. Enter the BCN rate manually to continue.',
+        final result = await repository.fetchOfficialBcnRateByInvoiceDate(
+          DateTime(2026, 1, 10),
+        );
+
+        expect(result, 36.7123);
+        verify(
+          mockDio.get(
+            '/inventory/fx/bcn',
+            queryParameters: {'invoiceDate': '2026-01-10'},
           ),
-        ),
-      );
-    });
+        ).called(1);
+      },
+    );
 
-    test('fetchOfficialBcnRateByInvoiceDate keeps manual entry available when offline', () async {
-      when(
-        mockDio.get(
-          '/inventory/fx/bcn',
-          queryParameters: {'invoiceDate': '2026-01-10'},
-        ),
-      ).thenThrow(
-        DioException(
-          requestOptions: RequestOptions(path: '/inventory/fx/bcn'),
-          type: DioExceptionType.connectionError,
-        ),
-      );
-
-      await expectLater(
-        () => repository.fetchOfficialBcnRateByInvoiceDate(DateTime(2026, 1, 10)),
-        throwsA(
-          isA<OfficialBcnRateLookupException>().having(
-            (OfficialBcnRateLookupException error) => error.message,
-            'message',
-            'Official BCN lookup is unavailable offline. Enter the BCN rate manually to continue.',
+    test(
+      'fetchOfficialBcnRateByInvoiceDate surfaces 404 lookups as manual fallback guidance',
+      () async {
+        when(
+          mockDio.get(
+            '/inventory/fx/bcn',
+            queryParameters: {'invoiceDate': '2026-01-10'},
           ),
-        ),
-      );
-    });
+        ).thenThrow(
+          DioException(
+            requestOptions: RequestOptions(path: '/inventory/fx/bcn'),
+            response: Response<void>(
+              statusCode: 404,
+              requestOptions: RequestOptions(path: '/inventory/fx/bcn'),
+            ),
+          ),
+        );
+
+        await expectLater(
+          () => repository.fetchOfficialBcnRateByInvoiceDate(
+            DateTime(2026, 1, 10),
+          ),
+          throwsA(
+            isA<OfficialBcnRateLookupException>().having(
+              (OfficialBcnRateLookupException error) => error.message,
+              'message',
+              'No official BCN rate is available for 2026-01-10. Enter the BCN rate manually to continue.',
+            ),
+          ),
+        );
+      },
+    );
+
+    test(
+      'fetchOfficialBcnRateByInvoiceDate keeps manual entry available when offline',
+      () async {
+        when(
+          mockDio.get(
+            '/inventory/fx/bcn',
+            queryParameters: {'invoiceDate': '2026-01-10'},
+          ),
+        ).thenThrow(
+          DioException(
+            requestOptions: RequestOptions(path: '/inventory/fx/bcn'),
+            type: DioExceptionType.connectionError,
+          ),
+        );
+
+        await expectLater(
+          () => repository.fetchOfficialBcnRateByInvoiceDate(
+            DateTime(2026, 1, 10),
+          ),
+          throwsA(
+            isA<OfficialBcnRateLookupException>().having(
+              (OfficialBcnRateLookupException error) => error.message,
+              'message',
+              'Official BCN lookup is unavailable offline. Enter the BCN rate manually to continue.',
+            ),
+          ),
+        );
+      },
+    );
 
     test('getUnsyncedMovements should call MovementDao', () async {
       final entities = [
@@ -206,6 +219,9 @@ void main() {
 
     test('markMovementAsSynced should upsert sync state', () async {
       when(
+        mockMovementSyncStateDao.findByMovementId('1'),
+      ).thenAnswer((_) async => null);
+      when(
         mockMovementSyncStateDao.upsertSyncState(any),
       ).thenAnswer((_) async => {});
 
@@ -214,15 +230,13 @@ void main() {
       verify(
         mockMovementSyncStateDao.upsertSyncState(
           argThat(
-            isA<MovementSyncStateEntity>().having(
-              (state) => state.movementId,
-              'movementId',
-              '1',
-            ).having(
-              (state) => state.syncStatus,
-              'syncStatus',
-              MovementSyncStateStatus.synced,
-            ),
+            isA<MovementSyncStateEntity>()
+                .having((state) => state.movementId, 'movementId', '1')
+                .having(
+                  (state) => state.syncStatus,
+                  'syncStatus',
+                  MovementSyncStateStatus.synced,
+                ),
           ),
         ),
       ).called(1);
@@ -230,6 +244,9 @@ void main() {
     });
 
     test('markMovementAsFailed should upsert failed sync state', () async {
+      when(
+        mockMovementSyncStateDao.findByMovementId('1'),
+      ).thenAnswer((_) async => null);
       when(
         mockMovementSyncStateDao.upsertSyncState(any),
       ).thenAnswer((_) async => {});
@@ -239,23 +256,289 @@ void main() {
       verify(
         mockMovementSyncStateDao.upsertSyncState(
           argThat(
-            isA<MovementSyncStateEntity>().having(
-              (state) => state.movementId,
-              'movementId',
-              '1',
-            ).having(
-              (state) => state.syncStatus,
-              'syncStatus',
-              MovementSyncStateStatus.failed,
-            ).having(
-              (state) => state.lastError,
-              'lastError',
-              'timeout',
-            ),
+            isA<MovementSyncStateEntity>()
+                .having((state) => state.movementId, 'movementId', '1')
+                .having(
+                  (state) => state.syncStatus,
+                  'syncStatus',
+                  MovementSyncStateStatus.failed,
+                )
+                .having((state) => state.lastError, 'lastError', 'timeout'),
           ),
         ),
       ).called(1);
     });
+
+    test(
+      'reserveMovementSyncMetadata preserves existing metadata and allocates next sequence deterministically',
+      () async {
+        const existing = MovementSyncStateEntity(
+          movementId: 'mov-existing',
+          syncStatus: MovementSyncStateStatus.failed,
+          lastAttemptedAt: '2026-01-01T00:00:00.000Z',
+          lastError: 'timeout',
+          terminalId: 'dev-1',
+          flowType: 'inventory',
+          localSequence: 7,
+          idempotencyKey: 'inventory:dev-1:mov-existing',
+          lastResultCode: 'PRIOR_FAILURE',
+        );
+        when(
+          mockMovementSyncStateDao.findByMovementIds([
+            'mov-existing',
+            'mov-new',
+          ]),
+        ).thenAnswer((_) async => [existing]);
+        when(
+          mockMovementSyncStateDao.findMaxLocalSequence('dev-1', 'inventory'),
+        ).thenAnswer((_) async => 7);
+        when(
+          mockMovementSyncStateDao.upsertSyncState(any),
+        ).thenAnswer((_) async => {});
+
+        final result = await repository.reserveMovementSyncMetadata(
+          ['mov-existing', 'mov-new'],
+          terminalId: 'dev-1',
+          flowType: 'inventory',
+        );
+
+        expect(result.map((metadata) => metadata.movementId), [
+          'mov-existing',
+          'mov-new',
+        ]);
+        expect(result.first.localSequence, 7);
+        expect(result.first.lastResultCode, 'PRIOR_FAILURE');
+        expect(result.first.lastError, 'timeout');
+        expect(result.last.localSequence, 8);
+        expect(result.last.idempotencyKey, 'inventory:dev-1:mov-new');
+        verify(
+          mockMovementSyncStateDao.findByMovementIds([
+            'mov-existing',
+            'mov-new',
+          ]),
+        ).called(1);
+        verify(
+          mockMovementSyncStateDao.findMaxLocalSequence('dev-1', 'inventory'),
+        ).called(1);
+        verify(
+          mockMovementSyncStateDao.upsertSyncState(
+            argThat(
+              isA<MovementSyncStateEntity>()
+                  .having((state) => state.movementId, 'movementId', 'mov-new')
+                  .having((state) => state.syncStatus, 'syncStatus', 'pending')
+                  .having((state) => state.terminalId, 'terminalId', 'dev-1')
+                  .having((state) => state.flowType, 'flowType', 'inventory')
+                  .having((state) => state.localSequence, 'localSequence', 8)
+                  .having(
+                    (state) => state.idempotencyKey,
+                    'idempotencyKey',
+                    'inventory:dev-1:mov-new',
+                  ),
+            ),
+          ),
+        ).called(1);
+      },
+    );
+
+    test(
+      'recordMovementRetryState retains metadata and records last result code and error',
+      () async {
+        const existing = MovementSyncStateEntity(
+          movementId: 'mov-retry',
+          syncStatus: MovementSyncStateStatus.pending,
+          terminalId: 'dev-1',
+          flowType: 'inventory',
+          localSequence: 9,
+          idempotencyKey: 'inventory:dev-1:mov-retry',
+        );
+        when(
+          mockMovementSyncStateDao.findByMovementId('mov-retry'),
+        ).thenAnswer((_) async => existing);
+        when(
+          mockMovementSyncStateDao.upsertSyncState(any),
+        ).thenAnswer((_) async => {});
+
+        await repository.recordMovementRetryState(
+          'mov-retry',
+          resultCode: 'INVALID_DELTA',
+          error: 'bad quantity',
+        );
+
+        verify(
+          mockMovementSyncStateDao.findByMovementId('mov-retry'),
+        ).called(1);
+        verify(
+          mockMovementSyncStateDao.upsertSyncState(
+            argThat(
+              isA<MovementSyncStateEntity>()
+                  .having(
+                    (state) => state.movementId,
+                    'movementId',
+                    'mov-retry',
+                  )
+                  .having(
+                    (state) => state.syncStatus,
+                    'syncStatus',
+                    MovementSyncStateStatus.failed,
+                  )
+                  .having(
+                    (state) => state.lastError,
+                    'lastError',
+                    'bad quantity',
+                  )
+                  .having(
+                    (state) => state.lastResultCode,
+                    'lastResultCode',
+                    'INVALID_DELTA',
+                  )
+                  .having((state) => state.terminalId, 'terminalId', 'dev-1')
+                  .having((state) => state.flowType, 'flowType', 'inventory')
+                  .having((state) => state.localSequence, 'localSequence', 9)
+                  .having(
+                    (state) => state.idempotencyKey,
+                    'idempotencyKey',
+                    'inventory:dev-1:mov-retry',
+                  )
+                  .having(
+                    (state) => state.lastAttemptedAt,
+                    'lastAttemptedAt',
+                    isNotNull,
+                  ),
+            ),
+          ),
+        ).called(1);
+      },
+    );
+
+    test(
+      'persists sync metadata and retry state through generated Floor DAOs',
+      () async {
+        final database = await $FloorAppDatabase
+            .inMemoryDatabaseBuilder()
+            .build();
+        final floorRepository = InventoryRepositoryImpl(
+          insumoDao: database.insumoDao,
+          recipeDao: database.recipeDao,
+          recipeVersionDocumentDao: database.recipeVersionDocumentDao,
+          productionOrderDocumentDao: database.productionOrderDocumentDao,
+          movementDao: database.movementDao,
+          movementSyncStateDao: database.movementSyncStateDao,
+          supplierDao: database.supplierDao,
+          warehouseDao: database.warehouseDao,
+          uomConversionDao: database.uomConversionDao,
+          batchDao: database.batchDao,
+          purchaseDao: database.purchaseDao,
+          forensicAlertDao: database.forensicAlertDao,
+          dio: mockDio,
+          database: database,
+        );
+
+        try {
+          await database.movementDao.insertMovement(
+            MovementEntity(
+              id: 'mov-existing',
+              insumoId: 'i-1',
+              type: 'SALE',
+              quantity: -1,
+              previousStock: 10,
+              newStock: 9,
+              timestamp: '2026-01-01T10:00:00.000Z',
+            ),
+          );
+          await database.movementDao.insertMovement(
+            MovementEntity(
+              id: 'mov-new',
+              insumoId: 'i-1',
+              type: 'SALE',
+              quantity: -1,
+              previousStock: 9,
+              newStock: 8,
+              timestamp: '2026-01-01T10:01:00.000Z',
+            ),
+          );
+          await database.movementSyncStateDao.upsertSyncState(
+            const MovementSyncStateEntity(
+              movementId: 'mov-existing',
+              syncStatus: MovementSyncStateStatus.failed,
+              lastAttemptedAt: '2026-01-01T00:00:00.000Z',
+              lastError: 'timeout',
+              terminalId: 'dev-1',
+              flowType: 'inventory',
+              localSequence: 7,
+              idempotencyKey: 'inventory:dev-1:mov-existing',
+              lastResultCode: 'PRIOR_FAILURE',
+            ),
+          );
+
+          final reserved = await floorRepository.reserveMovementSyncMetadata(
+            ['mov-existing', 'mov-new'],
+            terminalId: 'dev-1',
+            flowType: 'inventory',
+          );
+          final persistedRows = await database.movementSyncStateDao
+              .findByMovementIds(['mov-existing', 'mov-new']);
+          final maxSequence = await database.movementSyncStateDao
+              .findMaxLocalSequence('dev-1', 'inventory');
+
+          expect(reserved.map((metadata) => metadata.movementId), [
+            'mov-existing',
+            'mov-new',
+          ]);
+          expect(reserved.first.localSequence, 7);
+          expect(reserved.last.localSequence, 8);
+          expect(maxSequence, 8);
+          expect(persistedRows, hasLength(2));
+          expect(
+            persistedRows.where((row) => row.movementId == 'mov-new').single,
+            isA<MovementSyncStateEntity>()
+                .having((state) => state.syncStatus, 'syncStatus', 'pending')
+                .having((state) => state.terminalId, 'terminalId', 'dev-1')
+                .having((state) => state.flowType, 'flowType', 'inventory')
+                .having((state) => state.localSequence, 'localSequence', 8)
+                .having(
+                  (state) => state.idempotencyKey,
+                  'idempotencyKey',
+                  'inventory:dev-1:mov-new',
+                ),
+          );
+
+          await floorRepository.recordMovementRetryState(
+            'mov-new',
+            resultCode: 'INVALID_DELTA',
+            error: 'bad quantity',
+          );
+          final retried = await database.movementSyncStateDao.findByMovementId(
+            'mov-new',
+          );
+
+          expect(
+            retried,
+            isA<MovementSyncStateEntity>()
+                .having(
+                  (state) => state.syncStatus,
+                  'syncStatus',
+                  MovementSyncStateStatus.failed,
+                )
+                .having(
+                  (state) => state.lastResultCode,
+                  'lastResultCode',
+                  'INVALID_DELTA',
+                )
+                .having((state) => state.lastError, 'lastError', 'bad quantity')
+                .having((state) => state.terminalId, 'terminalId', 'dev-1')
+                .having((state) => state.flowType, 'flowType', 'inventory')
+                .having((state) => state.localSequence, 'localSequence', 8)
+                .having(
+                  (state) => state.idempotencyKey,
+                  'idempotencyKey',
+                  'inventory:dev-1:mov-new',
+                ),
+          );
+        } finally {
+          await database.close();
+        }
+      },
+    );
   });
 
   group('InventoryRepositoryImpl - recipe versions', () {

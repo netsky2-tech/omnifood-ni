@@ -5,6 +5,8 @@ import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/database/migrations.dart';
 import 'package:pos_app/data/repositories/inventory/inventory_repository_impl.dart';
 import 'package:pos_app/data/services/sync_service.dart';
+import 'package:pos_app/data/models/inventory/movement_sync_state_entity.dart';
+import 'package:pos_app/data/models/inventory/movement_entity.dart';
 import 'package:pos_app/domain/models/inventory/inventory_movement.dart';
 import 'package:pos_app/domain/models/inventory/insumo.dart';
 import 'package:pos_app/domain/models/inventory/product.dart';
@@ -66,7 +68,8 @@ class FakeAuditRepository implements AuditRepository {
   }) async => [];
 }
 
-class FakeInventoryRepository implements InventoryRepository {
+class FakeInventoryRepository
+    implements InventoryRepository, InventorySyncMetadataRepository {
   List<InventoryMovement> unsynced = [];
   List<Purchase> unsyncedPurchases = [];
   List<CountSessionDocument> unsyncedCountSessions = [];
@@ -81,6 +84,8 @@ class FakeInventoryRepository implements InventoryRepository {
   final List<String> syncedRecipeVersionIds = [];
   final List<String> syncedProductionOrderIds = [];
   final List<String> syncedForensicAlertIds = [];
+  final Map<String, MovementSyncMetadata> syncMetadataByMovementId = {};
+  final List<String> retriedIds = [];
 
   @override
   Future<List<InventoryMovement>> getUnsyncedMovements() async => unsynced;
@@ -93,6 +98,56 @@ class FakeInventoryRepository implements InventoryRepository {
   @override
   Future<void> markMovementAsFailed(String id, {String? error}) async {
     failedIds.add(id);
+  }
+
+  @override
+  Future<List<MovementSyncMetadata>> reserveMovementSyncMetadata(
+    List<String> movementIds, {
+    required String terminalId,
+    required String flowType,
+  }) async {
+    var nextSequence =
+        syncMetadataByMovementId.values.fold<int>(
+          0,
+          (max, state) => state.localSequence > max ? state.localSequence : max,
+        ) +
+        1;
+
+    return movementIds
+        .map((movementId) {
+          final existing = syncMetadataByMovementId[movementId];
+          if (existing != null) {
+            return existing;
+          }
+          final created = MovementSyncMetadata(
+            movementId: movementId,
+            terminalId: terminalId,
+            flowType: flowType,
+            localSequence: nextSequence++,
+            idempotencyKey: '$flowType:$terminalId:$movementId',
+          );
+          syncMetadataByMovementId[movementId] = created;
+          return created;
+        })
+        .toList(growable: false);
+  }
+
+  @override
+  Future<void> recordMovementRetryState(
+    String movementId, {
+    required String resultCode,
+    String? error,
+  }) async {
+    retriedIds.add(movementId);
+    final existing = syncMetadataByMovementId[movementId];
+    if (existing == null) {
+      return;
+    }
+    syncMetadataByMovementId[movementId] = existing.copyWith(
+      syncStatus: MovementSyncStateStatus.failed,
+      lastResultCode: resultCode,
+      lastError: error,
+    );
   }
 
   @override
@@ -332,6 +387,64 @@ void main() {
       dio,
     );
   });
+
+  InventoryMovement movement(String id, {DateTime? timestamp}) {
+    return InventoryMovement(
+      id: id,
+      insumoId: 'i-1',
+      type: MovementType.sale,
+      quantity: -1,
+      previousStock: 10,
+      newStock: 9,
+      timestamp: timestamp ?? DateTime.parse('2026-01-01T10:00:00Z'),
+    );
+  }
+
+  void respondToInventoryBatchWith(
+    Object? Function(List<Map<String, dynamic>> records) buildResponse,
+  ) {
+    dio.interceptors.clear();
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          capturedPosts.add(
+            CapturedPost(path: options.path, body: options.data),
+          );
+          final records =
+              ((options.data as Map<String, dynamic>)['records']
+                      as List<dynamic>)
+                  .cast<Map<String, dynamic>>();
+          handler.resolve(
+            Response<dynamic>(
+              statusCode: 200,
+              requestOptions: options,
+              data: buildResponse(records),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void failInventoryBatchWithDioException() {
+    dio.interceptors.clear();
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          capturedPosts.add(
+            CapturedPost(path: options.path, body: options.data),
+          );
+          handler.reject(
+            DioException(
+              requestOptions: options,
+              type: DioExceptionType.connectionError,
+              message: 'offline',
+            ),
+          );
+        },
+      ),
+    );
+  }
 
   test(
     'syncs audit logs and marks sales as synced on successful sync',
@@ -914,8 +1027,8 @@ void main() {
 
       final body = syncService.buildOrderedBatchEnvelopeForTest(unsynced);
       final records = body['records'] as List<dynamic>;
-      expect(records[0]['idempotencyKey'], 'inventory:mov-older');
-      expect(records[1]['idempotencyKey'], 'inventory:mov-newer');
+      expect(records[0]['idempotencyKey'], 'inventory:dev-1:mov-older');
+      expect(records[1]['idempotencyKey'], 'inventory:dev-1:mov-newer');
       expect(records[0]['sourceSequence'], 1);
       expect(records[1]['sourceSequence'], 2);
     },
@@ -945,6 +1058,506 @@ void main() {
 
       expect(firstRecord['idempotencyKey'], secondRecord['idempotencyKey']);
       expect(firstRecord['sourceSequence'], secondRecord['sourceSequence']);
+    },
+  );
+
+  test(
+    'sends terminal flow sequence metadata and preserves retry state per backend item result',
+    () async {
+      final unsynced = [
+        InventoryMovement(
+          id: 'mov-accepted',
+          insumoId: 'i-1',
+          type: MovementType.sale,
+          quantity: -1,
+          previousStock: 10,
+          newStock: 9,
+          timestamp: DateTime.parse('2026-01-01T10:00:00Z'),
+        ),
+        InventoryMovement(
+          id: 'mov-staged',
+          insumoId: 'i-1',
+          type: MovementType.reversal,
+          quantity: 1,
+          previousStock: 9,
+          newStock: 10,
+          timestamp: DateTime.parse('2026-01-01T10:01:00Z'),
+        ),
+        InventoryMovement(
+          id: 'mov-duplicate',
+          insumoId: 'i-1',
+          type: MovementType.adjustment,
+          quantity: 3,
+          previousStock: 10,
+          newStock: 13,
+          timestamp: DateTime.parse('2026-01-01T10:02:00Z'),
+        ),
+      ];
+      mockInventoryRepository.unsynced = unsynced;
+      dio.interceptors.clear();
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            capturedPosts.add(
+              CapturedPost(path: options.path, body: options.data),
+            );
+            final records =
+                ((options.data as Map<String, dynamic>)['records']
+                        as List<dynamic>)
+                    .cast<Map<String, dynamic>>();
+            handler.resolve(
+              Response<dynamic>(
+                statusCode: 200,
+                requestOptions: options,
+                data: {
+                  'status': 'PARTIAL',
+                  'received': records.length,
+                  'results': [
+                    {
+                      'idempotencyKey': records[0]['idempotencyKey'],
+                      'terminalId': records[0]['terminalId'],
+                      'flowType': records[0]['flowType'],
+                      'sourceSequence': records[0]['sourceSequence'],
+                      'status': 'ACCEPTED',
+                      'retryable': false,
+                    },
+                    {
+                      'idempotencyKey': records[1]['idempotencyKey'],
+                      'terminalId': records[1]['terminalId'],
+                      'flowType': records[1]['flowType'],
+                      'sourceSequence': records[1]['sourceSequence'],
+                      'status': 'STAGED_FUTURE',
+                      'retryable': true,
+                      'code': 'SEQUENCE_GAP',
+                    },
+                    {
+                      'idempotencyKey': records[2]['idempotencyKey'],
+                      'terminalId': records[2]['terminalId'],
+                      'flowType': records[2]['flowType'],
+                      'sourceSequence': records[2]['sourceSequence'],
+                      'status': 'DUPLICATE',
+                      'retryable': false,
+                    },
+                  ],
+                },
+              ),
+            );
+          },
+        ),
+      );
+
+      await syncService.triggerManualSync();
+
+      final body =
+          capturedPosts
+                  .singleWhere((post) => post.path == '/v1/sync/batch')
+                  .body
+              as Map<String, dynamic>;
+      final records = (body['records'] as List<dynamic>)
+          .cast<Map<String, dynamic>>();
+      expect(
+        records.map((record) => record['terminalId']),
+        everyElement('dev-1'),
+      );
+      expect(
+        records.map((record) => record['flowType']),
+        everyElement('inventory'),
+      );
+      expect(records.map((record) => record['sourceSequence']), [1, 2, 3]);
+      expect(records.map((record) => record['idempotencyKey']), [
+        'inventory:dev-1:mov-accepted',
+        'inventory:dev-1:mov-staged',
+        'inventory:dev-1:mov-duplicate',
+      ]);
+      expect(mockInventoryRepository.syncedIds, [
+        'mov-accepted',
+        'mov-duplicate',
+      ]);
+      expect(mockInventoryRepository.retriedIds, ['mov-staged']);
+      expect(
+        mockInventoryRepository
+            .syncMetadataByMovementId['mov-staged']
+            ?.lastResultCode,
+        'SEQUENCE_GAP',
+      );
+    },
+  );
+
+  test(
+    'reads unsynced movements in deterministic local sequence order',
+    () async {
+      final database = await $FloorAppDatabase
+          .inMemoryDatabaseBuilder()
+          .build();
+      try {
+        await database.movementDao.insertMovement(
+          MovementEntity(
+            id: 'mov-seq-2',
+            insumoId: 'i-1',
+            type: 'SALE',
+            quantity: -1,
+            previousStock: 10,
+            newStock: 9,
+            timestamp: '2026-01-01T10:00:00.000Z',
+          ),
+        );
+        await database.movementDao.insertMovement(
+          MovementEntity(
+            id: 'mov-seq-1',
+            insumoId: 'i-1',
+            type: 'SALE',
+            quantity: -1,
+            previousStock: 9,
+            newStock: 8,
+            timestamp: '2026-01-01T10:01:00.000Z',
+          ),
+        );
+        await database.movementSyncStateDao.upsertSyncState(
+          const MovementSyncStateEntity(
+            movementId: 'mov-seq-2',
+            syncStatus: MovementSyncStateStatus.pending,
+            terminalId: 'dev-1',
+            flowType: 'inventory',
+            localSequence: 2,
+            idempotencyKey: 'inventory:dev-1:mov-seq-2',
+          ),
+        );
+        await database.movementSyncStateDao.upsertSyncState(
+          const MovementSyncStateEntity(
+            movementId: 'mov-seq-1',
+            syncStatus: MovementSyncStateStatus.pending,
+            terminalId: 'dev-1',
+            flowType: 'inventory',
+            localSequence: 1,
+            idempotencyKey: 'inventory:dev-1:mov-seq-1',
+          ),
+        );
+
+        final unsynced = await database.movementDao.findUnsyncedMovements();
+
+        expect(unsynced.map((movement) => movement.id), [
+          'mov-seq-1',
+          'mov-seq-2',
+        ]);
+      } finally {
+        await database.close();
+      }
+    },
+  );
+
+  test(
+    'sends existing reserved sequence before newly reserved movement',
+    () async {
+      mockInventoryRepository.unsynced = [
+        movement('mov-new', timestamp: DateTime.parse('2026-01-01T10:00:00Z')),
+        movement(
+          'mov-failed',
+          timestamp: DateTime.parse('2026-01-01T10:01:00Z'),
+        ),
+      ];
+      mockInventoryRepository.syncMetadataByMovementId['mov-failed'] =
+          const MovementSyncMetadata(
+            movementId: 'mov-failed',
+            terminalId: 'dev-1',
+            flowType: 'inventory',
+            localSequence: 7,
+            idempotencyKey: 'inventory:dev-1:mov-failed',
+            syncStatus: MovementSyncStateStatus.failed,
+          );
+      respondToInventoryBatchWith(
+        (records) => {
+          'status': 'OK',
+          'received': records.length,
+          'results': records
+              .map((record) => {...record, 'status': 'ACCEPTED'})
+              .toList(growable: false),
+        },
+      );
+
+      await syncService.triggerManualSync();
+
+      final batchPost = capturedPosts.lastWhere(
+        (post) => post.path == '/v1/sync/batch',
+      );
+      final records =
+          (batchPost.body as Map<String, dynamic>)['records'] as List<dynamic>;
+      expect(records.map((record) => record['idempotencyKey']), [
+        'inventory:dev-1:mov-failed',
+        'inventory:dev-1:mov-new',
+      ]);
+      expect(records.map((record) => record['sourceSequence']), [7, 8]);
+      expect(mockInventoryRepository.syncedIds, ['mov-failed', 'mov-new']);
+    },
+  );
+
+  test(
+    'does not mark inventory movements synced when backend omits results',
+    () async {
+      mockInventoryRepository.unsynced = [movement('mov-missing-results')];
+      respondToInventoryBatchWith(
+        (records) => {'status': 'OK', 'received': records.length},
+      );
+
+      await syncService.triggerManualSync();
+
+      expect(mockInventoryRepository.syncedIds, isEmpty);
+      expect(mockInventoryRepository.retriedIds, ['mov-missing-results']);
+      expect(
+        mockInventoryRepository
+            .syncMetadataByMovementId['mov-missing-results']
+            ?.lastResultCode,
+        'MISSING_RESULT',
+      );
+    },
+  );
+
+  test(
+    'does not reserve or apply results to movements beyond the batch envelope limit',
+    () async {
+      mockInventoryRepository.unsynced = List.generate(
+        501,
+        (index) => movement(
+          'mov-${index + 1}',
+          timestamp: DateTime.parse(
+            '2026-01-01T10:00:00Z',
+          ).add(Duration(seconds: index)),
+        ),
+      );
+      respondToInventoryBatchWith(
+        (records) => {
+          'status': 'OK',
+          'received': records.length,
+          'results': records
+              .map((record) => {...record, 'status': 'ACCEPTED'})
+              .toList(growable: false),
+        },
+      );
+
+      await syncService.triggerManualSync();
+
+      final batchPost = capturedPosts.lastWhere(
+        (post) => post.path == '/v1/sync/batch',
+      );
+      final records =
+          (batchPost.body as Map<String, dynamic>)['records'] as List<dynamic>;
+      expect(records, hasLength(500));
+      expect(mockInventoryRepository.syncedIds, hasLength(500));
+      expect(mockInventoryRepository.syncedIds, isNot(contains('mov-501')));
+      expect(mockInventoryRepository.retriedIds, isNot(contains('mov-501')));
+      expect(
+        mockInventoryRepository.syncMetadataByMovementId,
+        isNot(contains('mov-501')),
+      );
+    },
+  );
+
+  test(
+    'does not fail unsent inventory movements when batch POST fails',
+    () async {
+      mockInventoryRepository.unsynced = List.generate(
+        501,
+        (index) => movement(
+          'mov-${index + 1}',
+          timestamp: DateTime.parse(
+            '2026-01-01T10:00:00Z',
+          ).add(Duration(seconds: index)),
+        ),
+      );
+      failInventoryBatchWithDioException();
+
+      await syncService.triggerManualSync();
+
+      final batchPost = capturedPosts.lastWhere(
+        (post) => post.path == '/v1/sync/batch',
+      );
+      final records =
+          (batchPost.body as Map<String, dynamic>)['records'] as List<dynamic>;
+      expect(records, hasLength(500));
+      expect(mockInventoryRepository.failedIds, hasLength(500));
+      expect(mockInventoryRepository.failedIds, isNot(contains('mov-501')));
+      expect(
+        mockInventoryRepository.syncMetadataByMovementId,
+        isNot(contains('mov-501')),
+      );
+    },
+  );
+
+  test(
+    'does not mark inventory movements synced when backend returns empty results',
+    () async {
+      mockInventoryRepository.unsynced = [movement('mov-empty-results')];
+      respondToInventoryBatchWith(
+        (records) => {
+          'status': 'OK',
+          'received': records.length,
+          'results': [],
+        },
+      );
+
+      await syncService.triggerManualSync();
+
+      expect(mockInventoryRepository.syncedIds, isEmpty);
+      expect(mockInventoryRepository.retriedIds, ['mov-empty-results']);
+      expect(
+        mockInventoryRepository
+            .syncMetadataByMovementId['mov-empty-results']
+            ?.lastResultCode,
+        'MISSING_RESULT',
+      );
+    },
+  );
+
+  test(
+    'does not mark inventory movements synced when result rows are malformed',
+    () async {
+      mockInventoryRepository.unsynced = [movement('mov-malformed-result')];
+      respondToInventoryBatchWith(
+        (records) => {
+          'status': 'OK',
+          'received': records.length,
+          'results': [
+            {'idempotencyKey': records.single['idempotencyKey']},
+          ],
+        },
+      );
+
+      await syncService.triggerManualSync();
+
+      expect(mockInventoryRepository.syncedIds, isEmpty);
+      expect(mockInventoryRepository.retriedIds, ['mov-malformed-result']);
+      expect(
+        mockInventoryRepository
+            .syncMetadataByMovementId['mov-malformed-result']
+            ?.lastResultCode,
+        'MISSING_RESULT',
+      );
+    },
+  );
+
+  test(
+    'treats malformed optional result fields as row retry data without batch fallback',
+    () async {
+      mockInventoryRepository.unsynced = [
+        movement('mov-numeric-code'),
+        movement('mov-object-message'),
+      ];
+      respondToInventoryBatchWith(
+        (records) => {
+          'status': 'PARTIAL',
+          'received': records.length,
+          'results': [
+            {...records[0], 'status': 'REJECTED', 'code': 409},
+            {
+              ...records[1],
+              'status': 'REJECTED',
+              'message': {'detail': 'bad row'},
+            },
+          ],
+        },
+      );
+
+      await syncService.triggerManualSync();
+
+      expect(mockInventoryRepository.syncedIds, isEmpty);
+      expect(mockInventoryRepository.failedIds, isEmpty);
+      expect(mockInventoryRepository.retriedIds, [
+        'mov-numeric-code',
+        'mov-object-message',
+      ]);
+      expect(
+        mockInventoryRepository.syncMetadataByMovementId.map(
+          (id, state) => MapEntry(id, state.lastResultCode),
+        ),
+        equals(<String, String>{
+          'mov-numeric-code': 'MISSING_RESULT',
+          'mov-object-message': 'MISSING_RESULT',
+        }),
+      );
+    },
+  );
+
+  test(
+    'records retry state for rejected, blocked, mismatch, unknown, and metadata-mismatched results',
+    () async {
+      mockInventoryRepository.unsynced = [
+        movement(
+          'mov-rejected',
+          timestamp: DateTime.parse('2026-01-01T10:00:00Z'),
+        ),
+        movement(
+          'mov-blocked',
+          timestamp: DateTime.parse('2026-01-01T10:01:00Z'),
+        ),
+        movement(
+          'mov-mismatch',
+          timestamp: DateTime.parse('2026-01-01T10:02:00Z'),
+        ),
+        movement(
+          'mov-unknown',
+          timestamp: DateTime.parse('2026-01-01T10:03:00Z'),
+        ),
+        movement(
+          'mov-meta-mismatch',
+          timestamp: DateTime.parse('2026-01-01T10:04:00Z'),
+        ),
+      ];
+      respondToInventoryBatchWith(
+        (records) => {
+          'status': 'PARTIAL',
+          'received': records.length,
+          'results': [
+            {
+              ...records[0],
+              'status': 'REJECTED',
+              'retryable': false,
+              'code': 'INVALID_DELTA',
+            },
+            {
+              ...records[1],
+              'status': 'BLOCKED_BY_PRIOR_FAILURE',
+              'retryable': true,
+              'code': 'PRIOR_FAILURE',
+            },
+            {
+              ...records[2],
+              'status': 'IDEMPOTENCY_MISMATCH',
+              'retryable': false,
+              'code': 'CRITICAL_IDEMPOTENCY_MISMATCH',
+            },
+            {...records[3], 'status': 'BOGUS_STATUS', 'retryable': true},
+            {
+              ...records[4],
+              'sourceSequence': (records[4]['sourceSequence'] as int) + 10,
+              'status': 'DUPLICATE',
+              'retryable': false,
+              'code': 'DUPLICATE_REPLAY',
+            },
+          ],
+        },
+      );
+
+      await syncService.triggerManualSync();
+
+      expect(mockInventoryRepository.syncedIds, isEmpty);
+      expect(mockInventoryRepository.retriedIds, [
+        'mov-rejected',
+        'mov-blocked',
+        'mov-mismatch',
+        'mov-unknown',
+        'mov-meta-mismatch',
+      ]);
+      expect(
+        mockInventoryRepository.syncMetadataByMovementId.map(
+          (id, state) => MapEntry(id, state.lastResultCode),
+        ),
+        equals(<String, String>{
+          'mov-rejected': 'INVALID_DELTA',
+          'mov-blocked': 'PRIOR_FAILURE',
+          'mov-mismatch': 'CRITICAL_IDEMPOTENCY_MISMATCH',
+          'mov-unknown': 'BOGUS_STATUS',
+          'mov-meta-mismatch': 'DUPLICATE_REPLAY',
+        }),
+      );
     },
   );
 
