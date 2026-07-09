@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../domain/models/inventory/insumo.dart';
+import '../../../../domain/models/inventory/product.dart';
 import 'merma_taxonomy.dart';
 import 'shrinkage_view_model.dart';
 
@@ -55,6 +56,8 @@ class _ShrinkageViewState extends State<ShrinkageView> {
   void _showShrinkageForm(BuildContext context) {
     final vm = context.read<ShrinkageViewModel>();
     Insumo? selectedInsumo;
+    Product? selectedProduct;
+    var selectedTargetType = ShrinkageTargetType.insumo;
     String selectedShrinkageType = shrinkageTypes.first;
     _qtyController.clear();
     _observationController.clear();
@@ -74,33 +77,87 @@ class _ShrinkageViewState extends State<ShrinkageView> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Autocomplete<Insumo>(
-                        displayStringForOption: (Insumo option) => option.name,
-                        optionsBuilder: (TextEditingValue textEditingValue) {
-                          if (textEditingValue.text == '') {
-                            return const Iterable<Insumo>.empty();
-                          }
-                          return vm.insumos.where((Insumo option) {
-                            return option.name.toLowerCase().contains(
-                              textEditingValue.text.toLowerCase(),
-                            );
+                      DropdownButtonFormField<ShrinkageTargetType>(
+                        initialValue: selectedTargetType,
+                        decoration: const InputDecoration(
+                          labelText: 'Tipo de objetivo',
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: ShrinkageTargetType.insumo,
+                            child: Text('Insumo'),
+                          ),
+                          DropdownMenuItem(
+                            value: ShrinkageTargetType.product,
+                            child: Text('Producto'),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          if (value == null) return;
+                          setState(() {
+                            selectedTargetType = value;
+                            selectedInsumo = null;
+                            selectedProduct = null;
+                            vm.selectBatch(null);
                           });
                         },
-                        onSelected: (Insumo selection) {
-                          vm.previewAdjustment(selection.id);
-                          setState(() => selectedInsumo = selection);
-                        },
-                        fieldViewBuilder:
-                            (context, controller, focusNode, onFieldSubmitted) {
-                              return TextField(
-                                controller: controller,
-                                focusNode: focusNode,
-                                decoration: const InputDecoration(
-                                  labelText: 'Insumo (buscar...)',
-                                ),
-                              );
-                            },
                       ),
+                      const SizedBox(height: 12),
+                      if (selectedTargetType == ShrinkageTargetType.insumo)
+                        Autocomplete<Insumo>(
+                          displayStringForOption: (Insumo option) => option.name,
+                          optionsBuilder: (TextEditingValue textEditingValue) {
+                            if (textEditingValue.text == '') {
+                              return const Iterable<Insumo>.empty();
+                            }
+                            return vm.insumos.where((Insumo option) {
+                              return option.name.toLowerCase().contains(
+                                textEditingValue.text.toLowerCase(),
+                              );
+                            });
+                          },
+                          onSelected: (Insumo selection) {
+                            vm.previewAdjustment(selection.id);
+                            setState(() => selectedInsumo = selection);
+                          },
+                          fieldViewBuilder:
+                              (context, controller, focusNode, onFieldSubmitted) {
+                                return TextField(
+                                  controller: controller,
+                                  focusNode: focusNode,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Insumo (buscar...)',
+                                  ),
+                                );
+                              },
+                        )
+                      else
+                        Autocomplete<Product>(
+                          displayStringForOption: (Product option) => option.name,
+                          optionsBuilder: (TextEditingValue textEditingValue) {
+                            if (textEditingValue.text == '') {
+                              return const Iterable<Product>.empty();
+                            }
+                            return vm.products.where((Product option) {
+                              return option.name.toLowerCase().contains(
+                                textEditingValue.text.toLowerCase(),
+                              );
+                            });
+                          },
+                          onSelected: (Product selection) {
+                            setState(() => selectedProduct = selection);
+                          },
+                          fieldViewBuilder:
+                              (context, controller, focusNode, onFieldSubmitted) {
+                                return TextField(
+                                  controller: controller,
+                                  focusNode: focusNode,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Producto (buscar...)',
+                                  ),
+                                );
+                              },
+                        ),
                       const SizedBox(height: 12),
                       TextField(
                         controller: _qtyController,
@@ -195,28 +252,43 @@ class _ShrinkageViewState extends State<ShrinkageView> {
                 ElevatedButton(
                   onPressed:
                       (vm.isLoading ||
-                          selectedInsumo == null ||
+                          (selectedTargetType == ShrinkageTargetType.insumo
+                              ? selectedInsumo == null
+                              : selectedProduct == null) ||
                           _observationController.text.trim().isEmpty ||
-                          (vm.batchPreview.isNotEmpty &&
+                          (selectedTargetType == ShrinkageTargetType.insumo &&
+                              vm.batchPreview.isNotEmpty &&
                               vm.selectedBatchId == null))
                       ? null
                       : () async {
                           final confirmed = await _confirmDestructiveAdjustment(
                             context,
                             vm,
-                            selectedInsumo!,
+                            selectedTargetType == ShrinkageTargetType.insumo
+                                ? selectedInsumo!.name
+                                : selectedProduct!.name,
                             double.tryParse(_qtyController.text) ?? 0,
                           );
                           if (!confirmed) {
                             return;
                           }
 
-                          await vm.recordShrinkage(
-                            insumoId: selectedInsumo!.id,
-                            quantity: double.tryParse(_qtyController.text) ?? 0,
-                            shrinkageType: selectedShrinkageType,
-                            observation: _observationController.text,
-                          );
+                          final quantity = double.tryParse(_qtyController.text) ?? 0;
+                          if (selectedTargetType == ShrinkageTargetType.insumo) {
+                            await vm.recordShrinkage(
+                              insumoId: selectedInsumo!.id,
+                              quantity: quantity,
+                              shrinkageType: selectedShrinkageType,
+                              observation: _observationController.text,
+                            );
+                          } else {
+                            await vm.recordProductShrinkage(
+                              productId: selectedProduct!.id,
+                              quantity: quantity,
+                              shrinkageType: selectedShrinkageType,
+                              observation: _observationController.text,
+                            );
+                          }
                           if (context.mounted) {
                             Navigator.pop(context);
                           }
@@ -240,7 +312,7 @@ class _ShrinkageViewState extends State<ShrinkageView> {
   Future<bool> _confirmDestructiveAdjustment(
     BuildContext context,
     ShrinkageViewModel viewModel,
-    Insumo insumo,
+    String targetName,
     double quantity,
   ) async {
     final selectedBatch = viewModel.selectedBatch;
@@ -259,7 +331,7 @@ class _ShrinkageViewState extends State<ShrinkageView> {
                 style: Theme.of(dialogContext).textTheme.titleLarge,
               ),
               const SizedBox(height: 12),
-              Text('Insumo: ${insumo.name}'),
+              Text('Objetivo: $targetName'),
               if (selectedBatch != null) ...[
                 const SizedBox(height: 8),
                 Text('Batch FIFO seleccionado: ${selectedBatch.batchNumber}'),
