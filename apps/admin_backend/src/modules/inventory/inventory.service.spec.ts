@@ -331,6 +331,31 @@ describe('InventoryService', () => {
       expect(movementRepo.create).not.toHaveBeenCalled();
       expect(movementRepo.save).not.toHaveBeenCalled();
     });
+
+    it('rejects generic count adjustments because SesionConteo replay owns traceability', async () => {
+      const movements: CreateInventoryMovementDto[] = [
+        {
+          id: 'count-1:line-1',
+          insumoId: 'ins-1',
+          type: MovementType.ADJUSTMENT,
+          quantity: -5,
+          previousStock: 15,
+          newStock: 10,
+          timestamp: '2026-06-02T10:00:00Z',
+          reason: 'COUNT_SESSION:count-1',
+        },
+      ];
+
+      await expect(
+        service.syncMovements(movements, 'tenant-A'),
+      ).rejects.toThrow(
+        'AJUSTE_CONTEO movements must be posted through the count-session document workflow because generic sync cannot prove SesionConteo traceability',
+      );
+      expect(insumoRepo.findOne).not.toHaveBeenCalled();
+      expect(insumoRepo.save).not.toHaveBeenCalled();
+      expect(movementRepo.create).not.toHaveBeenCalled();
+      expect(movementRepo.save).not.toHaveBeenCalled();
+    });
   });
 
   describe('tenant isolation', () => {

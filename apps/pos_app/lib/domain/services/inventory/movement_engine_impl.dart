@@ -129,8 +129,66 @@ class MovementEngineImpl implements MovementEngine {
         newStock: newStock,
         timestamp: DateTime.now(),
         reason: reason,
+        unitCostNio: insumo.averageCost,
+        sourceDocumentType: 'INSUMO_MERMA',
+        sourceDocumentId: insumoId,
       ),
     );
+  }
+
+  @override
+  Future<void> recordProductShrinkage({
+    required String productId,
+    required double quantity,
+    required String reason,
+  }) async {
+    if (quantity <= 0) throw ArgumentError('Quantity must be positive');
+
+    final timestamp = DateTime.now();
+    final Map<String, double> insumoQuantities = {};
+    await _gatherInsumoQuantities(
+      productId,
+      quantity,
+      0,
+      insumoQuantities,
+      visited: <String>{},
+    );
+
+    if (insumoQuantities.isEmpty) {
+      throw StateError('Product $productId has no recipe to record shrinkage');
+    }
+
+    final insumos = await repository.getInsumosByIds(
+      insumoQuantities.keys.toList(growable: false),
+    );
+    final insumoMap = {for (final insumo in insumos) insumo.id: insumo};
+
+    for (final entry in insumoQuantities.entries) {
+      final insumo = insumoMap[entry.key];
+      if (insumo == null) {
+        continue;
+      }
+
+      final newStock = insumo.stock - entry.value;
+      await repository.updateInsumoStock(insumo.id, newStock);
+      await _checkParAlert(insumo, newStock);
+
+      await repository.saveMovement(
+        InventoryMovement(
+          id: '${timestamp.microsecondsSinceEpoch}-${insumo.id}-product-merma',
+          insumoId: insumo.id,
+          type: MovementType.shrinkage,
+          quantity: -entry.value,
+          previousStock: insumo.stock,
+          newStock: newStock,
+          timestamp: timestamp,
+          reason: reason,
+          unitCostNio: insumo.averageCost,
+          sourceDocumentType: 'PRODUCT_MERMA',
+          sourceDocumentId: productId,
+        ),
+      );
+    }
   }
 
   @override

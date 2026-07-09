@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../domain/models/inventory/insumo.dart';
+import '../../../../domain/models/inventory/product.dart';
+import 'merma_taxonomy.dart';
 import 'shrinkage_view_model.dart';
 
 class ShrinkageView extends StatefulWidget {
@@ -12,6 +14,7 @@ class ShrinkageView extends StatefulWidget {
 
 class _ShrinkageViewState extends State<ShrinkageView> {
   final _qtyController = TextEditingController();
+  final _observationController = TextEditingController();
 
   @override
   void initState() {
@@ -24,6 +27,7 @@ class _ShrinkageViewState extends State<ShrinkageView> {
   @override
   void dispose() {
     _qtyController.dispose();
+    _observationController.dispose();
     super.dispose();
   }
 
@@ -33,8 +37,10 @@ class _ShrinkageViewState extends State<ShrinkageView> {
       appBar: AppBar(title: const Text('Registro de Mermas')),
       body: Consumer<ShrinkageViewModel>(
         builder: (context, vm, child) {
-          if (vm.isLoading && vm.insumos.isEmpty) return const Center(child: CircularProgressIndicator());
-          
+          if (vm.isLoading && vm.insumos.isEmpty) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
           return Padding(
             padding: const EdgeInsets.all(16.0),
             child: ElevatedButton(
@@ -50,8 +56,11 @@ class _ShrinkageViewState extends State<ShrinkageView> {
   void _showShrinkageForm(BuildContext context) {
     final vm = context.read<ShrinkageViewModel>();
     Insumo? selectedInsumo;
+    Product? selectedProduct;
+    var selectedTargetType = ShrinkageTargetType.insumo;
     String selectedShrinkageType = shrinkageTypes.first;
     _qtyController.clear();
+    _observationController.clear();
 
     showDialog(
       context: context,
@@ -68,79 +77,161 @@ class _ShrinkageViewState extends State<ShrinkageView> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Autocomplete<Insumo>(
-                    displayStringForOption: (Insumo option) => option.name,
-                    optionsBuilder: (TextEditingValue textEditingValue) {
-                      if (textEditingValue.text == '') {
-                        return const Iterable<Insumo>.empty();
-                      }
-                      return vm.insumos.where((Insumo option) {
-                        return option.name.toLowerCase().contains(textEditingValue.text.toLowerCase());
-                      });
-                    },
-                    onSelected: (Insumo selection) {
-                      vm.previewAdjustment(selection.id);
-                      setState(() => selectedInsumo = selection);
-                    },
-                    fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                      return TextField(
-                        controller: controller,
-                        focusNode: focusNode,
-                        decoration: const InputDecoration(labelText: 'Insumo (buscar...)'),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _qtyController,
-                    decoration: const InputDecoration(labelText: 'Cantidad'),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    initialValue: selectedShrinkageType,
-                    decoration: const InputDecoration(labelText: 'Tipo de merma'),
-                    items: shrinkageTypes
-                        .map((type) => DropdownMenuItem(value: type, child: Text(type)))
-                        .toList(),
-                    onChanged: (value) {
-                      if (value == null) return;
-                      setState(() => selectedShrinkageType = value);
-                    },
-                  ),
-                  if (vm.batchPreview.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    const Text('Revisión FIFO antes del ajuste'),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<String>(
-                      initialValue: vm.selectedBatchId,
-                      decoration: const InputDecoration(
-                        labelText: 'Lote exacto a ajustar',
+                      DropdownButtonFormField<ShrinkageTargetType>(
+                        initialValue: selectedTargetType,
+                        decoration: const InputDecoration(
+                          labelText: 'Tipo de objetivo',
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: ShrinkageTargetType.insumo,
+                            child: Text('Insumo'),
+                          ),
+                          DropdownMenuItem(
+                            value: ShrinkageTargetType.product,
+                            child: Text('Producto'),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          if (value == null) return;
+                          setState(() {
+                            selectedTargetType = value;
+                            selectedInsumo = null;
+                            selectedProduct = null;
+                            vm.selectBatch(null);
+                          });
+                        },
                       ),
-                      items: vm.batchPreview
-                          .map(
-                            (batch) => DropdownMenuItem<String>(
-                              value: batch.id,
-                              child: Text(
-                                '${batch.batchNumber} • ${_formatDate(batch.expirationDate)} • ${batch.remainingStock.toStringAsFixed(2)} u',
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          )
-                          .toList(growable: false),
-                      onChanged: vm.selectBatch,
-                    ),
-                    const SizedBox(height: 8),
-                    ...vm.batchPreview.asMap().entries.map(
-                      (entry) => ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text('FIFO ${entry.key + 1}: ${entry.value.batchNumber}'),
-                        subtitle: Text(
-                          'Stock ${entry.value.remainingStock.toStringAsFixed(2)} • Valor C\$${entry.value.cost.toStringAsFixed(2)}',
+                      const SizedBox(height: 12),
+                      if (selectedTargetType == ShrinkageTargetType.insumo)
+                        Autocomplete<Insumo>(
+                          displayStringForOption: (Insumo option) => option.name,
+                          optionsBuilder: (TextEditingValue textEditingValue) {
+                            if (textEditingValue.text == '') {
+                              return const Iterable<Insumo>.empty();
+                            }
+                            return vm.insumos.where((Insumo option) {
+                              return option.name.toLowerCase().contains(
+                                textEditingValue.text.toLowerCase(),
+                              );
+                            });
+                          },
+                          onSelected: (Insumo selection) {
+                            vm.previewAdjustment(selection.id);
+                            setState(() => selectedInsumo = selection);
+                          },
+                          fieldViewBuilder:
+                              (context, controller, focusNode, onFieldSubmitted) {
+                                return TextField(
+                                  controller: controller,
+                                  focusNode: focusNode,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Insumo (buscar...)',
+                                  ),
+                                );
+                              },
+                        )
+                      else
+                        Autocomplete<Product>(
+                          displayStringForOption: (Product option) => option.name,
+                          optionsBuilder: (TextEditingValue textEditingValue) {
+                            if (textEditingValue.text == '') {
+                              return const Iterable<Product>.empty();
+                            }
+                            return vm.products.where((Product option) {
+                              return option.name.toLowerCase().contains(
+                                textEditingValue.text.toLowerCase(),
+                              );
+                            });
+                          },
+                          onSelected: (Product selection) {
+                            setState(() => selectedProduct = selection);
+                          },
+                          fieldViewBuilder:
+                              (context, controller, focusNode, onFieldSubmitted) {
+                                return TextField(
+                                  controller: controller,
+                                  focusNode: focusNode,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Producto (buscar...)',
+                                  ),
+                                );
+                              },
+                        ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _qtyController,
+                        decoration: const InputDecoration(
+                          labelText: 'Cantidad',
+                        ),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
                         ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedShrinkageType,
+                        decoration: const InputDecoration(
+                          labelText: 'Tipo de merma',
+                        ),
+                        items: shrinkageTypes
+                            .map(
+                              (type) => DropdownMenuItem(
+                                value: type,
+                                child: Text(type),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          if (value == null) return;
+                          setState(() => selectedShrinkageType = value);
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _observationController,
+                        decoration: const InputDecoration(
+                          labelText: 'Observation',
+                        ),
+                        minLines: 2,
+                        maxLines: 3,
+                        onChanged: (_) => setState(() {}),
+                      ),
+                      if (vm.batchPreview.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        const Text('Revisión FIFO antes del ajuste'),
+                        const SizedBox(height: 8),
+                        DropdownButtonFormField<String>(
+                          initialValue: vm.selectedBatchId,
+                          decoration: const InputDecoration(
+                            labelText: 'Lote exacto a ajustar',
+                          ),
+                          items: vm.batchPreview
+                              .map(
+                                (batch) => DropdownMenuItem<String>(
+                                  value: batch.id,
+                                  child: Text(
+                                    '${batch.batchNumber} • ${_formatDate(batch.expirationDate)} • ${batch.remainingStock.toStringAsFixed(2)} u',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              )
+                              .toList(growable: false),
+                          onChanged: vm.selectBatch,
+                        ),
+                        const SizedBox(height: 8),
+                        ...vm.batchPreview.asMap().entries.map(
+                          (entry) => ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(
+                              'FIFO ${entry.key + 1}: ${entry.value.batchNumber}',
+                            ),
+                            subtitle: Text(
+                              'Stock ${entry.value.remainingStock.toStringAsFixed(2)} • Valor C\$${entry.value.cost.toStringAsFixed(2)}',
+                            ),
+                          ),
+                        ),
+                      ],
                       if (vm.forensicNotice != null)
                         Padding(
                           padding: const EdgeInsets.only(top: 8),
@@ -159,26 +250,45 @@ class _ShrinkageViewState extends State<ShrinkageView> {
                   child: const Text('CANCELAR'),
                 ),
                 ElevatedButton(
-                  onPressed: (vm.isLoading ||
-                          selectedInsumo == null ||
-                          (vm.batchPreview.isNotEmpty && vm.selectedBatchId == null))
+                  onPressed:
+                      (vm.isLoading ||
+                          (selectedTargetType == ShrinkageTargetType.insumo
+                              ? selectedInsumo == null
+                              : selectedProduct == null) ||
+                          _observationController.text.trim().isEmpty ||
+                          (selectedTargetType == ShrinkageTargetType.insumo &&
+                              vm.batchPreview.isNotEmpty &&
+                              vm.selectedBatchId == null))
                       ? null
                       : () async {
                           final confirmed = await _confirmDestructiveAdjustment(
                             context,
                             vm,
-                            selectedInsumo!,
+                            selectedTargetType == ShrinkageTargetType.insumo
+                                ? selectedInsumo!.name
+                                : selectedProduct!.name,
                             double.tryParse(_qtyController.text) ?? 0,
                           );
                           if (!confirmed) {
                             return;
                           }
 
-                          await vm.recordShrinkage(
-                            insumoId: selectedInsumo!.id,
-                            quantity: double.tryParse(_qtyController.text) ?? 0,
-                            shrinkageType: selectedShrinkageType,
-                          );
+                          final quantity = double.tryParse(_qtyController.text) ?? 0;
+                          if (selectedTargetType == ShrinkageTargetType.insumo) {
+                            await vm.recordShrinkage(
+                              insumoId: selectedInsumo!.id,
+                              quantity: quantity,
+                              shrinkageType: selectedShrinkageType,
+                              observation: _observationController.text,
+                            );
+                          } else {
+                            await vm.recordProductShrinkage(
+                              productId: selectedProduct!.id,
+                              quantity: quantity,
+                              shrinkageType: selectedShrinkageType,
+                              observation: _observationController.text,
+                            );
+                          }
                           if (context.mounted) {
                             Navigator.pop(context);
                           }
@@ -202,7 +312,7 @@ class _ShrinkageViewState extends State<ShrinkageView> {
   Future<bool> _confirmDestructiveAdjustment(
     BuildContext context,
     ShrinkageViewModel viewModel,
-    Insumo insumo,
+    String targetName,
     double quantity,
   ) async {
     final selectedBatch = viewModel.selectedBatch;
@@ -221,7 +331,7 @@ class _ShrinkageViewState extends State<ShrinkageView> {
                 style: Theme.of(dialogContext).textTheme.titleLarge,
               ),
               const SizedBox(height: 12),
-              Text('Insumo: ${insumo.name}'),
+              Text('Objetivo: $targetName'),
               if (selectedBatch != null) ...[
                 const SizedBox(height: 8),
                 Text('Batch FIFO seleccionado: ${selectedBatch.batchNumber}'),

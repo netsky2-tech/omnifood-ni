@@ -1,6 +1,7 @@
 {
   "moduleFileExtensions": ["js", "json", "ts"],
   "rootDir": "../src",
+  "setupFiles": ["<rootDir>/../test/setup-test-env.ts"],
   "testEnvironment": "node",
   "testMatch": ["**/*.db.spec.ts"],
   "transform": {

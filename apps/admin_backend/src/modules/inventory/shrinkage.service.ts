@@ -8,50 +8,62 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Insumo } from './entities/insumo.entity';
+import { Product } from './entities/product.entity';
 import {
   InventoryMovement,
   MovementType,
 } from './entities/inventory-movement.entity';
-import { ForensicAlertService } from './forensic-alert.service';
+import {
+  ForensicAlertService,
+  shouldCreateHighValueInventoryAlert,
+} from './forensic-alert.service';
+import { RecipeService } from './recipe.service';
+import { BomExplosionService } from './bom-explosion.service';
+import {
+  MERMA_REASONS,
+  normalizeMermaReason,
+  requireMermaObservation,
+} from './merma-taxonomy';
 
 const SCALE_4 = 4;
-const HIGH_VALUE_ADJUSTMENT_THRESHOLD_NIO = 1500;
-
-const SHRINKAGE_TYPES = {
-  VENCIMIENTO: 'VENCIMIENTO',
-  DESECHO_COCINA: 'DESECHO_COCINA',
-  DETERIORO_BODEGA: 'DETERIORO_BODEGA',
-  CORTESIA_DEGUSTACION: 'CORTESIA_DEGUSTACION',
-} as const;
-
-type ShrinkageType = (typeof SHRINKAGE_TYPES)[keyof typeof SHRINKAGE_TYPES];
-
 const round4 = (value: number): number => Number(value.toFixed(SCALE_4));
 
-const isValidShrinkageType = (value: string): value is ShrinkageType =>
-  Object.values(SHRINKAGE_TYPES).includes(value as ShrinkageType);
+export interface RecordProductShrinkageInput {
+  productId: string;
+  quantity: number;
+  reason: string;
+  observation: string;
+  recipeVersionId?: string;
+}
 
 @Injectable()
 export class ShrinkageService {
   constructor(
     @InjectRepository(Insumo)
     private readonly insumoRepo: Repository<Insumo>,
+    @InjectRepository(Product)
+    private readonly productRepo: Repository<Product>,
     @InjectRepository(InventoryMovement)
     private readonly movementRepo: Repository<InventoryMovement>,
     private readonly dataSource: DataSource,
     private readonly forensicAlertService: ForensicAlertService,
+    private readonly recipeService: RecipeService,
+    private readonly bomExplosionService: BomExplosionService,
   ) {}
 
   async recordShrinkage(
     insumoId: string,
     quantity: number,
     reason: string,
+    observation: string,
   ): Promise<Insumo> {
-    if (!isValidShrinkageType(reason)) {
+    const canonicalReason = normalizeMermaReason(reason);
+    if (canonicalReason == null) {
       throw new BadRequestException(
-        `Invalid shrinkage type: ${reason}. Allowed: ${Object.values(SHRINKAGE_TYPES).join(', ')}`,
+        `Invalid shrinkage type: ${reason}. Allowed: ${Object.values(MERMA_REASONS).join(', ')}`,
       );
     }
+    const requiredObservation = requireMermaObservation(observation);
 
     const normalizedQuantity = round4(quantity);
 
@@ -80,36 +92,165 @@ export class ShrinkageService {
         averageCostAfterNio: unitCostNio,
         unitCostNio,
         totalCostNio,
-        reason: reason,
+        reason: canonicalReason,
+        observation: requiredObservation,
         sourceDocumentType: 'SHRINKAGE',
       });
       await manager.save(movement);
 
-      if (totalCostNio > HIGH_VALUE_ADJUSTMENT_THRESHOLD_NIO) {
-        await this.forensicAlertService.create(
-          {
-            tenantId: insumo.tenant_id,
-            alertType: 'HIGH_VALUE_COUNT_ADJUSTMENT',
-            severity: 'HIGH',
-            actorRole: 'ADMIN',
-            message: `High-value shrinkage detected for ${insumo.name}`,
-            metadata: {
-              movementType: MovementType.SHRINKAGE,
-              insumoId: insumo.id,
-              insumoName: insumo.name,
-              amount: normalizedQuantity,
-              valuationNio: totalCostNio,
-              actorRole: 'OPERATOR',
-              originDocumentRef: `shrinkage:${movement.id}`,
-              operatorNotice:
-                'Adjustment recorded. Admin has been notified for forensic review.',
-            },
-          },
-          manager,
-        );
-      }
+      await this.createHighValueShrinkageAlertIfNeeded({
+        tenantId: insumo.tenant_id,
+        insumoId: insumo.id,
+        insumoName: insumo.name,
+        quantity: normalizedQuantity,
+        totalCostNio,
+        originDocumentRef: `shrinkage:${movement.id}`,
+        manager,
+      });
 
       return updatedInsumo;
     });
+  }
+
+  async recordProductShrinkage(
+    input: RecordProductShrinkageInput,
+  ): Promise<Product> {
+    if (!input.productId.trim()) {
+      throw new BadRequestException(
+        'productId is required for product shrinkage',
+      );
+    }
+
+    const canonicalReason = normalizeMermaReason(input.reason);
+    if (canonicalReason == null) {
+      throw new BadRequestException(
+        `Invalid shrinkage type: ${input.reason}. Allowed: ${Object.values(MERMA_REASONS).join(', ')}`,
+      );
+    }
+    const requiredObservation = requireMermaObservation(input.observation);
+    const normalizedQuantity = round4(input.quantity);
+
+    return this.dataSource.transaction(async (manager) => {
+      const product = await manager.findOne(Product, {
+        where: { id: input.productId },
+      });
+      if (!product) {
+        throw new NotFoundException(`Product ${input.productId} not found`);
+      }
+
+      const recipeVersionId =
+        input.recipeVersionId ??
+        (
+          await this.recipeService.findActiveVersion(
+            product.tenant_id,
+            product.id,
+          )
+        )?.id;
+      if (!recipeVersionId) {
+        throw new BadRequestException(
+          `Product ${product.id} does not have an active recipe for shrinkage explosion`,
+        );
+      }
+
+      const snapshot = await this.recipeService.getSnapshot(
+        recipeVersionId,
+        product.tenant_id,
+        product.id,
+      );
+      const exploded = this.bomExplosionService.explode({
+        snapshotComponents: snapshot.components,
+        orderQuantity: normalizedQuantity,
+      });
+
+      for (const [insumoId, explodedQuantity] of exploded.entries()) {
+        const normalizedIngredientQuantity = round4(explodedQuantity);
+        const insumo = await manager.findOne(Insumo, {
+          where: { id: insumoId },
+        });
+        if (!insumo) {
+          throw new NotFoundException(`Insumo ${insumoId} not found`);
+        }
+
+        const previousStock = Number(insumo.stock);
+        const newStock = round4(previousStock - normalizedIngredientQuantity);
+        const unitCostNio = round4(Number(insumo.averageCost));
+        const totalCostNio = round4(normalizedIngredientQuantity * unitCostNio);
+
+        insumo.stock = newStock;
+        insumo.existenciaActual = newStock;
+        await manager.save(insumo);
+
+        const movement = manager.create(InventoryMovement, {
+          tenant_id: insumo.tenant_id,
+          insumoId: insumo.id,
+          type: MovementType.SHRINKAGE,
+          quantity: -normalizedIngredientQuantity,
+          previousStock,
+          newStock,
+          averageCostAfterNio: unitCostNio,
+          unitCostNio,
+          totalCostNio,
+          reason: canonicalReason,
+          observation: requiredObservation,
+          sourceDocumentType: 'SHRINKAGE',
+        });
+        await manager.save(movement);
+
+        await this.createHighValueShrinkageAlertIfNeeded({
+          tenantId: insumo.tenant_id,
+          insumoId: insumo.id,
+          insumoName: insumo.name,
+          quantity: normalizedIngredientQuantity,
+          totalCostNio,
+          originDocumentRef: `product-shrinkage:${product.id}:${movement.id}`,
+          manager,
+        });
+      }
+
+      return product;
+    });
+  }
+
+  private async createHighValueShrinkageAlertIfNeeded(input: {
+    tenantId: string;
+    insumoId: string;
+    insumoName: string;
+    quantity: number;
+    totalCostNio: number;
+    originDocumentRef: string;
+    manager: Parameters<ForensicAlertService['create']>[1];
+  }): Promise<void> {
+    if (
+      !shouldCreateHighValueInventoryAlert({
+        valuationNio: input.totalCostNio,
+        movementType: MovementType.SHRINKAGE,
+        sourceDocumentType: 'SHRINKAGE',
+      })
+    ) {
+      return;
+    }
+
+    await this.forensicAlertService.create(
+      {
+        tenantId: input.tenantId,
+        alertType: 'HIGH_VALUE_COUNT_ADJUSTMENT',
+        severity: 'HIGH',
+        actorRole: 'ADMIN',
+        message: `High-value shrinkage detected for ${input.insumoName}`,
+        metadata: {
+          movementType: MovementType.SHRINKAGE,
+          sourceDocumentType: 'SHRINKAGE',
+          insumoId: input.insumoId,
+          insumoName: input.insumoName,
+          amount: input.quantity,
+          valuationNio: input.totalCostNio,
+          actorRole: 'OPERATOR',
+          originDocumentRef: input.originDocumentRef,
+          operatorNotice:
+            'Adjustment recorded. Admin has been notified for forensic review.',
+        },
+      },
+      input.manager,
+    );
   }
 }

@@ -123,6 +123,9 @@ class InventoryMapper {
       timestamp: DateTime.parse(entity.timestamp),
       reason: entity.reason,
       userId: entity.userId,
+      unitCostNio: entity.unitCostNio,
+      sourceDocumentType: entity.sourceDocumentType,
+      sourceDocumentId: entity.sourceDocumentId,
       batchDeductions: batchDeductions,
     );
   }
@@ -145,6 +148,9 @@ class InventoryMapper {
       timestamp: domain.timestamp.toIso8601String(),
       reason: domain.reason,
       userId: domain.userId,
+      unitCostNio: domain.unitCostNio,
+      sourceDocumentType: domain.sourceDocumentType,
+      sourceDocumentId: domain.sourceDocumentId,
       batch_deductions: batchDeductionsJson,
     );
   }

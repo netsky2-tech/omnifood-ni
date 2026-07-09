@@ -1,17 +1,14 @@
 import 'package:flutter/foundation.dart';
 import '../../../../domain/models/inventory/batch.dart';
 import '../../../../domain/models/inventory/insumo.dart';
+import '../../../../domain/models/inventory/product.dart';
 import '../../../../domain/repositories/inventory/inventory_repository.dart';
 import '../../../../domain/services/inventory/movement_engine.dart';
-
-const shrinkageTypes = <String>[
-  'VENCIMIENTO',
-  'DESECHO_COCINA',
-  'DETERIORO_BODEGA',
-  'CORTESIA_DEGUSTACION',
-];
+import 'merma_taxonomy.dart';
 
 const highValueAdjustmentThresholdNio = 1500.0;
+
+enum ShrinkageTargetType { insumo, product }
 
 class ShrinkageViewModel with ChangeNotifier {
   final InventoryRepository repository;
@@ -19,6 +16,9 @@ class ShrinkageViewModel with ChangeNotifier {
 
   List<Insumo> _insumos = [];
   List<Insumo> get insumos => _insumos;
+
+  List<Product> _products = [];
+  List<Product> get products => _products;
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
@@ -33,16 +33,21 @@ class ShrinkageViewModel with ChangeNotifier {
   String? get selectedBatchId => _selectedBatchId;
 
   Batch? get selectedBatch => _batchPreview.cast<Batch?>().firstWhere(
-        (batch) => batch?.id == _selectedBatchId,
-        orElse: () => null,
-      );
+    (batch) => batch?.id == _selectedBatchId,
+    orElse: () => null,
+  );
 
   ShrinkageViewModel(this.repository, this.movementEngine);
 
   Future<void> loadInsumos() async {
     _isLoading = true;
     notifyListeners();
-    _insumos = await repository.getActiveInsumos();
+    final results = await Future.wait([
+      repository.getActiveInsumos(),
+      repository.getActiveProducts(),
+    ]);
+    _insumos = results[0] as List<Insumo>;
+    _products = results[1] as List<Product>;
     _isLoading = false;
     notifyListeners();
   }
@@ -71,17 +76,22 @@ class ShrinkageViewModel with ChangeNotifier {
     required String insumoId,
     required double quantity,
     required String shrinkageType,
+    required String observation,
   }) async {
-    if (!shrinkageTypes.contains(shrinkageType)) {
+    final canonicalReason = normalizeMermaReason(shrinkageType);
+    if (canonicalReason == null) {
       throw ArgumentError('Invalid shrinkage type');
     }
+    final requiredObservation = requireMermaObservation(observation);
 
     _isLoading = true;
     notifyListeners();
     try {
       final insumo = _insumos.firstWhere((item) => item.id == insumoId);
       if (_batchPreview.isNotEmpty && _selectedBatchId == null) {
-        throw StateError('A batch selection is required before recording shrinkage');
+        throw StateError(
+          'A batch selection is required before recording shrinkage',
+        );
       }
 
       final valuationNio = quantity * insumo.averageCost;
@@ -90,11 +100,42 @@ class ShrinkageViewModel with ChangeNotifier {
           : null;
 
       final selectedBatchNumber = selectedBatch?.batchNumber;
-      final reason = selectedBatchNumber == null
-          ? shrinkageType
-          : '$shrinkageType | batch:$selectedBatchNumber';
+      final reasonParts = <String>[
+        canonicalReason,
+        'observation:$requiredObservation',
+        if (selectedBatchNumber != null) 'batch:$selectedBatchNumber',
+      ];
+      final reason = reasonParts.join(' | ');
 
       await movementEngine.recordShrinkage(insumoId, quantity, reason);
+      await loadInsumos();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> recordProductShrinkage({
+    required String productId,
+    required double quantity,
+    required String shrinkageType,
+    required String observation,
+  }) async {
+    final canonicalReason = normalizeMermaReason(shrinkageType);
+    if (canonicalReason == null) {
+      throw ArgumentError('Invalid shrinkage type');
+    }
+    final requiredObservation = requireMermaObservation(observation);
+
+    _isLoading = true;
+    notifyListeners();
+    try {
+      final reason = '$canonicalReason | observation:$requiredObservation';
+      await movementEngine.recordProductShrinkage(
+        productId: productId,
+        quantity: quantity,
+        reason: reason,
+      );
       await loadInsumos();
     } finally {
       _isLoading = false;

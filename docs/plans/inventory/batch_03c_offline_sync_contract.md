@@ -3,15 +3,16 @@
 Contrato determinista para la sincronización offline (Topología B). Define cómo la tablet transmite movimientos a la nube de forma reproducible, sin corrupción por latencia/conectividad intermitente. Cierra UC-02.
 
 ## Estado actual
-- Sync de catálogo existe; sync de movimientos no tiene contrato determinista formal.
+- **Cerrado** por la cadena **PR #67 / #71 / #73** y merge final **PR #75**.
+- El contrato determinista de movimientos quedó implementado con deltas-only, idempotencia, secuencia local por terminal, reintentos granulares, parsing determinista y cobertura route/e2e.
 
 ## Brechas a remediar
-- [ ] **Clave de idempotencia**: cada movimiento local genera un idempotency key único (ej. `{terminal_id}:{seq_local}`) para que la nube rechace duplicados.
-- [ ] **Secuencia por terminal de origen**: cada terminal mantiene su propio contador secuencial estricto; la nube procesa por orden de secuencia de origen, no por timestamp de llegada.
-- [ ] **Deltas, no absolutos**: la tablet nunca transmite "stock actual"; transmite deltas netos (PRD §1 Topología B, UC-02).
-- [ ] **Reintentos y duplicados**: política de retry con backoff; la nube debe responder idéntico ante retransmisiones (idempotencia).
-- [ ] **Fallo parcial**: política explícita — qué pasa si un lote parcial se acepta y otro se rechaza (registro de rechazo, reenvío selectivo).
-- [ ] **Orden en la nube**: la nube no reordena por timestamp absoluto; respeta la secuencia de origen por terminal para preservar balances intermedios (UC-02).
+- [x] **Clave de idempotencia**: cada movimiento local genera un idempotency key único (ej. `{terminal_id}:{seq_local}`) para que la nube rechace duplicados.
+- [x] **Secuencia por terminal de origen**: cada terminal mantiene su propio contador secuencial estricto; la nube procesa por orden de secuencia de origen, no por timestamp de llegada.
+- [x] **Deltas, no absolutos**: la tablet nunca transmite "stock actual"; transmite deltas netos (PRD §1 Topología B, UC-02).
+- [x] **Reintentos y duplicados**: política de retry con backoff; la nube debe responder idéntico ante retransmisiones (idempotencia).
+- [x] **Fallo parcial**: política explícita — qué pasa si un lote parcial se acepta y otro se rechaza (registro de rechazo, reenvío selectivo).
+- [x] **Orden en la nube**: la nube no reordena por timestamp absoluto; respeta la secuencia de origen por terminal para preservar balances intermedios (UC-02).
 
 ## Alcance técnico
 
@@ -35,11 +36,11 @@ Contrato determinista para la sincronización offline (Topología B). Define có
 - FIFO por ítem al aplicar deltas concurrentes desde múltiples terminales.
 
 ## DoD (Criterios de aceptación)
-- [ ] Cada movimiento local lleva idempotency key + seq de terminal.
-- [ ] Nube rechaza duplicados (test: retransmitir lote → sin duplicados en Kardex).
-- [ ] Orden preservado: test con seq desordenada por red → la nube aplica en orden de origen.
-- [ ] Política de fallo parcial documentada y testeada (un ítem rechazado no aborta el lote entero).
-- [ ] Verificar que ningún endpoint acepta "stock actual" absoluto.
+- [x] Cada movimiento local lleva idempotency key + seq de terminal.
+- [x] Nube rechaza duplicados (test: retransmitir lote → sin duplicados en Kardex).
+- [x] Orden preservado: test con seq desordenada por red → la nube aplica en orden de origen.
+- [x] Política de fallo parcial documentada y testeada (un ítem rechazado no aborta el lote entero).
+- [x] Verificar que ningún endpoint acepta "stock actual" absoluto.
 
 ## PRD cubierto
 §1 Topología B · UC-02 Sync diferida · NFR Concurrencia

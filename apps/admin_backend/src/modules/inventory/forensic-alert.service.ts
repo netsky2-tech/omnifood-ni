@@ -16,6 +16,46 @@ export interface ForensicAlertInput {
   metadata: Record<string, unknown>;
 }
 
+const HIGH_VALUE_INVENTORY_ALERT_THRESHOLD_NIO = 1500;
+
+const QUALIFYING_HIGH_VALUE_DOCUMENT_TYPES = new Set([
+  'AJUSTE_CONTEO',
+  'AJUSTE_MANUAL',
+  'SHRINKAGE',
+  'SALIDA_MERMA',
+]);
+
+const EXCLUDED_HIGH_VALUE_DOCUMENT_TYPES = new Set([
+  'SALE',
+  'SALE_CANCEL',
+  'SALIDA_VENTA',
+  'PRODUCTION',
+  'ENTRADA_PRODUCCION',
+  'SALIDA_BOM_PRODUCCION',
+]);
+
+export interface HighValueInventoryAlertCandidate {
+  valuationNio: number;
+  movementType: string;
+  sourceDocumentType: string;
+}
+
+export function shouldCreateHighValueInventoryAlert(
+  candidate: HighValueInventoryAlertCandidate,
+): boolean {
+  if (
+    Math.abs(candidate.valuationNio) < HIGH_VALUE_INVENTORY_ALERT_THRESHOLD_NIO
+  ) {
+    return false;
+  }
+
+  if (EXCLUDED_HIGH_VALUE_DOCUMENT_TYPES.has(candidate.sourceDocumentType)) {
+    return false;
+  }
+
+  return QUALIFYING_HIGH_VALUE_DOCUMENT_TYPES.has(candidate.sourceDocumentType);
+}
+
 @Injectable()
 export class ForensicAlertService {
   private readonly logger = new Logger(ForensicAlertService.name);
