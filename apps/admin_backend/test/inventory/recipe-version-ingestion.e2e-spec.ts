@@ -6,6 +6,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import * as request from 'supertest';
 import { App } from 'supertest/types';
 import { InventoryMovementController } from '../../src/modules/inventory/inventory-movement.controller';
+import { CountSessionService } from '../../src/modules/inventory/count-session.service';
 import { FxRateResolverService } from '../../src/modules/inventory/fx-rate-resolver.service';
 import { FX_RATE_RESOLVER } from '../../src/modules/inventory/inventory-purchase.service';
 import { InventoryPurchaseService } from '../../src/modules/inventory/inventory-purchase.service';
@@ -157,6 +158,12 @@ describe('Recipe version ingestion route (integration)', () => {
         {
           provide: RecipeService,
           useValue: recipeService,
+        },
+        {
+          provide: CountSessionService,
+          useValue: {
+            replayCountSession: jest.fn(),
+          },
         },
         TenantInterceptor,
         AuthGuard,
