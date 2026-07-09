@@ -254,13 +254,19 @@ describe('InventoryController', () => {
 
   describe('recordShrinkage', () => {
     it('should call shrinkageService recordShrinkage', async () => {
-      const dto = { insumoId: 'ins-123', quantity: 5, reason: 'Test' };
+      const dto = {
+        insumoId: 'ins-123',
+        quantity: 5,
+        reason: 'MALA_PREPARACION',
+        observation: 'Prep loss confirmed',
+      };
       await controller.recordShrinkage(dto);
       // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(shrinkageService.recordShrinkage).toHaveBeenCalledWith(
         'ins-123',
         5,
-        'Test',
+        'MALA_PREPARACION',
+        'Prep loss confirmed',
       );
     });
   });

@@ -26,6 +26,7 @@ import { Roles } from '../../core/decorators/roles.decorator';
 import { UserRole } from '../identity/entities/user.entity';
 import { FxRateResolverService } from './fx-rate-resolver.service';
 import { GetBcnFxRateQueryDto } from './dto/get-bcn-fx-rate-query.dto';
+import { CreateShrinkageDto } from './dto/create-shrinkage.dto';
 
 @Controller('inventory')
 @UseInterceptors(TenantInterceptor)
@@ -122,13 +123,12 @@ export class InventoryMovementController {
   }
 
   @Post('shrinkage')
-  async recordShrinkage(
-    @Body() dto: { insumoId: string; quantity: number; reason: string },
-  ) {
+  async recordShrinkage(@Body() dto: CreateShrinkageDto) {
     return this.shrinkageService.recordShrinkage(
       dto.insumoId,
       dto.quantity,
       dto.reason,
+      dto.observation,
     );
   }
 

@@ -3,13 +3,7 @@ import '../../../../domain/models/inventory/batch.dart';
 import '../../../../domain/models/inventory/insumo.dart';
 import '../../../../domain/repositories/inventory/inventory_repository.dart';
 import '../../../../domain/services/inventory/movement_engine.dart';
-
-const shrinkageTypes = <String>[
-  'VENCIMIENTO',
-  'DESECHO_COCINA',
-  'DETERIORO_BODEGA',
-  'CORTESIA_DEGUSTACION',
-];
+import 'merma_taxonomy.dart';
 
 const highValueAdjustmentThresholdNio = 1500.0;
 
@@ -33,9 +27,9 @@ class ShrinkageViewModel with ChangeNotifier {
   String? get selectedBatchId => _selectedBatchId;
 
   Batch? get selectedBatch => _batchPreview.cast<Batch?>().firstWhere(
-        (batch) => batch?.id == _selectedBatchId,
-        orElse: () => null,
-      );
+    (batch) => batch?.id == _selectedBatchId,
+    orElse: () => null,
+  );
 
   ShrinkageViewModel(this.repository, this.movementEngine);
 
@@ -71,17 +65,22 @@ class ShrinkageViewModel with ChangeNotifier {
     required String insumoId,
     required double quantity,
     required String shrinkageType,
+    required String observation,
   }) async {
-    if (!shrinkageTypes.contains(shrinkageType)) {
+    final canonicalReason = normalizeMermaReason(shrinkageType);
+    if (canonicalReason == null) {
       throw ArgumentError('Invalid shrinkage type');
     }
+    final requiredObservation = requireMermaObservation(observation);
 
     _isLoading = true;
     notifyListeners();
     try {
       final insumo = _insumos.firstWhere((item) => item.id == insumoId);
       if (_batchPreview.isNotEmpty && _selectedBatchId == null) {
-        throw StateError('A batch selection is required before recording shrinkage');
+        throw StateError(
+          'A batch selection is required before recording shrinkage',
+        );
       }
 
       final valuationNio = quantity * insumo.averageCost;
@@ -90,9 +89,12 @@ class ShrinkageViewModel with ChangeNotifier {
           : null;
 
       final selectedBatchNumber = selectedBatch?.batchNumber;
-      final reason = selectedBatchNumber == null
-          ? shrinkageType
-          : '$shrinkageType | batch:$selectedBatchNumber';
+      final reasonParts = <String>[
+        canonicalReason,
+        'observation:$requiredObservation',
+        if (selectedBatchNumber != null) 'batch:$selectedBatchNumber',
+      ];
+      final reason = reasonParts.join(' | ');
 
       await movementEngine.recordShrinkage(insumoId, quantity, reason);
       await loadInsumos();

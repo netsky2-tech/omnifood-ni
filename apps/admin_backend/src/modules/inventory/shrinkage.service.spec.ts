@@ -51,8 +51,14 @@ describe('ShrinkageService', () => {
 
   it('rejects non-whitelisted shrinkage types', async () => {
     await expect(
-      service.recordShrinkage('ins-1', 2.3456, 'UNKNOWN_TYPE'),
+      service.recordShrinkage('ins-1', 2.3456, 'UNKNOWN_TYPE', 'Spoiled'),
     ).rejects.toThrow('Invalid shrinkage type');
+  });
+
+  it('rejects shrinkage without an observation', async () => {
+    await expect(
+      service.recordShrinkage('ins-1', 2.3456, 'DESECHO_COCINA', '  '),
+    ).rejects.toThrow('Merma observation is required');
   });
 
   it('posts shrinkage with 4-decimal costing and emits alert for high value adjustment', async () => {
@@ -69,7 +75,12 @@ describe('ShrinkageService', () => {
       .mockResolvedValueOnce({ id: 'ins-1', stock: 97.6544 })
       .mockResolvedValueOnce({ id: 'mov-1' });
 
-    await service.recordShrinkage('ins-1', 2.3456, 'DESECHO_COCINA');
+    await service.recordShrinkage(
+      'ins-1',
+      2.3456,
+      'MALA_PREPARACION',
+      'Batch spoiled during prep',
+    );
 
     expect(create).toHaveBeenCalledWith(
       InventoryMovement,
@@ -78,6 +89,8 @@ describe('ShrinkageService', () => {
         unitCostNio: 800,
         totalCostNio: 1876.48,
         averageCostAfterNio: 800,
+        reason: 'DESECHO_COCINA',
+        observation: 'Batch spoiled during prep',
       }),
     );
     expect(forensicAlertService.create).toHaveBeenCalledTimes(1);

@@ -13,23 +13,16 @@ import {
   MovementType,
 } from './entities/inventory-movement.entity';
 import { ForensicAlertService } from './forensic-alert.service';
+import {
+  MERMA_REASONS,
+  normalizeMermaReason,
+  requireMermaObservation,
+} from './merma-taxonomy';
 
 const SCALE_4 = 4;
 const HIGH_VALUE_ADJUSTMENT_THRESHOLD_NIO = 1500;
 
-const SHRINKAGE_TYPES = {
-  VENCIMIENTO: 'VENCIMIENTO',
-  DESECHO_COCINA: 'DESECHO_COCINA',
-  DETERIORO_BODEGA: 'DETERIORO_BODEGA',
-  CORTESIA_DEGUSTACION: 'CORTESIA_DEGUSTACION',
-} as const;
-
-type ShrinkageType = (typeof SHRINKAGE_TYPES)[keyof typeof SHRINKAGE_TYPES];
-
 const round4 = (value: number): number => Number(value.toFixed(SCALE_4));
-
-const isValidShrinkageType = (value: string): value is ShrinkageType =>
-  Object.values(SHRINKAGE_TYPES).includes(value as ShrinkageType);
 
 @Injectable()
 export class ShrinkageService {
@@ -46,12 +39,15 @@ export class ShrinkageService {
     insumoId: string,
     quantity: number,
     reason: string,
+    observation: string,
   ): Promise<Insumo> {
-    if (!isValidShrinkageType(reason)) {
+    const canonicalReason = normalizeMermaReason(reason);
+    if (canonicalReason == null) {
       throw new BadRequestException(
-        `Invalid shrinkage type: ${reason}. Allowed: ${Object.values(SHRINKAGE_TYPES).join(', ')}`,
+        `Invalid shrinkage type: ${reason}. Allowed: ${Object.values(MERMA_REASONS).join(', ')}`,
       );
     }
+    const requiredObservation = requireMermaObservation(observation);
 
     const normalizedQuantity = round4(quantity);
 
@@ -80,7 +76,8 @@ export class ShrinkageService {
         averageCostAfterNio: unitCostNio,
         unitCostNio,
         totalCostNio,
-        reason: reason,
+        reason: canonicalReason,
+        observation: requiredObservation,
         sourceDocumentType: 'SHRINKAGE',
       });
       await manager.save(movement);
