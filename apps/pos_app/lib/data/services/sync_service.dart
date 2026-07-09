@@ -697,11 +697,17 @@ class SyncService {
     final sourceDocumentType = _tryReadField(movement, 'sourceDocumentType');
     final sourceDocumentId = _tryReadField(movement, 'sourceDocumentId');
 
-    return {
-      'unitCostNio': ?unitCostNio,
-      'sourceDocumentType': ?sourceDocumentType,
-      'sourceDocumentId': ?sourceDocumentId,
-    };
+    final fields = <String, Object>{};
+    if (unitCostNio != null) {
+      fields['unitCostNio'] = unitCostNio;
+    }
+    if (sourceDocumentType != null) {
+      fields['sourceDocumentType'] = sourceDocumentType;
+    }
+    if (sourceDocumentId != null) {
+      fields['sourceDocumentId'] = sourceDocumentId;
+    }
+    return fields;
   }
 
   dynamic _tryReadField(dynamic target, String fieldName) {
