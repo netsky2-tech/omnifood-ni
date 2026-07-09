@@ -43,6 +43,10 @@ interface IsolatedSchemaContext {
   schema: string;
 }
 
+interface PgIndexRow {
+  indexdef: string;
+}
+
 async function withIsolatedSchema(
   schemaPrefix: string,
   assertion: (context: IsolatedSchemaContext) => Promise<void>,
@@ -160,7 +164,7 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
             }),
           );
 
-          const indexes = await queryRunner.query(
+          const indexes = (await queryRunner.query(
             `
             SELECT indexdef
             FROM pg_indexes
@@ -169,9 +173,9 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
               AND indexname = 'uq_inventory_sync_outbox_stream_sequence'
           `,
             [schema],
-          );
+          )) as PgIndexRow[];
           expect(indexes).toHaveLength(1);
-          expect(String(indexes[0].indexdef)).toContain('UNIQUE INDEX');
+          expect(indexes[0]?.indexdef).toContain('UNIQUE INDEX');
 
           const result = await service.syncBatch('tenant-db', [
             {
