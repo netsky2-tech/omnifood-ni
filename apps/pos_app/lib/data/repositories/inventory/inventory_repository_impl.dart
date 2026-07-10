@@ -37,6 +37,7 @@ import '../../daos/inventory/purchase_dao.dart';
 import '../../daos/inventory/movement_sync_state_dao.dart';
 import '../../daos/inventory/recipe_version_document_dao.dart';
 import '../../daos/inventory/production_order_document_dao.dart';
+import '../../daos/inventory/production_transaction_dao.dart';
 import '../../models/inventory/recipe_version_document_entity.dart';
 import '../../models/inventory/count_line_entity.dart';
 import '../../models/inventory/count_session_document_entity.dart';
@@ -61,6 +62,7 @@ class InventoryRepositoryImpl
   final PurchaseDao purchaseDao;
   final RecipeVersionDocumentDao recipeVersionDocumentDao;
   final ProductionOrderDocumentDao productionOrderDocumentDao;
+  final ProductionTransactionDao? productionTransactionDao;
   final Dio dio;
   final AppDatabase _database;
 
@@ -79,6 +81,7 @@ class InventoryRepositoryImpl
     required this.purchaseDao,
     required this.recipeVersionDocumentDao,
     required this.productionOrderDocumentDao,
+    this.productionTransactionDao,
     required this.dio,
     required AppDatabase database,
   }) : _database = database;
@@ -775,27 +778,34 @@ class InventoryRepositoryImpl
   }
 
   @override
+  Future<int> reserveProductionSourceSequence(String terminalId) async {
+    final currentMax =
+        await productionOrderDocumentDao.findMaxSourceSequence(terminalId) ?? 0;
+    return currentMax + 1;
+  }
+
+  @override
   Future<void> saveProductionOrderDocument(ProductionOrderDocument document) {
     return productionOrderDocumentDao.upsertDocument(
-      ProductionOrderDocumentEntity(
-        id: document.id,
-        recipeVersionId: document.recipeVersionId,
-        recipeProductId: document.recipeProductId,
-        recipeProductName: document.recipeProductName,
-        producedInsumoId: document.producedInsumoId,
-        producedInsumoName: document.producedInsumoName,
-        plannedQuantity: document.plannedQuantity,
-        actualQuantity: document.actualQuantity,
-        producedBatchNumber: document.producedBatchNumber,
-        producedExpirationDate: document.producedExpirationDate
-            .toIso8601String(),
-        operationDate: document.operationDate.toIso8601String(),
-        status: document.status,
-        varianceReason: document.varianceReason,
-        closedAt: document.closedAt?.toIso8601String(),
-        movementReferencesJson: document.encodeMovementReferences(),
-        isSynced: document.isSynced,
-      ),
+      _toProductionOrderDocumentEntity(document),
+    );
+  }
+
+  @override
+  Future<void> saveProductionCloseTransaction(
+    ProductionOrderDocument document,
+    List<InventoryMovement> movements, {
+    bool debugFailAfterWrites = false,
+  }) {
+    final transactionDao = productionTransactionDao;
+    if (transactionDao == null) {
+      throw StateError('ProductionTransactionDao is not configured');
+    }
+
+    return transactionDao.executeProductionCloseTransaction(
+      movements.map(InventoryMapper.toMovementEntity).toList(growable: false),
+      _toProductionOrderDocumentEntity(document),
+      debugFailAfterWrites,
     );
   }
 
@@ -904,6 +914,14 @@ class InventoryRepositoryImpl
       producedExpirationDate: DateTime.parse(entity.producedExpirationDate),
       operationDate: DateTime.parse(entity.operationDate),
       status: entity.status,
+      outcome: entity.outcome,
+      failureReason: entity.failureReason,
+      terminalId: entity.terminalId,
+      sourceSequence: entity.sourceSequence,
+      idempotencyKey: entity.idempotencyKey,
+      payloadHash: entity.payloadHash,
+      totalConsumedCostNio: entity.totalConsumedCostNio,
+      producedUnitCostNio: entity.producedUnitCostNio,
       varianceReason: entity.varianceReason,
       closedAt: entity.closedAt == null
           ? null
@@ -912,6 +930,37 @@ class InventoryRepositoryImpl
         entity.movementReferencesJson,
       ),
       isSynced: entity.isSynced,
+    );
+  }
+
+  ProductionOrderDocumentEntity _toProductionOrderDocumentEntity(
+    ProductionOrderDocument document,
+  ) {
+    return ProductionOrderDocumentEntity(
+      id: document.id,
+      recipeVersionId: document.recipeVersionId,
+      recipeProductId: document.recipeProductId,
+      recipeProductName: document.recipeProductName,
+      producedInsumoId: document.producedInsumoId,
+      producedInsumoName: document.producedInsumoName,
+      plannedQuantity: document.plannedQuantity,
+      actualQuantity: document.actualQuantity,
+      producedBatchNumber: document.producedBatchNumber,
+      producedExpirationDate: document.producedExpirationDate.toIso8601String(),
+      operationDate: document.operationDate.toIso8601String(),
+      status: document.status,
+      outcome: document.outcome,
+      failureReason: document.failureReason,
+      terminalId: document.terminalId,
+      sourceSequence: document.sourceSequence,
+      idempotencyKey: document.idempotencyKey,
+      payloadHash: document.payloadHash,
+      totalConsumedCostNio: document.totalConsumedCostNio,
+      producedUnitCostNio: document.producedUnitCostNio,
+      varianceReason: document.varianceReason,
+      closedAt: document.closedAt?.toIso8601String(),
+      movementReferencesJson: document.encodeMovementReferences(),
+      isSynced: document.isSynced,
     );
   }
 

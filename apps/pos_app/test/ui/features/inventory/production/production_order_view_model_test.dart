@@ -10,9 +10,11 @@ import 'package:pos_app/domain/services/inventory/movement_engine.dart';
 import 'package:pos_app/ui/features/inventory/production/production_order_view_model.dart';
 
 class _MockInventoryRepository extends Mock implements InventoryRepository {}
+
 class _MockMovementEngine extends Mock implements MovementEngine {}
 
-class _FakeProductionOrderDocument extends Fake implements ProductionOrderDocument {}
+class _FakeProductionOrderDocument extends Fake
+    implements ProductionOrderDocument {}
 
 void main() {
   late _MockInventoryRepository repository;
@@ -20,7 +22,13 @@ void main() {
   late ProductionOrderViewModel viewModel;
 
   const insumos = <Insumo>[
-    Insumo(id: 'coffee-base', name: 'Base de Café', consumptionUom: 'kg', stock: 12, averageCost: 90),
+    Insumo(
+      id: 'coffee-base',
+      name: 'Base de Café',
+      consumptionUom: 'kg',
+      stock: 12,
+      averageCost: 90,
+    ),
   ];
 
   final recipeVersion = RecipeVersionDocument(
@@ -53,31 +61,59 @@ void main() {
     when(() => repository.getActiveInsumos()).thenAnswer((_) async => insumos);
     when(() => repository.getActiveProducts()).thenAnswer(
       (_) async => const [
-        Product(id: 'prod-coffee', name: 'Jarabe Casa', uom: 'lt', stock: 0, averageCost: 0, sellPrice: 0),
+        Product(
+          id: 'prod-coffee',
+          name: 'Jarabe Casa',
+          uom: 'lt',
+          stock: 0,
+          averageCost: 0,
+          sellPrice: 0,
+        ),
       ],
     );
-    when(() => repository.getRecipeVersionDocuments(any())).thenAnswer((_) async => <RecipeVersionDocument>[]);
-    when(() => repository.getProductionOrderDocuments()).thenAnswer((_) async => <ProductionOrderDocument>[]);
-    when(() => repository.saveProductionOrderDocument(any())).thenAnswer((_) async {});
     when(
-      () => movementEngine.recordProduction(
+      () => repository.getRecipeVersionDocuments(any()),
+    ).thenAnswer((_) async => <RecipeVersionDocument>[]);
+    when(
+      () => repository.getProductionOrderDocuments(),
+    ).thenAnswer((_) async => <ProductionOrderDocument>[]);
+    when(
+      () => repository.reserveProductionSourceSequence(any()),
+    ).thenAnswer((_) async => 1);
+    when(
+      () => repository.saveProductionCloseTransaction(
+        any(),
+        any(),
+        debugFailAfterWrites: any(named: 'debugFailAfterWrites'),
+      ),
+    ).thenAnswer((_) async {});
+    when(
+      () => movementEngine.buildProductionClose(
         recipeProductId: any(named: 'recipeProductId'),
         producedInsumoId: any(named: 'producedInsumoId'),
-        quantity: any(named: 'quantity'),
+        productionDocumentId: any(named: 'productionDocumentId'),
+        recipeVersionId: any(named: 'recipeVersionId'),
+        plannedQuantity: any(named: 'plannedQuantity'),
+        actualQuantity: any(named: 'actualQuantity'),
+        outcome: any(named: 'outcome'),
         reason: any(named: 'reason'),
       ),
     ).thenAnswer(
-      (_) async => [
-        InventoryMovement(
-          id: 'mov-1',
-          insumoId: 'coffee-base',
-          type: MovementType.production,
-          quantity: 1,
-          previousStock: 1,
-          newStock: 2,
-          timestamp: DateTime(2026, 6, 1, 8, 30),
-        ),
-      ],
+      (_) async => ProductionCloseResult(
+        movements: [
+          InventoryMovement(
+            id: 'mov-1',
+            insumoId: 'coffee-base',
+            type: MovementType.production,
+            quantity: 1,
+            previousStock: 1,
+            newStock: 2,
+            timestamp: DateTime(2026, 6, 1, 8, 30),
+          ),
+        ],
+        totalConsumedCostNio: 70,
+        producedUnitCostNio: 20,
+      ),
     );
 
     viewModel = ProductionOrderViewModel(
@@ -89,49 +125,237 @@ void main() {
   });
 
   test('loadInitialData exposes insumos and persisted closures', () async {
-    when(() => repository.getRecipeVersionDocuments(any())).thenAnswer((_) async => [recipeVersion]);
+    when(
+      () => repository.getRecipeVersionDocuments(any()),
+    ).thenAnswer((_) async => [recipeVersion]);
     await viewModel.loadInitialData();
 
     expect(viewModel.availableInsumos, hasLength(1));
     expect(viewModel.statusMessage, contains('Cerrá producción localmente'));
   });
 
-  test('closeOrderLocally persists a closed production document and movement references', () async {
-    when(() => repository.getRecipeVersionDocuments(any())).thenAnswer((_) async => [recipeVersion]);
-    await viewModel.loadInitialData();
+  test(
+    'closeOrderLocally persists a completed close document with idempotency metadata',
+    () async {
+      when(
+        () => repository.getRecipeVersionDocuments(any()),
+      ).thenAnswer((_) async => [recipeVersion]);
+      await viewModel.loadInitialData();
 
-    when(() => repository.getProductionOrderDocuments()).thenAnswer(
-      (_) async => [
-        ProductionOrderDocument(
-          id: 'order-1',
-          recipeVersionId: recipeVersion.id,
+      when(() => repository.getProductionOrderDocuments()).thenAnswer(
+        (_) async => [
+          ProductionOrderDocument(
+            id: 'order-1',
+            recipeVersionId: recipeVersion.id,
+            recipeProductId: recipeVersion.productId,
+            recipeProductName: recipeVersion.productName,
+            producedInsumoId: 'coffee-base',
+            producedInsumoName: 'Base de Café',
+            plannedQuantity: 4,
+            actualQuantity: 3.5,
+            producedBatchNumber: 'PB-1',
+            producedExpirationDate: DateTime(2026, 7, 1),
+            operationDate: DateTime(2026, 6, 1, 8, 30),
+            status: 'CLOSED_PENDING_SYNC',
+            outcome: 'COMPLETED',
+            terminalId: 'POS_LOCAL',
+            sourceSequence: 1,
+            idempotencyKey: 'production:POS_LOCAL:order-1',
+            payloadHash: 'order-1:COMPLETED:4.0:3.5',
+            totalConsumedCostNio: 70,
+            producedUnitCostNio: 20,
+            movementReferences: const ['mov-1'],
+          ),
+        ],
+      );
+
+      await viewModel.closeOrderLocally(
+        recipeVersion: recipeVersion,
+        producedInsumoId: 'coffee-base',
+        plannedQuantity: 4,
+        actualQuantity: 3.5,
+        producedBatchNumber: 'PB-1',
+        producedExpirationDate: DateTime(2026, 7, 1),
+        varianceReason: 'Merma',
+      );
+
+      verify(
+        () => movementEngine.buildProductionClose(
           recipeProductId: recipeVersion.productId,
-          recipeProductName: recipeVersion.productName,
           producedInsumoId: 'coffee-base',
-          producedInsumoName: 'Base de Café',
+          productionDocumentId: 'order-1',
+          recipeVersionId: recipeVersion.id,
           plannedQuantity: 4,
           actualQuantity: 3.5,
-          producedBatchNumber: 'PB-1',
-          producedExpirationDate: DateTime(2026, 7, 1),
-          operationDate: DateTime(2026, 6, 1, 8, 30),
-          status: 'CLOSED_PENDING_SYNC',
-          movementReferences: const ['mov-1'],
+          outcome: 'COMPLETED',
+          reason: any(named: 'reason'),
         ),
-      ],
-    );
+      ).called(1);
+      verify(
+        () => repository.saveProductionCloseTransaction(
+          any(
+            that: predicate<ProductionOrderDocument>(
+              (document) =>
+                  document.outcome == 'COMPLETED' &&
+                  document.idempotencyKey == 'production:POS_LOCAL:order-1' &&
+                  document.payloadHash == 'order-1:COMPLETED:4.0:3.5' &&
+                  document.totalConsumedCostNio == 70 &&
+                  document.producedUnitCostNio == 20,
+            ),
+          ),
+          any(
+            that: predicate<List<InventoryMovement>>(
+              (movements) =>
+                  movements.map((movement) => movement.id).contains('mov-1'),
+            ),
+          ),
+          debugFailAfterWrites: false,
+        ),
+      ).called(1);
+      expect(viewModel.orders.single.movementReferences, contains('mov-1'));
+      expect(viewModel.statusMessage, contains('pendientes de sync'));
+    },
+  );
 
-    await viewModel.closeOrderLocally(
-      recipeVersion: recipeVersion,
-      producedInsumoId: 'coffee-base',
-      plannedQuantity: 4,
-      actualQuantity: 3.5,
-      producedBatchNumber: 'PB-1',
-      producedExpirationDate: DateTime(2026, 7, 1),
-      varianceReason: 'Merma',
-    );
+  test(
+    'closeOrderLocally leaves source sequence assignment inside the close transaction',
+    () async {
+      when(
+        () => repository.getRecipeVersionDocuments(any()),
+      ).thenAnswer((_) async => [recipeVersion]);
+      await viewModel.loadInitialData();
 
-    verify(() => repository.saveProductionOrderDocument(any())).called(1);
-    expect(viewModel.orders.single.movementReferences, contains('mov-1'));
-    expect(viewModel.statusMessage, contains('pendientes de sync'));
-  });
+      await viewModel.closeOrderLocally(
+        recipeVersion: recipeVersion,
+        producedInsumoId: 'coffee-base',
+        plannedQuantity: 4,
+        actualQuantity: 3.5,
+        producedBatchNumber: 'PB-12',
+        producedExpirationDate: DateTime(2026, 7, 1),
+      );
+
+      verifyNever(() => repository.reserveProductionSourceSequence(any()));
+      verify(
+        () => repository.saveProductionCloseTransaction(
+          any(
+            that: predicate<ProductionOrderDocument>(
+              (document) =>
+                  document.terminalId == 'POS_LOCAL' &&
+                  document.sourceSequence == 0 &&
+                  document.idempotencyKey == 'production:POS_LOCAL:order-1',
+            ),
+          ),
+          any(),
+          debugFailAfterWrites: false,
+        ),
+      ).called(1);
+    },
+  );
+
+  test(
+    'closeOrderLocally allows failed close with zero output and DESECHO_COCINA',
+    () async {
+      when(
+        () => repository.getRecipeVersionDocuments(any()),
+      ).thenAnswer((_) async => [recipeVersion]);
+      await viewModel.loadInitialData();
+      when(
+        () => movementEngine.buildProductionClose(
+          recipeProductId: any(named: 'recipeProductId'),
+          producedInsumoId: any(named: 'producedInsumoId'),
+          productionDocumentId: any(named: 'productionDocumentId'),
+          recipeVersionId: any(named: 'recipeVersionId'),
+          plannedQuantity: any(named: 'plannedQuantity'),
+          actualQuantity: any(named: 'actualQuantity'),
+          outcome: 'FAILED',
+          reason: any(named: 'reason'),
+        ),
+      ).thenAnswer(
+        (_) async => ProductionCloseResult(
+          movements: [
+            InventoryMovement(
+              id: 'mov-1',
+              insumoId: 'coffee-base',
+              type: MovementType.production,
+              quantity: -1,
+              previousStock: 2,
+              newStock: 1,
+              timestamp: DateTime(2026, 6, 1, 8, 30),
+            ),
+          ],
+          totalConsumedCostNio: 70,
+          producedUnitCostNio: 0,
+        ),
+      );
+      when(() => repository.getProductionOrderDocuments()).thenAnswer(
+        (_) async => [
+          ProductionOrderDocument(
+            id: 'order-1',
+            recipeVersionId: recipeVersion.id,
+            recipeProductId: recipeVersion.productId,
+            recipeProductName: recipeVersion.productName,
+            producedInsumoId: 'coffee-base',
+            producedInsumoName: 'Base de Café',
+            plannedQuantity: 4,
+            actualQuantity: 0,
+            producedBatchNumber: 'PB-FAILED',
+            producedExpirationDate: DateTime(2026, 7, 1),
+            operationDate: DateTime(2026, 6, 1, 8, 30),
+            status: 'CLOSED_PENDING_SYNC',
+            outcome: 'FAILED',
+            failureReason: 'DESECHO_COCINA',
+            terminalId: 'POS_LOCAL',
+            sourceSequence: 1,
+            idempotencyKey: 'production:POS_LOCAL:order-1',
+            payloadHash: 'order-1:FAILED:4.0:0.0',
+            totalConsumedCostNio: 70,
+            producedUnitCostNio: 0,
+            movementReferences: const ['mov-1'],
+          ),
+        ],
+      );
+
+      await viewModel.closeOrderLocally(
+        recipeVersion: recipeVersion,
+        producedInsumoId: 'coffee-base',
+        plannedQuantity: 4,
+        actualQuantity: 0,
+        producedBatchNumber: 'PB-FAILED',
+        producedExpirationDate: DateTime(2026, 7, 1),
+        outcome: 'FAILED',
+      );
+
+      verify(
+        () => movementEngine.buildProductionClose(
+          recipeProductId: recipeVersion.productId,
+          producedInsumoId: 'coffee-base',
+          productionDocumentId: 'order-1',
+          recipeVersionId: recipeVersion.id,
+          plannedQuantity: 4,
+          actualQuantity: 0,
+          outcome: 'FAILED',
+          reason: any(named: 'reason'),
+        ),
+      ).called(1);
+      verify(
+        () => repository.saveProductionCloseTransaction(
+          any(
+            that: predicate<ProductionOrderDocument>(
+              (document) =>
+                  document.outcome == 'FAILED' &&
+                  document.actualQuantity == 0 &&
+                  document.failureReason == 'DESECHO_COCINA' &&
+                  document.producedUnitCostNio == 0,
+            ),
+          ),
+          any(
+            that: predicate<List<InventoryMovement>>(
+              (movements) => movements.single.id == 'mov-1',
+            ),
+          ),
+          debugFailAfterWrites: false,
+        ),
+      ).called(1);
+    },
+  );
 }

@@ -783,11 +783,93 @@ final migration27_28 = Migration(27, 28, (database) async {
   }
 
   await addColumnIfMissing('unit_cost_nio', 'unit_cost_nio REAL');
-  await addColumnIfMissing(
-    'source_document_type',
-    'source_document_type TEXT',
-  );
+  await addColumnIfMissing('source_document_type', 'source_document_type TEXT');
   await addColumnIfMissing('source_document_id', 'source_document_id TEXT');
+});
+
+final migration28_29 = Migration(28, 29, (database) async {
+  final table = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'production_order_documents'",
+  );
+  if (table.isEmpty) {
+    return;
+  }
+
+  final columns = await database.rawQuery(
+    'PRAGMA table_info(production_order_documents)',
+  );
+  final existingColumnNames = columns
+      .map((column) => column['name'] as String)
+      .toSet();
+
+  Future<void> addColumnIfMissing(String columnName, String definition) async {
+    if (!existingColumnNames.contains(columnName)) {
+      await database.execute(
+        'ALTER TABLE production_order_documents ADD COLUMN $definition',
+      );
+    }
+  }
+
+  await addColumnIfMissing(
+    'outcome',
+    "outcome TEXT NOT NULL DEFAULT 'COMPLETED'",
+  );
+  await addColumnIfMissing('failure_reason', 'failure_reason TEXT');
+  await addColumnIfMissing(
+    'terminal_id',
+    "terminal_id TEXT NOT NULL DEFAULT 'POS_LOCAL'",
+  );
+  await addColumnIfMissing(
+    'source_sequence',
+    'source_sequence INTEGER NOT NULL DEFAULT 1',
+  );
+  await addColumnIfMissing(
+    'idempotency_key',
+    "idempotency_key TEXT NOT NULL DEFAULT ''",
+  );
+  await addColumnIfMissing(
+    'payload_hash',
+    "payload_hash TEXT NOT NULL DEFAULT ''",
+  );
+  await addColumnIfMissing(
+    'total_consumed_cost_nio',
+    'total_consumed_cost_nio REAL NOT NULL DEFAULT 0',
+  );
+  await addColumnIfMissing(
+    'produced_unit_cost_nio',
+    'produced_unit_cost_nio REAL NOT NULL DEFAULT 0',
+  );
+
+  await database.execute('''
+    UPDATE production_order_documents
+    SET
+      source_sequence = (
+        SELECT ranked.sequence
+        FROM (
+          SELECT
+            id,
+            ROW_NUMBER() OVER (
+              PARTITION BY terminal_id
+              ORDER BY operation_date ASC, id ASC
+            ) AS sequence
+          FROM production_order_documents
+        ) ranked
+        WHERE ranked.id = production_order_documents.id
+      ),
+      idempotency_key = CASE
+        WHEN idempotency_key = '' THEN 'production:' || terminal_id || ':' || id
+        ELSE idempotency_key
+      END,
+      payload_hash = CASE
+        WHEN payload_hash = '' THEN id || ':' || outcome || ':' || planned_quantity || ':' || actual_quantity
+        ELSE payload_hash
+      END
+  ''');
+
+  await database.execute('''
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_production_order_documents_idempotency_key
+    ON production_order_documents (idempotency_key)
+  ''');
 });
 
 final allMigrations = [
@@ -809,4 +891,5 @@ final allMigrations = [
   migration25_26,
   migration26_27,
   migration27_28,
+  migration28_29,
 ];

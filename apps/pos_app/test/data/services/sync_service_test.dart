@@ -869,6 +869,14 @@ void main() {
           producedExpirationDate: DateTime(2026, 7, 1),
           operationDate: DateTime(2026, 6, 2, 10),
           status: 'CLOSED_PENDING_SYNC',
+          outcome: 'FAILED',
+          failureReason: 'DESECHO_COCINA',
+          terminalId: 'pos-terminal-7',
+          sourceSequence: 42,
+          idempotencyKey: 'production:pos-terminal-7:po-1',
+          payloadHash: 'hash-po-1',
+          totalConsumedCostNio: 180,
+          producedUnitCostNio: 0,
           movementReferences: const ['mov-prod-1'],
         ),
       ];
@@ -914,6 +922,88 @@ void main() {
         (recipeVersionComponents.first as Map<String, Object?>)['componentUom'],
         'lt',
       );
+      final productionPost = capturedPosts.firstWhere(
+        (post) => post.path == '/inventory/production-orders/close',
+      );
+      final productionPayload = productionPost.body as Map<String, Object?>;
+      expect(productionPayload['outcome'], 'FAILED');
+      expect(productionPayload['failureReason'], 'DESECHO_COCINA');
+      expect(productionPayload['terminalId'], 'pos-terminal-7');
+      expect(productionPayload['sourceSequence'], 42);
+      expect(
+        productionPayload['idempotencyKey'],
+        'production:pos-terminal-7:po-1',
+      );
+      expect(productionPayload['payloadHash'], 'hash-po-1');
+      expect(productionPayload['totalConsumedCostNio'], 180);
+      expect(productionPayload['producedUnitCostNio'], 0);
+    },
+  );
+
+  test(
+    'does not generically replay production-linked movements when the production document fails',
+    () async {
+      forcedError = DioException(
+        requestOptions: RequestOptions(
+          path: '/inventory/production-orders/close',
+        ),
+        type: DioExceptionType.connectionError,
+      );
+      mockInventoryRepository.unsyncedProductionOrders = [
+        ProductionOrderDocument(
+          id: 'po-failed-sync',
+          recipeVersionId: 'rv-1',
+          recipeProductId: 'prod-1',
+          recipeProductName: 'Vanilla Latte',
+          producedInsumoId: 'ins-finished',
+          producedInsumoName: 'Base',
+          plannedQuantity: 10,
+          actualQuantity: 9,
+          producedBatchNumber: 'PB-1',
+          producedExpirationDate: DateTime(2026, 7, 1),
+          operationDate: DateTime(2026, 6, 2, 10),
+          status: 'CLOSED_PENDING_SYNC',
+          terminalId: 'pos-terminal-7',
+          sourceSequence: 42,
+          movementReferences: const ['mov-prod-out', 'mov-prod-in'],
+        ),
+      ];
+      mockInventoryRepository.unsynced = [
+        InventoryMovement(
+          id: 'mov-prod-out',
+          insumoId: 'raw-1',
+          type: MovementType.production,
+          quantity: -2,
+          previousStock: 10,
+          newStock: 8,
+          timestamp: DateTime.parse('2026-06-02T10:00:00Z'),
+          sourceDocumentType: 'PRODUCTION_CLOSE',
+          sourceDocumentId: 'po-failed-sync',
+        ),
+        InventoryMovement(
+          id: 'mov-sale-1',
+          insumoId: 'raw-2',
+          type: MovementType.sale,
+          quantity: -1,
+          previousStock: 5,
+          newStock: 4,
+          timestamp: DateTime.parse('2026-06-02T11:00:00Z'),
+        ),
+      ];
+
+      await syncService.triggerManualSync();
+
+      expect(mockInventoryRepository.failedIds, contains('mov-prod-out'));
+      expect(mockInventoryRepository.failedIds, contains('mov-prod-in'));
+      final genericPosts = capturedPosts.where(
+        (post) => post.path == '/v1/sync/batch',
+      );
+      expect(genericPosts, hasLength(1));
+      final body = genericPosts.single.body as Map<String, Object?>;
+      final records = body['records'] as List<dynamic>;
+      expect(records, hasLength(1));
+      final record = records.single as Map<String, Object?>;
+      expect(record['idempotencyKey'], 'inventory:dev-1:mov-sale-1');
     },
   );
 

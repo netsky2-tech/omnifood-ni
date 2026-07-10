@@ -115,6 +115,7 @@ void main() async {
     batchDao: database.batchDao,
     purchaseDao: database.purchaseDao,
     productionOrderDocumentDao: database.productionOrderDocumentDao,
+    productionTransactionDao: database.productionTransactionDao,
     dio: dio,
     database: database,
   );
