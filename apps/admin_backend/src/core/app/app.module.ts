@@ -19,12 +19,14 @@ import { Insumo } from '../../modules/inventory/entities/insumo.entity';
 import { Product } from '../../modules/inventory/entities/product.entity';
 import { Recipe } from '../../modules/inventory/entities/recipe.entity';
 import { InventoryMovement } from '../../modules/inventory/entities/inventory-movement.entity';
+import { InventorySyncReceipt } from '../../modules/inventory/entities/inventory-sync-receipt.entity';
 import { Supplier } from '../../modules/inventory/entities/supplier.entity';
 import { Warehouse } from '../../modules/inventory/entities/warehouse.entity';
 import { UomConversion } from '../../modules/inventory/entities/uom-conversion.entity';
 import { Batch } from '../../modules/inventory/entities/batch.entity';
 import { BcnFxRate } from '../../modules/inventory/entities/bcn-fx-rate.entity';
 import { PurchaseDocument } from '../../modules/inventory/entities/purchase-document.entity';
+import { ProductionBatchHistory } from '../../modules/inventory/entities/production-batch-history.entity';
 import { CatalogValue } from '../../modules/catalog/entities/catalog-value.entity';
 import { Invoice } from '../../modules/sales/entities/invoice.entity';
 import { InvoiceItem } from '../../modules/sales/entities/invoice-item.entity';
@@ -59,12 +61,14 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
     Product,
     Recipe,
     InventoryMovement,
+    InventorySyncReceipt,
     Supplier,
     Warehouse,
     UomConversion,
     Batch,
     BcnFxRate,
     PurchaseDocument,
+    ProductionBatchHistory,
     CatalogValue,
     Invoice,
     InvoiceItem,

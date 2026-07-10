@@ -14,6 +14,7 @@ import { ShrinkageService } from './shrinkage.service';
 import { InventoryService } from './inventory.service';
 import { RecipeService } from './recipe.service';
 import { CountSessionService } from './count-session.service';
+import { ProductionService } from './production.service';
 
 describe('InventoryController', () => {
   let controller: InventoryMovementController;
@@ -76,6 +77,12 @@ describe('InventoryController', () => {
           provide: CountSessionService,
           useValue: {
             replayCountSession: jest.fn(),
+          },
+        },
+        {
+          provide: ProductionService,
+          useValue: {
+            replayProductionClose: jest.fn(),
           },
         },
         AuthGuard,
