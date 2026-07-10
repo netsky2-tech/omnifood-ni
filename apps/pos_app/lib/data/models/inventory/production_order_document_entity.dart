@@ -8,6 +8,11 @@ import 'package:floor/floor.dart';
       name: 'idx_production_order_documents_idempotency_key',
       unique: true,
     ),
+    Index(
+      value: ['terminal_id', 'source_sequence'],
+      name: 'idx_production_order_documents_terminal_source_sequence',
+      unique: true,
+    ),
   ],
 )
 class ProductionOrderDocumentEntity {
@@ -73,7 +78,7 @@ class ProductionOrderDocumentEntity {
     required this.status,
     this.outcome = 'COMPLETED',
     this.failureReason,
-    this.terminalId = 'POS_LOCAL',
+    required this.terminalId,
     this.sourceSequence = 0,
     String? idempotencyKey,
     String? payloadHash,
@@ -83,7 +88,7 @@ class ProductionOrderDocumentEntity {
     this.varianceReason,
     this.closedAt,
     this.isSynced = false,
-  }) : idempotencyKey = idempotencyKey ?? 'production:POS_LOCAL:$id',
+  }) : idempotencyKey = idempotencyKey ?? 'production:$terminalId:$id',
        payloadHash =
            payloadHash ?? '$id:$outcome:$plannedQuantity:$actualQuantity';
 }

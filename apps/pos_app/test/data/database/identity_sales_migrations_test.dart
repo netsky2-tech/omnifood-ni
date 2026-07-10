@@ -179,7 +179,7 @@ void main() {
       final rows = await db.query(
         'production_order_documents',
         columns: ['id', 'terminal_id', 'source_sequence'],
-        orderBy: 'source_sequence ASC',
+        orderBy: 'operation_date ASC, id ASC',
       );
 
       expect(rows.map((row) => row['id']), [
@@ -187,10 +187,260 @@ void main() {
         'po-same-time',
         'po-later',
       ]);
-      expect(rows.map((row) => row['terminal_id']).toSet(), {'POS_LOCAL'});
+      final terminalIds = rows
+          .map((row) => row['terminal_id'] as String)
+          .toList(growable: false);
+      expect(terminalIds.toSet(), hasLength(1));
+      final terminalId = terminalIds.toSet().single;
+      expect(terminalId, startsWith('pos-local-'));
+      expect(terminalId, isNot(contains('document')));
       expect(rows.map((row) => row['source_sequence']), [1, 2, 3]);
 
+      final configs = await db.query(
+        'local_configs',
+        columns: ['key', 'value'],
+        where: 'key = ?',
+        whereArgs: ['terminal_device_id'],
+      );
+      expect(configs, hasLength(1));
+      expect(configs.single['value'], terminalId);
+
       await db.close();
+    },
+  );
+
+  test(
+    'migration28_29 starts unsynced production replay streams at one',
+    () async {
+      final db = await databaseFactory.openDatabase(
+        dbPath,
+        options: OpenDatabaseOptions(
+          version: 28,
+          onCreate: (database, version) async {
+            await database.execute('''
+            CREATE TABLE production_order_documents (
+              id TEXT NOT NULL PRIMARY KEY,
+              recipe_version_id TEXT NOT NULL,
+              recipe_product_id TEXT NOT NULL,
+              recipe_product_name TEXT NOT NULL,
+              produced_insumo_id TEXT NOT NULL,
+              produced_insumo_name TEXT NOT NULL,
+              planned_quantity REAL NOT NULL,
+              actual_quantity REAL NOT NULL,
+              produced_batch_number TEXT NOT NULL,
+              produced_expiration_date TEXT NOT NULL,
+              operation_date TEXT NOT NULL,
+              status TEXT NOT NULL,
+              variance_reason TEXT,
+              closed_at TEXT,
+              movement_references_json TEXT NOT NULL,
+              is_synced INTEGER NOT NULL DEFAULT 0
+            )
+          ''');
+          },
+        ),
+      );
+
+      Future<void> insertLegacy({
+        required String id,
+        required String operationDate,
+        required int isSynced,
+      }) {
+        return db.insert('production_order_documents', {
+          'id': id,
+          'recipe_version_id': 'rv-1',
+          'recipe_product_id': 'prod-1',
+          'recipe_product_name': 'Product',
+          'produced_insumo_id': 'finished-1',
+          'produced_insumo_name': 'Finished',
+          'planned_quantity': 1.0,
+          'actual_quantity': 1.0,
+          'produced_batch_number': 'PB-$id',
+          'produced_expiration_date': '2026-08-01T00:00:00.000',
+          'operation_date': operationDate,
+          'status': 'CLOSED_PENDING_SYNC',
+          'movement_references_json': '[]',
+          'is_synced': isSynced,
+        });
+      }
+
+      await insertLegacy(
+        id: 'already-synced-first',
+        operationDate: '2026-07-09T10:01:00.000Z',
+        isSynced: 1,
+      );
+      await insertLegacy(
+        id: 'unsynced-first',
+        operationDate: '2026-07-09T10:02:00.000Z',
+        isSynced: 0,
+      );
+      await insertLegacy(
+        id: 'unsynced-second',
+        operationDate: '2026-07-09T10:03:00.000Z',
+        isSynced: 0,
+      );
+
+      await migration28_29.migrate(db);
+
+      final rows = await db.query(
+        'production_order_documents',
+        columns: ['id', 'source_sequence'],
+        where: 'is_synced = 0',
+        orderBy: 'operation_date ASC, id ASC',
+      );
+
+      expect(rows.map((row) => row['id']), [
+        'unsynced-first',
+        'unsynced-second',
+      ]);
+      expect(rows.map((row) => row['source_sequence']), [1, 2]);
+
+      await db.close();
+    },
+  );
+
+  test(
+    'migration28_29 excludes synced legacy production docs from replay allocation',
+    () async {
+      final db = await databaseFactory.openDatabase(
+        dbPath,
+        options: OpenDatabaseOptions(
+          version: 28,
+          onCreate: (database, version) async {
+            await database.execute('''
+            CREATE TABLE production_order_documents (
+              id TEXT NOT NULL PRIMARY KEY,
+              recipe_version_id TEXT NOT NULL,
+              recipe_product_id TEXT NOT NULL,
+              recipe_product_name TEXT NOT NULL,
+              produced_insumo_id TEXT NOT NULL,
+              produced_insumo_name TEXT NOT NULL,
+              planned_quantity REAL NOT NULL,
+              actual_quantity REAL NOT NULL,
+              produced_batch_number TEXT NOT NULL,
+              produced_expiration_date TEXT NOT NULL,
+              operation_date TEXT NOT NULL,
+              status TEXT NOT NULL,
+              variance_reason TEXT,
+              closed_at TEXT,
+              movement_references_json TEXT NOT NULL,
+              is_synced INTEGER NOT NULL DEFAULT 0
+            )
+          ''');
+          },
+        ),
+      );
+
+      Future<void> insertLegacy({
+        required String id,
+        required String operationDate,
+        required int isSynced,
+      }) {
+        return db.insert('production_order_documents', {
+          'id': id,
+          'recipe_version_id': 'rv-1',
+          'recipe_product_id': 'prod-1',
+          'recipe_product_name': 'Product',
+          'produced_insumo_id': 'finished-1',
+          'produced_insumo_name': 'Finished',
+          'planned_quantity': 1.0,
+          'actual_quantity': 1.0,
+          'produced_batch_number': 'PB-$id',
+          'produced_expiration_date': '2026-08-01T00:00:00.000',
+          'operation_date': operationDate,
+          'status': 'CLOSED_PENDING_SYNC',
+          'movement_references_json': '[]',
+          'is_synced': isSynced,
+        });
+      }
+
+      await insertLegacy(
+        id: 'unsynced-first',
+        operationDate: '2026-07-09T10:01:00.000Z',
+        isSynced: 0,
+      );
+      await insertLegacy(
+        id: 'unsynced-second',
+        operationDate: '2026-07-09T10:02:00.000Z',
+        isSynced: 0,
+      );
+      await insertLegacy(
+        id: 'legacy-synced',
+        operationDate: '2026-07-09T10:03:00.000Z',
+        isSynced: 1,
+      );
+
+      await migration28_29.migrate(db);
+
+      final rows = await db.query(
+        'production_order_documents',
+        columns: ['id', 'terminal_id', 'source_sequence'],
+        orderBy: 'operation_date ASC',
+      );
+      expect(rows.map((row) => row['id']), [
+        'unsynced-first',
+        'unsynced-second',
+        'legacy-synced',
+      ]);
+      expect(rows.map((row) => row['source_sequence']), [1, 2, -1]);
+
+      final terminalId = rows.first['terminal_id'];
+
+      final allocationRows = await db.rawQuery(
+        '''
+        SELECT COALESCE(MAX(source_sequence), 0) + 1 AS next_sequence
+        FROM production_order_documents
+        WHERE terminal_id = ? AND source_sequence > 0
+      ''',
+        [terminalId],
+      );
+
+      expect(allocationRows.single['next_sequence'], 3);
+
+      await db.close();
+    },
+  );
+
+  test(
+    'production documents reject duplicate assigned terminal source sequence pairs',
+    () async {
+      final database = await $FloorAppDatabase
+          .inMemoryDatabaseBuilder()
+          .build();
+      final db = database.database;
+
+      Map<String, Object?> document(String id) => {
+        'id': id,
+        'recipe_version_id': 'rv-1',
+        'recipe_product_id': 'prod-1',
+        'recipe_product_name': 'Product',
+        'produced_insumo_id': 'finished-1',
+        'produced_insumo_name': 'Finished',
+        'planned_quantity': 1.0,
+        'actual_quantity': 1.0,
+        'produced_batch_number': 'PB-$id',
+        'produced_expiration_date': '2026-08-01T00:00:00.000',
+        'operation_date': '2026-07-09T10:02:00.000Z',
+        'status': 'CLOSED_PENDING_SYNC',
+        'outcome': 'COMPLETED',
+        'terminal_id': 'terminal-a',
+        'source_sequence': 1,
+        'idempotency_key': 'production:terminal-a:$id',
+        'payload_hash': 'hash-$id',
+        'total_consumed_cost_nio': 1.0,
+        'produced_unit_cost_nio': 1.0,
+        'movement_references_json': '[]',
+        'is_synced': 0,
+      };
+
+      await db.insert('production_order_documents', document('po-1'));
+
+      await expectLater(
+        db.insert('production_order_documents', document('po-2')),
+        throwsA(isA<Exception>()),
+      );
+
+      await database.close();
     },
   );
 
@@ -552,4 +802,32 @@ void main() {
       await database.close();
     }
   });
+
+  test(
+    'fresh schema creates production terminal source sequence unique index',
+    () async {
+      final database = await $FloorAppDatabase
+          .inMemoryDatabaseBuilder()
+          .build();
+      try {
+        final indexes = await database.database.rawQuery(
+          "PRAGMA index_list('production_order_documents')",
+        );
+        final indexNames = indexes.map((row) => row['name']).toSet();
+        final streamIndex = indexes.singleWhere(
+          (row) =>
+              row['name'] ==
+              'idx_production_order_documents_terminal_source_sequence',
+        );
+
+        expect(
+          indexNames,
+          contains('idx_production_order_documents_terminal_source_sequence'),
+        );
+        expect(streamIndex['unique'], 1);
+      } finally {
+        await database.close();
+      }
+    },
+  );
 }

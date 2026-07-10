@@ -119,6 +119,20 @@ export class ProductionService {
     const serverPayloadHash = calculateProductionClosePayloadHash(
       input.document,
     );
+    if (input.document.sourceSequence < 1) {
+      throw new BadRequestException(
+        'Production replay source sequence must be positive',
+      );
+    }
+    if (
+      input.document.outcome === PRODUCTION_CLOSE_OUTCOME.COMPLETED &&
+      (input.document.plannedQuantity <= 0 ||
+        input.document.actualQuantity <= 0)
+    ) {
+      throw new BadRequestException(
+        'Completed production close must have positive planned and actual output',
+      );
+    }
 
     return this.dataSource.transaction('SERIALIZABLE', async (manager) => {
       await manager.query("SELECT set_config('app.tenant_id', $1, true)", [
@@ -126,23 +140,34 @@ export class ProductionService {
       ]);
 
       const receiptRepo = manager.getRepository(InventorySyncReceipt);
-      const existingReceipt = await receiptRepo.findOneBy({
+      const existingReceiptByStream = await receiptRepo.findOneBy({
         tenant_id: input.tenantId,
         source_device_id: input.document.terminalId,
         flow_type: PRODUCTION_FLOW_TYPE,
         source_sequence: input.document.sourceSequence.toString(),
       });
 
-      if (existingReceipt) {
-        // Same source replay key + server hash means the offline POS document was already replayed; a different hash is a conflicting replay.
-        if (existingReceipt.payload_hash !== serverPayloadHash) {
-          throw new ConflictException(
-            'Idempotency key already exists with a different payload hash',
-          );
-        }
+      const streamReplayResult = this.resolveExistingProductionReceipt(
+        existingReceiptByStream,
+        serverPayloadHash,
+        documentId,
+      );
+      if (streamReplayResult) return streamReplayResult;
 
-        return { documentId, skippedExisting: true };
-      }
+      const existingReceiptByIdempotencyKey = await receiptRepo.findOneBy({
+        tenant_id: input.tenantId,
+        idempotency_key: input.document.idempotencyKey,
+        flow_type: PRODUCTION_FLOW_TYPE,
+      });
+
+      const idempotencyReplayResult = this.resolveExistingProductionReceipt(
+        existingReceiptByIdempotencyKey,
+        serverPayloadHash,
+        documentId,
+      );
+      if (idempotencyReplayResult) return idempotencyReplayResult;
+
+      await this.assertContiguousProductionReplay(input, receiptRepo);
 
       const valuation = await this.postProductionClose(
         input,
@@ -172,6 +197,52 @@ export class ProductionService {
 
       return { documentId, skippedExisting: false };
     });
+  }
+
+  private resolveExistingProductionReceipt(
+    existingReceipt: InventorySyncReceipt | null,
+    serverPayloadHash: string,
+    documentId: string,
+  ): ReplayProductionCloseResult | null {
+    if (!existingReceipt) return null;
+
+    // Same replay identity + server hash means the offline POS document was already replayed; a different hash is a conflicting replay.
+    if (existingReceipt.payload_hash !== serverPayloadHash) {
+      throw new ConflictException(
+        'Idempotency key already exists with a different payload hash',
+      );
+    }
+
+    return { documentId, skippedExisting: true };
+  }
+
+  private async assertContiguousProductionReplay(
+    input: ReplayProductionCloseInput,
+    receiptRepo: Repository<InventorySyncReceipt>,
+  ): Promise<void> {
+    if (input.document.sourceSequence <= 1) {
+      return;
+    }
+
+    const priorReceipt = await receiptRepo
+      .createQueryBuilder('receipt')
+      .where('receipt.tenant_id = :tenantId', { tenantId: input.tenantId })
+      .andWhere('receipt.source_device_id = :sourceDeviceId', {
+        sourceDeviceId: input.document.terminalId,
+      })
+      .andWhere('receipt.flow_type = :flowType', {
+        flowType: PRODUCTION_FLOW_TYPE,
+      })
+      .andWhere('receipt.source_sequence = :sourceSequence', {
+        sourceSequence: (input.document.sourceSequence - 1).toString(),
+      })
+      .getOne();
+
+    if (!priorReceipt) {
+      throw new ConflictException(
+        `Production replay sequence gap for terminal ${input.document.terminalId}: expected prior sequence ${input.document.sourceSequence - 1}`,
+      );
+    }
   }
 
   async processOrder(input: {
@@ -364,7 +435,10 @@ export class ProductionService {
     );
     const exploded = this.bomExplosionService.explode({
       snapshotComponents: snapshot.components,
-      orderQuantity: input.document.plannedQuantity,
+      orderQuantity:
+        input.document.outcome === PRODUCTION_CLOSE_OUTCOME.COMPLETED
+          ? input.document.actualQuantity
+          : input.document.plannedQuantity,
     });
     const valuationTraceability: Record<string, BatchConsumptionTrace[]> = {};
     let totalConsumedValueNio = 0;
@@ -391,6 +465,12 @@ export class ProductionService {
       const consumedTotal = round4(
         trace.reduce((sum, item) => sum + item.consumedQuantity, 0),
       );
+      this.assertSourceBatchCoverage({
+        insumoId,
+        requiredQuantity,
+        consumedTotal,
+      });
+      await this.deductProductionSourceBatches(candidates, trace, manager);
       const consumedValueNio = round4(
         trace.reduce((sum, item) => sum + item.totalCostNio, 0),
       );
@@ -443,6 +523,49 @@ export class ProductionService {
     };
   }
 
+  private assertSourceBatchCoverage(input: {
+    insumoId: string;
+    requiredQuantity: number;
+    consumedTotal: number;
+  }): void {
+    if (input.consumedTotal >= round4(input.requiredQuantity)) {
+      return;
+    }
+
+    throw new BadRequestException(
+      `Insufficient source batch stock for production component ${input.insumoId}: required ${round4(input.requiredQuantity)}, valued ${input.consumedTotal}. Forced production is not enabled for replay.`,
+    );
+  }
+
+  private async deductProductionSourceBatches(
+    candidates: Batch[],
+    trace: BatchConsumptionTrace[],
+    manager: EntityManager,
+  ): Promise<void> {
+    const candidatesById = new Map(
+      candidates.map((batch) => [batch.id, batch] as const),
+    );
+
+    for (const consumedBatch of trace) {
+      const consumedQuantity = round4(consumedBatch.consumedQuantity);
+      if (consumedQuantity <= 0) {
+        continue;
+      }
+
+      const sourceBatch = candidatesById.get(consumedBatch.batchId);
+      if (!sourceBatch) {
+        throw new BadRequestException(
+          `Production valuation referenced an unknown source batch: ${consumedBatch.batchId}`,
+        );
+      }
+
+      sourceBatch.remaining_stock = round4(
+        Number(sourceBatch.remaining_stock) - consumedQuantity,
+      );
+      await manager.save(Batch, sourceBatch);
+    }
+  }
+
   private async applyProductionMovement(input: {
     manager: EntityManager;
     tenantId: string;
@@ -459,7 +582,11 @@ export class ProductionService {
       .where('insumo.id = :insumoId', { insumoId: input.insumoId })
       .andWhere('insumo.tenant_id = :tenantId', { tenantId: input.tenantId })
       .getOne();
-    if (!insumo) return;
+    if (!insumo) {
+      throw new BadRequestException(
+        `Production close references an unknown insumo: ${input.insumoId}`,
+      );
+    }
 
     const previousStock = round4(Number(insumo.stock));
     const newStock = round4(previousStock + input.quantity);

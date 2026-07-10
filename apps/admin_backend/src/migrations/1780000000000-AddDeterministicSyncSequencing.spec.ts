@@ -31,7 +31,35 @@ describe('AddDeterministicSyncSequencing1780000000000', () => {
     expect(sql).toContain(
       '(tenant_id, source_device_id, flow_type, source_sequence)',
     );
+    expect(sql).toContain('uq_inventory_sync_receipts_idempotency_key');
+    expect(sql).toContain('(tenant_id, idempotency_key, flow_type)');
     expect(sql).toContain('uq_inventory_sync_outbox_stream_sequence');
+  });
+
+  it('enforces tenant-scoped RLS on sync and ledger tables', async () => {
+    const { queryRunner, queries } = createQueryRunner();
+
+    await migration.up(queryRunner);
+
+    const sql = queries.join('\n');
+
+    for (const tableName of [
+      'inventory_sync_receipts',
+      'inventory_sync_outbox',
+      'inventory_kardex',
+    ]) {
+      expect(sql).toContain(
+        `ALTER TABLE ${tableName} ENABLE ROW LEVEL SECURITY`,
+      );
+      expect(sql).toContain(
+        `ALTER TABLE ${tableName} FORCE ROW LEVEL SECURITY`,
+      );
+      expect(sql).toContain(`sync_ledger_${tableName}_tenant_select`);
+      expect(sql).toContain(`sync_ledger_${tableName}_tenant_insert`);
+      expect(sql).toContain(
+        "tenant_id = current_setting('app.tenant_id', true)",
+      );
+    }
   });
 
   it('does not drop append-only sync metadata on rollback', async () => {

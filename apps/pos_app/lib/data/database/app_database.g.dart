@@ -222,6 +222,8 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE UNIQUE INDEX `idx_production_order_documents_idempotency_key` ON `production_order_documents` (`idempotency_key`)');
         await database.execute(
+            'CREATE UNIQUE INDEX `idx_production_order_documents_terminal_source_sequence` ON `production_order_documents` (`terminal_id`, `source_sequence`)');
+        await database.execute(
             'CREATE UNIQUE INDEX `index_invoices_invoice_number` ON `invoices` (`invoice_number`)');
 
         await callback?.onCreate?.call(database, version);
@@ -2012,7 +2014,7 @@ class _$ProductionOrderDocumentDao extends ProductionOrderDocumentDao {
   @override
   Future<int?> findMaxSourceSequence(String terminalId) async {
     return _queryAdapter.query(
-        'SELECT COALESCE(MAX(source_sequence), 0) FROM production_order_documents WHERE terminal_id = ?1',
+        'SELECT COALESCE(MAX(source_sequence), 0) FROM production_order_documents WHERE terminal_id = ?1 AND source_sequence > 0',
         mapper: (Map<String, Object?> row) => row.values.first as int,
         arguments: [terminalId]);
   }
@@ -2108,7 +2110,7 @@ class _$ProductionTransactionDao extends ProductionTransactionDao {
   @override
   Future<int?> findMaxSourceSequence(String terminalId) async {
     return _queryAdapter.query(
-        'SELECT COALESCE(MAX(source_sequence), 0) FROM production_order_documents WHERE terminal_id = ?1',
+        'SELECT COALESCE(MAX(source_sequence), 0) FROM production_order_documents WHERE terminal_id = ?1 AND source_sequence > 0',
         mapper: (Map<String, Object?> row) => row.values.first as int,
         arguments: [terminalId]);
   }

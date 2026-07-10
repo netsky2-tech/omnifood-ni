@@ -17,7 +17,7 @@ abstract class ProductionOrderDocumentDao {
   Future<void> upsertDocument(ProductionOrderDocumentEntity entity);
 
   @Query(
-    'SELECT COALESCE(MAX(source_sequence), 0) FROM production_order_documents WHERE terminal_id = :terminalId',
+    'SELECT COALESCE(MAX(source_sequence), 0) FROM production_order_documents WHERE terminal_id = :terminalId AND source_sequence > 0',
   )
   Future<int?> findMaxSourceSequence(String terminalId);
 

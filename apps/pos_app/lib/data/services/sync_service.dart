@@ -96,6 +96,7 @@ class SyncService {
           (movement) =>
               movement.type != MovementType.purchase &&
               !(movement.reason?.startsWith('COUNT_SESSION:') ?? false) &&
+              !_isProductionLinkedMovement(movement) &&
               !blockedMovementIds.contains(movement.id),
         )
         .toList(growable: false);
@@ -142,6 +143,10 @@ class SyncService {
       );
       await _markMovementsAsFailed(orderedBatch, error: e.toString());
     }
+  }
+
+  bool _isProductionLinkedMovement(dynamic movement) {
+    return _tryReadField(movement, 'sourceDocumentType') == 'PRODUCTION_CLOSE';
   }
 
   Future<void> _syncPurchaseDocuments() async {
@@ -249,12 +254,12 @@ class SyncService {
           data: _buildProductionOrderPayload(document),
         );
         if (response.statusCode == 200 || response.statusCode == 201) {
-          await _inventoryRepository.markProductionOrderDocumentAsSynced(
-            document.id,
-          );
           for (final movementId in document.movementReferences) {
             await _inventoryRepository.markMovementAsSynced(movementId);
           }
+          await _inventoryRepository.markProductionOrderDocumentAsSynced(
+            document.id,
+          );
         }
       } on DioException catch (e) {
         developer.log(

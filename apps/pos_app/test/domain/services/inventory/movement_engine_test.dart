@@ -300,6 +300,117 @@ void main() {
         verifyNever(mockRepo.getRecipeByProductId(productId));
       },
     );
+
+    test(
+      'completed close blocks before movements when a component has insufficient stock',
+      () async {
+        const productId = 'salsa-base';
+        const producedInsumoId = 'finished-salsa';
+        final recipe = [
+          const Recipe(
+            id: 'r-tomato',
+            productId: productId,
+            ingredientId: 'tomato',
+            ingredientType: IngredientType.insumo,
+            quantity: 2,
+          ),
+        ];
+        const tomato = Insumo(
+          id: 'tomato',
+          name: 'Tomato',
+          consumptionUom: 'kg',
+          stock: 3,
+          averageCost: 18,
+        );
+
+        when(
+          mockRepo.getRecipeByProductId(productId),
+        ).thenAnswer((_) async => recipe);
+        when(
+          mockRepo.getInsumosByIds(['tomato']),
+        ).thenAnswer((_) async => [tomato]);
+
+        await expectLater(
+          engine.recordProductionClose(
+            recipeProductId: productId,
+            producedInsumoId: producedInsumoId,
+            productionDocumentId: 'po-insufficient-completed',
+            plannedQuantity: 2,
+            actualQuantity: 2,
+            outcome: 'COMPLETED',
+            reason: 'PRODUCTION_CLOSE:insufficient-completed',
+          ),
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.message,
+              'message',
+              contains('Insufficient stock for production component tomato'),
+            ),
+          ),
+        );
+
+        verifyNever(mockRepo.updateInsumoStock(any, any));
+        verifyNever(mockRepo.saveMovement(any));
+        verifyNever(mockRepo.getInsumoById(producedInsumoId));
+      },
+    );
+
+    test(
+      'failed close keeps zero-output semantics but still blocks unavailable components',
+      () async {
+        const productId = 'burned-sauce';
+        const producedInsumoId = 'finished-sauce';
+        final recipe = [
+          const Recipe(
+            id: 'r-base',
+            productId: productId,
+            ingredientId: 'base',
+            ingredientType: IngredientType.insumo,
+            quantity: 1.5,
+          ),
+        ];
+        const base = Insumo(
+          id: 'base',
+          name: 'Base',
+          consumptionUom: 'kg',
+          stock: 1,
+          averageCost: 40,
+        );
+
+        when(
+          mockRepo.getRecipeByProductId(productId),
+        ).thenAnswer((_) async => recipe);
+        when(
+          mockRepo.getInsumosByIds(['base']),
+        ).thenAnswer((_) async => [base]);
+
+        await expectLater(
+          engine.recordProductionClose(
+            recipeProductId: productId,
+            producedInsumoId: producedInsumoId,
+            productionDocumentId: 'po-insufficient-failed',
+            plannedQuantity: 2,
+            actualQuantity: 0,
+            outcome: 'FAILED',
+            reason: 'PRODUCTION_CLOSE:insufficient-failed',
+          ),
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.message,
+              'message',
+              allOf(
+                contains('Insufficient stock for production component base'),
+                contains('requires 3.0'),
+              ),
+            ),
+          ),
+        );
+
+        verifyNever(mockRepo.updateInsumoStock(any, any));
+        verifyNever(mockRepo.saveMovement(any));
+        verifyNever(mockRepo.getInsumoById(producedInsumoId));
+      },
+    );
   });
 
   group('MovementEngine - recordProductShrinkage', () {

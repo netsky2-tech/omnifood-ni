@@ -26,17 +26,33 @@ import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
 import { UserRole } from '../../src/modules/identity/entities/user.entity';
 
 const TEST_TENANT_ID = 'tenant-production-close';
-const AUTH_TOKEN = new JwtService({ secret: 'test-secret' }).sign({
+const PRODUCTION_CLOSE_ROUTE_TEST_JWT_SECRET =
+  process.env.OMNIFOOD_TEST_JWT_SECRET ??
+  'non-production-production-close-route-jwt-secret';
+
+const productionCloseRouteTestJwtService = new JwtService({
+  secret: PRODUCTION_CLOSE_ROUTE_TEST_JWT_SECRET,
+});
+
+const AUTH_TOKEN = productionCloseRouteTestJwtService.sign({
   tenant_id: TEST_TENANT_ID,
   role: UserRole.MANAGER,
 });
-const UNAUTHORIZED_ROLE_TOKEN = new JwtService({ secret: 'test-secret' }).sign({
+const CLAIMED_TERMINAL_AUTH_TOKEN = productionCloseRouteTestJwtService.sign({
+  tenant_id: TEST_TENANT_ID,
+  role: UserRole.MANAGER,
+  terminal_id: 'terminal-claim-1',
+});
+const UNAUTHORIZED_ROLE_TOKEN = productionCloseRouteTestJwtService.sign({
   tenant_id: TEST_TENANT_ID,
   role: UserRole.CASHIER,
 });
 
 interface RequestWithUser {
-  user?: { tenant_id: string };
+  user?: {
+    tenant_id: string;
+    terminal_id?: string;
+  };
 }
 
 interface ProductionCloseReplayCall {
@@ -56,6 +72,7 @@ interface BadRequestBody {
 class TestTenantInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     context.switchToHttp().getRequest<RequestWithUser>().user = {
+      ...context.switchToHttp().getRequest<RequestWithUser>().user,
       tenant_id: TEST_TENANT_ID,
     };
     return next.handle();
@@ -114,7 +131,10 @@ describe('Production close route (integration)', () => {
         RolesGuard,
         Reflector,
         JwtService,
-        { provide: ConfigService, useValue: { get: () => 'test-secret' } },
+        {
+          provide: ConfigService,
+          useValue: { get: () => PRODUCTION_CLOSE_ROUTE_TEST_JWT_SECRET },
+        },
       ],
     }).compile();
 
@@ -172,6 +192,46 @@ describe('Production close route (integration)', () => {
     expect(replayCalls[0]?.[0].document.payloadHash).toBe(
       validProductionClosePayload.payloadHash,
     );
+  });
+
+  it('binds the production replay stream to an authenticated terminal claim when present', async () => {
+    await request(app.getHttpServer())
+      .post('/api/inventory/production-orders/close')
+      .set('Authorization', `Bearer ${CLAIMED_TERMINAL_AUTH_TOKEN}`)
+      .send({
+        ...validProductionClosePayload,
+        terminalId: 'payload-spoofed-terminal',
+        idempotencyKey: 'production:payload-spoofed-terminal:prod-doc-route-1',
+      })
+      .expect(201);
+
+    const replayCalls = replayProductionClose.mock.calls as Array<
+      [ProductionCloseReplayCall]
+    >;
+    expect(replayCalls[0]?.[0].document).toEqual(
+      expect.objectContaining({
+        terminalId: 'terminal-claim-1',
+        idempotencyKey: 'production:terminal-claim-1:prod-doc-route-1',
+      }),
+    );
+  });
+
+  it('rejects payload terminal stream forking when no authenticated terminal claim is available', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/inventory/production-orders/close')
+      .set('Authorization', `Bearer ${AUTH_TOKEN}`)
+      .send({
+        ...validProductionClosePayload,
+        terminalId: 'terminal-payload-2',
+        idempotencyKey: 'production:terminal-1:prod-doc-route-1',
+      })
+      .expect(400);
+
+    const body = response.body as BadRequestBody;
+    expect(body.message).toBe(
+      'production terminalId must match the terminal segment in idempotencyKey when no authenticated terminal claim is available',
+    );
+    expect(replayProductionClose).not.toHaveBeenCalled();
   });
 
   it('rejects production close replay without authentication', async () => {
@@ -258,6 +318,35 @@ describe('Production close route (integration)', () => {
     expect(replayCalls[0]?.[0].document.failureReason).toBeUndefined();
   });
 
+  it.each([
+    [
+      'plannedQuantity',
+      0,
+      'completed production close must have positive planned and actual output',
+    ],
+    [
+      'actualQuantity',
+      0,
+      'completed production close must have positive planned and actual output',
+    ],
+  ])(
+    'rejects a completed close with non-positive %s before replay persistence is attempted',
+    async (fieldName, value, expectedMessage) => {
+      const response = await request(app.getHttpServer())
+        .post('/api/inventory/production-orders/close')
+        .set('Authorization', `Bearer ${AUTH_TOKEN}`)
+        .send({
+          ...validProductionClosePayload,
+          [fieldName]: value,
+        })
+        .expect(400);
+
+      const body = response.body as BadRequestBody;
+      expect(body.message).toContain(expectedMessage);
+      expect(replayProductionClose).not.toHaveBeenCalled();
+    },
+  );
+
   it('rejects a failed close with finished output before replay persistence is attempted', async () => {
     const response = await request(app.getHttpServer())
       .post('/api/inventory/production-orders/close')
@@ -295,6 +384,24 @@ describe('Production close route (integration)', () => {
     );
     expect(replayProductionClose).not.toHaveBeenCalled();
   });
+
+  it.each([0, -1])(
+    'rejects non-positive production source sequence %s before replay persistence is attempted',
+    async (sourceSequence) => {
+      const response = await request(app.getHttpServer())
+        .post('/api/inventory/production-orders/close')
+        .set('Authorization', `Bearer ${AUTH_TOKEN}`)
+        .send({
+          ...validProductionClosePayload,
+          sourceSequence,
+        })
+        .expect(400);
+
+      const body = response.body as BadRequestBody;
+      expect(body.message).toContain('sourceSequence must not be less than 1');
+      expect(replayProductionClose).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     ['id', 'id must not be empty'],

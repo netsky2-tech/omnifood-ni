@@ -365,6 +365,13 @@ class MovementEngineImpl implements MovementEngine {
       }
       final consumedQuantity = item.quantity;
       final previousStock = insumo.stock;
+      if (previousStock < consumedQuantity) {
+        throw StateError(
+          'Insufficient stock for production component ${insumo.id}: '
+          'requires $consumedQuantity, available $previousStock. '
+          'Forced production is not enabled for local closes.',
+        );
+      }
       final newStock = previousStock - consumedQuantity;
       totalConsumedCost += consumedQuantity * insumo.averageCost;
 

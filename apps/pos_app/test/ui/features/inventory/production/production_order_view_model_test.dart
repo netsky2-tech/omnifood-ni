@@ -119,6 +119,7 @@ void main() {
     viewModel = ProductionOrderViewModel(
       repository,
       movementEngine,
+      terminalIdProvider: () => 'pos-terminal-a',
       createId: () => 'order-1',
       clock: () => DateTime(2026, 6, 1, 8, 30),
     );
@@ -158,9 +159,9 @@ void main() {
             operationDate: DateTime(2026, 6, 1, 8, 30),
             status: 'CLOSED_PENDING_SYNC',
             outcome: 'COMPLETED',
-            terminalId: 'POS_LOCAL',
+            terminalId: 'pos-terminal-a',
             sourceSequence: 1,
-            idempotencyKey: 'production:POS_LOCAL:order-1',
+            idempotencyKey: 'production:pos-terminal-a:order-1',
             payloadHash: 'order-1:COMPLETED:4.0:3.5',
             totalConsumedCostNio: 70,
             producedUnitCostNio: 20,
@@ -197,7 +198,9 @@ void main() {
             that: predicate<ProductionOrderDocument>(
               (document) =>
                   document.outcome == 'COMPLETED' &&
-                  document.idempotencyKey == 'production:POS_LOCAL:order-1' &&
+                  document.terminalId == 'pos-terminal-a' &&
+                  document.idempotencyKey ==
+                      'production:pos-terminal-a:order-1' &&
                   document.payloadHash == 'order-1:COMPLETED:4.0:3.5' &&
                   document.totalConsumedCostNio == 70 &&
                   document.producedUnitCostNio == 20,
@@ -240,15 +243,114 @@ void main() {
           any(
             that: predicate<ProductionOrderDocument>(
               (document) =>
-                  document.terminalId == 'POS_LOCAL' &&
+                  document.terminalId == 'pos-terminal-a' &&
                   document.sourceSequence == 0 &&
-                  document.idempotencyKey == 'production:POS_LOCAL:order-1',
+                  document.idempotencyKey ==
+                      'production:pos-terminal-a:order-1',
             ),
           ),
           any(),
           debugFailAfterWrites: false,
         ),
       ).called(1);
+    },
+  );
+
+  test(
+    'closeOrderLocally requires an injected terminal identity provider for production closes',
+    () async {
+      final viewModelWithoutTerminalProvider = ProductionOrderViewModel(
+        repository,
+        movementEngine,
+        createId: () => 'order-1',
+        clock: () => DateTime(2026, 6, 1, 8, 30),
+      );
+      when(
+        () => repository.getRecipeVersionDocuments(any()),
+      ).thenAnswer((_) async => [recipeVersion]);
+      await viewModelWithoutTerminalProvider.loadInitialData();
+
+      expect(
+        () => viewModelWithoutTerminalProvider.closeOrderLocally(
+          recipeVersion: recipeVersion,
+          producedInsumoId: 'coffee-base',
+          plannedQuantity: 4,
+          actualQuantity: 3.5,
+          producedBatchNumber: 'PB-NO-TERMINAL',
+          producedExpirationDate: DateTime(2026, 7, 1),
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            contains('requires an explicit terminal identity provider'),
+          ),
+        ),
+      );
+
+      verifyNever(
+        () => movementEngine.buildProductionClose(
+          recipeProductId: any(named: 'recipeProductId'),
+          producedInsumoId: any(named: 'producedInsumoId'),
+          productionDocumentId: any(named: 'productionDocumentId'),
+          recipeVersionId: any(named: 'recipeVersionId'),
+          plannedQuantity: any(named: 'plannedQuantity'),
+          actualQuantity: any(named: 'actualQuantity'),
+          outcome: any(named: 'outcome'),
+          reason: any(named: 'reason'),
+        ),
+      );
+    },
+  );
+
+  test(
+    'closeOrderLocally rejects completed close with zero planned and actual output before persistence',
+    () async {
+      when(
+        () => repository.getRecipeVersionDocuments(any()),
+      ).thenAnswer((_) async => [recipeVersion]);
+      await viewModel.loadInitialData();
+
+      expect(
+        () => viewModel.closeOrderLocally(
+          recipeVersion: recipeVersion,
+          producedInsumoId: 'coffee-base',
+          plannedQuantity: 0,
+          actualQuantity: 0,
+          producedBatchNumber: 'PB-COMPLETED-ZERO',
+          producedExpirationDate: DateTime(2026, 7, 1),
+          outcome: 'COMPLETED',
+        ),
+        throwsA(
+          isA<ArgumentError>().having(
+            (error) => error.message,
+            'message',
+            contains(
+              'Completed production requires positive planned and actual quantities',
+            ),
+          ),
+        ),
+      );
+
+      verifyNever(
+        () => movementEngine.buildProductionClose(
+          recipeProductId: any(named: 'recipeProductId'),
+          producedInsumoId: any(named: 'producedInsumoId'),
+          productionDocumentId: any(named: 'productionDocumentId'),
+          recipeVersionId: any(named: 'recipeVersionId'),
+          plannedQuantity: any(named: 'plannedQuantity'),
+          actualQuantity: any(named: 'actualQuantity'),
+          outcome: any(named: 'outcome'),
+          reason: any(named: 'reason'),
+        ),
+      );
+      verifyNever(
+        () => repository.saveProductionCloseTransaction(
+          any(),
+          any(),
+          debugFailAfterWrites: any(named: 'debugFailAfterWrites'),
+        ),
+      );
     },
   );
 
@@ -304,9 +406,9 @@ void main() {
             status: 'CLOSED_PENDING_SYNC',
             outcome: 'FAILED',
             failureReason: 'DESECHO_COCINA',
-            terminalId: 'POS_LOCAL',
+            terminalId: 'pos-terminal-a',
             sourceSequence: 1,
-            idempotencyKey: 'production:POS_LOCAL:order-1',
+            idempotencyKey: 'production:pos-terminal-a:order-1',
             payloadHash: 'order-1:FAILED:4.0:0.0',
             totalConsumedCostNio: 70,
             producedUnitCostNio: 0,
@@ -356,6 +458,86 @@ void main() {
           debugFailAfterWrites: false,
         ),
       ).called(1);
+    },
+  );
+
+  test(
+    'closeOrderLocally rejects failed close with nonzero output before persistence',
+    () async {
+      when(
+        () => repository.getRecipeVersionDocuments(any()),
+      ).thenAnswer((_) async => [recipeVersion]);
+      await viewModel.loadInitialData();
+
+      expect(
+        () => viewModel.closeOrderLocally(
+          recipeVersion: recipeVersion,
+          producedInsumoId: 'coffee-base',
+          plannedQuantity: 4,
+          actualQuantity: 1,
+          producedBatchNumber: 'PB-FAILED-NONZERO',
+          producedExpirationDate: DateTime(2026, 7, 1),
+          outcome: 'FAILED',
+        ),
+        throwsA(
+          isA<ArgumentError>().having(
+            (error) => error.message,
+            'message',
+            contains('failed or interrupted actual quantity must be zero'),
+          ),
+        ),
+      );
+
+      verifyNever(
+        () => movementEngine.buildProductionClose(
+          recipeProductId: any(named: 'recipeProductId'),
+          producedInsumoId: any(named: 'producedInsumoId'),
+          productionDocumentId: any(named: 'productionDocumentId'),
+          recipeVersionId: any(named: 'recipeVersionId'),
+          plannedQuantity: any(named: 'plannedQuantity'),
+          actualQuantity: any(named: 'actualQuantity'),
+          outcome: any(named: 'outcome'),
+          reason: any(named: 'reason'),
+        ),
+      );
+      verifyNever(
+        () => repository.saveProductionCloseTransaction(
+          any(),
+          any(),
+          debugFailAfterWrites: any(named: 'debugFailAfterWrites'),
+        ),
+      );
+    },
+  );
+
+  test(
+    'closeOrderLocally rejects interrupted close with nonzero output before persistence',
+    () async {
+      when(
+        () => repository.getRecipeVersionDocuments(any()),
+      ).thenAnswer((_) async => [recipeVersion]);
+      await viewModel.loadInitialData();
+
+      expect(
+        () => viewModel.closeOrderLocally(
+          recipeVersion: recipeVersion,
+          producedInsumoId: 'coffee-base',
+          plannedQuantity: 4,
+          actualQuantity: 0.5,
+          producedBatchNumber: 'PB-INTERRUPTED-NONZERO',
+          producedExpirationDate: DateTime(2026, 7, 1),
+          outcome: 'INTERRUPTED',
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+
+      verifyNever(
+        () => repository.saveProductionCloseTransaction(
+          any(),
+          any(),
+          debugFailAfterWrites: any(named: 'debugFailAfterWrites'),
+        ),
+      );
     },
   );
 }

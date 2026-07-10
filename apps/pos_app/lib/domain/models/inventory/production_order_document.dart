@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 class ProductionOrderDocument {
-  const ProductionOrderDocument({
+  ProductionOrderDocument({
     required this.id,
     required this.recipeVersionId,
     required this.recipeProductId,
@@ -16,7 +16,7 @@ class ProductionOrderDocument {
     required this.status,
     this.outcome = 'COMPLETED',
     this.failureReason,
-    this.terminalId = 'POS_LOCAL',
+    String? terminalId,
     this.sourceSequence = 0,
     String? idempotencyKey,
     String? payloadHash,
@@ -26,7 +26,9 @@ class ProductionOrderDocument {
     this.closedAt,
     this.movementReferences = const <String>[],
     this.isSynced = false,
-  }) : idempotencyKey = idempotencyKey ?? 'production:POS_LOCAL:$id',
+  }) : terminalId = _requireTerminalId(terminalId),
+       idempotencyKey =
+           idempotencyKey ?? 'production:${_requireTerminalId(terminalId)}:$id',
        payloadHash =
            payloadHash ?? '$id:$outcome:$plannedQuantity:$actualQuantity';
 
@@ -138,7 +140,7 @@ class ProductionOrderDocument {
       status: json['status'] as String,
       outcome: (json['outcome'] as String?) ?? 'COMPLETED',
       failureReason: json['failureReason'] as String?,
-      terminalId: (json['terminalId'] as String?) ?? 'POS_LOCAL',
+      terminalId: _readTerminalId(json),
       sourceSequence: (json['sourceSequence'] as num?)?.toInt() ?? 0,
       idempotencyKey: json['idempotencyKey'] as String?,
       payloadHash: json['payloadHash'] as String?,
@@ -161,5 +163,25 @@ class ProductionOrderDocument {
   static List<String> decodeMovementReferences(String encoded) {
     final decoded = jsonDecode(encoded) as List<dynamic>;
     return decoded.map((entry) => entry as String).toList(growable: false);
+  }
+
+  static String _readTerminalId(Map<String, dynamic> json) {
+    final terminalId = json['terminalId'] as String?;
+    if (terminalId == null || terminalId.trim().isEmpty) {
+      throw const FormatException(
+        'terminalId is required for production order documents; migrate legacy rows through local terminal identity first',
+      );
+    }
+    return terminalId.trim();
+  }
+
+  static String _requireTerminalId(String? terminalId) {
+    final normalized = terminalId?.trim();
+    if (normalized == null || normalized.isEmpty) {
+      throw ArgumentError(
+        'Production terminal identity is required; use TerminalIdentityService before creating a production document',
+      );
+    }
+    return normalized;
   }
 }

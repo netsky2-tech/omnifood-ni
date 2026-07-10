@@ -582,7 +582,7 @@ void main() {
               producedExpirationDate: '2026-07-01T00:00:00.000Z',
               operationDate: '2026-06-01T08:30:00.000Z',
               status: 'CLOSED_PENDING_SYNC',
-              terminalId: 'POS_LOCAL',
+              terminalId: 'terminal-local',
               sourceSequence: 7,
               movementReferencesJson: '[]',
             ),
@@ -608,7 +608,7 @@ void main() {
           );
 
           final nextLocal = await floorRepository
-              .reserveProductionSourceSequence('POS_LOCAL');
+              .reserveProductionSourceSequence('terminal-local');
           final firstOther = await floorRepository
               .reserveProductionSourceSequence('NEW_POS');
 
@@ -620,7 +620,7 @@ void main() {
       },
     );
 
-    test('production close models default to unassigned source sequence', () {
+    test('production close models keep terminal identity explicit', () {
       final document = ProductionOrderDocument(
         id: 'po-default-sequence',
         recipeVersionId: 'rv-1',
@@ -634,6 +634,7 @@ void main() {
         producedExpirationDate: DateTime(2026, 8, 1),
         operationDate: DateTime.parse('2026-07-09T10:00:00Z'),
         status: 'CLOSED_PENDING_SYNC',
+        terminalId: 'terminal-default-sequence',
       );
       const entity = ProductionOrderDocumentEntity(
         id: 'po-default-sequence',
@@ -648,12 +649,52 @@ void main() {
         producedExpirationDate: '2026-08-01T00:00:00.000',
         operationDate: '2026-07-09T10:00:00.000Z',
         status: 'CLOSED_PENDING_SYNC',
+        terminalId: 'terminal-default-sequence',
         movementReferencesJson: '[]',
       );
 
       expect(document.sourceSequence, 0);
       expect(entity.sourceSequence, 0);
+      expect(document.terminalId, 'terminal-default-sequence');
+      expect(entity.terminalId, 'terminal-default-sequence');
+      expect(
+        document.idempotencyKey,
+        'production:terminal-default-sequence:po-default-sequence',
+      );
+      expect(
+        entity.idempotencyKey,
+        'production:terminal-default-sequence:po-default-sequence',
+      );
     });
+
+    test(
+      'legacy production document json requires migrated terminal identity',
+      () {
+        expect(
+          () => ProductionOrderDocument.fromJson({
+            'id': 'po-legacy-json',
+            'recipeVersionId': 'rv-1',
+            'recipeProductId': 'prod-1',
+            'recipeProductName': 'Product',
+            'producedInsumoId': 'finished-1',
+            'producedInsumoName': 'Finished',
+            'plannedQuantity': 1,
+            'actualQuantity': 1,
+            'producedBatchNumber': 'PB-1',
+            'producedExpirationDate': '2026-08-01T00:00:00.000',
+            'operationDate': '2026-07-09T10:00:00.000Z',
+            'status': 'CLOSED_PENDING_SYNC',
+          }),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              contains('terminalId is required'),
+            ),
+          ),
+        );
+      },
+    );
 
     test(
       'rolls back production close movements, stock, and document on transaction failure',
@@ -712,6 +753,7 @@ void main() {
             producedExpirationDate: DateTime(2026, 8, 1),
             operationDate: DateTime.parse('2026-07-09T10:00:00.000Z'),
             status: 'CLOSED_PENDING_SYNC',
+            terminalId: 'pos-terminal-rollback',
             movementReferences: const ['mov-production-out'],
           );
 
@@ -774,7 +816,7 @@ void main() {
               producedExpirationDate: DateTime(2026, 8, 1),
               operationDate: operationDate,
               status: 'CLOSED_PENDING_SYNC',
-              terminalId: 'POS_LOCAL',
+              terminalId: 'terminal-local',
               sourceSequence: 0,
               movementReferences: const [],
             );
@@ -836,7 +878,7 @@ void main() {
           producedExpirationDate: DateTime(2026, 8, 1),
           operationDate: DateTime.parse('2026-07-09T10:00:00Z'),
           status: 'CLOSED_PENDING_SYNC',
-          terminalId: 'POS_LOCAL',
+          terminalId: 'terminal-local',
           sourceSequence: 1,
           movementReferences: const [],
         );

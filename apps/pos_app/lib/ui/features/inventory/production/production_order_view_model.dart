@@ -9,6 +9,7 @@ import '../../../../../domain/services/inventory/movement_engine.dart';
 
 typedef ProductionOrderIdFactory = String Function();
 typedef ProductionOrderClock = DateTime Function();
+typedef ProductionTerminalIdProvider = String Function();
 
 class ProductionOrderViewModel extends ChangeNotifier {
   ProductionOrderViewModel(
@@ -16,15 +17,18 @@ class ProductionOrderViewModel extends ChangeNotifier {
     this._movementEngine, {
     ProductionOrderIdFactory? createId,
     ProductionOrderClock? clock,
+    ProductionTerminalIdProvider? terminalIdProvider,
     Uuid? uuid,
   }) : _createId = createId ?? _defaultCreateId,
        _clock = clock ?? DateTime.now,
+       _terminalIdProvider = terminalIdProvider ?? _missingTerminalIdProvider,
        _uuid = uuid ?? const Uuid();
 
   final InventoryRepository _repository;
   final MovementEngine _movementEngine;
   final ProductionOrderIdFactory _createId;
   final ProductionOrderClock _clock;
+  final ProductionTerminalIdProvider _terminalIdProvider;
   final Uuid _uuid;
 
   List<ProductionOrderDocument> _orders = <ProductionOrderDocument>[];
@@ -87,7 +91,7 @@ class ProductionOrderViewModel extends ChangeNotifier {
     final isCompleted = normalizedOutcome == 'COMPLETED';
     if (plannedQuantity <= 0 || (isCompleted && actualQuantity <= 0)) {
       throw ArgumentError(
-        'Planned quantity and completed actual quantity must be greater than zero',
+        'Completed production requires positive planned and actual quantities',
       );
     }
     if (!isCompleted &&
@@ -95,6 +99,11 @@ class ProductionOrderViewModel extends ChangeNotifier {
         normalizedOutcome != 'INTERRUPTED') {
       throw ArgumentError(
         'Production outcome must be COMPLETED, FAILED, or INTERRUPTED',
+      );
+    }
+    if (!isCompleted && actualQuantity != 0) {
+      throw ArgumentError(
+        'Production failed or interrupted actual quantity must be zero',
       );
     }
 
@@ -107,7 +116,10 @@ class ProductionOrderViewModel extends ChangeNotifier {
         (insumo) => insumo.id == producedInsumoId,
       );
       final documentId = _createId();
-      const terminalId = 'POS_LOCAL';
+      final terminalId = _terminalIdProvider().trim();
+      if (terminalId.isEmpty) {
+        throw StateError('Production terminal identity must not be empty');
+      }
       final idempotencyKey = 'production:$terminalId:$documentId';
       final payloadHash =
           '$documentId:$normalizedOutcome:$plannedQuantity:$actualQuantity';
@@ -183,4 +195,7 @@ class ProductionOrderViewModel extends ChangeNotifier {
   }
 
   static String _defaultCreateId() => const Uuid().v4();
+  static String _missingTerminalIdProvider() => throw StateError(
+    'Production close requires an explicit terminal identity provider from TerminalIdentityService',
+  );
 }

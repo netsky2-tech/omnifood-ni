@@ -84,14 +84,20 @@ class FakeInventoryRepository
   final List<String> syncedRecipeVersionIds = [];
   final List<String> syncedProductionOrderIds = [];
   final List<String> syncedForensicAlertIds = [];
+  final List<String> syncMarkEvents = [];
   final Map<String, MovementSyncMetadata> syncMetadataByMovementId = {};
   final List<String> retriedIds = [];
+  final Set<String> movementIdsThatFailMarkSynced = <String>{};
 
   @override
   Future<List<InventoryMovement>> getUnsyncedMovements() async => unsynced;
 
   @override
   Future<void> markMovementAsSynced(String id) async {
+    if (movementIdsThatFailMarkSynced.remove(id)) {
+      throw StateError('Injected markMovementAsSynced failure for $id');
+    }
+    syncMarkEvents.add('movement:$id');
     syncedIds.add(id);
   }
 
@@ -182,6 +188,7 @@ class FakeInventoryRepository
 
   @override
   Future<void> markProductionOrderDocumentAsSynced(String id) async {
+    syncMarkEvents.add('production:$id');
     syncedProductionOrderIds.add(id);
   }
 
@@ -864,7 +871,7 @@ void main() {
           producedInsumoId: 'ins-1',
           producedInsumoName: 'Base',
           plannedQuantity: 10,
-          actualQuantity: 9,
+          actualQuantity: 0,
           producedBatchNumber: 'PB-1',
           producedExpirationDate: DateTime(2026, 7, 1),
           operationDate: DateTime(2026, 6, 2, 10),
@@ -958,7 +965,7 @@ void main() {
           producedInsumoId: 'ins-finished',
           producedInsumoName: 'Base',
           plannedQuantity: 10,
-          actualQuantity: 9,
+          actualQuantity: 0,
           producedBatchNumber: 'PB-1',
           producedExpirationDate: DateTime(2026, 7, 1),
           operationDate: DateTime(2026, 6, 2, 10),
@@ -1757,6 +1764,7 @@ void main() {
           producedExpirationDate: DateTime(2026, 7, 1),
           operationDate: DateTime(2026, 6, 2, 10),
           status: 'CLOSED_PENDING_SYNC',
+          terminalId: 'pos-terminal-7',
           movementReferences: const ['mov-prod-1', 'mov-prod-2'],
         ),
       ];
@@ -1781,6 +1789,87 @@ void main() {
         mockInventoryRepository.failedIds,
         containsAll(const ['mov-prod-1', 'mov-prod-2']),
       );
+    },
+  );
+
+  test(
+    'keeps production document retryable when linked movement marking fails and completes local marking on idempotent retry',
+    () async {
+      mockInventoryRepository.unsyncedProductionOrders = [
+        ProductionOrderDocument(
+          id: 'po-mark-fails',
+          recipeVersionId: 'rv-1',
+          recipeProductId: 'prod-1',
+          recipeProductName: 'Vanilla Latte',
+          producedInsumoId: 'ins-finished',
+          producedInsumoName: 'Base',
+          plannedQuantity: 10,
+          actualQuantity: 9,
+          producedBatchNumber: 'PB-1',
+          producedExpirationDate: DateTime(2026, 7, 1),
+          operationDate: DateTime(2026, 6, 2, 10),
+          status: 'CLOSED_PENDING_SYNC',
+          terminalId: 'pos-terminal-7',
+          sourceSequence: 42,
+          idempotencyKey: 'production:pos-terminal-7:po-mark-fails',
+          payloadHash: 'hash-po-mark-fails',
+          movementReferences: const ['mov-prod-after-success'],
+        ),
+      ];
+      mockInventoryRepository.unsynced = [
+        InventoryMovement(
+          id: 'mov-prod-after-success',
+          insumoId: 'raw-1',
+          type: MovementType.production,
+          quantity: -2,
+          previousStock: 10,
+          newStock: 8,
+          timestamp: DateTime.parse('2026-06-02T10:00:00Z'),
+          sourceDocumentType: 'PRODUCTION_CLOSE',
+          sourceDocumentId: 'po-mark-fails',
+        ),
+      ];
+      mockInventoryRepository.movementIdsThatFailMarkSynced.add(
+        'mov-prod-after-success',
+      );
+
+      await syncService.triggerManualSync();
+
+      expect(mockInventoryRepository.syncedIds, isEmpty);
+      expect(
+        mockInventoryRepository.syncedProductionOrderIds,
+        isNot(contains('po-mark-fails')),
+      );
+      expect(
+        mockInventoryRepository.syncMarkEvents,
+        isNot(contains('production:po-mark-fails')),
+      );
+      capturedPosts.clear();
+
+      await syncService.triggerManualSync();
+
+      expect(
+        capturedPosts.where(
+          (post) => post.path == '/inventory/production-orders/close',
+        ),
+        hasLength(1),
+      );
+      expect(
+        capturedPosts.where((post) => post.path == '/v1/sync/batch'),
+        isEmpty,
+      );
+      expect(
+        mockInventoryRepository.syncedIds,
+        contains('mov-prod-after-success'),
+      );
+      expect(
+        mockInventoryRepository.syncedProductionOrderIds,
+        contains('po-mark-fails'),
+      );
+      expect(mockInventoryRepository.syncMarkEvents, const [
+        'movement:mov-prod-after-success',
+        'production:po-mark-fails',
+      ]);
     },
   );
 }

@@ -49,6 +49,23 @@ class FailedOrInterruptedHasZeroOutput implements ValidatorConstraintInterface {
   }
 }
 
+@ValidatorConstraint({ name: 'completedHasPositiveOutput' })
+class CompletedHasPositiveOutput implements ValidatorConstraintInterface {
+  validate(actualQuantity: number, args: ValidationArguments): boolean {
+    const document = args.object as ProductionOrderDocumentDto;
+
+    if (document.outcome !== PRODUCTION_CLOSE_OUTCOME.COMPLETED) {
+      return true;
+    }
+
+    return document.plannedQuantity > 0 && actualQuantity > 0;
+  }
+
+  defaultMessage(): string {
+    return 'completed production close must have positive planned and actual output';
+  }
+}
+
 @ValidatorConstraint({ name: 'failureReasonMatchesOutcome' })
 class FailureReasonMatchesOutcome implements ValidatorConstraintInterface {
   validate(
@@ -106,6 +123,7 @@ export class ProductionOrderDocumentDto {
   @IsNumber()
   @Min(0)
   @Validate(FailedOrInterruptedHasZeroOutput)
+  @Validate(CompletedHasPositiveOutput)
   actualQuantity: number;
 
   @IsIn(Object.values(PRODUCTION_CLOSE_OUTCOME))
@@ -124,7 +142,7 @@ export class ProductionOrderDocumentDto {
 
   @Type(() => Number)
   @IsInt()
-  @Min(0)
+  @Min(1)
   sourceSequence: number;
 
   @IsString()
