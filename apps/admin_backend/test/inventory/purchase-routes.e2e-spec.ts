@@ -27,6 +27,7 @@ import {
 } from '../../src/modules/inventory/entities/inventory-movement.entity';
 import { Supplier } from '../../src/modules/inventory/entities/supplier.entity';
 import { InventoryService } from '../../src/modules/inventory/inventory.service';
+import { ProductionService } from '../../src/modules/inventory/production.service';
 import { RecipeService } from '../../src/modules/inventory/recipe.service';
 import { ShrinkageService } from '../../src/modules/inventory/shrinkage.service';
 import { UserRole } from '../../src/modules/identity/entities/user.entity';
@@ -216,6 +217,12 @@ describe('Inventory purchase routes (integration)', () => {
           provide: CountSessionService,
           useValue: {
             replayCountSession: jest.fn(),
+          },
+        },
+        {
+          provide: ProductionService,
+          useValue: {
+            replayProductionClose: jest.fn(),
           },
         },
         TenantInterceptor,

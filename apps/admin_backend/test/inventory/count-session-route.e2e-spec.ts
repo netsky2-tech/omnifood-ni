@@ -20,6 +20,7 @@ import { InventoryPurchaseService } from '../../src/modules/inventory/inventory-
 import { InventoryService } from '../../src/modules/inventory/inventory.service';
 import { RecipeService } from '../../src/modules/inventory/recipe.service';
 import { ShrinkageService } from '../../src/modules/inventory/shrinkage.service';
+import { ProductionService } from '../../src/modules/inventory/production.service';
 import { TenantInterceptor } from '../../src/core/database/rls.interceptor';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
@@ -167,6 +168,10 @@ describe('Count session route (integration)', () => {
         {
           provide: RecipeService,
           useValue: { ingestPosVersion: jest.fn() },
+        },
+        {
+          provide: ProductionService,
+          useValue: { replayProductionClose: jest.fn() },
         },
         {
           provide: TenantInterceptor,

@@ -29,6 +29,8 @@ import { GetBcnFxRateQueryDto } from './dto/get-bcn-fx-rate-query.dto';
 import { CreateShrinkageDto } from './dto/create-shrinkage.dto';
 import { CountSessionService } from './count-session.service';
 import { CountSessionDocumentDto } from './dto/count-session-document.dto';
+import { ProductionOrderDocumentDto } from './dto/production-order-document.dto';
+import { ProductionService } from './production.service';
 
 @Controller('inventory')
 @UseInterceptors(TenantInterceptor)
@@ -40,6 +42,7 @@ export class InventoryMovementController {
     private readonly inventoryService: InventoryService,
     private readonly recipeService: RecipeService,
     private readonly countSessionService: CountSessionService,
+    private readonly productionService: ProductionService,
   ) {}
 
   @Post('movements/sync')
@@ -151,6 +154,19 @@ export class InventoryMovementController {
     @GetTenantId() tenantId: string,
   ) {
     return this.countSessionService.replayCountSession({
+      tenantId,
+      document: dto,
+    });
+  }
+
+  @Post('production-orders/close')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  async closeProductionOrder(
+    @Body() dto: ProductionOrderDocumentDto,
+    @GetTenantId() tenantId: string,
+  ) {
+    return this.productionService.replayProductionClose({
       tenantId,
       document: dto,
     });

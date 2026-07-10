@@ -13,6 +13,7 @@ import { RecipeVersion } from './entities/recipe-version.entity';
 import { RecipeDetail } from './entities/recipe-detail.entity';
 import { ProductionOrder } from './entities/production-order.entity';
 import { ProductionOrderLine } from './entities/production-order-line.entity';
+import { ProductionBatchHistory } from './entities/production-batch-history.entity';
 import { Shrinkage } from './entities/shrinkage.entity';
 import { ShrinkageDetail } from './entities/shrinkage-detail.entity';
 import { InventorySyncOutbox } from './entities/inventory-sync-outbox.entity';
@@ -59,6 +60,7 @@ import { CountSessionService } from './count-session.service';
       RecipeDetail,
       ProductionOrder,
       ProductionOrderLine,
+      ProductionBatchHistory,
       Shrinkage,
       ShrinkageDetail,
       InventorySyncOutbox,

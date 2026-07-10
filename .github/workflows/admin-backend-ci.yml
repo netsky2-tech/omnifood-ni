@@ -54,14 +54,7 @@ jobs:
         run: npm run lint
 
       - name: Fail on focused tests (it.only / describe.only)
-        # Match the POS app safeguard: focused backend tests would let CI go
-        # green while skipping most of the Nest suite.
-        run: |
-          if grep -rnE '\b(it|test|describe)(\.concurrent)?\.only\(|\b(fit|fdescribe)\(' src/ test/; then
-            echo "::error::Focused tests (it.only/test.only/describe.only/fit/fdescribe) are forbidden in CI. Remove the focused marker."
-            exit 1
-          fi
-          echo "No focused tests found."
+        run: npm run test:no-only
 
       - name: Run unit tests
         run: npm test
