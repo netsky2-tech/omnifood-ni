@@ -783,11 +783,167 @@ final migration27_28 = Migration(27, 28, (database) async {
   }
 
   await addColumnIfMissing('unit_cost_nio', 'unit_cost_nio REAL');
-  await addColumnIfMissing(
-    'source_document_type',
-    'source_document_type TEXT',
-  );
+  await addColumnIfMissing('source_document_type', 'source_document_type TEXT');
   await addColumnIfMissing('source_document_id', 'source_document_id TEXT');
+});
+
+final migration28_29 = Migration(28, 29, (database) async {
+  final table = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'production_order_documents'",
+  );
+  if (table.isEmpty) {
+    return;
+  }
+
+  final columns = await database.rawQuery(
+    'PRAGMA table_info(production_order_documents)',
+  );
+  final existingColumnNames = columns
+      .map((column) => column['name'] as String)
+      .toSet();
+
+  Future<void> addColumnIfMissing(String columnName, String definition) async {
+    if (!existingColumnNames.contains(columnName)) {
+      await database.execute(
+        'ALTER TABLE production_order_documents ADD COLUMN $definition',
+      );
+    }
+  }
+
+  await addColumnIfMissing(
+    'outcome',
+    "outcome TEXT NOT NULL DEFAULT 'COMPLETED'",
+  );
+  await addColumnIfMissing('failure_reason', 'failure_reason TEXT');
+  await addColumnIfMissing('terminal_id', 'terminal_id TEXT');
+  await addColumnIfMissing(
+    'source_sequence',
+    'source_sequence INTEGER NOT NULL DEFAULT 1',
+  );
+  await addColumnIfMissing(
+    'idempotency_key',
+    "idempotency_key TEXT NOT NULL DEFAULT ''",
+  );
+  await addColumnIfMissing(
+    'payload_hash',
+    "payload_hash TEXT NOT NULL DEFAULT ''",
+  );
+  await addColumnIfMissing(
+    'total_consumed_cost_nio',
+    'total_consumed_cost_nio REAL NOT NULL DEFAULT 0',
+  );
+  await addColumnIfMissing(
+    'produced_unit_cost_nio',
+    'produced_unit_cost_nio REAL NOT NULL DEFAULT 0',
+  );
+
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS local_configs (
+      key TEXT NOT NULL PRIMARY KEY,
+      value TEXT NOT NULL,
+      description TEXT
+    )
+  ''');
+
+  const terminalDeviceIdKey = 'terminal_device_id';
+  final terminalRows = await database.query(
+    'local_configs',
+    columns: ['value'],
+    where: 'key = ?',
+    whereArgs: [terminalDeviceIdKey],
+    limit: 1,
+  );
+  var localTerminalId = terminalRows.isEmpty
+      ? ''
+      : (terminalRows.single['value'] as String?)?.trim() ?? '';
+  if (localTerminalId.isEmpty) {
+    final generatedRows = await database.rawQuery(
+      "SELECT 'pos-local-' || lower(hex(randomblob(16))) AS value",
+    );
+    localTerminalId = generatedRows.single['value'] as String;
+    await database.insert('local_configs', {
+      'key': terminalDeviceIdKey,
+      'value': localTerminalId,
+      'description':
+          'Stable offline-safe terminal identity generated on first install.',
+    }, conflictAlgorithm: sqflite.ConflictAlgorithm.replace);
+  }
+
+  await database.rawUpdate(
+    '''
+    UPDATE production_order_documents
+    SET terminal_id = ?
+    WHERE terminal_id IS NULL OR terminal_id = ''
+  ''',
+    [localTerminalId],
+  );
+
+  await database.execute('''
+    UPDATE production_order_documents
+    SET
+      source_sequence = (
+        SELECT ranked.sequence
+        FROM (
+          SELECT
+            id,
+            ROW_NUMBER() OVER (
+              PARTITION BY terminal_id
+              ORDER BY operation_date ASC, id ASC
+            ) AS sequence
+          FROM production_order_documents
+          WHERE is_synced = 0
+        ) ranked
+        WHERE ranked.id = production_order_documents.id
+      ),
+      idempotency_key = CASE
+        WHEN idempotency_key = '' THEN 'production:' || terminal_id || ':' || id
+        ELSE idempotency_key
+      END,
+      payload_hash = CASE
+        WHEN payload_hash = '' THEN id || ':' || outcome || ':' || planned_quantity || ':' || actual_quantity
+        ELSE payload_hash
+      END
+    WHERE is_synced = 0
+  ''');
+
+  await database.execute('''
+    UPDATE production_order_documents
+    SET
+      source_sequence = (
+        SELECT -ranked.sequence
+        FROM (
+          SELECT
+            id,
+            ROW_NUMBER() OVER (
+              PARTITION BY terminal_id
+              ORDER BY operation_date ASC, id ASC
+            ) AS sequence
+          FROM production_order_documents
+          WHERE is_synced != 0
+        ) ranked
+        WHERE ranked.id = production_order_documents.id
+      ),
+      idempotency_key = CASE
+        WHEN idempotency_key = '' THEN 'production:' || terminal_id || ':' || id
+        ELSE idempotency_key
+      END,
+      payload_hash = CASE
+        WHEN payload_hash = '' THEN id || ':' || outcome || ':' || planned_quantity || ':' || actual_quantity
+        ELSE payload_hash
+      END
+    WHERE is_synced != 0
+  ''');
+
+  await database.execute('''
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_production_order_documents_idempotency_key
+    ON production_order_documents (idempotency_key)
+  ''');
+
+  await database.execute('''
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_production_order_documents_terminal_source_sequence
+    ON production_order_documents (terminal_id, source_sequence)
+    WHERE source_sequence > 0
+  ''');
 });
 
 final allMigrations = [
@@ -809,4 +965,5 @@ final allMigrations = [
   migration25_26,
   migration26_27,
   migration27_28,
+  migration28_29,
 ];

@@ -67,10 +67,12 @@ class SyncService {
       // 2. Sync inventory outbox deltas
       await _syncPurchaseDocuments();
       await _syncRecipeVersionDocuments();
-      await _syncProductionOrderDocuments();
+      final productionLinkedMovementIds = await _syncProductionOrderDocuments();
       await _syncCountSessionDocuments();
       await _syncAlertLifecycleDocuments();
-      await _syncInventoryOutbox();
+      await _syncInventoryOutbox(
+        blockedMovementIds: productionLinkedMovementIds,
+      );
       await _refreshAlertInbox();
 
       developer.log('Sync completed successfully', name: 'SyncService');
@@ -86,12 +88,16 @@ class SyncService {
     }
   }
 
-  Future<void> _syncInventoryOutbox() async {
+  Future<void> _syncInventoryOutbox({
+    Set<String> blockedMovementIds = const <String>{},
+  }) async {
     final unsynced = (await _inventoryRepository.getUnsyncedMovements())
         .where(
           (movement) =>
               movement.type != MovementType.purchase &&
-              !(movement.reason?.startsWith('COUNT_SESSION:') ?? false),
+              !(movement.reason?.startsWith('COUNT_SESSION:') ?? false) &&
+              !_isProductionLinkedMovement(movement) &&
+              !blockedMovementIds.contains(movement.id),
         )
         .toList(growable: false);
     if (unsynced.isEmpty) return;
@@ -137,6 +143,10 @@ class SyncService {
       );
       await _markMovementsAsFailed(orderedBatch, error: e.toString());
     }
+  }
+
+  bool _isProductionLinkedMovement(dynamic movement) {
+    return _tryReadField(movement, 'sourceDocumentType') == 'PRODUCTION_CLOSE';
   }
 
   Future<void> _syncPurchaseDocuments() async {
@@ -227,11 +237,15 @@ class SyncService {
     }
   }
 
-  Future<void> _syncProductionOrderDocuments() async {
+  Future<Set<String>> _syncProductionOrderDocuments() async {
     final unsynced = await _inventoryRepository.getUnsyncedProductionOrders();
     if (unsynced.isEmpty) {
-      return;
+      return const <String>{};
     }
+
+    final linkedMovementIds = unsynced
+        .expand((document) => document.movementReferences)
+        .toSet();
 
     for (final document in unsynced) {
       try {
@@ -240,12 +254,12 @@ class SyncService {
           data: _buildProductionOrderPayload(document),
         );
         if (response.statusCode == 200 || response.statusCode == 201) {
-          await _inventoryRepository.markProductionOrderDocumentAsSynced(
-            document.id,
-          );
           for (final movementId in document.movementReferences) {
             await _inventoryRepository.markMovementAsSynced(movementId);
           }
+          await _inventoryRepository.markProductionOrderDocumentAsSynced(
+            document.id,
+          );
         }
       } on DioException catch (e) {
         developer.log(
@@ -258,6 +272,7 @@ class SyncService {
         );
       }
     }
+    return linkedMovementIds;
   }
 
   Future<void> _syncCountSessionDocuments() async {
@@ -452,6 +467,14 @@ class SyncService {
           .toIso8601String(),
       'plannedQuantity': document.plannedQuantity,
       'actualQuantity': document.actualQuantity,
+      'outcome': document.outcome,
+      'failureReason': document.failureReason,
+      'terminalId': document.terminalId,
+      'sourceSequence': document.sourceSequence,
+      'idempotencyKey': document.idempotencyKey,
+      'payloadHash': document.payloadHash,
+      'totalConsumedCostNio': document.totalConsumedCostNio,
+      'producedUnitCostNio': document.producedUnitCostNio,
       'varianceReason': document.varianceReason,
       'operationDate': document.operationDate.toIso8601String(),
       'movementReferences': document.movementReferences,

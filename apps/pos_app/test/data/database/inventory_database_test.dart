@@ -306,6 +306,7 @@ void main() {
             producedExpirationDate: '2026-07-01T00:00:00.000Z',
             operationDate: '2026-06-02T10:00:00.000Z',
             status: 'CLOSED_PENDING_SYNC',
+            terminalId: 'terminal-a',
             movementReferencesJson: '["mov-1","mov-2"]',
           ),
         );
@@ -320,6 +321,60 @@ void main() {
           productionDocs.single.movementReferencesJson,
           '["mov-1","mov-2"]',
         );
+      },
+    );
+
+    test(
+      'should allocate production source sequence after replayable documents only',
+      () async {
+        Future<void> insertDocument({
+          required String id,
+          required int sourceSequence,
+          required bool isSynced,
+        }) {
+          return database.productionOrderDocumentDao.upsertDocument(
+            ProductionOrderDocumentEntity(
+              id: id,
+              recipeVersionId: 'rv-1',
+              recipeProductId: 'prod-1',
+              recipeProductName: 'Vanilla Latte',
+              producedInsumoId: 'ins-1',
+              producedInsumoName: 'Base',
+              plannedQuantity: 10,
+              actualQuantity: 9,
+              producedBatchNumber: 'PB-$id',
+              producedExpirationDate: '2026-07-01T00:00:00.000Z',
+              operationDate: '2026-06-02T10:00:00.000Z',
+              status: 'CLOSED_PENDING_SYNC',
+              terminalId: 'terminal-a',
+              sourceSequence: sourceSequence,
+              movementReferencesJson: '[]',
+              isSynced: isSynced,
+            ),
+          );
+        }
+
+        await insertDocument(
+          id: 'unsynced-first',
+          sourceSequence: 1,
+          isSynced: false,
+        );
+        await insertDocument(
+          id: 'unsynced-second',
+          sourceSequence: 2,
+          isSynced: false,
+        );
+        await insertDocument(
+          id: 'legacy-synced',
+          sourceSequence: -1,
+          isSynced: true,
+        );
+
+        final maxReplayableSequence = await database.productionOrderDocumentDao
+            .findMaxSourceSequence('terminal-a');
+
+        expect(maxReplayableSequence, 2);
+        expect((maxReplayableSequence ?? 0) + 1, 3);
       },
     );
 

@@ -1,6 +1,20 @@
 import 'package:floor/floor.dart';
 
-@Entity(tableName: 'production_order_documents')
+@Entity(
+  tableName: 'production_order_documents',
+  indices: [
+    Index(
+      value: ['idempotency_key'],
+      name: 'idx_production_order_documents_idempotency_key',
+      unique: true,
+    ),
+    Index(
+      value: ['terminal_id', 'source_sequence'],
+      name: 'idx_production_order_documents_terminal_source_sequence',
+      unique: true,
+    ),
+  ],
+)
 class ProductionOrderDocumentEntity {
   @primaryKey
   final String id;
@@ -25,6 +39,21 @@ class ProductionOrderDocumentEntity {
   @ColumnInfo(name: 'operation_date')
   final String operationDate;
   final String status;
+  final String outcome;
+  @ColumnInfo(name: 'failure_reason')
+  final String? failureReason;
+  @ColumnInfo(name: 'terminal_id')
+  final String terminalId;
+  @ColumnInfo(name: 'source_sequence')
+  final int sourceSequence;
+  @ColumnInfo(name: 'idempotency_key')
+  final String idempotencyKey;
+  @ColumnInfo(name: 'payload_hash')
+  final String payloadHash;
+  @ColumnInfo(name: 'total_consumed_cost_nio')
+  final double totalConsumedCostNio;
+  @ColumnInfo(name: 'produced_unit_cost_nio')
+  final double producedUnitCostNio;
   @ColumnInfo(name: 'variance_reason')
   final String? varianceReason;
   @ColumnInfo(name: 'closed_at')
@@ -47,9 +76,19 @@ class ProductionOrderDocumentEntity {
     required this.producedExpirationDate,
     required this.operationDate,
     required this.status,
+    this.outcome = 'COMPLETED',
+    this.failureReason,
+    required this.terminalId,
+    this.sourceSequence = 0,
+    String? idempotencyKey,
+    String? payloadHash,
+    this.totalConsumedCostNio = 0,
+    this.producedUnitCostNio = 0,
     required this.movementReferencesJson,
     this.varianceReason,
     this.closedAt,
     this.isSynced = false,
-  });
+  }) : idempotencyKey = idempotencyKey ?? 'production:$terminalId:$id',
+       payloadHash =
+           payloadHash ?? '$id:$outcome:$plannedQuantity:$actualQuantity';
 }

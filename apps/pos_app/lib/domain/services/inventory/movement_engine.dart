@@ -32,6 +32,30 @@ abstract class MovementEngine {
     required String reason,
   });
 
+  /// Records a one-level local-first production close.
+  Future<ProductionCloseResult> recordProductionClose({
+    required String recipeProductId,
+    required String producedInsumoId,
+    required String productionDocumentId,
+    String? recipeVersionId,
+    required double plannedQuantity,
+    required double actualQuantity,
+    required String outcome,
+    required String reason,
+  });
+
+  /// Builds a one-level production close without writing to persistence.
+  Future<ProductionCloseResult> buildProductionClose({
+    required String recipeProductId,
+    required String producedInsumoId,
+    required String productionDocumentId,
+    String? recipeVersionId,
+    required double plannedQuantity,
+    required double actualQuantity,
+    required String outcome,
+    required String reason,
+  });
+
   /// Records a compensating inventory adjustment from a physical count.
   Future<void> recordAdjustment(
     String insumoId,
@@ -62,5 +86,20 @@ abstract class MovementEngine {
     String? recipeVersionId,
   });
 
-  Future<List<BatchDeduction>> getBatchesForConsumption(String insumoId, double quantity);
+  Future<List<BatchDeduction>> getBatchesForConsumption(
+    String insumoId,
+    double quantity,
+  );
+}
+
+class ProductionCloseResult {
+  const ProductionCloseResult({
+    required this.movements,
+    required this.totalConsumedCostNio,
+    required this.producedUnitCostNio,
+  });
+
+  final List<InventoryMovement> movements;
+  final double totalConsumedCostNio;
+  final double producedUnitCostNio;
 }

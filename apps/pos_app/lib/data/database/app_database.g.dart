@@ -108,6 +108,8 @@ class _$AppDatabase extends AppDatabase {
 
   ProductionOrderDocumentDao? _productionOrderDocumentDaoInstance;
 
+  ProductionTransactionDao? _productionTransactionDaoInstance;
+
   UomConversionDao? _uomConversionDaoInstance;
 
   BatchDao? _batchDaoInstance;
@@ -136,7 +138,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 28,
+      version: 29,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -188,7 +190,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `purchases` (`id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `supplier_id` TEXT NOT NULL, `invoice_number` TEXT NOT NULL, `fiscal_authorization_code` TEXT, `quantity` REAL NOT NULL, `unit_cost` REAL NOT NULL, `timestamp` TEXT NOT NULL, `invoice_date` TEXT NOT NULL, `currency` TEXT NOT NULL, `bcn_rate` REAL NOT NULL, `fx_rate_mode` TEXT, `unit_cost_nio` REAL, `cpp_before_nio` REAL, `projected_cpp_nio` REAL, `lot_code` TEXT, `received_date` TEXT, `expiration_date` TEXT, `requires_batch_tracking` INTEGER NOT NULL, `is_synced` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `production_order_documents` (`id` TEXT NOT NULL, `recipe_version_id` TEXT NOT NULL, `recipe_product_id` TEXT NOT NULL, `recipe_product_name` TEXT NOT NULL, `produced_insumo_id` TEXT NOT NULL, `produced_insumo_name` TEXT NOT NULL, `planned_quantity` REAL NOT NULL, `actual_quantity` REAL NOT NULL, `produced_batch_number` TEXT NOT NULL, `produced_expiration_date` TEXT NOT NULL, `operation_date` TEXT NOT NULL, `status` TEXT NOT NULL, `variance_reason` TEXT, `closed_at` TEXT, `movement_references_json` TEXT NOT NULL, `is_synced` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `production_order_documents` (`id` TEXT NOT NULL, `recipe_version_id` TEXT NOT NULL, `recipe_product_id` TEXT NOT NULL, `recipe_product_name` TEXT NOT NULL, `produced_insumo_id` TEXT NOT NULL, `produced_insumo_name` TEXT NOT NULL, `planned_quantity` REAL NOT NULL, `actual_quantity` REAL NOT NULL, `produced_batch_number` TEXT NOT NULL, `produced_expiration_date` TEXT NOT NULL, `operation_date` TEXT NOT NULL, `status` TEXT NOT NULL, `outcome` TEXT NOT NULL, `failure_reason` TEXT, `terminal_id` TEXT NOT NULL, `source_sequence` INTEGER NOT NULL, `idempotency_key` TEXT NOT NULL, `payload_hash` TEXT NOT NULL, `total_consumed_cost_nio` REAL NOT NULL, `produced_unit_cost_nio` REAL NOT NULL, `variance_reason` TEXT, `closed_at` TEXT, `movement_references_json` TEXT NOT NULL, `is_synced` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `uom_conversions` (`id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `unit_name` TEXT NOT NULL, `factor` REAL NOT NULL, `is_default` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
@@ -217,6 +219,10 @@ class _$AppDatabase extends AppDatabase {
             'CREATE UNIQUE INDEX `idx_movement_sync_state_stream_sequence` ON `inventory_movement_sync_state` (`terminal_id`, `flow_type`, `local_sequence`)');
         await database.execute(
             'CREATE UNIQUE INDEX `idx_movement_sync_state_idempotency_key` ON `inventory_movement_sync_state` (`idempotency_key`)');
+        await database.execute(
+            'CREATE UNIQUE INDEX `idx_production_order_documents_idempotency_key` ON `production_order_documents` (`idempotency_key`)');
+        await database.execute(
+            'CREATE UNIQUE INDEX `idx_production_order_documents_terminal_source_sequence` ON `production_order_documents` (`terminal_id`, `source_sequence`)');
         await database.execute(
             'CREATE UNIQUE INDEX `index_invoices_invoice_number` ON `invoices` (`invoice_number`)');
 
@@ -321,6 +327,12 @@ class _$AppDatabase extends AppDatabase {
   ProductionOrderDocumentDao get productionOrderDocumentDao {
     return _productionOrderDocumentDaoInstance ??=
         _$ProductionOrderDocumentDao(database, changeListener);
+  }
+
+  @override
+  ProductionTransactionDao get productionTransactionDao {
+    return _productionTransactionDaoInstance ??=
+        _$ProductionTransactionDao(database, changeListener);
   }
 
   @override
@@ -1914,6 +1926,14 @@ class _$ProductionOrderDocumentDao extends ProductionOrderDocumentDao {
                   'produced_expiration_date': item.producedExpirationDate,
                   'operation_date': item.operationDate,
                   'status': item.status,
+                  'outcome': item.outcome,
+                  'failure_reason': item.failureReason,
+                  'terminal_id': item.terminalId,
+                  'source_sequence': item.sourceSequence,
+                  'idempotency_key': item.idempotencyKey,
+                  'payload_hash': item.payloadHash,
+                  'total_consumed_cost_nio': item.totalConsumedCostNio,
+                  'produced_unit_cost_nio': item.producedUnitCostNio,
                   'variance_reason': item.varianceReason,
                   'closed_at': item.closedAt,
                   'movement_references_json': item.movementReferencesJson,
@@ -1946,6 +1966,14 @@ class _$ProductionOrderDocumentDao extends ProductionOrderDocumentDao {
             producedExpirationDate: row['produced_expiration_date'] as String,
             operationDate: row['operation_date'] as String,
             status: row['status'] as String,
+            outcome: row['outcome'] as String,
+            failureReason: row['failure_reason'] as String?,
+            terminalId: row['terminal_id'] as String,
+            sourceSequence: row['source_sequence'] as int,
+            idempotencyKey: row['idempotency_key'] as String?,
+            payloadHash: row['payload_hash'] as String?,
+            totalConsumedCostNio: row['total_consumed_cost_nio'] as double,
+            producedUnitCostNio: row['produced_unit_cost_nio'] as double,
             movementReferencesJson: row['movement_references_json'] as String,
             varianceReason: row['variance_reason'] as String?,
             closedAt: row['closed_at'] as String?,
@@ -1955,7 +1983,7 @@ class _$ProductionOrderDocumentDao extends ProductionOrderDocumentDao {
   @override
   Future<List<ProductionOrderDocumentEntity>> findUnsynced() async {
     return _queryAdapter.queryList(
-        'SELECT * FROM production_order_documents WHERE is_synced = 0 ORDER BY operation_date ASC',
+        'SELECT * FROM production_order_documents WHERE is_synced = 0 ORDER BY terminal_id ASC, source_sequence ASC, id ASC',
         mapper: (Map<String, Object?> row) => ProductionOrderDocumentEntity(
             id: row['id'] as String,
             recipeVersionId: row['recipe_version_id'] as String,
@@ -1969,10 +1997,26 @@ class _$ProductionOrderDocumentDao extends ProductionOrderDocumentDao {
             producedExpirationDate: row['produced_expiration_date'] as String,
             operationDate: row['operation_date'] as String,
             status: row['status'] as String,
+            outcome: row['outcome'] as String,
+            failureReason: row['failure_reason'] as String?,
+            terminalId: row['terminal_id'] as String,
+            sourceSequence: row['source_sequence'] as int,
+            idempotencyKey: row['idempotency_key'] as String?,
+            payloadHash: row['payload_hash'] as String?,
+            totalConsumedCostNio: row['total_consumed_cost_nio'] as double,
+            producedUnitCostNio: row['produced_unit_cost_nio'] as double,
             movementReferencesJson: row['movement_references_json'] as String,
             varianceReason: row['variance_reason'] as String?,
             closedAt: row['closed_at'] as String?,
             isSynced: (row['is_synced'] as int) != 0));
+  }
+
+  @override
+  Future<int?> findMaxSourceSequence(String terminalId) async {
+    return _queryAdapter.query(
+        'SELECT COALESCE(MAX(source_sequence), 0) FROM production_order_documents WHERE terminal_id = ?1 AND source_sequence > 0',
+        mapper: (Map<String, Object?> row) => row.values.first as int,
+        arguments: [terminalId]);
   }
 
   @override
@@ -1986,6 +2030,121 @@ class _$ProductionOrderDocumentDao extends ProductionOrderDocumentDao {
   Future<void> upsertDocument(ProductionOrderDocumentEntity entity) async {
     await _productionOrderDocumentEntityInsertionAdapter.insert(
         entity, OnConflictStrategy.replace);
+  }
+}
+
+class _$ProductionTransactionDao extends ProductionTransactionDao {
+  _$ProductionTransactionDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _movementEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'inventory_movements',
+            (MovementEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'insumo_id': item.insumoId,
+                  'type': item.type,
+                  'quantity': item.quantity,
+                  'previous_stock': item.previousStock,
+                  'new_stock': item.newStock,
+                  'timestamp': item.timestamp,
+                  'reason': item.reason,
+                  'user_id': item.userId,
+                  'unit_cost_nio': item.unitCostNio,
+                  'source_document_type': item.sourceDocumentType,
+                  'source_document_id': item.sourceDocumentId,
+                  'batch_deductions': item.batch_deductions
+                }),
+        _productionOrderDocumentEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'production_order_documents',
+            (ProductionOrderDocumentEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'recipe_version_id': item.recipeVersionId,
+                  'recipe_product_id': item.recipeProductId,
+                  'recipe_product_name': item.recipeProductName,
+                  'produced_insumo_id': item.producedInsumoId,
+                  'produced_insumo_name': item.producedInsumoName,
+                  'planned_quantity': item.plannedQuantity,
+                  'actual_quantity': item.actualQuantity,
+                  'produced_batch_number': item.producedBatchNumber,
+                  'produced_expiration_date': item.producedExpirationDate,
+                  'operation_date': item.operationDate,
+                  'status': item.status,
+                  'outcome': item.outcome,
+                  'failure_reason': item.failureReason,
+                  'terminal_id': item.terminalId,
+                  'source_sequence': item.sourceSequence,
+                  'idempotency_key': item.idempotencyKey,
+                  'payload_hash': item.payloadHash,
+                  'total_consumed_cost_nio': item.totalConsumedCostNio,
+                  'produced_unit_cost_nio': item.producedUnitCostNio,
+                  'variance_reason': item.varianceReason,
+                  'closed_at': item.closedAt,
+                  'movement_references_json': item.movementReferencesJson,
+                  'is_synced': item.isSynced ? 1 : 0
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<MovementEntity> _movementEntityInsertionAdapter;
+
+  final InsertionAdapter<ProductionOrderDocumentEntity>
+      _productionOrderDocumentEntityInsertionAdapter;
+
+  @override
+  Future<void> updateStock(
+    String id,
+    double newStock,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE insumos SET stock = ?2 WHERE id = ?1',
+        arguments: [id, newStock]);
+  }
+
+  @override
+  Future<int?> findMaxSourceSequence(String terminalId) async {
+    return _queryAdapter.query(
+        'SELECT COALESCE(MAX(source_sequence), 0) FROM production_order_documents WHERE terminal_id = ?1 AND source_sequence > 0',
+        mapper: (Map<String, Object?> row) => row.values.first as int,
+        arguments: [terminalId]);
+  }
+
+  @override
+  Future<void> insertMovement(MovementEntity movement) async {
+    await _movementEntityInsertionAdapter.insert(
+        movement, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> upsertDocument(ProductionOrderDocumentEntity document) async {
+    await _productionOrderDocumentEntityInsertionAdapter.insert(
+        document, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> executeProductionCloseTransaction(
+    List<MovementEntity> movements,
+    ProductionOrderDocumentEntity document,
+    bool shouldFail,
+  ) async {
+    if (database is sqflite.Transaction) {
+      await super
+          .executeProductionCloseTransaction(movements, document, shouldFail);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.productionTransactionDao
+            .executeProductionCloseTransaction(movements, document, shouldFail);
+      });
+    }
   }
 }
 

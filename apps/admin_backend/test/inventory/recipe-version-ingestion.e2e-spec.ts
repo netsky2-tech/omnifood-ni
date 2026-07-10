@@ -11,6 +11,7 @@ import { FxRateResolverService } from '../../src/modules/inventory/fx-rate-resol
 import { FX_RATE_RESOLVER } from '../../src/modules/inventory/inventory-purchase.service';
 import { InventoryPurchaseService } from '../../src/modules/inventory/inventory-purchase.service';
 import { InventoryService } from '../../src/modules/inventory/inventory.service';
+import { ProductionService } from '../../src/modules/inventory/production.service';
 import {
   type IngestPosVersionInput,
   type IngestPosVersionResult,
@@ -163,6 +164,12 @@ describe('Recipe version ingestion route (integration)', () => {
           provide: CountSessionService,
           useValue: {
             replayCountSession: jest.fn(),
+          },
+        },
+        {
+          provide: ProductionService,
+          useValue: {
+            replayProductionClose: jest.fn(),
           },
         },
         TenantInterceptor,

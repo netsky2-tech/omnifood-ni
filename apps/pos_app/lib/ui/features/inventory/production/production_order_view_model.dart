@@ -9,6 +9,7 @@ import '../../../../../domain/services/inventory/movement_engine.dart';
 
 typedef ProductionOrderIdFactory = String Function();
 typedef ProductionOrderClock = DateTime Function();
+typedef ProductionTerminalIdProvider = String Function();
 
 class ProductionOrderViewModel extends ChangeNotifier {
   ProductionOrderViewModel(
@@ -16,26 +17,32 @@ class ProductionOrderViewModel extends ChangeNotifier {
     this._movementEngine, {
     ProductionOrderIdFactory? createId,
     ProductionOrderClock? clock,
+    ProductionTerminalIdProvider? terminalIdProvider,
     Uuid? uuid,
-  })  : _createId = createId ?? _defaultCreateId,
-        _clock = clock ?? DateTime.now,
-        _uuid = uuid ?? const Uuid();
+  }) : _createId = createId ?? _defaultCreateId,
+       _clock = clock ?? DateTime.now,
+       _terminalIdProvider = terminalIdProvider ?? _missingTerminalIdProvider,
+       _uuid = uuid ?? const Uuid();
 
   final InventoryRepository _repository;
   final MovementEngine _movementEngine;
   final ProductionOrderIdFactory _createId;
   final ProductionOrderClock _clock;
+  final ProductionTerminalIdProvider _terminalIdProvider;
   final Uuid _uuid;
 
   List<ProductionOrderDocument> _orders = <ProductionOrderDocument>[];
   List<Insumo> _availableInsumos = <Insumo>[];
-  List<RecipeVersionDocument> _availableRecipeVersions = <RecipeVersionDocument>[];
+  List<RecipeVersionDocument> _availableRecipeVersions =
+      <RecipeVersionDocument>[];
   bool _isLoading = false;
   String? _errorMessage;
   String? _statusMessage;
 
-  List<ProductionOrderDocument> get orders => List<ProductionOrderDocument>.unmodifiable(_orders);
-  List<Insumo> get availableInsumos => List<Insumo>.unmodifiable(_availableInsumos);
+  List<ProductionOrderDocument> get orders =>
+      List<ProductionOrderDocument>.unmodifiable(_orders);
+  List<Insumo> get availableInsumos =>
+      List<Insumo>.unmodifiable(_availableInsumos);
   List<RecipeVersionDocument> get availableRecipeVersions =>
       List<RecipeVersionDocument>.unmodifiable(_availableRecipeVersions);
   bool get isLoading => _isLoading;
@@ -51,10 +58,13 @@ class ProductionOrderViewModel extends ChangeNotifier {
       _availableInsumos = await _repository.getActiveInsumos();
       final products = await _repository.getActiveProducts();
       final versionSets = await Future.wait(
-        products.map((product) => _repository.getRecipeVersionDocuments(product.id)),
+        products.map(
+          (product) => _repository.getRecipeVersionDocuments(product.id),
+        ),
       );
-      _availableRecipeVersions = versionSets.expand((versions) => versions).toList(growable: false)
-        ..sort((left, right) => right.createdAt.compareTo(left.createdAt));
+      _availableRecipeVersions =
+          versionSets.expand((versions) => versions).toList(growable: false)
+            ..sort((left, right) => right.createdAt.compareTo(left.createdAt));
       _orders = await _repository.getProductionOrderDocuments();
       _statusMessage = _orders.isEmpty
           ? 'Cerrá producción localmente con plan vs real y sync posterior.'
@@ -74,10 +84,27 @@ class ProductionOrderViewModel extends ChangeNotifier {
     required double actualQuantity,
     required String producedBatchNumber,
     required DateTime producedExpirationDate,
+    String outcome = 'COMPLETED',
     String? varianceReason,
   }) async {
-    if (plannedQuantity <= 0 || actualQuantity <= 0) {
-      throw ArgumentError('Planned and actual quantities must be greater than zero');
+    final normalizedOutcome = outcome.trim().toUpperCase();
+    final isCompleted = normalizedOutcome == 'COMPLETED';
+    if (plannedQuantity <= 0 || (isCompleted && actualQuantity <= 0)) {
+      throw ArgumentError(
+        'Completed production requires positive planned and actual quantities',
+      );
+    }
+    if (!isCompleted &&
+        normalizedOutcome != 'FAILED' &&
+        normalizedOutcome != 'INTERRUPTED') {
+      throw ArgumentError(
+        'Production outcome must be COMPLETED, FAILED, or INTERRUPTED',
+      );
+    }
+    if (!isCompleted && actualQuantity != 0) {
+      throw ArgumentError(
+        'Production failed or interrupted actual quantity must be zero',
+      );
     }
 
     _isLoading = true;
@@ -88,16 +115,29 @@ class ProductionOrderViewModel extends ChangeNotifier {
       final producedInsumo = _availableInsumos.firstWhere(
         (insumo) => insumo.id == producedInsumoId,
       );
-      final movementReason = 'PRODUCTION_CLOSE:${recipeVersion.id}:${_uuid.v4()}';
-      final movements = await _movementEngine.recordProduction(
+      final documentId = _createId();
+      final terminalId = _terminalIdProvider().trim();
+      if (terminalId.isEmpty) {
+        throw StateError('Production terminal identity must not be empty');
+      }
+      final idempotencyKey = 'production:$terminalId:$documentId';
+      final payloadHash =
+          '$documentId:$normalizedOutcome:$plannedQuantity:$actualQuantity';
+      final movementReason =
+          'PRODUCTION_CLOSE:${recipeVersion.id}:${_uuid.v4()}';
+      final closeResult = await _movementEngine.buildProductionClose(
         recipeProductId: recipeVersion.productId,
         producedInsumoId: producedInsumoId,
-        quantity: actualQuantity,
+        productionDocumentId: documentId,
+        recipeVersionId: recipeVersion.id,
+        plannedQuantity: plannedQuantity,
+        actualQuantity: actualQuantity,
+        outcome: normalizedOutcome,
         reason: movementReason,
       );
       final now = _clock();
       final document = ProductionOrderDocument(
-        id: _createId(),
+        id: documentId,
         recipeVersionId: recipeVersion.id,
         recipeProductId: recipeVersion.productId,
         recipeProductName: recipeVersion.productName,
@@ -109,14 +149,28 @@ class ProductionOrderViewModel extends ChangeNotifier {
         producedExpirationDate: producedExpirationDate,
         operationDate: now,
         status: 'CLOSED_PENDING_SYNC',
+        outcome: normalizedOutcome,
+        failureReason: isCompleted ? null : 'DESECHO_COCINA',
+        terminalId: terminalId,
+        sourceSequence: 0,
+        idempotencyKey: idempotencyKey,
+        payloadHash: payloadHash,
+        totalConsumedCostNio: closeResult.totalConsumedCostNio,
+        producedUnitCostNio: closeResult.producedUnitCostNio,
         varianceReason: varianceReason,
         closedAt: now,
-        movementReferences: movements.map((movement) => movement.id).toList(growable: false),
+        movementReferences: closeResult.movements
+            .map((movement) => movement.id)
+            .toList(growable: false),
       );
 
-      await _repository.saveProductionOrderDocument(document);
+      await _repository.saveProductionCloseTransaction(
+        document,
+        closeResult.movements,
+      );
       _orders = await _repository.getProductionOrderDocuments();
-      _statusMessage = 'Orden cerrada localmente. Movimientos y recibo pendientes de sync.';
+      _statusMessage =
+          'Orden cerrada localmente. Movimientos y recibo pendientes de sync.';
     } catch (error) {
       _errorMessage = 'No se pudo cerrar la orden: $error';
       rethrow;
@@ -141,4 +195,7 @@ class ProductionOrderViewModel extends ChangeNotifier {
   }
 
   static String _defaultCreateId() => const Uuid().v4();
+  static String _missingTerminalIdProvider() => throw StateError(
+    'Production close requires an explicit terminal identity provider from TerminalIdentityService',
+  );
 }

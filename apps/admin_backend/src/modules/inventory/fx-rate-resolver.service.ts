@@ -49,9 +49,8 @@ export class FxRateResolverService implements FxRateResolver {
       };
     }
 
-    const fetchedRate = await this.fetchAndPersistMonthlyRate(
-      canonicalInvoiceDate,
-    );
+    const fetchedRate =
+      await this.fetchAndPersistMonthlyRate(canonicalInvoiceDate);
 
     if (fetchedRate) {
       return fetchedRate;

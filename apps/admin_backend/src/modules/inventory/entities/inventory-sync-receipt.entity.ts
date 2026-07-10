@@ -12,6 +12,11 @@ import {
   ['tenant_id', 'source_device_id', 'flow_type', 'source_sequence'],
   { unique: true },
 )
+@Index(
+  'uq_inventory_sync_receipts_idempotency_key',
+  ['tenant_id', 'idempotency_key', 'flow_type'],
+  { unique: true },
+)
 export class InventorySyncReceipt {
   @PrimaryGeneratedColumn('uuid')
   id: string;

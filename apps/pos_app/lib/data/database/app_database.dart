@@ -16,6 +16,7 @@ import '../daos/inventory/movement_sync_state_dao.dart';
 import '../daos/inventory/inventory_dao.dart';
 import '../daos/inventory/purchase_dao.dart';
 import '../daos/inventory/production_order_document_dao.dart';
+import '../daos/inventory/production_transaction_dao.dart';
 import '../daos/inventory/supplier_dao.dart';
 import '../daos/inventory/warehouse_dao.dart';
 import '../daos/inventory/uom_conversion_dao.dart';
@@ -62,7 +63,7 @@ import 'package:pos_app/data/models/sales/promotion_entity.dart';
 part 'app_database.g.dart'; // generated code
 
 @Database(
-  version: 28,
+  version: 29,
   entities: [
     UserEntity,
     SecurityProfileEntity,
@@ -116,6 +117,7 @@ abstract class AppDatabase extends FloorDatabase {
   WarehouseDao get warehouseDao;
   PurchaseDao get purchaseDao;
   ProductionOrderDocumentDao get productionOrderDocumentDao;
+  ProductionTransactionDao get productionTransactionDao;
   UomConversionDao get uomConversionDao;
   BatchDao get batchDao;
   CatalogValueDao get catalogValueDao;

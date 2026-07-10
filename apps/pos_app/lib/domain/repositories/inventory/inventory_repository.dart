@@ -147,7 +147,13 @@ abstract class InventoryRepository {
   Future<void> markForensicAlertAsSynced(String id);
 
   Future<List<ProductionOrderDocument>> getProductionOrderDocuments();
+  Future<int> reserveProductionSourceSequence(String terminalId);
   Future<void> saveProductionOrderDocument(ProductionOrderDocument document);
+  Future<void> saveProductionCloseTransaction(
+    ProductionOrderDocument document,
+    List<InventoryMovement> movements, {
+    bool debugFailAfterWrites = false,
+  });
   Future<List<ProductionOrderDocument>> getUnsyncedProductionOrders();
   Future<void> markProductionOrderDocumentAsSynced(String id);
 }

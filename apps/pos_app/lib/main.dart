@@ -13,6 +13,7 @@ import 'domain/repositories/auth_repository.dart';
 import 'data/repositories/audit_repository_impl.dart';
 import 'data/services/local_auth_service.dart';
 import 'data/services/sync_service.dart';
+import 'data/services/terminal_identity_service.dart';
 import 'ui/features/auth/viewmodels/login_viewmodel.dart';
 import 'ui/features/auth/viewmodels/lock_screen_viewmodel.dart';
 import 'ui/features/inventory/items/insumo_view_model.dart';
@@ -62,8 +63,11 @@ void main() async {
 
   // Configuration (Could be loaded from .env)
   //const String baseUrl = String.fromEnvironment('API_URL', defaultValue: 'http://192.168.0.6:3000/api');
-  const String baseUrl = String.fromEnvironment('API_URL', defaultValue: 'http://127.0.0.1:3000/api');
-  const String deviceId = String.fromEnvironment('DEVICE_ID', defaultValue: 'pos-terminal-001');
+  const String baseUrl = String.fromEnvironment(
+    'API_URL',
+    defaultValue: 'http://127.0.0.1:3000/api',
+  );
+  const String provisionedDeviceId = String.fromEnvironment('DEVICE_ID');
 
   // Initialize Database
   final database = await $FloorAppDatabase
@@ -71,8 +75,11 @@ void main() async {
       .addMigrations(allMigrations)
       .addCallback(inventoryMovementAppendOnlyCallback)
       .build();
-  
+
   // Initialize Services & Repositories
+  final deviceId = await TerminalIdentityService(
+    database.localConfigDao,
+  ).resolveDeviceId(buildTimeDeviceId: provisionedDeviceId);
   final dio = Dio(BaseOptions(baseUrl: baseUrl));
   final localAuthService = LocalAuthService();
   final authRepository = AuthRepositoryImpl(
@@ -83,15 +90,17 @@ void main() async {
   );
 
   // Add Auth Interceptor
-  dio.interceptors.add(InterceptorsWrapper(
-    onRequest: (options, handler) async {
-      final token = await authRepository.getAccessToken();
-      if (token != null) {
-        options.headers['Authorization'] = 'Bearer $token';
-      }
-      return handler.next(options);
-    },
-  ));
+  dio.interceptors.add(
+    InterceptorsWrapper(
+      onRequest: (options, handler) async {
+        final token = await authRepository.getAccessToken();
+        if (token != null) {
+          options.headers['Authorization'] = 'Bearer $token';
+        }
+        return handler.next(options);
+      },
+    ),
+  );
 
   final auditRepository = AuditRepositoryImpl(
     database.auditDao,
@@ -115,6 +124,7 @@ void main() async {
     batchDao: database.batchDao,
     purchaseDao: database.purchaseDao,
     productionOrderDocumentDao: database.productionOrderDocumentDao,
+    productionTransactionDao: database.productionTransactionDao,
     dio: dio,
     database: database,
   );
@@ -126,8 +136,8 @@ void main() async {
   final numberingService = DgiNumberingServiceImpl(database.localConfigDao);
   // Provision initial DGI range for Pilot (Coffee Shop)
   await numberingService.initializeRange(
-    prefix: '001-001-01-', 
-    start: 1, 
+    prefix: '001-001-01-',
+    start: 1,
     end: 1000,
   );
 
@@ -160,28 +170,67 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => LoginViewModel(authRepository)),
-        ChangeNotifierProvider(create: (_) => LockScreenViewModel(authRepository, database.userDao)),
-        ChangeNotifierProvider(create: (_) => SupplierViewModel(inventoryRepository)),
-        ChangeNotifierProvider(create: (_) => WarehouseViewModel(inventoryRepository)),
-        ChangeNotifierProvider(create: (_) => InsumoViewModel(inventoryRepository, alertService: alertService)),
-        ChangeNotifierProvider(create: (_) => PurchaseViewModel(inventoryRepository, movementEngine)),
-        ChangeNotifierProvider(create: (_) => ShrinkageViewModel(inventoryRepository, movementEngine)),
-        ChangeNotifierProvider(create: (_) => ForensicAlertViewModel(alertService)),
-        ChangeNotifierProvider(create: (_) => PhysicalCountViewModel(inventoryRepository, movementEngine)),
-        ChangeNotifierProvider(create: (_) => KardexViewModel(inventoryRepository)),
-        ChangeNotifierProvider(create: (_) => ProductionOrderViewModel(inventoryRepository, movementEngine)),
-        ChangeNotifierProvider(create: (_) => UserManagementViewModel(authRepository)),
-        ChangeNotifierProvider(create: (_) => RecipeViewModel(inventoryRepository)),
-        ChangeNotifierProvider(create: (_) => DgiReportViewModel(salesRepository, database)),
-        ChangeNotifierProvider(create: (_) => BusinessProfileViewModel(database.localConfigDao)),
-        ChangeNotifierProvider(create: (_) => AuditLogViewModel(auditRepository)),
+        ChangeNotifierProvider(
+          create: (_) => LockScreenViewModel(authRepository, database.userDao),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => SupplierViewModel(inventoryRepository),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => WarehouseViewModel(inventoryRepository),
+        ),
+        ChangeNotifierProvider(
+          create: (_) =>
+              InsumoViewModel(inventoryRepository, alertService: alertService),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => PurchaseViewModel(inventoryRepository, movementEngine),
+        ),
+        ChangeNotifierProvider(
+          create: (_) =>
+              ShrinkageViewModel(inventoryRepository, movementEngine),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => ForensicAlertViewModel(alertService),
+        ),
+        ChangeNotifierProvider(
+          create: (_) =>
+              PhysicalCountViewModel(inventoryRepository, movementEngine),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => KardexViewModel(inventoryRepository),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => ProductionOrderViewModel(
+            inventoryRepository,
+            movementEngine,
+            terminalIdProvider: () => auditRepository.deviceId,
+          ),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => UserManagementViewModel(authRepository),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => RecipeViewModel(inventoryRepository),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => DgiReportViewModel(salesRepository, database),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => BusinessProfileViewModel(database.localConfigDao),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => AuditLogViewModel(auditRepository),
+        ),
         ChangeNotifierProvider(create: (_) => SalesHistoryViewModel(database)),
-        ChangeNotifierProvider(create: (_) => SaleViewModel(
-          salesRepository, 
-          inventoryRepository, 
-          authRepository,
-          database,
-        )),
+        ChangeNotifierProvider(
+          create: (_) => SaleViewModel(
+            salesRepository,
+            inventoryRepository,
+            authRepository,
+            database,
+          ),
+        ),
         Provider<AuthRepository>.value(value: authRepository),
         Provider<AuditRepositoryImpl>.value(value: auditRepository),
         Provider<AlertService>.value(value: alertService),
@@ -198,11 +247,7 @@ void main() async {
 class MyApp extends StatelessWidget {
   final AlertService alertService;
   final String initialRoute;
-  const MyApp({
-    super.key,
-    required this.alertService,
-    this.initialRoute = '/',
-  });
+  const MyApp({super.key, required this.alertService, this.initialRoute = '/'});
 
   @override
   Widget build(BuildContext context) {
@@ -289,7 +334,10 @@ class MyApp extends StatelessWidget {
               borderRadius: BorderRadius.circular(4),
               borderSide: const BorderSide(color: Color(0xFF3F6167), width: 2),
             ),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 12,
+            ),
           ),
           cardTheme: CardThemeData(
             elevation: 0,
@@ -366,7 +414,7 @@ class MyApp extends StatelessWidget {
           '/identity/users': (context) => const UserManagementView(),
           '/config/profile': (context) => const BusinessProfileView(),
           '/identity/audit': (context) => const AuditLogView(),
-          },
+        },
       ),
     );
   }

@@ -23,6 +23,17 @@ import 'package:pos_app/domain/services/inventory/movement_engine.dart' as _i2;
 // ignore_for_file: camel_case_types
 // ignore_for_file: subtype_of_sealed_class
 
+class _FakeProductionCloseResult_0 extends _i1.SmartFake
+    implements _i2.ProductionCloseResult {
+  _FakeProductionCloseResult_0(
+    Object parent,
+    Invocation parentInvocation,
+  ) : super(
+          parent,
+          parentInvocation,
+        );
+}
+
 /// A class which mocks [MovementEngine].
 ///
 /// See the documentation for Mockito's code generation for more information.
@@ -133,6 +144,98 @@ class MockMovementEngine extends _i1.Mock implements _i2.MovementEngine {
         returnValue: _i3.Future<List<_i4.InventoryMovement>>.value(
             <_i4.InventoryMovement>[]),
       ) as _i3.Future<List<_i4.InventoryMovement>>);
+
+  @override
+  _i3.Future<_i2.ProductionCloseResult> recordProductionClose({
+    required String? recipeProductId,
+    required String? producedInsumoId,
+    required String? productionDocumentId,
+    String? recipeVersionId,
+    required double? plannedQuantity,
+    required double? actualQuantity,
+    required String? outcome,
+    required String? reason,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #recordProductionClose,
+          [],
+          {
+            #recipeProductId: recipeProductId,
+            #producedInsumoId: producedInsumoId,
+            #productionDocumentId: productionDocumentId,
+            #recipeVersionId: recipeVersionId,
+            #plannedQuantity: plannedQuantity,
+            #actualQuantity: actualQuantity,
+            #outcome: outcome,
+            #reason: reason,
+          },
+        ),
+        returnValue: _i3.Future<_i2.ProductionCloseResult>.value(
+            _FakeProductionCloseResult_0(
+          this,
+          Invocation.method(
+            #recordProductionClose,
+            [],
+            {
+              #recipeProductId: recipeProductId,
+              #producedInsumoId: producedInsumoId,
+              #productionDocumentId: productionDocumentId,
+              #recipeVersionId: recipeVersionId,
+              #plannedQuantity: plannedQuantity,
+              #actualQuantity: actualQuantity,
+              #outcome: outcome,
+              #reason: reason,
+            },
+          ),
+        )),
+      ) as _i3.Future<_i2.ProductionCloseResult>);
+
+  @override
+  _i3.Future<_i2.ProductionCloseResult> buildProductionClose({
+    required String? recipeProductId,
+    required String? producedInsumoId,
+    required String? productionDocumentId,
+    String? recipeVersionId,
+    required double? plannedQuantity,
+    required double? actualQuantity,
+    required String? outcome,
+    required String? reason,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #buildProductionClose,
+          [],
+          {
+            #recipeProductId: recipeProductId,
+            #producedInsumoId: producedInsumoId,
+            #productionDocumentId: productionDocumentId,
+            #recipeVersionId: recipeVersionId,
+            #plannedQuantity: plannedQuantity,
+            #actualQuantity: actualQuantity,
+            #outcome: outcome,
+            #reason: reason,
+          },
+        ),
+        returnValue: _i3.Future<_i2.ProductionCloseResult>.value(
+            _FakeProductionCloseResult_0(
+          this,
+          Invocation.method(
+            #buildProductionClose,
+            [],
+            {
+              #recipeProductId: recipeProductId,
+              #producedInsumoId: producedInsumoId,
+              #productionDocumentId: productionDocumentId,
+              #recipeVersionId: recipeVersionId,
+              #plannedQuantity: plannedQuantity,
+              #actualQuantity: actualQuantity,
+              #outcome: outcome,
+              #reason: reason,
+            },
+          ),
+        )),
+      ) as _i3.Future<_i2.ProductionCloseResult>);
 
   @override
   _i3.Future<void> recordAdjustment(

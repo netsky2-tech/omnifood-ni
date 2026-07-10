@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Get,
   Controller,
   Post,
@@ -7,7 +8,9 @@ import {
   Query,
   UseGuards,
   UseInterceptors,
+  Req,
 } from '@nestjs/common';
+import { Request } from 'express';
 import { ShrinkageService } from './shrinkage.service';
 import { InventoryService } from './inventory.service';
 import { RecipeService } from './recipe.service';
@@ -29,6 +32,79 @@ import { GetBcnFxRateQueryDto } from './dto/get-bcn-fx-rate-query.dto';
 import { CreateShrinkageDto } from './dto/create-shrinkage.dto';
 import { CountSessionService } from './count-session.service';
 import { CountSessionDocumentDto } from './dto/count-session-document.dto';
+import { ProductionOrderDocumentDto } from './dto/production-order-document.dto';
+import { ProductionService } from './production.service';
+
+interface RequestWithProductionTerminalClaim extends Request {
+  user?: {
+    terminal_id?: string;
+    terminalId?: string;
+    device_id?: string;
+    deviceId?: string;
+  };
+}
+
+const TERMINAL_IDEMPOTENCY_PREFIX = 'production';
+
+const readAuthenticatedTerminalId = (
+  request: RequestWithProductionTerminalClaim,
+): string | undefined => {
+  const terminalId =
+    request.user?.terminal_id ??
+    request.user?.terminalId ??
+    request.user?.device_id ??
+    request.user?.deviceId;
+
+  return terminalId?.trim() || undefined;
+};
+
+const buildProductionIdempotencyKeyForTerminal = (
+  idempotencyKey: string,
+  terminalId: string,
+): string => {
+  const segments = idempotencyKey.split(':');
+  if (segments.length < 3 || segments[0] !== TERMINAL_IDEMPOTENCY_PREFIX) {
+    throw new BadRequestException(
+      'production idempotencyKey must use production:{terminalId}:{documentId}',
+    );
+  }
+
+  return [segments[0], terminalId, ...segments.slice(2)].join(':');
+};
+
+const assertPayloadTerminalMatchesIdempotencyKey = (
+  document: ProductionOrderDocumentDto,
+): void => {
+  const segments = document.idempotencyKey.split(':');
+  if (
+    segments.length < 3 ||
+    segments[0] !== TERMINAL_IDEMPOTENCY_PREFIX ||
+    segments[1] !== document.terminalId
+  ) {
+    throw new BadRequestException(
+      'production terminalId must match the terminal segment in idempotencyKey when no authenticated terminal claim is available',
+    );
+  }
+};
+
+const bindProductionDocumentTerminal = (
+  document: ProductionOrderDocumentDto,
+  request: RequestWithProductionTerminalClaim,
+): ProductionOrderDocumentDto => {
+  const authenticatedTerminalId = readAuthenticatedTerminalId(request);
+  if (!authenticatedTerminalId) {
+    assertPayloadTerminalMatchesIdempotencyKey(document);
+    return document;
+  }
+
+  return Object.assign(new ProductionOrderDocumentDto(), document, {
+    idempotencyKey: buildProductionIdempotencyKeyForTerminal(
+      document.idempotencyKey,
+      authenticatedTerminalId,
+    ),
+    terminalId: authenticatedTerminalId,
+  });
+};
 
 @Controller('inventory')
 @UseInterceptors(TenantInterceptor)
@@ -40,6 +116,7 @@ export class InventoryMovementController {
     private readonly inventoryService: InventoryService,
     private readonly recipeService: RecipeService,
     private readonly countSessionService: CountSessionService,
+    private readonly productionService: ProductionService,
   ) {}
 
   @Post('movements/sync')
@@ -153,6 +230,20 @@ export class InventoryMovementController {
     return this.countSessionService.replayCountSession({
       tenantId,
       document: dto,
+    });
+  }
+
+  @Post('production-orders/close')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  async closeProductionOrder(
+    @Body() dto: ProductionOrderDocumentDto,
+    @GetTenantId() tenantId: string,
+    @Req() request: RequestWithProductionTerminalClaim,
+  ) {
+    return this.productionService.replayProductionClose({
+      tenantId,
+      document: bindProductionDocumentTerminal(dto, request),
     });
   }
 
