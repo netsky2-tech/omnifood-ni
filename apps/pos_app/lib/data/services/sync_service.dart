@@ -67,10 +67,12 @@ class SyncService {
       // 2. Sync inventory outbox deltas
       await _syncPurchaseDocuments();
       await _syncRecipeVersionDocuments();
-      await _syncProductionOrderDocuments();
+      final productionLinkedMovementIds = await _syncProductionOrderDocuments();
       await _syncCountSessionDocuments();
       await _syncAlertLifecycleDocuments();
-      await _syncInventoryOutbox();
+      await _syncInventoryOutbox(
+        blockedMovementIds: productionLinkedMovementIds,
+      );
       await _refreshAlertInbox();
 
       developer.log('Sync completed successfully', name: 'SyncService');
@@ -86,12 +88,15 @@ class SyncService {
     }
   }
 
-  Future<void> _syncInventoryOutbox() async {
+  Future<void> _syncInventoryOutbox({
+    Set<String> blockedMovementIds = const <String>{},
+  }) async {
     final unsynced = (await _inventoryRepository.getUnsyncedMovements())
         .where(
           (movement) =>
               movement.type != MovementType.purchase &&
-              !(movement.reason?.startsWith('COUNT_SESSION:') ?? false),
+              !(movement.reason?.startsWith('COUNT_SESSION:') ?? false) &&
+              !blockedMovementIds.contains(movement.id),
         )
         .toList(growable: false);
     if (unsynced.isEmpty) return;
@@ -227,11 +232,15 @@ class SyncService {
     }
   }
 
-  Future<void> _syncProductionOrderDocuments() async {
+  Future<Set<String>> _syncProductionOrderDocuments() async {
     final unsynced = await _inventoryRepository.getUnsyncedProductionOrders();
     if (unsynced.isEmpty) {
-      return;
+      return const <String>{};
     }
+
+    final linkedMovementIds = unsynced
+        .expand((document) => document.movementReferences)
+        .toSet();
 
     for (final document in unsynced) {
       try {
@@ -258,6 +267,7 @@ class SyncService {
         );
       }
     }
+    return linkedMovementIds;
   }
 
   Future<void> _syncCountSessionDocuments() async {
@@ -452,6 +462,14 @@ class SyncService {
           .toIso8601String(),
       'plannedQuantity': document.plannedQuantity,
       'actualQuantity': document.actualQuantity,
+      'outcome': document.outcome,
+      'failureReason': document.failureReason,
+      'terminalId': document.terminalId,
+      'sourceSequence': document.sourceSequence,
+      'idempotencyKey': document.idempotencyKey,
+      'payloadHash': document.payloadHash,
+      'totalConsumedCostNio': document.totalConsumedCostNio,
+      'producedUnitCostNio': document.producedUnitCostNio,
       'varianceReason': document.varianceReason,
       'operationDate': document.operationDate.toIso8601String(),
       'movementReferences': document.movementReferences,

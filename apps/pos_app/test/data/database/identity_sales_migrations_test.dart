@@ -120,6 +120,81 @@ void main() {
   });
 
   test(
+    'migration28_29 backfills stable per-terminal production source sequences',
+    () async {
+      final db = await databaseFactory.openDatabase(
+        dbPath,
+        options: OpenDatabaseOptions(
+          version: 28,
+          onCreate: (database, version) async {
+            await database.execute('''
+            CREATE TABLE production_order_documents (
+              id TEXT NOT NULL PRIMARY KEY,
+              recipe_version_id TEXT NOT NULL,
+              recipe_product_id TEXT NOT NULL,
+              recipe_product_name TEXT NOT NULL,
+              produced_insumo_id TEXT NOT NULL,
+              produced_insumo_name TEXT NOT NULL,
+              planned_quantity REAL NOT NULL,
+              actual_quantity REAL NOT NULL,
+              produced_batch_number TEXT NOT NULL,
+              produced_expiration_date TEXT NOT NULL,
+              operation_date TEXT NOT NULL,
+              status TEXT NOT NULL,
+              variance_reason TEXT,
+              closed_at TEXT,
+              movement_references_json TEXT NOT NULL,
+              is_synced INTEGER NOT NULL DEFAULT 0
+            )
+          ''');
+          },
+        ),
+      );
+
+      Future<void> insertLegacy(String id, String operationDate) {
+        return db.insert('production_order_documents', {
+          'id': id,
+          'recipe_version_id': 'rv-1',
+          'recipe_product_id': 'prod-1',
+          'recipe_product_name': 'Product',
+          'produced_insumo_id': 'finished-1',
+          'produced_insumo_name': 'Finished',
+          'planned_quantity': 1.0,
+          'actual_quantity': 1.0,
+          'produced_batch_number': 'PB-$id',
+          'produced_expiration_date': '2026-08-01T00:00:00.000',
+          'operation_date': operationDate,
+          'status': 'CLOSED_PENDING_SYNC',
+          'movement_references_json': '[]',
+          'is_synced': 0,
+        });
+      }
+
+      await insertLegacy('po-later', '2026-07-09T10:02:00.000Z');
+      await insertLegacy('po-earlier', '2026-07-09T10:01:00.000Z');
+      await insertLegacy('po-same-time', '2026-07-09T10:01:00.000Z');
+
+      await migration28_29.migrate(db);
+
+      final rows = await db.query(
+        'production_order_documents',
+        columns: ['id', 'terminal_id', 'source_sequence'],
+        orderBy: 'source_sequence ASC',
+      );
+
+      expect(rows.map((row) => row['id']), [
+        'po-earlier',
+        'po-same-time',
+        'po-later',
+      ]);
+      expect(rows.map((row) => row['terminal_id']).toSet(), {'POS_LOCAL'});
+      expect(rows.map((row) => row['source_sequence']), [1, 2, 3]);
+
+      await db.close();
+    },
+  );
+
+  test(
     'migration22_23 moves movement sync state out of inventory_movements',
     () async {
       final db = await databaseFactory.openDatabase(
@@ -455,4 +530,26 @@ void main() {
       }
     },
   );
+
+  test('fresh schema creates production idempotency unique index', () async {
+    final database = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
+    try {
+      final indexes = await database.database.rawQuery(
+        "PRAGMA index_list('production_order_documents')",
+      );
+      final indexNames = indexes.map((row) => row['name']).toSet();
+      final idempotencyIndex = indexes.singleWhere(
+        (row) =>
+            row['name'] == 'idx_production_order_documents_idempotency_key',
+      );
+
+      expect(
+        indexNames,
+        contains('idx_production_order_documents_idempotency_key'),
+      );
+      expect(idempotencyIndex['unique'], 1);
+    } finally {
+      await database.close();
+    }
+  });
 }

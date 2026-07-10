@@ -19,7 +19,10 @@ import 'package:dio/dio.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_sync_state_entity.dart';
 import 'package:pos_app/data/models/inventory/insumo_entity.dart';
+import 'package:pos_app/data/models/inventory/production_order_document_entity.dart';
 import 'package:pos_app/data/models/inventory/recipe_version_document_entity.dart';
+import 'package:pos_app/domain/models/inventory/inventory_movement.dart';
+import 'package:pos_app/domain/models/inventory/production_order_document.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
 
 import 'inventory_repository_impl_test.mocks.dart';
@@ -533,6 +536,328 @@ void main() {
                   'idempotencyKey',
                   'inventory:dev-1:mov-new',
                 ),
+          );
+        } finally {
+          await database.close();
+        }
+      },
+    );
+
+    test(
+      'reserves production source sequence from persisted terminal order',
+      () async {
+        final database = await $FloorAppDatabase
+            .inMemoryDatabaseBuilder()
+            .build();
+        final floorRepository = InventoryRepositoryImpl(
+          insumoDao: database.insumoDao,
+          recipeDao: database.recipeDao,
+          recipeVersionDocumentDao: database.recipeVersionDocumentDao,
+          productionOrderDocumentDao: database.productionOrderDocumentDao,
+          productionTransactionDao: database.productionTransactionDao,
+          movementDao: database.movementDao,
+          movementSyncStateDao: database.movementSyncStateDao,
+          supplierDao: database.supplierDao,
+          warehouseDao: database.warehouseDao,
+          uomConversionDao: database.uomConversionDao,
+          batchDao: database.batchDao,
+          purchaseDao: database.purchaseDao,
+          forensicAlertDao: database.forensicAlertDao,
+          dio: mockDio,
+          database: database,
+        );
+
+        try {
+          await database.productionOrderDocumentDao.upsertDocument(
+            const ProductionOrderDocumentEntity(
+              id: 'prod-close-7',
+              recipeVersionId: 'rv-1',
+              recipeProductId: 'prod-1',
+              recipeProductName: 'Jarabe Casa',
+              producedInsumoId: 'insumo-1',
+              producedInsumoName: 'Jarabe Casa',
+              plannedQuantity: 4,
+              actualQuantity: 4,
+              producedBatchNumber: 'PB-7',
+              producedExpirationDate: '2026-07-01T00:00:00.000Z',
+              operationDate: '2026-06-01T08:30:00.000Z',
+              status: 'CLOSED_PENDING_SYNC',
+              terminalId: 'POS_LOCAL',
+              sourceSequence: 7,
+              movementReferencesJson: '[]',
+            ),
+          );
+          await database.productionOrderDocumentDao.upsertDocument(
+            const ProductionOrderDocumentEntity(
+              id: 'prod-close-other-terminal',
+              recipeVersionId: 'rv-1',
+              recipeProductId: 'prod-1',
+              recipeProductName: 'Jarabe Casa',
+              producedInsumoId: 'insumo-1',
+              producedInsumoName: 'Jarabe Casa',
+              plannedQuantity: 4,
+              actualQuantity: 4,
+              producedBatchNumber: 'PB-99',
+              producedExpirationDate: '2026-07-01T00:00:00.000Z',
+              operationDate: '2026-06-01T08:31:00.000Z',
+              status: 'CLOSED_PENDING_SYNC',
+              terminalId: 'OTHER_POS',
+              sourceSequence: 99,
+              movementReferencesJson: '[]',
+            ),
+          );
+
+          final nextLocal = await floorRepository
+              .reserveProductionSourceSequence('POS_LOCAL');
+          final firstOther = await floorRepository
+              .reserveProductionSourceSequence('NEW_POS');
+
+          expect(nextLocal, 8);
+          expect(firstOther, 1);
+        } finally {
+          await database.close();
+        }
+      },
+    );
+
+    test('production close models default to unassigned source sequence', () {
+      final document = ProductionOrderDocument(
+        id: 'po-default-sequence',
+        recipeVersionId: 'rv-1',
+        recipeProductId: 'prod-1',
+        recipeProductName: 'Product',
+        producedInsumoId: 'finished-1',
+        producedInsumoName: 'Finished',
+        plannedQuantity: 1,
+        actualQuantity: 1,
+        producedBatchNumber: 'PB-1',
+        producedExpirationDate: DateTime(2026, 8, 1),
+        operationDate: DateTime.parse('2026-07-09T10:00:00Z'),
+        status: 'CLOSED_PENDING_SYNC',
+      );
+      const entity = ProductionOrderDocumentEntity(
+        id: 'po-default-sequence',
+        recipeVersionId: 'rv-1',
+        recipeProductId: 'prod-1',
+        recipeProductName: 'Product',
+        producedInsumoId: 'finished-1',
+        producedInsumoName: 'Finished',
+        plannedQuantity: 1,
+        actualQuantity: 1,
+        producedBatchNumber: 'PB-1',
+        producedExpirationDate: '2026-08-01T00:00:00.000',
+        operationDate: '2026-07-09T10:00:00.000Z',
+        status: 'CLOSED_PENDING_SYNC',
+        movementReferencesJson: '[]',
+      );
+
+      expect(document.sourceSequence, 0);
+      expect(entity.sourceSequence, 0);
+    });
+
+    test(
+      'rolls back production close movements, stock, and document on transaction failure',
+      () async {
+        final database = await $FloorAppDatabase
+            .inMemoryDatabaseBuilder()
+            .build();
+        final floorRepository = InventoryRepositoryImpl(
+          insumoDao: database.insumoDao,
+          recipeDao: database.recipeDao,
+          recipeVersionDocumentDao: database.recipeVersionDocumentDao,
+          productionOrderDocumentDao: database.productionOrderDocumentDao,
+          productionTransactionDao: database.productionTransactionDao,
+          movementDao: database.movementDao,
+          movementSyncStateDao: database.movementSyncStateDao,
+          supplierDao: database.supplierDao,
+          warehouseDao: database.warehouseDao,
+          uomConversionDao: database.uomConversionDao,
+          batchDao: database.batchDao,
+          purchaseDao: database.purchaseDao,
+          forensicAlertDao: database.forensicAlertDao,
+          dio: mockDio,
+          database: database,
+        );
+
+        try {
+          await database.insumoDao.insertInsumos([
+            InsumoEntity(
+              id: 'input-1',
+              name: 'Input',
+              consumptionUom: 'kg',
+              stock: 10,
+              averageCost: 5,
+            ),
+          ]);
+          final movement = InventoryMovement(
+            id: 'mov-production-out',
+            insumoId: 'input-1',
+            type: MovementType.production,
+            quantity: -2,
+            previousStock: 10,
+            newStock: 8,
+            timestamp: DateTime.parse('2026-07-09T10:00:00.000Z'),
+            reason: 'PRODUCTION_CLOSE:po-atomic',
+          );
+          final document = ProductionOrderDocument(
+            id: 'po-atomic',
+            recipeVersionId: 'rv-1',
+            recipeProductId: 'prod-1',
+            recipeProductName: 'Product',
+            producedInsumoId: 'finished-1',
+            producedInsumoName: 'Finished',
+            plannedQuantity: 1,
+            actualQuantity: 1,
+            producedBatchNumber: 'PB-1',
+            producedExpirationDate: DateTime(2026, 8, 1),
+            operationDate: DateTime.parse('2026-07-09T10:00:00.000Z'),
+            status: 'CLOSED_PENDING_SYNC',
+            movementReferences: const ['mov-production-out'],
+          );
+
+          await expectLater(
+            () => floorRepository.saveProductionCloseTransaction(document, [
+              movement,
+            ], debugFailAfterWrites: true),
+            throwsException,
+          );
+
+          final input = await database.insumoDao.findInsumoById('input-1');
+          final movements = await database.movementDao.findAllMovements();
+          final documents = await database.productionOrderDocumentDao
+              .findAllDocuments();
+
+          expect(input?.stock, 10);
+          expect(movements, isEmpty);
+          expect(documents, isEmpty);
+        } finally {
+          await database.close();
+        }
+      },
+    );
+
+    test(
+      'assigns production source sequence inside the transaction and orders unsynced documents by stream',
+      () async {
+        final database = await $FloorAppDatabase
+            .inMemoryDatabaseBuilder()
+            .build();
+        final floorRepository = InventoryRepositoryImpl(
+          insumoDao: database.insumoDao,
+          recipeDao: database.recipeDao,
+          recipeVersionDocumentDao: database.recipeVersionDocumentDao,
+          productionOrderDocumentDao: database.productionOrderDocumentDao,
+          productionTransactionDao: database.productionTransactionDao,
+          movementDao: database.movementDao,
+          movementSyncStateDao: database.movementSyncStateDao,
+          supplierDao: database.supplierDao,
+          warehouseDao: database.warehouseDao,
+          uomConversionDao: database.uomConversionDao,
+          batchDao: database.batchDao,
+          purchaseDao: database.purchaseDao,
+          forensicAlertDao: database.forensicAlertDao,
+          dio: mockDio,
+          database: database,
+        );
+
+        ProductionOrderDocument document(String id, DateTime operationDate) =>
+            ProductionOrderDocument(
+              id: id,
+              recipeVersionId: 'rv-1',
+              recipeProductId: 'prod-1',
+              recipeProductName: 'Product',
+              producedInsumoId: 'finished-1',
+              producedInsumoName: 'Finished',
+              plannedQuantity: 1,
+              actualQuantity: 1,
+              producedBatchNumber: 'PB-$id',
+              producedExpirationDate: DateTime(2026, 8, 1),
+              operationDate: operationDate,
+              status: 'CLOSED_PENDING_SYNC',
+              terminalId: 'POS_LOCAL',
+              sourceSequence: 0,
+              movementReferences: const [],
+            );
+
+        try {
+          await floorRepository.saveProductionCloseTransaction(
+            document('po-second', DateTime.parse('2026-07-09T10:00:00Z')),
+            const [],
+          );
+          await floorRepository.saveProductionCloseTransaction(
+            document('po-first', DateTime.parse('2026-07-09T09:00:00Z')),
+            const [],
+          );
+
+          final unsynced = await floorRepository.getUnsyncedProductionOrders();
+
+          expect(unsynced.map((doc) => doc.id), ['po-second', 'po-first']);
+          expect(unsynced.map((doc) => doc.sourceSequence), [1, 2]);
+        } finally {
+          await database.close();
+        }
+      },
+    );
+
+    test(
+      'ignores caller-provided production source sequence for new local closes',
+      () async {
+        final database = await $FloorAppDatabase
+            .inMemoryDatabaseBuilder()
+            .build();
+        final floorRepository = InventoryRepositoryImpl(
+          insumoDao: database.insumoDao,
+          recipeDao: database.recipeDao,
+          recipeVersionDocumentDao: database.recipeVersionDocumentDao,
+          productionOrderDocumentDao: database.productionOrderDocumentDao,
+          productionTransactionDao: database.productionTransactionDao,
+          movementDao: database.movementDao,
+          movementSyncStateDao: database.movementSyncStateDao,
+          supplierDao: database.supplierDao,
+          warehouseDao: database.warehouseDao,
+          uomConversionDao: database.uomConversionDao,
+          batchDao: database.batchDao,
+          purchaseDao: database.purchaseDao,
+          forensicAlertDao: database.forensicAlertDao,
+          dio: mockDio,
+          database: database,
+        );
+
+        ProductionOrderDocument document(String id) => ProductionOrderDocument(
+          id: id,
+          recipeVersionId: 'rv-1',
+          recipeProductId: 'prod-1',
+          recipeProductName: 'Product',
+          producedInsumoId: 'finished-1',
+          producedInsumoName: 'Finished',
+          plannedQuantity: 1,
+          actualQuantity: 1,
+          producedBatchNumber: 'PB-$id',
+          producedExpirationDate: DateTime(2026, 8, 1),
+          operationDate: DateTime.parse('2026-07-09T10:00:00Z'),
+          status: 'CLOSED_PENDING_SYNC',
+          terminalId: 'POS_LOCAL',
+          sourceSequence: 1,
+          movementReferences: const [],
+        );
+
+        try {
+          await floorRepository.saveProductionCloseTransaction(
+            document('po-first'),
+            const [],
+          );
+          await floorRepository.saveProductionCloseTransaction(
+            document('po-second'),
+            const [],
+          );
+
+          final unsynced = await floorRepository.getUnsyncedProductionOrders();
+
+          expect(unsynced.map((doc) => doc.id), ['po-first', 'po-second']);
+          expect(unsynced.map((doc) => doc.sourceSequence), [1, 2]);
+          expect(
+            unsynced.map((doc) => doc.idempotencyKey).toSet(),
+            hasLength(2),
           );
         } finally {
           await database.close();

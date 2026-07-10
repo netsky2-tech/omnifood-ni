@@ -273,6 +273,216 @@ class MovementEngineImpl implements MovementEngine {
   }
 
   @override
+  Future<ProductionCloseResult> recordProductionClose({
+    required String recipeProductId,
+    required String producedInsumoId,
+    required String productionDocumentId,
+    String? recipeVersionId,
+    required double plannedQuantity,
+    required double actualQuantity,
+    required String outcome,
+    required String reason,
+  }) async {
+    final result = await buildProductionClose(
+      recipeProductId: recipeProductId,
+      producedInsumoId: producedInsumoId,
+      productionDocumentId: productionDocumentId,
+      recipeVersionId: recipeVersionId,
+      plannedQuantity: plannedQuantity,
+      actualQuantity: actualQuantity,
+      outcome: outcome,
+      reason: reason,
+    );
+
+    for (final movement in result.movements) {
+      await repository.updateInsumoStock(movement.insumoId, movement.newStock);
+      await repository.saveMovement(movement);
+    }
+
+    return result;
+  }
+
+  @override
+  Future<ProductionCloseResult> buildProductionClose({
+    required String recipeProductId,
+    required String producedInsumoId,
+    required String productionDocumentId,
+    String? recipeVersionId,
+    required double plannedQuantity,
+    required double actualQuantity,
+    required String outcome,
+    required String reason,
+  }) async {
+    if (plannedQuantity <= 0) {
+      throw ArgumentError(
+        'Planned production quantity must be greater than zero',
+      );
+    }
+    final normalizedOutcome = outcome.trim().toUpperCase();
+    final isCompleted = normalizedOutcome == 'COMPLETED';
+    if (!isCompleted &&
+        normalizedOutcome != 'FAILED' &&
+        normalizedOutcome != 'INTERRUPTED') {
+      throw ArgumentError(
+        'Production outcome must be COMPLETED, FAILED, or INTERRUPTED',
+      );
+    }
+    if (isCompleted && actualQuantity <= 0) {
+      throw ArgumentError(
+        'Completed production quantity must be greater than zero',
+      );
+    }
+
+    final closeQuantity = isCompleted ? actualQuantity : plannedQuantity;
+    final timestamp = DateTime.now();
+    final oneLevelInputs = await _resolveProductionCloseInputs(
+      recipeProductId: recipeProductId,
+      recipeVersionId: recipeVersionId,
+      closeQuantity: closeQuantity,
+    );
+    if (oneLevelInputs.isEmpty) {
+      throw StateError(
+        'Product $recipeProductId has no one-level insumo recipe',
+      );
+    }
+
+    final inputIds = oneLevelInputs
+        .map((item) => item.ingredientId)
+        .toList(growable: false);
+    final inputInsumos = await repository.getInsumosByIds(inputIds);
+    final inputInsumoMap = {
+      for (final insumo in inputInsumos) insumo.id: insumo,
+    };
+    final movements = <InventoryMovement>[];
+    double totalConsumedCost = 0;
+
+    for (final item in oneLevelInputs) {
+      final insumo = inputInsumoMap[item.ingredientId];
+      if (insumo == null) {
+        throw StateError(
+          'Recipe component ${item.ingredientId} is missing locally',
+        );
+      }
+      final consumedQuantity = item.quantity;
+      final previousStock = insumo.stock;
+      final newStock = previousStock - consumedQuantity;
+      totalConsumedCost += consumedQuantity * insumo.averageCost;
+
+      final movement = InventoryMovement(
+        id: '${timestamp.microsecondsSinceEpoch}-${insumo.id}-production-out',
+        insumoId: insumo.id,
+        type: MovementType.production,
+        quantity: -consumedQuantity,
+        previousStock: previousStock,
+        newStock: newStock,
+        timestamp: timestamp,
+        reason: isCompleted ? reason : 'DESECHO_COCINA',
+        unitCostNio: insumo.averageCost,
+        sourceDocumentType: 'PRODUCTION_CLOSE',
+        sourceDocumentId: productionDocumentId,
+      );
+      movements.add(movement);
+    }
+
+    final producedUnitCost = isCompleted
+        ? totalConsumedCost / actualQuantity
+        : 0.0;
+    if (isCompleted) {
+      final producedInsumo = await repository.getInsumoById(producedInsumoId);
+      if (producedInsumo == null) {
+        throw StateError(
+          'Produced insumo $producedInsumoId is missing locally',
+        );
+      }
+      final previousStock = producedInsumo.stock;
+      final newStock = previousStock + actualQuantity;
+      final movement = InventoryMovement(
+        id: '${timestamp.microsecondsSinceEpoch}-${producedInsumo.id}-production-in',
+        insumoId: producedInsumo.id,
+        type: MovementType.production,
+        quantity: actualQuantity,
+        previousStock: previousStock,
+        newStock: newStock,
+        timestamp: timestamp,
+        reason: reason,
+        unitCostNio: producedUnitCost,
+        sourceDocumentType: 'PRODUCTION_CLOSE',
+        sourceDocumentId: productionDocumentId,
+      );
+      movements.add(movement);
+    }
+
+    return ProductionCloseResult(
+      movements: movements,
+      totalConsumedCostNio: totalConsumedCost,
+      producedUnitCostNio: producedUnitCost,
+    );
+  }
+
+  Future<List<_BomLine>> _resolveProductionCloseInputs({
+    required String recipeProductId,
+    required String? recipeVersionId,
+    required double closeQuantity,
+  }) async {
+    if (recipeVersionId == null || recipeVersionId.trim().isEmpty) {
+      final recipeItems = await repository.getRecipeByProductId(
+        recipeProductId,
+      );
+      return recipeItems
+          .where((item) => item.ingredientType == IngredientType.insumo)
+          .map(
+            (item) => _BomLine(
+              ingredientId: item.ingredientId,
+              ingredientType: item.ingredientType,
+              quantity: item.quantity * closeQuantity,
+            ),
+          )
+          .toList(growable: false);
+    }
+
+    final document = await repository.getRecipeVersionDocumentById(
+      recipeVersionId,
+    );
+    if (document == null) {
+      throw StateError(
+        'Recipe version $recipeVersionId not found for product $recipeProductId. '
+        'Cannot close production with a missing version binding.',
+      );
+    }
+    if (document.productId != recipeProductId) {
+      throw StateError(
+        'Recipe version $recipeVersionId belongs to product '
+        '${document.productId}, not $recipeProductId. Refusing production close.',
+      );
+    }
+
+    _validateVersionedDocumentQuantities(document, recipeVersionId);
+    final conversionFactors = await _resolveUomConversionFactors(
+      document,
+      recipeVersionId,
+    );
+    final portionMultiplier = closeQuantity / document.yieldQuantity;
+    final lines = <_BomLine>[];
+    for (var i = 0; i < document.components.length; i++) {
+      final component = document.components[i];
+      final ingredientType = _parseIngredientType(component.ingredientType);
+      if (ingredientType != IngredientType.insumo) {
+        continue;
+      }
+      lines.add(
+        _BomLine(
+          ingredientId: component.ingredientId,
+          ingredientType: ingredientType,
+          quantity: UomConversionCalculator.roundToInventoryScale(
+            component.grossQuantity * conversionFactors[i] * portionMultiplier,
+          ),
+        ),
+      );
+    }
+    return lines;
+  }
+
+  @override
   Future<void> recordAdjustment(
     String insumoId,
     double quantityDelta,
@@ -699,7 +909,10 @@ class MovementEngineImpl implements MovementEngine {
     String versionId,
   ) async {
     final insumoComponentIds = document.components
-        .where((c) => _parseIngredientType(c.ingredientType) == IngredientType.insumo)
+        .where(
+          (c) =>
+              _parseIngredientType(c.ingredientType) == IngredientType.insumo,
+        )
         .map((c) => c.ingredientId)
         .toSet()
         .toList(growable: false);

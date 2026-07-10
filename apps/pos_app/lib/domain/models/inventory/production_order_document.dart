@@ -14,11 +14,21 @@ class ProductionOrderDocument {
     required this.producedExpirationDate,
     required this.operationDate,
     required this.status,
+    this.outcome = 'COMPLETED',
+    this.failureReason,
+    this.terminalId = 'POS_LOCAL',
+    this.sourceSequence = 0,
+    String? idempotencyKey,
+    String? payloadHash,
+    this.totalConsumedCostNio = 0,
+    this.producedUnitCostNio = 0,
     this.varianceReason,
     this.closedAt,
     this.movementReferences = const <String>[],
     this.isSynced = false,
-  });
+  }) : idempotencyKey = idempotencyKey ?? 'production:POS_LOCAL:$id',
+       payloadHash =
+           payloadHash ?? '$id:$outcome:$plannedQuantity:$actualQuantity';
 
   final String id;
   final String recipeVersionId;
@@ -32,6 +42,14 @@ class ProductionOrderDocument {
   final DateTime producedExpirationDate;
   final DateTime operationDate;
   final String status;
+  final String outcome;
+  final String? failureReason;
+  final String terminalId;
+  final int sourceSequence;
+  final String idempotencyKey;
+  final String payloadHash;
+  final double totalConsumedCostNio;
+  final double producedUnitCostNio;
   final String? varianceReason;
   final DateTime? closedAt;
   final List<String> movementReferences;
@@ -58,6 +76,14 @@ class ProductionOrderDocument {
       producedExpirationDate: producedExpirationDate,
       operationDate: operationDate,
       status: status ?? this.status,
+      outcome: outcome,
+      failureReason: failureReason,
+      terminalId: terminalId,
+      sourceSequence: sourceSequence,
+      idempotencyKey: idempotencyKey,
+      payloadHash: payloadHash,
+      totalConsumedCostNio: totalConsumedCostNio,
+      producedUnitCostNio: producedUnitCostNio,
       varianceReason: varianceReason,
       closedAt: closedAt ?? this.closedAt,
       movementReferences: movementReferences ?? this.movementReferences,
@@ -66,23 +92,31 @@ class ProductionOrderDocument {
   }
 
   Map<String, Object?> toJson() => {
-        'id': id,
-        'recipeVersionId': recipeVersionId,
-        'recipeProductId': recipeProductId,
-        'recipeProductName': recipeProductName,
-        'producedInsumoId': producedInsumoId,
-        'producedInsumoName': producedInsumoName,
-        'plannedQuantity': plannedQuantity,
-        'actualQuantity': actualQuantity,
-        'producedBatchNumber': producedBatchNumber,
-        'producedExpirationDate': producedExpirationDate.toIso8601String(),
-        'operationDate': operationDate.toIso8601String(),
-        'status': status,
-        'varianceReason': varianceReason,
-        'closedAt': closedAt?.toIso8601String(),
-        'movementReferences': movementReferences,
-        'isSynced': isSynced,
-      };
+    'id': id,
+    'recipeVersionId': recipeVersionId,
+    'recipeProductId': recipeProductId,
+    'recipeProductName': recipeProductName,
+    'producedInsumoId': producedInsumoId,
+    'producedInsumoName': producedInsumoName,
+    'plannedQuantity': plannedQuantity,
+    'actualQuantity': actualQuantity,
+    'producedBatchNumber': producedBatchNumber,
+    'producedExpirationDate': producedExpirationDate.toIso8601String(),
+    'operationDate': operationDate.toIso8601String(),
+    'status': status,
+    'outcome': outcome,
+    'failureReason': failureReason,
+    'terminalId': terminalId,
+    'sourceSequence': sourceSequence,
+    'idempotencyKey': idempotencyKey,
+    'payloadHash': payloadHash,
+    'totalConsumedCostNio': totalConsumedCostNio,
+    'producedUnitCostNio': producedUnitCostNio,
+    'varianceReason': varianceReason,
+    'closedAt': closedAt?.toIso8601String(),
+    'movementReferences': movementReferences,
+    'isSynced': isSynced,
+  };
 
   String encodeMovementReferences() => jsonEncode(movementReferences);
 
@@ -97,16 +131,29 @@ class ProductionOrderDocument {
       plannedQuantity: (json['plannedQuantity'] as num).toDouble(),
       actualQuantity: (json['actualQuantity'] as num).toDouble(),
       producedBatchNumber: json['producedBatchNumber'] as String,
-      producedExpirationDate: DateTime.parse(json['producedExpirationDate'] as String),
+      producedExpirationDate: DateTime.parse(
+        json['producedExpirationDate'] as String,
+      ),
       operationDate: DateTime.parse(json['operationDate'] as String),
       status: json['status'] as String,
+      outcome: (json['outcome'] as String?) ?? 'COMPLETED',
+      failureReason: json['failureReason'] as String?,
+      terminalId: (json['terminalId'] as String?) ?? 'POS_LOCAL',
+      sourceSequence: (json['sourceSequence'] as num?)?.toInt() ?? 0,
+      idempotencyKey: json['idempotencyKey'] as String?,
+      payloadHash: json['payloadHash'] as String?,
+      totalConsumedCostNio:
+          (json['totalConsumedCostNio'] as num?)?.toDouble() ?? 0,
+      producedUnitCostNio:
+          (json['producedUnitCostNio'] as num?)?.toDouble() ?? 0,
       varianceReason: json['varianceReason'] as String?,
       closedAt: json['closedAt'] == null
           ? null
           : DateTime.parse(json['closedAt'] as String),
-      movementReferences: (json['movementReferences'] as List<dynamic>? ?? const <dynamic>[])
-          .map((entry) => entry as String)
-          .toList(growable: false),
+      movementReferences:
+          (json['movementReferences'] as List<dynamic>? ?? const <dynamic>[])
+              .map((entry) => entry as String)
+              .toList(growable: false),
       isSynced: (json['isSynced'] as bool?) ?? false,
     );
   }

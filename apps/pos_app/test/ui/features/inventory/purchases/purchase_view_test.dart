@@ -152,6 +152,38 @@ class _FakeMovementEngine implements MovementEngine {
     required double quantity,
     required String reason,
   }) async => const [];
+
+  @override
+  Future<ProductionCloseResult> recordProductionClose({
+    required String recipeProductId,
+    required String producedInsumoId,
+    required String productionDocumentId,
+    String? recipeVersionId,
+    required double plannedQuantity,
+    required double actualQuantity,
+    required String outcome,
+    required String reason,
+  }) async => const ProductionCloseResult(
+    movements: <InventoryMovement>[],
+    totalConsumedCostNio: 0,
+    producedUnitCostNio: 0,
+  );
+
+  @override
+  Future<ProductionCloseResult> buildProductionClose({
+    required String recipeProductId,
+    required String producedInsumoId,
+    required String productionDocumentId,
+    String? recipeVersionId,
+    required double plannedQuantity,
+    required double actualQuantity,
+    required String outcome,
+    required String reason,
+  }) async => const ProductionCloseResult(
+    movements: <InventoryMovement>[],
+    totalConsumedCostNio: 0,
+    producedUnitCostNio: 0,
+  );
 }
 
 Future<void> _pumpPurchaseView(

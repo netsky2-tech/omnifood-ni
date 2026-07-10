@@ -690,12 +690,41 @@ class MockInventoryRepository extends _i1.Mock
           ) as _i4.Future<List<_i19.ProductionOrderDocument>>);
 
   @override
+  _i4.Future<int> reserveProductionSourceSequence(String? terminalId) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #reserveProductionSourceSequence,
+          [terminalId],
+        ),
+        returnValue: _i4.Future<int>.value(0),
+      ) as _i4.Future<int>);
+
+  @override
   _i4.Future<void> saveProductionOrderDocument(
           _i19.ProductionOrderDocument? document) =>
       (super.noSuchMethod(
         Invocation.method(
           #saveProductionOrderDocument,
           [document],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> saveProductionCloseTransaction(
+    _i19.ProductionOrderDocument? document,
+    List<_i10.InventoryMovement>? movements, {
+    bool? debugFailAfterWrites = false,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #saveProductionCloseTransaction,
+          [
+            document,
+            movements,
+          ],
+          {#debugFailAfterWrites: debugFailAfterWrites},
         ),
         returnValue: _i4.Future<void>.value(),
         returnValueForMissingStub: _i4.Future<void>.value(),
