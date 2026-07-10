@@ -169,7 +169,9 @@ describe('CreateInventoryPurchaseDocuments1776000000000 (db)', () => {
             await queryRunner.query(
               'ROLLBACK TO SAVEPOINT duplicate_invoice_attempt',
             );
-            await queryRunner.query('RELEASE SAVEPOINT duplicate_invoice_attempt');
+            await queryRunner.query(
+              'RELEASE SAVEPOINT duplicate_invoice_attempt',
+            );
 
             const tenantARows = (await queryRunner.query(`
               SELECT tenant_id, invoice_number
