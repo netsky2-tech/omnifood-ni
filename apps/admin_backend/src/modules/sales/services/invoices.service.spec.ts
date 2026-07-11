@@ -22,7 +22,7 @@ import {
 
 describe('InvoicesService', () => {
   let service: InvoicesService;
-  let invoiceRepo: { upsert: jest.Mock; find?: jest.Mock };
+  let invoiceRepo: { upsert: jest.Mock; find?: jest.Mock; findOne: jest.Mock };
   let itemRepo: { upsert: jest.Mock; find: jest.Mock };
   let paymentRepo: { upsert: jest.Mock; find?: jest.Mock };
   let movementRepo: {
@@ -41,6 +41,7 @@ describe('InvoicesService', () => {
   let bomExplosionService: { explode: jest.Mock };
   let dataSource: { transaction: jest.Mock };
   let txManager: {
+    query: jest.Mock<Promise<unknown>, unknown[]>;
     save: jest.Mock<Promise<unknown>, unknown[]>;
     getRepository: jest.Mock;
     createQueryBuilder: jest.Mock<
@@ -56,7 +57,11 @@ describe('InvoicesService', () => {
   };
 
   beforeEach(async () => {
-    invoiceRepo = { upsert: jest.fn(), find: jest.fn().mockResolvedValue([]) };
+    invoiceRepo = {
+      upsert: jest.fn(),
+      find: jest.fn().mockResolvedValue([]),
+      findOne: jest.fn().mockResolvedValue(null),
+    };
     itemRepo = { upsert: jest.fn(), find: jest.fn().mockResolvedValue([]) };
     paymentRepo = { upsert: jest.fn(), find: jest.fn().mockResolvedValue([]) };
     movementRepo = {
@@ -87,6 +92,7 @@ describe('InvoicesService', () => {
       getOne: jest.fn(),
     };
     txManager = {
+      query: jest.fn<Promise<unknown>, unknown[]>().mockResolvedValue([]),
       save: jest.fn<Promise<unknown>, unknown[]>(),
       // By default, return the injected (standalone) repositories so the
       // existing syncBatch tests that assert on `invoiceRepo.upsert` keep
@@ -97,6 +103,8 @@ describe('InvoicesService', () => {
         if (target === Invoice) return invoiceRepo;
         if (target === InvoiceItem) return itemRepo;
         if (target === Payment) return paymentRepo;
+        if (target === InventorySyncReceipt) return receiptRepo;
+        if (target === InventorySyncOutbox) return outboxRepo;
         return undefined;
       }),
       createQueryBuilder: jest
@@ -171,6 +179,37 @@ describe('InvoicesService', () => {
   });
 
   describe('syncInvoices', () => {
+    const creditNoteInvoice: SyncInvoiceDto = {
+      id: 'credit-invoice-1',
+      number: 'NC-001',
+      createdAt: '2026-07-10T18:00:00.000Z',
+      userId: 'user-1',
+      subtotal: -50,
+      totalTax: -7.5,
+      total: -57.5,
+      paymentStatus: 'REFUNDED',
+      type: 'creditNote',
+      originInvoiceId: 'sale-invoice-1',
+      refundReasonCode: 'DAMAGED_RETURN',
+      refundReasonPolicy: 'WASTE_NO_RESTOCK',
+      items: [
+        {
+          id: 'credit-item-1',
+          productId: 'prod-1',
+          productName: 'Burger',
+          quantity: -1,
+          unitPrice: 50,
+          originalTaxRate: 0.15,
+          appliedTaxRate: 0.15,
+          taxAmount: -7.5,
+          total: -57.5,
+          discount: 0,
+          originInvoiceItemId: 'sale-item-1',
+        },
+      ],
+      payments: [],
+    };
+
     it('should reconcile child entities for existing invoices using upsert', async () => {
       const tenantId = 'tenant-1';
       const dto: SyncInvoiceDto = {
@@ -441,6 +480,197 @@ describe('InvoicesService', () => {
       expect(invoiceRepo.upsert).not.toHaveBeenCalled();
       expect(itemRepo.upsert).not.toHaveBeenCalled();
     });
+
+    it('treats an identical duplicate credit-note invoice as idempotent without issuing an UPDATE upsert', async () => {
+      invoiceRepo.findOne.mockResolvedValueOnce({
+        ...creditNoteInvoice,
+        tenant_id: 'tenant-1',
+        created_at: new Date(creditNoteInvoice.createdAt),
+        items: creditNoteInvoice.items.map((item) => ({
+          ...item,
+          invoiceId: creditNoteInvoice.id,
+          tenant_id: 'tenant-1',
+        })),
+        payments: [],
+      });
+
+      await service.syncInvoices('tenant-1', [creditNoteInvoice], txManager as never, {
+        allowCreditNotes: true,
+      });
+
+      expect(invoiceRepo.findOne).toHaveBeenCalledWith({
+        where: { id: creditNoteInvoice.id, tenant_id: 'tenant-1' },
+        relations: ['items', 'payments'],
+      });
+      expect(invoiceRepo.upsert).not.toHaveBeenCalled();
+      expect(itemRepo.upsert).not.toHaveBeenCalled();
+      expect(paymentRepo.upsert).not.toHaveBeenCalled();
+    });
+
+    it('rejects a changed duplicate credit-note invoice before DB upsert can hit append-only triggers', async () => {
+      invoiceRepo.findOne.mockResolvedValueOnce({
+        ...creditNoteInvoice,
+        total: -57.5,
+        tenant_id: 'tenant-1',
+        created_at: new Date(creditNoteInvoice.createdAt),
+        items: creditNoteInvoice.items.map((item) => ({
+          ...item,
+          invoiceId: creditNoteInvoice.id,
+          tenant_id: 'tenant-1',
+        })),
+        payments: [],
+      });
+
+      await expect(
+        service.syncInvoices('tenant-1', [
+          { ...creditNoteInvoice, total: -58.5 },
+        ], txManager as never, { allowCreditNotes: true }),
+      ).rejects.toThrow('conflicts with an existing credit-note invoice');
+
+      expect(invoiceRepo.upsert).not.toHaveBeenCalled();
+      expect(itemRepo.upsert).not.toHaveBeenCalled();
+      expect(paymentRepo.upsert).not.toHaveBeenCalled();
+    });
+
+    it('disallows credit-note invoices on the direct sales sync boundary', async () => {
+      await expect(
+        service.syncInvoices('tenant-1', [creditNoteInvoice]),
+      ).rejects.toThrow('Credit-note invoices must use the batch CREDIT_NOTE sync boundary');
+
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+      expect(invoiceRepo.findOne).not.toHaveBeenCalled();
+      expect(invoiceRepo.upsert).not.toHaveBeenCalled();
+      expect(itemRepo.upsert).not.toHaveBeenCalled();
+    });
+
+    it('rejects a credit-note origin invoice that is itself another credit note before persistence', async () => {
+      invoiceRepo.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          id: 'sale-invoice-1',
+          tenant_id: 'tenant-1',
+          type: 'creditNote',
+        });
+
+      await expect(
+        service.syncInvoices('tenant-1', [creditNoteInvoice], txManager as never, {
+          allowCreditNotes: true,
+        }),
+      ).rejects.toThrow('credit-note origin invoice must be a regular sale invoice');
+
+      expect(invoiceRepo.upsert).not.toHaveBeenCalled();
+      expect(itemRepo.upsert).not.toHaveBeenCalled();
+    });
+
+    it('rejects credit-note lines whose origin item is missing from the tenant-bound origin invoice', async () => {
+      invoiceRepo.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          id: 'sale-invoice-1',
+          tenant_id: 'tenant-1',
+          type: 'regular',
+        });
+      itemRepo.find.mockResolvedValueOnce([]);
+
+      await expect(
+        service.syncInvoices('tenant-1', [creditNoteInvoice], txManager as never, {
+          allowCreditNotes: true,
+        }),
+      ).rejects.toThrow('credit-note origin invoice item was not found');
+
+      expect(itemRepo.find).toHaveBeenCalled();
+      expect(invoiceRepo.upsert).not.toHaveBeenCalled();
+      expect(itemRepo.upsert).not.toHaveBeenCalled();
+    });
+
+    it('rejects duplicate origin invoice item references within one credit note', async () => {
+      const duplicateOriginInvoice: SyncInvoiceDto = {
+        ...creditNoteInvoice,
+        items: [
+          creditNoteInvoice.items[0],
+          {
+            ...creditNoteInvoice.items[0],
+            id: 'credit-item-2',
+            quantity: -1,
+            total: -57.5,
+            originInvoiceItemId: 'sale-item-1',
+          },
+        ],
+      };
+
+      invoiceRepo.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          id: 'sale-invoice-1',
+          tenant_id: 'tenant-1',
+          type: 'regular',
+        });
+
+      await expect(
+        service.syncInvoices(
+          'tenant-1',
+          [duplicateOriginInvoice],
+          txManager as never,
+          { allowCreditNotes: true },
+        ),
+      ).rejects.toThrow('duplicate credit-note origin invoice item');
+
+      expect(itemRepo.find).not.toHaveBeenCalled();
+      expect(invoiceRepo.upsert).not.toHaveBeenCalled();
+      expect(itemRepo.upsert).not.toHaveBeenCalled();
+    });
+
+    it('rejects credit-note lines whose origin item belongs to a different invoice', async () => {
+      invoiceRepo.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          id: 'sale-invoice-1',
+          tenant_id: 'tenant-1',
+          type: 'regular',
+        });
+      itemRepo.find.mockResolvedValueOnce([
+        {
+          id: 'sale-item-1',
+          tenant_id: 'tenant-1',
+          invoiceId: 'sale-invoice-2',
+        },
+      ]);
+
+      await expect(
+        service.syncInvoices('tenant-1', [creditNoteInvoice], txManager as never, {
+          allowCreditNotes: true,
+        }),
+      ).rejects.toThrow('must belong to the credit-note origin invoice');
+
+      expect(invoiceRepo.upsert).not.toHaveBeenCalled();
+      expect(itemRepo.upsert).not.toHaveBeenCalled();
+    });
+
+    it('binds app.tenant_id before direct sales sync persistence touches RLS-protected tables', async () => {
+      const dto: SyncInvoiceDto = {
+        id: 'direct-rls-invoice',
+        number: 'RLS-001',
+        createdAt: new Date().toISOString(),
+        userId: 'user-1',
+        subtotal: 10,
+        totalTax: 1.5,
+        total: 11.5,
+        paymentStatus: 'PAID',
+        items: [],
+        payments: [],
+      };
+
+      await service.syncInvoices('tenant-rls', [dto]);
+
+      expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+      expect(txManager.query).toHaveBeenCalledWith(
+        "SELECT set_config('app.tenant_id', $1, true)",
+        ['tenant-rls'],
+      );
+      expect(txManager.query.mock.invocationCallOrder[0]).toBeLessThan(
+        invoiceRepo.upsert.mock.invocationCallOrder[0],
+      );
+    });
   });
 
   describe('syncBatch', () => {
@@ -586,19 +816,21 @@ describe('InvoicesService', () => {
     });
 
     it('skips duplicate records by idempotencyKey/sourceSequence', async () => {
+      const duplicateSaleRecord: SyncBatchRecordDto = {
+        idempotencyKey: 'dup',
+        sourceDeviceId: 'd1',
+        sourceSequence: 1,
+        documentType: 'SALE',
+        invoice: baseInvoice,
+      };
       receiptRepo.findOne
-        .mockResolvedValueOnce({ id: 'r-existing' })
+        .mockResolvedValueOnce({
+          id: 'r-existing',
+          payload_hash: calculateSyncPayloadHash(duplicateSaleRecord),
+        })
         .mockResolvedValueOnce(null);
 
-      const result = await service.syncBatch('tenant-1', [
-        {
-          idempotencyKey: 'dup',
-          sourceDeviceId: 'd1',
-          sourceSequence: 1,
-          documentType: 'SALE',
-          invoice: baseInvoice,
-        },
-      ]);
+      const result = await service.syncBatch('tenant-1', [duplicateSaleRecord]);
 
       expect(result).toEqual({ received: 1, processed: 0, duplicates: 1 });
       expect(invoiceRepo.upsert).not.toHaveBeenCalled();
@@ -636,7 +868,7 @@ describe('InvoicesService', () => {
           code: 'DUPLICATE_REPLAY',
         }),
       ]);
-      expect(dataSource.transaction).not.toHaveBeenCalled();
+      expect(dataSource.transaction).toHaveBeenCalled();
       expect(movementRepo.create).not.toHaveBeenCalled();
     });
 
@@ -672,7 +904,7 @@ describe('InvoicesService', () => {
           code: 'CRITICAL_PAYLOAD_MISMATCH',
         }),
       ]);
-      expect(dataSource.transaction).not.toHaveBeenCalled();
+      expect(dataSource.transaction).toHaveBeenCalled();
     });
 
     it('returns IDEMPOTENCY_MISMATCH when a staged future key is retried with a different payload hash', async () => {
@@ -713,7 +945,7 @@ describe('InvoicesService', () => {
         }),
       ]);
       expect(outboxRepo.save).not.toHaveBeenCalled();
-      expect(dataSource.transaction).not.toHaveBeenCalled();
+      expect(dataSource.transaction).toHaveBeenCalled();
     });
 
     it('returns a per-record mismatch instead of throwing when another staged future has the same stream sequence', async () => {
@@ -932,7 +1164,7 @@ describe('InvoicesService', () => {
         }),
       ]);
       expect(outboxRepo.delete).toHaveBeenCalledWith({ id: 'staged-2' });
-      expect(dataSource.transaction).toHaveBeenCalledTimes(2);
+      expect(dataSource.transaction).toHaveBeenCalled();
     });
 
     it('appends SALE_CANCEL reversal movement without invoice deletion', async () => {
@@ -1406,6 +1638,726 @@ describe('InvoicesService', () => {
       // idempotency receipt reached `manager.save`.
       expect(txManager.save).not.toHaveBeenCalled();
       expect(receiptRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('binds app.tenant_id inside the batch transaction before invoice and inventory writes', async () => {
+      receiptRepo.findOne.mockResolvedValue(null);
+      recipeService.findActiveVersion.mockResolvedValue(null);
+      txManager.createQueryBuilder().getOne.mockResolvedValue({
+        id: 'prod-1',
+        stock: 10,
+        averageCost: 2,
+        negativeStockPolicy: NEGATIVE_STOCK_POLICY.RESTRICT,
+        tenant_id: 'tenant-rls',
+      });
+      txManager.createQueryBuilder.mockClear();
+
+      await service.syncBatch('tenant-rls', [
+        {
+          idempotencyKey: 'batch-rls-1',
+          sourceDeviceId: 'd1',
+          sourceSequence: 1,
+          flowType: 'sales',
+          documentType: 'SALE',
+          invoice: baseInvoice,
+        },
+      ]);
+
+      expect(txManager.query).toHaveBeenCalledWith(
+        "SELECT set_config('app.tenant_id', $1, true)",
+        ['tenant-rls'],
+      );
+      expect(txManager.query.mock.invocationCallOrder[0]).toBeLessThan(
+        invoiceRepo.upsert.mock.invocationCallOrder[0],
+      );
+      expect(txManager.query.mock.invocationCallOrder[0]).toBeLessThan(
+        txManager.createQueryBuilder.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('rejects creditNote invoice type on non-CREDIT_NOTE batch records before persistence', async () => {
+      const creditNoteOnSaleRecord: SyncBatchRecordDto = {
+        idempotencyKey: 'sale-credit-note-mismatch',
+        sourceDeviceId: 'd1',
+        sourceSequence: 1,
+        flowType: 'sales',
+        documentType: 'SALE',
+        invoice: {
+          ...baseInvoice,
+          type: 'creditNote',
+          originInvoiceId: 'origin-sale-1',
+          refundReasonPolicy: 'FINANCIAL_ONLY',
+          items: [
+            {
+              ...baseInvoice.items[0],
+              originInvoiceItemId: 'origin-sale-item-1',
+            },
+          ],
+        },
+      };
+
+      const result = await service.syncBatch('tenant-1', [creditNoteOnSaleRecord]);
+
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          status: 'REJECTED',
+          retryable: false,
+          code: 'CREDIT_NOTE_DOCUMENT_TYPE_MISMATCH',
+        }),
+      ]);
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+      expect(invoiceRepo.upsert).not.toHaveBeenCalled();
+    });
+
+    it('normalizes credit-note provenance fields to null on non-CREDIT_NOTE batch invoice records', async () => {
+      receiptRepo.findOne.mockResolvedValue(null);
+      recipeService.findActiveVersion.mockResolvedValue(null);
+      txManager.createQueryBuilder().getOne.mockResolvedValue({
+        id: 'prod-1',
+        stock: 10,
+        averageCost: 2,
+        negativeStockPolicy: NEGATIVE_STOCK_POLICY.RESTRICT,
+        tenant_id: 'tenant-1',
+      });
+
+      const result = await service.syncBatch('tenant-1', [
+        {
+          idempotencyKey: 'sale-spoofed-credit-provenance',
+          sourceDeviceId: 'd1',
+          sourceSequence: 1,
+          flowType: 'sales',
+          documentType: 'SALE',
+          invoice: {
+            ...baseInvoice,
+            originInvoiceId: 'spoofed-origin-invoice',
+            refundReasonCode: 'SPOOFED_REFUND_REASON',
+            refundReasonPolicy: 'FINANCIAL_ONLY',
+            items: [
+              {
+                ...baseInvoice.items[0],
+                originInvoiceItemId: 'spoofed-origin-item',
+              },
+            ],
+          },
+        },
+      ]);
+
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          status: 'ACCEPTED',
+          code: 'APPLIED',
+        }),
+      ]);
+      expect(invoiceRepo.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'inv-1',
+          originInvoiceId: null,
+          refundReasonCode: null,
+          refundReasonPolicy: null,
+        }),
+        ['id'],
+      );
+      expect(itemRepo.upsert).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: 'item-1',
+            originInvoiceItemId: null,
+          }),
+        ]),
+        ['id'],
+      );
+    });
+
+    it('normalizes credit-note provenance fields to null on direct non-credit invoice sync', async () => {
+      const directInvoice: SyncInvoiceDto = {
+        ...baseInvoice,
+        originInvoiceId: 'spoofed-direct-origin',
+        refundReasonCode: 'SPOOFED_DIRECT_REASON',
+        refundReasonPolicy: 'WASTE_NO_RESTOCK',
+        items: [
+          {
+            ...baseInvoice.items[0],
+            originInvoiceItemId: 'spoofed-direct-origin-item',
+          },
+        ],
+      };
+
+      await service.syncInvoices('tenant-1', [directInvoice]);
+
+      expect(invoiceRepo.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'inv-1',
+          originInvoiceId: null,
+          refundReasonCode: null,
+          refundReasonPolicy: null,
+        }),
+        ['id'],
+      );
+      expect(itemRepo.upsert).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: 'item-1',
+            originInvoiceItemId: null,
+          }),
+        ]),
+        ['id'],
+      );
+    });
+
+    it('rejects no-flowType CREDIT_NOTE records before legacy persistence when invoice type is not creditNote', async () => {
+      const result = await service.syncBatch('tenant-1', [
+        {
+          idempotencyKey: 'legacy-credit-note-mismatch',
+          sourceDeviceId: 'legacy-terminal',
+          sourceSequence: 1,
+          documentType: 'CREDIT_NOTE',
+          invoice: baseInvoice,
+        },
+      ]);
+
+      expect(result).toMatchObject({
+        received: 1,
+        processed: 0,
+        duplicates: 0,
+        results: [
+          expect.objectContaining({
+            idempotencyKey: 'legacy-credit-note-mismatch',
+            status: 'REJECTED',
+            retryable: false,
+            code: 'CREDIT_NOTE_FLOW_TYPE_REQUIRED',
+          }),
+        ],
+      });
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+      expect(invoiceRepo.upsert).not.toHaveBeenCalled();
+    });
+
+    it('rejects no-flowType CREDIT_NOTE records before legacy persistence even when invoice type is creditNote', async () => {
+      const result = await service.syncBatch('tenant-1', [
+        {
+          idempotencyKey: 'legacy-credit-note-explicit',
+          sourceDeviceId: 'legacy-terminal',
+          sourceSequence: 1,
+          documentType: 'CREDIT_NOTE',
+          invoice: {
+            ...baseInvoice,
+            type: 'creditNote',
+            originInvoiceId: 'sale-origin-1',
+            refundReasonPolicy: 'FINANCIAL_ONLY',
+            items: [
+              {
+                ...baseInvoice.items[0],
+                originInvoiceItemId: 'sale-item-1',
+              },
+            ],
+          },
+        },
+      ]);
+
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          idempotencyKey: 'legacy-credit-note-explicit',
+          status: 'REJECTED',
+          retryable: false,
+          code: 'CREDIT_NOTE_FLOW_TYPE_REQUIRED',
+        }),
+      ]);
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+      expect(invoiceRepo.upsert).not.toHaveBeenCalled();
+    });
+
+    it('rejects no-flowType CREDIT_NOTE records in mixed batches before defaulting them to inventory flow', async () => {
+      receiptRepo.findOne.mockResolvedValue(null);
+
+      const result = await service.syncBatch('tenant-1', [
+        {
+          idempotencyKey: 'mixed-sale-with-flow',
+          sourceDeviceId: 'mixed-terminal',
+          sourceSequence: 1,
+          flowType: 'sales',
+          documentType: 'SALE',
+          invoice: baseInvoice,
+        },
+        {
+          idempotencyKey: 'mixed-credit-note-without-flow',
+          sourceDeviceId: 'mixed-terminal',
+          sourceSequence: 2,
+          documentType: 'CREDIT_NOTE',
+          invoice: {
+            ...baseInvoice,
+            id: 'mixed-credit-note-invoice',
+            type: 'creditNote',
+            originInvoiceId: 'sale-origin-1',
+            refundReasonPolicy: 'FINANCIAL_ONLY',
+            items: [
+              {
+                ...baseInvoice.items[0],
+                id: 'mixed-credit-note-item',
+                originInvoiceItemId: 'sale-item-1',
+              },
+            ],
+          },
+        },
+      ]);
+
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          idempotencyKey: 'mixed-sale-with-flow',
+          status: 'ACCEPTED',
+          code: 'APPLIED',
+        }),
+        expect.objectContaining({
+          idempotencyKey: 'mixed-credit-note-without-flow',
+          status: 'REJECTED',
+          retryable: false,
+          code: 'CREDIT_NOTE_FLOW_TYPE_REQUIRED',
+          flowType: 'inventory',
+        }),
+      ]);
+      expect(invoiceRepo.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'inv-1' }),
+        ['id'],
+      );
+      expect(invoiceRepo.upsert).not.toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'mixed-credit-note-invoice' }),
+        ['id'],
+      );
+    });
+
+    it('rejects CREDIT_NOTE records without an invoice before accepting a receipt', async () => {
+      receiptRepo.findOne.mockResolvedValue(null);
+
+      const result = await service.syncBatch('tenant-1', [
+        {
+          idempotencyKey: 'credit-note-missing-invoice',
+          sourceDeviceId: 'd1',
+          sourceSequence: 1,
+          flowType: 'sales',
+          documentType: 'CREDIT_NOTE',
+        },
+      ]);
+
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          idempotencyKey: 'credit-note-missing-invoice',
+          status: 'REJECTED',
+          retryable: false,
+          code: 'CREDIT_NOTE_INVOICE_REQUIRED',
+        }),
+      ]);
+      expect(receiptRepo.save).not.toHaveBeenCalled();
+      expect(invoiceRepo.upsert).not.toHaveBeenCalled();
+      expect(movementRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects CREDIT_NOTE stock movement deltas non-retryably without creating Kardex', async () => {
+      const result = await service.syncBatch('tenant-1', [
+        {
+          idempotencyKey: 'credit-note-stock-delta',
+          sourceDeviceId: 'd1',
+          sourceSequence: 1,
+          flowType: 'inventory',
+          documentType: 'CREDIT_NOTE',
+          invoice: {
+            ...baseInvoice,
+            type: 'creditNote',
+            originInvoiceId: 'sale-origin-1',
+            refundReasonPolicy: 'FINANCIAL_ONLY',
+            items: [
+              {
+                ...baseInvoice.items[0],
+                originInvoiceItemId: 'sale-item-1',
+              },
+            ],
+          },
+          movements: [{ insumoId: 'ins-1', quantity: 1, unitCostNio: 2 }],
+        },
+      ]);
+
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          status: 'REJECTED',
+          retryable: false,
+          code: 'CREDIT_NOTE_STOCK_REPLAY_UNSUPPORTED',
+        }),
+      ]);
+      expect(movementRepo.create).not.toHaveBeenCalled();
+      expect(txManager.save).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ sourceDocumentType: 'CREDIT_NOTE' }),
+      );
+    });
+
+    it('rejects CREDIT_NOTE restock policies requiring Kardex compensation non-retryably for this slice', async () => {
+      const result = await service.syncBatch('tenant-1', [
+        {
+          idempotencyKey: 'credit-note-restock-policy',
+          sourceDeviceId: 'd1',
+          sourceSequence: 1,
+          flowType: 'sales',
+          documentType: 'CREDIT_NOTE',
+          invoice: {
+            ...baseInvoice,
+            type: 'creditNote',
+            originInvoiceId: 'sale-origin-1',
+            refundReasonPolicy: 'RESTOCK_ORIGINAL_BOM',
+            items: [
+              {
+                ...baseInvoice.items[0],
+                originInvoiceItemId: 'sale-item-1',
+              },
+            ],
+          },
+        },
+      ]);
+
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          status: 'REJECTED',
+          retryable: false,
+          code: 'CREDIT_NOTE_KARDEX_COMPENSATION_UNSUPPORTED',
+        }),
+      ]);
+      expect(movementRepo.create).not.toHaveBeenCalled();
+      expect(invoiceRepo.upsert).not.toHaveBeenCalled();
+    });
+
+    it('accepts financial-only CREDIT_NOTE records with deterministic flowType when no inventory movements are requested', async () => {
+      invoiceRepo.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          id: 'sale-origin-1',
+          tenant_id: 'tenant-1',
+          type: 'regular',
+        });
+      itemRepo.find.mockResolvedValueOnce([
+        {
+          id: 'sale-item-1',
+          tenant_id: 'tenant-1',
+          invoiceId: 'sale-origin-1',
+        },
+      ]);
+      receiptRepo.findOne.mockResolvedValue(null);
+
+      const result = await service.syncBatch('tenant-1', [
+        {
+          idempotencyKey: 'credit-note-financial-only',
+          sourceDeviceId: 'd1',
+          sourceSequence: 1,
+          flowType: 'sales',
+          documentType: 'CREDIT_NOTE',
+          invoice: {
+            ...baseInvoice,
+            type: 'creditNote',
+            originInvoiceId: 'sale-origin-1',
+            refundReasonPolicy: 'FINANCIAL_ONLY',
+            items: [
+              {
+                ...baseInvoice.items[0],
+                originInvoiceItemId: 'sale-item-1',
+              },
+            ],
+          },
+        },
+      ]);
+
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          status: 'ACCEPTED',
+          retryable: false,
+          code: 'APPLIED',
+        }),
+      ]);
+      expect(invoiceRepo.upsert).toHaveBeenCalled();
+      expect(movementRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('reads invoices through a tenant-bound transaction under FORCE RLS', async () => {
+      const txInvoiceRepo = {
+        find: jest.fn().mockResolvedValue([{ id: 'inv-tenant' }]),
+      };
+      txManager.getRepository.mockImplementation((target: unknown) => {
+        if (target === Invoice) return txInvoiceRepo;
+        return undefined;
+      });
+
+      await expect(service.findAll('tenant-rls')).resolves.toEqual([
+        { id: 'inv-tenant' },
+      ]);
+
+      expect(txManager.query).toHaveBeenCalledWith(
+        "SELECT set_config('app.tenant_id', $1, true)",
+        ['tenant-rls'],
+      );
+      expect(txInvoiceRepo.find).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { tenant_id: 'tenant-rls' } }),
+      );
+      expect(invoiceRepo.find).not.toHaveBeenCalled();
+    });
+
+    it('reads a single invoice through a tenant-bound transaction under FORCE RLS', async () => {
+      const txInvoiceRepo = {
+        findOne: jest.fn().mockResolvedValue({ id: 'inv-tenant' }),
+      };
+      txManager.getRepository.mockImplementation((target: unknown) => {
+        if (target === Invoice) return txInvoiceRepo;
+        return undefined;
+      });
+
+      await expect(service.findOne('tenant-rls', 'inv-tenant')).resolves.toEqual({
+        id: 'inv-tenant',
+      });
+
+      expect(txManager.query).toHaveBeenCalledWith(
+        "SELECT set_config('app.tenant_id', $1, true)",
+        ['tenant-rls'],
+      );
+      expect(txInvoiceRepo.findOne).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'inv-tenant', tenant_id: 'tenant-rls' } }),
+      );
+      expect(invoiceRepo.findOne).not.toHaveBeenCalled();
+    });
+
+    it('performs duplicate receipt checks through a tenant-bound transaction before reading RLS-protected receipts', async () => {
+      const txReceiptRepo = {
+        findOne: jest.fn().mockResolvedValue(null),
+        create: jest.fn((x: unknown) => x),
+        save: jest.fn(),
+      };
+      txManager.getRepository.mockImplementation((target: unknown) => {
+        if (target === InventorySyncReceipt) return txReceiptRepo;
+        if (target === InventorySyncOutbox) return outboxRepo;
+        if (target === Invoice) return invoiceRepo;
+        if (target === InvoiceItem) return itemRepo;
+        if (target === Payment) return paymentRepo;
+        return undefined;
+      });
+      recipeService.findActiveVersion.mockResolvedValue(null);
+      txManager.createQueryBuilder().getOne.mockResolvedValue({
+        id: 'prod-1',
+        stock: 10,
+        averageCost: 2,
+        negativeStockPolicy: NEGATIVE_STOCK_POLICY.RESTRICT,
+        tenant_id: 'tenant-rls',
+      });
+
+      await service.syncBatch('tenant-rls', [
+        {
+          idempotencyKey: 'tenant-bound-receipt-check',
+          sourceDeviceId: 'd1',
+          sourceSequence: 1,
+          flowType: 'sales',
+          documentType: 'SALE',
+          invoice: baseInvoice,
+        },
+      ]);
+
+      expect(txManager.query).toHaveBeenCalledWith(
+        "SELECT set_config('app.tenant_id', $1, true)",
+        ['tenant-rls'],
+      );
+      expect(txReceiptRepo.findOne).toHaveBeenCalled();
+      expect(receiptRepo.findOne).not.toHaveBeenCalled();
+      expect(txManager.query.mock.invocationCallOrder[0]).toBeLessThan(
+        txReceiptRepo.findOne.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('stages future records through a tenant-bound transaction before writing RLS-protected outbox rows', async () => {
+      const txReceiptRepo = {
+        findOne: jest.fn().mockResolvedValue(null),
+        create: jest.fn((x: unknown) => x),
+        save: jest.fn(),
+      };
+      const txOutboxRepo = {
+        findOne: jest.fn().mockResolvedValue(null),
+        create: jest.fn((x: unknown) => x),
+        save: jest.fn(),
+        delete: jest.fn(),
+      };
+      txManager.getRepository.mockImplementation((target: unknown) => {
+        if (target === InventorySyncReceipt) return txReceiptRepo;
+        if (target === InventorySyncOutbox) return txOutboxRepo;
+        return undefined;
+      });
+
+      const result = await service.syncBatch('tenant-rls', [
+        {
+          idempotencyKey: 'future-tenant-bound-outbox',
+          sourceDeviceId: 'd1',
+          sourceSequence: 3,
+          flowType: 'inventory',
+          documentType: 'PURCHASE',
+          movements: [{ insumoId: 'ins-1', quantity: 1, unitCostNio: 5 }],
+        },
+      ]);
+
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          idempotencyKey: 'future-tenant-bound-outbox',
+          status: 'STAGED_FUTURE',
+          retryable: true,
+        }),
+      ]);
+      expect(txOutboxRepo.save).toHaveBeenCalledTimes(1);
+      expect(outboxRepo.save).not.toHaveBeenCalled();
+      expect(txManager.query.mock.invocationCallOrder[0]).toBeLessThan(
+        txOutboxRepo.findOne.mock.invocationCallOrder[0],
+      );
+      expect(txManager.query.mock.invocationCallOrder[0]).toBeLessThan(
+        txOutboxRepo.save.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('returns non-retryable CREDIT_NOTE_PAYLOAD_MISMATCH for changed duplicate credit-note payloads at batch level', async () => {
+      invoiceRepo.findOne.mockResolvedValueOnce({
+        id: 'cn-batch-dup',
+        number: 'NC-BATCH-001',
+        created_at: new Date('2026-07-10T18:00:00.000Z'),
+        userId: 'u-1',
+        subtotal: -10,
+        totalTax: -1.5,
+        total: -11.5,
+        isCanceled: false,
+        voidReason: null,
+        paymentStatus: 'REFUNDED',
+        customerId: null,
+        globalTaxOverride: false,
+        type: 'creditNote',
+        relatedInvoiceId: null,
+        originInvoiceId: 'sale-origin-1',
+        refundReasonCode: 'DAMAGED_RETURN',
+        refundReasonPolicy: 'WASTE_NO_RESTOCK',
+        items: [
+          {
+            id: 'cn-batch-item-1',
+            productId: 'prod-1',
+            productName: 'P1',
+            quantity: -1,
+            unitPrice: 10,
+            originalTaxRate: 0.15,
+            appliedTaxRate: 0.15,
+            taxAmount: -1.5,
+            total: -11.5,
+            discount: 0,
+            variantId: null,
+            notes: null,
+            recipeVersionId: null,
+            originInvoiceItemId: 'sale-item-1',
+          },
+        ],
+        payments: [],
+      });
+
+      const result = await service.syncBatch('tenant-1', [
+        {
+          idempotencyKey: 'changed-credit-note-payload',
+          sourceDeviceId: 'd1',
+          sourceSequence: 1,
+          flowType: 'sales',
+          documentType: 'CREDIT_NOTE',
+          invoice: {
+            ...baseInvoice,
+            id: 'cn-batch-dup',
+            number: 'NC-BATCH-001',
+            createdAt: '2026-07-10T18:00:00.000Z',
+            subtotal: -10,
+            totalTax: -1.5,
+            total: -12.5,
+            paymentStatus: 'REFUNDED',
+            type: 'creditNote',
+            originInvoiceId: 'sale-origin-1',
+            refundReasonCode: 'DAMAGED_RETURN',
+            refundReasonPolicy: 'WASTE_NO_RESTOCK',
+            items: [
+              {
+                ...baseInvoice.items[0],
+                id: 'cn-batch-item-1',
+                quantity: -1,
+                unitPrice: 10,
+                taxAmount: -1.5,
+                total: -12.5,
+                originInvoiceItemId: 'sale-item-1',
+              },
+            ],
+          },
+        },
+      ]);
+
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          status: 'REJECTED',
+          retryable: false,
+          code: 'CREDIT_NOTE_PAYLOAD_MISMATCH',
+        }),
+      ]);
+      expect(invoiceRepo.upsert).not.toHaveBeenCalled();
+    });
+
+    it('returns IDEMPOTENCY_MISMATCH for legacy idempotency-key duplicates with a different payload hash', async () => {
+      const legacyRecord: SyncBatchRecordDto = {
+        idempotencyKey: 'legacy-same-key',
+        sourceDeviceId: 'legacy-terminal',
+        sourceSequence: 1,
+        documentType: 'PURCHASE',
+        movements: [{ insumoId: 'ins-1', quantity: 2, unitCostNio: 4 }],
+      };
+      receiptRepo.findOne.mockResolvedValueOnce({
+        id: 'legacy-existing-key',
+        idempotency_key: legacyRecord.idempotencyKey,
+        source_device_id: legacyRecord.sourceDeviceId,
+        source_sequence: String(legacyRecord.sourceSequence),
+        payload_hash: 'different-legacy-payload-hash',
+        result_status: 'ACCEPTED',
+      });
+
+      const result = await service.syncBatch('tenant-1', [legacyRecord]);
+
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          idempotencyKey: 'legacy-same-key',
+          status: 'IDEMPOTENCY_MISMATCH',
+          retryable: false,
+          code: 'CRITICAL_PAYLOAD_MISMATCH',
+        }),
+      ]);
+      expect(result).toMatchObject({ received: 1, processed: 0, duplicates: 0 });
+      expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+      expect(movementRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('returns IDEMPOTENCY_MISMATCH for legacy source-sequence duplicates with a different payload hash', async () => {
+      const legacyRecord: SyncBatchRecordDto = {
+        idempotencyKey: 'legacy-new-key-same-sequence',
+        sourceDeviceId: 'legacy-terminal',
+        sourceSequence: 7,
+        documentType: 'PURCHASE',
+        movements: [{ insumoId: 'ins-1', quantity: 1, unitCostNio: 5 }],
+      };
+      receiptRepo.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          id: 'legacy-existing-sequence',
+          idempotency_key: 'legacy-old-key',
+          source_device_id: legacyRecord.sourceDeviceId,
+          source_sequence: String(legacyRecord.sourceSequence),
+          payload_hash: 'different-legacy-sequence-payload-hash',
+          result_status: 'ACCEPTED',
+        });
+
+      const result = await service.syncBatch('tenant-1', [legacyRecord]);
+
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          idempotencyKey: 'legacy-new-key-same-sequence',
+          status: 'IDEMPOTENCY_MISMATCH',
+          retryable: false,
+          code: 'CRITICAL_SEQUENCE_PAYLOAD_MISMATCH',
+        }),
+      ]);
+      expect(result).toMatchObject({ received: 1, processed: 0, duplicates: 0 });
+      expect(dataSource.transaction).toHaveBeenCalledTimes(2);
+      expect(movementRepo.create).not.toHaveBeenCalled();
     });
   });
 });

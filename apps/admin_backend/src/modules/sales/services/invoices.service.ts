@@ -22,6 +22,11 @@ import {
 } from '../../inventory/entities/insumo.entity';
 
 const SCALE_4 = 4;
+const SET_LOCAL_TENANT_SQL = "SELECT set_config('app.tenant_id', $1, true)";
+const CREDIT_NOTE_NO_STOCK_POLICIES = new Set([
+  'FINANCIAL_ONLY',
+  'WASTE_NO_RESTOCK',
+]);
 
 const round4 = (value: number): number => Number(value.toFixed(SCALE_4));
 
@@ -36,6 +41,22 @@ const SYNC_RESULT_STATUS = {
 
 type SyncResultStatus =
   (typeof SYNC_RESULT_STATUS)[keyof typeof SYNC_RESULT_STATUS];
+
+interface InvoiceItemForPersistence
+  extends Omit<CreateInvoiceItemDto, 'originInvoiceItemId'> {
+  originInvoiceItemId?: string | null;
+}
+
+interface InvoiceForPersistence
+  extends Omit<
+    SyncInvoiceDto,
+    'originInvoiceId' | 'refundReasonCode' | 'refundReasonPolicy' | 'items'
+  > {
+  originInvoiceId?: string | null;
+  refundReasonCode?: string | null;
+  refundReasonPolicy?: SyncInvoiceDto['refundReasonPolicy'] | null;
+  items: InvoiceItemForPersistence[];
+}
 
 export interface SyncBatchResultItem {
   idempotencyKey: string;
@@ -118,21 +139,55 @@ export class InvoicesService {
     tenantId: string,
     dtos: SyncInvoiceDto[],
     manager?: EntityManager,
+    options: { allowCreditNotes?: boolean } = {},
   ): Promise<void> {
+    this.assertDirectCreditNoteBoundary(dtos, options.allowCreditNotes ?? false);
+    if (!manager) {
+      await this.dataSource.transaction('SERIALIZABLE', async (txManager) => {
+        await this.bindTenantContext(txManager, tenantId);
+        await this.syncInvoices(tenantId, dtos, txManager, options);
+      });
+      return;
+    }
+
     for (const dto of dtos) {
+      const persistenceDto = this.normalizeInvoiceProvenanceForPersistence(
+        dto,
+        options.allowCreditNotes ?? false,
+      );
       await this.validateInvoiceRecipeVersions(tenantId, dto);
+      const handledDuplicate = await this.skipMatchingCreditNoteReplay(
+        tenantId,
+        dto,
+        manager,
+      );
+      if (handledDuplicate) continue;
+      await this.assertCreditNoteOriginInvoiceIsRegularSale(
+        tenantId,
+        dto,
+        manager,
+      );
+      await this.assertCreditNoteOriginItemsBelongToOriginInvoice(
+        tenantId,
+        dto,
+        manager,
+      );
       // Tenant isolation for items: the POS controls the item `id`
       // (client UUID) and the upsert conflict target is `['id']`. Before
       // persisting, reject any item id that already belongs to another
       // tenant so a colliding id cannot overwrite cross-tenant data.
       await this.assertItemTenantOwnership(tenantId, dto.items ?? [], manager);
       await this.invoiceRepoFor(manager).upsert(
-        { ...dto, tenant_id: tenantId, created_at: new Date(dto.createdAt) },
+        {
+          ...persistenceDto,
+          tenant_id: tenantId,
+          created_at: new Date(dto.createdAt),
+        },
         ['id'],
       );
-      if (dto.items?.length) {
+      if (persistenceDto.items?.length) {
         await this.itemRepoFor(manager).upsert(
-          dto.items.map((item) => ({
+          persistenceDto.items.map((item) => ({
             ...item,
             invoiceId: dto.id,
             tenant_id: tenantId,
@@ -150,24 +205,38 @@ export class InvoicesService {
   }
 
   async findAll(tenantId: string): Promise<Invoice[]> {
-    return this.invoiceRepository.find({
-      where: { tenant_id: tenantId },
-      relations: ['items', 'items.modifiers', 'payments'],
-      order: { created_at: 'DESC' },
-    });
+    return this.withTenantBoundTransaction(tenantId, async (manager) =>
+      this.invoiceRepoFor(manager).find({
+        where: { tenant_id: tenantId },
+        relations: ['items', 'items.modifiers', 'payments'],
+        order: { created_at: 'DESC' },
+      }),
+    );
   }
 
   async findOne(tenantId: string, id: string): Promise<Invoice | null> {
-    return this.invoiceRepository.findOne({
-      where: { id, tenant_id: tenantId },
-      relations: ['items', 'items.modifiers', 'payments'],
-    });
+    return this.withTenantBoundTransaction(tenantId, async (manager) =>
+      this.invoiceRepoFor(manager).findOne({
+        where: { id, tenant_id: tenantId },
+        relations: ['items', 'items.modifiers', 'payments'],
+      }),
+    );
   }
 
   async syncBatch(
     tenantId: string,
     records: SyncBatchRecordDto[],
   ): Promise<SyncBatchResult> {
+    const creditNoteFlowTypeErrors = this.rejectCreditNotesMissingFlowType(records);
+    if (creditNoteFlowTypeErrors.length === records.length) {
+      return {
+        received: records.length,
+        processed: 0,
+        duplicates: 0,
+        results: creditNoteFlowTypeErrors,
+      };
+    }
+
     if (!records.some((record) => record.flowType)) {
       return this.syncLegacyBatch(tenantId, records);
     }
@@ -188,9 +257,58 @@ export class InvoicesService {
         flowType,
       });
       const payloadHash = calculateSyncPayloadHash(record);
-      const existingByKey = await this.receiptRepository.findOne({
-        where: { tenant_id: tenantId, idempotency_key: record.idempotencyKey },
-      });
+
+      if (record.documentType === 'CREDIT_NOTE' && !record.flowType) {
+        results.push(
+          this.buildResult(record, SYNC_RESULT_STATUS.REJECTED, {
+            code: 'CREDIT_NOTE_FLOW_TYPE_REQUIRED',
+            retryable: false,
+            message:
+              'CREDIT_NOTE records require deterministic flowType until backend replay is implemented',
+          }),
+        );
+        blockedStreams.add(streamKey);
+        continue;
+      }
+
+      const creditNoteBoundaryError =
+        this.resolveRecordCreditNoteBoundaryError(record);
+      if (creditNoteBoundaryError) {
+        results.push(
+          this.buildResult(record, SYNC_RESULT_STATUS.REJECTED, {
+            code: creditNoteBoundaryError.code,
+            retryable: false,
+            message: creditNoteBoundaryError.message,
+          }),
+        );
+        blockedStreams.add(streamKey);
+        continue;
+      }
+
+      const unsupportedCreditNoteError =
+        this.resolveUnsupportedCreditNoteStockBehavior(record);
+      if (unsupportedCreditNoteError) {
+        results.push(
+          this.buildResult(record, SYNC_RESULT_STATUS.REJECTED, {
+            code: unsupportedCreditNoteError.code,
+            retryable: false,
+            message: unsupportedCreditNoteError.message,
+          }),
+        );
+        blockedStreams.add(streamKey);
+        continue;
+      }
+
+      const existingByKey = await this.withTenantBoundTransaction(
+        tenantId,
+        async (manager) =>
+          this.receiptRepoFor(manager).findOne({
+            where: {
+              tenant_id: tenantId,
+              idempotency_key: record.idempotencyKey,
+            },
+          }),
+      );
       if (existingByKey) {
         if (existingByKey.payload_hash !== payloadHash) {
           results.push(
@@ -212,14 +330,18 @@ export class InvoicesService {
         );
         continue;
       }
-      const existingBySequence = await this.receiptRepository.findOne({
-        where: {
-          tenant_id: tenantId,
-          source_device_id: record.sourceDeviceId,
-          flow_type: flowType,
-          source_sequence: String(record.sourceSequence),
-        },
-      });
+      const existingBySequence = await this.withTenantBoundTransaction(
+        tenantId,
+        async (manager) =>
+          this.receiptRepoFor(manager).findOne({
+            where: {
+              tenant_id: tenantId,
+              source_device_id: record.sourceDeviceId,
+              flow_type: flowType,
+              source_sequence: String(record.sourceSequence),
+            },
+          }),
+      );
       if (existingBySequence) {
         if (existingBySequence.payload_hash !== payloadHash) {
           results.push(
@@ -323,34 +445,98 @@ export class InvoicesService {
     );
     let processed = 0;
     let duplicates = 0;
+    const results: SyncBatchResultItem[] = [];
     for (const record of ordered) {
-      const existingByKey = await this.receiptRepository.findOne({
-        where: { tenant_id: tenantId, idempotency_key: record.idempotencyKey },
-      });
+      const creditNoteBoundaryError =
+        this.resolveRecordCreditNoteBoundaryError(record);
+      if (creditNoteBoundaryError) {
+        results.push(
+          this.buildResult(record, SYNC_RESULT_STATUS.REJECTED, {
+            code: creditNoteBoundaryError.code,
+            retryable: false,
+            message: creditNoteBoundaryError.message,
+          }),
+        );
+        continue;
+      }
+
+      const unsupportedCreditNoteError =
+        this.resolveUnsupportedLegacyCreditNoteRecord(record) ??
+        this.resolveUnsupportedCreditNoteStockBehavior(record);
+      if (unsupportedCreditNoteError) {
+        results.push(
+          this.buildResult(record, SYNC_RESULT_STATUS.REJECTED, {
+            code: unsupportedCreditNoteError.code,
+            retryable: false,
+            message: unsupportedCreditNoteError.message,
+          }),
+        );
+        continue;
+      }
+
+      const existingByKey = await this.withTenantBoundTransaction(
+        tenantId,
+        async (manager) =>
+          this.receiptRepoFor(manager).findOne({
+            where: {
+              tenant_id: tenantId,
+              idempotency_key: record.idempotencyKey,
+            },
+          }),
+      );
       if (existingByKey) {
+        const payloadHash = calculateSyncPayloadHash(record);
+        if (existingByKey.payload_hash !== payloadHash) {
+          results.push(
+            this.buildResult(record, SYNC_RESULT_STATUS.IDEMPOTENCY_MISMATCH, {
+              code: 'CRITICAL_PAYLOAD_MISMATCH',
+              message:
+                'Idempotency key was reused with a different payload hash.',
+              retryable: false,
+            }),
+          );
+          continue;
+        }
         duplicates += 1;
         continue;
       }
-      const existingBySequence = await this.receiptRepository.findOne({
-        where: {
-          tenant_id: tenantId,
-          source_device_id: record.sourceDeviceId,
-          source_sequence: String(record.sourceSequence),
-        },
-      });
+      const existingBySequence = await this.withTenantBoundTransaction(
+        tenantId,
+        async (manager) =>
+          this.receiptRepoFor(manager).findOne({
+            where: {
+              tenant_id: tenantId,
+              source_device_id: record.sourceDeviceId,
+              source_sequence: String(record.sourceSequence),
+            },
+          }),
+      );
       if (existingBySequence) {
+        const payloadHash = calculateSyncPayloadHash(record);
+        if (existingBySequence.payload_hash !== payloadHash) {
+          results.push(
+            this.buildResult(record, SYNC_RESULT_STATUS.IDEMPOTENCY_MISMATCH, {
+              code: 'CRITICAL_SEQUENCE_PAYLOAD_MISMATCH',
+              retryable: false,
+            }),
+          );
+          continue;
+        }
         duplicates += 1;
         continue;
       }
 
       await this.dataSource.transaction('SERIALIZABLE', async (manager) => {
+        await this.bindTenantContext(manager, tenantId);
         if (record.invoice) {
           await this.validateInvoiceRecipeVersions(
             tenantId,
             record.invoice,
             record.recipeVersionId,
           );
-          await this.syncInvoices(tenantId, [record.invoice], manager);
+          await this.syncInvoices(tenantId, [record.invoice], manager, {
+            allowCreditNotes: record.documentType === 'CREDIT_NOTE',
+          });
         }
         await this.appendInventoryDeltas(tenantId, record, manager);
         await manager.save(
@@ -368,7 +554,12 @@ export class InvoicesService {
       });
       processed += 1;
     }
-    return { received: records.length, processed, duplicates };
+    return {
+      received: records.length,
+      processed,
+      duplicates,
+      ...(results.length ? { results } : {}),
+    };
   }
 
   private buildResult(
@@ -392,20 +583,41 @@ export class InvoicesService {
     return `${key.tenantId}:${key.sourceDeviceId}:${key.flowType}`;
   }
 
+  private rejectCreditNotesMissingFlowType(
+    records: SyncBatchRecordDto[],
+  ): SyncBatchResultItem[] {
+    return records
+      .filter(
+        (record) => record.documentType === 'CREDIT_NOTE' && !record.flowType,
+      )
+      .map((record) =>
+        this.buildResult(record, SYNC_RESULT_STATUS.REJECTED, {
+          code: 'CREDIT_NOTE_FLOW_TYPE_REQUIRED',
+          retryable: false,
+          message:
+            'CREDIT_NOTE records require deterministic flowType until backend replay is implemented',
+        }),
+      );
+  }
+
   private async resolveExpectedSequence(
     tenantId: string,
     sourceDeviceId: string,
     flowType: string,
   ): Promise<number> {
-    const lastReceipt = await this.receiptRepository.findOne({
-      where: {
-        tenant_id: tenantId,
-        source_device_id: sourceDeviceId,
-        flow_type: flowType,
-        result_status: SYNC_RESULT_STATUS.ACCEPTED,
-      },
-      order: { source_sequence: 'DESC' },
-    });
+    const lastReceipt = await this.withTenantBoundTransaction(
+      tenantId,
+      async (manager) =>
+        this.receiptRepoFor(manager).findOne({
+          where: {
+            tenant_id: tenantId,
+            source_device_id: sourceDeviceId,
+            flow_type: flowType,
+            result_status: SYNC_RESULT_STATUS.ACCEPTED,
+          },
+          order: { source_sequence: 'DESC' },
+        }),
+    );
     return Number(lastReceipt?.source_sequence ?? 0) + 1;
   }
 
@@ -414,81 +626,87 @@ export class InvoicesService {
     record: SyncBatchRecordDto,
     payloadHash: string,
   ): Promise<SyncBatchResultItem | null> {
-    const existing = await this.outboxRepository.findOne({
-      where: { tenant_id: tenantId, idempotency_key: record.idempotencyKey },
-    });
-    if (existing) {
-      return this.resolveStagedConflictResult(
-        record,
-        existing.payload_hash,
-        payloadHash,
-        'CRITICAL_STAGED_PAYLOAD_MISMATCH',
-      );
-    }
-
-    const existingBySequence = await this.findStagedStreamSequence(
-      tenantId,
-      record,
-    );
-    if (existingBySequence) {
-      return this.resolveStagedConflictResult(
-        record,
-        existingBySequence.payload_hash,
-        payloadHash,
-        'CRITICAL_STAGED_SEQUENCE_PAYLOAD_MISMATCH',
-      );
-    }
-
-    try {
-      await this.outboxRepository.save(
-        this.outboxRepository.create({
-          tenant_id: tenantId,
-          idempotency_key: record.idempotencyKey,
-          source_device_id: record.sourceDeviceId,
-          flow_type: record.flowType ?? 'inventory',
-          source_sequence: String(record.sourceSequence),
-          document_type: record.documentType,
-          payload_hash: payloadHash,
-          payload: record as unknown as Record<string, unknown>,
-          status: SYNC_RESULT_STATUS.STAGED_FUTURE,
-          result_code: `WAITING_FOR_SEQUENCE_${record.sourceSequence - 1}`,
-        }),
-      );
-      return null;
-    } catch (error: unknown) {
-      if (!this.isUniqueViolation(error)) throw error;
-      const racedExisting = await this.outboxRepository.findOne({
+    return this.withTenantBoundTransaction(tenantId, async (manager) => {
+      const outboxRepository = this.outboxRepoFor(manager);
+      const existing = await outboxRepository.findOne({
         where: { tenant_id: tenantId, idempotency_key: record.idempotencyKey },
       });
-      if (racedExisting) {
+      if (existing) {
         return this.resolveStagedConflictResult(
           record,
-          racedExisting.payload_hash,
+          existing.payload_hash,
           payloadHash,
           'CRITICAL_STAGED_PAYLOAD_MISMATCH',
         );
       }
-      const racedSequence = await this.findStagedStreamSequence(
+
+      const existingBySequence = await this.findStagedStreamSequence(
         tenantId,
         record,
+        manager,
       );
-      if (racedSequence) {
+      if (existingBySequence) {
         return this.resolveStagedConflictResult(
           record,
-          racedSequence.payload_hash,
+          existingBySequence.payload_hash,
           payloadHash,
           'CRITICAL_STAGED_SEQUENCE_PAYLOAD_MISMATCH',
         );
       }
-      throw error;
-    }
+
+      try {
+        await outboxRepository.save(
+          outboxRepository.create({
+            tenant_id: tenantId,
+            idempotency_key: record.idempotencyKey,
+            source_device_id: record.sourceDeviceId,
+            flow_type: record.flowType ?? 'inventory',
+            source_sequence: String(record.sourceSequence),
+            document_type: record.documentType,
+            payload_hash: payloadHash,
+            payload: record as unknown as Record<string, unknown>,
+            status: SYNC_RESULT_STATUS.STAGED_FUTURE,
+            result_code: `WAITING_FOR_SEQUENCE_${record.sourceSequence - 1}`,
+          }),
+        );
+        return null;
+      } catch (error: unknown) {
+        if (!this.isUniqueViolation(error)) throw error;
+        const racedExisting = await outboxRepository.findOne({
+          where: { tenant_id: tenantId, idempotency_key: record.idempotencyKey },
+        });
+        if (racedExisting) {
+          return this.resolveStagedConflictResult(
+            record,
+            racedExisting.payload_hash,
+            payloadHash,
+            'CRITICAL_STAGED_PAYLOAD_MISMATCH',
+          );
+        }
+        const racedSequence = await this.findStagedStreamSequence(
+          tenantId,
+          record,
+          manager,
+        );
+        if (racedSequence) {
+          return this.resolveStagedConflictResult(
+            record,
+            racedSequence.payload_hash,
+            payloadHash,
+            'CRITICAL_STAGED_SEQUENCE_PAYLOAD_MISMATCH',
+          );
+        }
+        throw error;
+      }
+    });
   }
 
   private async findStagedStreamSequence(
     tenantId: string,
     record: SyncBatchRecordDto,
+    manager?: EntityManager,
   ): Promise<InventorySyncOutbox | null> {
-    return this.outboxRepository.findOne({
+    return this.outboxRepoFor(manager).findOne({
       where: {
         tenant_id: tenantId,
         source_device_id: record.sourceDeviceId,
@@ -522,6 +740,31 @@ export class InvoicesService {
     );
   }
 
+  private isCrossTenantItemCollisionError(
+    error: unknown,
+    message: string,
+  ): boolean {
+    const code =
+      typeof error === 'object' && error !== null && 'code' in error
+        ? (error as { code?: unknown }).code
+        : undefined;
+    const table =
+      typeof error === 'object' && error !== null && 'table' in error
+        ? (error as { table?: unknown }).table
+        : undefined;
+    const constraint =
+      typeof error === 'object' && error !== null && 'constraint' in error
+        ? (error as { constraint?: unknown }).constraint
+        : undefined;
+
+    return (
+      (code === '23505' && constraint === 'PK_invoice_items_id') ||
+      (code === '23505' && message.includes('invoice_items')) ||
+      (code === '42501' && table === 'invoice_items') ||
+      (code === '42501' && message.includes('invoice_items'))
+    );
+  }
+
   private async applyExpectedRecord(
     tenantId: string,
     record: SyncBatchRecordDto,
@@ -529,13 +772,18 @@ export class InvoicesService {
   ): Promise<{ accepted: boolean; result: SyncBatchResultItem }> {
     try {
       await this.dataSource.transaction('SERIALIZABLE', async (manager) => {
+        await this.bindTenantContext(manager, tenantId);
+        this.assertRecordCreditNoteBoundary(record);
+        this.assertSupportedCreditNoteStockBehavior(record);
         if (record.invoice) {
           await this.validateInvoiceRecipeVersions(
             tenantId,
             record.invoice,
             record.recipeVersionId,
           );
-          await this.syncInvoices(tenantId, [record.invoice], manager);
+          await this.syncInvoices(tenantId, [record.invoice], manager, {
+            allowCreditNotes: record.documentType === 'CREDIT_NOTE',
+          });
         }
         await this.appendInventoryDeltas(tenantId, record, manager);
         await manager.save(
@@ -560,11 +808,48 @@ export class InvoicesService {
       };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Sync failed';
+      if (this.isCrossTenantItemCollisionError(error, message)) {
+        return {
+          accepted: false,
+          result: this.buildResult(record, SYNC_RESULT_STATUS.REJECTED, {
+            code: 'CROSS_TENANT_ITEM_ID_COLLISION',
+            retryable: false,
+            message:
+              'Invoice item id already belongs to another tenant; cross-tenant item overwrite is not allowed.',
+          }),
+        };
+      }
+      const isCreditNoteBoundaryError =
+        error instanceof BadRequestException &&
+        message.includes('creditNote invoice type is only valid');
+      const isCreditNotePayloadMismatch =
+        error instanceof BadRequestException &&
+        message.includes(
+          'conflicts with an existing credit-note invoice payload',
+        );
+      const unsupportedCreditNoteError =
+        error instanceof BadRequestException
+          ? this.resolveCreditNoteUnsupportedErrorFromMessage(message)
+          : null;
+      const creditNoteOriginError =
+        error instanceof BadRequestException
+          ? this.resolveCreditNoteOriginErrorFromMessage(message)
+          : null;
       return {
         accepted: false,
         result: this.buildResult(record, SYNC_RESULT_STATUS.REJECTED, {
-          code: 'BUSINESS_RULE_VALIDATION',
-          retryable: true,
+          code:
+            unsupportedCreditNoteError?.code ??
+            creditNoteOriginError?.code ??
+            (isCreditNotePayloadMismatch
+              ? 'CREDIT_NOTE_PAYLOAD_MISMATCH'
+              : isCreditNoteBoundaryError
+                ? 'CREDIT_NOTE_DOCUMENT_TYPE_MISMATCH'
+                : 'BUSINESS_RULE_VALIDATION'),
+          retryable:
+            unsupportedCreditNoteError?.retryable ??
+            creditNoteOriginError?.retryable ??
+            !(isCreditNoteBoundaryError || isCreditNotePayloadMismatch),
           message,
         }),
       };
@@ -580,15 +865,19 @@ export class InvoicesService {
     const drained: SyncBatchResultItem[] = [];
     let expectedSequence = nextSequence;
     while (true) {
-      const staged = await this.outboxRepository.findOne({
-        where: {
-          tenant_id: tenantId,
-          source_device_id: sourceDeviceId,
-          flow_type: flowType,
-          source_sequence: String(expectedSequence),
-          status: SYNC_RESULT_STATUS.STAGED_FUTURE,
-        },
-      });
+      const staged = await this.withTenantBoundTransaction(
+        tenantId,
+        async (manager) =>
+          this.outboxRepoFor(manager).findOne({
+            where: {
+              tenant_id: tenantId,
+              source_device_id: sourceDeviceId,
+              flow_type: flowType,
+              source_sequence: String(expectedSequence),
+              status: SYNC_RESULT_STATUS.STAGED_FUTURE,
+            },
+          }),
+      );
       if (!staged) return drained;
       const record = staged.payload as unknown as SyncBatchRecordDto;
       const applied = await this.applyExpectedRecord(
@@ -598,9 +887,141 @@ export class InvoicesService {
       );
       drained.push(applied.result);
       if (!applied.accepted) return drained;
-      await this.outboxRepository.delete({ id: staged.id });
+      await this.withTenantBoundTransaction(tenantId, async (manager) => {
+        await this.outboxRepoFor(manager).delete({ id: staged.id });
+      });
       expectedSequence += 1;
     }
+  }
+
+  private async withTenantBoundTransaction<T>(
+    tenantId: string,
+    operation: (manager: EntityManager) => Promise<T>,
+  ): Promise<T> {
+    return this.dataSource.transaction('SERIALIZABLE', async (manager) => {
+      await this.bindTenantContext(manager, tenantId);
+      return operation(manager);
+    });
+  }
+
+  private async bindTenantContext(
+    manager: EntityManager,
+    tenantId: string,
+  ): Promise<void> {
+    await manager.query(SET_LOCAL_TENANT_SQL, [tenantId]);
+  }
+
+  private assertDirectCreditNoteBoundary(
+    dtos: SyncInvoiceDto[],
+    allowCreditNotes: boolean,
+  ): void {
+    if (allowCreditNotes) return;
+    if (dtos.some((dto) => this.isCreditNoteInvoice(dto))) {
+      throw new BadRequestException(
+        'Credit-note invoices must use the batch CREDIT_NOTE sync boundary',
+      );
+    }
+  }
+
+  private assertRecordCreditNoteBoundary(record: SyncBatchRecordDto): void {
+    const error = this.resolveRecordCreditNoteBoundaryError(record);
+    if (error) throw new BadRequestException(error.message);
+  }
+
+  private resolveRecordCreditNoteBoundaryError(
+    record: SyncBatchRecordDto,
+  ): { code: string; message: string } | null {
+    if (record.documentType === 'CREDIT_NOTE') {
+      if (!record.invoice) {
+        return {
+          code: 'CREDIT_NOTE_INVOICE_REQUIRED',
+          message: 'CREDIT_NOTE documentType requires an invoice payload',
+        };
+      }
+      if (record.invoice.type !== 'creditNote') {
+        return {
+          code: 'CREDIT_NOTE_DOCUMENT_TYPE_MISMATCH',
+          message: 'CREDIT_NOTE documentType requires invoice.type=creditNote',
+        };
+      }
+      return null;
+    }
+    if (!record.invoice) return null;
+    if (record.invoice.type === 'creditNote') {
+      return {
+        code: 'CREDIT_NOTE_DOCUMENT_TYPE_MISMATCH',
+        message: 'creditNote invoice type is only valid with CREDIT_NOTE documentType',
+      };
+    }
+    return null;
+  }
+
+  private resolveUnsupportedLegacyCreditNoteRecord(
+    record: SyncBatchRecordDto,
+  ): { code: string; message: string } | null {
+    if (record.documentType !== 'CREDIT_NOTE' || record.flowType) return null;
+    return {
+      code: 'CREDIT_NOTE_FLOW_TYPE_REQUIRED',
+      message:
+        'CREDIT_NOTE records require deterministic flowType until backend replay is implemented',
+    };
+  }
+
+  private assertSupportedCreditNoteStockBehavior(
+    record: SyncBatchRecordDto,
+  ): void {
+    const error = this.resolveUnsupportedCreditNoteStockBehavior(record);
+    if (error) throw new BadRequestException(error.message);
+  }
+
+  private resolveUnsupportedCreditNoteStockBehavior(
+    record: SyncBatchRecordDto,
+  ): { code: string; message: string } | null {
+    if (record.documentType !== 'CREDIT_NOTE') return null;
+    if (record.movements?.length) {
+      return {
+        code: 'CREDIT_NOTE_STOCK_REPLAY_UNSUPPORTED',
+        message:
+          'CREDIT_NOTE inventory movement deltas are not supported until backend Kardex replay is implemented',
+      };
+    }
+
+    const policy = record.invoice?.refundReasonPolicy;
+    if (policy && !CREDIT_NOTE_NO_STOCK_POLICIES.has(policy)) {
+      return {
+        code: 'CREDIT_NOTE_KARDEX_COMPENSATION_UNSUPPORTED',
+        message:
+          'CREDIT_NOTE refund reason policy requires Kardex compensation that is not implemented in this slice',
+      };
+    }
+    return null;
+  }
+
+  private resolveCreditNoteUnsupportedErrorFromMessage(
+    message: string,
+  ): { code: string; retryable: boolean } | null {
+    if (message.includes('inventory movement deltas are not supported')) {
+      return { code: 'CREDIT_NOTE_STOCK_REPLAY_UNSUPPORTED', retryable: false };
+    }
+    if (message.includes('requires Kardex compensation')) {
+      return {
+        code: 'CREDIT_NOTE_KARDEX_COMPENSATION_UNSUPPORTED',
+        retryable: false,
+      };
+    }
+    return null;
+  }
+
+  private resolveCreditNoteOriginErrorFromMessage(
+    message: string,
+  ): { code: string; retryable: boolean } | null {
+    if (message.includes('credit-note origin invoice item')) {
+      return { code: 'CREDIT_NOTE_ORIGIN_ITEM_INVALID', retryable: false };
+    }
+    if (message.includes('duplicate credit-note origin invoice item')) {
+      return { code: 'CREDIT_NOTE_ORIGIN_ITEM_INVALID', retryable: false };
+    }
+    return null;
   }
 
   private async appendFohMovements(
@@ -891,12 +1312,261 @@ export class InvoicesService {
     return manager ? manager.getRepository(Invoice) : this.invoiceRepository;
   }
 
+  private async skipMatchingCreditNoteReplay(
+    tenantId: string,
+    dto: SyncInvoiceDto,
+    manager?: EntityManager,
+  ): Promise<boolean> {
+    if (!this.isCreditNoteInvoice(dto)) return false;
+
+    const existing = await this.invoiceRepoFor(manager).findOne({
+      where: { id: dto.id, tenant_id: tenantId },
+      relations: ['items', 'payments'],
+    });
+    if (!existing) return false;
+
+    const incomingHash = this.calculateCreditNoteInvoiceHash(dto);
+    const existingHash = this.calculateCreditNoteInvoiceHash({
+      id: existing.id,
+      number: existing.number,
+      createdAt: existing.created_at.toISOString(),
+      userId: existing.userId,
+      subtotal: Number(existing.subtotal),
+      totalTax: Number(existing.totalTax),
+      total: Number(existing.total),
+      isCanceled: existing.isCanceled,
+      voidReason: existing.voidReason,
+      paymentStatus: existing.paymentStatus,
+      customerId: existing.customerId,
+      globalTaxOverride: existing.globalTaxOverride,
+      type: existing.type,
+      relatedInvoiceId: existing.relatedInvoiceId,
+      originInvoiceId: existing.originInvoiceId,
+      refundReasonCode: existing.refundReasonCode,
+      refundReasonPolicy:
+        existing.refundReasonPolicy as SyncInvoiceDto['refundReasonPolicy'],
+      items: (existing.items ?? []).map((item) => ({
+        id: item.id,
+        productId: item.productId,
+        productName: item.productName,
+        quantity: Number(item.quantity),
+        unitPrice: Number(item.unitPrice),
+        originalTaxRate: Number(item.originalTaxRate),
+        appliedTaxRate: Number(item.appliedTaxRate),
+        taxAmount: Number(item.taxAmount),
+        total: Number(item.total),
+        discount: Number(item.discount),
+        variantId: item.variantId,
+        notes: item.notes,
+        recipeVersionId: item.recipeVersionId,
+        originInvoiceItemId: item.originInvoiceItemId,
+      })),
+      payments: (existing.payments ?? []).map((payment) => ({
+        id: payment.id,
+        method: payment.method,
+        amount: Number(payment.amount),
+        currency: payment.currency,
+        exchangeRate: Number(payment.exchangeRate),
+      })),
+    });
+
+    if (incomingHash !== existingHash) {
+      throw new BadRequestException(
+        `Incoming credit-note invoice ${dto.id} conflicts with an existing credit-note invoice payload.`,
+      );
+    }
+
+    return true;
+  }
+
+  private async assertCreditNoteOriginInvoiceIsRegularSale(
+    tenantId: string,
+    dto: SyncInvoiceDto,
+    manager?: EntityManager,
+  ): Promise<void> {
+    if (!this.isCreditNoteInvoice(dto)) return;
+    if (!dto.originInvoiceId) return;
+
+    const origin = await this.invoiceRepoFor(manager).findOne({
+      where: { id: dto.originInvoiceId, tenant_id: tenantId },
+    });
+    if (!origin) {
+      throw new BadRequestException('credit-note origin invoice was not found');
+    }
+    if (origin.type === 'creditNote') {
+      throw new BadRequestException(
+        'credit-note origin invoice must be a regular sale invoice',
+      );
+    }
+  }
+
+  private async assertCreditNoteOriginItemsBelongToOriginInvoice(
+    tenantId: string,
+    dto: SyncInvoiceDto,
+    manager?: EntityManager,
+  ): Promise<void> {
+    if (!this.isCreditNoteInvoice(dto)) return;
+    if (!dto.originInvoiceId) return;
+
+    const originItemIds = (dto.items ?? [])
+      .map((item) => item.originInvoiceItemId)
+      .filter((originItemId): originItemId is string => Boolean(originItemId));
+    if (!originItemIds.length) return;
+
+    const uniqueOriginItemIds = new Set(originItemIds);
+    if (uniqueOriginItemIds.size !== originItemIds.length) {
+      throw new BadRequestException(
+        'duplicate credit-note origin invoice item references are not allowed',
+      );
+    }
+
+    const originItems = await this.itemRepoFor(manager).find({
+      where: {
+        id: In([...uniqueOriginItemIds]),
+        invoiceId: dto.originInvoiceId,
+        tenant_id: tenantId,
+      },
+    });
+    const originItemsById = new Map(
+      originItems.map((item) => [item.id, item]),
+    );
+
+    const missingOriginItemIds = [...uniqueOriginItemIds].filter(
+      (originItemId) => !originItemsById.has(originItemId),
+    );
+    const sameTenantItemsOutsideOriginInvoice = missingOriginItemIds.length
+      ? await this.itemRepoFor(manager).find({
+          where: {
+            id: In(missingOriginItemIds),
+            tenant_id: tenantId,
+          },
+        })
+      : [];
+    if (sameTenantItemsOutsideOriginInvoice.length) {
+      throw new BadRequestException(
+        'credit-note origin invoice item must belong to the credit-note origin invoice',
+      );
+    }
+
+    for (const originItemId of uniqueOriginItemIds) {
+      const originItem = originItemsById.get(originItemId);
+      if (!originItem) {
+        throw new BadRequestException(
+          'credit-note origin invoice item was not found for this tenant',
+        );
+      }
+      if (originItem.invoiceId !== dto.originInvoiceId) {
+        throw new BadRequestException(
+          'credit-note origin invoice item must belong to the credit-note origin invoice',
+        );
+      }
+      if (originItem.tenant_id !== tenantId) {
+        throw new BadRequestException(
+          'credit-note origin invoice item belongs to another tenant',
+        );
+      }
+    }
+  }
+
+  private isCreditNoteInvoice(dto: SyncInvoiceDto): boolean {
+    return dto.type === 'creditNote';
+  }
+
+  private normalizeInvoiceProvenanceForPersistence(
+    dto: SyncInvoiceDto,
+    allowCreditNotes: boolean,
+  ): InvoiceForPersistence {
+    if (allowCreditNotes && this.isCreditNoteInvoice(dto)) {
+      return { ...dto, items: dto.items ?? [] };
+    }
+
+    return {
+      ...dto,
+      originInvoiceId: null,
+      refundReasonCode: null,
+      refundReasonPolicy: null,
+      items: (dto.items ?? []).map((item) => ({
+        ...item,
+        originInvoiceItemId: null,
+      })),
+    };
+  }
+
+  private calculateCreditNoteInvoiceHash(dto: SyncInvoiceDto): string {
+    return createHash('sha256')
+      .update(
+        stableStringify({
+          id: dto.id,
+          number: dto.number,
+          createdAt: new Date(dto.createdAt).toISOString(),
+          userId: dto.userId,
+          subtotal: Number(dto.subtotal),
+          totalTax: Number(dto.totalTax),
+          total: Number(dto.total),
+          isCanceled: dto.isCanceled ?? false,
+          voidReason: dto.voidReason ?? null,
+          paymentStatus: dto.paymentStatus,
+          customerId: dto.customerId ?? null,
+          globalTaxOverride: dto.globalTaxOverride ?? false,
+          type: dto.type ?? 'regular',
+          relatedInvoiceId: dto.relatedInvoiceId ?? null,
+          originInvoiceId: dto.originInvoiceId ?? null,
+          refundReasonCode: dto.refundReasonCode ?? null,
+          refundReasonPolicy: dto.refundReasonPolicy ?? null,
+          items: [...(dto.items ?? [])]
+            .map((item) => ({
+              id: item.id,
+              productId: item.productId,
+              productName: item.productName,
+              quantity: Number(item.quantity),
+              unitPrice: Number(item.unitPrice),
+              originalTaxRate: Number(item.originalTaxRate),
+              appliedTaxRate: Number(item.appliedTaxRate),
+              taxAmount: Number(item.taxAmount),
+              total: Number(item.total),
+              discount: Number(item.discount),
+              variantId: item.variantId ?? null,
+              notes: item.notes ?? null,
+              recipeVersionId: item.recipeVersionId ?? null,
+              originInvoiceItemId: item.originInvoiceItemId ?? null,
+            }))
+            .sort((left, right) => left.id.localeCompare(right.id)),
+          payments: [...(dto.payments ?? [])]
+            .map((payment) => ({
+              id: payment.id,
+              method: payment.method,
+              amount: Number(payment.amount),
+              currency: payment.currency,
+              exchangeRate: Number(payment.exchangeRate),
+            }))
+            .sort((left, right) => left.id.localeCompare(right.id)),
+        }),
+      )
+      .digest('hex');
+  }
+
   private itemRepoFor(manager?: EntityManager): Repository<InvoiceItem> {
     return manager ? manager.getRepository(InvoiceItem) : this.itemRepository;
   }
 
   private paymentRepoFor(manager?: EntityManager): Repository<Payment> {
     return manager ? manager.getRepository(Payment) : this.paymentRepository;
+  }
+
+  private receiptRepoFor(
+    manager?: EntityManager,
+  ): Repository<InventorySyncReceipt> {
+    return manager
+      ? (manager.getRepository(InventorySyncReceipt) ?? this.receiptRepository)
+      : this.receiptRepository;
+  }
+
+  private outboxRepoFor(
+    manager?: EntityManager,
+  ): Repository<InventorySyncOutbox> {
+    return manager
+      ? (manager.getRepository(InventorySyncOutbox) ?? this.outboxRepository)
+      : this.outboxRepository;
   }
 
   /// Rejects item ids that already belong to a different tenant. The POS

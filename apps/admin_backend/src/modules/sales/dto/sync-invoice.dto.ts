@@ -1,4 +1,5 @@
 import {
+  IsEnum,
   IsString,
   IsNumber,
   IsBoolean,
@@ -52,12 +53,26 @@ export class CreateInvoiceItemDto {
   @IsOptional()
   recipeVersionId?: string;
 
+  @IsString()
+  @IsOptional()
+  originInvoiceItemId?: string;
+
   @IsArray()
   @IsOptional()
   @ValidateNested({ each: true })
   @Type(() => CreateModifierDto)
   modifiers?: CreateModifierDto[];
 }
+
+export const REFUND_REASON_POLICY = {
+  RESTOCK_ORIGINAL_BOM: 'RESTOCK_ORIGINAL_BOM',
+  FINANCIAL_ONLY: 'FINANCIAL_ONLY',
+  WASTE_NO_RESTOCK: 'WASTE_NO_RESTOCK',
+  MANAGER_REVIEW_HOLD: 'MANAGER_REVIEW_HOLD',
+} as const;
+
+export type RefundReasonPolicy =
+  (typeof REFUND_REASON_POLICY)[keyof typeof REFUND_REASON_POLICY];
 
 export class CreateModifierDto {
   @IsString()
@@ -132,6 +147,18 @@ export class SyncInvoiceDto {
   @IsString()
   @IsOptional()
   relatedInvoiceId?: string;
+
+  @IsString()
+  @IsOptional()
+  originInvoiceId?: string;
+
+  @IsString()
+  @IsOptional()
+  refundReasonCode?: string;
+
+  @IsEnum(REFUND_REASON_POLICY)
+  @IsOptional()
+  refundReasonPolicy?: RefundReasonPolicy;
 
   @IsArray()
   @ValidateNested({ each: true })

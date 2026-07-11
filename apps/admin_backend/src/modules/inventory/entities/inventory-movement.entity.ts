@@ -104,6 +104,15 @@ export class InventoryMovement {
   })
   compensationForKardexId: string | null;
 
+  @Column({ type: 'bigint', nullable: true, name: 'origin_movement_id' })
+  originMovementId: string | null;
+
+  @Column({ nullable: true, name: 'origin_invoice_item_id' })
+  originInvoiceItemId: string | null;
+
+  @Column({ nullable: true, name: 'refund_reason_policy' })
+  refundReasonPolicy: string | null;
+
   @Column({ nullable: true })
   user_id: string;
 
