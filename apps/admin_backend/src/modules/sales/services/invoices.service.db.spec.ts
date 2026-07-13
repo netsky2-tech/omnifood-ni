@@ -65,9 +65,16 @@ interface AmbientTenantRow {
   tenant: string;
 }
 
+interface AuthorizingUserLookup {
+  where: {
+    id: string;
+    tenant_id: string;
+  };
+}
+
 function createMockAuthorizingUserRepository() {
   return {
-    findOne: jest.fn().mockImplementation(({ where }) =>
+    findOne: jest.fn().mockImplementation(({ where }: AuthorizingUserLookup) =>
       Promise.resolve({
         id: where.id,
         tenant_id: where.tenant_id,
