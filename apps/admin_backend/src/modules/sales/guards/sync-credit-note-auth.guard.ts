@@ -44,12 +44,17 @@ export class SyncCreditNoteAuthGuard implements CanActivate {
 
     await this.authGuard.canActivate(context);
 
+    // A CREDIT_NOTE may carry POS-side authorization metadata, but the backend
+    // trust boundary is this authenticated same-tenant manager/owner context.
     const user = request.user;
     if (!user?.tenant_id?.trim()) {
       throw new UnauthorizedException('CREDIT_NOTE sync requires auth tenant');
     }
 
-    if (user.is_active !== true || !SYNC_AUTHORIZED_ROLES.has(user.role ?? '')) {
+    if (
+      user.is_active !== true ||
+      !SYNC_AUTHORIZED_ROLES.has(user.role ?? '')
+    ) {
       throw new ForbiddenException(
         'CREDIT_NOTE sync requires an active manager or owner auth context',
       );

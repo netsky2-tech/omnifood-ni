@@ -56,6 +56,8 @@ export class CreateInvoiceItemDto {
 
   @IsString()
   @IsOptional()
+  // Credit notes preserve fiscal provenance by pointing each refunded line back
+  // to the original invoice item; backend validation rejects invalid origins.
   originInvoiceItemId?: string;
 
   @IsArray()
@@ -164,6 +166,8 @@ export class SyncInvoiceDto {
   @IsString()
   @IsNotEmpty()
   @IsOptional()
+  // Audit label only. The allowed taxonomy is implementation-defined until the
+  // refund reason policy is formalized in product requirements.
   refundReasonCode?: string;
 
   @IsEnum(REFUND_REASON_POLICY)
@@ -177,6 +181,8 @@ export class SyncInvoiceDto {
 
   @IsEnum(CREDIT_NOTE_AUTH_ROLE)
   @IsOptional()
+  // POS metadata is not trusted by itself; CREDIT_NOTE sync also requires an
+  // authenticated active same-tenant manager/owner request context.
   authorizedByRole?: CreditNoteAuthRole;
 
   @IsArray()
