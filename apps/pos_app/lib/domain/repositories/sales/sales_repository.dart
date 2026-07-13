@@ -51,6 +51,8 @@ abstract class SalesRepository {
   Future<void> createCreditNote({
     required String originalInvoiceId,
     required String reason,
+    // Submitted as audit metadata only; backend sync revalidates manager/owner
+    // authorization before accepting CREDIT_NOTE fiscal persistence.
     required String authorizedByUserId,
     required UserRole authorizedByRole,
     RefundReasonPolicy refundReasonPolicy =

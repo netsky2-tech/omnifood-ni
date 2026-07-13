@@ -27,7 +27,7 @@ Resumen ejecutivo del estado real tras los merges **PR #32** (Batch 1), **PR #34
 | 3c — Sync Offline Determinista | **Cerrado** | Deltas-only, idempotencia, secuencia local, reintentos granulares, parsing determinista y cobertura route/e2e quedaron cubiertos por la cadena PR #67/#71/#73 y merge final #75. |
 | 4 — Mermas y Ajustes | **Cerrado** | Taxonomía PRD, metadatos offline/POS, merma de producto, BOM backend para platos, alertas forenses y sesiones de conteo físico quedaron cubiertos por la cadena PR #77-#83. |
 | 5 — Producción | **Cerrado** | Vertical slice POS offline + backend replay/history completado: cierre local de producción, identidad de terminal estable, source sequence determinístico, validación de stock de componentes, idempotencia, costeo canónico, historial append-only y RLS/immutability. UI avanzada, sub-recetas multi-nivel, empaques, aprobaciones y dashboards/reportes quedan fuera de Batch 5. |
-| 6a — Hooks FOH Venta/Cancelación | **Parcial** | Hooks POS de venta (BOM OUT) y void atómico (compensatorio) ya implementados vía PR #34; matemática BOM versionada refinada en PR #36. Resta: vínculo Kardex formal, reembolsos/credit notes, latencia async/background, `documento_origen_id` (tras 3a). **No** reclamar Kardex formal completo. |
+| 6a — Hooks FOH Venta/Cancelación | **Parcial** | Hooks POS de venta (BOM OUT) y void atómico (compensatorio) ya implementados vía PR #34; matemática BOM versionada refinada en PR #36. Batch 6a added the credit-note fiscal/sync contract with provenance, backend authorization, and deterministic replay. Remaining: backend Kardex compensation, async/background latency (#105), offline sale→credit-note e2e (#106), and final refund-reason/partial-credit-note policy. **No** reclamar Kardex formal completo. |
 | 6b — Stock Negativo + Recalculo | No iniciado | Depende de 3a. |
 | 6c — Dashboard y Reportes | No iniciado | |
 
@@ -58,7 +58,7 @@ Resumen ejecutivo del estado real tras los merges **PR #32** (Batch 1), **PR #34
 
 **Ampliaciones derivadas del PRD** (no literales en el PRD, pero necesarias para cumplimiento):
 - Flujo de factura de compra con identidad fiscal y corrección por movimiento compensatorio → Batch 3b.
-- Cancelación/reembolso FOH como movimiento compensatorio append-only → Batch 6a (parcial: POS void atómico hecho en PR #34; reembolso/credit note y Kardex formal pendientes).
+- Cancelación/reembolso FOH como movimiento compensatorio append-only → Batch 6a (parcial: POS void atómico hecho en PR #34; contrato fiscal/sync de credit note documentado; Kardex formal, async/e2e y políticas finales pendientes).
 - Contrato determinista de sync offline (idempotencia, secuencia, reintentos) → Batch 3c.
 - Replay de producción offline con source sequence, idempotencia, costeo canónico e historial append-only → Batch 5.
 
@@ -73,7 +73,7 @@ Resumen ejecutivo del estado real tras los merges **PR #32** (Batch 1), **PR #34
 | 3c | [Sync Offline Determinista](batch_03c_offline_sync_contract.md) | Deltas, idempotencia, secuencia, reintentos, Topología B | Split de Batch 3 | Cerrado |
 | 4 | [Mermas y Ajustes](batch_04_mermas_ajustes.md) | Taxonomía PRD, conteo físico, alertas forenses | Original (remediación) | Cerrado |
 | 5 | [Producción](batch_05_production.md) | Órdenes, atomización, costeo sub-receta | Original (remediación) | Cerrado |
-| 6a | [Hooks FOH Venta/Cancelación](batch_06a_foh_hooks.md) | Descuento venta, cancelación/reembolso compensatorio | Split de Batch 6 | Parcial (POS sale/void hechos; Kardex formal + reembolso pendientes) |
+| 6a | [Hooks FOH Venta/Cancelación](batch_06a_foh_hooks.md) | Descuento venta, cancelación/reembolso compensatorio | Split de Batch 6 | Parcial (POS sale/void hechos; contrato credit note documentado; Kardex formal, async/e2e y políticas finales pendientes) |
 | 6b | [Stock Negativo + Recalculo Retroactivo](batch_06b_negative_stock_retrocalc.md) | Stock negativo permitido, recalculo **obligatorio** | Split de Batch 6 | No iniciado |
 | 6c | [Dashboard y Reportes](batch_06c_dashboard_reporting.md) | Existencias, valorización, COGS, alertas stock | Split de Batch 6 | No iniciado |
 
