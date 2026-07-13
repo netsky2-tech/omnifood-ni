@@ -46,6 +46,15 @@ describe('AddCreditNoteProvenance1782000000000', () => {
     }
   });
 
+  it('keeps inventory movement_type as varchar so CREDIT_NOTE_RESTOCK needs no PostgreSQL enum migration', async () => {
+    const sql = await collectSql();
+
+    expect(sql).not.toContain('ALTER TYPE');
+    expect(sql).not.toContain('ADD VALUE');
+    expect(sql).toContain("source_document_type = 'CREDIT_NOTE'");
+    expect(sql).toContain("refund_reason_policy IN (");
+  });
+
   it('enforces tenant RLS, same-tenant origin ownership, and append-only guards', async () => {
     const sql = await collectSql();
 
@@ -54,7 +63,7 @@ describe('AddCreditNoteProvenance1782000000000', () => {
       expect(sql).toContain(`ALTER TABLE ${tableName} FORCE ROW LEVEL SECURITY`);
     }
     for (const fragment of [
-      "tenant_id = current_setting('app.tenant_id', true)",
+      "tenant_id::text = current_setting('app.tenant_id', true)",
       'validate_credit_note_invoice_origin_tenant',
       'validate_credit_note_item_origin_tenant',
       'validate_credit_note_kardex_origin_tenant',
@@ -69,8 +78,9 @@ describe('AddCreditNoteProvenance1782000000000', () => {
       'credit-note kardex row requires refund reason policy',
       'credit-note kardex row requires origin movement',
       'credit-note kardex row requires origin invoice item',
-      'origin.tenant_id <> NEW.tenant_id',
-      'origin.invoice_id <> parent_invoice.origin_invoice_id',
+      'origin.tenant_id::text <> NEW.tenant_id::text',
+      'origin.invoice_id::text <> parent_invoice.origin_invoice_id',
+      "origin_movement.source_document_id <> ('invoice:' || credit_note_invoice.origin_invoice_id)",
       'reject_credit_note_invoice_provenance_mutation',
       'reject_credit_note_item_provenance_mutation',
       'reject_credit_note_kardex_provenance_mutation',

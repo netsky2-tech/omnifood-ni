@@ -2,6 +2,13 @@ import { randomUUID } from 'crypto';
 import { DataSource, type QueryRunner, type Repository } from 'typeorm';
 import { BohInventoryLedgerFoundation1766000000000 } from '../../../migrations/1766000000000-BohInventoryLedgerFoundation';
 import { AddDeterministicSyncSequencing1780000000000 } from '../../../migrations/1780000000000-AddDeterministicSyncSequencing';
+import { AddCreditNoteProvenance1782000000000 } from '../../../migrations/1782000000000-AddCreditNoteProvenance';
+import { Insumo } from '../../inventory/entities/insumo.entity';
+import {
+  InventoryMovement,
+  MovementType,
+} from '../../inventory/entities/inventory-movement.entity';
+import { UomConversion } from '../../inventory/entities/uom-conversion.entity';
 import { InventorySyncOutbox } from '../../inventory/entities/inventory-sync-outbox.entity';
 import { InventorySyncReceipt } from '../../inventory/entities/inventory-sync-receipt.entity';
 import { Tenant } from '../../tenant/entities/tenant.entity';
@@ -605,6 +612,202 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
           if (bootstrap.isInitialized) {
             await bootstrap.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
             await bootstrap.query(`DROP ROLE IF EXISTS "${tenantRole}"`);
+            await bootstrap.destroy();
+          }
+        } catch {
+          // Best-effort cleanup.
+        }
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'replays a CREDIT_NOTE_RESTOCK through the real TypeORM/PostgreSQL path using invoice-prefixed SALE provenance',
+    async () => {
+      const bootstrap = new DataSource({
+        type: 'postgres',
+        ...postgresConnection,
+      });
+      const suffix = randomUUID().replace(/-/g, '');
+      const schema = `credit_restock_replay_${suffix}`;
+      const tenantId = randomUUID();
+      const insumoId = randomUUID();
+      const saleInvoiceId = randomUUID();
+      const saleItemId = randomUUID();
+      const creditNoteId = randomUUID();
+      let dataSource: DataSource | null = null;
+
+      try {
+        await bootstrap.initialize();
+        await bootstrap.query(`CREATE SCHEMA "${schema}"`);
+        dataSource = new DataSource({
+          type: 'postgres',
+          ...postgresConnection,
+          schema,
+          entities: [
+            Tenant,
+            Invoice,
+            InvoiceItem,
+            InvoiceItemModifier,
+            Payment,
+            InventorySyncReceipt,
+            InventorySyncOutbox,
+            InventoryMovement,
+            Insumo,
+            UomConversion,
+          ],
+          synchronize: true,
+        });
+        await dataSource.initialize();
+        await dataSource.query(`SET search_path TO "${schema}"`);
+        await dataSource.query("SELECT set_config('app.tenant_id', $1, false)", [
+          tenantId,
+        ]);
+        const queryRunner = dataSource.createQueryRunner();
+        await queryRunner.connect();
+        await queryRunner.query(`SET search_path TO "${schema}"`);
+        await new AddCreditNoteProvenance1782000000000().up(queryRunner);
+        await queryRunner.release();
+
+        await dataSource.getRepository(Tenant).save(
+          dataSource.getRepository(Tenant).create({
+            id: tenantId,
+            name: 'Tenant Restock Replay',
+          }),
+        );
+        await dataSource.getRepository(Insumo).save(
+          dataSource.getRepository(Insumo).create({
+            id: insumoId,
+            tenant_id: tenantId,
+            name: 'Burger Bun',
+            purchaseUom: 'unit',
+            consumptionUom: 'unit',
+            conversionFactor: 1,
+            stock: 10,
+            existenciaActual: 10,
+            averageCost: 3.5,
+          }),
+        );
+
+        const service = new InvoicesService(
+          dataSource,
+          dataSource.getRepository(Invoice),
+          dataSource.getRepository(InvoiceItem),
+          dataSource.getRepository(Payment),
+          dataSource.getRepository(InventoryMovement),
+          dataSource.getRepository(InventorySyncReceipt),
+          dataSource.getRepository(InventorySyncOutbox),
+          { findActiveVersion: jest.fn().mockResolvedValue(null) } as never,
+          { explode: jest.fn() },
+        );
+
+        const saleResult = await service.syncBatch(tenantId, [
+          {
+            idempotencyKey: 'sale-replay-key',
+            sourceDeviceId: 'terminal-db',
+            sourceSequence: 1,
+            flowType: 'sales',
+            documentType: 'SALE',
+            invoice: {
+              id: saleInvoiceId,
+              number: 'A-RESTOCK-001',
+              createdAt: new Date().toISOString(),
+              userId: 'user-db',
+              subtotal: 7,
+              totalTax: 1.05,
+              total: 8.05,
+              paymentStatus: 'PAID',
+              type: 'regular',
+              items: [
+                {
+                  id: saleItemId,
+                  productId: insumoId,
+                  productName: 'Burger Bun',
+                  quantity: 2,
+                  unitPrice: 3.5,
+                  originalTaxRate: 0.15,
+                  appliedTaxRate: 0.15,
+                  taxAmount: 1.05,
+                  total: 8.05,
+                  discount: 0,
+                },
+              ],
+              payments: [],
+            },
+          },
+        ]);
+        expect(saleResult.results).toEqual([
+          expect.objectContaining({ status: 'ACCEPTED', code: 'APPLIED' }),
+        ]);
+
+        const creditResult = await service.syncBatch(tenantId, [
+          {
+            idempotencyKey: 'credit-replay-key',
+            sourceDeviceId: 'terminal-db',
+            sourceSequence: 2,
+            flowType: 'sales',
+            documentType: 'CREDIT_NOTE',
+            invoice: {
+              id: creditNoteId,
+              number: 'CN-RESTOCK-001',
+              createdAt: new Date().toISOString(),
+              userId: 'user-db',
+              subtotal: -3.5,
+              totalTax: -0.53,
+              total: -4.03,
+              paymentStatus: 'REFUNDED',
+              type: 'creditNote',
+              originInvoiceId: saleInvoiceId,
+              refundReasonPolicy: 'RESTOCK_ORIGINAL_BOM',
+              items: [
+                {
+                  id: randomUUID(),
+                  productId: insumoId,
+                  productName: 'Burger Bun',
+                  quantity: -1,
+                  unitPrice: 3.5,
+                  originalTaxRate: 0.15,
+                  appliedTaxRate: 0.15,
+                  taxAmount: -0.53,
+                  total: -4.03,
+                  discount: 0,
+                  originInvoiceItemId: saleItemId,
+                },
+              ],
+              payments: [],
+            },
+          },
+        ]);
+
+        expect(creditResult.results).toEqual([
+          expect.objectContaining({ status: 'ACCEPTED', code: 'APPLIED' }),
+        ]);
+        const movements = await dataSource.getRepository(InventoryMovement).find({
+          where: { tenant_id: tenantId },
+          order: { id: 'ASC' },
+        });
+        expect(movements).toEqual([
+          expect.objectContaining({
+            type: MovementType.SALE,
+            sourceDocumentId: `invoice:${saleInvoiceId}`,
+            originInvoiceItemId: saleItemId,
+          }),
+          expect.objectContaining({
+            type: MovementType.CREDIT_NOTE_RESTOCK,
+            sourceDocumentId: creditNoteId,
+            sourceDocumentType: 'CREDIT_NOTE',
+            originInvoiceItemId: saleItemId,
+            refundReasonPolicy: 'RESTOCK_ORIGINAL_BOM',
+          }),
+        ]);
+      } finally {
+        try {
+          if (dataSource?.isInitialized) {
+            await dataSource.destroy();
+          }
+          if (bootstrap.isInitialized) {
+            await bootstrap.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
             await bootstrap.destroy();
           }
         } catch {

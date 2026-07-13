@@ -54,6 +54,7 @@ describe('InvoicesService', () => {
       unknown[]
     >;
     findOne: jest.Mock<Promise<unknown>, unknown[]>;
+    find: jest.Mock<Promise<unknown[]>, unknown[]>;
   };
 
   beforeEach(async () => {
@@ -119,6 +120,7 @@ describe('InvoicesService', () => {
         >()
         .mockReturnValue(qb),
       findOne: jest.fn<Promise<unknown>, unknown[]>(),
+      find: jest.fn<Promise<unknown[]>, unknown[]>().mockResolvedValue([]),
     };
     dataSource = {
       transaction: jest
@@ -494,9 +496,14 @@ describe('InvoicesService', () => {
         payments: [],
       });
 
-      await service.syncInvoices('tenant-1', [creditNoteInvoice], txManager as never, {
-        allowCreditNotes: true,
-      });
+      await service.syncInvoices(
+        'tenant-1',
+        [creditNoteInvoice],
+        txManager as never,
+        {
+          allowCreditNotes: true,
+        },
+      );
 
       expect(invoiceRepo.findOne).toHaveBeenCalledWith({
         where: { id: creditNoteInvoice.id, tenant_id: 'tenant-1' },
@@ -522,9 +529,12 @@ describe('InvoicesService', () => {
       });
 
       await expect(
-        service.syncInvoices('tenant-1', [
-          { ...creditNoteInvoice, total: -58.5 },
-        ], txManager as never, { allowCreditNotes: true }),
+        service.syncInvoices(
+          'tenant-1',
+          [{ ...creditNoteInvoice, total: -58.5 }],
+          txManager as never,
+          { allowCreditNotes: true },
+        ),
       ).rejects.toThrow('conflicts with an existing credit-note invoice');
 
       expect(invoiceRepo.upsert).not.toHaveBeenCalled();
@@ -535,7 +545,9 @@ describe('InvoicesService', () => {
     it('disallows credit-note invoices on the direct sales sync boundary', async () => {
       await expect(
         service.syncInvoices('tenant-1', [creditNoteInvoice]),
-      ).rejects.toThrow('Credit-note invoices must use the batch CREDIT_NOTE sync boundary');
+      ).rejects.toThrow(
+        'Credit-note invoices must use the batch CREDIT_NOTE sync boundary',
+      );
 
       expect(dataSource.transaction).not.toHaveBeenCalled();
       expect(invoiceRepo.findOne).not.toHaveBeenCalled();
@@ -544,38 +556,46 @@ describe('InvoicesService', () => {
     });
 
     it('rejects a credit-note origin invoice that is itself another credit note before persistence', async () => {
-      invoiceRepo.findOne
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce({
-          id: 'sale-invoice-1',
-          tenant_id: 'tenant-1',
-          type: 'creditNote',
-        });
+      invoiceRepo.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce({
+        id: 'sale-invoice-1',
+        tenant_id: 'tenant-1',
+        type: 'creditNote',
+      });
 
       await expect(
-        service.syncInvoices('tenant-1', [creditNoteInvoice], txManager as never, {
-          allowCreditNotes: true,
-        }),
-      ).rejects.toThrow('credit-note origin invoice must be a regular sale invoice');
+        service.syncInvoices(
+          'tenant-1',
+          [creditNoteInvoice],
+          txManager as never,
+          {
+            allowCreditNotes: true,
+          },
+        ),
+      ).rejects.toThrow(
+        'credit-note origin invoice must be a regular sale invoice',
+      );
 
       expect(invoiceRepo.upsert).not.toHaveBeenCalled();
       expect(itemRepo.upsert).not.toHaveBeenCalled();
     });
 
     it('rejects credit-note lines whose origin item is missing from the tenant-bound origin invoice', async () => {
-      invoiceRepo.findOne
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce({
-          id: 'sale-invoice-1',
-          tenant_id: 'tenant-1',
-          type: 'regular',
-        });
+      invoiceRepo.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce({
+        id: 'sale-invoice-1',
+        tenant_id: 'tenant-1',
+        type: 'regular',
+      });
       itemRepo.find.mockResolvedValueOnce([]);
 
       await expect(
-        service.syncInvoices('tenant-1', [creditNoteInvoice], txManager as never, {
-          allowCreditNotes: true,
-        }),
+        service.syncInvoices(
+          'tenant-1',
+          [creditNoteInvoice],
+          txManager as never,
+          {
+            allowCreditNotes: true,
+          },
+        ),
       ).rejects.toThrow('credit-note origin invoice item was not found');
 
       expect(itemRepo.find).toHaveBeenCalled();
@@ -598,13 +618,11 @@ describe('InvoicesService', () => {
         ],
       };
 
-      invoiceRepo.findOne
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce({
-          id: 'sale-invoice-1',
-          tenant_id: 'tenant-1',
-          type: 'regular',
-        });
+      invoiceRepo.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce({
+        id: 'sale-invoice-1',
+        tenant_id: 'tenant-1',
+        type: 'regular',
+      });
 
       await expect(
         service.syncInvoices(
@@ -621,13 +639,11 @@ describe('InvoicesService', () => {
     });
 
     it('rejects credit-note lines whose origin item belongs to a different invoice', async () => {
-      invoiceRepo.findOne
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce({
-          id: 'sale-invoice-1',
-          tenant_id: 'tenant-1',
-          type: 'regular',
-        });
+      invoiceRepo.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce({
+        id: 'sale-invoice-1',
+        tenant_id: 'tenant-1',
+        type: 'regular',
+      });
       itemRepo.find.mockResolvedValueOnce([
         {
           id: 'sale-item-1',
@@ -637,9 +653,14 @@ describe('InvoicesService', () => {
       ]);
 
       await expect(
-        service.syncInvoices('tenant-1', [creditNoteInvoice], txManager as never, {
-          allowCreditNotes: true,
-        }),
+        service.syncInvoices(
+          'tenant-1',
+          [creditNoteInvoice],
+          txManager as never,
+          {
+            allowCreditNotes: true,
+          },
+        ),
       ).rejects.toThrow('must belong to the credit-note origin invoice');
 
       expect(invoiceRepo.upsert).not.toHaveBeenCalled();
@@ -1696,7 +1717,9 @@ describe('InvoicesService', () => {
         },
       };
 
-      const result = await service.syncBatch('tenant-1', [creditNoteOnSaleRecord]);
+      const result = await service.syncBatch('tenant-1', [
+        creditNoteOnSaleRecord,
+      ]);
 
       expect(result.results).toEqual([
         expect.objectContaining({
@@ -1988,7 +2011,23 @@ describe('InvoicesService', () => {
       );
     });
 
-    it('rejects CREDIT_NOTE restock policies requiring Kardex compensation non-retryably for this slice', async () => {
+    it('rejects CREDIT_NOTE restock when origin sale Kardex snapshots are missing', async () => {
+      invoiceRepo.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce({
+        id: 'sale-origin-1',
+        tenant_id: 'tenant-1',
+        type: 'regular',
+      });
+      itemRepo.find.mockResolvedValue([
+        {
+          id: 'sale-item-1',
+          tenant_id: 'tenant-1',
+          invoiceId: 'sale-origin-1',
+          quantity: 2,
+        },
+      ]);
+      receiptRepo.findOne.mockResolvedValue(null);
+      txManager.find.mockResolvedValueOnce([]);
+
       const result = await service.syncBatch('tenant-1', [
         {
           idempotencyKey: 'credit-note-restock-policy',
@@ -2015,21 +2054,701 @@ describe('InvoicesService', () => {
         expect.objectContaining({
           status: 'REJECTED',
           retryable: false,
-          code: 'CREDIT_NOTE_KARDEX_COMPENSATION_UNSUPPORTED',
+          code: 'CREDIT_NOTE_ORIGIN_MOVEMENT_MISSING',
         }),
       ]);
       expect(movementRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('appends CREDIT_NOTE Kardex compensation from origin sale movement snapshots for restock policy', async () => {
+      invoiceRepo.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce({
+        id: 'sale-origin-1',
+        tenant_id: 'tenant-1',
+        type: 'regular',
+      });
+      itemRepo.find.mockResolvedValue([
+        {
+          id: 'sale-item-1',
+          tenant_id: 'tenant-1',
+          invoiceId: 'sale-origin-1',
+          quantity: 2,
+        },
+      ]);
+      receiptRepo.findOne.mockResolvedValue(null);
+      txManager.find.mockResolvedValueOnce([
+        {
+          id: '3001',
+          tenant_id: 'tenant-1',
+          insumoId: 'ins-bun',
+          type: MovementType.SALE,
+          quantity: -4,
+          unitCostNio: 3.5,
+          averageCostAfterNio: 3.5,
+          originInvoiceItemId: 'sale-item-1',
+          idempotencyKey: 'sale-key:sale-item-1:ins-bun',
+          sourceDocumentId: 'invoice:sale-origin-1',
+          sourceDocumentType: MovementType.SALE,
+        },
+      ]);
+      txManager.createQueryBuilder().getOne.mockResolvedValueOnce({
+        id: 'ins-bun',
+        stock: 6,
+        averageCost: 9.25,
+        negativeStockPolicy: NEGATIVE_STOCK_POLICY.RESTRICT,
+        tenant_id: 'tenant-1',
+      });
+
+      const result = await service.syncBatch('tenant-1', [
+        {
+          idempotencyKey: 'credit-note-restock-accepted',
+          sourceDeviceId: 'd1',
+          sourceSequence: 1,
+          flowType: 'sales',
+          documentType: 'CREDIT_NOTE',
+          invoice: {
+            ...baseInvoice,
+            id: 'credit-note-1',
+            type: 'creditNote',
+            originInvoiceId: 'sale-origin-1',
+            refundReasonPolicy: 'RESTOCK_ORIGINAL_BOM',
+            items: [
+              {
+                ...baseInvoice.items[0],
+                id: 'credit-note-item-1',
+                quantity: -1,
+                originInvoiceItemId: 'sale-item-1',
+              },
+            ],
+          },
+        },
+      ]);
+
+      expect(result.results).toEqual([
+        expect.objectContaining({ status: 'ACCEPTED', code: 'APPLIED' }),
+      ]);
+      expect(txManager.find).toHaveBeenCalledWith(
+        InventoryMovement,
+        expect.objectContaining({
+          where: expect.objectContaining({
+            sourceDocumentId: 'invoice:sale-origin-1',
+            sourceDocumentType: MovementType.SALE,
+          }),
+        }),
+      );
+      expect(movementRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MovementType.CREDIT_NOTE_RESTOCK,
+          quantity: 2,
+          previousStock: 6,
+          newStock: 8,
+          unitCostNio: 3.5,
+          averageCostAfterNio: 9.25,
+          originMovementId: '3001',
+          compensationForKardexId: '3001',
+          originInvoiceItemId: 'sale-item-1',
+          refundReasonPolicy: 'RESTOCK_ORIGINAL_BOM',
+          sourceDocumentType: 'CREDIT_NOTE',
+          sourceDocumentId: 'credit-note-1',
+        }),
+      );
+      expect(txManager.save).toHaveBeenCalledWith(
+        Insumo,
+        expect.objectContaining({
+          id: 'ins-bun',
+          stock: 8,
+          existenciaActual: 8,
+        }),
+      );
+    });
+
+    it('does not bind CREDIT_NOTE restock to an origin movement only because the client-controlled sale idempotency key mentions the origin item id', async () => {
+      invoiceRepo.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce({
+        id: 'sale-origin-1',
+        tenant_id: 'tenant-1',
+        type: 'regular',
+      });
+      itemRepo.find.mockResolvedValue([
+        {
+          id: 'sale-item-1',
+          tenant_id: 'tenant-1',
+          invoiceId: 'sale-origin-1',
+          quantity: 2,
+        },
+      ]);
+      receiptRepo.findOne.mockResolvedValue(null);
+      txManager.find.mockResolvedValueOnce([
+        {
+          id: '3002',
+          tenant_id: 'tenant-1',
+          insumoId: 'ins-bun',
+          type: MovementType.SALE,
+          quantity: -4,
+          unitCostNio: 3.5,
+          averageCostAfterNio: 3.5,
+          idempotencyKey: 'client-prefix:sale-item-1:spoofed:sale-item-2:ins-bun',
+          sourceDocumentId: 'invoice:sale-origin-1',
+          sourceDocumentType: MovementType.SALE,
+        },
+      ]);
+
+      const result = await service.syncBatch('tenant-1', [
+        {
+          idempotencyKey: 'credit-note-restock-spoofed-binding',
+          sourceDeviceId: 'd1',
+          sourceSequence: 1,
+          flowType: 'sales',
+          documentType: 'CREDIT_NOTE',
+          invoice: {
+            ...baseInvoice,
+            id: 'credit-note-spoofed-binding',
+            type: 'creditNote',
+            originInvoiceId: 'sale-origin-1',
+            refundReasonPolicy: 'RESTOCK_ORIGINAL_BOM',
+            items: [
+              {
+                ...baseInvoice.items[0],
+                id: 'credit-note-spoofed-binding-item',
+                quantity: -1,
+                originInvoiceItemId: 'sale-item-1',
+              },
+            ],
+          },
+        },
+      ]);
+
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          status: 'REJECTED',
+          retryable: false,
+          code: 'CREDIT_NOTE_ORIGIN_MOVEMENT_MISSING',
+        }),
+      ]);
+      expect(movementRepo.create).not.toHaveBeenCalledWith(
+        expect.objectContaining({ originMovementId: '3002' }),
+      );
+    });
+
+    it('rejects originless SALE movements even when the idempotency key ends with the requested origin item and insumo ids', async () => {
+      invoiceRepo.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce({
+        id: 'sale-origin-1',
+        tenant_id: 'tenant-1',
+        type: 'regular',
+      });
+      itemRepo.find.mockResolvedValue([
+        {
+          id: 'sale-item-1',
+          tenant_id: 'tenant-1',
+          invoiceId: 'sale-origin-1',
+          quantity: 2,
+        },
+      ]);
+      receiptRepo.findOne.mockResolvedValue(null);
+      txManager.find.mockResolvedValueOnce([
+        {
+          id: '3003',
+          tenant_id: 'tenant-1',
+          insumoId: 'ins-bun',
+          type: MovementType.SALE,
+          quantity: -4,
+          unitCostNio: 3.5,
+          averageCostAfterNio: 3.5,
+          originInvoiceItemId: null,
+          idempotencyKey: 'client-controlled:sale-item-1:ins-bun',
+          sourceDocumentId: 'invoice:sale-origin-1',
+          sourceDocumentType: MovementType.SALE,
+        },
+      ]);
+
+      const result = await service.syncBatch('tenant-1', [
+        {
+          idempotencyKey: 'credit-note-originless-sale-spoofed-suffix',
+          sourceDeviceId: 'd1',
+          sourceSequence: 1,
+          flowType: 'sales',
+          documentType: 'CREDIT_NOTE',
+          invoice: {
+            ...baseInvoice,
+            id: 'credit-note-originless-sale-spoofed-suffix',
+            type: 'creditNote',
+            originInvoiceId: 'sale-origin-1',
+            refundReasonPolicy: 'RESTOCK_ORIGINAL_BOM',
+            items: [
+              {
+                ...baseInvoice.items[0],
+                id: 'credit-note-originless-sale-spoofed-suffix-item',
+                quantity: -1,
+                originInvoiceItemId: 'sale-item-1',
+              },
+            ],
+          },
+        },
+      ]);
+
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          status: 'REJECTED',
+          retryable: false,
+          code: 'CREDIT_NOTE_ORIGIN_MOVEMENT_MISSING',
+        }),
+      ]);
+      expect(movementRepo.create).not.toHaveBeenCalledWith(
+        expect.objectContaining({ originMovementId: '3003' }),
+      );
+    });
+
+    it('rejects CREDIT_NOTE restock when the refund quantity is zero', async () => {
+      invoiceRepo.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce({
+        id: 'sale-origin-1',
+        tenant_id: 'tenant-1',
+        type: 'regular',
+      });
+      itemRepo.find.mockResolvedValue([
+        {
+          id: 'sale-item-1',
+          tenant_id: 'tenant-1',
+          invoiceId: 'sale-origin-1',
+          quantity: 2,
+        },
+      ]);
+      receiptRepo.findOne.mockResolvedValue(null);
+
+      const result = await service.syncBatch('tenant-1', [
+        {
+          idempotencyKey: 'credit-note-zero-restock',
+          sourceDeviceId: 'd1',
+          sourceSequence: 1,
+          flowType: 'sales',
+          documentType: 'CREDIT_NOTE',
+          invoice: {
+            ...baseInvoice,
+            id: 'credit-note-zero',
+            type: 'creditNote',
+            originInvoiceId: 'sale-origin-1',
+            refundReasonPolicy: 'RESTOCK_ORIGINAL_BOM',
+            items: [
+              {
+                ...baseInvoice.items[0],
+                id: 'credit-note-zero-item',
+                quantity: 0,
+                originInvoiceItemId: 'sale-item-1',
+              },
+            ],
+          },
+        },
+      ]);
+
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          status: 'REJECTED',
+          retryable: false,
+          code: 'CREDIT_NOTE_REFUND_QUANTITY_INVALID',
+        }),
+      ]);
+      expect(movementRepo.create).not.toHaveBeenCalled();
+      expect(receiptRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('rejects CREDIT_NOTE restock when the refund quantity exceeds the origin item quantity', async () => {
+      invoiceRepo.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce({
+        id: 'sale-origin-1',
+        tenant_id: 'tenant-1',
+        type: 'regular',
+      });
+      itemRepo.find.mockResolvedValue([
+        {
+          id: 'sale-item-1',
+          tenant_id: 'tenant-1',
+          invoiceId: 'sale-origin-1',
+          quantity: 2,
+        },
+      ]);
+      receiptRepo.findOne.mockResolvedValue(null);
+
+      const result = await service.syncBatch('tenant-1', [
+        {
+          idempotencyKey: 'credit-note-over-restock',
+          sourceDeviceId: 'd1',
+          sourceSequence: 1,
+          flowType: 'sales',
+          documentType: 'CREDIT_NOTE',
+          invoice: {
+            ...baseInvoice,
+            id: 'credit-note-over',
+            type: 'creditNote',
+            originInvoiceId: 'sale-origin-1',
+            refundReasonPolicy: 'RESTOCK_ORIGINAL_BOM',
+            items: [
+              {
+                ...baseInvoice.items[0],
+                id: 'credit-note-over-item',
+                quantity: -3,
+                originInvoiceItemId: 'sale-item-1',
+              },
+            ],
+          },
+        },
+      ]);
+
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          status: 'REJECTED',
+          retryable: false,
+          code: 'CREDIT_NOTE_REFUND_QUANTITY_INVALID',
+        }),
+      ]);
+      expect(movementRepo.create).not.toHaveBeenCalled();
+      expect(receiptRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('rejects cumulative CREDIT_NOTE restock that would exceed the origin movement quantity', async () => {
+      invoiceRepo.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce({
+        id: 'sale-origin-1',
+        tenant_id: 'tenant-1',
+        type: 'regular',
+      });
+      itemRepo.find.mockResolvedValue([
+        {
+          id: 'sale-item-1',
+          tenant_id: 'tenant-1',
+          invoiceId: 'sale-origin-1',
+          quantity: 2,
+        },
+      ]);
+      receiptRepo.findOne.mockResolvedValue(null);
+      txManager.find
+        .mockResolvedValueOnce([
+          {
+            id: '3001',
+            tenant_id: 'tenant-1',
+            insumoId: 'ins-bun',
+            type: MovementType.SALE,
+            quantity: -4,
+            unitCostNio: 3.5,
+            originInvoiceItemId: 'sale-item-1',
+            idempotencyKey: 'sale-key:sale-item-1:ins-bun',
+            sourceDocumentId: 'invoice:sale-origin-1',
+            sourceDocumentType: MovementType.SALE,
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            id: '3100',
+            tenant_id: 'tenant-1',
+            type: MovementType.CREDIT_NOTE_RESTOCK,
+            quantity: 3,
+            sourceDocumentId: 'credit-note-prior',
+            sourceDocumentType: 'CREDIT_NOTE',
+            originMovementId: '3001',
+            originInvoiceItemId: 'sale-item-1',
+          },
+        ]);
+
+      const result = await service.syncBatch('tenant-1', [
+        {
+          idempotencyKey: 'credit-note-cumulative-over-restock',
+          sourceDeviceId: 'd1',
+          sourceSequence: 1,
+          flowType: 'sales',
+          documentType: 'CREDIT_NOTE',
+          invoice: {
+            ...baseInvoice,
+            id: 'credit-note-cumulative-over',
+            type: 'creditNote',
+            originInvoiceId: 'sale-origin-1',
+            refundReasonPolicy: 'RESTOCK_ORIGINAL_BOM',
+            items: [
+              {
+                ...baseInvoice.items[0],
+                id: 'credit-note-cumulative-over-item',
+                quantity: -1,
+                originInvoiceItemId: 'sale-item-1',
+              },
+            ],
+          },
+        },
+      ]);
+
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          status: 'REJECTED',
+          retryable: false,
+          code: 'CREDIT_NOTE_RESTOCK_QUANTITY_EXCEEDED',
+        }),
+      ]);
+      expect(movementRepo.create).not.toHaveBeenCalled();
+      expect(receiptRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('does not append duplicate compensation for the same credit note and origin movement with a new accepted sequence', async () => {
+      invoiceRepo.findOne.mockResolvedValueOnce({
+        id: 'credit-note-duplicate',
+        number: baseInvoice.number,
+        created_at: new Date(baseInvoice.createdAt),
+        userId: baseInvoice.userId,
+        subtotal: baseInvoice.subtotal,
+        totalTax: baseInvoice.totalTax,
+        total: baseInvoice.total,
+        isCanceled: false,
+        voidReason: null,
+        paymentStatus: baseInvoice.paymentStatus,
+        customerId: null,
+        globalTaxOverride: false,
+        type: 'creditNote',
+        relatedInvoiceId: null,
+        originInvoiceId: 'sale-origin-1',
+        refundReasonCode: null,
+        refundReasonPolicy: 'RESTOCK_ORIGINAL_BOM',
+        tenant_id: 'tenant-1',
+        items: [
+          {
+            ...baseInvoice.items[0],
+            id: 'credit-note-duplicate-item',
+            invoiceId: 'credit-note-duplicate',
+            quantity: -1,
+            tenant_id: 'tenant-1',
+            originInvoiceItemId: 'sale-item-1',
+          },
+        ],
+        payments: [],
+      });
+      receiptRepo.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ source_sequence: '1' });
+      itemRepo.find.mockResolvedValue([
+        {
+          id: 'sale-item-1',
+          tenant_id: 'tenant-1',
+          invoiceId: 'sale-origin-1',
+          quantity: 2,
+        },
+      ]);
+      txManager.find
+        .mockResolvedValueOnce([
+          {
+            id: '3001',
+            tenant_id: 'tenant-1',
+            insumoId: 'ins-bun',
+            type: MovementType.SALE,
+            quantity: -4,
+            unitCostNio: 3.5,
+            originInvoiceItemId: 'sale-item-1',
+            idempotencyKey: 'sale-key:sale-item-1:ins-bun',
+            sourceDocumentId: 'invoice:sale-origin-1',
+            sourceDocumentType: MovementType.SALE,
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            id: '3100',
+            tenant_id: 'tenant-1',
+            type: MovementType.CREDIT_NOTE_RESTOCK,
+            quantity: 2,
+            sourceDocumentId: 'credit-note-duplicate',
+            sourceDocumentType: 'CREDIT_NOTE',
+            originMovementId: '3001',
+            originInvoiceItemId: 'sale-item-1',
+          },
+        ]);
+
+      const result = await service.syncBatch('tenant-1', [
+        {
+          idempotencyKey: 'credit-note-duplicate-new-key',
+          sourceDeviceId: 'd1',
+          sourceSequence: 2,
+          flowType: 'sales',
+          documentType: 'CREDIT_NOTE',
+          invoice: {
+            ...baseInvoice,
+            id: 'credit-note-duplicate',
+            type: 'creditNote',
+            originInvoiceId: 'sale-origin-1',
+            refundReasonPolicy: 'RESTOCK_ORIGINAL_BOM',
+            items: [
+              {
+                ...baseInvoice.items[0],
+                id: 'credit-note-duplicate-item',
+                quantity: -1,
+                originInvoiceItemId: 'sale-item-1',
+              },
+            ],
+          },
+        },
+      ]);
+
+      expect(result.results).toEqual([
+        expect.objectContaining({ status: 'ACCEPTED', code: 'APPLIED' }),
+      ]);
+      expect(movementRepo.create).not.toHaveBeenCalled();
+      expect(txManager.save).not.toHaveBeenCalledWith(
+        Insumo,
+        expect.objectContaining({ id: 'ins-bun' }),
+      );
+    });
+
+    it('rejects a changed duplicate credit-note replay with a new key before restock compensation', async () => {
+      invoiceRepo.findOne.mockResolvedValueOnce({
+        id: 'credit-note-changed-duplicate',
+        number: baseInvoice.number,
+        created_at: new Date(baseInvoice.createdAt),
+        userId: baseInvoice.userId,
+        subtotal: baseInvoice.subtotal,
+        totalTax: baseInvoice.totalTax,
+        total: baseInvoice.total,
+        isCanceled: false,
+        voidReason: null,
+        paymentStatus: baseInvoice.paymentStatus,
+        customerId: null,
+        globalTaxOverride: false,
+        type: 'creditNote',
+        relatedInvoiceId: null,
+        originInvoiceId: 'sale-origin-1',
+        refundReasonCode: null,
+        refundReasonPolicy: 'RESTOCK_ORIGINAL_BOM',
+        tenant_id: 'tenant-1',
+        items: [
+          {
+            ...baseInvoice.items[0],
+            id: 'credit-note-changed-duplicate-item',
+            invoiceId: 'credit-note-changed-duplicate',
+            quantity: -1,
+            tenant_id: 'tenant-1',
+            originInvoiceItemId: 'sale-item-1',
+          },
+        ],
+        payments: [],
+      });
+      receiptRepo.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ source_sequence: '1' });
+
+      const result = await service.syncBatch('tenant-1', [
+        {
+          idempotencyKey: 'credit-note-changed-duplicate-new-key',
+          sourceDeviceId: 'd1',
+          sourceSequence: 2,
+          flowType: 'sales',
+          documentType: 'CREDIT_NOTE',
+          invoice: {
+            ...baseInvoice,
+            id: 'credit-note-changed-duplicate',
+            total: 12.5,
+            type: 'creditNote',
+            originInvoiceId: 'sale-origin-1',
+            refundReasonPolicy: 'RESTOCK_ORIGINAL_BOM',
+            items: [
+              {
+                ...baseInvoice.items[0],
+                id: 'credit-note-changed-duplicate-item',
+                quantity: -1,
+                originInvoiceItemId: 'sale-item-1',
+              },
+            ],
+          },
+        },
+      ]);
+
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          status: 'REJECTED',
+          retryable: false,
+          code: 'CREDIT_NOTE_PAYLOAD_MISMATCH',
+        }),
+      ]);
+      expect(movementRepo.create).not.toHaveBeenCalled();
+      expect(receiptRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('rejects CREDIT_NOTE payloads that reuse an existing regular invoice id before upsert', async () => {
+      invoiceRepo.findOne.mockResolvedValueOnce({
+        id: 'regular-invoice-id',
+        tenant_id: 'tenant-1',
+        type: 'regular',
+      });
+      receiptRepo.findOne.mockResolvedValue(null);
+
+      const result = await service.syncBatch('tenant-1', [
+        {
+          idempotencyKey: 'credit-note-reuses-regular-id',
+          sourceDeviceId: 'd1',
+          sourceSequence: 1,
+          flowType: 'sales',
+          documentType: 'CREDIT_NOTE',
+          invoice: {
+            ...baseInvoice,
+            id: 'regular-invoice-id',
+            type: 'creditNote',
+            originInvoiceId: 'sale-origin-1',
+            refundReasonPolicy: 'FINANCIAL_ONLY',
+            items: [
+              {
+                ...baseInvoice.items[0],
+                id: 'credit-note-reuses-regular-item',
+                originInvoiceItemId: 'sale-item-1',
+              },
+            ],
+          },
+        },
+      ]);
+
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          status: 'REJECTED',
+          retryable: false,
+          code: 'CREDIT_NOTE_INVOICE_ID_COLLISION',
+        }),
+      ]);
       expect(invoiceRepo.upsert).not.toHaveBeenCalled();
+      expect(itemRepo.upsert).not.toHaveBeenCalled();
+      expect(receiptRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('rejects a CREDIT_NOTE with a missing origin invoice as non-retryable without receipt acceptance', async () => {
+      invoiceRepo.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null);
+      receiptRepo.findOne.mockResolvedValue(null);
+
+      const result = await service.syncBatch('tenant-1', [
+        {
+          idempotencyKey: 'credit-note-orphan-origin',
+          sourceDeviceId: 'd1',
+          sourceSequence: 1,
+          flowType: 'sales',
+          documentType: 'CREDIT_NOTE',
+          invoice: {
+            ...baseInvoice,
+            type: 'creditNote',
+            originInvoiceId: 'missing-sale-origin',
+            refundReasonPolicy: 'FINANCIAL_ONLY',
+            items: [
+              {
+                ...baseInvoice.items[0],
+                originInvoiceItemId: 'missing-sale-item',
+              },
+            ],
+          },
+        },
+      ]);
+
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          status: 'REJECTED',
+          retryable: false,
+          code: 'CREDIT_NOTE_ORIGIN_MISSING',
+        }),
+      ]);
+      expect(invoiceRepo.upsert).not.toHaveBeenCalled();
+      expect(receiptRepo.save).not.toHaveBeenCalled();
     });
 
     it('accepts financial-only CREDIT_NOTE records with deterministic flowType when no inventory movements are requested', async () => {
-      invoiceRepo.findOne
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce({
-          id: 'sale-origin-1',
-          tenant_id: 'tenant-1',
-          type: 'regular',
-        });
+      invoiceRepo.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce({
+        id: 'sale-origin-1',
+        tenant_id: 'tenant-1',
+        type: 'regular',
+      });
       itemRepo.find.mockResolvedValueOnce([
         {
           id: 'sale-item-1',
@@ -2104,7 +2823,9 @@ describe('InvoicesService', () => {
         return undefined;
       });
 
-      await expect(service.findOne('tenant-rls', 'inv-tenant')).resolves.toEqual({
+      await expect(
+        service.findOne('tenant-rls', 'inv-tenant'),
+      ).resolves.toEqual({
         id: 'inv-tenant',
       });
 
@@ -2113,7 +2834,9 @@ describe('InvoicesService', () => {
         ['tenant-rls'],
       );
       expect(txInvoiceRepo.findOne).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: 'inv-tenant', tenant_id: 'tenant-rls' } }),
+        expect.objectContaining({
+          where: { id: 'inv-tenant', tenant_id: 'tenant-rls' },
+        }),
       );
       expect(invoiceRepo.findOne).not.toHaveBeenCalled();
     });
@@ -2321,7 +3044,11 @@ describe('InvoicesService', () => {
           code: 'CRITICAL_PAYLOAD_MISMATCH',
         }),
       ]);
-      expect(result).toMatchObject({ received: 1, processed: 0, duplicates: 0 });
+      expect(result).toMatchObject({
+        received: 1,
+        processed: 0,
+        duplicates: 0,
+      });
       expect(dataSource.transaction).toHaveBeenCalledTimes(1);
       expect(movementRepo.create).not.toHaveBeenCalled();
     });
@@ -2334,16 +3061,14 @@ describe('InvoicesService', () => {
         documentType: 'PURCHASE',
         movements: [{ insumoId: 'ins-1', quantity: 1, unitCostNio: 5 }],
       };
-      receiptRepo.findOne
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce({
-          id: 'legacy-existing-sequence',
-          idempotency_key: 'legacy-old-key',
-          source_device_id: legacyRecord.sourceDeviceId,
-          source_sequence: String(legacyRecord.sourceSequence),
-          payload_hash: 'different-legacy-sequence-payload-hash',
-          result_status: 'ACCEPTED',
-        });
+      receiptRepo.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce({
+        id: 'legacy-existing-sequence',
+        idempotency_key: 'legacy-old-key',
+        source_device_id: legacyRecord.sourceDeviceId,
+        source_sequence: String(legacyRecord.sourceSequence),
+        payload_hash: 'different-legacy-sequence-payload-hash',
+        result_status: 'ACCEPTED',
+      });
 
       const result = await service.syncBatch('tenant-1', [legacyRecord]);
 
@@ -2355,7 +3080,11 @@ describe('InvoicesService', () => {
           code: 'CRITICAL_SEQUENCE_PAYLOAD_MISMATCH',
         }),
       ]);
-      expect(result).toMatchObject({ received: 1, processed: 0, duplicates: 0 });
+      expect(result).toMatchObject({
+        received: 1,
+        processed: 0,
+        duplicates: 0,
+      });
       expect(dataSource.transaction).toHaveBeenCalledTimes(2);
       expect(movementRepo.create).not.toHaveBeenCalled();
     });
