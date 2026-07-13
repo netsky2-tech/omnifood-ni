@@ -395,6 +395,9 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
               type: 'creditNote',
               originInvoiceId,
               refundReasonPolicy: 'FINANCIAL_ONLY',
+              refundReasonCode: 'customer_return',
+              authorizedByUserId: 'manager-a',
+              authorizedByRole: 'manager',
               items: [
                 {
                   id: collidingItemId,
@@ -569,6 +572,9 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
               type: 'creditNote',
               originInvoiceId,
               refundReasonPolicy: 'FINANCIAL_ONLY',
+              refundReasonCode: 'customer_return',
+              authorizedByUserId: 'manager-a',
+              authorizedByRole: 'manager',
               items: [
                 {
                   id: randomUUID(),
@@ -661,9 +667,10 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
         });
         await dataSource.initialize();
         await dataSource.query(`SET search_path TO "${schema}"`);
-        await dataSource.query("SELECT set_config('app.tenant_id', $1, false)", [
-          tenantId,
-        ]);
+        await dataSource.query(
+          "SELECT set_config('app.tenant_id', $1, false)",
+          [tenantId],
+        );
         const queryRunner = dataSource.createQueryRunner();
         await queryRunner.connect();
         await queryRunner.query(`SET search_path TO "${schema}"`);
@@ -760,6 +767,9 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
               type: 'creditNote',
               originInvoiceId: saleInvoiceId,
               refundReasonPolicy: 'RESTOCK_ORIGINAL_BOM',
+              refundReasonCode: 'returned_to_stock',
+              authorizedByUserId: 'manager-db',
+              authorizedByRole: 'manager',
               items: [
                 {
                   id: randomUUID(),
@@ -783,10 +793,12 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
         expect(creditResult.results).toEqual([
           expect.objectContaining({ status: 'ACCEPTED', code: 'APPLIED' }),
         ]);
-        const movements = await dataSource.getRepository(InventoryMovement).find({
-          where: { tenant_id: tenantId },
-          order: { id: 'ASC' },
-        });
+        const movements = await dataSource
+          .getRepository(InventoryMovement)
+          .find({
+            where: { tenant_id: tenantId },
+            order: { id: 'ASC' },
+          });
         expect(movements).toEqual([
           expect.objectContaining({
             type: MovementType.SALE,
