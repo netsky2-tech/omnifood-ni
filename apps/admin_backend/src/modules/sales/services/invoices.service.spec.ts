@@ -19,12 +19,14 @@ import {
   Insumo,
   NEGATIVE_STOCK_POLICY,
 } from '../../inventory/entities/insumo.entity';
+import { User, UserRole } from '../../identity/entities/user.entity';
 
 describe('InvoicesService', () => {
   let service: InvoicesService;
   let invoiceRepo: { upsert: jest.Mock; find?: jest.Mock; findOne: jest.Mock };
   let itemRepo: { upsert: jest.Mock; find: jest.Mock };
   let paymentRepo: { upsert: jest.Mock; find?: jest.Mock };
+  let userRepo: { findOne: jest.Mock };
   let movementRepo: {
     create: jest.Mock;
     save: jest.Mock;
@@ -65,6 +67,14 @@ describe('InvoicesService', () => {
     };
     itemRepo = { upsert: jest.fn(), find: jest.fn().mockResolvedValue([]) };
     paymentRepo = { upsert: jest.fn(), find: jest.fn().mockResolvedValue([]) };
+    userRepo = {
+      findOne: jest.fn().mockResolvedValue({
+        id: 'manager-1',
+        tenant_id: 'tenant-1',
+        role: UserRole.MANAGER,
+        is_active: true,
+      }),
+    };
     movementRepo = {
       create: jest.fn((x: unknown) => x),
       save: jest.fn(),
@@ -104,6 +114,7 @@ describe('InvoicesService', () => {
         if (target === Invoice) return invoiceRepo;
         if (target === InvoiceItem) return itemRepo;
         if (target === Payment) return paymentRepo;
+        if (target === User) return userRepo;
         if (target === InventorySyncReceipt) return receiptRepo;
         if (target === InventorySyncOutbox) return outboxRepo;
         return undefined;
@@ -149,6 +160,10 @@ describe('InvoicesService', () => {
         {
           provide: getRepositoryToken(Payment),
           useValue: paymentRepo,
+        },
+        {
+          provide: getRepositoryToken(User),
+          useValue: userRepo,
         },
         {
           provide: getRepositoryToken(InventoryMovement),
@@ -738,6 +753,56 @@ describe('InvoicesService', () => {
       expect(itemRepo.upsert).not.toHaveBeenCalled();
     });
 
+    it('rejects CREDIT_NOTE sync when the authorizing actor is not an active same-tenant manager or owner', async () => {
+      userRepo.findOne.mockResolvedValueOnce(null);
+
+      await expect(
+        service.syncInvoices(
+          'tenant-1',
+          [creditNoteInvoice],
+          txManager as never,
+          { allowCreditNotes: true },
+        ),
+      ).rejects.toThrow(
+        'credit-note authorizing actor must be an active same-tenant manager or owner',
+      );
+
+      expect(userRepo.findOne).toHaveBeenCalledWith({
+        where: {
+          id: 'manager-1',
+          tenant_id: 'tenant-1',
+          is_active: true,
+        },
+      });
+      expect(invoiceRepo.findOne).not.toHaveBeenCalled();
+      expect(invoiceRepo.upsert).not.toHaveBeenCalled();
+      expect(itemRepo.upsert).not.toHaveBeenCalled();
+    });
+
+    it('rejects CREDIT_NOTE sync when POS-supplied role metadata does not match the backend actor role', async () => {
+      userRepo.findOne.mockResolvedValueOnce({
+        id: 'manager-1',
+        tenant_id: 'tenant-1',
+        role: UserRole.CASHIER,
+        is_active: true,
+      });
+
+      await expect(
+        service.syncInvoices(
+          'tenant-1',
+          [creditNoteInvoice],
+          txManager as never,
+          { allowCreditNotes: true },
+        ),
+      ).rejects.toThrow(
+        'credit-note authorization metadata does not match backend actor role',
+      );
+
+      expect(invoiceRepo.findOne).not.toHaveBeenCalled();
+      expect(invoiceRepo.upsert).not.toHaveBeenCalled();
+      expect(itemRepo.upsert).not.toHaveBeenCalled();
+    });
+
     it('rejects CREDIT_NOTE sync when reason code is blank or missing', async () => {
       await expect(
         service.syncInvoices(
@@ -754,6 +819,12 @@ describe('InvoicesService', () => {
     });
 
     it('persists CREDIT_NOTE authorization metadata and nonblank reason code', async () => {
+      userRepo.findOne.mockResolvedValueOnce({
+        id: 'manager-1',
+        tenant_id: 'tenant-1',
+        role: UserRole.MANAGER,
+        is_active: true,
+      });
       invoiceRepo.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce({
         id: 'sale-invoice-1',
         tenant_id: 'tenant-1',
@@ -2958,11 +3029,12 @@ describe('InvoicesService', () => {
       expect(receiptRepo.save).not.toHaveBeenCalled();
     });
 
-    it('accepts financial-only CREDIT_NOTE records with deterministic flowType when no inventory movements are requested', async () => {
+    const seedFinancialOnlyCreditNoteOrigin = () => {
       invoiceRepo.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce({
         id: 'sale-origin-1',
         tenant_id: 'tenant-1',
         type: 'regular',
+        isCanceled: false,
       });
       itemRepo.find.mockResolvedValueOnce([
         {
@@ -2973,27 +3045,86 @@ describe('InvoicesService', () => {
         },
       ]);
       receiptRepo.findOne.mockResolvedValue(null);
+    };
+
+    const buildFinancialOnlyCreditNoteRecord = (
+      overrides: Partial<SyncBatchRecordDto> = {},
+      invoiceOverrides: Partial<SyncInvoiceDto> = {},
+    ): SyncBatchRecordDto => ({
+      idempotencyKey: 'credit-note-financial-only',
+      sourceDeviceId: 'd1',
+      sourceSequence: 1,
+      flowType: 'sales',
+      documentType: 'CREDIT_NOTE',
+      invoice: {
+        ...baseInvoice,
+        id: 'credit-note-financial-only-invoice',
+        type: 'creditNote',
+        originInvoiceId: 'sale-origin-1',
+        refundReasonPolicy: 'FINANCIAL_ONLY',
+        items: [
+          {
+            ...baseInvoice.items[0],
+            id: 'credit-note-financial-only-item',
+            quantity: -1,
+            originInvoiceItemId: 'sale-item-1',
+          },
+        ],
+        ...invoiceOverrides,
+      },
+      ...overrides,
+    });
+
+    it('accepts and persists a financial-only CREDIT_NOTE authorized by an active same-tenant owner', async () => {
+      userRepo.findOne.mockResolvedValueOnce({
+        id: 'owner-1',
+        tenant_id: 'tenant-1',
+        role: UserRole.OWNER,
+        is_active: true,
+      });
+      seedFinancialOnlyCreditNoteOrigin();
 
       const result = await service.syncBatch('tenant-1', [
-        {
-          idempotencyKey: 'credit-note-financial-only',
-          sourceDeviceId: 'd1',
-          sourceSequence: 1,
-          flowType: 'sales',
-          documentType: 'CREDIT_NOTE',
-          invoice: {
-            ...baseInvoice,
-            type: 'creditNote',
-            originInvoiceId: 'sale-origin-1',
-            refundReasonPolicy: 'FINANCIAL_ONLY',
-            items: [
-              {
-                ...baseInvoice.items[0],
-                originInvoiceItemId: 'sale-item-1',
-              },
-            ],
+        buildFinancialOnlyCreditNoteRecord(
+          { idempotencyKey: 'credit-note-owner-authorized' },
+          {
+            authorizedByUserId: 'owner-1',
+            authorizedByRole: 'owner',
           },
-        },
+        ),
+      ]);
+
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          status: 'ACCEPTED',
+          retryable: false,
+          code: 'APPLIED',
+        }),
+      ]);
+      expect(invoiceRepo.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'credit-note-financial-only-invoice',
+          authorizedByUserId: 'owner-1',
+          authorizedByRole: 'owner',
+        }),
+        ['id'],
+      );
+      expect(txManager.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenant_id: 'tenant-1',
+          idempotency_key: 'credit-note-owner-authorized',
+          result_status: 'ACCEPTED',
+          result_code: 'APPLIED',
+        }),
+      );
+      expect(movementRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('accepts financial-only CREDIT_NOTE records with deterministic flowType when no inventory movements are requested', async () => {
+      seedFinancialOnlyCreditNoteOrigin();
+
+      const result = await service.syncBatch('tenant-1', [
+        buildFinancialOnlyCreditNoteRecord(),
       ]);
 
       expect(result.results).toEqual([
@@ -3232,6 +3363,80 @@ describe('InvoicesService', () => {
       ]);
       expect(invoiceRepo.upsert).not.toHaveBeenCalled();
     });
+
+    describe.each<{
+      name: string;
+      actor: Partial<User> | null;
+      invoiceOverrides?: Partial<SyncInvoiceDto>;
+    }>([
+      {
+        name: 'missing actor',
+        actor: null,
+      },
+      {
+        name: 'wrong tenant actor',
+        actor: {
+          id: 'manager-1',
+          tenant_id: 'tenant-2',
+          role: UserRole.MANAGER,
+          is_active: true,
+        },
+      },
+      {
+        name: 'inactive actor',
+        actor: {
+          id: 'manager-1',
+          tenant_id: 'tenant-1',
+          role: UserRole.MANAGER,
+          is_active: false,
+        },
+      },
+      {
+        name: 'non-manager/non-owner actor',
+        actor: {
+          id: 'manager-1',
+          tenant_id: 'tenant-1',
+          role: UserRole.CASHIER,
+          is_active: true,
+        },
+      },
+      {
+        name: 'mismatched role metadata',
+        actor: {
+          id: 'manager-1',
+          tenant_id: 'tenant-1',
+          role: UserRole.MANAGER,
+          is_active: true,
+        },
+        invoiceOverrides: { authorizedByRole: 'owner' },
+      },
+    ])(
+      'CREDIT_NOTE authorization rejection for $name',
+      ({ actor, invoiceOverrides }) => {
+        it('returns non-retryable authorization failure and leaves no persistence', async () => {
+          userRepo.findOne.mockResolvedValueOnce(actor);
+          seedFinancialOnlyCreditNoteOrigin();
+
+          const result = await service.syncBatch('tenant-1', [
+            buildFinancialOnlyCreditNoteRecord(
+              { idempotencyKey: 'forged-credit-note-auth' },
+              invoiceOverrides,
+            ),
+          ]);
+
+          expect(result.results).toEqual([
+            expect.objectContaining({
+              status: 'REJECTED',
+              retryable: false,
+              code: 'CREDIT_NOTE_AUTHORIZATION_INVALID',
+            }),
+          ]);
+          expect(invoiceRepo.upsert).not.toHaveBeenCalled();
+          expect(itemRepo.upsert).not.toHaveBeenCalled();
+          expect(receiptRepo.save).not.toHaveBeenCalled();
+        });
+      },
+    );
 
     it('returns IDEMPOTENCY_MISMATCH for legacy idempotency-key duplicates with a different payload hash', async () => {
       const legacyRecord: SyncBatchRecordDto = {

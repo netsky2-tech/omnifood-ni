@@ -20,6 +20,7 @@ import {
   NEGATIVE_STOCK_POLICY,
   type NegativeStockPolicy,
 } from '../../inventory/entities/insumo.entity';
+import { User, UserRole } from '../../identity/entities/user.entity';
 
 const SCALE_4 = 4;
 const SET_LOCAL_TENANT_SQL = "SELECT set_config('app.tenant_id', $1, true)";
@@ -30,6 +31,14 @@ const CREDIT_NOTE_NO_STOCK_POLICIES = new Set([
 ]);
 const CREDIT_NOTE_RESTOCK_POLICY = 'RESTOCK_ORIGINAL_BOM';
 const INVOICE_SOURCE_DOCUMENT_PREFIX = 'invoice:';
+
+const CREDIT_NOTE_AUTH_ROLE_TO_USER_ROLE = {
+  manager: UserRole.MANAGER,
+  owner: UserRole.OWNER,
+} as const satisfies Record<
+  NonNullable<SyncInvoiceDto['authorizedByRole']>,
+  UserRole
+>;
 
 const round4 = (value: number): number => Number(value.toFixed(SCALE_4));
 
@@ -136,6 +145,8 @@ export class InvoicesService {
     private readonly itemRepository: Repository<InvoiceItem>,
     @InjectRepository(Payment)
     private readonly paymentRepository: Repository<Payment>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
     @InjectRepository(InventoryMovement)
     private readonly movementRepository: Repository<InventoryMovement>,
     @InjectRepository(InventorySyncReceipt)
@@ -170,6 +181,11 @@ export class InvoicesService {
         options.allowCreditNotes ?? false,
       );
       this.assertCreditNoteReasonAndAuthorization(dto);
+      await this.assertCreditNoteAuthorizingActor(
+        tenantId,
+        dto,
+        manager,
+      );
       await this.validateInvoiceRecipeVersions(tenantId, dto);
       const handledDuplicate = await this.skipMatchingCreditNoteReplay(
         tenantId,
@@ -854,11 +870,16 @@ export class InvoicesService {
         error instanceof BadRequestException
           ? this.resolveCreditNoteOriginErrorFromMessage(message)
           : null;
+      const creditNoteAuthorizationError =
+        error instanceof BadRequestException
+          ? this.resolveCreditNoteAuthorizationErrorFromMessage(message)
+          : null;
       return {
         accepted: false,
         result: this.buildResult(record, SYNC_RESULT_STATUS.REJECTED, {
           code:
             unsupportedCreditNoteError?.code ??
+            creditNoteAuthorizationError?.code ??
             creditNoteOriginError?.code ??
             (isCreditNotePayloadMismatch
               ? 'CREDIT_NOTE_PAYLOAD_MISMATCH'
@@ -867,6 +888,7 @@ export class InvoicesService {
                 : 'BUSINESS_RULE_VALIDATION'),
           retryable:
             unsupportedCreditNoteError?.retryable ??
+            creditNoteAuthorizationError?.retryable ??
             creditNoteOriginError?.retryable ??
             !(isCreditNoteBoundaryError || isCreditNotePayloadMismatch),
           message,
@@ -1046,6 +1068,18 @@ export class InvoicesService {
     }
     if (message.includes('collides with an existing non-credit invoice')) {
       return { code: 'CREDIT_NOTE_INVOICE_ID_COLLISION', retryable: false };
+    }
+    return null;
+  }
+
+  private resolveCreditNoteAuthorizationErrorFromMessage(
+    message: string,
+  ): { code: string; retryable: boolean } | null {
+    if (message.includes('credit-note authorizing actor')) {
+      return { code: 'CREDIT_NOTE_AUTHORIZATION_INVALID', retryable: false };
+    }
+    if (message.includes('credit-note authorization metadata')) {
+      return { code: 'CREDIT_NOTE_AUTHORIZATION_INVALID', retryable: false };
     }
     return null;
   }
@@ -1455,6 +1489,38 @@ export class InvoicesService {
     ) {
       throw new BadRequestException(
         'credit-note requires manager or owner authorization metadata',
+      );
+    }
+  }
+
+  private async assertCreditNoteAuthorizingActor(
+    tenantId: string,
+    dto: SyncInvoiceDto,
+    manager?: EntityManager,
+  ): Promise<void> {
+    if (!this.isCreditNoteInvoice(dto)) return;
+
+    const authorizedByUserId = dto.authorizedByUserId?.trim();
+    const authorizedByRole = dto.authorizedByRole;
+    if (!authorizedByUserId || !authorizedByRole) return;
+
+    const actor = await this.userRepoFor(manager).findOne({
+      where: {
+        id: authorizedByUserId,
+        tenant_id: tenantId,
+        is_active: true,
+      },
+    });
+    if (!actor || actor.tenant_id !== tenantId || actor.is_active !== true) {
+      throw new BadRequestException(
+        'credit-note authorizing actor must be an active same-tenant manager or owner',
+      );
+    }
+
+    const expectedRole = CREDIT_NOTE_AUTH_ROLE_TO_USER_ROLE[authorizedByRole];
+    if (actor.role !== expectedRole) {
+      throw new BadRequestException(
+        'credit-note authorization metadata does not match backend actor role',
       );
     }
   }
@@ -1882,6 +1948,13 @@ export class InvoicesService {
 
   private paymentRepoFor(manager?: EntityManager): Repository<Payment> {
     return manager ? manager.getRepository(Payment) : this.paymentRepository;
+  }
+
+  private userRepoFor(manager?: EntityManager): Repository<User> {
+    if (manager?.connection?.hasMetadata(User)) {
+      return manager.getRepository(User);
+    }
+    return this.userRepository;
   }
 
   private receiptRepoFor(
