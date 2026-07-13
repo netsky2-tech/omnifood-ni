@@ -1,6 +1,5 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mockito/mockito.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/database/migrations.dart';
 import 'package:pos_app/data/repositories/inventory/inventory_repository_impl.dart';
@@ -21,6 +20,10 @@ import 'package:pos_app/domain/models/inventory/forensic_alert.dart';
 import 'package:pos_app/domain/models/inventory/recipe_version_document.dart';
 import 'package:pos_app/domain/models/inventory/production_order_document.dart';
 import 'package:pos_app/domain/models/audit_log.dart';
+import 'package:pos_app/domain/models/sales/invoice.dart';
+import 'package:pos_app/domain/models/sales/invoice_item.dart';
+import 'package:pos_app/domain/models/sales/payment.dart';
+import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/domain/repositories/audit_repository.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
 import 'package:pos_app/domain/repositories/sales/sales_repository.dart';
@@ -33,7 +36,61 @@ class CapturedPost {
   CapturedPost({required this.path, required this.body});
 }
 
-class MockSalesRepository extends Mock implements SalesRepository {}
+class MockSalesRepository implements SalesRepository {
+  List<Map<String, dynamic>> unsyncedAggregates = [];
+  final List<List<String>> syncedInvoiceIdBatches = [];
+
+  @override
+  Future<List<Map<String, dynamic>>> getUnsyncedAggregates() async =>
+      unsyncedAggregates;
+
+  @override
+  Future<void> markAsSynced(List<String> invoiceIds) async {
+    syncedInvoiceIdBatches.add(invoiceIds);
+  }
+
+  @override
+  Future<void> createCreditNote({
+    required String originalInvoiceId,
+    required String reason,
+    required String authorizedByUserId,
+    required UserRole authorizedByRole,
+    RefundReasonPolicy refundReasonPolicy =
+        RefundReasonPolicy.restockOriginalBom,
+    List<CreditNoteRefundLine>? lines,
+  }) async => throw UnimplementedError();
+
+  @override
+  Future<Invoice?> getInvoiceById(String id) async =>
+      throw UnimplementedError();
+
+  @override
+  Future<Invoice?> getInvoiceByNumber(String number) async =>
+      throw UnimplementedError();
+
+  @override
+  Future<List<Invoice>> getInvoicesBySessionId(String sessionId) async =>
+      throw UnimplementedError();
+
+  @override
+  Future<List<Payment>> getPaymentsBySessionId(String sessionId) async =>
+      throw UnimplementedError();
+
+  @override
+  Future<List<Invoice>> getUnsyncedInvoices() async =>
+      throw UnimplementedError();
+
+  @override
+  Future<void> saveSale({
+    required Invoice invoice,
+    required List<InvoiceItem> items,
+    required List<Payment> payments,
+  }) async => throw UnimplementedError();
+
+  @override
+  Future<void> voidInvoice(String invoiceId, String reason) async =>
+      throw UnimplementedError();
+}
 
 class FakeAuditRepository implements AuditRepository {
   @override
@@ -365,6 +422,26 @@ void main() {
               handler.reject(forcedError!);
               return;
             }
+            if (options.path == '/v1/sync/batch') {
+              final records =
+                  ((options.data as Map<String, dynamic>)['records']
+                          as List<dynamic>)
+                      .cast<Map<String, dynamic>>();
+              handler.resolve(
+                Response<dynamic>(
+                  data: {
+                    'status': 'OK',
+                    'received': records.length,
+                    'results': records
+                        .map((record) => {...record, 'status': 'ACCEPTED'})
+                        .toList(growable: false),
+                  },
+                  statusCode: 200,
+                  requestOptions: options,
+                ),
+              );
+              return;
+            }
           }
           if (options.method.toUpperCase() == 'GET' &&
               capturedGets.containsKey(options.path)) {
@@ -559,6 +636,358 @@ void main() {
 
     expect(mockInventoryRepository.unsynced.length, 1);
   });
+
+  test(
+    'emits pending credit notes as sales sync records before inventory replay',
+    () async {
+      mockSalesRepository.unsyncedAggregates = [
+        {
+          'id': 'credit-note-1',
+          'number': 'NC-001',
+          'documentType': 'CREDIT_NOTE',
+          'terminalId': 'pos-terminal-1',
+          'sourceSequence': 12,
+          'idempotencyKey': 'credit-note:pos-terminal-1:credit-note-1',
+          'originInvoiceId': 'sale-1',
+          'refundReasonPolicy': 'FINANCIAL_ONLY',
+          'items': [
+            {
+              'id': 'credit-line-1',
+              'originInvoiceItemId': 'sale-line-1',
+              'quantity': -1,
+              'total': -57.5,
+            },
+          ],
+        },
+      ];
+      mockInventoryRepository.unsynced = [
+        InventoryMovement(
+          id: 'movement-after-credit-note',
+          insumoId: 'i-9',
+          type: MovementType.sale,
+          quantity: -2,
+          previousStock: 4,
+          newStock: 2,
+          timestamp: DateTime.parse('2026-01-01T12:00:00Z'),
+        ),
+      ];
+
+      await syncService.triggerManualSync();
+
+      expect(capturedPosts, isNotEmpty);
+      final firstPost = capturedPosts.first.body as Map<String, dynamic>;
+      final firstRecord =
+          (firstPost['records'] as List<dynamic>).single
+              as Map<String, dynamic>;
+      expect(firstRecord['flowType'], 'sales');
+      expect(firstRecord['documentType'], 'CREDIT_NOTE');
+      expect(firstRecord['sourceSequence'], 12);
+      expect(
+        firstRecord['idempotencyKey'],
+        'credit-note:pos-terminal-1:credit-note-1',
+      );
+      expect(
+        (firstRecord['invoice'] as Map<String, dynamic>)['originInvoiceId'],
+        'sale-1',
+      );
+      expect(mockSalesRepository.syncedInvoiceIdBatches, [
+        ['credit-note-1'],
+      ]);
+    },
+  );
+
+  test(
+    'keeps backend-rejected credit notes pending instead of marking them synced',
+    () async {
+      mockSalesRepository.unsyncedAggregates = [
+        {
+          'id': 'credit-note-over-refund',
+          'number': 'NC-OVER-REFUND',
+          'documentType': 'CREDIT_NOTE',
+          'terminalId': 'pos-terminal-1',
+          'sourceSequence': 13,
+          'idempotencyKey':
+              'credit-note:pos-terminal-1:credit-note-over-refund',
+          'originInvoiceId': 'sale-1',
+          'refundReasonPolicy': 'FINANCIAL_ONLY',
+          'items': [
+            {
+              'id': 'credit-line-over-refund',
+              'originInvoiceItemId': 'sale-line-1',
+              'quantity': -99,
+              'total': -5750.0,
+            },
+          ],
+        },
+      ];
+      respondToInventoryBatchWith(
+        (records) => {
+          'status': 'OK',
+          'received': records.length,
+          'results': [
+            {
+              ...records.single,
+              'status': 'REJECTED',
+              'code': 'CREDIT_NOTE_REFUND_QUANTITY_EXCEEDED',
+              'message':
+                  'credit-note refund quantity exceeds the origin item quantity',
+            },
+          ],
+        },
+      );
+
+      await syncService.triggerManualSync();
+
+      final salesPost = capturedPosts.singleWhere(
+        (post) => post.path == '/v1/sync/batch',
+      );
+      final record =
+          ((salesPost.body as Map<String, dynamic>)['records'] as List<dynamic>)
+                  .single
+              as Map<String, dynamic>;
+      expect(record['documentType'], 'CREDIT_NOTE');
+      expect(
+        record['idempotencyKey'],
+        'credit-note:pos-terminal-1:credit-note-over-refund',
+      );
+      expect(mockSalesRepository.syncedInvoiceIdBatches, isEmpty);
+    },
+  );
+
+  test(
+    'marks only accepted and matching duplicate sales results as synced',
+    () async {
+      mockSalesRepository.unsyncedAggregates = [
+        {
+          'id': 'sale-accepted',
+          'number': 'F001-ACCEPTED',
+          'documentType': 'SALE',
+          'terminalId': 'pos-terminal-1',
+          'sourceSequence': 14,
+          'idempotencyKey': 'sale:pos-terminal-1:sale-accepted',
+        },
+        {
+          'id': 'sale-duplicate',
+          'number': 'F001-DUPLICATE',
+          'documentType': 'SALE',
+          'terminalId': 'pos-terminal-1',
+          'sourceSequence': 15,
+          'idempotencyKey': 'sale:pos-terminal-1:sale-duplicate',
+        },
+        {
+          'id': 'sale-mismatch',
+          'number': 'F001-MISMATCH',
+          'documentType': 'SALE',
+          'terminalId': 'pos-terminal-1',
+          'sourceSequence': 16,
+          'idempotencyKey': 'sale:pos-terminal-1:sale-mismatch',
+        },
+        {
+          'id': 'credit-note-blocked',
+          'number': 'NC-BLOCKED',
+          'documentType': 'CREDIT_NOTE',
+          'terminalId': 'pos-terminal-1',
+          'sourceSequence': 17,
+          'idempotencyKey': 'credit-note:pos-terminal-1:credit-note-blocked',
+          'originInvoiceId': 'sale-accepted',
+          'refundReasonPolicy': 'FINANCIAL_ONLY',
+        },
+      ];
+      respondToInventoryBatchWith(
+        (records) => {
+          'status': 'OK',
+          'received': records.length,
+          'results': [
+            {...records[0], 'status': 'ACCEPTED'},
+            {...records[1], 'status': 'DUPLICATE'},
+            {...records[2], 'status': 'IDEMPOTENCY_MISMATCH'},
+            {...records[3], 'status': 'BLOCKED_BY_PRIOR_FAILURE'},
+          ],
+        },
+      );
+
+      await syncService.triggerManualSync();
+
+      expect(mockSalesRepository.syncedInvoiceIdBatches, [
+        ['sale-accepted', 'sale-duplicate'],
+      ]);
+    },
+  );
+
+  test(
+    'syncs only the first sales batch envelope and leaves unsent aggregates pending',
+    () async {
+      mockSalesRepository.unsyncedAggregates = List.generate(501, (index) {
+        final sequence = index + 1;
+        return {
+          'id': 'sale-$sequence',
+          'number': 'F001-$sequence',
+          'documentType': 'SALE',
+          'terminalId': 'pos-terminal-1',
+          'sourceSequence': sequence,
+          'idempotencyKey': 'sale:pos-terminal-1:sale-$sequence',
+          'items': const <Map<String, Object?>>[],
+        };
+      });
+
+      await syncService.triggerManualSync();
+
+      final salesPost = capturedPosts.firstWhere(
+        (post) => post.path == '/v1/sync/batch',
+      );
+      final records =
+          (salesPost.body as Map<String, dynamic>)['records'] as List<dynamic>;
+      expect(records, hasLength(500));
+      expect(mockSalesRepository.syncedInvoiceIdBatches, hasLength(1));
+      expect(mockSalesRepository.syncedInvoiceIdBatches.single, hasLength(500));
+      expect(
+        mockSalesRepository.syncedInvoiceIdBatches.single,
+        isNot(contains('sale-501')),
+      );
+    },
+  );
+
+  test(
+    'syncs regular offline sale aggregates with deterministic source metadata',
+    () async {
+      mockSalesRepository.unsyncedAggregates = [
+        {
+          'id': 'sale-regular-offline',
+          'number': 'F001-000129',
+          'documentType': 'SALE',
+          'terminalId': 'pos-cashier-1',
+          'sourceSequence': 20,
+          'idempotencyKey': 'sale:pos-cashier-1:sale-regular-offline',
+          'items': const <Map<String, Object?>>[],
+        },
+      ];
+
+      await syncService.triggerManualSync();
+
+      final salesPost = capturedPosts.firstWhere(
+        (post) => post.path == '/v1/sync/batch',
+      );
+      final record =
+          ((salesPost.body as Map<String, dynamic>)['records'] as List<dynamic>)
+                  .single
+              as Map<String, dynamic>;
+      expect(record['flowType'], 'sales');
+      expect(record['documentType'], 'SALE');
+      expect(record['terminalId'], 'pos-cashier-1');
+      expect(record['sourceSequence'], 20);
+      expect(
+        record['idempotencyKey'],
+        'sale:pos-cashier-1:sale-regular-offline',
+      );
+      expect(mockSalesRepository.syncedInvoiceIdBatches.single, [
+        'sale-regular-offline',
+      ]);
+    },
+  );
+
+  test(
+    'orders mixed offline sale and credit note aggregates by local source sequence',
+    () async {
+      mockSalesRepository.unsyncedAggregates = [
+        {
+          'id': 'credit-note-after-sale',
+          'number': 'NC-000130',
+          'documentType': 'CREDIT_NOTE',
+          'terminalId': 'pos-terminal-1',
+          'sourceSequence': 31,
+          'idempotencyKey': 'credit-note:pos-terminal-1:credit-note-after-sale',
+          'originInvoiceId': 'sale-before-credit-note',
+          'refundReasonPolicy': 'FINANCIAL_ONLY',
+        },
+        {
+          'id': 'sale-before-credit-note',
+          'number': 'F001-000130',
+          'documentType': 'SALE',
+          'terminalId': 'pos-terminal-1',
+          'sourceSequence': 30,
+          'idempotencyKey': 'sale:pos-terminal-1:sale-before-credit-note',
+        },
+      ];
+
+      await syncService.triggerManualSync();
+
+      final salesPost = capturedPosts.firstWhere(
+        (post) => post.path == '/v1/sync/batch',
+      );
+      final records =
+          ((salesPost.body as Map<String, dynamic>)['records'] as List<dynamic>)
+              .cast<Map<String, dynamic>>();
+      expect(records.map((record) => record['invoiceId']), [
+        'sale-before-credit-note',
+        'credit-note-after-sale',
+      ]);
+      expect(mockSalesRepository.syncedInvoiceIdBatches.single, [
+        'sale-before-credit-note',
+        'credit-note-after-sale',
+      ]);
+    },
+  );
+
+  test(
+    'does not independently replay local credit-note restock movements',
+    () async {
+      mockInventoryRepository.unsynced = [
+        InventoryMovement(
+          id: 'credit-note-restock-local',
+          insumoId: 'i-restock',
+          type: MovementType.reversal,
+          quantity: 1,
+          previousStock: 3,
+          newStock: 4,
+          timestamp: DateTime.parse('2026-07-13T10:00:00Z'),
+          sourceDocumentType: 'CREDIT_NOTE_RESTOCK',
+          sourceDocumentId: 'credit-note-1',
+          originInvoiceItemId: 'sale-line-1',
+        ),
+        InventoryMovement(
+          id: 'regular-sale-movement',
+          insumoId: 'i-sale',
+          type: MovementType.sale,
+          quantity: -1,
+          previousStock: 5,
+          newStock: 4,
+          timestamp: DateTime.parse('2026-07-13T10:01:00Z'),
+        ),
+      ];
+      respondToInventoryBatchWith(
+        (records) => {
+          'status': 'OK',
+          'received': records.length,
+          'results': records
+              .map((record) => {...record, 'status': 'ACCEPTED'})
+              .toList(growable: false),
+        },
+      );
+
+      await syncService.triggerManualSync();
+
+      final inventoryPost = capturedPosts.lastWhere(
+        (post) => post.path == '/v1/sync/batch',
+      );
+      final records =
+          ((inventoryPost.body as Map<String, dynamic>)['records']
+                  as List<dynamic>)
+              .cast<Map<String, dynamic>>();
+      expect(records, hasLength(1));
+      expect(
+        records.single['idempotencyKey'],
+        'inventory:dev-1:regular-sale-movement',
+      );
+      expect(
+        mockInventoryRepository.syncedIds,
+        contains('regular-sale-movement'),
+      );
+      expect(
+        mockInventoryRepository.syncedIds,
+        isNot(contains('credit-note-restock-local')),
+      );
+    },
+  );
 
   test('syncs purchase documents before generic movement replay', () async {
     mockInventoryRepository.unsynced = [

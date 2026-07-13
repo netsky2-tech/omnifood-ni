@@ -11,7 +11,9 @@ export class AddCreditNoteProvenance1782000000000
       ALTER TABLE invoices
         ADD COLUMN IF NOT EXISTS origin_invoice_id varchar,
         ADD COLUMN IF NOT EXISTS refund_reason_code varchar,
-        ADD COLUMN IF NOT EXISTS refund_reason_policy varchar;
+        ADD COLUMN IF NOT EXISTS refund_reason_policy varchar,
+        ADD COLUMN IF NOT EXISTS authorized_by_user_id varchar,
+        ADD COLUMN IF NOT EXISTS authorized_by_role varchar;
       ALTER TABLE invoice_items
         ADD COLUMN IF NOT EXISTS origin_invoice_item_id varchar;
       ALTER TABLE inventory_kardex
@@ -39,17 +41,24 @@ export class AddCreditNoteProvenance1782000000000
           (
             type = 'creditNote'
             AND origin_invoice_id IS NOT NULL
+            AND refund_reason_code IS NOT NULL
+            AND length(btrim(refund_reason_code)) > 0
             AND refund_reason_policy IS NOT NULL
             AND refund_reason_policy IN (
               'RESTOCK_ORIGINAL_BOM', 'FINANCIAL_ONLY',
               'WASTE_NO_RESTOCK', 'MANAGER_REVIEW_HOLD'
             )
+            AND authorized_by_user_id IS NOT NULL
+            AND length(btrim(authorized_by_user_id)) > 0
+            AND authorized_by_role IN ('manager', 'owner')
           )
           OR (
             type <> 'creditNote'
             AND origin_invoice_id IS NULL
             AND refund_reason_code IS NULL
             AND refund_reason_policy IS NULL
+            AND authorized_by_user_id IS NULL
+            AND authorized_by_role IS NULL
           )
         );
       ALTER TABLE invoice_items
@@ -140,6 +149,8 @@ export class AddCreditNoteProvenance1782000000000
       ALTER TABLE invoices
         DROP COLUMN IF EXISTS refund_reason_policy,
         DROP COLUMN IF EXISTS refund_reason_code,
+        DROP COLUMN IF EXISTS authorized_by_role,
+        DROP COLUMN IF EXISTS authorized_by_user_id,
         DROP COLUMN IF EXISTS origin_invoice_id;
 
     `);
@@ -232,19 +243,21 @@ export class AddCreditNoteProvenance1782000000000
           IF NEW.type <> 'creditNote'
              AND (NEW.origin_invoice_id IS NOT NULL
                   OR NEW.refund_reason_code IS NOT NULL
-                  OR NEW.refund_reason_policy IS NOT NULL) THEN
+                  OR NEW.refund_reason_policy IS NOT NULL
+                  OR NEW.authorized_by_user_id IS NOT NULL
+                  OR NEW.authorized_by_role IS NOT NULL) THEN
             RAISE EXCEPTION 'non-credit invoice provenance fields must be null';
           END IF;
           IF NEW.type = 'creditNote' THEN
-            SELECT tenant_id, type INTO origin FROM invoices WHERE id::text = NEW.origin_invoice_id;
+            SELECT tenant_id, type, is_canceled INTO origin FROM invoices WHERE id::text = NEW.origin_invoice_id;
           IF origin.tenant_id IS NULL THEN
             RAISE EXCEPTION 'credit-note origin invoice was not found';
           END IF;
           IF origin.tenant_id::text <> NEW.tenant_id::text THEN
             RAISE EXCEPTION 'credit-note origin invoice belongs to another tenant';
           END IF;
-          IF origin.type = 'creditNote' THEN
-            RAISE EXCEPTION 'credit-note origin invoice must be a regular sale invoice';
+          IF origin.type <> 'regular' OR origin.is_canceled = true THEN
+            RAISE EXCEPTION 'credit-note origin invoice must be a regular active sale invoice';
           END IF;
         END IF;
         RETURN NEW;

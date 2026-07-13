@@ -194,6 +194,8 @@ describe('InvoicesService', () => {
       originInvoiceId: 'sale-invoice-1',
       refundReasonCode: 'DAMAGED_RETURN',
       refundReasonPolicy: 'WASTE_NO_RESTOCK',
+      authorizedByUserId: 'manager-1',
+      authorizedByRole: 'manager',
       items: [
         {
           id: 'credit-item-1',
@@ -579,6 +581,52 @@ describe('InvoicesService', () => {
       expect(itemRepo.upsert).not.toHaveBeenCalled();
     });
 
+    it('rejects a credit-note origin invoice that is canceled before persistence', async () => {
+      invoiceRepo.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce({
+        id: 'sale-invoice-1',
+        tenant_id: 'tenant-1',
+        type: 'regular',
+        isCanceled: true,
+      });
+
+      await expect(
+        service.syncInvoices(
+          'tenant-1',
+          [creditNoteInvoice],
+          txManager as never,
+          { allowCreditNotes: true },
+        ),
+      ).rejects.toThrow(
+        'credit-note origin invoice must be a regular sale invoice and must not be canceled',
+      );
+
+      expect(invoiceRepo.upsert).not.toHaveBeenCalled();
+      expect(itemRepo.upsert).not.toHaveBeenCalled();
+    });
+
+    it('rejects a credit-note origin invoice whose type is not regular before persistence', async () => {
+      invoiceRepo.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce({
+        id: 'sale-invoice-1',
+        tenant_id: 'tenant-1',
+        type: 'proforma',
+        isCanceled: false,
+      });
+
+      await expect(
+        service.syncInvoices(
+          'tenant-1',
+          [creditNoteInvoice],
+          txManager as never,
+          { allowCreditNotes: true },
+        ),
+      ).rejects.toThrow(
+        'credit-note origin invoice must be a regular sale invoice and must not be canceled',
+      );
+
+      expect(invoiceRepo.upsert).not.toHaveBeenCalled();
+      expect(itemRepo.upsert).not.toHaveBeenCalled();
+    });
+
     it('rejects credit-note lines whose origin item is missing from the tenant-bound origin invoice', async () => {
       invoiceRepo.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce({
         id: 'sale-invoice-1',
@@ -667,6 +715,164 @@ describe('InvoicesService', () => {
       expect(itemRepo.upsert).not.toHaveBeenCalled();
     });
 
+    it('rejects CREDIT_NOTE sync without immutable manager or owner authorization metadata', async () => {
+      await expect(
+        service.syncInvoices(
+          'tenant-1',
+          [
+            {
+              ...creditNoteInvoice,
+              authorizedByUserId: undefined,
+              authorizedByRole: undefined,
+            },
+          ],
+          txManager as never,
+          { allowCreditNotes: true },
+        ),
+      ).rejects.toThrow(
+        'credit-note requires manager or owner authorization metadata',
+      );
+
+      expect(invoiceRepo.findOne).not.toHaveBeenCalled();
+      expect(invoiceRepo.upsert).not.toHaveBeenCalled();
+      expect(itemRepo.upsert).not.toHaveBeenCalled();
+    });
+
+    it('rejects CREDIT_NOTE sync when reason code is blank or missing', async () => {
+      await expect(
+        service.syncInvoices(
+          'tenant-1',
+          [{ ...creditNoteInvoice, refundReasonCode: '   ' }],
+          txManager as never,
+          { allowCreditNotes: true },
+        ),
+      ).rejects.toThrow('credit-note requires a nonblank refund reason code');
+
+      expect(invoiceRepo.findOne).not.toHaveBeenCalled();
+      expect(invoiceRepo.upsert).not.toHaveBeenCalled();
+      expect(itemRepo.upsert).not.toHaveBeenCalled();
+    });
+
+    it('persists CREDIT_NOTE authorization metadata and nonblank reason code', async () => {
+      invoiceRepo.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce({
+        id: 'sale-invoice-1',
+        tenant_id: 'tenant-1',
+        type: 'regular',
+        isCanceled: false,
+      });
+      itemRepo.find
+        .mockResolvedValueOnce([
+          {
+            id: 'sale-item-1',
+            tenant_id: 'tenant-1',
+            invoiceId: 'sale-invoice-1',
+            quantity: 2,
+          },
+        ])
+        .mockResolvedValueOnce([]);
+
+      await service.syncInvoices(
+        'tenant-1',
+        [creditNoteInvoice],
+        txManager as never,
+        { allowCreditNotes: true },
+      );
+
+      expect(invoiceRepo.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'credit-invoice-1',
+          refundReasonCode: 'DAMAGED_RETURN',
+          authorizedByUserId: 'manager-1',
+          authorizedByRole: 'manager',
+        }),
+        ['id'],
+      );
+    });
+
+    it('rejects FINANCIAL_ONLY credit-note quantities above the origin item quantity before persistence', async () => {
+      invoiceRepo.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce({
+        id: 'sale-invoice-1',
+        tenant_id: 'tenant-1',
+        type: 'regular',
+        isCanceled: false,
+      });
+      itemRepo.find.mockResolvedValueOnce([
+        {
+          id: 'sale-item-1',
+          tenant_id: 'tenant-1',
+          invoiceId: 'sale-invoice-1',
+          quantity: 1,
+        },
+      ]);
+
+      await expect(
+        service.syncInvoices(
+          'tenant-1',
+          [
+            {
+              ...creditNoteInvoice,
+              refundReasonPolicy: 'FINANCIAL_ONLY',
+              items: [{ ...creditNoteInvoice.items[0], quantity: -2 }],
+            },
+          ],
+          txManager as never,
+          { allowCreditNotes: true },
+        ),
+      ).rejects.toThrow(
+        'credit-note refund quantity exceeds the origin item quantity',
+      );
+
+      expect(invoiceRepo.upsert).not.toHaveBeenCalled();
+      expect(itemRepo.upsert).not.toHaveBeenCalled();
+    });
+
+    it('rejects cumulative credit-note quantity above the origin item quantity for no-stock policies', async () => {
+      invoiceRepo.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce({
+        id: 'sale-invoice-1',
+        tenant_id: 'tenant-1',
+        type: 'regular',
+        isCanceled: false,
+      });
+      itemRepo.find
+        .mockResolvedValueOnce([
+          {
+            id: 'sale-item-1',
+            tenant_id: 'tenant-1',
+            invoiceId: 'sale-invoice-1',
+            quantity: 2,
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            id: 'existing-credit-item-1',
+            tenant_id: 'tenant-1',
+            invoiceId: 'existing-credit-note-1',
+            originInvoiceItemId: 'sale-item-1',
+            quantity: -1.5,
+          },
+        ]);
+
+      await expect(
+        service.syncInvoices(
+          'tenant-1',
+          [
+            {
+              ...creditNoteInvoice,
+              refundReasonPolicy: 'WASTE_NO_RESTOCK',
+              items: [{ ...creditNoteInvoice.items[0], quantity: -1 }],
+            },
+          ],
+          txManager as never,
+          { allowCreditNotes: true },
+        ),
+      ).rejects.toThrow(
+        'credit-note cumulative refund quantity exceeds the origin item quantity',
+      );
+
+      expect(invoiceRepo.upsert).not.toHaveBeenCalled();
+      expect(itemRepo.upsert).not.toHaveBeenCalled();
+    });
+
     it('binds app.tenant_id before direct sales sync persistence touches RLS-protected tables', async () => {
       const dto: SyncInvoiceDto = {
         id: 'direct-rls-invoice',
@@ -704,6 +910,9 @@ describe('InvoicesService', () => {
       totalTax: 1.5,
       total: 11.5,
       paymentStatus: 'PAID',
+      refundReasonCode: 'DAMAGED_RETURN',
+      authorizedByUserId: 'manager-1',
+      authorizedByRole: 'manager',
       items: [
         {
           id: 'item-1',
@@ -2500,8 +2709,10 @@ describe('InvoicesService', () => {
         type: 'creditNote',
         relatedInvoiceId: null,
         originInvoiceId: 'sale-origin-1',
-        refundReasonCode: null,
+        refundReasonCode: 'DAMAGED_RETURN',
         refundReasonPolicy: 'RESTOCK_ORIGINAL_BOM',
+        authorizedByUserId: 'manager-1',
+        authorizedByRole: 'manager',
         tenant_id: 'tenant-1',
         items: [
           {
@@ -2758,6 +2969,7 @@ describe('InvoicesService', () => {
           id: 'sale-item-1',
           tenant_id: 'tenant-1',
           invoiceId: 'sale-origin-1',
+          quantity: 2,
         },
       ]);
       receiptRepo.findOne.mockResolvedValue(null);

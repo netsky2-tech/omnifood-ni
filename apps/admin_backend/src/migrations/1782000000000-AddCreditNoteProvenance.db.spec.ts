@@ -75,7 +75,8 @@ async function createMinimalSalesTables(queryRunner: QueryRunner): Promise<void>
     CREATE TABLE invoices (
       id varchar PRIMARY KEY,
       tenant_id varchar NOT NULL,
-      type varchar NOT NULL DEFAULT 'regular'
+      type varchar NOT NULL DEFAULT 'regular',
+      is_canceled boolean NOT NULL DEFAULT false
     );
     CREATE TABLE invoice_items (
       id varchar PRIMARY KEY,
@@ -113,9 +114,16 @@ async function seedOriginData(queryRunner: QueryRunner): Promise<void> {
     INSERT INTO invoices (id, tenant_id, type) VALUES
       ('sale-a-1', 'tenant-a', 'regular'),
       ('sale-a-2', 'tenant-a', 'regular'),
-      ('sale-b-1', 'tenant-b', 'regular');
-    INSERT INTO invoices (id, tenant_id, type, origin_invoice_id, refund_reason_policy) VALUES
-      ('cn-a-origin', 'tenant-a', 'creditNote', 'sale-a-1', 'FINANCIAL_ONLY');
+      ('sale-b-1', 'tenant-b', 'regular'),
+      ('quote-a-1', 'tenant-a', 'proforma');
+    INSERT INTO invoices (id, tenant_id, type, is_canceled) VALUES
+      ('sale-a-canceled', 'tenant-a', 'regular', true);
+    INSERT INTO invoices (
+      id, tenant_id, type, origin_invoice_id, refund_reason_code,
+      refund_reason_policy, authorized_by_user_id, authorized_by_role
+    ) VALUES
+      ('cn-a-origin', 'tenant-a', 'creditNote', 'sale-a-1', 'DAMAGED_RETURN',
+       'FINANCIAL_ONLY', 'manager-1', 'manager');
     INSERT INTO invoice_items (id, tenant_id, invoice_id) VALUES
       ('sale-a-1-item-1', 'tenant-a', 'sale-a-1'),
       ('sale-a-2-item-1', 'tenant-a', 'sale-a-2'),
@@ -183,8 +191,14 @@ describe('AddCreditNoteProvenance1782000000000 (db)', () => {
 
           await withTenantTransaction(queryRunner, tenantRole, 'tenant-a', async () => {
             await queryRunner.query(`
-              INSERT INTO invoices (id, tenant_id, type, origin_invoice_id, refund_reason_policy)
-              VALUES ('cn-a-valid', 'tenant-a', 'creditNote', 'sale-a-1', 'RESTOCK_ORIGINAL_BOM')
+              INSERT INTO invoices (
+                id, tenant_id, type, origin_invoice_id, refund_reason_code,
+                refund_reason_policy, authorized_by_user_id, authorized_by_role
+              )
+              VALUES (
+                'cn-a-valid', 'tenant-a', 'creditNote', 'sale-a-1',
+                'DAMAGED_RETURN', 'RESTOCK_ORIGINAL_BOM', 'manager-1', 'manager'
+              )
             `);
             await queryRunner.query(`
               INSERT INTO invoice_items (id, tenant_id, invoice_id, origin_invoice_item_id)
@@ -223,16 +237,42 @@ describe('AddCreditNoteProvenance1782000000000 (db)', () => {
             await expectRejectedAtSavepoint(
               queryRunner,
               'orphan_credit_invoice_origin',
-              `INSERT INTO invoices (id, tenant_id, type, origin_invoice_id, refund_reason_policy)
-               VALUES ('cn-a-orphan-invoice', 'tenant-a', 'creditNote', 'missing-sale', 'FINANCIAL_ONLY')`,
+              `INSERT INTO invoices (
+                 id, tenant_id, type, origin_invoice_id, refund_reason_code,
+                 refund_reason_policy, authorized_by_user_id, authorized_by_role
+               )
+               VALUES ('cn-a-orphan-invoice', 'tenant-a', 'creditNote', 'missing-sale', 'DAMAGED_RETURN', 'FINANCIAL_ONLY', 'manager-1', 'manager')`,
               /origin invoice was not found/,
             );
             await expectRejectedAtSavepoint(
               queryRunner,
               'credit_note_origin_invoice_is_credit_note',
-              `INSERT INTO invoices (id, tenant_id, type, origin_invoice_id, refund_reason_policy)
-               VALUES ('cn-a-credit-origin', 'tenant-a', 'creditNote', 'cn-a-origin', 'FINANCIAL_ONLY')`,
-              /origin invoice must be a regular sale invoice/,
+              `INSERT INTO invoices (
+                 id, tenant_id, type, origin_invoice_id, refund_reason_code,
+                 refund_reason_policy, authorized_by_user_id, authorized_by_role
+               )
+               VALUES ('cn-a-credit-origin', 'tenant-a', 'creditNote', 'cn-a-origin', 'DAMAGED_RETURN', 'FINANCIAL_ONLY', 'manager-1', 'manager')`,
+              /origin invoice must be a regular active sale invoice/,
+            );
+            await expectRejectedAtSavepoint(
+              queryRunner,
+              'credit_note_origin_invoice_is_canceled',
+              `INSERT INTO invoices (
+                 id, tenant_id, type, origin_invoice_id, refund_reason_code,
+                 refund_reason_policy, authorized_by_user_id, authorized_by_role
+               )
+               VALUES ('cn-a-canceled-origin', 'tenant-a', 'creditNote', 'sale-a-canceled', 'DAMAGED_RETURN', 'FINANCIAL_ONLY', 'manager-1', 'manager')`,
+              /origin invoice must be a regular active sale invoice/,
+            );
+            await expectRejectedAtSavepoint(
+              queryRunner,
+              'credit_note_origin_invoice_is_not_regular',
+              `INSERT INTO invoices (
+                 id, tenant_id, type, origin_invoice_id, refund_reason_code,
+                 refund_reason_policy, authorized_by_user_id, authorized_by_role
+               )
+               VALUES ('cn-a-proforma-origin', 'tenant-a', 'creditNote', 'quote-a-1', 'DAMAGED_RETURN', 'FINANCIAL_ONLY', 'manager-1', 'manager')`,
+              /origin invoice must be a regular active sale invoice/,
             );
             await expectRejectedAtSavepoint(
               queryRunner,
@@ -258,8 +298,11 @@ describe('AddCreditNoteProvenance1782000000000 (db)', () => {
             await expectRejectedAtSavepoint(
               queryRunner,
               'invalid_refund_policy',
-              `INSERT INTO invoices (id, tenant_id, type, origin_invoice_id, refund_reason_policy)
-               VALUES ('cn-a-bad-policy', 'tenant-a', 'creditNote', 'sale-a-1', 'RETURN_TO_ACTIVE_STOCK')`,
+              `INSERT INTO invoices (
+                 id, tenant_id, type, origin_invoice_id, refund_reason_code,
+                 refund_reason_policy, authorized_by_user_id, authorized_by_role
+               )
+               VALUES ('cn-a-bad-policy', 'tenant-a', 'creditNote', 'sale-a-1', 'DAMAGED_RETURN', 'RETURN_TO_ACTIVE_STOCK', 'manager-1', 'manager')`,
               /chk_invoices_credit_note_origin_policy|violates check constraint/,
             );
             await expectRejectedAtSavepoint(

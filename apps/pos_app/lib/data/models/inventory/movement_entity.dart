@@ -22,6 +22,10 @@ class MovementEntity {
   final String? sourceDocumentType;
   @ColumnInfo(name: 'source_document_id')
   final String? sourceDocumentId;
+  @ColumnInfo(name: 'origin_movement_id')
+  final String? originMovementId;
+  @ColumnInfo(name: 'origin_invoice_item_id')
+  final String? originInvoiceItemId;
   @ColumnInfo(name: 'batch_deductions')
   // ignore: non_constant_identifier_names
   final String? batch_deductions;
@@ -39,6 +43,8 @@ class MovementEntity {
     this.unitCostNio,
     this.sourceDocumentType,
     this.sourceDocumentId,
+    this.originMovementId,
+    this.originInvoiceItemId,
     // ignore: non_constant_identifier_names
     this.batch_deductions,
   });

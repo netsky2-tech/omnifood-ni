@@ -26,6 +26,15 @@ class Invoice with _$Invoice {
     String? customerId,
     @Default(false) bool globalTaxOverride,
     String? relatedInvoiceId, // For Credit Notes
+    String? originInvoiceId,
+    String? refundReasonPolicy,
+    String? refundReasonCode,
+    String? authorizedByUserId,
+    String? authorizedByRole,
+    String? terminalId,
+    int? sourceSequence,
+    String? idempotencyKey,
+    String? payloadHash,
   }) = _Invoice;
 
 

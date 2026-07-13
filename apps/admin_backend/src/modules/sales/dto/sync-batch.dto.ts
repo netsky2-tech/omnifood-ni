@@ -96,13 +96,17 @@ function CreditNoteInvoiceProvenanceComplete(
 
           return Boolean(
             invoice.originInvoiceId &&
+              invoice.refundReasonCode?.trim() &&
               invoice.refundReasonPolicy &&
+              invoice.authorizedByUserId?.trim() &&
+              (invoice.authorizedByRole === 'manager' ||
+                invoice.authorizedByRole === 'owner') &&
               invoice.items?.length &&
               invoice.items?.every((item) => item.originInvoiceItemId),
           );
         },
         defaultMessage() {
-          return 'CREDIT_NOTE invoice requires originInvoiceId, refundReasonPolicy, at least one item, and originInvoiceItemId on every item';
+          return 'CREDIT_NOTE invoice requires originInvoiceId, refundReasonCode, refundReasonPolicy, manager/owner authorization metadata, at least one item, and originInvoiceItemId on every item';
         },
       },
     });

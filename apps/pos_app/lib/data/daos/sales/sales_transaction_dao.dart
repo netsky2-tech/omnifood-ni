@@ -19,7 +19,9 @@ abstract class SalesTransactionDao {
   Future<void> insertInvoiceItems(List<InvoiceItemEntity> items);
 
   @Insert(onConflict: OnConflictStrategy.replace)
-  Future<void> insertInvoiceItemModifiers(List<InvoiceItemModifierEntity> modifiers);
+  Future<void> insertInvoiceItemModifiers(
+    List<InvoiceItemModifierEntity> modifiers,
+  );
 
   @Insert(onConflict: OnConflictStrategy.replace)
   Future<void> insertPayments(List<PaymentEntity> payments);
@@ -42,6 +44,11 @@ abstract class SalesTransactionDao {
   @Query('SELECT * FROM invoices WHERE related_invoice_id = :relatedId')
   Future<List<InvoiceEntity>> getCreditNotesByRelatedId(String relatedId);
 
+  @Query(
+    'SELECT COALESCE(MAX(source_sequence), 0) + 1 FROM invoices WHERE terminal_id = :terminalId AND source_sequence > 0',
+  )
+  Future<int?> getNextInvoiceSourceSequence(String terminalId);
+
   @transaction
   Future<void> executeSaleTransaction(
     InvoiceEntity invoice,
@@ -59,8 +66,13 @@ abstract class SalesTransactionDao {
         throw Exception('Original invoice not found');
       }
 
-      final existingCreditNotes = await getCreditNotesByRelatedId(invoice.relatedInvoiceId!);
-      final double existingTotal = existingCreditNotes.fold(0, (sum, cn) => sum + cn.total);
+      final existingCreditNotes = await getCreditNotesByRelatedId(
+        invoice.relatedInvoiceId!,
+      );
+      final double existingTotal = existingCreditNotes.fold(
+        0,
+        (sum, cn) => sum + cn.total,
+      );
 
       // We use a small epsilon for double comparison if needed, but here simple sum
       if ((existingTotal + invoice.total).abs() > original.total.abs() + 0.01) {
@@ -80,18 +92,21 @@ abstract class SalesTransactionDao {
     for (final movement in movements) {
       final insumo = await getInsumoById(movement.insumoId);
       if (insumo != null) {
-        final newStock = insumo.stock + movement.quantity; // quantity is negative for sales
-        await updateInsumo(InsumoEntity(
-          id: insumo.id,
-          name: insumo.name,
-          consumptionUom: insumo.consumptionUom,
-          warehouseId: insumo.warehouseId,
-          isPerishable: insumo.isPerishable,
-          stock: newStock,
-          averageCost: insumo.averageCost,
-          parLevel: insumo.parLevel,
-          isActive: insumo.isActive,
-        ));
+        final newStock =
+            insumo.stock + movement.quantity; // quantity is negative for sales
+        await updateInsumo(
+          InsumoEntity(
+            id: insumo.id,
+            name: insumo.name,
+            consumptionUom: insumo.consumptionUom,
+            warehouseId: insumo.warehouseId,
+            isPerishable: insumo.isPerishable,
+            stock: newStock,
+            averageCost: insumo.averageCost,
+            parLevel: insumo.parLevel,
+            isActive: insumo.isActive,
+          ),
+        );
         await insertMovement(movement);
       }
     }

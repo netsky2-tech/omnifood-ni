@@ -26,6 +26,7 @@ const SET_LOCAL_TENANT_SQL = "SELECT set_config('app.tenant_id', $1, true)";
 const CREDIT_NOTE_NO_STOCK_POLICIES = new Set([
   'FINANCIAL_ONLY',
   'WASTE_NO_RESTOCK',
+  'MANAGER_REVIEW_HOLD',
 ]);
 const CREDIT_NOTE_RESTOCK_POLICY = 'RESTOCK_ORIGINAL_BOM';
 const INVOICE_SOURCE_DOCUMENT_PREFIX = 'invoice:';
@@ -53,11 +54,18 @@ interface InvoiceItemForPersistence extends Omit<
 
 interface InvoiceForPersistence extends Omit<
   SyncInvoiceDto,
-  'originInvoiceId' | 'refundReasonCode' | 'refundReasonPolicy' | 'items'
+  | 'originInvoiceId'
+  | 'refundReasonCode'
+  | 'refundReasonPolicy'
+  | 'authorizedByUserId'
+  | 'authorizedByRole'
+  | 'items'
 > {
   originInvoiceId?: string | null;
   refundReasonCode?: string | null;
   refundReasonPolicy?: SyncInvoiceDto['refundReasonPolicy'] | null;
+  authorizedByUserId?: string | null;
+  authorizedByRole?: SyncInvoiceDto['authorizedByRole'] | null;
   items: InvoiceItemForPersistence[];
 }
 
@@ -161,6 +169,7 @@ export class InvoicesService {
         dto,
         options.allowCreditNotes ?? false,
       );
+      this.assertCreditNoteReasonAndAuthorization(dto);
       await this.validateInvoiceRecipeVersions(tenantId, dto);
       const handledDuplicate = await this.skipMatchingCreditNoteReplay(
         tenantId,
@@ -1372,6 +1381,8 @@ export class InvoicesService {
       refundReasonCode: existing.refundReasonCode,
       refundReasonPolicy:
         existing.refundReasonPolicy as SyncInvoiceDto['refundReasonPolicy'],
+      authorizedByUserId: existing.authorizedByUserId,
+      authorizedByRole: existing.authorizedByRole as SyncInvoiceDto['authorizedByRole'],
       items: (existing.items ?? []).map((item) => ({
         id: item.id,
         productId: item.productId,
@@ -1420,9 +1431,30 @@ export class InvoicesService {
     if (!origin) {
       throw new BadRequestException('credit-note origin invoice was not found');
     }
-    if (origin.type === 'creditNote') {
+    if (origin.type !== 'regular' || origin.isCanceled === true) {
       throw new BadRequestException(
-        'credit-note origin invoice must be a regular sale invoice',
+        'credit-note origin invoice must be a regular sale invoice and must not be canceled',
+      );
+    }
+  }
+
+  private assertCreditNoteReasonAndAuthorization(dto: SyncInvoiceDto): void {
+    if (!this.isCreditNoteInvoice(dto)) return;
+
+    if (!dto.refundReasonCode?.trim()) {
+      throw new BadRequestException(
+        'credit-note requires a nonblank refund reason code',
+      );
+    }
+
+    const authorizedByUserId = dto.authorizedByUserId?.trim();
+    const authorizedByRole = dto.authorizedByRole;
+    if (
+      !authorizedByUserId ||
+      (authorizedByRole !== 'manager' && authorizedByRole !== 'owner')
+    ) {
+      throw new BadRequestException(
+        'credit-note requires manager or owner authorization metadata',
       );
     }
   }
@@ -1488,6 +1520,83 @@ export class InvoicesService {
       if (originItem.tenant_id !== tenantId) {
         throw new BadRequestException(
           'credit-note origin invoice item belongs to another tenant',
+        );
+      }
+    }
+
+    await this.assertCreditNoteRefundQuantitiesWithinOriginLimits(
+      tenantId,
+      dto,
+      manager,
+      originItemsById,
+      [...uniqueOriginItemIds],
+    );
+  }
+
+  private async assertCreditNoteRefundQuantitiesWithinOriginLimits(
+    tenantId: string,
+    dto: SyncInvoiceDto,
+    manager: EntityManager | undefined,
+    originItemsById: Map<string, InvoiceItem>,
+    originItemIds: string[],
+  ): Promise<void> {
+    const requestedByOriginItemId = new Map<string, number>();
+    for (const item of dto.items ?? []) {
+      const originItemId = item.originInvoiceItemId;
+      if (!originItemId) continue;
+      const refundQuantity = Math.abs(Number(item.quantity));
+      if (refundQuantity <= 0) {
+        throw new BadRequestException(
+          'credit-note refund quantity must be greater than zero',
+        );
+      }
+      const originQuantity = Math.abs(
+        Number(originItemsById.get(originItemId)?.quantity ?? 0),
+      );
+      if (originQuantity === 0) {
+        throw new BadRequestException(
+          'credit-note origin invoice item quantity must be greater than zero',
+        );
+      }
+      if (refundQuantity > originQuantity) {
+        throw new BadRequestException(
+          'credit-note refund quantity exceeds the origin item quantity',
+        );
+      }
+      requestedByOriginItemId.set(
+        originItemId,
+        round4((requestedByOriginItemId.get(originItemId) ?? 0) + refundQuantity),
+      );
+    }
+
+    const existingCreditItems = await this.itemRepoFor(manager).find({
+      where: {
+        originInvoiceItemId: In(originItemIds),
+        tenant_id: tenantId,
+      },
+    });
+
+    const existingByOriginItemId = new Map<string, number>();
+    for (const item of existingCreditItems) {
+      if (!item.originInvoiceItemId || item.invoiceId === dto.id) continue;
+      existingByOriginItemId.set(
+        item.originInvoiceItemId,
+        round4(
+          (existingByOriginItemId.get(item.originInvoiceItemId) ?? 0) +
+            Math.abs(Number(item.quantity)),
+        ),
+      );
+    }
+
+    for (const originItemId of originItemIds) {
+      const originQuantity = round4(
+        Math.abs(Number(originItemsById.get(originItemId)?.quantity ?? 0)),
+      );
+      const requestedQuantity = requestedByOriginItemId.get(originItemId) ?? 0;
+      const existingQuantity = existingByOriginItemId.get(originItemId) ?? 0;
+      if (round4(existingQuantity + requestedQuantity) > originQuantity) {
+        throw new BadRequestException(
+          'credit-note cumulative refund quantity exceeds the origin item quantity',
         );
       }
     }
@@ -1703,6 +1812,8 @@ export class InvoicesService {
       originInvoiceId: null,
       refundReasonCode: null,
       refundReasonPolicy: null,
+      authorizedByUserId: null,
+      authorizedByRole: null,
       items: (dto.items ?? []).map((item) => ({
         ...item,
         originInvoiceItemId: null,
@@ -1731,6 +1842,8 @@ export class InvoicesService {
           originInvoiceId: dto.originInvoiceId ?? null,
           refundReasonCode: dto.refundReasonCode ?? null,
           refundReasonPolicy: dto.refundReasonPolicy ?? null,
+          authorizedByUserId: dto.authorizedByUserId ?? null,
+          authorizedByRole: dto.authorizedByRole ?? null,
           items: [...(dto.items ?? [])]
             .map((item) => ({
               id: item.id,

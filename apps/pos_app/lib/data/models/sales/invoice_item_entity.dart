@@ -36,6 +36,8 @@ class InvoiceItemEntity {
   final String? notes;
   @ColumnInfo(name: 'recipe_version_id')
   final String? recipeVersionId;
+  @ColumnInfo(name: 'origin_invoice_item_id')
+  final String? originInvoiceItemId;
 
   InvoiceItemEntity({
     required this.id,
@@ -52,5 +54,6 @@ class InvoiceItemEntity {
     this.variantId,
     this.notes,
     this.recipeVersionId,
+    this.originInvoiceItemId,
   });
 }
