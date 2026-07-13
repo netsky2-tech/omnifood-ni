@@ -27,6 +27,8 @@ const CREDIT_NOTE_NO_STOCK_POLICIES = new Set([
   'FINANCIAL_ONLY',
   'WASTE_NO_RESTOCK',
 ]);
+const CREDIT_NOTE_RESTOCK_POLICY = 'RESTOCK_ORIGINAL_BOM';
+const INVOICE_SOURCE_DOCUMENT_PREFIX = 'invoice:';
 
 const round4 = (value: number): number => Number(value.toFixed(SCALE_4));
 
@@ -42,16 +44,17 @@ const SYNC_RESULT_STATUS = {
 type SyncResultStatus =
   (typeof SYNC_RESULT_STATUS)[keyof typeof SYNC_RESULT_STATUS];
 
-interface InvoiceItemForPersistence
-  extends Omit<CreateInvoiceItemDto, 'originInvoiceItemId'> {
+interface InvoiceItemForPersistence extends Omit<
+  CreateInvoiceItemDto,
+  'originInvoiceItemId'
+> {
   originInvoiceItemId?: string | null;
 }
 
-interface InvoiceForPersistence
-  extends Omit<
-    SyncInvoiceDto,
-    'originInvoiceId' | 'refundReasonCode' | 'refundReasonPolicy' | 'items'
-  > {
+interface InvoiceForPersistence extends Omit<
+  SyncInvoiceDto,
+  'originInvoiceId' | 'refundReasonCode' | 'refundReasonPolicy' | 'items'
+> {
   originInvoiceId?: string | null;
   refundReasonCode?: string | null;
   refundReasonPolicy?: SyncInvoiceDto['refundReasonPolicy'] | null;
@@ -141,7 +144,10 @@ export class InvoicesService {
     manager?: EntityManager,
     options: { allowCreditNotes?: boolean } = {},
   ): Promise<void> {
-    this.assertDirectCreditNoteBoundary(dtos, options.allowCreditNotes ?? false);
+    this.assertDirectCreditNoteBoundary(
+      dtos,
+      options.allowCreditNotes ?? false,
+    );
     if (!manager) {
       await this.dataSource.transaction('SERIALIZABLE', async (txManager) => {
         await this.bindTenantContext(txManager, tenantId);
@@ -227,7 +233,8 @@ export class InvoicesService {
     tenantId: string,
     records: SyncBatchRecordDto[],
   ): Promise<SyncBatchResult> {
-    const creditNoteFlowTypeErrors = this.rejectCreditNotesMissingFlowType(records);
+    const creditNoteFlowTypeErrors =
+      this.rejectCreditNotesMissingFlowType(records);
     if (creditNoteFlowTypeErrors.length === records.length) {
       return {
         received: records.length,
@@ -673,7 +680,10 @@ export class InvoicesService {
       } catch (error: unknown) {
         if (!this.isUniqueViolation(error)) throw error;
         const racedExisting = await outboxRepository.findOne({
-          where: { tenant_id: tenantId, idempotency_key: record.idempotencyKey },
+          where: {
+            tenant_id: tenantId,
+            idempotency_key: record.idempotencyKey,
+          },
         });
         if (racedExisting) {
           return this.resolveStagedConflictResult(
@@ -950,7 +960,8 @@ export class InvoicesService {
     if (record.invoice.type === 'creditNote') {
       return {
         code: 'CREDIT_NOTE_DOCUMENT_TYPE_MISMATCH',
-        message: 'creditNote invoice type is only valid with CREDIT_NOTE documentType',
+        message:
+          'creditNote invoice type is only valid with CREDIT_NOTE documentType',
       };
     }
     return null;
@@ -985,15 +996,6 @@ export class InvoicesService {
           'CREDIT_NOTE inventory movement deltas are not supported until backend Kardex replay is implemented',
       };
     }
-
-    const policy = record.invoice?.refundReasonPolicy;
-    if (policy && !CREDIT_NOTE_NO_STOCK_POLICIES.has(policy)) {
-      return {
-        code: 'CREDIT_NOTE_KARDEX_COMPENSATION_UNSUPPORTED',
-        message:
-          'CREDIT_NOTE refund reason policy requires Kardex compensation that is not implemented in this slice',
-      };
-    }
     return null;
   }
 
@@ -1020,6 +1022,21 @@ export class InvoicesService {
     }
     if (message.includes('duplicate credit-note origin invoice item')) {
       return { code: 'CREDIT_NOTE_ORIGIN_ITEM_INVALID', retryable: false };
+    }
+    if (message.includes('credit-note origin invoice was not found')) {
+      return { code: 'CREDIT_NOTE_ORIGIN_MISSING', retryable: false };
+    }
+    if (message.includes('requires origin sale Kardex movement snapshots')) {
+      return { code: 'CREDIT_NOTE_ORIGIN_MOVEMENT_MISSING', retryable: false };
+    }
+    if (message.includes('credit-note refund quantity')) {
+      return { code: 'CREDIT_NOTE_REFUND_QUANTITY_INVALID', retryable: false };
+    }
+    if (message.includes('credit-note restock quantity exceeds')) {
+      return { code: 'CREDIT_NOTE_RESTOCK_QUANTITY_EXCEEDED', retryable: false };
+    }
+    if (message.includes('collides with an existing non-credit invoice')) {
+      return { code: 'CREDIT_NOTE_INVOICE_ID_COLLISION', retryable: false };
     }
     return null;
   }
@@ -1071,10 +1088,8 @@ export class InvoicesService {
           insumoId,
           movementType,
         );
-        const unitCostNio = Number((insumo.averageCost ?? 0).toFixed(4));
-        const averageCostAfterNio = Number(
-          (insumo.averageCost ?? 0).toFixed(4),
-        );
+        const unitCostNio = round4(Number(insumo.averageCost ?? 0));
+        const averageCostAfterNio = round4(Number(insumo.averageCost ?? 0));
         insumo.stock = newStock;
         insumo.existenciaActual = newStock;
         await manager.save(Insumo, insumo);
@@ -1105,9 +1120,11 @@ export class InvoicesService {
             idempotencyKey: `${record.idempotencyKey}:${item.id}:${insumoId}`,
             sourceDeviceId: record.sourceDeviceId,
             sourceSequence: String(record.sourceSequence),
-            reason: `invoice:${invoice.id}`,
+            sourceDocumentId: `${INVOICE_SOURCE_DOCUMENT_PREFIX}${invoice.id}`,
             sourceDocumentType: movementType,
             compensationForKardexId,
+            originInvoiceItemId:
+              movementType === MovementType.SALE ? item.id : null,
             user_id: invoice.userId,
           }),
         );
@@ -1120,6 +1137,10 @@ export class InvoicesService {
     record: SyncBatchRecordDto,
     manager: EntityManager,
   ): Promise<void> {
+    if (record.documentType === 'CREDIT_NOTE') {
+      await this.appendCreditNoteCompensation(tenantId, record, manager);
+      return;
+    }
     if (
       record.documentType === 'SALE' ||
       record.documentType === 'SALE_CANCEL'
@@ -1325,6 +1346,12 @@ export class InvoicesService {
     });
     if (!existing) return false;
 
+    if (existing.type !== 'creditNote') {
+      throw new BadRequestException(
+        `Incoming credit-note invoice ${dto.id} collides with an existing non-credit invoice id.`,
+      );
+    }
+
     const incomingHash = this.calculateCreditNoteInvoiceHash(dto);
     const existingHash = this.calculateCreditNoteInvoiceHash({
       id: existing.id,
@@ -1427,9 +1454,7 @@ export class InvoicesService {
         tenant_id: tenantId,
       },
     });
-    const originItemsById = new Map(
-      originItems.map((item) => [item.id, item]),
-    );
+    const originItemsById = new Map(originItems.map((item) => [item.id, item]));
 
     const missingOriginItemIds = [...uniqueOriginItemIds].filter(
       (originItemId) => !originItemsById.has(originItemId),
@@ -1466,6 +1491,199 @@ export class InvoicesService {
         );
       }
     }
+  }
+
+  private async appendCreditNoteCompensation(
+    tenantId: string,
+    record: SyncBatchRecordDto,
+    manager: EntityManager,
+  ): Promise<void> {
+    const invoice = record.invoice;
+    if (!invoice) return;
+    const policy = invoice.refundReasonPolicy;
+    if (!policy || CREDIT_NOTE_NO_STOCK_POLICIES.has(policy)) return;
+    if (policy !== CREDIT_NOTE_RESTOCK_POLICY) {
+      throw new BadRequestException(
+        `Unsupported credit-note refund reason policy ${policy}`,
+      );
+    }
+
+    const originItemIds = (invoice.items ?? [])
+      .map((item) => item.originInvoiceItemId)
+      .filter((originItemId): originItemId is string => Boolean(originItemId));
+    if (!originItemIds.length) return;
+
+    const originItems = await this.itemRepoFor(manager).find({
+      where: {
+        id: In(originItemIds),
+        invoiceId: invoice.originInvoiceId,
+        tenant_id: tenantId,
+      },
+    });
+    const originItemsById = new Map(
+      originItems.map((originItem) => [originItem.id, originItem]),
+    );
+    const originMovements = await manager.find(InventoryMovement, {
+      where: {
+        tenant_id: tenantId,
+        sourceDocumentId: `${INVOICE_SOURCE_DOCUMENT_PREFIX}${invoice.originInvoiceId}`,
+        sourceDocumentType: MovementType.SALE,
+      },
+    });
+    const existingCompensations = originMovements.length
+      ? await manager.find(InventoryMovement, {
+          where: {
+            tenant_id: tenantId,
+            sourceDocumentType: 'CREDIT_NOTE',
+            originMovementId: In(originMovements.map((movement) => movement.id)),
+          },
+        })
+      : [];
+
+    for (const creditItem of invoice.items ?? []) {
+      const originItemId = creditItem.originInvoiceItemId;
+      if (!originItemId) continue;
+      const originItem = originItemsById.get(originItemId);
+      if (!originItem) {
+        throw new BadRequestException(
+          'credit-note origin invoice item was not found for this tenant',
+        );
+      }
+      const originQuantity = Math.abs(Number(originItem.quantity));
+      if (originQuantity === 0) {
+        throw new BadRequestException(
+          'credit-note origin invoice item quantity must be greater than zero',
+        );
+      }
+      const refundQuantity = Math.abs(Number(creditItem.quantity));
+      if (refundQuantity <= 0) {
+        throw new BadRequestException(
+          'credit-note refund quantity must be greater than zero',
+        );
+      }
+      if (refundQuantity > originQuantity) {
+        throw new BadRequestException(
+          'credit-note refund quantity exceeds the origin item quantity',
+        );
+      }
+      const refundRatio = refundQuantity / originQuantity;
+      const movementsForLine = originMovements.filter((movement) =>
+        this.isMovementBoundToOriginInvoiceItem(movement, originItemId),
+      );
+      if (!movementsForLine.length) {
+        throw new BadRequestException(
+          'credit-note restock requires origin sale Kardex movement snapshots',
+        );
+      }
+
+      for (const originMovement of movementsForLine) {
+        await this.appendCreditNoteMovementFromOrigin({
+          tenantId,
+          record,
+          manager,
+          originMovement,
+          originInvoiceItemId: originItemId,
+          refundRatio,
+          refundReasonPolicy: policy,
+          existingCompensations,
+        });
+      }
+    }
+  }
+
+  private isMovementBoundToOriginInvoiceItem(
+    movement: InventoryMovement,
+    originInvoiceItemId: string,
+  ): boolean {
+    return movement.originInvoiceItemId === originInvoiceItemId;
+  }
+
+  private async appendCreditNoteMovementFromOrigin(input: {
+    tenantId: string;
+    record: SyncBatchRecordDto;
+    manager: EntityManager;
+    originMovement: InventoryMovement;
+    originInvoiceItemId: string;
+    refundRatio: number;
+    refundReasonPolicy: string;
+    existingCompensations: InventoryMovement[];
+  }): Promise<void> {
+    const { tenantId, record, manager, originMovement } = input;
+    const invoice = record.invoice;
+    if (!invoice) return;
+
+    const existingForOriginMovement = input.existingCompensations.filter(
+      (movement) =>
+        movement.originMovementId === originMovement.id &&
+        movement.originInvoiceItemId === input.originInvoiceItemId,
+    );
+    const existingForSameCreditNote = existingForOriginMovement.find(
+      (movement) => movement.sourceDocumentId === invoice.id,
+    );
+    if (existingForSameCreditNote) return;
+
+    const quantity = round4(
+      Math.abs(Number(originMovement.quantity)) * input.refundRatio,
+    );
+    const priorCompensatedQuantity = round4(
+      existingForOriginMovement.reduce(
+        (total, movement) => total + Math.abs(Number(movement.quantity)),
+        0,
+      ),
+    );
+    const originMovementQuantity = round4(
+      Math.abs(Number(originMovement.quantity)),
+    );
+    if (round4(priorCompensatedQuantity + quantity) > originMovementQuantity) {
+      throw new BadRequestException(
+        'credit-note restock quantity exceeds the remaining origin movement quantity',
+      );
+    }
+
+    const insumo = await manager
+      .createQueryBuilder(Insumo, 'insumo')
+      .setLock('pessimistic_write')
+      .where('insumo.id = :insumoId', { insumoId: originMovement.insumoId })
+      .andWhere('insumo.tenant_id = :tenantId', { tenantId })
+      .getOne();
+    if (!insumo) {
+      this.logger.warn(
+        `Skipping credit-note compensation due to unresolved insumo ${originMovement.insumoId}`,
+      );
+      return;
+    }
+
+    const previousStock = Number(insumo.stock);
+    const newStock = round4(previousStock + quantity);
+    const unitCostNio = round4(Number(originMovement.unitCostNio));
+    const averageCostAfterNio = round4(Number(insumo.averageCost ?? 0));
+    insumo.stock = newStock;
+    insumo.existenciaActual = newStock;
+    await manager.save(Insumo, insumo);
+
+    await manager.save(
+      this.movementRepository.create({
+        tenant_id: tenantId,
+        insumoId: originMovement.insumoId,
+        type: MovementType.CREDIT_NOTE_RESTOCK,
+        quantity,
+        previousStock,
+        newStock,
+        averageCostAfterNio,
+        unitCostNio,
+        totalCostNio: round4(quantity * unitCostNio),
+        idempotencyKey: `${record.idempotencyKey}:${input.originInvoiceItemId}:${originMovement.id}`,
+        sourceDeviceId: record.sourceDeviceId,
+        sourceSequence: String(record.sourceSequence),
+        sourceDocumentId: invoice.id,
+        sourceDocumentType: 'CREDIT_NOTE',
+        compensationForKardexId: originMovement.id,
+        originMovementId: originMovement.id,
+        originInvoiceItemId: input.originInvoiceItemId,
+        refundReasonPolicy: input.refundReasonPolicy,
+        user_id: invoice.userId,
+      }),
+    );
   }
 
   private isCreditNoteInvoice(dto: SyncInvoiceDto): boolean {

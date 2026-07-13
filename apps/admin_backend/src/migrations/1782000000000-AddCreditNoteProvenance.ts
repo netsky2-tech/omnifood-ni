@@ -75,7 +75,7 @@ export class AddCreditNoteProvenance1782000000000
           OR (
             source_document_type <> 'CREDIT_NOTE'
             AND origin_movement_id IS NULL
-            AND origin_invoice_item_id IS NULL
+            AND (source_document_type = 'SALE' OR origin_invoice_item_id IS NULL)
             AND refund_reason_policy IS NULL
           )
         );
@@ -174,7 +174,7 @@ export class AddCreditNoteProvenance1782000000000
     queryRunner: QueryRunner,
     tableName: string,
   ): Promise<void> {
-    const predicate = "tenant_id = current_setting('app.tenant_id', true)";
+    const predicate = "tenant_id::text = current_setting('app.tenant_id', true)";
     await queryRunner.query(`
       ALTER TABLE ${tableName} ENABLE ROW LEVEL SECURITY;
       ALTER TABLE ${tableName} FORCE ROW LEVEL SECURITY;
@@ -236,11 +236,11 @@ export class AddCreditNoteProvenance1782000000000
             RAISE EXCEPTION 'non-credit invoice provenance fields must be null';
           END IF;
           IF NEW.type = 'creditNote' THEN
-            SELECT tenant_id, type INTO origin FROM invoices WHERE id = NEW.origin_invoice_id;
+            SELECT tenant_id, type INTO origin FROM invoices WHERE id::text = NEW.origin_invoice_id;
           IF origin.tenant_id IS NULL THEN
             RAISE EXCEPTION 'credit-note origin invoice was not found';
           END IF;
-          IF origin.tenant_id <> NEW.tenant_id THEN
+          IF origin.tenant_id::text <> NEW.tenant_id::text THEN
             RAISE EXCEPTION 'credit-note origin invoice belongs to another tenant';
           END IF;
           IF origin.type = 'creditNote' THEN
@@ -257,11 +257,11 @@ export class AddCreditNoteProvenance1782000000000
       DECLARE parent_invoice RECORD;
       BEGIN
         SELECT tenant_id, type, origin_invoice_id INTO parent_invoice
-        FROM invoices WHERE id = NEW.invoice_id;
+        FROM invoices WHERE id::text = NEW.invoice_id::text;
         IF parent_invoice.tenant_id IS NULL THEN
           RAISE EXCEPTION 'invoice item parent invoice was not found';
         END IF;
-        IF parent_invoice.tenant_id <> NEW.tenant_id THEN
+        IF parent_invoice.tenant_id::text <> NEW.tenant_id::text THEN
           RAISE EXCEPTION 'invoice item parent invoice belongs to another tenant';
         END IF;
         IF parent_invoice.type = 'creditNote'
@@ -273,15 +273,15 @@ export class AddCreditNoteProvenance1782000000000
         END IF;
         IF NEW.origin_invoice_item_id IS NOT NULL THEN
           SELECT tenant_id, invoice_id INTO origin
-          FROM invoice_items WHERE id = NEW.origin_invoice_item_id;
+          FROM invoice_items WHERE id::text = NEW.origin_invoice_item_id;
           IF origin.tenant_id IS NULL THEN
             RAISE EXCEPTION 'credit-note origin invoice item was not found';
           END IF;
-          IF origin.tenant_id <> NEW.tenant_id THEN
+          IF origin.tenant_id::text <> NEW.tenant_id::text THEN
             RAISE EXCEPTION 'credit-note origin invoice item belongs to another tenant';
           END IF;
           IF parent_invoice.type = 'creditNote'
-             AND origin.invoice_id <> parent_invoice.origin_invoice_id THEN
+             AND origin.invoice_id::text <> parent_invoice.origin_invoice_id THEN
             RAISE EXCEPTION 'credit-note origin invoice item must belong to the credit-note origin invoice';
           END IF;
         END IF;
@@ -297,7 +297,7 @@ export class AddCreditNoteProvenance1782000000000
         BEGIN
           IF NEW.source_document_type <> 'CREDIT_NOTE'
              AND (NEW.origin_movement_id IS NOT NULL
-                  OR NEW.origin_invoice_item_id IS NOT NULL
+                  OR (NEW.origin_invoice_item_id IS NOT NULL AND NEW.source_document_type <> 'SALE')
                   OR NEW.refund_reason_policy IS NOT NULL) THEN
             RAISE EXCEPTION 'non-credit kardex provenance fields must be null';
           END IF;
@@ -318,11 +318,11 @@ export class AddCreditNoteProvenance1782000000000
             RAISE EXCEPTION 'credit-note kardex row requires origin invoice item';
           END IF;
           SELECT tenant_id, type, origin_invoice_id, refund_reason_policy INTO credit_note_invoice
-          FROM invoices WHERE id = NEW.source_document_id;
+          FROM invoices WHERE id::text = NEW.source_document_id;
           IF credit_note_invoice.tenant_id IS NULL OR credit_note_invoice.type <> 'creditNote' THEN
             RAISE EXCEPTION 'credit-note kardex source invoice must be a credit note';
           END IF;
-          IF credit_note_invoice.tenant_id <> NEW.tenant_id THEN
+          IF credit_note_invoice.tenant_id::text <> NEW.tenant_id::text THEN
             RAISE EXCEPTION 'credit-note kardex source invoice belongs to another tenant';
           END IF;
           IF credit_note_invoice.refund_reason_policy <> NEW.refund_reason_policy THEN
@@ -335,11 +335,11 @@ export class AddCreditNoteProvenance1782000000000
           IF origin_movement.tenant_id IS NULL THEN
             RAISE EXCEPTION 'credit-note origin movement was not found';
           END IF;
-          IF origin_movement.tenant_id <> NEW.tenant_id THEN
+          IF origin_movement.tenant_id::text <> NEW.tenant_id::text THEN
             RAISE EXCEPTION 'credit-note origin movement belongs to another tenant';
           END IF;
           IF NEW.source_document_type = 'CREDIT_NOTE'
-             AND origin_movement.source_document_id <> credit_note_invoice.origin_invoice_id THEN
+             AND origin_movement.source_document_id <> ('invoice:' || credit_note_invoice.origin_invoice_id) THEN
             RAISE EXCEPTION 'credit-note origin movement must belong to the credit-note origin invoice';
           END IF;
           IF NEW.source_document_type = 'CREDIT_NOTE'
@@ -349,16 +349,21 @@ export class AddCreditNoteProvenance1782000000000
         END IF;
         IF NEW.origin_invoice_item_id IS NOT NULL THEN
           SELECT tenant_id, invoice_id INTO origin_item
-          FROM invoice_items WHERE id = NEW.origin_invoice_item_id;
+          FROM invoice_items WHERE id::text = NEW.origin_invoice_item_id;
           IF origin_item.tenant_id IS NULL THEN
             RAISE EXCEPTION 'credit-note origin invoice item was not found';
           END IF;
-          IF origin_item.tenant_id <> NEW.tenant_id THEN
+          IF origin_item.tenant_id::text <> NEW.tenant_id::text THEN
             RAISE EXCEPTION 'credit-note origin invoice item belongs to another tenant';
           END IF;
-          IF NEW.source_document_type = 'CREDIT_NOTE'
-             AND origin_item.invoice_id <> credit_note_invoice.origin_invoice_id THEN
-            RAISE EXCEPTION 'credit-note origin invoice item must belong to the credit-note origin invoice';
+          IF NEW.source_document_type = 'CREDIT_NOTE' THEN
+            IF origin_item.invoice_id::text <> credit_note_invoice.origin_invoice_id THEN
+              RAISE EXCEPTION 'credit-note origin invoice item must belong to the credit-note origin invoice';
+            END IF;
+          END IF;
+          IF NEW.source_document_type = 'SALE'
+             AND NEW.source_document_id <> ('invoice:' || origin_item.invoice_id::text) THEN
+            RAISE EXCEPTION 'sale kardex origin invoice item must belong to the sale invoice';
           END IF;
         END IF;
         RETURN NEW;

@@ -225,7 +225,7 @@ describe('SyncBatchEnvelopeDto', () => {
     );
   });
 
-  it('rejects CREDIT_NOTE movement deltas because stock/Kardex replay is not implemented in this slice', () => {
+  it('rejects client-supplied CREDIT_NOTE movement deltas because backend derives restock movements from invoice provenance', () => {
     const { errors } = validate([
       {
         ...creditNoteRecord,

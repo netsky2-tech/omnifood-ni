@@ -126,11 +126,11 @@ async function seedOriginData(queryRunner: QueryRunner): Promise<void> {
       source_document_id
     ) VALUES
       ('tenant-a', '00000000-0000-0000-0000-000000000001', 'SALE', -1.0000,
-       10.0000, 10.0000, 5.0000, 4.0000, 'SALE', 'sale-a-1'),
+       10.0000, 10.0000, 5.0000, 4.0000, 'SALE', 'invoice:sale-a-1'),
       ('tenant-a', '00000000-0000-0000-0000-000000000001', 'SALE', -1.0000,
-       10.0000, 10.0000, 4.0000, 3.0000, 'SALE', 'sale-a-2'),
+       10.0000, 10.0000, 4.0000, 3.0000, 'SALE', 'invoice:sale-a-2'),
       ('tenant-b', '00000000-0000-0000-0000-000000000001', 'SALE', -1.0000,
-       10.0000, 10.0000, 5.0000, 4.0000, 'SALE', 'sale-b-1');
+       10.0000, 10.0000, 5.0000, 4.0000, 'SALE', 'invoice:sale-b-1');
   `);
 }
 
@@ -178,7 +178,7 @@ describe('AddCreditNoteProvenance1782000000000 (db)', () => {
 
           const tenantBOrigin = (await queryRunner.query(`
             SELECT id FROM inventory_kardex
-            WHERE tenant_id = 'tenant-b' AND source_document_id = 'sale-b-1'
+            WHERE tenant_id = 'tenant-b' AND source_document_id = 'invoice:sale-b-1'
           `)) as Array<{ id: string }>;
 
           await withTenantTransaction(queryRunner, tenantRole, 'tenant-a', async () => {
@@ -286,11 +286,11 @@ describe('AddCreditNoteProvenance1782000000000 (db)', () => {
 
             const tenantAOrigin = (await queryRunner.query(`
               SELECT id FROM inventory_kardex
-              WHERE tenant_id = 'tenant-a' AND source_document_id = 'sale-a-1'
+              WHERE tenant_id = 'tenant-a' AND source_document_id = 'invoice:sale-a-1'
             `)) as Array<{ id: string }>;
             const tenantAOtherOrigin = (await queryRunner.query(`
               SELECT id FROM inventory_kardex
-              WHERE tenant_id = 'tenant-a' AND source_document_id = 'sale-a-2'
+              WHERE tenant_id = 'tenant-a' AND source_document_id = 'invoice:sale-a-2'
             `)) as Array<{ id: string }>;
             await queryRunner.query(`
               INSERT INTO inventory_kardex (
