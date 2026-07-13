@@ -147,6 +147,15 @@ class SalesMapper {
       customerId: entity.customerId,
       globalTaxOverride: entity.globalTaxOverride,
       relatedInvoiceId: entity.relatedInvoiceId,
+      originInvoiceId: entity.originInvoiceId,
+      refundReasonPolicy: entity.refundReasonPolicy,
+      refundReasonCode: entity.refundReasonCode,
+      authorizedByUserId: entity.authorizedByUserId,
+      authorizedByRole: entity.authorizedByRole,
+      terminalId: entity.terminalId,
+      sourceSequence: entity.sourceSequence,
+      idempotencyKey: entity.idempotencyKey,
+      payloadHash: entity.payloadHash,
     );
   }
 
@@ -167,6 +176,15 @@ class SalesMapper {
       customerId: domain.customerId,
       globalTaxOverride: domain.globalTaxOverride,
       relatedInvoiceId: domain.relatedInvoiceId,
+      originInvoiceId: domain.originInvoiceId,
+      refundReasonPolicy: domain.refundReasonPolicy,
+      refundReasonCode: domain.refundReasonCode,
+      authorizedByUserId: domain.authorizedByUserId,
+      authorizedByRole: domain.authorizedByRole,
+      terminalId: domain.terminalId,
+      sourceSequence: domain.sourceSequence,
+      idempotencyKey: domain.idempotencyKey,
+      payloadHash: domain.payloadHash,
     );
   }
 
@@ -187,6 +205,7 @@ class SalesMapper {
       variantId: entity.variantId,
       notes: entity.notes,
       recipeVersionId: entity.recipeVersionId,
+      originInvoiceItemId: entity.originInvoiceItemId,
       selectedModifiers: modifiers,
     );
   }
@@ -207,6 +226,7 @@ class SalesMapper {
       variantId: domain.variantId,
       notes: domain.notes,
       recipeVersionId: domain.recipeVersionId,
+      originInvoiceItemId: domain.originInvoiceItemId,
     );
   }
 
@@ -268,7 +288,17 @@ class SalesMapper {
       'customerId': invoice.customerId,
       'globalTaxOverride': invoice.globalTaxOverride,
       'type': invoice.type.name,
+      'documentType': invoice.type == InvoiceType.creditNote ? 'CREDIT_NOTE' : 'SALE',
       'relatedInvoiceId': invoice.relatedInvoiceId,
+      'originInvoiceId': invoice.originInvoiceId ?? invoice.relatedInvoiceId,
+      'refundReasonPolicy': invoice.refundReasonPolicy,
+      'refundReasonCode': invoice.refundReasonCode,
+      'authorizedByUserId': invoice.authorizedByUserId,
+      'authorizedByRole': invoice.authorizedByRole,
+      'terminalId': invoice.terminalId,
+      'sourceSequence': invoice.sourceSequence,
+      'idempotencyKey': invoice.idempotencyKey,
+      'payloadHash': invoice.payloadHash,
       'items': items.map((item) => {
         'id': item.id,
         'productId': item.productId,
@@ -283,6 +313,7 @@ class SalesMapper {
         'variantId': item.variantId,
         'notes': item.notes,
         'recipeVersionId': item.recipeVersionId,
+        'originInvoiceItemId': item.originInvoiceItemId,
         'modifiers': item.selectedModifiers.map((m) => ({
           'name': m.name,
           'extraPrice': m.extraPrice,

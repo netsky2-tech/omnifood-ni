@@ -28,6 +28,15 @@ _$InvoiceImpl _$$InvoiceImplFromJson(Map<String, dynamic> json) =>
       customerId: json['customerId'] as String?,
       globalTaxOverride: json['globalTaxOverride'] as bool? ?? false,
       relatedInvoiceId: json['relatedInvoiceId'] as String?,
+      originInvoiceId: json['originInvoiceId'] as String?,
+      refundReasonPolicy: json['refundReasonPolicy'] as String?,
+      refundReasonCode: json['refundReasonCode'] as String?,
+      authorizedByUserId: json['authorizedByUserId'] as String?,
+      authorizedByRole: json['authorizedByRole'] as String?,
+      terminalId: json['terminalId'] as String?,
+      sourceSequence: json['sourceSequence'] as int?,
+      idempotencyKey: json['idempotencyKey'] as String?,
+      payloadHash: json['payloadHash'] as String?,
     );
 
 Map<String, dynamic> _$$InvoiceImplToJson(_$InvoiceImpl instance) =>
@@ -47,6 +56,15 @@ Map<String, dynamic> _$$InvoiceImplToJson(_$InvoiceImpl instance) =>
       'customerId': instance.customerId,
       'globalTaxOverride': instance.globalTaxOverride,
       'relatedInvoiceId': instance.relatedInvoiceId,
+      'originInvoiceId': instance.originInvoiceId,
+      'refundReasonPolicy': instance.refundReasonPolicy,
+      'refundReasonCode': instance.refundReasonCode,
+      'authorizedByUserId': instance.authorizedByUserId,
+      'authorizedByRole': instance.authorizedByRole,
+      'terminalId': instance.terminalId,
+      'sourceSequence': instance.sourceSequence,
+      'idempotencyKey': instance.idempotencyKey,
+      'payloadHash': instance.payloadHash,
     };
 
 const _$SyncStatusEnumMap = {

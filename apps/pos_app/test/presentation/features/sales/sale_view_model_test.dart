@@ -12,6 +12,7 @@ import 'package:pos_app/data/models/sales/cashier_session_entity.dart';
 import 'package:pos_app/domain/models/inventory/product.dart';
 import 'package:pos_app/domain/models/sales/cashier_session.dart';
 import 'package:pos_app/domain/models/sales/payment.dart';
+import 'package:pos_app/domain/models/sales/invoice.dart';
 import 'package:pos_app/domain/models/user.dart';
 import 'sale_view_model_test.mocks.dart';
 import 'package:mockito/annotations.dart';
@@ -85,7 +86,9 @@ void main() {
       tipoModelo: CashSessionModel.carteraMesero,
     );
 
-    final captured = verify(mockSessionDao.insertSession(captureAny)).captured.single as CashierSessionEntity;
+    final captured =
+        verify(mockSessionDao.insertSession(captureAny)).captured.single
+            as CashierSessionEntity;
     expect(captured.tipoModelo, 'CARTERA_MESERO');
   });
 
@@ -99,7 +102,10 @@ void main() {
       ),
     );
 
-    await viewModel.openSession(200, tipoModelo: CashSessionModel.carteraMesero);
+    await viewModel.openSession(
+      200,
+      tipoModelo: CashSessionModel.carteraMesero,
+    );
 
     expect(viewModel.errorMessage, 'Acceso denegado.');
     verifyNever(mockSessionDao.insertSession(any));
@@ -115,10 +121,18 @@ void main() {
       ),
     );
     when(mockSessionDao.insertSession(any)).thenAnswer((_) async {});
-    when(mockSalesRepo.saveSale(invoice: anyNamed('invoice'), items: anyNamed('items'), payments: anyNamed('payments')))
-        .thenAnswer((_) async {});
+    when(
+      mockSalesRepo.saveSale(
+        invoice: anyNamed('invoice'),
+        items: anyNamed('items'),
+        payments: anyNamed('payments'),
+      ),
+    ).thenAnswer((_) async {});
 
-    await viewModel.openSession(100, tipoModelo: CashSessionModel.carteraMesero);
+    await viewModel.openSession(
+      100,
+      tipoModelo: CashSessionModel.carteraMesero,
+    );
     viewModel.addToCart(
       Product(
         id: 'p1',
@@ -142,37 +156,48 @@ void main() {
     expect(viewModel.sessionExpected[PaymentMethod.card], 0.0);
   });
 
-  test('finalizeSale in CAJA_CENTRAL tracks cash and card expected totals', () async {
-    when(mockAuthRepo.getCurrentUser()).thenAnswer(
-      (_) async => const User(
-        id: 'u-1',
-        name: 'Cashier',
-        role: UserRole.cashier,
-        isActive: true,
-      ),
-    );
-    when(mockSessionDao.insertSession(any)).thenAnswer((_) async {});
-    when(mockSalesRepo.saveSale(invoice: anyNamed('invoice'), items: anyNamed('items'), payments: anyNamed('payments')))
-        .thenAnswer((_) async {});
+  test(
+    'finalizeSale in CAJA_CENTRAL tracks cash and card expected totals',
+    () async {
+      when(mockAuthRepo.getCurrentUser()).thenAnswer(
+        (_) async => const User(
+          id: 'u-1',
+          name: 'Cashier',
+          role: UserRole.cashier,
+          isActive: true,
+        ),
+      );
+      when(mockSessionDao.insertSession(any)).thenAnswer((_) async {});
+      when(
+        mockSalesRepo.saveSale(
+          invoice: anyNamed('invoice'),
+          items: anyNamed('items'),
+          payments: anyNamed('payments'),
+        ),
+      ).thenAnswer((_) async {});
 
-    await viewModel.openSession(100, tipoModelo: CashSessionModel.cajaCentral);
-    viewModel.addToCart(
-      Product(
-        id: 'p1',
-        sku: 'SKU-1',
-        name: 'Prod',
-        uom: 'unit',
-        sellPrice: 100,
-        stock: 10,
-        averageCost: 10,
-      ),
-    );
+      await viewModel.openSession(
+        100,
+        tipoModelo: CashSessionModel.cajaCentral,
+      );
+      viewModel.addToCart(
+        Product(
+          id: 'p1',
+          sku: 'SKU-1',
+          name: 'Prod',
+          uom: 'unit',
+          sellPrice: 100,
+          stock: 10,
+          averageCost: 10,
+        ),
+      );
 
-    await viewModel.finalizeSale([PaymentMethod.cash, PaymentMethod.card]);
+      await viewModel.finalizeSale([PaymentMethod.cash, PaymentMethod.card]);
 
-    expect(viewModel.sessionExpected[PaymentMethod.cash], greaterThan(100));
-    expect(viewModel.sessionExpected[PaymentMethod.card], greaterThan(0));
-  });
+      expect(viewModel.sessionExpected[PaymentMethod.cash], greaterThan(100));
+      expect(viewModel.sessionExpected[PaymentMethod.card], greaterThan(0));
+    },
+  );
 
   test('processReturn denies cashier role with generic message', () async {
     when(mockAuthRepo.getCurrentUser()).thenAnswer(
@@ -189,6 +214,67 @@ void main() {
     expect(viewModel.errorMessage, 'Acceso denegado.');
     verifyNever(mockSalesRepo.getInvoiceByNumber(any));
   });
+
+  test(
+    'processReturn passes selected partial lines, reason policy, and actor to repository',
+    () async {
+      when(mockAuthRepo.getCurrentUser()).thenAnswer(
+        (_) async => const User(
+          id: 'manager-1',
+          name: 'Manager',
+          role: UserRole.manager,
+          isActive: true,
+        ),
+      );
+      when(mockSalesRepo.getInvoiceByNumber('F001-000123')).thenAnswer(
+        (_) async => Invoice(
+          id: 'invoice-1',
+          number: 'F001-000123',
+          createdAt: DateTime(2026, 7, 13),
+          userId: 'cashier-1',
+          subtotal: 100,
+          totalTax: 15,
+          total: 115,
+          paymentStatus: PaymentStatus.paid,
+          syncStatus: SyncStatus.synced,
+          type: InvoiceType.regular,
+        ),
+      );
+      when(
+        mockSalesRepo.createCreditNote(
+          originalInvoiceId: anyNamed('originalInvoiceId'),
+          reason: anyNamed('reason'),
+          authorizedByUserId: anyNamed('authorizedByUserId'),
+          authorizedByRole: anyNamed('authorizedByRole'),
+          refundReasonPolicy: anyNamed('refundReasonPolicy'),
+          lines: anyNamed('lines'),
+        ),
+      ).thenAnswer((_) async {});
+
+      const refundLines = [
+        CreditNoteRefundLine(originInvoiceItemId: 'line-1', quantity: 0.5),
+      ];
+
+      await viewModel.processReturn(
+        'F001-000123',
+        'Damaged item',
+        refundReasonPolicy: RefundReasonPolicy.wasteNoRestock,
+        lines: refundLines,
+      );
+
+      verify(
+        mockSalesRepo.createCreditNote(
+          originalInvoiceId: 'invoice-1',
+          reason: 'Damaged item',
+          authorizedByUserId: 'manager-1',
+          authorizedByRole: UserRole.manager,
+          refundReasonPolicy: RefundReasonPolicy.wasteNoRestock,
+          lines: refundLines,
+        ),
+      ).called(1);
+      expect(viewModel.errorMessage, isNull);
+    },
+  );
 
   test('voidInvoice denies cashier role with generic message', () async {
     when(mockAuthRepo.getCurrentUser()).thenAnswer(
@@ -231,12 +317,15 @@ void main() {
         isActive: true,
       ),
     );
-    when(mockSalesRepo.voidInvoice('invoice-3', 'anulacion manager'))
-        .thenAnswer((_) async {});
+    when(
+      mockSalesRepo.voidInvoice('invoice-3', 'anulacion manager'),
+    ).thenAnswer((_) async {});
 
     await viewModel.voidInvoice('invoice-3', 'anulacion manager');
 
-    verify(mockSalesRepo.voidInvoice('invoice-3', 'anulacion manager')).called(1);
+    verify(
+      mockSalesRepo.voidInvoice('invoice-3', 'anulacion manager'),
+    ).called(1);
     expect(viewModel.errorMessage, isNull);
   });
 
@@ -320,54 +409,62 @@ void main() {
       expect(cashierViewModel.totalDiscounts, 10.0);
     });
 
-    test('override is consumed after finalizeSale and requires re-authorization for next restricted action', () async {
-      when(mockAuthRepo.getCurrentUser()).thenAnswer(
-        (_) async => const User(
-          id: 'u-1',
-          name: 'Cashier',
-          role: UserRole.cashier,
-          isActive: true,
-        ),
-      );
-      when(mockSessionDao.insertSession(any)).thenAnswer((_) async {});
-      when(mockSalesRepo.saveSale(
-        invoice: anyNamed('invoice'),
-        items: anyNamed('items'),
-        payments: anyNamed('payments'),
-      )).thenAnswer((_) async {});
+    test(
+      'override is consumed after finalizeSale and requires re-authorization for next restricted action',
+      () async {
+        when(mockAuthRepo.getCurrentUser()).thenAnswer(
+          (_) async => const User(
+            id: 'u-1',
+            name: 'Cashier',
+            role: UserRole.cashier,
+            isActive: true,
+          ),
+        );
+        when(mockSessionDao.insertSession(any)).thenAnswer((_) async {});
+        when(
+          mockSalesRepo.saveSale(
+            invoice: anyNamed('invoice'),
+            items: anyNamed('items'),
+            payments: anyNamed('payments'),
+          ),
+        ).thenAnswer((_) async {});
 
-      final cashierViewModel = SaleViewModel(
-        mockSalesRepo,
-        mockInventoryRepo,
-        mockAuthRepo,
-        mockDb,
-      );
-      await Future<void>.delayed(Duration.zero);
+        final cashierViewModel = SaleViewModel(
+          mockSalesRepo,
+          mockInventoryRepo,
+          mockAuthRepo,
+          mockDb,
+        );
+        await Future<void>.delayed(Duration.zero);
 
-      await cashierViewModel.openSession(100, tipoModelo: CashSessionModel.cajaCentral);
-      cashierViewModel.addToCart(
-        Product(
-          id: 'p1',
-          sku: 'SKU-1',
-          name: 'Prod',
-          uom: 'unit',
-          sellPrice: 100,
-          stock: 10,
-          averageCost: 10,
-        ),
-      );
+        await cashierViewModel.openSession(
+          100,
+          tipoModelo: CashSessionModel.cajaCentral,
+        );
+        cashierViewModel.addToCart(
+          Product(
+            id: 'p1',
+            sku: 'SKU-1',
+            name: 'Prod',
+            uom: 'unit',
+            sellPrice: 100,
+            stock: 10,
+            averageCost: 10,
+          ),
+        );
 
-      cashierViewModel.grantSupervisorOverride();
-      cashierViewModel.applyManualDiscount(10.0);
-      expect(cashierViewModel.totalDiscounts, 10.0);
-      expect(cashierViewModel.isSupervisorOverrideActive, isTrue);
+        cashierViewModel.grantSupervisorOverride();
+        cashierViewModel.applyManualDiscount(10.0);
+        expect(cashierViewModel.totalDiscounts, 10.0);
+        expect(cashierViewModel.isSupervisorOverrideActive, isTrue);
 
-      await cashierViewModel.finalizeSale([PaymentMethod.cash]);
-      expect(cashierViewModel.isSupervisorOverrideActive, isFalse);
+        await cashierViewModel.finalizeSale([PaymentMethod.cash]);
+        expect(cashierViewModel.isSupervisorOverrideActive, isFalse);
 
-      cashierViewModel.applyManualDiscount(5.0);
-      expect(cashierViewModel.errorMessage, 'Acceso denegado.');
-      expect(cashierViewModel.totalDiscounts, 0.0);
-    });
+        cashierViewModel.applyManualDiscount(5.0);
+        expect(cashierViewModel.errorMessage, 'Acceso denegado.');
+        expect(cashierViewModel.totalDiscounts, 0.0);
+      },
+    );
   });
 }

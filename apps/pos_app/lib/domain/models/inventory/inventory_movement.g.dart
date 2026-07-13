@@ -21,6 +21,8 @@ _$InventoryMovementImpl _$$InventoryMovementImplFromJson(
       unitCostNio: (json['unitCostNio'] as num?)?.toDouble(),
       sourceDocumentType: json['sourceDocumentType'] as String?,
       sourceDocumentId: json['sourceDocumentId'] as String?,
+      originMovementId: json['originMovementId'] as String?,
+      originInvoiceItemId: json['originInvoiceItemId'] as String?,
       batchDeductions: (json['batchDeductions'] as List<dynamic>?)
           ?.map((e) => BatchDeduction.fromJson(e as Map<String, dynamic>))
           .toList(),
@@ -41,6 +43,8 @@ Map<String, dynamic> _$$InventoryMovementImplToJson(
       'unitCostNio': instance.unitCostNio,
       'sourceDocumentType': instance.sourceDocumentType,
       'sourceDocumentId': instance.sourceDocumentId,
+      'originMovementId': instance.originMovementId,
+      'originInvoiceItemId': instance.originInvoiceItemId,
       'batchDeductions':
           instance.batchDeductions?.map((e) => e.toJson()).toList(),
     };

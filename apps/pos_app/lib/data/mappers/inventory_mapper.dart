@@ -126,6 +126,8 @@ class InventoryMapper {
       unitCostNio: entity.unitCostNio,
       sourceDocumentType: entity.sourceDocumentType,
       sourceDocumentId: entity.sourceDocumentId,
+      originMovementId: entity.originMovementId,
+      originInvoiceItemId: entity.originInvoiceItemId,
       batchDeductions: batchDeductions,
     );
   }
@@ -151,6 +153,8 @@ class InventoryMapper {
       unitCostNio: domain.unitCostNio,
       sourceDocumentType: domain.sourceDocumentType,
       sourceDocumentId: domain.sourceDocumentId,
+      originMovementId: domain.originMovementId,
+      originInvoiceItemId: domain.originInvoiceItemId,
       batch_deductions: batchDeductionsJson,
     );
   }

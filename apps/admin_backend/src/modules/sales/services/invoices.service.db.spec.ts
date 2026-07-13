@@ -12,6 +12,7 @@ import { UomConversion } from '../../inventory/entities/uom-conversion.entity';
 import { InventorySyncOutbox } from '../../inventory/entities/inventory-sync-outbox.entity';
 import { InventorySyncReceipt } from '../../inventory/entities/inventory-sync-receipt.entity';
 import { Tenant } from '../../tenant/entities/tenant.entity';
+import { UserRole } from '../../identity/entities/user.entity';
 import { InvoiceItemModifier } from '../entities/invoice-item-modifier.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
 import { Invoice } from '../entities/invoice.entity';
@@ -62,6 +63,26 @@ interface PgIndexRow {
 
 interface AmbientTenantRow {
   tenant: string;
+}
+
+interface AuthorizingUserLookup {
+  where: {
+    id: string;
+    tenant_id: string;
+  };
+}
+
+function createMockAuthorizingUserRepository() {
+  return {
+    findOne: jest.fn().mockImplementation(({ where }: AuthorizingUserLookup) =>
+      Promise.resolve({
+        id: where.id,
+        tenant_id: where.tenant_id,
+        role: UserRole.MANAGER,
+        is_active: true,
+      }),
+    ),
+  } as never;
 }
 
 async function withIsolatedSchema(
@@ -126,6 +147,7 @@ function createService(
   outboxRepository: Repository<InventorySyncOutbox>,
 ): InvoicesService {
   const unusedRepository = {} as never;
+  const userRepository = createMockAuthorizingUserRepository();
   const recipeService = { findActiveVersion: jest.fn() } as never;
   const bomExplosionService = { explodeRecipe: jest.fn() } as never;
 
@@ -134,6 +156,7 @@ function createService(
     unusedRepository,
     unusedRepository,
     unusedRepository,
+    userRepository,
     unusedRepository,
     receiptRepository,
     outboxRepository,
@@ -217,11 +240,13 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
         );
 
         const unusedRepository = {} as never;
+        const userRepository = createMockAuthorizingUserRepository();
         const service = new InvoicesService(
           dataSource,
           dataSource.getRepository(Invoice),
           dataSource.getRepository(InvoiceItem),
           dataSource.getRepository(Payment),
+          userRepository,
           unusedRepository,
           dataSource.getRepository(InventorySyncReceipt),
           dataSource.getRepository(InventorySyncOutbox),
@@ -368,6 +393,7 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
           dataSource.getRepository(Invoice),
           dataSource.getRepository(InvoiceItem),
           dataSource.getRepository(Payment),
+          createMockAuthorizingUserRepository(),
           {} as never,
           dataSource.getRepository(InventorySyncReceipt),
           dataSource.getRepository(InventorySyncOutbox),
@@ -395,6 +421,9 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
               type: 'creditNote',
               originInvoiceId,
               refundReasonPolicy: 'FINANCIAL_ONLY',
+              refundReasonCode: 'customer_return',
+              authorizedByUserId: 'manager-a',
+              authorizedByRole: 'manager',
               items: [
                 {
                   id: collidingItemId,
@@ -542,6 +571,7 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
           dataSource.getRepository(Invoice),
           dataSource.getRepository(InvoiceItem),
           dataSource.getRepository(Payment),
+          createMockAuthorizingUserRepository(),
           {} as never,
           dataSource.getRepository(InventorySyncReceipt),
           dataSource.getRepository(InventorySyncOutbox),
@@ -569,6 +599,9 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
               type: 'creditNote',
               originInvoiceId,
               refundReasonPolicy: 'FINANCIAL_ONLY',
+              refundReasonCode: 'customer_return',
+              authorizedByUserId: 'manager-a',
+              authorizedByRole: 'manager',
               items: [
                 {
                   id: randomUUID(),
@@ -661,9 +694,10 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
         });
         await dataSource.initialize();
         await dataSource.query(`SET search_path TO "${schema}"`);
-        await dataSource.query("SELECT set_config('app.tenant_id', $1, false)", [
-          tenantId,
-        ]);
+        await dataSource.query(
+          "SELECT set_config('app.tenant_id', $1, false)",
+          [tenantId],
+        );
         const queryRunner = dataSource.createQueryRunner();
         await queryRunner.connect();
         await queryRunner.query(`SET search_path TO "${schema}"`);
@@ -695,6 +729,7 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
           dataSource.getRepository(Invoice),
           dataSource.getRepository(InvoiceItem),
           dataSource.getRepository(Payment),
+          createMockAuthorizingUserRepository(),
           dataSource.getRepository(InventoryMovement),
           dataSource.getRepository(InventorySyncReceipt),
           dataSource.getRepository(InventorySyncOutbox),
@@ -760,6 +795,9 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
               type: 'creditNote',
               originInvoiceId: saleInvoiceId,
               refundReasonPolicy: 'RESTOCK_ORIGINAL_BOM',
+              refundReasonCode: 'returned_to_stock',
+              authorizedByUserId: 'manager-db',
+              authorizedByRole: 'manager',
               items: [
                 {
                   id: randomUUID(),
@@ -783,10 +821,12 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
         expect(creditResult.results).toEqual([
           expect.objectContaining({ status: 'ACCEPTED', code: 'APPLIED' }),
         ]);
-        const movements = await dataSource.getRepository(InventoryMovement).find({
-          where: { tenant_id: tenantId },
-          order: { id: 'ASC' },
-        });
+        const movements = await dataSource
+          .getRepository(InventoryMovement)
+          .find({
+            where: { tenant_id: tenantId },
+            order: { id: 'ASC' },
+          });
         expect(movements).toEqual([
           expect.objectContaining({
             type: MovementType.SALE,

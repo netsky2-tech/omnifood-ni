@@ -6,6 +6,7 @@ import {
   IsDateString,
   IsOptional,
   IsArray,
+  IsNotEmpty,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -73,6 +74,14 @@ export const REFUND_REASON_POLICY = {
 
 export type RefundReasonPolicy =
   (typeof REFUND_REASON_POLICY)[keyof typeof REFUND_REASON_POLICY];
+
+export const CREDIT_NOTE_AUTH_ROLE = {
+  MANAGER: 'manager',
+  OWNER: 'owner',
+} as const;
+
+export type CreditNoteAuthRole =
+  (typeof CREDIT_NOTE_AUTH_ROLE)[keyof typeof CREDIT_NOTE_AUTH_ROLE];
 
 export class CreateModifierDto {
   @IsString()
@@ -153,12 +162,22 @@ export class SyncInvoiceDto {
   originInvoiceId?: string;
 
   @IsString()
+  @IsNotEmpty()
   @IsOptional()
   refundReasonCode?: string;
 
   @IsEnum(REFUND_REASON_POLICY)
   @IsOptional()
   refundReasonPolicy?: RefundReasonPolicy;
+
+  @IsString()
+  @IsNotEmpty()
+  @IsOptional()
+  authorizedByUserId?: string;
+
+  @IsEnum(CREDIT_NOTE_AUTH_ROLE)
+  @IsOptional()
+  authorizedByRole?: CreditNoteAuthRole;
 
   @IsArray()
   @ValidateNested({ each: true })

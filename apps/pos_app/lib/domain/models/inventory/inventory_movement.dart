@@ -29,6 +29,8 @@ class InventoryMovement with _$InventoryMovement {
     double? unitCostNio,
     String? sourceDocumentType,
     String? sourceDocumentId,
+    String? originMovementId,
+    String? originInvoiceItemId,
     List<BatchDeduction>? batchDeductions,
   }) = _InventoryMovement;
 

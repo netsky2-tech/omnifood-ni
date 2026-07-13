@@ -141,6 +141,8 @@ describe('SyncBatchEnvelopeDto', () => {
           originInvoiceId: 'sale-inv-1',
           refundReasonCode: 'DAMAGED_RETURN',
           refundReasonPolicy: 'WASTE_NO_RESTOCK',
+          authorizedByUserId: 'manager-1',
+          authorizedByRole: 'manager',
           items: [{ ...creditNoteItem, originInvoiceItemId: 'sale-item-1' }],
         },
       },
@@ -165,7 +167,9 @@ describe('SyncBatchEnvelopeDto', () => {
     const serializedErrors = JSON.stringify(errors);
     expect(serializedErrors).toContain('originInvoiceId');
     expect(serializedErrors).toContain('originInvoiceItemId');
+    expect(serializedErrors).toContain('refundReasonCode');
     expect(serializedErrors).toContain('refundReasonPolicy');
+    expect(serializedErrors).toContain('authorization metadata');
   });
 
   it('rejects CREDIT_NOTE records with no refunded items', () => {
@@ -176,7 +180,10 @@ describe('SyncBatchEnvelopeDto', () => {
         invoice: {
           ...creditNoteRecord.invoice,
           originInvoiceId: 'sale-inv-1',
+          refundReasonCode: 'DAMAGED_RETURN',
           refundReasonPolicy: 'FINANCIAL_ONLY',
+          authorizedByUserId: 'manager-1',
+          authorizedByRole: 'manager',
           items: [],
         },
       },

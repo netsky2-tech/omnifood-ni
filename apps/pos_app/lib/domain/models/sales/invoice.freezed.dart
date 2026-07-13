@@ -35,7 +35,17 @@ mixin _$Invoice {
   InvoiceType get type => throw _privateConstructorUsedError;
   String? get customerId => throw _privateConstructorUsedError;
   bool get globalTaxOverride => throw _privateConstructorUsedError;
-  String? get relatedInvoiceId => throw _privateConstructorUsedError;
+  String? get relatedInvoiceId =>
+      throw _privateConstructorUsedError; // For Credit Notes
+  String? get originInvoiceId => throw _privateConstructorUsedError;
+  String? get refundReasonPolicy => throw _privateConstructorUsedError;
+  String? get refundReasonCode => throw _privateConstructorUsedError;
+  String? get authorizedByUserId => throw _privateConstructorUsedError;
+  String? get authorizedByRole => throw _privateConstructorUsedError;
+  String? get terminalId => throw _privateConstructorUsedError;
+  int? get sourceSequence => throw _privateConstructorUsedError;
+  String? get idempotencyKey => throw _privateConstructorUsedError;
+  String? get payloadHash => throw _privateConstructorUsedError;
 
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
   @JsonKey(ignore: true)
@@ -62,7 +72,16 @@ abstract class $InvoiceCopyWith<$Res> {
       InvoiceType type,
       String? customerId,
       bool globalTaxOverride,
-      String? relatedInvoiceId});
+      String? relatedInvoiceId,
+      String? originInvoiceId,
+      String? refundReasonPolicy,
+      String? refundReasonCode,
+      String? authorizedByUserId,
+      String? authorizedByRole,
+      String? terminalId,
+      int? sourceSequence,
+      String? idempotencyKey,
+      String? payloadHash});
 }
 
 /// @nodoc
@@ -93,6 +112,15 @@ class _$InvoiceCopyWithImpl<$Res, $Val extends Invoice>
     Object? customerId = freezed,
     Object? globalTaxOverride = null,
     Object? relatedInvoiceId = freezed,
+    Object? originInvoiceId = freezed,
+    Object? refundReasonPolicy = freezed,
+    Object? refundReasonCode = freezed,
+    Object? authorizedByUserId = freezed,
+    Object? authorizedByRole = freezed,
+    Object? terminalId = freezed,
+    Object? sourceSequence = freezed,
+    Object? idempotencyKey = freezed,
+    Object? payloadHash = freezed,
   }) {
     return _then(_value.copyWith(
       id: null == id
@@ -155,6 +183,42 @@ class _$InvoiceCopyWithImpl<$Res, $Val extends Invoice>
           ? _value.relatedInvoiceId
           : relatedInvoiceId // ignore: cast_nullable_to_non_nullable
               as String?,
+      originInvoiceId: freezed == originInvoiceId
+          ? _value.originInvoiceId
+          : originInvoiceId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      refundReasonPolicy: freezed == refundReasonPolicy
+          ? _value.refundReasonPolicy
+          : refundReasonPolicy // ignore: cast_nullable_to_non_nullable
+              as String?,
+      refundReasonCode: freezed == refundReasonCode
+          ? _value.refundReasonCode
+          : refundReasonCode // ignore: cast_nullable_to_non_nullable
+              as String?,
+      authorizedByUserId: freezed == authorizedByUserId
+          ? _value.authorizedByUserId
+          : authorizedByUserId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      authorizedByRole: freezed == authorizedByRole
+          ? _value.authorizedByRole
+          : authorizedByRole // ignore: cast_nullable_to_non_nullable
+              as String?,
+      terminalId: freezed == terminalId
+          ? _value.terminalId
+          : terminalId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      sourceSequence: freezed == sourceSequence
+          ? _value.sourceSequence
+          : sourceSequence // ignore: cast_nullable_to_non_nullable
+              as int?,
+      idempotencyKey: freezed == idempotencyKey
+          ? _value.idempotencyKey
+          : idempotencyKey // ignore: cast_nullable_to_non_nullable
+              as String?,
+      payloadHash: freezed == payloadHash
+          ? _value.payloadHash
+          : payloadHash // ignore: cast_nullable_to_non_nullable
+              as String?,
     ) as $Val);
   }
 }
@@ -181,7 +245,16 @@ abstract class _$$InvoiceImplCopyWith<$Res> implements $InvoiceCopyWith<$Res> {
       InvoiceType type,
       String? customerId,
       bool globalTaxOverride,
-      String? relatedInvoiceId});
+      String? relatedInvoiceId,
+      String? originInvoiceId,
+      String? refundReasonPolicy,
+      String? refundReasonCode,
+      String? authorizedByUserId,
+      String? authorizedByRole,
+      String? terminalId,
+      int? sourceSequence,
+      String? idempotencyKey,
+      String? payloadHash});
 }
 
 /// @nodoc
@@ -210,6 +283,15 @@ class __$$InvoiceImplCopyWithImpl<$Res>
     Object? customerId = freezed,
     Object? globalTaxOverride = null,
     Object? relatedInvoiceId = freezed,
+    Object? originInvoiceId = freezed,
+    Object? refundReasonPolicy = freezed,
+    Object? refundReasonCode = freezed,
+    Object? authorizedByUserId = freezed,
+    Object? authorizedByRole = freezed,
+    Object? terminalId = freezed,
+    Object? sourceSequence = freezed,
+    Object? idempotencyKey = freezed,
+    Object? payloadHash = freezed,
   }) {
     return _then(_$InvoiceImpl(
       id: null == id
@@ -272,6 +354,42 @@ class __$$InvoiceImplCopyWithImpl<$Res>
           ? _value.relatedInvoiceId
           : relatedInvoiceId // ignore: cast_nullable_to_non_nullable
               as String?,
+      originInvoiceId: freezed == originInvoiceId
+          ? _value.originInvoiceId
+          : originInvoiceId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      refundReasonPolicy: freezed == refundReasonPolicy
+          ? _value.refundReasonPolicy
+          : refundReasonPolicy // ignore: cast_nullable_to_non_nullable
+              as String?,
+      refundReasonCode: freezed == refundReasonCode
+          ? _value.refundReasonCode
+          : refundReasonCode // ignore: cast_nullable_to_non_nullable
+              as String?,
+      authorizedByUserId: freezed == authorizedByUserId
+          ? _value.authorizedByUserId
+          : authorizedByUserId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      authorizedByRole: freezed == authorizedByRole
+          ? _value.authorizedByRole
+          : authorizedByRole // ignore: cast_nullable_to_non_nullable
+              as String?,
+      terminalId: freezed == terminalId
+          ? _value.terminalId
+          : terminalId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      sourceSequence: freezed == sourceSequence
+          ? _value.sourceSequence
+          : sourceSequence // ignore: cast_nullable_to_non_nullable
+              as int?,
+      idempotencyKey: freezed == idempotencyKey
+          ? _value.idempotencyKey
+          : idempotencyKey // ignore: cast_nullable_to_non_nullable
+              as String?,
+      payloadHash: freezed == payloadHash
+          ? _value.payloadHash
+          : payloadHash // ignore: cast_nullable_to_non_nullable
+              as String?,
     ));
   }
 }
@@ -294,7 +412,16 @@ class _$InvoiceImpl implements _Invoice {
       this.type = InvoiceType.regular,
       this.customerId,
       this.globalTaxOverride = false,
-      this.relatedInvoiceId});
+      this.relatedInvoiceId,
+      this.originInvoiceId,
+      this.refundReasonPolicy,
+      this.refundReasonCode,
+      this.authorizedByUserId,
+      this.authorizedByRole,
+      this.terminalId,
+      this.sourceSequence,
+      this.idempotencyKey,
+      this.payloadHash});
 
   factory _$InvoiceImpl.fromJson(Map<String, dynamic> json) =>
       _$$InvoiceImplFromJson(json);
@@ -336,10 +463,29 @@ class _$InvoiceImpl implements _Invoice {
   final bool globalTaxOverride;
   @override
   final String? relatedInvoiceId;
+// For Credit Notes
+  @override
+  final String? originInvoiceId;
+  @override
+  final String? refundReasonPolicy;
+  @override
+  final String? refundReasonCode;
+  @override
+  final String? authorizedByUserId;
+  @override
+  final String? authorizedByRole;
+  @override
+  final String? terminalId;
+  @override
+  final int? sourceSequence;
+  @override
+  final String? idempotencyKey;
+  @override
+  final String? payloadHash;
 
   @override
   String toString() {
-    return 'Invoice(id: $id, number: $number, createdAt: $createdAt, userId: $userId, subtotal: $subtotal, totalTax: $totalTax, total: $total, isCanceled: $isCanceled, voidReason: $voidReason, syncStatus: $syncStatus, paymentStatus: $paymentStatus, type: $type, customerId: $customerId, globalTaxOverride: $globalTaxOverride, relatedInvoiceId: $relatedInvoiceId)';
+    return 'Invoice(id: $id, number: $number, createdAt: $createdAt, userId: $userId, subtotal: $subtotal, totalTax: $totalTax, total: $total, isCanceled: $isCanceled, voidReason: $voidReason, syncStatus: $syncStatus, paymentStatus: $paymentStatus, type: $type, customerId: $customerId, globalTaxOverride: $globalTaxOverride, relatedInvoiceId: $relatedInvoiceId, originInvoiceId: $originInvoiceId, refundReasonPolicy: $refundReasonPolicy, refundReasonCode: $refundReasonCode, authorizedByUserId: $authorizedByUserId, authorizedByRole: $authorizedByRole, terminalId: $terminalId, sourceSequence: $sourceSequence, idempotencyKey: $idempotencyKey, payloadHash: $payloadHash)';
   }
 
   @override
@@ -371,28 +517,56 @@ class _$InvoiceImpl implements _Invoice {
             (identical(other.globalTaxOverride, globalTaxOverride) ||
                 other.globalTaxOverride == globalTaxOverride) &&
             (identical(other.relatedInvoiceId, relatedInvoiceId) ||
-                other.relatedInvoiceId == relatedInvoiceId));
+                other.relatedInvoiceId == relatedInvoiceId) &&
+            (identical(other.originInvoiceId, originInvoiceId) ||
+                other.originInvoiceId == originInvoiceId) &&
+            (identical(other.refundReasonPolicy, refundReasonPolicy) ||
+                other.refundReasonPolicy == refundReasonPolicy) &&
+            (identical(other.refundReasonCode, refundReasonCode) ||
+                other.refundReasonCode == refundReasonCode) &&
+            (identical(other.authorizedByUserId, authorizedByUserId) ||
+                other.authorizedByUserId == authorizedByUserId) &&
+            (identical(other.authorizedByRole, authorizedByRole) ||
+                other.authorizedByRole == authorizedByRole) &&
+            (identical(other.terminalId, terminalId) ||
+                other.terminalId == terminalId) &&
+            (identical(other.sourceSequence, sourceSequence) ||
+                other.sourceSequence == sourceSequence) &&
+            (identical(other.idempotencyKey, idempotencyKey) ||
+                other.idempotencyKey == idempotencyKey) &&
+            (identical(other.payloadHash, payloadHash) ||
+                other.payloadHash == payloadHash));
   }
 
   @JsonKey(ignore: true)
   @override
-  int get hashCode => Object.hash(
-      runtimeType,
-      id,
-      number,
-      createdAt,
-      userId,
-      subtotal,
-      totalTax,
-      total,
-      isCanceled,
-      voidReason,
-      syncStatus,
-      paymentStatus,
-      type,
-      customerId,
-      globalTaxOverride,
-      relatedInvoiceId);
+  int get hashCode => Object.hashAll([
+        runtimeType,
+        id,
+        number,
+        createdAt,
+        userId,
+        subtotal,
+        totalTax,
+        total,
+        isCanceled,
+        voidReason,
+        syncStatus,
+        paymentStatus,
+        type,
+        customerId,
+        globalTaxOverride,
+        relatedInvoiceId,
+        originInvoiceId,
+        refundReasonPolicy,
+        refundReasonCode,
+        authorizedByUserId,
+        authorizedByRole,
+        terminalId,
+        sourceSequence,
+        idempotencyKey,
+        payloadHash
+      ]);
 
   @JsonKey(ignore: true)
   @override
@@ -424,7 +598,16 @@ abstract class _Invoice implements Invoice {
       final InvoiceType type,
       final String? customerId,
       final bool globalTaxOverride,
-      final String? relatedInvoiceId}) = _$InvoiceImpl;
+      final String? relatedInvoiceId,
+      final String? originInvoiceId,
+      final String? refundReasonPolicy,
+      final String? refundReasonCode,
+      final String? authorizedByUserId,
+      final String? authorizedByRole,
+      final String? terminalId,
+      final int? sourceSequence,
+      final String? idempotencyKey,
+      final String? payloadHash}) = _$InvoiceImpl;
 
   factory _Invoice.fromJson(Map<String, dynamic> json) = _$InvoiceImpl.fromJson;
 
@@ -458,6 +641,24 @@ abstract class _Invoice implements Invoice {
   bool get globalTaxOverride;
   @override
   String? get relatedInvoiceId;
+  @override // For Credit Notes
+  String? get originInvoiceId;
+  @override
+  String? get refundReasonPolicy;
+  @override
+  String? get refundReasonCode;
+  @override
+  String? get authorizedByUserId;
+  @override
+  String? get authorizedByRole;
+  @override
+  String? get terminalId;
+  @override
+  int? get sourceSequence;
+  @override
+  String? get idempotencyKey;
+  @override
+  String? get payloadHash;
   @override
   @JsonKey(ignore: true)
   _$$InvoiceImplCopyWith<_$InvoiceImpl> get copyWith =>

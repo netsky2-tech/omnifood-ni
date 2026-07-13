@@ -1121,6 +1121,16 @@ class MockSalesTransactionDao extends _i1.Mock
       ) as _i31.Future<List<_i35.InvoiceEntity>>);
 
   @override
+  _i31.Future<int?> getNextInvoiceSourceSequence(String? terminalId) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getNextInvoiceSourceSequence,
+          [terminalId],
+        ),
+        returnValue: _i31.Future<int?>.value(),
+      ) as _i31.Future<int?>);
+
+  @override
   _i31.Future<void> executeSaleTransaction(
     _i35.InvoiceEntity? invoice,
     List<_i36.InvoiceItemEntity>? items,

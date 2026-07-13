@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:pos_app/domain/usecases/inventory/process_sale_inventory_use_case.dart';
 import 'package:pos_app/domain/usecases/inventory/reverse_sale_inventory_use_case.dart';
 import 'package:pos_app/data/mappers/inventory_mapper.dart';
@@ -18,7 +21,9 @@ import 'package:pos_app/data/daos/sales/sales_transaction_dao.dart';
 import 'package:pos_app/domain/services/sales/dgi_numbering_service.dart';
 import 'package:pos_app/data/models/sales/invoice_entity.dart';
 import 'package:pos_app/data/models/sales/invoice_item_entity.dart';
+import 'package:pos_app/data/models/inventory/movement_entity.dart';
 import 'package:pos_app/data/mappers/audit_mapper.dart';
+import 'package:pos_app/domain/models/user.dart';
 
 class SalesRepositoryImpl implements SalesRepository {
   final AppDatabase database;
@@ -58,7 +63,22 @@ class SalesRepositoryImpl implements SalesRepository {
     }
 
     final finalNumber = await numberingService.getNextNumber();
-    final updatedInvoice = invoice.copyWith(number: finalNumber);
+    final terminalId = 'pos-${invoice.userId}';
+    final sourceSequence = await transactionDao.getNextInvoiceSourceSequence(
+      terminalId,
+    );
+    final payloadHash = _buildSalePayloadHash(
+      invoice: invoice.copyWith(number: finalNumber),
+      items: items,
+      payments: payments,
+    );
+    final updatedInvoice = invoice.copyWith(
+      number: finalNumber,
+      terminalId: terminalId,
+      sourceSequence: sourceSequence,
+      idempotencyKey: 'sale:$terminalId:${invoice.id}',
+      payloadHash: payloadHash,
+    );
 
     // Bind historical recipe version per line (UC-05). For prepared products
     // without an explicit recipeVersionId, resolve the active version at sale
@@ -199,6 +219,15 @@ class SalesRepositoryImpl implements SalesRepository {
         customerId: entity.customerId,
         globalTaxOverride: entity.globalTaxOverride,
         relatedInvoiceId: entity.relatedInvoiceId,
+        originInvoiceId: entity.originInvoiceId,
+        refundReasonPolicy: entity.refundReasonPolicy,
+        refundReasonCode: entity.refundReasonCode,
+        authorizedByUserId: entity.authorizedByUserId,
+        authorizedByRole: entity.authorizedByRole,
+        terminalId: entity.terminalId,
+        sourceSequence: entity.sourceSequence,
+        idempotencyKey: entity.idempotencyKey,
+        payloadHash: entity.payloadHash,
       );
       await invoiceDao.updateInvoice(updated);
     }
@@ -238,8 +267,9 @@ class SalesRepositoryImpl implements SalesRepository {
       'SALE_VOIDED',
       metadata: '{"invoice_id": "$invoiceId", "reason": "$reason"}',
     );
-    final auditEntity =
-        preparedAudit == null ? null : AuditMapper.toEntity(preparedAudit);
+    final auditEntity = preparedAudit == null
+        ? null
+        : AuditMapper.toEntity(preparedAudit);
 
     // DGI forbids deleting invoices — cancellation is a flag flip, never
     // a row deletion. syncStatus is reset to 'pending' so the cancelled
@@ -260,6 +290,15 @@ class SalesRepositoryImpl implements SalesRepository {
       customerId: entity.customerId,
       globalTaxOverride: entity.globalTaxOverride,
       relatedInvoiceId: entity.relatedInvoiceId,
+      originInvoiceId: entity.originInvoiceId,
+      refundReasonPolicy: entity.refundReasonPolicy,
+      refundReasonCode: entity.refundReasonCode,
+      authorizedByUserId: entity.authorizedByUserId,
+      authorizedByRole: entity.authorizedByRole,
+      terminalId: entity.terminalId,
+      sourceSequence: entity.sourceSequence,
+      idempotencyKey: entity.idempotencyKey,
+      payloadHash: entity.payloadHash,
     );
 
     // Persist EVERYTHING in a single Floor @transaction:
@@ -278,36 +317,107 @@ class SalesRepositoryImpl implements SalesRepository {
   Future<void> createCreditNote({
     required String originalInvoiceId,
     required String reason,
+    required String authorizedByUserId,
+    required UserRole authorizedByRole,
+    RefundReasonPolicy refundReasonPolicy =
+        RefundReasonPolicy.restockOriginalBom,
+    List<CreditNoteRefundLine>? lines,
   }) async {
+    if (authorizedByRole == UserRole.cashier ||
+        authorizedByRole == UserRole.waiter) {
+      throw StateError('Credit note requires manager or owner authorization.');
+    }
+    if (authorizedByUserId.trim().isEmpty) {
+      throw StateError('Credit note requires an authorized actor.');
+    }
+    final sanitizedReason = reason.trim();
+    if (sanitizedReason.isEmpty) {
+      throw StateError('Credit note reason must not be blank.');
+    }
+    if (await numberingService.isRangeExhausted()) {
+      throw Exception('DGI Authorized Numbering Range exhausted.');
+    }
+
     final original = await invoiceDao.getInvoiceById(originalInvoiceId);
     if (original == null) throw Exception('Original invoice not found');
+    if (original.isCanceled) {
+      throw StateError('Credit note origin invoice must not be canceled.');
+    }
+    if (original.type != 'regular') {
+      throw StateError('Credit note origin invoice must be a regular sale.');
+    }
 
     final items = await itemDao.getItemsByInvoiceId(originalInvoiceId);
+    final requestedLines =
+        lines ??
+        items
+            .map(
+              (item) => CreditNoteRefundLine(
+                originInvoiceItemId: item.id,
+                quantity: item.quantity,
+              ),
+            )
+            .toList(growable: false);
+    final selectedItems = _buildRefundItems(items, requestedLines);
+    await _assertRefundWithinOriginalQuantity(
+      originalInvoiceId,
+      items,
+      selectedItems,
+    );
 
     final creditNoteId = const Uuid().v4();
     final creditNoteNumber = await numberingService.getNextNumber();
+    final now = DateTime.now();
+    final terminalId = 'pos-${original.userId}';
+    final sourceSequence = await transactionDao.getNextInvoiceSourceSequence(
+      terminalId,
+    );
+    final payloadHash = _buildCreditNotePayloadHash(
+      creditNoteId: creditNoteId,
+      originalInvoiceId: originalInvoiceId,
+      reason: sanitizedReason,
+      policy: refundReasonPolicy,
+      lines: selectedItems,
+    );
 
     final creditNoteEntity = InvoiceEntity(
       id: creditNoteId,
       number: creditNoteNumber,
-      createdAt: DateTime.now().millisecondsSinceEpoch,
+      createdAt: now.millisecondsSinceEpoch,
       userId: original.userId,
-      subtotal: -original.subtotal,
-      totalTax: -original.totalTax,
-      total: -original.total,
+      subtotal: -selectedItems.fold<double>(
+        0,
+        (sum, item) => sum + (item.unitPrice * item.quantity),
+      ),
+      totalTax: -selectedItems.fold<double>(
+        0,
+        (sum, item) => sum + item.taxAmount,
+      ),
+      total: -selectedItems.fold<double>(0, (sum, item) => sum + item.total),
       type: 'creditNote',
       relatedInvoiceId: originalInvoiceId,
+      originInvoiceId: originalInvoiceId,
+      refundReasonPolicy: refundReasonPolicy.backendName,
+      refundReasonCode: sanitizedReason,
+      authorizedByUserId: authorizedByUserId.trim(),
+      authorizedByRole: authorizedByRole.name,
+      terminalId: terminalId,
+      sourceSequence: sourceSequence,
+      idempotencyKey: 'credit-note:$terminalId:$creditNoteId',
+      payloadHash: payloadHash,
       paymentStatus: 'paid',
-      syncStatus: 'pending',
+      syncStatus: refundReasonPolicy == RefundReasonPolicy.managerReviewHold
+          ? 'error'
+          : 'pending',
     );
 
-    final itemEntities = items
+    final itemEntities = selectedItems
         .map(
           (i) => InvoiceItemEntity(
             id: const Uuid().v4(),
             invoiceId: creditNoteId,
             productId: i.productId,
-            productName: 'DEVOLUCION: ${i.productName}',
+            productName: 'RETURN: ${i.productName}',
             quantity: -i.quantity,
             unitPrice: i.unitPrice,
             originalTaxRate: i.originalTaxRate,
@@ -315,25 +425,29 @@ class SalesRepositoryImpl implements SalesRepository {
             taxAmount: -i.taxAmount,
             total: -i.total,
             variantId: i.variantId,
-            notes: reason,
+            notes: sanitizedReason,
             recipeVersionId: i.recipeVersionId,
+            originInvoiceItemId: i.id,
           ),
         )
         .toList();
 
-    // Reversing stock (adding back) using UseCase for BOM support
-    final domainItems = items.map(SalesMapper.toItemDomain).toList();
-    final movements = await reverseInventoryUseCase.execute(
-      domainItems,
-      'Devolución Factura: ${original.number}',
+    final movementEntities = await _buildCreditNoteMovements(
+      refundReasonPolicy,
+      selectedItems,
+      original,
+      creditNoteId,
+      sanitizedReason,
     );
-    final movementEntities = movements
-        .map(
-          (m) => InventoryMapper.toMovementEntity(
-            m.copyWith(userId: original.userId),
-          ),
-        )
-        .toList();
+
+    final preparedAudit = await auditRepository.prepareLog(
+      'CREDIT_NOTE_CREATED',
+      metadata:
+          '{"original_id": "$originalInvoiceId", "new_id": "$creditNoteId", "refundReasonPolicy": "${refundReasonPolicy.backendName}", "authorizedByUserId": "$authorizedByUserId"}',
+    );
+    final auditEntity = preparedAudit == null
+        ? null
+        : AuditMapper.toEntity(preparedAudit);
 
     await transactionDao.executeSaleTransaction(
       creditNoteEntity,
@@ -341,17 +455,186 @@ class SalesRepositoryImpl implements SalesRepository {
       [],
       [],
       movementEntities,
-      null, // Audit log is written separately
+      auditEntity,
       false,
     );
 
-    await auditRepository.log(
-      'CREDIT_NOTE_CREATED',
-      metadata:
-          '{"original_id": "$originalInvoiceId", "new_id": "$creditNoteId"}',
+    await numberingService.incrementNumber();
+  }
+
+  List<InvoiceItemEntity> _buildRefundItems(
+    List<InvoiceItemEntity> originalItems,
+    List<CreditNoteRefundLine> requestedLines,
+  ) {
+    final originalsById = {for (final item in originalItems) item.id: item};
+    final seenOriginItemIds = <String>{};
+    final List<InvoiceItemEntity> selected = [];
+
+    for (final line in requestedLines) {
+      if (!seenOriginItemIds.add(line.originInvoiceItemId)) {
+        throw StateError(
+          'Credit note refund lines must not duplicate an origin invoice item.',
+        );
+      }
+      if (line.quantity <= 0) {
+        throw StateError('Credit note refund quantity must be positive.');
+      }
+      final original = originalsById[line.originInvoiceItemId];
+      if (original == null) {
+        throw StateError('Credit note origin invoice item was not found.');
+      }
+      if (line.quantity > original.quantity + 0.000001) {
+        throw StateError(
+          'Credit note refund quantity exceeds original line quantity.',
+        );
+      }
+      final ratio = line.quantity / original.quantity;
+      selected.add(
+        InvoiceItemEntity(
+          id: original.id,
+          invoiceId: original.invoiceId,
+          productId: original.productId,
+          productName: original.productName,
+          quantity: line.quantity,
+          unitPrice: original.unitPrice,
+          originalTaxRate: original.originalTaxRate,
+          appliedTaxRate: original.appliedTaxRate,
+          taxAmount: original.taxAmount * ratio,
+          total: original.total * ratio,
+          discount: original.discount * ratio,
+          variantId: original.variantId,
+          notes: original.notes,
+          recipeVersionId: original.recipeVersionId,
+        ),
+      );
+    }
+    return selected;
+  }
+
+  Future<void> _assertRefundWithinOriginalQuantity(
+    String originalInvoiceId,
+    List<InvoiceItemEntity> originalItems,
+    List<InvoiceItemEntity> selectedItems,
+  ) async {
+    final originalQuantityByItemId = {
+      for (final item in originalItems) item.id: item.quantity,
+    };
+    final refundedQuantityByItemId = <String, double>{};
+    final existingCreditNotes = await transactionDao.getCreditNotesByRelatedId(
+      originalInvoiceId,
     );
 
-    await numberingService.incrementNumber();
+    for (final creditNote in existingCreditNotes) {
+      final creditItems = await itemDao.getItemsByInvoiceId(creditNote.id);
+      for (final item in creditItems) {
+        final originItemId = item.originInvoiceItemId;
+        if (originItemId == null) continue;
+        refundedQuantityByItemId[originItemId] =
+            (refundedQuantityByItemId[originItemId] ?? 0) + item.quantity.abs();
+      }
+    }
+
+    for (final item in selectedItems) {
+      final alreadyRefunded = refundedQuantityByItemId[item.id] ?? 0;
+      final originalQuantity = originalQuantityByItemId[item.id] ?? 0;
+      if (alreadyRefunded + item.quantity > originalQuantity + 0.000001) {
+        throw StateError(
+          'Credit note cumulative refund exceeds original line quantity.',
+        );
+      }
+    }
+  }
+
+  Future<List<MovementEntity>> _buildCreditNoteMovements(
+    RefundReasonPolicy policy,
+    List<InvoiceItemEntity> selectedItems,
+    InvoiceEntity original,
+    String creditNoteId,
+    String reason,
+  ) async {
+    if (policy == RefundReasonPolicy.financialOnly ||
+        policy == RefundReasonPolicy.wasteNoRestock ||
+        policy == RefundReasonPolicy.managerReviewHold) {
+      return [];
+    }
+
+    final movements = await reverseInventoryUseCase.execute(
+      selectedItems.map(SalesMapper.toItemDomain).toList(growable: false),
+      'Credit note ${original.number}: $reason',
+    );
+    return movements
+        .map(
+          (movement) => InventoryMapper.toMovementEntity(
+            movement.copyWith(
+              userId: original.userId,
+              sourceDocumentType: 'CREDIT_NOTE_RESTOCK',
+              sourceDocumentId: creditNoteId,
+              originMovementId: null,
+              originInvoiceItemId: movement.originInvoiceItemId,
+            ),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  String _buildCreditNotePayloadHash({
+    required String creditNoteId,
+    required String originalInvoiceId,
+    required String reason,
+    required RefundReasonPolicy policy,
+    required List<InvoiceItemEntity> lines,
+  }) {
+    final canonical = jsonEncode({
+      'creditNoteId': creditNoteId,
+      'originInvoiceId': originalInvoiceId,
+      'reason': reason,
+      'refundReasonPolicy': policy.backendName,
+      'lines': lines
+          .map(
+            (line) => {
+              'originInvoiceItemId': line.id,
+              'quantity': line.quantity,
+              'total': line.total,
+            },
+          )
+          .toList(growable: false),
+    });
+    return sha256.convert(utf8.encode(canonical)).toString();
+  }
+
+  String _buildSalePayloadHash({
+    required Invoice invoice,
+    required List<InvoiceItem> items,
+    required List<Payment> payments,
+  }) {
+    final canonical = jsonEncode({
+      'invoiceId': invoice.id,
+      'number': invoice.number,
+      'documentType': 'SALE',
+      'subtotal': invoice.subtotal,
+      'totalTax': invoice.totalTax,
+      'total': invoice.total,
+      'items': items
+          .map(
+            (item) => {
+              'id': item.id,
+              'productId': item.productId,
+              'quantity': item.quantity,
+              'total': item.total,
+            },
+          )
+          .toList(growable: false),
+      'payments': payments
+          .map(
+            (payment) => {
+              'id': payment.id,
+              'method': payment.method.name,
+              'amount': payment.amount,
+            },
+          )
+          .toList(growable: false),
+    });
+    return sha256.convert(utf8.encode(canonical)).toString();
   }
 
   @override

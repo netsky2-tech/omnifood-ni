@@ -82,6 +82,12 @@ export class Invoice {
   @Column({ name: 'refund_reason_policy', nullable: true })
   refundReasonPolicy: string;
 
+  @Column({ name: 'authorized_by_user_id', nullable: true })
+  authorizedByUserId: string;
+
+  @Column({ name: 'authorized_by_role', nullable: true })
+  authorizedByRole: string;
+
   @UpdateDateColumn()
   updated_at: Date;
 }
