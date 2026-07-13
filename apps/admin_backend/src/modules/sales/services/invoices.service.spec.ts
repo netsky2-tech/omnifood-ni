@@ -2990,41 +2990,67 @@ describe('InvoicesService', () => {
       expect(receiptRepo.save).not.toHaveBeenCalled();
     });
 
-    it('rejects a CREDIT_NOTE with a missing origin invoice as non-retryable without receipt acceptance', async () => {
+    it('holds a CREDIT_NOTE with a missing origin invoice as retryable and blocks later same-stream records', async () => {
       invoiceRepo.findOne
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce(null);
       receiptRepo.findOne.mockResolvedValue(null);
 
+      const orphanCreditNote: SyncBatchRecordDto = {
+        idempotencyKey: 'credit-note-orphan-origin',
+        sourceDeviceId: 'd1',
+        sourceSequence: 1,
+        flowType: 'sales',
+        documentType: 'CREDIT_NOTE',
+        invoice: {
+          ...baseInvoice,
+          type: 'creditNote',
+          originInvoiceId: 'missing-sale-origin',
+          refundReasonPolicy: 'FINANCIAL_ONLY',
+          items: [
+            {
+              ...baseInvoice.items[0],
+              originInvoiceItemId: 'missing-sale-item',
+            },
+          ],
+        },
+      };
+
       const result = await service.syncBatch('tenant-1', [
+        orphanCreditNote,
         {
-          idempotencyKey: 'credit-note-orphan-origin',
+          idempotencyKey: 'same-stream-after-held-origin',
           sourceDeviceId: 'd1',
-          sourceSequence: 1,
+          sourceSequence: 2,
           flowType: 'sales',
-          documentType: 'CREDIT_NOTE',
-          invoice: {
-            ...baseInvoice,
-            type: 'creditNote',
-            originInvoiceId: 'missing-sale-origin',
-            refundReasonPolicy: 'FINANCIAL_ONLY',
-            items: [
-              {
-                ...baseInvoice.items[0],
-                originInvoiceItemId: 'missing-sale-item',
-              },
-            ],
-          },
+          documentType: 'SALE',
+          invoice: { ...baseInvoice, id: 'same-stream-after-held-origin-sale' },
         },
       ]);
 
       expect(result.results).toEqual([
         expect.objectContaining({
-          status: 'REJECTED',
-          retryable: false,
-          code: 'CREDIT_NOTE_ORIGIN_MISSING',
+          status: 'STAGED_FUTURE',
+          retryable: true,
+          code: 'HELD_ORIGIN_MISSING',
+        }),
+        expect.objectContaining({
+          status: 'BLOCKED_BY_PRIOR_FAILURE',
+          retryable: true,
+          code: 'WAITING_FOR_SEQUENCE_1',
         }),
       ]);
+      expect(outboxRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          idempotency_key: 'credit-note-orphan-origin',
+          source_sequence: '1',
+          payload_hash: calculateSyncPayloadHash(orphanCreditNote),
+          payload: orphanCreditNote,
+          status: 'STAGED_FUTURE',
+          result_code: 'HELD_ORIGIN_MISSING',
+        }),
+      );
+      expect(outboxRepo.save).toHaveBeenCalledTimes(1);
       expect(invoiceRepo.upsert).not.toHaveBeenCalled();
       expect(receiptRepo.save).not.toHaveBeenCalled();
     });

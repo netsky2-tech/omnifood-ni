@@ -657,6 +657,7 @@ export class InvoicesService {
     tenantId: string,
     record: SyncBatchRecordDto,
     payloadHash: string,
+    resultCode = `WAITING_FOR_SEQUENCE_${record.sourceSequence - 1}`,
   ): Promise<SyncBatchResultItem | null> {
     return this.withTenantBoundTransaction(tenantId, async (manager) => {
       const outboxRepository = this.outboxRepoFor(manager);
@@ -698,7 +699,7 @@ export class InvoicesService {
             payload_hash: payloadHash,
             payload: record as unknown as Record<string, unknown>,
             status: SYNC_RESULT_STATUS.STAGED_FUTURE,
-            result_code: `WAITING_FOR_SEQUENCE_${record.sourceSequence - 1}`,
+            result_code: resultCode,
           }),
         );
         return null;
@@ -874,6 +875,24 @@ export class InvoicesService {
         error instanceof BadRequestException
           ? this.resolveCreditNoteAuthorizationErrorFromMessage(message)
           : null;
+      if (creditNoteOriginError?.code === 'CREDIT_NOTE_ORIGIN_MISSING') {
+        const stagedConflict = await this.stageFutureRecord(
+          tenantId,
+          record,
+          payloadHash,
+          'HELD_ORIGIN_MISSING',
+        );
+        return {
+          accepted: false,
+          result:
+            stagedConflict ??
+            this.buildResult(record, SYNC_RESULT_STATUS.STAGED_FUTURE, {
+              code: 'HELD_ORIGIN_MISSING',
+              retryable: true,
+              message,
+            }),
+        };
+      }
       return {
         accepted: false,
         result: this.buildResult(record, SYNC_RESULT_STATUS.REJECTED, {
