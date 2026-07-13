@@ -21,7 +21,12 @@ class SaleViewModel extends ChangeNotifier {
   final AuthRepository _authRepository;
   final AppDatabase _database; // For session, hold, and promo DAOs
 
-  SaleViewModel(this._salesRepository, this._inventoryRepository, this._authRepository, this._database) {
+  SaleViewModel(
+    this._salesRepository,
+    this._inventoryRepository,
+    this._authRepository,
+    this._database,
+  ) {
     loadProducts();
     checkActiveSession();
     loadHoldTickets();
@@ -66,15 +71,18 @@ class SaleViewModel extends ChangeNotifier {
   UserRole? _currentUserRole;
   UserRole? get currentUserRole => _currentUserRole;
   bool get canManageCashDrawer =>
-      _currentUserRole == UserRole.owner || _currentUserRole == UserRole.manager;
+      _currentUserRole == UserRole.owner ||
+      _currentUserRole == UserRole.manager;
   bool get canVoidInvoice =>
-      _currentUserRole == UserRole.owner || _currentUserRole == UserRole.manager;
+      _currentUserRole == UserRole.owner ||
+      _currentUserRole == UserRole.manager;
 
   bool _isSupervisorOverrideActive = false;
   bool get isSupervisorOverrideActive => _isSupervisorOverrideActive;
 
   bool get _requiresSupervisorForRestrictedActions =>
-      _currentUserRole == UserRole.cashier || _currentUserRole == UserRole.waiter;
+      _currentUserRole == UserRole.cashier ||
+      _currentUserRole == UserRole.waiter;
 
   void grantSupervisorOverride() {
     _isSupervisorOverrideActive = true;
@@ -92,7 +100,8 @@ class SaleViewModel extends ChangeNotifier {
       return;
     }
 
-    if (_requiresSupervisorForRestrictedActions && !_isSupervisorOverrideActive) {
+    if (_requiresSupervisorForRestrictedActions &&
+        !_isSupervisorOverrideActive) {
       _errorMessage = 'Acceso denegado.';
       notifyListeners();
       return;
@@ -110,10 +119,13 @@ class SaleViewModel extends ChangeNotifier {
   }
 
   double get subtotal {
-    final rawSubtotal = _cart.fold(0.0, (sum, item) => sum + item.subtotal + item.modifiersTotal);
+    final rawSubtotal = _cart.fold(
+      0.0,
+      (sum, item) => sum + item.subtotal + item.modifiersTotal,
+    );
     return rawSubtotal - _totalDiscounts;
   }
-  
+
   double _totalDiscounts = 0.0;
   double get totalDiscounts => _totalDiscounts;
 
@@ -124,7 +136,9 @@ class SaleViewModel extends ChangeNotifier {
       final itemBase = item.subtotal + item.modifiersTotal;
       // Simple proportional discount application for tax calculation
       final totalBase = subtotal + _totalDiscounts;
-      final itemDiscount = totalBase == 0 ? 0.0 : (_totalDiscounts * (itemBase / totalBase));
+      final itemDiscount = totalBase == 0
+          ? 0.0
+          : (_totalDiscounts * (itemBase / totalBase));
       return sum + ((itemBase - itemDiscount) * item.taxRate);
     });
   }
@@ -148,7 +162,9 @@ class SaleViewModel extends ChangeNotifier {
       if (promo.type == PromotionType.buyXGetYFree) {
         final items = _cart.where((i) => i.productId == promo.targetProductId);
         if (items.isNotEmpty) {
-          final totalQty = items.fold(0.0, (sum, i) => sum + i.quantity).toInt();
+          final totalQty = items
+              .fold(0.0, (sum, i) => sum + i.quantity)
+              .toInt();
           final sets = totalQty ~/ (promo.buyQuantity + promo.getQuantity);
           if (sets > 0) {
             final unitPrice = items.first.unitPrice;
@@ -178,17 +194,22 @@ class SaleViewModel extends ChangeNotifier {
   List<Product> get filteredProducts {
     if (_searchQuery.isEmpty) return _products;
     final q = _searchQuery.toLowerCase();
-    return _products.where((p) => 
-      p.name.toLowerCase().contains(q) || 
-      (p.sku?.toLowerCase().contains(q) ?? false) ||
-      (p.barcode?.toLowerCase().contains(q) ?? false)
-    ).toList();
+    return _products
+        .where(
+          (p) =>
+              p.name.toLowerCase().contains(q) ||
+              (p.sku?.toLowerCase().contains(q) ?? false) ||
+              (p.barcode?.toLowerCase().contains(q) ?? false),
+        )
+        .toList();
   }
 
   Future<void> searchAndAddToCart(String code) async {
     try {
       final product = _products.firstWhere(
-        (p) => (p.sku != null && p.sku == code) || (p.barcode != null && p.barcode == code),
+        (p) =>
+            (p.sku != null && p.sku == code) ||
+            (p.barcode != null && p.barcode == code),
       );
       addToCart(product);
       _errorMessage = null;
@@ -202,7 +223,9 @@ class SaleViewModel extends ChangeNotifier {
     final entities = await _database.holdTicketDao.getAllHoldTickets();
     final List<HoldTicket> tickets = [];
     for (final entity in entities) {
-      final itemEntities = await _database.holdTicketDao.getItemsByHoldTicketId(entity.id);
+      final itemEntities = await _database.holdTicketDao.getItemsByHoldTicketId(
+        entity.id,
+      );
       tickets.add(SalesMapper.toHoldTicketDomain(entity, itemEntities));
     }
     _holdTickets = tickets;
@@ -211,7 +234,7 @@ class SaleViewModel extends ChangeNotifier {
 
   Future<void> holdCurrentTicket(String name) async {
     if (_cart.isEmpty) return;
-    
+
     final ticket = HoldTicket(
       id: const Uuid().v4(),
       name: name,
@@ -233,7 +256,7 @@ class SaleViewModel extends ChangeNotifier {
     _cart.clear();
     _cart.addAll(ticket.items);
     _isGlobalTaxExempt = ticket.isGlobalTaxExempt;
-    
+
     await _database.holdTicketDao.deleteHoldTicket(ticket.id);
     await loadHoldTickets();
     _applyPromotions();
@@ -279,7 +302,9 @@ class SaleViewModel extends ChangeNotifier {
       tipoModelo: tipoModelo,
       openingBalance: balance,
     );
-    await _database.cashierSessionDao.insertSession(SalesMapper.toSessionEntity(session));
+    await _database.cashierSessionDao.insertSession(
+      SalesMapper.toSessionEntity(session),
+    );
     _activeSession = session;
     _sessionExpected = {
       PaymentMethod.cash: balance,
@@ -291,9 +316,11 @@ class SaleViewModel extends ChangeNotifier {
 
   Future<void> closeSession(double closingBalance) async {
     if (_activeSession == null) return;
-    
-    final totalSales = _sessionExpected.values.fold(0.0, (sum, v) => sum + v) - _activeSession!.openingBalance;
-    
+
+    final totalSales =
+        _sessionExpected.values.fold(0.0, (sum, v) => sum + v) -
+        _activeSession!.openingBalance;
+
     final updated = _activeSession!.copyWith(
       isClosed: true,
       closedAt: DateTime.now(),
@@ -301,7 +328,9 @@ class SaleViewModel extends ChangeNotifier {
       totalSales: totalSales,
       totalExpected: _sessionExpected[PaymentMethod.cash],
     );
-    await _database.cashierSessionDao.updateSession(SalesMapper.toSessionEntity(updated));
+    await _database.cashierSessionDao.updateSession(
+      SalesMapper.toSessionEntity(updated),
+    );
     _activeSession = null;
     notifyListeners();
   }
@@ -312,14 +341,17 @@ class SaleViewModel extends ChangeNotifier {
     String? variantId,
     List<Modifier> modifiers = const [],
   }) {
-    final index = _cart.indexWhere((item) => 
-      item.productId == product.id && 
-      item.variantId == variantId && 
-      listEquals(item.selectedModifiers, modifiers)
+    final index = _cart.indexWhere(
+      (item) =>
+          item.productId == product.id &&
+          item.variantId == variantId &&
+          listEquals(item.selectedModifiers, modifiers),
     );
 
     if (index != -1) {
-      _cart[index] = _cart[index].copyWith(quantity: _cart[index].quantity + quantity);
+      _cart[index] = _cart[index].copyWith(
+        quantity: _cart[index].quantity + quantity,
+      );
     } else {
       double unitPrice = product.sellPrice;
       String productName = product.name;
@@ -332,35 +364,48 @@ class SaleViewModel extends ChangeNotifier {
         } catch (_) {}
       }
 
-      _cart.add(CartItem(
-        productId: product.id,
-        productName: productName,
-        quantity: quantity,
-        unitPrice: unitPrice,
-        taxRate: 0.15,
-        variantId: variantId,
-        selectedModifiers: modifiers,
-      ));
+      _cart.add(
+        CartItem(
+          productId: product.id,
+          productName: productName,
+          quantity: quantity,
+          unitPrice: unitPrice,
+          taxRate: 0.15,
+          variantId: variantId,
+          selectedModifiers: modifiers,
+        ),
+      );
     }
     _applyPromotions();
     notifyListeners();
   }
 
-  void removeFromCart(String productId, {String? variantId, List<Modifier>? modifiers}) {
-    _cart.removeWhere((item) => 
-      item.productId == productId && 
-      item.variantId == variantId && 
-      (modifiers == null || listEquals(item.selectedModifiers, modifiers))
+  void removeFromCart(
+    String productId, {
+    String? variantId,
+    List<Modifier>? modifiers,
+  }) {
+    _cart.removeWhere(
+      (item) =>
+          item.productId == productId &&
+          item.variantId == variantId &&
+          (modifiers == null || listEquals(item.selectedModifiers, modifiers)),
     );
     _applyPromotions();
     notifyListeners();
   }
 
-  void updateQuantity(String productId, double quantity, {String? variantId, List<Modifier>? modifiers}) {
-    final index = _cart.indexWhere((item) => 
-      item.productId == productId && 
-      item.variantId == variantId && 
-      (modifiers == null || listEquals(item.selectedModifiers, modifiers))
+  void updateQuantity(
+    String productId,
+    double quantity, {
+    String? variantId,
+    List<Modifier>? modifiers,
+  }) {
+    final index = _cart.indexWhere(
+      (item) =>
+          item.productId == productId &&
+          item.variantId == variantId &&
+          (modifiers == null || listEquals(item.selectedModifiers, modifiers)),
     );
     if (index != -1) {
       if (quantity <= 0) {
@@ -399,7 +444,7 @@ class SaleViewModel extends ChangeNotifier {
 
     final items = _cart.map((cartItem) {
       final appliedTaxRate = _isGlobalTaxExempt ? 0.0 : cartItem.taxRate;
-      
+
       return InvoiceItem(
         id: const Uuid().v4(),
         invoiceId: invoiceId,
@@ -428,12 +473,16 @@ class SaleViewModel extends ChangeNotifier {
       globalTaxOverride: _isGlobalTaxExempt,
     );
 
-    final payments = methods.map((m) => Payment(
-      id: const Uuid().v4(),
-      invoiceId: invoiceId,
-      method: m,
-      amount: total / methods.length, 
-    )).toList();
+    final payments = methods
+        .map(
+          (m) => Payment(
+            id: const Uuid().v4(),
+            invoiceId: invoiceId,
+            method: m,
+            amount: total / methods.length,
+          ),
+        )
+        .toList();
 
     await _salesRepository.saveSale(
       invoice: invoice,
@@ -443,17 +492,25 @@ class SaleViewModel extends ChangeNotifier {
 
     // Update expected totals
     for (final p in payments) {
-      if (_activeSession?.tipoModelo == CashSessionModel.carteraMesero && p.method != PaymentMethod.cash) {
+      if (_activeSession?.tipoModelo == CashSessionModel.carteraMesero &&
+          p.method != PaymentMethod.cash) {
         continue;
       }
-      _sessionExpected[p.method] = (_sessionExpected[p.method] ?? 0.0) + p.amount;
+      _sessionExpected[p.method] =
+          (_sessionExpected[p.method] ?? 0.0) + p.amount;
     }
 
     clearCart();
     _consumeOverride();
   }
 
-  Future<void> processReturn(String invoiceNumber, String reason) async {
+  Future<void> processReturn(
+    String invoiceNumber,
+    String reason, {
+    RefundReasonPolicy refundReasonPolicy =
+        RefundReasonPolicy.restockOriginalBom,
+    List<CreditNoteRefundLine>? lines,
+  }) async {
     final currentUser = await _authRepository.getCurrentUser();
     final role = currentUser?.role;
     if (role == UserRole.cashier || role == UserRole.waiter) {
@@ -470,7 +527,7 @@ class SaleViewModel extends ChangeNotifier {
         _errorMessage = 'Factura no encontrada: $invoiceNumber';
         return;
       }
-      
+
       if (original.isCanceled) {
         _errorMessage = 'La factura ya está anulada.';
         return;
@@ -479,8 +536,12 @@ class SaleViewModel extends ChangeNotifier {
       await _salesRepository.createCreditNote(
         originalInvoiceId: original.id,
         reason: reason,
+        authorizedByUserId: currentUser?.id ?? '',
+        authorizedByRole: role ?? UserRole.cashier,
+        refundReasonPolicy: refundReasonPolicy,
+        lines: lines,
       );
-      
+
       _errorMessage = null;
     } catch (e) {
       _errorMessage = 'Error al procesar devolución: $e';

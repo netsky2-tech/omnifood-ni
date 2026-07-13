@@ -72,6 +72,10 @@ export class InvoiceItem {
   @Column({ name: 'recipe_version_id', nullable: true })
   recipeVersionId: string;
 
+  @Column({ name: 'origin_invoice_item_id', nullable: true })
+  @Index()
+  originInvoiceItemId: string;
+
   @OneToMany(() => InvoiceItemModifier, (modifier) => modifier.item, {
     cascade: true,
   })

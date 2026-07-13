@@ -946,6 +946,242 @@ final migration28_29 = Migration(28, 29, (database) async {
   ''');
 });
 
+final migration29_30 = Migration(29, 30, (database) async {
+  Future<void> addColumnIfMissing(
+    String tableName,
+    String columnName,
+    String definition,
+  ) async {
+    final table = await database.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+      [tableName],
+    );
+    if (table.isEmpty) return;
+
+    final columns = await database.rawQuery('PRAGMA table_info($tableName)');
+    final existingColumnNames = columns
+        .map((column) => column['name'] as String)
+        .toSet();
+    if (!existingColumnNames.contains(columnName)) {
+      await database.execute('ALTER TABLE $tableName ADD COLUMN $definition');
+    }
+  }
+
+  await addColumnIfMissing(
+    'invoices',
+    'origin_invoice_id',
+    'origin_invoice_id TEXT',
+  );
+  await addColumnIfMissing(
+    'invoices',
+    'refund_reason_policy',
+    'refund_reason_policy TEXT',
+  );
+  await addColumnIfMissing('invoices', 'terminal_id', 'terminal_id TEXT');
+  await addColumnIfMissing(
+    'invoices',
+    'source_sequence',
+    'source_sequence INTEGER',
+  );
+  await addColumnIfMissing(
+    'invoices',
+    'idempotency_key',
+    'idempotency_key TEXT',
+  );
+  await addColumnIfMissing('invoices', 'payload_hash', 'payload_hash TEXT');
+
+  Future<bool> tableExists(String tableName) async {
+    final table = await database.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+      [tableName],
+    );
+    return table.isNotEmpty;
+  }
+
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS local_configs (
+      key TEXT NOT NULL PRIMARY KEY,
+      value TEXT NOT NULL,
+      description TEXT
+    )
+  ''');
+
+  const terminalDeviceIdKey = 'terminal_device_id';
+  final terminalRows = await database.query(
+    'local_configs',
+    columns: ['value'],
+    where: 'key = ?',
+    whereArgs: [terminalDeviceIdKey],
+    limit: 1,
+  );
+  var localTerminalId = terminalRows.isEmpty
+      ? ''
+      : (terminalRows.single['value'] as String?)?.trim() ?? '';
+  if (localTerminalId.isEmpty) {
+    final generatedRows = await database.rawQuery(
+      "SELECT 'pos-local-' || lower(hex(randomblob(16))) AS value",
+    );
+    localTerminalId = generatedRows.single['value'] as String;
+    await database.insert('local_configs', {
+      'key': terminalDeviceIdKey,
+      'value': localTerminalId,
+      'description':
+          'Stable offline-safe terminal identity generated on first install.',
+    }, conflictAlgorithm: sqflite.ConflictAlgorithm.replace);
+  }
+
+  if (await tableExists('invoices')) {
+    await database.rawUpdate(
+      '''
+      UPDATE invoices
+      SET terminal_id = ?
+      WHERE terminal_id IS NULL OR terminal_id = ''
+    ''',
+      [localTerminalId],
+    );
+
+    await database.execute('''
+      UPDATE invoices
+      SET
+        source_sequence = (
+          SELECT ranked.sequence
+          FROM (
+            SELECT
+              id,
+              ROW_NUMBER() OVER (
+                PARTITION BY terminal_id
+                ORDER BY created_at ASC, id ASC
+              ) AS sequence
+            FROM invoices
+            WHERE sync_status = 'pending' AND type = 'regular'
+          ) ranked
+          WHERE ranked.id = invoices.id
+        ),
+        idempotency_key = CASE
+          WHEN idempotency_key IS NULL OR idempotency_key = '' THEN 'sale:' || terminal_id || ':' || id
+          ELSE idempotency_key
+        END,
+        payload_hash = CASE
+          WHEN payload_hash IS NULL OR payload_hash = '' THEN id || ':' || invoice_number || ':' || total || ':' || created_at
+          ELSE payload_hash
+        END
+      WHERE sync_status = 'pending' AND type = 'regular'
+    ''');
+
+    await database.execute('''
+      UPDATE invoices
+      SET
+        source_sequence = (
+          SELECT -ranked.sequence
+          FROM (
+            SELECT
+              id,
+              ROW_NUMBER() OVER (
+                PARTITION BY terminal_id
+                ORDER BY created_at ASC, id ASC
+              ) AS sequence
+            FROM invoices
+            WHERE sync_status != 'pending' AND type = 'regular'
+          ) ranked
+          WHERE ranked.id = invoices.id
+        ),
+        idempotency_key = CASE
+          WHEN idempotency_key IS NULL OR idempotency_key = '' THEN 'sale:' || terminal_id || ':' || id
+          ELSE idempotency_key
+        END,
+        payload_hash = CASE
+          WHEN payload_hash IS NULL OR payload_hash = '' THEN id || ':' || invoice_number || ':' || total || ':' || created_at
+          ELSE payload_hash
+        END
+      WHERE sync_status != 'pending' AND type = 'regular'
+    ''');
+  }
+  await addColumnIfMissing(
+    'invoice_items',
+    'origin_invoice_item_id',
+    'origin_invoice_item_id TEXT',
+  );
+  await addColumnIfMissing(
+    'inventory_movements',
+    'origin_movement_id',
+    'origin_movement_id TEXT',
+  );
+  await addColumnIfMissing(
+    'inventory_movements',
+    'origin_invoice_item_id',
+    'origin_invoice_item_id TEXT',
+  );
+
+  if (await tableExists('invoices')) {
+    await database.execute('''
+      CREATE INDEX IF NOT EXISTS idx_invoices_origin_invoice_id
+      ON invoices (origin_invoice_id)
+      WHERE origin_invoice_id IS NOT NULL
+    ''');
+    await database.execute('''
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_terminal_source_sequence
+      ON invoices (terminal_id, source_sequence)
+      WHERE source_sequence > 0
+    ''');
+    await database.execute('''
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_idempotency_key
+      ON invoices (idempotency_key)
+      WHERE idempotency_key IS NOT NULL AND idempotency_key != ''
+    ''');
+  }
+  if (await tableExists('invoice_items')) {
+    await database.execute('''
+      CREATE INDEX IF NOT EXISTS idx_invoice_items_origin_invoice_item_id
+      ON invoice_items (origin_invoice_item_id)
+      WHERE origin_invoice_item_id IS NOT NULL
+    ''');
+  }
+  if (await tableExists('inventory_movements')) {
+    await database.execute('''
+      CREATE INDEX IF NOT EXISTS idx_inventory_movements_origin_invoice_item_id
+      ON inventory_movements (origin_invoice_item_id)
+      WHERE origin_invoice_item_id IS NOT NULL
+    ''');
+  }
+});
+
+final migration30_31 = Migration(30, 31, (database) async {
+  final invoiceTable = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'invoices'",
+  );
+  if (invoiceTable.isEmpty) return;
+
+  Future<void> addColumnIfMissing(
+    String tableName,
+    String columnName,
+    String definition,
+  ) async {
+    final columns = await database.rawQuery('PRAGMA table_info($tableName)');
+    final existingColumnNames = columns
+        .map((column) => column['name'] as String)
+        .toSet();
+    if (!existingColumnNames.contains(columnName)) {
+      await database.execute('ALTER TABLE $tableName ADD COLUMN $definition');
+    }
+  }
+
+  await addColumnIfMissing(
+    'invoices',
+    'refund_reason_code',
+    'refund_reason_code TEXT',
+  );
+  await addColumnIfMissing(
+    'invoices',
+    'authorized_by_user_id',
+    'authorized_by_user_id TEXT',
+  );
+  await addColumnIfMissing(
+    'invoices',
+    'authorized_by_role',
+    'authorized_by_role TEXT',
+  );
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -966,4 +1202,6 @@ final allMigrations = [
   migration26_27,
   migration27_28,
   migration28_29,
+  migration29_30,
+  migration30_31,
 ];

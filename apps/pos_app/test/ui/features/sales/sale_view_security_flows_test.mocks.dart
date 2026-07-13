@@ -4,21 +4,23 @@
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
 import 'dart:async' as _i9;
-import 'dart:ui' as _i11;
+import 'dart:ui' as _i12;
 
 import 'package:mockito/mockito.dart' as _i1;
 import 'package:mockito/src/dummies.dart' as _i8;
-import 'package:pos_app/data/services/sync_service.dart' as _i16;
-import 'package:pos_app/domain/models/audit_log.dart' as _i15;
+import 'package:pos_app/data/services/sync_service.dart' as _i17;
+import 'package:pos_app/domain/models/audit_log.dart' as _i16;
 import 'package:pos_app/domain/models/inventory/product.dart' as _i4;
 import 'package:pos_app/domain/models/sales/cart_item.dart' as _i3;
 import 'package:pos_app/domain/models/sales/cashier_session.dart' as _i10;
 import 'package:pos_app/domain/models/sales/hold_ticket.dart' as _i6;
 import 'package:pos_app/domain/models/sales/payment.dart' as _i7;
 import 'package:pos_app/domain/models/sales/promotion.dart' as _i5;
-import 'package:pos_app/domain/models/user.dart' as _i13;
-import 'package:pos_app/domain/repositories/audit_repository.dart' as _i14;
-import 'package:pos_app/domain/repositories/auth_repository.dart' as _i12;
+import 'package:pos_app/domain/models/user.dart' as _i14;
+import 'package:pos_app/domain/repositories/audit_repository.dart' as _i15;
+import 'package:pos_app/domain/repositories/auth_repository.dart' as _i13;
+import 'package:pos_app/domain/repositories/sales/sales_repository.dart'
+    as _i11;
 import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart'
     as _i2;
 
@@ -387,8 +389,11 @@ class MockSaleViewModel extends _i1.Mock implements _i2.SaleViewModel {
   @override
   _i9.Future<void> processReturn(
     String? invoiceNumber,
-    String? reason,
-  ) =>
+    String? reason, {
+    _i11.RefundReasonPolicy? refundReasonPolicy =
+        _i11.RefundReasonPolicy.restockOriginalBom,
+    List<_i11.CreditNoteRefundLine>? lines,
+  }) =>
       (super.noSuchMethod(
         Invocation.method(
           #processReturn,
@@ -396,6 +401,10 @@ class MockSaleViewModel extends _i1.Mock implements _i2.SaleViewModel {
             invoiceNumber,
             reason,
           ],
+          {
+            #refundReasonPolicy: refundReasonPolicy,
+            #lines: lines,
+          },
         ),
         returnValue: _i9.Future<void>.value(),
         returnValueForMissingStub: _i9.Future<void>.value(),
@@ -419,7 +428,7 @@ class MockSaleViewModel extends _i1.Mock implements _i2.SaleViewModel {
       ) as _i9.Future<void>);
 
   @override
-  void addListener(_i11.VoidCallback? listener) => super.noSuchMethod(
+  void addListener(_i12.VoidCallback? listener) => super.noSuchMethod(
         Invocation.method(
           #addListener,
           [listener],
@@ -428,7 +437,7 @@ class MockSaleViewModel extends _i1.Mock implements _i2.SaleViewModel {
       );
 
   @override
-  void removeListener(_i11.VoidCallback? listener) => super.noSuchMethod(
+  void removeListener(_i12.VoidCallback? listener) => super.noSuchMethod(
         Invocation.method(
           #removeListener,
           [listener],
@@ -458,7 +467,7 @@ class MockSaleViewModel extends _i1.Mock implements _i2.SaleViewModel {
 /// A class which mocks [AuthRepository].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockAuthRepository extends _i1.Mock implements _i12.AuthRepository {
+class MockAuthRepository extends _i1.Mock implements _i13.AuthRepository {
   @override
   bool get isPendingSync => (super.noSuchMethod(
         Invocation.getter(#isPendingSync),
@@ -467,7 +476,7 @@ class MockAuthRepository extends _i1.Mock implements _i12.AuthRepository {
       ) as bool);
 
   @override
-  _i9.Future<_i13.User?> loginOnline(
+  _i9.Future<_i14.User?> loginOnline(
     String? email,
     String? password,
   ) =>
@@ -479,9 +488,9 @@ class MockAuthRepository extends _i1.Mock implements _i12.AuthRepository {
             password,
           ],
         ),
-        returnValue: _i9.Future<_i13.User?>.value(),
-        returnValueForMissingStub: _i9.Future<_i13.User?>.value(),
-      ) as _i9.Future<_i13.User?>);
+        returnValue: _i9.Future<_i14.User?>.value(),
+        returnValueForMissingStub: _i9.Future<_i14.User?>.value(),
+      ) as _i9.Future<_i14.User?>);
 
   @override
   _i9.Future<void> syncStaff() => (super.noSuchMethod(
@@ -494,7 +503,7 @@ class MockAuthRepository extends _i1.Mock implements _i12.AuthRepository {
       ) as _i9.Future<void>);
 
   @override
-  _i9.Future<_i13.User?> loginOffline(
+  _i9.Future<_i14.User?> loginOffline(
     String? userId,
     String? pin,
   ) =>
@@ -506,9 +515,9 @@ class MockAuthRepository extends _i1.Mock implements _i12.AuthRepository {
             pin,
           ],
         ),
-        returnValue: _i9.Future<_i13.User?>.value(),
-        returnValueForMissingStub: _i9.Future<_i13.User?>.value(),
-      ) as _i9.Future<_i13.User?>);
+        returnValue: _i9.Future<_i14.User?>.value(),
+        returnValueForMissingStub: _i9.Future<_i14.User?>.value(),
+      ) as _i9.Future<_i14.User?>);
 
   @override
   _i9.Future<bool> authorizeOverride({
@@ -531,14 +540,14 @@ class MockAuthRepository extends _i1.Mock implements _i12.AuthRepository {
       ) as _i9.Future<bool>);
 
   @override
-  _i9.Future<_i13.User?> getCurrentUser() => (super.noSuchMethod(
+  _i9.Future<_i14.User?> getCurrentUser() => (super.noSuchMethod(
         Invocation.method(
           #getCurrentUser,
           [],
         ),
-        returnValue: _i9.Future<_i13.User?>.value(),
-        returnValueForMissingStub: _i9.Future<_i13.User?>.value(),
-      ) as _i9.Future<_i13.User?>);
+        returnValue: _i9.Future<_i14.User?>.value(),
+        returnValueForMissingStub: _i9.Future<_i14.User?>.value(),
+      ) as _i9.Future<_i14.User?>);
 
   @override
   _i9.Future<String?> getAccessToken() => (super.noSuchMethod(
@@ -561,19 +570,19 @@ class MockAuthRepository extends _i1.Mock implements _i12.AuthRepository {
       ) as _i9.Future<void>);
 
   @override
-  _i9.Future<List<_i13.User>> getAllUsers() => (super.noSuchMethod(
+  _i9.Future<List<_i14.User>> getAllUsers() => (super.noSuchMethod(
         Invocation.method(
           #getAllUsers,
           [],
         ),
-        returnValue: _i9.Future<List<_i13.User>>.value(<_i13.User>[]),
+        returnValue: _i9.Future<List<_i14.User>>.value(<_i14.User>[]),
         returnValueForMissingStub:
-            _i9.Future<List<_i13.User>>.value(<_i13.User>[]),
-      ) as _i9.Future<List<_i13.User>>);
+            _i9.Future<List<_i14.User>>.value(<_i14.User>[]),
+      ) as _i9.Future<List<_i14.User>>);
 
   @override
   _i9.Future<void> saveUser(
-    _i13.User? user, {
+    _i14.User? user, {
     String? pin,
   }) =>
       (super.noSuchMethod(
@@ -600,7 +609,7 @@ class MockAuthRepository extends _i1.Mock implements _i12.AuthRepository {
 /// A class which mocks [AuditRepository].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockAuditRepository extends _i1.Mock implements _i14.AuditRepository {
+class MockAuditRepository extends _i1.Mock implements _i15.AuditRepository {
   @override
   String get deviceId => (super.noSuchMethod(
         Invocation.getter(#deviceId),
@@ -630,7 +639,7 @@ class MockAuditRepository extends _i1.Mock implements _i14.AuditRepository {
       ) as _i9.Future<void>);
 
   @override
-  _i9.Future<_i15.AuditLog?> prepareLog(
+  _i9.Future<_i16.AuditLog?> prepareLog(
     String? action, {
     String? metadata,
   }) =>
@@ -640,9 +649,9 @@ class MockAuditRepository extends _i1.Mock implements _i14.AuditRepository {
           [action],
           {#metadata: metadata},
         ),
-        returnValue: _i9.Future<_i15.AuditLog?>.value(),
-        returnValueForMissingStub: _i9.Future<_i15.AuditLog?>.value(),
-      ) as _i9.Future<_i15.AuditLog?>);
+        returnValue: _i9.Future<_i16.AuditLog?>.value(),
+        returnValueForMissingStub: _i9.Future<_i16.AuditLog?>.value(),
+      ) as _i9.Future<_i16.AuditLog?>);
 
   @override
   _i9.Future<void> logForensic(
@@ -676,7 +685,7 @@ class MockAuditRepository extends _i1.Mock implements _i14.AuditRepository {
       ) as _i9.Future<void>);
 
   @override
-  _i9.Future<List<_i15.AuditLog>> getLocalLogs({
+  _i9.Future<List<_i16.AuditLog>> getLocalLogs({
     DateTime? start,
     DateTime? end,
     String? userId,
@@ -691,16 +700,16 @@ class MockAuditRepository extends _i1.Mock implements _i14.AuditRepository {
             #userId: userId,
           },
         ),
-        returnValue: _i9.Future<List<_i15.AuditLog>>.value(<_i15.AuditLog>[]),
+        returnValue: _i9.Future<List<_i16.AuditLog>>.value(<_i16.AuditLog>[]),
         returnValueForMissingStub:
-            _i9.Future<List<_i15.AuditLog>>.value(<_i15.AuditLog>[]),
-      ) as _i9.Future<List<_i15.AuditLog>>);
+            _i9.Future<List<_i16.AuditLog>>.value(<_i16.AuditLog>[]),
+      ) as _i9.Future<List<_i16.AuditLog>>);
 }
 
 /// A class which mocks [SyncService].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockSyncService extends _i1.Mock implements _i16.SyncService {
+class MockSyncService extends _i1.Mock implements _i17.SyncService {
   @override
   void start() => super.noSuchMethod(
         Invocation.method(

@@ -1,5 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { AuthGuard } from '../../identity/guards/auth.guard';
 import { SyncBatchController } from './sync-batch.controller';
+import { SyncCreditNoteAuthGuard } from '../guards/sync-credit-note-auth.guard';
 import { InvoicesService } from '../services/invoices.service';
 
 describe('SyncBatchController', () => {
@@ -11,7 +13,11 @@ describe('SyncBatchController', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [SyncBatchController],
-      providers: [{ provide: InvoicesService, useValue: invoicesService }],
+      providers: [
+        { provide: InvoicesService, useValue: invoicesService },
+        { provide: AuthGuard, useValue: { canActivate: jest.fn() } },
+        { provide: SyncCreditNoteAuthGuard, useValue: { canActivate: jest.fn() } },
+      ],
     }).compile();
 
     controller = module.get<SyncBatchController>(SyncBatchController);

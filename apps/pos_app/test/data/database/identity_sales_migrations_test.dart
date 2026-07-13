@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/database/migrations.dart';
+import 'package:pos_app/data/mappers/sales_mapper.dart';
+import 'package:pos_app/domain/models/sales/invoice.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
@@ -402,6 +404,157 @@ void main() {
   );
 
   test(
+    'migration29_30 backfills deterministic sync metadata for legacy pending regular sales',
+    () async {
+      final db = await databaseFactory.openDatabase(
+        dbPath,
+        options: OpenDatabaseOptions(
+          version: 29,
+          onCreate: (database, version) async {
+            await database.execute('''
+            CREATE TABLE invoices (
+              id TEXT NOT NULL PRIMARY KEY,
+              invoice_number TEXT NOT NULL,
+              created_at INTEGER NOT NULL,
+              user_id TEXT NOT NULL,
+              subtotal REAL NOT NULL,
+              total_tax REAL NOT NULL,
+              total REAL NOT NULL,
+              is_canceled INTEGER NOT NULL DEFAULT 0,
+              void_reason TEXT,
+              sync_status TEXT NOT NULL DEFAULT 'pending',
+              payment_status TEXT NOT NULL DEFAULT 'pending',
+              customer_id TEXT,
+              global_tax_override INTEGER NOT NULL DEFAULT 0,
+              type TEXT NOT NULL DEFAULT 'regular',
+              related_invoice_id TEXT
+            )
+          ''');
+          },
+        ),
+      );
+
+      Future<void> insertLegacySale({
+        required String id,
+        required String number,
+        required int createdAt,
+        required String syncStatus,
+      }) {
+        return db.insert('invoices', {
+          'id': id,
+          'invoice_number': number,
+          'created_at': createdAt,
+          'user_id': 'cashier-1',
+          'subtotal': 100.0,
+          'total_tax': 15.0,
+          'total': 115.0,
+          'is_canceled': 0,
+          'sync_status': syncStatus,
+          'payment_status': 'PAID',
+          'global_tax_override': 0,
+          'type': 'regular',
+        });
+      }
+
+      await insertLegacySale(
+        id: 'legacy-pending-later',
+        number: 'F001-0002',
+        createdAt: 2000,
+        syncStatus: 'pending',
+      );
+      await insertLegacySale(
+        id: 'legacy-pending-earlier',
+        number: 'F001-0001',
+        createdAt: 1000,
+        syncStatus: 'pending',
+      );
+      await insertLegacySale(
+        id: 'legacy-synced',
+        number: 'F001-0003',
+        createdAt: 3000,
+        syncStatus: 'synced',
+      );
+
+      await migration29_30.migrate(db);
+
+      final rows = await db.query(
+        'invoices',
+        columns: [
+          'id',
+          'terminal_id',
+          'source_sequence',
+          'idempotency_key',
+          'payload_hash',
+        ],
+        orderBy: 'created_at ASC, id ASC',
+      );
+
+      expect(rows.map((row) => row['id']), [
+        'legacy-pending-earlier',
+        'legacy-pending-later',
+        'legacy-synced',
+      ]);
+      final terminalId = rows.first['terminal_id'];
+      expect(terminalId, isA<String>());
+      expect(terminalId, startsWith('pos-local-'));
+      expect(rows.take(2).map((row) => row['terminal_id']),
+          everyElement(terminalId));
+      expect(rows.map((row) => row['source_sequence']), [1, 2, -1]);
+      expect(rows.map((row) => row['idempotency_key']), [
+        'sale:$terminalId:legacy-pending-earlier',
+        'sale:$terminalId:legacy-pending-later',
+        'sale:$terminalId:legacy-synced',
+      ]);
+      expect(rows.map((row) => row['payload_hash']),
+          [
+            'legacy-pending-earlier:F001-0001:115.0:1000',
+            'legacy-pending-later:F001-0002:115.0:2000',
+            'legacy-synced:F001-0003:115.0:3000',
+          ]);
+
+      await db.close();
+    },
+  );
+
+  test(
+    'fresh schema creates invoice credit-note and idempotency indexes',
+    () async {
+      final database = await $FloorAppDatabase
+          .inMemoryDatabaseBuilder()
+          .build();
+      final db = database.database;
+
+      final indexRows = await db.rawQuery("PRAGMA index_list('invoices')");
+      final indexNames = indexRows
+          .map((row) => row['name'] as String)
+          .toSet();
+
+      expect(indexNames, contains('idx_invoices_origin_invoice_id'));
+      expect(indexNames, contains('idx_invoices_terminal_source_sequence'));
+      expect(indexNames, contains('idx_invoices_idempotency_key'));
+
+      final originIndex = await db.rawQuery(
+        "PRAGMA index_info('idx_invoices_origin_invoice_id')",
+      );
+      final sourceSequenceIndex = await db.rawQuery(
+        "PRAGMA index_info('idx_invoices_terminal_source_sequence')",
+      );
+      final idempotencyIndex = await db.rawQuery(
+        "PRAGMA index_info('idx_invoices_idempotency_key')",
+      );
+
+      expect(originIndex.map((row) => row['name']), ['origin_invoice_id']);
+      expect(sourceSequenceIndex.map((row) => row['name']), [
+        'terminal_id',
+        'source_sequence',
+      ]);
+      expect(idempotencyIndex.map((row) => row['name']), ['idempotency_key']);
+
+      await database.close();
+    },
+  );
+
+  test(
     'production documents reject duplicate assigned terminal source sequence pairs',
     () async {
       final database = await $FloorAppDatabase
@@ -753,6 +906,62 @@ void main() {
       expect(rows.single['fx_rate_mode'], isNull);
 
       await db.close();
+    },
+  );
+
+  test(
+    'fresh schema allocates sale source sequence one after only negative legacy invoice sequences',
+    () async {
+      final database = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
+      try {
+        await database.database.insert('invoices', {
+          'id': 'legacy-synced-sale',
+          'invoice_number': 'F001-000001',
+          'created_at': DateTime.parse('2026-07-13T10:00:00Z')
+              .millisecondsSinceEpoch,
+          'user_id': 'cashier-1',
+          'subtotal': 100.0,
+          'total_tax': 15.0,
+          'total': 115.0,
+          'is_canceled': 0,
+          'sync_status': 'synced',
+          'payment_status': 'paid',
+          'global_tax_override': 0,
+          'type': 'regular',
+          'terminal_id': 'pos-cashier-1',
+          'source_sequence': -1,
+          'idempotency_key': 'sale:pos-cashier-1:legacy-synced-sale',
+          'payload_hash': 'legacy-hash',
+        });
+
+        final nextSequence = await database.salesTransactionDao
+            .getNextInvoiceSourceSequence('pos-cashier-1');
+        final payload = SalesMapper.toSyncJson(
+          Invoice(
+            id: 'new-sale-after-legacy',
+            number: 'F001-000002',
+            createdAt: DateTime.parse('2026-07-13T10:05:00Z'),
+            userId: 'cashier-1',
+            subtotal: 50,
+            totalTax: 7.5,
+            total: 57.5,
+            paymentStatus: PaymentStatus.paid,
+            syncStatus: SyncStatus.pending,
+            type: InvoiceType.regular,
+            terminalId: 'pos-cashier-1',
+            sourceSequence: nextSequence,
+            idempotencyKey: 'sale:pos-cashier-1:new-sale-after-legacy',
+            payloadHash: 'new-sale-hash',
+          ),
+          const [],
+          const [],
+        );
+
+        expect(nextSequence, 1);
+        expect(payload['sourceSequence'], 1);
+      } finally {
+        await database.close();
+      }
     },
   );
 

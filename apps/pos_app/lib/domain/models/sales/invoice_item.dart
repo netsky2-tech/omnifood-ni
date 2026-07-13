@@ -21,6 +21,7 @@ class InvoiceItem with _$InvoiceItem {
     String? variantId,
     String? notes,
     String? recipeVersionId,
+    String? originInvoiceItemId,
     @Default([]) List<Modifier> selectedModifiers,
   }) = _InvoiceItem;
 

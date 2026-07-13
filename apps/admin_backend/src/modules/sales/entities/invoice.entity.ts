@@ -72,6 +72,22 @@ export class Invoice {
   @Index()
   relatedInvoiceId: string;
 
+  @Column({ name: 'origin_invoice_id', nullable: true })
+  @Index()
+  originInvoiceId: string;
+
+  @Column({ name: 'refund_reason_code', nullable: true })
+  refundReasonCode: string;
+
+  @Column({ name: 'refund_reason_policy', nullable: true })
+  refundReasonPolicy: string;
+
+  @Column({ name: 'authorized_by_user_id', nullable: true })
+  authorizedByUserId: string;
+
+  @Column({ name: 'authorized_by_role', nullable: true })
+  authorizedByRole: string;
+
   @UpdateDateColumn()
   updated_at: Date;
 }

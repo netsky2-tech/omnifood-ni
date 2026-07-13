@@ -64,6 +64,10 @@ class SyncService {
       // 1. Sync Audit Logs
       await _auditRepository.syncLogs();
 
+      // 1b. Sync fiscal sales documents, including offline credit notes, before
+      // inventory movements so backend replay sees sale -> credit-note ordering.
+      await _syncSalesDocuments();
+
       // 2. Sync inventory outbox deltas
       await _syncPurchaseDocuments();
       await _syncRecipeVersionDocuments();
@@ -88,6 +92,96 @@ class SyncService {
     }
   }
 
+  Future<void> _syncSalesDocuments() async {
+    final aggregates = await _salesRepository.getUnsyncedAggregates();
+    if (aggregates.isEmpty) return;
+
+    final records = aggregates.map(_buildSalesRecord).toList(growable: false)
+      ..sort((a, b) {
+        final bySequence = (a['sourceSequence'] as int).compareTo(
+          b['sourceSequence'] as int,
+        );
+        if (bySequence != 0) return bySequence;
+        return (a['idempotencyKey'] as String).compareTo(
+          b['idempotencyKey'] as String,
+        );
+      });
+    final sentRecords = records
+        .take(_batchEnvelopeLimit)
+        .toList(growable: false);
+    final response = await _dio.post(
+      '/v1/sync/batch',
+      data: {'records': sentRecords},
+      options: Options(
+        headers: {HttpHeaders.contentTypeHeader: 'application/json'},
+      ),
+    );
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      final acceptedInvoiceIds = _acceptedSalesInvoiceIds(
+        sentRecords,
+        response.data,
+      );
+      if (acceptedInvoiceIds.isEmpty) return;
+      await _salesRepository.markAsSynced(
+        acceptedInvoiceIds,
+      );
+    }
+  }
+
+  List<String> _acceptedSalesInvoiceIds(
+    List<Map<String, Object?>> sentRecords,
+    dynamic responseData,
+  ) {
+    final resultsByKey = _parseSyncResults(responseData);
+    if (resultsByKey.isEmpty) return const [];
+
+    final acceptedInvoiceIds = <String>[];
+    for (final record in sentRecords) {
+      final invoiceId = record['invoiceId'];
+      final idempotencyKey = record['idempotencyKey'];
+      if (invoiceId is! String || idempotencyKey is! String) continue;
+      final result = resultsByKey[idempotencyKey];
+      if (result != null && result.shouldMarkSalesSynced(record)) {
+        acceptedInvoiceIds.add(invoiceId);
+      }
+    }
+    return acceptedInvoiceIds;
+  }
+
+  Map<String, Object?> _buildSalesRecord(Map<String, dynamic> aggregate) {
+    final invoiceId = aggregate['id'];
+    final documentType = aggregate['documentType'];
+    final terminalId = aggregate['terminalId'] ?? _auditRepository.deviceId;
+    final sourceSequence = aggregate['sourceSequence'];
+    final idempotencyKey = aggregate['idempotencyKey'];
+
+    if (invoiceId is! String || documentType is! String) {
+      throw StateError('Sales aggregate is missing fiscal document identity.');
+    }
+    if (sourceSequence is! int || sourceSequence <= 0) {
+      throw StateError(
+        'Sales aggregate $invoiceId is missing deterministic sourceSequence.',
+      );
+    }
+    if (idempotencyKey is! String || idempotencyKey.trim().isEmpty) {
+      throw StateError('Sales aggregate $invoiceId is missing idempotencyKey.');
+    }
+    return {
+      'invoiceId': invoiceId,
+      'idempotencyKey': idempotencyKey,
+      'terminalId': terminalId is String
+          ? terminalId
+          : _auditRepository.deviceId,
+      'sourceDeviceId': terminalId is String
+          ? terminalId
+          : _auditRepository.deviceId,
+      'flowType': 'sales',
+      'sourceSequence': sourceSequence,
+      'documentType': documentType,
+      'invoice': aggregate,
+    };
+  }
+
   Future<void> _syncInventoryOutbox({
     Set<String> blockedMovementIds = const <String>{},
   }) async {
@@ -97,6 +191,7 @@ class SyncService {
               movement.type != MovementType.purchase &&
               !(movement.reason?.startsWith('COUNT_SESSION:') ?? false) &&
               !_isProductionLinkedMovement(movement) &&
+              !_isCreditNoteRestockMovement(movement) &&
               !blockedMovementIds.contains(movement.id),
         )
         .toList(growable: false);
@@ -147,6 +242,11 @@ class SyncService {
 
   bool _isProductionLinkedMovement(dynamic movement) {
     return _tryReadField(movement, 'sourceDocumentType') == 'PRODUCTION_CLOSE';
+  }
+
+  bool _isCreditNoteRestockMovement(dynamic movement) {
+    return _tryReadField(movement, 'sourceDocumentType') ==
+        'CREDIT_NOTE_RESTOCK';
   }
 
   Future<void> _syncPurchaseDocuments() async {
@@ -924,6 +1024,16 @@ class _SyncBatchResultItem {
         terminalId == metadata.terminalId &&
         flowType == metadata.flowType &&
         sourceSequence == metadata.localSequence;
+    if (!matchesRecord) return false;
+    return status == 'ACCEPTED' || status == 'DUPLICATE';
+  }
+
+  bool shouldMarkSalesSynced(Map<String, Object?> record) {
+    final matchesRecord =
+        idempotencyKey == record['idempotencyKey'] &&
+        terminalId == record['terminalId'] &&
+        flowType == record['flowType'] &&
+        sourceSequence == record['sourceSequence'];
     if (!matchesRecord) return false;
     return status == 'ACCEPTED' || status == 'DUPLICATE';
   }

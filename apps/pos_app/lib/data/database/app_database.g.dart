@@ -138,7 +138,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 29,
+      version: 31,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -180,7 +180,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `forensic_alerts` (`id` TEXT NOT NULL, `alert_type` TEXT NOT NULL, `severity` TEXT NOT NULL, `message` TEXT NOT NULL, `created_at` TEXT NOT NULL, `status` TEXT NOT NULL, `note` TEXT, `actor_label` TEXT, `acted_at` TEXT, `source_movement_id` TEXT, `source_document_id` TEXT, `source_document_type` TEXT, `metadata_json` TEXT, `is_synced` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `inventory_movements` (`id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `type` TEXT NOT NULL, `quantity` REAL NOT NULL, `previous_stock` REAL NOT NULL, `new_stock` REAL NOT NULL, `timestamp` TEXT NOT NULL, `reason` TEXT, `user_id` TEXT, `unit_cost_nio` REAL, `source_document_type` TEXT, `source_document_id` TEXT, `batch_deductions` TEXT, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `inventory_movements` (`id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `type` TEXT NOT NULL, `quantity` REAL NOT NULL, `previous_stock` REAL NOT NULL, `new_stock` REAL NOT NULL, `timestamp` TEXT NOT NULL, `reason` TEXT, `user_id` TEXT, `unit_cost_nio` REAL, `source_document_type` TEXT, `source_document_id` TEXT, `origin_movement_id` TEXT, `origin_invoice_item_id` TEXT, `batch_deductions` TEXT, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `inventory_movement_sync_state` (`movement_id` TEXT NOT NULL, `sync_status` TEXT NOT NULL, `last_attempted_at` TEXT, `synced_at` TEXT, `last_error` TEXT, `terminal_id` TEXT, `flow_type` TEXT, `local_sequence` INTEGER, `idempotency_key` TEXT, `last_result_code` TEXT, FOREIGN KEY (`movement_id`) REFERENCES `inventory_movements` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE, PRIMARY KEY (`movement_id`))');
         await database.execute(
@@ -198,9 +198,9 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `catalog_values` (`id` TEXT NOT NULL, `catalog_type` TEXT NOT NULL, `code` TEXT NOT NULL, `name` TEXT NOT NULL, `is_active` INTEGER NOT NULL, `sort_order` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `invoices` (`id` TEXT NOT NULL, `invoice_number` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `user_id` TEXT NOT NULL, `subtotal` REAL NOT NULL, `total_tax` REAL NOT NULL, `total` REAL NOT NULL, `is_canceled` INTEGER NOT NULL, `void_reason` TEXT, `sync_status` TEXT NOT NULL, `payment_status` TEXT NOT NULL, `customer_id` TEXT, `global_tax_override` INTEGER NOT NULL, `type` TEXT NOT NULL, `related_invoice_id` TEXT, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `invoices` (`id` TEXT NOT NULL, `invoice_number` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `user_id` TEXT NOT NULL, `subtotal` REAL NOT NULL, `total_tax` REAL NOT NULL, `total` REAL NOT NULL, `is_canceled` INTEGER NOT NULL, `void_reason` TEXT, `sync_status` TEXT NOT NULL, `payment_status` TEXT NOT NULL, `customer_id` TEXT, `global_tax_override` INTEGER NOT NULL, `type` TEXT NOT NULL, `related_invoice_id` TEXT, `origin_invoice_id` TEXT, `refund_reason_policy` TEXT, `refund_reason_code` TEXT, `authorized_by_user_id` TEXT, `authorized_by_role` TEXT, `terminal_id` TEXT, `source_sequence` INTEGER, `idempotency_key` TEXT, `payload_hash` TEXT, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `invoice_items` (`id` TEXT NOT NULL, `invoice_id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `product_name` TEXT NOT NULL, `quantity` REAL NOT NULL, `unit_price` REAL NOT NULL, `original_tax_rate` REAL NOT NULL, `applied_tax_rate` REAL NOT NULL, `tax_amount` REAL NOT NULL, `total` REAL NOT NULL, `discount` REAL NOT NULL, `variant_id` TEXT, `notes` TEXT, `recipe_version_id` TEXT, FOREIGN KEY (`invoice_id`) REFERENCES `invoices` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `invoice_items` (`id` TEXT NOT NULL, `invoice_id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `product_name` TEXT NOT NULL, `quantity` REAL NOT NULL, `unit_price` REAL NOT NULL, `original_tax_rate` REAL NOT NULL, `applied_tax_rate` REAL NOT NULL, `tax_amount` REAL NOT NULL, `total` REAL NOT NULL, `discount` REAL NOT NULL, `variant_id` TEXT, `notes` TEXT, `recipe_version_id` TEXT, `origin_invoice_item_id` TEXT, FOREIGN KEY (`invoice_id`) REFERENCES `invoices` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `invoice_item_modifiers` (`id` TEXT NOT NULL, `invoice_item_id` TEXT NOT NULL, `name` TEXT NOT NULL, `extra_price` REAL NOT NULL, FOREIGN KEY (`invoice_item_id`) REFERENCES `invoice_items` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
@@ -225,6 +225,12 @@ class _$AppDatabase extends AppDatabase {
             'CREATE UNIQUE INDEX `idx_production_order_documents_terminal_source_sequence` ON `production_order_documents` (`terminal_id`, `source_sequence`)');
         await database.execute(
             'CREATE UNIQUE INDEX `index_invoices_invoice_number` ON `invoices` (`invoice_number`)');
+        await database.execute(
+            'CREATE INDEX `idx_invoices_origin_invoice_id` ON `invoices` (`origin_invoice_id`)');
+        await database.execute(
+            'CREATE UNIQUE INDEX `idx_invoices_terminal_source_sequence` ON `invoices` (`terminal_id`, `source_sequence`)');
+        await database.execute(
+            'CREATE UNIQUE INDEX `idx_invoices_idempotency_key` ON `invoices` (`idempotency_key`)');
 
         await callback?.onCreate?.call(database, version);
       },
@@ -1434,6 +1440,8 @@ class _$MovementDao extends MovementDao {
                   'unit_cost_nio': item.unitCostNio,
                   'source_document_type': item.sourceDocumentType,
                   'source_document_id': item.sourceDocumentId,
+                  'origin_movement_id': item.originMovementId,
+                  'origin_invoice_item_id': item.originInvoiceItemId,
                   'batch_deductions': item.batch_deductions
                 });
 
@@ -1462,6 +1470,8 @@ class _$MovementDao extends MovementDao {
             unitCostNio: row['unit_cost_nio'] as double?,
             sourceDocumentType: row['source_document_type'] as String?,
             sourceDocumentId: row['source_document_id'] as String?,
+            originMovementId: row['origin_movement_id'] as String?,
+            originInvoiceItemId: row['origin_invoice_item_id'] as String?,
             batch_deductions: row['batch_deductions'] as String?));
   }
 
@@ -1482,6 +1492,8 @@ class _$MovementDao extends MovementDao {
             unitCostNio: row['unit_cost_nio'] as double?,
             sourceDocumentType: row['source_document_type'] as String?,
             sourceDocumentId: row['source_document_id'] as String?,
+            originMovementId: row['origin_movement_id'] as String?,
+            originInvoiceItemId: row['origin_invoice_item_id'] as String?,
             batch_deductions: row['batch_deductions'] as String?));
   }
 
@@ -1492,7 +1504,7 @@ class _$MovementDao extends MovementDao {
   ) async {
     return _queryAdapter.queryList(
         'SELECT * FROM inventory_movements WHERE type = ?1 ORDER BY timestamp DESC LIMIT ?2',
-        mapper: (Map<String, Object?> row) => MovementEntity(id: row['id'] as String, insumoId: row['insumo_id'] as String, type: row['type'] as String, quantity: row['quantity'] as double, previousStock: row['previous_stock'] as double, newStock: row['new_stock'] as double, timestamp: row['timestamp'] as String, reason: row['reason'] as String?, userId: row['user_id'] as String?, unitCostNio: row['unit_cost_nio'] as double?, sourceDocumentType: row['source_document_type'] as String?, sourceDocumentId: row['source_document_id'] as String?, batch_deductions: row['batch_deductions'] as String?),
+        mapper: (Map<String, Object?> row) => MovementEntity(id: row['id'] as String, insumoId: row['insumo_id'] as String, type: row['type'] as String, quantity: row['quantity'] as double, previousStock: row['previous_stock'] as double, newStock: row['new_stock'] as double, timestamp: row['timestamp'] as String, reason: row['reason'] as String?, userId: row['user_id'] as String?, unitCostNio: row['unit_cost_nio'] as double?, sourceDocumentType: row['source_document_type'] as String?, sourceDocumentId: row['source_document_id'] as String?, originMovementId: row['origin_movement_id'] as String?, originInvoiceItemId: row['origin_invoice_item_id'] as String?, batch_deductions: row['batch_deductions'] as String?),
         arguments: [type, limit]);
   }
 
@@ -1605,6 +1617,8 @@ class _$InventoryDao extends InventoryDao {
                   'unit_cost_nio': item.unitCostNio,
                   'source_document_type': item.sourceDocumentType,
                   'source_document_id': item.sourceDocumentId,
+                  'origin_movement_id': item.originMovementId,
+                  'origin_invoice_item_id': item.originInvoiceItemId,
                   'batch_deductions': item.batch_deductions
                 });
 
@@ -2054,6 +2068,8 @@ class _$ProductionTransactionDao extends ProductionTransactionDao {
                   'unit_cost_nio': item.unitCostNio,
                   'source_document_type': item.sourceDocumentType,
                   'source_document_id': item.sourceDocumentId,
+                  'origin_movement_id': item.originMovementId,
+                  'origin_invoice_item_id': item.originInvoiceItemId,
                   'batch_deductions': item.batch_deductions
                 }),
         _productionOrderDocumentEntityInsertionAdapter = InsertionAdapter(
@@ -2363,7 +2379,16 @@ class _$InvoiceDao extends InvoiceDao {
                   'customer_id': item.customerId,
                   'global_tax_override': item.globalTaxOverride ? 1 : 0,
                   'type': item.type,
-                  'related_invoice_id': item.relatedInvoiceId
+                  'related_invoice_id': item.relatedInvoiceId,
+                  'origin_invoice_id': item.originInvoiceId,
+                  'refund_reason_policy': item.refundReasonPolicy,
+                  'refund_reason_code': item.refundReasonCode,
+                  'authorized_by_user_id': item.authorizedByUserId,
+                  'authorized_by_role': item.authorizedByRole,
+                  'terminal_id': item.terminalId,
+                  'source_sequence': item.sourceSequence,
+                  'idempotency_key': item.idempotencyKey,
+                  'payload_hash': item.payloadHash
                 }),
         _invoiceEntityUpdateAdapter = UpdateAdapter(
             database,
@@ -2384,7 +2409,16 @@ class _$InvoiceDao extends InvoiceDao {
                   'customer_id': item.customerId,
                   'global_tax_override': item.globalTaxOverride ? 1 : 0,
                   'type': item.type,
-                  'related_invoice_id': item.relatedInvoiceId
+                  'related_invoice_id': item.relatedInvoiceId,
+                  'origin_invoice_id': item.originInvoiceId,
+                  'refund_reason_policy': item.refundReasonPolicy,
+                  'refund_reason_code': item.refundReasonCode,
+                  'authorized_by_user_id': item.authorizedByUserId,
+                  'authorized_by_role': item.authorizedByRole,
+                  'terminal_id': item.terminalId,
+                  'source_sequence': item.sourceSequence,
+                  'idempotency_key': item.idempotencyKey,
+                  'payload_hash': item.payloadHash
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -2415,7 +2449,16 @@ class _$InvoiceDao extends InvoiceDao {
             customerId: row['customer_id'] as String?,
             globalTaxOverride: (row['global_tax_override'] as int) != 0,
             type: row['type'] as String,
-            relatedInvoiceId: row['related_invoice_id'] as String?),
+            relatedInvoiceId: row['related_invoice_id'] as String?,
+            originInvoiceId: row['origin_invoice_id'] as String?,
+            refundReasonPolicy: row['refund_reason_policy'] as String?,
+            refundReasonCode: row['refund_reason_code'] as String?,
+            authorizedByUserId: row['authorized_by_user_id'] as String?,
+            authorizedByRole: row['authorized_by_role'] as String?,
+            terminalId: row['terminal_id'] as String?,
+            sourceSequence: row['source_sequence'] as int?,
+            idempotencyKey: row['idempotency_key'] as String?,
+            payloadHash: row['payload_hash'] as String?),
         arguments: [id]);
   }
 
@@ -2438,7 +2481,16 @@ class _$InvoiceDao extends InvoiceDao {
             customerId: row['customer_id'] as String?,
             globalTaxOverride: (row['global_tax_override'] as int) != 0,
             type: row['type'] as String,
-            relatedInvoiceId: row['related_invoice_id'] as String?),
+            relatedInvoiceId: row['related_invoice_id'] as String?,
+            originInvoiceId: row['origin_invoice_id'] as String?,
+            refundReasonPolicy: row['refund_reason_policy'] as String?,
+            refundReasonCode: row['refund_reason_code'] as String?,
+            authorizedByUserId: row['authorized_by_user_id'] as String?,
+            authorizedByRole: row['authorized_by_role'] as String?,
+            terminalId: row['terminal_id'] as String?,
+            sourceSequence: row['source_sequence'] as int?,
+            idempotencyKey: row['idempotency_key'] as String?,
+            payloadHash: row['payload_hash'] as String?),
         arguments: [number]);
   }
 
@@ -2461,7 +2513,16 @@ class _$InvoiceDao extends InvoiceDao {
             customerId: row['customer_id'] as String?,
             globalTaxOverride: (row['global_tax_override'] as int) != 0,
             type: row['type'] as String,
-            relatedInvoiceId: row['related_invoice_id'] as String?));
+            relatedInvoiceId: row['related_invoice_id'] as String?,
+            originInvoiceId: row['origin_invoice_id'] as String?,
+            refundReasonPolicy: row['refund_reason_policy'] as String?,
+            refundReasonCode: row['refund_reason_code'] as String?,
+            authorizedByUserId: row['authorized_by_user_id'] as String?,
+            authorizedByRole: row['authorized_by_role'] as String?,
+            terminalId: row['terminal_id'] as String?,
+            sourceSequence: row['source_sequence'] as int?,
+            idempotencyKey: row['idempotency_key'] as String?,
+            payloadHash: row['payload_hash'] as String?));
   }
 
   @override
@@ -2483,7 +2544,16 @@ class _$InvoiceDao extends InvoiceDao {
             customerId: row['customer_id'] as String?,
             globalTaxOverride: (row['global_tax_override'] as int) != 0,
             type: row['type'] as String,
-            relatedInvoiceId: row['related_invoice_id'] as String?),
+            relatedInvoiceId: row['related_invoice_id'] as String?,
+            originInvoiceId: row['origin_invoice_id'] as String?,
+            refundReasonPolicy: row['refund_reason_policy'] as String?,
+            refundReasonCode: row['refund_reason_code'] as String?,
+            authorizedByUserId: row['authorized_by_user_id'] as String?,
+            authorizedByRole: row['authorized_by_role'] as String?,
+            terminalId: row['terminal_id'] as String?,
+            sourceSequence: row['source_sequence'] as int?,
+            idempotencyKey: row['idempotency_key'] as String?,
+            payloadHash: row['payload_hash'] as String?),
         arguments: [status]);
   }
 
@@ -2509,7 +2579,16 @@ class _$InvoiceDao extends InvoiceDao {
             customerId: row['customer_id'] as String?,
             globalTaxOverride: (row['global_tax_override'] as int) != 0,
             type: row['type'] as String,
-            relatedInvoiceId: row['related_invoice_id'] as String?),
+            relatedInvoiceId: row['related_invoice_id'] as String?,
+            originInvoiceId: row['origin_invoice_id'] as String?,
+            refundReasonPolicy: row['refund_reason_policy'] as String?,
+            refundReasonCode: row['refund_reason_code'] as String?,
+            authorizedByUserId: row['authorized_by_user_id'] as String?,
+            authorizedByRole: row['authorized_by_role'] as String?,
+            terminalId: row['terminal_id'] as String?,
+            sourceSequence: row['source_sequence'] as int?,
+            idempotencyKey: row['idempotency_key'] as String?,
+            payloadHash: row['payload_hash'] as String?),
         arguments: [startTime, endTime]);
   }
 
@@ -2570,7 +2649,8 @@ class _$InvoiceItemDao extends InvoiceItemDao {
                   'discount': item.discount,
                   'variant_id': item.variantId,
                   'notes': item.notes,
-                  'recipe_version_id': item.recipeVersionId
+                  'recipe_version_id': item.recipeVersionId,
+                  'origin_invoice_item_id': item.originInvoiceItemId
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -2599,7 +2679,8 @@ class _$InvoiceItemDao extends InvoiceItemDao {
             discount: row['discount'] as double,
             variantId: row['variant_id'] as String?,
             notes: row['notes'] as String?,
-            recipeVersionId: row['recipe_version_id'] as String?),
+            recipeVersionId: row['recipe_version_id'] as String?,
+            originInvoiceItemId: row['origin_invoice_item_id'] as String?),
         arguments: [invoiceId]);
   }
 
@@ -2765,7 +2846,16 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'customer_id': item.customerId,
                   'global_tax_override': item.globalTaxOverride ? 1 : 0,
                   'type': item.type,
-                  'related_invoice_id': item.relatedInvoiceId
+                  'related_invoice_id': item.relatedInvoiceId,
+                  'origin_invoice_id': item.originInvoiceId,
+                  'refund_reason_policy': item.refundReasonPolicy,
+                  'refund_reason_code': item.refundReasonCode,
+                  'authorized_by_user_id': item.authorizedByUserId,
+                  'authorized_by_role': item.authorizedByRole,
+                  'terminal_id': item.terminalId,
+                  'source_sequence': item.sourceSequence,
+                  'idempotency_key': item.idempotencyKey,
+                  'payload_hash': item.payloadHash
                 }),
         _invoiceItemEntityInsertionAdapter = InsertionAdapter(
             database,
@@ -2784,7 +2874,8 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'discount': item.discount,
                   'variant_id': item.variantId,
                   'notes': item.notes,
-                  'recipe_version_id': item.recipeVersionId
+                  'recipe_version_id': item.recipeVersionId,
+                  'origin_invoice_item_id': item.originInvoiceItemId
                 }),
         _invoiceItemModifierEntityInsertionAdapter = InsertionAdapter(
             database,
@@ -2823,6 +2914,8 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'unit_cost_nio': item.unitCostNio,
                   'source_document_type': item.sourceDocumentType,
                   'source_document_id': item.sourceDocumentId,
+                  'origin_movement_id': item.originMovementId,
+                  'origin_invoice_item_id': item.originInvoiceItemId,
                   'batch_deductions': item.batch_deductions
                 }),
         _auditLogEntityInsertionAdapter = InsertionAdapter(
@@ -2862,7 +2955,16 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'customer_id': item.customerId,
                   'global_tax_override': item.globalTaxOverride ? 1 : 0,
                   'type': item.type,
-                  'related_invoice_id': item.relatedInvoiceId
+                  'related_invoice_id': item.relatedInvoiceId,
+                  'origin_invoice_id': item.originInvoiceId,
+                  'refund_reason_policy': item.refundReasonPolicy,
+                  'refund_reason_code': item.refundReasonCode,
+                  'authorized_by_user_id': item.authorizedByUserId,
+                  'authorized_by_role': item.authorizedByRole,
+                  'terminal_id': item.terminalId,
+                  'source_sequence': item.sourceSequence,
+                  'idempotency_key': item.idempotencyKey,
+                  'payload_hash': item.payloadHash
                 }),
         _insumoEntityUpdateAdapter = UpdateAdapter(
             database,
@@ -2941,7 +3043,16 @@ class _$SalesTransactionDao extends SalesTransactionDao {
             customerId: row['customer_id'] as String?,
             globalTaxOverride: (row['global_tax_override'] as int) != 0,
             type: row['type'] as String,
-            relatedInvoiceId: row['related_invoice_id'] as String?),
+            relatedInvoiceId: row['related_invoice_id'] as String?,
+            originInvoiceId: row['origin_invoice_id'] as String?,
+            refundReasonPolicy: row['refund_reason_policy'] as String?,
+            refundReasonCode: row['refund_reason_code'] as String?,
+            authorizedByUserId: row['authorized_by_user_id'] as String?,
+            authorizedByRole: row['authorized_by_role'] as String?,
+            terminalId: row['terminal_id'] as String?,
+            sourceSequence: row['source_sequence'] as int?,
+            idempotencyKey: row['idempotency_key'] as String?,
+            payloadHash: row['payload_hash'] as String?),
         arguments: [id]);
   }
 
@@ -2965,8 +3076,25 @@ class _$SalesTransactionDao extends SalesTransactionDao {
             customerId: row['customer_id'] as String?,
             globalTaxOverride: (row['global_tax_override'] as int) != 0,
             type: row['type'] as String,
-            relatedInvoiceId: row['related_invoice_id'] as String?),
+            relatedInvoiceId: row['related_invoice_id'] as String?,
+            originInvoiceId: row['origin_invoice_id'] as String?,
+            refundReasonPolicy: row['refund_reason_policy'] as String?,
+            refundReasonCode: row['refund_reason_code'] as String?,
+            authorizedByUserId: row['authorized_by_user_id'] as String?,
+            authorizedByRole: row['authorized_by_role'] as String?,
+            terminalId: row['terminal_id'] as String?,
+            sourceSequence: row['source_sequence'] as int?,
+            idempotencyKey: row['idempotency_key'] as String?,
+            payloadHash: row['payload_hash'] as String?),
         arguments: [relatedId]);
+  }
+
+  @override
+  Future<int?> getNextInvoiceSourceSequence(String terminalId) async {
+    return _queryAdapter.query(
+        'SELECT COALESCE(MAX(source_sequence), 0) + 1 FROM invoices WHERE terminal_id = ?1 AND source_sequence > 0',
+        mapper: (Map<String, Object?> row) => row.values.first as int,
+        arguments: [terminalId]);
   }
 
   @override

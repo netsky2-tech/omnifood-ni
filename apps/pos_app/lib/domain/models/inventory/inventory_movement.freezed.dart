@@ -32,6 +32,8 @@ mixin _$InventoryMovement {
   double? get unitCostNio => throw _privateConstructorUsedError;
   String? get sourceDocumentType => throw _privateConstructorUsedError;
   String? get sourceDocumentId => throw _privateConstructorUsedError;
+  String? get originMovementId => throw _privateConstructorUsedError;
+  String? get originInvoiceItemId => throw _privateConstructorUsedError;
   List<BatchDeduction>? get batchDeductions =>
       throw _privateConstructorUsedError;
 
@@ -60,6 +62,8 @@ abstract class $InventoryMovementCopyWith<$Res> {
       double? unitCostNio,
       String? sourceDocumentType,
       String? sourceDocumentId,
+      String? originMovementId,
+      String? originInvoiceItemId,
       List<BatchDeduction>? batchDeductions});
 }
 
@@ -88,6 +92,8 @@ class _$InventoryMovementCopyWithImpl<$Res, $Val extends InventoryMovement>
     Object? unitCostNio = freezed,
     Object? sourceDocumentType = freezed,
     Object? sourceDocumentId = freezed,
+    Object? originMovementId = freezed,
+    Object? originInvoiceItemId = freezed,
     Object? batchDeductions = freezed,
   }) {
     return _then(_value.copyWith(
@@ -139,6 +145,14 @@ class _$InventoryMovementCopyWithImpl<$Res, $Val extends InventoryMovement>
           ? _value.sourceDocumentId
           : sourceDocumentId // ignore: cast_nullable_to_non_nullable
               as String?,
+      originMovementId: freezed == originMovementId
+          ? _value.originMovementId
+          : originMovementId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      originInvoiceItemId: freezed == originInvoiceItemId
+          ? _value.originInvoiceItemId
+          : originInvoiceItemId // ignore: cast_nullable_to_non_nullable
+              as String?,
       batchDeductions: freezed == batchDeductions
           ? _value.batchDeductions
           : batchDeductions // ignore: cast_nullable_to_non_nullable
@@ -168,6 +182,8 @@ abstract class _$$InventoryMovementImplCopyWith<$Res>
       double? unitCostNio,
       String? sourceDocumentType,
       String? sourceDocumentId,
+      String? originMovementId,
+      String? originInvoiceItemId,
       List<BatchDeduction>? batchDeductions});
 }
 
@@ -194,6 +210,8 @@ class __$$InventoryMovementImplCopyWithImpl<$Res>
     Object? unitCostNio = freezed,
     Object? sourceDocumentType = freezed,
     Object? sourceDocumentId = freezed,
+    Object? originMovementId = freezed,
+    Object? originInvoiceItemId = freezed,
     Object? batchDeductions = freezed,
   }) {
     return _then(_$InventoryMovementImpl(
@@ -245,6 +263,14 @@ class __$$InventoryMovementImplCopyWithImpl<$Res>
           ? _value.sourceDocumentId
           : sourceDocumentId // ignore: cast_nullable_to_non_nullable
               as String?,
+      originMovementId: freezed == originMovementId
+          ? _value.originMovementId
+          : originMovementId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      originInvoiceItemId: freezed == originInvoiceItemId
+          ? _value.originInvoiceItemId
+          : originInvoiceItemId // ignore: cast_nullable_to_non_nullable
+              as String?,
       batchDeductions: freezed == batchDeductions
           ? _value._batchDeductions
           : batchDeductions // ignore: cast_nullable_to_non_nullable
@@ -270,6 +296,8 @@ class _$InventoryMovementImpl implements _InventoryMovement {
       this.unitCostNio,
       this.sourceDocumentType,
       this.sourceDocumentId,
+      this.originMovementId,
+      this.originInvoiceItemId,
       final List<BatchDeduction>? batchDeductions})
       : _batchDeductions = batchDeductions;
 
@@ -300,6 +328,10 @@ class _$InventoryMovementImpl implements _InventoryMovement {
   final String? sourceDocumentType;
   @override
   final String? sourceDocumentId;
+  @override
+  final String? originMovementId;
+  @override
+  final String? originInvoiceItemId;
   final List<BatchDeduction>? _batchDeductions;
   @override
   List<BatchDeduction>? get batchDeductions {
@@ -312,7 +344,7 @@ class _$InventoryMovementImpl implements _InventoryMovement {
 
   @override
   String toString() {
-    return 'InventoryMovement(id: $id, insumoId: $insumoId, type: $type, quantity: $quantity, previousStock: $previousStock, newStock: $newStock, timestamp: $timestamp, reason: $reason, userId: $userId, unitCostNio: $unitCostNio, sourceDocumentType: $sourceDocumentType, sourceDocumentId: $sourceDocumentId, batchDeductions: $batchDeductions)';
+    return 'InventoryMovement(id: $id, insumoId: $insumoId, type: $type, quantity: $quantity, previousStock: $previousStock, newStock: $newStock, timestamp: $timestamp, reason: $reason, userId: $userId, unitCostNio: $unitCostNio, sourceDocumentType: $sourceDocumentType, sourceDocumentId: $sourceDocumentId, originMovementId: $originMovementId, originInvoiceItemId: $originInvoiceItemId, batchDeductions: $batchDeductions)';
   }
 
   @override
@@ -340,6 +372,10 @@ class _$InventoryMovementImpl implements _InventoryMovement {
                 other.sourceDocumentType == sourceDocumentType) &&
             (identical(other.sourceDocumentId, sourceDocumentId) ||
                 other.sourceDocumentId == sourceDocumentId) &&
+            (identical(other.originMovementId, originMovementId) ||
+                other.originMovementId == originMovementId) &&
+            (identical(other.originInvoiceItemId, originInvoiceItemId) ||
+                other.originInvoiceItemId == originInvoiceItemId) &&
             const DeepCollectionEquality()
                 .equals(other._batchDeductions, _batchDeductions));
   }
@@ -360,6 +396,8 @@ class _$InventoryMovementImpl implements _InventoryMovement {
       unitCostNio,
       sourceDocumentType,
       sourceDocumentId,
+      originMovementId,
+      originInvoiceItemId,
       const DeepCollectionEquality().hash(_batchDeductions));
 
   @JsonKey(ignore: true)
@@ -391,6 +429,8 @@ abstract class _InventoryMovement implements InventoryMovement {
       final double? unitCostNio,
       final String? sourceDocumentType,
       final String? sourceDocumentId,
+      final String? originMovementId,
+      final String? originInvoiceItemId,
       final List<BatchDeduction>? batchDeductions}) = _$InventoryMovementImpl;
 
   factory _InventoryMovement.fromJson(Map<String, dynamic> json) =
@@ -420,6 +460,10 @@ abstract class _InventoryMovement implements InventoryMovement {
   String? get sourceDocumentType;
   @override
   String? get sourceDocumentId;
+  @override
+  String? get originMovementId;
+  @override
+  String? get originInvoiceItemId;
   @override
   List<BatchDeduction>? get batchDeductions;
   @override

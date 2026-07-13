@@ -15,6 +15,7 @@ export enum MovementType {
   ENTRADA_COMPRA = 'ENTRADA_COMPRA',
   SHRINKAGE = 'SHRINKAGE',
   PRODUCTION = 'PRODUCTION',
+  CREDIT_NOTE_RESTOCK = 'CREDIT_NOTE_RESTOCK',
   ADJUSTMENT = 'ADJUSTMENT',
   REVERSAL = 'REVERSAL',
 }
@@ -103,6 +104,15 @@ export class InventoryMovement {
     name: 'compensation_for_kardex_id',
   })
   compensationForKardexId: string | null;
+
+  @Column({ type: 'bigint', nullable: true, name: 'origin_movement_id' })
+  originMovementId: string | null;
+
+  @Column({ nullable: true, name: 'origin_invoice_item_id' })
+  originInvoiceItemId: string | null;
+
+  @Column({ nullable: true, name: 'refund_reason_policy' })
+  refundReasonPolicy: string | null;
 
   @Column({ nullable: true })
   user_id: string;

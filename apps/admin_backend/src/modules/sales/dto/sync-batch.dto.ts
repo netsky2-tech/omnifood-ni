@@ -17,6 +17,7 @@ import { SyncInvoiceDto } from './sync-invoice.dto';
 const SYNC_DOCUMENT_TYPE = {
   SALE: 'SALE',
   SALE_CANCEL: 'SALE_CANCEL',
+  CREDIT_NOTE: 'CREDIT_NOTE',
   PURCHASE: 'PURCHASE',
   SHRINKAGE: 'SHRINKAGE',
   PRODUCTION: 'PRODUCTION',
@@ -71,6 +72,107 @@ function RejectAbsoluteStockFields(validationOptions?: ValidationOptions) {
   };
 }
 
+function CreditNoteInvoiceProvenanceComplete(
+  validationOptions?: ValidationOptions,
+) {
+  return function (object: object, propertyName: string) {
+    registerDecorator({
+      name: 'creditNoteInvoiceProvenanceComplete',
+      target: object.constructor,
+      propertyName,
+      options: validationOptions,
+      validator: {
+        validate(value: unknown, args: ValidationArguments) {
+          const record = args.object as SyncBatchRecordDto;
+          if (typeof value !== 'object' || value === null) {
+            return record.documentType !== SYNC_DOCUMENT_TYPE.CREDIT_NOTE;
+          }
+
+          const invoice = value as SyncInvoiceDto;
+          const requiresCreditNoteProvenance =
+            record.documentType === SYNC_DOCUMENT_TYPE.CREDIT_NOTE ||
+            invoice.type === 'creditNote';
+          if (!requiresCreditNoteProvenance) return true;
+
+          return Boolean(
+            invoice.originInvoiceId &&
+              invoice.refundReasonCode?.trim() &&
+              invoice.refundReasonPolicy &&
+              invoice.authorizedByUserId?.trim() &&
+              (invoice.authorizedByRole === 'manager' ||
+                invoice.authorizedByRole === 'owner') &&
+              invoice.items?.length &&
+              invoice.items?.every((item) => item.originInvoiceItemId),
+          );
+        },
+        defaultMessage() {
+          return 'CREDIT_NOTE invoice requires originInvoiceId, refundReasonCode, refundReasonPolicy, manager/owner authorization metadata, at least one item, and originInvoiceItemId on every item';
+        },
+      },
+    });
+  };
+}
+
+function CreditNoteDocumentTypeMatchesInvoiceType(
+  validationOptions?: ValidationOptions,
+) {
+  return function (object: object, propertyName: string) {
+    registerDecorator({
+      name: 'creditNoteDocumentTypeMatchesInvoiceType',
+      target: object.constructor,
+      propertyName,
+      options: validationOptions,
+      validator: {
+        validate(value: unknown, args: ValidationArguments) {
+          const record = args.object as SyncBatchRecordDto;
+          if (typeof value !== 'object' || value === null) {
+            return record.documentType !== SYNC_DOCUMENT_TYPE.CREDIT_NOTE;
+          }
+
+          const invoice = value as SyncInvoiceDto;
+          if (record.documentType === SYNC_DOCUMENT_TYPE.CREDIT_NOTE) {
+            return invoice.type === 'creditNote';
+          }
+          return invoice.type !== 'creditNote';
+        },
+        defaultMessage(args: ValidationArguments) {
+          const record = args.object as SyncBatchRecordDto;
+          if (record.documentType === SYNC_DOCUMENT_TYPE.CREDIT_NOTE) {
+            return 'CREDIT_NOTE documentType requires invoice.type=creditNote';
+          }
+          return 'creditNote invoice type is only valid with CREDIT_NOTE documentType';
+        },
+      },
+    });
+  };
+}
+
+function RejectCreditNoteMovementDeltas(
+  validationOptions?: ValidationOptions,
+) {
+  return function (object: object, propertyName: string) {
+    registerDecorator({
+      name: 'rejectCreditNoteMovementDeltas',
+      target: object.constructor,
+      propertyName,
+      options: validationOptions,
+      validator: {
+        validate(value: unknown, args: ValidationArguments) {
+          const record = args.object as SyncBatchRecordDto;
+          return !(
+            record.documentType === SYNC_DOCUMENT_TYPE.CREDIT_NOTE &&
+            Array.isArray(value) &&
+            value.length > 0
+          );
+        },
+        defaultMessage() {
+          return 'CREDIT_NOTE inventory movement deltas are not supported until backend Kardex replay is implemented';
+        },
+      },
+    });
+  };
+}
+
 export class SyncMovementDeltaDto {
   @IsString()
   insumoId: string;
@@ -85,6 +187,18 @@ export class SyncMovementDeltaDto {
   @IsString()
   @IsOptional()
   recipeVersionId?: string;
+
+  @IsString()
+  @IsOptional()
+  originMovementId?: string;
+
+  @IsString()
+  @IsOptional()
+  originInvoiceItemId?: string;
+
+  @IsString()
+  @IsOptional()
+  refundReasonPolicy?: string;
 }
 
 export class SyncBatchRecordDto {
@@ -112,6 +226,8 @@ export class SyncBatchRecordDto {
   @IsOptional()
   @ValidateNested()
   @Type(() => SyncInvoiceDto)
+  @CreditNoteDocumentTypeMatchesInvoiceType()
+  @CreditNoteInvoiceProvenanceComplete()
   invoice?: SyncInvoiceDto;
 
   @IsArray()
@@ -119,6 +235,7 @@ export class SyncBatchRecordDto {
   @ValidateNested({ each: true })
   @Type(() => SyncMovementDeltaDto)
   @RejectAbsoluteStockFields()
+  @RejectCreditNoteMovementDeltas()
   movements?: SyncMovementDeltaDto[];
 }
 
