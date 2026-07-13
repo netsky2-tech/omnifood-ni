@@ -2126,15 +2126,18 @@ describe('InvoicesService', () => {
       expect(result.results).toEqual([
         expect.objectContaining({ status: 'ACCEPTED', code: 'APPLIED' }),
       ]);
-      expect(txManager.find).toHaveBeenCalledWith(
-        InventoryMovement,
-        expect.objectContaining({
-          where: expect.objectContaining({
-            sourceDocumentId: 'invoice:sale-origin-1',
-            sourceDocumentType: MovementType.SALE,
-          }),
-        }),
-      );
+      const originMovementFindCall = txManager.find.mock.calls.find(
+        ([entity]) => entity === InventoryMovement,
+      ) as [
+        typeof InventoryMovement,
+        {
+          where: { sourceDocumentId: string; sourceDocumentType: MovementType };
+        },
+      ];
+      expect(originMovementFindCall[1].where).toMatchObject({
+        sourceDocumentId: 'invoice:sale-origin-1',
+        sourceDocumentType: MovementType.SALE,
+      });
       expect(movementRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MovementType.CREDIT_NOTE_RESTOCK,
@@ -2185,7 +2188,8 @@ describe('InvoicesService', () => {
           quantity: -4,
           unitCostNio: 3.5,
           averageCostAfterNio: 3.5,
-          idempotencyKey: 'client-prefix:sale-item-1:spoofed:sale-item-2:ins-bun',
+          idempotencyKey:
+            'client-prefix:sale-item-1:spoofed:sale-item-2:ins-bun',
           sourceDocumentId: 'invoice:sale-origin-1',
           sourceDocumentType: MovementType.SALE,
         },
