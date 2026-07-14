@@ -1468,6 +1468,140 @@ describe('InvoicesService', () => {
       expect(dataSource.transaction).toHaveBeenCalled();
     });
 
+    it('accepts a held CREDIT_NOTE retry after the origin exists and clears only the matching staged row', async () => {
+      const creditNoteRecord: SyncBatchRecordDto = {
+        idempotencyKey: 'held-credit-note-key',
+        sourceDeviceId: 'd1',
+        sourceSequence: 2,
+        flowType: 'sales',
+        documentType: 'CREDIT_NOTE',
+        invoice: {
+          ...baseInvoice,
+          id: 'held-credit-note-invoice',
+          type: 'creditNote',
+          originInvoiceId: 'origin-sale-invoice',
+          refundReasonPolicy: 'FINANCIAL_ONLY',
+          items: [
+            {
+              ...baseInvoice.items[0],
+              id: 'held-credit-note-item',
+              quantity: -1,
+              originInvoiceItemId: 'origin-sale-item',
+            },
+          ],
+        },
+      };
+      receiptRepo.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          tenant_id: 'tenant-1',
+          source_device_id: 'd1',
+          flow_type: 'sales',
+          source_sequence: '1',
+          result_status: 'ACCEPTED',
+        });
+      invoiceRepo.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce({
+        id: 'origin-sale-invoice',
+        tenant_id: 'tenant-1',
+        type: 'regular',
+        isCanceled: false,
+      });
+      itemRepo.find
+        .mockResolvedValueOnce([
+          {
+            id: 'origin-sale-item',
+            tenant_id: 'tenant-1',
+            invoiceId: 'origin-sale-invoice',
+            quantity: 2,
+          },
+        ])
+        .mockResolvedValueOnce([]);
+      outboxRepo.findOne.mockResolvedValue(null);
+
+      const result = await service.syncBatch('tenant-1', [creditNoteRecord]);
+
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          idempotencyKey: 'held-credit-note-key',
+          status: 'ACCEPTED',
+          code: 'APPLIED',
+        }),
+      ]);
+      expect(outboxRepo.delete).toHaveBeenCalledWith({
+        tenant_id: 'tenant-1',
+        idempotency_key: 'held-credit-note-key',
+        document_type: 'CREDIT_NOTE',
+        payload_hash: calculateSyncPayloadHash(creditNoteRecord),
+        status: 'STAGED_FUTURE',
+      });
+      expect(invoiceRepo.upsert).toHaveBeenCalledTimes(1);
+      expect(itemRepo.upsert).toHaveBeenCalledTimes(1);
+      expect(receiptRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          idempotency_key: 'held-credit-note-key',
+          result_status: 'ACCEPTED',
+          result_code: 'APPLIED',
+        }),
+      );
+    });
+
+    it('holds a CREDIT_NOTE with a missing origin as retryable without fiscal or Kardex writes', async () => {
+      const missingOriginRecord: SyncBatchRecordDto = {
+        idempotencyKey: 'held-origin-missing-key',
+        sourceDeviceId: 'd1',
+        sourceSequence: 1,
+        flowType: 'sales',
+        documentType: 'CREDIT_NOTE',
+        invoice: {
+          ...baseInvoice,
+          id: 'missing-origin-credit-note',
+          type: 'creditNote',
+          originInvoiceId: 'missing-origin-sale',
+          refundReasonPolicy: 'FINANCIAL_ONLY',
+          items: [
+            {
+              ...baseInvoice.items[0],
+              id: 'missing-origin-credit-note-item',
+              quantity: -1,
+              originInvoiceItemId: 'missing-origin-sale-item',
+            },
+          ],
+        },
+      };
+      receiptRepo.findOne.mockResolvedValue(null);
+      invoiceRepo.findOne.mockResolvedValue(null);
+      outboxRepo.findOne.mockResolvedValue(null);
+
+      const result = await service.syncBatch('tenant-1', [missingOriginRecord]);
+
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          idempotencyKey: 'held-origin-missing-key',
+          status: 'STAGED_FUTURE',
+          retryable: true,
+          code: 'HELD_ORIGIN_MISSING',
+        }),
+      ]);
+      expect(outboxRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          idempotency_key: 'held-origin-missing-key',
+          document_type: 'CREDIT_NOTE',
+          result_code: 'HELD_ORIGIN_MISSING',
+          status: 'STAGED_FUTURE',
+        }),
+      );
+      expect(invoiceRepo.upsert).not.toHaveBeenCalled();
+      expect(itemRepo.upsert).not.toHaveBeenCalled();
+      expect(paymentRepo.upsert).not.toHaveBeenCalled();
+      expect(receiptRepo.create).not.toHaveBeenCalled();
+      expect(movementRepo.create).not.toHaveBeenCalled();
+      expect(txManager.save).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ sourceDocumentType: 'CREDIT_NOTE' }),
+      );
+    });
+
     it('appends SALE_CANCEL reversal movement without invoice deletion', async () => {
       receiptRepo.findOne.mockResolvedValue(null);
       recipeService.findActiveVersion.mockResolvedValue(null);

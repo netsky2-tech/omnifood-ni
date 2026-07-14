@@ -755,6 +755,69 @@ void main() {
   );
 
   test(
+    'keeps held origin-missing credit notes pending and retries them on the next sync pass',
+    () async {
+      final heldCreditNote = {
+        'id': 'credit-note-held-origin',
+        'number': 'NC-HELD-001',
+        'documentType': 'CREDIT_NOTE',
+        'terminalId': 'pos-terminal-1',
+        'sourceSequence': 18,
+        'idempotencyKey': 'credit-note:pos-terminal-1:credit-note-held-origin',
+        'originInvoiceId': 'sale-not-yet-synced',
+        'refundReasonPolicy': 'FINANCIAL_ONLY',
+        'items': [
+          {
+            'id': 'credit-line-held-origin',
+            'originInvoiceItemId': 'sale-line-not-yet-synced',
+            'quantity': -1,
+            'total': -57.5,
+          },
+        ],
+      };
+      mockSalesRepository.unsyncedAggregates = [heldCreditNote];
+      var attempt = 0;
+      respondToInventoryBatchWith((records) {
+        attempt += 1;
+        return {
+          'status': 'OK',
+          'received': records.length,
+          'results': [
+            {
+              ...records.single,
+              'status': attempt == 1 ? 'STAGED_FUTURE' : 'ACCEPTED',
+              'code': attempt == 1 ? 'HELD_ORIGIN_MISSING' : 'APPLIED',
+              'retryable': attempt == 1,
+            },
+          ],
+        };
+      });
+
+      await syncService.triggerManualSync();
+      await syncService.triggerManualSync();
+
+      final salesPosts = capturedPosts
+          .where((post) => post.path == '/v1/sync/batch')
+          .toList(growable: false);
+      expect(salesPosts, hasLength(2));
+      for (final post in salesPosts) {
+        final record =
+            ((post.body as Map<String, dynamic>)['records'] as List<dynamic>)
+                    .single
+                as Map<String, dynamic>;
+        expect(record['documentType'], 'CREDIT_NOTE');
+        expect(
+          record['idempotencyKey'],
+          'credit-note:pos-terminal-1:credit-note-held-origin',
+        );
+      }
+      expect(mockSalesRepository.syncedInvoiceIdBatches, [
+        ['credit-note-held-origin'],
+      ]);
+    },
+  );
+
+  test(
     'marks only accepted and matching duplicate sales results as synced',
     () async {
       mockSalesRepository.unsyncedAggregates = [
