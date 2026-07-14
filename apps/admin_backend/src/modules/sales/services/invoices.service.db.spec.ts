@@ -776,51 +776,70 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
           expect.objectContaining({ status: 'ACCEPTED', code: 'APPLIED' }),
         ]);
 
-        const creditResult = await service.syncBatch(tenantId, [
-          {
-            idempotencyKey: 'credit-replay-key',
-            sourceDeviceId: 'terminal-db',
-            sourceSequence: 2,
-            flowType: 'sales',
-            documentType: 'CREDIT_NOTE',
-            invoice: {
-              id: creditNoteId,
-              number: 'CN-RESTOCK-001',
-              createdAt: new Date().toISOString(),
-              userId: 'user-db',
-              subtotal: -3.5,
-              totalTax: -0.53,
-              total: -4.03,
-              paymentStatus: 'REFUNDED',
-              type: 'creditNote',
-              originInvoiceId: saleInvoiceId,
-              refundReasonPolicy: 'RESTOCK_ORIGINAL_BOM',
-              refundReasonCode: 'returned_to_stock',
-              authorizedByUserId: 'manager-db',
-              authorizedByRole: 'manager',
-              items: [
-                {
-                  id: randomUUID(),
-                  productId: insumoId,
-                  productName: 'Burger Bun',
-                  quantity: -1,
-                  unitPrice: 3.5,
-                  originalTaxRate: 0.15,
-                  appliedTaxRate: 0.15,
-                  taxAmount: -0.53,
-                  total: -4.03,
-                  discount: 0,
-                  originInvoiceItemId: saleItemId,
-                },
-              ],
-              payments: [],
-            },
+        const creditNoteRecord: SyncBatchRecordDto = {
+          idempotencyKey: 'credit-replay-key',
+          sourceDeviceId: 'terminal-db',
+          sourceSequence: 2,
+          flowType: 'sales',
+          documentType: 'CREDIT_NOTE',
+          invoice: {
+            id: creditNoteId,
+            number: 'CN-RESTOCK-001',
+            createdAt: new Date().toISOString(),
+            userId: 'user-db',
+            subtotal: -3.5,
+            totalTax: -0.53,
+            total: -4.03,
+            paymentStatus: 'REFUNDED',
+            type: 'creditNote',
+            originInvoiceId: saleInvoiceId,
+            refundReasonPolicy: 'RESTOCK_ORIGINAL_BOM',
+            refundReasonCode: 'returned_to_stock',
+            authorizedByUserId: 'manager-db',
+            authorizedByRole: 'manager',
+            items: [
+              {
+                id: randomUUID(),
+                productId: insumoId,
+                productName: 'Burger Bun',
+                quantity: -1,
+                unitPrice: 3.5,
+                originalTaxRate: 0.15,
+                appliedTaxRate: 0.15,
+                taxAmount: -0.53,
+                total: -4.03,
+                discount: 0,
+                originInvoiceItemId: saleItemId,
+              },
+            ],
+            payments: [],
           },
+        };
+
+        const creditResult = await service.syncBatch(tenantId, [
+          creditNoteRecord,
         ]);
 
         expect(creditResult.results).toEqual([
           expect.objectContaining({ status: 'ACCEPTED', code: 'APPLIED' }),
         ]);
+        const duplicateCreditResult = await service.syncBatch(tenantId, [
+          creditNoteRecord,
+        ]);
+
+        expect(duplicateCreditResult.results).toEqual([
+          expect.objectContaining({
+            idempotencyKey: 'credit-replay-key',
+            status: 'DUPLICATE',
+            code: 'DUPLICATE_REPLAY',
+          }),
+        ]);
+        await expect(
+          dataSource.getRepository(Invoice).countBy({
+            tenant_id: tenantId,
+            type: 'creditNote',
+          }),
+        ).resolves.toBe(1);
         const movements = await dataSource
           .getRepository(InventoryMovement)
           .find({

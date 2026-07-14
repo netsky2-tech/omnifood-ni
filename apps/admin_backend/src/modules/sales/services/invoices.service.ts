@@ -181,11 +181,7 @@ export class InvoicesService {
         options.allowCreditNotes ?? false,
       );
       this.assertCreditNoteReasonAndAuthorization(dto);
-      await this.assertCreditNoteAuthorizingActor(
-        tenantId,
-        dto,
-        manager,
-      );
+      await this.assertCreditNoteAuthorizingActor(tenantId, dto, manager);
       await this.validateInvoiceRecipeVersions(tenantId, dto);
       const handledDuplicate = await this.skipMatchingCreditNoteReplay(
         tenantId,
@@ -834,6 +830,12 @@ export class InvoicesService {
             result_code: 'APPLIED',
           }),
         );
+        await this.clearAcceptedHeldCreditNoteRecord(
+          tenantId,
+          record,
+          payloadHash,
+          manager,
+        );
       });
       return {
         accepted: true,
@@ -914,6 +916,23 @@ export class InvoicesService {
         }),
       };
     }
+  }
+
+  private async clearAcceptedHeldCreditNoteRecord(
+    tenantId: string,
+    record: SyncBatchRecordDto,
+    payloadHash: string,
+    manager: EntityManager,
+  ): Promise<void> {
+    if (record.documentType !== 'CREDIT_NOTE') return;
+
+    await this.outboxRepoFor(manager).delete({
+      tenant_id: tenantId,
+      idempotency_key: record.idempotencyKey,
+      document_type: 'CREDIT_NOTE',
+      payload_hash: payloadHash,
+      status: SYNC_RESULT_STATUS.STAGED_FUTURE,
+    });
   }
 
   private async drainStagedFutureRecords(
@@ -1083,7 +1102,10 @@ export class InvoicesService {
       return { code: 'CREDIT_NOTE_REFUND_QUANTITY_INVALID', retryable: false };
     }
     if (message.includes('credit-note restock quantity exceeds')) {
-      return { code: 'CREDIT_NOTE_RESTOCK_QUANTITY_EXCEEDED', retryable: false };
+      return {
+        code: 'CREDIT_NOTE_RESTOCK_QUANTITY_EXCEEDED',
+        retryable: false,
+      };
     }
     if (message.includes('collides with an existing non-credit invoice')) {
       return { code: 'CREDIT_NOTE_INVOICE_ID_COLLISION', retryable: false };
@@ -1435,7 +1457,8 @@ export class InvoicesService {
       refundReasonPolicy:
         existing.refundReasonPolicy as SyncInvoiceDto['refundReasonPolicy'],
       authorizedByUserId: existing.authorizedByUserId,
-      authorizedByRole: existing.authorizedByRole as SyncInvoiceDto['authorizedByRole'],
+      authorizedByRole:
+        existing.authorizedByRole as SyncInvoiceDto['authorizedByRole'],
       items: (existing.items ?? []).map((item) => ({
         id: item.id,
         productId: item.productId,
@@ -1650,7 +1673,9 @@ export class InvoicesService {
       }
       requestedByOriginItemId.set(
         originItemId,
-        round4((requestedByOriginItemId.get(originItemId) ?? 0) + refundQuantity),
+        round4(
+          (requestedByOriginItemId.get(originItemId) ?? 0) + refundQuantity,
+        ),
       );
     }
 
@@ -1729,7 +1754,9 @@ export class InvoicesService {
           where: {
             tenant_id: tenantId,
             sourceDocumentType: 'CREDIT_NOTE',
-            originMovementId: In(originMovements.map((movement) => movement.id)),
+            originMovementId: In(
+              originMovements.map((movement) => movement.id),
+            ),
           },
         })
       : [];
