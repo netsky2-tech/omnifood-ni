@@ -19,7 +19,7 @@ import { AuthGuard } from './guards/auth.guard';
 import { IdentityModule } from './identity.module';
 import { AuthService } from './services/auth.service';
 
-interface LegacyPayload {
+interface LoginPayload {
   sub: string;
   email: string;
   tenant_id: string;
@@ -28,9 +28,9 @@ interface LegacyPayload {
   exp: number;
   iss?: string;
   aud?: string;
-  token_type?: string;
-  is_active?: boolean;
-  security_version?: number;
+  token_type: 'access';
+  is_active: boolean;
+  security_version: number;
 }
 
 interface GuardRequest {
@@ -63,7 +63,7 @@ const createContext = (request: GuardRequest): ExecutionContext =>
     }),
   }) as unknown as ExecutionContext;
 
-describe('IdentityModule legacy JWT bridge', () => {
+describe('IdentityModule typed issuance with legacy AuthGuard', () => {
   let module: TestingModule;
   let authService: AuthService;
   let authGuard: AuthGuard;
@@ -104,7 +104,7 @@ describe('IdentityModule legacy JWT bridge', () => {
     await module.close();
   });
 
-  it('authenticates the real login access token as a legacy payload without strict claims', async () => {
+  it('authenticates the real login access token through the unchanged legacy guard', async () => {
     const user = Object.assign(new User(), {
       id: 'legacy-user-id',
       name: 'Legacy User',
@@ -112,6 +112,7 @@ describe('IdentityModule legacy JWT bridge', () => {
       password_hash: await bcrypt.hash('password', 10),
       role: UserRole.MANAGER,
       tenant_id: 'legacy-tenant-id',
+      is_active: true,
     });
     jest.mocked(userRepository.findOne).mockResolvedValue(user);
     jest.mocked(userRepository.update).mockResolvedValue({
@@ -129,27 +130,49 @@ describe('IdentityModule legacy JWT bridge', () => {
       true,
     );
 
-    const payload = request.user as LegacyPayload;
+    const payload = request.user as LoginPayload;
     expect(payload).toMatchObject({
       sub: user.id,
       email: user.email,
       tenant_id: user.tenant_id,
       role: user.role,
     });
-    expect(payload).not.toHaveProperty('iss');
-    expect(payload).not.toHaveProperty('aud');
-    expect(payload).not.toHaveProperty('token_type');
-    expect(payload).not.toHaveProperty('is_active');
-    expect(payload).not.toHaveProperty('security_version');
+    expect(payload).toMatchObject({
+      iss: jwtEnvironment.JWT_ISSUER,
+      aud: jwtEnvironment.JWT_AUDIENCE,
+      token_type: 'access',
+      is_active: true,
+      security_version: 1,
+    });
     expect(payload.exp - payload.iat).toBe(60 * 60);
   });
 
   it('keeps the production JwtModule legacy default expiry close to one day', async () => {
     const token = await jwtService.signAsync({ sub: 'legacy-default-expiry' });
-    const payload = await jwtService.verifyAsync<LegacyPayload>(token);
+    const payload = await jwtService.verifyAsync<LoginPayload>(token);
 
     expect(payload.exp - payload.iat).toBeGreaterThanOrEqual(24 * 60 * 60 - 1);
     expect(payload.exp - payload.iat).toBeLessThanOrEqual(24 * 60 * 60 + 1);
+  });
+
+  it('continues accepting a previously issued typeless access token', async () => {
+    const token = await jwtService.signAsync({
+      sub: 'legacy-access-user',
+      email: 'legacy-access@example.com',
+      tenant_id: 'legacy-tenant-id',
+      role: UserRole.MANAGER,
+    });
+    const request: GuardRequest = {
+      headers: { authorization: `Bearer ${token}` },
+    };
+
+    await expect(authGuard.canActivate(createContext(request))).resolves.toBe(
+      true,
+    );
+    expect(request.user).toMatchObject({
+      sub: 'legacy-access-user',
+      tenant_id: 'legacy-tenant-id',
+    });
   });
 
   it('rejects invalid-signature and expired legacy tokens without token-type rules', async () => {
