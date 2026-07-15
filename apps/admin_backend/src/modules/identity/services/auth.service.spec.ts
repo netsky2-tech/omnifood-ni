@@ -4,6 +4,21 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { AuthService } from './auth.service';
 import { User, UserRole } from '../entities/user.entity';
+import {
+  IDENTITY_JWT_CONFIG,
+  type IdentityJwtConfig,
+} from '../config/identity-jwt.config';
+import { JWT_TOKEN_TYPES } from '../security/jwt-token.types';
+
+const jwtConfig: IdentityJwtConfig = {
+  secret: 'test-only-jwt-secret-with-at-least-thirty-two-bytes',
+  issuer: 'omnifood-admin-test',
+  audience: 'omnifood-pos-test',
+  accessTokenTtlSeconds: 60 * 60,
+  refreshTokenTtlSeconds: 7 * 24 * 60 * 60,
+  clockToleranceSeconds: 5,
+  algorithm: 'HS256',
+};
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -36,6 +51,10 @@ describe('AuthService', () => {
         {
           provide: JwtService,
           useValue: mockJwtService,
+        },
+        {
+          provide: IDENTITY_JWT_CONFIG,
+          useValue: jwtConfig,
         },
       ],
     }).compile();
@@ -509,6 +528,7 @@ describe('AuthService', () => {
       password_hash: 'stored-hash',
       role: UserRole.CASHIER,
       tenant_id: 'tenant-1',
+      is_active: true,
     });
     jest.spyOn(bcrypt, 'compare').mockResolvedValue(true as never);
     jest.spyOn(bcrypt, 'hash').mockResolvedValue('hashed-refresh' as never);
@@ -528,6 +548,41 @@ describe('AuthService', () => {
     expect(mockUserRepository.update).toHaveBeenCalledWith('user-1', {
       hashed_refresh_token: 'hashed-refresh',
     });
+    expect(mockJwtService.signAsync).toHaveBeenNthCalledWith(
+      1,
+      {
+        sub: 'user-1',
+        email: 'cashier@omnifood.ni',
+        tenant_id: 'tenant-1',
+        role: UserRole.CASHIER,
+        is_active: true,
+        token_type: JWT_TOKEN_TYPES.ACCESS,
+        security_version: 1,
+      },
+      {
+        expiresIn: 60 * 60,
+        algorithm: 'HS256',
+        issuer: 'omnifood-admin-test',
+        audience: 'omnifood-pos-test',
+      },
+    );
+    expect(mockJwtService.signAsync).toHaveBeenNthCalledWith(
+      2,
+      {
+        sub: 'user-1',
+        email: 'cashier@omnifood.ni',
+        tenant_id: 'tenant-1',
+        role: UserRole.CASHIER,
+        is_active: true,
+        token_type: JWT_TOKEN_TYPES.REFRESH,
+      },
+      {
+        expiresIn: 7 * 24 * 60 * 60,
+        algorithm: 'HS256',
+        issuer: 'omnifood-admin-test',
+        audience: 'omnifood-pos-test',
+      },
+    );
   });
 
   it('rejects login when password compare fails', async () => {
@@ -537,6 +592,7 @@ describe('AuthService', () => {
       password_hash: 'stored-hash',
       role: UserRole.WAITER,
       tenant_id: 'tenant-1',
+      is_active: true,
     });
     jest.spyOn(bcrypt, 'compare').mockResolvedValue(false as never);
 
@@ -551,6 +607,7 @@ describe('AuthService', () => {
       email: 'manager@omnifood.ni',
       tenant_id: 'tenant-1',
       role: UserRole.MANAGER,
+      is_active: true,
       hashed_refresh_token: 'stored-refresh',
     });
     jest.spyOn(bcrypt, 'compare').mockResolvedValue(true as never);
@@ -576,11 +633,48 @@ describe('AuthService', () => {
       email: 'owner@omnifood.ni',
       tenant_id: 'tenant-1',
       role: UserRole.OWNER,
+      is_active: true,
       hashed_refresh_token: null,
     });
 
     await expect(service.refreshTokens('user-4', 'refresh')).rejects.toThrow(
       'Acceso denegado',
     );
+  });
+
+  it('rejects inactive users before comparing, signing, or rotating refresh tokens', async () => {
+    mockUserRepository.findOne.mockResolvedValue({
+      id: 'inactive-user',
+      email: 'inactive@omnifood.ni',
+      tenant_id: 'tenant-1',
+      role: UserRole.CASHIER,
+      is_active: false,
+      hashed_refresh_token: 'stored-refresh',
+    });
+    const compare = jest.spyOn(bcrypt, 'compare');
+
+    await expect(
+      service.refreshTokens('inactive-user', 'refresh-plain'),
+    ).rejects.toThrow('Acceso denegado');
+
+    expect(compare).not.toHaveBeenCalled();
+    expect(mockJwtService.signAsync).not.toHaveBeenCalled();
+    expect(mockUserRepository.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects inactive users before issuing login tokens', async () => {
+    mockUserRepository.findOne.mockResolvedValue({
+      id: 'inactive-user',
+      email: 'inactive@omnifood.ni',
+      password_hash: 'stored-hash',
+      role: UserRole.CASHIER,
+      tenant_id: 'tenant-1',
+      is_active: false,
+    });
+
+    await expect(
+      service.login('inactive@omnifood.ni', 'Password123!'),
+    ).rejects.toThrow('Credenciales inválidas');
+    expect(mockJwtService.signAsync).not.toHaveBeenCalled();
   });
 });
