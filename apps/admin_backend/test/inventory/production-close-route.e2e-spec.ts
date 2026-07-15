@@ -5,7 +5,6 @@ import {
   NestInterceptor,
   ValidationPipe,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -24,29 +23,36 @@ import { ShrinkageService } from '../../src/modules/inventory/shrinkage.service'
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
 import { UserRole } from '../../src/modules/identity/entities/user.entity';
+import {
+  createIdentityJwtTestConfigProvider,
+  signIdentityJwtAccessToken,
+} from '../support/identity-jwt-test.fixture';
 
 const TEST_TENANT_ID = 'tenant-production-close';
-const PRODUCTION_CLOSE_ROUTE_TEST_JWT_SECRET =
-  process.env.OMNIFOOD_TEST_JWT_SECRET ??
-  'non-production-production-close-route-jwt-secret';
+const productionCloseRouteTestJwtService = new JwtService();
 
-const productionCloseRouteTestJwtService = new JwtService({
-  secret: PRODUCTION_CLOSE_ROUTE_TEST_JWT_SECRET,
-});
-
-const AUTH_TOKEN = productionCloseRouteTestJwtService.sign({
-  tenant_id: TEST_TENANT_ID,
-  role: UserRole.MANAGER,
-});
-const CLAIMED_TERMINAL_AUTH_TOKEN = productionCloseRouteTestJwtService.sign({
-  tenant_id: TEST_TENANT_ID,
-  role: UserRole.MANAGER,
-  terminal_id: 'terminal-claim-1',
-});
-const UNAUTHORIZED_ROLE_TOKEN = productionCloseRouteTestJwtService.sign({
-  tenant_id: TEST_TENANT_ID,
-  role: UserRole.CASHIER,
-});
+const AUTH_TOKEN = signIdentityJwtAccessToken(
+  productionCloseRouteTestJwtService,
+  {
+    tenant_id: TEST_TENANT_ID,
+    role: UserRole.MANAGER,
+  },
+);
+const CLAIMED_TERMINAL_AUTH_TOKEN = signIdentityJwtAccessToken(
+  productionCloseRouteTestJwtService,
+  {
+    tenant_id: TEST_TENANT_ID,
+    role: UserRole.MANAGER,
+    terminal_id: 'terminal-claim-1',
+  },
+);
+const UNAUTHORIZED_ROLE_TOKEN = signIdentityJwtAccessToken(
+  productionCloseRouteTestJwtService,
+  {
+    tenant_id: TEST_TENANT_ID,
+    role: UserRole.CASHIER,
+  },
+);
 
 interface RequestWithUser {
   user?: {
@@ -131,10 +137,7 @@ describe('Production close route (integration)', () => {
         RolesGuard,
         Reflector,
         JwtService,
-        {
-          provide: ConfigService,
-          useValue: { get: () => PRODUCTION_CLOSE_ROUTE_TEST_JWT_SECRET },
-        },
+        createIdentityJwtTestConfigProvider(),
       ],
     }).compile();
 
