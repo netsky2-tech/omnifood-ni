@@ -17,6 +17,15 @@ on:
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      JWT_SECRET: test-only-jwt-secret-with-at-least-thirty-two-bytes
+      JWT_ISSUER: omnifood-admin
+      JWT_AUDIENCE: omnifood-pos
+      JWT_ACCESS_TTL_SECONDS: 3600
+      JWT_REFRESH_TTL_SECONDS: 604800
+      JWT_CLOCK_TOLERANCE_SECONDS: 5
+      JWT_ALGORITHM: HS256
 
     defaults:
       run:
@@ -76,11 +85,19 @@ jobs:
           DB_USERNAME: postgres
           DB_PASSWORD: admin
           DB_DATABASE: omnifood
-          JWT_SECRET: test-secret
 
   build:
     needs: lint-and-test
     runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      JWT_SECRET: test-only-jwt-secret-with-at-least-thirty-two-bytes
+      JWT_ISSUER: omnifood-admin
+      JWT_AUDIENCE: omnifood-pos
+      JWT_ACCESS_TTL_SECONDS: 3600
+      JWT_REFRESH_TTL_SECONDS: 604800
+      JWT_CLOCK_TOLERANCE_SECONDS: 5
+      JWT_ALGORITHM: HS256
 
     defaults:
       run:
