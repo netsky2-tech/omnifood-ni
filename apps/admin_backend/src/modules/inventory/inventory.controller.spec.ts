@@ -7,6 +7,10 @@ import { ROLES_KEY } from '../../core/decorators/roles.decorator';
 import { UserRole } from '../identity/entities/user.entity';
 import { AuthGuard } from '../identity/guards/auth.guard';
 import { RolesGuard } from '../identity/guards/roles.guard';
+import {
+  IDENTITY_JWT_CONFIG,
+  type IdentityJwtConfig,
+} from '../identity/config/identity-jwt.config';
 import { InventoryMovementController } from './inventory-movement.controller';
 import { FxRateResolverService } from './fx-rate-resolver.service';
 import { InventoryPurchaseService } from './inventory-purchase.service';
@@ -46,6 +50,15 @@ describe('InventoryController', () => {
 
   const configServiceMock = {
     get: jest.fn((key: keyof typeof jwtEnvironment) => jwtEnvironment[key]),
+  };
+  const identityJwtConfig: IdentityJwtConfig = {
+    secret: jwtEnvironment.JWT_SECRET,
+    issuer: jwtEnvironment.JWT_ISSUER,
+    audience: jwtEnvironment.JWT_AUDIENCE,
+    accessTokenTtlSeconds: Number(jwtEnvironment.JWT_ACCESS_TTL_SECONDS),
+    refreshTokenTtlSeconds: Number(jwtEnvironment.JWT_REFRESH_TTL_SECONDS),
+    clockToleranceSeconds: Number(jwtEnvironment.JWT_CLOCK_TOLERANCE_SECONDS),
+    algorithm: jwtEnvironment.JWT_ALGORITHM,
   };
 
   beforeEach(async () => {
@@ -109,6 +122,10 @@ describe('InventoryController', () => {
         {
           provide: ConfigService,
           useValue: configServiceMock,
+        },
+        {
+          provide: IDENTITY_JWT_CONFIG,
+          useValue: identityJwtConfig,
         },
       ],
     }).compile();

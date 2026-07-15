@@ -28,7 +28,10 @@ import {
   InventoryMovement,
   MovementType,
 } from '../../src/modules/inventory/entities/inventory-movement.entity';
-import { createIdentityJwtTestConfigProvider } from '../support/identity-jwt-test.fixture';
+import {
+  createIdentityJwtConfigProvider,
+  createIdentityJwtTestConfigProvider,
+} from '../support/identity-jwt-test.fixture';
 
 const INVENTORY_API_PREFIX = '/api/inventory';
 const TEST_TENANT_ID = 'tenant-count-session';
@@ -182,6 +185,7 @@ describe('Count session route (integration)', () => {
         Reflector,
         JwtService,
         createIdentityJwtTestConfigProvider(),
+        createIdentityJwtConfigProvider(),
       ],
     }).compile();
 

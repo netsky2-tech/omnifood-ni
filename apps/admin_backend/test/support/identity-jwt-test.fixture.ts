@@ -1,5 +1,9 @@
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import {
+  IDENTITY_JWT_CONFIG,
+  type IdentityJwtConfig,
+} from '../../src/modules/identity/config/identity-jwt.config';
 import type { JwtSignPayload } from '../../src/modules/identity/security/jwt-token.types';
 
 export const IDENTITY_JWT_TEST_CONFIG = {
@@ -45,6 +49,14 @@ export const createIdentityJwtTestConfigProvider = (): {
     get: <T = string>(key: string): T | undefined =>
       configValues[key] as T | undefined,
   },
+});
+
+export const createIdentityJwtConfigProvider = (): {
+  provide: typeof IDENTITY_JWT_CONFIG;
+  useValue: IdentityJwtConfig;
+} => ({
+  provide: IDENTITY_JWT_CONFIG,
+  useValue: IDENTITY_JWT_TEST_CONFIG,
 });
 
 export const signIdentityJwtAccessToken = (

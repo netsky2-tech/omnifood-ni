@@ -22,6 +22,7 @@ import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
 import { UserRole } from '../../src/modules/identity/entities/user.entity';
 import {
+  createIdentityJwtConfigProvider,
   createIdentityJwtTestConfigProvider,
   signIdentityJwtAccessToken,
 } from '../support/identity-jwt-test.fixture';
@@ -179,6 +180,7 @@ describe('Recipe version ingestion route (integration)', () => {
         Reflector,
         JwtService,
         createIdentityJwtTestConfigProvider(),
+        createIdentityJwtConfigProvider(),
       ],
     }).compile();
 
@@ -240,7 +242,7 @@ describe('Recipe version ingestion route (integration)', () => {
       .expect(401);
 
     const body = response.body as UnauthorizedResponseBody;
-    expect(body.message).toBe('Tenant context is required');
+    expect(body.message).toBe('Unauthorized');
 
     expect(recipeService.ingestPosVersion).not.toHaveBeenCalled();
   });

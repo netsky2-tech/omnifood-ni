@@ -10,6 +10,28 @@ import { AuthGuard } from '../identity/guards/auth.guard';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { UserRole } from '../identity/entities/user.entity';
+import {
+  IDENTITY_JWT_CONFIG,
+  type IdentityJwtConfig,
+} from '../identity/config/identity-jwt.config';
+
+const createIdentityJwtConfig = (jwtEnvironment: {
+  JWT_SECRET: string;
+  JWT_ISSUER: string;
+  JWT_AUDIENCE: string;
+  JWT_ACCESS_TTL_SECONDS: string;
+  JWT_REFRESH_TTL_SECONDS: string;
+  JWT_CLOCK_TOLERANCE_SECONDS: string;
+  JWT_ALGORITHM: 'HS256';
+}): IdentityJwtConfig => ({
+  secret: jwtEnvironment.JWT_SECRET,
+  issuer: jwtEnvironment.JWT_ISSUER,
+  audience: jwtEnvironment.JWT_AUDIENCE,
+  accessTokenTtlSeconds: Number(jwtEnvironment.JWT_ACCESS_TTL_SECONDS),
+  refreshTokenTtlSeconds: Number(jwtEnvironment.JWT_REFRESH_TTL_SECONDS),
+  clockToleranceSeconds: Number(jwtEnvironment.JWT_CLOCK_TOLERANCE_SECONDS),
+  algorithm: jwtEnvironment.JWT_ALGORITHM,
+});
 
 describe('CatalogController', () => {
   const jwtEnvironment = {
@@ -56,6 +78,10 @@ describe('CatalogController', () => {
           useValue: {
             get: (key: keyof typeof jwtEnvironment) => jwtEnvironment[key],
           },
+        },
+        {
+          provide: IDENTITY_JWT_CONFIG,
+          useValue: createIdentityJwtConfig(jwtEnvironment),
         },
       ],
     }).compile();
@@ -185,6 +211,10 @@ describe('CatalogController HTTP guards and route precedence', () => {
           useValue: {
             get: (key: keyof typeof jwtEnvironment) => jwtEnvironment[key],
           },
+        },
+        {
+          provide: IDENTITY_JWT_CONFIG,
+          useValue: createIdentityJwtConfig(jwtEnvironment),
         },
       ],
     }).compile();
