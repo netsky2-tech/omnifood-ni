@@ -5,7 +5,6 @@ import {
   NestInterceptor,
   ValidationPipe,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -29,6 +28,7 @@ import {
   InventoryMovement,
   MovementType,
 } from '../../src/modules/inventory/entities/inventory-movement.entity';
+import { createIdentityJwtTestConfigProvider } from '../support/identity-jwt-test.fixture';
 
 const INVENTORY_API_PREFIX = '/api/inventory';
 const TEST_TENANT_ID = 'tenant-count-session';
@@ -181,13 +181,7 @@ describe('Count session route (integration)', () => {
         RolesGuard,
         Reflector,
         JwtService,
-        {
-          provide: ConfigService,
-          useValue: {
-            get: (key: string) =>
-              key === 'JWT_SECRET' ? 'test-secret' : undefined,
-          },
-        },
+        createIdentityJwtTestConfigProvider(),
       ],
     }).compile();
 

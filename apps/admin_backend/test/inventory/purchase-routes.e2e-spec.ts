@@ -3,7 +3,6 @@ import {
   NotFoundException,
   ValidationPipe,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -33,8 +32,10 @@ import { ShrinkageService } from '../../src/modules/inventory/shrinkage.service'
 import { UserRole } from '../../src/modules/identity/entities/user.entity';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
-
-const JWT_SECRET = process.env.JWT_SECRET?.trim() || 'test-secret';
+import {
+  createIdentityJwtTestConfigProvider,
+  signIdentityJwtAccessToken,
+} from '../support/identity-jwt-test.fixture';
 
 interface PurchasePreviewResponseBody extends PurchasePreview {
   statusCode?: number;
@@ -230,13 +231,7 @@ describe('Inventory purchase routes (integration)', () => {
         RolesGuard,
         Reflector,
         JwtService,
-        {
-          provide: ConfigService,
-          useValue: {
-            get: (key: string) =>
-              key === 'JWT_SECRET' ? JWT_SECRET : undefined,
-          },
-        },
+        createIdentityJwtTestConfigProvider(),
       ],
     }).compile();
 
@@ -320,16 +315,13 @@ describe('Inventory purchase routes (integration)', () => {
       tenant_id: string;
     }> = {},
   ): string =>
-    jwtService.sign(
-      {
-        sub: 'user-1',
-        email: 'manager@example.com',
-        role: UserRole.MANAGER,
-        tenant_id: 'tenant-A',
-        ...overrides,
-      },
-      { secret: JWT_SECRET },
-    );
+    signIdentityJwtAccessToken(jwtService, {
+      sub: 'user-1',
+      email: 'manager@example.com',
+      role: UserRole.MANAGER,
+      tenant_id: 'tenant-A',
+      ...overrides,
+    });
 
   it('returns 401 for purchase preview when no bearer token is provided', async () => {
     await request(app.getHttpServer())
