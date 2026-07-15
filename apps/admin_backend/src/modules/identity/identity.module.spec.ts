@@ -19,17 +19,17 @@ import { AuthGuard } from './guards/auth.guard';
 import { IdentityModule } from './identity.module';
 import { AuthService } from './services/auth.service';
 
-interface LegacyPayload {
+interface TokenPayload {
   sub: string;
   email: string;
   tenant_id: string;
   role: string;
   iat: number;
   exp: number;
-  iss?: string;
-  aud?: string;
-  token_type?: string;
-  is_active?: boolean;
+  iss: string;
+  aud: string;
+  token_type: string;
+  is_active: boolean;
   security_version?: number;
 }
 
@@ -63,12 +63,15 @@ const createContext = (request: GuardRequest): ExecutionContext =>
     }),
   }) as unknown as ExecutionContext;
 
-describe('IdentityModule legacy JWT bridge', () => {
+describe('IdentityModule typed JWT cutover', () => {
   let module: TestingModule;
   let authService: AuthService;
   let authGuard: AuthGuard;
   let jwtService: JwtService;
   let userRepository: Pick<Repository<User>, 'findOne' | 'update'>;
+  const originalEnvironment = new Map(
+    Object.keys(jwtEnvironment).map((key) => [key, process.env[key]]),
+  );
 
   beforeAll(async () => {
     Object.assign(process.env, jwtEnvironment);
@@ -102,9 +105,13 @@ describe('IdentityModule legacy JWT bridge', () => {
 
   afterAll(async () => {
     await module.close();
+    for (const [key, value] of originalEnvironment) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
   });
 
-  it('authenticates the real login access token as a legacy payload without strict claims', async () => {
+  it('issues real typed access and refresh tokens for an active login', async () => {
     const user = Object.assign(new User(), {
       id: 'legacy-user-id',
       name: 'Legacy User',
@@ -112,6 +119,7 @@ describe('IdentityModule legacy JWT bridge', () => {
       password_hash: await bcrypt.hash('password', 10),
       role: UserRole.MANAGER,
       tenant_id: 'legacy-tenant-id',
+      is_active: true,
     });
     jest.mocked(userRepository.findOne).mockResolvedValue(user);
     jest.mocked(userRepository.update).mockResolvedValue({
@@ -129,48 +137,68 @@ describe('IdentityModule legacy JWT bridge', () => {
       true,
     );
 
-    const payload = request.user as LegacyPayload;
+    const payload = request.user as TokenPayload;
     expect(payload).toMatchObject({
       sub: user.id,
       email: user.email,
       tenant_id: user.tenant_id,
       role: user.role,
     });
-    expect(payload).not.toHaveProperty('iss');
-    expect(payload).not.toHaveProperty('aud');
-    expect(payload).not.toHaveProperty('token_type');
-    expect(payload).not.toHaveProperty('is_active');
-    expect(payload).not.toHaveProperty('security_version');
+    expect(payload).toMatchObject({
+      iss: jwtEnvironment.JWT_ISSUER,
+      aud: jwtEnvironment.JWT_AUDIENCE,
+      token_type: 'access',
+      is_active: true,
+      security_version: 1,
+    });
     expect(payload.exp - payload.iat).toBe(60 * 60);
+    const refresh = await jwtService.verifyAsync<TokenPayload>(
+      login.refresh_token,
+      {
+        issuer: jwtEnvironment.JWT_ISSUER,
+        audience: jwtEnvironment.JWT_AUDIENCE,
+      },
+    );
+    expect(refresh).toMatchObject({
+      sub: user.id,
+      email: user.email,
+      tenant_id: user.tenant_id,
+      role: user.role,
+      is_active: true,
+      token_type: 'refresh',
+      iss: jwtEnvironment.JWT_ISSUER,
+      aud: jwtEnvironment.JWT_AUDIENCE,
+    });
+    expect(refresh.exp - refresh.iat).toBe(7 * 24 * 60 * 60);
   });
 
-  it('keeps the production JwtModule legacy default expiry close to one day', async () => {
+  it('keeps the production JwtModule default expiry close to one day', async () => {
     const token = await jwtService.signAsync({ sub: 'legacy-default-expiry' });
-    const payload = await jwtService.verifyAsync<LegacyPayload>(token);
+    const payload = await jwtService.verifyAsync<TokenPayload>(token);
 
     expect(payload.exp - payload.iat).toBeGreaterThanOrEqual(24 * 60 * 60 - 1);
     expect(payload.exp - payload.iat).toBeLessThanOrEqual(24 * 60 * 60 + 1);
   });
 
-  it('rejects invalid-signature and expired legacy tokens without token-type rules', async () => {
-    const validToken = await jwtService.signAsync({ sub: 'legacy-negative' });
-    const expiredToken = await jwtService.signAsync(
-      { sub: 'legacy-expired' },
-      { expiresIn: -1 },
-    );
+  it('rejects refresh and typeless tokens through the strict guard', async () => {
+    const refreshToken = await jwtService.signAsync({
+      sub: 'refresh-user',
+      token_type: 'refresh',
+    });
+    const legacyToken = await jwtService.signAsync({ sub: 'legacy-user' });
 
-    const invalidSignatureRequest: GuardRequest = {
-      headers: { authorization: `Bearer ${validToken}x` },
+    const refreshRequest: GuardRequest = {
+      headers: { authorization: `Bearer ${refreshToken}` },
     };
-    const expiredRequest: GuardRequest = {
-      headers: { authorization: `Bearer ${expiredToken}` },
+    const legacyRequest: GuardRequest = {
+      headers: { authorization: `Bearer ${legacyToken}` },
     };
 
     await expect(
-      authGuard.canActivate(createContext(invalidSignatureRequest)),
+      authGuard.canActivate(createContext(refreshRequest)),
     ).rejects.toBeInstanceOf(UnauthorizedException);
     await expect(
-      authGuard.canActivate(createContext(expiredRequest)),
+      authGuard.canActivate(createContext(legacyRequest)),
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });
