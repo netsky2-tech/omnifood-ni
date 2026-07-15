@@ -33,8 +33,19 @@ describe('InventoryController', () => {
     getAllAndOverride: jest.fn(),
   };
 
+  const jwtEnvironment = {
+    NODE_ENV: 'test',
+    JWT_SECRET: 'test-only-jwt-secret-with-at-least-thirty-two-bytes',
+    JWT_ISSUER: 'omnifood-admin-test',
+    JWT_AUDIENCE: 'omnifood-pos-test',
+    JWT_ACCESS_TTL_SECONDS: '3600',
+    JWT_REFRESH_TTL_SECONDS: '604800',
+    JWT_CLOCK_TOLERANCE_SECONDS: '5',
+    JWT_ALGORITHM: 'HS256',
+  } as const;
+
   const configServiceMock = {
-    get: jest.fn().mockReturnValue('test-secret'),
+    get: jest.fn((key: keyof typeof jwtEnvironment) => jwtEnvironment[key]),
   };
 
   beforeEach(async () => {
