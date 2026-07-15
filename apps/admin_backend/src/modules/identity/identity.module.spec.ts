@@ -63,7 +63,7 @@ const createContext = (request: GuardRequest): ExecutionContext =>
     }),
   }) as unknown as ExecutionContext;
 
-describe('IdentityModule typed issuance with legacy AuthGuard', () => {
+describe('IdentityModule strict typed access-token ownership', () => {
   let module: TestingModule;
   let authService: AuthService;
   let authGuard: AuthGuard;
@@ -125,7 +125,7 @@ describe('IdentityModule typed issuance with legacy AuthGuard', () => {
     await closeModuleAndRestoreJwtEnvironment();
   });
 
-  it('authenticates the real login access token through the unchanged legacy guard', async () => {
+  it('authenticates the real login access token through the strict guard', async () => {
     const user = Object.assign(new User(), {
       id: 'legacy-user-id',
       name: 'Legacy User',
@@ -168,15 +168,19 @@ describe('IdentityModule typed issuance with legacy AuthGuard', () => {
     expect(payload.exp - payload.iat).toBe(60 * 60);
   });
 
-  it('keeps the production JwtModule legacy default expiry close to one day', async () => {
-    const token = await jwtService.signAsync({ sub: 'legacy-default-expiry' });
+  it('uses the canonical typed JWT configuration for JwtModule defaults', async () => {
+    const token = await jwtService.signAsync({
+      sub: 'canonical-default-expiry',
+    });
     const payload = await jwtService.verifyAsync<LoginPayload>(token);
 
-    expect(payload.exp - payload.iat).toBeGreaterThanOrEqual(24 * 60 * 60 - 1);
-    expect(payload.exp - payload.iat).toBeLessThanOrEqual(24 * 60 * 60 + 1);
+    expect(payload.exp - payload.iat).toBeGreaterThanOrEqual(60 * 60 - 1);
+    expect(payload.exp - payload.iat).toBeLessThanOrEqual(60 * 60 + 1);
+    expect(payload.iss).toBe(jwtEnvironment.JWT_ISSUER);
+    expect(payload.aud).toBe(jwtEnvironment.JWT_AUDIENCE);
   });
 
-  it('continues accepting a previously issued typeless access token', async () => {
+  it('rejects a previously issued typeless access token', async () => {
     const token = await jwtService.signAsync({
       sub: 'legacy-access-user',
       email: 'legacy-access@example.com',
@@ -187,13 +191,10 @@ describe('IdentityModule typed issuance with legacy AuthGuard', () => {
       headers: { authorization: `Bearer ${token}` },
     };
 
-    await expect(authGuard.canActivate(createContext(request))).resolves.toBe(
-      true,
-    );
-    expect(request.user).toMatchObject({
-      sub: 'legacy-access-user',
-      tenant_id: 'legacy-tenant-id',
-    });
+    await expect(
+      authGuard.canActivate(createContext(request)),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(request.user).toBeUndefined();
   });
 
   it('rejects invalid-signature and expired legacy tokens without token-type rules', async () => {

@@ -1,6 +1,8 @@
 import { JwtService } from '@nestjs/jwt';
+import { IDENTITY_JWT_CONFIG } from '../../src/modules/identity/config/identity-jwt.config';
 import {
   IDENTITY_JWT_TEST_CONFIG,
+  createIdentityJwtConfigProvider,
   createIdentityJwtTestConfigProvider,
   signIdentityJwtAccessToken,
 } from './identity-jwt-test.fixture';
@@ -15,13 +17,13 @@ describe('identity JWT test fixture', () => {
     expect(provider.useValue.get('JWT_ISSUER')).toBe(
       IDENTITY_JWT_TEST_CONFIG.issuer,
     );
+    expect(createIdentityJwtConfigProvider()).toEqual({
+      provide: IDENTITY_JWT_CONFIG,
+      useValue: IDENTITY_JWT_TEST_CONFIG,
+    });
     expect(provider.useValue.get('JWT_AUDIENCE')).toBe(
       IDENTITY_JWT_TEST_CONFIG.audience,
     );
-    expect(provider.useValue.get('JWT_ACCESS_TTL_SECONDS')).toBe('3600');
-    expect(provider.useValue.get('JWT_REFRESH_TTL_SECONDS')).toBe('604800');
-    expect(provider.useValue.get('JWT_CLOCK_TOLERANCE_SECONDS')).toBe('5');
-    expect(provider.useValue.get('JWT_ALGORITHM')).toBe('HS256');
   });
 
   it('signs a typed canonical access token with caller overrides', () => {

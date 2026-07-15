@@ -8,6 +8,10 @@ import { AuthGuard } from '../../identity/guards/auth.guard';
 import { UserRole } from '../../identity/entities/user.entity';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import {
+  IDENTITY_JWT_CONFIG,
+  type IdentityJwtConfig,
+} from '../../identity/config/identity-jwt.config';
 
 describe('ReportsController RBAC', () => {
   const jwtEnvironment = {
@@ -20,6 +24,15 @@ describe('ReportsController RBAC', () => {
     JWT_CLOCK_TOLERANCE_SECONDS: '5',
     JWT_ALGORITHM: 'HS256',
   } as const;
+  const identityJwtConfig: IdentityJwtConfig = {
+    secret: jwtEnvironment.JWT_SECRET,
+    issuer: jwtEnvironment.JWT_ISSUER,
+    audience: jwtEnvironment.JWT_AUDIENCE,
+    accessTokenTtlSeconds: Number(jwtEnvironment.JWT_ACCESS_TTL_SECONDS),
+    refreshTokenTtlSeconds: Number(jwtEnvironment.JWT_REFRESH_TTL_SECONDS),
+    clockToleranceSeconds: Number(jwtEnvironment.JWT_CLOCK_TOLERANCE_SECONDS),
+    algorithm: jwtEnvironment.JWT_ALGORITHM,
+  };
   let app: INestApplication;
 
   beforeAll(async () => {
@@ -44,6 +57,10 @@ describe('ReportsController RBAC', () => {
           useValue: {
             get: (key: keyof typeof jwtEnvironment) => jwtEnvironment[key],
           },
+        },
+        {
+          provide: IDENTITY_JWT_CONFIG,
+          useValue: identityJwtConfig,
         },
       ],
     }).compile();

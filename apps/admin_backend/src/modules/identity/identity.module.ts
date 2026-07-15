@@ -34,7 +34,9 @@ import {
         secret: config.secret,
         signOptions: {
           algorithm: config.algorithm,
-          expiresIn: '1d',
+          expiresIn: config.accessTokenTtlSeconds,
+          issuer: config.issuer,
+          audience: config.audience,
         },
       }),
     }),
@@ -50,6 +52,7 @@ import {
   ],
   exports: [
     JwtModule,
+    IdentityJwtConfigModule,
     AuthService,
     UserService,
     AuditIntegrityService,

@@ -33,6 +33,7 @@ import { UserRole } from '../../src/modules/identity/entities/user.entity';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
 import {
+  createIdentityJwtConfigProvider,
   createIdentityJwtTestConfigProvider,
   signIdentityJwtAccessToken,
 } from '../support/identity-jwt-test.fixture';
@@ -232,6 +233,7 @@ describe('Inventory purchase routes (integration)', () => {
         Reflector,
         JwtService,
         createIdentityJwtTestConfigProvider(),
+        createIdentityJwtConfigProvider(),
       ],
     }).compile();
 
@@ -439,7 +441,7 @@ describe('Inventory purchase routes (integration)', () => {
       .expect(401);
 
     const body = response.body as UnauthorizedResponseBody;
-    expect(body.message).toBe('Tenant context is required');
+    expect(body.message).toBe('Unauthorized');
     expect(repositoryFindOne).not.toHaveBeenCalled();
   });
 
@@ -602,7 +604,7 @@ describe('Inventory purchase routes (integration)', () => {
       .expect(401);
 
     const body = response.body as UnauthorizedResponseBody;
-    expect(body.message).toBe('Tenant context is required');
+    expect(body.message).toBe('Unauthorized');
     expect(transaction).not.toHaveBeenCalled();
   });
 

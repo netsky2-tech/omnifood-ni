@@ -10,6 +10,7 @@ import { SyncBatchController } from '../../src/modules/sales/controllers/sync-ba
 import { SyncCreditNoteAuthGuard } from '../../src/modules/sales/guards/sync-credit-note-auth.guard';
 import { InvoicesService } from '../../src/modules/sales/services/invoices.service';
 import {
+  createIdentityJwtConfigProvider,
   createIdentityJwtTestConfigProvider,
   signIdentityJwtAccessToken,
 } from '../support/identity-jwt-test.fixture';
@@ -139,6 +140,7 @@ describe('Sync batch route (e2e)', () => {
         AuthGuard,
         SyncCreditNoteAuthGuard,
         createIdentityJwtTestConfigProvider(),
+        createIdentityJwtConfigProvider(),
       ],
     }).compile();
 
@@ -338,7 +340,7 @@ describe('Sync batch route (e2e)', () => {
       .post('/v1/sync/batch')
       .set('Authorization', `Bearer ${token}`)
       .send({ records: [buildCreditNoteRecord(2)] })
-      .expect(403);
+      .expect(401);
 
     expect(syncBatch).not.toHaveBeenCalled();
   });
