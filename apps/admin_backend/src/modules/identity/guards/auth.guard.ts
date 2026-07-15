@@ -7,17 +7,29 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
+import {
+  getIdentityJwtConfig,
+  IdentityJwtConfig,
+} from '../config/identity-jwt.config';
+import {
+  isAccessTokenPayload,
+  JwtAccessPayload,
+} from '../security/jwt-token.types';
 
 interface RequestWithUser extends Request {
-  user?: unknown;
+  user?: JwtAccessPayload;
 }
 
 @Injectable()
 export class AuthGuard implements CanActivate {
+  private readonly jwtConfig: IdentityJwtConfig;
+
   constructor(
     private jwtService: JwtService,
-    private configService: ConfigService,
-  ) {}
+    configService: ConfigService,
+  ) {
+    this.jwtConfig = getIdentityJwtConfig(configService);
+  }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<RequestWithUser>();
@@ -25,14 +37,22 @@ export class AuthGuard implements CanActivate {
     if (!token) {
       throw new UnauthorizedException();
     }
-    const secret = this.configService.get<string>('JWT_SECRET')?.trim();
-    if (!secret) {
-      throw new UnauthorizedException('JWT_SECRET is required');
-    }
     try {
       const payload: unknown = await this.jwtService.verifyAsync(token, {
-        secret,
+        secret: this.jwtConfig.secret,
+        issuer: this.jwtConfig.issuer,
+        audience: this.jwtConfig.audience,
+        algorithms: [this.jwtConfig.algorithm],
+        clockTolerance: this.jwtConfig.clockToleranceSeconds,
       });
+      if (
+        !isAccessTokenPayload(
+          payload,
+          this.jwtConfig.issuer,
+          this.jwtConfig.audience,
+        )
+      )
+        throw new UnauthorizedException();
       request.user = payload;
     } catch {
       throw new UnauthorizedException();

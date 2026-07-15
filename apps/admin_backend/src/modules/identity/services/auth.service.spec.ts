@@ -4,6 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { AuthService } from './auth.service';
 import { User, UserRole } from '../entities/user.entity';
+import { IDENTITY_JWT_CONFIG } from '../config/identity-jwt.config';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -36,6 +37,18 @@ describe('AuthService', () => {
         {
           provide: JwtService,
           useValue: mockJwtService,
+        },
+        {
+          provide: IDENTITY_JWT_CONFIG,
+          useValue: {
+            secret: 'test-only-jwt-secret-with-at-least-thirty-two-bytes',
+            issuer: 'omnifood-admin-test',
+            audience: 'omnifood-pos-test',
+            accessTokenTtlSeconds: 3600,
+            refreshTokenTtlSeconds: 604800,
+            clockToleranceSeconds: 5,
+            algorithm: 'HS256',
+          },
         },
       ],
     }).compile();
@@ -509,6 +522,7 @@ describe('AuthService', () => {
       password_hash: 'stored-hash',
       role: UserRole.CASHIER,
       tenant_id: 'tenant-1',
+      is_active: true,
     });
     jest.spyOn(bcrypt, 'compare').mockResolvedValue(true as never);
     jest.spyOn(bcrypt, 'hash').mockResolvedValue('hashed-refresh' as never);
@@ -530,19 +544,20 @@ describe('AuthService', () => {
     });
   });
 
-  it('rejects login when password compare fails', async () => {
+  it('rejects inactive login with a generic error', async () => {
     mockUserRepository.findOne.mockResolvedValue({
       id: 'user-2',
       email: 'waiter@omnifood.ni',
       password_hash: 'stored-hash',
       role: UserRole.WAITER,
       tenant_id: 'tenant-1',
+      is_active: false,
     });
-    jest.spyOn(bcrypt, 'compare').mockResolvedValue(false as never);
+    jest.spyOn(bcrypt, 'compare').mockResolvedValue(true as never);
 
-    await expect(service.login('waiter@omnifood.ni', 'wrong')).rejects.toThrow(
-      'Credenciales inválidas',
-    );
+    await expect(
+      service.login('waiter@omnifood.ni', 'password'),
+    ).rejects.toThrow('Credenciales inválidas');
   });
 
   it('refreshes tokens when refresh token hash matches', async () => {
@@ -551,6 +566,7 @@ describe('AuthService', () => {
       email: 'manager@omnifood.ni',
       tenant_id: 'tenant-1',
       role: UserRole.MANAGER,
+      is_active: true,
       hashed_refresh_token: 'stored-refresh',
     });
     jest.spyOn(bcrypt, 'compare').mockResolvedValue(true as never);
@@ -570,13 +586,14 @@ describe('AuthService', () => {
     });
   });
 
-  it('rejects refresh when no stored refresh hash exists', async () => {
+  it('rejects inactive refresh with a generic error', async () => {
     mockUserRepository.findOne.mockResolvedValue({
       id: 'user-4',
       email: 'owner@omnifood.ni',
       tenant_id: 'tenant-1',
       role: UserRole.OWNER,
-      hashed_refresh_token: null,
+      is_active: false,
+      hashed_refresh_token: 'stored-refresh',
     });
 
     await expect(service.refreshTokens('user-4', 'refresh')).rejects.toThrow(

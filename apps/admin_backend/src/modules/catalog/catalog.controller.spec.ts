@@ -11,8 +11,18 @@ import { JwtModule, JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { UserRole } from '../identity/entities/user.entity';
 
+const jwtConfig = {
+  NODE_ENV: 'test',
+  JWT_SECRET: 'test-only-jwt-secret-with-at-least-thirty-two-bytes',
+  JWT_ISSUER: 'omnifood-admin-backend',
+  JWT_AUDIENCE: 'omnifood-pos',
+  JWT_ACCESS_TTL_SECONDS: '3600',
+  JWT_REFRESH_TTL_SECONDS: '604800',
+  JWT_CLOCK_TOLERANCE_SECONDS: '5',
+  JWT_ALGORITHM: 'HS256' as const,
+};
+
 describe('CatalogController', () => {
-  const jwtSecret = 'test-jwt-secret';
   let controller: CatalogController;
   let service: jest.Mocked<CatalogService>;
 
@@ -26,14 +36,19 @@ describe('CatalogController', () => {
     } as unknown as jest.Mocked<CatalogService>;
 
     const module: TestingModule = await Test.createTestingModule({
-      imports: [JwtModule.register({ secret: jwtSecret })],
+      imports: [JwtModule.register({ secret: jwtConfig.JWT_SECRET })],
       controllers: [CatalogController],
       providers: [
         Reflector,
         AuthGuard,
         RolesGuard,
         { provide: CatalogService, useValue: service },
-        { provide: ConfigService, useValue: { get: () => jwtSecret } },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: (key: string) => jwtConfig[key as keyof typeof jwtConfig],
+          },
+        },
       ],
     }).compile();
 
@@ -118,7 +133,6 @@ describe('CatalogController', () => {
 });
 
 describe('CatalogController HTTP guards and route precedence', () => {
-  const jwtSecret = 'test-jwt-secret';
   let app: INestApplication;
   let service: jest.Mocked<CatalogService>;
 
@@ -132,14 +146,29 @@ describe('CatalogController HTTP guards and route precedence', () => {
     } as unknown as jest.Mocked<CatalogService>;
 
     const moduleRef = await Test.createTestingModule({
-      imports: [JwtModule.register({ secret: jwtSecret })],
+      imports: [
+        JwtModule.register({
+          secret: jwtConfig.JWT_SECRET,
+          signOptions: {
+            algorithm: jwtConfig.JWT_ALGORITHM,
+            audience: jwtConfig.JWT_AUDIENCE,
+            expiresIn: 3600,
+            issuer: jwtConfig.JWT_ISSUER,
+          },
+        }),
+      ],
       controllers: [CatalogController],
       providers: [
         Reflector,
         RolesGuard,
         AuthGuard,
         { provide: CatalogService, useValue: service },
-        { provide: ConfigService, useValue: { get: () => jwtSecret } },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: (key: string) => jwtConfig[key as keyof typeof jwtConfig],
+          },
+        },
       ],
     }).compile();
 
@@ -161,8 +190,15 @@ describe('CatalogController HTTP guards and route precedence', () => {
   const getHttpServer = (): Parameters<typeof request>[0] =>
     app.getHttpServer() as Parameters<typeof request>[0];
 
-  const signToken = (payload: Record<string, string>) =>
-    app.get(JwtService).sign({ sub: 'user-1', ...payload });
+  const signToken = (payload: { role: UserRole; tenant_id?: string }): string =>
+    app.get(JwtService).sign({
+      sub: 'user-1',
+      email: 'manager@omnifood.test',
+      is_active: true,
+      token_type: 'access',
+      security_version: 1,
+      ...payload,
+    });
 
   it('returns 401 without authentication', async () => {
     await request(getHttpServer()).get('/catalogs/UOM').expect(401);

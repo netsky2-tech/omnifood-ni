@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -7,6 +7,11 @@ import { User } from '../entities/user.entity';
 import { UserRole } from '../entities/user.entity';
 import { AuthenticatedUserDto, StaffSyncUserDto } from '../dto/identity.dto';
 import { resolveInventoryBohPermissions } from '../guards/roles.guard';
+import {
+  IDENTITY_JWT_CONFIG,
+  IdentityJwtConfig,
+} from '../config/identity-jwt.config';
+import { JWT_TOKEN_TYPES, JwtSignPayload } from '../security/jwt-token.types';
 
 const SYNC_SCOPE = {
   POS_AUTH_CONTINUITY: 'pos-auth-continuity',
@@ -30,24 +35,43 @@ export class AuthService {
     @InjectRepository(User)
     private userRepository: Repository<User>,
     private jwtService: JwtService,
+    @Inject(IDENTITY_JWT_CONFIG) private readonly jwtConfig: IdentityJwtConfig,
   ) {}
 
   async login(email: string, pass: string) {
     let user: Pick<
       User,
-      'id' | 'name' | 'email' | 'password_hash' | 'role' | 'tenant_id'
+      | 'id'
+      | 'name'
+      | 'email'
+      | 'password_hash'
+      | 'role'
+      | 'tenant_id'
+      | 'is_active'
     > | null = null;
 
     try {
       user = await this.userRepository.findOne({
         where: { email },
-        select: ['id', 'name', 'email', 'password_hash', 'role', 'tenant_id'],
+        select: [
+          'id',
+          'name',
+          'email',
+          'password_hash',
+          'role',
+          'tenant_id',
+          'is_active',
+        ],
       });
     } catch {
       user = null;
     }
 
-    if (!user || !(await bcrypt.compare(pass, user.password_hash))) {
+    if (
+      !user ||
+      !user.is_active ||
+      !(await bcrypt.compare(pass, user.password_hash))
+    ) {
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
@@ -74,10 +98,17 @@ export class AuthService {
   async refreshTokens(userId: string, refreshToken: string) {
     const user = await this.userRepository.findOne({
       where: { id: userId },
-      select: ['id', 'email', 'tenant_id', 'role', 'hashed_refresh_token'],
+      select: [
+        'id',
+        'email',
+        'tenant_id',
+        'role',
+        'is_active',
+        'hashed_refresh_token',
+      ],
     });
 
-    if (!user || !user.hashed_refresh_token) {
+    if (!user || !user.is_active || !user.hashed_refresh_token) {
       throw new UnauthorizedException('Acceso denegado');
     }
 
@@ -112,10 +143,35 @@ export class AuthService {
     tenantId: string,
     role: string,
   ) {
-    const payload = { sub: userId, email, tenant_id: tenantId, role };
+    const identity = {
+      sub: userId,
+      email,
+      tenant_id: tenantId,
+      role,
+      is_active: true,
+    };
+    const accessPayload: JwtSignPayload = {
+      ...identity,
+      token_type: JWT_TOKEN_TYPES.ACCESS,
+      security_version: 1,
+    };
+    const refreshPayload: JwtSignPayload = {
+      ...identity,
+      token_type: JWT_TOKEN_TYPES.REFRESH,
+    };
     const [at, rt] = await Promise.all([
-      this.jwtService.signAsync(payload, { expiresIn: '1h' }),
-      this.jwtService.signAsync(payload, { expiresIn: '7d' }),
+      this.jwtService.signAsync(accessPayload, {
+        expiresIn: this.jwtConfig.accessTokenTtlSeconds,
+        algorithm: this.jwtConfig.algorithm,
+        issuer: this.jwtConfig.issuer,
+        audience: this.jwtConfig.audience,
+      }),
+      this.jwtService.signAsync(refreshPayload, {
+        expiresIn: this.jwtConfig.refreshTokenTtlSeconds,
+        algorithm: this.jwtConfig.algorithm,
+        issuer: this.jwtConfig.issuer,
+        audience: this.jwtConfig.audience,
+      }),
     ]);
 
     return {
