@@ -10,12 +10,30 @@ import { JwtModule, JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 
 describe('ReportsController RBAC', () => {
-  const jwtSecret = 'test-jwt-secret';
+  const jwtEnvironment = {
+    NODE_ENV: 'test',
+    JWT_SECRET: 'test-only-jwt-secret-with-at-least-thirty-two-bytes',
+    JWT_ISSUER: 'omnifood-admin-test',
+    JWT_AUDIENCE: 'omnifood-pos-test',
+    JWT_ACCESS_TTL_SECONDS: '3600',
+    JWT_REFRESH_TTL_SECONDS: '604800',
+    JWT_CLOCK_TOLERANCE_SECONDS: '5',
+    JWT_ALGORITHM: 'HS256',
+  } as const;
   let app: INestApplication;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [JwtModule.register({ secret: jwtSecret })],
+      imports: [
+        JwtModule.register({
+          secret: jwtEnvironment.JWT_SECRET,
+          signOptions: {
+            algorithm: jwtEnvironment.JWT_ALGORITHM,
+            issuer: jwtEnvironment.JWT_ISSUER,
+            audience: jwtEnvironment.JWT_AUDIENCE,
+          },
+        }),
+      ],
       controllers: [ReportsController],
       providers: [
         Reflector,
@@ -23,7 +41,9 @@ describe('ReportsController RBAC', () => {
         AuthGuard,
         {
           provide: ConfigService,
-          useValue: { get: () => jwtSecret },
+          useValue: {
+            get: (key: keyof typeof jwtEnvironment) => jwtEnvironment[key],
+          },
         },
       ],
     }).compile();
@@ -37,7 +57,15 @@ describe('ReportsController RBAC', () => {
   });
 
   const signToken = (jwtService: JwtService, role: UserRole) =>
-    jwtService.sign({ sub: 'user-1', role, tenant_id: 'tenant-1' });
+    jwtService.sign({
+      sub: 'user-1',
+      email: 'manager@example.com',
+      role,
+      tenant_id: 'tenant-1',
+      is_active: true,
+      token_type: 'access',
+      security_version: 1,
+    });
 
   const getHttpServer = (): Parameters<typeof request>[0] =>
     app.getHttpServer() as Parameters<typeof request>[0];

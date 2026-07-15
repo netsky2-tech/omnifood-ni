@@ -12,7 +12,16 @@ import { ConfigService } from '@nestjs/config';
 import { UserRole } from '../identity/entities/user.entity';
 
 describe('CatalogController', () => {
-  const jwtSecret = 'test-jwt-secret';
+  const jwtEnvironment = {
+    NODE_ENV: 'test',
+    JWT_SECRET: 'test-only-jwt-secret-with-at-least-thirty-two-bytes',
+    JWT_ISSUER: 'omnifood-admin-test',
+    JWT_AUDIENCE: 'omnifood-pos-test',
+    JWT_ACCESS_TTL_SECONDS: '3600',
+    JWT_REFRESH_TTL_SECONDS: '604800',
+    JWT_CLOCK_TOLERANCE_SECONDS: '5',
+    JWT_ALGORITHM: 'HS256',
+  } as const;
   let controller: CatalogController;
   let service: jest.Mocked<CatalogService>;
 
@@ -26,14 +35,28 @@ describe('CatalogController', () => {
     } as unknown as jest.Mocked<CatalogService>;
 
     const module: TestingModule = await Test.createTestingModule({
-      imports: [JwtModule.register({ secret: jwtSecret })],
+      imports: [
+        JwtModule.register({
+          secret: jwtEnvironment.JWT_SECRET,
+          signOptions: {
+            algorithm: jwtEnvironment.JWT_ALGORITHM,
+            issuer: jwtEnvironment.JWT_ISSUER,
+            audience: jwtEnvironment.JWT_AUDIENCE,
+          },
+        }),
+      ],
       controllers: [CatalogController],
       providers: [
         Reflector,
         AuthGuard,
         RolesGuard,
         { provide: CatalogService, useValue: service },
-        { provide: ConfigService, useValue: { get: () => jwtSecret } },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: (key: keyof typeof jwtEnvironment) => jwtEnvironment[key],
+          },
+        },
       ],
     }).compile();
 
@@ -118,7 +141,16 @@ describe('CatalogController', () => {
 });
 
 describe('CatalogController HTTP guards and route precedence', () => {
-  const jwtSecret = 'test-jwt-secret';
+  const jwtEnvironment = {
+    NODE_ENV: 'test',
+    JWT_SECRET: 'test-only-jwt-secret-with-at-least-thirty-two-bytes',
+    JWT_ISSUER: 'omnifood-admin-test',
+    JWT_AUDIENCE: 'omnifood-pos-test',
+    JWT_ACCESS_TTL_SECONDS: '3600',
+    JWT_REFRESH_TTL_SECONDS: '604800',
+    JWT_CLOCK_TOLERANCE_SECONDS: '5',
+    JWT_ALGORITHM: 'HS256',
+  } as const;
   let app: INestApplication;
   let service: jest.Mocked<CatalogService>;
 
@@ -132,14 +164,28 @@ describe('CatalogController HTTP guards and route precedence', () => {
     } as unknown as jest.Mocked<CatalogService>;
 
     const moduleRef = await Test.createTestingModule({
-      imports: [JwtModule.register({ secret: jwtSecret })],
+      imports: [
+        JwtModule.register({
+          secret: jwtEnvironment.JWT_SECRET,
+          signOptions: {
+            algorithm: jwtEnvironment.JWT_ALGORITHM,
+            issuer: jwtEnvironment.JWT_ISSUER,
+            audience: jwtEnvironment.JWT_AUDIENCE,
+          },
+        }),
+      ],
       controllers: [CatalogController],
       providers: [
         Reflector,
         RolesGuard,
         AuthGuard,
         { provide: CatalogService, useValue: service },
-        { provide: ConfigService, useValue: { get: () => jwtSecret } },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: (key: keyof typeof jwtEnvironment) => jwtEnvironment[key],
+          },
+        },
       ],
     }).compile();
 
@@ -162,7 +208,14 @@ describe('CatalogController HTTP guards and route precedence', () => {
     app.getHttpServer() as Parameters<typeof request>[0];
 
   const signToken = (payload: Record<string, string>) =>
-    app.get(JwtService).sign({ sub: 'user-1', ...payload });
+    app.get(JwtService).sign({
+      sub: 'user-1',
+      email: 'manager@example.com',
+      is_active: true,
+      token_type: 'access',
+      security_version: 1,
+      ...payload,
+    });
 
   it('returns 401 without authentication', async () => {
     await request(getHttpServer()).get('/catalogs/UOM').expect(401);

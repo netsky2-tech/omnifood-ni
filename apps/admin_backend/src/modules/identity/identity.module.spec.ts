@@ -69,8 +69,12 @@ describe('IdentityModule typed issuance with legacy AuthGuard', () => {
   let authGuard: AuthGuard;
   let jwtService: JwtService;
   let userRepository: Pick<Repository<User>, 'findOne' | 'update'>;
+  const originalJwtEnvironment = new Map<string, string | undefined>();
 
   beforeAll(async () => {
+    for (const key of Object.keys(jwtEnvironment)) {
+      originalJwtEnvironment.set(key, process.env[key]);
+    }
     Object.assign(process.env, jwtEnvironment);
     userRepository = {
       findOne: jest.fn(),
@@ -100,8 +104,25 @@ describe('IdentityModule typed issuance with legacy AuthGuard', () => {
     jwtService = module.get(JwtService);
   });
 
+  const closeModuleAndRestoreJwtEnvironment = async (): Promise<void> => {
+    try {
+      await module.close();
+    } finally {
+      for (const [key, value] of originalJwtEnvironment) {
+        if (value === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = value;
+        }
+      }
+      for (const [key, value] of originalJwtEnvironment) {
+        expect(process.env[key]).toBe(value);
+      }
+    }
+  };
+
   afterAll(async () => {
-    await module.close();
+    await closeModuleAndRestoreJwtEnvironment();
   });
 
   it('authenticates the real login access token through the unchanged legacy guard', async () => {
@@ -195,5 +216,21 @@ describe('IdentityModule typed issuance with legacy AuthGuard', () => {
     await expect(
       authGuard.canActivate(createContext(expiredRequest)),
     ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('restores and deletes JWT environment values when module closure rejects', async () => {
+    const closeError = new Error('module close failed');
+    jest.spyOn(module, 'close').mockRejectedValueOnce(closeError);
+
+    await expect(closeModuleAndRestoreJwtEnvironment()).rejects.toThrow(
+      closeError,
+    );
+
+    for (const [key, value] of originalJwtEnvironment) {
+      expect(process.env[key]).toBe(value);
+      if (value === undefined) {
+        expect(key in process.env).toBe(false);
+      }
+    }
   });
 });
