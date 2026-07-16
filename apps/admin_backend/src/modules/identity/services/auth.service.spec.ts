@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { JwtService } from '@nestjs/jwt';
+import { JwtService, type JwtVerifyOptions } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { AuthService } from './auth.service';
 import { User, UserRole } from '../entities/user.entity';
@@ -20,6 +20,36 @@ const jwtConfig: IdentityJwtConfig = {
   algorithm: 'HS256',
 };
 
+const realJwtService = new JwtService();
+
+const createRefreshJwt = (
+  subject: string,
+  overrides: Record<string, unknown> = {},
+  options: {
+    secret?: string;
+    algorithm?: 'HS256' | 'HS384';
+    issuer?: string;
+    audience?: string;
+    expiresIn?: number;
+  } = {},
+) =>
+  realJwtService.signAsync(
+    {
+      sub: subject,
+      token_type: JWT_TOKEN_TYPES.REFRESH,
+      ...overrides,
+    },
+    {
+      secret: options.secret ?? jwtConfig.secret,
+      algorithm: options.algorithm ?? jwtConfig.algorithm,
+      issuer: options.issuer ?? jwtConfig.issuer,
+      audience: options.audience ?? jwtConfig.audience,
+      ...(options.expiresIn === undefined
+        ? {}
+        : { expiresIn: options.expiresIn }),
+    },
+  );
+
 describe('AuthService', () => {
   let service: AuthService;
   let mockUserRepository: {
@@ -29,6 +59,7 @@ describe('AuthService', () => {
   };
   let mockJwtService: {
     signAsync: jest.Mock;
+    verifyAsync: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -39,6 +70,7 @@ describe('AuthService', () => {
     };
     mockJwtService = {
       signAsync: jest.fn(),
+      verifyAsync: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -601,7 +633,95 @@ describe('AuthService', () => {
     );
   });
 
-  it('refreshes tokens when refresh token hash matches', async () => {
+  const useRealJwtVerification = () => {
+    mockJwtService.verifyAsync.mockImplementation(
+      (token: string, options?: JwtVerifyOptions) =>
+        realJwtService.verifyAsync<Record<string, unknown>>(token, options),
+    );
+  };
+
+  it.each([
+    ['malformed token', () => Promise.resolve('not-a-jwt')],
+    [
+      'invalid signature',
+      () => createRefreshJwt('user-3', {}, { secret: 'different-test-secret' }),
+    ],
+    [
+      'expired token beyond the configured clock tolerance',
+      () => createRefreshJwt('user-3', {}, { expiresIn: -6 }),
+    ],
+    [
+      'wrong issuer',
+      () => createRefreshJwt('user-3', {}, { issuer: 'other-issuer' }),
+    ],
+    [
+      'wrong audience',
+      () => createRefreshJwt('user-3', {}, { audience: 'other-audience' }),
+    ],
+    [
+      'non-HS256 algorithm',
+      () => createRefreshJwt('user-3', {}, { algorithm: 'HS384' }),
+    ],
+  ])(
+    'rejects %s before repository, bcrypt, signing, or persistence',
+    async (_caseName, createToken) => {
+      useRealJwtVerification();
+      const compare = jest.spyOn(bcrypt, 'compare');
+      const token = await createToken();
+
+      await expect(service.refreshTokens('user-3', token)).rejects.toThrow(
+        'Acceso denegado',
+      );
+
+      expect(mockJwtService.verifyAsync).toHaveBeenCalledWith(
+        token,
+        expect.objectContaining({
+          secret: jwtConfig.secret,
+          algorithms: ['HS256'],
+          issuer: jwtConfig.issuer,
+          audience: jwtConfig.audience,
+          clockTolerance: jwtConfig.clockToleranceSeconds,
+        }),
+      );
+      expect(mockUserRepository.findOne).not.toHaveBeenCalled();
+      expect(compare).not.toHaveBeenCalled();
+      expect(mockJwtService.signAsync).not.toHaveBeenCalled();
+      expect(mockUserRepository.update).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    [
+      'access type',
+      () => createRefreshJwt('user-3', { token_type: JWT_TOKEN_TYPES.ACCESS }),
+    ],
+    ['typeless', () => createRefreshJwt('user-3', { token_type: undefined })],
+    ['empty subject', () => createRefreshJwt('')],
+    ['mismatched subject', () => createRefreshJwt('other-user')],
+  ])(
+    'rejects %s refresh payload before repository, bcrypt, signing, or persistence',
+    async (_caseName, createToken) => {
+      useRealJwtVerification();
+      const compare = jest.spyOn(bcrypt, 'compare');
+      const token = await createToken();
+
+      await expect(service.refreshTokens('user-3', token)).rejects.toThrow(
+        'Acceso denegado',
+      );
+
+      expect(mockJwtService.verifyAsync).toHaveBeenCalledWith(
+        token,
+        expect.objectContaining({ secret: jwtConfig.secret }),
+      );
+      expect(mockUserRepository.findOne).not.toHaveBeenCalled();
+      expect(compare).not.toHaveBeenCalled();
+      expect(mockJwtService.signAsync).not.toHaveBeenCalled();
+      expect(mockUserRepository.update).not.toHaveBeenCalled();
+    },
+  );
+
+  it('refreshes tokens when a verified refresh JWT subject and refresh hash match', async () => {
+    useRealJwtVerification();
     mockUserRepository.findOne.mockResolvedValue({
       id: 'user-3',
       email: 'manager@omnifood.ni',
@@ -616,7 +736,8 @@ describe('AuthService', () => {
       .mockResolvedValueOnce('new-access')
       .mockResolvedValueOnce('new-refresh');
 
-    const tokens = await service.refreshTokens('user-3', 'refresh-plain');
+    const refreshToken = await createRefreshJwt('user-3');
+    const tokens = await service.refreshTokens('user-3', refreshToken);
 
     expect(tokens).toMatchObject({
       access_token: 'new-access',
@@ -628,6 +749,7 @@ describe('AuthService', () => {
   });
 
   it('rejects refresh when no stored refresh hash exists', async () => {
+    useRealJwtVerification();
     mockUserRepository.findOne.mockResolvedValue({
       id: 'user-4',
       email: 'owner@omnifood.ni',
@@ -637,12 +759,25 @@ describe('AuthService', () => {
       hashed_refresh_token: null,
     });
 
-    await expect(service.refreshTokens('user-4', 'refresh')).rejects.toThrow(
+    const compare = jest.spyOn(bcrypt, 'compare');
+    const refreshToken = await createRefreshJwt('user-4');
+
+    await expect(service.refreshTokens('user-4', refreshToken)).rejects.toThrow(
       'Acceso denegado',
     );
+
+    expect(mockJwtService.verifyAsync).toHaveBeenCalledWith(
+      refreshToken,
+      expect.objectContaining({ secret: jwtConfig.secret }),
+    );
+    expect(mockUserRepository.findOne).toHaveBeenCalled();
+    expect(compare).not.toHaveBeenCalled();
+    expect(mockJwtService.signAsync).not.toHaveBeenCalled();
+    expect(mockUserRepository.update).not.toHaveBeenCalled();
   });
 
   it('rejects inactive users before comparing, signing, or rotating refresh tokens', async () => {
+    useRealJwtVerification();
     mockUserRepository.findOne.mockResolvedValue({
       id: 'inactive-user',
       email: 'inactive@omnifood.ni',
@@ -653,11 +788,47 @@ describe('AuthService', () => {
     });
     const compare = jest.spyOn(bcrypt, 'compare');
 
+    const refreshToken = await createRefreshJwt('inactive-user');
+
     await expect(
-      service.refreshTokens('inactive-user', 'refresh-plain'),
+      service.refreshTokens('inactive-user', refreshToken),
     ).rejects.toThrow('Acceso denegado');
 
+    expect(mockJwtService.verifyAsync).toHaveBeenCalledWith(
+      refreshToken,
+      expect.objectContaining({ secret: jwtConfig.secret }),
+    );
+    expect(mockUserRepository.findOne).toHaveBeenCalled();
     expect(compare).not.toHaveBeenCalled();
+    expect(mockJwtService.signAsync).not.toHaveBeenCalled();
+    expect(mockUserRepository.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects a verified refresh token with a mismatched hash without an oracle or downstream update', async () => {
+    useRealJwtVerification();
+    mockUserRepository.findOne.mockResolvedValue({
+      id: 'user-5',
+      email: 'manager@omnifood.ni',
+      tenant_id: 'tenant-1',
+      role: UserRole.MANAGER,
+      is_active: true,
+      hashed_refresh_token: 'stored-refresh',
+    });
+    const compare = jest
+      .spyOn(bcrypt, 'compare')
+      .mockResolvedValue(false as never);
+    const refreshToken = await createRefreshJwt('user-5');
+
+    await expect(service.refreshTokens('user-5', refreshToken)).rejects.toThrow(
+      'Acceso denegado',
+    );
+
+    expect(mockJwtService.verifyAsync).toHaveBeenCalledWith(
+      refreshToken,
+      expect.objectContaining({ secret: jwtConfig.secret }),
+    );
+    expect(mockUserRepository.findOne).toHaveBeenCalled();
+    expect(compare).toHaveBeenCalledWith(refreshToken, 'stored-refresh');
     expect(mockJwtService.signAsync).not.toHaveBeenCalled();
     expect(mockUserRepository.update).not.toHaveBeenCalled();
   });

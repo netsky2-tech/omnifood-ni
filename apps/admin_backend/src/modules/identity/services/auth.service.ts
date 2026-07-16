@@ -13,6 +13,7 @@ import {
 } from '../config/identity-jwt.config';
 import {
   JWT_TOKEN_TYPES,
+  isRefreshTokenPayloadForSubject,
   type JwtSignPayload,
 } from '../security/jwt-token.types';
 
@@ -100,6 +101,24 @@ export class AuthService {
   }
 
   async refreshTokens(userId: string, refreshToken: string) {
+    try {
+      const payload = await this.jwtService.verifyAsync<
+        Record<string, unknown>
+      >(refreshToken, {
+        secret: this.jwtConfig.secret,
+        algorithms: ['HS256'],
+        issuer: this.jwtConfig.issuer,
+        audience: this.jwtConfig.audience,
+        clockTolerance: this.jwtConfig.clockToleranceSeconds,
+      });
+
+      if (!isRefreshTokenPayloadForSubject(payload, userId)) {
+        throw new UnauthorizedException('Acceso denegado');
+      }
+    } catch {
+      throw new UnauthorizedException('Acceso denegado');
+    }
+
     const user = await this.userRepository.findOne({
       where: { id: userId },
       select: [
@@ -121,7 +140,7 @@ export class AuthService {
       user.hashed_refresh_token,
     );
     if (!refreshTokenMatches) {
-      throw new UnauthorizedException('Token inválido');
+      throw new UnauthorizedException('Acceso denegado');
     }
 
     const tokens = await this.getTokens(
