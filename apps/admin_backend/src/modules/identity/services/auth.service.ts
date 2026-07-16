@@ -1,7 +1,8 @@
 import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
+import { randomUUID } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { User } from '../entities/user.entity';
 import { UserRole } from '../entities/user.entity';
@@ -14,6 +15,7 @@ import {
 import {
   JWT_TOKEN_TYPES,
   isRefreshTokenPayloadForSubject,
+  type JwtRefreshPayload,
   type JwtSignPayload,
 } from '../security/jwt-token.types';
 
@@ -39,6 +41,7 @@ export class AuthService {
     @InjectRepository(User)
     private userRepository: Repository<User>,
     private jwtService: JwtService,
+    private dataSource: DataSource,
     @Inject(IDENTITY_JWT_CONFIG) private readonly jwtConfig: IdentityJwtConfig,
   ) {}
 
@@ -52,6 +55,7 @@ export class AuthService {
       | 'role'
       | 'tenant_id'
       | 'is_active'
+      | 'security_version'
     > | null = null;
 
     try {
@@ -65,6 +69,7 @@ export class AuthService {
           'role',
           'tenant_id',
           'is_active',
+          'security_version',
         ],
       });
     } catch {
@@ -79,14 +84,21 @@ export class AuthService {
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
+    const refreshTokenFamilyId = randomUUID();
     const tokens = await this.getTokens(
       user.id,
       user.email,
       user.tenant_id,
       user.role,
       user.is_active,
+      user.security_version ?? 1,
+      refreshTokenFamilyId,
     );
-    await this.updateRefreshToken(user.id, tokens.refresh_token);
+    await this.updateRefreshToken(
+      user.id,
+      tokens.refresh_token,
+      refreshTokenFamilyId,
+    );
 
     return {
       ...tokens,
@@ -101,6 +113,7 @@ export class AuthService {
   }
 
   async refreshTokens(userId: string, refreshToken: string) {
+    let refreshPayload: JwtRefreshPayload;
     try {
       const payload = await this.jwtService.verifyAsync<
         Record<string, unknown>
@@ -115,49 +128,107 @@ export class AuthService {
       if (!isRefreshTokenPayloadForSubject(payload, userId)) {
         throw new UnauthorizedException('Acceso denegado');
       }
+      refreshPayload = payload;
     } catch {
       throw new UnauthorizedException('Acceso denegado');
     }
 
-    const user = await this.userRepository.findOne({
-      where: { id: userId },
-      select: [
-        'id',
-        'email',
-        'tenant_id',
-        'role',
-        'is_active',
-        'hashed_refresh_token',
-      ],
+    const outcome = await this.dataSource.transaction(async (manager) => {
+      const repository = manager.getRepository(User);
+      const user = await repository.findOne({
+        where: { id: userId },
+        lock: { mode: 'pessimistic_write' },
+        select: [
+          'id',
+          'email',
+          'tenant_id',
+          'role',
+          'is_active',
+          'security_version',
+          'hashed_refresh_token',
+          'refresh_token_family_id',
+          'refresh_token_revoked_at',
+        ],
+      });
+
+      if (
+        !user ||
+        !user.is_active ||
+        !user.hashed_refresh_token ||
+        user.refresh_token_revoked_at
+      ) {
+        return null;
+      }
+
+      const isCurrentFamily =
+        (typeof user.refresh_token_family_id === 'string' &&
+          refreshPayload.refresh_token_family_id ===
+            user.refresh_token_family_id) ||
+        (refreshPayload.refresh_token_family_id === undefined &&
+          user.refresh_token_family_id == null);
+      const refreshTokenMatches = await bcrypt.compare(
+        refreshToken,
+        user.hashed_refresh_token,
+      );
+
+      if (isCurrentFamily && refreshTokenMatches) {
+        const familyId = user.refresh_token_family_id ?? randomUUID();
+        const tokens = await this.getTokens(
+          user.id,
+          user.email,
+          user.tenant_id,
+          user.role,
+          user.is_active,
+          user.security_version,
+          familyId,
+        );
+        await this.updateRefreshToken(
+          user.id,
+          tokens.refresh_token,
+          familyId,
+          repository,
+        );
+        return { tokens };
+      }
+
+      if (
+        typeof user.refresh_token_family_id === 'string' &&
+        refreshPayload.refresh_token_family_id === user.refresh_token_family_id
+      ) {
+        await this.revokeRefreshSessionForUser(manager, user.id, new Date());
+      }
+      return null;
     });
 
-    if (!user || !user.is_active || !user.hashed_refresh_token) {
+    if (!outcome) {
       throw new UnauthorizedException('Acceso denegado');
     }
-
-    const refreshTokenMatches = await bcrypt.compare(
-      refreshToken,
-      user.hashed_refresh_token,
-    );
-    if (!refreshTokenMatches) {
-      throw new UnauthorizedException('Acceso denegado');
-    }
-
-    const tokens = await this.getTokens(
-      user.id,
-      user.email,
-      user.tenant_id,
-      user.role,
-      user.is_active,
-    );
-    await this.updateRefreshToken(user.id, tokens.refresh_token);
-    return tokens;
+    return outcome.tokens;
   }
 
-  async updateRefreshToken(userId: string, refreshToken: string) {
+  async updateRefreshToken(
+    userId: string,
+    refreshToken: string,
+    familyId?: string,
+    repository: Pick<Repository<User>, 'update'> = this.userRepository,
+  ) {
     const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
-    await this.userRepository.update(userId, {
+    await repository.update(userId, {
       hashed_refresh_token: hashedRefreshToken,
+      ...(familyId === undefined ? {} : { refresh_token_family_id: familyId }),
+      ...(familyId === undefined ? {} : { refresh_token_revoked_at: null }),
+    });
+  }
+
+  async revokeRefreshSessionForUser(
+    manager: EntityManager,
+    userId: string,
+    now: Date,
+  ) {
+    await manager.getRepository(User).update(userId, {
+      hashed_refresh_token: null,
+      refresh_token_family_id: null,
+      refresh_token_revoked_at: now,
     });
   }
 
@@ -167,6 +238,8 @@ export class AuthService {
     tenantId: string,
     role: string,
     isActive: boolean,
+    securityVersion: number,
+    refreshTokenFamilyId?: string,
   ) {
     const identity = {
       sub: userId,
@@ -178,11 +251,14 @@ export class AuthService {
     const accessPayload: JwtSignPayload = {
       ...identity,
       token_type: JWT_TOKEN_TYPES.ACCESS,
-      security_version: 1,
+      security_version: securityVersion,
     };
     const refreshPayload: JwtSignPayload = {
       ...identity,
       token_type: JWT_TOKEN_TYPES.REFRESH,
+      ...(refreshTokenFamilyId === undefined
+        ? {}
+        : { refresh_token_family_id: refreshTokenFamilyId }),
     };
     const [at, rt] = await Promise.all([
       this.jwtService.signAsync(accessPayload, {

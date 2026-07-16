@@ -7,6 +7,7 @@ import {
 import { ConfigModule } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { JwtService } from '@nestjs/jwt';
+import { PATH_METADATA } from '@nestjs/common/constants';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import { DataSource, Repository } from 'typeorm';
@@ -18,6 +19,7 @@ import { SecurityProfile } from './entities/security-profile.entity';
 import { AuthGuard } from './guards/auth.guard';
 import { IdentityModule } from './identity.module';
 import { AuthService } from './services/auth.service';
+import { AuthController } from './controllers/auth.controller';
 
 interface LoginPayload {
   sub: string;
@@ -178,6 +180,25 @@ describe('IdentityModule strict typed access-token ownership', () => {
     expect(payload.exp - payload.iat).toBeLessThanOrEqual(60 * 60 + 1);
     expect(payload.iss).toBe(jwtEnvironment.JWT_ISSUER);
     expect(payload.aud).toBe(jwtEnvironment.JWT_AUDIENCE);
+  });
+
+  it('does not expose a public identity logout route before 2A-L', () => {
+    const controllerPrototype = AuthController.prototype as unknown as Record<
+      string,
+      object
+    >;
+    const routes = Object.getOwnPropertyNames(controllerPrototype)
+      .map((method) => {
+        const path: unknown = Reflect.getMetadata(
+          PATH_METADATA,
+          controllerPrototype[method],
+        );
+        return path;
+      })
+      .filter((path): path is string => typeof path === 'string');
+
+    expect(routes).toEqual(['identity', 'login', 'refresh', 'staff']);
+    expect(routes).not.toContain('logout');
   });
 
   it('rejects a previously issued typeless access token', async () => {
