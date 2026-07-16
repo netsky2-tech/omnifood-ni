@@ -54,6 +54,15 @@ export class User {
   @Column({ select: false, nullable: true })
   hashed_refresh_token: string;
 
+  @Column({ default: 1, select: false })
+  security_version: number;
+
+  @Column({ type: 'uuid', nullable: true, select: false })
+  refresh_token_family_id: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true, select: false })
+  refresh_token_revoked_at: Date | null;
+
   @CreateDateColumn()
   created_at: Date;
 

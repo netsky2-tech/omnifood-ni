@@ -16,4 +16,42 @@ describe('User Entity Mapping', () => {
 
     expect(pinHashColumn).toBeUndefined();
   });
+
+  it('maps additive security and session-family state without exposing it by default', () => {
+    const columns = getMetadataArgsStorage().columns.filter(
+      (column) => column.target === User,
+    );
+
+    const securityVersion = columns.find(
+      (column) => column.propertyName === 'security_version',
+    );
+    const refreshTokenFamilyId = columns.find(
+      (column) => column.propertyName === 'refresh_token_family_id',
+    );
+    const refreshTokenRevokedAt = columns.find(
+      (column) => column.propertyName === 'refresh_token_revoked_at',
+    );
+    const hashedRefreshToken = columns.find(
+      (column) => column.propertyName === 'hashed_refresh_token',
+    );
+
+    expect(securityVersion?.options).toMatchObject({
+      default: 1,
+      select: false,
+    });
+    expect(refreshTokenFamilyId?.options).toMatchObject({
+      type: 'uuid',
+      nullable: true,
+      select: false,
+    });
+    expect(refreshTokenRevokedAt?.options).toMatchObject({
+      type: 'timestamptz',
+      nullable: true,
+      select: false,
+    });
+    expect(hashedRefreshToken?.options).toMatchObject({
+      nullable: true,
+      select: false,
+    });
+  });
 });
