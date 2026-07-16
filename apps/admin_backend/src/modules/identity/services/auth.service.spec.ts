@@ -1,6 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { JwtService, type JwtVerifyOptions } from '@nestjs/jwt';
+import {
+  JwtService,
+  type JwtSignOptions,
+  type JwtVerifyOptions,
+} from '@nestjs/jwt';
 import { DataSource, type EntityManager } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { AuthService } from './auth.service';
@@ -22,6 +26,7 @@ const jwtConfig: IdentityJwtConfig = {
 };
 
 const realJwtService = new JwtService();
+const anyString = expect.any(String) as unknown as string;
 
 const createRefreshJwt = (
   subject: string,
@@ -32,6 +37,8 @@ const createRefreshJwt = (
     issuer?: string;
     audience?: string;
     expiresIn?: number;
+    jwtid?: string;
+    includeJti?: boolean;
   } = {},
 ) =>
   realJwtService.signAsync(
@@ -45,6 +52,9 @@ const createRefreshJwt = (
       algorithm: options.algorithm ?? jwtConfig.algorithm,
       issuer: options.issuer ?? jwtConfig.issuer,
       audience: options.audience ?? jwtConfig.audience,
+      ...(options.includeJti === false
+        ? {}
+        : { jwtid: options.jwtid ?? 'test-refresh-jti' }),
       ...(options.expiresIn === undefined
         ? {}
         : { expiresIn: options.expiresIn }),
@@ -653,6 +663,7 @@ describe('AuthService', () => {
         algorithm: 'HS256',
         issuer: 'omnifood-admin-test',
         audience: 'omnifood-pos-test',
+        jwtid: anyString,
       },
     );
   });
@@ -679,6 +690,114 @@ describe('AuthService', () => {
         realJwtService.verifyAsync<Record<string, unknown>>(token, options),
     );
   };
+
+  const useRealJwtSigning = () => {
+    const sign = (payload: Record<string, unknown>, options?: JwtSignOptions) =>
+      realJwtService.signAsync(payload, {
+        ...options,
+        secret: jwtConfig.secret,
+      });
+    mockJwtService.signAsync.mockImplementation(sign);
+  };
+
+  it('issues distinct registered refresh jti values in the same second without changing access claims', async () => {
+    jest
+      .useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] })
+      .setSystemTime(new Date('2026-07-16T12:00:00.000Z'));
+    try {
+      useRealJwtSigning();
+
+      const first = await service.getTokens(
+        'same-second-user',
+        'same-second@omnifood.ni',
+        'tenant-1',
+        UserRole.MANAGER,
+        true,
+        9,
+        'family-same-second',
+      );
+      const second = await service.getTokens(
+        'same-second-user',
+        'same-second@omnifood.ni',
+        'tenant-1',
+        UserRole.MANAGER,
+        true,
+        9,
+        'family-same-second',
+      );
+
+      const firstRefresh = await realJwtService.verifyAsync<
+        Record<string, unknown>
+      >(first.refresh_token, {
+        secret: jwtConfig.secret,
+        issuer: jwtConfig.issuer,
+        audience: jwtConfig.audience,
+      });
+      const secondRefresh = await realJwtService.verifyAsync<
+        Record<string, unknown>
+      >(second.refresh_token, {
+        secret: jwtConfig.secret,
+        issuer: jwtConfig.issuer,
+        audience: jwtConfig.audience,
+      });
+      const access = await realJwtService.verifyAsync<Record<string, unknown>>(
+        first.access_token,
+        {
+          secret: jwtConfig.secret,
+          issuer: jwtConfig.issuer,
+          audience: jwtConfig.audience,
+        },
+      );
+
+      expect(first.refresh_token).not.toBe(second.refresh_token);
+      expect(firstRefresh.jti).toEqual(expect.any(String));
+      expect(firstRefresh.jti).not.toBe('');
+      expect(firstRefresh.jti).not.toBe(secondRefresh.jti);
+      expect(access).toMatchObject({
+        token_type: JWT_TOKEN_TYPES.ACCESS,
+        security_version: 9,
+        iss: jwtConfig.issuer,
+        aud: jwtConfig.audience,
+      });
+      expect(access.jti).toBeUndefined();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it.each([
+    ['empty', () => createRefreshJwt('user-3', {}, { jwtid: '' })],
+    ['whitespace', () => createRefreshJwt('user-3', {}, { jwtid: '   ' })],
+    [
+      'non-string',
+      () =>
+        realJwtService.signAsync(
+          { sub: 'user-3', token_type: JWT_TOKEN_TYPES.REFRESH, jti: 4 },
+          {
+            secret: jwtConfig.secret,
+            algorithm: jwtConfig.algorithm,
+            issuer: jwtConfig.issuer,
+            audience: jwtConfig.audience,
+          },
+        ),
+    ],
+  ])(
+    'rejects %s refresh jti before repository, bcrypt, signing, or persistence',
+    async (_caseName, createToken) => {
+      useRealJwtVerification();
+      const compare = jest.spyOn(bcrypt, 'compare');
+      const token = await createToken();
+
+      await expect(service.refreshTokens('user-3', token)).rejects.toThrow(
+        'Acceso denegado',
+      );
+
+      expect(mockUserRepository.findOne).not.toHaveBeenCalled();
+      expect(compare).not.toHaveBeenCalled();
+      expect(mockJwtService.signAsync).not.toHaveBeenCalled();
+      expect(mockUserRepository.update).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     ['malformed token', () => Promise.resolve('not-a-jwt')],
@@ -791,13 +910,13 @@ describe('AuthService', () => {
     );
   });
 
-  it('upgrades a matching family-less legacy hash into a persisted refresh family', async () => {
+  it('migrates a matching pre-jti bearer into the stable persisted refresh family', async () => {
     useRealJwtVerification();
     const lockedRepository = createLockedRepository({
       id: 'legacy-user',
       security_version: 8,
       hashed_refresh_token: 'legacy-hash',
-      refresh_token_family_id: null,
+      refresh_token_family_id: 'family-active',
     });
     useLockedRepository(lockedRepository);
     jest.spyOn(bcrypt, 'compare').mockResolvedValue(true as never);
@@ -809,7 +928,11 @@ describe('AuthService', () => {
     await expect(
       service.refreshTokens(
         'legacy-user',
-        await createRefreshJwt('legacy-user'),
+        await createRefreshJwt(
+          'legacy-user',
+          { refresh_token_family_id: 'family-active' },
+          { includeJti: false },
+        ),
       ),
     ).resolves.toEqual({
       access_token: 'upgraded-access',
@@ -834,10 +957,10 @@ describe('AuthService', () => {
     expect(refreshClaims.refresh_token_family_id).toBe(
       update.refresh_token_family_id,
     );
-    expect(update.refresh_token_family_id).toEqual(expect.any(String));
+    expect(update.refresh_token_family_id).toBe('family-active');
   });
 
-  it('rejects a family-less token without revoking an active stored family', async () => {
+  it('rejects a family-less pre-jti token without rotating an active stored family', async () => {
     useRealJwtVerification();
     const lockedRepository = createLockedRepository({ id: 'isolated-user' });
     useLockedRepository(lockedRepository);
@@ -846,7 +969,7 @@ describe('AuthService', () => {
     await expect(
       service.refreshTokens(
         'isolated-user',
-        await createRefreshJwt('isolated-user'),
+        await createRefreshJwt('isolated-user', {}, { includeJti: false }),
       ),
     ).rejects.toThrow('Acceso denegado');
 
@@ -877,12 +1000,19 @@ describe('AuthService', () => {
     expect(mockJwtService.signAsync).not.toHaveBeenCalled();
   });
 
-  it('revokes the actual successor family before rejecting a response-loss retry', async () => {
+  it('serializes one pre-jti winner and revokes its replaying loser', async () => {
     useRealJwtVerification();
+    useRealJwtSigning();
     let committed = false;
+    const consumed = await createRefreshJwt(
+      'retry-user',
+      { refresh_token_family_id: 'family-active' },
+      { includeJti: false },
+    );
     const lockedRepository = createLockedRepository({
       id: 'retry-user',
       security_version: 7,
+      hashed_refresh_token: await bcrypt.hash(consumed, 10),
     });
     let state = (await lockedRepository.findOne()) as Record<string, unknown>;
     lockedRepository.findOne.mockImplementation(() => Promise.resolve(state));
@@ -904,14 +1034,6 @@ describe('AuthService', () => {
         throw error;
       }
     });
-    jest
-      .spyOn(bcrypt, 'compare')
-      .mockResolvedValueOnce(true as never)
-      .mockResolvedValueOnce(false as never);
-    jest.spyOn(bcrypt, 'hash').mockResolvedValue('successor-hash' as never);
-    const consumed = await createRefreshJwt('retry-user', {
-      refresh_token_family_id: 'family-active',
-    });
     await service.refreshTokens('retry-user', consumed);
     expect(lockedRepository.findOne).toHaveBeenCalledWith(
       expect.objectContaining({ lock: { mode: 'pessimistic_write' } }),
@@ -929,7 +1051,7 @@ describe('AuthService', () => {
     expect(mockJwtService.signAsync).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({ refresh_token_family_id: 'family-active' }),
-      expect.any(Object),
+      expect.objectContaining({ jwtid: anyString }),
     );
     expect(state).toMatchObject({
       hashed_refresh_token: null,

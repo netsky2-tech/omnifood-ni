@@ -272,6 +272,7 @@ export class AuthService {
         algorithm: this.jwtConfig.algorithm,
         issuer: this.jwtConfig.issuer,
         audience: this.jwtConfig.audience,
+        jwtid: randomUUID(),
       }),
     ]);
 
