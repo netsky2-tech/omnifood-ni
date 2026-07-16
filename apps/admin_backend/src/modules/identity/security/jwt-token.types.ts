@@ -16,11 +16,13 @@ interface JwtIdentityClaims {
 
 export interface JwtSignPayload extends JwtIdentityClaims {
   security_version?: number;
+  refresh_token_family_id?: string;
 }
 
 export interface JwtRefreshPayload {
   sub: string;
   token_type: typeof JWT_TOKEN_TYPES.REFRESH;
+  refresh_token_family_id?: string;
 }
 
 export const isRefreshTokenPayloadForSubject = (
@@ -34,4 +36,6 @@ export const isRefreshTokenPayloadForSubject = (
   typeof payload.sub === 'string' &&
   payload.sub.length > 0 &&
   payload.sub === userId &&
-  payload.token_type === JWT_TOKEN_TYPES.REFRESH;
+  payload.token_type === JWT_TOKEN_TYPES.REFRESH &&
+  (!('refresh_token_family_id' in payload) ||
+    typeof payload.refresh_token_family_id === 'string');
