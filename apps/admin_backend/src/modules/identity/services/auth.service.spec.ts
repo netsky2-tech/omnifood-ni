@@ -14,6 +14,7 @@ import {
   type IdentityJwtConfig,
 } from '../config/identity-jwt.config';
 import { JWT_TOKEN_TYPES } from '../security/jwt-token.types';
+import * as refreshTokenVerifier from '../security/refresh-token-verifier';
 
 const jwtConfig: IdentityJwtConfig = {
   secret: 'test-only-jwt-secret-with-at-least-thirty-two-bytes',
@@ -668,6 +669,36 @@ describe('AuthService', () => {
     );
   });
 
+  it('routes login refresh persistence through the canonical verifier', async () => {
+    mockUserRepository.findOne.mockResolvedValue({
+      id: 'verifier-login-user',
+      email: 'verifier-login@omnifood.ni',
+      name: 'Verifier Login',
+      password_hash: 'stored-password-hash',
+      role: UserRole.CASHIER,
+      tenant_id: 'tenant-1',
+      is_active: true,
+      security_version: 3,
+    });
+    jest.spyOn(bcrypt, 'compare').mockResolvedValue(true as never);
+    const hash = jest
+      .spyOn(refreshTokenVerifier, 'hashRefreshTokenVerifier')
+      .mockResolvedValue('canonical-refresh-verifier');
+    mockJwtService.signAsync
+      .mockResolvedValueOnce('access-token')
+      .mockResolvedValueOnce('login-refresh-token');
+
+    await service.login('verifier-login@omnifood.ni', 'Password123!');
+
+    expect(hash).toHaveBeenCalledWith('login-refresh-token');
+    expect(mockUserRepository.update).toHaveBeenCalledWith(
+      'verifier-login-user',
+      expect.objectContaining({
+        hashed_refresh_token: 'canonical-refresh-verifier',
+      }),
+    );
+  });
+
   it('rejects login when password compare fails', async () => {
     mockUserRepository.findOne.mockResolvedValue({
       id: 'user-2',
@@ -910,6 +941,40 @@ describe('AuthService', () => {
     );
   });
 
+  it('routes modern rotation comparison and successor persistence through the canonical verifier', async () => {
+    useRealJwtVerification();
+    const lockedRepository = createLockedRepository({ id: 'modern-user' });
+    useLockedRepository(lockedRepository);
+    const compare = jest
+      .spyOn(refreshTokenVerifier, 'compareRefreshTokenVerifier')
+      .mockResolvedValue(true);
+    const hash = jest
+      .spyOn(refreshTokenVerifier, 'hashRefreshTokenVerifier')
+      .mockResolvedValue('modern-successor-verifier');
+    mockJwtService.signAsync
+      .mockResolvedValueOnce('modern-access-token')
+      .mockResolvedValueOnce('modern-successor-token');
+    const refreshToken = await createRefreshJwt('modern-user', {
+      refresh_token_family_id: 'family-active',
+    });
+
+    await expect(
+      service.refreshTokens('modern-user', refreshToken),
+    ).resolves.toEqual({
+      access_token: 'modern-access-token',
+      refresh_token: 'modern-successor-token',
+    });
+
+    expect(compare).toHaveBeenCalledWith(refreshToken, 'active-hash');
+    expect(hash).toHaveBeenCalledWith('modern-successor-token');
+    expect(lockedRepository.update).toHaveBeenCalledWith(
+      'modern-user',
+      expect.objectContaining({
+        hashed_refresh_token: 'modern-successor-verifier',
+      }),
+    );
+  });
+
   it('migrates a matching pre-jti bearer into the stable persisted refresh family', async () => {
     useRealJwtVerification();
     const lockedRepository = createLockedRepository({
@@ -958,6 +1023,33 @@ describe('AuthService', () => {
       update.refresh_token_family_id,
     );
     expect(update.refresh_token_family_id).toBe('family-active');
+  });
+
+  it('routes pre-jti bridge comparison and successor persistence through the canonical verifier', async () => {
+    useRealJwtVerification();
+    const lockedRepository = createLockedRepository({
+      id: 'legacy-verifier-user',
+    });
+    useLockedRepository(lockedRepository);
+    const compare = jest
+      .spyOn(refreshTokenVerifier, 'compareRefreshTokenVerifier')
+      .mockResolvedValue(true);
+    const hash = jest
+      .spyOn(refreshTokenVerifier, 'hashRefreshTokenVerifier')
+      .mockResolvedValue('legacy-successor-verifier');
+    mockJwtService.signAsync
+      .mockResolvedValueOnce('legacy-access-token')
+      .mockResolvedValueOnce('legacy-successor-token');
+    const refreshToken = await createRefreshJwt(
+      'legacy-verifier-user',
+      { refresh_token_family_id: 'family-active' },
+      { includeJti: false },
+    );
+
+    await service.refreshTokens('legacy-verifier-user', refreshToken);
+
+    expect(compare).toHaveBeenCalledWith(refreshToken, 'active-hash');
+    expect(hash).toHaveBeenCalledWith('legacy-successor-token');
   });
 
   it('rejects a family-less pre-jti token without rotating an active stored family', async () => {
@@ -1012,7 +1104,8 @@ describe('AuthService', () => {
     const lockedRepository = createLockedRepository({
       id: 'retry-user',
       security_version: 7,
-      hashed_refresh_token: await bcrypt.hash(consumed, 10),
+      hashed_refresh_token:
+        await refreshTokenVerifier.hashRefreshTokenVerifier(consumed),
     });
     let state = (await lockedRepository.findOne()) as Record<string, unknown>;
     lockedRepository.findOne.mockImplementation(() => Promise.resolve(state));
@@ -1127,8 +1220,8 @@ describe('AuthService', () => {
       hashed_refresh_token: 'stored-refresh',
     });
     const compare = jest
-      .spyOn(bcrypt, 'compare')
-      .mockResolvedValue(false as never);
+      .spyOn(refreshTokenVerifier, 'compareRefreshTokenVerifier')
+      .mockResolvedValue(false);
     const refreshToken = await createRefreshJwt('user-5');
 
     await expect(service.refreshTokens('user-5', refreshToken)).rejects.toThrow(
