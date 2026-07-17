@@ -3,7 +3,8 @@ export const JWT_TOKEN_TYPES = {
   REFRESH: 'refresh',
 } as const;
 
-type JwtTokenType = (typeof JWT_TOKEN_TYPES)[keyof typeof JWT_TOKEN_TYPES];
+export type JwtTokenType =
+  (typeof JWT_TOKEN_TYPES)[keyof typeof JWT_TOKEN_TYPES];
 
 interface JwtIdentityClaims {
   sub: string;
@@ -12,6 +13,12 @@ interface JwtIdentityClaims {
   role: string;
   is_active: boolean;
   token_type: JwtTokenType;
+}
+
+export interface JwtAccessPayload extends JwtIdentityClaims {
+  token_type: typeof JWT_TOKEN_TYPES.ACCESS;
+  security_version: number;
+  [claim: string]: unknown;
 }
 
 export interface JwtSignPayload extends JwtIdentityClaims {
