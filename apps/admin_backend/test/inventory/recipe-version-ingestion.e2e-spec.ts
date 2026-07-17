@@ -19,7 +19,9 @@ import {
 import { ShrinkageService } from '../../src/modules/inventory/shrinkage.service';
 import { TenantInterceptor } from '../../src/core/database/rls.interceptor';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
+import { AuthoritativeCurrentUserGuard } from '../../src/modules/identity/guards/authoritative-current-user.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
+import { CurrentUserAuthorizationService } from '../../src/modules/identity/services/current-user-authorization.service';
 import { UserRole } from '../../src/modules/identity/entities/user.entity';
 import {
   createIdentityJwtConfigProvider,
@@ -176,7 +178,12 @@ describe('Recipe version ingestion route (integration)', () => {
         },
         TenantInterceptor,
         AuthGuard,
+        AuthoritativeCurrentUserGuard,
         RolesGuard,
+        {
+          provide: CurrentUserAuthorizationService,
+          useValue: { authorize: jest.fn((token: unknown) => token) },
+        },
         Reflector,
         JwtService,
         createIdentityJwtTestConfigProvider(),
