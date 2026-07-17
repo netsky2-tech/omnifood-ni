@@ -6,6 +6,7 @@ import { AuditLog } from '../entities/audit-log.entity';
 import { SecurityProfile } from '../entities/security-profile.entity';
 import { DataSource } from 'typeorm';
 import { AuthService } from './auth.service';
+import * as bcrypt from 'bcrypt';
 
 describe('UserService', () => {
   let service: UserService;
@@ -152,15 +153,35 @@ describe('UserService', () => {
     );
   });
 
-  it('atomically revokes refresh state after a role change', async () => {
+  it('rejects password hashing failures before opening a transaction', async () => {
+    const hash = jest
+      .spyOn(bcrypt, 'hash')
+      .mockRejectedValueOnce(new Error('hash failed') as never);
+
+    await expect(
+      service.update(
+        'user-1',
+        { password: 'Password123!' },
+        'tenant-1',
+        'admin-1',
+      ),
+    ).rejects.toThrow('hash failed');
+
+    expect(dataSource.transaction).not.toHaveBeenCalled();
+    hash.mockRestore();
+  });
+
+  it('enters the sensitive boundary for role and password changes', async () => {
     const lockedUsers = {
-      findOne: jest.fn().mockResolvedValue({
-        id: 'user-1',
-        tenant_id: 'tenant-1',
-        name: 'Cashier',
-        role: UserRole.CASHIER,
-        security_version: 7,
-      }),
+      findOne: jest.fn().mockImplementation(() =>
+        Promise.resolve({
+          id: 'user-1',
+          tenant_id: 'tenant-1',
+          name: 'Cashier',
+          role: UserRole.CASHIER,
+          security_version: 7,
+        }),
+      ),
       save: jest
         .fn()
         .mockImplementation((user: Record<string, unknown>) =>
@@ -176,14 +197,14 @@ describe('UserService', () => {
         operation(manager),
     );
 
-    await service.update(
-      'user-1',
+    for (const dto of [
       { role: UserRole.MANAGER },
-      'tenant-1',
-      'admin-1',
-    );
+      { password: 'Password123!' },
+    ]) {
+      await service.update('user-1', dto, 'tenant-1', 'admin-1');
+    }
 
-    expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+    expect(dataSource.transaction).toHaveBeenCalledTimes(2);
     expect(lockedUsers.findOne).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 'user-1', tenant_id: 'tenant-1' },
@@ -191,17 +212,41 @@ describe('UserService', () => {
       }),
     );
     expect(lockedUsers.save).toHaveBeenCalledWith(
-      expect.objectContaining({
-        role: UserRole.MANAGER,
-        security_version: 8,
-      }),
+      expect.objectContaining({ security_version: 8 }),
     );
-    expect(authService.revokeRefreshSessionForUser).toHaveBeenCalledWith(
-      manager,
-      'user-1',
-      expect.any(Date),
+    expect(authService.revokeRefreshSessionForUser).toHaveBeenCalledTimes(2);
+    expect(lockedAudit.save).toHaveBeenCalledTimes(2);
+  });
+
+  it('treats each repeated deactivation as a sensitive revocation and audit boundary', async () => {
+    const lockedUsers = {
+      findOne: jest.fn().mockImplementation(() =>
+        Promise.resolve({
+          id: 'user-1',
+          tenant_id: 'tenant-1',
+          is_active: false,
+          security_version: 7,
+        }),
+      ),
+      save: jest.fn().mockResolvedValue({ id: 'user-1' }),
+    };
+    const lockedAudit = {
+      save: jest.fn().mockResolvedValue({ id: 'audit-1' }),
+    };
+    manager.getRepository.mockImplementation((entity: unknown) =>
+      entity === User ? lockedUsers : lockedAudit,
     );
-    expect(lockedAudit.save).toHaveBeenCalledTimes(1);
+    dataSource.transaction.mockImplementation(
+      (operation: (transactionManager: typeof manager) => Promise<unknown>) =>
+        operation(manager),
+    );
+
+    await service.deactivate('user-1', 'tenant-1', 'admin-1');
+    await service.deactivate('user-1', 'tenant-1', 'admin-1');
+
+    expect(dataSource.transaction).toHaveBeenCalledTimes(2);
+    expect(authService.revokeRefreshSessionForUser).toHaveBeenCalledTimes(2);
+    expect(lockedAudit.save).toHaveBeenCalledTimes(2);
   });
 
   it('keeps name and PIN changes outside refresh revocation', async () => {
