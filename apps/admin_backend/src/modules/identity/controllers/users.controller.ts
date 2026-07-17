@@ -13,6 +13,7 @@ import {
 import { UserService } from '../services/user.service';
 import { AuthGuard } from '../guards/auth.guard';
 import { RolesGuard } from '../guards/roles.guard';
+import { AuthoritativeCurrentUserGuard } from '../guards/authoritative-current-user.guard';
 import { Roles } from '../../../core/decorators/roles.decorator';
 import { UserRole } from '../entities/user.entity';
 import { TenantInterceptor } from '../../../core/database/rls.interceptor';
@@ -29,18 +30,19 @@ interface RequestWithUser extends Request {
 }
 
 @Controller('identity/users')
-@UseGuards(AuthGuard, RolesGuard)
 @UseInterceptors(TenantInterceptor)
 export class UsersController {
   constructor(private userService: UserService) {}
 
   @Get()
+  @UseGuards(AuthGuard, RolesGuard)
   @Roles(UserRole.OWNER)
   async list(@GetTenantId() tenantId: string) {
     return this.userService.findByTenant(tenantId || '');
   }
 
   @Post()
+  @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)
   @Roles(UserRole.OWNER)
   async create(
     @GetTenantId() tenantId: string,
@@ -51,6 +53,7 @@ export class UsersController {
   }
 
   @Put(':id')
+  @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)
   @Roles(UserRole.OWNER)
   async update(
     @Param('id') id: string,
@@ -62,6 +65,7 @@ export class UsersController {
   }
 
   @Delete(':id')
+  @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)
   @Roles(UserRole.OWNER)
   async delete(
     @Param('id') id: string,

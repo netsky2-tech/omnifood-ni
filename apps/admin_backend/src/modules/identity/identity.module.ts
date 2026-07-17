@@ -13,6 +13,8 @@ import { AuditController } from './controllers/audit.controller';
 import { UsersController } from './controllers/users.controller';
 import { AuthGuard } from './guards/auth.guard';
 import { RolesGuard } from './guards/roles.guard';
+import { AuthoritativeCurrentUserGuard } from './guards/authoritative-current-user.guard';
+import { CurrentUserAuthorizationService } from './services/current-user-authorization.service';
 import {
   IDENTITY_JWT_CONFIG,
   IdentityJwtConfig,
@@ -48,7 +50,9 @@ import {
     UserService,
     AuditIntegrityService,
     AuthGuard,
+    AuthoritativeCurrentUserGuard,
     RolesGuard,
+    CurrentUserAuthorizationService,
   ],
   exports: [
     JwtModule,
@@ -57,7 +61,9 @@ import {
     UserService,
     AuditIntegrityService,
     AuthGuard,
+    AuthoritativeCurrentUserGuard,
     RolesGuard,
+    CurrentUserAuthorizationService,
   ],
 })
 export class IdentityModule {}
