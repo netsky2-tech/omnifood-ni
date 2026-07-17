@@ -4,12 +4,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { User } from '../entities/user.entity';
 import { AuditLog } from '../entities/audit-log.entity';
 import { SecurityProfile } from '../entities/security-profile.entity';
 import { CreateUserDto, UpdateUserDto } from '../dto/user-management.dto';
+import { AuthService } from './auth.service';
 
 @Injectable()
 export class UserService {
@@ -20,6 +21,8 @@ export class UserService {
     private auditRepository: Repository<AuditLog>,
     @InjectRepository(SecurityProfile)
     private securityProfileRepository: Repository<SecurityProfile>,
+    private readonly dataSource: DataSource,
+    private readonly authService: AuthService,
   ) {}
 
   async findByTenant(tenantId: string): Promise<User[]> {
@@ -78,6 +81,27 @@ export class UserService {
     tenantId: string,
     adminId: string,
   ): Promise<User> {
+    const passwordHash = dto.password
+      ? await bcrypt.hash(dto.password, 10)
+      : undefined;
+    const pinHash = dto.pin ? await bcrypt.hash(dto.pin, 10) : undefined;
+    const requiresSecurityRevocation =
+      dto.role !== undefined || passwordHash !== undefined;
+
+    if (requiresSecurityRevocation) {
+      return this.dataSource.transaction(async (manager) =>
+        this.updateSensitiveUser(
+          manager,
+          id,
+          dto,
+          tenantId,
+          adminId,
+          passwordHash,
+          pinHash,
+        ),
+      );
+    }
+
     const user = await this.userRepository.findOne({
       where: { id, tenant_id: tenantId },
     });
@@ -88,20 +112,16 @@ export class UserService {
     if (dto.name) user.name = dto.name;
     if (dto.role) user.role = dto.role;
 
-    if (dto.password) {
-      user.password_hash = await bcrypt.hash(dto.password, 10);
-    }
-
     const updatedUser = await this.userRepository.save(user);
 
-    if (dto.pin) {
+    if (pinHash) {
       const existingProfile = await this.securityProfileRepository.findOne({
         where: { user_id: updatedUser.id },
       });
       const profile =
         existingProfile ??
         this.securityProfileRepository.create({ user_id: updatedUser.id });
-      profile.pin_hash = await bcrypt.hash(dto.pin, 10);
+      profile.pin_hash = pinHash;
       profile.is_pin_enabled = true;
       await this.securityProfileRepository.save(profile);
     }
@@ -116,17 +136,86 @@ export class UserService {
     tenantId: string,
     adminId: string,
   ): Promise<void> {
-    const user = await this.userRepository.findOne({
+    await this.dataSource.transaction(async (manager) => {
+      const users = manager.getRepository(User);
+      const user = await users.findOne({
+        where: { id, tenant_id: tenantId },
+        lock: { mode: 'pessimistic_write' },
+        select: ['id', 'tenant_id', 'is_active', 'security_version'],
+      });
+      if (!user) {
+        throw new NotFoundException('Usuario no encontrado');
+      }
+
+      user.is_active = false;
+      user.security_version += 1;
+      await users.save(user);
+      await this.authService.revokeRefreshSessionForUser(
+        manager,
+        user.id,
+        new Date(),
+      );
+      await this.logAction('USER_DEACTIVATED', id, tenantId, adminId, manager);
+    });
+  }
+
+  private async updateSensitiveUser(
+    manager: EntityManager,
+    id: string,
+    dto: UpdateUserDto,
+    tenantId: string,
+    adminId: string,
+    passwordHash?: string,
+    pinHash?: string,
+  ): Promise<User> {
+    const users = manager.getRepository(User);
+    const user = await users.findOne({
       where: { id, tenant_id: tenantId },
+      lock: { mode: 'pessimistic_write' },
+      select: [
+        'id',
+        'tenant_id',
+        'name',
+        'role',
+        'password_hash',
+        'security_version',
+      ],
     });
     if (!user) {
       throw new NotFoundException('Usuario no encontrado');
     }
 
-    user.is_active = false;
-    await this.userRepository.save(user);
+    if (dto.name) user.name = dto.name;
+    if (dto.role !== undefined) user.role = dto.role;
+    if (passwordHash) user.password_hash = passwordHash;
+    user.security_version += 1;
+    const updatedUser = await users.save(user);
 
-    await this.logAction('USER_DEACTIVATED', id, tenantId, adminId);
+    if (pinHash) {
+      const profiles = manager.getRepository(SecurityProfile);
+      const existingProfile = await profiles.findOne({
+        where: { user_id: updatedUser.id },
+      });
+      const profile =
+        existingProfile ?? profiles.create({ user_id: updatedUser.id });
+      profile.pin_hash = pinHash;
+      profile.is_pin_enabled = true;
+      await profiles.save(profile);
+    }
+
+    await this.authService.revokeRefreshSessionForUser(
+      manager,
+      updatedUser.id,
+      new Date(),
+    );
+    await this.logAction(
+      'USER_UPDATED',
+      updatedUser.id,
+      tenantId,
+      adminId,
+      manager,
+    );
+    return updatedUser;
   }
 
   private async logAction(
@@ -134,6 +223,7 @@ export class UserService {
     targetId: string,
     tenantId: string,
     adminId: string,
+    manager?: EntityManager,
   ) {
     const log = new AuditLog();
     log.action = action;
@@ -145,6 +235,8 @@ export class UserService {
     log.timestamp = new Date();
     log.metadata = { timestamp: new Date().toISOString() };
 
-    await this.auditRepository.save(log);
+    await (manager
+      ? manager.getRepository(AuditLog).save(log)
+      : this.auditRepository.save(log));
   }
 }
