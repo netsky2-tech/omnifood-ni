@@ -18,6 +18,7 @@ import {
   type JwtRefreshPayload,
   type JwtSignPayload,
 } from '../security/jwt-token.types';
+import * as refreshTokenVerifier from '../security/refresh-token-verifier';
 
 const SYNC_SCOPE = {
   POS_AUTH_CONTINUITY: 'pos-auth-continuity',
@@ -166,10 +167,11 @@ export class AuthService {
             user.refresh_token_family_id) ||
         (refreshPayload.refresh_token_family_id === undefined &&
           user.refresh_token_family_id == null);
-      const refreshTokenMatches = await bcrypt.compare(
-        refreshToken,
-        user.hashed_refresh_token,
-      );
+      const refreshTokenMatches =
+        await refreshTokenVerifier.compareRefreshTokenVerifier(
+          refreshToken,
+          user.hashed_refresh_token,
+        );
 
       if (isCurrentFamily && refreshTokenMatches) {
         const familyId = user.refresh_token_family_id ?? randomUUID();
@@ -212,7 +214,8 @@ export class AuthService {
     familyId?: string,
     repository: Pick<Repository<User>, 'update'> = this.userRepository,
   ) {
-    const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
+    const hashedRefreshToken =
+      await refreshTokenVerifier.hashRefreshTokenVerifier(refreshToken);
     await repository.update(userId, {
       hashed_refresh_token: hashedRefreshToken,
       ...(familyId === undefined ? {} : { refresh_token_family_id: familyId }),
