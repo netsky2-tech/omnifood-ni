@@ -7,6 +7,9 @@ import { CATALOG_TYPE } from './catalog-type';
 import { RolesGuard } from '../identity/guards/roles.guard';
 import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '../identity/guards/auth.guard';
+import { AuthoritativeCurrentUserGuard } from '../identity/guards/authoritative-current-user.guard';
+import { CurrentUserAuthorizationService } from '../identity/services/current-user-authorization.service';
+import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { UserRole } from '../identity/entities/user.entity';
@@ -71,7 +74,12 @@ describe('CatalogController', () => {
       providers: [
         Reflector,
         AuthGuard,
+        AuthoritativeCurrentUserGuard,
         RolesGuard,
+        {
+          provide: CurrentUserAuthorizationService,
+          useValue: { authorize: jest.fn((token: unknown) => token) },
+        },
         { provide: CatalogService, useValue: service },
         {
           provide: ConfigService,
@@ -91,6 +99,32 @@ describe('CatalogController', () => {
 
   it('is defined', () => {
     expect(controller).toBeDefined();
+  });
+
+  it('requires authoritative authorization on writes but excludes GET :type', () => {
+    const handler = (name: string): object => {
+      const value: unknown = Object.getOwnPropertyDescriptor(
+        CatalogController.prototype,
+        name,
+      )?.value;
+      if (typeof value !== 'function') {
+        throw new Error(`Missing ${name} handler`);
+      }
+      return value;
+    };
+
+    for (const name of ['seedDefaults', 'create', 'update', 'deactivate']) {
+      expect(Reflect.getMetadata(GUARDS_METADATA, handler(name))).toEqual([
+        AuthGuard,
+        AuthoritativeCurrentUserGuard,
+        RolesGuard,
+      ]);
+    }
+
+    expect(Reflect.getMetadata(GUARDS_METADATA, handler('list'))).toEqual([
+      AuthGuard,
+      RolesGuard,
+    ]);
   });
 
   it('GET :type delegates to service.list with the resolved type and tenant', async () => {
@@ -205,6 +239,11 @@ describe('CatalogController HTTP guards and route precedence', () => {
         Reflector,
         RolesGuard,
         AuthGuard,
+        AuthoritativeCurrentUserGuard,
+        {
+          provide: CurrentUserAuthorizationService,
+          useValue: { authorize: jest.fn((token: unknown) => token) },
+        },
         { provide: CatalogService, useValue: service },
         {
           provide: ConfigService,

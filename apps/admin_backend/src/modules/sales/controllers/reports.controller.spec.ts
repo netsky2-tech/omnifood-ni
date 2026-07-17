@@ -1,10 +1,13 @@
 import { INestApplication } from '@nestjs/common';
+import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { Test } from '@nestjs/testing';
 import * as request from 'supertest';
 import { ReportsController } from './reports.controller';
 import { RolesGuard } from '../../identity/guards/roles.guard';
 import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '../../identity/guards/auth.guard';
+import { AuthoritativeCurrentUserGuard } from '../../identity/guards/authoritative-current-user.guard';
+import { CurrentUserAuthorizationService } from '../../identity/services/current-user-authorization.service';
 import { UserRole } from '../../identity/entities/user.entity';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -52,6 +55,11 @@ describe('ReportsController RBAC', () => {
         Reflector,
         RolesGuard,
         AuthGuard,
+        AuthoritativeCurrentUserGuard,
+        {
+          provide: CurrentUserAuthorizationService,
+          useValue: { authorize: jest.fn((token: unknown) => token) },
+        },
         {
           provide: ConfigService,
           useValue: {
@@ -86,6 +94,14 @@ describe('ReportsController RBAC', () => {
 
   const getHttpServer = (): Parameters<typeof request>[0] =>
     app.getHttpServer() as Parameters<typeof request>[0];
+
+  it('requires authoritative authorization before role checks on X and Z reports', () => {
+    expect(Reflect.getMetadata(GUARDS_METADATA, ReportsController)).toEqual([
+      AuthGuard,
+      AuthoritativeCurrentUserGuard,
+      RolesGuard,
+    ]);
+  });
 
   it('returns 403 for CASHIER role on X report route', async () => {
     const jwtService = app.get(JwtService);

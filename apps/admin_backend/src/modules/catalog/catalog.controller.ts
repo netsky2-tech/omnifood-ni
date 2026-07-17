@@ -18,6 +18,7 @@ import { UpdateCatalogValueDto } from './dto/update-catalog-value.dto';
 import { GetTenantId } from '../../core/decorators/tenant.decorator';
 import { TenantInterceptor } from '../../core/database/rls.interceptor';
 import { AuthGuard } from '../identity/guards/auth.guard';
+import { AuthoritativeCurrentUserGuard } from '../identity/guards/authoritative-current-user.guard';
 import { RolesGuard } from '../identity/guards/roles.guard';
 import { Roles } from '../../core/decorators/roles.decorator';
 import { UserRole } from '../identity/entities/user.entity';
@@ -28,7 +29,6 @@ import { UserRole } from '../identity/entities/user.entity';
  * hardcoded list. Catalog types are fixed by protocol; values are per-tenant.
  */
 @Controller('catalogs')
-@UseGuards(AuthGuard, RolesGuard)
 @UseInterceptors(TenantInterceptor)
 export class CatalogController {
   constructor(private readonly catalogService: CatalogService) {}
@@ -41,6 +41,7 @@ export class CatalogController {
   }
 
   @Post('seed-defaults')
+  @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)
   @Roles(UserRole.OWNER, UserRole.MANAGER)
   async seedDefaults(@GetTenantId() tenantId?: string) {
     const inserted = await this.catalogService.seedDefaults(
@@ -50,6 +51,7 @@ export class CatalogController {
   }
 
   @Get(':type')
+  @UseGuards(AuthGuard, RolesGuard)
   @Roles(UserRole.OWNER, UserRole.MANAGER)
   async list(
     @Param('type') type: string,
@@ -65,6 +67,7 @@ export class CatalogController {
   }
 
   @Post(':type')
+  @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)
   @Roles(UserRole.OWNER, UserRole.MANAGER)
   async create(
     @Param('type') type: string,
@@ -80,6 +83,7 @@ export class CatalogController {
   }
 
   @Patch(':type/:id')
+  @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)
   @Roles(UserRole.OWNER, UserRole.MANAGER)
   async update(
     @Param('type') type: string,
@@ -97,6 +101,7 @@ export class CatalogController {
   }
 
   @Delete(':type/:id')
+  @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)
   @Roles(UserRole.OWNER, UserRole.MANAGER)
   async deactivate(
     @Param('type') type: string,
