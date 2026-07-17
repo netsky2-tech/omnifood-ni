@@ -4,6 +4,8 @@ import { UserService } from './user.service';
 import { User, UserRole } from '../entities/user.entity';
 import { AuditLog } from '../entities/audit-log.entity';
 import { SecurityProfile } from '../entities/security-profile.entity';
+import { DataSource } from 'typeorm';
+import { AuthService } from './auth.service';
 
 describe('UserService', () => {
   let service: UserService;
@@ -23,6 +25,16 @@ describe('UserService', () => {
     save: jest.fn(),
   };
 
+  const manager = {
+    getRepository: jest.fn(),
+  };
+  const dataSource = {
+    transaction: jest.fn(),
+  };
+  const authService = {
+    revokeRefreshSessionForUser: jest.fn(),
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
@@ -35,6 +47,8 @@ describe('UserService', () => {
           provide: getRepositoryToken(SecurityProfile),
           useValue: securityProfileRepository,
         },
+        { provide: DataSource, useValue: dataSource },
+        { provide: AuthService, useValue: authService },
       ],
     }).compile();
 
@@ -136,5 +150,83 @@ describe('UserService', () => {
         is_pin_enabled: true,
       }),
     );
+  });
+
+  it('atomically revokes refresh state after a role change', async () => {
+    const lockedUsers = {
+      findOne: jest.fn().mockResolvedValue({
+        id: 'user-1',
+        tenant_id: 'tenant-1',
+        name: 'Cashier',
+        role: UserRole.CASHIER,
+        security_version: 7,
+      }),
+      save: jest
+        .fn()
+        .mockImplementation((user: Record<string, unknown>) =>
+          Promise.resolve(user),
+        ),
+    };
+    const lockedAudit = { save: jest.fn() };
+    manager.getRepository.mockImplementation((entity: unknown) =>
+      entity === User ? lockedUsers : lockedAudit,
+    );
+    dataSource.transaction.mockImplementation(
+      (operation: (transactionManager: typeof manager) => Promise<unknown>) =>
+        operation(manager),
+    );
+
+    await service.update(
+      'user-1',
+      { role: UserRole.MANAGER },
+      'tenant-1',
+      'admin-1',
+    );
+
+    expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+    expect(lockedUsers.findOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'user-1', tenant_id: 'tenant-1' },
+        lock: { mode: 'pessimistic_write' },
+      }),
+    );
+    expect(lockedUsers.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        role: UserRole.MANAGER,
+        security_version: 8,
+      }),
+    );
+    expect(authService.revokeRefreshSessionForUser).toHaveBeenCalledWith(
+      manager,
+      'user-1',
+      expect.any(Date),
+    );
+    expect(lockedAudit.save).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps name and PIN changes outside refresh revocation', async () => {
+    const user = {
+      id: 'user-1',
+      tenant_id: 'tenant-1',
+      name: 'Cashier',
+      role: UserRole.CASHIER,
+      security_version: 7,
+    };
+    userRepository.findOne.mockResolvedValue(user);
+    userRepository.save.mockResolvedValue(user);
+    securityProfileRepository.findOne.mockResolvedValue({ user_id: 'user-1' });
+    securityProfileRepository.save.mockResolvedValue({ id: 'profile-1' });
+    auditRepository.save.mockResolvedValue({ id: 'audit-1' });
+
+    await service.update(
+      'user-1',
+      { name: 'Renamed', pin: '654321' },
+      'tenant-1',
+      'admin-1',
+    );
+
+    expect(dataSource.transaction).not.toHaveBeenCalled();
+    expect(authService.revokeRefreshSessionForUser).not.toHaveBeenCalled();
+    expect(user.security_version).toBe(7);
   });
 });
