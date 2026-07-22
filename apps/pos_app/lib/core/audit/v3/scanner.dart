@@ -113,7 +113,8 @@ AuditV3Result<AuditV3Value> scanNumberFreeJson(Uint8List rawUtf8) {
       final frame = stack.last; whitespace(); final close = frame.object ? '}' : ']';
       if (frame.afterValue) {
         if (position < source.length && source[position] == close) { position++; stack.removeLast(); continue; }
-        if (position >= source.length || source[position++] != ',') _fail(auditV3InvalidJson, offset(position - 1));
+        if (position >= source.length) _fail(auditV3InvalidJson, rawUtf8.length);
+        if (source[position++] != ',') _fail(auditV3InvalidJson, offset(position - 1));
         frame.afterValue = false; whitespace();
       } else if (frame.count == 0 && position < source.length && source[position] == close) { position++; stack.removeLast(); continue; }
       final crossing = offset(position); frame.count++; if (frame.count > 10000) limits.add(crossing);
@@ -121,7 +122,8 @@ AuditV3Result<AuditV3Value> scanNumberFreeJson(Uint8List rawUtf8) {
       else {
         if (position >= source.length || source[position] != '"') _fail(auditV3InvalidJson, position >= source.length ? rawUtf8.length : offset(position));
         final key = string(); if (!frame.seen.add(key.value)) duplicates.add(key.start);
-        whitespace(); if (position >= source.length || source[position++] != ':') _fail(auditV3InvalidJson, offset(position - 1));
+        whitespace(); if (position >= source.length) _fail(auditV3InvalidJson, rawUtf8.length);
+        if (source[position++] != ':') _fail(auditV3InvalidJson, offset(position - 1));
         frame.entries.add(AuditV3ObjectEntry(key.value, value(frame.depth + 1)));
       }
       frame.afterValue = true;

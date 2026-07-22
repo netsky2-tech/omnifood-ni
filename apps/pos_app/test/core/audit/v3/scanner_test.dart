@@ -61,6 +61,10 @@ void main() {
     expect(duplicate, isNot(isA<AuditV3Success<AuditV3Value>>()));
     expect(scanNumberFreeJson(Uint8List.fromList(utf8.encode('[1,2]'))), const AuditV3Failure<AuditV3Value>(AuditV3Error(auditV3NumberForbidden, 1)));
   });
+  test('reports incomplete containers at the EOF byte offset', () {
+    expect(scanNumberFreeJson(Uint8List.fromList(utf8.encode('[null'))), const AuditV3Failure<AuditV3Value>(AuditV3Error(auditV3InvalidJson, 5)));
+    expect(scanNumberFreeJson(Uint8List.fromList(utf8.encode('{"a"'))), const AuditV3Failure<AuditV3Value>(AuditV3Error(auditV3InvalidJson, 4)));
+  });
   test('large valid numeric array does not throw or overflow the stack', () {
     final raw = Uint8List.fromList(utf8.encode('[${'0,' * 199999}0]'));
     expect(() => scanNumberFreeJson(raw), returnsNormally);
