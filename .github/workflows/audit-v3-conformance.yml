@@ -1,0 +1,39 @@
+name: Audit v3 Cross-Runtime Conformance
+
+on:
+  pull_request:
+    paths:
+      - "apps/admin_backend/src/core/audit/v3/**"
+      - "apps/pos_app/lib/core/audit/v3/**"
+      - "apps/pos_app/test/core/audit/v3/**"
+      - "fixtures/audit/v3/**"
+      - ".github/workflows/audit-v3-conformance.yml"
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/admin_backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/admin_backend/package-lock.json
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.41.8"
+          channel: stable
+          cache: true
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Dart dependencies
+        working-directory: apps/pos_app
+        run: flutter pub get
+      - name: Run real Node/Dart parity gate
+        run: AUDIT_V3_REAL_RUNTIME=1 node node_modules/jest/bin/jest.js --runInBand --testPathPatterns=conformance.spec.ts
+      - name: Verify deterministic receipt
+        working-directory: .
+        run: git diff --exit-code -- fixtures/audit/v3/conformance-receipt.json

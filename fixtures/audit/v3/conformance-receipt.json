@@ -11,7 +11,8 @@
     "apps/admin_backend/src/core/audit/v3/sha256.ts": "bd415428312d54fb99af8fc1c88bd613673db267b124a098531c35924187de47",
     "apps/pos_app/lib/core/audit/v3/canonicalizer.dart": "09f2a9d59b72c18ae323263b5c0ea8be0ccdd9d1ace1916eb2514709b8d9f3b1",
     "apps/pos_app/lib/core/audit/v3/frame.dart": "f32708d9db5ed9bca8c2c26f44526998ef0513d517f9fb85ca3e7774f0352ea2",
-    "apps/pos_app/lib/core/audit/v3/sha256.dart": "c4e77c0ef6fa9e88fddda5f5a964cdd618bb97c68f22085dca6f6f8ed4b0e747"
+    "apps/pos_app/lib/core/audit/v3/sha256.dart": "c4e77c0ef6fa9e88fddda5f5a964cdd618bb97c68f22085dca6f6f8ed4b0e747",
+    "apps/pos_app/test/core/audit/v3/conformance_runner.dart": "81a3424fddf9130ff089144fa222105220a1c72989edc5b68aa9bbd612ca137b"
   },
   "groups": {
     "canonical": 12,

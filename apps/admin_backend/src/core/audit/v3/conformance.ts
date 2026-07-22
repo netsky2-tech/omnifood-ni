@@ -8,6 +8,13 @@ import { sha256LowerHex } from './sha256';
 
 type Json = Record<string, unknown>;
 export interface RuntimeRow { readonly id: string; readonly output: string }
+interface RuntimeResult {
+  readonly status: number | null;
+  readonly stdout: string | null;
+  readonly stderr: string | null;
+  readonly error?: Error;
+}
+export type RuntimeRunner = (root: string, expected: readonly RuntimeRow[]) => RuntimeResult;
 export interface Receipt {
   readonly schema: 1;
   readonly authority: Readonly<Record<string, string>>;
@@ -56,8 +63,12 @@ const output = (id: string, result: ReturnType<typeof canonicalizeNumberFreeJson
   const failure = result as Extract<typeof result, { ok: false }>;
   return { id, output: `error:${failure.error.code}@${failure.error.offset}` };
 };
+const dartRunner: RuntimeRunner = (root) => spawnSync(
+  'dart', ['--packages=.dart_tool/package_config.json', 'test/core/audit/v3/conformance_runner.dart', root],
+  { cwd: resolve(root, 'apps/pos_app'), encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 },
+);
 
-export function runConformance(root: string, receiptPath: string, tamper?: (rows: RuntimeRow[]) => RuntimeRow[]): Receipt {
+export function runConformance(root: string, receiptPath: string, runner: RuntimeRunner = dartRunner): Receipt {
   const fixtureRoot = resolve(root, 'fixtures/audit/v3');
   const authority = Object.fromEntries(FILES.map((name) => {
     const digest = hash(readFileSync(resolve(fixtureRoot, name), 'utf8').replace(/\r\n/g, '\n'));
@@ -76,15 +87,16 @@ export function runConformance(root: string, receiptPath: string, tamper?: (rows
       return { id: row.id as string, output: `error:${failure.error.code}@${failure.error.offset}` };
     }),
   ];
-  const dart = spawnSync('dart', ['--packages=.dart_tool/package_config.json', 'test/core/audit/v3/conformance_runner.dart', root], {
-    cwd: resolve(root, 'apps/pos_app'), encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,
-  });
-  if (dart.status !== 0) throw new Error(`dart runtime failed (${dart.status}): ${dart.stderr.trim()}`);
-  const dartRows = tamper ? tamper(JSON.parse(dart.stdout) as RuntimeRow[]) : JSON.parse(dart.stdout) as RuntimeRow[];
+  const dart = runner(root, nodeRows);
+  if (dart.error) throw new Error(`dart runtime launch failed: ${dart.error.message}`);
+  if (dart.status === null) throw new Error(`dart runtime launch failed: no exit status${dart.stderr ? `: ${dart.stderr.trim()}` : ''}`);
+  if (dart.status !== 0) throw new Error(`dart runtime failed (${dart.status}): ${(dart.stderr ?? '').trim()}`);
+  const dartRows: unknown = JSON.parse(dart.stdout ?? '');
+  if (!Array.isArray(dartRows) || dartRows.length !== 64) throw new Error('dart runtime must return exactly 64 rows');
   nodeRows.forEach((row, index) => {
     if (JSON.stringify(row) !== JSON.stringify(dartRows[index])) throw new Error(`${row.id}: node/dart mismatch`);
   });
-  const paths = ['apps/admin_backend/src/core/audit/v3/canonicalizer.ts', 'apps/admin_backend/src/core/audit/v3/frame.ts', 'apps/admin_backend/src/core/audit/v3/sha256.ts', 'apps/pos_app/lib/core/audit/v3/canonicalizer.dart', 'apps/pos_app/lib/core/audit/v3/frame.dart', 'apps/pos_app/lib/core/audit/v3/sha256.dart'];
+  const paths = ['apps/admin_backend/src/core/audit/v3/canonicalizer.ts', 'apps/admin_backend/src/core/audit/v3/frame.ts', 'apps/admin_backend/src/core/audit/v3/sha256.ts', 'apps/pos_app/lib/core/audit/v3/canonicalizer.dart', 'apps/pos_app/lib/core/audit/v3/frame.dart', 'apps/pos_app/lib/core/audit/v3/sha256.dart', 'apps/pos_app/test/core/audit/v3/conformance_runner.dart'];
   const implementations = Object.fromEntries(paths.map((name) => [name, hash(readFileSync(resolve(root, name)))]));
   const receipt: Receipt = { schema: 1, authority, implementations, groups: { canonical: 12, rejections: 28, frames: 24 }, total: 64, aggregate: hash(JSON.stringify(nodeRows)) };
   writeFileSync(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`);
