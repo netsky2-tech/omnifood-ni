@@ -25,6 +25,7 @@ export interface Receipt {
 }
 
 const FILES = ['canonical-valid.jsonl', 'rejections.jsonl', 'frames.jsonl'] as const;
+const DART_TIMEOUT_MS = 90_000;
 const AUTHORITY = {
   'canonical-valid.jsonl': 'f0e32ecd332c36e49061383c8e424d00ecbbdd58c2d18d258f2063679abc7fac',
   'rejections.jsonl': 'c84c85146e03029a405aa7aa1dadd0a6d7211c05e4446a0a918a32e7a497e5d1',
@@ -65,7 +66,7 @@ const output = (id: string, result: ReturnType<typeof canonicalizeNumberFreeJson
 };
 const dartRunner: RuntimeRunner = (root) => spawnSync(
   'dart', ['--packages=.dart_tool/package_config.json', 'test/core/audit/v3/conformance_runner.dart', root],
-  { cwd: resolve(root, 'apps/pos_app'), encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 },
+  { cwd: resolve(root, 'apps/pos_app'), encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, timeout: DART_TIMEOUT_MS },
 );
 
 export function runConformance(root: string, receiptPath: string, runner: RuntimeRunner = dartRunner): Receipt {
@@ -88,6 +89,7 @@ export function runConformance(root: string, receiptPath: string, runner: Runtim
     }),
   ];
   const dart = runner(root, nodeRows);
+  if ((dart.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT') throw new Error(`dart runtime timed out after ${DART_TIMEOUT_MS}ms`);
   if (dart.error) throw new Error(`dart runtime launch failed: ${dart.error.message}`);
   if (dart.status === null) throw new Error(`dart runtime launch failed: no exit status${dart.stderr ? `: ${dart.stderr.trim()}` : ''}`);
   if (dart.status !== 0) throw new Error(`dart runtime failed (${dart.status}): ${(dart.stderr ?? '').trim()}`);
