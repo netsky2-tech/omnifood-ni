@@ -10,6 +10,8 @@ Compact SHA-256: schema `74c3f4900d00fe3f0642a973beed5ac1235230552136b6095294467
 
 The Node and Dart test-local loaders validate structure and materialization only. They intentionally do not implement canonicalization or OFA3 framing.
 
-Run `node node_modules/jest/bin/jest.js --runInBand --testPathPatterns=conformance.spec.ts`
-from `apps/admin_backend`. It compares all 64 Node/Dart results byte-for-byte and
-rewrites `conformance-receipt.json`; any authority or runtime mismatch exits nonzero.
+From `apps/admin_backend`, run the real Node/Dart gate with
+`$env:AUDIT_V3_REAL_RUNTIME=1; node node_modules/jest/bin/jest.js --runInBand --testPathPatterns=conformance.spec.ts`
+in PowerShell, or `AUDIT_V3_REAL_RUNTIME=1 node node_modules/jest/bin/jest.js --runInBand --testPathPatterns=conformance.spec.ts`
+on Linux. It compares all 64 results byte-for-byte and rewrites
+`conformance-receipt.json`; any authority or runtime mismatch exits nonzero.

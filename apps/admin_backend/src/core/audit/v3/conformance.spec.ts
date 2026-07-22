@@ -1,14 +1,18 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { hashSource, runConformance, type RuntimeRunner } from './conformance';
 
 const ROOT = resolve(process.cwd(), '../..');
 const receipt = resolve(ROOT, 'fixtures/audit/v3/conformance-receipt.json');
+const injectedReceipt = resolve(tmpdir(), `audit-v3-conformance-${process.pid}.json`);
 const injected: RuntimeRunner = (_root, expected) => ({
   status: 0, stdout: JSON.stringify(expected), stderr: '',
 });
 
 describe('audit v3 cross-runtime conformance', () => {
+  afterAll(() => rmSync(injectedReceipt, { force: true }));
+
   it('hashes equivalent LF and CRLF implementation source identically', () => {
     expect(hashSource(Buffer.from('const a = 1;\nconst b = 2;\n')))
       .toBe(hashSource(Buffer.from('const a = 1;\r\nconst b = 2;\r\n')));
@@ -19,12 +23,14 @@ describe('audit v3 cross-runtime conformance', () => {
   }, 120_000);
 
   it('proves all authority groups and writes a deterministic receipt', () => {
-    const first = runConformance(ROOT, receipt, injected);
-    const bytes = readFileSync(receipt);
-    const second = runConformance(ROOT, receipt, injected);
+    const trackedBytes = readFileSync(receipt);
+    const first = runConformance(ROOT, injectedReceipt, injected);
+    const bytes = readFileSync(injectedReceipt);
+    const second = runConformance(ROOT, injectedReceipt, injected);
 
     expect(second).toEqual(first);
-    expect(readFileSync(receipt)).toEqual(bytes);
+    expect(readFileSync(injectedReceipt)).toEqual(bytes);
+    expect(readFileSync(receipt)).toEqual(trackedBytes);
     expect(first.groups).toEqual({ canonical: 12, rejections: 28, frames: 24 });
     expect(first.total).toBe(64);
     expect(first.aggregate).toMatch(/^[0-9a-f]{64}$/);
@@ -40,7 +46,6 @@ describe('audit v3 cross-runtime conformance', () => {
   }, 120_000);
 
   it.each([
-    ['not an array', '{}'],
     ['63 rows', (_root: string, expected: readonly unknown[]) => JSON.stringify(expected.slice(1))],
     ['65 rows', (_root: string, expected: readonly unknown[]) => JSON.stringify([...expected, expected[0]])],
   ])('rejects Dart output with %s', (_label, value) => {
@@ -50,6 +55,19 @@ describe('audit v3 cross-runtime conformance', () => {
       stderr: '',
     });
     expect(() => runConformance(ROOT, receipt, runner)).toThrow('dart runtime must return exactly 64 rows');
+  });
+
+  it.each([
+    ['missing', null],
+    ['empty', ''],
+    ['malformed', '{'],
+    ['non-array', '{}'],
+  ])('rejects %s successful Dart stdout with bounded stderr', (_label, stdout) => {
+    const stderr = `useful context ${'x'.repeat(600)} hidden tail`;
+    expect(() => runConformance(ROOT, injectedReceipt, () => ({ status: 0, stdout, stderr })))
+      .toThrow(/^dart runtime produced invalid JSON: .*stderr: useful context x{10}/);
+    expect(() => runConformance(ROOT, injectedReceipt, () => ({ status: 0, stdout, stderr })))
+      .not.toThrow('hidden tail');
   });
 
   it('preserves the original Dart launch diagnostic', () => {

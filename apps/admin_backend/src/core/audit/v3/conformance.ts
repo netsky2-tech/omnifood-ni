@@ -26,6 +26,7 @@ export interface Receipt {
 
 const FILES = ['canonical-valid.jsonl', 'rejections.jsonl', 'frames.jsonl'] as const;
 const DART_TIMEOUT_MS = 90_000;
+const DIAGNOSTIC_LIMIT = 512;
 const AUTHORITY = {
   'canonical-valid.jsonl': 'f0e32ecd332c36e49061383c8e424d00ecbbdd58c2d18d258f2063679abc7fac',
   'rejections.jsonl': 'c84c85146e03029a405aa7aa1dadd0a6d7211c05e4446a0a918a32e7a497e5d1',
@@ -69,6 +70,10 @@ const dartRunner: RuntimeRunner = (root) => spawnSync(
   'dart', ['--packages=.dart_tool/package_config.json', 'test/core/audit/v3/conformance_runner.dart', root],
   { cwd: resolve(root, 'apps/pos_app'), encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, timeout: DART_TIMEOUT_MS },
 );
+const invalidDartJson = (reason: string, stderr: string | null): Error => {
+  const context = (stderr ?? '').trim().slice(0, DIAGNOSTIC_LIMIT);
+  return new Error(`dart runtime produced invalid JSON: ${reason}${context ? `; stderr: ${context}` : ''}`);
+};
 
 export function runConformance(root: string, receiptPath: string, runner: RuntimeRunner = dartRunner): Receipt {
   const fixtureRoot = resolve(root, 'fixtures/audit/v3');
@@ -94,8 +99,14 @@ export function runConformance(root: string, receiptPath: string, runner: Runtim
   if (dart.error) throw new Error(`dart runtime launch failed: ${dart.error.message}`);
   if (dart.status === null) throw new Error(`dart runtime launch failed: no exit status${dart.stderr ? `: ${dart.stderr.trim()}` : ''}`);
   if (dart.status !== 0) throw new Error(`dart runtime failed (${dart.status}): ${(dart.stderr ?? '').trim()}`);
-  const dartRows: unknown = JSON.parse(dart.stdout ?? '');
-  if (!Array.isArray(dartRows) || dartRows.length !== 64) throw new Error('dart runtime must return exactly 64 rows');
+  let dartRows: unknown;
+  try {
+    dartRows = JSON.parse(dart.stdout ?? '');
+  } catch {
+    throw invalidDartJson('missing, empty, or malformed stdout', dart.stderr);
+  }
+  if (!Array.isArray(dartRows)) throw invalidDartJson('expected an array', dart.stderr);
+  if (dartRows.length !== 64) throw new Error('dart runtime must return exactly 64 rows');
   nodeRows.forEach((row, index) => {
     if (JSON.stringify(row) !== JSON.stringify(dartRows[index])) throw new Error(`${row.id}: node/dart mismatch`);
   });
