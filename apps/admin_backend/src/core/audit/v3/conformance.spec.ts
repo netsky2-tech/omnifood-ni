@@ -75,6 +75,18 @@ describe('audit v3 cross-runtime conformance', () => {
     expect(() => runConformance(ROOT, receipt, runner)).toThrow('dart runtime launch failed: spawn dart ENOENT');
   });
 
+  it.each([
+    ['launch failed: spawn dart ENOENT', { status: null, stdout: null, error: new Error('spawn dart ENOENT') }],
+    ['launch failed: no exit status', { status: null, stdout: null }],
+    ['failed (7)', { status: 7, stdout: null }],
+  ])('bounds Dart %s stderr diagnostics', (primary, result) => {
+    const stderr = `useful context ${'x'.repeat(600)} hidden tail`;
+    const invoke = () => runConformance(ROOT, injectedReceipt, () => ({ ...result, stderr }));
+    expect(invoke).toThrow(`dart runtime ${primary}`);
+    expect(invoke).toThrow(/stderr: useful context x{10}/);
+    expect(invoke).not.toThrow('hidden tail');
+  });
+
   it('reports a deterministic Dart timeout diagnostic', () => {
     const error = Object.assign(new Error('spawnSync dart ETIMEDOUT'), { code: 'ETIMEDOUT' });
     expect(() => runConformance(ROOT, receipt, () => ({ status: null, stdout: null, stderr: null, error }))).toThrow('dart runtime timed out after 90000ms');

@@ -70,9 +70,9 @@ const dartRunner: RuntimeRunner = (root) => spawnSync(
   'dart', ['--packages=.dart_tool/package_config.json', 'test/core/audit/v3/conformance_runner.dart', root],
   { cwd: resolve(root, 'apps/pos_app'), encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, timeout: DART_TIMEOUT_MS },
 );
-const invalidDartJson = (reason: string, stderr: string | null): Error => {
+const dartDiagnostic = (message: string, stderr: string | null): Error => {
   const context = (stderr ?? '').trim().slice(0, DIAGNOSTIC_LIMIT);
-  return new Error(`dart runtime produced invalid JSON: ${reason}${context ? `; stderr: ${context}` : ''}`);
+  return new Error(`${message}${context ? `; stderr: ${context}` : ''}`);
 };
 
 export function runConformance(root: string, receiptPath: string, runner: RuntimeRunner = dartRunner): Receipt {
@@ -96,16 +96,16 @@ export function runConformance(root: string, receiptPath: string, runner: Runtim
   ];
   const dart = runner(root, nodeRows);
   if ((dart.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT') throw new Error(`dart runtime timed out after ${DART_TIMEOUT_MS}ms`);
-  if (dart.error) throw new Error(`dart runtime launch failed: ${dart.error.message}`);
-  if (dart.status === null) throw new Error(`dart runtime launch failed: no exit status${dart.stderr ? `: ${dart.stderr.trim()}` : ''}`);
-  if (dart.status !== 0) throw new Error(`dart runtime failed (${dart.status}): ${(dart.stderr ?? '').trim()}`);
+  if (dart.error) throw dartDiagnostic(`dart runtime launch failed: ${dart.error.message}`, dart.stderr);
+  if (dart.status === null) throw dartDiagnostic('dart runtime launch failed: no exit status', dart.stderr);
+  if (dart.status !== 0) throw dartDiagnostic(`dart runtime failed (${dart.status})`, dart.stderr);
   let dartRows: unknown;
   try {
     dartRows = JSON.parse(dart.stdout ?? '');
   } catch {
-    throw invalidDartJson('missing, empty, or malformed stdout', dart.stderr);
+    throw dartDiagnostic('dart runtime produced invalid JSON: missing, empty, or malformed stdout', dart.stderr);
   }
-  if (!Array.isArray(dartRows)) throw invalidDartJson('expected an array', dart.stderr);
+  if (!Array.isArray(dartRows)) throw dartDiagnostic('dart runtime produced invalid JSON: expected an array', dart.stderr);
   if (dartRows.length !== 64) throw new Error('dart runtime must return exactly 64 rows');
   nodeRows.forEach((row, index) => {
     if (JSON.stringify(row) !== JSON.stringify(dartRows[index])) throw new Error(`${row.id}: node/dart mismatch`);
