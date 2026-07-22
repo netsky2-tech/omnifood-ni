@@ -9,3 +9,7 @@ Rows are exactly ordered `V001`-`V012`, `R001`-`R028`, `F001`-`F024` (12 + 28 + 
 Compact SHA-256: schema `74c3f4900d00fe3f0642a973beed5ac1235230552136b6095294467fc1ca3e84`; canonical `f0e32ecd332c36e49061383c8e424d00ecbbdd58c2d18d258f2063679abc7fac`; rejections `c84c85146e03029a405aa7aa1dadd0a6d7211c05e4446a0a918a32e7a497e5d1`; frames `94e71dd3237d28f23fc1978cc55ab3a9d86101d321e8d494a515987c0a569372`.
 
 The Node and Dart test-local loaders validate structure and materialization only. They intentionally do not implement canonicalization or OFA3 framing.
+
+Run `node node_modules/jest/bin/jest.js --runInBand --testPathPatterns=conformance.spec.ts`
+from `apps/admin_backend`. It compares all 64 Node/Dart results byte-for-byte and
+rewrites `conformance-receipt.json`; any authority or runtime mismatch exits nonzero.
