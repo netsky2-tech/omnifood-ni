@@ -21,7 +21,17 @@ class Failure extends Error {
   constructor(readonly code: AuditV3ErrorCode, readonly offset: number) { super(code) }
 }
 const fail = (code: AuditV3ErrorCode, offset: number): never => { throw new Failure(code, offset) };
-const scalar = (value: string): boolean => !/[\ud800-\udfff]/.test(value);
+const scalar = (value: string): boolean => {
+  for (let index = 0; index < value.length; index++) {
+    const unit = value.charCodeAt(index);
+    if (unit >= 0xd800 && unit <= 0xdbff) {
+      if (++index >= value.length) return false;
+      const low = value.charCodeAt(index);
+      if (low < 0xdc00 || low > 0xdfff) return false;
+    } else if (unit >= 0xdc00 && unit <= 0xdfff) return false;
+  }
+  return true;
+};
 
 export function buildAuditV3Frame(fields: AuditV3FrameFields, canonicalMetadata: Buffer): Result<Buffer> {
   try {

@@ -45,6 +45,16 @@ describe('OFA3 typed frame', () => {
     expect(sha256LowerHex(first.value)).toMatch(/^[0-9a-f]{64}$/);
   });
 
+  it('preserves supplementary scalar UTF-8', () => {
+    const result = buildAuditV3Frame({ ...base(), user_id: 'u😀' }, Buffer.from('{}'));
+    expect(result.ok).toBe(true); if (!result.ok) return;
+    expect(result.value.includes(Buffer.from('u😀', 'utf8'))).toBe(true);
+  });
+
+  it.each(['\ud800', '\udc00', '\ud800x', 'x\ud800'])('rejects malformed surrogate text %p at its field index', (user_id) => {
+    expect(buildAuditV3Frame({ ...base(), user_id }, Buffer.from('{}'))).toEqual({ ok: false, error: { code: 'AUDIT_V3_FRAME_INVALID', offset: 0 } });
+  });
+
   it.each([[0, { user_id: null }], [1, { resolved_action: '' }], [2, { device_id: null }], [3, { timestamp: '' }], [4, { sequence_no: '00' }], [5, { prev_hash: null }], [6, { metodo_autorizacion: { state: 'bad' } }], [7, { usuario_autorizador_id: { state: 'text', value: '\ud800' } }]])('rejects malformed field %i without partial output', (offset, patch) => {
     const result = buildAuditV3Frame({ ...base(), ...patch } as unknown as AuditV3FrameFields, Buffer.from('{}'));
     expect(result).toEqual({ ok: false, error: { code: 'AUDIT_V3_FRAME_INVALID', offset } }); expect('value' in result).toBe(false);
