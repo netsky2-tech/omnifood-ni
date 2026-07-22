@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "authority": {
+    "canonical-valid.jsonl": "f0e32ecd332c36e49061383c8e424d00ecbbdd58c2d18d258f2063679abc7fac",
+    "rejections.jsonl": "c84c85146e03029a405aa7aa1dadd0a6d7211c05e4446a0a918a32e7a497e5d1",
+    "frames.jsonl": "94e71dd3237d28f23fc1978cc55ab3a9d86101d321e8d494a515987c0a569372"
+  },
+  "implementations": {
+    "apps/admin_backend/src/core/audit/v3/canonicalizer.ts": "17220e07e411e8766eaafffeae397b381445ce1e6a848ad56acf30ead9a41f78",
+    "apps/admin_backend/src/core/audit/v3/frame.ts": "ec2f47bacc0cd96bc6cc6ac1b709b8a4bffb8dff8d8d375730062ff32a242e42",
+    "apps/admin_backend/src/core/audit/v3/sha256.ts": "bd415428312d54fb99af8fc1c88bd613673db267b124a098531c35924187de47",
+    "apps/pos_app/lib/core/audit/v3/canonicalizer.dart": "09f2a9d59b72c18ae323263b5c0ea8be0ccdd9d1ace1916eb2514709b8d9f3b1",
+    "apps/pos_app/lib/core/audit/v3/frame.dart": "f32708d9db5ed9bca8c2c26f44526998ef0513d517f9fb85ca3e7774f0352ea2",
+    "apps/pos_app/lib/core/audit/v3/sha256.dart": "c4e77c0ef6fa9e88fddda5f5a964cdd618bb97c68f22085dca6f6f8ed4b0e747"
+  },
+  "groups": {
+    "canonical": 12,
+    "rejections": 28,
+    "frames": 24
+  },
+  "total": 64,
+  "aggregate": "1089479ea8efbc2a0ff97a7993b52285ac5f6868f09ac6a34062e9a5571e7577"
+}
