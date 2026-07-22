@@ -34,6 +34,7 @@ const AUTHORITY = {
 const object = (value: unknown): Json => value as Json;
 const integer = (value: unknown): number => value as number;
 const hash = (value: Buffer | string): string => createHash('sha256').update(value).digest('hex');
+export const hashSource = (value: Buffer): string => hash(value.toString('utf8').replace(/\r\n/g, '\n'));
 const rows = (path: string): Json[] => readFileSync(path, 'utf8').trim().split('\n').map((line) => object(JSON.parse(line) as unknown));
 const bytes = (recipeValue: unknown): Buffer => {
   const recipe = object(recipeValue);
@@ -99,7 +100,7 @@ export function runConformance(root: string, receiptPath: string, runner: Runtim
     if (JSON.stringify(row) !== JSON.stringify(dartRows[index])) throw new Error(`${row.id}: node/dart mismatch`);
   });
   const paths = ['apps/admin_backend/src/core/audit/v3/canonicalizer.ts', 'apps/admin_backend/src/core/audit/v3/frame.ts', 'apps/admin_backend/src/core/audit/v3/sha256.ts', 'apps/pos_app/lib/core/audit/v3/canonicalizer.dart', 'apps/pos_app/lib/core/audit/v3/frame.dart', 'apps/pos_app/lib/core/audit/v3/sha256.dart', 'apps/pos_app/test/core/audit/v3/conformance_runner.dart'];
-  const implementations = Object.fromEntries(paths.map((name) => [name, hash(readFileSync(resolve(root, name)))]));
+  const implementations = Object.fromEntries(paths.map((name) => [name, hashSource(readFileSync(resolve(root, name)))]));
   const receipt: Receipt = { schema: 1, authority, implementations, groups: { canonical: 12, rejections: 28, frames: 24 }, total: 64, aggregate: hash(JSON.stringify(nodeRows)) };
   writeFileSync(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`);
   return receipt;

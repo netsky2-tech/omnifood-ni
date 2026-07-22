@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { runConformance, type RuntimeRunner } from './conformance';
+import { hashSource, runConformance, type RuntimeRunner } from './conformance';
 
 const ROOT = resolve(process.cwd(), '../..');
 const receipt = resolve(ROOT, 'fixtures/audit/v3/conformance-receipt.json');
@@ -9,6 +9,11 @@ const injected: RuntimeRunner = (_root, expected) => ({
 });
 
 describe('audit v3 cross-runtime conformance', () => {
+  it('hashes equivalent LF and CRLF implementation source identically', () => {
+    expect(hashSource(Buffer.from('const a = 1;\nconst b = 2;\n')))
+      .toBe(hashSource(Buffer.from('const a = 1;\r\nconst b = 2;\r\n')));
+  });
+
   (process.env.AUDIT_V3_REAL_RUNTIME === '1' ? it : it.skip)('matches the real Dart runtime', () => {
     expect(runConformance(ROOT, receipt).total).toBe(64);
   }, 120_000);
