@@ -68,7 +68,7 @@ export class AuditLog {
   timestamp: Date;
 
   @Column({ type: 'jsonb', nullable: true })
-  metadata: unknown | null;
+  metadata: unknown;
 
   @Column({ default: 'ACTIVE' })
   forensic_status: string;
