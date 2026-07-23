@@ -8,6 +8,7 @@ import { AuditIntegrityAlert } from './entities/audit-integrity-alert.entity';
 import { AuthService } from './services/auth.service';
 import { UserService } from './services/user.service';
 import { AuditIntegrityService } from './services/audit-integrity.service';
+import { AuditMetricsService } from './services/audit-metrics.service';
 import { AuthController } from './controllers/auth.controller';
 import { AuditController } from './controllers/audit.controller';
 import { UsersController } from './controllers/users.controller';
@@ -49,6 +50,7 @@ import {
     AuthService,
     UserService,
     AuditIntegrityService,
+    AuditMetricsService,
     AuthGuard,
     AuthoritativeCurrentUserGuard,
     RolesGuard,
@@ -60,6 +62,7 @@ import {
     AuthService,
     UserService,
     AuditIntegrityService,
+    AuditMetricsService,
     AuthGuard,
     AuthoritativeCurrentUserGuard,
     RolesGuard,

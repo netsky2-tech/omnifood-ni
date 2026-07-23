@@ -7,8 +7,9 @@ import {
   IsOptional,
   IsUUID,
   IsObject,
+  Allow,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 
 export class LoginDto {
   @IsEmail({}, { message: 'Email inválido' })
@@ -70,13 +71,15 @@ export class CreateAuditLogDto {
   @IsNotEmpty()
   entry_hash: string;
 
+  @Transform(({ value }: { value: unknown }): unknown => value)
   @IsString()
   @IsOptional()
-  metodo_autorizacion?: string;
+  metodo_autorizacion?: string | null | undefined;
 
+  @Transform(({ value }: { value: unknown }): unknown => value)
   @IsString()
   @IsOptional()
-  usuario_autorizador_id?: string;
+  usuario_autorizador_id?: string | null | undefined;
 
   @IsString()
   @IsNotEmpty()
@@ -90,9 +93,10 @@ export class CreateAuditLogDto {
   @IsOptional()
   metadata_raw?: string;
 
-  @IsString()
+  @Transform(({ value }: { value: unknown }): unknown => value)
+  @Allow()
   @IsOptional()
-  hash_version?: string;
+  hash_version?: unknown;
 }
 
 export class PushAuditLogsDto {
