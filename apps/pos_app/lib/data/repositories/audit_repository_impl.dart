@@ -18,12 +18,17 @@ class AuditRepositoryImpl implements AuditRepository {
   static const _uuid = Uuid();
   static const _forensicHashVersion = 'v2-canonical-json';
 
-  AuditRepositoryImpl(this._auditDao, this._authRepository, this._dio, this._deviceId);
+  AuditRepositoryImpl(
+    this._auditDao,
+    this._authRepository,
+    this._dio,
+    this._deviceId,
+  );
 
   @override
   String get deviceId => _deviceId;
 
-@override
+  @override
   Future<void> log(String action, {String? metadata}) async {
     return logForensic(action, metadata: metadata);
   }
@@ -94,6 +99,9 @@ class AuditRepositoryImpl implements AuditRepository {
       metodoAutorizacion: metodoAutorizacion,
       usuarioAutorizadorId: usuarioAutorizadorId,
       remoteRefUuid: _uuid.v4(),
+      hashVersion: _forensicHashVersion,
+      hasMetodoAutorizacion: metodoAutorizacion != null,
+      hasUsuarioAutorizadorId: usuarioAutorizadorId != null,
     );
   }
 
@@ -105,10 +113,13 @@ class AuditRepositoryImpl implements AuditRepository {
     try {
       final logsJson = <Map<String, dynamic>>[];
       for (final e in unsynced) {
+        final isV3 = e.hashVersion == 'v3-jcs-rfc8785';
         final normalizedMetadata = _normalizeMetadataToJsonObject(e.metadata);
         final normalizedMetadataString = jsonEncode(normalizedMetadata);
-        final metadataRaw = _extractLegacyMetadataRaw(e.metadata);
-        if (e.id != null && e.metadata != normalizedMetadataString) {
+        final metadataRaw = isV3
+            ? (e.metadata ?? 'null')
+            : _extractLegacyMetadataRaw(e.metadata);
+        if (!isV3 && e.id != null && e.metadata != normalizedMetadataString) {
           try {
             await _auditDao.updateMetadataById(e.id!, normalizedMetadataString);
           } catch (_) {
@@ -116,7 +127,7 @@ class AuditRepositoryImpl implements AuditRepository {
           }
         }
 
-        logsJson.add({
+        final payload = <String, dynamic>{
           'id': e.remoteRefUuid,
           'user_id': e.userId,
           'action': e.action,
@@ -125,16 +136,23 @@ class AuditRepositoryImpl implements AuditRepository {
           'sequence_no': e.sequenceNo,
           'prev_hash': e.prevHash,
           'entry_hash': e.entryHash,
-          'metodo_autorizacion': e.metodoAutorizacion,
-          'usuario_autorizador_id': e.usuarioAutorizadorId,
-          'metadata': normalizedMetadata,
+          'metadata': isV3 ? jsonDecode(metadataRaw!) : normalizedMetadata,
           'metadata_raw': metadataRaw,
-          'hash_version': _forensicHashVersion,
-        });
+        };
+        if (!isV3 || e.hasMetodoAutorizacion == true) {
+          payload['metodo_autorizacion'] = e.metodoAutorizacion;
+        }
+        if (!isV3 || e.hasUsuarioAutorizadorId == true) {
+          payload['usuario_autorizador_id'] = e.usuarioAutorizadorId;
+        }
+        if (e.hashVersion != null) {
+          payload['hash_version'] = e.hashVersion;
+        }
+        logsJson.add(payload);
       }
 
       await _dio.post('/identity/audit', data: {'logs': logsJson});
-      
+
       final ids = unsynced.map((e) => e.id!).toList();
       await _auditDao.markAsSynced(ids);
     } catch (e) {
@@ -193,11 +211,21 @@ class AuditRepositoryImpl implements AuditRepository {
   }
 
   @override
-  Future<List<AuditLog>> getLocalLogs({DateTime? start, DateTime? end, String? userId}) async {
-    final startTime = (start ?? DateTime.now().subtract(const Duration(days: 30))).toIso8601String();
+  Future<List<AuditLog>> getLocalLogs({
+    DateTime? start,
+    DateTime? end,
+    String? userId,
+  }) async {
+    final startTime =
+        (start ?? DateTime.now().subtract(const Duration(days: 30)))
+            .toIso8601String();
     final endTime = (end ?? DateTime.now()).toIso8601String();
-    
-    final entities = await _auditDao.findLogsWithFilters(startTime, endTime, userId ?? "");
+
+    final entities = await _auditDao.findLogsWithFilters(
+      startTime,
+      endTime,
+      userId ?? "",
+    );
     return entities.map(AuditMapper.toDomain).toList();
   }
 }

@@ -25,6 +25,12 @@ class AuditLogEntity {
   final String? usuarioAutorizadorId;
   @ColumnInfo(name: 'remote_ref_uuid')
   final String remoteRefUuid;
+  @ColumnInfo(name: 'hash_version')
+  final String? hashVersion;
+  @ColumnInfo(name: 'has_metodo_autorizacion')
+  final bool? hasMetodoAutorizacion;
+  @ColumnInfo(name: 'has_usuario_autorizador_id')
+  final bool? hasUsuarioAutorizadorId;
 
   AuditLogEntity({
     this.id,
@@ -40,5 +46,8 @@ class AuditLogEntity {
     this.metodoAutorizacion,
     this.usuarioAutorizadorId,
     required this.remoteRefUuid,
+    this.hashVersion,
+    this.hasMetodoAutorizacion,
+    this.hasUsuarioAutorizadorId,
   });
 }

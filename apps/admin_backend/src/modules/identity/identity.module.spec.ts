@@ -20,6 +20,7 @@ import { AuthGuard } from './guards/auth.guard';
 import { IdentityModule } from './identity.module';
 import { AuthService } from './services/auth.service';
 import { AuthController } from './controllers/auth.controller';
+import { AuditMetricsService } from './services/audit-metrics.service';
 
 interface LoginPayload {
   sub: string;
@@ -180,6 +181,12 @@ describe('IdentityModule strict typed access-token ownership', () => {
     expect(payload.exp - payload.iat).toBeLessThanOrEqual(60 * 60 + 1);
     expect(payload.iss).toBe(jwtEnvironment.JWT_ISSUER);
     expect(payload.aud).toBe(jwtEnvironment.JWT_AUDIENCE);
+  });
+
+  it('registers the dormant audit metrics provider without changing module wiring', () => {
+    expect(module.get(AuditMetricsService)).toBeInstanceOf(AuditMetricsService);
+    expect(module.get(AuthService)).toBe(authService);
+    expect(module.get(AuthGuard)).toBe(authGuard);
   });
 
   it('does not expose a public identity logout route before 2A-L', () => {

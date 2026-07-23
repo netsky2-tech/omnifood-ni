@@ -18,7 +18,9 @@ class AuditLog with _$AuditLog {
     @JsonKey(name: 'entry_hash') required String entryHash,
     @JsonKey(name: 'metodo_autorizacion') String? metodoAutorizacion,
     @JsonKey(name: 'usuario_autorizador_id') String? usuarioAutorizadorId,
+    @JsonKey(name: 'hash_version') String? hashVersion,
   }) = _AuditLog;
 
-  factory AuditLog.fromJson(Map<String, dynamic> json) => _$AuditLogFromJson(json);
+  factory AuditLog.fromJson(Map<String, dynamic> json) =>
+      _$AuditLogFromJson(json);
 }

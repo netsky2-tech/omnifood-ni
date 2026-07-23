@@ -20,6 +20,7 @@ _$AuditLogImpl _$$AuditLogImplFromJson(Map<String, dynamic> json) =>
       entryHash: json['entry_hash'] as String,
       metodoAutorizacion: json['metodo_autorizacion'] as String?,
       usuarioAutorizadorId: json['usuario_autorizador_id'] as String?,
+      hashVersion: json['hash_version'] as String?,
     );
 
 Map<String, dynamic> _$$AuditLogImplToJson(_$AuditLogImpl instance) =>
@@ -36,4 +37,5 @@ Map<String, dynamic> _$$AuditLogImplToJson(_$AuditLogImpl instance) =>
       'entry_hash': instance.entryHash,
       'metodo_autorizacion': instance.metodoAutorizacion,
       'usuario_autorizador_id': instance.usuarioAutorizadorId,
+      'hash_version': instance.hashVersion,
     };
