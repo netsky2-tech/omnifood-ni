@@ -39,6 +39,8 @@ mixin _$AuditLog {
   String? get metodoAutorizacion => throw _privateConstructorUsedError;
   @JsonKey(name: 'usuario_autorizador_id')
   String? get usuarioAutorizadorId => throw _privateConstructorUsedError;
+  @JsonKey(name: 'hash_version')
+  String? get hashVersion => throw _privateConstructorUsedError;
 
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
   @JsonKey(ignore: true)
@@ -63,7 +65,8 @@ abstract class $AuditLogCopyWith<$Res> {
       @JsonKey(name: 'prev_hash') String prevHash,
       @JsonKey(name: 'entry_hash') String entryHash,
       @JsonKey(name: 'metodo_autorizacion') String? metodoAutorizacion,
-      @JsonKey(name: 'usuario_autorizador_id') String? usuarioAutorizadorId});
+      @JsonKey(name: 'usuario_autorizador_id') String? usuarioAutorizadorId,
+      @JsonKey(name: 'hash_version') String? hashVersion});
 }
 
 /// @nodoc
@@ -91,6 +94,7 @@ class _$AuditLogCopyWithImpl<$Res, $Val extends AuditLog>
     Object? entryHash = null,
     Object? metodoAutorizacion = freezed,
     Object? usuarioAutorizadorId = freezed,
+    Object? hashVersion = freezed,
   }) {
     return _then(_value.copyWith(
       id: freezed == id
@@ -141,6 +145,10 @@ class _$AuditLogCopyWithImpl<$Res, $Val extends AuditLog>
           ? _value.usuarioAutorizadorId
           : usuarioAutorizadorId // ignore: cast_nullable_to_non_nullable
               as String?,
+      hashVersion: freezed == hashVersion
+          ? _value.hashVersion
+          : hashVersion // ignore: cast_nullable_to_non_nullable
+              as String?,
     ) as $Val);
   }
 }
@@ -165,7 +173,8 @@ abstract class _$$AuditLogImplCopyWith<$Res>
       @JsonKey(name: 'prev_hash') String prevHash,
       @JsonKey(name: 'entry_hash') String entryHash,
       @JsonKey(name: 'metodo_autorizacion') String? metodoAutorizacion,
-      @JsonKey(name: 'usuario_autorizador_id') String? usuarioAutorizadorId});
+      @JsonKey(name: 'usuario_autorizador_id') String? usuarioAutorizadorId,
+      @JsonKey(name: 'hash_version') String? hashVersion});
 }
 
 /// @nodoc
@@ -191,6 +200,7 @@ class __$$AuditLogImplCopyWithImpl<$Res>
     Object? entryHash = null,
     Object? metodoAutorizacion = freezed,
     Object? usuarioAutorizadorId = freezed,
+    Object? hashVersion = freezed,
   }) {
     return _then(_$AuditLogImpl(
       id: freezed == id
@@ -241,6 +251,10 @@ class __$$AuditLogImplCopyWithImpl<$Res>
           ? _value.usuarioAutorizadorId
           : usuarioAutorizadorId // ignore: cast_nullable_to_non_nullable
               as String?,
+      hashVersion: freezed == hashVersion
+          ? _value.hashVersion
+          : hashVersion // ignore: cast_nullable_to_non_nullable
+              as String?,
     ));
   }
 }
@@ -260,7 +274,8 @@ class _$AuditLogImpl implements _AuditLog {
       @JsonKey(name: 'prev_hash') required this.prevHash,
       @JsonKey(name: 'entry_hash') required this.entryHash,
       @JsonKey(name: 'metodo_autorizacion') this.metodoAutorizacion,
-      @JsonKey(name: 'usuario_autorizador_id') this.usuarioAutorizadorId});
+      @JsonKey(name: 'usuario_autorizador_id') this.usuarioAutorizadorId,
+      @JsonKey(name: 'hash_version') this.hashVersion});
 
   factory _$AuditLogImpl.fromJson(Map<String, dynamic> json) =>
       _$$AuditLogImplFromJson(json);
@@ -298,10 +313,13 @@ class _$AuditLogImpl implements _AuditLog {
   @override
   @JsonKey(name: 'usuario_autorizador_id')
   final String? usuarioAutorizadorId;
+  @override
+  @JsonKey(name: 'hash_version')
+  final String? hashVersion;
 
   @override
   String toString() {
-    return 'AuditLog(id: $id, userId: $userId, action: $action, timestamp: $timestamp, deviceId: $deviceId, metadata: $metadata, isSynced: $isSynced, sequenceNo: $sequenceNo, prevHash: $prevHash, entryHash: $entryHash, metodoAutorizacion: $metodoAutorizacion, usuarioAutorizadorId: $usuarioAutorizadorId)';
+    return 'AuditLog(id: $id, userId: $userId, action: $action, timestamp: $timestamp, deviceId: $deviceId, metadata: $metadata, isSynced: $isSynced, sequenceNo: $sequenceNo, prevHash: $prevHash, entryHash: $entryHash, metodoAutorizacion: $metodoAutorizacion, usuarioAutorizadorId: $usuarioAutorizadorId, hashVersion: $hashVersion)';
   }
 
   @override
@@ -329,7 +347,9 @@ class _$AuditLogImpl implements _AuditLog {
             (identical(other.metodoAutorizacion, metodoAutorizacion) ||
                 other.metodoAutorizacion == metodoAutorizacion) &&
             (identical(other.usuarioAutorizadorId, usuarioAutorizadorId) ||
-                other.usuarioAutorizadorId == usuarioAutorizadorId));
+                other.usuarioAutorizadorId == usuarioAutorizadorId) &&
+            (identical(other.hashVersion, hashVersion) ||
+                other.hashVersion == hashVersion));
   }
 
   @JsonKey(ignore: true)
@@ -347,7 +367,8 @@ class _$AuditLogImpl implements _AuditLog {
       prevHash,
       entryHash,
       metodoAutorizacion,
-      usuarioAutorizadorId);
+      usuarioAutorizadorId,
+      hashVersion);
 
   @JsonKey(ignore: true)
   @override
@@ -377,7 +398,9 @@ abstract class _AuditLog implements AuditLog {
       @JsonKey(name: 'entry_hash') required final String entryHash,
       @JsonKey(name: 'metodo_autorizacion') final String? metodoAutorizacion,
       @JsonKey(name: 'usuario_autorizador_id')
-      final String? usuarioAutorizadorId}) = _$AuditLogImpl;
+      final String? usuarioAutorizadorId,
+      @JsonKey(name: 'hash_version')
+      final String? hashVersion}) = _$AuditLogImpl;
 
   factory _AuditLog.fromJson(Map<String, dynamic> json) =
       _$AuditLogImpl.fromJson;
@@ -413,6 +436,9 @@ abstract class _AuditLog implements AuditLog {
   @override
   @JsonKey(name: 'usuario_autorizador_id')
   String? get usuarioAutorizadorId;
+  @override
+  @JsonKey(name: 'hash_version')
+  String? get hashVersion;
   @override
   @JsonKey(ignore: true)
   _$$AuditLogImplCopyWith<_$AuditLogImpl> get copyWith =>

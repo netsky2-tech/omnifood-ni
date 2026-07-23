@@ -67,9 +67,12 @@ export class AuditLog {
   @CreateDateColumn({ type: 'timestamptz' })
   timestamp: Date;
 
-  @Column({ type: 'jsonb', default: {} })
-  metadata: Record<string, unknown>;
+  @Column({ type: 'jsonb', nullable: true })
+  metadata: unknown | null;
 
   @Column({ default: 'ACTIVE' })
   forensic_status: string;
+
+  @Column({ type: 'varchar', nullable: true })
+  hash_version: string | null;
 }

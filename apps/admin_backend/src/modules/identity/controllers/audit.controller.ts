@@ -15,7 +15,7 @@ import { AuthGuard } from '../guards/auth.guard';
 import { TenantInterceptor } from '../../../core/database/rls.interceptor';
 import { GetTenantId } from '../../../core/decorators/tenant.decorator';
 import { PushAuditLogsDto } from '../dto/identity.dto';
-import * as crypto from 'crypto';
+import { AuditVerificationService } from '../services/audit-verification.service';
 
 @Controller('identity/audit')
 @UseGuards(AuthGuard)
@@ -25,6 +25,7 @@ export class AuditController {
     @InjectRepository(AuditLog)
     private auditRepository: Repository<AuditLog>,
     private readonly dataSource: DataSource,
+    private readonly verificationService: AuditVerificationService,
   ) {}
 
   @Post()
@@ -47,41 +48,22 @@ export class AuditController {
       if (!logActorUserId || !logActorUserId.trim()) {
         throw new BadRequestException(`Missing user_id for log ${log.id}`);
       }
+    }
 
-      const canonicalMetadata = JSON.stringify(log.metadata ?? {});
-      const canonicalPayload = `${logActorUserId}|${resolvedAction}|${log.device_id}|${log.timestamp}|${log.sequence_no}|${log.prev_hash}|${log.metodo_autorizacion || 'null'}|${log.usuario_autorizador_id || 'null'}|${canonicalMetadata}`;
-      const canonicalHash = crypto
-        .createHash('sha256')
-        .update(canonicalPayload)
-        .digest('hex');
+    this.verificationService.verifyBatch(dto.logs, requesterUserId);
 
-      if (canonicalHash !== log.entry_hash) {
-        const legacyMetadataRaw =
-          log.metadata_raw ??
-          (typeof log.metadata?.raw_text === 'string'
-            ? log.metadata.raw_text
-            : null);
-        const legacyMetadataSegment =
-          legacyMetadataRaw === null ? 'null' : legacyMetadataRaw;
-        const legacyPayload = `${logActorUserId}|${resolvedAction}|${log.device_id}|${log.timestamp}|${log.sequence_no}|${log.prev_hash}|${log.metodo_autorizacion || 'null'}|${log.usuario_autorizador_id || 'null'}|${legacyMetadataSegment}`;
-        const legacyHash = crypto
-          .createHash('sha256')
-          .update(legacyPayload)
-          .digest('hex');
+    for (const log of dto.logs) {
+      const logActorUserId = log.user_id ?? requesterUserId;
+      const resolvedAction = log.action ?? log.tipo_accion;
 
-        if (legacyHash !== log.entry_hash) {
-          throw new BadRequestException(
-            `Invalid forensic chain for log ${log.id}`,
-          );
-        }
-      }
-
+      const persistedLog = { ...log };
+      delete persistedLog.metadata_raw;
       logsToSave.push({
-        ...log,
+        ...persistedLog,
         action: resolvedAction,
         user_id: logActorUserId,
         tenant_id: tenantId,
-        metadata: log.metadata || {},
+        metadata: log.metadata === undefined ? {} : log.metadata,
         timestamp: new Date(log.timestamp),
       });
     }
@@ -129,6 +111,21 @@ export class AuditController {
         const expectedSequence = latest.sequence_no + 1;
         const currentSequence = log.sequence_no as number;
         const currentPrevHash = log.prev_hash as string;
+        if (currentSequence <= latest.sequence_no) {
+          const existing = await queryRunner.manager.findOne(AuditLog, {
+            where: {
+              tenant_id: tenantId,
+              device_id: log.device_id as string,
+              user_id: log.user_id as string,
+              sequence_no: currentSequence,
+              forensic_status: 'ACTIVE',
+            },
+          });
+          if (!existing || existing.entry_hash !== log.entry_hash) {
+            throw new ConflictException('Conflicting forensic replay detected');
+          }
+          continue;
+        }
         if (currentSequence !== expectedSequence) {
           throw new BadRequestException(
             `Out-of-order forensic sequence for log ${log.id as string}: expected ${expectedSequence}, got ${currentSequence}`,

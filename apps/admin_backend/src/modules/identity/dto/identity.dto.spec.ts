@@ -33,6 +33,18 @@ describe('CreateAuditLogDto raw version state', () => {
     const dto = plainToInstance(CreateAuditLogDto, {});
 
     expect(dto.hash_version).toBeUndefined();
+    expect(Object.prototype.hasOwnProperty.call(dto, 'hash_version')).toBe(
+      false,
+    );
+  });
+
+  it('preserves an explicitly undefined hash_version as an own property', async () => {
+    const dto = await transformAuditLog({ hash_version: undefined });
+
+    expect(dto.hash_version).toBeUndefined();
+    expect(Object.prototype.hasOwnProperty.call(dto, 'hash_version')).toBe(
+      true,
+    );
   });
 
   it('preserves explicit nullable audit fields without coercion', () => {
@@ -71,6 +83,7 @@ describe('CreateAuditLogDto raw version state', () => {
     });
     const v3 = await transformAuditLog({
       hash_version: 'v3-jcs-rfc8785',
+      metadata_raw: '{}',
     });
 
     expect(absent.hash_version).toBeUndefined();
@@ -81,5 +94,45 @@ describe('CreateAuditLogDto raw version state', () => {
     expect(structured.hash_version).toEqual(object);
     expect(v2.hash_version).toBe('v2-canonical-json');
     expect(v3.hash_version).toBe('v3-jcs-rfc8785');
+  });
+
+  it.each([
+    ['array', [true, null, 'text']],
+    ['string', 'text'],
+    ['boolean', false],
+    ['null', null],
+  ])(
+    'admits protocol-valid number-free v3 %s metadata',
+    async (_, metadata) => {
+      const dto = await transformAuditLog({
+        hash_version: 'v3-jcs-rfc8785',
+        metadata,
+        metadata_raw: JSON.stringify(metadata),
+      });
+
+      expect(dto.metadata).toEqual(metadata);
+    },
+  );
+
+  it.each([
+    ['legacy', undefined],
+    ['v2', 'v2-canonical-json'],
+  ])('keeps %s metadata object-only compatibility', async (_, hashVersion) => {
+    await expect(
+      transformAuditLog({
+        ...(hashVersion === undefined ? {} : { hash_version: hashVersion }),
+        metadata: ['not', 'legacy', 'metadata'],
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('rejects numbers recursively from v3 metadata', async () => {
+    await expect(
+      transformAuditLog({
+        hash_version: 'v3-jcs-rfc8785',
+        metadata: { nested: [true, 1] },
+        metadata_raw: '{"nested":[true,1]}',
+      }),
+    ).rejects.toThrow();
   });
 });

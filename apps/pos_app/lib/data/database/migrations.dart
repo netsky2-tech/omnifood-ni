@@ -1182,6 +1182,27 @@ final migration30_31 = Migration(30, 31, (database) async {
   );
 });
 
+final migration31_32 = Migration(31, 32, (database) async {
+  final auditTable = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'audit_logs'",
+  );
+  if (auditTable.isEmpty) return;
+  await database.execute('ALTER TABLE audit_logs ADD COLUMN hash_version TEXT');
+});
+
+final migration32_33 = Migration(32, 33, (database) async {
+  final auditTable = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'audit_logs'",
+  );
+  if (auditTable.isEmpty) return;
+  await database.execute(
+    'ALTER TABLE audit_logs ADD COLUMN has_metodo_autorizacion INTEGER',
+  );
+  await database.execute(
+    'ALTER TABLE audit_logs ADD COLUMN has_usuario_autorizador_id INTEGER',
+  );
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -1204,4 +1225,6 @@ final allMigrations = [
   migration28_29,
   migration29_30,
   migration30_31,
+  migration31_32,
+  migration32_33,
 ];

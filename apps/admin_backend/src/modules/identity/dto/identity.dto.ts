@@ -6,10 +6,33 @@ import {
   ValidateNested,
   IsOptional,
   IsUUID,
-  IsObject,
   Allow,
+  ValidateIf,
+  ValidateBy,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
+
+const V3_HASH_VERSION = 'v3-jcs-rfc8785';
+
+export type NumberFreeJson =
+  | null
+  | string
+  | boolean
+  | { readonly [key: string]: NumberFreeJson }
+  | readonly NumberFreeJson[];
+
+const isNumberFreeJson = (value: unknown): boolean => {
+  if (
+    value === null ||
+    typeof value === 'string' ||
+    typeof value === 'boolean'
+  ) {
+    return true;
+  }
+  if (Array.isArray(value)) return value.every(isNumberFreeJson);
+  if (typeof value !== 'object') return false;
+  return Object.values(value).every(isNumberFreeJson);
+};
 
 export class LoginDto {
   @IsEmail({}, { message: 'Email inválido' })
@@ -85,12 +108,29 @@ export class CreateAuditLogDto {
   @IsNotEmpty()
   timestamp: string;
 
-  @IsObject()
   @IsOptional()
-  metadata?: Record<string, unknown>;
+  @ValidateBy({
+    name: 'isAuditMetadata',
+    validator: {
+      validate: (value: unknown, { object }): boolean =>
+        (object as CreateAuditLogDto).hash_version === V3_HASH_VERSION
+          ? isNumberFreeJson(value)
+          : typeof value === 'object' &&
+            value !== null &&
+            !Array.isArray(value),
+      defaultMessage: ({ object }): string =>
+        (object as CreateAuditLogDto).hash_version === V3_HASH_VERSION
+          ? 'metadata must be a number-free JSON value'
+          : 'metadata must be an object',
+    },
+  })
+  metadata?: NumberFreeJson;
 
+  @ValidateIf(
+    ({ hash_version }: CreateAuditLogDto) => hash_version === V3_HASH_VERSION,
+  )
   @IsString()
-  @IsOptional()
+  @IsNotEmpty()
   metadata_raw?: string;
 
   @Transform(({ value }: { value: unknown }): unknown => value)
