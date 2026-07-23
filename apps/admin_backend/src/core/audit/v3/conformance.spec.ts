@@ -89,6 +89,9 @@ describe('audit v3 cross-runtime conformance', () => {
 
   it('reports a deterministic Dart timeout diagnostic', () => {
     const error = Object.assign(new Error('spawnSync dart ETIMEDOUT'), { code: 'ETIMEDOUT' });
-    expect(() => runConformance(ROOT, receipt, () => ({ status: null, stdout: null, stderr: null, error }))).toThrow('dart runtime timed out after 90000ms');
+    const stderr = `useful timeout context ${'x'.repeat(600)} hidden tail`;
+    const invoke = () => runConformance(ROOT, receipt, () => ({ status: null, stdout: null, stderr, error }));
+    expect(invoke).toThrow(/^dart runtime timed out after 90000ms; stderr: useful timeout context x{10}/);
+    expect(invoke).not.toThrow('hidden tail');
   });
 });

@@ -95,7 +95,7 @@ export function runConformance(root: string, receiptPath: string, runner: Runtim
     }),
   ];
   const dart = runner(root, nodeRows);
-  if ((dart.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT') throw new Error(`dart runtime timed out after ${DART_TIMEOUT_MS}ms`);
+  if ((dart.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT') throw dartDiagnostic(`dart runtime timed out after ${DART_TIMEOUT_MS}ms`, dart.stderr);
   if (dart.error) throw dartDiagnostic(`dart runtime launch failed: ${dart.error.message}`, dart.stderr);
   if (dart.status === null) throw dartDiagnostic('dart runtime launch failed: no exit status', dart.stderr);
   if (dart.status !== 0) throw dartDiagnostic(`dart runtime failed (${dart.status})`, dart.stderr);
