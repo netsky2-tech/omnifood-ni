@@ -12,11 +12,23 @@ abstract class AuditDao {
   @Query('SELECT * FROM audit_logs WHERE is_synced = 0')
   Future<List<AuditLogEntity>> findUnsyncedLogs();
 
-  @Query('SELECT sequence_no FROM audit_logs ORDER BY id DESC LIMIT 1')
-  Future<int?> getLastSequenceNo();
+  @Query(
+    'SELECT sequence_no FROM audit_logs WHERE tenant_id = :tenantId AND device_id = :deviceId AND user_id = :userId ORDER BY sequence_no DESC LIMIT 1',
+  )
+  Future<int?> getLastSequenceNoByStream(
+    String tenantId,
+    String deviceId,
+    String userId,
+  );
 
-  @Query('SELECT entry_hash FROM audit_logs ORDER BY id DESC LIMIT 1')
-  Future<String?> getLastEntryHash();
+  @Query(
+    'SELECT entry_hash FROM audit_logs WHERE tenant_id = :tenantId AND device_id = :deviceId AND user_id = :userId ORDER BY sequence_no DESC LIMIT 1',
+  )
+  Future<String?> getLastEntryHashByStream(
+    String tenantId,
+    String deviceId,
+    String userId,
+  );
 
   @Insert(onConflict: OnConflictStrategy.replace)
   Future<void> insertLog(AuditLogEntity log);
