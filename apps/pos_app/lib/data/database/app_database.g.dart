@@ -679,17 +679,27 @@ class _$AuditDao extends AuditDao {
   }
 
   @override
-  Future<int?> getLastSequenceNo() async {
+  Future<int?> getLastSequenceNoByStream(
+    String tenantId,
+    String deviceId,
+    String userId,
+  ) async {
     return _queryAdapter.query(
-        'SELECT sequence_no FROM audit_logs ORDER BY id DESC LIMIT 1',
-        mapper: (Map<String, Object?> row) => row.values.first as int);
+        'SELECT sequence_no FROM audit_logs WHERE tenant_id = ?1 AND device_id = ?2 AND user_id = ?3 ORDER BY sequence_no DESC LIMIT 1',
+        mapper: (Map<String, Object?> row) => row.values.first as int,
+        arguments: [tenantId, deviceId, userId]);
   }
 
   @override
-  Future<String?> getLastEntryHash() async {
+  Future<String?> getLastEntryHashByStream(
+    String tenantId,
+    String deviceId,
+    String userId,
+  ) async {
     return _queryAdapter.query(
-        'SELECT entry_hash FROM audit_logs ORDER BY id DESC LIMIT 1',
-        mapper: (Map<String, Object?> row) => row.values.first as String);
+        'SELECT entry_hash FROM audit_logs WHERE tenant_id = ?1 AND device_id = ?2 AND user_id = ?3 ORDER BY sequence_no DESC LIMIT 1',
+        mapper: (Map<String, Object?> row) => row.values.first as String,
+        arguments: [tenantId, deviceId, userId]);
   }
 
   @override
