@@ -1140,6 +1140,39 @@ class MockForensicAlertDao extends _i1.Mock implements _i17.ForensicAlertDao {
       ) as _i37.Future<void>);
 
   @override
+  _i37.Future<void> insertIfAbsentForensicAlert(
+    String? id,
+    String? alertType,
+    String? severity,
+    String? message,
+    String? createdAt,
+    String? status,
+    String? sourceDocumentType,
+    String? sourceDocumentId,
+    String? metadataJson,
+    bool? isSynced,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #insertIfAbsentForensicAlert,
+          [
+            id,
+            alertType,
+            severity,
+            message,
+            createdAt,
+            status,
+            sourceDocumentType,
+            sourceDocumentId,
+            metadataJson,
+            isSynced,
+          ],
+        ),
+        returnValue: _i37.Future<void>.value(),
+        returnValueForMissingStub: _i37.Future<void>.value(),
+      ) as _i37.Future<void>);
+
+  @override
   _i37.Future<void> markAsSynced(String? id) => (super.noSuchMethod(
         Invocation.method(
           #markAsSynced,
