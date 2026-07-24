@@ -43,7 +43,7 @@ describe('TenantCapabilityService', () => {
         sql.startsWith('SELECT new_version')
           ? reads++ === 0
             ? []
-            : [{ version: 'v2', revision: 1 }]
+            : [{ version: 'v2', revision: 1, contractVersion: 99 }]
           : sql.startsWith('SELECT id FROM users')
             ? [{ id: 'owner-a' }]
             : undefined,
@@ -52,6 +52,7 @@ describe('TenantCapabilityService', () => {
     await expect(service.current('tenant-a')).resolves.toEqual({
       version: 'v2',
       revision: 0,
+      contractVersion: 1,
     });
     await expect(
       service.append({
@@ -60,7 +61,7 @@ describe('TenantCapabilityService', () => {
         version: 'v3-jcs-rfc8785',
         reason: 'approved rollout',
       }),
-    ).resolves.toMatchObject({ revision: 2, previousVersion: 'v2' });
+    ).resolves.toMatchObject({ revision: 2, previousVersion: 'v2', contractVersion: 1 });
     expect(runner.query).toHaveBeenCalledWith(
       "SELECT set_config('app.tenant_id', $1, true)",
       ['tenant-a'],
@@ -74,7 +75,7 @@ describe('TenantCapabilityService', () => {
       calls.indexOf('SELECT pg_advisory_xact_lock(hashtext($1))'),
     ).toBeLessThan(
       calls.lastIndexOf(
-        'SELECT new_version AS version, revision FROM tenant_capability_event ORDER BY revision DESC LIMIT 1',
+        'SELECT new_version AS version, revision, contract_version AS "contractVersion" FROM tenant_capability_event ORDER BY revision DESC LIMIT 1',
       ),
     );
     expect(runner.query).toHaveBeenCalledWith(
