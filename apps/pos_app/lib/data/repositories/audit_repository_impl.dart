@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 
 import '../../domain/models/audit_log.dart';
@@ -9,12 +10,19 @@ import '../models/audit_log_entity.dart';
 import '../mappers/audit_mapper.dart';
 import 'package:dio/dio.dart';
 import 'package:uuid/uuid.dart';
+import '../../core/audit/v3/canonicalizer.dart';
+import '../../core/audit/v3/frame.dart';
+import '../../core/audit/v3/sha256.dart';
+import '../../core/audit/v3/types.dart';
+import 'tenant_capability_cache.dart';
 
 class AuditRepositoryImpl implements AuditRepository {
   final AuditDao _auditDao;
   final AuthRepository _authRepository;
   final Dio _dio;
   final String _deviceId;
+  final TenantCapabilityCache _capabilityCache;
+  final DateTime Function() _now;
   static const _uuid = Uuid();
   static const _forensicHashVersion = 'v2-canonical-json';
 
@@ -22,8 +30,10 @@ class AuditRepositoryImpl implements AuditRepository {
     this._auditDao,
     this._authRepository,
     this._dio,
-    this._deviceId,
-  );
+    this._deviceId, {
+    required TenantCapabilityCache capabilityCache,
+    DateTime Function()? now,
+  }) : _capabilityCache = capabilityCache, _now = now ?? DateTime.now;
 
   @override
   String get deviceId => _deviceId;
@@ -66,32 +76,66 @@ class AuditRepositoryImpl implements AuditRepository {
     String? usuarioAutorizadorId,
   }) async {
     final user = await _authRepository.getCurrentUser();
-    if (user == null) return null;
+    final tenantId = user?.tenantId;
+    if (user == null || tenantId == null || tenantId.isEmpty) return null;
 
-    final lastSeq = await _auditDao.getLastSequenceNo();
+    final lastSeq = await _auditDao.getLastSequenceNoByStream(
+      tenantId,
+      _deviceId,
+      user.id,
+    );
     final nextSeq = (lastSeq ?? 0) + 1;
-    final prevHash = await _auditDao.getLastEntryHash() ?? 'GENESIS';
+    final prevHash =
+        await _auditDao.getLastEntryHashByStream(
+          tenantId,
+          _deviceId,
+          user.id,
+        ) ??
+        'GENESIS';
 
-    final timestamp = DateTime.now().toIso8601String();
+    final timestamp = _now().toIso8601String();
     final metadataObject = _normalizeMetadataToJsonObject(metadata);
     final canonicalMetadata = jsonEncode(metadataObject);
-    final entryHash = _computeCanonicalHash(
-      userId: user.id,
-      action: action,
-      timestamp: timestamp,
-      sequenceNo: nextSeq,
-      prevHash: prevHash,
-      metodoAutorizacion: metodoAutorizacion,
-      usuarioAutorizadorId: usuarioAutorizadorId,
-      canonicalMetadata: canonicalMetadata,
-    );
+    final selectedVersion = _capabilityCache.isV3Eligible(tenantId)
+        ? 'v3-jcs-rfc8785'
+        : _forensicHashVersion;
+    final v3Provenance = selectedVersion == 'v3-jcs-rfc8785'
+        ? _buildV3Provenance(
+            user.id,
+            action,
+            timestamp,
+            nextSeq,
+            prevHash,
+            metadata,
+            metodoAutorizacion,
+            usuarioAutorizadorId,
+          )
+        : null;
+    if (selectedVersion == 'v3-jcs-rfc8785' && v3Provenance == null) {
+      throw StateError('Unable to construct v3 audit evidence');
+    }
+    final hashVersion = v3Provenance == null
+        ? _forensicHashVersion
+        : selectedVersion;
+    final entryHash =
+        v3Provenance?.$1 ??
+        _computeCanonicalHash(
+          userId: user.id,
+          action: action,
+          timestamp: timestamp,
+          sequenceNo: nextSeq,
+          prevHash: prevHash,
+          metodoAutorizacion: metodoAutorizacion,
+          usuarioAutorizadorId: usuarioAutorizadorId,
+          canonicalMetadata: canonicalMetadata,
+        );
 
     return AuditLogEntity(
       userId: user.id,
       action: action,
       timestamp: timestamp,
       deviceId: _deviceId,
-      metadata: canonicalMetadata,
+      metadata: v3Provenance?.$2 ?? canonicalMetadata,
       isSynced: false,
       sequenceNo: nextSeq,
       prevHash: prevHash,
@@ -99,10 +143,48 @@ class AuditRepositoryImpl implements AuditRepository {
       metodoAutorizacion: metodoAutorizacion,
       usuarioAutorizadorId: usuarioAutorizadorId,
       remoteRefUuid: _uuid.v4(),
-      hashVersion: _forensicHashVersion,
+      hashVersion: hashVersion,
       hasMetodoAutorizacion: metodoAutorizacion != null,
       hasUsuarioAutorizadorId: usuarioAutorizadorId != null,
+      tenantId: tenantId,
+      metadataRaw: metadata,
     );
+  }
+
+  (String, String)? _buildV3Provenance(
+    String userId,
+    String action,
+    String timestamp,
+    int sequenceNo,
+    String prevHash,
+    String? metadata,
+    String? metodoAutorizacion,
+    String? usuarioAutorizadorId,
+  ) {
+    final canonical = canonicalizeNumberFreeJson(
+      utf8.encode(metadata ?? 'null'),
+    );
+    if (canonical is! AuditV3Success<Uint8List>) return null;
+    final frame = buildAuditV3Frame(
+      AuditV3FrameFields(
+        userId: userId,
+        resolvedAction: action,
+        deviceId: _deviceId,
+        timestamp: timestamp,
+        sequenceNo: '$sequenceNo',
+        prevHash: prevHash,
+        metodoAutorizacion: metodoAutorizacion == null
+            ? const FieldState.absent()
+            : FieldState.text(metodoAutorizacion),
+        usuarioAutorizadorId: usuarioAutorizadorId == null
+            ? const FieldState.absent()
+            : FieldState.text(usuarioAutorizadorId),
+      ),
+      canonical.value,
+    );
+    return frame is AuditV3Success<Uint8List>
+        ? (sha256LowerHex(frame.value), utf8.decode(canonical.value))
+        : null;
   }
 
   @override
@@ -115,18 +197,8 @@ class AuditRepositoryImpl implements AuditRepository {
       for (final e in unsynced) {
         final isV3 = e.hashVersion == 'v3-jcs-rfc8785';
         final normalizedMetadata = _normalizeMetadataToJsonObject(e.metadata);
-        final normalizedMetadataString = jsonEncode(normalizedMetadata);
-        final metadataRaw = isV3
-            ? (e.metadata ?? 'null')
-            : _extractLegacyMetadataRaw(e.metadata);
-        if (!isV3 && e.id != null && e.metadata != normalizedMetadataString) {
-          try {
-            await _auditDao.updateMetadataById(e.id!, normalizedMetadataString);
-          } catch (_) {
-            // Best-effort normalization persistence: never block forensic sync.
-          }
-        }
-
+        final metadataRaw = e.metadataRaw ??
+            (isV3 ? (e.metadata ?? 'null') : _extractLegacyMetadataRaw(e.metadata));
         final payload = <String, dynamic>{
           'id': e.remoteRefUuid,
           'user_id': e.userId,

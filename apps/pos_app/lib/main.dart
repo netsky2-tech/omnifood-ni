@@ -85,16 +85,13 @@ void main() async {
   ).resolveDeviceId(buildTimeDeviceId: provisionedDeviceId);
   final dio = Dio(BaseOptions(baseUrl: baseUrl));
   final localAuthService = LocalAuthService();
+  final capabilityCache = TenantCapabilityCache(configDao: database.localConfigDao, clock: StopwatchMonotonicClock(), bootSessionId: const Uuid().v4());
   final authRepository = AuthRepositoryImpl(
     database.userDao,
     database.securityProfileDao,
     localAuthService,
     dio,
-    capabilityCache: TenantCapabilityCache(
-      configDao: database.localConfigDao,
-      clock: StopwatchMonotonicClock(),
-      bootSessionId: const Uuid().v4(),
-    ),
+    capabilityCache: capabilityCache,
   );
 
   // Add Auth Interceptor
@@ -115,6 +112,7 @@ void main() async {
     authRepository,
     dio,
     deviceId,
+    capabilityCache: capabilityCache,
   );
 
   final inventoryRepository = InventoryRepositoryImpl(
