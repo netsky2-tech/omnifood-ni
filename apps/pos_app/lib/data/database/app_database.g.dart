@@ -1444,6 +1444,35 @@ class _$ForensicAlertDao extends ForensicAlertDao {
   }
 
   @override
+  Future<void> insertIfAbsentForensicAlert(
+    String id,
+    String alertType,
+    String severity,
+    String message,
+    String createdAt,
+    String status,
+    String sourceDocumentType,
+    String sourceDocumentId,
+    String metadataJson,
+    bool isSynced,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'INSERT OR IGNORE INTO forensic_alerts (id, alert_type, severity, message, created_at, status, source_document_type, source_document_id, metadata_json, is_synced) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)',
+        arguments: [
+          id,
+          alertType,
+          severity,
+          message,
+          createdAt,
+          status,
+          sourceDocumentType,
+          sourceDocumentId,
+          metadataJson,
+          isSynced ? 1 : 0
+        ]);
+  }
+
+  @override
   Future<void> markAsSynced(String id) async {
     await _queryAdapter.queryNoReturn(
         'UPDATE forensic_alerts SET is_synced = 1 WHERE id = ?1',
