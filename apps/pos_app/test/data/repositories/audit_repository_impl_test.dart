@@ -4,6 +4,7 @@ import 'package:mockito/annotations.dart';
 import 'package:pos_app/domain/repositories/auth_repository.dart';
 import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/data/daos/audit_log_dao.dart';
+import 'package:pos_app/data/daos/inventory/forensic_alert_dao.dart';
 import 'package:pos_app/data/models/audit_log_entity.dart';
 import 'package:pos_app/data/repositories/audit_repository_impl.dart';
 import 'package:dio/dio.dart';
@@ -21,6 +22,19 @@ import 'audit_repository_impl_test.mocks.dart';
 class _Configs extends mt.Mock implements LocalConfigDao {}
 class _Clock implements MonotonicClock { @override Duration elapsed() => Duration.zero; }
 class _Capabilities extends mt.Mock implements TenantCapabilityCache {}
+class _Alerts implements ForensicAlertDao {
+  final calls = <List<Object>>[];
+  bool throwsOnInsert = false;
+
+  @override
+  Future<void> insertIfAbsentForensicAlert(String id, String alertType, String severity, String message, String createdAt, String status, String sourceDocumentType, String sourceDocumentId, String metadataJson, bool isSynced) async {
+    if (throwsOnInsert) throw StateError('alert persistence unavailable');
+    calls.add([id, alertType, severity, message, createdAt, status, sourceDocumentType, sourceDocumentId, metadataJson, isSynced]);
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
 
 @GenerateNiceMocks([
   MockSpec<AuditDao>(),
@@ -33,6 +47,7 @@ void main() {
   late MockAuditDao mockAuditDao;
   late MockAuthRepository mockAuthRepository;
   late MockDio mockDio;
+  late _Alerts alerts;
   late AuditRepositoryImpl repository;
   late TenantCapabilityCache cache;
 
@@ -40,6 +55,7 @@ void main() {
     mockAuditDao = MockAuditDao();
     mockAuthRepository = MockAuthRepository();
     mockDio = MockDio();
+    alerts = _Alerts();
     final configs = _Configs();
     mt.when(() => configs.saveConfig(mt.any())).thenAnswer((_) async {});
     cache = TenantCapabilityCache(configDao: configs, clock: _Clock(), bootSessionId: 'boot', nowUtc: () => DateTime.utc(2026));
@@ -49,6 +65,7 @@ void main() {
       mockDio,
       'device_123',
       capabilityCache: cache,
+      forensicAlertDao: alerts,
     );
   });
 
@@ -244,7 +261,7 @@ void main() {
     });
 
     test('preserves the authoritative v2 golden digest', () async {
-      repository = AuditRepositoryImpl(mockAuditDao, mockAuthRepository, mockDio, 'pos-01', capabilityCache: cache, now: () => DateTime.parse('2026-07-21T12:34:56.789Z'));
+      repository = AuditRepositoryImpl(mockAuditDao, mockAuthRepository, mockDio, 'pos-01', capabilityCache: cache, forensicAlertDao: alerts, now: () => DateTime.parse('2026-07-21T12:34:56.789Z'));
       when(mockAuthRepository.getCurrentUser()).thenAnswer((_) async => User(id: 'user-01', name: 'u', role: UserRole.manager, isActive: true, tenantId: 'tenant_a'));
       when(mockAuditDao.getLastSequenceNoByStream('tenant_a', 'pos-01', 'user-01')).thenAnswer((_) async => 6);
       when(mockAuditDao.getLastEntryHashByStream('tenant_a', 'pos-01', 'user-01')).thenAnswer((_) async => 'GENESIS');
@@ -260,7 +277,7 @@ void main() {
     test('fails closed when authoritative v3 metadata is invalid', () async {
       final capabilities = _Capabilities();
       mt.when(() => capabilities.isV3Eligible('tenant_a')).thenReturn(true);
-      repository = AuditRepositoryImpl(mockAuditDao, mockAuthRepository, mockDio, 'device_123', capabilityCache: capabilities);
+      repository = AuditRepositoryImpl(mockAuditDao, mockAuthRepository, mockDio, 'device_123', capabilityCache: capabilities, forensicAlertDao: alerts);
       when(mockAuthRepository.getCurrentUser()).thenAnswer((_) async => user('tenant_a'));
       stubStream();
       await expectLater(repository.logForensic('OPEN', metadata: '{"number":1}'), throwsStateError);
@@ -512,5 +529,169 @@ void main() {
         verify(mockAuditDao.markAsSynced([10]));
       },
     );
+  });
+
+  group('syncLogs stream isolation', () {
+    AuditLogEntity row({
+      required int id,
+      required String remoteRef,
+      required String tenantId,
+      required String deviceId,
+      required String userId,
+      required int sequence,
+      required String previousHash,
+      required String entryHash,
+      String? hashVersion,
+      String? metadataRaw,
+    }) => AuditLogEntity(
+      id: id,
+      userId: userId,
+      action: 'OPEN',
+      timestamp: '2026-07-24T00:00:00.000Z',
+      deviceId: deviceId,
+      metadata: metadataRaw ?? '{}',
+      metadataRaw: metadataRaw,
+      tenantId: tenantId,
+      isSynced: false,
+      sequenceNo: sequence,
+      prevHash: previousHash,
+      entryHash: entryHash,
+      remoteRefUuid: remoteRef,
+      hashVersion: hashVersion,
+    );
+
+    void acceptAllPosts() {
+      when(
+        mockDio.post(
+          any,
+          data: anyNamed('data'),
+          options: anyNamed('options'),
+          cancelToken: anyNamed('cancelToken'),
+          onSendProgress: anyNamed('onSendProgress'),
+          onReceiveProgress: anyNamed('onReceiveProgress'),
+        ),
+      ).thenAnswer(
+        (call) async => Response(
+          requestOptions: RequestOptions(path: '/identity/audit'),
+          data: {'status': 'success', 'count': (call.namedArguments[#data] as Map)['logs'].length},
+        ),
+      );
+    }
+
+    void authenticateAs(String tenantId) {
+      when(mockAuthRepository.getCurrentUser()).thenAnswer(
+        (_) async => User(id: 'active-user', name: 'Active', role: UserRole.manager, isActive: true, tenantId: tenantId),
+      );
+    }
+
+    test('blocks a poison stream tail while independently syncing another stream', () async {
+      final rows = [
+        row(id: 3, remoteRef: 'a-3', tenantId: 'tenant-a', deviceId: 'd', userId: 'u', sequence: 3, previousHash: 'a-2', entryHash: 'a-3'),
+        row(id: 4, remoteRef: 'b-1', tenantId: 'tenant-a', deviceId: 'other-device', userId: 'u', sequence: 1, previousHash: 'GENESIS', entryHash: 'b-1'),
+        row(id: 2, remoteRef: 'a-poison', tenantId: 'tenant-a', deviceId: 'd', userId: 'u', sequence: 2, previousHash: 'a-1', entryHash: 'a-2', hashVersion: 'v3-jcs-rfc8785', metadataRaw: '{invalid'),
+        row(id: 1, remoteRef: 'a-1', tenantId: 'tenant-a', deviceId: 'd', userId: 'u', sequence: 1, previousHash: 'GENESIS', entryHash: 'a-1'),
+      ];
+      authenticateAs('tenant-a');
+      when(mockAuditDao.findUnsyncedLogs()).thenAnswer((_) async => rows);
+      when(mockAuditDao.markAsSynced(any)).thenAnswer((_) async {});
+      acceptAllPosts();
+
+      await repository.syncLogs();
+
+      final payloads = verify(mockDio.post('/identity/audit', data: captureAnyNamed('data'), options: anyNamed('options'), cancelToken: anyNamed('cancelToken'), onSendProgress: anyNamed('onSendProgress'), onReceiveProgress: anyNamed('onReceiveProgress'))).captured.cast<Map>();
+      expect(payloads.map((payload) => (payload['logs'] as List).single['id']), ['a-1', 'b-1']);
+      verify(mockAuditDao.markAsSynced([1]));
+      verify(mockAuditDao.markAsSynced([4]));
+      verifyNever(mockAuditDao.markAsSynced([2, 3]));
+      final alert = alerts.calls.single;
+      expect(alert[6], 'audit_log');
+      expect(alert[7], 'a-poison');
+      expect(alert[8], contains('"sequence_no":2'));
+    });
+
+    test('acknowledges only accepted rows in a contiguous stream sub-batch', () async {
+      final first = row(id: 1, remoteRef: 'c-1', tenantId: 'tenant-c', deviceId: 'd', userId: 'u', sequence: 1, previousHash: 'GENESIS', entryHash: 'c-1');
+      final second = row(id: 2, remoteRef: 'c-2', tenantId: 'tenant-c', deviceId: 'd', userId: 'u', sequence: 2, previousHash: 'c-1', entryHash: 'c-2');
+      authenticateAs('tenant-c');
+      when(mockAuditDao.findUnsyncedLogs()).thenAnswer((_) async => [second, first]);
+      when(mockAuditDao.markAsSynced(any)).thenAnswer((_) async {});
+      when(mockDio.post(any, data: anyNamed('data'), options: anyNamed('options'), cancelToken: anyNamed('cancelToken'), onSendProgress: anyNamed('onSendProgress'), onReceiveProgress: anyNamed('onReceiveProgress'))).thenAnswer((_) async => Response(requestOptions: RequestOptions(path: '/identity/audit'), data: {'accepted_ids': ['c-1']}));
+
+      await repository.syncLogs();
+
+      final payload = verify(mockDio.post('/identity/audit', data: captureAnyNamed('data'), options: anyNamed('options'), cancelToken: anyNamed('cancelToken'), onSendProgress: anyNamed('onSendProgress'), onReceiveProgress: anyNamed('onReceiveProgress'))).captured.single as Map;
+      expect((payload['logs'] as List).map((log) => log['id']), ['c-1', 'c-2']);
+      verify(mockAuditDao.markAsSynced([1]));
+      verifyNever(mockAuditDao.markAsSynced([2]));
+    });
+
+    test('keeps legacy null-tenant rows on their existing payload path without rewriting them', () async {
+      final legacy = AuditLogEntity(id: 9, userId: 'u', action: 'OPEN', timestamp: '2026-07-24T00:00:00.000Z', deviceId: 'd', metadata: 'legacy text', isSynced: false, sequenceNo: 9, prevHash: 'old', entryHash: 'legacy-hash', remoteRefUuid: 'legacy-9');
+      when(mockAuditDao.findUnsyncedLogs()).thenAnswer((_) async => [legacy]);
+      when(mockAuditDao.markAsSynced(any)).thenAnswer((_) async {});
+      acceptAllPosts();
+
+      await repository.syncLogs();
+
+      verify(mockAuditDao.markAsSynced([9]));
+      verifyNever(mockAuditDao.updateMetadataById(any, any));
+      expect(legacy.tenantId, isNull);
+      expect(legacy.metadata, 'legacy text');
+    });
+
+    test('leaves another tenant backlog queued while the active tenant stream continues', () async {
+      final active = row(id: 1, remoteRef: 'a-1', tenantId: 'tenant-a', deviceId: 'd', userId: 'u', sequence: 1, previousHash: 'GENESIS', entryHash: 'a-1');
+      final other = row(id: 2, remoteRef: 'b-1', tenantId: 'tenant-b', deviceId: 'd', userId: 'u', sequence: 1, previousHash: 'GENESIS', entryHash: 'b-1');
+      authenticateAs('tenant-a');
+      when(mockAuditDao.findUnsyncedLogs()).thenAnswer((_) async => [other, active]);
+      when(mockAuditDao.markAsSynced(any)).thenAnswer((_) async {});
+      acceptAllPosts();
+
+      await repository.syncLogs();
+
+      final payload = verify(mockDio.post('/identity/audit', data: captureAnyNamed('data'), options: anyNamed('options'), cancelToken: anyNamed('cancelToken'), onSendProgress: anyNamed('onSendProgress'), onReceiveProgress: anyNamed('onReceiveProgress'))).captured.single as Map;
+      expect((payload['logs'] as List).single['id'], 'a-1');
+      verify(mockAuditDao.markAsSynced([1]));
+      verifyNever(mockAuditDao.markAsSynced([2]));
+    });
+
+    test('continues a safe same-tenant stream when poison alert persistence fails', () async {
+      final poison = row(id: 1, remoteRef: 'poison', tenantId: 'tenant-a', deviceId: 'blocked-device', userId: 'u', sequence: 1, previousHash: 'GENESIS', entryHash: 'p-1', hashVersion: 'v3-jcs-rfc8785', metadataRaw: '{bad');
+      final tail = row(id: 2, remoteRef: 'tail', tenantId: 'tenant-a', deviceId: 'blocked-device', userId: 'u', sequence: 2, previousHash: 'p-1', entryHash: 'p-2');
+      final safe = row(id: 3, remoteRef: 'safe', tenantId: 'tenant-a', deviceId: 'other-device', userId: 'u', sequence: 1, previousHash: 'GENESIS', entryHash: 's-1');
+      authenticateAs('tenant-a');
+      alerts.throwsOnInsert = true;
+      when(mockAuditDao.findUnsyncedLogs()).thenAnswer((_) async => [poison, tail, safe]);
+      when(mockAuditDao.markAsSynced(any)).thenAnswer((_) async {});
+      acceptAllPosts();
+
+      await repository.syncLogs();
+
+      final payload = verify(mockDio.post('/identity/audit', data: captureAnyNamed('data'), options: anyNamed('options'), cancelToken: anyNamed('cancelToken'), onSendProgress: anyNamed('onSendProgress'), onReceiveProgress: anyNamed('onReceiveProgress'))).captured.single as Map;
+      expect((payload['logs'] as List).single['id'], 'safe');
+      verify(mockAuditDao.markAsSynced([3]));
+      verifyNever(mockAuditDao.markAsSynced([1, 2]));
+    });
+
+    test('blocks duplicate sequence and tail deterministically regardless of input order', () async {
+      final prefix = row(id: 1, remoteRef: 'prefix', tenantId: 'tenant-a', deviceId: 'd', userId: 'u', sequence: 1, previousHash: 'GENESIS', entryHash: 'h-1');
+      final duplicateA = row(id: 2, remoteRef: 'duplicate-a', tenantId: 'tenant-a', deviceId: 'd', userId: 'u', sequence: 2, previousHash: 'h-1', entryHash: 'h-2a');
+      final duplicateB = row(id: 3, remoteRef: 'duplicate-b', tenantId: 'tenant-a', deviceId: 'd', userId: 'u', sequence: 2, previousHash: 'h-1', entryHash: 'h-2b');
+      final tail = row(id: 4, remoteRef: 'tail', tenantId: 'tenant-a', deviceId: 'd', userId: 'u', sequence: 3, previousHash: 'h-2a', entryHash: 'h-3');
+      authenticateAs('tenant-a');
+      var attempt = 0;
+      when(mockAuditDao.findUnsyncedLogs()).thenAnswer((_) async => ++attempt == 1 ? [tail, duplicateB, prefix, duplicateA] : [duplicateA, prefix, tail, duplicateB]);
+      when(mockAuditDao.markAsSynced(any)).thenAnswer((_) async {});
+      acceptAllPosts();
+
+      await repository.syncLogs();
+      await repository.syncLogs();
+
+      final payloads = verify(mockDio.post('/identity/audit', data: captureAnyNamed('data'), options: anyNamed('options'), cancelToken: anyNamed('cancelToken'), onSendProgress: anyNamed('onSendProgress'), onReceiveProgress: anyNamed('onReceiveProgress'))).captured.cast<Map>();
+      expect(payloads.map((payload) => (payload['logs'] as List).single['id']), ['prefix', 'prefix']);
+      verify(mockAuditDao.markAsSynced([1])).called(2);
+      verifyNever(mockAuditDao.markAsSynced([2, 3, 4]));
+      expect(alerts.calls.map((call) => call[8]), everyElement(contains('duplicate_sequence')));
+    });
   });
 }
