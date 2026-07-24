@@ -7,29 +7,48 @@ import 'package:pos_app/data/daos/audit_log_dao.dart';
 import 'package:pos_app/data/models/audit_log_entity.dart';
 import 'package:pos_app/data/repositories/audit_repository_impl.dart';
 import 'package:dio/dio.dart';
+import 'package:mocktail/mocktail.dart' as mt;
+import 'package:pos_app/core/clock/monotonic_clock.dart';
+import 'package:pos_app/data/daos/local_config_dao.dart';
+import 'package:pos_app/data/models/local_config_entity.dart';
+import 'package:pos_app/data/repositories/tenant_capability_cache.dart';
+import 'package:pos_app/core/audit/v3/frame.dart';
+import 'package:pos_app/core/audit/v3/sha256.dart';
+import 'package:pos_app/core/audit/v3/types.dart';
+import 'dart:typed_data';
+import 'audit_repository_impl_test.mocks.dart';
+
+class _Configs extends mt.Mock implements LocalConfigDao {}
+class _Clock implements MonotonicClock { @override Duration elapsed() => Duration.zero; }
+class _Capabilities extends mt.Mock implements TenantCapabilityCache {}
 
 @GenerateNiceMocks([
   MockSpec<AuditDao>(),
   MockSpec<AuthRepository>(),
   MockSpec<Dio>(),
 ])
-import 'audit_repository_impl_test.mocks.dart';
 
 void main() {
+  setUpAll(() => mt.registerFallbackValue(LocalConfigEntity(key: '', value: '')));
   late MockAuditDao mockAuditDao;
   late MockAuthRepository mockAuthRepository;
   late MockDio mockDio;
   late AuditRepositoryImpl repository;
+  late TenantCapabilityCache cache;
 
   setUp(() {
     mockAuditDao = MockAuditDao();
     mockAuthRepository = MockAuthRepository();
     mockDio = MockDio();
+    final configs = _Configs();
+    mt.when(() => configs.saveConfig(mt.any())).thenAnswer((_) async {});
+    cache = TenantCapabilityCache(configDao: configs, clock: _Clock(), bootSessionId: 'boot', nowUtc: () => DateTime.utc(2026));
     repository = AuditRepositoryImpl(
       mockAuditDao,
       mockAuthRepository,
       mockDio,
       'device_123',
+      capabilityCache: cache,
     );
   });
 
@@ -41,10 +60,23 @@ void main() {
         name: 'Test User',
         role: UserRole.manager,
         isActive: true,
+        tenantId: 'tenant_a',
       );
       when(mockAuthRepository.getCurrentUser()).thenAnswer((_) async => user);
-      when(mockAuditDao.getLastSequenceNo()).thenAnswer((_) async => null);
-      when(mockAuditDao.getLastEntryHash()).thenAnswer((_) async => null);
+      when(
+        mockAuditDao.getLastSequenceNoByStream(
+          'tenant_a',
+          'device_123',
+          'user_1',
+        ),
+      ).thenAnswer((_) async => null);
+      when(
+        mockAuditDao.getLastEntryHashByStream(
+          'tenant_a',
+          'device_123',
+          'user_1',
+        ),
+      ).thenAnswer((_) async => null);
 
       // Act
       await repository.logForensic(
@@ -74,11 +106,22 @@ void main() {
         name: 'Test User',
         role: UserRole.manager,
         isActive: true,
+        tenantId: 'tenant_a',
       );
       when(mockAuthRepository.getCurrentUser()).thenAnswer((_) async => user);
-      when(mockAuditDao.getLastSequenceNo()).thenAnswer((_) async => 5);
       when(
-        mockAuditDao.getLastEntryHash(),
+        mockAuditDao.getLastSequenceNoByStream(
+          'tenant_a',
+          'device_123',
+          'user_1',
+        ),
+      ).thenAnswer((_) async => 5);
+      when(
+        mockAuditDao.getLastEntryHashByStream(
+          'tenant_a',
+          'device_123',
+          'user_1',
+        ),
       ).thenAnswer((_) async => 'PREV_HASH_123');
 
       // Act
@@ -94,6 +137,173 @@ void main() {
       expect(entity.entryHash, isNotNull);
       expect(entity.metodoAutorizacion, isNull);
       expect(entity.usuarioAutorizadorId, isNull);
+    });
+  });
+
+  group('creation provenance', () {
+    User user(String? tenantId) => User(
+      id: 'user_1',
+      name: 'Test User',
+      role: UserRole.manager,
+      isActive: true,
+      tenantId: tenantId,
+    );
+
+    void stubStream({int? sequence, String? hash}) {
+      when(
+        mockAuditDao.getLastSequenceNoByStream(
+          'tenant_a',
+          'device_123',
+          'user_1',
+        ),
+      ).thenAnswer((_) async => sequence);
+      when(
+        mockAuditDao.getLastEntryHashByStream(
+          'tenant_a',
+          'device_123',
+          'user_1',
+        ),
+      ).thenAnswer((_) async => hash);
+    }
+
+    test(
+      'creates independent tenant streams and excludes legacy predecessors',
+      () async {
+        when(
+          mockAuthRepository.getCurrentUser(),
+        ).thenAnswer((_) async => user('tenant_a'));
+        stubStream();
+        await repository.logForensic('OPEN', metadata: '{"z":1,"a":"raw"}');
+        when(
+          mockAuthRepository.getCurrentUser(),
+        ).thenAnswer((_) async => user('tenant_b'));
+        when(
+          mockAuditDao.getLastSequenceNoByStream(
+            'tenant_b',
+            'device_123',
+            'user_1',
+          ),
+        ).thenAnswer((_) async => null);
+        when(
+          mockAuditDao.getLastEntryHashByStream(
+            'tenant_b',
+            'device_123',
+            'user_1',
+          ),
+        ).thenAnswer((_) async => null);
+        await repository.logForensic('OPEN');
+
+        final rows = verify(
+          mockAuditDao.insertLog(captureAny),
+        ).captured.cast<AuditLogEntity>();
+        expect(rows.map((row) => row.tenantId), ['tenant_a', 'tenant_b']);
+        expect(rows.map((row) => row.sequenceNo), [1, 1]);
+        expect(rows.first.prevHash, 'GENESIS');
+        expect(rows.first.metadataRaw, '{"z":1,"a":"raw"}');
+      },
+    );
+
+    test(
+      'fails closed without a tenant and ignores forged event metadata',
+      () async {
+        when(
+          mockAuthRepository.getCurrentUser(),
+        ).thenAnswer((_) async => user(null));
+        await repository.logForensic(
+          'OPEN',
+          metadata: '{"tenant_id":"forged"}',
+        );
+        verifyNever(mockAuditDao.insertLog(any));
+        verifyNever(mockAuditDao.getLastSequenceNoByStream(any, any, any));
+      },
+    );
+
+    test(
+      'snapshots explicit v2 provenance on the dark production path',
+      () async {
+        when(
+          mockAuthRepository.getCurrentUser(),
+        ).thenAnswer((_) async => user('tenant_a'));
+        stubStream(sequence: 4, hash: 'A4');
+        await repository.logForensic('OPEN', metadata: 'exact raw input');
+        final row =
+            verify(mockAuditDao.insertLog(captureAny)).captured.single
+                as AuditLogEntity;
+        expect(row.hashVersion, 'v2-canonical-json');
+        expect(row.metadataRaw, 'exact raw input');
+        expect(row.sequenceNo, 5);
+        expect(row.prevHash, 'A4');
+      },
+    );
+
+    test('fresh same-tenant authority remains v2 while the production gate is false', () async {
+      await cache.refresh(tenantId: 'tenant_a', response: {'tenant_id': 'tenant_a', 'active_version': 'v3-jcs-rfc8785', 'contract_version': 1, 'server_fetched_at': '2026-01-01T00:00:00Z', 'server_expires_at': '2026-01-02T00:00:00Z'});
+      when(mockAuthRepository.getCurrentUser()).thenAnswer((_) async => user('tenant_a'));
+      stubStream(); await repository.logForensic('OPEN');
+      expect((verify(mockAuditDao.insertLog(captureAny)).captured.single as AuditLogEntity).hashVersion, 'v2-canonical-json');
+    });
+
+    test('preserves the authoritative v2 golden digest', () async {
+      repository = AuditRepositoryImpl(mockAuditDao, mockAuthRepository, mockDio, 'pos-01', capabilityCache: cache, now: () => DateTime.parse('2026-07-21T12:34:56.789Z'));
+      when(mockAuthRepository.getCurrentUser()).thenAnswer((_) async => User(id: 'user-01', name: 'u', role: UserRole.manager, isActive: true, tenantId: 'tenant_a'));
+      when(mockAuditDao.getLastSequenceNoByStream('tenant_a', 'pos-01', 'user-01')).thenAnswer((_) async => 6);
+      when(mockAuditDao.getLastEntryHashByStream('tenant_a', 'pos-01', 'user-01')).thenAnswer((_) async => 'GENESIS');
+      await repository.logForensic('LOGOUT', metadata: '{"reason":"manual"}', metodoAutorizacion: 'PIN', usuarioAutorizadorId: 'supervisor-01');
+      expect((verify(mockAuditDao.insertLog(captureAny)).captured.single as AuditLogEntity).entryHash, 'e30059a1e2d4b99339be0515e107fbdaf737e339bbc0bc7617a5c5bf5cb34a2c');
+    });
+
+    test('preserves the authoritative v3 frame digest', () {
+      final frame = buildAuditV3Frame(const AuditV3FrameFields(userId: 'u', resolvedAction: 'LOGOUT', deviceId: 'd', timestamp: '2026-07-21T00:00:00Z', sequenceNo: '0', prevHash: 'GENESIS', metodoAutorizacion: FieldState.absent(), usuarioAutorizadorId: FieldState.absent()), Uint8List.fromList([123, 125])) as AuditV3Success<Uint8List>;
+      expect(sha256LowerHex(frame.value), '70d36fb4f831755febf5a75dc370f1c835d56feb5733a72f064560cb86509cab');
+    });
+
+    test('fails closed when authoritative v3 metadata is invalid', () async {
+      final capabilities = _Capabilities();
+      mt.when(() => capabilities.isV3Eligible('tenant_a')).thenReturn(true);
+      repository = AuditRepositoryImpl(mockAuditDao, mockAuthRepository, mockDio, 'device_123', capabilityCache: capabilities);
+      when(mockAuthRepository.getCurrentUser()).thenAnswer((_) async => user('tenant_a'));
+      stubStream();
+      await expectLater(repository.logForensic('OPEN', metadata: '{"number":1}'), throwsStateError);
+      verifyNever(mockAuditDao.insertLog(any));
+    });
+
+    test('never rewrites a queued row during sync', () async {
+      final queued = AuditLogEntity(
+        id: 7,
+        userId: 'user_1',
+        action: 'OPEN',
+        timestamp: '2026-01-01T00:00:00Z',
+        deviceId: 'device_123',
+        metadata: '{"a":1}',
+        metadataRaw: 'exact raw input',
+        tenantId: 'tenant_a',
+        isSynced: false,
+        sequenceNo: 1,
+        prevHash: 'GENESIS',
+        entryHash: 'unchanged',
+        remoteRefUuid: 'row-7',
+        hashVersion: 'v2-canonical-json',
+      );
+      when(mockAuditDao.findUnsyncedLogs()).thenAnswer((_) async => [queued]);
+      when(mockAuditDao.markAsSynced(any)).thenAnswer((_) async {});
+      when(
+        mockDio.post(
+          any,
+          data: anyNamed('data'),
+          options: anyNamed('options'),
+          cancelToken: anyNamed('cancelToken'),
+          onSendProgress: anyNamed('onSendProgress'),
+          onReceiveProgress: anyNamed('onReceiveProgress'),
+        ),
+      ).thenAnswer((call) async {
+        expect(((call.namedArguments[#data] as Map)['logs'] as List).single['metadata_raw'], 'exact raw input');
+        return Response(requestOptions: RequestOptions(path: '/identity/audit'));
+      });
+      await repository.syncLogs();
+      verifyNever(mockAuditDao.updateMetadataById(any, any));
+      expect(queued.metadataRaw, 'exact raw input');
+      expect(queued.entryHash, 'unchanged');
+      expect(queued.hashVersion, 'v2-canonical-json');
     });
   });
 

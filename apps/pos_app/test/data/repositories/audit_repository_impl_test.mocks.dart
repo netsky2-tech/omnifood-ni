@@ -143,20 +143,38 @@ class MockAuditDao extends _i1.Mock implements _i8.AuditDao {
       ) as _i9.Future<List<_i10.AuditLogEntity>>);
 
   @override
-  _i9.Future<int?> getLastSequenceNo() => (super.noSuchMethod(
+  _i9.Future<int?> getLastSequenceNoByStream(
+    String? tenantId,
+    String? deviceId,
+    String? userId,
+  ) =>
+      (super.noSuchMethod(
         Invocation.method(
-          #getLastSequenceNo,
-          [],
+          #getLastSequenceNoByStream,
+          [
+            tenantId,
+            deviceId,
+            userId,
+          ],
         ),
         returnValue: _i9.Future<int?>.value(),
         returnValueForMissingStub: _i9.Future<int?>.value(),
       ) as _i9.Future<int?>);
 
   @override
-  _i9.Future<String?> getLastEntryHash() => (super.noSuchMethod(
+  _i9.Future<String?> getLastEntryHashByStream(
+    String? tenantId,
+    String? deviceId,
+    String? userId,
+  ) =>
+      (super.noSuchMethod(
         Invocation.method(
-          #getLastEntryHash,
-          [],
+          #getLastEntryHashByStream,
+          [
+            tenantId,
+            deviceId,
+            userId,
+          ],
         ),
         returnValue: _i9.Future<String?>.value(),
         returnValueForMissingStub: _i9.Future<String?>.value(),
