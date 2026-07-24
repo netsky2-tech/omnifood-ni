@@ -15,6 +15,7 @@ import * as bcrypt from 'bcrypt';
 import { User, UserRole } from './entities/user.entity';
 import { AuditIntegrityAlert } from './entities/audit-integrity-alert.entity';
 import { AuditLog } from './entities/audit-log.entity';
+import { TenantCapabilityEvent } from './entities/tenant-capability-event.entity';
 import { SecurityProfile } from './entities/security-profile.entity';
 import { AuthGuard } from './guards/auth.guard';
 import { IdentityModule } from './identity.module';
@@ -99,6 +100,8 @@ describe('IdentityModule strict typed access-token ownership', () => {
       .overrideProvider(getRepositoryToken(SecurityProfile))
       .useValue({})
       .overrideProvider(getRepositoryToken(AuditIntegrityAlert))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(TenantCapabilityEvent))
       .useValue({})
       .compile();
 
