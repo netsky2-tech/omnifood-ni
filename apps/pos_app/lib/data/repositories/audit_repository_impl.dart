@@ -6,6 +6,7 @@ import '../../domain/models/audit_log.dart';
 import '../../domain/repositories/audit_repository.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../daos/audit_log_dao.dart';
+import '../daos/inventory/forensic_alert_dao.dart';
 import '../models/audit_log_entity.dart';
 import '../mappers/audit_mapper.dart';
 import 'package:dio/dio.dart';
@@ -22,6 +23,7 @@ class AuditRepositoryImpl implements AuditRepository {
   final Dio _dio;
   final String _deviceId;
   final TenantCapabilityCache _capabilityCache;
+  final ForensicAlertDao _forensicAlertDao;
   final DateTime Function() _now;
   static const _uuid = Uuid();
   static const _forensicHashVersion = 'v2-canonical-json';
@@ -32,8 +34,11 @@ class AuditRepositoryImpl implements AuditRepository {
     this._dio,
     this._deviceId, {
     required TenantCapabilityCache capabilityCache,
+    required ForensicAlertDao forensicAlertDao,
     DateTime Function()? now,
-  }) : _capabilityCache = capabilityCache, _now = now ?? DateTime.now;
+  }) : _capabilityCache = capabilityCache,
+       _forensicAlertDao = forensicAlertDao,
+       _now = now ?? DateTime.now;
 
   @override
   String get deviceId => _deviceId;
@@ -191,45 +196,161 @@ class AuditRepositoryImpl implements AuditRepository {
   Future<void> syncLogs() async {
     final unsynced = await _auditDao.findUnsyncedLogs();
     if (unsynced.isEmpty) return;
-
-    try {
-      final logsJson = <Map<String, dynamic>>[];
-      for (final e in unsynced) {
-        final isV3 = e.hashVersion == 'v3-jcs-rfc8785';
-        final normalizedMetadata = _normalizeMetadataToJsonObject(e.metadata);
-        final metadataRaw = e.metadataRaw ??
-            (isV3 ? (e.metadata ?? 'null') : _extractLegacyMetadataRaw(e.metadata));
-        final payload = <String, dynamic>{
-          'id': e.remoteRefUuid,
-          'user_id': e.userId,
-          'action': e.action,
-          'timestamp': e.timestamp,
-          'device_id': e.deviceId,
-          'sequence_no': e.sequenceNo,
-          'prev_hash': e.prevHash,
-          'entry_hash': e.entryHash,
-          'metadata': isV3 ? jsonDecode(metadataRaw!) : normalizedMetadata,
-          'metadata_raw': metadataRaw,
-        };
-        if (!isV3 || e.hasMetodoAutorizacion == true) {
-          payload['metodo_autorizacion'] = e.metodoAutorizacion;
-        }
-        if (!isV3 || e.hasUsuarioAutorizadorId == true) {
-          payload['usuario_autorizador_id'] = e.usuarioAutorizadorId;
-        }
-        if (e.hashVersion != null) {
-          payload['hash_version'] = e.hashVersion;
-        }
-        logsJson.add(payload);
-      }
-
-      await _dio.post('/identity/audit', data: {'logs': logsJson});
-
-      final ids = unsynced.map((e) => e.id!).toList();
-      await _auditDao.markAsSynced(ids);
-    } catch (e) {
-      // Offline or error
+    final legacy = unsynced.where((row) => row.tenantId == null).toList();
+    await _syncLegacy(legacy);
+    final activeTenantId = (await _authRepository.getCurrentUser())?.tenantId;
+    if (activeTenantId == null || activeTenantId.isEmpty) return;
+    final streams = <(String, String, String), List<AuditLogEntity>>{};
+    for (final row in unsynced.where((row) => row.tenantId == activeTenantId)) {
+      streams.putIfAbsent(
+        (row.tenantId!, row.deviceId, row.userId),
+        () => <AuditLogEntity>[],
+      ).add(row);
     }
+    final orderedStreams = streams.entries.toList()
+      ..sort((a, b) => _compareStream(a.key, b.key));
+    for (final stream in orderedStreams) {
+      await _syncStream(stream.key, stream.value);
+    }
+  }
+
+  Future<void> _syncLegacy(List<AuditLogEntity> rows) async {
+    if (rows.isEmpty) return;
+    try {
+      await _dio.post('/identity/audit', data: {'logs': rows.map(_payload).toList()});
+      await _auditDao.markAsSynced(rows.map((row) => row.id!).toList());
+    } catch (_) {}
+  }
+
+  Future<void> _syncStream(
+    (String, String, String) stream,
+    List<AuditLogEntity> rows,
+  ) async {
+    rows.sort((a, b) {
+      final sequence = a.sequenceNo.compareTo(b.sequenceNo);
+      return sequence != 0 ? sequence : a.remoteRefUuid.compareTo(b.remoteRefUuid);
+    });
+    final safe = <AuditLogEntity>[];
+    AuditLogEntity? previous;
+    for (var index = 0; index < rows.length; index++) {
+      final row = rows[index];
+      if (index + 1 < rows.length &&
+          row.sequenceNo == rows[index + 1].sequenceNo) {
+        await _recordIncident(row, stream, 'duplicate_sequence');
+        break;
+      }
+      if (!_isContiguous(row, previous)) break;
+      try {
+        _payload(row);
+      } catch (_) {
+        if (row.hashVersion == 'v3-jcs-rfc8785') {
+          await _recordIncident(row, stream, 'v3_payload_unserializable');
+        }
+        break;
+      }
+      safe.add(row);
+      previous = row;
+    }
+    for (var start = 0; start < safe.length; start += 500) {
+      final end = start + 500 > safe.length ? safe.length : start + 500;
+      final batch = safe.sublist(start, end);
+      try {
+        final response = await _dio.post(
+          '/identity/audit',
+          data: {'logs': batch.map(_payload).toList()},
+        );
+        final accepted = _acceptedRows(batch, response.data);
+        if (accepted.isNotEmpty) {
+          await _auditDao.markAsSynced(accepted.map((row) => row.id!).toList());
+        }
+        if (accepted.length != batch.length) break;
+      } catch (_) {
+        break;
+      }
+    }
+  }
+
+  bool _isContiguous(AuditLogEntity row, AuditLogEntity? previous) {
+    if (row.sequenceNo <= 0 || row.prevHash.isEmpty) return false;
+    if (previous == null) {
+      return row.sequenceNo != 1 || row.prevHash == 'GENESIS';
+    }
+    return row.sequenceNo == previous.sequenceNo + 1 &&
+        row.prevHash == previous.entryHash;
+  }
+
+  int _compareStream(
+    (String, String, String) left,
+    (String, String, String) right,
+  ) {
+    for (final pair in [(left.$1, right.$1), (left.$2, right.$2), (left.$3, right.$3)]) {
+      final result = pair.$1.compareTo(pair.$2);
+      if (result != 0) return result;
+    }
+    return 0;
+  }
+
+  List<AuditLogEntity> _acceptedRows(
+    List<AuditLogEntity> rows,
+    dynamic response,
+  ) {
+    if (response is! Map) return const [];
+    final ids = response['accepted_ids'];
+    if (ids is List) {
+      final accepted = ids.whereType<String>().toSet();
+      return rows.where((row) => accepted.contains(row.remoteRefUuid)).toList();
+    }
+    return response['count'] == rows.length ? rows : const [];
+  }
+
+  Future<void> _recordIncident(
+    AuditLogEntity row,
+    (String, String, String) stream,
+    String failureType,
+  ) async {
+    final metadata = jsonEncode({
+      'tenant_id': stream.$1,
+      'device_id': stream.$2,
+      'user_id': stream.$3,
+      'sequence_no': row.sequenceNo,
+      'hash_version': row.hashVersion,
+      'failure_type': failureType,
+    });
+    try {
+      await _forensicAlertDao.insertIfAbsentForensicAlert(
+        'audit-$failureType-${sha256.convert(utf8.encode(row.remoteRefUuid))}',
+        failureType == 'duplicate_sequence'
+            ? 'AUDIT_STREAM_DUPLICATE_SEQUENCE'
+            : 'AUDIT_V3_POISON',
+        'critical',
+        failureType == 'duplicate_sequence'
+            ? 'Audit stream contains a duplicate sequence.'
+            : 'Audit v3 payload cannot be serialized.',
+        _now().toUtc().toIso8601String(),
+        'active',
+        'audit_log',
+        row.remoteRefUuid,
+        metadata,
+        false,
+      );
+    } catch (_) {}
+  }
+
+  Map<String, dynamic> _payload(AuditLogEntity e) {
+    final isV3 = e.hashVersion == 'v3-jcs-rfc8785';
+    final metadataRaw = e.metadataRaw ??
+        (isV3 ? (e.metadata ?? 'null') : _extractLegacyMetadataRaw(e.metadata));
+    final payload = <String, dynamic>{
+      'id': e.remoteRefUuid, 'user_id': e.userId, 'action': e.action,
+      'timestamp': e.timestamp, 'device_id': e.deviceId, 'sequence_no': e.sequenceNo,
+      'prev_hash': e.prevHash, 'entry_hash': e.entryHash,
+      'metadata': isV3 ? jsonDecode(metadataRaw!) : _normalizeMetadataToJsonObject(e.metadata),
+      'metadata_raw': metadataRaw,
+    };
+    if (!isV3 || e.hasMetodoAutorizacion == true) payload['metodo_autorizacion'] = e.metodoAutorizacion;
+    if (!isV3 || e.hasUsuarioAutorizadorId == true) payload['usuario_autorizador_id'] = e.usuarioAutorizadorId;
+    if (e.hashVersion != null) payload['hash_version'] = e.hashVersion;
+    return payload;
   }
 
   String _computeCanonicalHash({

@@ -443,6 +443,22 @@ void main() {
         expect(alerts.single.sourceMovementId, 'mov-1');
         expect(alerts.single.metadataJson, contains('Leche'));
         expect(unsynced.single.id, 'alert-1');
+
+        await database.forensicAlertDao.insertIfAbsentForensicAlert(
+          'alert-1',
+          'AUDIT_V3_POISON',
+          'critical',
+          'must not overwrite',
+          '2026-06-02T11:00:00.000Z',
+          'active',
+          'audit_log',
+          'remote-ref-1',
+          '{"failure_type":"v3_payload_unserializable"}',
+          false,
+        );
+        final preserved = await database.forensicAlertDao.findAllAlerts();
+        expect(preserved.single.status, 'acknowledged');
+        expect(preserved.single.note, 'Revisado');
       },
     );
   });
