@@ -6,6 +6,8 @@ import {
   ValidateNested,
   IsOptional,
   IsUUID,
+  IsIn,
+  MaxLength,
   Allow,
   ValidateIf,
   ValidateBy,
@@ -13,6 +15,18 @@ import {
 import { Transform, Type } from 'class-transformer';
 
 const V3_HASH_VERSION = 'v3-jcs-rfc8785';
+
+export const AUDIT_CAPABILITY_VERSION = {
+  V2: 'v2',
+  V3: V3_HASH_VERSION,
+} as const;
+
+export const auditCapabilityVersionValues = Object.values(
+  AUDIT_CAPABILITY_VERSION,
+);
+
+export type AuditCapabilityVersionDto =
+  (typeof AUDIT_CAPABILITY_VERSION)[keyof typeof AUDIT_CAPABILITY_VERSION];
 
 export type NumberFreeJson =
   | null
@@ -144,6 +158,27 @@ export class PushAuditLogsDto {
   @ValidateNested({ each: true })
   @Type(() => CreateAuditLogDto)
   logs: CreateAuditLogDto[];
+}
+
+export class ActivateCapabilityDto {
+  @IsIn(auditCapabilityVersionValues)
+  new_version: AuditCapabilityVersionDto;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(500)
+  reason: string;
+}
+
+export class AuditCapabilityResponseDto {
+  tenant_id: string;
+  active_version: AuditCapabilityVersionDto;
+  contract_version: number;
+  revision: number;
+  previous_version?: AuditCapabilityVersionDto;
+  server_issued_at: string;
+  server_fetched_at: string;
+  server_expires_at: string;
 }
 
 export const inventoryBohPermissionValues = [

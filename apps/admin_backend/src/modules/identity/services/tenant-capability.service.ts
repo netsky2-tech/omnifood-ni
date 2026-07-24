@@ -9,6 +9,7 @@ import { UserRole } from '../entities/user.entity';
 export interface CapabilityState {
   version: string;
   revision: number;
+  contractVersion: number;
 }
 export interface AppendTenantCapability {
   tenantId: string;
@@ -60,15 +61,16 @@ export class TenantCapabilityService {
         version: input.version,
         previousVersion: previous.version,
         revision,
+        contractVersion: 1,
       };
     });
   }
 
   private async readCurrent(runner: QueryRunner): Promise<CapabilityState> {
     const rows = (await runner.query(
-      'SELECT new_version AS version, revision FROM tenant_capability_event ORDER BY revision DESC LIMIT 1',
-    )) as Array<{ version: string; revision: number }>;
-    return rows[0] ?? { version: 'v2', revision: 0 };
+      'SELECT new_version AS version, revision, contract_version AS "contractVersion" FROM tenant_capability_event ORDER BY revision DESC LIMIT 1',
+    )) as Array<{ version: string; revision: number; contractVersion: number }>;
+    return rows[0] ?? { version: 'v2', revision: 0, contractVersion: 1 };
   }
 
   private async inTenantTransaction<T>(
