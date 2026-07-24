@@ -15,6 +15,20 @@ abstract class ForensicAlertDao {
   @Insert(onConflict: OnConflictStrategy.replace)
   Future<void> upsertAlert(ForensicAlertEntity entity);
 
+  @Query('INSERT OR IGNORE INTO forensic_alerts (id, alert_type, severity, message, created_at, status, source_document_type, source_document_id, metadata_json, is_synced) VALUES (:id, :alertType, :severity, :message, :createdAt, :status, :sourceDocumentType, :sourceDocumentId, :metadataJson, :isSynced)')
+  Future<void> insertIfAbsentForensicAlert(
+    String id,
+    String alertType,
+    String severity,
+    String message,
+    String createdAt,
+    String status,
+    String sourceDocumentType,
+    String sourceDocumentId,
+    String metadataJson,
+    bool isSynced,
+  );
+
   @Query('UPDATE forensic_alerts SET is_synced = 1 WHERE id = :id')
   Future<void> markAsSynced(String id);
 }

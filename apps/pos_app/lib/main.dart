@@ -113,6 +113,7 @@ void main() async {
     dio,
     deviceId,
     capabilityCache: capabilityCache,
+    forensicAlertDao: database.forensicAlertDao,
   );
 
   final inventoryRepository = InventoryRepositoryImpl(
