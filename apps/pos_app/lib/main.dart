@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:dio/dio.dart';
+import 'package:uuid/uuid.dart';
 import 'package:pos_app/domain/services/alerts/alert_service.dart';
 import 'package:pos_app/domain/services/inventory/movement_engine_impl.dart';
 import 'package:pos_app/presentation/services/alert_service_impl.dart';
@@ -9,6 +10,8 @@ import 'package:pos_app/data/repositories/inventory/inventory_repository_impl.da
 import 'data/database/app_database.dart';
 import 'data/database/migrations.dart';
 import 'data/repositories/auth_repository_impl.dart';
+import 'core/clock/monotonic_clock.dart';
+import 'data/repositories/tenant_capability_cache.dart';
 import 'domain/repositories/auth_repository.dart';
 import 'data/repositories/audit_repository_impl.dart';
 import 'data/services/local_auth_service.dart';
@@ -87,6 +90,11 @@ void main() async {
     database.securityProfileDao,
     localAuthService,
     dio,
+    capabilityCache: TenantCapabilityCache(
+      configDao: database.localConfigDao,
+      clock: StopwatchMonotonicClock(),
+      bootSessionId: const Uuid().v4(),
+    ),
   );
 
   // Add Auth Interceptor
