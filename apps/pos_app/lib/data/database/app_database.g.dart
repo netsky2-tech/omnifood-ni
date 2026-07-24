@@ -138,7 +138,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 33,
+      version: 34,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -158,7 +158,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `security_profiles` (`user_id` TEXT NOT NULL, `pin_hash` TEXT, `totp_secret_seed` TEXT, `is_totp_enabled` INTEGER NOT NULL, `is_pin_enabled` INTEGER NOT NULL, PRIMARY KEY (`user_id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `audit_logs` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `user_id` TEXT NOT NULL, `action` TEXT NOT NULL, `timestamp` TEXT NOT NULL, `device_id` TEXT NOT NULL, `metadata` TEXT, `is_synced` INTEGER NOT NULL, `sequence_no` INTEGER NOT NULL, `prev_hash` TEXT NOT NULL, `entry_hash` TEXT NOT NULL, `metodo_autorizacion` TEXT, `usuario_autorizador_id` TEXT, `remote_ref_uuid` TEXT NOT NULL, `hash_version` TEXT, `has_metodo_autorizacion` INTEGER, `has_usuario_autorizador_id` INTEGER)');
+            'CREATE TABLE IF NOT EXISTS `audit_logs` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `user_id` TEXT NOT NULL, `action` TEXT NOT NULL, `timestamp` TEXT NOT NULL, `device_id` TEXT NOT NULL, `metadata` TEXT, `is_synced` INTEGER NOT NULL, `sequence_no` INTEGER NOT NULL, `prev_hash` TEXT NOT NULL, `entry_hash` TEXT NOT NULL, `metodo_autorizacion` TEXT, `usuario_autorizador_id` TEXT, `remote_ref_uuid` TEXT NOT NULL, `hash_version` TEXT, `has_metodo_autorizacion` INTEGER, `has_usuario_autorizador_id` INTEGER, `tenant_id` TEXT, `metadata_raw` TEXT)');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `local_configs` (`key` TEXT NOT NULL, `value` TEXT NOT NULL, `description` TEXT, PRIMARY KEY (`key`))');
         await database.execute(
@@ -595,7 +595,9 @@ class _$AuditDao extends AuditDao {
                   'has_usuario_autorizador_id':
                       item.hasUsuarioAutorizadorId == null
                           ? null
-                          : (item.hasUsuarioAutorizadorId! ? 1 : 0)
+                          : (item.hasUsuarioAutorizadorId! ? 1 : 0),
+                  'tenant_id': item.tenantId,
+                  'metadata_raw': item.metadataRaw
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -630,7 +632,9 @@ class _$AuditDao extends AuditDao {
                 : (row['has_metodo_autorizacion'] as int) != 0,
             hasUsuarioAutorizadorId: row['has_usuario_autorizador_id'] == null
                 ? null
-                : (row['has_usuario_autorizador_id'] as int) != 0));
+                : (row['has_usuario_autorizador_id'] as int) != 0,
+            tenantId: row['tenant_id'] as String?,
+            metadataRaw: row['metadata_raw'] as String?));
   }
 
   @override
@@ -641,7 +645,7 @@ class _$AuditDao extends AuditDao {
   ) async {
     return _queryAdapter.queryList(
         'SELECT * FROM audit_logs WHERE timestamp >= ?1 AND timestamp <= ?2 AND (?3 = \"\" OR user_id = ?3) ORDER BY timestamp DESC',
-        mapper: (Map<String, Object?> row) => AuditLogEntity(id: row['id'] as int?, userId: row['user_id'] as String, action: row['action'] as String, timestamp: row['timestamp'] as String, deviceId: row['device_id'] as String, metadata: row['metadata'] as String?, isSynced: (row['is_synced'] as int) != 0, sequenceNo: row['sequence_no'] as int, prevHash: row['prev_hash'] as String, entryHash: row['entry_hash'] as String, metodoAutorizacion: row['metodo_autorizacion'] as String?, usuarioAutorizadorId: row['usuario_autorizador_id'] as String?, remoteRefUuid: row['remote_ref_uuid'] as String, hashVersion: row['hash_version'] as String?, hasMetodoAutorizacion: row['has_metodo_autorizacion'] == null ? null : (row['has_metodo_autorizacion'] as int) != 0, hasUsuarioAutorizadorId: row['has_usuario_autorizador_id'] == null ? null : (row['has_usuario_autorizador_id'] as int) != 0),
+        mapper: (Map<String, Object?> row) => AuditLogEntity(id: row['id'] as int?, userId: row['user_id'] as String, action: row['action'] as String, timestamp: row['timestamp'] as String, deviceId: row['device_id'] as String, metadata: row['metadata'] as String?, isSynced: (row['is_synced'] as int) != 0, sequenceNo: row['sequence_no'] as int, prevHash: row['prev_hash'] as String, entryHash: row['entry_hash'] as String, metodoAutorizacion: row['metodo_autorizacion'] as String?, usuarioAutorizadorId: row['usuario_autorizador_id'] as String?, remoteRefUuid: row['remote_ref_uuid'] as String, hashVersion: row['hash_version'] as String?, hasMetodoAutorizacion: row['has_metodo_autorizacion'] == null ? null : (row['has_metodo_autorizacion'] as int) != 0, hasUsuarioAutorizadorId: row['has_usuario_autorizador_id'] == null ? null : (row['has_usuario_autorizador_id'] as int) != 0, tenantId: row['tenant_id'] as String?, metadataRaw: row['metadata_raw'] as String?),
         arguments: [start, end, userId]);
   }
 
@@ -669,7 +673,9 @@ class _$AuditDao extends AuditDao {
                 : (row['has_metodo_autorizacion'] as int) != 0,
             hasUsuarioAutorizadorId: row['has_usuario_autorizador_id'] == null
                 ? null
-                : (row['has_usuario_autorizador_id'] as int) != 0));
+                : (row['has_usuario_autorizador_id'] as int) != 0,
+            tenantId: row['tenant_id'] as String?,
+            metadataRaw: row['metadata_raw'] as String?));
   }
 
   @override
@@ -2964,7 +2970,9 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'has_usuario_autorizador_id':
                       item.hasUsuarioAutorizadorId == null
                           ? null
-                          : (item.hasUsuarioAutorizadorId! ? 1 : 0)
+                          : (item.hasUsuarioAutorizadorId! ? 1 : 0),
+                  'tenant_id': item.tenantId,
+                  'metadata_raw': item.metadataRaw
                 }),
         _invoiceEntityUpdateAdapter = UpdateAdapter(
             database,
