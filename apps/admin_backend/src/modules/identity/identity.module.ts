@@ -5,6 +5,7 @@ import { User } from './entities/user.entity';
 import { AuditLog } from './entities/audit-log.entity';
 import { SecurityProfile } from './entities/security-profile.entity';
 import { AuditIntegrityAlert } from './entities/audit-integrity-alert.entity';
+import { TenantCapabilityEvent } from './entities/tenant-capability-event.entity';
 import { AuthService } from './services/auth.service';
 import { UserService } from './services/user.service';
 import { AuditIntegrityService } from './services/audit-integrity.service';
@@ -17,6 +18,7 @@ import { AuthGuard } from './guards/auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { AuthoritativeCurrentUserGuard } from './guards/authoritative-current-user.guard';
 import { CurrentUserAuthorizationService } from './services/current-user-authorization.service';
+import { TenantCapabilityService } from './services/tenant-capability.service';
 import {
   IDENTITY_JWT_CONFIG,
   IdentityJwtConfig,
@@ -30,6 +32,7 @@ import {
       AuditLog,
       SecurityProfile,
       AuditIntegrityAlert,
+      TenantCapabilityEvent,
     ]),
     JwtModule.registerAsync({
       imports: [IdentityJwtConfigModule],
@@ -57,6 +60,7 @@ import {
     AuthoritativeCurrentUserGuard,
     RolesGuard,
     CurrentUserAuthorizationService,
+    TenantCapabilityService,
   ],
   exports: [
     JwtModule,
@@ -70,6 +74,7 @@ import {
     AuthoritativeCurrentUserGuard,
     RolesGuard,
     CurrentUserAuthorizationService,
+    TenantCapabilityService,
   ],
 })
 export class IdentityModule {}
