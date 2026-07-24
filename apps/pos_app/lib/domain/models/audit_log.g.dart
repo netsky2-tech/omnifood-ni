@@ -21,6 +21,8 @@ _$AuditLogImpl _$$AuditLogImplFromJson(Map<String, dynamic> json) =>
       metodoAutorizacion: json['metodo_autorizacion'] as String?,
       usuarioAutorizadorId: json['usuario_autorizador_id'] as String?,
       hashVersion: json['hash_version'] as String?,
+      tenantId: json['tenant_id'] as String?,
+      metadataRaw: json['metadata_raw'] as String?,
     );
 
 Map<String, dynamic> _$$AuditLogImplToJson(_$AuditLogImpl instance) =>
@@ -38,4 +40,6 @@ Map<String, dynamic> _$$AuditLogImplToJson(_$AuditLogImpl instance) =>
       'metodo_autorizacion': instance.metodoAutorizacion,
       'usuario_autorizador_id': instance.usuarioAutorizadorId,
       'hash_version': instance.hashVersion,
+      'tenant_id': instance.tenantId,
+      'metadata_raw': instance.metadataRaw,
     };

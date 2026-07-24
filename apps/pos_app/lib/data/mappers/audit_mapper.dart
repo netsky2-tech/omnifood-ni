@@ -19,6 +19,8 @@ class AuditMapper {
       metodoAutorizacion: entity.metodoAutorizacion,
       usuarioAutorizadorId: entity.usuarioAutorizadorId,
       hashVersion: entity.hashVersion,
+      tenantId: entity.tenantId,
+      metadataRaw: entity.metadataRaw,
     );
   }
 
@@ -38,6 +40,8 @@ class AuditMapper {
       usuarioAutorizadorId: domain.usuarioAutorizadorId,
       remoteRefUuid: _uuid.v4(),
       hashVersion: domain.hashVersion,
+      tenantId: domain.tenantId,
+      metadataRaw: domain.metadataRaw,
     );
   }
 }
