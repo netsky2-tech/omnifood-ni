@@ -21,6 +21,18 @@ const Map<String, String> syncRole = {
 
 typedef SyncRole = String;
 
+enum SyncRunStatus { complete, partial, failed }
+
+class SyncRunOutcome {
+  const SyncRunOutcome(this.status);
+
+  const SyncRunOutcome.complete() : this(SyncRunStatus.complete);
+  const SyncRunOutcome.partial() : this(SyncRunStatus.partial);
+  const SyncRunOutcome.failed() : this(SyncRunStatus.failed);
+
+  final SyncRunStatus status;
+}
+
 class SyncService {
   final AuditRepository _auditRepository;
   // ignore: unused_field
@@ -54,32 +66,50 @@ class SyncService {
     developer.log('SyncService stopped', name: 'SyncService');
   }
 
-  Future<void> triggerManualSync() async {
-    if (_isSyncing) return;
+  Future<SyncRunOutcome> triggerManualSync() async {
+    if (_isSyncing) return const SyncRunOutcome.partial();
 
     _isSyncing = true;
     try {
       developer.log('Starting sync...', name: 'SyncService');
 
-      // 1. Sync Audit Logs
-      await _auditRepository.syncLogs();
+      var auditOutcome = const AuditSyncOutcome.retryable(failedStreams: 1);
+      var hasFailure = !await _runDomain('audit', () async {
+        auditOutcome = await _auditRepository.syncLogs();
+      });
+      hasFailure |= auditOutcome.status != AuditSyncStatus.complete;
 
       // 1b. Sync fiscal sales documents, including offline credit notes, before
       // inventory movements so backend replay sees sale -> credit-note ordering.
-      await _syncSalesDocuments();
+      hasFailure |= !await _runDomain('sales', _syncSalesDocuments);
 
       // 2. Sync inventory outbox deltas
-      await _syncPurchaseDocuments();
-      await _syncRecipeVersionDocuments();
-      final productionLinkedMovementIds = await _syncProductionOrderDocuments();
-      await _syncCountSessionDocuments();
-      await _syncAlertLifecycleDocuments();
-      await _syncInventoryOutbox(
-        blockedMovementIds: productionLinkedMovementIds,
+      hasFailure |= !await _runDomain('purchase', _syncPurchaseDocuments);
+      hasFailure |= !await _runDomain('recipe', _syncRecipeVersionDocuments);
+      var productionLinkedMovementIds = const <String>{};
+      hasFailure |= !await _runDomain('production', () async {
+        productionLinkedMovementIds = await _syncProductionOrderDocuments();
+      });
+      hasFailure |= !await _runDomain('count', _syncCountSessionDocuments);
+      hasFailure |=
+          !await _runDomain('alert lifecycle', _syncAlertLifecycleDocuments);
+      hasFailure |= !await _runDomain(
+        'inventory',
+        () => _syncInventoryOutbox(
+          blockedMovementIds: productionLinkedMovementIds,
+        ),
       );
-      await _refreshAlertInbox();
+      hasFailure |= !await _runDomain('alert inbox', _refreshAlertInbox);
 
-      developer.log('Sync completed successfully', name: 'SyncService');
+      if (!hasFailure) {
+        developer.log('Sync completed successfully', name: 'SyncService');
+        return const SyncRunOutcome.complete();
+      }
+      developer.log(
+        'Sync completed partially; audit rows remain queued.',
+        name: 'SyncService',
+      );
+      return const SyncRunOutcome.partial();
     } catch (e, stackTrace) {
       developer.log(
         'Sync failed',
@@ -87,8 +117,27 @@ class SyncService {
         error: e,
         stackTrace: stackTrace,
       );
+      return const SyncRunOutcome.failed();
     } finally {
       _isSyncing = false;
+    }
+  }
+
+  Future<bool> _runDomain(
+    String domain,
+    Future<void> Function() operation,
+  ) async {
+    try {
+      await operation();
+      return true;
+    } catch (error, stackTrace) {
+      developer.log(
+        'Sync $domain failed; later domains will continue.',
+        name: 'SyncService',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      return false;
     }
   }
 
@@ -228,7 +277,7 @@ class SyncService {
     } on DioException catch (e) {
       developer.log('Failed to sync sales: ${e.message}', name: 'SyncService');
       await _markMovementsAsFailed(orderedBatch, error: e.message);
-      // We don't rethrow here to allow other sync operations to continue if added
+      rethrow;
     } catch (e, stackTrace) {
       developer.log(
         'Failed to build/post inventory outbox payload',
@@ -237,6 +286,7 @@ class SyncService {
         stackTrace: stackTrace,
       );
       await _markMovementsAsFailed(orderedBatch, error: e.toString());
+      rethrow;
     }
   }
 
@@ -274,6 +324,7 @@ class SyncService {
           purchase.id,
           error: e.message,
         );
+        rethrow;
       } catch (e, stackTrace) {
         developer.log(
           'Skipped purchase ${purchase.id}: $e',
@@ -285,6 +336,7 @@ class SyncService {
           purchase.id,
           error: e.toString(),
         );
+        rethrow;
       }
     }
   }
@@ -333,6 +385,7 @@ class SyncService {
           'Failed to sync recipe version ${document.id}: ${e.message}',
           name: 'SyncService',
         );
+        rethrow;
       }
     }
   }
@@ -370,6 +423,7 @@ class SyncService {
           document.movementReferences,
           error: e.message,
         );
+        rethrow;
       }
     }
     return linkedMovementIds;
@@ -405,6 +459,7 @@ class SyncService {
           document.movementReferences,
           error: e.message,
         );
+        rethrow;
       }
     }
   }
@@ -450,6 +505,7 @@ class SyncService {
           'Failed to sync alert lifecycle ${alert.id}: ${e.message}',
           name: 'SyncService',
         );
+        rethrow;
       }
     }
   }
@@ -489,6 +545,7 @@ class SyncService {
         'Failed to refresh forensic alerts: ${e.message}',
         name: 'SyncService',
       );
+      rethrow;
     }
   }
 
