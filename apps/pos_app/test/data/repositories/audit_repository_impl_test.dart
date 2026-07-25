@@ -59,6 +59,15 @@ void main() {
     final configs = _Configs();
     mt.when(() => configs.saveConfig(mt.any())).thenAnswer((_) async {});
     cache = TenantCapabilityCache(configDao: configs, clock: _Clock(), bootSessionId: 'boot', nowUtc: () => DateTime.utc(2026));
+    when(mockAuditDao.appendForensicLog(any, any, any, any)).thenAnswer((call) async {
+      final tenantId = call.positionalArguments[0] as String;
+      final deviceId = call.positionalArguments[1] as String;
+      final userId = call.positionalArguments[2] as String;
+      final createLog = call.positionalArguments[3] as AuditLogEntity Function(int, String);
+      final sequence = await mockAuditDao.getLastSequenceNoByStream(tenantId, deviceId, userId);
+      final previousHash = await mockAuditDao.getLastEntryHashByStream(tenantId, deviceId, userId);
+      await mockAuditDao.insertLog(createLog((sequence ?? 0) + 1, previousHash ?? 'GENESIS'));
+    });
     repository = AuditRepositoryImpl(
       mockAuditDao,
       mockAuthRepository,
@@ -182,6 +191,16 @@ void main() {
         ),
       ).thenAnswer((_) async => hash);
     }
+
+    test('prepareLog snapshots a stream head without persisting an audit row', () async {
+      when(mockAuthRepository.getCurrentUser()).thenAnswer((_) async => user('tenant_a'));
+      when(mockAuditDao.getLastAuditLogByStream('tenant_a', 'device_123', 'user_1')).thenAnswer((_) async => null);
+      final prepared = await repository.prepareLog('OPEN');
+      expect(prepared?.sequenceNo, 1);
+      expect(prepared?.prevHash, 'GENESIS');
+      verifyNever(mockAuditDao.appendForensicLog(any, any, any, any));
+      verifyNever(mockAuditDao.insertLog(any));
+    });
 
     test(
       'creates independent tenant streams and excludes legacy predecessors',
