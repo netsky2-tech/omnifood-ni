@@ -675,14 +675,14 @@ class MockAuditRepository extends _i1.Mock implements _i15.AuditRepository {
       ) as _i9.Future<void>);
 
   @override
-  _i9.Future<void> syncLogs() => (super.noSuchMethod(
+  _i9.Future<_i15.AuditSyncOutcome> syncLogs() => (super.noSuchMethod(
         Invocation.method(
           #syncLogs,
           [],
         ),
-        returnValue: _i9.Future<void>.value(),
-        returnValueForMissingStub: _i9.Future<void>.value(),
-      ) as _i9.Future<void>);
+        returnValue: _i9.Future<_i15.AuditSyncOutcome>.value(const _i15.AuditSyncOutcome.complete()),
+        returnValueForMissingStub: _i9.Future<_i15.AuditSyncOutcome>.value(const _i15.AuditSyncOutcome.complete()),
+      ) as _i9.Future<_i15.AuditSyncOutcome>);
 
   @override
   _i9.Future<List<_i16.AuditLog>> getLocalLogs({
@@ -729,14 +729,14 @@ class MockSyncService extends _i1.Mock implements _i17.SyncService {
       );
 
   @override
-  _i9.Future<void> triggerManualSync() => (super.noSuchMethod(
+  _i9.Future<_i17.SyncRunOutcome> triggerManualSync() => (super.noSuchMethod(
         Invocation.method(
           #triggerManualSync,
           [],
         ),
-        returnValue: _i9.Future<void>.value(),
-        returnValueForMissingStub: _i9.Future<void>.value(),
-      ) as _i9.Future<void>);
+        returnValue: _i9.Future<_i17.SyncRunOutcome>.value(const _i17.SyncRunOutcome.complete()),
+        returnValueForMissingStub: _i9.Future<_i17.SyncRunOutcome>.value(const _i17.SyncRunOutcome.complete()),
+      ) as _i9.Future<_i17.SyncRunOutcome>);
 
   @override
   Map<String, Object> buildOrderedBatchEnvelopeForTest(
