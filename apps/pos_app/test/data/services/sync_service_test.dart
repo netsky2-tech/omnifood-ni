@@ -97,10 +97,12 @@ class FakeAuditRepository implements AuditRepository {
   String get deviceId => 'dev-1';
 
   var syncCount = 0;
+  AuditSyncOutcome nextOutcome = const AuditSyncOutcome.complete();
 
   @override
-  Future<void> syncLogs() async {
+  Future<AuditSyncOutcome> syncLogs() async {
     syncCount += 1;
+    return nextOutcome;
   }
 
   @override
@@ -569,6 +571,111 @@ void main() {
       expect(mockInventoryRepository.unsynced.length, 2);
     },
   );
+
+  test('continues later domains and reports partial when audit transport is retryable', () async {
+    mockAuditRepository.nextOutcome = const AuditSyncOutcome.retryable(failedStreams: 1);
+    mockSalesRepository.unsyncedAggregates = [
+      {
+        'id': 'sale-1',
+        'number': 'F-001',
+        'documentType': 'INVOICE',
+        'terminalId': 'terminal-1',
+        'sourceSequence': 1,
+        'idempotencyKey': 'sales:terminal-1:sale-1',
+        'items': <Map<String, Object?>>[],
+        'payments': <Map<String, Object?>>[],
+      },
+    ];
+
+    final outcome = await syncService.triggerManualSync();
+
+    expect(outcome.status, SyncRunStatus.partial);
+    expect(mockSalesRepository.syncedInvoiceIdBatches, [
+      ['sale-1'],
+    ]);
+  });
+
+  test('reports complete when every domain has no pending work', () async {
+    final outcome = await syncService.triggerManualSync();
+
+    expect(outcome.status, SyncRunStatus.complete);
+  });
+
+  test('releases the sync guard after a retryable audit timeout outcome', () async {
+    mockAuditRepository.nextOutcome = const AuditSyncOutcome.retryable(failedStreams: 1);
+
+    await syncService.triggerManualSync();
+    await syncService.triggerManualSync();
+
+    expect(mockAuditRepository.syncCount, 2);
+  });
+
+  test('continues inventory after a sales timeout and reports partial', () async {
+    mockSalesRepository.unsyncedAggregates = [
+      {
+        'id': 'sale-timeout',
+        'number': 'F-002',
+        'documentType': 'INVOICE',
+        'terminalId': 'terminal-1',
+        'sourceSequence': 1,
+        'idempotencyKey': 'sales:terminal-1:sale-timeout',
+        'items': <Map<String, Object?>>[],
+        'payments': <Map<String, Object?>>[],
+      },
+    ];
+    mockInventoryRepository.unsynced = [movement('inventory-after-sales')];
+    forcedError = DioException(
+      requestOptions: RequestOptions(path: '/v1/sync/batch'),
+      type: DioExceptionType.connectionTimeout,
+    );
+
+    final outcome = await syncService.triggerManualSync();
+
+    expect(outcome.status, SyncRunStatus.partial);
+    expect(capturedPosts.length, greaterThanOrEqualTo(2));
+  });
+
+  test('reports partial when inventory transport fails', () async {
+    mockInventoryRepository.unsynced = [movement('inventory-timeout')];
+    forcedError = DioException(
+      requestOptions: RequestOptions(path: '/v1/sync/batch'),
+      type: DioExceptionType.connectionError,
+    );
+
+    final outcome = await syncService.triggerManualSync();
+
+    expect(outcome.status, SyncRunStatus.partial);
+    expect(mockInventoryRepository.failedIds, ['inventory-timeout']);
+  });
+
+  test('aggregates multiple domain transport failures deterministically', () async {
+    mockSalesRepository.unsyncedAggregates = [
+      {
+        'id': 'sale-failure',
+        'number': 'F-003',
+        'documentType': 'INVOICE',
+        'terminalId': 'terminal-1',
+        'sourceSequence': 1,
+        'idempotencyKey': 'sales:terminal-1:sale-failure',
+        'items': <Map<String, Object?>>[],
+        'payments': <Map<String, Object?>>[],
+      },
+    ];
+    mockInventoryRepository.unsynced = [movement('inventory-failure')];
+    forcedError = DioException(
+      requestOptions: RequestOptions(path: '/v1/sync/batch'),
+      type: DioExceptionType.connectionTimeout,
+    );
+
+    final first = await syncService.triggerManualSync();
+    final second = await syncService.triggerManualSync();
+
+    expect([first.status, second.status], [
+      SyncRunStatus.partial,
+      SyncRunStatus.partial,
+    ]);
+    expect(capturedPosts.length, greaterThanOrEqualTo(4));
+  });
 
   test(
     'does not mark sales as synced when sync endpoint returns error',
