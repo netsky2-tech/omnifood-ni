@@ -197,13 +197,26 @@ class AuditRepositoryImpl implements AuditRepository {
   }
 
   @override
-  Future<void> syncLogs() async {
+  Future<AuditSyncOutcome> syncLogs() async {
     final unsynced = await _auditDao.findUnsyncedLogs();
-    if (unsynced.isEmpty) return;
+    if (unsynced.isEmpty) return const AuditSyncOutcome.complete();
+    var completedStreams = 0;
+    var failedStreams = 0;
+    var offlineFailures = 0;
     final legacy = unsynced.where((row) => row.tenantId == null).toList();
-    await _syncLegacy(legacy);
+    if (legacy.isNotEmpty) {
+      final result = await _syncLegacy(legacy);
+      if (result.$1) {
+        completedStreams++;
+      } else {
+        failedStreams++;
+        if (result.$2) offlineFailures++;
+      }
+    }
     final activeTenantId = (await _authRepository.getCurrentUser())?.tenantId;
-    if (activeTenantId == null || activeTenantId.isEmpty) return;
+    if (activeTenantId == null || activeTenantId.isEmpty) {
+      return _outcome(completedStreams, failedStreams, offlineFailures);
+    }
     final streams = <(String, String, String), List<AuditLogEntity>>{};
     for (final row in unsynced.where((row) => row.tenantId == activeTenantId)) {
       streams.putIfAbsent(
@@ -214,19 +227,47 @@ class AuditRepositoryImpl implements AuditRepository {
     final orderedStreams = streams.entries.toList()
       ..sort((a, b) => _compareStream(a.key, b.key));
     for (final stream in orderedStreams) {
-      await _syncStream(stream.key, stream.value);
+      final result = await _syncStream(stream.key, stream.value);
+      if (result.$1) {
+        completedStreams++;
+      } else {
+        failedStreams++;
+        if (result.$2) offlineFailures++;
+      }
     }
+    return _outcome(completedStreams, failedStreams, offlineFailures);
   }
 
-  Future<void> _syncLegacy(List<AuditLogEntity> rows) async {
-    if (rows.isEmpty) return;
+  AuditSyncOutcome _outcome(
+    int completedStreams,
+    int failedStreams,
+    int offlineFailures,
+  ) {
+    if (failedStreams == 0) {
+      return AuditSyncOutcome.complete(completedStreams: completedStreams);
+    }
+    if (completedStreams > 0) {
+      return AuditSyncOutcome.partial(
+        completedStreams: completedStreams,
+        failedStreams: failedStreams,
+      );
+    }
+    return offlineFailures == failedStreams
+        ? AuditSyncOutcome.offline(failedStreams: failedStreams)
+        : AuditSyncOutcome.retryable(failedStreams: failedStreams);
+  }
+
+  Future<(bool, bool)> _syncLegacy(List<AuditLogEntity> rows) async {
     try {
       await _dio.post('/identity/audit', data: {'logs': rows.map(_payload).toList()});
       await _auditDao.markAsSynced(rows.map((row) => row.id!).toList());
-    } catch (_) {}
+      return (true, false);
+    } catch (error) {
+      return (false, _isOffline(error));
+    }
   }
 
-  Future<void> _syncStream(
+  Future<(bool, bool)> _syncStream(
     (String, String, String) stream,
     List<AuditLogEntity> rows,
   ) async {
@@ -255,6 +296,7 @@ class AuditRepositoryImpl implements AuditRepository {
       safe.add(row);
       previous = row;
     }
+    if (safe.isEmpty) return (false, false);
     for (var start = 0; start < safe.length; start += 500) {
       final end = start + 500 > safe.length ? safe.length : start + 500;
       final batch = safe.sublist(start, end);
@@ -267,12 +309,18 @@ class AuditRepositoryImpl implements AuditRepository {
         if (accepted.isNotEmpty) {
           await _auditDao.markAsSynced(accepted.map((row) => row.id!).toList());
         }
-        if (accepted.length != batch.length) break;
-      } catch (_) {
-        break;
+        if (accepted.length != batch.length) return (false, false);
+      } catch (error) {
+        return (false, _isOffline(error));
       }
     }
+    return (safe.length == rows.length, false);
   }
+
+  bool _isOffline(Object error) =>
+      error is DioException &&
+      (error.type == DioExceptionType.connectionError ||
+          error.type == DioExceptionType.connectionTimeout);
 
   bool _isContiguous(AuditLogEntity row, AuditLogEntity? previous) {
     if (row.sequenceNo <= 0 || row.prevHash.isEmpty) return false;

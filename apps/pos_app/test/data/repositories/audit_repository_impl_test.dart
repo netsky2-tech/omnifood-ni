@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
 import 'package:mockito/annotations.dart';
 import 'package:pos_app/domain/repositories/auth_repository.dart';
+import 'package:pos_app/domain/repositories/audit_repository.dart';
 import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/data/daos/audit_log_dao.dart';
 import 'package:pos_app/data/daos/inventory/forensic_alert_dao.dart';
@@ -477,14 +478,28 @@ void main() {
           DioException(requestOptions: RequestOptions(path: '/identity/audit')),
         );
 
-        await repository.syncLogs();
+        final timedOut = await repository.syncLogs();
+        expect(timedOut.status, AuditSyncStatus.retryable);
         verifyNever(mockAuditDao.markAsSynced(any));
 
         stubSuccessfulPost();
-        await repository.syncLogs();
+        final retried = await repository.syncLogs();
+        expect(retried.status, AuditSyncStatus.complete);
         verify(mockAuditDao.markAsSynced([10]));
       },
     );
+
+    test('reports a partial outcome when a legacy transport timeout keeps rows queued', () async {
+      final legacy = unsyncedAudit(id: 14, hashVersion: 'v2-canonical-json');
+      when(mockAuditDao.findUnsyncedLogs()).thenAnswer((_) async => [legacy]);
+      when(mockDio.post(any, data: anyNamed('data'), options: anyNamed('options'), cancelToken: anyNamed('cancelToken'), onSendProgress: anyNamed('onSendProgress'), onReceiveProgress: anyNamed('onReceiveProgress'))).thenThrow(DioException(requestOptions: RequestOptions(path: '/identity/audit'), type: DioExceptionType.receiveTimeout));
+
+      final outcome = await repository.syncLogs();
+
+      expect(outcome.status, AuditSyncStatus.retryable);
+      expect(outcome.failedStreams, 1);
+      verifyNever(mockAuditDao.markAsSynced(any));
+    });
 
     test(
       'normalizes plain-text metadata to JSON object and syncs without silent skip',
@@ -690,6 +705,28 @@ void main() {
       expect((payload['logs'] as List).single['id'], 'safe');
       verify(mockAuditDao.markAsSynced([3]));
       verifyNever(mockAuditDao.markAsSynced([1, 2]));
+    });
+
+    test('continues an unrelated stream after a retryable transport failure', () async {
+      final failed = row(id: 1, remoteRef: 'failed-1', tenantId: 'tenant-a', deviceId: 'a-device', userId: 'u', sequence: 1, previousHash: 'GENESIS', entryHash: 'a-1');
+      final safe = row(id: 2, remoteRef: 'safe-1', tenantId: 'tenant-a', deviceId: 'b-device', userId: 'u', sequence: 1, previousHash: 'GENESIS', entryHash: 'b-1');
+      authenticateAs('tenant-a');
+      when(mockAuditDao.findUnsyncedLogs()).thenAnswer((_) async => [failed, safe]);
+      when(mockAuditDao.markAsSynced(any)).thenAnswer((_) async {});
+      when(mockDio.post(any, data: anyNamed('data'), options: anyNamed('options'), cancelToken: anyNamed('cancelToken'), onSendProgress: anyNamed('onSendProgress'), onReceiveProgress: anyNamed('onReceiveProgress'))).thenAnswer((call) async {
+        final id = (((call.namedArguments[#data] as Map)['logs'] as List).single as Map)['id'];
+        if (id == 'failed-1') {
+          throw DioException(requestOptions: RequestOptions(path: '/identity/audit'), type: DioExceptionType.connectionTimeout);
+        }
+        return Response(requestOptions: RequestOptions(path: '/identity/audit'), data: {'count': 1});
+      });
+
+      final outcome = await repository.syncLogs();
+
+      expect(outcome.status, AuditSyncStatus.partial);
+      expect(outcome.failedStreams, 1);
+      verify(mockAuditDao.markAsSynced([2]));
+      verifyNever(mockAuditDao.markAsSynced([1]));
     });
 
     test('blocks duplicate sequence and tail deterministically regardless of input order', () async {
