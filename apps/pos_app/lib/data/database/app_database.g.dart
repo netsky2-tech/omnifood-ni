@@ -138,7 +138,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 34,
+      version: 35,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -215,6 +215,8 @@ class _$AppDatabase extends AppDatabase {
             'CREATE TABLE IF NOT EXISTS `hold_ticket_items` (`id` TEXT NOT NULL, `hold_ticket_id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `product_name` TEXT NOT NULL, `quantity` REAL NOT NULL, `unit_price` REAL NOT NULL, `tax_rate` REAL NOT NULL, FOREIGN KEY (`hold_ticket_id`) REFERENCES `hold_tickets` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `promotions` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `type` TEXT NOT NULL, `target_product_id` TEXT NOT NULL, `buy_quantity` INTEGER NOT NULL, `get_quantity` INTEGER NOT NULL, `discount_value` REAL NOT NULL, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE UNIQUE INDEX `index_audit_logs_tenant_id_device_id_user_id_sequence_no` ON `audit_logs` (`tenant_id`, `device_id`, `user_id`, `sequence_no`)');
         await database.execute(
             'CREATE UNIQUE INDEX `idx_movement_sync_state_stream_sequence` ON `inventory_movement_sync_state` (`terminal_id`, `flow_type`, `local_sequence`)');
         await database.execute(
@@ -703,6 +705,18 @@ class _$AuditDao extends AuditDao {
   }
 
   @override
+  Future<AuditLogEntity?> getLastAuditLogByStream(
+    String tenantId,
+    String deviceId,
+    String userId,
+  ) async {
+    return _queryAdapter.query(
+        'SELECT * FROM audit_logs WHERE tenant_id = ?1 AND device_id = ?2 AND user_id = ?3 ORDER BY sequence_no DESC LIMIT 1',
+        mapper: (Map<String, Object?> row) => AuditLogEntity(id: row['id'] as int?, userId: row['user_id'] as String, action: row['action'] as String, timestamp: row['timestamp'] as String, deviceId: row['device_id'] as String, metadata: row['metadata'] as String?, isSynced: (row['is_synced'] as int) != 0, sequenceNo: row['sequence_no'] as int, prevHash: row['prev_hash'] as String, entryHash: row['entry_hash'] as String, metodoAutorizacion: row['metodo_autorizacion'] as String?, usuarioAutorizadorId: row['usuario_autorizador_id'] as String?, remoteRefUuid: row['remote_ref_uuid'] as String, hashVersion: row['hash_version'] as String?, hasMetodoAutorizacion: row['has_metodo_autorizacion'] == null ? null : (row['has_metodo_autorizacion'] as int) != 0, hasUsuarioAutorizadorId: row['has_usuario_autorizador_id'] == null ? null : (row['has_usuario_autorizador_id'] as int) != 0, tenantId: row['tenant_id'] as String?, metadataRaw: row['metadata_raw'] as String?),
+        arguments: [tenantId, deviceId, userId]);
+  }
+
+  @override
   Future<void> updateMetadataById(
     int id,
     String metadata,
@@ -727,8 +741,27 @@ class _$AuditDao extends AuditDao {
 
   @override
   Future<void> insertLog(AuditLogEntity log) async {
-    await _auditLogEntityInsertionAdapter.insert(
-        log, OnConflictStrategy.replace);
+    await _auditLogEntityInsertionAdapter.insert(log, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> appendForensicLog(
+    String tenantId,
+    String deviceId,
+    String userId,
+    AuditLogEntity Function(int, String) createLog,
+  ) async {
+    if (database is sqflite.Transaction) {
+      await super.appendForensicLog(tenantId, deviceId, userId, createLog);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.auditDao
+            .appendForensicLog(tenantId, deviceId, userId, createLog);
+      });
+    }
   }
 }
 
