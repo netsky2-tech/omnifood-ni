@@ -111,6 +111,25 @@ void main() {
 
     await db.close();
   });
+
+  test('migration34_35 preserves v34 history and enforces only tenant-bound stream uniqueness', () async {
+    final db = await databaseFactory.openDatabase(dbPath, options: OpenDatabaseOptions(version: 34, onCreate: (database, version) async {
+      await database.execute('CREATE TABLE audit_logs (id INTEGER PRIMARY KEY, user_id TEXT NOT NULL, action TEXT NOT NULL, timestamp TEXT NOT NULL, device_id TEXT NOT NULL, metadata TEXT, is_synced INTEGER NOT NULL, sequence_no INTEGER NOT NULL, prev_hash TEXT NOT NULL, entry_hash TEXT NOT NULL, remote_ref_uuid TEXT NOT NULL, tenant_id TEXT, metadata_raw TEXT)');
+    }));
+    final legacy = <String, Object?>{'id': 1, 'user_id': 'legacy-user', 'action': 'OPEN', 'timestamp': '2026-07-24T00:00:00.000Z', 'device_id': 'legacy-device', 'metadata': 'legacy', 'is_synced': 0, 'sequence_no': 7, 'prev_hash': 'legacy-prev', 'entry_hash': 'legacy-hash', 'remote_ref_uuid': 'legacy-1', 'tenant_id': null, 'metadata_raw': null};
+    await db.insert('audit_logs', legacy);
+    await db.insert('audit_logs', {...legacy, 'id': 2, 'remote_ref_uuid': 'legacy-2'});
+    final before = await db.query('audit_logs', orderBy: 'id ASC');
+    await migration34_35.migrate(db);
+    expect(await db.query('audit_logs', orderBy: 'id ASC'), before);
+    final indexes = await db.rawQuery('PRAGMA index_list(audit_logs)');
+    expect(indexes.map((index) => index['name']), contains('index_audit_logs_tenant_id_device_id_user_id_sequence_no'));
+    await db.insert('audit_logs', {...legacy, 'id': 3, 'tenant_id': 'tenant-a', 'remote_ref_uuid': 'tenant-a-1'});
+    await expectLater(db.insert('audit_logs', {...legacy, 'id': 4, 'tenant_id': 'tenant-a', 'remote_ref_uuid': 'tenant-a-2'}), throwsA(isA<DatabaseException>()));
+    await migration34_35.migrate(db);
+    expect(await db.query('audit_logs', where: 'tenant_id IS NULL'), hasLength(2));
+    await db.close();
+  });
 }
 
 const _legacyColumns = <String>[
