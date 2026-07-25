@@ -1,6 +1,14 @@
 import 'package:floor/floor.dart';
 
-@Entity(tableName: 'audit_logs')
+@Entity(
+  tableName: 'audit_logs',
+  indices: [
+    Index(
+      value: ['tenant_id', 'device_id', 'user_id', 'sequence_no'],
+      unique: true,
+    ),
+  ],
+)
 class AuditLogEntity {
   @PrimaryKey(autoGenerate: true)
   final int? id;

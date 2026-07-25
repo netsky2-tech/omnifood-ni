@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 
 import '../../domain/models/audit_log.dart';
+import '../../domain/models/user.dart';
 import '../../domain/repositories/audit_repository.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../daos/audit_log_dao.dart';
@@ -55,49 +56,52 @@ class AuditRepositoryImpl implements AuditRepository {
     String? metodoAutorizacion,
     String? usuarioAutorizadorId,
   }) async {
-    final entity = await _buildAuditEntity(
-      action,
-      metadata: metadata,
-      metodoAutorizacion: metodoAutorizacion,
-      usuarioAutorizadorId: usuarioAutorizadorId,
+    final user = await _authRepository.getCurrentUser();
+    final tenantId = user?.tenantId;
+    if (user == null || tenantId == null || tenantId.isEmpty) return;
+    await _auditDao.appendForensicLog(
+      tenantId,
+      _deviceId,
+      user.id,
+      (sequenceNo, prevHash) => _buildAuditEntity(
+        user,
+        tenantId,
+        action,
+        sequenceNo: sequenceNo,
+        prevHash: prevHash,
+        metadata: metadata,
+        metodoAutorizacion: metodoAutorizacion,
+        usuarioAutorizadorId: usuarioAutorizadorId,
+      ),
     );
-    if (entity == null) return;
-    await _auditDao.insertLog(entity);
   }
 
   @override
   Future<AuditLog?> prepareLog(String action, {String? metadata}) async {
-    final entity = await _buildAuditEntity(action, metadata: metadata);
-    if (entity == null) return null;
-    return AuditMapper.toDomain(entity);
-  }
-
-  /// Builds the forensic, hash-chained [AuditLogEntity] WITHOUT persisting
-  /// it. Returns `null` when there is no current user (mirrors [log]).
-  Future<AuditLogEntity?> _buildAuditEntity(
-    String action, {
-    String? metadata,
-    String? metodoAutorizacion,
-    String? usuarioAutorizadorId,
-  }) async {
     final user = await _authRepository.getCurrentUser();
     final tenantId = user?.tenantId;
     if (user == null || tenantId == null || tenantId.isEmpty) return null;
-
-    final lastSeq = await _auditDao.getLastSequenceNoByStream(
+    final head = await _auditDao.getLastAuditLogByStream(
       tenantId,
       _deviceId,
       user.id,
     );
-    final nextSeq = (lastSeq ?? 0) + 1;
-    final prevHash =
-        await _auditDao.getLastEntryHashByStream(
-          tenantId,
-          _deviceId,
-          user.id,
-        ) ??
-        'GENESIS';
+    return AuditMapper.toDomain(_buildAuditEntity(user, tenantId, action,
+      sequenceNo: (head?.sequenceNo ?? 0) + 1,
+      prevHash: head?.entryHash ?? 'GENESIS', metadata: metadata));
+  }
 
+  /// Builds a forensic [AuditLogEntity] from a stream head without persisting.
+  AuditLogEntity _buildAuditEntity(
+    User user,
+    String tenantId,
+    String action, {
+    required int sequenceNo,
+    required String prevHash,
+    String? metadata,
+    String? metodoAutorizacion,
+    String? usuarioAutorizadorId,
+  }) {
     final timestamp = _now().toIso8601String();
     final metadataObject = _normalizeMetadataToJsonObject(metadata);
     final canonicalMetadata = jsonEncode(metadataObject);
@@ -109,7 +113,7 @@ class AuditRepositoryImpl implements AuditRepository {
             user.id,
             action,
             timestamp,
-            nextSeq,
+            sequenceNo,
             prevHash,
             metadata,
             metodoAutorizacion,
@@ -128,7 +132,7 @@ class AuditRepositoryImpl implements AuditRepository {
           userId: user.id,
           action: action,
           timestamp: timestamp,
-          sequenceNo: nextSeq,
+          sequenceNo: sequenceNo,
           prevHash: prevHash,
           metodoAutorizacion: metodoAutorizacion,
           usuarioAutorizadorId: usuarioAutorizadorId,
@@ -142,7 +146,7 @@ class AuditRepositoryImpl implements AuditRepository {
       deviceId: _deviceId,
       metadata: v3Provenance?.$2 ?? canonicalMetadata,
       isSynced: false,
-      sequenceNo: nextSeq,
+      sequenceNo: sequenceNo,
       prevHash: prevHash,
       entryHash: entryHash,
       metodoAutorizacion: metodoAutorizacion,
