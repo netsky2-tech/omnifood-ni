@@ -1215,8 +1215,22 @@ final migration33_34 = Migration(33, 34, (database) async {
     await database.execute('ALTER TABLE audit_logs ADD COLUMN tenant_id TEXT');
   }
   if (!names.contains('metadata_raw')) {
-    await database.execute('ALTER TABLE audit_logs ADD COLUMN metadata_raw TEXT');
+    await database.execute(
+      'ALTER TABLE audit_logs ADD COLUMN metadata_raw TEXT',
+    );
   }
+});
+
+final migration34_35 = Migration(34, 35, (database) async {
+  final auditTable = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'audit_logs'",
+  );
+  if (auditTable.isEmpty) return;
+  await database.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS '
+    'index_audit_logs_tenant_id_device_id_user_id_sequence_no '
+    'ON audit_logs (tenant_id, device_id, user_id, sequence_no)',
+  );
 });
 
 final allMigrations = [
@@ -1244,4 +1258,5 @@ final allMigrations = [
   migration31_32,
   migration32_33,
   migration33_34,
+  migration34_35,
 ];

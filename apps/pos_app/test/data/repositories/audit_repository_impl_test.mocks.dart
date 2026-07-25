@@ -181,10 +181,53 @@ class MockAuditDao extends _i1.Mock implements _i8.AuditDao {
       ) as _i9.Future<String?>);
 
   @override
+  _i9.Future<_i10.AuditLogEntity?> getLastAuditLogByStream(
+    String? tenantId,
+    String? deviceId,
+    String? userId,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getLastAuditLogByStream,
+          [
+            tenantId,
+            deviceId,
+            userId,
+          ],
+        ),
+        returnValue: _i9.Future<_i10.AuditLogEntity?>.value(),
+        returnValueForMissingStub: _i9.Future<_i10.AuditLogEntity?>.value(),
+      ) as _i9.Future<_i10.AuditLogEntity?>);
+
+  @override
   _i9.Future<void> insertLog(_i10.AuditLogEntity? log) => (super.noSuchMethod(
         Invocation.method(
           #insertLog,
           [log],
+        ),
+        returnValue: _i9.Future<void>.value(),
+        returnValueForMissingStub: _i9.Future<void>.value(),
+      ) as _i9.Future<void>);
+
+  @override
+  _i9.Future<void> appendForensicLog(
+    String? tenantId,
+    String? deviceId,
+    String? userId,
+    _i10.AuditLogEntity Function(
+      int,
+      String,
+    )? createLog,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #appendForensicLog,
+          [
+            tenantId,
+            deviceId,
+            userId,
+            createLog,
+          ],
         ),
         returnValue: _i9.Future<void>.value(),
         returnValueForMissingStub: _i9.Future<void>.value(),
