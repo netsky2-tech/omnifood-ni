@@ -26,6 +26,11 @@ class _Capabilities extends mt.Mock implements TenantCapabilityCache {}
 class _Alerts implements ForensicAlertDao {
   final calls = <List<Object>>[];
   bool throwsOnInsert = false;
+  bool unresolvedTerminalAlert = false;
+
+  @override
+  Future<int?> countActiveAuditTerminalAlerts(String sourceDocumentId) async =>
+      unresolvedTerminalAlert ? 1 : 0;
 
   @override
   Future<void> insertIfAbsentForensicAlert(String id, String alertType, String severity, String message, String createdAt, String status, String sourceDocumentType, String sourceDocumentId, String metadataJson, bool isSynced) async {
@@ -618,6 +623,100 @@ void main() {
       );
     }
 
+    test('isolates a 400 terminal rejection without exposing backend data', () async {
+      final rejected = row(id: 1, remoteRef: 'rejected', tenantId: 'tenant-a', deviceId: 'blocked', userId: 'u', sequence: 1, previousHash: 'GENESIS', entryHash: 'r-1');
+      final tail = row(id: 2, remoteRef: 'tail', tenantId: 'tenant-a', deviceId: 'blocked', userId: 'u', sequence: 2, previousHash: 'r-1', entryHash: 'r-2');
+      final safe = row(id: 3, remoteRef: 'safe', tenantId: 'tenant-a', deviceId: 'safe', userId: 'u', sequence: 1, previousHash: 'GENESIS', entryHash: 's-1');
+      authenticateAs('tenant-a');
+      when(mockAuditDao.findUnsyncedLogs()).thenAnswer((_) async => [rejected, tail, safe]);
+      when(mockAuditDao.markAsSynced(any)).thenAnswer((_) async {});
+      final outgoing = <List<String>>[];
+      when(mockDio.post(any, data: anyNamed('data'), options: anyNamed('options'), cancelToken: anyNamed('cancelToken'), onSendProgress: anyNamed('onSendProgress'), onReceiveProgress: anyNamed('onReceiveProgress'))).thenAnswer((call) async {
+        final ids = ((call.namedArguments[#data] as Map)['logs'] as List).map((log) => (log as Map)['id'] as String).toList();
+        outgoing.add(ids);
+        final id = ids.first;
+        if (id == 'rejected') throw DioException(requestOptions: RequestOptions(path: '/identity/audit'), response: Response(requestOptions: RequestOptions(path: '/identity/audit'), statusCode: 400, data: {'message': 'Bearer token jane@example.com'}));
+        return Response(requestOptions: RequestOptions(path: '/identity/audit'), data: {'count': 1});
+      });
+      expect((await repository.syncLogs()).status, AuditSyncStatus.partial);
+      expect(alerts.calls, hasLength(1));
+      expect(alerts.calls.single[8], allOf(contains('"status_code":400'), contains('"sequence_no":1'), isNot(contains('token')), isNot(contains('jane@example.com'))));
+      expect(outgoing, [['rejected'], ['safe']]);
+      verify(mockAuditDao.markAsSynced([3]));
+      verifyNever(mockAuditDao.markAsSynced([1, 2]));
+    });
+
+    test('does not send a tenant-stream tail after a 409 terminal rejection', () async {
+      final rejected = row(id: 1, remoteRef: 'conflict', tenantId: 'tenant-a', deviceId: 'd', userId: 'u', sequence: 1, previousHash: 'GENESIS', entryHash: 'c-1');
+      final tail = row(id: 2, remoteRef: 'tail', tenantId: 'tenant-a', deviceId: 'd', userId: 'u', sequence: 2, previousHash: 'c-1', entryHash: 'c-2');
+      authenticateAs('tenant-a');
+      when(mockAuditDao.findUnsyncedLogs()).thenAnswer((_) async => [rejected, tail]);
+      final outgoing = <List<String>>[];
+      when(mockDio.post(any, data: anyNamed('data'), options: anyNamed('options'), cancelToken: anyNamed('cancelToken'), onSendProgress: anyNamed('onSendProgress'), onReceiveProgress: anyNamed('onReceiveProgress'))).thenAnswer((call) async {
+        final ids = ((call.namedArguments[#data] as Map)['logs'] as List).map((log) => (log as Map)['id'] as String).toList();
+        outgoing.add(ids);
+        throw DioException(requestOptions: RequestOptions(path: '/identity/audit'), response: Response(requestOptions: RequestOptions(path: '/identity/audit'), statusCode: 409));
+      });
+      expect((await repository.syncLogs()).status, AuditSyncStatus.terminal);
+      expect(outgoing, [['conflict']]);
+      expect(alerts.calls.single[8], contains('"status_code":409'));
+      verifyNever(mockAuditDao.markAsSynced(any));
+      await repository.syncLogs();
+      expect(alerts.calls.map((call) => call.first).toSet(), hasLength(1));
+    });
+
+    test('blocks unresolved terminal alerts, then retries after resolution', () async {
+      final rejected = row(id: 1, remoteRef: 'rejected', tenantId: 'tenant-a', deviceId: 'd', userId: 'u', sequence: 1, previousHash: 'GENESIS', entryHash: 'r-1');
+      authenticateAs('tenant-a');
+      when(mockAuditDao.findUnsyncedLogs()).thenAnswer((_) async => [rejected]);
+      when(mockAuditDao.markAsSynced(any)).thenAnswer((_) async {});
+      alerts.unresolvedTerminalAlert = true;
+      expect((await repository.syncLogs()).status, AuditSyncStatus.terminal);
+      verifyNever(mockDio.post(any, data: anyNamed('data'), options: anyNamed('options'), cancelToken: anyNamed('cancelToken'), onSendProgress: anyNamed('onSendProgress'), onReceiveProgress: anyNamed('onReceiveProgress')));
+      alerts.unresolvedTerminalAlert = false;
+      acceptAllPosts();
+      expect((await repository.syncLogs()).status, AuditSyncStatus.complete);
+      verify(mockAuditDao.markAsSynced([1]));
+    });
+
+    test('keeps 500, timeouts, and legacy 409 isolated without tenant reassignment', () async {
+      final retryable = row(id: 1, remoteRef: 'retryable', tenantId: 'tenant-a', deviceId: 'd', userId: 'u', sequence: 1, previousHash: 'GENESIS', entryHash: 'r-1');
+      authenticateAs('tenant-a');
+      when(mockAuditDao.findUnsyncedLogs()).thenAnswer((_) async => [retryable]);
+      when(mockDio.post(any, data: anyNamed('data'), options: anyNamed('options'), cancelToken: anyNamed('cancelToken'), onSendProgress: anyNamed('onSendProgress'), onReceiveProgress: anyNamed('onReceiveProgress'))).thenThrow(DioException(requestOptions: RequestOptions(path: '/identity/audit'), response: Response(requestOptions: RequestOptions(path: '/identity/audit'), statusCode: 500)));
+      expect((await repository.syncLogs()).status, AuditSyncStatus.retryable);
+      for (final status in [408, 429]) {
+        when(mockDio.post(any, data: anyNamed('data'), options: anyNamed('options'), cancelToken: anyNamed('cancelToken'), onSendProgress: anyNamed('onSendProgress'), onReceiveProgress: anyNamed('onReceiveProgress'))).thenThrow(DioException(requestOptions: RequestOptions(path: '/identity/audit'), response: Response(requestOptions: RequestOptions(path: '/identity/audit'), statusCode: status)));
+        expect((await repository.syncLogs()).status, AuditSyncStatus.retryable);
+      }
+      when(mockDio.post(any, data: anyNamed('data'), options: anyNamed('options'), cancelToken: anyNamed('cancelToken'), onSendProgress: anyNamed('onSendProgress'), onReceiveProgress: anyNamed('onReceiveProgress'))).thenThrow(DioException(requestOptions: RequestOptions(path: '/identity/audit'), type: DioExceptionType.receiveTimeout));
+      expect((await repository.syncLogs()).status, AuditSyncStatus.retryable);
+      expect(alerts.calls, isEmpty);
+      final legacy = AuditLogEntity(id: 9, userId: 'u', action: 'OPEN', timestamp: '2026-07-24T00:00:00.000Z', deviceId: 'd', metadata: '{}', isSynced: false, sequenceNo: 1, prevHash: 'GENESIS', entryHash: 'legacy', remoteRefUuid: 'legacy');
+      when(mockAuditDao.findUnsyncedLogs()).thenAnswer((_) async => [legacy]);
+      when(mockDio.post(any, data: anyNamed('data'), options: anyNamed('options'), cancelToken: anyNamed('cancelToken'), onSendProgress: anyNamed('onSendProgress'), onReceiveProgress: anyNamed('onReceiveProgress'))).thenThrow(DioException(requestOptions: RequestOptions(path: '/identity/audit'), response: Response(requestOptions: RequestOptions(path: '/identity/audit'), statusCode: 409)));
+      expect((await repository.syncLogs()).status, AuditSyncStatus.terminal);
+      expect(legacy.tenantId, isNull);
+      expect(alerts.calls.single[7], 'legacy');
+    });
+
+    test('continues an unrelated stream when terminal alert persistence fails', () async {
+      final rejected = row(id: 1, remoteRef: 'rejected', tenantId: 'tenant-a', deviceId: 'blocked', userId: 'u', sequence: 1, previousHash: 'GENESIS', entryHash: 'r-1');
+      final safe = row(id: 2, remoteRef: 'safe', tenantId: 'tenant-a', deviceId: 'safe', userId: 'u', sequence: 1, previousHash: 'GENESIS', entryHash: 's-1');
+      authenticateAs('tenant-a');
+      alerts.throwsOnInsert = true;
+      when(mockAuditDao.findUnsyncedLogs()).thenAnswer((_) async => [rejected, safe]);
+      when(mockAuditDao.markAsSynced(any)).thenAnswer((_) async {});
+      when(mockDio.post(any, data: anyNamed('data'), options: anyNamed('options'), cancelToken: anyNamed('cancelToken'), onSendProgress: anyNamed('onSendProgress'), onReceiveProgress: anyNamed('onReceiveProgress'))).thenAnswer((call) async {
+        final id = (((call.namedArguments[#data] as Map)['logs'] as List).single as Map)['id'];
+        if (id == 'rejected') throw DioException(requestOptions: RequestOptions(path: '/identity/audit'), response: Response(requestOptions: RequestOptions(path: '/identity/audit'), statusCode: 400));
+        return Response(requestOptions: RequestOptions(path: '/identity/audit'), data: {'count': 1});
+      });
+      expect((await repository.syncLogs()).status, AuditSyncStatus.partial);
+      verify(mockAuditDao.markAsSynced([2]));
+      verifyNever(mockAuditDao.markAsSynced([1]));
+    });
+
     test('blocks a poison stream tail while independently syncing another stream', () async {
       final rows = [
         row(id: 3, remoteRef: 'a-3', tenantId: 'tenant-a', deviceId: 'd', userId: 'u', sequence: 3, previousHash: 'a-2', entryHash: 'a-3'),
@@ -643,20 +742,23 @@ void main() {
       expect(alert[8], contains('"sequence_no":2'));
     });
 
-    test('acknowledges only accepted rows in a contiguous stream sub-batch', () async {
+    test('sends the second row only after the first row is explicitly accepted', () async {
       final first = row(id: 1, remoteRef: 'c-1', tenantId: 'tenant-c', deviceId: 'd', userId: 'u', sequence: 1, previousHash: 'GENESIS', entryHash: 'c-1');
       final second = row(id: 2, remoteRef: 'c-2', tenantId: 'tenant-c', deviceId: 'd', userId: 'u', sequence: 2, previousHash: 'c-1', entryHash: 'c-2');
       authenticateAs('tenant-c');
       when(mockAuditDao.findUnsyncedLogs()).thenAnswer((_) async => [second, first]);
       when(mockAuditDao.markAsSynced(any)).thenAnswer((_) async {});
-      when(mockDio.post(any, data: anyNamed('data'), options: anyNamed('options'), cancelToken: anyNamed('cancelToken'), onSendProgress: anyNamed('onSendProgress'), onReceiveProgress: anyNamed('onReceiveProgress'))).thenAnswer((_) async => Response(requestOptions: RequestOptions(path: '/identity/audit'), data: {'accepted_ids': ['c-1']}));
+      when(mockDio.post(any, data: anyNamed('data'), options: anyNamed('options'), cancelToken: anyNamed('cancelToken'), onSendProgress: anyNamed('onSendProgress'), onReceiveProgress: anyNamed('onReceiveProgress'))).thenAnswer((call) async {
+        final id = (((call.namedArguments[#data] as Map)['logs'] as List).single as Map)['id'];
+        return Response(requestOptions: RequestOptions(path: '/identity/audit'), data: {'accepted_ids': [id]});
+      });
 
       await repository.syncLogs();
 
-      final payload = verify(mockDio.post('/identity/audit', data: captureAnyNamed('data'), options: anyNamed('options'), cancelToken: anyNamed('cancelToken'), onSendProgress: anyNamed('onSendProgress'), onReceiveProgress: anyNamed('onReceiveProgress'))).captured.single as Map;
-      expect((payload['logs'] as List).map((log) => log['id']), ['c-1', 'c-2']);
+      final payloads = verify(mockDio.post('/identity/audit', data: captureAnyNamed('data'), options: anyNamed('options'), cancelToken: anyNamed('cancelToken'), onSendProgress: anyNamed('onSendProgress'), onReceiveProgress: anyNamed('onReceiveProgress'))).captured.cast<Map>();
+      expect(payloads.map((payload) => (payload['logs'] as List).single['id']), ['c-1', 'c-2']);
       verify(mockAuditDao.markAsSynced([1]));
-      verifyNever(mockAuditDao.markAsSynced([2]));
+      verify(mockAuditDao.markAsSynced([2]));
     });
 
     test('keeps legacy null-tenant rows on their existing payload path without rewriting them', () async {
