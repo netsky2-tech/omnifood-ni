@@ -1506,6 +1506,14 @@ class _$ForensicAlertDao extends ForensicAlertDao {
   }
 
   @override
+  Future<int?> countActiveAuditTerminalAlerts(String sourceDocumentId) async {
+    return _queryAdapter.query(
+        'SELECT COUNT(*) FROM forensic_alerts WHERE alert_type = \'AUDIT_BACKEND_TERMINAL_REJECTION\' AND source_document_type = \'audit_log\' AND source_document_id = ?1 AND status = \'active\'',
+        mapper: (Map<String, Object?> row) => row.values.first as int,
+        arguments: [sourceDocumentId]);
+  }
+
+  @override
   Future<void> markAsSynced(String id) async {
     await _queryAdapter.queryNoReturn(
         'UPDATE forensic_alerts SET is_synced = 1 WHERE id = ?1',
