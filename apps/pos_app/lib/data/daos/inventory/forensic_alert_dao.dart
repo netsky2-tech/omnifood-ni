@@ -15,7 +15,9 @@ abstract class ForensicAlertDao {
   @Insert(onConflict: OnConflictStrategy.replace)
   Future<void> upsertAlert(ForensicAlertEntity entity);
 
-  @Query('INSERT OR IGNORE INTO forensic_alerts (id, alert_type, severity, message, created_at, status, source_document_type, source_document_id, metadata_json, is_synced) VALUES (:id, :alertType, :severity, :message, :createdAt, :status, :sourceDocumentType, :sourceDocumentId, :metadataJson, :isSynced)')
+  @Query(
+    'INSERT OR IGNORE INTO forensic_alerts (id, alert_type, severity, message, created_at, status, source_document_type, source_document_id, metadata_json, is_synced) VALUES (:id, :alertType, :severity, :message, :createdAt, :status, :sourceDocumentType, :sourceDocumentId, :metadataJson, :isSynced)',
+  )
   Future<void> insertIfAbsentForensicAlert(
     String id,
     String alertType,
@@ -28,6 +30,11 @@ abstract class ForensicAlertDao {
     String metadataJson,
     bool isSynced,
   );
+
+  @Query(
+    "SELECT COUNT(*) FROM forensic_alerts WHERE alert_type = 'AUDIT_BACKEND_TERMINAL_REJECTION' AND source_document_type = 'audit_log' AND source_document_id = :sourceDocumentId AND status = 'active'",
+  )
+  Future<int?> countActiveAuditTerminalAlerts(String sourceDocumentId);
 
   @Query('UPDATE forensic_alerts SET is_synced = 1 WHERE id = :id')
   Future<void> markAsSynced(String id);
