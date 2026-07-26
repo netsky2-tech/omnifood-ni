@@ -61,7 +61,11 @@ describe('TenantCapabilityService', () => {
         version: 'v3-jcs-rfc8785',
         reason: 'approved rollout',
       }),
-    ).resolves.toMatchObject({ revision: 2, previousVersion: 'v2', contractVersion: 1 });
+    ).resolves.toMatchObject({
+      revision: 2,
+      previousVersion: 'v2',
+      contractVersion: 1,
+    });
     expect(runner.query).toHaveBeenCalledWith(
       "SELECT set_config('app.tenant_id', $1, true)",
       ['tenant-a'],
