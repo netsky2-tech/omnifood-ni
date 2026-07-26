@@ -86,9 +86,16 @@ class AuditRepositoryImpl implements AuditRepository {
       _deviceId,
       user.id,
     );
-    return AuditMapper.toDomain(_buildAuditEntity(user, tenantId, action,
-      sequenceNo: (head?.sequenceNo ?? 0) + 1,
-      prevHash: head?.entryHash ?? 'GENESIS', metadata: metadata));
+    return AuditMapper.toDomain(
+      _buildAuditEntity(
+        user,
+        tenantId,
+        action,
+        sequenceNo: (head?.sequenceNo ?? 0) + 1,
+        prevHash: head?.entryHash ?? 'GENESIS',
+        metadata: metadata,
+      ),
+    );
   }
 
   /// Builds a forensic [AuditLogEntity] from a stream head without persisting.
@@ -203,6 +210,7 @@ class AuditRepositoryImpl implements AuditRepository {
     var completedStreams = 0;
     var failedStreams = 0;
     var offlineFailures = 0;
+    var terminalFailures = 0;
     final legacy = unsynced.where((row) => row.tenantId == null).toList();
     if (legacy.isNotEmpty) {
       final result = await _syncLegacy(legacy);
@@ -211,18 +219,27 @@ class AuditRepositoryImpl implements AuditRepository {
       } else {
         failedStreams++;
         if (result.$2) offlineFailures++;
+        if (result.$3) terminalFailures++;
       }
     }
     final activeTenantId = (await _authRepository.getCurrentUser())?.tenantId;
     if (activeTenantId == null || activeTenantId.isEmpty) {
-      return _outcome(completedStreams, failedStreams, offlineFailures);
+      return _outcome(
+        completedStreams,
+        failedStreams,
+        offlineFailures,
+        terminalFailures,
+      );
     }
     final streams = <(String, String, String), List<AuditLogEntity>>{};
     for (final row in unsynced.where((row) => row.tenantId == activeTenantId)) {
-      streams.putIfAbsent(
-        (row.tenantId!, row.deviceId, row.userId),
-        () => <AuditLogEntity>[],
-      ).add(row);
+      streams
+          .putIfAbsent((
+            row.tenantId!,
+            row.deviceId,
+            row.userId,
+          ), () => <AuditLogEntity>[])
+          .add(row);
     }
     final orderedStreams = streams.entries.toList()
       ..sort((a, b) => _compareStream(a.key, b.key));
@@ -233,15 +250,22 @@ class AuditRepositoryImpl implements AuditRepository {
       } else {
         failedStreams++;
         if (result.$2) offlineFailures++;
+        if (result.$3) terminalFailures++;
       }
     }
-    return _outcome(completedStreams, failedStreams, offlineFailures);
+    return _outcome(
+      completedStreams,
+      failedStreams,
+      offlineFailures,
+      terminalFailures,
+    );
   }
 
   AuditSyncOutcome _outcome(
     int completedStreams,
     int failedStreams,
     int offlineFailures,
+    int terminalFailures,
   ) {
     if (failedStreams == 0) {
       return AuditSyncOutcome.complete(completedStreams: completedStreams);
@@ -252,29 +276,61 @@ class AuditRepositoryImpl implements AuditRepository {
         failedStreams: failedStreams,
       );
     }
+    if (terminalFailures > 0) {
+      return AuditSyncOutcome.terminal(failedStreams: failedStreams);
+    }
     return offlineFailures == failedStreams
         ? AuditSyncOutcome.offline(failedStreams: failedStreams)
         : AuditSyncOutcome.retryable(failedStreams: failedStreams);
   }
 
-  Future<(bool, bool)> _syncLegacy(List<AuditLogEntity> rows) async {
+  Future<(bool, bool, bool)> _syncLegacy(List<AuditLogEntity> rows) async {
+    if ((await _forensicAlertDao.countActiveAuditTerminalAlerts(
+              rows.first.remoteRefUuid,
+            ) ??
+            0) >
+        0) {
+      return (false, false, true);
+    }
     try {
-      await _dio.post('/identity/audit', data: {'logs': rows.map(_payload).toList()});
+      await _dio.post(
+        '/identity/audit',
+        data: {'logs': rows.map(_payload).toList()},
+      );
       await _auditDao.markAsSynced(rows.map((row) => row.id!).toList());
-      return (true, false);
+      return (true, false, false);
     } catch (error) {
-      return (false, _isOffline(error));
+      final terminal = _isTerminalBackendRejection(error);
+      if (terminal) {
+        final row = rows.first;
+        await _recordTerminalRejection(row, (
+          'legacy',
+          row.deviceId,
+          row.userId,
+        ), error as DioException);
+      }
+      return (false, _isOffline(error), terminal);
     }
   }
 
-  Future<(bool, bool)> _syncStream(
+  Future<(bool, bool, bool)> _syncStream(
     (String, String, String) stream,
     List<AuditLogEntity> rows,
   ) async {
     rows.sort((a, b) {
       final sequence = a.sequenceNo.compareTo(b.sequenceNo);
-      return sequence != 0 ? sequence : a.remoteRefUuid.compareTo(b.remoteRefUuid);
+      return sequence != 0
+          ? sequence
+          : a.remoteRefUuid.compareTo(b.remoteRefUuid);
     });
+    if (rows.isNotEmpty &&
+        (await _forensicAlertDao.countActiveAuditTerminalAlerts(
+                  rows.first.remoteRefUuid,
+                ) ??
+                0) >
+            0) {
+      return (false, false, true);
+    }
     final safe = <AuditLogEntity>[];
     AuditLogEntity? previous;
     for (var index = 0; index < rows.length; index++) {
@@ -296,31 +352,40 @@ class AuditRepositoryImpl implements AuditRepository {
       safe.add(row);
       previous = row;
     }
-    if (safe.isEmpty) return (false, false);
-    for (var start = 0; start < safe.length; start += 500) {
-      final end = start + 500 > safe.length ? safe.length : start + 500;
-      final batch = safe.sublist(start, end);
+    if (safe.isEmpty) return (false, false, false);
+    for (final row in safe) {
       try {
         final response = await _dio.post(
           '/identity/audit',
-          data: {'logs': batch.map(_payload).toList()},
+          data: {'logs': [_payload(row)]},
         );
-        final accepted = _acceptedRows(batch, response.data);
+        final accepted = _acceptedRows([row], response.data);
         if (accepted.isNotEmpty) {
           await _auditDao.markAsSynced(accepted.map((row) => row.id!).toList());
         }
-        if (accepted.length != batch.length) return (false, false);
+        if (accepted.length != 1) return (false, false, false);
       } catch (error) {
-        return (false, _isOffline(error));
+        if (_isTerminalBackendRejection(error)) {
+          await _recordTerminalRejection(
+            row,
+            stream,
+            error as DioException,
+          );
+        }
+        return (false, _isOffline(error), _isTerminalBackendRejection(error));
       }
     }
-    return (safe.length == rows.length, false);
+    return (safe.length == rows.length, false, false);
   }
 
   bool _isOffline(Object error) =>
       error is DioException &&
       (error.type == DioExceptionType.connectionError ||
           error.type == DioExceptionType.connectionTimeout);
+
+  bool _isTerminalBackendRejection(Object error) =>
+      error is DioException &&
+      (error.response?.statusCode == 400 || error.response?.statusCode == 409);
 
   bool _isContiguous(AuditLogEntity row, AuditLogEntity? previous) {
     if (row.sequenceNo <= 0 || row.prevHash.isEmpty) return false;
@@ -335,7 +400,11 @@ class AuditRepositoryImpl implements AuditRepository {
     (String, String, String) left,
     (String, String, String) right,
   ) {
-    for (final pair in [(left.$1, right.$1), (left.$2, right.$2), (left.$3, right.$3)]) {
+    for (final pair in [
+      (left.$1, right.$1),
+      (left.$2, right.$2),
+      (left.$3, right.$3),
+    ]) {
       final result = pair.$1.compareTo(pair.$2);
       if (result != 0) return result;
     }
@@ -388,19 +457,63 @@ class AuditRepositoryImpl implements AuditRepository {
     } catch (_) {}
   }
 
+  Future<void> _recordTerminalRejection(
+    AuditLogEntity row,
+    (String, String, String) stream,
+    DioException error,
+  ) async {
+    final statusCode = error.response?.statusCode;
+    final category = 'http_$statusCode';
+    final streamKey = sha256
+        .convert(utf8.encode('${stream.$1}|${stream.$2}|${stream.$3}'))
+        .toString();
+    try {
+      await _forensicAlertDao.insertIfAbsentForensicAlert(
+        'audit-terminal-rejection-${sha256.convert(utf8.encode(row.remoteRefUuid))}',
+        'AUDIT_BACKEND_TERMINAL_REJECTION',
+        'critical',
+        'Audit backend rejected forensic evidence ($category).',
+        _now().toUtc().toIso8601String(),
+        'active',
+        'audit_log',
+        row.remoteRefUuid,
+        jsonEncode({
+          'stream_key': streamKey,
+          'sequence_no': row.sequenceNo,
+          'hash_version': row.hashVersion,
+          'status_code': statusCode,
+          'backend_category': category,
+        }),
+        false,
+      );
+    } catch (_) {}
+  }
+
   Map<String, dynamic> _payload(AuditLogEntity e) {
     final isV3 = e.hashVersion == 'v3-jcs-rfc8785';
-    final metadataRaw = e.metadataRaw ??
+    final metadataRaw =
+        e.metadataRaw ??
         (isV3 ? (e.metadata ?? 'null') : _extractLegacyMetadataRaw(e.metadata));
     final payload = <String, dynamic>{
-      'id': e.remoteRefUuid, 'user_id': e.userId, 'action': e.action,
-      'timestamp': e.timestamp, 'device_id': e.deviceId, 'sequence_no': e.sequenceNo,
-      'prev_hash': e.prevHash, 'entry_hash': e.entryHash,
-      'metadata': isV3 ? jsonDecode(metadataRaw!) : _normalizeMetadataToJsonObject(e.metadata),
+      'id': e.remoteRefUuid,
+      'user_id': e.userId,
+      'action': e.action,
+      'timestamp': e.timestamp,
+      'device_id': e.deviceId,
+      'sequence_no': e.sequenceNo,
+      'prev_hash': e.prevHash,
+      'entry_hash': e.entryHash,
+      'metadata': isV3
+          ? jsonDecode(metadataRaw!)
+          : _normalizeMetadataToJsonObject(e.metadata),
       'metadata_raw': metadataRaw,
     };
-    if (!isV3 || e.hasMetodoAutorizacion == true) payload['metodo_autorizacion'] = e.metodoAutorizacion;
-    if (!isV3 || e.hasUsuarioAutorizadorId == true) payload['usuario_autorizador_id'] = e.usuarioAutorizadorId;
+    if (!isV3 || e.hasMetodoAutorizacion == true) {
+      payload['metodo_autorizacion'] = e.metodoAutorizacion;
+    }
+    if (!isV3 || e.hasUsuarioAutorizadorId == true) {
+      payload['usuario_autorizador_id'] = e.usuarioAutorizadorId;
+    }
     if (e.hashVersion != null) payload['hash_version'] = e.hashVersion;
     return payload;
   }
