@@ -164,6 +164,9 @@ export class ActivateCapabilityDto {
   @IsIn(auditCapabilityVersionValues)
   new_version: AuditCapabilityVersionDto;
 
+  @Transform(({ value }: { value: unknown }): unknown =>
+    typeof value === 'string' ? value.trim() : value,
+  )
   @IsString()
   @IsNotEmpty()
   @MaxLength(500)

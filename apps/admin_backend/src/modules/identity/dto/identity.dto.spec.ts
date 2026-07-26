@@ -1,7 +1,11 @@
 import 'reflect-metadata';
 import { ValidationPipe } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
-import { CreateAuditLogDto, PushAuditLogsDto } from './identity.dto';
+import {
+  ActivateCapabilityDto,
+  CreateAuditLogDto,
+  PushAuditLogsDto,
+} from './identity.dto';
 
 const validAuditLog = {
   id: 'd6df2e11-9a37-4fc9-a512-2b89a43a9a42',
@@ -134,5 +138,44 @@ describe('CreateAuditLogDto raw version state', () => {
         metadata_raw: '{"nested":[true,1]}',
       }),
     ).rejects.toThrow();
+  });
+});
+
+describe('ActivateCapabilityDto', () => {
+  const transformActivateCapability = async (
+    input: Record<string, unknown>,
+  ): Promise<ActivateCapabilityDto> => {
+    const pipe = new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    });
+
+    return (await pipe.transform(input, {
+      type: 'body',
+      metatype: ActivateCapabilityDto,
+    })) as ActivateCapabilityDto;
+  };
+
+  it('trims the activation reason before forwarding it to the service boundary', async () => {
+    await expect(
+      transformActivateCapability({
+        new_version: 'v3-jcs-rfc8785',
+        reason: '  approved rollout  ',
+      }),
+    ).resolves.toMatchObject({ reason: 'approved rollout' });
+  });
+
+  it.each([
+    ['missing', { new_version: 'v2' }],
+    ['blank', { new_version: 'v2', reason: '' }],
+    ['whitespace-only', { new_version: 'v2', reason: '   ' }],
+    ['oversized', { new_version: 'v2', reason: 'a'.repeat(501) }],
+    [
+      'unknown field',
+      { new_version: 'v2', reason: 'rollback', unexpected: true },
+    ],
+  ])('rejects a %s activation reason payload', async (_, input) => {
+    await expect(transformActivateCapability(input)).rejects.toThrow();
   });
 });
