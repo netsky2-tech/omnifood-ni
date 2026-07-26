@@ -47,6 +47,7 @@ describe('audit capability contract (e2e)', () => {
     capabilityService.current
       .mockReset()
       .mockResolvedValue({ version: 'v2', revision: 0, contractVersion: 1 });
+    capabilityService.append.mockReset();
     authorize
       .mockReset()
       .mockImplementation(
@@ -97,6 +98,54 @@ describe('audit capability contract (e2e)', () => {
       .set('Authorization', `Bearer ${token(1, UserRole.MANAGER)}`)
       .send({ new_version: 'v2', reason: 'revocation' })
       .expect(403);
+    expect(capabilityService.append).not.toHaveBeenCalled();
+  });
+  it('accepts an OWNER activation through the real guards and forwards verified identity with a trimmed reason', async () => {
+    capabilityService.append.mockResolvedValueOnce({
+      version: 'v3-jcs-rfc8785',
+      previousVersion: 'v2',
+      revision: 4,
+      contractVersion: 1,
+    });
+
+    await request(app.getHttpServer())
+      .post('/identity/capabilities/audit/activate')
+      .set('Authorization', `Bearer ${token()}`)
+      .send({ new_version: 'v3-jcs-rfc8785', reason: '  approved rollout  ' })
+      .expect(201)
+      .expect(({ body }: { body: Record<string, unknown> }) =>
+        expect(body).toEqual(
+          expect.objectContaining({
+            tenant_id: 'tenant-e2e',
+            active_version: 'v3-jcs-rfc8785',
+            previous_version: 'v2',
+            contract_version: 1,
+            revision: 4,
+          }),
+        ),
+      );
+
+    expect(capabilityService.append).toHaveBeenCalledWith({
+      tenantId: 'tenant-e2e',
+      actorUserId: 'e2e-user',
+      version: 'v3-jcs-rfc8785',
+      reason: 'approved rollout',
+    });
+  });
+  it.each([
+    ['invalid version', { new_version: 'v9', reason: 'rollback' }],
+    ['missing reason', { new_version: 'v2' }],
+    ['extra field', { new_version: 'v2', reason: 'rollback', extra: true }],
+    ['blank reason', { new_version: 'v2', reason: '' }],
+    ['whitespace-only reason', { new_version: 'v2', reason: '   ' }],
+    ['oversized reason', { new_version: 'v2', reason: 'a'.repeat(501) }],
+  ])('rejects an OWNER activation with %s', async (_, body) => {
+    await request(app.getHttpServer())
+      .post('/identity/capabilities/audit/activate')
+      .set('Authorization', `Bearer ${token()}`)
+      .send(body)
+      .expect(400);
+
     expect(capabilityService.append).not.toHaveBeenCalled();
   });
   it('rejects an inactive or stale user through real AuthoritativeCurrentUserGuard', async () => {
