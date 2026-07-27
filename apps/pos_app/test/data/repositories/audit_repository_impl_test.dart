@@ -278,11 +278,11 @@ void main() {
       },
     );
 
-    test('fresh same-tenant authority remains v2 while the production gate is false', () async {
+    test('fresh same-tenant authority produces v3 after controlled activation', () async {
       await cache.refresh(tenantId: 'tenant_a', response: {'tenant_id': 'tenant_a', 'active_version': 'v3-jcs-rfc8785', 'contract_version': 1, 'server_fetched_at': '2026-01-01T00:00:00Z', 'server_expires_at': '2026-01-02T00:00:00Z'});
       when(mockAuthRepository.getCurrentUser()).thenAnswer((_) async => user('tenant_a'));
       stubStream(); await repository.logForensic('OPEN');
-      expect((verify(mockAuditDao.insertLog(captureAny)).captured.single as AuditLogEntity).hashVersion, 'v2-canonical-json');
+      expect((verify(mockAuditDao.insertLog(captureAny)).captured.single as AuditLogEntity).hashVersion, 'v3-jcs-rfc8785');
     });
 
     test('preserves the authoritative v2 golden digest', () async {
