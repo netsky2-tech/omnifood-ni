@@ -30,7 +30,7 @@ void main() {
     expect(await cache.refresh(tenantId: tenant, response: response()), isTrue);
     expect(cache.hasFreshAuthority(tenant), isTrue);
     expect(cache.hasFreshAuthority('tenant-b'), isFalse);
-    expect(cache.isV3Eligible(tenant), isFalse);
+    expect(cache.isV3Eligible(tenant), isTrue);
     final saved = verify(() => dao.saveConfig(captureAny())).captured.single as LocalConfigEntity;
     expect(saved.key, 'audit_cap:tenant-a');
     expect(saved.value, allOf(contains('server_expires_at'), isNot(contains('boot-a'))));
@@ -56,5 +56,6 @@ void main() {
       {...response(), 'server_fetched_at': '2026-07-24T12:06:00Z', 'server_expires_at': '2026-07-24T13:00:00Z'},
       {...response(), 'server_expires_at': '2026-07-25T12:01:00Z'},
     ]) { expect(await cache.refresh(tenantId: tenant, response: invalid), isFalse); }
+    expect(cache.isV3Eligible(tenant), isFalse);
   });
 }
