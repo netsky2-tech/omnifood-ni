@@ -7,6 +7,18 @@ const ROOT = resolve(process.cwd(), '../../fixtures/audit/v3');
 const MAX_BYTES = 1_048_577;
 const hex = (bytes: Buffer) => bytes.toString('hex');
 const sha = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
+const normalizeFixtureLineEndings = (bytes: Buffer): Buffer => {
+  const normalized: number[] = [];
+  for (let index = 0; index < bytes.length; index += 1) {
+    const byte = bytes[index];
+    if (byte === 0x0d && bytes[index + 1] === 0x0a) {
+      normalized.push(0x0a);
+      index += 1;
+    } else normalized.push(byte);
+  }
+  return Buffer.from(normalized);
+};
+const fixtureSha = (bytes: Buffer): string => sha(normalizeFixtureLineEndings(bytes));
 const object = (value: unknown, label: string): Json => {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error(`${label} must be an object`);
   return value as Json;
@@ -47,9 +59,22 @@ const prove = (bytes: Buffer, value: unknown): void => {
 };
 const load = (name: string): Json[] => readFileSync(resolve(ROOT, name), 'utf8').trim().split('\n').map((line) => object(JSON.parse(line) as unknown, name));
 
+it('normalizes LF and CRLF fixture bytes only for authoritative hashes', () => {
+  const schema = readFileSync(resolve(ROOT, 'schema.json'));
+  const authority = object(JSON.parse(schema.toString('utf8')) as unknown, 'schema')['x-authority'];
+  const hashes = ['74c3f4900d00fe3f0642a973beed5ac1235230552136b6095294467fc1ca3e84', ...['canonical', 'rejections', 'frames'].map((key) => object(object(authority, 'authority').compact, 'compact')[key])];
+  ['schema.json', 'canonical-valid.jsonl', 'rejections.jsonl', 'frames.jsonl'].forEach((name, index) => {
+    const lf = normalizeFixtureLineEndings(readFileSync(resolve(ROOT, name)));
+    const crlf = Buffer.from(Array.from(lf).flatMap((byte) => byte === 0x0a ? [0x0d, byte] : [byte]));
+    expect(fixtureSha(lf)).toBe(hashes[index]);
+    expect(fixtureSha(crlf)).toBe(hashes[index]);
+  });
+  expect(normalizeFixtureLineEndings(Buffer.from([0x61, 0x0d, 0x62, 0x0d, 0x0a, 0x63]))).toEqual(Buffer.from([0x61, 0x0d, 0x62, 0x0a, 0x63]));
+});
+
 it('loads the compact final v3 fixture authority', () => {
   const schemaBytes = readFileSync(resolve(ROOT, 'schema.json'));
-  expect(sha(schemaBytes)).toBe('74c3f4900d00fe3f0642a973beed5ac1235230552136b6095294467fc1ca3e84');
+  expect(fixtureSha(schemaBytes)).toBe('74c3f4900d00fe3f0642a973beed5ac1235230552136b6095294467fc1ca3e84');
   const schema = object(JSON.parse(schemaBytes.toString('utf8')) as unknown, 'schema');
   expect(schema.version).toBe(1);
   const authority = object(schema['x-authority'], 'x-authority');
@@ -58,7 +83,7 @@ it('loads the compact final v3 fixture authority', () => {
   expect(object(authority.source, 'source').results).toBe('d2808ae2218d3c4090794fe67ec91883b16027c33ec6023a6f850ee66b6988ba');
   const names = ['canonical-valid.jsonl', 'rejections.jsonl', 'frames.jsonl'];
   const compact = object(authority.compact, 'compact');
-  names.forEach((name, index) => expect(sha(readFileSync(resolve(ROOT, name)))).toBe(compact[['canonical', 'rejections', 'frames'][index]]));
+  names.forEach((name, index) => expect(fixtureSha(readFileSync(resolve(ROOT, name)))).toBe(compact[['canonical', 'rejections', 'frames'][index]]));
   const shards = names.map((name) => load(name));
   expect(shards.map((rows) => rows.length)).toEqual([12, 28, 24]);
   const rows = shards.flat();
