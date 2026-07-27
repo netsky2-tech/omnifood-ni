@@ -138,7 +138,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 33,
+      version: 35,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -158,7 +158,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `security_profiles` (`user_id` TEXT NOT NULL, `pin_hash` TEXT, `totp_secret_seed` TEXT, `is_totp_enabled` INTEGER NOT NULL, `is_pin_enabled` INTEGER NOT NULL, PRIMARY KEY (`user_id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `audit_logs` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `user_id` TEXT NOT NULL, `action` TEXT NOT NULL, `timestamp` TEXT NOT NULL, `device_id` TEXT NOT NULL, `metadata` TEXT, `is_synced` INTEGER NOT NULL, `sequence_no` INTEGER NOT NULL, `prev_hash` TEXT NOT NULL, `entry_hash` TEXT NOT NULL, `metodo_autorizacion` TEXT, `usuario_autorizador_id` TEXT, `remote_ref_uuid` TEXT NOT NULL, `hash_version` TEXT, `has_metodo_autorizacion` INTEGER, `has_usuario_autorizador_id` INTEGER)');
+            'CREATE TABLE IF NOT EXISTS `audit_logs` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `user_id` TEXT NOT NULL, `action` TEXT NOT NULL, `timestamp` TEXT NOT NULL, `device_id` TEXT NOT NULL, `metadata` TEXT, `is_synced` INTEGER NOT NULL, `sequence_no` INTEGER NOT NULL, `prev_hash` TEXT NOT NULL, `entry_hash` TEXT NOT NULL, `metodo_autorizacion` TEXT, `usuario_autorizador_id` TEXT, `remote_ref_uuid` TEXT NOT NULL, `hash_version` TEXT, `has_metodo_autorizacion` INTEGER, `has_usuario_autorizador_id` INTEGER, `tenant_id` TEXT, `metadata_raw` TEXT)');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `local_configs` (`key` TEXT NOT NULL, `value` TEXT NOT NULL, `description` TEXT, PRIMARY KEY (`key`))');
         await database.execute(
@@ -215,6 +215,8 @@ class _$AppDatabase extends AppDatabase {
             'CREATE TABLE IF NOT EXISTS `hold_ticket_items` (`id` TEXT NOT NULL, `hold_ticket_id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `product_name` TEXT NOT NULL, `quantity` REAL NOT NULL, `unit_price` REAL NOT NULL, `tax_rate` REAL NOT NULL, FOREIGN KEY (`hold_ticket_id`) REFERENCES `hold_tickets` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `promotions` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `type` TEXT NOT NULL, `target_product_id` TEXT NOT NULL, `buy_quantity` INTEGER NOT NULL, `get_quantity` INTEGER NOT NULL, `discount_value` REAL NOT NULL, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE UNIQUE INDEX `index_audit_logs_tenant_id_device_id_user_id_sequence_no` ON `audit_logs` (`tenant_id`, `device_id`, `user_id`, `sequence_no`)');
         await database.execute(
             'CREATE UNIQUE INDEX `idx_movement_sync_state_stream_sequence` ON `inventory_movement_sync_state` (`terminal_id`, `flow_type`, `local_sequence`)');
         await database.execute(
@@ -595,7 +597,9 @@ class _$AuditDao extends AuditDao {
                   'has_usuario_autorizador_id':
                       item.hasUsuarioAutorizadorId == null
                           ? null
-                          : (item.hasUsuarioAutorizadorId! ? 1 : 0)
+                          : (item.hasUsuarioAutorizadorId! ? 1 : 0),
+                  'tenant_id': item.tenantId,
+                  'metadata_raw': item.metadataRaw
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -630,7 +634,9 @@ class _$AuditDao extends AuditDao {
                 : (row['has_metodo_autorizacion'] as int) != 0,
             hasUsuarioAutorizadorId: row['has_usuario_autorizador_id'] == null
                 ? null
-                : (row['has_usuario_autorizador_id'] as int) != 0));
+                : (row['has_usuario_autorizador_id'] as int) != 0,
+            tenantId: row['tenant_id'] as String?,
+            metadataRaw: row['metadata_raw'] as String?));
   }
 
   @override
@@ -641,7 +647,7 @@ class _$AuditDao extends AuditDao {
   ) async {
     return _queryAdapter.queryList(
         'SELECT * FROM audit_logs WHERE timestamp >= ?1 AND timestamp <= ?2 AND (?3 = \"\" OR user_id = ?3) ORDER BY timestamp DESC',
-        mapper: (Map<String, Object?> row) => AuditLogEntity(id: row['id'] as int?, userId: row['user_id'] as String, action: row['action'] as String, timestamp: row['timestamp'] as String, deviceId: row['device_id'] as String, metadata: row['metadata'] as String?, isSynced: (row['is_synced'] as int) != 0, sequenceNo: row['sequence_no'] as int, prevHash: row['prev_hash'] as String, entryHash: row['entry_hash'] as String, metodoAutorizacion: row['metodo_autorizacion'] as String?, usuarioAutorizadorId: row['usuario_autorizador_id'] as String?, remoteRefUuid: row['remote_ref_uuid'] as String, hashVersion: row['hash_version'] as String?, hasMetodoAutorizacion: row['has_metodo_autorizacion'] == null ? null : (row['has_metodo_autorizacion'] as int) != 0, hasUsuarioAutorizadorId: row['has_usuario_autorizador_id'] == null ? null : (row['has_usuario_autorizador_id'] as int) != 0),
+        mapper: (Map<String, Object?> row) => AuditLogEntity(id: row['id'] as int?, userId: row['user_id'] as String, action: row['action'] as String, timestamp: row['timestamp'] as String, deviceId: row['device_id'] as String, metadata: row['metadata'] as String?, isSynced: (row['is_synced'] as int) != 0, sequenceNo: row['sequence_no'] as int, prevHash: row['prev_hash'] as String, entryHash: row['entry_hash'] as String, metodoAutorizacion: row['metodo_autorizacion'] as String?, usuarioAutorizadorId: row['usuario_autorizador_id'] as String?, remoteRefUuid: row['remote_ref_uuid'] as String, hashVersion: row['hash_version'] as String?, hasMetodoAutorizacion: row['has_metodo_autorizacion'] == null ? null : (row['has_metodo_autorizacion'] as int) != 0, hasUsuarioAutorizadorId: row['has_usuario_autorizador_id'] == null ? null : (row['has_usuario_autorizador_id'] as int) != 0, tenantId: row['tenant_id'] as String?, metadataRaw: row['metadata_raw'] as String?),
         arguments: [start, end, userId]);
   }
 
@@ -669,21 +675,45 @@ class _$AuditDao extends AuditDao {
                 : (row['has_metodo_autorizacion'] as int) != 0,
             hasUsuarioAutorizadorId: row['has_usuario_autorizador_id'] == null
                 ? null
-                : (row['has_usuario_autorizador_id'] as int) != 0));
+                : (row['has_usuario_autorizador_id'] as int) != 0,
+            tenantId: row['tenant_id'] as String?,
+            metadataRaw: row['metadata_raw'] as String?));
   }
 
   @override
-  Future<int?> getLastSequenceNo() async {
+  Future<int?> getLastSequenceNoByStream(
+    String tenantId,
+    String deviceId,
+    String userId,
+  ) async {
     return _queryAdapter.query(
-        'SELECT sequence_no FROM audit_logs ORDER BY id DESC LIMIT 1',
-        mapper: (Map<String, Object?> row) => row.values.first as int);
+        'SELECT sequence_no FROM audit_logs WHERE tenant_id = ?1 AND device_id = ?2 AND user_id = ?3 ORDER BY sequence_no DESC LIMIT 1',
+        mapper: (Map<String, Object?> row) => row.values.first as int,
+        arguments: [tenantId, deviceId, userId]);
   }
 
   @override
-  Future<String?> getLastEntryHash() async {
+  Future<String?> getLastEntryHashByStream(
+    String tenantId,
+    String deviceId,
+    String userId,
+  ) async {
     return _queryAdapter.query(
-        'SELECT entry_hash FROM audit_logs ORDER BY id DESC LIMIT 1',
-        mapper: (Map<String, Object?> row) => row.values.first as String);
+        'SELECT entry_hash FROM audit_logs WHERE tenant_id = ?1 AND device_id = ?2 AND user_id = ?3 ORDER BY sequence_no DESC LIMIT 1',
+        mapper: (Map<String, Object?> row) => row.values.first as String,
+        arguments: [tenantId, deviceId, userId]);
+  }
+
+  @override
+  Future<AuditLogEntity?> getLastAuditLogByStream(
+    String tenantId,
+    String deviceId,
+    String userId,
+  ) async {
+    return _queryAdapter.query(
+        'SELECT * FROM audit_logs WHERE tenant_id = ?1 AND device_id = ?2 AND user_id = ?3 ORDER BY sequence_no DESC LIMIT 1',
+        mapper: (Map<String, Object?> row) => AuditLogEntity(id: row['id'] as int?, userId: row['user_id'] as String, action: row['action'] as String, timestamp: row['timestamp'] as String, deviceId: row['device_id'] as String, metadata: row['metadata'] as String?, isSynced: (row['is_synced'] as int) != 0, sequenceNo: row['sequence_no'] as int, prevHash: row['prev_hash'] as String, entryHash: row['entry_hash'] as String, metodoAutorizacion: row['metodo_autorizacion'] as String?, usuarioAutorizadorId: row['usuario_autorizador_id'] as String?, remoteRefUuid: row['remote_ref_uuid'] as String, hashVersion: row['hash_version'] as String?, hasMetodoAutorizacion: row['has_metodo_autorizacion'] == null ? null : (row['has_metodo_autorizacion'] as int) != 0, hasUsuarioAutorizadorId: row['has_usuario_autorizador_id'] == null ? null : (row['has_usuario_autorizador_id'] as int) != 0, tenantId: row['tenant_id'] as String?, metadataRaw: row['metadata_raw'] as String?),
+        arguments: [tenantId, deviceId, userId]);
   }
 
   @override
@@ -711,8 +741,27 @@ class _$AuditDao extends AuditDao {
 
   @override
   Future<void> insertLog(AuditLogEntity log) async {
-    await _auditLogEntityInsertionAdapter.insert(
-        log, OnConflictStrategy.replace);
+    await _auditLogEntityInsertionAdapter.insert(log, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> appendForensicLog(
+    String tenantId,
+    String deviceId,
+    String userId,
+    AuditLogEntity Function(int, String) createLog,
+  ) async {
+    if (database is sqflite.Transaction) {
+      await super.appendForensicLog(tenantId, deviceId, userId, createLog);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.auditDao
+            .appendForensicLog(tenantId, deviceId, userId, createLog);
+      });
+    }
   }
 }
 
@@ -1425,6 +1474,43 @@ class _$ForensicAlertDao extends ForensicAlertDao {
             sourceDocumentType: row['source_document_type'] as String?,
             metadataJson: row['metadata_json'] as String?,
             isSynced: (row['is_synced'] as int) != 0));
+  }
+
+  @override
+  Future<void> insertIfAbsentForensicAlert(
+    String id,
+    String alertType,
+    String severity,
+    String message,
+    String createdAt,
+    String status,
+    String sourceDocumentType,
+    String sourceDocumentId,
+    String metadataJson,
+    bool isSynced,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'INSERT OR IGNORE INTO forensic_alerts (id, alert_type, severity, message, created_at, status, source_document_type, source_document_id, metadata_json, is_synced) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)',
+        arguments: [
+          id,
+          alertType,
+          severity,
+          message,
+          createdAt,
+          status,
+          sourceDocumentType,
+          sourceDocumentId,
+          metadataJson,
+          isSynced ? 1 : 0
+        ]);
+  }
+
+  @override
+  Future<int?> countActiveAuditTerminalAlerts(String sourceDocumentId) async {
+    return _queryAdapter.query(
+        'SELECT COUNT(*) FROM forensic_alerts WHERE alert_type = \'AUDIT_BACKEND_TERMINAL_REJECTION\' AND source_document_type = \'audit_log\' AND source_document_id = ?1 AND status = \'active\'',
+        mapper: (Map<String, Object?> row) => row.values.first as int,
+        arguments: [sourceDocumentId]);
   }
 
   @override
@@ -2964,7 +3050,9 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'has_usuario_autorizador_id':
                       item.hasUsuarioAutorizadorId == null
                           ? null
-                          : (item.hasUsuarioAutorizadorId! ? 1 : 0)
+                          : (item.hasUsuarioAutorizadorId! ? 1 : 0),
+                  'tenant_id': item.tenantId,
+                  'metadata_raw': item.metadataRaw
                 }),
         _invoiceEntityUpdateAdapter = UpdateAdapter(
             database,

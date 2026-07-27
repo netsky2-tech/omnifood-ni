@@ -1,6 +1,14 @@
 import 'package:floor/floor.dart';
 
-@Entity(tableName: 'audit_logs')
+@Entity(
+  tableName: 'audit_logs',
+  indices: [
+    Index(
+      value: ['tenant_id', 'device_id', 'user_id', 'sequence_no'],
+      unique: true,
+    ),
+  ],
+)
 class AuditLogEntity {
   @PrimaryKey(autoGenerate: true)
   final int? id;
@@ -31,6 +39,10 @@ class AuditLogEntity {
   final bool? hasMetodoAutorizacion;
   @ColumnInfo(name: 'has_usuario_autorizador_id')
   final bool? hasUsuarioAutorizadorId;
+  @ColumnInfo(name: 'tenant_id')
+  final String? tenantId;
+  @ColumnInfo(name: 'metadata_raw')
+  final String? metadataRaw;
 
   AuditLogEntity({
     this.id,
@@ -49,5 +61,7 @@ class AuditLogEntity {
     this.hashVersion,
     this.hasMetodoAutorizacion,
     this.hasUsuarioAutorizadorId,
+    this.tenantId,
+    this.metadataRaw,
   });
 }

@@ -5,6 +5,7 @@ import { User } from './entities/user.entity';
 import { AuditLog } from './entities/audit-log.entity';
 import { SecurityProfile } from './entities/security-profile.entity';
 import { AuditIntegrityAlert } from './entities/audit-integrity-alert.entity';
+import { TenantCapabilityEvent } from './entities/tenant-capability-event.entity';
 import { AuthService } from './services/auth.service';
 import { UserService } from './services/user.service';
 import { AuditIntegrityService } from './services/audit-integrity.service';
@@ -13,10 +14,12 @@ import { AuditVerificationService } from './services/audit-verification.service'
 import { AuthController } from './controllers/auth.controller';
 import { AuditController } from './controllers/audit.controller';
 import { UsersController } from './controllers/users.controller';
+import { CapabilityController } from './controllers/capability.controller';
 import { AuthGuard } from './guards/auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { AuthoritativeCurrentUserGuard } from './guards/authoritative-current-user.guard';
 import { CurrentUserAuthorizationService } from './services/current-user-authorization.service';
+import { TenantCapabilityService } from './services/tenant-capability.service';
 import {
   IDENTITY_JWT_CONFIG,
   IdentityJwtConfig,
@@ -30,6 +33,7 @@ import {
       AuditLog,
       SecurityProfile,
       AuditIntegrityAlert,
+      TenantCapabilityEvent,
     ]),
     JwtModule.registerAsync({
       imports: [IdentityJwtConfigModule],
@@ -46,7 +50,12 @@ import {
     }),
     IdentityJwtConfigModule,
   ],
-  controllers: [AuthController, AuditController, UsersController],
+  controllers: [
+    AuthController,
+    AuditController,
+    UsersController,
+    CapabilityController,
+  ],
   providers: [
     AuthService,
     UserService,
@@ -57,6 +66,7 @@ import {
     AuthoritativeCurrentUserGuard,
     RolesGuard,
     CurrentUserAuthorizationService,
+    TenantCapabilityService,
   ],
   exports: [
     JwtModule,
@@ -70,6 +80,7 @@ import {
     AuthoritativeCurrentUserGuard,
     RolesGuard,
     CurrentUserAuthorizationService,
+    TenantCapabilityService,
   ],
 })
 export class IdentityModule {}

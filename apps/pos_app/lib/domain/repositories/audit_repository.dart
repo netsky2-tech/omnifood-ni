@@ -1,5 +1,40 @@
 import '../models/audit_log.dart';
 
+enum AuditSyncStatus { complete, partial, terminal, offline, retryable }
+
+class AuditSyncOutcome {
+  const AuditSyncOutcome._(
+    this.status, {
+    this.completedStreams = 0,
+    this.failedStreams = 0,
+  });
+
+  const AuditSyncOutcome.complete({int completedStreams = 0})
+    : this._(AuditSyncStatus.complete, completedStreams: completedStreams);
+
+  const AuditSyncOutcome.partial({
+    required int completedStreams,
+    required int failedStreams,
+  }) : this._(
+         AuditSyncStatus.partial,
+         completedStreams: completedStreams,
+         failedStreams: failedStreams,
+       );
+
+  const AuditSyncOutcome.terminal({required int failedStreams})
+    : this._(AuditSyncStatus.terminal, failedStreams: failedStreams);
+
+  const AuditSyncOutcome.offline({required int failedStreams})
+    : this._(AuditSyncStatus.offline, failedStreams: failedStreams);
+
+  const AuditSyncOutcome.retryable({required int failedStreams})
+    : this._(AuditSyncStatus.retryable, failedStreams: failedStreams);
+
+  final AuditSyncStatus status;
+  final int completedStreams;
+  final int failedStreams;
+}
+
 abstract class AuditRepository {
   String get deviceId;
   Future<void> log(String action, {String? metadata});
@@ -21,6 +56,10 @@ abstract class AuditRepository {
     String? metodoAutorizacion,
     String? usuarioAutorizadorId,
   });
-  Future<void> syncLogs();
-  Future<List<AuditLog>> getLocalLogs({DateTime? start, DateTime? end, String? userId});
+  Future<AuditSyncOutcome> syncLogs();
+  Future<List<AuditLog>> getLocalLogs({
+    DateTime? start,
+    DateTime? end,
+    String? userId,
+  });
 }

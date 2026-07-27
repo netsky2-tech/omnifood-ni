@@ -1203,6 +1203,36 @@ final migration32_33 = Migration(32, 33, (database) async {
   );
 });
 
+final migration33_34 = Migration(33, 34, (database) async {
+  final auditTable = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'audit_logs'",
+  );
+  if (auditTable.isEmpty) return;
+
+  final columns = await database.rawQuery('PRAGMA table_info(audit_logs)');
+  final names = columns.map((column) => column['name'] as String).toSet();
+  if (!names.contains('tenant_id')) {
+    await database.execute('ALTER TABLE audit_logs ADD COLUMN tenant_id TEXT');
+  }
+  if (!names.contains('metadata_raw')) {
+    await database.execute(
+      'ALTER TABLE audit_logs ADD COLUMN metadata_raw TEXT',
+    );
+  }
+});
+
+final migration34_35 = Migration(34, 35, (database) async {
+  final auditTable = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'audit_logs'",
+  );
+  if (auditTable.isEmpty) return;
+  await database.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS '
+    'index_audit_logs_tenant_id_device_id_user_id_sequence_no '
+    'ON audit_logs (tenant_id, device_id, user_id, sequence_no)',
+  );
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -1227,4 +1257,6 @@ final allMigrations = [
   migration30_31,
   migration31_32,
   migration32_33,
+  migration33_34,
+  migration34_35,
 ];

@@ -1612,14 +1612,14 @@ class MockAuditRepository extends _i1.Mock implements _i46.AuditRepository {
       ) as _i31.Future<void>);
 
   @override
-  _i31.Future<void> syncLogs() => (super.noSuchMethod(
+  _i31.Future<_i46.AuditSyncOutcome> syncLogs() => (super.noSuchMethod(
         Invocation.method(
           #syncLogs,
           [],
         ),
-        returnValue: _i31.Future<void>.value(),
-        returnValueForMissingStub: _i31.Future<void>.value(),
-      ) as _i31.Future<void>);
+        returnValue: _i31.Future<_i46.AuditSyncOutcome>.value(const _i46.AuditSyncOutcome.complete()),
+        returnValueForMissingStub: _i31.Future<_i46.AuditSyncOutcome>.value(const _i46.AuditSyncOutcome.complete()),
+      ) as _i31.Future<_i46.AuditSyncOutcome>);
 
   @override
   _i31.Future<List<_i47.AuditLog>> getLocalLogs({

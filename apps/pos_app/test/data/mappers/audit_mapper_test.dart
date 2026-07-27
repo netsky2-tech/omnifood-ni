@@ -2,7 +2,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_app/data/mappers/audit_mapper.dart';
 import 'package:pos_app/data/models/audit_log_entity.dart';
 
-AuditLogEntity buildEntity({String? hashVersion}) => AuditLogEntity(
+AuditLogEntity buildEntity({
+  String? hashVersion,
+  String? tenantId,
+  String? metadataRaw,
+}) => AuditLogEntity(
   id: 7,
   userId: 'user-1',
   action: 'DRAWER_OPEN',
@@ -14,6 +18,8 @@ AuditLogEntity buildEntity({String? hashVersion}) => AuditLogEntity(
   entryHash: 'entry-hash',
   remoteRefUuid: 'remote-ref',
   hashVersion: hashVersion,
+  tenantId: tenantId,
+  metadataRaw: metadataRaw,
 );
 
 void main() {
@@ -35,4 +41,29 @@ void main() {
       expect(AuditMapper.toEntity(domain).hashVersion, 'v3-jcs-rfc8785');
     },
   );
+
+  test('preserves nullable historical tenant and raw metadata through the mapper', () {
+    final domain = AuditMapper.toDomain(buildEntity());
+
+    expect(domain.tenantId, isNull);
+    expect(domain.metadataRaw, isNull);
+    final entity = AuditMapper.toEntity(domain);
+    expect(entity.tenantId, isNull);
+    expect(entity.metadataRaw, isNull);
+  });
+
+  test('round-trips tenant and raw metadata values through the mapper', () {
+    final domain = AuditMapper.toDomain(
+      buildEntity(
+        tenantId: 'tenant-1',
+        metadataRaw: '{"canonical":true}',
+      ),
+    );
+
+    expect(domain.tenantId, 'tenant-1');
+    expect(domain.metadataRaw, '{"canonical":true}');
+    final entity = AuditMapper.toEntity(domain);
+    expect(entity.tenantId, 'tenant-1');
+    expect(entity.metadataRaw, '{"canonical":true}');
+  });
 }

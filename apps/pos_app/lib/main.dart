@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:dio/dio.dart';
+import 'package:uuid/uuid.dart';
 import 'package:pos_app/domain/services/alerts/alert_service.dart';
 import 'package:pos_app/domain/services/inventory/movement_engine_impl.dart';
 import 'package:pos_app/presentation/services/alert_service_impl.dart';
@@ -9,6 +10,9 @@ import 'package:pos_app/data/repositories/inventory/inventory_repository_impl.da
 import 'data/database/app_database.dart';
 import 'data/database/migrations.dart';
 import 'data/repositories/auth_repository_impl.dart';
+import 'core/clock/monotonic_clock.dart';
+import 'core/config/production_transport_config.dart';
+import 'data/repositories/tenant_capability_cache.dart';
 import 'domain/repositories/auth_repository.dart';
 import 'data/repositories/audit_repository_impl.dart';
 import 'data/services/local_auth_service.dart';
@@ -80,13 +84,15 @@ void main() async {
   final deviceId = await TerminalIdentityService(
     database.localConfigDao,
   ).resolveDeviceId(buildTimeDeviceId: provisionedDeviceId);
-  final dio = Dio(BaseOptions(baseUrl: baseUrl));
+  final dio = Dio(productionTransportOptions(baseUrl));
   final localAuthService = LocalAuthService();
+  final capabilityCache = TenantCapabilityCache(configDao: database.localConfigDao, clock: StopwatchMonotonicClock(), bootSessionId: const Uuid().v4());
   final authRepository = AuthRepositoryImpl(
     database.userDao,
     database.securityProfileDao,
     localAuthService,
     dio,
+    capabilityCache: capabilityCache,
   );
 
   // Add Auth Interceptor
@@ -107,6 +113,8 @@ void main() async {
     authRepository,
     dio,
     deviceId,
+    capabilityCache: capabilityCache,
+    forensicAlertDao: database.forensicAlertDao,
   );
 
   final inventoryRepository = InventoryRepositoryImpl(
