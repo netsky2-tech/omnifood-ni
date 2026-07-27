@@ -1,1 +1,1 @@
-const bool auditV3ProducerEnabled = false;
+const bool auditV3ProducerEnabled = true;
