@@ -9,6 +9,22 @@ typedef Json = Map<String, Object?>;
 const maxBytes = 1048577;
 final root = Directory('../../fixtures/audit/v3');
 
+Uint8List normalizeFixtureLineEndings(List<int> bytes) {
+  final normalized = <int>[];
+  for (var index = 0; index < bytes.length; index++) {
+    final byte = bytes[index];
+    if (byte == 0x0d && index + 1 < bytes.length && bytes[index + 1] == 0x0a) {
+      normalized.add(0x0a);
+      index++;
+    } else {
+      normalized.add(byte);
+    }
+  }
+  return Uint8List.fromList(normalized);
+}
+
+String fixtureSha(List<int> bytes) => sha256.convert(normalizeFixtureLineEndings(bytes)).toString();
+
 Json asObject(Object? value, String label) {
   if (value is! Map) throw FormatException('$label must be an object');
   return Map<String, Object?>.from(value);
@@ -62,9 +78,22 @@ void prove(Uint8List bytes, Object? value) {
 List<Json> load(String name) => File('${root.path}/$name').readAsLinesSync().where((line) => line.isNotEmpty).map((line) => asObject(jsonDecode(line), name)).toList();
 
 void main() {
+  test('normalizes LF and CRLF fixture bytes only for authoritative hashes', () {
+    final schema = File('${root.path}/schema.json').readAsBytesSync();
+    final authority = asObject(jsonDecode(utf8.decode(schema)), 'schema')['x-authority'];
+    final hashes = ['74c3f4900d00fe3f0642a973beed5ac1235230552136b6095294467fc1ca3e84', for (final key in ['canonical', 'rejections', 'frames']) asObject(asObject(authority, 'authority')['compact'], 'compact')[key]];
+    for (final (index, name) in ['schema.json', 'canonical-valid.jsonl', 'rejections.jsonl', 'frames.jsonl'].indexed) {
+      final lf = normalizeFixtureLineEndings(File('${root.path}/$name').readAsBytesSync());
+      final crlf = Uint8List.fromList([for (final byte in lf) if (byte == 0x0a) ...[0x0d, byte] else byte]);
+      expect(fixtureSha(lf), hashes[index]);
+      expect(fixtureSha(crlf), hashes[index]);
+    }
+    expect(normalizeFixtureLineEndings(Uint8List.fromList([0x61, 0x0d, 0x62, 0x0d, 0x0a, 0x63])), Uint8List.fromList([0x61, 0x0d, 0x62, 0x0a, 0x63]));
+  });
+
   test('loads the compact final v3 fixture authority', () {
     final schemaBytes = File('${root.path}/schema.json').readAsBytesSync();
-    expect(sha256.convert(schemaBytes).toString(), '74c3f4900d00fe3f0642a973beed5ac1235230552136b6095294467fc1ca3e84');
+    expect(fixtureSha(schemaBytes), '74c3f4900d00fe3f0642a973beed5ac1235230552136b6095294467fc1ca3e84');
     final schema = asObject(jsonDecode(utf8.decode(schemaBytes)), 'schema');
     expect(schema['version'], 1);
     final authority = asObject(schema['x-authority'], 'x-authority');
@@ -74,7 +103,7 @@ void main() {
     final names = ['canonical-valid.jsonl', 'rejections.jsonl', 'frames.jsonl'];
     final compact = asObject(authority['compact'], 'compact');
     for (var i = 0; i < names.length; i++) {
-      expect(sha256.convert(File('${root.path}/${names[i]}').readAsBytesSync()).toString(), compact[['canonical', 'rejections', 'frames'][i]]);
+      expect(fixtureSha(File('${root.path}/${names[i]}').readAsBytesSync()), compact[['canonical', 'rejections', 'frames'][i]]);
     }
     final shards = names.map(load).toList();
     expect(shards.map((rows) => rows.length), [12, 28, 24]);
