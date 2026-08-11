@@ -150,4 +150,119 @@ describe('normalizeSecurityEvidence', () => {
     expect(input.entries).toBe(entries);
     expect(lengthReads).toBe(1);
   });
+
+  it('retains the first valid fact and notices every identical duplicate', () => {
+    expect(
+      normalizeSecurityEvidence({
+        entries: [
+          { name: 'segmentClosed', status: 'verified', value: true },
+          { name: 'segmentClosed', status: 'verified', value: true },
+          { name: 'segmentClosed', status: 'verified', value: true },
+        ],
+      }),
+    ).toEqual({
+      facts: [{ name: 'segmentClosed', status: 'verified', value: true }],
+      errors: [],
+      notices: [
+        { name: 'segmentClosed', reason: 'R_IDENTICAL_DUPLICATE' },
+        { name: 'segmentClosed', reason: 'R_IDENTICAL_DUPLICATE' },
+      ],
+      conflicts: [],
+    });
+  });
+
+  it('compares later value and status differences against the original winner', () => {
+    expect(
+      normalizeSecurityEvidence({
+        entries: [
+          { name: 'hold', status: 'verified', value: 'active' },
+          { name: 'hold', status: 'verified', value: 'clear' },
+          { name: 'hold', status: 'failed', value: 'active' },
+        ],
+      }),
+    ).toEqual({
+      facts: [{ name: 'hold', status: 'verified', value: 'active' }],
+      errors: [],
+      notices: [],
+      conflicts: [
+        { name: 'hold', reason: 'R_CONFLICTING_DUPLICATE' },
+        { name: 'hold', reason: 'R_CONFLICTING_DUPLICATE' },
+      ],
+    });
+  });
+
+  it('keeps conflict and winner-identical notices with independent and invalid entries', () => {
+    expect(
+      normalizeSecurityEvidence({
+        entries: [
+          { name: 'segmentClosed', status: 'verified', value: true },
+          { name: 'segmentClosed', status: 'failed', value: true },
+          null,
+          { name: 'archiveEncrypted', status: 'verified', value: false },
+          { name: 'segmentClosed', status: 'verified', value: true },
+          { name: 'archiveEncrypted', status: 'verified', value: false },
+        ],
+      }),
+    ).toEqual({
+      facts: [
+        { name: 'segmentClosed', status: 'verified', value: true },
+        { name: 'archiveEncrypted', status: 'verified', value: false },
+      ],
+      errors: [{ code: 'E_CONTAINER', reason: 'R_NOT_OBJECT', entryIndex: 2 }],
+      notices: [
+        { name: 'segmentClosed', reason: 'R_IDENTICAL_DUPLICATE' },
+        { name: 'archiveEncrypted', reason: 'R_IDENTICAL_DUPLICATE' },
+      ],
+      conflicts: [{ name: 'segmentClosed', reason: 'R_CONFLICTING_DUPLICATE' }],
+    });
+  });
+
+  it('creates fresh duplicate tracking for stable repeated invocations', () => {
+    const input = {
+      entries: [
+        { name: 'category', status: 'verified', value: 'fiscal/DGI' },
+        { name: 'category', status: 'verified', value: 'fiscal/DGI' },
+        { name: 'category', status: 'failed', value: 'fiscal/DGI' },
+      ],
+    };
+
+    const first = normalizeSecurityEvidence(input);
+
+    expect(normalizeSecurityEvidence(input)).toEqual(first);
+    expect(first).toEqual({
+      facts: [{ name: 'category', status: 'verified', value: 'fiscal/DGI' }],
+      errors: [],
+      notices: [{ name: 'category', reason: 'R_IDENTICAL_DUPLICATE' }],
+      conflicts: [{ name: 'category', reason: 'R_CONFLICTING_DUPLICATE' }],
+    });
+  });
+
+  it('keeps duplicate diagnostics stable across invalid interleaving', () => {
+    const input = {
+      entries: [
+        { name: 'hold', status: 'verified', value: 'clear' },
+        { name: 'hold', status: 'verified', value: 'clear' },
+        { name: 'hold', status: 'failed', value: 'clear' },
+        { name: 'hold', status: 'verified', value: 'invalid-hold' },
+      ],
+    };
+
+    const first = normalizeSecurityEvidence(input);
+    const second = normalizeSecurityEvidence(input);
+
+    expect(second).toEqual(first);
+    expect(first).toEqual({
+      facts: [{ name: 'hold', status: 'verified', value: 'clear' }],
+      errors: [
+        {
+          code: 'E_VALUE',
+          reason: 'R_INVALID_SEMANTIC_VALUE',
+          name: 'hold',
+          entryIndex: 3,
+        },
+      ],
+      notices: [{ name: 'hold', reason: 'R_IDENTICAL_DUPLICATE' }],
+      conflicts: [{ name: 'hold', reason: 'R_CONFLICTING_DUPLICATE' }],
+    });
+  });
 });
