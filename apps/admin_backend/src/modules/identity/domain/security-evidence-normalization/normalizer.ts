@@ -4,7 +4,9 @@ import {
   isPrerequisiteStatus,
   isSecurityEvidenceCategory,
   type CanonicalFact,
+  type Conflict,
   type ErrorData,
+  type Notice,
   type PrerequisiteName,
   type PrerequisiteStatus,
 } from '../security-evidence-vocabulary';
@@ -145,6 +147,12 @@ const isNormalizationEntryError = (
   value: CanonicalFact | NormalizationEntryError,
 ): value is NormalizationEntryError => 'entryIndex' in value;
 
+const isIdenticalFact = (
+  winner: CanonicalFact,
+  candidate: CanonicalFact,
+): boolean =>
+  winner.status === candidate.status && winner.value === candidate.value;
+
 export const normalizeSecurityEvidence = (
   input: unknown,
 ): NormalizationResult => {
@@ -155,6 +163,9 @@ export const normalizeSecurityEvidence = (
 
   const facts: CanonicalFact[] = [];
   const errors: NormalizationEntryError[] = [];
+  const notices: Notice[] = [];
+  const conflicts: Conflict[] = [];
+  const winners = new Map<PrerequisiteName, CanonicalFact>();
   try {
     const length = entries.length;
     if (!Number.isSafeInteger(length) || length < 0) {
@@ -167,11 +178,28 @@ export const normalizeSecurityEvidence = (
         continue;
       }
 
-      facts.push(normalized);
+      const winner = winners.get(normalized.name);
+      if (!winner) {
+        winners.set(normalized.name, normalized);
+        facts.push(normalized);
+        continue;
+      }
+
+      if (isIdenticalFact(winner, normalized)) {
+        notices.push({
+          name: normalized.name,
+          reason: 'R_IDENTICAL_DUPLICATE',
+        });
+      } else {
+        conflicts.push({
+          name: normalized.name,
+          reason: 'R_CONFLICTING_DUPLICATE',
+        });
+      }
     }
   } catch {
     return { ...EMPTY_RESULT, errors: [containerError()] };
   }
 
-  return { facts, errors, notices: [], conflicts: [] };
+  return { facts, errors, notices, conflicts };
 };
