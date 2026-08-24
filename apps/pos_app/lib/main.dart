@@ -51,6 +51,8 @@ import 'ui/features/sales/sales_history_view.dart';
 import 'presentation/features/sales/view_models/sales_history_view_model.dart';
 import 'ui/features/sales/reports/dgi_report_view_model.dart';
 import 'ui/features/sales/reports/dgi_report_view.dart';
+import 'ui/features/cash/cash_shift_view.dart';
+import 'ui/features/cash/cash_shift_view_model.dart';
 import 'ui/features/config/business_profile/business_profile_view_model.dart';
 import 'ui/features/config/business_profile/business_profile_view.dart';
 import 'ui/features/identity/audit/audit_log_view_model.dart';
@@ -238,6 +240,12 @@ void main() async {
           create: (_) => AuditLogViewModel(auditRepository),
         ),
         ChangeNotifierProvider(create: (_) => SalesHistoryViewModel(database)),
+        ChangeNotifierProvider(
+          create: (_) => CashShiftViewModel.fromDatabase(
+            database: database,
+            currentUserId: 'user-cajero',
+          ),
+        ),
         ChangeNotifierProvider(
           create: (_) => SaleViewModel(
             salesRepository,
@@ -441,6 +449,7 @@ class MyApp extends StatelessWidget {
           ),
           '/sales/reports': (context) => const DgiReportView(),
           '/sales/history': (context) => const SalesHistoryView(),
+          '/sales/cash': (context) => const CashShiftView(),
           '/identity/users': (context) => const UserManagementView(),
           '/config/profile': (context) => const BusinessProfileView(),
           '/identity/audit': (context) => const AuditLogView(),

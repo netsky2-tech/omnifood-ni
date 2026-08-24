@@ -19,6 +19,12 @@ import { InventoryModule } from '../inventory/inventory.module';
 import { User } from '../identity/entities/user.entity';
 import { SyncCreditNoteAuthGuard } from './guards/sync-credit-note-auth.guard';
 
+import { CashShiftSession } from './entities/cash-shift.entity';
+import { CashMovement } from './entities/cash-movement.entity';
+import { CashShiftService } from './services/cash-shift.service';
+
+import { CashShiftController } from './controllers/cash-shift.controller';
+
 export const getRequiredSalesJwtSecret = (
   configService: ConfigService,
 ): string => {
@@ -49,10 +55,23 @@ export const getRequiredSalesJwtSecret = (
       InventorySyncReceipt,
       InventorySyncOutbox,
       User,
+      CashShiftSession,
+      CashMovement,
     ]),
   ],
-  controllers: [InvoicesController, SyncBatchController, ReportsController],
-  providers: [InvoicesService, AuthGuard, RolesGuard, SyncCreditNoteAuthGuard],
-  exports: [InvoicesService],
+  controllers: [
+    InvoicesController,
+    SyncBatchController,
+    ReportsController,
+    CashShiftController,
+  ],
+  providers: [
+    InvoicesService,
+    CashShiftService,
+    AuthGuard,
+    RolesGuard,
+    SyncCreditNoteAuthGuard,
+  ],
+  exports: [InvoicesService, CashShiftService],
 })
 export class SalesModule {}

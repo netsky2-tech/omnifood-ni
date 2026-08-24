@@ -1265,6 +1265,89 @@ final migration31_32 = Migration(31, 32, (database) async {
   ''');
 });
 
+final migration32_33 = Migration(32, 33, (database) async {
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS `cashier_sessions` (
+      `id` TEXT NOT NULL,
+      `user_id` TEXT NOT NULL,
+      `terminal_id` TEXT NOT NULL DEFAULT 'default-terminal',
+      `opened_at` INTEGER NOT NULL,
+      `tipo_modelo` TEXT NOT NULL DEFAULT 'CAJA_CENTRAL',
+      `closed_at` INTEGER,
+      `opening_balance_nio` REAL NOT NULL DEFAULT 0.0,
+      `opening_balance_usd` REAL NOT NULL DEFAULT 0.0,
+      `closing_counted_nio` REAL,
+      `closing_counted_usd` REAL,
+      `expected_nio` REAL NOT NULL DEFAULT 0.0,
+      `expected_usd` REAL NOT NULL DEFAULT 0.0,
+      `difference_nio` REAL,
+      `difference_usd` REAL,
+      `z_report_sequence` INTEGER,
+      `is_closed` INTEGER NOT NULL DEFAULT 0,
+      `supervisor_id` TEXT,
+      `notes` TEXT,
+      `sync_status` TEXT NOT NULL DEFAULT 'pending',
+      PRIMARY KEY (`id`)
+    )
+  ''');
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS `cash_movements` (
+      `id` TEXT NOT NULL,
+      `shift_id` TEXT NOT NULL,
+      `terminal_id` TEXT NOT NULL,
+      `type` TEXT NOT NULL,
+      `amount_nio` REAL NOT NULL,
+      `amount_usd` REAL NOT NULL,
+      `reason` TEXT NOT NULL,
+      `authorized_by_user_id` TEXT,
+      `timestamp` INTEGER NOT NULL,
+      `sync_status` TEXT NOT NULL,
+      PRIMARY KEY (`id`)
+    )
+  ''');
+  final columns = await database.rawQuery('PRAGMA table_info(cashier_sessions)');
+  final columnNames = columns.map((c) => c['name'] as String).toSet();
+  if (!columnNames.contains('terminal_id')) {
+    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `terminal_id` TEXT NOT NULL DEFAULT 'default-terminal'");
+  }
+  if (!columnNames.contains('opening_balance_nio')) {
+    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `opening_balance_nio` REAL NOT NULL DEFAULT 0.0");
+  }
+  if (!columnNames.contains('opening_balance_usd')) {
+    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `opening_balance_usd` REAL NOT NULL DEFAULT 0.0");
+  }
+  if (!columnNames.contains('closing_counted_nio')) {
+    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `closing_counted_nio` REAL");
+  }
+  if (!columnNames.contains('closing_counted_usd')) {
+    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `closing_counted_usd` REAL");
+  }
+  if (!columnNames.contains('expected_nio')) {
+    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `expected_nio` REAL NOT NULL DEFAULT 0.0");
+  }
+  if (!columnNames.contains('expected_usd')) {
+    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `expected_usd` REAL NOT NULL DEFAULT 0.0");
+  }
+  if (!columnNames.contains('difference_nio')) {
+    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `difference_nio` REAL");
+  }
+  if (!columnNames.contains('difference_usd')) {
+    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `difference_usd` REAL");
+  }
+  if (!columnNames.contains('z_report_sequence')) {
+    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `z_report_sequence` INTEGER");
+  }
+  if (!columnNames.contains('supervisor_id')) {
+    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `supervisor_id` TEXT");
+  }
+  if (!columnNames.contains('notes')) {
+    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `notes` TEXT");
+  }
+  if (!columnNames.contains('sync_status')) {
+    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `sync_status` TEXT NOT NULL DEFAULT 'pending'");
+  }
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -1288,4 +1371,5 @@ final allMigrations = [
   migration29_30,
   migration30_31,
   migration31_32,
+  migration32_33,
 ];

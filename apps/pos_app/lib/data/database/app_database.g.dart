@@ -132,6 +132,8 @@ class _$AppDatabase extends AppDatabase {
 
   CashierSessionDao? _cashierSessionDaoInstance;
 
+  CashMovementDao? _cashMovementDaoInstance;
+
   HoldTicketDao? _holdTicketDaoInstance;
 
   PromotionDao? _promotionDaoInstance;
@@ -142,7 +144,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 32,
+      version: 33,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -216,7 +218,9 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `tax_configurations` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `rate` REAL NOT NULL, `is_active` INTEGER NOT NULL, `is_default` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `cashier_sessions` (`id` TEXT NOT NULL, `user_id` TEXT NOT NULL, `opened_at` INTEGER NOT NULL, `tipo_modelo` TEXT NOT NULL, `closed_at` INTEGER, `opening_balance` REAL NOT NULL, `closing_balance` REAL, `total_sales` REAL, `total_expected` REAL, `is_closed` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `cashier_sessions` (`id` TEXT NOT NULL, `user_id` TEXT NOT NULL, `terminal_id` TEXT NOT NULL, `opened_at` INTEGER NOT NULL, `tipo_modelo` TEXT NOT NULL, `closed_at` INTEGER, `opening_balance_nio` REAL NOT NULL, `opening_balance_usd` REAL NOT NULL, `closing_counted_nio` REAL, `closing_counted_usd` REAL, `expected_nio` REAL NOT NULL, `expected_usd` REAL NOT NULL, `difference_nio` REAL, `difference_usd` REAL, `z_report_sequence` INTEGER, `is_closed` INTEGER NOT NULL, `supervisor_id` TEXT, `notes` TEXT, `sync_status` TEXT NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `cash_movements` (`id` TEXT NOT NULL, `shift_id` TEXT NOT NULL, `terminal_id` TEXT NOT NULL, `type` TEXT NOT NULL, `amount_nio` REAL NOT NULL, `amount_usd` REAL NOT NULL, `reason` TEXT NOT NULL, `authorized_by_user_id` TEXT, `timestamp` INTEGER NOT NULL, `sync_status` TEXT NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `hold_tickets` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `global_tax_exempt` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
@@ -409,6 +413,12 @@ class _$AppDatabase extends AppDatabase {
   CashierSessionDao get cashierSessionDao {
     return _cashierSessionDaoInstance ??=
         _$CashierSessionDao(database, changeListener);
+  }
+
+  @override
+  CashMovementDao get cashMovementDao {
+    return _cashMovementDaoInstance ??=
+        _$CashMovementDao(database, changeListener);
   }
 
   @override
@@ -3517,14 +3527,23 @@ class _$CashierSessionDao extends CashierSessionDao {
             (CashierSessionEntity item) => <String, Object?>{
                   'id': item.id,
                   'user_id': item.userId,
+                  'terminal_id': item.terminalId,
                   'opened_at': item.openedAt,
                   'tipo_modelo': item.tipoModelo,
                   'closed_at': item.closedAt,
-                  'opening_balance': item.openingBalance,
-                  'closing_balance': item.closingBalance,
-                  'total_sales': item.totalSales,
-                  'total_expected': item.totalExpected,
-                  'is_closed': item.isClosed ? 1 : 0
+                  'opening_balance_nio': item.openingBalanceNio,
+                  'opening_balance_usd': item.openingBalanceUsd,
+                  'closing_counted_nio': item.closingCountedNio,
+                  'closing_counted_usd': item.closingCountedUsd,
+                  'expected_nio': item.expectedNio,
+                  'expected_usd': item.expectedUsd,
+                  'difference_nio': item.differenceNio,
+                  'difference_usd': item.differenceUsd,
+                  'z_report_sequence': item.zReportSequence,
+                  'is_closed': item.isClosed ? 1 : 0,
+                  'supervisor_id': item.supervisorId,
+                  'notes': item.notes,
+                  'sync_status': item.syncStatus
                 }),
         _cashierSessionEntityUpdateAdapter = UpdateAdapter(
             database,
@@ -3533,14 +3552,23 @@ class _$CashierSessionDao extends CashierSessionDao {
             (CashierSessionEntity item) => <String, Object?>{
                   'id': item.id,
                   'user_id': item.userId,
+                  'terminal_id': item.terminalId,
                   'opened_at': item.openedAt,
                   'tipo_modelo': item.tipoModelo,
                   'closed_at': item.closedAt,
-                  'opening_balance': item.openingBalance,
-                  'closing_balance': item.closingBalance,
-                  'total_sales': item.totalSales,
-                  'total_expected': item.totalExpected,
-                  'is_closed': item.isClosed ? 1 : 0
+                  'opening_balance_nio': item.openingBalanceNio,
+                  'opening_balance_usd': item.openingBalanceUsd,
+                  'closing_counted_nio': item.closingCountedNio,
+                  'closing_counted_usd': item.closingCountedUsd,
+                  'expected_nio': item.expectedNio,
+                  'expected_usd': item.expectedUsd,
+                  'difference_nio': item.differenceNio,
+                  'difference_usd': item.differenceUsd,
+                  'z_report_sequence': item.zReportSequence,
+                  'is_closed': item.isClosed ? 1 : 0,
+                  'supervisor_id': item.supervisorId,
+                  'notes': item.notes,
+                  'sync_status': item.syncStatus
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -3560,14 +3588,23 @@ class _$CashierSessionDao extends CashierSessionDao {
         mapper: (Map<String, Object?> row) => CashierSessionEntity(
             id: row['id'] as String,
             userId: row['user_id'] as String,
+            terminalId: row['terminal_id'] as String,
             openedAt: row['opened_at'] as int,
             tipoModelo: row['tipo_modelo'] as String,
             closedAt: row['closed_at'] as int?,
-            openingBalance: row['opening_balance'] as double,
-            closingBalance: row['closing_balance'] as double?,
-            totalSales: row['total_sales'] as double?,
-            totalExpected: row['total_expected'] as double?,
-            isClosed: (row['is_closed'] as int) != 0),
+            openingBalanceNio: row['opening_balance_nio'] as double?,
+            openingBalanceUsd: row['opening_balance_usd'] as double,
+            closingCountedNio: row['closing_counted_nio'] as double?,
+            closingCountedUsd: row['closing_counted_usd'] as double?,
+            expectedNio: row['expected_nio'] as double?,
+            expectedUsd: row['expected_usd'] as double,
+            differenceNio: row['difference_nio'] as double?,
+            differenceUsd: row['difference_usd'] as double?,
+            zReportSequence: row['z_report_sequence'] as int?,
+            isClosed: (row['is_closed'] as int) != 0,
+            supervisorId: row['supervisor_id'] as String?,
+            notes: row['notes'] as String?,
+            syncStatus: row['sync_status'] as String),
         arguments: [id]);
   }
 
@@ -3578,14 +3615,23 @@ class _$CashierSessionDao extends CashierSessionDao {
         mapper: (Map<String, Object?> row) => CashierSessionEntity(
             id: row['id'] as String,
             userId: row['user_id'] as String,
+            terminalId: row['terminal_id'] as String,
             openedAt: row['opened_at'] as int,
             tipoModelo: row['tipo_modelo'] as String,
             closedAt: row['closed_at'] as int?,
-            openingBalance: row['opening_balance'] as double,
-            closingBalance: row['closing_balance'] as double?,
-            totalSales: row['total_sales'] as double?,
-            totalExpected: row['total_expected'] as double?,
-            isClosed: (row['is_closed'] as int) != 0));
+            openingBalanceNio: row['opening_balance_nio'] as double?,
+            openingBalanceUsd: row['opening_balance_usd'] as double,
+            closingCountedNio: row['closing_counted_nio'] as double?,
+            closingCountedUsd: row['closing_counted_usd'] as double?,
+            expectedNio: row['expected_nio'] as double?,
+            expectedUsd: row['expected_usd'] as double,
+            differenceNio: row['difference_nio'] as double?,
+            differenceUsd: row['difference_usd'] as double?,
+            zReportSequence: row['z_report_sequence'] as int?,
+            isClosed: (row['is_closed'] as int) != 0,
+            supervisorId: row['supervisor_id'] as String?,
+            notes: row['notes'] as String?,
+            syncStatus: row['sync_status'] as String));
   }
 
   @override
@@ -3595,14 +3641,30 @@ class _$CashierSessionDao extends CashierSessionDao {
         mapper: (Map<String, Object?> row) => CashierSessionEntity(
             id: row['id'] as String,
             userId: row['user_id'] as String,
+            terminalId: row['terminal_id'] as String,
             openedAt: row['opened_at'] as int,
             tipoModelo: row['tipo_modelo'] as String,
             closedAt: row['closed_at'] as int?,
-            openingBalance: row['opening_balance'] as double,
-            closingBalance: row['closing_balance'] as double?,
-            totalSales: row['total_sales'] as double?,
-            totalExpected: row['total_expected'] as double?,
-            isClosed: (row['is_closed'] as int) != 0));
+            openingBalanceNio: row['opening_balance_nio'] as double?,
+            openingBalanceUsd: row['opening_balance_usd'] as double,
+            closingCountedNio: row['closing_counted_nio'] as double?,
+            closingCountedUsd: row['closing_counted_usd'] as double?,
+            expectedNio: row['expected_nio'] as double?,
+            expectedUsd: row['expected_usd'] as double,
+            differenceNio: row['difference_nio'] as double?,
+            differenceUsd: row['difference_usd'] as double?,
+            zReportSequence: row['z_report_sequence'] as int?,
+            isClosed: (row['is_closed'] as int) != 0,
+            supervisorId: row['supervisor_id'] as String?,
+            notes: row['notes'] as String?,
+            syncStatus: row['sync_status'] as String));
+  }
+
+  @override
+  Future<int?> countClosedSessions() async {
+    return _queryAdapter.query(
+        'SELECT COUNT(*) FROM cashier_sessions WHERE is_closed = 1',
+        mapper: (Map<String, Object?> row) => row.values.first as int);
   }
 
   @override
@@ -3615,6 +3677,97 @@ class _$CashierSessionDao extends CashierSessionDao {
   Future<void> updateSession(CashierSessionEntity session) async {
     await _cashierSessionEntityUpdateAdapter.update(
         session, OnConflictStrategy.replace);
+  }
+}
+
+class _$CashMovementDao extends CashMovementDao {
+  _$CashMovementDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _cashMovementEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'cash_movements',
+            (CashMovementEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'shift_id': item.shiftId,
+                  'terminal_id': item.terminalId,
+                  'type': item.type,
+                  'amount_nio': item.amountNio,
+                  'amount_usd': item.amountUsd,
+                  'reason': item.reason,
+                  'authorized_by_user_id': item.authorizedByUserId,
+                  'timestamp': item.timestamp,
+                  'sync_status': item.syncStatus
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<CashMovementEntity>
+      _cashMovementEntityInsertionAdapter;
+
+  @override
+  Future<CashMovementEntity?> getMovementById(String id) async {
+    return _queryAdapter.query('SELECT * FROM cash_movements WHERE id = ?1',
+        mapper: (Map<String, Object?> row) => CashMovementEntity(
+            id: row['id'] as String,
+            shiftId: row['shift_id'] as String,
+            terminalId: row['terminal_id'] as String,
+            type: row['type'] as String,
+            amountNio: row['amount_nio'] as double,
+            amountUsd: row['amount_usd'] as double,
+            reason: row['reason'] as String,
+            authorizedByUserId: row['authorized_by_user_id'] as String?,
+            timestamp: row['timestamp'] as int,
+            syncStatus: row['sync_status'] as String),
+        arguments: [id]);
+  }
+
+  @override
+  Future<List<CashMovementEntity>> getMovementsByShiftId(String shiftId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM cash_movements WHERE shift_id = ?1 ORDER BY timestamp ASC',
+        mapper: (Map<String, Object?> row) => CashMovementEntity(id: row['id'] as String, shiftId: row['shift_id'] as String, terminalId: row['terminal_id'] as String, type: row['type'] as String, amountNio: row['amount_nio'] as double, amountUsd: row['amount_usd'] as double, reason: row['reason'] as String, authorizedByUserId: row['authorized_by_user_id'] as String?, timestamp: row['timestamp'] as int, syncStatus: row['sync_status'] as String),
+        arguments: [shiftId]);
+  }
+
+  @override
+  Future<List<CashMovementEntity>> getMovementsBySyncStatus(
+      String status) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM cash_movements WHERE sync_status = ?1',
+        mapper: (Map<String, Object?> row) => CashMovementEntity(
+            id: row['id'] as String,
+            shiftId: row['shift_id'] as String,
+            terminalId: row['terminal_id'] as String,
+            type: row['type'] as String,
+            amountNio: row['amount_nio'] as double,
+            amountUsd: row['amount_usd'] as double,
+            reason: row['reason'] as String,
+            authorizedByUserId: row['authorized_by_user_id'] as String?,
+            timestamp: row['timestamp'] as int,
+            syncStatus: row['sync_status'] as String),
+        arguments: [status]);
+  }
+
+  @override
+  Future<void> updateSyncStatus(
+    String id,
+    String status,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE cash_movements SET sync_status = ?2 WHERE id = ?1',
+        arguments: [id, status]);
+  }
+
+  @override
+  Future<void> insertMovement(CashMovementEntity movement) async {
+    await _cashMovementEntityInsertionAdapter.insert(
+        movement, OnConflictStrategy.replace);
   }
 }
 

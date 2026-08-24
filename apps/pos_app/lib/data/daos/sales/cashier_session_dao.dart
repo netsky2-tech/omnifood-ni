@@ -17,4 +17,7 @@ abstract class CashierSessionDao {
 
   @Query('SELECT * FROM cashier_sessions ORDER BY opened_at DESC')
   Future<List<CashierSessionEntity>> getAllSessions();
+
+  @Query('SELECT COUNT(*) FROM cashier_sessions WHERE is_closed = 1')
+  Future<int?> countClosedSessions();
 }

@@ -325,8 +325,10 @@ class SaleViewModel extends ChangeNotifier {
       isClosed: true,
       closedAt: DateTime.now(),
       closingBalance: closingBalance,
+      closingCountedNio: closingBalance,
       totalSales: totalSales,
-      totalExpected: _sessionExpected[PaymentMethod.cash],
+      totalExpected: _sessionExpected[PaymentMethod.cash] ?? 0.0,
+      expectedNio: _sessionExpected[PaymentMethod.cash] ?? 0.0,
     );
     await _database.cashierSessionDao.updateSession(
       SalesMapper.toSessionEntity(updated),

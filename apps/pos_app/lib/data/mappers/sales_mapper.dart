@@ -88,6 +88,7 @@ class SalesMapper {
     return CashierSession(
       id: entity.id,
       userId: entity.userId,
+      terminalId: entity.terminalId,
       openedAt: DateTime.fromMillisecondsSinceEpoch(entity.openedAt),
       tipoModelo: entity.tipoModelo == 'CARTERA_MESERO'
           ? CashSessionModel.carteraMesero
@@ -95,11 +96,23 @@ class SalesMapper {
       closedAt: entity.closedAt != null
           ? DateTime.fromMillisecondsSinceEpoch(entity.closedAt!)
           : null,
-      openingBalance: entity.openingBalance,
-      closingBalance: entity.closingBalance,
+      openingBalance: entity.openingBalanceNio,
+      openingBalanceNio: entity.openingBalanceNio,
+      openingBalanceUsd: entity.openingBalanceUsd,
+      closingBalance: entity.closingCountedNio,
+      closingCountedNio: entity.closingCountedNio,
+      closingCountedUsd: entity.closingCountedUsd,
       totalSales: entity.totalSales,
-      totalExpected: entity.totalExpected,
+      totalExpected: entity.expectedNio,
+      expectedNio: entity.expectedNio,
+      expectedUsd: entity.expectedUsd,
+      differenceNio: entity.differenceNio,
+      differenceUsd: entity.differenceUsd,
+      zReportSequence: entity.zReportSequence,
       isClosed: entity.isClosed,
+      supervisorId: entity.supervisorId,
+      notes: entity.notes,
+      syncStatus: entity.syncStatus,
     );
   }
 
@@ -107,16 +120,25 @@ class SalesMapper {
     return CashierSessionEntity(
       id: domain.id,
       userId: domain.userId,
+      terminalId: domain.terminalId,
       openedAt: domain.openedAt.millisecondsSinceEpoch,
       tipoModelo: domain.tipoModelo == CashSessionModel.carteraMesero
           ? 'CARTERA_MESERO'
           : 'CAJA_CENTRAL',
       closedAt: domain.closedAt?.millisecondsSinceEpoch,
-      openingBalance: domain.openingBalance,
-      closingBalance: domain.closingBalance,
-      totalSales: domain.totalSales,
-      totalExpected: domain.totalExpected,
+      openingBalanceNio: domain.openingBalanceNio > 0 ? domain.openingBalanceNio : domain.openingBalance,
+      openingBalanceUsd: domain.openingBalanceUsd,
+      closingCountedNio: domain.closingCountedNio ?? domain.closingBalance,
+      closingCountedUsd: domain.closingCountedUsd,
+      expectedNio: domain.expectedNio > 0 ? domain.expectedNio : domain.totalExpected,
+      expectedUsd: domain.expectedUsd,
+      differenceNio: domain.differenceNio,
+      differenceUsd: domain.differenceUsd,
+      zReportSequence: domain.zReportSequence,
       isClosed: domain.isClosed,
+      supervisorId: domain.supervisorId,
+      notes: domain.notes,
+      syncStatus: domain.syncStatus,
     );
   }
 

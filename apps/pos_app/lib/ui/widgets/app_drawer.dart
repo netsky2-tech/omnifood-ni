@@ -87,6 +87,14 @@ class _AppDrawerState extends State<AppDrawer> {
                       Navigator.pushNamed(context, '/sales/history');
                     },
                   ),
+                  ListTile(
+                    leading: const Icon(Icons.point_of_sale),
+                    title: const Text('Control de Caja y Turnos'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.pushNamed(context, '/sales/cash');
+                    },
+                  ),
                   if (_canAccessDgiReports)
                     ListTile(
                       leading: const Icon(Icons.analytics),

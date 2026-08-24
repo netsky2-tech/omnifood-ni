@@ -30,6 +30,7 @@ import 'package:pos_app/data/daos/sales/payment_dao.dart';
 import 'package:pos_app/data/daos/sales/tax_config_dao.dart';
 import 'package:pos_app/data/daos/sales/sales_transaction_dao.dart';
 import 'package:pos_app/data/daos/sales/cashier_session_dao.dart';
+import 'package:pos_app/data/daos/sales/cash_movement_dao.dart';
 import 'package:pos_app/data/daos/sales/hold_ticket_dao.dart';
 import 'package:pos_app/data/daos/sales/promotion_dao.dart';
 import 'package:pos_app/data/daos/local_config_dao.dart';
@@ -61,13 +62,14 @@ import 'package:pos_app/data/models/sales/invoice_item_modifier_entity.dart';
 import 'package:pos_app/data/models/sales/payment_entity.dart';
 import 'package:pos_app/data/models/sales/tax_config_entity.dart';
 import 'package:pos_app/data/models/sales/cashier_session_entity.dart';
+import 'package:pos_app/data/models/sales/cash_movement_entity.dart';
 import 'package:pos_app/data/models/sales/hold_ticket_entity.dart';
 import 'package:pos_app/data/models/sales/promotion_entity.dart';
 
 part 'app_database.g.dart'; // generated code
 
 @Database(
-  version: 32,
+  version: 33,
   entities: [
     UserEntity,
     SecurityProfileEntity,
@@ -99,6 +101,7 @@ part 'app_database.g.dart'; // generated code
     PaymentEntity,
     TaxConfigEntity,
     CashierSessionEntity,
+    CashMovementEntity,
     HoldTicketEntity,
     HoldTicketItemEntity,
     PromotionEntity,
@@ -135,6 +138,7 @@ abstract class AppDatabase extends FloorDatabase {
   TaxConfigDao get taxConfigDao;
   SalesTransactionDao get salesTransactionDao;
   CashierSessionDao get cashierSessionDao;
+  CashMovementDao get cashMovementDao;
   HoldTicketDao get holdTicketDao;
   PromotionDao get promotionDao;
 }
