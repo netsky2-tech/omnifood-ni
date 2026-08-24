@@ -183,4 +183,32 @@ void main() {
       expect(legacy.componentUom, isNull);
     },
   );
+
+  test('calculates draft theoretical cost, unit cost, and profit margins accurately', () async {
+    await viewModel.loadInitialData();
+    await viewModel.selectProduct(repository._products.first);
+
+    // Add Leche (cost: 2.0 NIO/lt, gross: 3.0 lt, shrink: 10%) -> cost = 3.0 * 2.0 = 6.0 NIO
+    viewModel.addDraftComponent(
+      ingredientId: 'ins-1',
+      ingredientName: 'Leche',
+      ingredientType: IngredientType.insumo,
+      grossQuantity: 3.0,
+      technicalShrinkPct: 10.0,
+    );
+
+    // Calculate with yield of 2 portions and selling price of 10.0 NIO
+    final breakdown = viewModel.calculateDraftTheoreticalCost(
+      yieldQuantity: 2.0,
+      sellingPrice: 10.0,
+    );
+
+    expect(breakdown.totalBatchCostNio, 6.0);
+    expect(breakdown.unitTheoreticalCostNio, 3.0);
+    expect(breakdown.grossMarginNio, 7.0); // 10 - 3 = 7
+    expect(breakdown.grossMarginPct, 70.0); // 7 / 10 = 70%
+    expect(breakdown.componentCosts, hasLength(1));
+    expect(breakdown.componentCosts.first.totalCostNio, 6.0);
+    expect(breakdown.componentCosts.first.costPercentage, 100.0);
+  });
 }

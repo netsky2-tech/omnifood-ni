@@ -36,6 +36,39 @@ export interface PurchaseCppResult {
   projectedCppNio: number;
 }
 
+export interface RecipeTheoreticalCostComponent {
+  ingredientId: string;
+  ingredientName?: string;
+  ingredientType: string;
+  grossQuantity: number;
+  technicalShrinkPct: number;
+  unitCostNio: number;
+  totalCostNio: number;
+  costPercentage: number;
+}
+
+export interface RecipeTheoreticalCostResult {
+  totalBatchCostNio: number;
+  unitTheoreticalCostNio: number;
+  yieldQuantity: number;
+  components: RecipeTheoreticalCostComponent[];
+  grossMarginNio?: number;
+  grossMarginPct?: number;
+}
+
+export interface CalculateRecipeTheoreticalCostInput {
+  yieldQuantity: number;
+  sellingPriceNio?: number;
+  components: {
+    ingredientId: string;
+    ingredientName?: string;
+    ingredientType: string;
+    grossQuantity: number;
+    technicalShrinkPct: number;
+    unitCostNio: number;
+  }[];
+}
+
 @Injectable()
 export class CostCalculatorService {
   /**
@@ -86,6 +119,57 @@ export class CostCalculatorService {
       projectedStock,
       unitCostNio,
       projectedCppNio,
+    };
+  }
+
+  /**
+   * Calculates theoretical cost and margin of a recipe based on component gross quantities and CPPs.
+   */
+  calculateRecipeTheoreticalCost(
+    input: CalculateRecipeTheoreticalCostInput,
+  ): RecipeTheoreticalCostResult {
+    const yieldQuantity = input.yieldQuantity > 0 ? input.yieldQuantity : 1;
+    let totalBatchCostNio = 0;
+
+    const rawComponents = input.components.map((c) => {
+      const lineCost = roundPurchaseCpp(Number(c.grossQuantity) * Number(c.unitCostNio));
+      totalBatchCostNio = roundPurchaseCpp(totalBatchCostNio + lineCost);
+      return {
+        ingredientId: c.ingredientId,
+        ingredientName: c.ingredientName,
+        ingredientType: c.ingredientType,
+        grossQuantity: roundPurchaseCpp(Number(c.grossQuantity)),
+        technicalShrinkPct: roundPurchaseCpp(Number(c.technicalShrinkPct)),
+        unitCostNio: roundPurchaseCpp(Number(c.unitCostNio)),
+        totalCostNio: lineCost,
+      };
+    });
+
+    const components: RecipeTheoreticalCostComponent[] = rawComponents.map((c) => ({
+      ...c,
+      costPercentage:
+        totalBatchCostNio > 0
+          ? roundPurchaseCpp((c.totalCostNio / totalBatchCostNio) * 100)
+          : 0,
+    }));
+
+    const unitTheoreticalCostNio = roundPurchaseCpp(totalBatchCostNio / yieldQuantity);
+
+    let grossMarginNio: number | undefined;
+    let grossMarginPct: number | undefined;
+
+    if (input.sellingPriceNio != null && input.sellingPriceNio > 0) {
+      grossMarginNio = roundPurchaseCpp(input.sellingPriceNio - unitTheoreticalCostNio);
+      grossMarginPct = roundPurchaseCpp((grossMarginNio / input.sellingPriceNio) * 100);
+    }
+
+    return {
+      totalBatchCostNio,
+      unitTheoreticalCostNio,
+      yieldQuantity,
+      components,
+      grossMarginNio,
+      grossMarginPct,
     };
   }
 

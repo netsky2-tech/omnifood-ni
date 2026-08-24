@@ -466,25 +466,55 @@ describe('RecipeService', () => {
       expect(explosion.get('00000000-0000-4000-8000-000000000ins')).toBe(1);
     });
 
-    it('rejects SUB_RECIPE components (multi-level BOM ingestion deferred)', async () => {
-      productRepo.findOne.mockResolvedValue({ id: buildDto().productId });
+    it('successfully ingests valid SUB_RECIPE component and persists with reference version', async () => {
+      productRepo.findOne.mockImplementation(async ({ where }: { where: { id: string } }) => {
+        return { id: where.id, tenant_id: 'tenant-A' };
+      });
+      manager.findOne.mockResolvedValue(null);
+
+      await service.ingestPosVersion({
+        tenantId: 'tenant-A',
+        dto: buildDto({
+          components: [
+            {
+              ingredientId: '00000000-0000-4000-8000-000000000sub',
+              ingredientName: 'Salsa sub-receta',
+              ingredientType: 'SUB_RECIPE',
+              grossQuantity: 0.25,
+              technicalShrinkPct: 0,
+              componentUom: 'kg',
+              referenceVersionId: 'v-sub-1',
+            },
+          ],
+        }),
+      });
+
+      const detail = createdDetails[0] as unknown as RecipeDetail;
+      expect(detail.ingredient_type).toBe('SUB_RECIPE');
+      expect(detail.reference_version_id).toBe('v-sub-1');
+      expect(detail.gross_quantity).toBe(0.25);
+    });
+
+    it('rejects self-referencing SUB_RECIPE components with circular dependency error', async () => {
+      const rootId = buildDto().productId;
+      productRepo.findOne.mockResolvedValue({ id: rootId });
+
       await expect(
         service.ingestPosVersion({
           tenantId: 'tenant-A',
           dto: buildDto({
             components: [
               {
-                ingredientId: '00000000-0000-4000-8000-000000000sub',
-                ingredientName: 'Salsa sub-receta',
+                ingredientId: rootId, // self reference!
+                ingredientName: 'Same Product',
                 ingredientType: 'SUB_RECIPE',
                 grossQuantity: 1,
                 technicalShrinkPct: 0,
-                componentUom: 'l',
               },
             ],
           }),
         }),
-      ).rejects.toThrow('SUB_RECIPE');
+      ).rejects.toThrow('Dependencia circular detectada');
     });
 
     it('rejects when the insumo is not found for the tenant', async () => {

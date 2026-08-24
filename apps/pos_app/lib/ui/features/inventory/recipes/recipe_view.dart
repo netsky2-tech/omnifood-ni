@@ -227,6 +227,12 @@ class _RecipeViewState extends State<RecipeView> {
                                 ),
                         ),
                         const SizedBox(height: 16),
+                        _buildTheoreticalCostCard(
+                          context,
+                          viewModel,
+                          double.tryParse(_yieldController.text.trim()) ?? 1,
+                        ),
+                        const SizedBox(height: 16),
                         _SectionCard(
                           title: 'Comparar versiones',
                           child: Column(
@@ -288,6 +294,104 @@ class _RecipeViewState extends State<RecipeView> {
                       ],
                     ),
                   ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTheoreticalCostCard(
+    BuildContext context,
+    RecipeViewModel viewModel,
+    double yieldQuantity,
+  ) {
+    if (viewModel.draftComponents.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final costBreakdown = viewModel.calculateDraftTheoreticalCost(
+      yieldQuantity: yieldQuantity,
+    );
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return _SectionCard(
+      title: 'Costo Teórico & Rentabilidad',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _CostMetricTile(
+                  label: 'Costo por Porción',
+                  value: 'C\$ ${costBreakdown.unitTheoreticalCostNio.toStringAsFixed(2)}',
+                  color: colorScheme.primary,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _CostMetricTile(
+                  label: 'Costo Total Batch',
+                  value: 'C\$ ${costBreakdown.totalBatchCostNio.toStringAsFixed(2)}',
+                  color: colorScheme.secondary,
+                ),
+              ),
+              if (costBreakdown.grossMarginNio > 0) ...[
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _CostMetricTile(
+                    label: 'Margen Proyectado',
+                    value:
+                        'C\$ ${costBreakdown.grossMarginNio.toStringAsFixed(2)} (${costBreakdown.grossMarginPct.toStringAsFixed(1)}%)',
+                    color: Colors.green.shade700,
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'PARTICIPACIÓN DE COSTOS',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 10,
+              letterSpacing: 0.8,
+            ),
+          ),
+          const SizedBox(height: 6),
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: costBreakdown.componentCosts.length,
+            separatorBuilder: (context, index) => const Divider(height: 1),
+            itemBuilder: (context, index) {
+              final comp = costBreakdown.componentCosts[index];
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: Text(
+                        comp.ingredientName,
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                    Expanded(
+                      flex: 2,
+                      child: Text(
+                        '${comp.grossQuantity.toStringAsFixed(2)} × C\$ ${comp.unitCostNio.toStringAsFixed(2)}',
+                        style: const TextStyle(fontSize: 12, color: Colors.black54),
+                      ),
+                    ),
+                    Text(
+                      'C\$ ${comp.totalCostNio.toStringAsFixed(2)} (${comp.costPercentage.toStringAsFixed(1)}%)',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -487,6 +591,54 @@ class _SectionCard extends StatelessWidget {
             child,
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _CostMetricTile extends StatelessWidget {
+  const _CostMetricTile({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: color,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+              color: color,
+            ),
+          ),
+        ],
       ),
     );
   }
