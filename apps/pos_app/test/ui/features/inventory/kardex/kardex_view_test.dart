@@ -165,7 +165,12 @@ void main() {
     await tester.pumpWidget(buildApp());
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Café Molido').first);
+    final cafeFinder = find.descendant(
+      of: find.byType(DataTable),
+      matching: find.text('Café Molido'),
+    );
+    await tester.ensureVisible(cafeFinder);
+    await tester.tap(cafeFinder);
     await tester.pumpAndSettle();
 
     expect(find.text('Documento origen: PURCHASE · purchase-1'), findsOneWidget);

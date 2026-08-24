@@ -64,3 +64,12 @@ The POS system MUST dispatch local kardex corrections via `POST /inventory/regul
 - GIVEN a batch of local corrections sent from the POS terminal
 - WHEN the backend processes the batch
 - THEN the backend SHALL ingest new corrections, skip duplicate `lineage_hash` entries, and return `{ syncedCount, duplicatesCount }`
+
+### Requirement: Multi-Filter Kardex Reporting (Slice 4.3)
+The system MUST provide multi-filter querying across the kardex ledger by transaction type, insumo, warehouse, and date period with pagination, returning unit costs, line valuations, post-movement stock, and lineage traceability.
+
+#### Scenario: Querying kardex ledger with combined filters
+- GIVEN historical inventory movements recorded in the ledger
+- WHEN an operator filters by a specific insumo and movement type within a date range
+- THEN the system SHALL return matching movements ordered chronologically with unit cost, resulting stock, and origin document labels
+

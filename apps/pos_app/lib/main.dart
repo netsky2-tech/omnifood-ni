@@ -34,8 +34,14 @@ import 'ui/features/inventory/items/insumo_view.dart';
 import 'ui/features/inventory/purchases/purchase_view.dart';
 import 'ui/features/inventory/shrinkage/shrinkage_view.dart';
 import 'ui/features/inventory/alerts/forensic_alert_view.dart';
+import 'ui/features/inventory/alerts/stock_alerts_view.dart';
+import 'ui/features/inventory/alerts/stock_alerts_view_model.dart';
 import 'ui/features/inventory/production/production_order_view.dart';
 import 'ui/features/inventory/recipes/recipe_view.dart';
+import 'ui/features/inventory/reports/inventory_valuation_view.dart';
+import 'ui/features/inventory/reports/inventory_valuation_view_model.dart';
+import 'ui/features/inventory/reports/cogs_report_view.dart';
+import 'ui/features/inventory/reports/cogs_report_view_model.dart';
 import 'ui/features/inventory/suppliers/supplier_view.dart';
 import 'ui/features/inventory/warehouses/warehouse_view.dart';
 import 'data/repositories/sales/sales_repository_impl.dart';
@@ -214,6 +220,15 @@ void main() async {
           create: (_) => RecipeViewModel(inventoryRepository),
         ),
         ChangeNotifierProvider(
+          create: (_) => InventoryValuationViewModel(inventoryRepository),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => CogsReportViewModel(inventoryRepository),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => StockAlertsViewModel(inventoryRepository),
+        ),
+        ChangeNotifierProvider(
           create: (_) => DgiReportViewModel(salesRepository, database),
         ),
         ChangeNotifierProvider(
@@ -389,6 +404,11 @@ class MyApp extends StatelessWidget {
             featureLabel: 'Alertas BOH',
             child: ForensicAlertView(),
           ),
+          '/inventory/alerts/stock': (context) => const BohRouteGuard(
+            permission: BohPermission.alertsView,
+            featureLabel: 'Alertas de Stock BOH',
+            child: StockAlertsView(),
+          ),
           '/inventory/counts': (context) => const BohRouteGuard(
             permission: BohPermission.countsView,
             featureLabel: 'Conteos y ajustes BOH',
@@ -408,6 +428,16 @@ class MyApp extends StatelessWidget {
             permission: BohPermission.recipesView,
             featureLabel: 'Recetas BOH',
             child: RecipeView(),
+          ),
+          '/inventory/reports/valuation': (context) => const BohRouteGuard(
+            permission: BohPermission.valuationView,
+            featureLabel: 'Existencias & Valorización BOH',
+            child: InventoryValuationView(),
+          ),
+          '/inventory/reports/cogs': (context) => const BohRouteGuard(
+            permission: BohPermission.cogsView,
+            featureLabel: 'Costo de Ventas (COGS) BOH',
+            child: CogsReportView(),
           ),
           '/sales/reports': (context) => const DgiReportView(),
           '/sales/history': (context) => const SalesHistoryView(),

@@ -80,6 +80,12 @@ class BohNavigationShellView extends StatelessWidget {
                 enabled: hasBohPermission(role, BohPermission.alertsView),
               ),
               _BohDestinationCard(
+                title: 'Alertas de Stock',
+                description: 'Monitoreo de stock crítico, agotado y sugerencias de compra.',
+                routeName: '/inventory/alerts/stock',
+                enabled: hasBohPermission(role, BohPermission.alertsView),
+              ),
+              _BohDestinationCard(
                 title: 'Kardex BOH',
                 description: 'Movimientos y trazabilidad auditable.',
                 routeName: '/inventory/kardex',
@@ -96,6 +102,18 @@ class BohNavigationShellView extends StatelessWidget {
                 description: 'Registros de merma, destrucción y control operativo.',
                 routeName: '/inventory/shrinkage',
                 enabled: hasBohPermission(role, BohPermission.shrinkageView),
+              ),
+              _BohDestinationCard(
+                title: 'Existencias & Valorización',
+                description: 'Reporte consolidado de stock actual valorizado al CPP.',
+                routeName: '/inventory/reports/valuation',
+                enabled: hasBohPermission(role, BohPermission.valuationView),
+              ),
+              _BohDestinationCard(
+                title: 'Costo de Ventas (COGS)',
+                description: 'Consumos operativos por venta y mermas por período.',
+                routeName: '/inventory/reports/cogs',
+                enabled: hasBohPermission(role, BohPermission.cogsView),
               ),
             ],
           ),

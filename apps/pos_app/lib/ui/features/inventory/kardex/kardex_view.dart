@@ -71,22 +71,98 @@ class _KardexViewState extends State<KardexView> {
                 TextField(
                   controller: _searchController,
                   onChanged: viewModel.setSearchQuery,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Buscar insumo o motivo',
-                    prefixIcon: Icon(Icons.search),
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: viewModel.searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              _searchController.clear();
+                              viewModel.clearSearch();
+                            },
+                          )
+                        : null,
+                    isDense: true,
+                    border: const OutlineInputBorder(),
                   ),
                 ),
-                if (viewModel.searchQuery.isNotEmpty)
+                if (viewModel.searchQuery.isNotEmpty ||
+                    viewModel.selectedInsumoId != null ||
+                    viewModel.startDate != null)
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(
                       onPressed: () {
                         _searchController.clear();
                         viewModel.clearSearch();
+                        viewModel.setSelectedInsumo(null);
+                        viewModel.clearDateRange();
                       },
                       child: const Text('Limpiar búsqueda'),
                     ),
                   ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    if (viewModel.availableInsumos.isNotEmpty)
+                      Expanded(
+                        child: DropdownButtonFormField<String?>(
+                          value: viewModel.selectedInsumoId,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Filtrar Insumo',
+                            isDense: true,
+                            border: OutlineInputBorder(),
+                          ),
+                          items: [
+                            const DropdownMenuItem<String?>(
+                              value: null,
+                              child: Text('Todos los insumos'),
+                            ),
+                            ...viewModel.availableInsumos.map(
+                              (i) => DropdownMenuItem<String?>(
+                                value: i.id,
+                                child: Text(
+                                  i.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                          ],
+                          onChanged: viewModel.setSelectedInsumo,
+                        ),
+                      ),
+                    if (viewModel.availableInsumos.isNotEmpty)
+                      const SizedBox(width: 8),
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.date_range, size: 18),
+                      label: Text(
+                        viewModel.startDate != null && viewModel.endDate != null
+                            ? '${viewModel.startDate!.day}/${viewModel.startDate!.month} - ${viewModel.endDate!.day}/${viewModel.endDate!.month}'
+                            : 'Fechas',
+                      ),
+                      onPressed: () async {
+                        final picked = await showDateRangePicker(
+                          context: context,
+                          firstDate: DateTime(2025, 1, 1),
+                          lastDate: DateTime(2030, 12, 31),
+                          initialDateRange: viewModel.startDate != null &&
+                                  viewModel.endDate != null
+                              ? DateTimeRange(
+                                  start: viewModel.startDate!,
+                                  end: viewModel.endDate!,
+                                )
+                              : null,
+                        );
+                        if (picked != null) {
+                          viewModel.setDateRange(picked.start, picked.end);
+                        }
+                      },
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 8),
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,

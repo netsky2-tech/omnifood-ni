@@ -48,6 +48,8 @@ import { CountSessionService } from './count-session.service';
 import { GovernanceApprovalService } from './services/governance-approval.service';
 import { KardexRegularizationService } from './services/kardex-regularization.service';
 import { RegularizationController } from './controllers/regularization.controller';
+import { InventoryReportsService } from './services/inventory-reports.service';
+import { InventoryReportsController } from './controllers/inventory-reports.controller';
 
 @Module({
   imports: [
@@ -77,7 +79,11 @@ import { RegularizationController } from './controllers/regularization.controlle
       KardexCorrection,
     ]),
   ],
-  controllers: [InventoryMovementController, RegularizationController],
+  controllers: [
+    InventoryMovementController,
+    RegularizationController,
+    InventoryReportsController,
+  ],
   providers: [
     InventoryService,
     InventoryMovementService,
@@ -94,6 +100,7 @@ import { RegularizationController } from './controllers/regularization.controlle
     ForensicAlertService,
     GovernanceApprovalService,
     KardexRegularizationService,
+    InventoryReportsService,
     UomConversionCalculator,
     FxRateResolverService,
     {
