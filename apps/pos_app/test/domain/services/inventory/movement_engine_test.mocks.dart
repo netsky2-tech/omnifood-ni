@@ -7,6 +7,10 @@ import 'dart:async' as _i4;
 
 import 'package:mockito/mockito.dart' as _i1;
 import 'package:pos_app/data/database/app_database.dart' as _i2;
+import 'package:pos_app/data/models/inventory/kardex_correction_entity.dart'
+    as _i20;
+import 'package:pos_app/data/models/inventory/kardex_recalculate_queue_entity.dart'
+    as _i21;
 import 'package:pos_app/domain/models/catalog/catalog_type.dart' as _i16;
 import 'package:pos_app/domain/models/catalog/catalog_value.dart' as _i15;
 import 'package:pos_app/domain/models/inventory/batch.dart' as _i13;
@@ -28,7 +32,7 @@ import 'package:pos_app/domain/models/inventory/uom_conversion.dart' as _i14;
 import 'package:pos_app/domain/models/inventory/warehouse.dart' as _i12;
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart'
     as _i3;
-import 'package:pos_app/domain/services/alerts/alert_service.dart' as _i20;
+import 'package:pos_app/domain/services/alerts/alert_service.dart' as _i22;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values
@@ -751,21 +755,43 @@ class MockInventoryRepository extends _i1.Mock
         returnValue: _i4.Future<void>.value(),
         returnValueForMissingStub: _i4.Future<void>.value(),
       ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<List<_i20.KardexCorrectionEntity>> getKardexCorrections() =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getKardexCorrections,
+          [],
+        ),
+        returnValue: _i4.Future<List<_i20.KardexCorrectionEntity>>.value(
+            <_i20.KardexCorrectionEntity>[]),
+      ) as _i4.Future<List<_i20.KardexCorrectionEntity>>);
+
+  @override
+  _i4.Future<List<_i21.KardexRecalculateQueueEntity>> getPendingKardexQueue() =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getPendingKardexQueue,
+          [],
+        ),
+        returnValue: _i4.Future<List<_i21.KardexRecalculateQueueEntity>>.value(
+            <_i21.KardexRecalculateQueueEntity>[]),
+      ) as _i4.Future<List<_i21.KardexRecalculateQueueEntity>>);
 }
 
 /// A class which mocks [AlertService].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockAlertService extends _i1.Mock implements _i20.AlertService {
+class MockAlertService extends _i1.Mock implements _i22.AlertService {
   MockAlertService() {
     _i1.throwOnMissingStub(this);
   }
 
   @override
-  _i4.Stream<_i20.AlertMessage> get alertStream => (super.noSuchMethod(
+  _i4.Stream<_i22.AlertMessage> get alertStream => (super.noSuchMethod(
         Invocation.getter(#alertStream),
-        returnValue: _i4.Stream<_i20.AlertMessage>.empty(),
-      ) as _i4.Stream<_i20.AlertMessage>);
+        returnValue: _i4.Stream<_i22.AlertMessage>.empty(),
+      ) as _i4.Stream<_i22.AlertMessage>);
 
   @override
   _i4.Stream<List<_i18.ForensicAlert>> get sessionAlertsStream =>

@@ -1182,6 +1182,89 @@ final migration30_31 = Migration(30, 31, (database) async {
   );
 });
 
+final migration31_32 = Migration(31, 32, (database) async {
+  Future<void> addColumnIfMissing(
+    String tableName,
+    String columnName,
+    String definition,
+  ) async {
+    final tables = await database.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = '$tableName'",
+    );
+    if (tables.isEmpty) return;
+
+    final columns = await database.rawQuery('PRAGMA table_info($tableName)');
+    final existingColumnNames = columns
+        .map((column) => column['name'] as String)
+        .toSet();
+    if (!existingColumnNames.contains(columnName)) {
+      await database.execute('ALTER TABLE $tableName ADD COLUMN $definition');
+    }
+  }
+
+  await addColumnIfMissing(
+    'inventory_movements',
+    'estado_costeo',
+    'estado_costeo INTEGER NOT NULL DEFAULT 30',
+  );
+  await addColumnIfMissing(
+    'inventory_movements',
+    'intentos_count',
+    'intentos_count INTEGER NOT NULL DEFAULT 0',
+  );
+  await addColumnIfMissing(
+    'inventory_movements',
+    'bloqueo_motivo',
+    'bloqueo_motivo TEXT',
+  );
+  await addColumnIfMissing(
+    'inventory_movements',
+    'autorizado_por_usuario_id',
+    'autorizado_por_usuario_id TEXT',
+  );
+  await addColumnIfMissing(
+    'inventory_movements',
+    'fecha_autorizacion',
+    'fecha_autorizacion TEXT',
+  );
+
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS `kardex_recalculate_queue` (
+      `id` TEXT NOT NULL,
+      `insumo_id` TEXT NOT NULL,
+      `origin_movement_id` TEXT NOT NULL,
+      `trigger_movement_id` TEXT NOT NULL,
+      `status` TEXT NOT NULL,
+      `attempts` INTEGER NOT NULL,
+      `claimed_at` TEXT,
+      `last_error` TEXT,
+      `created_at` TEXT NOT NULL,
+      `updated_at` TEXT NOT NULL,
+      PRIMARY KEY (`id`)
+    )
+  ''');
+
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS `kardex_corrections` (
+      `id` TEXT NOT NULL,
+      `insumo_id` TEXT NOT NULL,
+      `origin_movement_id` TEXT NOT NULL,
+      `trigger_movement_id` TEXT NOT NULL,
+      `previous_unit_cost_nio` REAL NOT NULL,
+      `recalculated_unit_cost_nio` REAL NOT NULL,
+      `delta_unit_cost_nio` REAL NOT NULL,
+      `total_delta_cost_nio` REAL NOT NULL,
+      `affected_quantity` REAL NOT NULL,
+      `lineage_hash` TEXT NOT NULL,
+      `authorized_by_user_id` TEXT,
+      `authorized_by_role` TEXT,
+      `authorization_method` TEXT,
+      `created_at` TEXT NOT NULL,
+      PRIMARY KEY (`id`)
+    )
+  ''');
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -1204,4 +1287,5 @@ final allMigrations = [
   migration28_29,
   migration29_30,
   migration30_31,
+  migration31_32,
 ];

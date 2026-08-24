@@ -44,6 +44,8 @@ import '../../models/inventory/count_session_document_entity.dart';
 import '../../models/inventory/forensic_alert_entity.dart';
 import '../../models/inventory/movement_sync_state_entity.dart';
 import '../../models/inventory/production_order_document_entity.dart';
+import '../../models/inventory/kardex_correction_entity.dart';
+import '../../models/inventory/kardex_recalculate_queue_entity.dart';
 import 'package:dio/dio.dart';
 
 class InventoryRepositoryImpl
@@ -1012,5 +1014,15 @@ class InventoryRepositoryImpl
     }
 
     return 'Could not load the official BCN rate. Enter the BCN rate manually to continue.';
+  }
+
+  @override
+  Future<List<KardexCorrectionEntity>> getKardexCorrections() async {
+    return _database.kardexCorrectionDao.findAllCorrections();
+  }
+
+  @override
+  Future<List<KardexRecalculateQueueEntity>> getPendingKardexQueue() async {
+    return _database.kardexRecalculateQueueDao.findQueueByStatus('PENDING');
   }
 }

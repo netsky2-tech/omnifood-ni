@@ -26,6 +26,11 @@ _$InventoryMovementImpl _$$InventoryMovementImplFromJson(
       batchDeductions: (json['batchDeductions'] as List<dynamic>?)
           ?.map((e) => BatchDeduction.fromJson(e as Map<String, dynamic>))
           .toList(),
+      estadoCosteo: json['estadoCosteo'] as int?,
+      intentosCount: json['intentosCount'] as int?,
+      bloqueoMotivo: json['bloqueoMotivo'] as String?,
+      autorizadoPorUsuarioId: json['autorizadoPorUsuarioId'] as String?,
+      fechaAutorizacion: json['fechaAutorizacion'] as String?,
     );
 
 Map<String, dynamic> _$$InventoryMovementImplToJson(
@@ -47,6 +52,11 @@ Map<String, dynamic> _$$InventoryMovementImplToJson(
       'originInvoiceItemId': instance.originInvoiceItemId,
       'batchDeductions':
           instance.batchDeductions?.map((e) => e.toJson()).toList(),
+      'estadoCosteo': instance.estadoCosteo,
+      'intentosCount': instance.intentosCount,
+      'bloqueoMotivo': instance.bloqueoMotivo,
+      'autorizadoPorUsuarioId': instance.autorizadoPorUsuarioId,
+      'fechaAutorizacion': instance.fechaAutorizacion,
     };
 
 const _$MovementTypeEnumMap = {

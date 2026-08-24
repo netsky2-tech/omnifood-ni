@@ -36,6 +36,11 @@ mixin _$InventoryMovement {
   String? get originInvoiceItemId => throw _privateConstructorUsedError;
   List<BatchDeduction>? get batchDeductions =>
       throw _privateConstructorUsedError;
+  int? get estadoCosteo => throw _privateConstructorUsedError;
+  int? get intentosCount => throw _privateConstructorUsedError;
+  String? get bloqueoMotivo => throw _privateConstructorUsedError;
+  String? get autorizadoPorUsuarioId => throw _privateConstructorUsedError;
+  String? get fechaAutorizacion => throw _privateConstructorUsedError;
 
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
   @JsonKey(ignore: true)
@@ -64,7 +69,12 @@ abstract class $InventoryMovementCopyWith<$Res> {
       String? sourceDocumentId,
       String? originMovementId,
       String? originInvoiceItemId,
-      List<BatchDeduction>? batchDeductions});
+      List<BatchDeduction>? batchDeductions,
+      int? estadoCosteo,
+      int? intentosCount,
+      String? bloqueoMotivo,
+      String? autorizadoPorUsuarioId,
+      String? fechaAutorizacion});
 }
 
 /// @nodoc
@@ -95,6 +105,11 @@ class _$InventoryMovementCopyWithImpl<$Res, $Val extends InventoryMovement>
     Object? originMovementId = freezed,
     Object? originInvoiceItemId = freezed,
     Object? batchDeductions = freezed,
+    Object? estadoCosteo = freezed,
+    Object? intentosCount = freezed,
+    Object? bloqueoMotivo = freezed,
+    Object? autorizadoPorUsuarioId = freezed,
+    Object? fechaAutorizacion = freezed,
   }) {
     return _then(_value.copyWith(
       id: null == id
@@ -157,6 +172,26 @@ class _$InventoryMovementCopyWithImpl<$Res, $Val extends InventoryMovement>
           ? _value.batchDeductions
           : batchDeductions // ignore: cast_nullable_to_non_nullable
               as List<BatchDeduction>?,
+      estadoCosteo: freezed == estadoCosteo
+          ? _value.estadoCosteo
+          : estadoCosteo // ignore: cast_nullable_to_non_nullable
+              as int?,
+      intentosCount: freezed == intentosCount
+          ? _value.intentosCount
+          : intentosCount // ignore: cast_nullable_to_non_nullable
+              as int?,
+      bloqueoMotivo: freezed == bloqueoMotivo
+          ? _value.bloqueoMotivo
+          : bloqueoMotivo // ignore: cast_nullable_to_non_nullable
+              as String?,
+      autorizadoPorUsuarioId: freezed == autorizadoPorUsuarioId
+          ? _value.autorizadoPorUsuarioId
+          : autorizadoPorUsuarioId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      fechaAutorizacion: freezed == fechaAutorizacion
+          ? _value.fechaAutorizacion
+          : fechaAutorizacion // ignore: cast_nullable_to_non_nullable
+              as String?,
     ) as $Val);
   }
 }
@@ -184,7 +219,12 @@ abstract class _$$InventoryMovementImplCopyWith<$Res>
       String? sourceDocumentId,
       String? originMovementId,
       String? originInvoiceItemId,
-      List<BatchDeduction>? batchDeductions});
+      List<BatchDeduction>? batchDeductions,
+      int? estadoCosteo,
+      int? intentosCount,
+      String? bloqueoMotivo,
+      String? autorizadoPorUsuarioId,
+      String? fechaAutorizacion});
 }
 
 /// @nodoc
@@ -213,6 +253,11 @@ class __$$InventoryMovementImplCopyWithImpl<$Res>
     Object? originMovementId = freezed,
     Object? originInvoiceItemId = freezed,
     Object? batchDeductions = freezed,
+    Object? estadoCosteo = freezed,
+    Object? intentosCount = freezed,
+    Object? bloqueoMotivo = freezed,
+    Object? autorizadoPorUsuarioId = freezed,
+    Object? fechaAutorizacion = freezed,
   }) {
     return _then(_$InventoryMovementImpl(
       id: null == id
@@ -275,6 +320,26 @@ class __$$InventoryMovementImplCopyWithImpl<$Res>
           ? _value._batchDeductions
           : batchDeductions // ignore: cast_nullable_to_non_nullable
               as List<BatchDeduction>?,
+      estadoCosteo: freezed == estadoCosteo
+          ? _value.estadoCosteo
+          : estadoCosteo // ignore: cast_nullable_to_non_nullable
+              as int?,
+      intentosCount: freezed == intentosCount
+          ? _value.intentosCount
+          : intentosCount // ignore: cast_nullable_to_non_nullable
+              as int?,
+      bloqueoMotivo: freezed == bloqueoMotivo
+          ? _value.bloqueoMotivo
+          : bloqueoMotivo // ignore: cast_nullable_to_non_nullable
+              as String?,
+      autorizadoPorUsuarioId: freezed == autorizadoPorUsuarioId
+          ? _value.autorizadoPorUsuarioId
+          : autorizadoPorUsuarioId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      fechaAutorizacion: freezed == fechaAutorizacion
+          ? _value.fechaAutorizacion
+          : fechaAutorizacion // ignore: cast_nullable_to_non_nullable
+              as String?,
     ));
   }
 }
@@ -298,7 +363,12 @@ class _$InventoryMovementImpl implements _InventoryMovement {
       this.sourceDocumentId,
       this.originMovementId,
       this.originInvoiceItemId,
-      final List<BatchDeduction>? batchDeductions})
+      final List<BatchDeduction>? batchDeductions,
+      this.estadoCosteo,
+      this.intentosCount,
+      this.bloqueoMotivo,
+      this.autorizadoPorUsuarioId,
+      this.fechaAutorizacion})
       : _batchDeductions = batchDeductions;
 
   factory _$InventoryMovementImpl.fromJson(Map<String, dynamic> json) =>
@@ -343,8 +413,19 @@ class _$InventoryMovementImpl implements _InventoryMovement {
   }
 
   @override
+  final int? estadoCosteo;
+  @override
+  final int? intentosCount;
+  @override
+  final String? bloqueoMotivo;
+  @override
+  final String? autorizadoPorUsuarioId;
+  @override
+  final String? fechaAutorizacion;
+
+  @override
   String toString() {
-    return 'InventoryMovement(id: $id, insumoId: $insumoId, type: $type, quantity: $quantity, previousStock: $previousStock, newStock: $newStock, timestamp: $timestamp, reason: $reason, userId: $userId, unitCostNio: $unitCostNio, sourceDocumentType: $sourceDocumentType, sourceDocumentId: $sourceDocumentId, originMovementId: $originMovementId, originInvoiceItemId: $originInvoiceItemId, batchDeductions: $batchDeductions)';
+    return 'InventoryMovement(id: $id, insumoId: $insumoId, type: $type, quantity: $quantity, previousStock: $previousStock, newStock: $newStock, timestamp: $timestamp, reason: $reason, userId: $userId, unitCostNio: $unitCostNio, sourceDocumentType: $sourceDocumentType, sourceDocumentId: $sourceDocumentId, originMovementId: $originMovementId, originInvoiceItemId: $originInvoiceItemId, batchDeductions: $batchDeductions, estadoCosteo: $estadoCosteo, intentosCount: $intentosCount, bloqueoMotivo: $bloqueoMotivo, autorizadoPorUsuarioId: $autorizadoPorUsuarioId, fechaAutorizacion: $fechaAutorizacion)';
   }
 
   @override
@@ -377,28 +458,44 @@ class _$InventoryMovementImpl implements _InventoryMovement {
             (identical(other.originInvoiceItemId, originInvoiceItemId) ||
                 other.originInvoiceItemId == originInvoiceItemId) &&
             const DeepCollectionEquality()
-                .equals(other._batchDeductions, _batchDeductions));
+                .equals(other._batchDeductions, _batchDeductions) &&
+            (identical(other.estadoCosteo, estadoCosteo) ||
+                other.estadoCosteo == estadoCosteo) &&
+            (identical(other.intentosCount, intentosCount) ||
+                other.intentosCount == intentosCount) &&
+            (identical(other.bloqueoMotivo, bloqueoMotivo) ||
+                other.bloqueoMotivo == bloqueoMotivo) &&
+            (identical(other.autorizadoPorUsuarioId, autorizadoPorUsuarioId) ||
+                other.autorizadoPorUsuarioId == autorizadoPorUsuarioId) &&
+            (identical(other.fechaAutorizacion, fechaAutorizacion) ||
+                other.fechaAutorizacion == fechaAutorizacion));
   }
 
   @JsonKey(ignore: true)
   @override
-  int get hashCode => Object.hash(
-      runtimeType,
-      id,
-      insumoId,
-      type,
-      quantity,
-      previousStock,
-      newStock,
-      timestamp,
-      reason,
-      userId,
-      unitCostNio,
-      sourceDocumentType,
-      sourceDocumentId,
-      originMovementId,
-      originInvoiceItemId,
-      const DeepCollectionEquality().hash(_batchDeductions));
+  int get hashCode => Object.hashAll([
+        runtimeType,
+        id,
+        insumoId,
+        type,
+        quantity,
+        previousStock,
+        newStock,
+        timestamp,
+        reason,
+        userId,
+        unitCostNio,
+        sourceDocumentType,
+        sourceDocumentId,
+        originMovementId,
+        originInvoiceItemId,
+        const DeepCollectionEquality().hash(_batchDeductions),
+        estadoCosteo,
+        intentosCount,
+        bloqueoMotivo,
+        autorizadoPorUsuarioId,
+        fechaAutorizacion
+      ]);
 
   @JsonKey(ignore: true)
   @override
@@ -431,7 +528,12 @@ abstract class _InventoryMovement implements InventoryMovement {
       final String? sourceDocumentId,
       final String? originMovementId,
       final String? originInvoiceItemId,
-      final List<BatchDeduction>? batchDeductions}) = _$InventoryMovementImpl;
+      final List<BatchDeduction>? batchDeductions,
+      final int? estadoCosteo,
+      final int? intentosCount,
+      final String? bloqueoMotivo,
+      final String? autorizadoPorUsuarioId,
+      final String? fechaAutorizacion}) = _$InventoryMovementImpl;
 
   factory _InventoryMovement.fromJson(Map<String, dynamic> json) =
       _$InventoryMovementImpl.fromJson;
@@ -466,6 +568,16 @@ abstract class _InventoryMovement implements InventoryMovement {
   String? get originInvoiceItemId;
   @override
   List<BatchDeduction>? get batchDeductions;
+  @override
+  int? get estadoCosteo;
+  @override
+  int? get intentosCount;
+  @override
+  String? get bloqueoMotivo;
+  @override
+  String? get autorizadoPorUsuarioId;
+  @override
+  String? get fechaAutorizacion;
   @override
   @JsonKey(ignore: true)
   _$$InventoryMovementImplCopyWith<_$InventoryMovementImpl> get copyWith =>

@@ -12,7 +12,7 @@ import { ConfigService } from '@nestjs/config';
 import { UserRole } from '../identity/entities/user.entity';
 
 describe('CatalogController', () => {
-  const jwtSecret = 'test-jwt-secret';
+  const jwtSecret = 'test-only-jwt-secret-with-at-least-thirty-two-bytes';
   let controller: CatalogController;
   let service: jest.Mocked<CatalogService>;
 
@@ -33,7 +33,19 @@ describe('CatalogController', () => {
         AuthGuard,
         RolesGuard,
         { provide: CatalogService, useValue: service },
-        { provide: ConfigService, useValue: { get: () => jwtSecret } },
+        {
+          provide: ConfigService,
+          useValue: new ConfigService({
+            NODE_ENV: 'test',
+            JWT_SECRET: jwtSecret,
+            JWT_ISSUER: 'omnifood-admin',
+            JWT_AUDIENCE: 'omnifood-pos',
+            JWT_ACCESS_TTL_SECONDS: '3600',
+            JWT_REFRESH_TTL_SECONDS: '604800',
+            JWT_CLOCK_TOLERANCE_SECONDS: '5',
+            JWT_ALGORITHM: 'HS256',
+          }),
+        },
       ],
     }).compile();
 
@@ -118,7 +130,7 @@ describe('CatalogController', () => {
 });
 
 describe('CatalogController HTTP guards and route precedence', () => {
-  const jwtSecret = 'test-jwt-secret';
+  const jwtSecret = 'test-only-jwt-secret-with-at-least-thirty-two-bytes';
   let app: INestApplication;
   let service: jest.Mocked<CatalogService>;
 
@@ -139,7 +151,19 @@ describe('CatalogController HTTP guards and route precedence', () => {
         RolesGuard,
         AuthGuard,
         { provide: CatalogService, useValue: service },
-        { provide: ConfigService, useValue: { get: () => jwtSecret } },
+        {
+          provide: ConfigService,
+          useValue: new ConfigService({
+            NODE_ENV: 'test',
+            JWT_SECRET: jwtSecret,
+            JWT_ISSUER: 'omnifood-admin',
+            JWT_AUDIENCE: 'omnifood-pos',
+            JWT_ACCESS_TTL_SECONDS: '3600',
+            JWT_REFRESH_TTL_SECONDS: '604800',
+            JWT_CLOCK_TOLERANCE_SECONDS: '5',
+            JWT_ALGORITHM: 'HS256',
+          }),
+        },
       ],
     }).compile();
 
@@ -161,8 +185,23 @@ describe('CatalogController HTTP guards and route precedence', () => {
   const getHttpServer = (): Parameters<typeof request>[0] =>
     app.getHttpServer() as Parameters<typeof request>[0];
 
-  const signToken = (payload: Record<string, string>) =>
-    app.get(JwtService).sign({ sub: 'user-1', ...payload });
+  const signToken = (payload: Record<string, unknown>) =>
+    app.get(JwtService).sign(
+      {
+        sub: 'user-1',
+        email: 'user@omnifood.ni',
+        is_active: true,
+        token_type: 'access',
+        security_version: 1,
+        ...payload,
+      },
+      {
+        issuer: 'omnifood-admin',
+        audience: 'omnifood-pos',
+        expiresIn: 3600,
+        algorithm: 'HS256',
+      },
+    );
 
   it('returns 401 without authentication', async () => {
     await request(getHttpServer()).get('/catalogs/UOM').expect(401);

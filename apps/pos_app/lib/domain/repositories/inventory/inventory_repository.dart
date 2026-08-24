@@ -14,6 +14,8 @@ import '../../models/inventory/purchase.dart';
 import '../../models/inventory/production_order_document.dart';
 import '../../models/catalog/catalog_value.dart';
 import '../../models/catalog/catalog_type.dart';
+import '../../../data/models/inventory/kardex_correction_entity.dart';
+import '../../../data/models/inventory/kardex_recalculate_queue_entity.dart';
 
 class OfficialBcnRateLookupException implements Exception {
   const OfficialBcnRateLookupException(this.message);
@@ -156,6 +158,10 @@ abstract class InventoryRepository {
   });
   Future<List<ProductionOrderDocument>> getUnsyncedProductionOrders();
   Future<void> markProductionOrderDocumentAsSynced(String id);
+
+  // Batch 6b Kardex Retrocalculation
+  Future<List<KardexCorrectionEntity>> getKardexCorrections();
+  Future<List<KardexRecalculateQueueEntity>> getPendingKardexQueue();
 }
 
 abstract class InventorySyncMetadataRepository {

@@ -27,6 +27,9 @@ class KardexEntryViewData {
     required this.reasonLabel,
     required this.sourceDocumentLabel,
     required this.relatedAlertCount,
+    this.estadoCosteo = 30,
+    this.costingStateLabel = 'Estándar',
+    this.bloqueoMotivo,
   });
 
   final String id;
@@ -43,6 +46,9 @@ class KardexEntryViewData {
   final String reasonLabel;
   final String sourceDocumentLabel;
   final int relatedAlertCount;
+  final int estadoCosteo;
+  final String costingStateLabel;
+  final String? bloqueoMotivo;
 }
 
 class KardexViewModel extends ChangeNotifier {
@@ -223,6 +229,16 @@ class KardexViewModel extends ChangeNotifier {
           : 'Sin detalle operativo',
       sourceDocumentLabel: sourceDocumentLabel,
       relatedAlertCount: alertCountByMovementId[movement.id] ?? 0,
+      estadoCosteo: movement.estadoCosteo ?? 30,
+      costingStateLabel: switch (movement.estadoCosteo) {
+        10 => 'Provisional',
+        20 => 'En proceso',
+        30 => 'Regularizado',
+        40 => 'Bloqueado',
+        50 => 'Error DLQ',
+        _ => 'Estándar',
+      },
+      bloqueoMotivo: movement.bloqueoMotivo,
     );
   }
 

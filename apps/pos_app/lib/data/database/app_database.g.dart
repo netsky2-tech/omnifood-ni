@@ -98,6 +98,10 @@ class _$AppDatabase extends AppDatabase {
 
   MovementSyncStateDao? _movementSyncStateDaoInstance;
 
+  KardexRecalculateQueueDao? _kardexRecalculateQueueDaoInstance;
+
+  KardexCorrectionDao? _kardexCorrectionDaoInstance;
+
   InventoryDao? _inventoryDaoInstance;
 
   SupplierDao? _supplierDaoInstance;
@@ -138,7 +142,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 31,
+      version: 32,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -180,9 +184,13 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `forensic_alerts` (`id` TEXT NOT NULL, `alert_type` TEXT NOT NULL, `severity` TEXT NOT NULL, `message` TEXT NOT NULL, `created_at` TEXT NOT NULL, `status` TEXT NOT NULL, `note` TEXT, `actor_label` TEXT, `acted_at` TEXT, `source_movement_id` TEXT, `source_document_id` TEXT, `source_document_type` TEXT, `metadata_json` TEXT, `is_synced` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `inventory_movements` (`id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `type` TEXT NOT NULL, `quantity` REAL NOT NULL, `previous_stock` REAL NOT NULL, `new_stock` REAL NOT NULL, `timestamp` TEXT NOT NULL, `reason` TEXT, `user_id` TEXT, `unit_cost_nio` REAL, `source_document_type` TEXT, `source_document_id` TEXT, `origin_movement_id` TEXT, `origin_invoice_item_id` TEXT, `batch_deductions` TEXT, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `inventory_movements` (`id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `type` TEXT NOT NULL, `quantity` REAL NOT NULL, `previous_stock` REAL NOT NULL, `new_stock` REAL NOT NULL, `timestamp` TEXT NOT NULL, `reason` TEXT, `user_id` TEXT, `unit_cost_nio` REAL, `source_document_type` TEXT, `source_document_id` TEXT, `origin_movement_id` TEXT, `origin_invoice_item_id` TEXT, `batch_deductions` TEXT, `estado_costeo` INTEGER NOT NULL, `intentos_count` INTEGER NOT NULL, `bloqueo_motivo` TEXT, `autorizado_por_usuario_id` TEXT, `fecha_autorizacion` TEXT, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `inventory_movement_sync_state` (`movement_id` TEXT NOT NULL, `sync_status` TEXT NOT NULL, `last_attempted_at` TEXT, `synced_at` TEXT, `last_error` TEXT, `terminal_id` TEXT, `flow_type` TEXT, `local_sequence` INTEGER, `idempotency_key` TEXT, `last_result_code` TEXT, FOREIGN KEY (`movement_id`) REFERENCES `inventory_movements` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE, PRIMARY KEY (`movement_id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `kardex_recalculate_queue` (`id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `origin_movement_id` TEXT NOT NULL, `trigger_movement_id` TEXT NOT NULL, `status` TEXT NOT NULL, `attempts` INTEGER NOT NULL, `claimed_at` TEXT, `last_error` TEXT, `created_at` TEXT NOT NULL, `updated_at` TEXT NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `kardex_corrections` (`id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `origin_movement_id` TEXT NOT NULL, `trigger_movement_id` TEXT NOT NULL, `previous_unit_cost_nio` REAL NOT NULL, `recalculated_unit_cost_nio` REAL NOT NULL, `delta_unit_cost_nio` REAL NOT NULL, `total_delta_cost_nio` REAL NOT NULL, `affected_quantity` REAL NOT NULL, `lineage_hash` TEXT NOT NULL, `authorized_by_user_id` TEXT, `authorized_by_role` TEXT, `authorization_method` TEXT, `created_at` TEXT NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `suppliers` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `phone` TEXT, `contact_person` TEXT, `credit_terms` TEXT, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
@@ -307,6 +315,18 @@ class _$AppDatabase extends AppDatabase {
   MovementSyncStateDao get movementSyncStateDao {
     return _movementSyncStateDaoInstance ??=
         _$MovementSyncStateDao(database, changeListener);
+  }
+
+  @override
+  KardexRecalculateQueueDao get kardexRecalculateQueueDao {
+    return _kardexRecalculateQueueDaoInstance ??=
+        _$KardexRecalculateQueueDao(database, changeListener);
+  }
+
+  @override
+  KardexCorrectionDao get kardexCorrectionDao {
+    return _kardexCorrectionDaoInstance ??=
+        _$KardexCorrectionDao(database, changeListener);
   }
 
   @override
@@ -1442,7 +1462,12 @@ class _$MovementDao extends MovementDao {
                   'source_document_id': item.sourceDocumentId,
                   'origin_movement_id': item.originMovementId,
                   'origin_invoice_item_id': item.originInvoiceItemId,
-                  'batch_deductions': item.batch_deductions
+                  'batch_deductions': item.batch_deductions,
+                  'estado_costeo': item.estadoCosteo,
+                  'intentos_count': item.intentosCount,
+                  'bloqueo_motivo': item.bloqueoMotivo,
+                  'autorizado_por_usuario_id': item.autorizadoPorUsuarioId,
+                  'fecha_autorizacion': item.fechaAutorizacion
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -1472,7 +1497,12 @@ class _$MovementDao extends MovementDao {
             sourceDocumentId: row['source_document_id'] as String?,
             originMovementId: row['origin_movement_id'] as String?,
             originInvoiceItemId: row['origin_invoice_item_id'] as String?,
-            batch_deductions: row['batch_deductions'] as String?));
+            batch_deductions: row['batch_deductions'] as String?,
+            estadoCosteo: row['estado_costeo'] as int,
+            intentosCount: row['intentos_count'] as int,
+            bloqueoMotivo: row['bloqueo_motivo'] as String?,
+            autorizadoPorUsuarioId: row['autorizado_por_usuario_id'] as String?,
+            fechaAutorizacion: row['fecha_autorizacion'] as String?));
   }
 
   @override
@@ -1494,7 +1524,12 @@ class _$MovementDao extends MovementDao {
             sourceDocumentId: row['source_document_id'] as String?,
             originMovementId: row['origin_movement_id'] as String?,
             originInvoiceItemId: row['origin_invoice_item_id'] as String?,
-            batch_deductions: row['batch_deductions'] as String?));
+            batch_deductions: row['batch_deductions'] as String?,
+            estadoCosteo: row['estado_costeo'] as int,
+            intentosCount: row['intentos_count'] as int,
+            bloqueoMotivo: row['bloqueo_motivo'] as String?,
+            autorizadoPorUsuarioId: row['autorizado_por_usuario_id'] as String?,
+            fechaAutorizacion: row['fecha_autorizacion'] as String?));
   }
 
   @override
@@ -1504,7 +1539,7 @@ class _$MovementDao extends MovementDao {
   ) async {
     return _queryAdapter.queryList(
         'SELECT * FROM inventory_movements WHERE type = ?1 ORDER BY timestamp DESC LIMIT ?2',
-        mapper: (Map<String, Object?> row) => MovementEntity(id: row['id'] as String, insumoId: row['insumo_id'] as String, type: row['type'] as String, quantity: row['quantity'] as double, previousStock: row['previous_stock'] as double, newStock: row['new_stock'] as double, timestamp: row['timestamp'] as String, reason: row['reason'] as String?, userId: row['user_id'] as String?, unitCostNio: row['unit_cost_nio'] as double?, sourceDocumentType: row['source_document_type'] as String?, sourceDocumentId: row['source_document_id'] as String?, originMovementId: row['origin_movement_id'] as String?, originInvoiceItemId: row['origin_invoice_item_id'] as String?, batch_deductions: row['batch_deductions'] as String?),
+        mapper: (Map<String, Object?> row) => MovementEntity(id: row['id'] as String, insumoId: row['insumo_id'] as String, type: row['type'] as String, quantity: row['quantity'] as double, previousStock: row['previous_stock'] as double, newStock: row['new_stock'] as double, timestamp: row['timestamp'] as String, reason: row['reason'] as String?, userId: row['user_id'] as String?, unitCostNio: row['unit_cost_nio'] as double?, sourceDocumentType: row['source_document_type'] as String?, sourceDocumentId: row['source_document_id'] as String?, originMovementId: row['origin_movement_id'] as String?, originInvoiceItemId: row['origin_invoice_item_id'] as String?, batch_deductions: row['batch_deductions'] as String?, estadoCosteo: row['estado_costeo'] as int, intentosCount: row['intentos_count'] as int, bloqueoMotivo: row['bloqueo_motivo'] as String?, autorizadoPorUsuarioId: row['autorizado_por_usuario_id'] as String?, fechaAutorizacion: row['fecha_autorizacion'] as String?),
         arguments: [type, limit]);
   }
 
@@ -1596,6 +1631,265 @@ class _$MovementSyncStateDao extends MovementSyncStateDao {
   }
 }
 
+class _$KardexRecalculateQueueDao extends KardexRecalculateQueueDao {
+  _$KardexRecalculateQueueDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _kardexRecalculateQueueEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'kardex_recalculate_queue',
+            (KardexRecalculateQueueEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'insumo_id': item.insumoId,
+                  'origin_movement_id': item.originMovementId,
+                  'trigger_movement_id': item.triggerMovementId,
+                  'status': item.status,
+                  'attempts': item.attempts,
+                  'claimed_at': item.claimedAt,
+                  'last_error': item.lastError,
+                  'created_at': item.createdAt,
+                  'updated_at': item.updatedAt
+                }),
+        _kardexRecalculateQueueEntityUpdateAdapter = UpdateAdapter(
+            database,
+            'kardex_recalculate_queue',
+            ['id'],
+            (KardexRecalculateQueueEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'insumo_id': item.insumoId,
+                  'origin_movement_id': item.originMovementId,
+                  'trigger_movement_id': item.triggerMovementId,
+                  'status': item.status,
+                  'attempts': item.attempts,
+                  'claimed_at': item.claimedAt,
+                  'last_error': item.lastError,
+                  'created_at': item.createdAt,
+                  'updated_at': item.updatedAt
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<KardexRecalculateQueueEntity>
+      _kardexRecalculateQueueEntityInsertionAdapter;
+
+  final UpdateAdapter<KardexRecalculateQueueEntity>
+      _kardexRecalculateQueueEntityUpdateAdapter;
+
+  @override
+  Future<List<KardexRecalculateQueueEntity>> findQueueByStatus(
+      String status) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM kardex_recalculate_queue WHERE status = ?1 ORDER BY created_at ASC',
+        mapper: (Map<String, Object?> row) => KardexRecalculateQueueEntity(id: row['id'] as String, insumoId: row['insumo_id'] as String, originMovementId: row['origin_movement_id'] as String, triggerMovementId: row['trigger_movement_id'] as String, status: row['status'] as String, attempts: row['attempts'] as int, claimedAt: row['claimed_at'] as String?, lastError: row['last_error'] as String?, createdAt: row['created_at'] as String, updatedAt: row['updated_at'] as String),
+        arguments: [status]);
+  }
+
+  @override
+  Future<List<KardexRecalculateQueueEntity>> findQueueByInsumoId(
+      String insumoId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM kardex_recalculate_queue WHERE insumo_id = ?1 ORDER BY created_at ASC',
+        mapper: (Map<String, Object?> row) => KardexRecalculateQueueEntity(id: row['id'] as String, insumoId: row['insumo_id'] as String, originMovementId: row['origin_movement_id'] as String, triggerMovementId: row['trigger_movement_id'] as String, status: row['status'] as String, attempts: row['attempts'] as int, claimedAt: row['claimed_at'] as String?, lastError: row['last_error'] as String?, createdAt: row['created_at'] as String, updatedAt: row['updated_at'] as String),
+        arguments: [insumoId]);
+  }
+
+  @override
+  Future<KardexRecalculateQueueEntity?> findQueueById(String id) async {
+    return _queryAdapter.query(
+        'SELECT * FROM kardex_recalculate_queue WHERE id = ?1',
+        mapper: (Map<String, Object?> row) => KardexRecalculateQueueEntity(
+            id: row['id'] as String,
+            insumoId: row['insumo_id'] as String,
+            originMovementId: row['origin_movement_id'] as String,
+            triggerMovementId: row['trigger_movement_id'] as String,
+            status: row['status'] as String,
+            attempts: row['attempts'] as int,
+            claimedAt: row['claimed_at'] as String?,
+            lastError: row['last_error'] as String?,
+            createdAt: row['created_at'] as String,
+            updatedAt: row['updated_at'] as String),
+        arguments: [id]);
+  }
+
+  @override
+  Future<void> deleteQueueItemById(String id) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM kardex_recalculate_queue WHERE id = ?1',
+        arguments: [id]);
+  }
+
+  @override
+  Future<void> insertQueueItem(KardexRecalculateQueueEntity item) async {
+    await _kardexRecalculateQueueEntityInsertionAdapter.insert(
+        item, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> updateQueueItem(KardexRecalculateQueueEntity item) async {
+    await _kardexRecalculateQueueEntityUpdateAdapter.update(
+        item, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> claimQueueItem(
+    String id,
+    String status,
+    String claimedAt,
+    int attempts,
+  ) async {
+    if (database is sqflite.Transaction) {
+      await super.claimQueueItem(id, status, claimedAt, attempts);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.kardexRecalculateQueueDao
+            .claimQueueItem(id, status, claimedAt, attempts);
+      });
+    }
+  }
+}
+
+class _$KardexCorrectionDao extends KardexCorrectionDao {
+  _$KardexCorrectionDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _kardexCorrectionEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'kardex_corrections',
+            (KardexCorrectionEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'insumo_id': item.insumoId,
+                  'origin_movement_id': item.originMovementId,
+                  'trigger_movement_id': item.triggerMovementId,
+                  'previous_unit_cost_nio': item.previousUnitCostNio,
+                  'recalculated_unit_cost_nio': item.recalculatedUnitCostNio,
+                  'delta_unit_cost_nio': item.deltaUnitCostNio,
+                  'total_delta_cost_nio': item.totalDeltaCostNio,
+                  'affected_quantity': item.affectedQuantity,
+                  'lineage_hash': item.lineageHash,
+                  'authorized_by_user_id': item.authorizedByUserId,
+                  'authorized_by_role': item.authorizedByRole,
+                  'authorization_method': item.authorizationMethod,
+                  'created_at': item.createdAt
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<KardexCorrectionEntity>
+      _kardexCorrectionEntityInsertionAdapter;
+
+  @override
+  Future<List<KardexCorrectionEntity>> findCorrectionsByInsumoId(
+      String insumoId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM kardex_corrections WHERE insumo_id = ?1 ORDER BY created_at DESC',
+        mapper: (Map<String, Object?> row) => KardexCorrectionEntity(id: row['id'] as String, insumoId: row['insumo_id'] as String, originMovementId: row['origin_movement_id'] as String, triggerMovementId: row['trigger_movement_id'] as String, previousUnitCostNio: row['previous_unit_cost_nio'] as double, recalculatedUnitCostNio: row['recalculated_unit_cost_nio'] as double, deltaUnitCostNio: row['delta_unit_cost_nio'] as double, totalDeltaCostNio: row['total_delta_cost_nio'] as double, affectedQuantity: row['affected_quantity'] as double, lineageHash: row['lineage_hash'] as String, authorizedByUserId: row['authorized_by_user_id'] as String?, authorizedByRole: row['authorized_by_role'] as String?, authorizationMethod: row['authorization_method'] as String?, createdAt: row['created_at'] as String),
+        arguments: [insumoId]);
+  }
+
+  @override
+  Future<KardexCorrectionEntity?> findCorrectionByLineageHash(
+      String lineageHash) async {
+    return _queryAdapter.query(
+        'SELECT * FROM kardex_corrections WHERE lineage_hash = ?1 LIMIT 1',
+        mapper: (Map<String, Object?> row) => KardexCorrectionEntity(
+            id: row['id'] as String,
+            insumoId: row['insumo_id'] as String,
+            originMovementId: row['origin_movement_id'] as String,
+            triggerMovementId: row['trigger_movement_id'] as String,
+            previousUnitCostNio: row['previous_unit_cost_nio'] as double,
+            recalculatedUnitCostNio:
+                row['recalculated_unit_cost_nio'] as double,
+            deltaUnitCostNio: row['delta_unit_cost_nio'] as double,
+            totalDeltaCostNio: row['total_delta_cost_nio'] as double,
+            affectedQuantity: row['affected_quantity'] as double,
+            lineageHash: row['lineage_hash'] as String,
+            authorizedByUserId: row['authorized_by_user_id'] as String?,
+            authorizedByRole: row['authorized_by_role'] as String?,
+            authorizationMethod: row['authorization_method'] as String?,
+            createdAt: row['created_at'] as String),
+        arguments: [lineageHash]);
+  }
+
+  @override
+  Future<KardexCorrectionEntity?> findCorrectionById(String id) async {
+    return _queryAdapter.query('SELECT * FROM kardex_corrections WHERE id = ?1',
+        mapper: (Map<String, Object?> row) => KardexCorrectionEntity(
+            id: row['id'] as String,
+            insumoId: row['insumo_id'] as String,
+            originMovementId: row['origin_movement_id'] as String,
+            triggerMovementId: row['trigger_movement_id'] as String,
+            previousUnitCostNio: row['previous_unit_cost_nio'] as double,
+            recalculatedUnitCostNio:
+                row['recalculated_unit_cost_nio'] as double,
+            deltaUnitCostNio: row['delta_unit_cost_nio'] as double,
+            totalDeltaCostNio: row['total_delta_cost_nio'] as double,
+            affectedQuantity: row['affected_quantity'] as double,
+            lineageHash: row['lineage_hash'] as String,
+            authorizedByUserId: row['authorized_by_user_id'] as String?,
+            authorizedByRole: row['authorized_by_role'] as String?,
+            authorizationMethod: row['authorization_method'] as String?,
+            createdAt: row['created_at'] as String),
+        arguments: [id]);
+  }
+
+  @override
+  Future<List<KardexCorrectionEntity>> findAllCorrections() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM kardex_corrections ORDER BY created_at ASC',
+        mapper: (Map<String, Object?> row) => KardexCorrectionEntity(
+            id: row['id'] as String,
+            insumoId: row['insumo_id'] as String,
+            originMovementId: row['origin_movement_id'] as String,
+            triggerMovementId: row['trigger_movement_id'] as String,
+            previousUnitCostNio: row['previous_unit_cost_nio'] as double,
+            recalculatedUnitCostNio:
+                row['recalculated_unit_cost_nio'] as double,
+            deltaUnitCostNio: row['delta_unit_cost_nio'] as double,
+            totalDeltaCostNio: row['total_delta_cost_nio'] as double,
+            affectedQuantity: row['affected_quantity'] as double,
+            lineageHash: row['lineage_hash'] as String,
+            authorizedByUserId: row['authorized_by_user_id'] as String?,
+            authorizedByRole: row['authorized_by_role'] as String?,
+            authorizationMethod: row['authorization_method'] as String?,
+            createdAt: row['created_at'] as String));
+  }
+
+  @override
+  Future<void> insertCorrection(KardexCorrectionEntity correction) async {
+    await _kardexCorrectionEntityInsertionAdapter.insert(
+        correction, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> recordCorrectionWithLineage(
+      KardexCorrectionEntity correction) async {
+    if (database is sqflite.Transaction) {
+      await super.recordCorrectionWithLineage(correction);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.kardexCorrectionDao
+            .recordCorrectionWithLineage(correction);
+      });
+    }
+  }
+}
+
 class _$InventoryDao extends InventoryDao {
   _$InventoryDao(
     this.database,
@@ -1619,7 +1913,12 @@ class _$InventoryDao extends InventoryDao {
                   'source_document_id': item.sourceDocumentId,
                   'origin_movement_id': item.originMovementId,
                   'origin_invoice_item_id': item.originInvoiceItemId,
-                  'batch_deductions': item.batch_deductions
+                  'batch_deductions': item.batch_deductions,
+                  'estado_costeo': item.estadoCosteo,
+                  'intentos_count': item.intentosCount,
+                  'bloqueo_motivo': item.bloqueoMotivo,
+                  'autorizado_por_usuario_id': item.autorizadoPorUsuarioId,
+                  'fecha_autorizacion': item.fechaAutorizacion
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -2070,7 +2369,12 @@ class _$ProductionTransactionDao extends ProductionTransactionDao {
                   'source_document_id': item.sourceDocumentId,
                   'origin_movement_id': item.originMovementId,
                   'origin_invoice_item_id': item.originInvoiceItemId,
-                  'batch_deductions': item.batch_deductions
+                  'batch_deductions': item.batch_deductions,
+                  'estado_costeo': item.estadoCosteo,
+                  'intentos_count': item.intentosCount,
+                  'bloqueo_motivo': item.bloqueoMotivo,
+                  'autorizado_por_usuario_id': item.autorizadoPorUsuarioId,
+                  'fecha_autorizacion': item.fechaAutorizacion
                 }),
         _productionOrderDocumentEntityInsertionAdapter = InsertionAdapter(
             database,
@@ -2916,7 +3220,12 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'source_document_id': item.sourceDocumentId,
                   'origin_movement_id': item.originMovementId,
                   'origin_invoice_item_id': item.originInvoiceItemId,
-                  'batch_deductions': item.batch_deductions
+                  'batch_deductions': item.batch_deductions,
+                  'estado_costeo': item.estadoCosteo,
+                  'intentos_count': item.intentosCount,
+                  'bloqueo_motivo': item.bloqueoMotivo,
+                  'autorizado_por_usuario_id': item.autorizadoPorUsuarioId,
+                  'fecha_autorizacion': item.fechaAutorizacion
                 }),
         _auditLogEntityInsertionAdapter = InsertionAdapter(
             database,

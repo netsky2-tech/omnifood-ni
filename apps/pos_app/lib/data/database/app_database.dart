@@ -13,6 +13,8 @@ import '../daos/inventory/count_session_dao.dart';
 import '../daos/inventory/forensic_alert_dao.dart';
 import '../daos/inventory/movement_dao.dart';
 import '../daos/inventory/movement_sync_state_dao.dart';
+import '../daos/inventory/kardex_recalculate_queue_dao.dart';
+import '../daos/inventory/kardex_correction_dao.dart';
 import '../daos/inventory/inventory_dao.dart';
 import '../daos/inventory/purchase_dao.dart';
 import '../daos/inventory/production_order_document_dao.dart';
@@ -44,6 +46,8 @@ import 'package:pos_app/data/models/inventory/count_session_document_entity.dart
 import 'package:pos_app/data/models/inventory/forensic_alert_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_sync_state_entity.dart';
+import 'package:pos_app/data/models/inventory/kardex_recalculate_queue_entity.dart';
+import 'package:pos_app/data/models/inventory/kardex_correction_entity.dart';
 import 'package:pos_app/data/models/inventory/supplier_entity.dart';
 import 'package:pos_app/data/models/inventory/warehouse_entity.dart';
 import 'package:pos_app/data/models/inventory/purchase_entity.dart';
@@ -63,7 +67,7 @@ import 'package:pos_app/data/models/sales/promotion_entity.dart';
 part 'app_database.g.dart'; // generated code
 
 @Database(
-  version: 31,
+  version: 32,
   entities: [
     UserEntity,
     SecurityProfileEntity,
@@ -80,6 +84,8 @@ part 'app_database.g.dart'; // generated code
     ForensicAlertEntity,
     MovementEntity,
     MovementSyncStateEntity,
+    KardexRecalculateQueueEntity,
+    KardexCorrectionEntity,
     SupplierEntity,
     WarehouseEntity,
     PurchaseEntity,
@@ -112,6 +118,8 @@ abstract class AppDatabase extends FloorDatabase {
   ForensicAlertDao get forensicAlertDao;
   MovementDao get movementDao;
   MovementSyncStateDao get movementSyncStateDao;
+  KardexRecalculateQueueDao get kardexRecalculateQueueDao;
+  KardexCorrectionDao get kardexCorrectionDao;
   InventoryDao get inventoryDao;
   SupplierDao get supplierDao;
   WarehouseDao get warehouseDao;

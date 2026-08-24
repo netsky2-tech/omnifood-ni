@@ -129,6 +129,11 @@ class InventoryMapper {
       originMovementId: entity.originMovementId,
       originInvoiceItemId: entity.originInvoiceItemId,
       batchDeductions: batchDeductions,
+      estadoCosteo: entity.estadoCosteo,
+      intentosCount: entity.intentosCount,
+      bloqueoMotivo: entity.bloqueoMotivo,
+      autorizadoPorUsuarioId: entity.autorizadoPorUsuarioId,
+      fechaAutorizacion: entity.fechaAutorizacion,
     );
   }
 
@@ -156,6 +161,11 @@ class InventoryMapper {
       originMovementId: domain.originMovementId,
       originInvoiceItemId: domain.originInvoiceItemId,
       batch_deductions: batchDeductionsJson,
+      estadoCosteo: domain.estadoCosteo ?? 30,
+      intentosCount: domain.intentosCount ?? 0,
+      bloqueoMotivo: domain.bloqueoMotivo,
+      autorizadoPorUsuarioId: domain.autorizadoPorUsuarioId,
+      fechaAutorizacion: domain.fechaAutorizacion,
     );
   }
 

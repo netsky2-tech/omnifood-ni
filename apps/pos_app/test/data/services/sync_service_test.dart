@@ -6,6 +6,8 @@ import 'package:pos_app/data/repositories/inventory/inventory_repository_impl.da
 import 'package:pos_app/data/services/sync_service.dart';
 import 'package:pos_app/data/models/inventory/movement_sync_state_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
+import 'package:pos_app/data/models/inventory/kardex_correction_entity.dart';
+import 'package:pos_app/data/models/inventory/kardex_recalculate_queue_entity.dart';
 import 'package:pos_app/domain/models/inventory/inventory_movement.dart';
 import 'package:pos_app/domain/models/inventory/insumo.dart';
 import 'package:pos_app/domain/models/inventory/product.dart';
@@ -371,6 +373,11 @@ class FakeInventoryRepository
     String productId,
     List<Recipe> recipes,
   ) async => throw UnimplementedError();
+
+  @override
+  Future<List<KardexCorrectionEntity>> getKardexCorrections() async => [];
+  @override
+  Future<List<KardexRecalculateQueueEntity>> getPendingKardexQueue() async => [];
 }
 
 class RepositoryBackedPurchaseInventoryRepository

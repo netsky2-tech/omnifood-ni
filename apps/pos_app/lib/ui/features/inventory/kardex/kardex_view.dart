@@ -123,28 +123,30 @@ class _KardexViewState extends State<KardexView> {
                                   scrollDirection: Axis.horizontal,
                                   child: SingleChildScrollView(
                                     child: DataTable(
-                                       columns: const [
-                                         DataColumn(label: Text('Fecha')),
-                                         DataColumn(label: Text('Tipo')),
-                                         DataColumn(label: Text('Referencia')),
-                                         DataColumn(label: Text('Documento')),
-                                         DataColumn(label: Text('Cantidad')),
-                                         DataColumn(label: Text('Stock final')),
-                                         DataColumn(label: Text('Costo unit.')),
-                                         DataColumn(label: Text('Valor')),
+                                      columns: const [
+                                        DataColumn(label: Text('Fecha')),
+                                        DataColumn(label: Text('Tipo')),
+                                        DataColumn(label: Text('Estado Costeo')),
+                                        DataColumn(label: Text('Referencia')),
+                                        DataColumn(label: Text('Documento')),
+                                        DataColumn(label: Text('Cantidad')),
+                                        DataColumn(label: Text('Stock final')),
+                                        DataColumn(label: Text('Costo unit.')),
+                                        DataColumn(label: Text('Valor')),
                                       ],
                                       rows: viewModel.visibleEntries
                                           .map(
                                             (entry) => DataRow(
                                               cells: [
-                                                 DataCell(Text(entry.dateLabel), onTap: () => _showDetailSheet(context, entry)),
-                                                 DataCell(Text(entry.typeLabel.toUpperCase()), onTap: () => _showDetailSheet(context, entry)),
-                                                 DataCell(Text(entry.referenceLabel), onTap: () => _showDetailSheet(context, entry)),
-                                                 DataCell(Text(entry.sourceDocumentLabel), onTap: () => _showDetailSheet(context, entry)),
-                                                  DataCell(Text(entry.quantityLabel, style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])), onTap: () => _showDetailSheet(context, entry)),
-                                                  DataCell(Text(entry.stockAfterLabel, style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])), onTap: () => _showDetailSheet(context, entry)),
-                                                  DataCell(Text(entry.unitCostLabel, style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])), onTap: () => _showDetailSheet(context, entry)),
-                                                  DataCell(Text(entry.totalValueLabel, style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])), onTap: () => _showDetailSheet(context, entry)),
+                                                DataCell(Text(entry.dateLabel), onTap: () => _showDetailSheet(context, entry)),
+                                                DataCell(Text(entry.typeLabel.toUpperCase()), onTap: () => _showDetailSheet(context, entry)),
+                                                DataCell(_buildCostingChip(context, entry), onTap: () => _showDetailSheet(context, entry)),
+                                                DataCell(Text(entry.referenceLabel), onTap: () => _showDetailSheet(context, entry)),
+                                                DataCell(Text(entry.sourceDocumentLabel), onTap: () => _showDetailSheet(context, entry)),
+                                                DataCell(Text(entry.quantityLabel, style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])), onTap: () => _showDetailSheet(context, entry)),
+                                                DataCell(Text(entry.stockAfterLabel, style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])), onTap: () => _showDetailSheet(context, entry)),
+                                                DataCell(Text(entry.unitCostLabel, style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])), onTap: () => _showDetailSheet(context, entry)),
+                                                DataCell(Text(entry.totalValueLabel, style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])), onTap: () => _showDetailSheet(context, entry)),
                                               ],
                                             ),
                                           )
@@ -161,33 +163,70 @@ class _KardexViewState extends State<KardexView> {
     );
   }
 
+  Widget _buildCostingChip(BuildContext context, KardexEntryViewData entry) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final (Color bg, Color fg) = switch (entry.estadoCosteo) {
+      10 => (Colors.amber.shade100, Colors.amber.shade900), // Provisional
+      20 => (Colors.blue.shade100, Colors.blue.shade900), // En proceso
+      30 => (Colors.green.shade100, Colors.green.shade900), // Regularizado
+      40 => (Colors.red.shade100, Colors.red.shade900), // Bloqueado
+      _ => (colorScheme.surfaceContainerHighest, colorScheme.onSurfaceVariant),
+    };
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        entry.costingStateLabel,
+        style: TextStyle(color: fg, fontSize: 12, fontWeight: FontWeight.bold),
+      ),
+    );
+  }
+
   Future<void> _showDetailSheet(
     BuildContext context,
     KardexEntryViewData entry,
   ) {
     return showModalBottomSheet<void>(
       context: context,
-      builder: (context) => Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Detalle del movimiento', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 12),
-            Text('ID: ${entry.id}'),
-            Text('Referencia: ${entry.referenceLabel}'),
-            Text('Tipo: ${entry.typeLabel}'),
-            Text('Documento origen: ${entry.sourceDocumentLabel}'),
-            Text('Fecha: ${entry.dateLabel}'),
-            Text('Stock previo: ${entry.stockBeforeLabel}', style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])),
-            Text('Stock final: ${entry.stockAfterLabel}', style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])),
-            Text('Costo unitario: ${entry.unitCostLabel}', style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])),
-            Text('Valor total: ${entry.totalValueLabel}', style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])),
-            Text('Alertas relacionadas: ${entry.relatedAlertCount}', style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])),
-            Text('Detalle operativo: ${entry.reasonLabel}'),
-            const SizedBox(height: 12),
-          ],
+      isScrollControlled: true,
+      builder: (context) => SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Detalle del movimiento', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 12),
+              Text('ID: ${entry.id}'),
+              Text('Referencia: ${entry.referenceLabel}'),
+              Text('Tipo: ${entry.typeLabel}'),
+              Row(
+                children: [
+                  const Text('Estado de costeo: '),
+                  _buildCostingChip(context, entry),
+                ],
+              ),
+              if (entry.bloqueoMotivo != null)
+                Text(
+                  'Motivo de bloqueo: ${entry.bloqueoMotivo}',
+                  style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                ),
+              Text('Documento origen: ${entry.sourceDocumentLabel}'),
+              Text('Fecha: ${entry.dateLabel}'),
+              Text('Stock previo: ${entry.stockBeforeLabel}', style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])),
+              Text('Stock final: ${entry.stockAfterLabel}', style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])),
+              Text('Costo unitario: ${entry.unitCostLabel}', style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])),
+              Text('Valor total: ${entry.totalValueLabel}', style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])),
+              Text('Alertas relacionadas: ${entry.relatedAlertCount}', style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])),
+              Text('Detalle operativo: ${entry.reasonLabel}'),
+              const SizedBox(height: 12),
+            ],
+          ),
         ),
       ),
     );
@@ -202,17 +241,19 @@ class _EmptyKardexState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.inventory_outlined, size: 56, color: Theme.of(context).colorScheme.outline),
-          const SizedBox(height: 12),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-        ],
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.inventory_outlined, size: 56, color: Theme.of(context).colorScheme.outline),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ],
+        ),
       ),
     );
   }

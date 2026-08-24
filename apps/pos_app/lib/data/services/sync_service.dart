@@ -74,6 +74,7 @@ class SyncService {
       final productionLinkedMovementIds = await _syncProductionOrderDocuments();
       await _syncCountSessionDocuments();
       await _syncAlertLifecycleDocuments();
+      await _syncKardexCorrections();
       await _syncInventoryOutbox(
         blockedMovementIds: productionLinkedMovementIds,
       );
@@ -965,6 +966,50 @@ class SyncService {
       parsed[result.idempotencyKey] = result;
     }
     return parsed;
+  }
+
+  Future<void> _syncKardexCorrections() async {
+    final corrections = await _inventoryRepository.getKardexCorrections();
+    if (corrections.isEmpty) return;
+
+    final payload = {
+      'corrections': corrections
+          .map((c) => {
+                'id': c.id,
+                'insumoId': c.insumoId,
+                'originMovementId': c.originMovementId,
+                'triggerMovementId': c.triggerMovementId,
+                'previousUnitCostNio': c.previousUnitCostNio,
+                'recalculatedUnitCostNio': c.recalculatedUnitCostNio,
+                'deltaUnitCostNio': c.deltaUnitCostNio,
+                'totalDeltaCostNio': c.totalDeltaCostNio,
+                'affectedQuantity': c.affectedQuantity,
+                'lineageHash': c.lineageHash,
+                'authorizedByUserId': c.authorizedByUserId,
+                'authorizedByRole': c.authorizedByRole,
+                'authorizationMethod': c.authorizationMethod,
+                'createdAt': c.createdAt,
+              })
+          .toList(growable: false),
+    };
+
+    try {
+      final response = await _dio.post(
+        '/inventory/regularization/sync',
+        data: payload,
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        developer.log(
+          'Synced ${corrections.length} kardex corrections to cloud',
+          name: 'SyncService',
+        );
+      }
+    } on DioException catch (e) {
+      developer.log(
+        'Failed to sync kardex corrections: ${e.message}',
+        name: 'SyncService',
+      );
+    }
   }
 }
 

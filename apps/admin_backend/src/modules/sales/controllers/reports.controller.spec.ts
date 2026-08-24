@@ -10,7 +10,7 @@ import { JwtModule, JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 
 describe('ReportsController RBAC', () => {
-  const jwtSecret = 'test-jwt-secret';
+  const jwtSecret = 'test-only-jwt-secret-with-at-least-thirty-two-bytes';
   let app: INestApplication;
 
   beforeAll(async () => {
@@ -23,7 +23,16 @@ describe('ReportsController RBAC', () => {
         AuthGuard,
         {
           provide: ConfigService,
-          useValue: { get: () => jwtSecret },
+          useValue: new ConfigService({
+            NODE_ENV: 'test',
+            JWT_SECRET: jwtSecret,
+            JWT_ISSUER: 'omnifood-admin',
+            JWT_AUDIENCE: 'omnifood-pos',
+            JWT_ACCESS_TTL_SECONDS: '3600',
+            JWT_REFRESH_TTL_SECONDS: '604800',
+            JWT_CLOCK_TOLERANCE_SECONDS: '5',
+            JWT_ALGORITHM: 'HS256',
+          }),
         },
       ],
     }).compile();
@@ -37,7 +46,23 @@ describe('ReportsController RBAC', () => {
   });
 
   const signToken = (jwtService: JwtService, role: UserRole) =>
-    jwtService.sign({ sub: 'user-1', role, tenant_id: 'tenant-1' });
+    jwtService.sign(
+      {
+        sub: 'user-1',
+        email: 'user@omnifood.ni',
+        tenant_id: 'tenant-1',
+        role,
+        is_active: true,
+        token_type: 'access',
+        security_version: 1,
+      },
+      {
+        issuer: 'omnifood-admin',
+        audience: 'omnifood-pos',
+        expiresIn: 3600,
+        algorithm: 'HS256',
+      },
+    );
 
   const getHttpServer = (): Parameters<typeof request>[0] =>
     app.getHttpServer() as Parameters<typeof request>[0];
