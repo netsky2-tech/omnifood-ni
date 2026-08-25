@@ -1409,6 +1409,75 @@ final migration34_35 = Migration(34, 35, (database) async {
   }
 });
 
+final migration35_36 = Migration(35, 36, (database) async {
+  // Create restaurant_areas table
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS `restaurant_areas` (
+      `id` TEXT NOT NULL,
+      `name` TEXT NOT NULL,
+      `display_order` INTEGER NOT NULL,
+      `is_active` INTEGER NOT NULL,
+      PRIMARY KEY (`id`)
+    )
+  ''');
+
+  // Create restaurant_tables table
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS `restaurant_tables` (
+      `id` TEXT NOT NULL,
+      `area_id` TEXT NOT NULL,
+      `table_number` TEXT NOT NULL,
+      `capacity` INTEGER NOT NULL,
+      `status` TEXT NOT NULL,
+      `current_ticket_id` TEXT,
+      `active_guests` INTEGER,
+      `opened_at` INTEGER,
+      FOREIGN KEY (`area_id`) REFERENCES `restaurant_areas` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE,
+      PRIMARY KEY (`id`)
+    )
+  ''');
+
+  // Alter hold_tickets columns
+  final holdColumns = await database.rawQuery("PRAGMA table_info(`hold_tickets`)");
+  final holdColumnNames = holdColumns.map((col) => col['name'] as String).toSet();
+
+  if (!holdColumnNames.contains('updated_at')) {
+    await database.execute("ALTER TABLE `hold_tickets` ADD COLUMN `updated_at` INTEGER");
+  }
+  if (!holdColumnNames.contains('table_id')) {
+    await database.execute("ALTER TABLE `hold_tickets` ADD COLUMN `table_id` TEXT");
+  }
+  if (!holdColumnNames.contains('area_id')) {
+    await database.execute("ALTER TABLE `hold_tickets` ADD COLUMN `area_id` TEXT");
+  }
+  if (!holdColumnNames.contains('waiter_id')) {
+    await database.execute("ALTER TABLE `hold_tickets` ADD COLUMN `waiter_id` TEXT");
+  }
+  if (!holdColumnNames.contains('waiter_name')) {
+    await database.execute("ALTER TABLE `hold_tickets` ADD COLUMN `waiter_name` TEXT");
+  }
+  if (!holdColumnNames.contains('guest_count')) {
+    await database.execute("ALTER TABLE `hold_tickets` ADD COLUMN `guest_count` INTEGER NOT NULL DEFAULT 1");
+  }
+  if (!holdColumnNames.contains('version')) {
+    await database.execute("ALTER TABLE `hold_tickets` ADD COLUMN `version` INTEGER NOT NULL DEFAULT 1");
+  }
+
+  // Alter hold_ticket_items columns
+  final itemColumns = await database.rawQuery("PRAGMA table_info(`hold_ticket_items`)");
+  final itemColumnNames = itemColumns.map((col) => col['name'] as String).toSet();
+
+  if (!itemColumnNames.contains('variant_id')) {
+    await database.execute("ALTER TABLE `hold_ticket_items` ADD COLUMN `variant_id` TEXT");
+  }
+  if (!itemColumnNames.contains('notes')) {
+    await database.execute("ALTER TABLE `hold_ticket_items` ADD COLUMN `notes` TEXT");
+  }
+  if (!itemColumnNames.contains('modifiers_json')) {
+    await database.execute("ALTER TABLE `hold_ticket_items` ADD COLUMN `modifiers_json` TEXT");
+  }
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -1435,4 +1504,5 @@ final allMigrations = [
   migration32_33,
   migration33_34,
   migration34_35,
+  migration35_36,
 ];

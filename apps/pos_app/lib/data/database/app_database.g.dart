@@ -138,13 +138,17 @@ class _$AppDatabase extends AppDatabase {
 
   PromotionDao? _promotionDaoInstance;
 
+  RestaurantAreaDao? _restaurantAreaDaoInstance;
+
+  RestaurantTableDao? _restaurantTableDaoInstance;
+
   Future<sqflite.Database> open(
     String path,
     List<Migration> migrations, [
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 35,
+      version: 36,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -222,11 +226,15 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `cash_movements` (`id` TEXT NOT NULL, `shift_id` TEXT NOT NULL, `terminal_id` TEXT NOT NULL, `type` TEXT NOT NULL, `amount_nio` REAL NOT NULL, `amount_usd` REAL NOT NULL, `reason` TEXT NOT NULL, `authorized_by_user_id` TEXT, `timestamp` INTEGER NOT NULL, `sync_status` TEXT NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `hold_tickets` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `global_tax_exempt` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `hold_tickets` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `table_id` TEXT, `area_id` TEXT, `waiter_id` TEXT, `waiter_name` TEXT, `guest_count` INTEGER NOT NULL, `global_tax_exempt` INTEGER NOT NULL, `version` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `hold_ticket_items` (`id` TEXT NOT NULL, `hold_ticket_id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `product_name` TEXT NOT NULL, `quantity` REAL NOT NULL, `unit_price` REAL NOT NULL, `tax_rate` REAL NOT NULL, FOREIGN KEY (`hold_ticket_id`) REFERENCES `hold_tickets` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `hold_ticket_items` (`id` TEXT NOT NULL, `hold_ticket_id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `product_name` TEXT NOT NULL, `quantity` REAL NOT NULL, `unit_price` REAL NOT NULL, `tax_rate` REAL NOT NULL, `variant_id` TEXT, `notes` TEXT, `modifiers_json` TEXT, FOREIGN KEY (`hold_ticket_id`) REFERENCES `hold_tickets` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `promotions` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `type` TEXT NOT NULL, `target_product_id` TEXT NOT NULL, `buy_quantity` INTEGER NOT NULL, `get_quantity` INTEGER NOT NULL, `discount_value` REAL NOT NULL, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `restaurant_areas` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `display_order` INTEGER NOT NULL, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `restaurant_tables` (`id` TEXT NOT NULL, `area_id` TEXT NOT NULL, `table_number` TEXT NOT NULL, `capacity` INTEGER NOT NULL, `status` TEXT NOT NULL, `current_ticket_id` TEXT, `active_guests` INTEGER, `opened_at` INTEGER, FOREIGN KEY (`area_id`) REFERENCES `restaurant_areas` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE UNIQUE INDEX `idx_movement_sync_state_stream_sequence` ON `inventory_movement_sync_state` (`terminal_id`, `flow_type`, `local_sequence`)');
         await database.execute(
@@ -429,6 +437,18 @@ class _$AppDatabase extends AppDatabase {
   @override
   PromotionDao get promotionDao {
     return _promotionDaoInstance ??= _$PromotionDao(database, changeListener);
+  }
+
+  @override
+  RestaurantAreaDao get restaurantAreaDao {
+    return _restaurantAreaDaoInstance ??=
+        _$RestaurantAreaDao(database, changeListener);
+  }
+
+  @override
+  RestaurantTableDao get restaurantTableDao {
+    return _restaurantTableDaoInstance ??=
+        _$RestaurantTableDao(database, changeListener);
   }
 }
 
@@ -3918,7 +3938,14 @@ class _$HoldTicketDao extends HoldTicketDao {
                   'id': item.id,
                   'name': item.name,
                   'created_at': item.createdAt,
-                  'global_tax_exempt': item.isGlobalTaxExempt ? 1 : 0
+                  'updated_at': item.updatedAt,
+                  'table_id': item.tableId,
+                  'area_id': item.areaId,
+                  'waiter_id': item.waiterId,
+                  'waiter_name': item.waiterName,
+                  'guest_count': item.guestCount,
+                  'global_tax_exempt': item.isGlobalTaxExempt ? 1 : 0,
+                  'version': item.version
                 }),
         _holdTicketItemEntityInsertionAdapter = InsertionAdapter(
             database,
@@ -3930,7 +3957,27 @@ class _$HoldTicketDao extends HoldTicketDao {
                   'product_name': item.productName,
                   'quantity': item.quantity,
                   'unit_price': item.unitPrice,
-                  'tax_rate': item.taxRate
+                  'tax_rate': item.taxRate,
+                  'variant_id': item.variantId,
+                  'notes': item.notes,
+                  'modifiers_json': item.modifiersJson
+                }),
+        _holdTicketEntityUpdateAdapter = UpdateAdapter(
+            database,
+            'hold_tickets',
+            ['id'],
+            (HoldTicketEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'name': item.name,
+                  'created_at': item.createdAt,
+                  'updated_at': item.updatedAt,
+                  'table_id': item.tableId,
+                  'area_id': item.areaId,
+                  'waiter_id': item.waiterId,
+                  'waiter_name': item.waiterName,
+                  'guest_count': item.guestCount,
+                  'global_tax_exempt': item.isGlobalTaxExempt ? 1 : 0,
+                  'version': item.version
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -3944,6 +3991,8 @@ class _$HoldTicketDao extends HoldTicketDao {
   final InsertionAdapter<HoldTicketItemEntity>
       _holdTicketItemEntityInsertionAdapter;
 
+  final UpdateAdapter<HoldTicketEntity> _holdTicketEntityUpdateAdapter;
+
   @override
   Future<List<HoldTicketEntity>> getAllHoldTickets() async {
     return _queryAdapter.queryList(
@@ -3952,7 +4001,50 @@ class _$HoldTicketDao extends HoldTicketDao {
             id: row['id'] as String,
             name: row['name'] as String,
             createdAt: row['created_at'] as int,
-            isGlobalTaxExempt: (row['global_tax_exempt'] as int) != 0));
+            updatedAt: row['updated_at'] as int?,
+            tableId: row['table_id'] as String?,
+            areaId: row['area_id'] as String?,
+            waiterId: row['waiter_id'] as String?,
+            waiterName: row['waiter_name'] as String?,
+            guestCount: row['guest_count'] as int,
+            isGlobalTaxExempt: (row['global_tax_exempt'] as int) != 0,
+            version: row['version'] as int));
+  }
+
+  @override
+  Future<HoldTicketEntity?> getHoldTicketById(String id) async {
+    return _queryAdapter.query('SELECT * FROM hold_tickets WHERE id = ?1',
+        mapper: (Map<String, Object?> row) => HoldTicketEntity(
+            id: row['id'] as String,
+            name: row['name'] as String,
+            createdAt: row['created_at'] as int,
+            updatedAt: row['updated_at'] as int?,
+            tableId: row['table_id'] as String?,
+            areaId: row['area_id'] as String?,
+            waiterId: row['waiter_id'] as String?,
+            waiterName: row['waiter_name'] as String?,
+            guestCount: row['guest_count'] as int,
+            isGlobalTaxExempt: (row['global_tax_exempt'] as int) != 0,
+            version: row['version'] as int),
+        arguments: [id]);
+  }
+
+  @override
+  Future<HoldTicketEntity?> getHoldTicketByTableId(String tableId) async {
+    return _queryAdapter.query('SELECT * FROM hold_tickets WHERE table_id = ?1',
+        mapper: (Map<String, Object?> row) => HoldTicketEntity(
+            id: row['id'] as String,
+            name: row['name'] as String,
+            createdAt: row['created_at'] as int,
+            updatedAt: row['updated_at'] as int?,
+            tableId: row['table_id'] as String?,
+            areaId: row['area_id'] as String?,
+            waiterId: row['waiter_id'] as String?,
+            waiterName: row['waiter_name'] as String?,
+            guestCount: row['guest_count'] as int,
+            isGlobalTaxExempt: (row['global_tax_exempt'] as int) != 0,
+            version: row['version'] as int),
+        arguments: [tableId]);
   }
 
   @override
@@ -3967,7 +4059,17 @@ class _$HoldTicketDao extends HoldTicketDao {
             productName: row['product_name'] as String,
             quantity: row['quantity'] as double,
             unitPrice: row['unit_price'] as double,
-            taxRate: row['tax_rate'] as double),
+            taxRate: row['tax_rate'] as double,
+            variantId: row['variant_id'] as String?,
+            notes: row['notes'] as String?,
+            modifiersJson: row['modifiers_json'] as String?),
+        arguments: [holdTicketId]);
+  }
+
+  @override
+  Future<void> deleteHoldTicketItems(String holdTicketId) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM hold_ticket_items WHERE hold_ticket_id = ?1',
         arguments: [holdTicketId]);
   }
 
@@ -3990,6 +4092,12 @@ class _$HoldTicketDao extends HoldTicketDao {
   }
 
   @override
+  Future<int> updateHoldTicket(HoldTicketEntity ticket) {
+    return _holdTicketEntityUpdateAdapter.updateAndReturnChangedRows(
+        ticket, OnConflictStrategy.replace);
+  }
+
+  @override
   Future<void> saveHoldTicket(
     HoldTicketEntity ticket,
     List<HoldTicketItemEntity> items,
@@ -4002,6 +4110,20 @@ class _$HoldTicketDao extends HoldTicketDao {
         final transactionDatabase = _$AppDatabase(changeListener)
           ..database = transaction;
         await transactionDatabase.holdTicketDao.saveHoldTicket(ticket, items);
+      });
+    }
+  }
+
+  @override
+  Future<void> deleteHoldTicketWithItems(String id) async {
+    if (database is sqflite.Transaction) {
+      await super.deleteHoldTicketWithItems(id);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.holdTicketDao.deleteHoldTicketWithItems(id);
       });
     }
   }
@@ -4083,5 +4205,261 @@ class _$PromotionDao extends PromotionDao {
   Future<void> updatePromotion(PromotionEntity promotion) async {
     await _promotionEntityUpdateAdapter.update(
         promotion, OnConflictStrategy.replace);
+  }
+}
+
+class _$RestaurantAreaDao extends RestaurantAreaDao {
+  _$RestaurantAreaDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _restaurantAreaEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'restaurant_areas',
+            (RestaurantAreaEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'name': item.name,
+                  'display_order': item.displayOrder,
+                  'is_active': item.isActive ? 1 : 0
+                }),
+        _restaurantAreaEntityUpdateAdapter = UpdateAdapter(
+            database,
+            'restaurant_areas',
+            ['id'],
+            (RestaurantAreaEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'name': item.name,
+                  'display_order': item.displayOrder,
+                  'is_active': item.isActive ? 1 : 0
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<RestaurantAreaEntity>
+      _restaurantAreaEntityInsertionAdapter;
+
+  final UpdateAdapter<RestaurantAreaEntity> _restaurantAreaEntityUpdateAdapter;
+
+  @override
+  Future<List<RestaurantAreaEntity>> getActiveAreas() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM restaurant_areas WHERE is_active = 1 ORDER BY display_order ASC',
+        mapper: (Map<String, Object?> row) => RestaurantAreaEntity(
+            id: row['id'] as String,
+            name: row['name'] as String,
+            displayOrder: row['display_order'] as int,
+            isActive: (row['is_active'] as int) != 0));
+  }
+
+  @override
+  Future<List<RestaurantAreaEntity>> getAllAreas() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM restaurant_areas ORDER BY display_order ASC',
+        mapper: (Map<String, Object?> row) => RestaurantAreaEntity(
+            id: row['id'] as String,
+            name: row['name'] as String,
+            displayOrder: row['display_order'] as int,
+            isActive: (row['is_active'] as int) != 0));
+  }
+
+  @override
+  Future<RestaurantAreaEntity?> getAreaById(String id) async {
+    return _queryAdapter.query('SELECT * FROM restaurant_areas WHERE id = ?1',
+        mapper: (Map<String, Object?> row) => RestaurantAreaEntity(
+            id: row['id'] as String,
+            name: row['name'] as String,
+            displayOrder: row['display_order'] as int,
+            isActive: (row['is_active'] as int) != 0),
+        arguments: [id]);
+  }
+
+  @override
+  Future<void> deleteArea(String id) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM restaurant_areas WHERE id = ?1',
+        arguments: [id]);
+  }
+
+  @override
+  Future<void> insertArea(RestaurantAreaEntity area) async {
+    await _restaurantAreaEntityInsertionAdapter.insert(
+        area, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> insertAreas(List<RestaurantAreaEntity> areas) async {
+    await _restaurantAreaEntityInsertionAdapter.insertList(
+        areas, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<int> updateArea(RestaurantAreaEntity area) {
+    return _restaurantAreaEntityUpdateAdapter.updateAndReturnChangedRows(
+        area, OnConflictStrategy.replace);
+  }
+}
+
+class _$RestaurantTableDao extends RestaurantTableDao {
+  _$RestaurantTableDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _restaurantTableEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'restaurant_tables',
+            (RestaurantTableEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'area_id': item.areaId,
+                  'table_number': item.tableNumber,
+                  'capacity': item.capacity,
+                  'status': item.status,
+                  'current_ticket_id': item.currentTicketId,
+                  'active_guests': item.activeGuests,
+                  'opened_at': item.openedAt
+                }),
+        _restaurantTableEntityUpdateAdapter = UpdateAdapter(
+            database,
+            'restaurant_tables',
+            ['id'],
+            (RestaurantTableEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'area_id': item.areaId,
+                  'table_number': item.tableNumber,
+                  'capacity': item.capacity,
+                  'status': item.status,
+                  'current_ticket_id': item.currentTicketId,
+                  'active_guests': item.activeGuests,
+                  'opened_at': item.openedAt
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<RestaurantTableEntity>
+      _restaurantTableEntityInsertionAdapter;
+
+  final UpdateAdapter<RestaurantTableEntity>
+      _restaurantTableEntityUpdateAdapter;
+
+  @override
+  Future<List<RestaurantTableEntity>> getAllTables() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM restaurant_tables ORDER BY table_number ASC',
+        mapper: (Map<String, Object?> row) => RestaurantTableEntity(
+            id: row['id'] as String,
+            areaId: row['area_id'] as String,
+            tableNumber: row['table_number'] as String,
+            capacity: row['capacity'] as int,
+            status: row['status'] as String,
+            currentTicketId: row['current_ticket_id'] as String?,
+            activeGuests: row['active_guests'] as int?,
+            openedAt: row['opened_at'] as int?));
+  }
+
+  @override
+  Future<List<RestaurantTableEntity>> getTablesByArea(String areaId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM restaurant_tables WHERE area_id = ?1 ORDER BY table_number ASC',
+        mapper: (Map<String, Object?> row) => RestaurantTableEntity(id: row['id'] as String, areaId: row['area_id'] as String, tableNumber: row['table_number'] as String, capacity: row['capacity'] as int, status: row['status'] as String, currentTicketId: row['current_ticket_id'] as String?, activeGuests: row['active_guests'] as int?, openedAt: row['opened_at'] as int?),
+        arguments: [areaId]);
+  }
+
+  @override
+  Future<RestaurantTableEntity?> getTableById(String id) async {
+    return _queryAdapter.query('SELECT * FROM restaurant_tables WHERE id = ?1',
+        mapper: (Map<String, Object?> row) => RestaurantTableEntity(
+            id: row['id'] as String,
+            areaId: row['area_id'] as String,
+            tableNumber: row['table_number'] as String,
+            capacity: row['capacity'] as int,
+            status: row['status'] as String,
+            currentTicketId: row['current_ticket_id'] as String?,
+            activeGuests: row['active_guests'] as int?,
+            openedAt: row['opened_at'] as int?),
+        arguments: [id]);
+  }
+
+  @override
+  Future<RestaurantTableEntity?> getTableByTicketId(String ticketId) async {
+    return _queryAdapter.query(
+        'SELECT * FROM restaurant_tables WHERE current_ticket_id = ?1',
+        mapper: (Map<String, Object?> row) => RestaurantTableEntity(
+            id: row['id'] as String,
+            areaId: row['area_id'] as String,
+            tableNumber: row['table_number'] as String,
+            capacity: row['capacity'] as int,
+            status: row['status'] as String,
+            currentTicketId: row['current_ticket_id'] as String?,
+            activeGuests: row['active_guests'] as int?,
+            openedAt: row['opened_at'] as int?),
+        arguments: [ticketId]);
+  }
+
+  @override
+  Future<List<RestaurantTableEntity>> getTablesByStatus(String status) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM restaurant_tables WHERE status = ?1',
+        mapper: (Map<String, Object?> row) => RestaurantTableEntity(
+            id: row['id'] as String,
+            areaId: row['area_id'] as String,
+            tableNumber: row['table_number'] as String,
+            capacity: row['capacity'] as int,
+            status: row['status'] as String,
+            currentTicketId: row['current_ticket_id'] as String?,
+            activeGuests: row['active_guests'] as int?,
+            openedAt: row['opened_at'] as int?),
+        arguments: [status]);
+  }
+
+  @override
+  Future<void> occupyTable(
+    String id,
+    String status,
+    String ticketId,
+    int guests,
+    int openedAt,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE restaurant_tables SET status = ?2, current_ticket_id = ?3, active_guests = ?4, opened_at = ?5 WHERE id = ?1',
+        arguments: [id, status, ticketId, guests, openedAt]);
+  }
+
+  @override
+  Future<void> releaseTable(String id) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE restaurant_tables SET status = \'DISPONIBLE\', current_ticket_id = NULL, active_guests = NULL, opened_at = NULL WHERE id = ?1',
+        arguments: [id]);
+  }
+
+  @override
+  Future<void> deleteTable(String id) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM restaurant_tables WHERE id = ?1',
+        arguments: [id]);
+  }
+
+  @override
+  Future<void> insertTable(RestaurantTableEntity table) async {
+    await _restaurantTableEntityInsertionAdapter.insert(
+        table, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> insertTables(List<RestaurantTableEntity> tables) async {
+    await _restaurantTableEntityInsertionAdapter.insertList(
+        tables, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<int> updateTable(RestaurantTableEntity table) {
+    return _restaurantTableEntityUpdateAdapter.updateAndReturnChangedRows(
+        table, OnConflictStrategy.replace);
   }
 }

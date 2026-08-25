@@ -33,6 +33,8 @@ import 'package:pos_app/data/daos/sales/cashier_session_dao.dart';
 import 'package:pos_app/data/daos/sales/cash_movement_dao.dart';
 import 'package:pos_app/data/daos/sales/hold_ticket_dao.dart';
 import 'package:pos_app/data/daos/sales/promotion_dao.dart';
+import 'package:pos_app/data/daos/sales/restaurant_area_dao.dart';
+import 'package:pos_app/data/daos/sales/restaurant_table_dao.dart';
 import 'package:pos_app/data/daos/local_config_dao.dart';
 import 'package:pos_app/data/models/user_entity.dart';
 import 'package:pos_app/data/models/audit_log_entity.dart';
@@ -65,11 +67,13 @@ import 'package:pos_app/data/models/sales/cashier_session_entity.dart';
 import 'package:pos_app/data/models/sales/cash_movement_entity.dart';
 import 'package:pos_app/data/models/sales/hold_ticket_entity.dart';
 import 'package:pos_app/data/models/sales/promotion_entity.dart';
+import 'package:pos_app/data/models/sales/restaurant_area_entity.dart';
+import 'package:pos_app/data/models/sales/restaurant_table_entity.dart';
 
 part 'app_database.g.dart'; // generated code
 
 @Database(
-  version: 35,
+  version: 36,
   entities: [
     UserEntity,
     SecurityProfileEntity,
@@ -105,6 +109,8 @@ part 'app_database.g.dart'; // generated code
     HoldTicketEntity,
     HoldTicketItemEntity,
     PromotionEntity,
+    RestaurantAreaEntity,
+    RestaurantTableEntity,
   ],
 )
 abstract class AppDatabase extends FloorDatabase {
@@ -141,4 +147,6 @@ abstract class AppDatabase extends FloorDatabase {
   CashMovementDao get cashMovementDao;
   HoldTicketDao get holdTicketDao;
   PromotionDao get promotionDao;
+  RestaurantAreaDao get restaurantAreaDao;
+  RestaurantTableDao get restaurantTableDao;
 }

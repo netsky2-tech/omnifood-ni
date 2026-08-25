@@ -7,14 +7,34 @@ class HoldTicketEntity {
   final String name;
   @ColumnInfo(name: 'created_at')
   final int createdAt;
+  @ColumnInfo(name: 'updated_at')
+  final int? updatedAt;
+  @ColumnInfo(name: 'table_id')
+  final String? tableId;
+  @ColumnInfo(name: 'area_id')
+  final String? areaId;
+  @ColumnInfo(name: 'waiter_id')
+  final String? waiterId;
+  @ColumnInfo(name: 'waiter_name')
+  final String? waiterName;
+  @ColumnInfo(name: 'guest_count')
+  final int guestCount;
   @ColumnInfo(name: 'global_tax_exempt')
   final bool isGlobalTaxExempt;
+  final int version;
 
   HoldTicketEntity({
     required this.id,
     required this.name,
     required this.createdAt,
+    this.updatedAt,
+    this.tableId,
+    this.areaId,
+    this.waiterId,
+    this.waiterName,
+    this.guestCount = 1,
     this.isGlobalTaxExempt = false,
+    this.version = 1,
   });
 }
 
@@ -43,6 +63,11 @@ class HoldTicketItemEntity {
   final double unitPrice;
   @ColumnInfo(name: 'tax_rate')
   final double taxRate;
+  @ColumnInfo(name: 'variant_id')
+  final String? variantId;
+  final String? notes;
+  @ColumnInfo(name: 'modifiers_json')
+  final String? modifiersJson;
 
   HoldTicketItemEntity({
     required this.id,
@@ -52,5 +77,8 @@ class HoldTicketItemEntity {
     required this.quantity,
     required this.unitPrice,
     required this.taxRate,
+    this.variantId,
+    this.notes,
+    this.modifiersJson,
   });
 }

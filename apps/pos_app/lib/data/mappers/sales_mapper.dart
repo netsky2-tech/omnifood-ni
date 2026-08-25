@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:uuid/uuid.dart';
 import '../../domain/models/sales/invoice.dart';
 import '../../domain/models/sales/invoice_item.dart';
@@ -13,6 +14,10 @@ import 'package:pos_app/data/models/sales/cashier_session_entity.dart';
 
 import 'package:pos_app/domain/models/sales/hold_ticket.dart';
 import 'package:pos_app/data/models/sales/hold_ticket_entity.dart';
+import 'package:pos_app/domain/models/sales/restaurant_area.dart';
+import 'package:pos_app/data/models/sales/restaurant_area_entity.dart';
+import 'package:pos_app/domain/models/sales/restaurant_table.dart';
+import 'package:pos_app/data/models/sales/restaurant_table_entity.dart';
 import 'package:pos_app/data/models/sales/invoice_item_modifier_entity.dart';
 import 'package:pos_app/domain/models/sales/cart_item.dart';
 import 'package:pos_app/domain/models/inventory/product.dart'; // For Modifier
@@ -45,20 +50,89 @@ class SalesMapper {
     );
   }
 
+  // --- Restaurant Area ---
+  static RestaurantArea toAreaDomain(RestaurantAreaEntity entity) {
+    return RestaurantArea(
+      id: entity.id,
+      name: entity.name,
+      displayOrder: entity.displayOrder,
+      isActive: entity.isActive,
+    );
+  }
+
+  static RestaurantAreaEntity toAreaEntity(RestaurantArea domain) {
+    return RestaurantAreaEntity(
+      id: domain.id,
+      name: domain.name,
+      displayOrder: domain.displayOrder,
+      isActive: domain.isActive,
+    );
+  }
+
+  // --- Restaurant Table ---
+  static RestaurantTable toTableDomain(RestaurantTableEntity entity) {
+    return RestaurantTable(
+      id: entity.id,
+      areaId: entity.areaId,
+      tableNumber: entity.tableNumber,
+      capacity: entity.capacity,
+      status: entity.status,
+      currentTicketId: entity.currentTicketId,
+      activeGuests: entity.activeGuests,
+      openedAt: entity.openedAt != null
+          ? DateTime.fromMillisecondsSinceEpoch(entity.openedAt!)
+          : null,
+    );
+  }
+
+  static RestaurantTableEntity toTableEntity(RestaurantTable domain) {
+    return RestaurantTableEntity(
+      id: domain.id,
+      areaId: domain.areaId,
+      tableNumber: domain.tableNumber,
+      capacity: domain.capacity,
+      status: domain.status,
+      currentTicketId: domain.currentTicketId,
+      activeGuests: domain.activeGuests,
+      openedAt: domain.openedAt?.millisecondsSinceEpoch,
+    );
+  }
+
   // --- Hold Ticket ---
   static HoldTicket toHoldTicketDomain(HoldTicketEntity entity, List<HoldTicketItemEntity> itemEntities) {
     return HoldTicket(
       id: entity.id,
       name: entity.name,
       createdAt: DateTime.fromMillisecondsSinceEpoch(entity.createdAt),
+      updatedAt: entity.updatedAt != null
+          ? DateTime.fromMillisecondsSinceEpoch(entity.updatedAt!)
+          : null,
+      tableId: entity.tableId,
+      areaId: entity.areaId,
+      waiterId: entity.waiterId,
+      waiterName: entity.waiterName,
+      guestCount: entity.guestCount,
       isGlobalTaxExempt: entity.isGlobalTaxExempt,
-      items: itemEntities.map((e) => CartItem(
-        productId: e.productId,
-        productName: e.productName,
-        quantity: e.quantity,
-        unitPrice: e.unitPrice,
-        taxRate: e.taxRate,
-      )).toList(),
+      version: entity.version,
+      items: itemEntities.map((e) {
+        List<Modifier> modifiers = [];
+        if (e.modifiersJson != null && e.modifiersJson!.isNotEmpty) {
+          try {
+            final decoded = jsonDecode(e.modifiersJson!) as List;
+            modifiers = decoded.map((m) => Modifier.fromJson(m as Map<String, dynamic>)).toList();
+          } catch (_) {}
+        }
+        return CartItem(
+          productId: e.productId,
+          productName: e.productName,
+          quantity: e.quantity,
+          unitPrice: e.unitPrice,
+          taxRate: e.taxRate,
+          variantId: e.variantId,
+          notes: e.notes,
+          selectedModifiers: modifiers,
+        );
+      }).toList(),
     );
   }
 
@@ -67,20 +141,36 @@ class SalesMapper {
       id: domain.id,
       name: domain.name,
       createdAt: domain.createdAt.millisecondsSinceEpoch,
+      updatedAt: domain.updatedAt?.millisecondsSinceEpoch,
+      tableId: domain.tableId,
+      areaId: domain.areaId,
+      waiterId: domain.waiterId,
+      waiterName: domain.waiterName,
+      guestCount: domain.guestCount,
       isGlobalTaxExempt: domain.isGlobalTaxExempt,
+      version: domain.version,
     );
   }
 
   static List<HoldTicketItemEntity> toHoldTicketItemEntities(HoldTicket domain) {
-    return domain.items.map((item) => HoldTicketItemEntity(
-      id: const Uuid().v4(),
-      holdTicketId: domain.id,
-      productId: item.productId,
-      productName: item.productName,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      taxRate: item.taxRate,
-    )).toList();
+    return domain.items.map((item) {
+      String? modJson;
+      if (item.selectedModifiers.isNotEmpty) {
+        modJson = jsonEncode(item.selectedModifiers.map((m) => m.toJson()).toList());
+      }
+      return HoldTicketItemEntity(
+        id: const Uuid().v4(),
+        holdTicketId: domain.id,
+        productId: item.productId,
+        productName: item.productName,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        taxRate: item.taxRate,
+        variantId: item.variantId,
+        notes: item.notes,
+        modifiersJson: modJson,
+      );
+    }).toList();
   }
 
   // --- Cashier Session ---
