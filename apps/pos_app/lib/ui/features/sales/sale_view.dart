@@ -68,22 +68,23 @@ class _SaleViewState extends State<SaleView> {
         elevation: 0,
         shape: Border(bottom: BorderSide(color: colorScheme.outlineVariant)),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.table_restaurant),
-            onPressed: () async {
-              final result = await Navigator.push<Map<String, dynamic>>(
-                context,
-                MaterialPageRoute(builder: (_) => const TableLayoutView()),
-              );
-              if (result != null && mounted) {
-                final tableName = result['tableName'] as String? ?? 'Mesa';
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Comanda abierta para $tableName')),
+          if (viewModel.supportsTables)
+            IconButton(
+              icon: const Icon(Icons.table_restaurant),
+              onPressed: () async {
+                final result = await Navigator.push<Map<String, dynamic>>(
+                  context,
+                  MaterialPageRoute(builder: (_) => const TableLayoutView()),
                 );
-              }
-            },
-            tooltip: 'Control de Mesas',
-          ),
+                if (result != null && mounted) {
+                  final tableName = result['tableName'] as String? ?? 'Mesa';
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Comanda abierta para $tableName')),
+                  );
+                }
+              },
+              tooltip: 'Control de Mesas',
+            ),
           IconButton(
             icon: const Icon(Icons.assignment_return),
             onPressed: () => Navigator.pushNamed(context, '/sales/history'),
@@ -866,7 +867,6 @@ class CartSummary extends StatelessWidget {
             ),
           ],
         ),
-        
         const SizedBox(height: 16),
         ElevatedButton(
           onPressed: viewModel.cart.isEmpty
@@ -874,6 +874,17 @@ class CartSummary extends StatelessWidget {
               : () => _requestSupervisorOverrideForManualDiscount(context),
           child: const Text('DESCUENTO MANUAL'),
         ),
+
+        if (viewModel.supportsBuzzerPager && viewModel.buzzerNumber != null) ...[
+          const SizedBox(height: 8),
+          InputChip(
+            key: const Key('cart_buzzer_chip'),
+            avatar: const Icon(Icons.notifications_active, size: 16, color: Colors.amber),
+            label: Text('Buzzer #${viewModel.buzzerNumber}'),
+            onDeleted: () => viewModel.setBuzzerNumber(null),
+            deleteIconColor: Colors.amber.shade900,
+          ),
+        ],
 
         const SizedBox(height: 8),
         ElevatedButton(

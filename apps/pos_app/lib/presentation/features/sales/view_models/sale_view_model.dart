@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
+import '../../../../domain/models/config/tenant_config.dart';
+import '../../../../domain/models/config/tenant_operation_mode.dart';
 import '../../../../domain/models/sales/invoice.dart';
 import '../../../../domain/models/sales/invoice_item.dart';
 import '../../../../domain/models/sales/payment.dart';
@@ -14,6 +16,8 @@ import '../../../../domain/repositories/inventory/inventory_repository.dart';
 import '../../../../domain/repositories/auth_repository.dart';
 import '../../../../data/database/app_database.dart';
 import '../../../../data/mappers/sales_mapper.dart';
+import '../../../../domain/services/config/tenant_config_service.dart';
+import '../../../../domain/services/kitchen/kitchen_order_service.dart';
 import '../../../../domain/services/sales/table_order_service.dart';
 
 class SaleViewModel extends ChangeNotifier {
@@ -22,6 +26,8 @@ class SaleViewModel extends ChangeNotifier {
   final AuthRepository _authRepository;
   final AppDatabase _database; // For session, hold, and promo DAOs
   final TableOrderService _tableOrderService;
+  final TenantConfigService _tenantConfigService;
+  final KitchenOrderService _kitchenOrderService;
 
   SaleViewModel(
     this._salesRepository,
@@ -30,7 +36,13 @@ class SaleViewModel extends ChangeNotifier {
     this._database, [
     TableOrderService? tableOrderService,
     bool autoLoad = true,
-  ]) : _tableOrderService = tableOrderService ?? TableOrderService(_database) {
+    TenantConfigService? tenantConfigService,
+    KitchenOrderService? kitchenOrderService,
+  ])  : _tableOrderService = tableOrderService ?? TableOrderService(_database),
+        _tenantConfigService =
+            tenantConfigService ?? TenantConfigService(_database.localConfigDao),
+        _kitchenOrderService =
+            kitchenOrderService ?? KitchenOrderService(_database) {
     if (autoLoad) {
       loadProducts();
       checkActiveSession();
@@ -38,6 +50,43 @@ class SaleViewModel extends ChangeNotifier {
       loadPromotions();
       _loadCurrentUserRole();
       loadExchangeRates();
+      loadTenantConfig();
+    }
+  }
+
+  TenantConfig? _tenantConfig;
+  TenantConfig? get tenantConfig => _tenantConfig;
+  TenantOperationMode get operationMode =>
+      _tenantConfig?.operationMode ?? TenantOperationMode.foodparkQsr;
+
+  bool get isFoodParkQsr => operationMode.isFoodParkQsr;
+  bool get supportsTables => operationMode.supportsTables;
+  bool get supportsBuzzerPager => operationMode.supportsBuzzerPager;
+
+  String? _buzzerNumber;
+  String? get buzzerNumber => _buzzerNumber;
+
+  String? _customerName;
+  String? get customerName => _customerName;
+
+  void setBuzzerNumber(String? number) {
+    _buzzerNumber =
+        (number != null && number.trim().isNotEmpty) ? number.trim() : null;
+    notifyListeners();
+  }
+
+  void setCustomerName(String? name) {
+    _customerName =
+        (name != null && name.trim().isNotEmpty) ? name.trim() : null;
+    notifyListeners();
+  }
+
+  Future<void> loadTenantConfig() async {
+    try {
+      _tenantConfig = await _tenantConfigService.getTenantConfig();
+      notifyListeners();
+    } catch (_) {
+      // Non-blocking fallback
     }
   }
 
@@ -482,6 +531,8 @@ class SaleViewModel extends ChangeNotifier {
   Future<void> processSale(
     List<PaymentMethod> methods, {
     List<Payment>? customPayments,
+    String? buzzerNumber,
+    String? customerName,
   }) async {
     final user = await _authRepository.getCurrentUser();
     if (user == null) {
@@ -494,6 +545,14 @@ class SaleViewModel extends ChangeNotifier {
     final totalUsd = _commercialRate > 0
         ? ((total / _commercialRate) * 100).round() / 100
         : 0.0;
+
+    final effectiveBuzzer = (buzzerNumber != null && buzzerNumber.trim().isNotEmpty)
+        ? buzzerNumber.trim()
+        : _buzzerNumber;
+    final effectiveCustomerName =
+        (customerName != null && customerName.trim().isNotEmpty)
+            ? customerName.trim()
+            : _customerName;
 
     final items = _cart.map((cartItem) {
       final appliedTaxRate = _isGlobalTaxExempt ? 0.0 : cartItem.taxRate;
@@ -568,8 +627,26 @@ class SaleViewModel extends ChangeNotifier {
     if (_activeLoadedHoldTicket != null) {
       await _tableOrderService.liquidateOrder(_activeLoadedHoldTicket!.id);
       _activeLoadedHoldTicket = null;
+    } else {
+      // Direct counter sale: dispatch to kitchen KDS if items exist
+      if (_cart.isNotEmpty) {
+        try {
+          await _kitchenOrderService.sendDirectSaleToKitchen(
+            invoiceId: invoiceId,
+            invoiceNumber: invoice.number,
+            items: List.from(_cart),
+            buzzerNumber: effectiveBuzzer,
+            customerName: effectiveCustomerName,
+            waiterName: user.name,
+          );
+        } catch (_) {
+          // Graceful fallback for offline tests/setups
+        }
+      }
     }
 
+    _buzzerNumber = null;
+    _customerName = null;
     clearCart();
     _consumeOverride();
   }

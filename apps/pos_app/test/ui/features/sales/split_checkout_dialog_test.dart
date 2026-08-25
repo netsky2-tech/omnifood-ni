@@ -9,22 +9,52 @@ import 'package:pos_app/domain/models/sales/payment.dart';
 import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/domain/repositories/auth_repository.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
-import 'package:pos_app/domain/repositories/sales/sales_repository.dart';
+import 'package:pos_app/domain/models/config/tenant_config.dart';
+import 'package:pos_app/domain/models/kitchen/kitchen_order.dart';
+import 'package:pos_app/domain/models/sales/cart_item.dart';
+import 'package:pos_app/domain/services/kitchen/kitchen_order_service.dart';
+import 'package:pos_app/domain/services/config/tenant_config_service.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
 import 'package:pos_app/ui/features/sales/widgets/multi_currency_checkout_dialog.dart';
 import 'package:provider/provider.dart';
 
-import 'split_checkout_dialog_test.mocks.dart';
+import '../../../presentation/features/sales/sale_view_model_test.mocks.dart';
 
-@GenerateMocks([
-  SalesRepository,
-  InventoryRepository,
-  AuthRepository,
-])
+import 'package:pos_app/domain/models/config/tenant_operation_mode.dart';
+
+class FakeKitchenOrderService extends KitchenOrderService {
+  FakeKitchenOrderService(super.database);
+
+  @override
+  Future<List<KitchenOrder>> sendDirectSaleToKitchen({
+    required String invoiceId,
+    required String invoiceNumber,
+    required List<CartItem> items,
+    String? buzzerNumber,
+    String? customerName,
+    String? waiterName,
+    Map<String, String>? productCategories,
+  }) async {
+    return [];
+  }
+}
+
+class FakeTenantConfigService extends TenantConfigService {
+  FakeTenantConfigService(super.localConfigDao);
+
+  @override
+  Future<TenantConfig> getTenantConfig() async => const TenantConfig();
+
+  @override
+  Stream<TenantOperationMode> get onOperationModeChanged => const Stream.empty();
+}
+
 void main() {
   late MockSalesRepository mockSalesRepo;
   late MockInventoryRepository mockInventoryRepo;
   late MockAuthRepository mockAuthRepo;
+  late FakeKitchenOrderService fakeKitchenOrderService;
+  late FakeTenantConfigService fakeTenantConfigService;
   late AppDatabase database;
   late SaleViewModel saleViewModel;
 
@@ -42,6 +72,8 @@ void main() {
     mockSalesRepo = MockSalesRepository();
     mockInventoryRepo = MockInventoryRepository();
     mockAuthRepo = MockAuthRepository();
+    fakeKitchenOrderService = FakeKitchenOrderService(database);
+    fakeTenantConfigService = FakeTenantConfigService(database.localConfigDao);
 
     when(mockAuthRepo.getCurrentUser()).thenAnswer(
       (_) async => const User(
@@ -64,6 +96,10 @@ void main() {
       mockInventoryRepo,
       mockAuthRepo,
       database,
+      null,
+      false,
+      fakeTenantConfigService,
+      fakeKitchenOrderService,
     );
 
     // Set 1000 NIO total (tax exempt for clean rounding in test)
@@ -80,12 +116,22 @@ void main() {
     );
   });
 
+  tearDown(() {
+    saleViewModel.dispose();
+  });
+
   Widget createWidgetUnderTest() {
     return MaterialApp(
       home: ChangeNotifierProvider<SaleViewModel>.value(
         value: saleViewModel,
         child: const Scaffold(
-          body: MultiCurrencyCheckoutDialog(),
+          body: Center(
+            child: SizedBox(
+              width: 800,
+              height: 900,
+              child: MultiCurrencyCheckoutDialog(),
+            ),
+          ),
         ),
       ),
     );
@@ -94,6 +140,10 @@ void main() {
   group('MultiCurrencyCheckoutDialog - Split Payments & Two-Layer Card (Slice 3.2)', () {
     testWidgets('Card selection displays Two-Layer datáfono instructions and Fast-Checkout mode',
         (tester) async {
+      tester.view.physicalSize = const Size(1024, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
       await tester.pumpWidget(createWidgetUnderTest());
       await tester.pumpAndSettle();
 
@@ -135,6 +185,10 @@ void main() {
 
     testWidgets('Card selection allows entering manual authorization code',
         (tester) async {
+      tester.view.physicalSize = const Size(1024, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
       await tester.pumpWidget(createWidgetUnderTest());
       await tester.pumpAndSettle();
 
@@ -170,10 +224,15 @@ void main() {
       final payments = captured.first as List<Payment>;
       expect(payments.first.voucherCode, '789123');
       expect(payments.first.reconciliationStatus, 'CONCILIADO');
+      expect(payments.first.bankPos, 'BAC');
     });
 
     testWidgets('Split Payment mode allows multi-tender combinations until balance is zero',
         (tester) async {
+      tester.view.physicalSize = const Size(1024, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
       await tester.pumpWidget(createWidgetUnderTest());
       await tester.pumpAndSettle();
 
@@ -187,7 +246,9 @@ void main() {
       expect(find.textContaining('Resta: C\$ 1000.00'), findsOneWidget);
 
       // 3. Add Tender 1: USD Cash $10.00 (C$ 365.00 NIO)
-      await tester.tap(find.widgetWithText(ChoiceChip, 'USD (\$)'));
+      final usdChip = find.widgetWithText(ChoiceChip, 'USD (\$)');
+      await tester.ensureVisible(usdChip);
+      await tester.tap(usdChip);
       await tester.pumpAndSettle();
 
       final tenderInput = find.byKey(const Key('split_tender_amount_field'));

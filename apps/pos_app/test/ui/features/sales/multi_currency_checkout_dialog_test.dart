@@ -23,6 +23,11 @@ void main() {
     when(mockSaleViewModel.commercialRate).thenReturn(36.50);
     when(mockSaleViewModel.bcnOfficialRate).thenReturn(36.6241);
     when(mockSaleViewModel.isLoading).thenReturn(false);
+    when(mockSaleViewModel.supportsBuzzerPager).thenReturn(false);
+    when(mockSaleViewModel.supportsTables).thenReturn(true);
+    when(mockSaleViewModel.buzzerNumber).thenReturn(null);
+    when(mockSaleViewModel.customerName).thenReturn(null);
+    when(mockSaleViewModel.tenantConfig).thenReturn(null);
     when(mockSaleViewModel.cart).thenReturn([
       CartItem(
         productId: 'p-1',
@@ -147,6 +152,45 @@ void main() {
     verify(mockSaleViewModel.processSale(
       [PaymentMethod.cash],
       customPayments: anyNamed('customPayments'),
+    )).called(1);
+  });
+
+  testWidgets('renders buzzer and customer name inputs when supportsBuzzerPager is true', (tester) async {
+    tester.view.physicalSize = const Size(1024, 768);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
+
+    when(mockSaleViewModel.supportsBuzzerPager).thenReturn(true);
+    when(mockSaleViewModel.processSale(
+      any,
+      customPayments: anyNamed('customPayments'),
+      buzzerNumber: anyNamed('buzzerNumber'),
+      customerName: anyNamed('customerName'),
+    )).thenAnswer((_) async {});
+
+    await tester.pumpWidget(buildTestWidget());
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('checkout_buzzer_input')), findsOneWidget);
+    expect(find.byKey(const Key('checkout_customer_name_input')), findsOneWidget);
+    expect(find.textContaining('BUZZER / PAGER DE ENTREGA'), findsOneWidget);
+
+    // Enter buzzer number 14
+    await tester.enterText(find.byKey(const Key('checkout_buzzer_input')), '14');
+    await tester.pumpAndSettle();
+
+    verify(mockSaleViewModel.setBuzzerNumber('14')).called(1);
+
+    // Submit sale
+    final submitButton = find.widgetWithText(FilledButton, 'COBRAR');
+    await tester.tap(submitButton);
+    await tester.pumpAndSettle();
+
+    verify(mockSaleViewModel.processSale(
+      [PaymentMethod.cash],
+      customPayments: anyNamed('customPayments'),
+      buzzerNumber: '14',
+      customerName: anyNamed('customerName'),
     )).called(1);
   });
 }

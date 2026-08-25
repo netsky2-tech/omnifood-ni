@@ -23,6 +23,11 @@ class _MultiCurrencyCheckoutDialogState
   String _changeCurrencyPreference = 'NIO';
   final TextEditingController _tenderAmountController = TextEditingController();
 
+  // Buzzer & Customer metadata
+  final TextEditingController _buzzerController = TextEditingController();
+  final TextEditingController _customerNameController = TextEditingController();
+  String? _buzzerValidationMessage;
+
   // Card Datáfono State
   String _selectedBankPos = 'BAC';
   String _selectedCardBrand = 'VISA';
@@ -56,11 +61,19 @@ class _MultiCurrencyCheckoutDialogState
 
     _tenderAmountController.text = vm.total.toStringAsFixed(2);
     _splitAmountController.text = vm.total.toStringAsFixed(2);
+    if (vm.buzzerNumber != null && vm.buzzerNumber!.isNotEmpty) {
+      _buzzerController.text = vm.buzzerNumber!;
+    }
+    if (vm.customerName != null && vm.customerName!.isNotEmpty) {
+      _customerNameController.text = vm.customerName!;
+    }
   }
 
   @override
   void dispose() {
     _tenderAmountController.dispose();
+    _buzzerController.dispose();
+    _customerNameController.dispose();
     _authCodeController.dispose();
     _last4Controller.dispose();
     _batchController.dispose();
@@ -223,8 +236,22 @@ class _MultiCurrencyCheckoutDialogState
         createdAt: DateTime.now(),
       );
     }
+    final buzzerText = _buzzerController.text.trim();
+    final customerNameText = _customerNameController.text.trim();
 
-    await vm.processSale([_selectedMethod], customPayments: [payment]);
+    if (vm.tenantConfig?.buzzerPagerRequired == true && buzzerText.isEmpty) {
+      setState(() {
+        _buzzerValidationMessage = 'El número de Buzzer/Pager es obligatorio.';
+      });
+      return;
+    }
+
+    await vm.processSale(
+      [_selectedMethod],
+      customPayments: [payment],
+      buzzerNumber: buzzerText.isNotEmpty ? buzzerText : null,
+      customerName: customerNameText.isNotEmpty ? customerNameText : null,
+    );
     if (mounted) {
       Navigator.of(context).pop();
     }
@@ -233,11 +260,121 @@ class _MultiCurrencyCheckoutDialogState
   Future<void> _submitSplitSale(SaleViewModel vm) async {
     if (!_splitCalculator.isFullyPaid) return;
 
+    final buzzerText = _buzzerController.text.trim();
+    final customerNameText = _customerNameController.text.trim();
+
+    if (vm.tenantConfig?.buzzerPagerRequired == true && buzzerText.isEmpty) {
+      setState(() {
+        _buzzerValidationMessage = 'El número de Buzzer/Pager es obligatorio.';
+      });
+      return;
+    }
+
     final methods = _splitCalculator.payments.map((p) => p.method).toSet().toList();
-    await vm.processSale(methods, customPayments: _splitCalculator.payments);
+    await vm.processSale(
+      methods,
+      customPayments: _splitCalculator.payments,
+      buzzerNumber: buzzerText.isNotEmpty ? buzzerText : null,
+      customerName: customerNameText.isNotEmpty ? customerNameText : null,
+    );
     if (mounted) {
       Navigator.of(context).pop();
     }
+  }
+
+  Widget _buildBuzzerPagerSection(SaleViewModel viewModel) {
+    if (viewModel.supportsBuzzerPager != true) return const SizedBox.shrink();
+
+    final isRequired = viewModel.tenantConfig?.buzzerPagerRequired ?? false;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Card(
+        elevation: 0,
+        color: Colors.amber.shade50,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(
+            color: _buzzerValidationMessage != null
+                ? Colors.red.shade400
+                : Colors.amber.shade300,
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.notifications_active,
+                    size: 18,
+                    color: Colors.amber.shade900,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    isRequired
+                        ? 'BUZZER / PAGER DE ENTREGA (REQUERIDO)'
+                        : 'BUZZER / PAGER DE ENTREGA (OPCIONAL)',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.amber.shade900,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: TextField(
+                      key: const Key('checkout_buzzer_input'),
+                      controller: _buzzerController,
+                      decoration: InputDecoration(
+                        labelText: isRequired ? 'Nº Buzzer *' : 'Nº Buzzer',
+                        hintText: 'Ej: 15',
+                        isDense: true,
+                        filled: true,
+                        fillColor: Colors.white,
+                        border: const OutlineInputBorder(),
+                        errorText: _buzzerValidationMessage,
+                      ),
+                      keyboardType: TextInputType.number,
+                      onChanged: (val) {
+                        viewModel.setBuzzerNumber(val.trim());
+                        if (_buzzerValidationMessage != null) {
+                          setState(() => _buzzerValidationMessage = null);
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 3,
+                    child: TextField(
+                      key: const Key('checkout_customer_name_input'),
+                      controller: _customerNameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Nombre Cliente',
+                        hintText: 'Ej: Juan',
+                        isDense: true,
+                        filled: true,
+                        fillColor: Colors.white,
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (val) => viewModel.setCustomerName(val.trim()),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -378,6 +515,9 @@ class _MultiCurrencyCheckoutDialogState
         _buildTotalHeaderCard(totalNio, totalUsd, viewModel),
         const SizedBox(height: 12),
 
+        // Buzzer & Customer Section (Food Park QSR / Hybrid)
+        _buildBuzzerPagerSection(viewModel),
+
         // Method Selector
         _buildMethodSelector(
           selected: _selectedMethod,
@@ -417,6 +557,9 @@ class _MultiCurrencyCheckoutDialogState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // Buzzer & Customer Section (Food Park QSR / Hybrid)
+        _buildBuzzerPagerSection(viewModel),
+
         // Split Summary Balance Card
         Card(
           color: Colors.blueGrey.shade50,

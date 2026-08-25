@@ -1350,62 +1350,68 @@ final migration32_33 = Migration(32, 33, (database) async {
 
 final migration33_34 = Migration(33, 34, (database) async {
   final invoiceColumns = await database.rawQuery("PRAGMA table_info(`invoices`)");
-  final invColumnNames = invoiceColumns.map((col) => col['name'] as String).toSet();
+  if (invoiceColumns.isNotEmpty) {
+    final invColumnNames = invoiceColumns.map((col) => col['name'] as String).toSet();
 
-  if (!invColumnNames.contains('bcn_official_rate')) {
-    await database.execute("ALTER TABLE `invoices` ADD COLUMN `bcn_official_rate` REAL NOT NULL DEFAULT 36.6241");
-  }
-  if (!invColumnNames.contains('commercial_rate')) {
-    await database.execute("ALTER TABLE `invoices` ADD COLUMN `commercial_rate` REAL NOT NULL DEFAULT 36.50");
-  }
-  if (!invColumnNames.contains('total_usd')) {
-    await database.execute("ALTER TABLE `invoices` ADD COLUMN `total_usd` REAL NOT NULL DEFAULT 0.0");
+    if (!invColumnNames.contains('bcn_official_rate')) {
+      await database.execute("ALTER TABLE `invoices` ADD COLUMN `bcn_official_rate` REAL NOT NULL DEFAULT 36.6241");
+    }
+    if (!invColumnNames.contains('commercial_rate')) {
+      await database.execute("ALTER TABLE `invoices` ADD COLUMN `commercial_rate` REAL NOT NULL DEFAULT 36.50");
+    }
+    if (!invColumnNames.contains('total_usd')) {
+      await database.execute("ALTER TABLE `invoices` ADD COLUMN `total_usd` REAL NOT NULL DEFAULT 0.0");
+    }
   }
 
   final paymentColumns = await database.rawQuery("PRAGMA table_info(`payments`)");
-  final payColumnNames = paymentColumns.map((col) => col['name'] as String).toSet();
+  if (paymentColumns.isNotEmpty) {
+    final payColumnNames = paymentColumns.map((col) => col['name'] as String).toSet();
 
-  if (!payColumnNames.contains('amount_nio')) {
-    await database.execute("ALTER TABLE `payments` ADD COLUMN `amount_nio` REAL NOT NULL DEFAULT 0.0");
-  }
-  if (!payColumnNames.contains('change_given')) {
-    await database.execute("ALTER TABLE `payments` ADD COLUMN `change_given` REAL NOT NULL DEFAULT 0.0");
-  }
-  if (!payColumnNames.contains('change_currency')) {
-    await database.execute("ALTER TABLE `payments` ADD COLUMN `change_currency` TEXT NOT NULL DEFAULT 'NIO'");
+    if (!payColumnNames.contains('amount_nio')) {
+      await database.execute("ALTER TABLE `payments` ADD COLUMN `amount_nio` REAL NOT NULL DEFAULT 0.0");
+    }
+    if (!payColumnNames.contains('change_given')) {
+      await database.execute("ALTER TABLE `payments` ADD COLUMN `change_given` REAL NOT NULL DEFAULT 0.0");
+    }
+    if (!payColumnNames.contains('change_currency')) {
+      await database.execute("ALTER TABLE `payments` ADD COLUMN `change_currency` TEXT NOT NULL DEFAULT 'NIO'");
+    }
   }
 });
 
 final migration34_35 = Migration(34, 35, (database) async {
   final paymentColumns = await database.rawQuery("PRAGMA table_info(`payments`)");
-  final payColumnNames = paymentColumns.map((col) => col['name'] as String).toSet();
+  if (paymentColumns.isNotEmpty) {
+    final payColumnNames = paymentColumns.map((col) => col['name'] as String).toSet();
 
-  if (!payColumnNames.contains('voucher_code')) {
-    await database.execute("ALTER TABLE `payments` ADD COLUMN `voucher_code` TEXT");
-  }
-  if (!payColumnNames.contains('card_brand')) {
-    await database.execute("ALTER TABLE `payments` ADD COLUMN `card_brand` TEXT");
-  }
-  if (!payColumnNames.contains('card_type')) {
-    await database.execute("ALTER TABLE `payments` ADD COLUMN `card_type` TEXT");
-  }
-  if (!payColumnNames.contains('bank_pos')) {
-    await database.execute("ALTER TABLE `payments` ADD COLUMN `bank_pos` TEXT");
-  }
-  if (!payColumnNames.contains('reconciliation_status')) {
-    await database.execute("ALTER TABLE `payments` ADD COLUMN `reconciliation_status` TEXT");
-  }
-  if (!payColumnNames.contains('last4')) {
-    await database.execute("ALTER TABLE `payments` ADD COLUMN `last4` TEXT");
-  }
-  if (!payColumnNames.contains('batch_number')) {
-    await database.execute("ALTER TABLE `payments` ADD COLUMN `batch_number` TEXT");
-  }
-  if (!payColumnNames.contains('reconciled_at')) {
-    await database.execute("ALTER TABLE `payments` ADD COLUMN `reconciled_at` INTEGER");
-  }
-  if (!payColumnNames.contains('reconciled_by_user_id')) {
-    await database.execute("ALTER TABLE `payments` ADD COLUMN `reconciled_by_user_id` TEXT");
+    if (!payColumnNames.contains('voucher_code')) {
+      await database.execute("ALTER TABLE `payments` ADD COLUMN `voucher_code` TEXT");
+    }
+    if (!payColumnNames.contains('card_brand')) {
+      await database.execute("ALTER TABLE `payments` ADD COLUMN `card_brand` TEXT");
+    }
+    if (!payColumnNames.contains('card_type')) {
+      await database.execute("ALTER TABLE `payments` ADD COLUMN `card_type` TEXT");
+    }
+    if (!payColumnNames.contains('bank_pos')) {
+      await database.execute("ALTER TABLE `payments` ADD COLUMN `bank_pos` TEXT");
+    }
+    if (!payColumnNames.contains('reconciliation_status')) {
+      await database.execute("ALTER TABLE `payments` ADD COLUMN `reconciliation_status` TEXT");
+    }
+    if (!payColumnNames.contains('last4')) {
+      await database.execute("ALTER TABLE `payments` ADD COLUMN `last4` TEXT");
+    }
+    if (!payColumnNames.contains('batch_number')) {
+      await database.execute("ALTER TABLE `payments` ADD COLUMN `batch_number` TEXT");
+    }
+    if (!payColumnNames.contains('reconciled_at')) {
+      await database.execute("ALTER TABLE `payments` ADD COLUMN `reconciled_at` INTEGER");
+    }
+    if (!payColumnNames.contains('reconciled_by_user_id')) {
+      await database.execute("ALTER TABLE `payments` ADD COLUMN `reconciled_by_user_id` TEXT");
+    }
   }
 });
 
@@ -1439,42 +1445,46 @@ final migration35_36 = Migration(35, 36, (database) async {
 
   // Alter hold_tickets columns
   final holdColumns = await database.rawQuery("PRAGMA table_info(`hold_tickets`)");
-  final holdColumnNames = holdColumns.map((col) => col['name'] as String).toSet();
+  if (holdColumns.isNotEmpty) {
+    final holdColumnNames = holdColumns.map((col) => col['name'] as String).toSet();
 
-  if (!holdColumnNames.contains('updated_at')) {
-    await database.execute("ALTER TABLE `hold_tickets` ADD COLUMN `updated_at` INTEGER");
-  }
-  if (!holdColumnNames.contains('table_id')) {
-    await database.execute("ALTER TABLE `hold_tickets` ADD COLUMN `table_id` TEXT");
-  }
-  if (!holdColumnNames.contains('area_id')) {
-    await database.execute("ALTER TABLE `hold_tickets` ADD COLUMN `area_id` TEXT");
-  }
-  if (!holdColumnNames.contains('waiter_id')) {
-    await database.execute("ALTER TABLE `hold_tickets` ADD COLUMN `waiter_id` TEXT");
-  }
-  if (!holdColumnNames.contains('waiter_name')) {
-    await database.execute("ALTER TABLE `hold_tickets` ADD COLUMN `waiter_name` TEXT");
-  }
-  if (!holdColumnNames.contains('guest_count')) {
-    await database.execute("ALTER TABLE `hold_tickets` ADD COLUMN `guest_count` INTEGER NOT NULL DEFAULT 1");
-  }
-  if (!holdColumnNames.contains('version')) {
-    await database.execute("ALTER TABLE `hold_tickets` ADD COLUMN `version` INTEGER NOT NULL DEFAULT 1");
+    if (!holdColumnNames.contains('updated_at')) {
+      await database.execute("ALTER TABLE `hold_tickets` ADD COLUMN `updated_at` INTEGER");
+    }
+    if (!holdColumnNames.contains('table_id')) {
+      await database.execute("ALTER TABLE `hold_tickets` ADD COLUMN `table_id` TEXT");
+    }
+    if (!holdColumnNames.contains('area_id')) {
+      await database.execute("ALTER TABLE `hold_tickets` ADD COLUMN `area_id` TEXT");
+    }
+    if (!holdColumnNames.contains('waiter_id')) {
+      await database.execute("ALTER TABLE `hold_tickets` ADD COLUMN `waiter_id` TEXT");
+    }
+    if (!holdColumnNames.contains('waiter_name')) {
+      await database.execute("ALTER TABLE `hold_tickets` ADD COLUMN `waiter_name` TEXT");
+    }
+    if (!holdColumnNames.contains('guest_count')) {
+      await database.execute("ALTER TABLE `hold_tickets` ADD COLUMN `guest_count` INTEGER NOT NULL DEFAULT 1");
+    }
+    if (!holdColumnNames.contains('version')) {
+      await database.execute("ALTER TABLE `hold_tickets` ADD COLUMN `version` INTEGER NOT NULL DEFAULT 1");
+    }
   }
 
   // Alter hold_ticket_items columns
   final itemColumns = await database.rawQuery("PRAGMA table_info(`hold_ticket_items`)");
-  final itemColumnNames = itemColumns.map((col) => col['name'] as String).toSet();
+  if (itemColumns.isNotEmpty) {
+    final itemColumnNames = itemColumns.map((col) => col['name'] as String).toSet();
 
-  if (!itemColumnNames.contains('variant_id')) {
-    await database.execute("ALTER TABLE `hold_ticket_items` ADD COLUMN `variant_id` TEXT");
-  }
-  if (!itemColumnNames.contains('notes')) {
-    await database.execute("ALTER TABLE `hold_ticket_items` ADD COLUMN `notes` TEXT");
-  }
-  if (!itemColumnNames.contains('modifiers_json')) {
-    await database.execute("ALTER TABLE `hold_ticket_items` ADD COLUMN `modifiers_json` TEXT");
+    if (!itemColumnNames.contains('variant_id')) {
+      await database.execute("ALTER TABLE `hold_ticket_items` ADD COLUMN `variant_id` TEXT");
+    }
+    if (!itemColumnNames.contains('notes')) {
+      await database.execute("ALTER TABLE `hold_ticket_items` ADD COLUMN `notes` TEXT");
+    }
+    if (!itemColumnNames.contains('modifiers_json')) {
+      await database.execute("ALTER TABLE `hold_ticket_items` ADD COLUMN `modifiers_json` TEXT");
+    }
   }
 });
 

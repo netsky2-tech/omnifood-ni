@@ -11,11 +11,59 @@ import 'package:pos_app/data/daos/sales/promotion_dao.dart';
 import 'package:pos_app/data/models/sales/cashier_session_entity.dart';
 import 'package:pos_app/domain/models/inventory/product.dart';
 import 'package:pos_app/domain/models/sales/cashier_session.dart';
-import 'package:pos_app/domain/models/sales/payment.dart';
 import 'package:pos_app/domain/models/sales/invoice.dart';
+import 'package:pos_app/domain/models/sales/payment.dart';
+import 'package:pos_app/domain/models/sales/cart_item.dart';
 import 'package:pos_app/domain/models/user.dart';
+import 'package:pos_app/domain/models/config/tenant_config.dart';
+import 'package:pos_app/domain/models/config/tenant_operation_mode.dart';
+import 'package:pos_app/domain/models/kitchen/kitchen_order.dart';
+import 'package:pos_app/data/daos/local_config_dao.dart';
+import 'package:pos_app/data/daos/kitchen/kitchen_order_dao.dart';
+import 'package:pos_app/data/daos/sales/tax_config_dao.dart';
+import 'package:pos_app/data/models/sales/tax_config_entity.dart';
+import 'package:pos_app/domain/services/config/tenant_config_service.dart';
+import 'package:pos_app/domain/services/kitchen/kitchen_order_service.dart';
 import 'sale_view_model_test.mocks.dart';
 import 'package:mockito/annotations.dart';
+
+class FakeLocalConfigDao extends Mock implements LocalConfigDao {
+  @override
+  Future<String?> getConfigValue(String? key) async => null;
+}
+
+class FakeKitchenOrderDao extends Mock implements KitchenOrderDao {}
+class FakeTaxConfigDao extends Mock implements TaxConfigDao {
+  @override
+  Future<List<TaxConfigEntity>> getAllTaxConfigs() async => [];
+}
+
+class FakeKitchenOrderService extends KitchenOrderService {
+  FakeKitchenOrderService(super.database);
+
+  @override
+  Future<List<KitchenOrder>> sendDirectSaleToKitchen({
+    required String invoiceId,
+    required String invoiceNumber,
+    required List<CartItem> items,
+    String? buzzerNumber,
+    String? customerName,
+    String? waiterName,
+    Map<String, String>? productCategories,
+  }) async {
+    return [];
+  }
+}
+
+class FakeTenantConfigService extends TenantConfigService {
+  FakeTenantConfigService(super.localConfigDao);
+
+  @override
+  Future<TenantConfig> getTenantConfig() async => const TenantConfig();
+
+  @override
+  Stream<TenantOperationMode> get onOperationModeChanged => const Stream.empty();
+}
 
 @GenerateMocks([
   SalesRepository,
@@ -34,6 +82,8 @@ void main() {
   late MockCashierSessionDao mockSessionDao;
   late MockHoldTicketDao mockHoldDao;
   late MockPromotionDao mockPromoDao;
+  late FakeKitchenOrderService fakeKitchenOrderService;
+  late FakeTenantConfigService fakeTenantConfigService;
   late SaleViewModel viewModel;
 
   setUp(() {
@@ -48,6 +98,12 @@ void main() {
     when(mockDb.cashierSessionDao).thenReturn(mockSessionDao);
     when(mockDb.holdTicketDao).thenReturn(mockHoldDao);
     when(mockDb.promotionDao).thenReturn(mockPromoDao);
+    when(mockDb.localConfigDao).thenReturn(FakeLocalConfigDao());
+    when(mockDb.kitchenOrderDao).thenReturn(FakeKitchenOrderDao());
+    when(mockDb.taxConfigDao).thenReturn(FakeTaxConfigDao());
+
+    fakeKitchenOrderService = FakeKitchenOrderService(mockDb);
+    fakeTenantConfigService = FakeTenantConfigService(mockDb.localConfigDao);
     when(mockAuthRepo.getCurrentUser()).thenAnswer((_) async => null);
 
     // Initial loads
@@ -61,6 +117,10 @@ void main() {
       mockInventoryRepo,
       mockAuthRepo,
       mockDb,
+      null,
+      true,
+      fakeTenantConfigService,
+      fakeKitchenOrderService,
     );
   });
 

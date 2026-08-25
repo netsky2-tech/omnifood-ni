@@ -260,6 +260,75 @@ class KitchenOrderService {
     return createdOrders;
   }
 
+  /// Routes and sends a direct counter POS sale to KDS stations (e.g. Food Park QSR mode with buzzer/pager)
+  Future<List<KitchenOrder>> sendDirectSaleToKitchen({
+    required String invoiceId,
+    required String invoiceNumber,
+    required List<CartItem> items,
+    String? buzzerNumber,
+    String? customerName,
+    String? waiterName,
+    Map<String, String>? productCategories,
+  }) async {
+    final now = DateTime.now();
+
+    // 1. Group items by station
+    final Map<String, List<CartItem>> itemsByStation = {};
+    for (final item in items) {
+      final category = productCategories?[item.productId];
+      final station = determineStation(item, category);
+      itemsByStation.putIfAbsent(station, () => []).add(item);
+    }
+
+    final List<KitchenOrder> createdOrders = [];
+    final label = (buzzerNumber != null && buzzerNumber.trim().isNotEmpty)
+        ? 'Buzzer #${buzzerNumber.trim()}'
+        : (customerName != null && customerName.trim().isNotEmpty
+            ? customerName.trim()
+            : 'Ticket $invoiceNumber');
+
+    // 2. Create and persist a KitchenOrder for each station
+    for (final entry in itemsByStation.entries) {
+      final station = entry.key;
+      final stationItems = entry.value;
+      final orderId = _uuid.v4();
+
+      final kitchenOrderItems = stationItems.map((cartItem) {
+        final modifierNames = cartItem.selectedModifiers.map((m) => m.name).toList();
+        return KitchenOrderItem(
+          id: _uuid.v4(),
+          kitchenOrderId: orderId,
+          productId: cartItem.productId,
+          productName: cartItem.productName,
+          quantity: cartItem.quantity,
+          status: 'PENDIENTE',
+          notes: cartItem.notes,
+          modifiers: modifierNames,
+        );
+      }).toList();
+
+      final kitchenOrder = KitchenOrder(
+        id: orderId,
+        ticketId: invoiceId,
+        tableNumber: buzzerNumber != null && buzzerNumber.trim().isNotEmpty ? buzzerNumber.trim() : null,
+        tableName: label,
+        waiterName: waiterName,
+        station: station,
+        status: 'PENDIENTE',
+        createdAt: now,
+        items: kitchenOrderItems,
+      );
+
+      final orderEntity = KitchenMapper.toEntity(kitchenOrder);
+      final itemEntities = KitchenMapper.toItemEntities(kitchenOrder);
+
+      await _database.kitchenOrderDao.saveKitchenOrder(orderEntity, itemEntities);
+      createdOrders.add(kitchenOrder);
+    }
+
+    return createdOrders;
+  }
+
   /// Appends newly added items from an updated comanda to KDS stations
   Future<List<KitchenOrder>> appendTicketItemsToKitchen({
     required String ticketId,

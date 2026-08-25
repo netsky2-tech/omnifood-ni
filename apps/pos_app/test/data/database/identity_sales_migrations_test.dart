@@ -932,6 +932,9 @@ void main() {
           'source_sequence': -1,
           'idempotency_key': 'sale:pos-cashier-1:legacy-synced-sale',
           'payload_hash': 'legacy-hash',
+          'bcn_official_rate': 36.6241,
+          'commercial_rate': 36.50,
+          'total_usd': 3.15,
         });
 
         final nextSequence = await database.salesTransactionDao
