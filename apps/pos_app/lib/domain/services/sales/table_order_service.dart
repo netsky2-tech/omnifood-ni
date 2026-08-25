@@ -178,6 +178,38 @@ class TableOrderService {
     return mergedTargetDomain;
   }
 
+  Future<HoldTicket> transferOrder({
+    required String ticketId,
+    required String sourceTableId,
+    required String targetTableId,
+  }) async {
+    final ticket = await getOrderById(ticketId);
+    if (ticket == null) {
+      throw StateError('La comanda $ticketId no existe.');
+    }
+
+    final now = DateTime.now();
+    final updatedDomain = ticket.copyWith(
+      tableId: targetTableId,
+      updatedAt: now,
+    );
+
+    final updatedEntity = SalesMapper.toHoldTicketEntity(updatedDomain);
+    final updatedItemEntities = SalesMapper.toHoldTicketItemEntities(updatedDomain);
+    await _database.holdTicketDao.saveHoldTicket(updatedEntity, updatedItemEntities);
+
+    await _database.restaurantTableDao.releaseTable(sourceTableId);
+    await _database.restaurantTableDao.occupyTable(
+      targetTableId,
+      'OCUPADA',
+      ticket.id,
+      ticket.guestCount,
+      now.millisecondsSinceEpoch,
+    );
+
+    return updatedDomain;
+  }
+
   Future<SplitOrderResult> splitOrderItems({
     required String sourceTicketId,
     required List<CartItem> itemsToMove,

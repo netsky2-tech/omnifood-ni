@@ -111,30 +111,11 @@ class TableLayoutViewModel extends ChangeNotifier {
     }
 
     try {
-      final now = DateTime.now();
-
-      // 1. Update ticket with new tableId
-      final updatedTicket = sourceTicket.copyWith(
-        tableId: targetTableId,
-        updatedAt: now,
+      await _tableOrderService.transferOrder(
+        ticketId: sourceTicket.id,
+        sourceTableId: sourceTableId,
+        targetTableId: targetTableId,
       );
-
-      final entity = SalesMapper.toHoldTicketEntity(updatedTicket);
-      final itemEntities = SalesMapper.toHoldTicketItemEntities(updatedTicket);
-      await _database.holdTicketDao.saveHoldTicket(entity, itemEntities);
-
-      // 2. Release source table
-      await _database.restaurantTableDao.releaseTable(sourceTableId);
-
-      // 3. Occupy target table
-      await _database.restaurantTableDao.occupyTable(
-        targetTableId,
-        'OCUPADA',
-        updatedTicket.id,
-        updatedTicket.guestCount,
-        now.millisecondsSinceEpoch,
-      );
-
       await loadData();
     } catch (e) {
       _errorMessage = 'Error al transferir mesa: $e';
