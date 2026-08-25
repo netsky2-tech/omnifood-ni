@@ -14,19 +14,22 @@ import '../../../../domain/repositories/inventory/inventory_repository.dart';
 import '../../../../domain/repositories/auth_repository.dart';
 import '../../../../data/database/app_database.dart';
 import '../../../../data/mappers/sales_mapper.dart';
+import '../../../../domain/services/sales/table_order_service.dart';
 
 class SaleViewModel extends ChangeNotifier {
   final SalesRepository _salesRepository;
   final InventoryRepository _inventoryRepository;
   final AuthRepository _authRepository;
   final AppDatabase _database; // For session, hold, and promo DAOs
+  final TableOrderService _tableOrderService;
 
   SaleViewModel(
     this._salesRepository,
     this._inventoryRepository,
     this._authRepository,
-    this._database,
-  ) {
+    this._database, [
+    TableOrderService? tableOrderService,
+  ]) : _tableOrderService = tableOrderService ?? TableOrderService(_database) {
     loadProducts();
     checkActiveSession();
     loadHoldTickets();
@@ -242,35 +245,45 @@ class SaleViewModel extends ChangeNotifier {
     }
   }
 
+  HoldTicket? _activeLoadedHoldTicket;
+  HoldTicket? get activeLoadedHoldTicket => _activeLoadedHoldTicket;
+  String? get activeTableId => _activeLoadedHoldTicket?.tableId;
+
   Future<void> loadHoldTickets() async {
-    final entities = await _database.holdTicketDao.getAllHoldTickets();
-    final List<HoldTicket> tickets = [];
-    for (final entity in entities) {
-      final itemEntities = await _database.holdTicketDao.getItemsByHoldTicketId(
-        entity.id,
-      );
-      tickets.add(SalesMapper.toHoldTicketDomain(entity, itemEntities));
-    }
-    _holdTickets = tickets;
+    _holdTickets = await _tableOrderService.getAllOpenOrders();
     notifyListeners();
   }
 
-  Future<void> holdCurrentTicket(String name) async {
+  Future<void> holdCurrentTicket(
+    String name, {
+    String? tableId,
+    String? areaId,
+    String? waiterId,
+    String? waiterName,
+    int guestCount = 1,
+  }) async {
     if (_cart.isEmpty) return;
 
-    final ticket = HoldTicket(
-      id: const Uuid().v4(),
-      name: name,
-      items: List.from(_cart),
-      createdAt: DateTime.now(),
-      isGlobalTaxExempt: _isGlobalTaxExempt,
-    );
+    if (_activeLoadedHoldTicket != null) {
+      await _tableOrderService.appendItemsToOrder(
+        ticketId: _activeLoadedHoldTicket!.id,
+        newItems: List.from(_cart),
+        expectedVersion: _activeLoadedHoldTicket!.version,
+      );
+    } else {
+      await _tableOrderService.parkOrder(
+        name: name,
+        tableId: tableId,
+        areaId: areaId,
+        waiterId: waiterId,
+        waiterName: waiterName,
+        guestCount: guestCount,
+        isGlobalTaxExempt: _isGlobalTaxExempt,
+        items: List.from(_cart),
+      );
+    }
 
-    await _database.holdTicketDao.saveHoldTicket(
-      SalesMapper.toHoldTicketEntity(ticket),
-      SalesMapper.toHoldTicketItemEntities(ticket),
-    );
-
+    _activeLoadedHoldTicket = null;
     clearCart();
     await loadHoldTickets();
   }
@@ -279,11 +292,16 @@ class SaleViewModel extends ChangeNotifier {
     _cart.clear();
     _cart.addAll(ticket.items);
     _isGlobalTaxExempt = ticket.isGlobalTaxExempt;
+    _activeLoadedHoldTicket = ticket;
 
-    await _database.holdTicketDao.deleteHoldTicket(ticket.id);
     await loadHoldTickets();
     _applyPromotions();
     notifyListeners();
+  }
+
+  void cancelLoadedHoldTicket() {
+    _activeLoadedHoldTicket = null;
+    clearCart();
   }
 
   Future<void> checkActiveSession() async {
@@ -452,6 +470,7 @@ class SaleViewModel extends ChangeNotifier {
     _cart.clear();
     _isGlobalTaxExempt = false;
     _totalDiscounts = 0.0;
+    _activeLoadedHoldTicket = null;
     notifyListeners();
   }
 
@@ -541,6 +560,11 @@ class SaleViewModel extends ChangeNotifier {
           : p.amount;
       _sessionExpected[p.method] =
           (_sessionExpected[p.method] ?? 0.0) + effectiveCashNio;
+    }
+
+    if (_activeLoadedHoldTicket != null) {
+      await _tableOrderService.liquidateOrder(_activeLoadedHoldTicket!.id);
+      _activeLoadedHoldTicket = null;
     }
 
     clearCart();

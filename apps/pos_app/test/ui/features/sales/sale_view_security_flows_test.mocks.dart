@@ -267,10 +267,25 @@ class MockSaleViewModel extends _i1.Mock implements _i2.SaleViewModel {
       ) as _i9.Future<void>);
 
   @override
-  _i9.Future<void> holdCurrentTicket(String? name) => (super.noSuchMethod(
+  _i9.Future<void> holdCurrentTicket(
+    String? name, {
+    String? tableId,
+    String? areaId,
+    String? waiterId,
+    String? waiterName,
+    int? guestCount = 1,
+  }) =>
+      (super.noSuchMethod(
         Invocation.method(
           #holdCurrentTicket,
           [name],
+          {
+            #tableId: tableId,
+            #areaId: areaId,
+            #waiterId: waiterId,
+            #waiterName: waiterName,
+            #guestCount: guestCount,
+          },
         ),
         returnValue: _i9.Future<void>.value(),
         returnValueForMissingStub: _i9.Future<void>.value(),
@@ -285,6 +300,15 @@ class MockSaleViewModel extends _i1.Mock implements _i2.SaleViewModel {
         returnValue: _i9.Future<void>.value(),
         returnValueForMissingStub: _i9.Future<void>.value(),
       ) as _i9.Future<void>);
+
+  @override
+  void cancelLoadedHoldTicket() => super.noSuchMethod(
+        Invocation.method(
+          #cancelLoadedHoldTicket,
+          [],
+        ),
+        returnValueForMissingStub: null,
+      );
 
   @override
   _i9.Future<void> checkActiveSession() => (super.noSuchMethod(
