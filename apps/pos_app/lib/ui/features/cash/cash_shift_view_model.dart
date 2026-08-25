@@ -3,12 +3,14 @@ import 'package:uuid/uuid.dart';
 import '../../../data/database/app_database.dart';
 import '../../../data/daos/sales/cashier_session_dao.dart';
 import '../../../data/daos/sales/cash_movement_dao.dart';
+import '../../../data/daos/sales/payment_dao.dart';
 import '../../../data/models/sales/cashier_session_entity.dart';
 import '../../../data/models/sales/cash_movement_entity.dart';
 
 class CashShiftViewModel extends ChangeNotifier {
   final CashierSessionDao sessionDao;
   final CashMovementDao movementDao;
+  final PaymentDao? paymentDao;
   final String currentUserId;
   final String currentUserName;
   final String currentTerminalId;
@@ -16,12 +18,14 @@ class CashShiftViewModel extends ChangeNotifier {
   CashierSessionEntity? _activeShift;
   CashierSessionEntity? _lastClosedShift;
   List<CashMovementEntity> _movements = [];
+  int _pendingVouchersCount = 0;
   bool _isLoading = false;
   String? _errorMessage;
 
   CashShiftViewModel({
     required this.sessionDao,
     required this.movementDao,
+    this.paymentDao,
     required this.currentUserId,
     this.currentUserName = 'Cajero',
     this.currentTerminalId = 'term-main',
@@ -36,6 +40,7 @@ class CashShiftViewModel extends ChangeNotifier {
     return CashShiftViewModel(
       sessionDao: database.cashierSessionDao,
       movementDao: database.cashMovementDao,
+      paymentDao: database.paymentDao,
       currentUserId: currentUserId,
       currentUserName: currentUserName,
       currentTerminalId: currentTerminalId,
@@ -46,6 +51,8 @@ class CashShiftViewModel extends ChangeNotifier {
   CashierSessionEntity? get lastClosedShift => _lastClosedShift;
   bool get hasActiveShift => _activeShift != null && !_activeShift!.isClosed;
   List<CashMovementEntity> get movements => List.unmodifiable(_movements);
+  int get pendingVouchersCount => _pendingVouchersCount;
+  bool get hasPendingVouchers => _pendingVouchersCount > 0;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
@@ -61,11 +68,18 @@ class CashShiftViewModel extends ChangeNotifier {
       } else {
         _movements = [];
       }
+      await refreshPendingVouchersCount();
     } catch (e) {
       _errorMessage = 'Error al cargar turno: $e';
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  Future<void> refreshPendingVouchersCount() async {
+    if (paymentDao != null) {
+      _pendingVouchersCount = (await paymentDao!.countPendingCardPayments()) ?? 0;
     }
   }
 
@@ -108,6 +122,7 @@ class CashShiftViewModel extends ChangeNotifier {
       await sessionDao.insertSession(session);
       _activeShift = session;
       _movements = [];
+      await refreshPendingVouchersCount();
       _isLoading = false;
       notifyListeners();
       return true;
@@ -217,6 +232,19 @@ class CashShiftViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // Invariante Fiscal DGI: No emitir Corte Z con vouchers pendientes
+      if (paymentDao != null) {
+        final pendingCount = (await paymentDao!.countPendingCardPayments()) ?? 0;
+        _pendingVouchersCount = pendingCount;
+        if (pendingCount > 0) {
+          _errorMessage =
+              'Existen $pendingCount vouchers de tarjeta pendientes de conciliar. Debe conciliar todos los vouchers antes de emitir el Corte Z Fiscal.';
+          _isLoading = false;
+          notifyListeners();
+          return false;
+        }
+      }
+
       final now = DateTime.now().millisecondsSinceEpoch;
       final closedCount = (await sessionDao.countClosedSessions()) ?? 0;
       final zSequence = closedCount + 1;

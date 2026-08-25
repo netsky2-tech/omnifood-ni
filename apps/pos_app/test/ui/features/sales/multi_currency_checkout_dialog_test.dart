@@ -106,6 +106,7 @@ void main() {
     final chip500 = find.widgetWithText(ActionChip, 'C\$ 500');
     expect(chip500, findsOneWidget);
 
+    await tester.ensureVisible(chip500);
     await tester.tap(chip500);
     await tester.pumpAndSettle();
 

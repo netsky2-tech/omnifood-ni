@@ -56,6 +56,33 @@ export class Payment {
   @Column({ name: 'change_currency', default: 'NIO' })
   changeCurrency: string;
 
+  @Column({ name: 'voucher_code', nullable: true })
+  voucherCode?: string;
+
+  @Column({ name: 'card_brand', nullable: true })
+  cardBrand?: string;
+
+  @Column({ name: 'card_type', nullable: true })
+  cardType?: string;
+
+  @Column({ name: 'bank_pos', nullable: true })
+  bankPos?: string;
+
+  @Column({ name: 'reconciliation_status', nullable: true, default: 'PENDIENTE' })
+  reconciliationStatus?: string;
+
+  @Column({ nullable: true })
+  last4?: string;
+
+  @Column({ name: 'batch_number', nullable: true })
+  batchNumber?: string;
+
+  @Column({ name: 'reconciled_at', nullable: true })
+  reconciledAt?: Date;
+
+  @Column({ name: 'reconciled_by_user_id', nullable: true })
+  reconciledByUserId?: string;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }

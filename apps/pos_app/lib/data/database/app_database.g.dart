@@ -144,7 +144,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 34,
+      version: 35,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -214,7 +214,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `invoice_item_modifiers` (`id` TEXT NOT NULL, `invoice_item_id` TEXT NOT NULL, `name` TEXT NOT NULL, `extra_price` REAL NOT NULL, FOREIGN KEY (`invoice_item_id`) REFERENCES `invoice_items` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `payments` (`id` TEXT NOT NULL, `invoice_id` TEXT NOT NULL, `method` TEXT NOT NULL, `amount` REAL NOT NULL, `currency` TEXT NOT NULL, `exchange_rate` REAL NOT NULL, `amount_nio` REAL NOT NULL, `change_given` REAL NOT NULL, `change_currency` TEXT NOT NULL, `created_at` INTEGER, FOREIGN KEY (`invoice_id`) REFERENCES `invoices` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `payments` (`id` TEXT NOT NULL, `invoice_id` TEXT NOT NULL, `method` TEXT NOT NULL, `amount` REAL NOT NULL, `currency` TEXT NOT NULL, `exchange_rate` REAL NOT NULL, `amount_nio` REAL NOT NULL, `change_given` REAL NOT NULL, `change_currency` TEXT NOT NULL, `voucher_code` TEXT, `card_brand` TEXT, `card_type` TEXT, `bank_pos` TEXT, `reconciliation_status` TEXT, `last4` TEXT, `batch_number` TEXT, `reconciled_at` INTEGER, `reconciled_by_user_id` TEXT, `created_at` INTEGER, FOREIGN KEY (`invoice_id`) REFERENCES `invoices` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `tax_configurations` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `rate` REAL NOT NULL, `is_active` INTEGER NOT NULL, `is_default` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
@@ -3044,6 +3044,40 @@ class _$PaymentDao extends PaymentDao {
                   'amount_nio': item.amountNio,
                   'change_given': item.changeGiven,
                   'change_currency': item.changeCurrency,
+                  'voucher_code': item.voucherCode,
+                  'card_brand': item.cardBrand,
+                  'card_type': item.cardType,
+                  'bank_pos': item.bankPos,
+                  'reconciliation_status': item.reconciliationStatus,
+                  'last4': item.last4,
+                  'batch_number': item.batchNumber,
+                  'reconciled_at': item.reconciledAt,
+                  'reconciled_by_user_id': item.reconciledByUserId,
+                  'created_at': item.createdAt
+                }),
+        _paymentEntityUpdateAdapter = UpdateAdapter(
+            database,
+            'payments',
+            ['id'],
+            (PaymentEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'invoice_id': item.invoiceId,
+                  'method': item.method,
+                  'amount': item.amount,
+                  'currency': item.currency,
+                  'exchange_rate': item.exchangeRate,
+                  'amount_nio': item.amountNio,
+                  'change_given': item.changeGiven,
+                  'change_currency': item.changeCurrency,
+                  'voucher_code': item.voucherCode,
+                  'card_brand': item.cardBrand,
+                  'card_type': item.cardType,
+                  'bank_pos': item.bankPos,
+                  'reconciliation_status': item.reconciliationStatus,
+                  'last4': item.last4,
+                  'batch_number': item.batchNumber,
+                  'reconciled_at': item.reconciledAt,
+                  'reconciled_by_user_id': item.reconciledByUserId,
                   'created_at': item.createdAt
                 });
 
@@ -3054,6 +3088,8 @@ class _$PaymentDao extends PaymentDao {
   final QueryAdapter _queryAdapter;
 
   final InsertionAdapter<PaymentEntity> _paymentEntityInsertionAdapter;
+
+  final UpdateAdapter<PaymentEntity> _paymentEntityUpdateAdapter;
 
   @override
   Future<List<PaymentEntity>> getPaymentsByInvoiceId(String invoiceId) async {
@@ -3069,6 +3105,15 @@ class _$PaymentDao extends PaymentDao {
             amountNio: row['amount_nio'] as double,
             changeGiven: row['change_given'] as double,
             changeCurrency: row['change_currency'] as String,
+            voucherCode: row['voucher_code'] as String?,
+            cardBrand: row['card_brand'] as String?,
+            cardType: row['card_type'] as String?,
+            bankPos: row['bank_pos'] as String?,
+            reconciliationStatus: row['reconciliation_status'] as String?,
+            last4: row['last4'] as String?,
+            batchNumber: row['batch_number'] as String?,
+            reconciledAt: row['reconciled_at'] as int?,
+            reconciledByUserId: row['reconciled_by_user_id'] as String?,
             createdAt: row['created_at'] as int?),
         arguments: [invoiceId]);
   }
@@ -3080,14 +3125,53 @@ class _$PaymentDao extends PaymentDao {
   ) async {
     return _queryAdapter.queryList(
         'SELECT p.* FROM payments p INNER JOIN invoices i ON p.invoice_id = i.id WHERE i.created_at >= ?1 AND i.created_at <= ?2',
-        mapper: (Map<String, Object?> row) => PaymentEntity(id: row['id'] as String, invoiceId: row['invoice_id'] as String, method: row['method'] as String, amount: row['amount'] as double, currency: row['currency'] as String, exchangeRate: row['exchange_rate'] as double, amountNio: row['amount_nio'] as double, changeGiven: row['change_given'] as double, changeCurrency: row['change_currency'] as String, createdAt: row['created_at'] as int?),
+        mapper: (Map<String, Object?> row) => PaymentEntity(id: row['id'] as String, invoiceId: row['invoice_id'] as String, method: row['method'] as String, amount: row['amount'] as double, currency: row['currency'] as String, exchangeRate: row['exchange_rate'] as double, amountNio: row['amount_nio'] as double, changeGiven: row['change_given'] as double, changeCurrency: row['change_currency'] as String, voucherCode: row['voucher_code'] as String?, cardBrand: row['card_brand'] as String?, cardType: row['card_type'] as String?, bankPos: row['bank_pos'] as String?, reconciliationStatus: row['reconciliation_status'] as String?, last4: row['last4'] as String?, batchNumber: row['batch_number'] as String?, reconciledAt: row['reconciled_at'] as int?, reconciledByUserId: row['reconciled_by_user_id'] as String?, createdAt: row['created_at'] as int?),
         arguments: [startTime, endTime]);
+  }
+
+  @override
+  Future<List<PaymentEntity>> getPendingCardPayments() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM payments WHERE method = \'card\' AND reconciliation_status = \'PENDIENTE\' ORDER BY created_at ASC',
+        mapper: (Map<String, Object?> row) => PaymentEntity(
+            id: row['id'] as String,
+            invoiceId: row['invoice_id'] as String,
+            method: row['method'] as String,
+            amount: row['amount'] as double,
+            currency: row['currency'] as String,
+            exchangeRate: row['exchange_rate'] as double,
+            amountNio: row['amount_nio'] as double,
+            changeGiven: row['change_given'] as double,
+            changeCurrency: row['change_currency'] as String,
+            voucherCode: row['voucher_code'] as String?,
+            cardBrand: row['card_brand'] as String?,
+            cardType: row['card_type'] as String?,
+            bankPos: row['bank_pos'] as String?,
+            reconciliationStatus: row['reconciliation_status'] as String?,
+            last4: row['last4'] as String?,
+            batchNumber: row['batch_number'] as String?,
+            reconciledAt: row['reconciled_at'] as int?,
+            reconciledByUserId: row['reconciled_by_user_id'] as String?,
+            createdAt: row['created_at'] as int?));
+  }
+
+  @override
+  Future<int?> countPendingCardPayments() async {
+    return _queryAdapter.query(
+        'SELECT COUNT(*) FROM payments WHERE method = \'card\' AND reconciliation_status = \'PENDIENTE\'',
+        mapper: (Map<String, Object?> row) => row.values.first as int);
   }
 
   @override
   Future<void> insertPayments(List<PaymentEntity> payments) async {
     await _paymentEntityInsertionAdapter.insertList(
         payments, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> updatePayment(PaymentEntity payment) async {
+    await _paymentEntityUpdateAdapter.update(
+        payment, OnConflictStrategy.replace);
   }
 }
 
@@ -3243,6 +3327,15 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'amount_nio': item.amountNio,
                   'change_given': item.changeGiven,
                   'change_currency': item.changeCurrency,
+                  'voucher_code': item.voucherCode,
+                  'card_brand': item.cardBrand,
+                  'card_type': item.cardType,
+                  'bank_pos': item.bankPos,
+                  'reconciliation_status': item.reconciliationStatus,
+                  'last4': item.last4,
+                  'batch_number': item.batchNumber,
+                  'reconciled_at': item.reconciledAt,
+                  'reconciled_by_user_id': item.reconciledByUserId,
                   'created_at': item.createdAt
                 }),
         _movementEntityInsertionAdapter = InsertionAdapter(

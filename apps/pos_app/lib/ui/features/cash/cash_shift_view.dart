@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'cash_shift_view_model.dart';
+import 'card_voucher_reconciliation_view_model.dart';
 import 'widgets/open_shift_dialog.dart';
 import 'widgets/cash_movement_dialog.dart';
 import 'widgets/close_shift_dialog.dart';
 import 'widgets/z_report_dialog.dart';
 import 'widgets/x_report_dialog.dart';
+import 'widgets/card_voucher_reconciliation_dialog.dart';
 
 class CashShiftView extends StatelessWidget {
   const CashShiftView({super.key});
@@ -214,7 +216,54 @@ class CashShiftView extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 16),
+          // Pending card vouchers warning banner
+          if (vm.hasPendingVouchers)
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.amber.shade400, width: 1.5),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded,
+                      color: Colors.amber.shade900, size: 28),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '⚠️ ${vm.pendingVouchersCount} voucher${vm.pendingVouchersCount > 1 ? 's' : ''} de tarjeta pendiente${vm.pendingVouchersCount > 1 ? 's' : ''} de conciliar',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.amber.shade900,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Debe ingresar los códigos de autorización bancarios antes de emitir el Corte Z.',
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.amber.shade900),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton.icon(
+                    onPressed: () => _openVoucherReconciliationDialog(context, vm),
+                    icon: const Icon(Icons.receipt_long, size: 16),
+                    label: const Text('Conciliar Vouchers'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.amber.shade800,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
           // Action bar
           Wrap(
@@ -231,6 +280,20 @@ class CashShiftView extends StatelessWidget {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
+                  if (vm.paymentDao != null)
+                    OutlinedButton.icon(
+                      onPressed: () =>
+                          _openVoucherReconciliationDialog(context, vm),
+                      icon: const Icon(Icons.receipt_long),
+                      label: Text(vm.hasPendingVouchers
+                          ? 'Vouchers (${vm.pendingVouchersCount})'
+                          : 'Vouchers'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: vm.hasPendingVouchers
+                            ? Colors.amber.shade900
+                            : Colors.indigo,
+                      ),
+                    ),
                   OutlinedButton.icon(
                     onPressed: () => showDialog<void>(
                       context: context,
@@ -261,13 +324,41 @@ class CashShiftView extends StatelessWidget {
                     ),
                   ),
                   ElevatedButton.icon(
-                    onPressed: () => showDialog<bool>(
-                      context: context,
-                      builder: (_) => ChangeNotifierProvider<CashShiftViewModel>.value(
-                        value: vm,
-                        child: const CloseShiftDialog(),
-                      ),
-                    ),
+                    onPressed: () async {
+                      if (vm.hasPendingVouchers) {
+                        final goToReconcile = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('Bloqueo de Corte Z Fiscal'),
+                            content: Text(
+                              'Existen ${vm.pendingVouchersCount} vouchers de datáfono en estado PENDIENTE.\n\nPor disposición de control fiscal y auditoría, debe conciliar o autorizar el override de todos los vouchers antes de emitir el Reporte Z.',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.of(ctx).pop(false),
+                                child: const Text('CANCELAR'),
+                              ),
+                              FilledButton(
+                                onPressed: () => Navigator.of(ctx).pop(true),
+                                child: const Text('IR A RECONCILIACIÓN'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (goToReconcile == true && context.mounted) {
+                          _openVoucherReconciliationDialog(context, vm);
+                        }
+                        return;
+                      }
+
+                      showDialog<bool>(
+                        context: context,
+                        builder: (_) => ChangeNotifierProvider<CashShiftViewModel>.value(
+                          value: vm,
+                          child: const CloseShiftDialog(),
+                        ),
+                      );
+                    },
                     icon: const Icon(Icons.lock),
                     label: const Text('Cerrar Turno (Corte Z)'),
                     style: ElevatedButton.styleFrom(
@@ -361,6 +452,21 @@ class CashShiftView extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  void _openVoucherReconciliationDialog(
+      BuildContext context, CashShiftViewModel vm) {
+    if (vm.paymentDao == null) return;
+    showDialog<void>(
+      context: context,
+      builder: (_) => ChangeNotifierProvider<CardVoucherReconciliationViewModel>(
+        create: (_) => CardVoucherReconciliationViewModel(
+          paymentDao: vm.paymentDao!,
+          currentUserId: vm.currentUserId,
+        )..loadPendingVouchers(),
+        child: const CardVoucherReconciliationDialog(),
+      ),
+    ).then((_) => vm.refreshPendingVouchersCount());
   }
 
   Widget _buildMetricTile({

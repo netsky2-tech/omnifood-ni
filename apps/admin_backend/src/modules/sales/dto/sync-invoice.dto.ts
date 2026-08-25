@@ -120,6 +120,42 @@ export class CreatePaymentDto {
   @IsString()
   @IsOptional()
   changeCurrency?: string;
+
+  @IsString()
+  @IsOptional()
+  voucherCode?: string;
+
+  @IsString()
+  @IsOptional()
+  cardBrand?: string;
+
+  @IsString()
+  @IsOptional()
+  cardType?: string;
+
+  @IsString()
+  @IsOptional()
+  bankPos?: string;
+
+  @IsString()
+  @IsOptional()
+  reconciliationStatus?: string;
+
+  @IsString()
+  @IsOptional()
+  last4?: string;
+
+  @IsString()
+  @IsOptional()
+  batchNumber?: string;
+
+  @IsDateString()
+  @IsOptional()
+  reconciledAt?: string;
+
+  @IsString()
+  @IsOptional()
+  reconciledByUserId?: string;
 }
 
 export class SyncInvoiceDto {

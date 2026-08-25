@@ -1376,6 +1376,39 @@ final migration33_34 = Migration(33, 34, (database) async {
   }
 });
 
+final migration34_35 = Migration(34, 35, (database) async {
+  final paymentColumns = await database.rawQuery("PRAGMA table_info(`payments`)");
+  final payColumnNames = paymentColumns.map((col) => col['name'] as String).toSet();
+
+  if (!payColumnNames.contains('voucher_code')) {
+    await database.execute("ALTER TABLE `payments` ADD COLUMN `voucher_code` TEXT");
+  }
+  if (!payColumnNames.contains('card_brand')) {
+    await database.execute("ALTER TABLE `payments` ADD COLUMN `card_brand` TEXT");
+  }
+  if (!payColumnNames.contains('card_type')) {
+    await database.execute("ALTER TABLE `payments` ADD COLUMN `card_type` TEXT");
+  }
+  if (!payColumnNames.contains('bank_pos')) {
+    await database.execute("ALTER TABLE `payments` ADD COLUMN `bank_pos` TEXT");
+  }
+  if (!payColumnNames.contains('reconciliation_status')) {
+    await database.execute("ALTER TABLE `payments` ADD COLUMN `reconciliation_status` TEXT");
+  }
+  if (!payColumnNames.contains('last4')) {
+    await database.execute("ALTER TABLE `payments` ADD COLUMN `last4` TEXT");
+  }
+  if (!payColumnNames.contains('batch_number')) {
+    await database.execute("ALTER TABLE `payments` ADD COLUMN `batch_number` TEXT");
+  }
+  if (!payColumnNames.contains('reconciled_at')) {
+    await database.execute("ALTER TABLE `payments` ADD COLUMN `reconciled_at` INTEGER");
+  }
+  if (!payColumnNames.contains('reconciled_by_user_id')) {
+    await database.execute("ALTER TABLE `payments` ADD COLUMN `reconciled_by_user_id` TEXT");
+  }
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -1401,4 +1434,5 @@ final allMigrations = [
   migration31_32,
   migration32_33,
   migration33_34,
+  migration34_35,
 ];

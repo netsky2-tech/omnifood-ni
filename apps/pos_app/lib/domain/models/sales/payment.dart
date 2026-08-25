@@ -17,6 +17,16 @@ class Payment with _$Payment {
     @Default(0.0) double amountNio,
     @Default(0.0) double changeGiven,
     @Default('NIO') String changeCurrency,
+    // Voucher & Card Metadata (PRD Dos Capas)
+    String? voucherCode,
+    String? cardBrand,
+    String? cardType,
+    String? bankPos,
+    String? reconciliationStatus,
+    String? last4,
+    String? batchNumber,
+    DateTime? reconciledAt,
+    String? reconciledByUserId,
     DateTime? createdAt,
   }) = _Payment;
 
