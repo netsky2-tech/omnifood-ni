@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../../domain/models/config/tenant_operation_mode.dart';
 import 'business_profile_view_model.dart';
 
 class BusinessProfileView extends StatefulWidget {
@@ -136,6 +137,31 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                       },
                     ),
                     
+                    const SizedBox(height: 32),
+                    Text('MODO OPERATIVO DEL NEGOCIO', style: Theme.of(context).textTheme.labelLarge),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<TenantOperationMode>(
+                      key: const Key('operation_mode_dropdown'),
+                      value: viewModel.operationMode,
+                      decoration: const InputDecoration(
+                        labelText: 'Modo de Operación POS',
+                        prefixIcon: Icon(Icons.storefront),
+                        helperText: 'Determina el flujo de atención: Cobro directo en barra (Food Park), Servicio de Mesas (Restaurante), o Híbrido.',
+                      ),
+                      items: TenantOperationMode.values.map((mode) {
+                        return DropdownMenuItem(
+                          value: mode,
+                          child: Text(mode.displayName),
+                        );
+                      }).toList(),
+                      onChanged: (newMode) {
+                        if (newMode != null) {
+                          viewModel.setOperationMode(newMode);
+                          _controllers['operation_mode']?.text = newMode.code;
+                        }
+                      },
+                    ),
+
                     const SizedBox(height: 48),
                     Row(
                       children: [
@@ -147,6 +173,7 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                                 _controllers.forEach((key, controller) {
                                   newConfig[key] = controller.text;
                                 });
+                                newConfig['operation_mode'] = viewModel.operationMode.code;
                                 await viewModel.saveConfig(newConfig);
                                 if (mounted && context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
