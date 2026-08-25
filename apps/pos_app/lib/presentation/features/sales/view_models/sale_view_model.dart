@@ -29,13 +29,16 @@ class SaleViewModel extends ChangeNotifier {
     this._authRepository,
     this._database, [
     TableOrderService? tableOrderService,
+    bool autoLoad = true,
   ]) : _tableOrderService = tableOrderService ?? TableOrderService(_database) {
-    loadProducts();
-    checkActiveSession();
-    loadHoldTickets();
-    loadPromotions();
-    _loadCurrentUserRole();
-    loadExchangeRates();
+    if (autoLoad) {
+      loadProducts();
+      checkActiveSession();
+      loadHoldTickets();
+      loadPromotions();
+      _loadCurrentUserRole();
+      loadExchangeRates();
+    }
   }
 
   double _commercialRate = 36.50;

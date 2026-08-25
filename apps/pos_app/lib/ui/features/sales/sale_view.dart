@@ -8,9 +8,11 @@ import '../../../domain/models/sales/payment.dart';
 import '../../../domain/models/user.dart';
 import '../../../domain/repositories/auth_repository.dart';
 import '../../../domain/repositories/audit_repository.dart';
+import '../../../data/database/app_database.dart';
 import '../../widgets/app_drawer.dart';
 import '../../features/identity/supervisor_override_modal.dart';
 import 'widgets/multi_currency_checkout_dialog.dart';
+import 'tables/table_layout_view.dart';
 
 class SaleView extends StatefulWidget {
   const SaleView({super.key});
@@ -66,6 +68,22 @@ class _SaleViewState extends State<SaleView> {
         elevation: 0,
         shape: Border(bottom: BorderSide(color: colorScheme.outlineVariant)),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.table_restaurant),
+            onPressed: () async {
+              final result = await Navigator.push<Map<String, dynamic>>(
+                context,
+                MaterialPageRoute(builder: (_) => const TableLayoutView()),
+              );
+              if (result != null && mounted) {
+                final tableName = result['tableName'] as String? ?? 'Mesa';
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Comanda abierta para $tableName')),
+                );
+              }
+            },
+            tooltip: 'Control de Mesas',
+          ),
           IconButton(
             icon: const Icon(Icons.assignment_return),
             onPressed: () => Navigator.pushNamed(context, '/sales/history'),
@@ -166,27 +184,93 @@ class _SaleViewState extends State<SaleView> {
   // TODO: Implementar funcionalidad de devoluciones/notas de crédito
   // void _showReturnsDialog(BuildContext context) { ... }
 
-  void _showHoldTicketDialog(BuildContext context) {
+  void _showHoldTicketDialog(BuildContext context) async {
     final controller = TextEditingController();
+    final database = context.read<AppDatabase>();
+    final tables = await database.restaurantTableDao.getTablesByStatus('DISPONIBLE');
+
+    if (!context.mounted) return;
+
+    String? selectedTableId;
+    int guestCount = 2;
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Poner Venta en Espera'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(labelText: 'Nombre / Mesa'),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCELAR')),
-          ElevatedButton(
-            onPressed: () {
-              context.read<SaleViewModel>().holdCurrentTicket(controller.text);
-              Navigator.pop(context);
-            }, 
-            child: const Text('GUARDAR'),
-          ),
-        ],
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: const Text('Poner Venta en Espera'),
+            content: SizedBox(
+              width: 380,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: controller,
+                    decoration: const InputDecoration(
+                      labelText: 'Nombre / Identificador',
+                      hintText: 'Ej: Juan Perez / Barra',
+                    ),
+                    autofocus: true,
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String?>(
+                    decoration: const InputDecoration(labelText: 'Mesa Asignada (Opcional)'),
+                    value: selectedTableId,
+                    items: [
+                      const DropdownMenuItem(value: null, child: Text('Sin mesa (Para llevar)')),
+                      ...tables.map((t) => DropdownMenuItem(
+                            value: t.id,
+                            child: Text('${t.tableNumber} (Cap: ${t.capacity})'),
+                          )),
+                    ],
+                    onChanged: (val) => setState(() {
+                      selectedTableId = val;
+                      if (val != null && controller.text.isEmpty) {
+                        final found = tables.firstWhere((t) => t.id == val);
+                        controller.text = found.tableNumber;
+                      }
+                    }),
+                  ),
+                  if (selectedTableId != null) ...[
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        const Text('Comensales:'),
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(Icons.remove_circle_outline),
+                          onPressed: guestCount > 1 ? () => setState(() => guestCount--) : null,
+                        ),
+                        Text('$guestCount', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        IconButton(
+                          icon: const Icon(Icons.add_circle_outline),
+                          onPressed: guestCount < 20 ? () => setState(() => guestCount++) : null,
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('CANCELAR')),
+              ElevatedButton(
+                onPressed: () {
+                  final name = controller.text.trim().isEmpty ? 'Comanda' : controller.text.trim();
+                  context.read<SaleViewModel>().holdCurrentTicket(
+                        name,
+                        tableId: selectedTableId,
+                        guestCount: guestCount,
+                      );
+                  Navigator.pop(dialogCtx);
+                },
+                child: const Text('GUARDAR'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
