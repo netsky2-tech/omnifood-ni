@@ -1478,6 +1478,56 @@ final migration35_36 = Migration(35, 36, (database) async {
   }
 });
 
+final migration36_37 = Migration(36, 37, (database) async {
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS `kitchen_orders` (
+      `id` TEXT NOT NULL,
+      `ticket_id` TEXT NOT NULL,
+      `table_number` TEXT,
+      `table_name` TEXT,
+      `waiter_name` TEXT,
+      `station` TEXT NOT NULL,
+      `status` TEXT NOT NULL,
+      `created_at` INTEGER NOT NULL,
+      `started_at` INTEGER,
+      `ready_at` INTEGER,
+      `served_at` INTEGER,
+      `notes` TEXT,
+      PRIMARY KEY (`id`)
+    )
+  ''');
+
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS `kitchen_order_items` (
+      `id` TEXT NOT NULL,
+      `kitchen_order_id` TEXT NOT NULL,
+      `product_id` TEXT NOT NULL,
+      `product_name` TEXT NOT NULL,
+      `quantity` REAL NOT NULL,
+      `status` TEXT NOT NULL,
+      `notes` TEXT,
+      `modifiers_json` TEXT,
+      FOREIGN KEY (`kitchen_order_id`) REFERENCES `kitchen_orders` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION,
+      PRIMARY KEY (`id`)
+    )
+  ''');
+
+  await database.execute('''
+    CREATE INDEX IF NOT EXISTS `idx_kitchen_orders_station_status`
+    ON `kitchen_orders` (`station`, `status`)
+  ''');
+
+  await database.execute('''
+    CREATE INDEX IF NOT EXISTS `idx_kitchen_orders_ticket_id`
+    ON `kitchen_orders` (`ticket_id`)
+  ''');
+
+  await database.execute('''
+    CREATE INDEX IF NOT EXISTS `idx_kitchen_order_items_order_id`
+    ON `kitchen_order_items` (`kitchen_order_id`)
+  ''');
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -1505,4 +1555,5 @@ final allMigrations = [
   migration33_34,
   migration34_35,
   migration35_36,
+  migration36_37,
 ];

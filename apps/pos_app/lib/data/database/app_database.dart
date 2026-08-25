@@ -35,6 +35,7 @@ import 'package:pos_app/data/daos/sales/hold_ticket_dao.dart';
 import 'package:pos_app/data/daos/sales/promotion_dao.dart';
 import 'package:pos_app/data/daos/sales/restaurant_area_dao.dart';
 import 'package:pos_app/data/daos/sales/restaurant_table_dao.dart';
+import 'package:pos_app/data/daos/kitchen/kitchen_order_dao.dart';
 import 'package:pos_app/data/daos/local_config_dao.dart';
 import 'package:pos_app/data/models/user_entity.dart';
 import 'package:pos_app/data/models/audit_log_entity.dart';
@@ -69,11 +70,13 @@ import 'package:pos_app/data/models/sales/hold_ticket_entity.dart';
 import 'package:pos_app/data/models/sales/promotion_entity.dart';
 import 'package:pos_app/data/models/sales/restaurant_area_entity.dart';
 import 'package:pos_app/data/models/sales/restaurant_table_entity.dart';
+import 'package:pos_app/data/models/kitchen/kitchen_order_entity.dart';
+import 'package:pos_app/data/models/kitchen/kitchen_order_item_entity.dart';
 
 part 'app_database.g.dart'; // generated code
 
 @Database(
-  version: 36,
+  version: 37,
   entities: [
     UserEntity,
     SecurityProfileEntity,
@@ -111,6 +114,8 @@ part 'app_database.g.dart'; // generated code
     PromotionEntity,
     RestaurantAreaEntity,
     RestaurantTableEntity,
+    KitchenOrderEntity,
+    KitchenOrderItemEntity,
   ],
 )
 abstract class AppDatabase extends FloorDatabase {
@@ -149,4 +154,5 @@ abstract class AppDatabase extends FloorDatabase {
   PromotionDao get promotionDao;
   RestaurantAreaDao get restaurantAreaDao;
   RestaurantTableDao get restaurantTableDao;
+  KitchenOrderDao get kitchenOrderDao;
 }

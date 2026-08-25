@@ -142,13 +142,15 @@ class _$AppDatabase extends AppDatabase {
 
   RestaurantTableDao? _restaurantTableDaoInstance;
 
+  KitchenOrderDao? _kitchenOrderDaoInstance;
+
   Future<sqflite.Database> open(
     String path,
     List<Migration> migrations, [
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 36,
+      version: 37,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -236,6 +238,10 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `restaurant_tables` (`id` TEXT NOT NULL, `area_id` TEXT NOT NULL, `table_number` TEXT NOT NULL, `capacity` INTEGER NOT NULL, `status` TEXT NOT NULL, `current_ticket_id` TEXT, `active_guests` INTEGER, `opened_at` INTEGER, FOREIGN KEY (`area_id`) REFERENCES `restaurant_areas` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE, PRIMARY KEY (`id`))');
         await database.execute(
+            'CREATE TABLE IF NOT EXISTS `kitchen_orders` (`id` TEXT NOT NULL, `ticket_id` TEXT NOT NULL, `table_number` TEXT, `table_name` TEXT, `waiter_name` TEXT, `station` TEXT NOT NULL, `status` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `started_at` INTEGER, `ready_at` INTEGER, `served_at` INTEGER, `notes` TEXT, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `kitchen_order_items` (`id` TEXT NOT NULL, `kitchen_order_id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `product_name` TEXT NOT NULL, `quantity` REAL NOT NULL, `status` TEXT NOT NULL, `notes` TEXT, `modifiers_json` TEXT, FOREIGN KEY (`kitchen_order_id`) REFERENCES `kitchen_orders` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE, PRIMARY KEY (`id`))');
+        await database.execute(
             'CREATE UNIQUE INDEX `idx_movement_sync_state_stream_sequence` ON `inventory_movement_sync_state` (`terminal_id`, `flow_type`, `local_sequence`)');
         await database.execute(
             'CREATE UNIQUE INDEX `idx_movement_sync_state_idempotency_key` ON `inventory_movement_sync_state` (`idempotency_key`)');
@@ -251,6 +257,12 @@ class _$AppDatabase extends AppDatabase {
             'CREATE UNIQUE INDEX `idx_invoices_terminal_source_sequence` ON `invoices` (`terminal_id`, `source_sequence`)');
         await database.execute(
             'CREATE UNIQUE INDEX `idx_invoices_idempotency_key` ON `invoices` (`idempotency_key`)');
+        await database.execute(
+            'CREATE INDEX `index_kitchen_orders_station_status` ON `kitchen_orders` (`station`, `status`)');
+        await database.execute(
+            'CREATE INDEX `index_kitchen_orders_ticket_id` ON `kitchen_orders` (`ticket_id`)');
+        await database.execute(
+            'CREATE INDEX `index_kitchen_order_items_kitchen_order_id` ON `kitchen_order_items` (`kitchen_order_id`)');
 
         await callback?.onCreate?.call(database, version);
       },
@@ -449,6 +461,12 @@ class _$AppDatabase extends AppDatabase {
   RestaurantTableDao get restaurantTableDao {
     return _restaurantTableDaoInstance ??=
         _$RestaurantTableDao(database, changeListener);
+  }
+
+  @override
+  KitchenOrderDao get kitchenOrderDao {
+    return _kitchenOrderDaoInstance ??=
+        _$KitchenOrderDao(database, changeListener);
   }
 }
 
@@ -4461,5 +4479,288 @@ class _$RestaurantTableDao extends RestaurantTableDao {
   Future<int> updateTable(RestaurantTableEntity table) {
     return _restaurantTableEntityUpdateAdapter.updateAndReturnChangedRows(
         table, OnConflictStrategy.replace);
+  }
+}
+
+class _$KitchenOrderDao extends KitchenOrderDao {
+  _$KitchenOrderDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _kitchenOrderEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'kitchen_orders',
+            (KitchenOrderEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'ticket_id': item.ticketId,
+                  'table_number': item.tableNumber,
+                  'table_name': item.tableName,
+                  'waiter_name': item.waiterName,
+                  'station': item.station,
+                  'status': item.status,
+                  'created_at': item.createdAt,
+                  'started_at': item.startedAt,
+                  'ready_at': item.readyAt,
+                  'served_at': item.servedAt,
+                  'notes': item.notes
+                }),
+        _kitchenOrderItemEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'kitchen_order_items',
+            (KitchenOrderItemEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'kitchen_order_id': item.kitchenOrderId,
+                  'product_id': item.productId,
+                  'product_name': item.productName,
+                  'quantity': item.quantity,
+                  'status': item.status,
+                  'notes': item.notes,
+                  'modifiers_json': item.modifiersJson
+                }),
+        _kitchenOrderEntityUpdateAdapter = UpdateAdapter(
+            database,
+            'kitchen_orders',
+            ['id'],
+            (KitchenOrderEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'ticket_id': item.ticketId,
+                  'table_number': item.tableNumber,
+                  'table_name': item.tableName,
+                  'waiter_name': item.waiterName,
+                  'station': item.station,
+                  'status': item.status,
+                  'created_at': item.createdAt,
+                  'started_at': item.startedAt,
+                  'ready_at': item.readyAt,
+                  'served_at': item.servedAt,
+                  'notes': item.notes
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<KitchenOrderEntity>
+      _kitchenOrderEntityInsertionAdapter;
+
+  final InsertionAdapter<KitchenOrderItemEntity>
+      _kitchenOrderItemEntityInsertionAdapter;
+
+  final UpdateAdapter<KitchenOrderEntity> _kitchenOrderEntityUpdateAdapter;
+
+  @override
+  Future<List<KitchenOrderEntity>> getActiveOrders(String servedStatus) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM kitchen_orders WHERE status != ?1 ORDER BY created_at ASC',
+        mapper: (Map<String, Object?> row) => KitchenOrderEntity(id: row['id'] as String, ticketId: row['ticket_id'] as String, tableNumber: row['table_number'] as String?, tableName: row['table_name'] as String?, waiterName: row['waiter_name'] as String?, station: row['station'] as String, status: row['status'] as String, createdAt: row['created_at'] as int, startedAt: row['started_at'] as int?, readyAt: row['ready_at'] as int?, servedAt: row['served_at'] as int?, notes: row['notes'] as String?),
+        arguments: [servedStatus]);
+  }
+
+  @override
+  Future<List<KitchenOrderEntity>> getActiveOrdersByStation(
+    String station,
+    String servedStatus,
+  ) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM kitchen_orders WHERE station = ?1 AND status != ?2 ORDER BY created_at ASC',
+        mapper: (Map<String, Object?> row) => KitchenOrderEntity(id: row['id'] as String, ticketId: row['ticket_id'] as String, tableNumber: row['table_number'] as String?, tableName: row['table_name'] as String?, waiterName: row['waiter_name'] as String?, station: row['station'] as String, status: row['status'] as String, createdAt: row['created_at'] as int, startedAt: row['started_at'] as int?, readyAt: row['ready_at'] as int?, servedAt: row['served_at'] as int?, notes: row['notes'] as String?),
+        arguments: [station, servedStatus]);
+  }
+
+  @override
+  Future<List<KitchenOrderEntity>> getAllOrders() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM kitchen_orders ORDER BY created_at DESC',
+        mapper: (Map<String, Object?> row) => KitchenOrderEntity(
+            id: row['id'] as String,
+            ticketId: row['ticket_id'] as String,
+            tableNumber: row['table_number'] as String?,
+            tableName: row['table_name'] as String?,
+            waiterName: row['waiter_name'] as String?,
+            station: row['station'] as String,
+            status: row['status'] as String,
+            createdAt: row['created_at'] as int,
+            startedAt: row['started_at'] as int?,
+            readyAt: row['ready_at'] as int?,
+            servedAt: row['served_at'] as int?,
+            notes: row['notes'] as String?));
+  }
+
+  @override
+  Future<KitchenOrderEntity?> getOrderById(String id) async {
+    return _queryAdapter.query('SELECT * FROM kitchen_orders WHERE id = ?1',
+        mapper: (Map<String, Object?> row) => KitchenOrderEntity(
+            id: row['id'] as String,
+            ticketId: row['ticket_id'] as String,
+            tableNumber: row['table_number'] as String?,
+            tableName: row['table_name'] as String?,
+            waiterName: row['waiter_name'] as String?,
+            station: row['station'] as String,
+            status: row['status'] as String,
+            createdAt: row['created_at'] as int,
+            startedAt: row['started_at'] as int?,
+            readyAt: row['ready_at'] as int?,
+            servedAt: row['served_at'] as int?,
+            notes: row['notes'] as String?),
+        arguments: [id]);
+  }
+
+  @override
+  Future<List<KitchenOrderEntity>> getOrdersByTicketId(String ticketId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM kitchen_orders WHERE ticket_id = ?1',
+        mapper: (Map<String, Object?> row) => KitchenOrderEntity(
+            id: row['id'] as String,
+            ticketId: row['ticket_id'] as String,
+            tableNumber: row['table_number'] as String?,
+            tableName: row['table_name'] as String?,
+            waiterName: row['waiter_name'] as String?,
+            station: row['station'] as String,
+            status: row['status'] as String,
+            createdAt: row['created_at'] as int,
+            startedAt: row['started_at'] as int?,
+            readyAt: row['ready_at'] as int?,
+            servedAt: row['served_at'] as int?,
+            notes: row['notes'] as String?),
+        arguments: [ticketId]);
+  }
+
+  @override
+  Future<List<KitchenOrderItemEntity>> getItemsForOrder(String orderId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM kitchen_order_items WHERE kitchen_order_id = ?1',
+        mapper: (Map<String, Object?> row) => KitchenOrderItemEntity(
+            id: row['id'] as String,
+            kitchenOrderId: row['kitchen_order_id'] as String,
+            productId: row['product_id'] as String,
+            productName: row['product_name'] as String,
+            quantity: row['quantity'] as double,
+            status: row['status'] as String,
+            notes: row['notes'] as String?,
+            modifiersJson: row['modifiers_json'] as String?),
+        arguments: [orderId]);
+  }
+
+  @override
+  Future<void> updateOrderStatus(
+    String id,
+    String status,
+    int readyAt,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE kitchen_orders SET status = ?2, ready_at = ?3 WHERE id = ?1',
+        arguments: [id, status, readyAt]);
+  }
+
+  @override
+  Future<void> startOrderPreparation(
+    String id,
+    String status,
+    int startedAt,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE kitchen_orders SET status = ?2, started_at = ?3 WHERE id = ?1',
+        arguments: [id, status, startedAt]);
+  }
+
+  @override
+  Future<void> markOrderServed(
+    String id,
+    String status,
+    int servedAt,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE kitchen_orders SET status = ?2, served_at = ?3 WHERE id = ?1',
+        arguments: [id, status, servedAt]);
+  }
+
+  @override
+  Future<void> updateItemStatus(
+    String id,
+    String status,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE kitchen_order_items SET status = ?2 WHERE id = ?1',
+        arguments: [id, status]);
+  }
+
+  @override
+  Future<void> deleteOrdersByTicketId(String ticketId) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM kitchen_orders WHERE ticket_id = ?1',
+        arguments: [ticketId]);
+  }
+
+  @override
+  Future<void> deleteOrder(String id) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM kitchen_orders WHERE id = ?1',
+        arguments: [id]);
+  }
+
+  @override
+  Future<void> deleteItemsForOrder(String orderId) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM kitchen_order_items WHERE kitchen_order_id = ?1',
+        arguments: [orderId]);
+  }
+
+  @override
+  Future<void> insertOrder(KitchenOrderEntity order) async {
+    await _kitchenOrderEntityInsertionAdapter.insert(
+        order, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> insertOrders(List<KitchenOrderEntity> orders) async {
+    await _kitchenOrderEntityInsertionAdapter.insertList(
+        orders, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> insertOrderItems(List<KitchenOrderItemEntity> items) async {
+    await _kitchenOrderItemEntityInsertionAdapter.insertList(
+        items, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> updateOrder(KitchenOrderEntity order) async {
+    await _kitchenOrderEntityUpdateAdapter.update(
+        order, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> saveKitchenOrder(
+    KitchenOrderEntity order,
+    List<KitchenOrderItemEntity> items,
+  ) async {
+    if (database is sqflite.Transaction) {
+      await super.saveKitchenOrder(order, items);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.kitchenOrderDao
+            .saveKitchenOrder(order, items);
+      });
+    }
+  }
+
+  @override
+  Future<void> deleteKitchenOrderWithItems(String orderId) async {
+    if (database is sqflite.Transaction) {
+      await super.deleteKitchenOrderWithItems(orderId);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.kitchenOrderDao
+            .deleteKitchenOrderWithItems(orderId);
+      });
+    }
   }
 }
