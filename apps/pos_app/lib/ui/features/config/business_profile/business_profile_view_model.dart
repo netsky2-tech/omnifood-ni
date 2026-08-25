@@ -13,8 +13,16 @@ class BusinessProfileViewModel extends ChangeNotifier {
     'address': '',
     'phone': '',
     'legal_footer': '',
+    'commercial_exchange_rate': '36.50',
+    'bcn_official_exchange_rate': '36.6241',
   };
   Map<String, String> get config => _config;
+
+  double get commercialRate =>
+      double.tryParse(_config['commercial_exchange_rate'] ?? '36.50') ?? 36.50;
+
+  double get bcnOfficialRate =>
+      double.tryParse(_config['bcn_official_exchange_rate'] ?? '36.6241') ?? 36.6241;
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;

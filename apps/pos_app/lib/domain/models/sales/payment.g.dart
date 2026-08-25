@@ -14,6 +14,9 @@ _$PaymentImpl _$$PaymentImplFromJson(Map<String, dynamic> json) =>
       amount: (json['amount'] as num).toDouble(),
       currency: json['currency'] as String? ?? 'NIO',
       exchangeRate: (json['exchangeRate'] as num?)?.toDouble() ?? 1.0,
+      amountNio: (json['amountNio'] as num?)?.toDouble() ?? 0.0,
+      changeGiven: (json['changeGiven'] as num?)?.toDouble() ?? 0.0,
+      changeCurrency: json['changeCurrency'] as String? ?? 'NIO',
       createdAt: json['createdAt'] == null
           ? null
           : DateTime.parse(json['createdAt'] as String),
@@ -27,6 +30,9 @@ Map<String, dynamic> _$$PaymentImplToJson(_$PaymentImpl instance) =>
       'amount': instance.amount,
       'currency': instance.currency,
       'exchangeRate': instance.exchangeRate,
+      'amountNio': instance.amountNio,
+      'changeGiven': instance.changeGiven,
+      'changeCurrency': instance.changeCurrency,
       'createdAt': instance.createdAt?.toIso8601String(),
     };
 

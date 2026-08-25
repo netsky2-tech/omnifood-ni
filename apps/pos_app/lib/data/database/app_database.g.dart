@@ -144,7 +144,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 33,
+      version: 34,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -208,13 +208,13 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `catalog_values` (`id` TEXT NOT NULL, `catalog_type` TEXT NOT NULL, `code` TEXT NOT NULL, `name` TEXT NOT NULL, `is_active` INTEGER NOT NULL, `sort_order` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `invoices` (`id` TEXT NOT NULL, `invoice_number` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `user_id` TEXT NOT NULL, `subtotal` REAL NOT NULL, `total_tax` REAL NOT NULL, `total` REAL NOT NULL, `is_canceled` INTEGER NOT NULL, `void_reason` TEXT, `sync_status` TEXT NOT NULL, `payment_status` TEXT NOT NULL, `customer_id` TEXT, `global_tax_override` INTEGER NOT NULL, `type` TEXT NOT NULL, `related_invoice_id` TEXT, `origin_invoice_id` TEXT, `refund_reason_policy` TEXT, `refund_reason_code` TEXT, `authorized_by_user_id` TEXT, `authorized_by_role` TEXT, `terminal_id` TEXT, `source_sequence` INTEGER, `idempotency_key` TEXT, `payload_hash` TEXT, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `invoices` (`id` TEXT NOT NULL, `invoice_number` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `user_id` TEXT NOT NULL, `subtotal` REAL NOT NULL, `total_tax` REAL NOT NULL, `total` REAL NOT NULL, `is_canceled` INTEGER NOT NULL, `void_reason` TEXT, `sync_status` TEXT NOT NULL, `payment_status` TEXT NOT NULL, `customer_id` TEXT, `global_tax_override` INTEGER NOT NULL, `type` TEXT NOT NULL, `related_invoice_id` TEXT, `origin_invoice_id` TEXT, `refund_reason_policy` TEXT, `refund_reason_code` TEXT, `authorized_by_user_id` TEXT, `authorized_by_role` TEXT, `terminal_id` TEXT, `source_sequence` INTEGER, `idempotency_key` TEXT, `payload_hash` TEXT, `bcn_official_rate` REAL NOT NULL, `commercial_rate` REAL NOT NULL, `total_usd` REAL NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `invoice_items` (`id` TEXT NOT NULL, `invoice_id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `product_name` TEXT NOT NULL, `quantity` REAL NOT NULL, `unit_price` REAL NOT NULL, `original_tax_rate` REAL NOT NULL, `applied_tax_rate` REAL NOT NULL, `tax_amount` REAL NOT NULL, `total` REAL NOT NULL, `discount` REAL NOT NULL, `variant_id` TEXT, `notes` TEXT, `recipe_version_id` TEXT, `origin_invoice_item_id` TEXT, FOREIGN KEY (`invoice_id`) REFERENCES `invoices` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `invoice_item_modifiers` (`id` TEXT NOT NULL, `invoice_item_id` TEXT NOT NULL, `name` TEXT NOT NULL, `extra_price` REAL NOT NULL, FOREIGN KEY (`invoice_item_id`) REFERENCES `invoice_items` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `payments` (`id` TEXT NOT NULL, `invoice_id` TEXT NOT NULL, `method` TEXT NOT NULL, `amount` REAL NOT NULL, `currency` TEXT NOT NULL, `exchange_rate` REAL NOT NULL, `created_at` INTEGER, FOREIGN KEY (`invoice_id`) REFERENCES `invoices` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `payments` (`id` TEXT NOT NULL, `invoice_id` TEXT NOT NULL, `method` TEXT NOT NULL, `amount` REAL NOT NULL, `currency` TEXT NOT NULL, `exchange_rate` REAL NOT NULL, `amount_nio` REAL NOT NULL, `change_given` REAL NOT NULL, `change_currency` TEXT NOT NULL, `created_at` INTEGER, FOREIGN KEY (`invoice_id`) REFERENCES `invoices` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `tax_configurations` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `rate` REAL NOT NULL, `is_active` INTEGER NOT NULL, `is_default` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
@@ -748,7 +748,7 @@ class _$LocalConfigDao extends LocalConfigDao {
 
   @override
   Future<LocalConfigEntity?> getConfigByKey(String key) async {
-    return _queryAdapter.query('SELECT * FROM local_configs WHERE key = ?1',
+    return _queryAdapter.query('SELECT * FROM local_configs WHERE `key` = ?1',
         mapper: (Map<String, Object?> row) => LocalConfigEntity(
             key: row['key'] as String,
             value: row['value'] as String,
@@ -759,7 +759,7 @@ class _$LocalConfigDao extends LocalConfigDao {
   @override
   Future<void> deleteConfig(String key) async {
     await _queryAdapter.queryNoReturn(
-        'DELETE FROM local_configs WHERE key = ?1',
+        'DELETE FROM local_configs WHERE `key` = ?1',
         arguments: [key]);
   }
 
@@ -2702,7 +2702,10 @@ class _$InvoiceDao extends InvoiceDao {
                   'terminal_id': item.terminalId,
                   'source_sequence': item.sourceSequence,
                   'idempotency_key': item.idempotencyKey,
-                  'payload_hash': item.payloadHash
+                  'payload_hash': item.payloadHash,
+                  'bcn_official_rate': item.bcnOfficialRate,
+                  'commercial_rate': item.commercialRate,
+                  'total_usd': item.totalUsd
                 }),
         _invoiceEntityUpdateAdapter = UpdateAdapter(
             database,
@@ -2732,7 +2735,10 @@ class _$InvoiceDao extends InvoiceDao {
                   'terminal_id': item.terminalId,
                   'source_sequence': item.sourceSequence,
                   'idempotency_key': item.idempotencyKey,
-                  'payload_hash': item.payloadHash
+                  'payload_hash': item.payloadHash,
+                  'bcn_official_rate': item.bcnOfficialRate,
+                  'commercial_rate': item.commercialRate,
+                  'total_usd': item.totalUsd
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -2772,7 +2778,10 @@ class _$InvoiceDao extends InvoiceDao {
             terminalId: row['terminal_id'] as String?,
             sourceSequence: row['source_sequence'] as int?,
             idempotencyKey: row['idempotency_key'] as String?,
-            payloadHash: row['payload_hash'] as String?),
+            payloadHash: row['payload_hash'] as String?,
+            bcnOfficialRate: row['bcn_official_rate'] as double,
+            commercialRate: row['commercial_rate'] as double,
+            totalUsd: row['total_usd'] as double),
         arguments: [id]);
   }
 
@@ -2804,7 +2813,10 @@ class _$InvoiceDao extends InvoiceDao {
             terminalId: row['terminal_id'] as String?,
             sourceSequence: row['source_sequence'] as int?,
             idempotencyKey: row['idempotency_key'] as String?,
-            payloadHash: row['payload_hash'] as String?),
+            payloadHash: row['payload_hash'] as String?,
+            bcnOfficialRate: row['bcn_official_rate'] as double,
+            commercialRate: row['commercial_rate'] as double,
+            totalUsd: row['total_usd'] as double),
         arguments: [number]);
   }
 
@@ -2836,7 +2848,10 @@ class _$InvoiceDao extends InvoiceDao {
             terminalId: row['terminal_id'] as String?,
             sourceSequence: row['source_sequence'] as int?,
             idempotencyKey: row['idempotency_key'] as String?,
-            payloadHash: row['payload_hash'] as String?));
+            payloadHash: row['payload_hash'] as String?,
+            bcnOfficialRate: row['bcn_official_rate'] as double,
+            commercialRate: row['commercial_rate'] as double,
+            totalUsd: row['total_usd'] as double));
   }
 
   @override
@@ -2867,7 +2882,10 @@ class _$InvoiceDao extends InvoiceDao {
             terminalId: row['terminal_id'] as String?,
             sourceSequence: row['source_sequence'] as int?,
             idempotencyKey: row['idempotency_key'] as String?,
-            payloadHash: row['payload_hash'] as String?),
+            payloadHash: row['payload_hash'] as String?,
+            bcnOfficialRate: row['bcn_official_rate'] as double,
+            commercialRate: row['commercial_rate'] as double,
+            totalUsd: row['total_usd'] as double),
         arguments: [status]);
   }
 
@@ -2902,7 +2920,10 @@ class _$InvoiceDao extends InvoiceDao {
             terminalId: row['terminal_id'] as String?,
             sourceSequence: row['source_sequence'] as int?,
             idempotencyKey: row['idempotency_key'] as String?,
-            payloadHash: row['payload_hash'] as String?),
+            payloadHash: row['payload_hash'] as String?,
+            bcnOfficialRate: row['bcn_official_rate'] as double,
+            commercialRate: row['commercial_rate'] as double,
+            totalUsd: row['total_usd'] as double),
         arguments: [startTime, endTime]);
   }
 
@@ -3020,6 +3041,9 @@ class _$PaymentDao extends PaymentDao {
                   'amount': item.amount,
                   'currency': item.currency,
                   'exchange_rate': item.exchangeRate,
+                  'amount_nio': item.amountNio,
+                  'change_given': item.changeGiven,
+                  'change_currency': item.changeCurrency,
                   'created_at': item.createdAt
                 });
 
@@ -3042,6 +3066,9 @@ class _$PaymentDao extends PaymentDao {
             amount: row['amount'] as double,
             currency: row['currency'] as String,
             exchangeRate: row['exchange_rate'] as double,
+            amountNio: row['amount_nio'] as double,
+            changeGiven: row['change_given'] as double,
+            changeCurrency: row['change_currency'] as String,
             createdAt: row['created_at'] as int?),
         arguments: [invoiceId]);
   }
@@ -3053,7 +3080,7 @@ class _$PaymentDao extends PaymentDao {
   ) async {
     return _queryAdapter.queryList(
         'SELECT p.* FROM payments p INNER JOIN invoices i ON p.invoice_id = i.id WHERE i.created_at >= ?1 AND i.created_at <= ?2',
-        mapper: (Map<String, Object?> row) => PaymentEntity(id: row['id'] as String, invoiceId: row['invoice_id'] as String, method: row['method'] as String, amount: row['amount'] as double, currency: row['currency'] as String, exchangeRate: row['exchange_rate'] as double, createdAt: row['created_at'] as int?),
+        mapper: (Map<String, Object?> row) => PaymentEntity(id: row['id'] as String, invoiceId: row['invoice_id'] as String, method: row['method'] as String, amount: row['amount'] as double, currency: row['currency'] as String, exchangeRate: row['exchange_rate'] as double, amountNio: row['amount_nio'] as double, changeGiven: row['change_given'] as double, changeCurrency: row['change_currency'] as String, createdAt: row['created_at'] as int?),
         arguments: [startTime, endTime]);
   }
 
@@ -3169,7 +3196,10 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'terminal_id': item.terminalId,
                   'source_sequence': item.sourceSequence,
                   'idempotency_key': item.idempotencyKey,
-                  'payload_hash': item.payloadHash
+                  'payload_hash': item.payloadHash,
+                  'bcn_official_rate': item.bcnOfficialRate,
+                  'commercial_rate': item.commercialRate,
+                  'total_usd': item.totalUsd
                 }),
         _invoiceItemEntityInsertionAdapter = InsertionAdapter(
             database,
@@ -3210,6 +3240,9 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'amount': item.amount,
                   'currency': item.currency,
                   'exchange_rate': item.exchangeRate,
+                  'amount_nio': item.amountNio,
+                  'change_given': item.changeGiven,
+                  'change_currency': item.changeCurrency,
                   'created_at': item.createdAt
                 }),
         _movementEntityInsertionAdapter = InsertionAdapter(
@@ -3283,7 +3316,10 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'terminal_id': item.terminalId,
                   'source_sequence': item.sourceSequence,
                   'idempotency_key': item.idempotencyKey,
-                  'payload_hash': item.payloadHash
+                  'payload_hash': item.payloadHash,
+                  'bcn_official_rate': item.bcnOfficialRate,
+                  'commercial_rate': item.commercialRate,
+                  'total_usd': item.totalUsd
                 }),
         _insumoEntityUpdateAdapter = UpdateAdapter(
             database,
@@ -3371,7 +3407,10 @@ class _$SalesTransactionDao extends SalesTransactionDao {
             terminalId: row['terminal_id'] as String?,
             sourceSequence: row['source_sequence'] as int?,
             idempotencyKey: row['idempotency_key'] as String?,
-            payloadHash: row['payload_hash'] as String?),
+            payloadHash: row['payload_hash'] as String?,
+            bcnOfficialRate: row['bcn_official_rate'] as double,
+            commercialRate: row['commercial_rate'] as double,
+            totalUsd: row['total_usd'] as double),
         arguments: [id]);
   }
 
@@ -3404,7 +3443,10 @@ class _$SalesTransactionDao extends SalesTransactionDao {
             terminalId: row['terminal_id'] as String?,
             sourceSequence: row['source_sequence'] as int?,
             idempotencyKey: row['idempotency_key'] as String?,
-            payloadHash: row['payload_hash'] as String?),
+            payloadHash: row['payload_hash'] as String?,
+            bcnOfficialRate: row['bcn_official_rate'] as double,
+            commercialRate: row['commercial_rate'] as double,
+            totalUsd: row['total_usd'] as double),
         arguments: [relatedId]);
   }
 

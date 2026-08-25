@@ -37,6 +37,25 @@ export class Payment {
   })
   exchangeRate: number;
 
+  @Column('decimal', {
+    precision: 12,
+    scale: 2,
+    name: 'amount_nio',
+    default: 0.0,
+  })
+  amountNio: number;
+
+  @Column('decimal', {
+    precision: 12,
+    scale: 2,
+    name: 'change_given',
+    default: 0.0,
+  })
+  changeGiven: number;
+
+  @Column({ name: 'change_currency', default: 'NIO' })
+  changeCurrency: string;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }

@@ -10,6 +10,7 @@ import '../../../domain/repositories/auth_repository.dart';
 import '../../../domain/repositories/audit_repository.dart';
 import '../../widgets/app_drawer.dart';
 import '../../features/identity/supervisor_override_modal.dart';
+import 'widgets/multi_currency_checkout_dialog.dart';
 
 class SaleView extends StatefulWidget {
   const SaleView({super.key});
@@ -804,7 +805,7 @@ class CartSummary extends StatelessWidget {
   void _showCheckoutDialog(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => const CheckoutDialog(),
+      builder: (context) => const MultiCurrencyCheckoutDialog(),
     );
   }
 

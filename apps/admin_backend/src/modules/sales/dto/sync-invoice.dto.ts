@@ -108,6 +108,18 @@ export class CreatePaymentDto {
 
   @IsNumber()
   exchangeRate: number;
+
+  @IsNumber()
+  @IsOptional()
+  amountNio?: number;
+
+  @IsNumber()
+  @IsOptional()
+  changeGiven?: number;
+
+  @IsString()
+  @IsOptional()
+  changeCurrency?: string;
 }
 
 export class SyncInvoiceDto {
@@ -131,6 +143,18 @@ export class SyncInvoiceDto {
 
   @IsNumber()
   total: number;
+
+  @IsNumber()
+  @IsOptional()
+  bcnOfficialRate?: number;
+
+  @IsNumber()
+  @IsOptional()
+  commercialRate?: number;
+
+  @IsNumber()
+  @IsOptional()
+  totalUsd?: number;
 
   @IsBoolean()
   @IsOptional()

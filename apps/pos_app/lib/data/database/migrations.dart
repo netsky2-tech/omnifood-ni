@@ -1348,6 +1348,34 @@ final migration32_33 = Migration(32, 33, (database) async {
   }
 });
 
+final migration33_34 = Migration(33, 34, (database) async {
+  final invoiceColumns = await database.rawQuery("PRAGMA table_info(`invoices`)");
+  final invColumnNames = invoiceColumns.map((col) => col['name'] as String).toSet();
+
+  if (!invColumnNames.contains('bcn_official_rate')) {
+    await database.execute("ALTER TABLE `invoices` ADD COLUMN `bcn_official_rate` REAL NOT NULL DEFAULT 36.6241");
+  }
+  if (!invColumnNames.contains('commercial_rate')) {
+    await database.execute("ALTER TABLE `invoices` ADD COLUMN `commercial_rate` REAL NOT NULL DEFAULT 36.50");
+  }
+  if (!invColumnNames.contains('total_usd')) {
+    await database.execute("ALTER TABLE `invoices` ADD COLUMN `total_usd` REAL NOT NULL DEFAULT 0.0");
+  }
+
+  final paymentColumns = await database.rawQuery("PRAGMA table_info(`payments`)");
+  final payColumnNames = paymentColumns.map((col) => col['name'] as String).toSet();
+
+  if (!payColumnNames.contains('amount_nio')) {
+    await database.execute("ALTER TABLE `payments` ADD COLUMN `amount_nio` REAL NOT NULL DEFAULT 0.0");
+  }
+  if (!payColumnNames.contains('change_given')) {
+    await database.execute("ALTER TABLE `payments` ADD COLUMN `change_given` REAL NOT NULL DEFAULT 0.0");
+  }
+  if (!payColumnNames.contains('change_currency')) {
+    await database.execute("ALTER TABLE `payments` ADD COLUMN `change_currency` TEXT NOT NULL DEFAULT 'NIO'");
+  }
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -1372,4 +1400,5 @@ final allMigrations = [
   migration30_31,
   migration31_32,
   migration32_33,
+  migration33_34,
 ];

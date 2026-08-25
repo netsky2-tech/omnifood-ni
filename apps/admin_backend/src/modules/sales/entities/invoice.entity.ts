@@ -88,6 +88,30 @@ export class Invoice {
   @Column({ name: 'authorized_by_role', nullable: true })
   authorizedByRole: string;
 
+  @Column('decimal', {
+    precision: 10,
+    scale: 4,
+    name: 'bcn_official_rate',
+    default: 36.6241,
+  })
+  bcnOfficialRate: number;
+
+  @Column('decimal', {
+    precision: 10,
+    scale: 4,
+    name: 'commercial_rate',
+    default: 36.5,
+  })
+  commercialRate: number;
+
+  @Column('decimal', {
+    precision: 12,
+    scale: 2,
+    name: 'total_usd',
+    default: 0.0,
+  })
+  totalUsd: number;
+
   @UpdateDateColumn()
   updated_at: Date;
 }

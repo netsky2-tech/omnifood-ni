@@ -32,6 +32,29 @@ class SaleViewModel extends ChangeNotifier {
     loadHoldTickets();
     loadPromotions();
     _loadCurrentUserRole();
+    loadExchangeRates();
+  }
+
+  double _commercialRate = 36.50;
+  double get commercialRate => _commercialRate;
+
+  double _bcnOfficialRate = 36.6241;
+  double get bcnOfficialRate => _bcnOfficialRate;
+
+  Future<void> loadExchangeRates() async {
+    try {
+      final commVal = await _database.localConfigDao.getConfigByKey('commercial_exchange_rate');
+      if (commVal != null) {
+        _commercialRate = double.tryParse(commVal.value) ?? 36.50;
+      }
+      final bcnVal = await _database.localConfigDao.getConfigByKey('bcn_official_exchange_rate');
+      if (bcnVal != null) {
+        _bcnOfficialRate = double.tryParse(bcnVal.value) ?? 36.6241;
+      }
+      notifyListeners();
+    } catch (_) {
+      // Fallback to default FX rates
+    }
   }
 
   final List<CartItem> _cart = [];
@@ -432,21 +455,26 @@ class SaleViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> finalizeSale(List<PaymentMethod> methods) async {
-    if (_cart.isEmpty) return;
+  Future<void> finalizeSale(List<PaymentMethod> methods) => processSale(methods);
 
+  Future<void> processSale(
+    List<PaymentMethod> methods, {
+    List<Payment>? customPayments,
+  }) async {
     final user = await _authRepository.getCurrentUser();
     if (user == null) {
-      _errorMessage = 'Sesión de usuario expirada. Re-ingrese PIN.';
+      _errorMessage = 'Usuario no autenticado';
       notifyListeners();
       return;
     }
 
     final invoiceId = const Uuid().v4();
+    final totalUsd = _commercialRate > 0
+        ? ((total / _commercialRate) * 100).round() / 100
+        : 0.0;
 
     final items = _cart.map((cartItem) {
       final appliedTaxRate = _isGlobalTaxExempt ? 0.0 : cartItem.taxRate;
-
       return InvoiceItem(
         id: const Uuid().v4(),
         invoiceId: invoiceId,
@@ -473,18 +501,28 @@ class SaleViewModel extends ChangeNotifier {
       totalTax: totalTax,
       total: total,
       globalTaxOverride: _isGlobalTaxExempt,
+      bcnOfficialRate: _bcnOfficialRate,
+      commercialRate: _commercialRate,
+      totalUsd: totalUsd,
     );
 
-    final payments = methods
-        .map(
-          (m) => Payment(
-            id: const Uuid().v4(),
-            invoiceId: invoiceId,
-            method: m,
-            amount: total / methods.length,
-          ),
-        )
-        .toList();
+    final payments = customPayments != null && customPayments.isNotEmpty
+        ? customPayments.map((p) => p.copyWith(invoiceId: invoiceId)).toList()
+        : methods
+            .map(
+              (m) => Payment(
+                id: const Uuid().v4(),
+                invoiceId: invoiceId,
+                method: m,
+                amount: total / methods.length,
+                currency: 'NIO',
+                exchangeRate: _commercialRate,
+                amountNio: total / methods.length,
+                changeGiven: 0.0,
+                changeCurrency: 'NIO',
+              ),
+            )
+            .toList();
 
     await _salesRepository.saveSale(
       invoice: invoice,
@@ -498,8 +536,11 @@ class SaleViewModel extends ChangeNotifier {
           p.method != PaymentMethod.cash) {
         continue;
       }
+      final effectiveCashNio = (p.method == PaymentMethod.cash && p.amountNio > 0)
+          ? (p.amountNio - p.changeGiven)
+          : p.amount;
       _sessionExpected[p.method] =
-          (_sessionExpected[p.method] ?? 0.0) + p.amount;
+          (_sessionExpected[p.method] ?? 0.0) + effectiveCashNio;
     }
 
     clearCart();

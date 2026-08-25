@@ -178,6 +178,9 @@ class SalesMapper {
       sourceSequence: entity.sourceSequence,
       idempotencyKey: entity.idempotencyKey,
       payloadHash: entity.payloadHash,
+      bcnOfficialRate: entity.bcnOfficialRate,
+      commercialRate: entity.commercialRate,
+      totalUsd: entity.totalUsd,
     );
   }
 
@@ -207,6 +210,9 @@ class SalesMapper {
       sourceSequence: domain.sourceSequence,
       idempotencyKey: domain.idempotencyKey,
       payloadHash: domain.payloadHash,
+      bcnOfficialRate: domain.bcnOfficialRate,
+      commercialRate: domain.commercialRate,
+      totalUsd: domain.totalUsd,
     );
   }
 
@@ -273,6 +279,9 @@ class SalesMapper {
       amount: entity.amount,
       currency: entity.currency,
       exchangeRate: entity.exchangeRate,
+      amountNio: entity.amountNio,
+      changeGiven: entity.changeGiven,
+      changeCurrency: entity.changeCurrency,
       createdAt: entity.createdAt != null
           ? DateTime.fromMillisecondsSinceEpoch(entity.createdAt!)
           : null,
@@ -287,6 +296,9 @@ class SalesMapper {
       amount: domain.amount,
       currency: domain.currency,
       exchangeRate: domain.exchangeRate,
+      amountNio: domain.amountNio,
+      changeGiven: domain.changeGiven,
+      changeCurrency: domain.changeCurrency,
       createdAt: domain.createdAt?.millisecondsSinceEpoch,
     );
   }

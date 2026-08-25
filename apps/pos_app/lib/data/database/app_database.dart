@@ -69,7 +69,7 @@ import 'package:pos_app/data/models/sales/promotion_entity.dart';
 part 'app_database.g.dart'; // generated code
 
 @Database(
-  version: 33,
+  version: 34,
   entities: [
     UserEntity,
     SecurityProfileEntity,

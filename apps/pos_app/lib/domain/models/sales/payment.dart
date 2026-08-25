@@ -14,6 +14,9 @@ class Payment with _$Payment {
     required double amount,
     @Default('NIO') String currency,
     @Default(1.0) double exchangeRate,
+    @Default(0.0) double amountNio,
+    @Default(0.0) double changeGiven,
+    @Default('NIO') String changeCurrency,
     DateTime? createdAt,
   }) = _Payment;
 

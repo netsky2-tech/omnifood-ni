@@ -21,6 +21,12 @@ class PaymentEntity {
   final String currency;
   @ColumnInfo(name: 'exchange_rate')
   final double exchangeRate;
+  @ColumnInfo(name: 'amount_nio')
+  final double amountNio;
+  @ColumnInfo(name: 'change_given')
+  final double changeGiven;
+  @ColumnInfo(name: 'change_currency')
+  final String changeCurrency;
   @ColumnInfo(name: 'created_at')
   final int? createdAt;
 
@@ -31,6 +37,9 @@ class PaymentEntity {
     required this.amount,
     this.currency = 'NIO',
     this.exchangeRate = 1.0,
+    this.amountNio = 0.0,
+    this.changeGiven = 0.0,
+    this.changeCurrency = 'NIO',
     this.createdAt,
   });
 }

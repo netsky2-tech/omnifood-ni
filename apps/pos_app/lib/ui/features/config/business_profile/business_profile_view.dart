@@ -99,6 +99,42 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                       ),
                       maxLines: 3,
                     ),
+                    const SizedBox(height: 32),
+                    Text('TASAS DE CAMBIO Y MULTI-MONEDA', style: Theme.of(context).textTheme.labelLarge),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _controllers['commercial_exchange_rate'],
+                      decoration: const InputDecoration(
+                        labelText: 'Tipo de Cambio Comercial (POS / Atención al Cliente)',
+                        hintText: '36.50',
+                        prefixIcon: Icon(Icons.currency_exchange),
+                        helperText: 'Tasa utilizada para precios al público, cobro en USD y cálculo de vuelto en córdobas.',
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return 'Requerido';
+                        final val = double.tryParse(v);
+                        if (val == null || val <= 0) return 'Ingrese una tasa válida mayor a 0';
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _controllers['bcn_official_exchange_rate'],
+                      decoration: const InputDecoration(
+                        labelText: 'Tipo de Cambio Oficial BCN (Base Fiscal DGI)',
+                        hintText: '36.6241',
+                        prefixIcon: Icon(Icons.account_balance),
+                        helperText: 'Tasa oficial del Banco Central de Nicaragua utilizada exclusivamente para IVA y reportes DGI.',
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return 'Requerido';
+                        final val = double.tryParse(v);
+                        if (val == null || val <= 0) return 'Ingrese una tasa válida mayor a 0';
+                        return null;
+                      },
+                    ),
                     
                     const SizedBox(height: 48),
                     Row(
