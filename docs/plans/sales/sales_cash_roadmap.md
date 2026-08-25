@@ -68,9 +68,9 @@ This execution plan operationalizes the **Front-of-House (FOH) Sales Module**, *
 |---|---|---|---|---|
 | **M1: Cash & Shift Management** | Shift lifecycle, Cash movements, Blind Arqueo, Cortes X & Z | Batch 1 (Slices 1.1-1.4) | ~1,200 total (<400 / slice) | Unit + Widget + E2E Shift Flow Tests |
 | **M2: Multi-Currency Checkout** | Dual FX (BCN vs Commercial), USD cash handling, Mixed Change | Batch 2 (Slices 2.1-2.3) | ~1,000 total (<400 / slice) | Currency Math Invariance + UI Specs |
-| **M3: Split Payments & Vouchers** | Multi-tender checkout, Two-layer dataphone flow, Shift Clearance | Batch 3 (Slices 3.1-3.3) | ~1,100 total (<400 / slice) | Fast-checkout & Reconciliation Suite |
-| **M4: Tables & Hold Tickets** | Tab retention, multi-terminal locks, order merges/splits | Batch 4 (Slices 4.1-4.3) | Deferred | Concurrency & WebSocket Specs |
-| **M5: Kitchen Display System (KDS)** | Paperless kitchen routing, real-time ticket statuses | Batch 5 (Slices 5.1-5.3) | Deferred | Real-time broadcast validation |
+| **M4: Tables & Hold Tickets** | Tab retention, multi-terminal locks, order merges/splits | Batch 4 (Slices 4.1-4.4) | Completed ✅ | `restaurant_flow_e2e_test.dart` |
+| **M5: Kitchen Display System (KDS)** | Paperless kitchen routing, real-time ticket statuses, SLA badges | Batch 5 (Slices 5.1-5.4) | Completed ✅ | `kitchen_restaurant_flow_e2e_test.dart` |
+| **M6: Multi-Tenant Operation Modes** | Food Park QSR (Counter Pre-Pay + Buzzer) vs Restaurant (Fine Dining / Mesas) | Batch 6 (Slices 6.1-6.4) | Planned 🚀 | `foodpark_qsr_flow_e2e_test.dart` |
 
 ---
 
@@ -212,4 +212,4 @@ This execution plan operationalizes the **Front-of-House (FOH) Sales Module**, *
 
 ## 9. Next Action Recommendation
 
-Proceed with **Batch 1 (Turnos de Caja, Control de Efectivo y Cortes X/Z)** starting with **Slice 1.1: Cash Shift Session Core Domain & Local Persistence (Database Schema, DAOs & Entities)** using strict TDD (RED $\rightarrow$ GREEN $\rightarrow$ Triangulation).
+Proceed with **Batch 6 (Adaptabilidad Multi-Tenant & Modo Food Park QSR)** starting with **Slice 6.1: TenantConfigService & Persistencia de operation_mode** (`'FOODPARK_QSR' | 'RESTAURANT' | 'HYBRID'`) using strict TDD (RED $\rightarrow$ GREEN $\rightarrow$ Triangulation).
