@@ -20,11 +20,14 @@
 
 ## 3. Slices de Ejecución
 
-### Slice 7.1: Responsividad Handheld & Corrección de Overflows
-- Helper `ResponsiveLayout` y detector de breakpoints.
-- Refactor de `SaleView`: Panel inferior flotante/colapsable para el carrito en pantallas móviles ($\le 600\text{dp}$).
-- Refactor de `MultiCurrencyCheckoutDialog`: Layout scrollable en columna única para evitar desbordamientos.
-- Test de widgets en resolución Sunmi V2s ($360 \times 720\text{ dp}$).
+### Slice 7.1: Responsividad Handheld & Corrección de Overflows [COMPLETADO ✅]
+- Helper `ResponsiveLayout` y detector de breakpoints (`ResponsiveBreakpoints`).
+- Refactor de `SaleView`: Panel inferior flotante/colapsable (`MobileFloatingCartBar` y bottom sheet) para pantallas móviles ($\le 600\text{dp}$).
+- Refactor de `MultiCurrencyCheckoutDialog`: Layout scrollable con padding adaptativo y textos flexibles (`Flexible`/`Expanded`) para evitar desbordamientos en $360\text{dp}$.
+- Test de widgets en resolución Sunmi V2s ($360 \times 720\text{ dp}$):
+  - `sunmi_v2s_responsive_sale_view_test.dart`
+  - `sunmi_v2s_checkout_dialog_test.dart`
+  - `responsive_layout_test.dart`
 
 ### Slice 7.2: Puerto Hexagonal & Formateador 58mm (ESC/POS & Templates)
 - Interfaz `PrinterPort`.

@@ -4,6 +4,7 @@ import '../../../../presentation/features/sales/view_models/sale_view_model.dart
 import '../../../../domain/models/sales/payment.dart';
 import '../../../../domain/services/sales/currency_checkout_calculator.dart';
 import '../../../../domain/services/sales/split_payment_calculator.dart';
+import '../../../design_system/design_system.dart';
 
 class MultiCurrencyCheckoutDialog extends StatefulWidget {
   const MultiCurrencyCheckoutDialog({super.key});
@@ -313,14 +314,17 @@ class _MultiCurrencyCheckoutDialogState
                     color: Colors.amber.shade900,
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    isRequired
-                        ? 'BUZZER / PAGER DE ENTREGA (REQUERIDO)'
-                        : 'BUZZER / PAGER DE ENTREGA (OPCIONAL)',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.amber.shade900,
+                  Expanded(
+                    child: Text(
+                      isRequired
+                          ? 'BUZZER / PAGER DE ENTREGA (REQUERIDO)'
+                          : 'BUZZER / PAGER DE ENTREGA (OPCIONAL)',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.amber.shade900,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
@@ -351,7 +355,7 @@ class _MultiCurrencyCheckoutDialogState
                       },
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
                   Expanded(
                     flex: 3,
                     child: TextField(
@@ -381,18 +385,26 @@ class _MultiCurrencyCheckoutDialogState
   Widget build(BuildContext context) {
     final viewModel = context.watch<SaleViewModel>();
     final colorScheme = Theme.of(context).colorScheme;
+    final isHandheld = ResponsiveBreakpoints.isHandheld(context);
     final totalNio = viewModel.total;
     final totalUsd = _singleCalculator.calculateTotalUsd(totalNio);
 
     return Dialog(
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: isHandheld ? 8 : 40,
+        vertical: isHandheld ? 12 : 24,
+      ),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
         side: BorderSide(color: colorScheme.primary, width: 2),
       ),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 580, maxHeight: 780),
+        constraints: BoxConstraints(
+          maxWidth: isHandheld ? double.infinity : 580,
+          maxHeight: isHandheld ? MediaQuery.sizeOf(context).height * 0.95 : 780,
+        ),
         child: Padding(
-          padding: const EdgeInsets.all(20),
+          padding: EdgeInsets.all(isHandheld ? 12 : 20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -401,13 +413,16 @@ class _MultiCurrencyCheckoutDialogState
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'Cobro y Facturación',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                  Expanded(
+                    child: Text(
+                      'Cobro y Facturación',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
                   ),
                   IconButton(
+                    visualDensity: VisualDensity.compact,
                     icon: const Icon(Icons.close),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
@@ -417,16 +432,21 @@ class _MultiCurrencyCheckoutDialogState
 
               // Mode Tabs: Cobro Simple vs Pago Dividido
               SegmentedButton<bool>(
+                showSelectedIcon: !isHandheld,
+                style: const ButtonStyle(
+                  visualDensity: VisualDensity.compact,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
                 segments: const [
                   ButtonSegment(
                     value: false,
                     label: Text('Cobro Completo'),
-                    icon: Icon(Icons.payment),
+                    icon: Icon(Icons.payment, size: 16),
                   ),
                   ButtonSegment(
                     value: true,
                     label: Text('Pago Dividido'),
-                    icon: Icon(Icons.call_split),
+                    icon: Icon(Icons.call_split, size: 16),
                   ),
                 ],
                 selected: {_isSplitMode},
@@ -486,6 +506,7 @@ class _MultiCurrencyCheckoutDialogState
       ),
     );
   }
+
 
   Widget _buildSingleCheckoutBody(
     BuildContext context,
@@ -570,7 +591,14 @@ class _MultiCurrencyCheckoutDialogState
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Total Ticket:', style: Theme.of(context).textTheme.bodyMedium),
+                    Flexible(
+                      child: Text(
+                        'Total Ticket:',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     Text('C\$ ${totalNio.toStringAsFixed(2)}',
                         style: const TextStyle(fontWeight: FontWeight.bold)),
                   ],
@@ -579,7 +607,14 @@ class _MultiCurrencyCheckoutDialogState
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Total Pagado:', style: Theme.of(context).textTheme.bodyMedium),
+                    Flexible(
+                      child: Text(
+                        'Total Pagado:',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     Text('C\$ ${_splitCalculator.totalPaidNio.toStringAsFixed(2)}',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
@@ -588,13 +623,16 @@ class _MultiCurrencyCheckoutDialogState
                   ],
                 ),
                 const Divider(),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 4,
                   children: [
                     Text(
                       'Resta: C\$ ${_splitCalculator.remainingNio.toStringAsFixed(2)}',
                       style: TextStyle(
-                        fontSize: 16,
+                        fontSize: 15,
                         fontWeight: FontWeight.bold,
                         color: _splitCalculator.isFullyPaid
                             ? Colors.green.shade700
@@ -606,6 +644,7 @@ class _MultiCurrencyCheckoutDialogState
                       style: TextStyle(
                         color: Colors.grey.shade700,
                         fontWeight: FontWeight.w600,
+                        fontSize: 13,
                       ),
                     ),
                   ],
@@ -731,14 +770,18 @@ class _MultiCurrencyCheckoutDialogState
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Total a Cobrar:',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              const Flexible(
+                child: Text(
+                  'Total a Cobrar:',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
+              const SizedBox(width: 8),
               Text(
                 'C\$ ${totalNio.toStringAsFixed(2)}',
                 style: const TextStyle(
-                  fontSize: 20,
+                  fontSize: 18,
                   fontWeight: FontWeight.bold,
                   color: Colors.blueAccent,
                 ),
@@ -749,14 +792,18 @@ class _MultiCurrencyCheckoutDialogState
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Equivalente Comercial:',
-                style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+              Flexible(
+                child: Text(
+                  'Equivalente Comercial:',
+                  style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
+              const SizedBox(width: 8),
               Text(
                 '\$${totalUsd.toStringAsFixed(2)} USD',
                 style: TextStyle(
-                  fontSize: 15,
+                  fontSize: 14,
                   fontWeight: FontWeight.bold,
                   color: Colors.green.shade800,
                 ),
@@ -941,18 +988,20 @@ class _MultiCurrencyCheckoutDialogState
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                breakdown.isSufficient
-                    ? (breakdown.changeCurrency == 'USD'
-                        ? 'Vuelto: \$${breakdown.effectiveChange.toStringAsFixed(2)} USD'
-                        : 'Vuelto: C\$ ${breakdown.effectiveChange.toStringAsFixed(2)}')
-                    : 'Faltan C\$ ${breakdown.remainingNio.toStringAsFixed(2)}',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: breakdown.isSufficient
-                      ? Colors.green.shade800
-                      : Colors.red.shade800,
+              Flexible(
+                child: Text(
+                  breakdown.isSufficient
+                      ? (breakdown.changeCurrency == 'USD'
+                          ? 'Vuelto: \$${breakdown.effectiveChange.toStringAsFixed(2)} USD'
+                          : 'Vuelto: C\$ ${breakdown.effectiveChange.toStringAsFixed(2)}')
+                      : 'Faltan C\$ ${breakdown.remainingNio.toStringAsFixed(2)}',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: breakdown.isSufficient
+                        ? Colors.green.shade800
+                        : Colors.red.shade800,
+                  ),
                 ),
               ),
             ],
@@ -1059,9 +1108,12 @@ class _MultiCurrencyCheckoutDialogState
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      '⚡ Cobro Rápido (Hora Pico)',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    const Flexible(
+                      child: Text(
+                        '⚡ Cobro Rápido (Hora Pico)',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     Switch(
                       value: _isFastCheckout,
