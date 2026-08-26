@@ -70,7 +70,7 @@ This execution plan operationalizes the **Front-of-House (FOH) Sales Module**, *
 | **M2: Multi-Currency Checkout** | Dual FX (BCN vs Commercial), USD cash handling, Mixed Change | Batch 2 (Slices 2.1-2.3) | ~1,000 total (<400 / slice) | Currency Math Invariance + UI Specs |
 | **M4: Tables & Hold Tickets** | Tab retention, multi-terminal locks, order merges/splits | Batch 4 (Slices 4.1-4.4) | Completed ✅ | `restaurant_flow_e2e_test.dart` |
 | **M5: Kitchen Display System (KDS)** | Paperless kitchen routing, real-time ticket statuses, SLA badges | Batch 5 (Slices 5.1-5.4) | Completed ✅ | `kitchen_restaurant_flow_e2e_test.dart` |
-| **M6: Multi-Tenant Operation Modes** | Food Park QSR (Counter Pre-Pay + Buzzer) vs Restaurant (Fine Dining / Mesas) | Batch 6 (Slices 6.1-6.4) | Planned 🚀 | `foodpark_qsr_flow_e2e_test.dart` |
+| **M6: Multi-Tenant Operation Modes** | Food Park QSR (Counter Pre-Pay + Buzzer) vs Restaurant (Fine Dining / Mesas) | Batch 6 (Slices 6.1-6.4) | Completed ✅ | `foodpark_qsr_flow_e2e_test.dart` |
 
 ---
 

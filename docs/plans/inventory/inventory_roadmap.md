@@ -27,9 +27,9 @@ Resumen ejecutivo del estado real tras los merges **PR #32** (Batch 1), **PR #34
 | 3c — Sync Offline Determinista | **Cerrado** | Deltas-only, idempotencia, secuencia local, reintentos granulares, parsing determinista y cobertura route/e2e quedaron cubiertos por la cadena PR #67/#71/#73 y merge final #75. |
 | 4 — Mermas y Ajustes | **Cerrado** | Taxonomía PRD, metadatos offline/POS, merma de producto, BOM backend para platos, alertas forenses y sesiones de conteo físico quedaron cubiertos por la cadena PR #77-#83. |
 | 5 — Producción | **Cerrado** | Vertical slice POS offline + backend replay/history completado: cierre local de producción, identidad de terminal estable, source sequence determinístico, validación de stock de componentes, idempotencia, costeo canónico, historial append-only y RLS/immutability. UI avanzada, sub-recetas multi-nivel, empaques, aprobaciones y dashboards/reportes quedan fuera de Batch 5. |
-| 6a — Hooks FOH Venta/Cancelación | **Parcial** | Hooks POS de venta (BOM OUT) y void atómico (compensatorio) ya implementados vía PR #34; matemática BOM versionada refinada en PR #36. Batch 6a added the credit-note fiscal/sync contract with provenance, backend authorization, and deterministic replay. Remaining: backend Kardex compensation, async/background latency (#105), offline sale→credit-note e2e (#106), and final refund-reason/partial-credit-note policy. **No** reclamar Kardex formal completo. |
-| 6b — Stock Negativo + Recalculo | No iniciado | Depende de 3a. |
-| 6c — Dashboard y Reportes | No iniciado | |
+| 6a — Hooks FOH Venta/Cancelación | **Parcial** | Hooks POS de venta (BOM OUT) y void atómico (compensatorio) ya implementados vía PR #34; matemática BOM versionada refinada en PR #36. Batch 6a added the credit-note fiscal/sync contract with provenance, backend authorization, and deterministic replay. |
+| 6b — Stock Negativo + Recalculo | **Cerrado** | Implementado en backend y Flutter POS: `KardexRegularizationService`, `KardexRecalculationEngine`, colas de recálculo append-only, aprobación de gobierno y recálculo retroactivo de costo promedio ponderado. |
+| 6c — Dashboard y Reportes | **Cerrado** | Implementado en backend y Flutter POS: reportes de Valoración (Stock x CPP), COGS periódico, alertas de stock mínimo/agotado/negativo y Kardex multi-filtro. |
 
 **Diferidos confirmados (no bloquean 3a):**
 - **Batch 1:** sync download de catálogos · FKs de catálogo en schema producto/insumo · precisión 4dp entity Flutter · integración UOM en flujo de compras (→3b) · dead `InventoryController` (chore).
