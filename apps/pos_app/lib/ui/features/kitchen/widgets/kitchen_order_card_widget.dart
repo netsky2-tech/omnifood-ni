@@ -49,6 +49,25 @@ class KitchenOrderCardWidget extends StatelessWidget {
     return order.station == 'BARRA' ? Colors.deepPurple.shade700 : Colors.blue.shade800;
   }
 
+  bool get _isBuzzerOrder {
+    final name = order.tableName ?? '';
+    final number = order.tableNumber ?? '';
+    return name.toLowerCase().contains('buzzer') || number.toLowerCase().contains('buzzer') || (number.isNotEmpty && !number.startsWith('tab-') && !name.toLowerCase().contains('mesa'));
+  }
+
+  String get _buzzerNumber {
+    final number = order.tableNumber ?? '';
+    if (number.isNotEmpty && !number.startsWith('tab-') && !number.toLowerCase().contains('mesa')) {
+      return number.replaceAll(RegExp(r'[^0-9a-zA-Z]'), '').trim();
+    }
+    final name = order.tableName ?? '';
+    final match = RegExp(r'Buzzer\s*#?([0-9a-zA-Z]+)', caseSensitive: false).firstMatch(name);
+    if (match != null) {
+      return match.group(1) ?? '';
+    }
+    return '';
+  }
+
   @override
   Widget build(BuildContext context) {
     final isReady = order.status == 'LISTO';
@@ -93,18 +112,59 @@ class KitchenOrderCardWidget extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // Table identifier
+                    // Table or Buzzer identifier
                     Expanded(
-                      child: Text(
-                        order.tableName ?? order.tableNumber ?? 'Para Llevar',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      child: _isBuzzerOrder
+                          ? Row(
+                              children: [
+                                Container(
+                                  key: const Key('kds_buzzer_badge'),
+                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: Colors.amber.shade700,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.notifications_active, size: 13, color: Colors.black),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Buzzer #$_buzzerNumber',
+                                        style: const TextStyle(
+                                          color: Colors.black,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    order.tableName ?? 'Buzzer #$_buzzerNumber',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Text(
+                              order.tableName ?? order.tableNumber ?? 'Para Llevar',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                     ),
+                    const SizedBox(width: 6),
                     // Station badge
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -127,7 +187,7 @@ class KitchenOrderCardWidget extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // Waiter name
+                    // Waiter name or QSR Mostrador label
                     Expanded(
                       child: order.waiterName != null
                           ? Text(
@@ -138,7 +198,16 @@ class KitchenOrderCardWidget extends StatelessWidget {
                               ),
                               overflow: TextOverflow.ellipsis,
                             )
-                          : const SizedBox.shrink(),
+                          : _isBuzzerOrder
+                              ? const Text(
+                                  'Mostrador / QSR',
+                                  style: TextStyle(
+                                    color: Color(0xFF94A3B8),
+                                    fontSize: 12,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                )
+                              : const SizedBox.shrink(),
                     ),
                     const SizedBox(width: 8),
                     // SLA Timer badge
@@ -169,6 +238,38 @@ class KitchenOrderCardWidget extends StatelessWidget {
               ],
             ),
           ),
+
+          // --- BUZZER CALL BANNER ON READY ---
+          if (isReady && _isBuzzerOrder)
+            Container(
+              key: const Key('kds_buzzer_call_banner'),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade400,
+                border: Border(
+                  bottom: BorderSide(color: Colors.amber.shade600, width: 2),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.notifications_active, color: Colors.black, size: 18),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      '🔔 LLAMAR LOCALIZADOR #$_buzzerNumber',
+                      style: const TextStyle(
+                        color: Colors.black,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.5,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
           // --- NOTES IF PRESENT ---
           if (order.notes != null && order.notes!.isNotEmpty)
