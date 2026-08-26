@@ -38,10 +38,17 @@
   - `test/domain/services/printer/receipt_58mm_formatter_test.dart`
   - `test/data/adapters/printer/mock_printer_adapter_test.dart`
 
-### Slice 7.3: Driver Sunmi V2s & Configuración de Hardware
-- `SunmiPrinterAdapter` implementando `PrinterPort` (enlace con servicio Sunmi OS).
-- Detección de hardware y fallback seguro para dispositivos no-Sunmi.
-- Entidad `PrinterConfig` y pantalla de Ajustes de Hardware.
+### Slice 7.3: Driver Sunmi V2s & Configuración de Hardware [COMPLETADO ✅]
+- Adaptador `SunmiPrinterAdapter` implementando `PrinterPort` (MethodChannel `com.omnifood.pos/sunmi_printer`).
+- Detección de hardware y fallback seguro en dispositivos no-Sunmi (desktop/emulador/test) para garantizar que las ventas nunca fallen.
+- Entidad `PrinterConfig` (Freezed) y servicio `PrinterConfigService` persistido en SQLite (`local_configs`).
+- Factory `PrinterResolver` para resolver la instancia adecuada de `PrinterPort`.
+- Pantalla y ViewModel de Ajustes de Hardware (`HardwareSettingsView` & `HardwareSettingsViewModel`) con pruebas de impresión y apertura de gaveta.
+- Rutas y acceso desde `AppDrawer`.
+- Suite de tests unitarios y de widgets:
+  - `sunmi_printer_adapter_test.dart`
+  - `printer_config_service_test.dart`
+  - `hardware_settings_view_test.dart`
 
 ### Slice 7.4: Integración E2E Checkout $\rightarrow$ Auto-Print & Verificación
 - Disparo automático de impresión de factura en `SaleViewModel.processSale`.

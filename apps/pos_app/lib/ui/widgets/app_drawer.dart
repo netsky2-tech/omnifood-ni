@@ -135,6 +135,14 @@ class _AppDrawerState extends State<AppDrawer> {
                     title: const Text('Perfil del Negocio'),
                     onTap: () => Navigator.pushNamed(context, '/config/profile'),
                   ),
+                  ListTile(
+                    leading: const Icon(Icons.print),
+                    title: const Text('Hardware e Impresora'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.pushNamed(context, '/config/hardware');
+                    },
+                  ),
                   if (_userCount > 0)
                     ListTile(
                       leading: const Icon(Icons.people),

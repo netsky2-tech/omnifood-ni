@@ -55,6 +55,9 @@ import 'ui/features/cash/cash_shift_view.dart';
 import 'ui/features/cash/cash_shift_view_model.dart';
 import 'ui/features/config/business_profile/business_profile_view_model.dart';
 import 'ui/features/config/business_profile/business_profile_view.dart';
+import 'ui/features/config/hardware/hardware_settings_view_model.dart';
+import 'ui/features/config/hardware/hardware_settings_view.dart';
+import 'domain/services/config/printer_config_service.dart';
 import 'ui/features/identity/audit/audit_log_view_model.dart';
 import 'ui/features/identity/audit/audit_log_view.dart';
 import 'ui/features/identity/users/user_management_view_model.dart';
@@ -237,6 +240,11 @@ void main() async {
           create: (_) => BusinessProfileViewModel(database.localConfigDao),
         ),
         ChangeNotifierProvider(
+          create: (_) => HardwareSettingsViewModel(
+            configService: PrinterConfigService(database.localConfigDao),
+          ),
+        ),
+        ChangeNotifierProvider(
           create: (_) => AuditLogViewModel(auditRepository),
         ),
         ChangeNotifierProvider(create: (_) => SalesHistoryViewModel(database)),
@@ -261,6 +269,9 @@ void main() async {
         Provider<SalesRepositoryImpl>.value(value: salesRepository),
         Provider<DgiNumberingService>.value(value: numberingService),
         Provider<SyncService>.value(value: syncService),
+        Provider<PrinterConfigService>(
+          create: (_) => PrinterConfigService(database.localConfigDao),
+        ),
       ],
       child: MyApp(alertService: alertService),
     ),
@@ -452,6 +463,7 @@ class MyApp extends StatelessWidget {
           '/sales/cash': (context) => const CashShiftView(),
           '/identity/users': (context) => const UserManagementView(),
           '/config/profile': (context) => const BusinessProfileView(),
+          '/config/hardware': (context) => const HardwareSettingsView(),
           '/identity/audit': (context) => const AuditLogView(),
         },
       ),
