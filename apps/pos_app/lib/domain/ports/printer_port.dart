@@ -60,6 +60,7 @@ abstract class PrinterPort {
     String? address,
     String? phone,
     String? cashierName,
+    List<int>? logoRasterBytes,
   });
 
   /// Prints a kitchen / KDS order ticket with buzzer / table identification.

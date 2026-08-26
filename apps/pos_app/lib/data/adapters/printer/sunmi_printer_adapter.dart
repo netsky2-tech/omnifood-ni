@@ -65,6 +65,7 @@ class SunmiPrinterAdapter implements PrinterPort {
     String? address,
     String? phone,
     String? cashierName,
+    List<int>? logoRasterBytes,
   }) async {
     final status = await checkStatus();
     if (status == PrinterStatus.outOfPaper) {
@@ -99,6 +100,7 @@ class SunmiPrinterAdapter implements PrinterPort {
       address: address,
       phone: phone,
       cashierName: cashierName,
+      logoRasterBytes: logoRasterBytes,
     );
 
     return _sendToHardware(rawBytes: rawBytes, plainText: formattedText);

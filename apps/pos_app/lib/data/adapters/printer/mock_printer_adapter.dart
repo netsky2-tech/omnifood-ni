@@ -41,6 +41,7 @@ class MockPrinterAdapter implements PrinterPort {
     String? address,
     String? phone,
     String? cashierName,
+    List<int>? logoRasterBytes,
   }) async {
     if (shouldFail || currentStatus != PrinterStatus.ready) {
       String defaultMsg = 'Error de impresión en hardware simulado';
@@ -77,6 +78,7 @@ class MockPrinterAdapter implements PrinterPort {
       address: address,
       phone: phone,
       cashierName: cashierName,
+      logoRasterBytes: logoRasterBytes,
     );
 
     lastPrintedText = text;

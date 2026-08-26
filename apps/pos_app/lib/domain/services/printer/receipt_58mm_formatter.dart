@@ -244,9 +244,15 @@ class Receipt58mmFormatter {
     String? address,
     String? phone,
     String? cashierName,
+    List<int>? logoRasterBytes,
   }) {
     final builder = EscPosBuilder();
     final dateFormat = DateFormat('yyyy-MM-dd HH:mm');
+
+    // Company Logo (1-bit monochrome thermal raster)
+    if (logoRasterBytes != null && logoRasterBytes.isNotEmpty) {
+      builder.rasterImage(logoRasterBytes).feedLines(1);
+    }
 
     // Header
     builder

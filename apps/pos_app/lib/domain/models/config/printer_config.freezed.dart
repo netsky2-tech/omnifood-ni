@@ -32,6 +32,10 @@ mixin _$PrinterConfig {
   String? get headerRuc => throw _privateConstructorUsedError;
   String? get headerAddress => throw _privateConstructorUsedError;
   String? get headerPhone => throw _privateConstructorUsedError;
+  String? get logoBase64 => throw _privateConstructorUsedError;
+  int? get logoWidth => throw _privateConstructorUsedError;
+  int? get logoHeight => throw _privateConstructorUsedError;
+  bool get isLogoEnabled => throw _privateConstructorUsedError;
 
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
   @JsonKey(ignore: true)
@@ -57,7 +61,11 @@ abstract class $PrinterConfigCopyWith<$Res> {
       String headerBusinessName,
       String? headerRuc,
       String? headerAddress,
-      String? headerPhone});
+      String? headerPhone,
+      String? logoBase64,
+      int? logoWidth,
+      int? logoHeight,
+      bool isLogoEnabled});
 }
 
 /// @nodoc
@@ -85,6 +93,10 @@ class _$PrinterConfigCopyWithImpl<$Res, $Val extends PrinterConfig>
     Object? headerRuc = freezed,
     Object? headerAddress = freezed,
     Object? headerPhone = freezed,
+    Object? logoBase64 = freezed,
+    Object? logoWidth = freezed,
+    Object? logoHeight = freezed,
+    Object? isLogoEnabled = null,
   }) {
     return _then(_value.copyWith(
       driverType: null == driverType
@@ -135,6 +147,22 @@ class _$PrinterConfigCopyWithImpl<$Res, $Val extends PrinterConfig>
           ? _value.headerPhone
           : headerPhone // ignore: cast_nullable_to_non_nullable
               as String?,
+      logoBase64: freezed == logoBase64
+          ? _value.logoBase64
+          : logoBase64 // ignore: cast_nullable_to_non_nullable
+              as String?,
+      logoWidth: freezed == logoWidth
+          ? _value.logoWidth
+          : logoWidth // ignore: cast_nullable_to_non_nullable
+              as int?,
+      logoHeight: freezed == logoHeight
+          ? _value.logoHeight
+          : logoHeight // ignore: cast_nullable_to_non_nullable
+              as int?,
+      isLogoEnabled: null == isLogoEnabled
+          ? _value.isLogoEnabled
+          : isLogoEnabled // ignore: cast_nullable_to_non_nullable
+              as bool,
     ) as $Val);
   }
 }
@@ -159,7 +187,11 @@ abstract class _$$PrinterConfigImplCopyWith<$Res>
       String headerBusinessName,
       String? headerRuc,
       String? headerAddress,
-      String? headerPhone});
+      String? headerPhone,
+      String? logoBase64,
+      int? logoWidth,
+      int? logoHeight,
+      bool isLogoEnabled});
 }
 
 /// @nodoc
@@ -185,6 +217,10 @@ class __$$PrinterConfigImplCopyWithImpl<$Res>
     Object? headerRuc = freezed,
     Object? headerAddress = freezed,
     Object? headerPhone = freezed,
+    Object? logoBase64 = freezed,
+    Object? logoWidth = freezed,
+    Object? logoHeight = freezed,
+    Object? isLogoEnabled = null,
   }) {
     return _then(_$PrinterConfigImpl(
       driverType: null == driverType
@@ -235,6 +271,22 @@ class __$$PrinterConfigImplCopyWithImpl<$Res>
           ? _value.headerPhone
           : headerPhone // ignore: cast_nullable_to_non_nullable
               as String?,
+      logoBase64: freezed == logoBase64
+          ? _value.logoBase64
+          : logoBase64 // ignore: cast_nullable_to_non_nullable
+              as String?,
+      logoWidth: freezed == logoWidth
+          ? _value.logoWidth
+          : logoWidth // ignore: cast_nullable_to_non_nullable
+              as int?,
+      logoHeight: freezed == logoHeight
+          ? _value.logoHeight
+          : logoHeight // ignore: cast_nullable_to_non_nullable
+              as int?,
+      isLogoEnabled: null == isLogoEnabled
+          ? _value.isLogoEnabled
+          : isLogoEnabled // ignore: cast_nullable_to_non_nullable
+              as bool,
     ));
   }
 }
@@ -254,7 +306,11 @@ class _$PrinterConfigImpl implements _PrinterConfig {
       this.headerBusinessName = 'OMNIFOOD NI',
       this.headerRuc,
       this.headerAddress,
-      this.headerPhone});
+      this.headerPhone,
+      this.logoBase64,
+      this.logoWidth,
+      this.logoHeight,
+      this.isLogoEnabled = false});
 
   factory _$PrinterConfigImpl.fromJson(Map<String, dynamic> json) =>
       _$$PrinterConfigImplFromJson(json);
@@ -291,10 +347,19 @@ class _$PrinterConfigImpl implements _PrinterConfig {
   final String? headerAddress;
   @override
   final String? headerPhone;
+  @override
+  final String? logoBase64;
+  @override
+  final int? logoWidth;
+  @override
+  final int? logoHeight;
+  @override
+  @JsonKey()
+  final bool isLogoEnabled;
 
   @override
   String toString() {
-    return 'PrinterConfig(driverType: $driverType, autoPrintInvoice: $autoPrintInvoice, autoPrintKitchen: $autoPrintKitchen, openDrawerOnCash: $openDrawerOnCash, paperWidthMm: $paperWidthMm, networkIp: $networkIp, networkPort: $networkPort, copies: $copies, headerBusinessName: $headerBusinessName, headerRuc: $headerRuc, headerAddress: $headerAddress, headerPhone: $headerPhone)';
+    return 'PrinterConfig(driverType: $driverType, autoPrintInvoice: $autoPrintInvoice, autoPrintKitchen: $autoPrintKitchen, openDrawerOnCash: $openDrawerOnCash, paperWidthMm: $paperWidthMm, networkIp: $networkIp, networkPort: $networkPort, copies: $copies, headerBusinessName: $headerBusinessName, headerRuc: $headerRuc, headerAddress: $headerAddress, headerPhone: $headerPhone, logoBase64: $logoBase64, logoWidth: $logoWidth, logoHeight: $logoHeight, isLogoEnabled: $isLogoEnabled)';
   }
 
   @override
@@ -324,7 +389,15 @@ class _$PrinterConfigImpl implements _PrinterConfig {
             (identical(other.headerAddress, headerAddress) ||
                 other.headerAddress == headerAddress) &&
             (identical(other.headerPhone, headerPhone) ||
-                other.headerPhone == headerPhone));
+                other.headerPhone == headerPhone) &&
+            (identical(other.logoBase64, logoBase64) ||
+                other.logoBase64 == logoBase64) &&
+            (identical(other.logoWidth, logoWidth) ||
+                other.logoWidth == logoWidth) &&
+            (identical(other.logoHeight, logoHeight) ||
+                other.logoHeight == logoHeight) &&
+            (identical(other.isLogoEnabled, isLogoEnabled) ||
+                other.isLogoEnabled == isLogoEnabled));
   }
 
   @JsonKey(ignore: true)
@@ -342,7 +415,11 @@ class _$PrinterConfigImpl implements _PrinterConfig {
       headerBusinessName,
       headerRuc,
       headerAddress,
-      headerPhone);
+      headerPhone,
+      logoBase64,
+      logoWidth,
+      logoHeight,
+      isLogoEnabled);
 
   @JsonKey(ignore: true)
   @override
@@ -371,7 +448,11 @@ abstract class _PrinterConfig implements PrinterConfig {
       final String headerBusinessName,
       final String? headerRuc,
       final String? headerAddress,
-      final String? headerPhone}) = _$PrinterConfigImpl;
+      final String? headerPhone,
+      final String? logoBase64,
+      final int? logoWidth,
+      final int? logoHeight,
+      final bool isLogoEnabled}) = _$PrinterConfigImpl;
 
   factory _PrinterConfig.fromJson(Map<String, dynamic> json) =
       _$PrinterConfigImpl.fromJson;
@@ -400,6 +481,14 @@ abstract class _PrinterConfig implements PrinterConfig {
   String? get headerAddress;
   @override
   String? get headerPhone;
+  @override
+  String? get logoBase64;
+  @override
+  int? get logoWidth;
+  @override
+  int? get logoHeight;
+  @override
+  bool get isLogoEnabled;
   @override
   @JsonKey(ignore: true)
   _$$PrinterConfigImplCopyWith<_$PrinterConfigImpl> get copyWith =>

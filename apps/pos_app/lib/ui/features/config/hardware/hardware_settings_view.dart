@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../domain/models/config/printer_config.dart';
@@ -126,6 +128,10 @@ class HardwareSettingsView extends StatelessWidget {
                     ),
                   ),
                 ),
+                const SizedBox(height: 16),
+
+                // Company Logo Configuration Card
+                _buildLogoCard(context, config, viewModel),
                 const SizedBox(height: 16),
 
                 // Paper Width Card
@@ -316,6 +322,152 @@ class HardwareSettingsView extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLogoCard(
+    BuildContext context,
+    PrinterConfig config,
+    HardwareSettingsViewModel viewModel,
+  ) {
+    final hasLogo = config.logoBase64 != null && config.logoBase64!.isNotEmpty;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Logo de la Empresa (Factura Térmica)',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                if (hasLogo)
+                  Chip(
+                    avatar: const Icon(Icons.check, size: 14, color: Colors.green),
+                    label: Text(
+                      '${config.logoWidth ?? 384}x${config.logoHeight ?? 0} px (1-bit)',
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Requisitos estrictos para impresión térmica:\n'
+              '• Ancho máximo: 384 px (ancho exacto del cabezal de 58 mm)\n'
+              '• Formato: PNG monocromático (1-bit / Black & White)\n'
+              '• Fondo: Blanco o transparente (con dithering Floyd-Steinberg)',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey.shade700),
+            ),
+            const SizedBox(height: 12),
+            if (hasLogo) ...[
+              SwitchListTile(
+                title: const Text('Imprimir Logo en Cabecera'),
+                subtitle: const Text('Inserta el gráfico en el encabezado de las facturas DGI.'),
+                value: config.isLogoEnabled,
+                onChanged: (val) => viewModel.toggleLogoEnabled(val),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.upload_file),
+                    label: const Text('Reemplazar Logo'),
+                    onPressed: () => _showUploadLogoDialog(context, viewModel),
+                  ),
+                  const SizedBox(width: 12),
+                  TextButton.icon(
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    label: const Text('Eliminar Logo', style: TextStyle(color: Colors.red)),
+                    onPressed: () => viewModel.removeLogo(),
+                  ),
+                ],
+              ),
+            ] else ...[
+              const SizedBox(height: 8),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.add_photo_alternate),
+                label: const Text('Subir Logo PNG (Máx 384 px)'),
+                onPressed: () => _showUploadLogoDialog(context, viewModel),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showUploadLogoDialog(BuildContext context, HardwareSettingsViewModel viewModel) {
+    final textController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Text('Cargar Logo Monocromático'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Pegue los bytes en formato Base64 de la imagen PNG (máx 384px de ancho). '
+                'El sistema aplicará automáticamente validación de cabecera y tramado Floyd-Steinberg.',
+                style: TextStyle(fontSize: 12),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: textController,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  labelText: 'Base64 del archivo PNG',
+                  hintText: 'iVBORw0KGgoAAAANSUhEUgAAAYAAAA...',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final text = textController.text.trim();
+              if (text.isEmpty) return;
+              try {
+                final bytes = base64Decode(text);
+                final error = await viewModel.uploadAndProcessLogo(Uint8List.fromList(bytes));
+                if (dialogCtx.mounted) {
+                  Navigator.of(dialogCtx).pop();
+                }
+                if (error != null && context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(error), backgroundColor: Colors.red),
+                  );
+                } else if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Logo validado y guardado correctamente.'), backgroundColor: Colors.green),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error al decodificar Base64: $e'), backgroundColor: Colors.red),
+                  );
+                }
+              }
+            },
+            child: const Text('Validar y Guardar'),
           ),
         ],
       ),

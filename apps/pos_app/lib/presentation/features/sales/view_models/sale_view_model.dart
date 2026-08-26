@@ -14,12 +14,14 @@ import '../../../../domain/models/user.dart';
 import '../../../../domain/repositories/sales/sales_repository.dart';
 import '../../../../domain/repositories/inventory/inventory_repository.dart';
 import '../../../../domain/repositories/auth_repository.dart';
+import 'dart:convert';
 import '../../../../data/database/app_database.dart';
 import '../../../../data/mappers/sales_mapper.dart';
 import '../../../../domain/models/config/printer_config.dart';
 import '../../../../domain/services/config/tenant_config_service.dart';
 import '../../../../domain/services/config/printer_config_service.dart';
 import '../../../../domain/services/printer/printer_resolver.dart';
+import '../../../../domain/services/printer/thermal_logo_processor.dart';
 import '../../../../domain/ports/printer_port.dart';
 import '../../../../domain/services/kitchen/kitchen_order_service.dart';
 import '../../../../domain/services/sales/table_order_service.dart';
@@ -682,6 +684,21 @@ class SaleViewModel extends ChangeNotifier {
         await _printerPort.openCashDrawer();
       }
 
+      List<int>? logoRasterBytes;
+      if (printerConfig.isLogoEnabled &&
+          printerConfig.logoBase64 != null &&
+          printerConfig.logoWidth != null &&
+          printerConfig.logoHeight != null) {
+        try {
+          final rawBytes = base64Decode(printerConfig.logoBase64!);
+          logoRasterBytes = ThermalLogoProcessor.buildEscPosRasterFrom1Bit(
+            raw1BitBitmap: rawBytes,
+            width: printerConfig.logoWidth!,
+            height: printerConfig.logoHeight!,
+          );
+        } catch (_) {}
+      }
+
       if (printerConfig.autoPrintInvoice) {
         final printResult = await _printerPort.printInvoice(
           invoiceToPrint,
@@ -692,6 +709,7 @@ class SaleViewModel extends ChangeNotifier {
           address: printerConfig.headerAddress,
           phone: printerConfig.headerPhone,
           cashierName: user.name,
+          logoRasterBytes: logoRasterBytes,
         );
 
         if (!printResult.isSuccess) {
@@ -763,6 +781,21 @@ class SaleViewModel extends ChangeNotifier {
         last4: e.last4,
       )).toList();
 
+      List<int>? logoRasterBytes;
+      if (config.isLogoEnabled &&
+          config.logoBase64 != null &&
+          config.logoWidth != null &&
+          config.logoHeight != null) {
+        try {
+          final rawBytes = base64Decode(config.logoBase64!);
+          logoRasterBytes = ThermalLogoProcessor.buildEscPosRasterFrom1Bit(
+            raw1BitBitmap: rawBytes,
+            width: config.logoWidth!,
+            height: config.logoHeight!,
+          );
+        } catch (_) {}
+      }
+
       final res = await _printerPort.printInvoice(
         _lastProcessedInvoice!,
         items: domainItems,
@@ -771,6 +804,7 @@ class SaleViewModel extends ChangeNotifier {
         ruc: config.headerRuc,
         address: config.headerAddress,
         phone: config.headerPhone,
+        logoRasterBytes: logoRasterBytes,
       );
 
       if (!res.isSuccess) {

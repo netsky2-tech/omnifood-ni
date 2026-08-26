@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import '../../../../domain/models/config/printer_config.dart';
 import '../../../../domain/models/sales/invoice.dart';
@@ -6,6 +8,7 @@ import '../../../../domain/models/sales/payment.dart';
 import '../../../../domain/ports/printer_port.dart';
 import '../../../../domain/services/config/printer_config_service.dart';
 import '../../../../domain/services/printer/printer_resolver.dart';
+import '../../../../domain/services/printer/thermal_logo_processor.dart';
 
 class HardwareSettingsViewModel extends ChangeNotifier {
   final PrinterConfigService _configService;
@@ -94,6 +97,62 @@ class HardwareSettingsViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> toggleLogoEnabled(bool value) async {
+    _config = _config.copyWith(isLogoEnabled: value);
+    await _configService.savePrinterConfig(_config);
+    notifyListeners();
+  }
+
+  Future<String?> uploadAndProcessLogo(Uint8List pngBytes) async {
+    _isLoading = true;
+    _statusMessage = null;
+    notifyListeners();
+
+    try {
+      final result = await ThermalLogoProcessor.processPngBytes(
+        pngBytes,
+        maxWidth: ThermalLogoProcessor.maxThermalWidth58mm,
+        applyDithering: true,
+      );
+
+      if (!result.isValid) {
+        _statusMessage = result.errorMessage;
+        return result.errorMessage;
+      }
+
+      final base64String = base64Encode(result.raw1BitBitmap!);
+
+      _config = _config.copyWith(
+        logoBase64: base64String,
+        logoWidth: result.width,
+        logoHeight: result.height,
+        isLogoEnabled: true,
+      );
+
+      await _configService.savePrinterConfig(_config);
+      _statusMessage = 'Logo procesado (${result.width}x${result.height} px, 1-bit Floyd-Steinberg) guardado correctamente.';
+      return null;
+    } catch (e) {
+      _statusMessage = 'Error al procesar logo: $e';
+      return e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> removeLogo() async {
+    _config = _config.copyWith(
+      logoBase64: null,
+      logoWidth: null,
+      logoHeight: null,
+      isLogoEnabled: false,
+    );
+    await _configService.savePrinterConfig(_config);
+    _statusMessage = 'Logo eliminado de la configuración.';
+    notifyListeners();
+  }
+
   Future<bool> testPrintReceipt() async {
     _isTesting = true;
     _statusMessage = null;
@@ -138,12 +197,28 @@ class HardwareSettingsViewModel extends ChangeNotifier {
         ),
       ];
 
+      List<int>? logoRasterBytes;
+      if (_config.isLogoEnabled &&
+          _config.logoBase64 != null &&
+          _config.logoWidth != null &&
+          _config.logoHeight != null) {
+        try {
+          final rawBytes = base64Decode(_config.logoBase64!);
+          logoRasterBytes = ThermalLogoProcessor.buildEscPosRasterFrom1Bit(
+            raw1BitBitmap: rawBytes,
+            width: _config.logoWidth!,
+            height: _config.logoHeight!,
+          );
+        } catch (_) {}
+      }
+
       final result = await _printerPort.printInvoice(
         sampleInvoice,
         items: sampleItems,
         payments: samplePayments,
         businessName: _config.headerBusinessName,
         ruc: _config.headerRuc ?? 'J0310000000001',
+        logoRasterBytes: logoRasterBytes,
       );
 
       if (result.isSuccess) {

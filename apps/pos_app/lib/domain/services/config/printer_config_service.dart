@@ -20,6 +20,10 @@ class PrinterConfigService {
   static const String headerRucKey = 'printer_header_ruc';
   static const String headerAddressKey = 'printer_header_address';
   static const String headerPhoneKey = 'printer_header_phone';
+  static const String logoBase64Key = 'printer_logo_base64';
+  static const String logoWidthKey = 'printer_logo_width';
+  static const String logoHeightKey = 'printer_logo_height';
+  static const String isLogoEnabledKey = 'printer_logo_enabled';
 
   final LocalConfigDao _configDao;
   final StreamController<PrinterConfig> _configStreamController =
@@ -44,6 +48,10 @@ class PrinterConfigService {
         await _configDao.getConfigByKey('address');
     final phoneEntity = await _configDao.getConfigByKey(headerPhoneKey) ??
         await _configDao.getConfigByKey('phone');
+    final logoBase64Entity = await _configDao.getConfigByKey(logoBase64Key);
+    final logoWidthEntity = await _configDao.getConfigByKey(logoWidthKey);
+    final logoHeightEntity = await _configDao.getConfigByKey(logoHeightKey);
+    final isLogoEnabledEntity = await _configDao.getConfigByKey(isLogoEnabledKey);
 
     PrinterDriverType driverType = PrinterDriverType.sunmiV2s;
     if (driverEntity != null) {
@@ -68,6 +76,9 @@ class PrinterConfigService {
     final paperWidth = int.tryParse(paperWidthEntity?.value ?? '') ?? 58;
     final networkPort = int.tryParse(networkPortEntity?.value ?? '') ?? 9100;
     final copies = int.tryParse(copiesEntity?.value ?? '') ?? 1;
+    final logoWidth = int.tryParse(logoWidthEntity?.value ?? '');
+    final logoHeight = int.tryParse(logoHeightEntity?.value ?? '');
+    final isLogoEnabled = isLogoEnabledEntity?.value.trim().toLowerCase() == 'true';
 
     return PrinterConfig(
       driverType: driverType,
@@ -82,6 +93,10 @@ class PrinterConfigService {
       headerRuc: rucEntity?.value,
       headerAddress: addressEntity?.value,
       headerPhone: phoneEntity?.value,
+      logoBase64: logoBase64Entity?.value,
+      logoWidth: logoWidth,
+      logoHeight: logoHeight,
+      isLogoEnabled: isLogoEnabled,
     );
   }
 
@@ -169,6 +184,33 @@ class PrinterConfigService {
         description: 'Phone for printed tickets',
       ));
     }
+
+    if (config.logoBase64 != null) {
+      await _configDao.saveConfig(LocalConfigEntity(
+        key: logoBase64Key,
+        value: config.logoBase64!,
+        description: 'Monochrome 1-bit logo raster bytes (Base64)',
+      ));
+    }
+    if (config.logoWidth != null) {
+      await _configDao.saveConfig(LocalConfigEntity(
+        key: logoWidthKey,
+        value: config.logoWidth.toString(),
+        description: 'Logo width in pixels',
+      ));
+    }
+    if (config.logoHeight != null) {
+      await _configDao.saveConfig(LocalConfigEntity(
+        key: logoHeightKey,
+        value: config.logoHeight.toString(),
+        description: 'Logo height in pixels',
+      ));
+    }
+    await _configDao.saveConfig(LocalConfigEntity(
+      key: isLogoEnabledKey,
+      value: config.isLogoEnabled.toString(),
+      description: 'Whether company logo is printed on receipt header',
+    ));
 
     _configStreamController.add(config);
   }

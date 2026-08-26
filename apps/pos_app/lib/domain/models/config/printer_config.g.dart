@@ -23,6 +23,10 @@ _$PrinterConfigImpl _$$PrinterConfigImplFromJson(Map<String, dynamic> json) =>
       headerRuc: json['headerRuc'] as String?,
       headerAddress: json['headerAddress'] as String?,
       headerPhone: json['headerPhone'] as String?,
+      logoBase64: json['logoBase64'] as String?,
+      logoWidth: json['logoWidth'] as int?,
+      logoHeight: json['logoHeight'] as int?,
+      isLogoEnabled: json['isLogoEnabled'] as bool? ?? false,
     );
 
 Map<String, dynamic> _$$PrinterConfigImplToJson(_$PrinterConfigImpl instance) =>
@@ -39,6 +43,10 @@ Map<String, dynamic> _$$PrinterConfigImplToJson(_$PrinterConfigImpl instance) =>
       'headerRuc': instance.headerRuc,
       'headerAddress': instance.headerAddress,
       'headerPhone': instance.headerPhone,
+      'logoBase64': instance.logoBase64,
+      'logoWidth': instance.logoWidth,
+      'logoHeight': instance.logoHeight,
+      'isLogoEnabled': instance.isLogoEnabled,
     };
 
 const _$PrinterDriverTypeEnumMap = {

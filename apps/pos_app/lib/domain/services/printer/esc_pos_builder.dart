@@ -105,6 +105,18 @@ class EscPosBuilder {
     return this;
   }
 
+  /// Appends raw byte sequence directly to the buffer.
+  EscPosBuilder rawBytes(List<int> bytes) {
+    _bytes.addAll(bytes);
+    return this;
+  }
+
+  /// Appends raster image bytes generated from ThermalLogoProcessor.
+  EscPosBuilder rasterImage(List<int> imageBytes) {
+    _bytes.addAll(imageBytes);
+    return this;
+  }
+
   /// Returns the complete generated ESC/POS byte sequence.
   List<int> toBytes() => List.unmodifiable(_bytes);
 }

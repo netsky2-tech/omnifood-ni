@@ -130,6 +130,7 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
     String? address,
     String? phone,
     String? cashierName,
+    List<int>? logoRasterBytes,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -143,6 +144,7 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
             #address: address,
             #phone: phone,
             #cashierName: cashierName,
+            #logoRasterBytes: logoRasterBytes,
           },
         ),
         returnValue: _i5.Future<_i3.PrinterResult>.value(_FakePrinterResult_1(
@@ -158,6 +160,7 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
               #address: address,
               #phone: phone,
               #cashierName: cashierName,
+              #logoRasterBytes: logoRasterBytes,
             },
           ),
         )),
@@ -175,6 +178,7 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
               #address: address,
               #phone: phone,
               #cashierName: cashierName,
+              #logoRasterBytes: logoRasterBytes,
             },
           ),
         )),

@@ -27,6 +27,10 @@ class PrinterConfig with _$PrinterConfig {
     String? headerRuc,
     String? headerAddress,
     String? headerPhone,
+    String? logoBase64,
+    int? logoWidth,
+    int? logoHeight,
+    @Default(false) bool isLogoEnabled,
   }) = _PrinterConfig;
 
   factory PrinterConfig.fromJson(Map<String, dynamic> json) =>
