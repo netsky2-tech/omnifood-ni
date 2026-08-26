@@ -50,7 +50,8 @@
   - `printer_config_service_test.dart`
   - `hardware_settings_view_test.dart`
 
-### Slice 7.4: Integración E2E Checkout $\rightarrow$ Auto-Print & Verificación
-- Disparo automático de impresión de factura en `SaleViewModel.processSale`.
-- Impresión opcional de comanda física al despachar a KDS.
-- Suite E2E `sunmi_v2s_checkout_print_flow_e2e_test.dart`.
+### Slice 7.4: Integración E2E Checkout $\rightarrow$ Auto-Print & Verificación [COMPLETADO ✅]
+- Disparo automático de impresión de factura DGI y apertura de gaveta de dinero en `SaleViewModel.processSale`.
+- Resiliencia Offline-First (D1): los fallos de hardware o falta de papel nunca bloquean ni abortan la transacción persistida en SQLite local.
+- Reimpresión manual de última factura vía `SaleViewModel.reprintLastInvoice()`.
+- Suite E2E completa: `test/ui/features/sales/sunmi_v2s_checkout_print_flow_e2e_test.dart` cubriendo checkout en efectivo en Sunmi V2s ($360 \times 720\text{ dp}$), pagos divididos multimoneda y tolerancia a fallos de hardware.

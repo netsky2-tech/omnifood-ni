@@ -513,6 +513,16 @@ class MockSaleViewModel extends _i1.Mock implements _i2.SaleViewModel {
       ) as _i10.Future<void>);
 
   @override
+  _i10.Future<bool> reprintLastInvoice() => (super.noSuchMethod(
+        Invocation.method(
+          #reprintLastInvoice,
+          [],
+        ),
+        returnValue: _i10.Future<bool>.value(false),
+        returnValueForMissingStub: _i10.Future<bool>.value(false),
+      ) as _i10.Future<bool>);
+
+  @override
   _i10.Future<void> processReturn(
     String? invoiceNumber,
     String? reason, {

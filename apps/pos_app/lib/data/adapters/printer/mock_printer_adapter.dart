@@ -43,9 +43,15 @@ class MockPrinterAdapter implements PrinterPort {
     String? cashierName,
   }) async {
     if (shouldFail || currentStatus != PrinterStatus.ready) {
+      String defaultMsg = 'Error de impresión en hardware simulado';
+      if (currentStatus == PrinterStatus.outOfPaper) {
+        defaultMsg = 'La impresora no tiene papel.';
+      } else if (currentStatus == PrinterStatus.overheating) {
+        defaultMsg = 'Cabezal sobrecalentado.';
+      }
       final res = PrinterResult.failure(
         currentStatus == PrinterStatus.ready ? PrinterStatus.error : currentStatus,
-        failureMessage ?? 'Error de impresión en hardware simulado',
+        failureMessage ?? defaultMsg,
       );
       printHistory.add(res);
       return res;

@@ -16,7 +16,11 @@ import '../../../../domain/repositories/inventory/inventory_repository.dart';
 import '../../../../domain/repositories/auth_repository.dart';
 import '../../../../data/database/app_database.dart';
 import '../../../../data/mappers/sales_mapper.dart';
+import '../../../../domain/models/config/printer_config.dart';
 import '../../../../domain/services/config/tenant_config_service.dart';
+import '../../../../domain/services/config/printer_config_service.dart';
+import '../../../../domain/services/printer/printer_resolver.dart';
+import '../../../../domain/ports/printer_port.dart';
 import '../../../../domain/services/kitchen/kitchen_order_service.dart';
 import '../../../../domain/services/sales/table_order_service.dart';
 
@@ -28,6 +32,8 @@ class SaleViewModel extends ChangeNotifier {
   final TableOrderService _tableOrderService;
   final TenantConfigService _tenantConfigService;
   final KitchenOrderService _kitchenOrderService;
+  final PrinterConfigService _printerConfigService;
+  final PrinterPort _printerPort;
 
   SaleViewModel(
     this._salesRepository,
@@ -38,11 +44,17 @@ class SaleViewModel extends ChangeNotifier {
     bool autoLoad = true,
     TenantConfigService? tenantConfigService,
     KitchenOrderService? kitchenOrderService,
+    PrinterConfigService? printerConfigService,
+    PrinterPort? printerPort,
   ])  : _tableOrderService = tableOrderService ?? TableOrderService(_database),
         _tenantConfigService =
             tenantConfigService ?? TenantConfigService(_database.localConfigDao),
         _kitchenOrderService =
-            kitchenOrderService ?? KitchenOrderService(_database) {
+            kitchenOrderService ?? KitchenOrderService(_database),
+        _printerConfigService =
+            printerConfigService ?? PrinterConfigService(_database.localConfigDao),
+        _printerPort =
+            printerPort ?? PrinterResolver.resolve(const PrinterConfig()) {
     if (autoLoad) {
       loadProducts();
       checkActiveSession();
@@ -53,6 +65,12 @@ class SaleViewModel extends ChangeNotifier {
       loadTenantConfig();
     }
   }
+
+  String? _lastPrintError;
+  String? get lastPrintError => _lastPrintError;
+
+  Invoice? _lastProcessedInvoice;
+  Invoice? get lastProcessedInvoice => _lastProcessedInvoice;
 
   TenantConfig? _tenantConfig;
   TenantConfig? get tenantConfig => _tenantConfig;
@@ -645,10 +663,127 @@ class SaleViewModel extends ChangeNotifier {
       }
     }
 
+    // Auto-Printing & Hardware Drawer Kick (PRD Batch 7)
+    Invoice? savedInvoice;
+    try {
+      savedInvoice = await _salesRepository.getInvoiceById(invoiceId);
+    } catch (_) {
+      // Non-blocking fallback for offline environments or unstubbed test mocks
+    }
+    final invoiceToPrint = savedInvoice ?? invoice;
+    _lastProcessedInvoice = invoiceToPrint;
+    _lastPrintError = null;
+
+    try {
+      final printerConfig = await _printerConfigService.getPrinterConfig();
+      final hasCashPayment = payments.any((p) => p.method == PaymentMethod.cash);
+
+      if (printerConfig.openDrawerOnCash && hasCashPayment) {
+        await _printerPort.openCashDrawer();
+      }
+
+      if (printerConfig.autoPrintInvoice) {
+        final printResult = await _printerPort.printInvoice(
+          invoiceToPrint,
+          items: items,
+          payments: payments,
+          businessName: printerConfig.headerBusinessName,
+          ruc: printerConfig.headerRuc,
+          address: printerConfig.headerAddress,
+          phone: printerConfig.headerPhone,
+          cashierName: user.name,
+        );
+
+        if (!printResult.isSuccess) {
+          _lastPrintError = printResult.message ?? 'Error de impresión en hardware';
+        }
+      }
+
+      if (printerConfig.autoPrintKitchen && items.isNotEmpty) {
+        await _printerPort.printKitchenOrder(
+          ticketId: invoiceToPrint.id.length > 8 ? invoiceToPrint.id.substring(0, 8) : invoiceToPrint.id,
+          orderTitle: 'Orden #${invoiceToPrint.number}',
+          cashierName: user.name,
+          timestamp: DateTime.now(),
+          items: items,
+          buzzerNumber: int.tryParse(effectiveBuzzer ?? ''),
+          tableName: _activeLoadedHoldTicket?.name,
+        );
+      }
+    } catch (e) {
+      debugPrint('[SaleViewModel] Non-blocking hardware printing error: $e');
+      _lastPrintError = e.toString();
+    }
+
     _buzzerNumber = null;
     _customerName = null;
     clearCart();
     _consumeOverride();
+  }
+
+  /// Manually triggers a reprint of the last successfully processed invoice.
+  Future<bool> reprintLastInvoice() async {
+    if (_lastProcessedInvoice == null) return false;
+    try {
+      final config = await _printerConfigService.getPrinterConfig();
+      final items = await _database.invoiceItemDao.getItemsByInvoiceId(_lastProcessedInvoice!.id);
+      final domainItems = items.map((e) => InvoiceItem(
+        id: e.id,
+        invoiceId: e.invoiceId,
+        productId: e.productId,
+        productName: e.productName,
+        quantity: e.quantity,
+        unitPrice: e.unitPrice,
+        originalTaxRate: e.originalTaxRate,
+        appliedTaxRate: e.appliedTaxRate,
+        taxAmount: e.taxAmount,
+        total: e.total,
+        discount: e.discount,
+        variantId: e.variantId,
+        notes: e.notes,
+      )).toList();
+
+      final payments = await _database.paymentDao.getPaymentsByInvoiceId(_lastProcessedInvoice!.id);
+      final domainPayments = payments.map((e) => Payment(
+        id: e.id,
+        invoiceId: e.invoiceId,
+        method: PaymentMethod.values.firstWhere(
+          (m) => m.name == e.method,
+          orElse: () => PaymentMethod.cash,
+        ),
+        amount: e.amount,
+        currency: e.currency,
+        exchangeRate: e.exchangeRate,
+        amountNio: e.amountNio,
+        changeGiven: e.changeGiven,
+        changeCurrency: e.changeCurrency,
+        voucherCode: e.voucherCode,
+        cardBrand: e.cardBrand,
+        bankPos: e.bankPos,
+        last4: e.last4,
+      )).toList();
+
+      final res = await _printerPort.printInvoice(
+        _lastProcessedInvoice!,
+        items: domainItems,
+        payments: domainPayments,
+        businessName: config.headerBusinessName,
+        ruc: config.headerRuc,
+        address: config.headerAddress,
+        phone: config.headerPhone,
+      );
+
+      if (!res.isSuccess) {
+        _lastPrintError = res.message;
+        notifyListeners();
+        return false;
+      }
+      return true;
+    } catch (e) {
+      _lastPrintError = e.toString();
+      notifyListeners();
+      return false;
+    }
   }
 
   Future<void> processReturn(

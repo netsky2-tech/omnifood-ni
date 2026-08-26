@@ -14,10 +14,12 @@ import 'package:pos_app/domain/models/kitchen/kitchen_order.dart';
 import 'package:pos_app/domain/models/sales/cart_item.dart';
 import 'package:pos_app/domain/services/kitchen/kitchen_order_service.dart';
 import 'package:pos_app/domain/services/config/tenant_config_service.dart';
+import 'package:pos_app/domain/models/config/printer_config.dart';
+import 'package:pos_app/domain/services/config/printer_config_service.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
 import 'package:pos_app/ui/features/sales/widgets/multi_currency_checkout_dialog.dart';
 import 'package:provider/provider.dart';
-
+import 'package:pos_app/data/adapters/printer/mock_printer_adapter.dart';
 import '../../../presentation/features/sales/sale_view_model_test.mocks.dart';
 
 import 'package:pos_app/domain/models/config/tenant_operation_mode.dart';
@@ -49,12 +51,23 @@ class FakeTenantConfigService extends TenantConfigService {
   Stream<TenantOperationMode> get onOperationModeChanged => const Stream.empty();
 }
 
+class FakePrinterConfigService extends PrinterConfigService {
+  FakePrinterConfigService(super.configDao);
+
+  @override
+  Future<PrinterConfig> getPrinterConfig() async => const PrinterConfig();
+
+  @override
+  Stream<PrinterConfig> get onConfigChanged => const Stream.empty();
+}
+
 void main() {
   late MockSalesRepository mockSalesRepo;
   late MockInventoryRepository mockInventoryRepo;
   late MockAuthRepository mockAuthRepo;
   late FakeKitchenOrderService fakeKitchenOrderService;
   late FakeTenantConfigService fakeTenantConfigService;
+  late FakePrinterConfigService fakePrinterConfigService;
   late AppDatabase database;
   late SaleViewModel saleViewModel;
 
@@ -74,6 +87,7 @@ void main() {
     mockAuthRepo = MockAuthRepository();
     fakeKitchenOrderService = FakeKitchenOrderService(database);
     fakeTenantConfigService = FakeTenantConfigService(database.localConfigDao);
+    fakePrinterConfigService = FakePrinterConfigService(database.localConfigDao);
 
     when(mockAuthRepo.getCurrentUser()).thenAnswer(
       (_) async => const User(
@@ -100,6 +114,8 @@ void main() {
       false,
       fakeTenantConfigService,
       fakeKitchenOrderService,
+      fakePrinterConfigService,
+      MockPrinterAdapter(),
     );
 
     // Set 1000 NIO total (tax exempt for clean rounding in test)
