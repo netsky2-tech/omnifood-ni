@@ -29,10 +29,14 @@
   - `sunmi_v2s_checkout_dialog_test.dart`
   - `responsive_layout_test.dart`
 
-### Slice 7.2: Puerto Hexagonal & Formateador 58mm (ESC/POS & Templates)
-- Interfaz `PrinterPort`.
-- Formateador `Receipt58mmFormatter`: Factura fiscal DGI (32 cols), Comanda KDS (`#Buzzer XX` / `Mesa XX`), Cortes X y Z.
-- Mocks y tests de formateo unitario.
+### Slice 7.2: Puerto Hexagonal & Formateador 58mm (ESC/POS & Templates) [COMPLETADO ✅]
+- Interfaz `PrinterPort` y `PrinterResult` (`lib/domain/ports/printer_port.dart`).
+- Builder de comandos térmicos `EscPosBuilder` (`lib/domain/services/printer/esc_pos_builder.dart`).
+- Formateador estricto de 32 columnas `Receipt58mmFormatter` (`lib/domain/services/printer/receipt_58mm_formatter.dart`): Factura fiscal DGI (DT 09-2007), Comanda KDS (`#Buzzer XX` / `Mesa XX`), Cortes X y Z.
+- Adaptador en memoria `MockPrinterAdapter` (`lib/data/adapters/printer/mock_printer_adapter.dart`).
+- Suite de tests unitarios:
+  - `test/domain/services/printer/receipt_58mm_formatter_test.dart`
+  - `test/data/adapters/printer/mock_printer_adapter_test.dart`
 
 ### Slice 7.3: Driver Sunmi V2s & Configuración de Hardware
 - `SunmiPrinterAdapter` implementando `PrinterPort` (enlace con servicio Sunmi OS).
