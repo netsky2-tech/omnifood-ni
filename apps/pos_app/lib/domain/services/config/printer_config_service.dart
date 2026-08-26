@@ -36,10 +36,14 @@ class PrinterConfigService {
     final networkIpEntity = await _configDao.getConfigByKey(networkIpKey);
     final networkPortEntity = await _configDao.getConfigByKey(networkPortKey);
     final copiesEntity = await _configDao.getConfigByKey(copiesKey);
-    final bizNameEntity = await _configDao.getConfigByKey(headerBusinessNameKey);
-    final rucEntity = await _configDao.getConfigByKey(headerRucKey);
-    final addressEntity = await _configDao.getConfigByKey(headerAddressKey);
-    final phoneEntity = await _configDao.getConfigByKey(headerPhoneKey);
+    final bizNameEntity = await _configDao.getConfigByKey(headerBusinessNameKey) ??
+        await _configDao.getConfigByKey('business_name');
+    final rucEntity = await _configDao.getConfigByKey(headerRucKey) ??
+        await _configDao.getConfigByKey('ruc');
+    final addressEntity = await _configDao.getConfigByKey(headerAddressKey) ??
+        await _configDao.getConfigByKey('address');
+    final phoneEntity = await _configDao.getConfigByKey(headerPhoneKey) ??
+        await _configDao.getConfigByKey('phone');
 
     PrinterDriverType driverType = PrinterDriverType.sunmiV2s;
     if (driverEntity != null) {
