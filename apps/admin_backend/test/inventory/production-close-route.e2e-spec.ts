@@ -34,16 +34,37 @@ const productionCloseRouteTestJwtService = new JwtService({
   secret: PRODUCTION_CLOSE_ROUTE_TEST_JWT_SECRET,
 });
 
-const AUTH_TOKEN = productionCloseRouteTestJwtService.sign({
+const defaultClaims = {
+  sub: 'user-test-1',
+  email: 'test@omnifood.ni',
+  is_active: true,
+  token_type: 'access',
+  security_version: 1,
+};
+
+const signTestToken = (claims: Record<string, unknown>) =>
+  productionCloseRouteTestJwtService.sign(
+    {
+      ...defaultClaims,
+      ...claims,
+    },
+    {
+      issuer: 'omnifood-admin',
+      audience: 'omnifood-pos',
+      expiresIn: '1h',
+    },
+  );
+
+const AUTH_TOKEN = signTestToken({
   tenant_id: TEST_TENANT_ID,
   role: UserRole.MANAGER,
 });
-const CLAIMED_TERMINAL_AUTH_TOKEN = productionCloseRouteTestJwtService.sign({
+const CLAIMED_TERMINAL_AUTH_TOKEN = signTestToken({
   tenant_id: TEST_TENANT_ID,
   role: UserRole.MANAGER,
   terminal_id: 'terminal-claim-1',
 });
-const UNAUTHORIZED_ROLE_TOKEN = productionCloseRouteTestJwtService.sign({
+const UNAUTHORIZED_ROLE_TOKEN = signTestToken({
   tenant_id: TEST_TENANT_ID,
   role: UserRole.CASHIER,
 });
@@ -133,7 +154,21 @@ describe('Production close route (integration)', () => {
         JwtService,
         {
           provide: ConfigService,
-          useValue: { get: () => PRODUCTION_CLOSE_ROUTE_TEST_JWT_SECRET },
+          useValue: {
+            get: (key: string) => {
+              const env: Record<string, string> = {
+                NODE_ENV: 'test',
+                JWT_SECRET: PRODUCTION_CLOSE_ROUTE_TEST_JWT_SECRET,
+                JWT_ISSUER: 'omnifood-admin',
+                JWT_AUDIENCE: 'omnifood-pos',
+                JWT_ACCESS_TTL_SECONDS: '3600',
+                JWT_REFRESH_TTL_SECONDS: '604800',
+                JWT_CLOCK_TOLERANCE_SECONDS: '5',
+                JWT_ALGORITHM: 'HS256',
+              };
+              return env[key] ?? null;
+            },
+          },
         },
       ],
     }).compile();

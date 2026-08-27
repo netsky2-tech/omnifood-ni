@@ -733,13 +733,15 @@ class _MultiCurrencyCheckoutDialogState
                   color: Colors.blueGrey,
                 ),
                 title: Text(
-                  '${p.currency} \$${p.amount.toStringAsFixed(2)}  (C\$ ${p.amountNio.toStringAsFixed(2)})',
+                  p.currency.toUpperCase() == 'NIO'
+                      ? 'C\$ ${p.amount.toStringAsFixed(2)}'
+                      : '\$ ${p.amount.toStringAsFixed(2)} (C\$ ${p.amountNio.toStringAsFixed(2)})',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 subtitle: isCard
                     ? Text('${p.bankPos ?? 'BAC'} - ${p.cardBrand ?? 'VISA'} ${isFast ? '[Voucher: PENDIENTE]' : '[Aut: ${p.voucherCode}]'}')
                     : (p.changeGiven > 0
-                        ? Text('Vuelto: ${p.changeCurrency} \$${p.changeGiven.toStringAsFixed(2)}')
+                        ? Text('Vuelto: ${p.changeCurrency.toUpperCase() == 'NIO' ? 'C\$' : '\$'} ${p.changeGiven.toStringAsFixed(2)}')
                         : null),
                 trailing: IconButton(
                   icon: const Icon(Icons.delete, color: Colors.red),

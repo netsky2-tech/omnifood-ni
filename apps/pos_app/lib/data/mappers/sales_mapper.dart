@@ -25,14 +25,35 @@ import 'package:pos_app/domain/models/inventory/product.dart'; // For Modifier
 class SalesMapper {
   // --- Promotion ---
   static Promotion toPromotionDomain(PromotionEntity entity) {
+    List<int> days = [];
+    if (entity.daysOfWeek != null && entity.daysOfWeek!.isNotEmpty) {
+      days = entity.daysOfWeek!
+          .split(',')
+          .map((s) => int.tryParse(s.trim()))
+          .whereType<int>()
+          .toList();
+    }
+
     return Promotion(
       id: entity.id,
       name: entity.name,
-      type: PromotionType.values.firstWhere((e) => e.name == entity.type),
+      type: PromotionType.values.firstWhere(
+        (e) => e.name == entity.type,
+        orElse: () => PromotionType.buyXGetYFree,
+      ),
       targetProductId: entity.targetProductId,
+      targetCategoryId: entity.targetCategoryId,
       buyQuantity: entity.buyQuantity,
       getQuantity: entity.getQuantity,
       discountValue: entity.discountValue,
+      minOrderAmount: entity.minOrderAmount,
+      daysOfWeek: days,
+      startTime: entity.startTime,
+      endTime: entity.endTime,
+      startDate: entity.startDate,
+      endDate: entity.endDate,
+      priority: entity.priority,
+      isStackable: entity.isStackable,
       isActive: entity.isActive,
     );
   }
@@ -43,9 +64,18 @@ class SalesMapper {
       name: domain.name,
       type: domain.type.name,
       targetProductId: domain.targetProductId,
+      targetCategoryId: domain.targetCategoryId,
       buyQuantity: domain.buyQuantity,
       getQuantity: domain.getQuantity,
       discountValue: domain.discountValue,
+      minOrderAmount: domain.minOrderAmount,
+      daysOfWeek: domain.daysOfWeek.isNotEmpty ? domain.daysOfWeek.join(',') : null,
+      startTime: domain.startTime,
+      endTime: domain.endTime,
+      startDate: domain.startDate,
+      endDate: domain.endDate,
+      priority: domain.priority,
+      isStackable: domain.isStackable,
       isActive: domain.isActive,
     );
   }
@@ -434,11 +464,11 @@ class SalesMapper {
       'customerId': invoice.customerId,
       'globalTaxOverride': invoice.globalTaxOverride,
       'relatedInvoiceId': invoice.relatedInvoiceId,
-      'originInvoiceId': invoice.originInvoiceId,
-      'refundReasonPolicy': invoice.refundReasonPolicy,
-      'refundReasonCode': invoice.refundReasonCode,
-      'authorizedByUserId': invoice.authorizedByUserId,
-      'authorizedByRole': invoice.authorizedByRole,
+      if (invoice.originInvoiceId?.isNotEmpty ?? false) 'originInvoiceId': invoice.originInvoiceId,
+      if (invoice.refundReasonPolicy?.isNotEmpty ?? false) 'refundReasonPolicy': invoice.refundReasonPolicy,
+      if (invoice.refundReasonCode?.isNotEmpty ?? false) 'refundReasonCode': invoice.refundReasonCode,
+      if (invoice.authorizedByUserId?.isNotEmpty ?? false) 'authorizedByUserId': invoice.authorizedByUserId,
+      if (invoice.authorizedByRole?.isNotEmpty ?? false) 'authorizedByRole': invoice.authorizedByRole,
       'terminalId': invoice.terminalId,
       'documentType': invoice.type == InvoiceType.creditNote ? 'CREDIT_NOTE' : 'SALE',
       'sourceSequence': invoice.sourceSequence,

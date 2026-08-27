@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../cash_shift_view_model.dart';
 import 'z_report_dialog.dart';
+import '../../../../presentation/features/sales/view_models/sale_view_model.dart';
 
 class CloseShiftDialog extends StatefulWidget {
   const CloseShiftDialog({super.key});
@@ -68,6 +69,9 @@ class _CloseShiftDialogState extends State<CloseShiftDialog> {
 
     if (mounted) {
       if (success) {
+        try {
+          context.read<SaleViewModel>().checkActiveSession();
+        } catch (_) {}
         if (Navigator.of(context).canPop()) {
           Navigator.of(context).pop(true);
         }

@@ -94,6 +94,18 @@ abstract class PrinterPort {
     double? difference,
   });
 
+  /// Prints a BOH FIFO Production Batch Label (Viñeta Térmica de Producción).
+  Future<PrinterResult> printProductionBatchLabel({
+    required String productName,
+    required String batchCode,
+    required double quantity,
+    required String uom,
+    required DateTime productionDate,
+    required DateTime expirationDate,
+    String? operatorName,
+    String? storageInstructions,
+  });
+
   /// Sends raw ESC/POS byte sequence directly to the hardware printer.
   Future<PrinterResult> printRawEscPos(List<int> bytes);
 

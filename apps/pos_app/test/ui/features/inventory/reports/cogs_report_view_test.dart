@@ -79,4 +79,18 @@ void main() {
 
     expect(find.text('No hay consumos ni ventas registradas en el período seleccionado.'), findsOneWidget);
   });
+
+  testWidgets('renders 2x2 KPI grid on Sunmi V2s handheld (360x720dp) without overflow', (tester) async {
+    tester.view.physicalSize = const Size(360, 720);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
+
+    await tester.pumpWidget(createWidgetUnderTest());
+    await tester.pumpAndSettle();
+
+    expect(find.text('TOTAL COGS'), findsOneWidget);
+    expect(find.text('VENTAS DIRECTAS'), findsOneWidget);
+    expect(find.text('MERMAS & PÉRDIDAS'), findsOneWidget);
+    expect(find.text('Café Grano'), findsOneWidget);
+  });
 }

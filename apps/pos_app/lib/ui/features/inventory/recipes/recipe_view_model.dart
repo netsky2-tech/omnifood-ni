@@ -146,10 +146,21 @@ class RecipeViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> selectProduct(Product product) async {
+  Future<void> selectProduct(Product? product) async {
     _selectedProduct = product;
-    _isLoading = true;
     _errorMessage = null;
+
+    if (product == null) {
+      _currentRecipes = <Recipe>[];
+      _recipeVersions = <RecipeVersionDocument>[];
+      _draftComponents = <RecipeDraftComponent>[];
+      _compareBaseId = null;
+      _compareTargetId = null;
+      notifyListeners();
+      return;
+    }
+
+    _isLoading = true;
     notifyListeners();
 
     try {

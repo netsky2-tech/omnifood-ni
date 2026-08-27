@@ -28,6 +28,7 @@ import { SyncCreditNoteAuthGuard } from './guards/sync-credit-note-auth.guard';
 
 import { CashShiftSession } from './entities/cash-shift.entity';
 import { CashMovement } from './entities/cash-movement.entity';
+import { DatafonoEquipo } from './entities/datafono-equipo.entity';
 import { CashShiftService } from './services/cash-shift.service';
 
 import { CashShiftController } from './controllers/cash-shift.controller';
@@ -72,6 +73,7 @@ export const getRequiredSalesJwtSecret = (
       RecipeVersion,
       CashShiftSession,
       CashMovement,
+      DatafonoEquipo,
     ]),
   ],
   controllers: [

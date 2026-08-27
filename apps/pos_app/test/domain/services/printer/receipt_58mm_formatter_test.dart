@@ -309,4 +309,53 @@ void main() {
       expect(corteZ, contains('Disposicion Tecnica 09-2007'));
     });
   });
+
+  group('BOH FIFO Production Batch Label Formatter Tests', () {
+    test('formatProductionBatchLabelText formats sticker label with all lines <= 32 cols', () {
+      final labelText = Receipt58mmFormatter.formatProductionBatchLabelText(
+        productName: 'Salsa Especial de la Casa Picante',
+        batchCode: 'LOTE-20260827-001',
+        quantity: 4.5,
+        uom: 'kg',
+        productionDate: DateTime(2026, 8, 27, 14, 30),
+        expirationDate: DateTime(2026, 8, 29, 14, 30),
+        operatorName: 'Chef Carlos',
+        storageInstructions: 'Refrigerar de 2°C a 4°C. Mantener sellado.',
+      );
+
+      final lines = labelText.split('\n');
+      for (final line in lines) {
+        final cleanLine = line.replaceAll('\r', '');
+        expect(cleanLine.length, lessThanOrEqualTo(32), reason: 'Line too long: "$cleanLine"');
+      }
+
+      expect(labelText, contains('ETIQUETA DE PRE-ELABORACION'));
+      expect(labelText, contains('BOH - ROTACION FIFO'));
+      expect(labelText, contains('LOTE:'));
+      expect(labelText, contains('LOTE-20260827-001'));
+      expect(labelText, contains('4.50 kg'));
+      expect(labelText, contains('2026-08-27 14:30'));
+      expect(labelText, contains('2026-08-29 14:30'));
+      expect(labelText, contains('COCINERO / OP:'));
+      expect(labelText, contains('Chef Carlos'));
+      expect(labelText, contains('CONSERVACION:'));
+    });
+
+    test('formatProductionBatchLabelEscPos generates valid ESC/POS byte sequence', () {
+      final bytes = Receipt58mmFormatter.formatProductionBatchLabelEscPos(
+        productName: 'Base de Café Frío',
+        batchCode: 'LOTE-20260827-002',
+        quantity: 10,
+        uom: 'lt',
+        productionDate: DateTime(2026, 8, 27, 8, 0),
+        expirationDate: DateTime(2026, 8, 30, 8, 0),
+        operatorName: 'Maria Barista',
+      );
+
+      // Check init ESC @
+      expect(bytes.sublist(0, 2), [0x1B, 0x40]);
+      // Check cut command GS V
+      expect(bytes, containsAllInOrder([0x1D, 0x56, 0x42, 0x00]));
+    });
+  });
 }

@@ -26,6 +26,8 @@ class PinPad extends StatelessWidget {
           aspectRatio = 1.5;
         }
 
+        final fontSize = constraints.maxHeight.isFinite && constraints.maxHeight < 280 ? 18.0 : 22.0;
+
         return GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
@@ -38,14 +40,14 @@ class PinPad extends StatelessWidget {
           itemCount: 12,
           itemBuilder: (context, index) {
             if (index == 9) {
-              return _buildButton(context, 'C', onClear, color: const Color(0xFFBA1A1A));
+              return _buildButton(context, 'C', onClear, color: const Color(0xFFBA1A1A), fontSize: fontSize);
             } else if (index == 10) {
-              return _buildButton(context, '0', () => onKeyPressed('0'));
+              return _buildButton(context, '0', () => onKeyPressed('0'), fontSize: fontSize);
             } else if (index == 11) {
-              return _buildButton(context, '⌫', onDelete, color: const Color(0xFF79573F));
+              return _buildButton(context, '⌫', onDelete, color: const Color(0xFF79573F), fontSize: fontSize);
             } else {
               final number = (index + 1).toString();
-              return _buildButton(context, number, () => onKeyPressed(number));
+              return _buildButton(context, number, () => onKeyPressed(number), fontSize: fontSize);
             }
           },
         );
@@ -53,13 +55,20 @@ class PinPad extends StatelessWidget {
     );
   }
 
-  Widget _buildButton(BuildContext context, String text, VoidCallback onPressed, {Color? color}) {
+  Widget _buildButton(
+    BuildContext context,
+    String text,
+    VoidCallback onPressed, {
+    Color? color,
+    double fontSize = 22,
+  }) {
     return ElevatedButton(
       style: ElevatedButton.styleFrom(
         elevation: 0,
         backgroundColor: color ?? Colors.white,
         foregroundColor: color != null ? Colors.white : const Color(0xFF1A1C1C),
-        minimumSize: const Size.fromHeight(48), // hit-area-min
+        minimumSize: const Size.fromHeight(44), // hit-area-min
+        padding: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(4),
           side: BorderSide(
@@ -71,7 +80,7 @@ class PinPad extends StatelessWidget {
       onPressed: onPressed,
       child: Text(
         text,
-        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
+        style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.w700),
       ),
     );
   }

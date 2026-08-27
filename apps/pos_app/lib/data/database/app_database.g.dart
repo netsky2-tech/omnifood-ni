@@ -144,13 +144,17 @@ class _$AppDatabase extends AppDatabase {
 
   KitchenOrderDao? _kitchenOrderDaoInstance;
 
+  CustomerDao? _customerDaoInstance;
+
+  CustomerPointTransactionDao? _customerPointTransactionDaoInstance;
+
   Future<sqflite.Database> open(
     String path,
     List<Migration> migrations, [
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 37,
+      version: 40,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -232,7 +236,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `hold_ticket_items` (`id` TEXT NOT NULL, `hold_ticket_id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `product_name` TEXT NOT NULL, `quantity` REAL NOT NULL, `unit_price` REAL NOT NULL, `tax_rate` REAL NOT NULL, `variant_id` TEXT, `notes` TEXT, `modifiers_json` TEXT, FOREIGN KEY (`hold_ticket_id`) REFERENCES `hold_tickets` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `promotions` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `type` TEXT NOT NULL, `target_product_id` TEXT NOT NULL, `buy_quantity` INTEGER NOT NULL, `get_quantity` INTEGER NOT NULL, `discount_value` REAL NOT NULL, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `promotions` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `type` TEXT NOT NULL, `target_product_id` TEXT, `target_category_id` TEXT, `buy_quantity` INTEGER NOT NULL, `get_quantity` INTEGER NOT NULL, `discount_value` REAL NOT NULL, `min_order_amount` REAL NOT NULL, `days_of_week` TEXT, `start_time` TEXT, `end_time` TEXT, `start_date` INTEGER, `end_date` INTEGER, `priority` INTEGER NOT NULL, `is_stackable` INTEGER NOT NULL, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `restaurant_areas` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `display_order` INTEGER NOT NULL, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
@@ -241,6 +245,10 @@ class _$AppDatabase extends AppDatabase {
             'CREATE TABLE IF NOT EXISTS `kitchen_orders` (`id` TEXT NOT NULL, `ticket_id` TEXT NOT NULL, `table_number` TEXT, `table_name` TEXT, `waiter_name` TEXT, `station` TEXT NOT NULL, `status` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `started_at` INTEGER, `ready_at` INTEGER, `served_at` INTEGER, `notes` TEXT, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `kitchen_order_items` (`id` TEXT NOT NULL, `kitchen_order_id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `product_name` TEXT NOT NULL, `quantity` REAL NOT NULL, `status` TEXT NOT NULL, `notes` TEXT, `modifiers_json` TEXT, FOREIGN KEY (`kitchen_order_id`) REFERENCES `kitchen_orders` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `customers` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `tax_id` TEXT, `phone` TEXT, `email` TEXT, `address` TEXT, `points_balance` REAL NOT NULL, `is_active` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, `sync_status` TEXT NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `customer_point_transactions` (`id` TEXT NOT NULL, `customer_id` TEXT NOT NULL, `invoice_id` TEXT, `type` TEXT NOT NULL, `points` REAL NOT NULL, `balance_after` REAL NOT NULL, `conversion_rate` REAL NOT NULL, `reason` TEXT, `created_at` INTEGER NOT NULL, `sync_status` TEXT NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE UNIQUE INDEX `idx_movement_sync_state_stream_sequence` ON `inventory_movement_sync_state` (`terminal_id`, `flow_type`, `local_sequence`)');
         await database.execute(
@@ -263,6 +271,18 @@ class _$AppDatabase extends AppDatabase {
             'CREATE INDEX `index_kitchen_orders_ticket_id` ON `kitchen_orders` (`ticket_id`)');
         await database.execute(
             'CREATE INDEX `index_kitchen_order_items_kitchen_order_id` ON `kitchen_order_items` (`kitchen_order_id`)');
+        await database.execute(
+            'CREATE INDEX `idx_customers_tax_id` ON `customers` (`tax_id`)');
+        await database.execute(
+            'CREATE INDEX `idx_customers_phone` ON `customers` (`phone`)');
+        await database.execute(
+            'CREATE INDEX `idx_customers_name` ON `customers` (`name`)');
+        await database.execute(
+            'CREATE INDEX `index_customer_point_transactions_customer_id` ON `customer_point_transactions` (`customer_id`)');
+        await database.execute(
+            'CREATE INDEX `index_customer_point_transactions_invoice_id` ON `customer_point_transactions` (`invoice_id`)');
+        await database.execute(
+            'CREATE INDEX `index_customer_point_transactions_created_at` ON `customer_point_transactions` (`created_at`)');
 
         await callback?.onCreate?.call(database, version);
       },
@@ -467,6 +487,17 @@ class _$AppDatabase extends AppDatabase {
   KitchenOrderDao get kitchenOrderDao {
     return _kitchenOrderDaoInstance ??=
         _$KitchenOrderDao(database, changeListener);
+  }
+
+  @override
+  CustomerDao get customerDao {
+    return _customerDaoInstance ??= _$CustomerDao(database, changeListener);
+  }
+
+  @override
+  CustomerPointTransactionDao get customerPointTransactionDao {
+    return _customerPointTransactionDaoInstance ??=
+        _$CustomerPointTransactionDao(database, changeListener);
   }
 }
 
@@ -4160,9 +4191,18 @@ class _$PromotionDao extends PromotionDao {
                   'name': item.name,
                   'type': item.type,
                   'target_product_id': item.targetProductId,
+                  'target_category_id': item.targetCategoryId,
                   'buy_quantity': item.buyQuantity,
                   'get_quantity': item.getQuantity,
                   'discount_value': item.discountValue,
+                  'min_order_amount': item.minOrderAmount,
+                  'days_of_week': item.daysOfWeek,
+                  'start_time': item.startTime,
+                  'end_time': item.endTime,
+                  'start_date': item.startDate,
+                  'end_date': item.endDate,
+                  'priority': item.priority,
+                  'is_stackable': item.isStackable ? 1 : 0,
                   'is_active': item.isActive ? 1 : 0
                 }),
         _promotionEntityUpdateAdapter = UpdateAdapter(
@@ -4174,9 +4214,18 @@ class _$PromotionDao extends PromotionDao {
                   'name': item.name,
                   'type': item.type,
                   'target_product_id': item.targetProductId,
+                  'target_category_id': item.targetCategoryId,
                   'buy_quantity': item.buyQuantity,
                   'get_quantity': item.getQuantity,
                   'discount_value': item.discountValue,
+                  'min_order_amount': item.minOrderAmount,
+                  'days_of_week': item.daysOfWeek,
+                  'start_time': item.startTime,
+                  'end_time': item.endTime,
+                  'start_date': item.startDate,
+                  'end_date': item.endDate,
+                  'priority': item.priority,
+                  'is_stackable': item.isStackable ? 1 : 0,
                   'is_active': item.isActive ? 1 : 0
                 });
 
@@ -4193,15 +4242,24 @@ class _$PromotionDao extends PromotionDao {
   @override
   Future<List<PromotionEntity>> getActivePromotions() async {
     return _queryAdapter.queryList(
-        'SELECT * FROM promotions WHERE is_active = 1',
+        'SELECT * FROM promotions WHERE is_active = 1 ORDER BY priority DESC',
         mapper: (Map<String, Object?> row) => PromotionEntity(
             id: row['id'] as String,
             name: row['name'] as String,
             type: row['type'] as String,
-            targetProductId: row['target_product_id'] as String,
+            targetProductId: row['target_product_id'] as String?,
+            targetCategoryId: row['target_category_id'] as String?,
             buyQuantity: row['buy_quantity'] as int,
             getQuantity: row['get_quantity'] as int,
             discountValue: row['discount_value'] as double,
+            minOrderAmount: row['min_order_amount'] as double,
+            daysOfWeek: row['days_of_week'] as String?,
+            startTime: row['start_time'] as String?,
+            endTime: row['end_time'] as String?,
+            startDate: row['start_date'] as int?,
+            endDate: row['end_date'] as int?,
+            priority: row['priority'] as int,
+            isStackable: (row['is_stackable'] as int) != 0,
             isActive: (row['is_active'] as int) != 0));
   }
 
@@ -4209,14 +4267,35 @@ class _$PromotionDao extends PromotionDao {
   Future<List<PromotionEntity>> getPromotionsByProduct(String productId) async {
     return _queryAdapter.queryList(
         'SELECT * FROM promotions WHERE target_product_id = ?1 AND is_active = 1',
-        mapper: (Map<String, Object?> row) => PromotionEntity(id: row['id'] as String, name: row['name'] as String, type: row['type'] as String, targetProductId: row['target_product_id'] as String, buyQuantity: row['buy_quantity'] as int, getQuantity: row['get_quantity'] as int, discountValue: row['discount_value'] as double, isActive: (row['is_active'] as int) != 0),
+        mapper: (Map<String, Object?> row) => PromotionEntity(id: row['id'] as String, name: row['name'] as String, type: row['type'] as String, targetProductId: row['target_product_id'] as String?, targetCategoryId: row['target_category_id'] as String?, buyQuantity: row['buy_quantity'] as int, getQuantity: row['get_quantity'] as int, discountValue: row['discount_value'] as double, minOrderAmount: row['min_order_amount'] as double, daysOfWeek: row['days_of_week'] as String?, startTime: row['start_time'] as String?, endTime: row['end_time'] as String?, startDate: row['start_date'] as int?, endDate: row['end_date'] as int?, priority: row['priority'] as int, isStackable: (row['is_stackable'] as int) != 0, isActive: (row['is_active'] as int) != 0),
         arguments: [productId]);
+  }
+
+  @override
+  Future<List<PromotionEntity>> getPromotionsByCategory(
+      String categoryId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM promotions WHERE target_category_id = ?1 AND is_active = 1',
+        mapper: (Map<String, Object?> row) => PromotionEntity(id: row['id'] as String, name: row['name'] as String, type: row['type'] as String, targetProductId: row['target_product_id'] as String?, targetCategoryId: row['target_category_id'] as String?, buyQuantity: row['buy_quantity'] as int, getQuantity: row['get_quantity'] as int, discountValue: row['discount_value'] as double, minOrderAmount: row['min_order_amount'] as double, daysOfWeek: row['days_of_week'] as String?, startTime: row['start_time'] as String?, endTime: row['end_time'] as String?, startDate: row['start_date'] as int?, endDate: row['end_date'] as int?, priority: row['priority'] as int, isStackable: (row['is_stackable'] as int) != 0, isActive: (row['is_active'] as int) != 0),
+        arguments: [categoryId]);
+  }
+
+  @override
+  Future<void> deletePromotionById(String id) async {
+    await _queryAdapter
+        .queryNoReturn('DELETE FROM promotions WHERE id = ?1', arguments: [id]);
   }
 
   @override
   Future<void> savePromotion(PromotionEntity promotion) async {
     await _promotionEntityInsertionAdapter.insert(
         promotion, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> savePromotions(List<PromotionEntity> promotions) async {
+    await _promotionEntityInsertionAdapter.insertList(
+        promotions, OnConflictStrategy.replace);
   }
 
   @override
@@ -4760,6 +4839,289 @@ class _$KitchenOrderDao extends KitchenOrderDao {
           ..database = transaction;
         await transactionDatabase.kitchenOrderDao
             .deleteKitchenOrderWithItems(orderId);
+      });
+    }
+  }
+}
+
+class _$CustomerDao extends CustomerDao {
+  _$CustomerDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _customerEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'customers',
+            (CustomerEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'name': item.name,
+                  'tax_id': item.taxId,
+                  'phone': item.phone,
+                  'email': item.email,
+                  'address': item.address,
+                  'points_balance': item.pointsBalance,
+                  'is_active': item.isActive ? 1 : 0,
+                  'created_at': item.createdAt,
+                  'updated_at': item.updatedAt,
+                  'sync_status': item.syncStatus
+                }),
+        _customerEntityUpdateAdapter = UpdateAdapter(
+            database,
+            'customers',
+            ['id'],
+            (CustomerEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'name': item.name,
+                  'tax_id': item.taxId,
+                  'phone': item.phone,
+                  'email': item.email,
+                  'address': item.address,
+                  'points_balance': item.pointsBalance,
+                  'is_active': item.isActive ? 1 : 0,
+                  'created_at': item.createdAt,
+                  'updated_at': item.updatedAt,
+                  'sync_status': item.syncStatus
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<CustomerEntity> _customerEntityInsertionAdapter;
+
+  final UpdateAdapter<CustomerEntity> _customerEntityUpdateAdapter;
+
+  @override
+  Future<List<CustomerEntity>> getAllCustomers() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM customers WHERE is_active = 1 ORDER BY name ASC',
+        mapper: (Map<String, Object?> row) => CustomerEntity(
+            id: row['id'] as String,
+            name: row['name'] as String,
+            taxId: row['tax_id'] as String?,
+            phone: row['phone'] as String?,
+            email: row['email'] as String?,
+            address: row['address'] as String?,
+            pointsBalance: row['points_balance'] as double,
+            isActive: (row['is_active'] as int) != 0,
+            createdAt: row['created_at'] as int,
+            updatedAt: row['updated_at'] as int,
+            syncStatus: row['sync_status'] as String));
+  }
+
+  @override
+  Future<CustomerEntity?> getCustomerById(String id) async {
+    return _queryAdapter.query('SELECT * FROM customers WHERE id = ?1',
+        mapper: (Map<String, Object?> row) => CustomerEntity(
+            id: row['id'] as String,
+            name: row['name'] as String,
+            taxId: row['tax_id'] as String?,
+            phone: row['phone'] as String?,
+            email: row['email'] as String?,
+            address: row['address'] as String?,
+            pointsBalance: row['points_balance'] as double,
+            isActive: (row['is_active'] as int) != 0,
+            createdAt: row['created_at'] as int,
+            updatedAt: row['updated_at'] as int,
+            syncStatus: row['sync_status'] as String),
+        arguments: [id]);
+  }
+
+  @override
+  Future<CustomerEntity?> getCustomerByTaxId(String taxId) async {
+    return _queryAdapter.query(
+        'SELECT * FROM customers WHERE tax_id = ?1 LIMIT 1',
+        mapper: (Map<String, Object?> row) => CustomerEntity(
+            id: row['id'] as String,
+            name: row['name'] as String,
+            taxId: row['tax_id'] as String?,
+            phone: row['phone'] as String?,
+            email: row['email'] as String?,
+            address: row['address'] as String?,
+            pointsBalance: row['points_balance'] as double,
+            isActive: (row['is_active'] as int) != 0,
+            createdAt: row['created_at'] as int,
+            updatedAt: row['updated_at'] as int,
+            syncStatus: row['sync_status'] as String),
+        arguments: [taxId]);
+  }
+
+  @override
+  Future<CustomerEntity?> getCustomerByPhone(String phone) async {
+    return _queryAdapter.query(
+        'SELECT * FROM customers WHERE phone = ?1 LIMIT 1',
+        mapper: (Map<String, Object?> row) => CustomerEntity(
+            id: row['id'] as String,
+            name: row['name'] as String,
+            taxId: row['tax_id'] as String?,
+            phone: row['phone'] as String?,
+            email: row['email'] as String?,
+            address: row['address'] as String?,
+            pointsBalance: row['points_balance'] as double,
+            isActive: (row['is_active'] as int) != 0,
+            createdAt: row['created_at'] as int,
+            updatedAt: row['updated_at'] as int,
+            syncStatus: row['sync_status'] as String),
+        arguments: [phone]);
+  }
+
+  @override
+  Future<List<CustomerEntity>> searchCustomers(
+    String query,
+    int limit,
+  ) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM customers      WHERE is_active = 1        AND (         name LIKE \'%\' || ?1 || \'%\'          OR tax_id LIKE \'%\' || ?1 || \'%\'          OR phone LIKE \'%\' || ?1 || \'%\'       )     ORDER BY name ASC      LIMIT ?2',
+        mapper: (Map<String, Object?> row) => CustomerEntity(id: row['id'] as String, name: row['name'] as String, taxId: row['tax_id'] as String?, phone: row['phone'] as String?, email: row['email'] as String?, address: row['address'] as String?, pointsBalance: row['points_balance'] as double, isActive: (row['is_active'] as int) != 0, createdAt: row['created_at'] as int, updatedAt: row['updated_at'] as int, syncStatus: row['sync_status'] as String),
+        arguments: [query, limit]);
+  }
+
+  @override
+  Future<int?> countCustomers() async {
+    return _queryAdapter.query('SELECT COUNT(*) FROM customers',
+        mapper: (Map<String, Object?> row) => row.values.first as int);
+  }
+
+  @override
+  Future<void> saveCustomer(CustomerEntity customer) async {
+    await _customerEntityInsertionAdapter.insert(
+        customer, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> saveCustomers(List<CustomerEntity> customers) async {
+    await _customerEntityInsertionAdapter.insertList(
+        customers, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> updateCustomer(CustomerEntity customer) async {
+    await _customerEntityUpdateAdapter.update(
+        customer, OnConflictStrategy.replace);
+  }
+}
+
+class _$CustomerPointTransactionDao extends CustomerPointTransactionDao {
+  _$CustomerPointTransactionDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _customerPointTransactionEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'customer_point_transactions',
+            (CustomerPointTransactionEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'customer_id': item.customerId,
+                  'invoice_id': item.invoiceId,
+                  'type': item.type,
+                  'points': item.points,
+                  'balance_after': item.balanceAfter,
+                  'conversion_rate': item.conversionRate,
+                  'reason': item.reason,
+                  'created_at': item.createdAt,
+                  'sync_status': item.syncStatus
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<CustomerPointTransactionEntity>
+      _customerPointTransactionEntityInsertionAdapter;
+
+  @override
+  Future<List<CustomerPointTransactionEntity>> getTransactionsByCustomer(
+      String customerId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM customer_point_transactions WHERE customer_id = ?1 ORDER BY created_at DESC',
+        mapper: (Map<String, Object?> row) => CustomerPointTransactionEntity(id: row['id'] as String, customerId: row['customer_id'] as String, invoiceId: row['invoice_id'] as String?, type: row['type'] as String, points: row['points'] as double, balanceAfter: row['balance_after'] as double, conversionRate: row['conversion_rate'] as double, reason: row['reason'] as String?, createdAt: row['created_at'] as int, syncStatus: row['sync_status'] as String),
+        arguments: [customerId]);
+  }
+
+  @override
+  Future<List<CustomerPointTransactionEntity>> getTransactionsByInvoice(
+      String invoiceId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM customer_point_transactions WHERE invoice_id = ?1',
+        mapper: (Map<String, Object?> row) => CustomerPointTransactionEntity(
+            id: row['id'] as String,
+            customerId: row['customer_id'] as String,
+            invoiceId: row['invoice_id'] as String?,
+            type: row['type'] as String,
+            points: row['points'] as double,
+            balanceAfter: row['balance_after'] as double,
+            conversionRate: row['conversion_rate'] as double,
+            reason: row['reason'] as String?,
+            createdAt: row['created_at'] as int,
+            syncStatus: row['sync_status'] as String),
+        arguments: [invoiceId]);
+  }
+
+  @override
+  Future<List<CustomerPointTransactionEntity>> getTransactionsBySyncStatus(
+      String status) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM customer_point_transactions WHERE sync_status = ?1',
+        mapper: (Map<String, Object?> row) => CustomerPointTransactionEntity(
+            id: row['id'] as String,
+            customerId: row['customer_id'] as String,
+            invoiceId: row['invoice_id'] as String?,
+            type: row['type'] as String,
+            points: row['points'] as double,
+            balanceAfter: row['balance_after'] as double,
+            conversionRate: row['conversion_rate'] as double,
+            reason: row['reason'] as String?,
+            createdAt: row['created_at'] as int,
+            syncStatus: row['sync_status'] as String),
+        arguments: [status]);
+  }
+
+  @override
+  Future<void> updateCustomerBalance(
+    String customerId,
+    double newBalance,
+    int updatedAt,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE customers SET points_balance = ?2, updated_at = ?3 WHERE id = ?1',
+        arguments: [customerId, newBalance, updatedAt]);
+  }
+
+  @override
+  Future<void> insertTransaction(CustomerPointTransactionEntity entity) async {
+    await _customerPointTransactionEntityInsertionAdapter.insert(
+        entity, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> insertTransactions(
+      List<CustomerPointTransactionEntity> entities) async {
+    await _customerPointTransactionEntityInsertionAdapter.insertList(
+        entities, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> recordPointTransactionAndUpdateBalance(
+    CustomerPointTransactionEntity entity,
+    String customerId,
+    double newBalance,
+    int updatedAt,
+  ) async {
+    if (database is sqflite.Transaction) {
+      await super.recordPointTransactionAndUpdateBalance(
+          entity, customerId, newBalance, updatedAt);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.customerPointTransactionDao
+            .recordPointTransactionAndUpdateBalance(
+                entity, customerId, newBalance, updatedAt);
       });
     }
   }

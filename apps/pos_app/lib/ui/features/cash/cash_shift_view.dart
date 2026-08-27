@@ -10,11 +10,26 @@ import 'widgets/z_report_dialog.dart';
 import 'widgets/x_report_dialog.dart';
 import 'widgets/card_voucher_reconciliation_dialog.dart';
 
-class CashShiftView extends StatelessWidget {
+class CashShiftView extends StatefulWidget {
   const CashShiftView({super.key});
 
+  @override
+  State<CashShiftView> createState() => _CashShiftViewState();
+}
+
+class _CashShiftViewState extends State<CashShiftView> {
   String _formatNio(double amount) => 'C\$ ${amount.toStringAsFixed(2)}';
   String _formatUsd(double amount) => '\$ ${amount.toStringAsFixed(2)}';
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<CashShiftViewModel>().init();
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {

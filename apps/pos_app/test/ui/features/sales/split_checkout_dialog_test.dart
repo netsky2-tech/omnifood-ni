@@ -277,7 +277,7 @@ void main() {
 
       // Remaining should now be C$ 635.00
       expect(find.textContaining('Resta: C\$ 635.00'), findsOneWidget);
-      expect(find.textContaining('USD \$10.00'), findsOneWidget);
+      expect(find.textContaining('\$ 10.00'), findsOneWidget);
 
       // 4. Add Tender 2: Card BAC C$ 500.00 (Fast-Checkout) in NIO
       await tester.ensureVisible(find.widgetWithText(ChoiceChip, 'Tarjeta'));

@@ -125,7 +125,7 @@ void main() {
 
       // Check floating cart bar is visible on mobile
       expect(find.byKey(const Key('mobile_floating_cart_bar')), findsOneWidget);
-      expect(find.text('Total: \$115.00'), findsOneWidget);
+      expect(find.text('Total: C\$ 115.00'), findsOneWidget);
       expect(find.byKey(const Key('mobile_view_cart_button')), findsOneWidget);
 
       // Verify PopupMenu exists for mobile app bar actions

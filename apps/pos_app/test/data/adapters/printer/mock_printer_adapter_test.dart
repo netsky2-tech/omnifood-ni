@@ -122,5 +122,23 @@ void main() {
       expect(result.isSuccess, isTrue);
       expect(adapter.cashDrawerKickCount, 1);
     });
+
+    test('prints production batch label successfully', () async {
+      final result = await adapter.printProductionBatchLabel(
+        productName: 'Salsa Ranchera',
+        batchCode: 'LOTE-20260827-001',
+        quantity: 5,
+        uom: 'lt',
+        productionDate: DateTime(2026, 8, 27, 10, 0),
+        expirationDate: DateTime(2026, 8, 29, 10, 0),
+        operatorName: 'Chef Pedro',
+      );
+
+      expect(result.isSuccess, isTrue);
+      expect(adapter.lastPrintedText, contains('ETIQUETA DE PRE-ELABORACION'));
+      expect(adapter.lastPrintedText, contains('LOTE-20260827-001'));
+      expect(adapter.lastPrintedText, contains('Chef Pedro'));
+      expect(adapter.lastPrintedBytes, isNotNull);
+    });
   });
 }

@@ -1538,6 +1538,94 @@ final migration36_37 = Migration(36, 37, (database) async {
   ''');
 });
 
+final migration37_38 = Migration(37, 38, (database) async {
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS `customers` (
+      `id` TEXT NOT NULL,
+      `name` TEXT NOT NULL,
+      `tax_id` TEXT,
+      `phone` TEXT,
+      `email` TEXT,
+      `address` TEXT,
+      `points_balance` REAL NOT NULL,
+      `is_active` INTEGER NOT NULL,
+      `created_at` INTEGER NOT NULL,
+      `updated_at` INTEGER NOT NULL,
+      `sync_status` TEXT NOT NULL,
+      PRIMARY KEY (`id`)
+    )
+  ''');
+
+  await database.execute('''
+    CREATE INDEX IF NOT EXISTS `idx_customers_tax_id`
+    ON `customers` (`tax_id`)
+  ''');
+
+  await database.execute('''
+    CREATE INDEX IF NOT EXISTS `idx_customers_phone`
+    ON `customers` (`phone`)
+  ''');
+
+  await database.execute('''
+    CREATE INDEX IF NOT EXISTS `idx_customers_name`
+    ON `customers` (`name`)
+  ''');
+});
+
+final migration38_39 = Migration(38, 39, (database) async {
+  final tables = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='promotions'",
+  );
+  if (tables.isNotEmpty) {
+    final columns = await database.rawQuery('PRAGMA table_info(promotions)');
+    final hasCol = columns.any((c) => c['name'] == 'target_category_id');
+    if (!hasCol) {
+      await database.execute('ALTER TABLE `promotions` ADD COLUMN `target_category_id` TEXT');
+      await database.execute('ALTER TABLE `promotions` ADD COLUMN `min_order_amount` REAL NOT NULL DEFAULT 0.0');
+      await database.execute('ALTER TABLE `promotions` ADD COLUMN `days_of_week` TEXT');
+      await database.execute('ALTER TABLE `promotions` ADD COLUMN `start_time` TEXT');
+      await database.execute('ALTER TABLE `promotions` ADD COLUMN `end_time` TEXT');
+      await database.execute('ALTER TABLE `promotions` ADD COLUMN `start_date` INTEGER');
+      await database.execute('ALTER TABLE `promotions` ADD COLUMN `end_date` INTEGER');
+      await database.execute('ALTER TABLE `promotions` ADD COLUMN `priority` INTEGER NOT NULL DEFAULT 0');
+      await database.execute('ALTER TABLE `promotions` ADD COLUMN `is_stackable` INTEGER NOT NULL DEFAULT 1');
+    }
+  }
+});
+
+final migration39_40 = Migration(39, 40, (database) async {
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS `customer_point_transactions` (
+      `id` TEXT NOT NULL,
+      `customer_id` TEXT NOT NULL,
+      `invoice_id` TEXT,
+      `type` TEXT NOT NULL,
+      `points` REAL NOT NULL,
+      `balance_after` REAL NOT NULL,
+      `conversion_rate` REAL NOT NULL,
+      `reason` TEXT,
+      `created_at` INTEGER NOT NULL,
+      `sync_status` TEXT NOT NULL,
+      PRIMARY KEY (`id`)
+    )
+  ''');
+
+  await database.execute('''
+    CREATE INDEX IF NOT EXISTS `idx_customer_point_transactions_customer_id`
+    ON `customer_point_transactions` (`customer_id`)
+  ''');
+
+  await database.execute('''
+    CREATE INDEX IF NOT EXISTS `idx_customer_point_transactions_invoice_id`
+    ON `customer_point_transactions` (`invoice_id`)
+  ''');
+
+  await database.execute('''
+    CREATE INDEX IF NOT EXISTS `idx_customer_point_transactions_created_at`
+    ON `customer_point_transactions` (`created_at`)
+  ''');
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -1566,4 +1654,7 @@ final allMigrations = [
   migration34_35,
   migration35_36,
   migration36_37,
+  migration37_38,
+  migration38_39,
+  migration39_40,
 ];

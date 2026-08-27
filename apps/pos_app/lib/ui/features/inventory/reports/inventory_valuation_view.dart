@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
+import '../../../design_system/design_system.dart';
 import 'inventory_valuation_view_model.dart';
 
 class InventoryValuationView extends StatefulWidget {
@@ -17,7 +17,11 @@ class _InventoryValuationViewState extends State<InventoryValuationView> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<InventoryValuationViewModel>().loadValuationReport();
+      if (mounted) {
+        _searchController.clear();
+        context.read<InventoryValuationViewModel>().setSearchQuery('');
+        context.read<InventoryValuationViewModel>().loadValuationReport();
+      }
     });
   }
 
@@ -29,6 +33,8 @@ class _InventoryValuationViewState extends State<InventoryValuationView> {
 
   @override
   Widget build(BuildContext context) {
+    final isHandheld = ResponsiveBreakpoints.isHandheld(context);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Reporte de Existencias & Valorización'),
@@ -50,57 +56,70 @@ class _InventoryValuationViewState extends State<InventoryValuationView> {
 
           final colorScheme = Theme.of(context).colorScheme;
 
+          final card1 = _SummaryCard(
+            title: 'Valorización Total',
+            value: 'C\$ ${viewModel.totalValuationNio.toStringAsFixed(2)}',
+            subtitle: '${viewModel.itemsWithStockCount} ítems con existencias',
+            color: colorScheme.primary,
+            icon: Icons.account_balance_wallet_outlined,
+          );
+          final card2 = _SummaryCard(
+            title: 'Ítems Totales',
+            value: '${viewModel.totalItemsCount}',
+            subtitle: 'Insumos registrados',
+            color: colorScheme.secondary,
+            icon: Icons.inventory_2_outlined,
+          );
+          final card3 = _SummaryCard(
+            title: 'Stock Bajo',
+            value: '${viewModel.itemsLowStockCount}',
+            subtitle: 'Bajo punto de reorden',
+            color: Colors.orange.shade800,
+            icon: Icons.warning_amber_rounded,
+          );
+          final card4 = _SummaryCard(
+            title: 'Stock Negativo',
+            value: '${viewModel.itemsNegativeStockCount}',
+            subtitle: 'Pendientes de retrocálculo',
+            color: colorScheme.error,
+            icon: Icons.error_outline,
+          );
+
           return Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // 1. Header Summary Cards
-                Row(
-                  children: [
-                    Expanded(
-                      child: _SummaryCard(
-                        title: 'Valorización Total',
-                        value:
-                            'C\$ ${viewModel.totalValuationNio.toStringAsFixed(2)}',
-                        subtitle:
-                            '${viewModel.itemsWithStockCount} ítems con existencias',
-                        color: colorScheme.primary,
-                        icon: Icons.account_balance_wallet_outlined,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _SummaryCard(
-                        title: 'Ítems Totales',
-                        value: '${viewModel.totalItemsCount}',
-                        subtitle: 'Insumos registrados',
-                        color: colorScheme.secondary,
-                        icon: Icons.inventory_2_outlined,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _SummaryCard(
-                        title: 'Stock Bajo',
-                        value: '${viewModel.itemsLowStockCount}',
-                        subtitle: 'Bajo punto de reorden',
-                        color: Colors.orange.shade800,
-                        icon: Icons.warning_amber_rounded,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _SummaryCard(
-                        title: 'Stock Negativo',
-                        value: '${viewModel.itemsNegativeStockCount}',
-                        subtitle: 'Pendientes de retrocálculo',
-                        color: colorScheme.error,
-                        icon: Icons.error_outline,
-                      ),
-                    ),
-                  ],
-                ),
+                // 1. Header Summary Cards (2x2 on handheld, 4x1 on desktop)
+                if (isHandheld) ...[
+                  Row(
+                    children: [
+                      Expanded(child: card1),
+                      const SizedBox(width: 8),
+                      Expanded(child: card2),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(child: card3),
+                      const SizedBox(width: 8),
+                      Expanded(child: card4),
+                    ],
+                  ),
+                ] else ...[
+                  Row(
+                    children: [
+                      Expanded(child: card1),
+                      const SizedBox(width: 12),
+                      Expanded(child: card2),
+                      const SizedBox(width: 12),
+                      Expanded(child: card3),
+                      const SizedBox(width: 12),
+                      Expanded(child: card4),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 16),
 
                 // 2. Search and Filter Bar
@@ -201,20 +220,28 @@ class _InventoryValuationViewState extends State<InventoryValuationView> {
                             itemBuilder: (context, index) {
                               final item = viewModel.filteredItems[index];
                               return ListTile(
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 2,
+                                ),
                                 title: Row(
                                   children: [
-                                    Text(
-                                      item.name,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
+                                    Expanded(
+                                      child: Text(
+                                        item.name,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 13,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
                                     if (item.isPerishable) ...[
-                                      const SizedBox(width: 8),
+                                      const SizedBox(width: 4),
                                       Container(
                                         padding: const EdgeInsets.symmetric(
-                                          horizontal: 6,
-                                          vertical: 2,
+                                          horizontal: 4,
+                                          vertical: 1,
                                         ),
                                         decoration: BoxDecoration(
                                           color: Colors.blue.shade50,
@@ -227,7 +254,7 @@ class _InventoryValuationViewState extends State<InventoryValuationView> {
                                         child: Text(
                                           'Perecedero',
                                           style: TextStyle(
-                                            fontSize: 10,
+                                            fontSize: 9,
                                             color: Colors.blue.shade900,
                                             fontWeight: FontWeight.w600,
                                           ),
@@ -240,6 +267,9 @@ class _InventoryValuationViewState extends State<InventoryValuationView> {
                                   'Existencia: ${item.stock.toStringAsFixed(2)} ${item.consumptionUom}'
                                   '${item.stockMin != null ? ' • Mín: ${item.stockMin!.toStringAsFixed(2)}' : ''}'
                                   ' • CPP: C\$ ${item.averageCostNio.toStringAsFixed(2)}',
+                                  style: const TextStyle(fontSize: 11),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                                 trailing: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
@@ -249,7 +279,7 @@ class _InventoryValuationViewState extends State<InventoryValuationView> {
                                       'C\$ ${item.totalValuationNio.toStringAsFixed(2)}',
                                       style: const TextStyle(
                                         fontWeight: FontWeight.w800,
-                                        fontSize: 14,
+                                        fontSize: 13,
                                       ),
                                     ),
                                     const SizedBox(height: 2),

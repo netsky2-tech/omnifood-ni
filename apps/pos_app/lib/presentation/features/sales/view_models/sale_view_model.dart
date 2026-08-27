@@ -9,6 +9,7 @@ import '../../../../domain/models/sales/cashier_session.dart';
 import '../../../../domain/models/sales/cart_item.dart';
 import '../../../../domain/models/sales/hold_ticket.dart';
 import '../../../../domain/models/sales/promotion.dart';
+import '../../../../domain/models/customer/customer.dart';
 import '../../../../domain/models/inventory/product.dart';
 import '../../../../domain/models/user.dart';
 import '../../../../domain/repositories/sales/sales_repository.dart';
@@ -17,8 +18,13 @@ import '../../../../domain/repositories/auth_repository.dart';
 import 'dart:convert';
 import '../../../../data/database/app_database.dart';
 import '../../../../data/mappers/sales_mapper.dart';
+import '../../../../data/mappers/customer_mapper.dart';
+import '../../../../data/models/customer/customer_entity.dart';
 import '../../../../domain/models/config/printer_config.dart';
-import '../../../../domain/services/config/tenant_config_service.dart';
+import 'package:pos_app/domain/services/sales/table_order_service.dart';
+import 'package:pos_app/domain/services/sales/promotions_engine.dart';
+import 'package:pos_app/domain/services/sales/loyalty_service.dart';
+import 'package:pos_app/domain/services/config/tenant_config_service.dart';
 import '../../../../domain/services/config/printer_config_service.dart';
 import '../../../../domain/services/printer/printer_resolver.dart';
 import '../../../../domain/services/printer/thermal_logo_processor.dart';
@@ -38,6 +44,8 @@ class SaleViewModel extends ChangeNotifier {
   final KitchenOrderService _kitchenOrderService;
   final PrinterConfigService _printerConfigService;
   final PrinterPort _printerPort;
+  final PromotionsEngine _promotionsEngine;
+  final LoyaltyService _loyaltyService;
   StreamSubscription<InboundSyncResult>? _syncSubscription;
 
   SaleViewModel(
@@ -52,6 +60,8 @@ class SaleViewModel extends ChangeNotifier {
     PrinterConfigService? printerConfigService,
     PrinterPort? printerPort,
     SyncService? syncService,
+    PromotionsEngine? promotionsEngine,
+    LoyaltyService? loyaltyService,
   ])  : _tableOrderService = tableOrderService ?? TableOrderService(_database),
         _tenantConfigService =
             tenantConfigService ?? TenantConfigService(_database.localConfigDao),
@@ -60,7 +70,9 @@ class SaleViewModel extends ChangeNotifier {
         _printerConfigService =
             printerConfigService ?? PrinterConfigService(_database.localConfigDao),
         _printerPort =
-            printerPort ?? PrinterResolver.resolve(const PrinterConfig()) {
+            printerPort ?? PrinterResolver.resolve(const PrinterConfig()),
+        _promotionsEngine = promotionsEngine ?? const PromotionsEngine(),
+        _loyaltyService = loyaltyService ?? const LoyaltyService() {
     if (syncService != null) {
       _syncSubscription = syncService.onInboundSync.listen((event) {
         if (event.productsCount > 0 || event.catalogValuesCount > 0) {
@@ -97,12 +109,62 @@ class SaleViewModel extends ChangeNotifier {
   String? _buzzerNumber;
   String? get buzzerNumber => _buzzerNumber;
 
-  String? _customerName;
-  String? get customerName => _customerName;
-
   void setBuzzerNumber(String? number) {
     _buzzerNumber =
         (number != null && number.trim().isNotEmpty) ? number.trim() : null;
+    notifyListeners();
+  }
+
+  String? _customerName;
+  String? get customerName => _customerName;
+
+  Customer? _selectedCustomer;
+  Customer? get selectedCustomer => _selectedCustomer;
+
+  void selectCustomer(Customer? customer) {
+    _selectedCustomer = customer;
+    _customerName = customer?.name;
+    _pointsToRedeem = 0.0;
+    notifyListeners();
+  }
+
+  void clearCustomer() {
+    _selectedCustomer = null;
+    _customerName = null;
+    _pointsToRedeem = 0.0;
+    notifyListeners();
+  }
+
+  double _pointsToRedeem = 0.0;
+  double get pointsToRedeem => _pointsToRedeem;
+  double get loyaltyDiscount => _loyaltyService.calculateDiscountFromPoints(_pointsToRedeem);
+  double get promoDiscounts => _totalDiscounts;
+
+  RedemptionValidationResult applyLoyaltyPoints(double points) {
+    if (_selectedCustomer == null) {
+      return RedemptionValidationResult.failure(
+        'Debe seleccionar un cliente para redimir puntos.',
+      );
+    }
+    final rawSubtotal = _cart.fold(
+      0.0,
+      (sum, item) => sum + item.subtotal + item.modifiersTotal,
+    );
+    final currentSubtotal = rawSubtotal - _totalDiscounts;
+    final result = _loyaltyService.validateRedemption(
+      customer: _selectedCustomer!,
+      pointsToRedeem: points,
+      orderTotal: currentSubtotal,
+    );
+    if (result.isValid) {
+      _pointsToRedeem = points;
+      notifyListeners();
+    }
+    return result;
+  }
+
+  void clearLoyaltyPoints() {
+    _pointsToRedeem = 0.0;
     notifyListeners();
   }
 
@@ -110,6 +172,43 @@ class SaleViewModel extends ChangeNotifier {
     _customerName =
         (name != null && name.trim().isNotEmpty) ? name.trim() : null;
     notifyListeners();
+  }
+
+  Future<List<Customer>> searchCustomers(String query) async {
+    if (query.trim().isEmpty) {
+      final entities = await _database.customerDao.getAllCustomers();
+      return entities.map(CustomerMapper.toDomain).toList();
+    }
+    final entities = await _database.customerDao.searchCustomers(query.trim(), 20);
+    return entities.map(CustomerMapper.toDomain).toList();
+  }
+
+  Future<Customer> createExpressCustomer({
+    required String name,
+    String? taxId,
+    String? phone,
+    String? email,
+    String? address,
+  }) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final id = const Uuid().v4();
+    final entity = CustomerEntity(
+      id: id,
+      name: name.trim(),
+      taxId: (taxId != null && taxId.trim().isNotEmpty) ? taxId.trim().toUpperCase() : null,
+      phone: (phone != null && phone.trim().isNotEmpty) ? phone.trim() : null,
+      email: (email != null && email.trim().isNotEmpty) ? email.trim() : null,
+      address: (address != null && address.trim().isNotEmpty) ? address.trim() : null,
+      pointsBalance: 0.0,
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+      syncStatus: 'pending',
+    );
+    await _database.customerDao.saveCustomer(entity);
+    final domain = CustomerMapper.toDomain(entity);
+    selectCustomer(domain);
+    return domain;
   }
 
   Future<void> loadTenantConfig() async {
@@ -232,11 +331,13 @@ class SaleViewModel extends ChangeNotifier {
       0.0,
       (sum, item) => sum + item.subtotal + item.modifiersTotal,
     );
-    return rawSubtotal - _totalDiscounts;
+    final totalWithPromos = rawSubtotal - _totalDiscounts;
+    final afterLoyalty = totalWithPromos - loyaltyDiscount;
+    return afterLoyalty < 0.0 ? 0.0 : afterLoyalty;
   }
 
   double _totalDiscounts = 0.0;
-  double get totalDiscounts => _totalDiscounts;
+  double get totalDiscounts => _totalDiscounts + loyaltyDiscount;
 
   double get totalTax {
     if (_isGlobalTaxExempt) return 0.0;
@@ -266,22 +367,11 @@ class SaleViewModel extends ChangeNotifier {
   }
 
   void _applyPromotions() {
-    _totalDiscounts = 0.0;
-    for (final promo in _promotions) {
-      if (promo.type == PromotionType.buyXGetYFree) {
-        final items = _cart.where((i) => i.productId == promo.targetProductId);
-        if (items.isNotEmpty) {
-          final totalQty = items
-              .fold(0.0, (sum, i) => sum + i.quantity)
-              .toInt();
-          final sets = totalQty ~/ (promo.buyQuantity + promo.getQuantity);
-          if (sets > 0) {
-            final unitPrice = items.first.unitPrice;
-            _totalDiscounts += sets * promo.getQuantity * unitPrice;
-          }
-        }
-      }
-    }
+    final result = _promotionsEngine.evaluate(
+      cart: _cart,
+      promotions: _promotions,
+    );
+    _totalDiscounts = result.totalDiscount;
   }
 
   Future<void> loadProducts() async {
@@ -425,6 +515,9 @@ class SaleViewModel extends ChangeNotifier {
       openedAt: DateTime.now(),
       tipoModelo: tipoModelo,
       openingBalance: balance,
+      openingBalanceNio: balance,
+      expectedNio: balance,
+      totalExpected: balance,
     );
     await _database.cashierSessionDao.insertSession(
       SalesMapper.toSessionEntity(session),
@@ -497,6 +590,7 @@ class SaleViewModel extends ChangeNotifier {
           quantity: quantity,
           unitPrice: unitPrice,
           taxRate: 0.15,
+          category: product.category,
           variantId: variantId,
           selectedModifiers: modifiers,
         ),
@@ -553,6 +647,7 @@ class SaleViewModel extends ChangeNotifier {
     _cart.clear();
     _isGlobalTaxExempt = false;
     _totalDiscounts = 0.0;
+    _pointsToRedeem = 0.0;
     _activeLoadedHoldTicket = null;
     notifyListeners();
   }
@@ -609,6 +704,7 @@ class SaleViewModel extends ChangeNotifier {
       number: 'PENDING',
       createdAt: DateTime.now(),
       userId: user.id,
+      customerId: _selectedCustomer?.id,
       subtotal: subtotal,
       totalTax: totalTax,
       total: total,
@@ -641,6 +737,52 @@ class SaleViewModel extends ChangeNotifier {
       items: items,
       payments: payments,
     );
+
+    // Process Customer Loyalty Points (Redemption & Accumulation)
+    if (_selectedCustomer != null) {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      // 1. Process redemption if points were used
+      if (_pointsToRedeem > 0) {
+        final redeemTx = _loyaltyService.createRedeemTransaction(
+          customerId: _selectedCustomer!.id,
+          currentBalance: _selectedCustomer!.pointsBalance,
+          pointsToRedeem: _pointsToRedeem,
+          invoiceId: invoiceId,
+        );
+        try {
+          await _database.customerPointTransactionDao
+              .recordPointTransactionAndUpdateBalance(
+            CustomerMapper.toPointTransactionEntity(redeemTx),
+            _selectedCustomer!.id,
+            redeemTx.balanceAfter,
+            now,
+          );
+          _selectedCustomer = _selectedCustomer!.copyWith(pointsBalance: redeemTx.balanceAfter);
+        } catch (_) {}
+      }
+
+      // 2. Process accumulation on the final net subtotal
+      final pointsEarned = _loyaltyService.calculatePointsEarned(subtotal);
+      if (pointsEarned > 0) {
+        final currentBalance = _selectedCustomer!.pointsBalance;
+        final earnTx = _loyaltyService.createEarnTransaction(
+          customerId: _selectedCustomer!.id,
+          currentBalance: currentBalance,
+          netAmount: subtotal,
+          invoiceId: invoiceId,
+        );
+        try {
+          await _database.customerPointTransactionDao
+              .recordPointTransactionAndUpdateBalance(
+            CustomerMapper.toPointTransactionEntity(earnTx),
+            _selectedCustomer!.id,
+            earnTx.balanceAfter,
+            now,
+          );
+          _selectedCustomer = _selectedCustomer!.copyWith(pointsBalance: earnTx.balanceAfter);
+        } catch (_) {}
+      }
+    }
 
     // Update expected totals
     for (final p in payments) {
@@ -746,6 +888,7 @@ class SaleViewModel extends ChangeNotifier {
 
     _buzzerNumber = null;
     _customerName = null;
+    _selectedCustomer = null;
     clearCart();
     _consumeOverride();
   }

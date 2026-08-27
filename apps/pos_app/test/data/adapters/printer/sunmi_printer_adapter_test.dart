@@ -168,5 +168,21 @@ void main() {
       expect(result.isSuccess, isTrue);
       expect(channelLog.any((c) => c.method == 'openDrawer'), isTrue);
     });
+
+    test('printProductionBatchLabel sends raw bytes to channel', () async {
+      mockChannelResponse = 'READY';
+      final result = await adapter.printProductionBatchLabel(
+        productName: 'Salsa Ranchera',
+        batchCode: 'LOTE-20260827-001',
+        quantity: 5,
+        uom: 'lt',
+        productionDate: DateTime(2026, 8, 27, 10, 0),
+        expirationDate: DateTime(2026, 8, 29, 10, 0),
+        operatorName: 'Chef Pedro',
+      );
+
+      expect(result.isSuccess, isTrue);
+      expect(channelLog.any((c) => c.method == 'printRawBytes'), isTrue);
+    });
   });
 }

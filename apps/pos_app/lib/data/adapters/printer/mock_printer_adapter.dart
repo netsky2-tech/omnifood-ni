@@ -204,6 +204,55 @@ class MockPrinterAdapter implements PrinterPort {
   }
 
   @override
+  Future<PrinterResult> printProductionBatchLabel({
+    required String productName,
+    required String batchCode,
+    required double quantity,
+    required String uom,
+    required DateTime productionDate,
+    required DateTime expirationDate,
+    String? operatorName,
+    String? storageInstructions,
+  }) async {
+    if (shouldFail || currentStatus != PrinterStatus.ready) {
+      final res = PrinterResult.failure(
+        currentStatus == PrinterStatus.ready ? PrinterStatus.error : currentStatus,
+        failureMessage ?? 'Error imprimiendo viñeta de lote',
+      );
+      printHistory.add(res);
+      return res;
+    }
+
+    final text = Receipt58mmFormatter.formatProductionBatchLabelText(
+      productName: productName,
+      batchCode: batchCode,
+      quantity: quantity,
+      uom: uom,
+      productionDate: productionDate,
+      expirationDate: expirationDate,
+      operatorName: operatorName,
+      storageInstructions: storageInstructions,
+    );
+
+    final bytes = Receipt58mmFormatter.formatProductionBatchLabelEscPos(
+      productName: productName,
+      batchCode: batchCode,
+      quantity: quantity,
+      uom: uom,
+      productionDate: productionDate,
+      expirationDate: expirationDate,
+      operatorName: operatorName,
+      storageInstructions: storageInstructions,
+    );
+
+    lastPrintedText = text;
+    lastPrintedBytes = bytes;
+    final res = PrinterResult.success(text: text, bytes: bytes);
+    printHistory.add(res);
+    return res;
+  }
+
+  @override
   Future<PrinterResult> printRawEscPos(List<int> bytes) async {
     if (shouldFail || currentStatus != PrinterStatus.ready) {
       return PrinterResult.failure(

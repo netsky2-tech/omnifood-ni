@@ -8,11 +8,14 @@ import { AuditIntegrityAlert } from './entities/audit-integrity-alert.entity';
 import { AuthService } from './services/auth.service';
 import { UserService } from './services/user.service';
 import { AuditIntegrityService } from './services/audit-integrity.service';
+import { SupervisorOverrideService } from './services/supervisor-override.service';
+import { AuditTrailService } from './services/audit-trail.service';
 import { AuthController } from './controllers/auth.controller';
 import { AuditController } from './controllers/audit.controller';
 import { UsersController } from './controllers/users.controller';
 import { AuthGuard } from './guards/auth.guard';
 import { RolesGuard } from './guards/roles.guard';
+import { PermissionsGuard } from './guards/permissions.guard';
 import {
   IDENTITY_JWT_CONFIG,
   IdentityJwtConfig,
@@ -45,16 +48,22 @@ import {
     AuthService,
     UserService,
     AuditIntegrityService,
+    SupervisorOverrideService,
+    AuditTrailService,
     AuthGuard,
     RolesGuard,
+    PermissionsGuard,
   ],
   exports: [
     JwtModule,
     AuthService,
     UserService,
     AuditIntegrityService,
+    SupervisorOverrideService,
+    AuditTrailService,
     AuthGuard,
     RolesGuard,
+    PermissionsGuard,
   ],
 })
 export class IdentityModule {}

@@ -76,4 +76,19 @@ void main() {
     expect(find.text('Leche Deslactosada'), findsOneWidget);
     expect(find.text('Café Grano Especial'), findsNothing);
   });
+
+  testWidgets('renders 2x2 KPI grid on Sunmi V2s handheld (360x720dp) without overflow', (tester) async {
+    tester.view.physicalSize = const Size(360, 720);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
+
+    await tester.pumpWidget(createWidgetUnderTest());
+    await tester.pumpAndSettle();
+
+    expect(find.text('VALORIZACIÓN TOTAL'), findsOneWidget);
+    expect(find.text('C\$ 1570.00'), findsOneWidget);
+    expect(find.text('ÍTEMS TOTALES'), findsOneWidget);
+    expect(find.text('Café Grano Especial'), findsOneWidget);
+    expect(find.text('Leche Deslactosada'), findsOneWidget);
+  });
 }

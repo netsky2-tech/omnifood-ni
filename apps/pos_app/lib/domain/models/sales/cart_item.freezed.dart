@@ -25,6 +25,7 @@ mixin _$CartItem {
   double get quantity => throw _privateConstructorUsedError;
   double get unitPrice => throw _privateConstructorUsedError;
   double get taxRate => throw _privateConstructorUsedError;
+  String? get category => throw _privateConstructorUsedError;
   String? get variantId => throw _privateConstructorUsedError;
   String? get notes => throw _privateConstructorUsedError;
   List<Modifier> get selectedModifiers => throw _privateConstructorUsedError;
@@ -46,6 +47,7 @@ abstract class $CartItemCopyWith<$Res> {
       double quantity,
       double unitPrice,
       double taxRate,
+      String? category,
       String? variantId,
       String? notes,
       List<Modifier> selectedModifiers});
@@ -69,6 +71,7 @@ class _$CartItemCopyWithImpl<$Res, $Val extends CartItem>
     Object? quantity = null,
     Object? unitPrice = null,
     Object? taxRate = null,
+    Object? category = freezed,
     Object? variantId = freezed,
     Object? notes = freezed,
     Object? selectedModifiers = null,
@@ -94,6 +97,10 @@ class _$CartItemCopyWithImpl<$Res, $Val extends CartItem>
           ? _value.taxRate
           : taxRate // ignore: cast_nullable_to_non_nullable
               as double,
+      category: freezed == category
+          ? _value.category
+          : category // ignore: cast_nullable_to_non_nullable
+              as String?,
       variantId: freezed == variantId
           ? _value.variantId
           : variantId // ignore: cast_nullable_to_non_nullable
@@ -124,6 +131,7 @@ abstract class _$$CartItemImplCopyWith<$Res>
       double quantity,
       double unitPrice,
       double taxRate,
+      String? category,
       String? variantId,
       String? notes,
       List<Modifier> selectedModifiers});
@@ -145,6 +153,7 @@ class __$$CartItemImplCopyWithImpl<$Res>
     Object? quantity = null,
     Object? unitPrice = null,
     Object? taxRate = null,
+    Object? category = freezed,
     Object? variantId = freezed,
     Object? notes = freezed,
     Object? selectedModifiers = null,
@@ -170,6 +179,10 @@ class __$$CartItemImplCopyWithImpl<$Res>
           ? _value.taxRate
           : taxRate // ignore: cast_nullable_to_non_nullable
               as double,
+      category: freezed == category
+          ? _value.category
+          : category // ignore: cast_nullable_to_non_nullable
+              as String?,
       variantId: freezed == variantId
           ? _value.variantId
           : variantId // ignore: cast_nullable_to_non_nullable
@@ -195,6 +208,7 @@ class _$CartItemImpl implements _CartItem {
       required this.quantity,
       required this.unitPrice,
       required this.taxRate,
+      this.category,
       this.variantId,
       this.notes,
       final List<Modifier> selectedModifiers = const []})
@@ -214,6 +228,8 @@ class _$CartItemImpl implements _CartItem {
   @override
   final double taxRate;
   @override
+  final String? category;
+  @override
   final String? variantId;
   @override
   final String? notes;
@@ -229,7 +245,7 @@ class _$CartItemImpl implements _CartItem {
 
   @override
   String toString() {
-    return 'CartItem(productId: $productId, productName: $productName, quantity: $quantity, unitPrice: $unitPrice, taxRate: $taxRate, variantId: $variantId, notes: $notes, selectedModifiers: $selectedModifiers)';
+    return 'CartItem(productId: $productId, productName: $productName, quantity: $quantity, unitPrice: $unitPrice, taxRate: $taxRate, category: $category, variantId: $variantId, notes: $notes, selectedModifiers: $selectedModifiers)';
   }
 
   @override
@@ -246,6 +262,8 @@ class _$CartItemImpl implements _CartItem {
             (identical(other.unitPrice, unitPrice) ||
                 other.unitPrice == unitPrice) &&
             (identical(other.taxRate, taxRate) || other.taxRate == taxRate) &&
+            (identical(other.category, category) ||
+                other.category == category) &&
             (identical(other.variantId, variantId) ||
                 other.variantId == variantId) &&
             (identical(other.notes, notes) || other.notes == notes) &&
@@ -262,6 +280,7 @@ class _$CartItemImpl implements _CartItem {
       quantity,
       unitPrice,
       taxRate,
+      category,
       variantId,
       notes,
       const DeepCollectionEquality().hash(_selectedModifiers));
@@ -287,6 +306,7 @@ abstract class _CartItem implements CartItem {
       required final double quantity,
       required final double unitPrice,
       required final double taxRate,
+      final String? category,
       final String? variantId,
       final String? notes,
       final List<Modifier> selectedModifiers}) = _$CartItemImpl;
@@ -304,6 +324,8 @@ abstract class _CartItem implements CartItem {
   double get unitPrice;
   @override
   double get taxRate;
+  @override
+  String? get category;
   @override
   String? get variantId;
   @override

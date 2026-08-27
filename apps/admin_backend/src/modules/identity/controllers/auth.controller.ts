@@ -9,14 +9,19 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { AuthService } from '../services/auth.service';
+import { SupervisorOverrideService } from '../services/supervisor-override.service';
 import { AuthGuard } from '../guards/auth.guard';
 import { TenantInterceptor } from '../../../core/database/rls.interceptor';
 import { GetTenantId } from '../../../core/decorators/tenant.decorator';
 import { LoginDto, RefreshTokenDto } from '../dto/identity.dto';
+import { SupervisorOverrideRequestDto } from '../dto/supervisor-override.dto';
 
 @Controller('identity')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+    private supervisorOverrideService: SupervisorOverrideService,
+  ) {}
 
   @Post('login')
   async login(@Body() body: LoginDto) {
@@ -26,6 +31,21 @@ export class AuthController {
   @Post('refresh')
   async refresh(@Body() body: RefreshTokenDto) {
     return this.authService.refreshTokens(body.userId, body.refreshToken);
+  }
+
+  @UseGuards(AuthGuard)
+  @UseInterceptors(TenantInterceptor)
+  @Post('auth/supervisor-override')
+  async supervisorOverride(
+    @GetTenantId() tenantId: string,
+    @Body() body: SupervisorOverrideRequestDto,
+    @Req() req: { user?: { sub?: string; tenant_id?: string } },
+  ) {
+    return this.supervisorOverrideService.authorizeOverride(
+      body,
+      tenantId || req.user?.tenant_id || '',
+      req.user?.sub || '',
+    );
   }
 
   @UseGuards(AuthGuard)

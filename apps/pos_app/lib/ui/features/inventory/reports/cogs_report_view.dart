@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-
+import '../../../design_system/design_system.dart';
 import 'cogs_report_view_model.dart';
 
 class CogsReportView extends StatefulWidget {
@@ -19,7 +19,11 @@ class _CogsReportViewState extends State<CogsReportView> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<CogsReportViewModel>().loadCogsReport();
+      if (mounted) {
+        _searchController.clear();
+        context.read<CogsReportViewModel>().setSearchQuery('');
+        context.read<CogsReportViewModel>().loadCogsReport();
+      }
     });
   }
 
@@ -50,6 +54,8 @@ class _CogsReportViewState extends State<CogsReportView> {
 
   @override
   Widget build(BuildContext context) {
+    final isHandheld = ResponsiveBreakpoints.isHandheld(context);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Costo de Ventas (COGS) & Consumos'),
@@ -70,6 +76,35 @@ class _CogsReportViewState extends State<CogsReportView> {
 
           final colorScheme = Theme.of(context).colorScheme;
 
+          final card1 = _SummaryCard(
+            title: 'Total COGS',
+            value: 'C\$ ${viewModel.totalCogsNio.toStringAsFixed(2)}',
+            subtitle: 'Costo total consumido',
+            color: colorScheme.primary,
+            icon: Icons.monetization_on_outlined,
+          );
+          final card2 = _SummaryCard(
+            title: 'Ventas Directas',
+            value: 'C\$ ${viewModel.salesCogsNio.toStringAsFixed(2)}',
+            subtitle: 'Consumo por recetas de venta',
+            color: Colors.green.shade800,
+            icon: Icons.point_of_sale_outlined,
+          );
+          final card3 = _SummaryCard(
+            title: 'Mermas & Pérdidas',
+            value: 'C\$ ${viewModel.shrinkageCogsNio.toStringAsFixed(2)}',
+            subtitle: 'Desechos y caducidades',
+            color: Colors.orange.shade800,
+            icon: Icons.delete_sweep_outlined,
+          );
+          final card4 = _SummaryCard(
+            title: 'Insumos Afectados',
+            value: '${viewModel.report?.items.length ?? 0}',
+            subtitle: 'Con movimiento en período',
+            color: colorScheme.secondary,
+            icon: Icons.category_outlined,
+          );
+
           return Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -89,9 +124,12 @@ class _CogsReportViewState extends State<CogsReportView> {
                           children: [
                             const Icon(Icons.date_range, size: 20),
                             const SizedBox(width: 8),
-                            Text(
-                              'Período: ${_dateFormat.format(viewModel.fromDate)} al ${_dateFormat.format(viewModel.toDate)}',
-                              style: const TextStyle(fontWeight: FontWeight.w600),
+                            Expanded(
+                              child: Text(
+                                'Período: ${_dateFormat.format(viewModel.fromDate)} al ${_dateFormat.format(viewModel.toDate)}',
+                                style: const TextStyle(fontWeight: FontWeight.w600),
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                           ],
                         ),
@@ -145,53 +183,36 @@ class _CogsReportViewState extends State<CogsReportView> {
                 ),
                 const SizedBox(height: 12),
 
-                // 2. Summary KPI Cards
-                Row(
-                  children: [
-                    Expanded(
-                      child: _SummaryCard(
-                        title: 'Total COGS',
-                        value:
-                            'C\$ ${viewModel.totalCogsNio.toStringAsFixed(2)}',
-                        subtitle: 'Costo total consumido',
-                        color: colorScheme.primary,
-                        icon: Icons.monetization_on_outlined,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _SummaryCard(
-                        title: 'Ventas Directas',
-                        value:
-                            'C\$ ${viewModel.salesCogsNio.toStringAsFixed(2)}',
-                        subtitle: 'Consumo por recetas de venta',
-                        color: Colors.green.shade800,
-                        icon: Icons.point_of_sale_outlined,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _SummaryCard(
-                        title: 'Mermas & Pérdidas',
-                        value:
-                            'C\$ ${viewModel.shrinkageCogsNio.toStringAsFixed(2)}',
-                        subtitle: 'Desechos y caducidades',
-                        color: Colors.orange.shade800,
-                        icon: Icons.delete_sweep_outlined,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _SummaryCard(
-                        title: 'Insumos Afectados',
-                        value: '${viewModel.report?.items.length ?? 0}',
-                        subtitle: 'Con movimiento en período',
-                        color: colorScheme.secondary,
-                        icon: Icons.category_outlined,
-                      ),
-                    ),
-                  ],
-                ),
+                // 2. Summary KPI Cards (2x2 on handheld, 4x1 on desktop)
+                if (isHandheld) ...[
+                  Row(
+                    children: [
+                      Expanded(child: card1),
+                      const SizedBox(width: 8),
+                      Expanded(child: card2),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(child: card3),
+                      const SizedBox(width: 8),
+                      Expanded(child: card4),
+                    ],
+                  ),
+                ] else ...[
+                  Row(
+                    children: [
+                      Expanded(child: card1),
+                      const SizedBox(width: 12),
+                      Expanded(child: card2),
+                      const SizedBox(width: 12),
+                      Expanded(child: card3),
+                      const SizedBox(width: 12),
+                      Expanded(child: card4),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 16),
 
                 // 3. Search Bar
@@ -232,15 +253,24 @@ class _CogsReportViewState extends State<CogsReportView> {
                             itemBuilder: (context, index) {
                               final item = viewModel.filteredItems[index];
                               return ListTile(
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 2,
+                                ),
                                 title: Text(
                                   item.insumoName,
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w600,
+                                    fontSize: 13,
                                   ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                                 subtitle: Text(
                                   'Ventas: ${item.salesQuantity.toStringAsFixed(2)} ${item.consumptionUom} (C\$ ${item.salesCostNio.toStringAsFixed(2)})'
                                   '${item.shrinkageQuantity > 0 ? ' • Mermas: ${item.shrinkageQuantity.toStringAsFixed(2)} ${item.consumptionUom} (C\$ ${item.shrinkageCostNio.toStringAsFixed(2)})' : ''}',
+                                  style: const TextStyle(fontSize: 11),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                                 trailing: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
@@ -250,7 +280,7 @@ class _CogsReportViewState extends State<CogsReportView> {
                                       'C\$ ${item.totalCostNio.toStringAsFixed(2)}',
                                       style: const TextStyle(
                                         fontWeight: FontWeight.w800,
-                                        fontSize: 14,
+                                        fontSize: 13,
                                       ),
                                     ),
                                     const SizedBox(height: 2),

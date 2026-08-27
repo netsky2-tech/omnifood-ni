@@ -191,6 +191,50 @@ class SunmiPrinterAdapter implements PrinterPort {
   }
 
   @override
+  Future<PrinterResult> printProductionBatchLabel({
+    required String productName,
+    required String batchCode,
+    required double quantity,
+    required String uom,
+    required DateTime productionDate,
+    required DateTime expirationDate,
+    String? operatorName,
+    String? storageInstructions,
+  }) async {
+    final status = await checkStatus();
+    if (status == PrinterStatus.outOfPaper) {
+      return PrinterResult.failure(
+        PrinterStatus.outOfPaper,
+        'Impresora sin papel al emitir viñeta de lote.',
+      );
+    }
+
+    final formattedText = Receipt58mmFormatter.formatProductionBatchLabelText(
+      productName: productName,
+      batchCode: batchCode,
+      quantity: quantity,
+      uom: uom,
+      productionDate: productionDate,
+      expirationDate: expirationDate,
+      operatorName: operatorName,
+      storageInstructions: storageInstructions,
+    );
+
+    final rawBytes = Receipt58mmFormatter.formatProductionBatchLabelEscPos(
+      productName: productName,
+      batchCode: batchCode,
+      quantity: quantity,
+      uom: uom,
+      productionDate: productionDate,
+      expirationDate: expirationDate,
+      operatorName: operatorName,
+      storageInstructions: storageInstructions,
+    );
+
+    return _sendToHardware(rawBytes: rawBytes, plainText: formattedText);
+  }
+
+  @override
   Future<PrinterResult> printRawEscPos(List<int> bytes) async {
     return _sendToHardware(rawBytes: bytes);
   }

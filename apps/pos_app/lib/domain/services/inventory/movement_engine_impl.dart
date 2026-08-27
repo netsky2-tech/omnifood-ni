@@ -282,6 +282,7 @@ class MovementEngineImpl implements MovementEngine {
     required double actualQuantity,
     required String outcome,
     required String reason,
+    Map<String, double>? customIngredientConsumptions,
   }) async {
     final result = await buildProductionClose(
       recipeProductId: recipeProductId,
@@ -292,6 +293,7 @@ class MovementEngineImpl implements MovementEngine {
       actualQuantity: actualQuantity,
       outcome: outcome,
       reason: reason,
+      customIngredientConsumptions: customIngredientConsumptions,
     );
 
     for (final movement in result.movements) {
@@ -312,6 +314,7 @@ class MovementEngineImpl implements MovementEngine {
     required double actualQuantity,
     required String outcome,
     required String reason,
+    Map<String, double>? customIngredientConsumptions,
   }) async {
     if (plannedQuantity <= 0) {
       throw ArgumentError(
@@ -363,7 +366,15 @@ class MovementEngineImpl implements MovementEngine {
           'Recipe component ${item.ingredientId} is missing locally',
         );
       }
-      final consumedQuantity = item.quantity;
+      final consumedQuantity = customIngredientConsumptions != null &&
+              customIngredientConsumptions.containsKey(item.ingredientId)
+          ? customIngredientConsumptions[item.ingredientId]!
+          : item.quantity;
+      if (consumedQuantity < 0) {
+        throw ArgumentError(
+          'Custom consumed quantity for ${insumo.id} cannot be negative',
+        );
+      }
       final previousStock = insumo.stock;
       if (previousStock < consumedQuantity) {
         throw StateError(

@@ -5,6 +5,8 @@ import 'package:pos_app/domain/models/inventory/insumo.dart';
 import 'package:pos_app/domain/models/inventory/product.dart';
 import 'package:pos_app/domain/models/inventory/production_order_document.dart';
 import 'package:pos_app/domain/models/inventory/recipe_version_document.dart';
+import 'package:pos_app/domain/repositories/auth_repository.dart';
+import 'package:pos_app/data/adapters/printer/mock_printer_adapter.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
 import 'package:pos_app/domain/services/inventory/movement_engine.dart';
 import 'package:pos_app/ui/features/inventory/production/production_order_view_model.dart';
@@ -540,4 +542,235 @@ void main() {
       );
     },
   );
+
+  test('generateNextBatchCode calculates next sequential batch code for given date', () async {
+    when(() => repository.getProductionOrderDocuments()).thenAnswer(
+      (_) async => [
+        ProductionOrderDocument(
+          id: 'order-1',
+          recipeVersionId: recipeVersion.id,
+          recipeProductId: recipeVersion.productId,
+          recipeProductName: recipeVersion.productName,
+          producedInsumoId: 'coffee-base',
+          producedInsumoName: 'Base de Café',
+          plannedQuantity: 4,
+          actualQuantity: 3.5,
+          producedBatchNumber: 'LOTE-20260601-001',
+          producedExpirationDate: DateTime(2026, 6, 4),
+          operationDate: DateTime(2026, 6, 1, 8, 30),
+          status: 'CLOSED_PENDING_SYNC',
+          outcome: 'COMPLETED',
+          terminalId: 'pos-terminal-a',
+          sourceSequence: 1,
+          idempotencyKey: 'production:pos-terminal-a:order-1',
+          payloadHash: 'hash',
+          totalConsumedCostNio: 70,
+          producedUnitCostNio: 20,
+        ),
+      ],
+    );
+    await viewModel.loadInitialData();
+
+    final nextCode = viewModel.generateNextBatchCode(forDate: DateTime(2026, 6, 1));
+    expect(nextCode, 'LOTE-20260601-002');
+
+    final nextCodeOtherDate = viewModel.generateNextBatchCode(forDate: DateTime(2026, 6, 2));
+    expect(nextCodeOtherDate, 'LOTE-20260602-001');
+  });
+
+  test('calculateExpirationDate derives expiration date from recipe diasVidaUtil', () {
+    final customRecipeVersion = recipeVersion.copyWith(diasVidaUtil: 5);
+    final now = DateTime(2026, 6, 1, 10, 0);
+
+    final expiry = viewModel.calculateExpirationDate(customRecipeVersion, fromDate: now);
+    expect(expiry, DateTime(2026, 6, 6, 10, 0));
+  });
+
+  test('closeOrderLocally forwards customIngredientConsumptions to movementEngine', () async {
+    when(
+      () => repository.getRecipeVersionDocuments(any()),
+    ).thenAnswer((_) async => [recipeVersion]);
+    await viewModel.loadInitialData();
+
+    when(
+      () => movementEngine.buildProductionClose(
+        recipeProductId: any(named: 'recipeProductId'),
+        producedInsumoId: any(named: 'producedInsumoId'),
+        productionDocumentId: any(named: 'productionDocumentId'),
+        recipeVersionId: any(named: 'recipeVersionId'),
+        plannedQuantity: any(named: 'plannedQuantity'),
+        actualQuantity: any(named: 'actualQuantity'),
+        outcome: any(named: 'outcome'),
+        reason: any(named: 'reason'),
+        customIngredientConsumptions: any(named: 'customIngredientConsumptions'),
+      ),
+    ).thenAnswer(
+      (_) async => ProductionCloseResult(
+        movements: [
+          InventoryMovement(
+            id: 'mov-custom',
+            insumoId: 'coffee-base',
+            type: MovementType.production,
+            quantity: -2.5,
+            previousStock: 10,
+            newStock: 7.5,
+            timestamp: DateTime(2026, 6, 1, 8, 30),
+          ),
+        ],
+        totalConsumedCostNio: 80,
+        producedUnitCostNio: 20,
+      ),
+    );
+
+    final customConsumptions = {'raw-1': 2.5};
+
+    await viewModel.closeOrderLocally(
+      recipeVersion: recipeVersion,
+      producedInsumoId: 'coffee-base',
+      plannedQuantity: 4,
+      actualQuantity: 4,
+      producedBatchNumber: 'LOTE-20260601-001',
+      producedExpirationDate: DateTime(2026, 6, 4),
+      customIngredientConsumptions: customConsumptions,
+    );
+
+    verify(
+      () => movementEngine.buildProductionClose(
+        recipeProductId: recipeVersion.productId,
+        producedInsumoId: 'coffee-base',
+        productionDocumentId: 'order-1',
+        recipeVersionId: recipeVersion.id,
+        plannedQuantity: 4,
+        actualQuantity: 4,
+        outcome: 'COMPLETED',
+        reason: any(named: 'reason'),
+        customIngredientConsumptions: customConsumptions,
+      ),
+    ).called(1);
+  });
+
+  test('evaluateVariance calculates deviation and flags supervisor requirement', () {
+    final normalEvaluation = viewModel.evaluateVariance(
+      recipeVersion: recipeVersion,
+      plannedQuantity: 10,
+      actualQuantity: 9.8, // 2% deviation <= 5%
+    );
+    expect(normalEvaluation.isWithinTolerance, isTrue);
+    expect(normalEvaluation.requiresSupervisorOverride, isFalse);
+    expect(normalEvaluation.status, 'COMPLETED_NORMAL');
+
+    final highVarianceEvaluation = viewModel.evaluateVariance(
+      recipeVersion: recipeVersion,
+      plannedQuantity: 10,
+      actualQuantity: 8.0, // 20% deviation > 5%
+    );
+    expect(highVarianceEvaluation.isWithinTolerance, isFalse);
+    expect(highVarianceEvaluation.requiresSupervisorOverride, isTrue);
+    expect(highVarianceEvaluation.status, 'COMPLETED_WITH_VARIANCE');
+
+    final totalLossEvaluation = viewModel.evaluateVariance(
+      recipeVersion: recipeVersion,
+      plannedQuantity: 10,
+      actualQuantity: 0.0,
+    );
+    expect(totalLossEvaluation.isTotalLoss, isTrue);
+    expect(totalLossEvaluation.requiresSupervisorOverride, isTrue);
+    expect(totalLossEvaluation.outcome, 'FAILED');
+    expect(totalLossEvaluation.status, 'FAILED_TOTAL_LOSS');
+  });
+
+  test('closeOrderLocally requests supervisor authorization when deviation exceeds tolerance', () async {
+    final mockAuthRepo = MockAuthRepository();
+    when(() => mockAuthRepo.authorizeOverride(
+      supervisorId: any(named: 'supervisorId'),
+      pin: any(named: 'pin'),
+      totpCode: any(named: 'totpCode'),
+    )).thenAnswer((_) async => true);
+
+    when(
+      () => movementEngine.buildProductionClose(
+        recipeProductId: any(named: 'recipeProductId'),
+        producedInsumoId: any(named: 'producedInsumoId'),
+        productionDocumentId: any(named: 'productionDocumentId'),
+        recipeVersionId: any(named: 'recipeVersionId'),
+        plannedQuantity: any(named: 'plannedQuantity'),
+        actualQuantity: any(named: 'actualQuantity'),
+        outcome: any(named: 'outcome'),
+        reason: any(named: 'reason'),
+        customIngredientConsumptions: any(named: 'customIngredientConsumptions'),
+      ),
+    ).thenAnswer(
+      (_) async => const ProductionCloseResult(
+        movements: [],
+        totalConsumedCostNio: 100,
+        producedUnitCostNio: 12.5,
+      ),
+    );
+
+    await viewModel.loadInitialData();
+
+    await viewModel.closeOrderLocally(
+      recipeVersion: recipeVersion,
+      producedInsumoId: 'coffee-base',
+      plannedQuantity: 10,
+      actualQuantity: 8, // 20% variance
+      producedBatchNumber: 'LOTE-20260601-001',
+      producedExpirationDate: DateTime(2026, 6, 4),
+      varianceReason: 'Merma por temperatura irregular',
+      supervisorId: 'sup-1',
+      supervisorPin: '1234',
+      authRepository: mockAuthRepo,
+    );
+
+    verify(() => mockAuthRepo.authorizeOverride(
+      supervisorId: 'sup-1',
+      pin: '1234',
+      totpCode: null,
+    )).called(1);
+  });
+
+  test('printBatchLabel invokes printer with order details and UOM', () async {
+    final mockPrinter = MockPrinterAdapter();
+    await viewModel.loadInitialData();
+
+    final order = ProductionOrderDocument(
+      id: 'doc-1',
+      recipeVersionId: 'rv-1',
+      recipeProductId: 'prod-coffee',
+      recipeProductName: 'Jarabe Casa',
+      producedInsumoId: 'coffee-base',
+      producedInsumoName: 'Base de Café',
+      plannedQuantity: 10,
+      actualQuantity: 10,
+      producedBatchNumber: 'LOTE-20260601-001',
+      producedExpirationDate: DateTime(2026, 6, 4, 12, 0),
+      operationDate: DateTime(2026, 6, 1, 8, 30),
+      status: 'CLOSED_PENDING_SYNC',
+      outcome: 'COMPLETED',
+      terminalId: 'POS-01',
+      sourceSequence: 1,
+      idempotencyKey: 'key-1',
+      payloadHash: 'hash-1',
+      totalConsumedCostNio: 100,
+      producedUnitCostNio: 10,
+      closedAt: DateTime(2026, 6, 1, 8, 30),
+      movementReferences: const ['mov-1'],
+    );
+
+    final result = await viewModel.printBatchLabel(
+      order: order,
+      printer: mockPrinter,
+      operatorName: 'Chef Roberto',
+      storageInstructions: 'Refrigerar 2C a 4C',
+    );
+
+    expect(result.isSuccess, isTrue);
+    expect(mockPrinter.lastPrintedText, contains('ETIQUETA DE PRE-ELABORACION'));
+    expect(mockPrinter.lastPrintedText, contains('Base de Café'));
+    expect(mockPrinter.lastPrintedText, contains('LOTE-20260601-001'));
+    expect(mockPrinter.lastPrintedText, contains('10 kg'));
+    expect(mockPrinter.lastPrintedText, contains('Chef Roberto'));
+  });
 }
+class MockAuthRepository extends Mock implements AuthRepository {}
+

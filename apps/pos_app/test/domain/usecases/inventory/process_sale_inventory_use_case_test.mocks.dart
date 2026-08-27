@@ -155,6 +155,7 @@ class MockMovementEngine extends _i1.Mock implements _i2.MovementEngine {
     required double? actualQuantity,
     required String? outcome,
     required String? reason,
+    Map<String, double>? customIngredientConsumptions,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -169,6 +170,7 @@ class MockMovementEngine extends _i1.Mock implements _i2.MovementEngine {
             #actualQuantity: actualQuantity,
             #outcome: outcome,
             #reason: reason,
+            #customIngredientConsumptions: customIngredientConsumptions,
           },
         ),
         returnValue: _i3.Future<_i2.ProductionCloseResult>.value(
@@ -186,6 +188,7 @@ class MockMovementEngine extends _i1.Mock implements _i2.MovementEngine {
               #actualQuantity: actualQuantity,
               #outcome: outcome,
               #reason: reason,
+              #customIngredientConsumptions: customIngredientConsumptions,
             },
           ),
         )),
@@ -201,6 +204,7 @@ class MockMovementEngine extends _i1.Mock implements _i2.MovementEngine {
     required double? actualQuantity,
     required String? outcome,
     required String? reason,
+    Map<String, double>? customIngredientConsumptions,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -215,6 +219,7 @@ class MockMovementEngine extends _i1.Mock implements _i2.MovementEngine {
             #actualQuantity: actualQuantity,
             #outcome: outcome,
             #reason: reason,
+            #customIngredientConsumptions: customIngredientConsumptions,
           },
         ),
         returnValue: _i3.Future<_i2.ProductionCloseResult>.value(
@@ -232,6 +237,7 @@ class MockMovementEngine extends _i1.Mock implements _i2.MovementEngine {
               #actualQuantity: actualQuantity,
               #outcome: outcome,
               #reason: reason,
+              #customIngredientConsumptions: customIngredientConsumptions,
             },
           ),
         )),

@@ -15,13 +15,13 @@ describe('SyncBatchController', () => {
       controllers: [SyncBatchController],
       providers: [
         { provide: InvoicesService, useValue: invoicesService },
-        { provide: AuthGuard, useValue: { canActivate: jest.fn() } },
-        {
-          provide: SyncCreditNoteAuthGuard,
-          useValue: { canActivate: jest.fn() },
-        },
       ],
-    }).compile();
+    })
+      .overrideGuard(AuthGuard)
+      .useValue({ canActivate: jest.fn().mockReturnValue(true) })
+      .overrideGuard(SyncCreditNoteAuthGuard)
+      .useValue({ canActivate: jest.fn().mockReturnValue(true) })
+      .compile();
 
     controller = module.get<SyncBatchController>(SyncBatchController);
     jest.clearAllMocks();

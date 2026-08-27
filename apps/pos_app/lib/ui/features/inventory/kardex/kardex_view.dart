@@ -1,6 +1,7 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
+import '../../../design_system/design_system.dart';
 import 'kardex_view_model.dart';
 
 class KardexView extends StatefulWidget {
@@ -17,7 +18,11 @@ class _KardexViewState extends State<KardexView> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<KardexViewModel>().loadInitialData();
+      if (mounted) {
+        _searchController.clear();
+        context.read<KardexViewModel>().clearSearch();
+        context.read<KardexViewModel>().loadInitialData();
+      }
     });
   }
 
@@ -29,6 +34,9 @@ class _KardexViewState extends State<KardexView> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isHandheld = ResponsiveBreakpoints.isHandheld(context);
+
     return Scaffold(
       appBar: AppBar(title: const Text('Kardex BOH')),
       body: Consumer<KardexViewModel>(
@@ -38,36 +46,51 @@ class _KardexViewState extends State<KardexView> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // 1. Compact / Expandable Explanatory Card
                 Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Historial local de movimientos inventariables',
-                          style: Theme.of(context).textTheme.titleLarge,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    side: BorderSide(color: colorScheme.outlineVariant),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Theme(
+                    data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                    child: ExpansionTile(
+                      leading: Icon(Icons.info_outline, color: colorScheme.primary, size: 20),
+                      title: Text(
+                        'Historial local de movimientos inventariables',
+                        style: TextStyle(
+                          fontSize: isHandheld ? 13 : 15,
+                          fontWeight: FontWeight.bold,
+                          color: colorScheme.onSurface,
                         ),
-                        const SizedBox(height: 8),
+                      ),
+                      initiallyExpanded: !isHandheld,
+                      childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                      children: [
                         const Text(
                           'Fuente operativa: SQLite local como verdad de esta terminal POS, enriquecida con documentos BOH y estados de sincronización cuando existen.',
+                          style: TextStyle(fontSize: 12),
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 6),
                         const Text(
                           'Los costos históricos se muestran cuando el documento origen está disponible; los movimientos legados sin metadata conservan N/D de forma explícita.',
+                          style: TextStyle(fontSize: 12),
                         ),
                         if (viewModel.errorMessage != null) ...[
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 6),
                           Text(
                             viewModel.errorMessage!,
-                            style: TextStyle(color: Theme.of(context).colorScheme.error),
+                            style: TextStyle(color: colorScheme.error, fontSize: 12),
                           ),
                         ],
                       ],
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
+
+                // 2. Search Field
                 TextField(
                   controller: _searchController,
                   onChanged: viewModel.setSearchQuery,
@@ -103,6 +126,8 @@ class _KardexViewState extends State<KardexView> {
                     ),
                   ),
                 const SizedBox(height: 8),
+
+                // 3. Filters
                 Row(
                   children: [
                     if (viewModel.availableInsumos.isNotEmpty)
@@ -114,6 +139,7 @@ class _KardexViewState extends State<KardexView> {
                             labelText: 'Filtrar Insumo',
                             isDense: true,
                             border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                           ),
                           items: [
                             const DropdownMenuItem<String?>(
@@ -164,6 +190,8 @@ class _KardexViewState extends State<KardexView> {
                   ],
                 ),
                 const SizedBox(height: 8),
+
+                // 4. Type Chips
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
@@ -181,7 +209,9 @@ class _KardexViewState extends State<KardexView> {
                         .toList(growable: false),
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
+
+                // 5. Entries Content (Responsive Cards for mobile, DataTable for desktop)
                 Expanded(
                   child: viewModel.isLoading && viewModel.entries.isEmpty
                       ? const Center(child: CircularProgressIndicator())
@@ -195,41 +225,100 @@ class _KardexViewState extends State<KardexView> {
                                   message:
                                       'No hay movimientos que coincidan con la búsqueda o el filtro actual.',
                                 )
-                              : SingleChildScrollView(
-                                  scrollDirection: Axis.horizontal,
-                                  child: SingleChildScrollView(
-                                    child: DataTable(
-                                      columns: const [
-                                        DataColumn(label: Text('Fecha')),
-                                        DataColumn(label: Text('Tipo')),
-                                        DataColumn(label: Text('Estado Costeo')),
-                                        DataColumn(label: Text('Referencia')),
-                                        DataColumn(label: Text('Documento')),
-                                        DataColumn(label: Text('Cantidad')),
-                                        DataColumn(label: Text('Stock final')),
-                                        DataColumn(label: Text('Costo unit.')),
-                                        DataColumn(label: Text('Valor')),
-                                      ],
-                                      rows: viewModel.visibleEntries
-                                          .map(
-                                            (entry) => DataRow(
-                                              cells: [
-                                                DataCell(Text(entry.dateLabel), onTap: () => _showDetailSheet(context, entry)),
-                                                DataCell(Text(entry.typeLabel.toUpperCase()), onTap: () => _showDetailSheet(context, entry)),
-                                                DataCell(_buildCostingChip(context, entry), onTap: () => _showDetailSheet(context, entry)),
-                                                DataCell(Text(entry.referenceLabel), onTap: () => _showDetailSheet(context, entry)),
-                                                DataCell(Text(entry.sourceDocumentLabel), onTap: () => _showDetailSheet(context, entry)),
-                                                DataCell(Text(entry.quantityLabel, style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])), onTap: () => _showDetailSheet(context, entry)),
-                                                DataCell(Text(entry.stockAfterLabel, style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])), onTap: () => _showDetailSheet(context, entry)),
-                                                DataCell(Text(entry.unitCostLabel, style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])), onTap: () => _showDetailSheet(context, entry)),
-                                                DataCell(Text(entry.totalValueLabel, style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])), onTap: () => _showDetailSheet(context, entry)),
+                              : (isHandheld
+                                  ? ListView.separated(
+                                      itemCount: viewModel.visibleEntries.length,
+                                      separatorBuilder: (context, _) => const SizedBox(height: 8),
+                                      itemBuilder: (context, index) {
+                                        final entry = viewModel.visibleEntries[index];
+                                        return Card(
+                                          margin: EdgeInsets.zero,
+                                          child: ListTile(
+                                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                                            title: Row(
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    entry.referenceLabel,
+                                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                _buildCostingChip(context, entry),
                                               ],
                                             ),
-                                          )
-                                          .toList(growable: false),
-                                    ),
-                                  ),
-                                ),
+                                            subtitle: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  '${entry.typeLabel.toUpperCase()} • ${entry.dateLabel}',
+                                                  style: TextStyle(color: colorScheme.outline, fontSize: 11),
+                                                ),
+                                                const SizedBox(height: 4),
+                                                Row(
+                                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                  children: [
+                                                    Expanded(
+                                                      child: Text(
+                                                        'Cant: ${entry.quantityLabel} | Stock: ${entry.stockAfterLabel}',
+                                                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    Text(
+                                                      'Valor: ${entry.totalValueLabel}',
+                                                      style: TextStyle(
+                                                        fontSize: 12,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: colorScheme.primary,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ],
+                                            ),
+                                            onTap: () => _showDetailSheet(context, entry),
+                                          ),
+                                        );
+                                      },
+                                    )
+                                  : SingleChildScrollView(
+                                      scrollDirection: Axis.horizontal,
+                                      child: SingleChildScrollView(
+                                        child: DataTable(
+                                          columns: const [
+                                            DataColumn(label: Text('Fecha')),
+                                            DataColumn(label: Text('Tipo')),
+                                            DataColumn(label: Text('Estado Costeo')),
+                                            DataColumn(label: Text('Referencia')),
+                                            DataColumn(label: Text('Documento')),
+                                            DataColumn(label: Text('Cantidad')),
+                                            DataColumn(label: Text('Stock final')),
+                                            DataColumn(label: Text('Costo unit.')),
+                                            DataColumn(label: Text('Valor')),
+                                          ],
+                                          rows: viewModel.visibleEntries
+                                              .map(
+                                                (entry) => DataRow(
+                                                  cells: [
+                                                    DataCell(Text(entry.dateLabel), onTap: () => _showDetailSheet(context, entry)),
+                                                    DataCell(Text(entry.typeLabel.toUpperCase()), onTap: () => _showDetailSheet(context, entry)),
+                                                    DataCell(_buildCostingChip(context, entry), onTap: () => _showDetailSheet(context, entry)),
+                                                    DataCell(Text(entry.referenceLabel), onTap: () => _showDetailSheet(context, entry)),
+                                                    DataCell(Text(entry.sourceDocumentLabel), onTap: () => _showDetailSheet(context, entry)),
+                                                    DataCell(Text(entry.quantityLabel, style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])), onTap: () => _showDetailSheet(context, entry)),
+                                                    DataCell(Text(entry.stockAfterLabel, style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])), onTap: () => _showDetailSheet(context, entry)),
+                                                    DataCell(Text(entry.unitCostLabel, style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])), onTap: () => _showDetailSheet(context, entry)),
+                                                    DataCell(Text(entry.totalValueLabel, style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])), onTap: () => _showDetailSheet(context, entry)),
+                                                  ],
+                                                ),
+                                              )
+                                              .toList(growable: false),
+                                        ),
+                                      ),
+                                    )),
                 ),
               ],
             ),
@@ -281,9 +370,11 @@ class _KardexViewState extends State<KardexView> {
               Text('ID: ${entry.id}'),
               Text('Referencia: ${entry.referenceLabel}'),
               Text('Tipo: ${entry.typeLabel}'),
-              Row(
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
                 children: [
-                  const Text('Estado de costeo: '),
+                  const Text('Estado de costeo:'),
                   _buildCostingChip(context, entry),
                 ],
               ),

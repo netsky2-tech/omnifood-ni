@@ -79,9 +79,34 @@ class _ProductionOrderViewState extends State<ProductionOrderView> {
                       : ListView.separated(
                           itemCount: viewModel.orders.length,
                           separatorBuilder: (context, index) => const SizedBox(height: 12),
-                          itemBuilder: (context, index) => ProductionOrderDetailCard(
-                            order: viewModel.orders[index],
-                          ),
+                          itemBuilder: (context, index) {
+                            final order = viewModel.orders[index];
+                            return ProductionOrderDetailCard(
+                              order: order,
+                              onPrintLabel: () async {
+                                try {
+                                  final result = await viewModel.printBatchLabel(
+                                    order: order,
+                                  );
+                                  if (context.mounted && result.isSuccess) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Viñeta de producción enviada a impresora'),
+                                      ),
+                                    );
+                                  }
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Error al imprimir viñeta: $e'),
+                                      ),
+                                    );
+                                  }
+                                }
+                              },
+                            );
+                          },
                         ),
                 ),
               ],
@@ -98,119 +123,344 @@ class _ProductionOrderViewState extends State<ProductionOrderView> {
   ) async {
     RecipeVersionDocument? selectedVersion;
     String? producedInsumoId;
+    final initialBatchCode = viewModel.generateNextBatchCode();
     final plannedController = TextEditingController(text: '1');
     final actualController = TextEditingController(text: '1');
-    final batchController = TextEditingController();
-    final expiryController = TextEditingController(text: DateTime.now().add(const Duration(days: 30)).toIso8601String().split('T').first);
+    final batchController = TextEditingController(text: initialBatchCode);
+    final expiryController = TextEditingController(
+      text: DateTime.now().add(const Duration(days: 2)).toIso8601String().split('T').first,
+    );
     final varianceController = TextEditingController();
+    final supervisorIdController = TextEditingController();
+    final supervisorPinController = TextEditingController();
 
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setState) => Dialog(
-          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text('Cerrar producción', style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 16),
-                SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                  DropdownButtonFormField<RecipeVersionDocument>(
-                  initialValue: selectedVersion,
-                  decoration: const InputDecoration(labelText: 'Versión de receta'),
-                  items: viewModel.availableRecipeVersions
-                      .map(
-                        (version) => DropdownMenuItem<RecipeVersionDocument>(
-                          value: version,
-                          child: Text('${version.productName} • V${version.versionNumber}'),
+        builder: (context, setState) {
+          final screenSize = MediaQuery.of(context).size;
+          final isCompact = screenSize.width < 600;
+
+          final planned = double.tryParse(plannedController.text.trim()) ?? 0;
+          final actual = double.tryParse(actualController.text.trim()) ?? 0;
+          final evaluation = selectedVersion == null
+              ? null
+              : viewModel.evaluateVariance(
+                  recipeVersion: selectedVersion!,
+                  plannedQuantity: planned,
+                  actualQuantity: actual,
+                );
+          final requiresSupervisor = evaluation?.requiresSupervisorOverride ?? false;
+          final isTotalLoss = evaluation?.isTotalLoss ?? false;
+
+          final isSubmitDisabled = selectedVersion == null ||
+              producedInsumoId == null ||
+              batchController.text.trim().isEmpty ||
+              planned <= 0 ||
+              (!isTotalLoss && actual <= 0) ||
+              (requiresSupervisor &&
+                  (supervisorIdController.text.trim().isEmpty ||
+                      supervisorPinController.text.trim().isEmpty ||
+                      varianceController.text.trim().isEmpty));
+
+          Future<void> submitClose() async {
+            try {
+              await viewModel.closeOrderLocally(
+                recipeVersion: selectedVersion!,
+                producedInsumoId: producedInsumoId!,
+                plannedQuantity: planned,
+                actualQuantity: actual,
+                producedBatchNumber: batchController.text.trim(),
+                producedExpirationDate:
+                    DateTime.parse(expiryController.text.trim()),
+                varianceReason: varianceController.text.trim().isEmpty
+                    ? null
+                    : varianceController.text.trim(),
+                supervisorId: supervisorIdController.text.trim().isEmpty
+                    ? null
+                    : supervisorIdController.text.trim(),
+                supervisorPin: supervisorPinController.text.trim().isEmpty
+                    ? null
+                    : supervisorPinController.text.trim(),
+              );
+              if (dialogContext.mounted) {
+                Navigator.pop(dialogContext);
+              }
+            } catch (error) {
+              if (dialogContext.mounted) {
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  SnackBar(
+                    content: Text('$error'),
+                    backgroundColor: Theme.of(dialogContext).colorScheme.error,
+                  ),
+                );
+              }
+            }
+          }
+
+          return Dialog(
+            insetPadding: EdgeInsets.symmetric(
+              horizontal: isCompact ? 12 : 24,
+              vertical: isCompact ? 16 : 24,
+            ),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 540),
+              child: Padding(
+                padding: EdgeInsets.all(isCompact ? 16 : 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Cerrar producción',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                    const SizedBox(height: 16),
+                    Flexible(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            DropdownButtonFormField<RecipeVersionDocument>(
+                              initialValue: selectedVersion,
+                              isExpanded: true,
+                              decoration: const InputDecoration(
+                                labelText: 'Versión de receta',
+                                border: OutlineInputBorder(),
+                              ),
+                              items: viewModel.availableRecipeVersions
+                                   .map(
+                                    (version) => DropdownMenuItem<RecipeVersionDocument>(
+                                      value: version,
+                                      child: Text(
+                                        '${version.productName} • V${version.versionNumber}',
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  )
+                                  .toList(growable: false),
+                              onChanged: (value) {
+                                setState(() {
+                                  selectedVersion = value;
+                                  if (value != null) {
+                                    final calculatedExpiry = viewModel.calculateExpirationDate(value);
+                                    expiryController.text =
+                                        calculatedExpiry.toIso8601String().split('T').first;
+                                    plannedController.text = value.yieldQuantity.toString();
+                                    actualController.text = value.yieldQuantity.toString();
+                                  }
+                                });
+                              },
+                            ),
+                            const SizedBox(height: 12),
+                            DropdownButtonFormField<String>(
+                              initialValue: producedInsumoId,
+                              isExpanded: true,
+                              decoration: const InputDecoration(
+                                labelText: 'Insumo producido',
+                                border: OutlineInputBorder(),
+                              ),
+                              items: viewModel.availableInsumos
+                                  .map(
+                                    (insumo) => DropdownMenuItem<String>(
+                                      value: insumo.id,
+                                      child: Text(
+                                        insumo.name,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  )
+                                  .toList(growable: false),
+                              onChanged: (value) => setState(() => producedInsumoId = value),
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: plannedController,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Cant. planificada',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                    style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
+                                    onChanged: (_) => setState(() {}),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: TextField(
+                                    controller: actualController,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Cant. real recibida',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                    style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
+                                    onChanged: (_) => setState(() {}),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            if (evaluation != null) ...[
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: requiresSupervisor
+                                      ? (isTotalLoss
+                                          ? Colors.red.withOpacity(0.08)
+                                          : Colors.orange.withOpacity(0.08))
+                                      : Colors.green.withOpacity(0.08),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: requiresSupervisor
+                                        ? (isTotalLoss ? Colors.red : Colors.orange.shade700)
+                                        : Colors.green.shade700,
+                                  ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          requiresSupervisor
+                                              ? (isTotalLoss
+                                                  ? Icons.cancel_outlined
+                                                  : Icons.warning_amber_rounded)
+                                              : Icons.check_circle_outline,
+                                          size: 20,
+                                          color: requiresSupervisor
+                                              ? (isTotalLoss
+                                                  ? Colors.red.shade800
+                                                  : Colors.orange.shade900)
+                                              : Colors.green.shade800,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            isTotalLoss
+                                                ? 'Pérdida total de lote (Merma a cocina)'
+                                                : (requiresSupervisor
+                                                    ? 'Desviación excede tolerancia (±${selectedVersion!.umbralDesviacionPermitido}%)'
+                                                    : 'Rendimiento dentro de tolerancia'),
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: requiresSupervisor
+                                                  ? (isTotalLoss
+                                                      ? Colors.red.shade900
+                                                      : Colors.orange.shade900)
+                                                  : Colors.green.shade900,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      'Rendimiento: ${evaluation.yieldPercentage.toStringAsFixed(1)}% • Desviación: ${evaluation.deviationPercentage.toStringAsFixed(1)}%',
+                                      style: const TextStyle(fontSize: 13),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                            ],
+                            TextField(
+                              controller: batchController,
+                              decoration: const InputDecoration(
+                                labelText: 'Código de lote (auto)',
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.qr_code),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: expiryController,
+                              decoration: const InputDecoration(
+                                labelText: 'Expiración (YYYY-MM-DD)',
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.calendar_today),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: varianceController,
+                              decoration: InputDecoration(
+                                labelText: requiresSupervisor
+                                    ? 'Motivo de variación o merma *'
+                                    : 'Motivo de variación (opcional)',
+                                border: const OutlineInputBorder(),
+                              ),
+                              onChanged: (_) => setState(() {}),
+                            ),
+                            if (requiresSupervisor) ...[
+                              const SizedBox(height: 12),
+                              TextField(
+                                controller: supervisorIdController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Usuario / ID de Supervisor *',
+                                  border: OutlineInputBorder(),
+                                  prefixIcon: Icon(Icons.person),
+                                ),
+                                onChanged: (_) => setState(() {}),
+                              ),
+                              const SizedBox(height: 12),
+                              TextField(
+                                controller: supervisorPinController,
+                                obscureText: true,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  labelText: 'PIN o TOTP de Supervisor *',
+                                  border: OutlineInputBorder(),
+                                  prefixIcon: Icon(Icons.lock_outline),
+                                ),
+                                onChanged: (_) => setState(() {}),
+                              ),
+                            ],
+                          ],
                         ),
-                      )
-                      .toList(growable: false),
-                  onChanged: (value) => setState(() => selectedVersion = value),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: producedInsumoId,
-                  decoration: const InputDecoration(labelText: 'Insumo producido'),
-                  items: viewModel.availableInsumos
-                      .map(
-                        (insumo) => DropdownMenuItem<String>(
-                          value: insumo.id,
-                          child: Text(insumo.name),
-                        ),
-                      )
-                      .toList(growable: false),
-                  onChanged: (value) => setState(() => producedInsumoId = value),
-                ),
-                const SizedBox(height: 12),
-                      TextField(
-                        controller: plannedController,
-                        decoration: const InputDecoration(labelText: 'Cantidad planificada'),
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
                       ),
-                const SizedBox(height: 12),
-                      TextField(
-                        controller: actualController,
-                        decoration: const InputDecoration(labelText: 'Cantidad real recibida'),
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
+                    ),
+                    const SizedBox(height: 16),
+                    if (isCompact) ...[
+                      FilledButton.icon(
+                        icon: const Icon(Icons.check_circle_outline),
+                        onPressed: isSubmitDisabled ? null : submitClose,
+                        label: const Text('CERRAR ORDEN'),
                       ),
-                const SizedBox(height: 12),
-                      TextField(
-                  controller: batchController,
-                  decoration: const InputDecoration(labelText: 'Lote de salida'),
+                      const SizedBox(height: 8),
+                      OutlinedButton(
+                        onPressed: () => Navigator.pop(dialogContext),
+                        child: const Text('CANCELAR'),
                       ),
-                const SizedBox(height: 12),
-                      TextField(
-                  controller: expiryController,
-                  decoration: const InputDecoration(labelText: 'Expiración del lote'),
-                      ),
-                const SizedBox(height: 12),
-                      TextField(
-                  controller: varianceController,
-                  decoration: const InputDecoration(labelText: 'Motivo de variación'),
+                    ] else ...[
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          OutlinedButton(
+                            onPressed: () => Navigator.pop(dialogContext),
+                            child: const Text('CANCELAR'),
+                          ),
+                          const SizedBox(width: 12),
+                          FilledButton.icon(
+                            icon: const Icon(Icons.check_circle_outline),
+                            onPressed: isSubmitDisabled ? null : submitClose,
+                            label: const Text('CERRAR ORDEN'),
+                          ),
+                        ],
                       ),
                     ],
-                  ),
+                  ],
                 ),
-                const SizedBox(height: 16),
-                OutlinedButton(
-                  onPressed: () => Navigator.pop(dialogContext),
-                  child: const Text('CANCELAR'),
-                ),
-                const SizedBox(height: 8),
-                FilledButton(
-                  onPressed: selectedVersion == null || producedInsumoId == null || batchController.text.trim().isEmpty
-                      ? null
-                      : () async {
-                          await viewModel.closeOrderLocally(
-                            recipeVersion: selectedVersion!,
-                            producedInsumoId: producedInsumoId!,
-                            plannedQuantity: double.tryParse(plannedController.text.trim()) ?? 0,
-                            actualQuantity: double.tryParse(actualController.text.trim()) ?? 0,
-                            producedBatchNumber: batchController.text.trim(),
-                            producedExpirationDate: DateTime.parse(expiryController.text.trim()),
-                            varianceReason: varianceController.text.trim().isEmpty
-                                ? null
-                                : varianceController.text.trim(),
-                          );
-                          if (dialogContext.mounted) {
-                            Navigator.pop(dialogContext);
-                          }
-                        },
-                  child: const Text('CERRAR ORDEN'),
-                ),
-              ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
 
@@ -219,5 +469,7 @@ class _ProductionOrderViewState extends State<ProductionOrderView> {
     batchController.dispose();
     expiryController.dispose();
     varianceController.dispose();
+    supervisorIdController.dispose();
+    supervisorPinController.dispose();
   }
 }

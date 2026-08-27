@@ -137,4 +137,82 @@ describe('UserService', () => {
       }),
     );
   });
+
+  describe('Permissions Matrix & Custom Permissions', () => {
+    it('returns system permissions matrix with role defaults', () => {
+      const matrix = service.getPermissionsMatrix();
+      expect(matrix.role_defaults).toBeDefined();
+      expect(matrix.role_defaults[UserRole.OWNER].length).toBe(8);
+      expect(matrix.all_permissions.length).toBe(8);
+    });
+
+    it('resolves user effective permissions including custom overrides', async () => {
+      userRepository.findOne.mockResolvedValue({
+        id: 'user-cashier',
+        role: UserRole.CASHIER,
+        tenant_id: 'tenant-1',
+        is_active: true,
+      });
+
+      securityProfileRepository.findOne.mockResolvedValue({
+        user_id: 'user-cashier',
+        custom_permissions: ['sales:void_invoice'],
+      });
+
+      const effective = await service.getUserEffectivePermissions(
+        'user-cashier',
+        'tenant-1',
+      );
+
+      expect(effective.user_id).toBe('user-cashier');
+      expect(effective.role).toBe(UserRole.CASHIER);
+      expect(effective.role_permissions).toEqual([]);
+      expect(effective.custom_permissions).toEqual(['sales:void_invoice']);
+      expect(effective.effective_permissions).toEqual(['sales:void_invoice']);
+    });
+
+    it('sets custom permissions on security profile and audits action', async () => {
+      userRepository.findOne.mockResolvedValue({
+        id: 'user-cashier',
+        role: UserRole.CASHIER,
+        tenant_id: 'tenant-1',
+        is_active: true,
+      });
+
+      const existingProfile = {
+        user_id: 'user-cashier',
+        custom_permissions: [],
+      };
+      securityProfileRepository.findOne.mockResolvedValue(existingProfile);
+      securityProfileRepository.save.mockImplementation(
+        async (p: unknown) => p,
+      );
+      auditRepository.save.mockResolvedValue({ id: 'audit-3' });
+
+      const updated = await service.setCustomPermissions(
+        'user-cashier',
+        ['sales:void_invoice' as any, 'cash:manual_drawer_open' as any],
+        'tenant-1',
+        'admin-1',
+      );
+
+      expect(existingProfile.custom_permissions).toEqual([
+        'sales:void_invoice',
+        'cash:manual_drawer_open',
+      ]);
+      expect(securityProfileRepository.save).toHaveBeenCalled();
+      expect(auditRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'USER_PERMISSIONS_UPDATED',
+          target_id: 'user-cashier',
+          tenant_id: 'tenant-1',
+          user_id: 'admin-1',
+        }),
+      );
+      expect(updated.effective_permissions).toEqual([
+        'sales:void_invoice',
+        'cash:manual_drawer_open',
+      ]);
+    });
+  });
 });

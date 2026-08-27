@@ -12,9 +12,11 @@ import '../../../data/database/app_database.dart';
 import '../../widgets/app_drawer.dart';
 import '../../features/identity/supervisor_override_modal.dart';
 import '../../design_system/design_system.dart';
+import '../cash/cash_shift_view_model.dart';
 import 'widgets/multi_currency_checkout_dialog.dart';
 import 'widgets/cloud_sync_status_badge.dart';
 import 'tables/table_layout_view.dart';
+import '../../../presentation/features/sales/widgets/customer_select_dialog.dart';
 
 class SaleView extends StatefulWidget {
   const SaleView({super.key});
@@ -28,6 +30,12 @@ class _SaleViewState extends State<SaleView> {
   void initState() {
     super.initState();
     _checkAuth();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<SaleViewModel>().setSearchQuery('');
+        context.read<SaleViewModel>().checkActiveSession();
+      }
+    });
   }
 
   Future<void> _checkAuth() async {
@@ -605,7 +613,7 @@ class _CloseBoxDialogState extends State<CloseBoxDialog> {
               ],
               rows: expected.entries.map((e) => DataRow(cells: [
                 DataCell(Text(e.key.name.toUpperCase())),
-                DataCell(Text('\$${e.value.toStringAsFixed(2)}')),
+                DataCell(Text('C\$ ${e.value.toStringAsFixed(2)}')),
               ])).toList(),
             ),
             const Divider(),
@@ -623,10 +631,15 @@ class _CloseBoxDialogState extends State<CloseBoxDialog> {
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCELAR')),
         ElevatedButton(
-          onPressed: () {
+          onPressed: () async {
             final balance = double.tryParse(controller.text) ?? 0.0;
-            context.read<SaleViewModel>().closeSession(balance);
-            Navigator.pop(context);
+            await context.read<SaleViewModel>().closeSession(balance);
+            if (context.mounted) {
+              try {
+                context.read<CashShiftViewModel>().init();
+              } catch (_) {}
+              Navigator.pop(context);
+            }
           }, 
           child: const Text('CERRAR CAJA'),
         ),
@@ -635,13 +648,35 @@ class _CloseBoxDialogState extends State<CloseBoxDialog> {
   }
 }
 
-class SearchBarWidget extends StatelessWidget {
+class SearchBarWidget extends StatefulWidget {
   const SearchBarWidget({super.key});
+
+  @override
+  State<SearchBarWidget> createState() => _SearchBarWidgetState();
+}
+
+class _SearchBarWidgetState extends State<SearchBarWidget> {
+  final TextEditingController _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final isHandheld = ResponsiveBreakpoints.isHandheld(context);
+    final viewModel = context.watch<SaleViewModel>();
+
+    // Synchronize controller text if search query changed externally
+    if (_controller.text != viewModel.searchQuery) {
+      _controller.value = _controller.value.copyWith(
+        text: viewModel.searchQuery,
+        selection: TextSelection.collapsed(offset: viewModel.searchQuery.length),
+      );
+    }
 
     return Container(
       width: isHandheld ? null : 450,
@@ -653,10 +688,12 @@ class SearchBarWidget extends StatelessWidget {
         border: Border.all(color: colorScheme.outlineVariant),
       ),
       child: TextField(
+        controller: _controller,
         onChanged: (val) => context.read<SaleViewModel>().setSearchQuery(val),
         onSubmitted: (val) {
           context.read<SaleViewModel>().searchAndAddToCart(val);
           context.read<SaleViewModel>().setSearchQuery('');
+          _controller.clear();
         },
         decoration: InputDecoration(
           hintText: isHandheld ? 'Buscar...' : 'Buscar por SKU o Nombre...',
@@ -668,6 +705,15 @@ class SearchBarWidget extends StatelessWidget {
           isDense: true,
           contentPadding: const EdgeInsets.symmetric(vertical: 8),
           prefixIcon: Icon(Icons.search, size: 20, color: colorScheme.primary),
+          suffixIcon: viewModel.searchQuery.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear, size: 18),
+                  onPressed: () {
+                    _controller.clear();
+                    context.read<SaleViewModel>().setSearchQuery('');
+                  },
+                )
+              : null,
         ),
       ),
     );
@@ -694,7 +740,7 @@ class RecallTicketsDialog extends StatelessWidget {
                 return ListTile(
                   title: Text(ticket.name),
                   subtitle: Text('${ticket.items.length} productos'),
-                  trailing: Text('\$${ticket.items.fold(0.0, (sum, i) => sum + i.total).toStringAsFixed(2)}'),
+                  trailing: Text('C\$ ${ticket.items.fold(0.0, (sum, i) => sum + i.total).toStringAsFixed(2)}'),
                   onTap: () {
                     viewModel.recallTicket(ticket);
                     Navigator.pop(context);
@@ -754,7 +800,7 @@ class ProductGrid extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '\$${product.sellPrice.toStringAsFixed(2)}',
+                    'C\$ ${product.sellPrice.toStringAsFixed(2)}',
                     style: TextStyle(color: colorScheme.primary, fontWeight: FontWeight.bold, fontSize: isHandheld ? 13 : 15),
                   ),
                 ],
@@ -820,7 +866,7 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
                   onChanged: (val) => setState(() => _selectedVariantId = val),
                   child: Column(
                     children: widget.product.variants.map((v) => RadioListTile<String>(
-                      title: Text('${v.name} (+\$${v.priceAdjustment})'),
+                      title: Text('${v.name} (+C\$ ${v.priceAdjustment})'),
                       value: v.id,
                     )).toList(),
                   ),
@@ -831,7 +877,7 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
                 const Text('Modificadores:', style: TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 ...widget.product.availableModifiers.map((m) => CheckboxListTile(
-                  title: Text('${m.name} (+\$${m.extraPrice})'),
+                  title: Text('${m.name} (+C\$ ${m.extraPrice})'),
                   value: _selectedModifiers.contains(m),
                   onChanged: (val) {
                     setState(() {
@@ -931,7 +977,7 @@ class _BoxOpeningContentState extends State<BoxOpeningContent> {
                   controller: controller,
                   decoration: const InputDecoration(
                     labelText: 'Fondo de Caja Inicial',
-                    prefixText: '\$ ',
+                    prefixText: 'C\$ ',
                   ),
                   keyboardType: TextInputType.number,
                   textAlign: TextAlign.center,
@@ -943,9 +989,14 @@ class _BoxOpeningContentState extends State<BoxOpeningContent> {
                 SizedBox(height: isHandheld ? 16 : 24),
                 ElevatedButton(
                   onPressed: viewModel.currentUserRole != null && viewModel.currentUserRole != UserRole.waiter
-                      ? () {
+                      ? () async {
                           final balance = double.tryParse(controller.text) ?? 0.0;
-                          context.read<SaleViewModel>().openSession(balance);
+                          await context.read<SaleViewModel>().openSession(balance);
+                          if (context.mounted) {
+                            try {
+                              context.read<CashShiftViewModel>().init();
+                            } catch (_) {}
+                          }
                         }
                       : null,
                   child: const Text('ABRIR CAJA'),
@@ -1001,7 +1052,7 @@ class MobileFloatingCartBar extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Total: \$${viewModel.total.toStringAsFixed(2)}',
+                  'Total: C\$ ${viewModel.total.toStringAsFixed(2)}',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
@@ -1103,7 +1154,7 @@ class CartSidebar extends StatelessWidget {
                           ),
                         ],
                       ),
-                      trailing: Text('\$${item.total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                      trailing: Text('C\$ ${item.total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
                       onLongPress: () => viewModel.removeFromCart(item.productId, variantId: item.variantId, modifiers: item.selectedModifiers),
                     );
                   },
@@ -1137,7 +1188,7 @@ class CartSummary extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text('Subtotal'),
-            Text('\$${(viewModel.subtotal + viewModel.totalDiscounts).toStringAsFixed(2)}'),
+            Text('C\$ ${(viewModel.subtotal + viewModel.totalDiscounts).toStringAsFixed(2)}'),
           ],
         ),
         if (viewModel.totalDiscounts > 0)
@@ -1145,23 +1196,28 @@ class CartSummary extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Descuentos (Promos)', style: TextStyle(color: Colors.green)),
-              Text('-\$${viewModel.totalDiscounts.toStringAsFixed(2)}', style: const TextStyle(color: Colors.green)),
+              Text('-C\$ ${viewModel.totalDiscounts.toStringAsFixed(2)}', style: const TextStyle(color: Colors.green)),
             ],
           ),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text('IVA (15%)'),
-            Text('\$${viewModel.totalTax.toStringAsFixed(2)}'),
+            Text('C\$ ${viewModel.totalTax.toStringAsFixed(2)}'),
           ],
         ),
         const Divider(),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('TOTAL', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24)),
-            Text('\$${viewModel.total.toStringAsFixed(2)}', 
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24, color: colorScheme.primary)),
+            Text('TOTAL', style: TextStyle(fontWeight: FontWeight.bold, fontSize: ResponsiveBreakpoints.isHandheld(context) ? 20 : 24)),
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text('C\$ ${viewModel.total.toStringAsFixed(2)}', 
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: ResponsiveBreakpoints.isHandheld(context) ? 20 : 24, color: colorScheme.primary)),
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 12),
@@ -1184,6 +1240,30 @@ class CartSummary extends StatelessWidget {
                 ? null
                 : () => _requestSupervisorOverrideForManualDiscount(context),
             child: const Text('DESCUENTO MANUAL'),
+          ),
+        ),
+        const SizedBox(height: 8),
+        if (viewModel.selectedCustomer != null || viewModel.customerName != null) ...[
+          InputChip(
+            key: const Key('cart_customer_chip'),
+            avatar: const Icon(Icons.person, size: 16, color: Colors.blue),
+            label: Text(
+              viewModel.selectedCustomer != null
+                  ? '${viewModel.selectedCustomer!.name}${viewModel.selectedCustomer!.pointsBalance > 0 ? " (${viewModel.selectedCustomer!.pointsBalance.toStringAsFixed(0)} pts)" : ""}'
+                  : 'Cliente: ${viewModel.customerName}',
+            ),
+            onDeleted: () => viewModel.clearCustomer(),
+            deleteIconColor: Colors.red.shade700,
+          ),
+          const SizedBox(height: 8),
+        ],
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            key: const Key('btn_select_customer'),
+            onPressed: () => CustomerSelectDialog.show(context, viewModel),
+            icon: const Icon(Icons.person_add_alt),
+            label: Text(viewModel.selectedCustomer != null ? 'CAMBIAR CLIENTE' : 'ASIGNAR CLIENTE'),
           ),
         ),
 
@@ -1353,7 +1433,7 @@ class _CheckoutDialogState extends State<CheckoutDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Total a Pagar: \$${total.toStringAsFixed(2)}', 
+              Text('Total a Pagar: C\$ ${total.toStringAsFixed(2)}', 
                 style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
               const Divider(),
               ..._payments.keys.map((method) => Padding(
@@ -1365,7 +1445,7 @@ class _CheckoutDialogState extends State<CheckoutDialog> {
                       flex: 3,
                       child: TextField(
                         controller: _controllers[method],
-                        decoration: const InputDecoration(prefixText: '\$ '),
+                        decoration: const InputDecoration(prefixText: 'C\$ '),
                         keyboardType: TextInputType.number,
                         onChanged: (val) {
                           setState(() {
@@ -1386,7 +1466,7 @@ class _CheckoutDialogState extends State<CheckoutDialog> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text('Restante:', style: TextStyle(color: Colors.red, fontSize: 18, fontWeight: FontWeight.bold)),
-                  Text('\$${remaining.toStringAsFixed(2)}', 
+                  Text('C\$ ${remaining.toStringAsFixed(2)}', 
                     style: TextStyle(color: remaining == 0 ? Colors.green : Colors.red, fontWeight: FontWeight.bold, fontSize: 18)),
                 ],
               ),

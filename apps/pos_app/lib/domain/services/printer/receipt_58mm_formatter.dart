@@ -645,4 +645,135 @@ class Receipt58mmFormatter {
 
     return buffer.toString();
   }
+
+  // ==========================================
+  // 4. BOH FIFO Production Batch Label (Viñeta)
+  // ==========================================
+
+  /// Formats a BOH FIFO Production Batch Label (Viñeta Térmica) as 32-column text.
+  static String formatProductionBatchLabelText({
+    required String productName,
+    required String batchCode,
+    required double quantity,
+    required String uom,
+    required DateTime productionDate,
+    required DateTime expirationDate,
+    String? operatorName,
+    String? storageInstructions,
+  }) {
+    final buffer = StringBuffer();
+    final dateTimeFormat = DateFormat('yyyy-MM-dd HH:mm');
+
+    buffer.writeln(divider('='));
+    buffer.writeln(center('ETIQUETA DE PRE-ELABORACION'));
+    buffer.writeln(center('BOH - ROTACION FIFO'));
+    buffer.writeln(divider('='));
+
+    buffer.writeln('PRODUCTO:');
+    for (final line in wrap(productName)) {
+      buffer.writeln('  $line');
+    }
+    buffer.writeln(divider('-'));
+
+    buffer.writeln(twoColumns('LOTE:', batchCode));
+    final qtyStr = quantity % 1 == 0
+        ? '${quantity.toInt()} $uom'
+        : '${quantity.toStringAsFixed(2)} $uom';
+    buffer.writeln(twoColumns('CANTIDAD:', qtyStr));
+    buffer.writeln(twoColumns('ELABORADO:', dateTimeFormat.format(productionDate)));
+    buffer.writeln(twoColumns('VENCE:', dateTimeFormat.format(expirationDate)));
+
+    if (operatorName != null && operatorName.trim().isNotEmpty) {
+      buffer.writeln(divider('-'));
+      buffer.writeln(twoColumns('COCINERO / OP:', operatorName.trim()));
+    }
+
+    if (storageInstructions != null && storageInstructions.trim().isNotEmpty) {
+      buffer.writeln(divider('-'));
+      buffer.writeln('CONSERVACION:');
+      for (final line in wrap(storageInstructions.trim())) {
+        buffer.writeln('  $line');
+      }
+    }
+
+    buffer.writeln(divider('='));
+    return buffer.toString();
+  }
+
+  /// Formats a BOH FIFO Production Batch Label into ESC/POS bytecode.
+  static List<int> formatProductionBatchLabelEscPos({
+    required String productName,
+    required String batchCode,
+    required double quantity,
+    required String uom,
+    required DateTime productionDate,
+    required DateTime expirationDate,
+    String? operatorName,
+    String? storageInstructions,
+  }) {
+    final builder = EscPosBuilder();
+    final dateTimeFormat = DateFormat('yyyy-MM-dd HH:mm');
+
+    builder
+        .align(EscPosAlign.center)
+        .bold(true)
+        .textLine(divider('='))
+        .fontSize(EscPosFontSize.doubleWidth)
+        .textLine('PRE-ELABORACION')
+        .fontSize(EscPosFontSize.normal)
+        .textLine('ROTACION FIFO (BOH)')
+        .textLine(divider('='))
+        .align(EscPosAlign.left)
+        .bold(false)
+        .textLine('PRODUCTO:')
+        .bold(true)
+        .fontSize(EscPosFontSize.doubleHeight);
+
+    for (final line in wrap(productName)) {
+      builder.textLine(line);
+    }
+
+    builder
+        .fontSize(EscPosFontSize.normal)
+        .bold(false)
+        .textLine(divider('-'))
+        .bold(true)
+        .textLine(twoColumns('LOTE:', batchCode))
+        .bold(false);
+
+    final qtyStr = quantity % 1 == 0
+        ? '${quantity.toInt()} $uom'
+        : '${quantity.toStringAsFixed(2)} $uom';
+    builder.textLine(twoColumns('CANTIDAD:', qtyStr));
+    builder.textLine(twoColumns('ELABORADO:', dateTimeFormat.format(productionDate)));
+
+    builder
+        .bold(true)
+        .fontSize(EscPosFontSize.doubleWidth)
+        .textLine(twoColumns('VENCE:', dateTimeFormat.format(expirationDate)))
+        .fontSize(EscPosFontSize.normal)
+        .bold(false);
+
+    if (operatorName != null && operatorName.trim().isNotEmpty) {
+      builder
+          .textLine(divider('-'))
+          .textLine(twoColumns('RESPONSABLE:', operatorName.trim()));
+    }
+
+    if (storageInstructions != null && storageInstructions.trim().isNotEmpty) {
+      builder
+          .textLine(divider('-'))
+          .textLine('CONSERVACION:');
+      for (final line in wrap(storageInstructions.trim())) {
+        builder.textLine('  $line');
+      }
+    }
+
+    builder
+        .textLine(divider('='))
+        .feedLines(3)
+        .cut();
+
+    return builder.toBytes();
+  }
 }

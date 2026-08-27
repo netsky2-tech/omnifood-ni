@@ -64,6 +64,8 @@ class RecipeVersionDocument {
     this.versionNote,
     this.publishedAt,
     this.isSynced = false,
+    this.diasVidaUtil = 2,
+    this.umbralDesviacionPermitido = 5.0,
   });
 
   final String id;
@@ -77,11 +79,20 @@ class RecipeVersionDocument {
   final String? versionNote;
   final DateTime? publishedAt;
   final bool isSynced;
+  final int diasVidaUtil;
+  final double umbralDesviacionPermitido;
+
+  DateTime calculateExpirationDate(DateTime fromDate) {
+    final effectiveDays = diasVidaUtil > 0 ? diasVidaUtil : 2;
+    return fromDate.add(Duration(days: effectiveDays));
+  }
 
   RecipeVersionDocument copyWith({
     bool? isSynced,
     DateTime? publishedAt,
     List<RecipeVersionComponentDocument>? components,
+    int? diasVidaUtil,
+    double? umbralDesviacionPermitido,
   }) {
     return RecipeVersionDocument(
       id: id,
@@ -95,6 +106,9 @@ class RecipeVersionDocument {
       versionNote: versionNote,
       publishedAt: publishedAt ?? this.publishedAt,
       isSynced: isSynced ?? this.isSynced,
+      diasVidaUtil: diasVidaUtil ?? this.diasVidaUtil,
+      umbralDesviacionPermitido:
+          umbralDesviacionPermitido ?? this.umbralDesviacionPermitido,
     );
   }
 
@@ -109,6 +123,8 @@ class RecipeVersionDocument {
         'versionNote': versionNote,
         'publishedAt': publishedAt?.toIso8601String(),
         'isSynced': isSynced,
+        'diasVidaUtil': diasVidaUtil,
+        'umbralDesviacionPermitido': umbralDesviacionPermitido,
         'components': components.map((component) => component.toJson()).toList(),
       };
 
@@ -138,6 +154,11 @@ class RecipeVersionDocument {
           ? null
           : DateTime.parse(json['publishedAt'] as String),
       isSynced: (json['isSynced'] as bool?) ?? false,
+      diasVidaUtil: (json['diasVidaUtil'] ?? json['dias_vida_util'] as num?)?.toInt() ?? 2,
+      umbralDesviacionPermitido:
+          (json['umbralDesviacionPermitido'] ?? json['umbral_desviacion_permitido'] as num?)
+                  ?.toDouble() ??
+              5.0,
       components: componentList,
     );
   }

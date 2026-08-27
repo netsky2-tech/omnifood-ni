@@ -75,8 +75,7 @@ export class InventoryMovement {
   })
   totalCostNio: number;
 
-  @Column({ nullable: true })
-  idempotencyKey: string;
+  idempotencyKey?: string;
 
   @Column({ nullable: true, name: 'source_device_id' })
   sourceDeviceId: string;
@@ -133,8 +132,7 @@ export class InventoryMovement {
   @Column({ name: 'fecha_autorizacion', type: 'timestamptz', nullable: true })
   fechaAutorizacion: Date | null;
 
-  @Column({ nullable: true })
-  user_id: string;
+  user_id?: string;
 
   @CreateDateColumn({ name: 'occurred_at' })
   timestamp: Date;

@@ -16,7 +16,11 @@ class _StockAlertsViewState extends State<StockAlertsView> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<StockAlertsViewModel>().loadStockAlerts();
+      if (mounted) {
+        _searchController.clear();
+        context.read<StockAlertsViewModel>().clearSearch();
+        context.read<StockAlertsViewModel>().loadStockAlerts();
+      }
     });
   }
 

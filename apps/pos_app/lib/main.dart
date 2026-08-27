@@ -8,6 +8,7 @@ import 'package:pos_app/presentation/widgets/inventory_alert_overlay.dart';
 import 'package:pos_app/data/repositories/inventory/inventory_repository_impl.dart';
 import 'data/database/app_database.dart';
 import 'data/database/migrations.dart';
+import 'data/database/database_seeder.dart';
 import 'data/repositories/auth_repository_impl.dart';
 import 'domain/repositories/auth_repository.dart';
 import 'data/repositories/audit_repository_impl.dart';
@@ -87,6 +88,9 @@ void main() async {
       .addMigrations(allMigrations)
       .addCallback(inventoryMovementAppendOnlyCallback)
       .build();
+
+  // Populate seed test data if not present
+  await DatabaseSeeder.seedAll(database);
 
   // Initialize Services & Repositories
   final deviceId = await TerminalIdentityService(
@@ -221,6 +225,7 @@ void main() async {
           create: (_) => ProductionOrderViewModel(
             inventoryRepository,
             movementEngine,
+            authRepository: authRepository,
             terminalIdProvider: () => auditRepository.deviceId,
           ),
         ),
@@ -255,10 +260,14 @@ void main() async {
         ),
         ChangeNotifierProvider(create: (_) => SalesHistoryViewModel(database)),
         ChangeNotifierProvider(
-          create: (_) => CashShiftViewModel.fromDatabase(
-            database: database,
-            currentUserId: 'user-cajero',
-          ),
+          create: (_) {
+            final vm = CashShiftViewModel.fromDatabase(
+              database: database,
+              currentUserId: 'user-cajero',
+            );
+            vm.init();
+            return vm;
+          },
         ),
         ChangeNotifierProvider(
           create: (_) => SaleViewModel(
