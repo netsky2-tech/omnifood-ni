@@ -13,8 +13,13 @@ describe('SystemParametersConfig Entity', () => {
 
     expect(config.id).toBe('1');
     expect(config.tenant_id).toBe('tenant-123');
-    expect(config.paramKey).toBe('inventory.negative_stock.auto_approve_threshold');
-    expect(config.paramValue).toEqual({ thresholdNio: 1500.0, currency: 'NIO' });
+    expect(config.paramKey).toBe(
+      'inventory.negative_stock.auto_approve_threshold',
+    );
+    expect(config.paramValue).toEqual({
+      thresholdNio: 1500.0,
+      currency: 'NIO',
+    });
     expect(config.version).toBe(1);
     expect(config.isActive).toBe(true);
     expect(config.createdBy).toBe('user-admin');

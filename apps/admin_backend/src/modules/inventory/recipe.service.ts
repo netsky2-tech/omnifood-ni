@@ -588,7 +588,7 @@ export class RecipeService {
     const queue = [subRecipeProductId];
 
     while (queue.length > 0) {
-      const currentId = queue.shift()!;
+      const currentId = queue.shift();
       if (currentId === rootProductId) {
         throw new BadRequestException(
           `Dependencia circular detectada en receta: ${rootProductId} -> ... -> ${subRecipeProductId} -> ${rootProductId}`,

@@ -4,6 +4,8 @@ import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/database/migrations.dart';
 import 'package:pos_app/data/repositories/inventory/inventory_repository_impl.dart';
 import 'package:pos_app/data/services/sync_service.dart';
+import 'package:pos_app/data/services/network_connectivity_service.dart';
+import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_sync_state_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
 import 'package:pos_app/data/models/inventory/kardex_correction_entity.dart';
@@ -2371,4 +2373,434 @@ void main() {
       ]);
     },
   );
+
+  group('Slice 8.2 Inbound Catalog & Security Delta Sync', () {
+    test('pullInboundDeltas downloads deltas and hydrates SQLite tables', () async {
+      final database = await $FloorAppDatabase
+          .inMemoryDatabaseBuilder()
+          .build();
+
+      try {
+        final syncServiceWithDb = SyncService(
+          mockAuditRepository,
+          mockSalesRepository,
+          mockInventoryRepository,
+          dio,
+          database: database,
+        );
+
+        capturedGets['/v1/sync/inbound/deltas'] = {
+          'status': 'success',
+          'serverTime': '2026-08-26T18:00:00.000Z',
+          'currentVersion': 1787745600000,
+          'deltas': {
+            'products': [
+              {
+                'id': 'prod-101',
+                'name': 'Café Espresso Doble',
+                'uom': 'CUP',
+                'stock': 25.0,
+                'averageCost': 12.0,
+                'sellPrice': 55.0,
+                'isActive': true,
+                'isPerishable': false,
+                'createdAt': '2026-08-26T10:00:00.000Z',
+              },
+            ],
+            'catalogValues': [
+              {
+                'id': 'cat-101',
+                'catalogType': 'CATEGORY',
+                'code': 'HOT_BEVERAGE',
+                'name': 'Bebidas Calientes',
+                'isActive': true,
+                'sortOrder': 1,
+              },
+            ],
+            'insumos': [
+              {
+                'id': 'ins-101',
+                'name': 'Grano de Café Especial',
+                'purchaseUom': 'KG',
+                'consumptionUom': 'G',
+                'conversionFactor': 1000.0,
+                'stock': 5000.0,
+                'averageCost': 0.45,
+                'isActive': true,
+                'isPerishable': false,
+              },
+            ],
+            'recipes': [
+              {
+                'id': 'rec-101',
+                'productId': 'prod-101',
+                'ingredientId': 'ins-101',
+                'ingredientType': 'INSUMO',
+                'quantity': 18.0,
+              },
+            ],
+            'users': [
+              {
+                'id': 'user-201',
+                'name': 'Barista Principal',
+                'email': 'barista@omnifood.ni',
+                'role': 'CASHIER',
+                'isActive': true,
+                'securityProfile': {
+                  'isPinEnabled': true,
+                  'isTotpEnabled': false,
+                  'pinHash': '\$2b\$10\$inboundhashedpin',
+                },
+              },
+            ],
+          },
+        };
+
+        final result = await syncServiceWithDb.pullInboundDeltas();
+
+        expect(result, isNotNull);
+        expect(result!.productsCount, 1);
+        expect(result.catalogValuesCount, 1);
+        expect(result.insumosCount, 1);
+        expect(result.recipesCount, 1);
+        expect(result.usersCount, 1);
+
+        // Verify SQLite hydration
+        final savedProduct = await database.productDao.findProductById('prod-101');
+        expect(savedProduct, isNotNull);
+        expect(savedProduct!.name, 'Café Espresso Doble');
+        expect(savedProduct.sellPrice, 55.0);
+
+        final savedCategory = await database.catalogValueDao.findByTypeAndCode('CATEGORY', 'HOT_BEVERAGE');
+        expect(savedCategory, isNotNull);
+        expect(savedCategory!.name, 'Bebidas Calientes');
+
+        final savedInsumo = await database.insumoDao.findInsumoById('ins-101');
+        expect(savedInsumo, isNotNull);
+        expect(savedInsumo!.name, 'Grano de Café Especial');
+        expect(savedInsumo.consumptionUom, 'G');
+
+        final savedRecipes = await database.recipeDao.findRecipeByProductId('prod-101');
+        expect(savedRecipes, hasLength(1));
+        expect(savedRecipes.first.quantity, 18.0);
+
+        final savedUser = await database.userDao.findUserById('user-201');
+        expect(savedUser, isNotNull);
+        expect(savedUser!.name, 'Barista Principal');
+        expect(savedUser.pinHash, '\$2b\$10\$inboundhashedpin');
+
+        final savedProfile = await database.securityProfileDao.findByUserId('user-201');
+        expect(savedProfile, isNotNull);
+        expect(savedProfile!.pinHash, '\$2b\$10\$inboundhashedpin');
+
+        // Verify watermark saved in local_configs
+        final savedVersionConfig = await database.localConfigDao.getConfigByKey('last_inbound_sync_version');
+        expect(savedVersionConfig, isNotNull);
+        expect(savedVersionConfig!.value, '1787745600000');
+      } finally {
+        await database.close();
+      }
+    });
+
+    test('pullInboundDeltas sends sinceVersion query parameter when watermark exists', () async {
+      final database = await $FloorAppDatabase
+          .inMemoryDatabaseBuilder()
+          .build();
+
+      try {
+        await database.localConfigDao.saveConfig(
+          LocalConfigEntity(
+            key: 'last_inbound_sync_version',
+            value: '1787700000000',
+          ),
+        );
+
+        String? requestedSinceVersion;
+        String? requestedTerminalId;
+
+        final testDio = Dio();
+        testDio.interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              if (options.path == '/v1/sync/inbound/deltas') {
+                requestedSinceVersion = options.queryParameters['sinceVersion']?.toString();
+                requestedTerminalId = options.queryParameters['terminalId']?.toString();
+                handler.resolve(
+                  Response<dynamic>(
+                    statusCode: 200,
+                    requestOptions: options,
+                    data: {
+                      'status': 'success',
+                      'serverTime': '2026-08-26T18:30:00.000Z',
+                      'currentVersion': 1787750000000,
+                      'deltas': {
+                        'products': [],
+                        'catalogValues': [],
+                        'insumos': [],
+                        'recipes': [],
+                        'users': [],
+                      },
+                    },
+                  ),
+                );
+                return;
+              }
+              handler.resolve(
+                Response<dynamic>(
+                  statusCode: 200,
+                  requestOptions: options,
+                  data: {'ok': true},
+                ),
+              );
+            },
+          ),
+        );
+
+        final syncServiceWithDb = SyncService(
+          mockAuditRepository,
+          mockSalesRepository,
+          mockInventoryRepository,
+          testDio,
+          database: database,
+        );
+
+        await syncServiceWithDb.pullInboundDeltas();
+
+        expect(requestedSinceVersion, '1787700000000');
+        expect(requestedTerminalId, 'dev-1');
+
+        final updatedVersionConfig = await database.localConfigDao.getConfigByKey('last_inbound_sync_version');
+        expect(updatedVersionConfig?.value, '1787750000000');
+      } finally {
+        await database.close();
+      }
+    });
+
+    test('onInboundSync stream emits events and triggers reactive listeners', () async {
+      final database = await $FloorAppDatabase
+          .inMemoryDatabaseBuilder()
+          .build();
+
+      try {
+        final syncServiceWithDb = SyncService(
+          mockAuditRepository,
+          mockSalesRepository,
+          mockInventoryRepository,
+          dio,
+          database: database,
+        );
+
+        capturedGets['/v1/sync/inbound/deltas'] = {
+          'status': 'success',
+          'serverTime': '2026-08-26T19:00:00.000Z',
+          'currentVersion': 1787760000000,
+          'deltas': {
+            'products': [
+              {
+                'id': 'prod-event',
+                'name': 'Smoothie Fresa',
+                'uom': 'CUP',
+                'stock': 10.0,
+                'averageCost': 20.0,
+                'sellPrice': 60.0,
+                'isActive': true,
+              },
+            ],
+            'catalogValues': [],
+            'insumos': [],
+            'recipes': [],
+            'users': [],
+          },
+        };
+
+        InboundSyncResult? emittedEvent;
+        final sub = syncServiceWithDb.onInboundSync.listen((event) {
+          emittedEvent = event;
+        });
+
+        await syncServiceWithDb.pullInboundDeltas();
+        await Future<void>.delayed(Duration.zero);
+
+        expect(emittedEvent, isNotNull);
+        expect(emittedEvent!.productsCount, 1);
+        expect(emittedEvent!.timestamp, '2026-08-26T19:00:00.000Z');
+
+        await sub.cancel();
+      } finally {
+        await database.close();
+      }
+    });
+  });
+
+  group('Slice 8.3 Auto-Sync, Network Resilience & Fault Isolation', () {
+    test('triggers automatic sync when NetworkConnectivityService detects reconnection', () async {
+      final connectivityService = NetworkConnectivityService(dio);
+      connectivityService.setOnlineStateForTest(false);
+
+      final autoSyncService = SyncService(
+        mockAuditRepository,
+        mockSalesRepository,
+        mockInventoryRepository,
+        dio,
+        connectivityService: connectivityService,
+      );
+
+      autoSyncService.start();
+
+      expect(mockAuditRepository.syncCount, 0);
+
+      // Simulate recovery to online
+      connectivityService.setOnlineStateForTest(true);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(mockAuditRepository.syncCount, 1);
+
+      autoSyncService.dispose();
+      connectivityService.dispose();
+    });
+
+    test('updates CloudSyncStatus through syncing, success, and idle transitions', () async {
+      final statuses = <CloudSyncStatus>[];
+      final sub = syncService.onStatusChanged.listen(statuses.add);
+
+      await syncService.triggerManualSync();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(statuses, contains(CloudSyncStatus.syncing));
+      expect(statuses, contains(CloudSyncStatus.success));
+      expect(statuses, contains(CloudSyncStatus.idle));
+      expect(syncService.status, CloudSyncStatus.idle);
+      expect(syncService.lastSyncTime, isNotNull);
+      expect(syncService.consecutiveFailures, 0);
+
+      await sub.cancel();
+    });
+
+    test('getPendingOutboxCount correctly aggregates pending records', () async {
+      mockSalesRepository.unsyncedAggregates = [
+        {'id': 'sale-1', 'documentType': 'INVOICE'},
+        {'id': 'sale-2', 'documentType': 'INVOICE'},
+      ];
+      mockInventoryRepository.unsynced = [
+        movement('mov-1'),
+      ];
+
+      final count = await syncService.getPendingOutboxCount();
+      expect(count, 3);
+    });
+
+    test('getNextBackoffDelay scales exponentially with consecutive failures', () async {
+      expect(syncService.getNextBackoffDelay(), Duration.zero);
+
+      // Trigger forced failure
+      forcedError = DioException(
+        requestOptions: RequestOptions(path: '/v1/sync/batch'),
+        response: Response(statusCode: 500, requestOptions: RequestOptions(path: '/v1/sync/batch')),
+      );
+
+      mockInventoryRepository.unsynced = [movement('mov-err')];
+      await syncService.triggerManualSync();
+
+      expect(syncService.consecutiveFailures, 1);
+      expect(syncService.getNextBackoffDelay(), const Duration(seconds: 5));
+
+      await syncService.triggerManualSync();
+      expect(syncService.consecutiveFailures, 2);
+      expect(syncService.getNextBackoffDelay(), const Duration(seconds: 10));
+
+      await syncService.triggerManualSync();
+      expect(syncService.consecutiveFailures, 3);
+      expect(syncService.getNextBackoffDelay(), const Duration(seconds: 20));
+    });
+
+    test('fault isolation: Inbound Catalog failure does not block Sales Outbox push', () async {
+      final database = await $FloorAppDatabase
+          .inMemoryDatabaseBuilder()
+          .build();
+
+      try {
+        final isolatedSyncService = SyncService(
+          mockAuditRepository,
+          mockSalesRepository,
+          mockInventoryRepository,
+          dio,
+          database: database,
+        );
+
+        mockSalesRepository.unsyncedAggregates = [
+          {
+            'id': 'sale-isolated',
+            'number': 'FAC-001',
+            'documentType': 'INVOICE',
+            'terminalId': 'pos-terminal-1',
+            'sourceSequence': 1,
+            'idempotencyKey': 'invoice:pos-terminal-1:sale-isolated',
+            'items': [],
+          },
+        ];
+
+        // Setup batch POST to succeed, but inbound GET to fail with 500
+        dio.interceptors.clear();
+        dio.interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              if (options.path == '/v1/sync/batch') {
+                handler.resolve(
+                  Response<dynamic>(
+                    statusCode: 200,
+                    requestOptions: options,
+                    data: {
+                      'status': 'OK',
+                      'received': 1,
+                      'results': [
+                        {
+                          'idempotencyKey': 'invoice:pos-terminal-1:sale-isolated',
+                          'terminalId': 'pos-terminal-1',
+                          'flowType': 'sales',
+                          'sourceSequence': 1,
+                          'status': 'ACCEPTED',
+                        },
+                      ],
+                    },
+                  ),
+                );
+                return;
+              }
+              if (options.path == '/v1/sync/inbound/deltas') {
+                handler.reject(
+                  DioException(
+                    requestOptions: options,
+                    response: Response(
+                      statusCode: 500,
+                      requestOptions: options,
+                      data: {'error': 'Internal Server Error'},
+                    ),
+                    type: DioExceptionType.badResponse,
+                  ),
+                );
+                return;
+              }
+              handler.resolve(
+                Response<dynamic>(
+                  statusCode: 200,
+                  requestOptions: options,
+                  data: {'ok': true},
+                ),
+              );
+            },
+          ),
+        );
+
+        await isolatedSyncService.triggerManualSync();
+
+        // Verify sales document was marked synced despite inbound catalog error!
+        expect(mockSalesRepository.syncedInvoiceIdBatches, [
+          ['sale-isolated'],
+        ]);
+        expect(isolatedSyncService.lastSyncError, contains('InboundCatalog'));
+      } finally {
+        await database.close();
+      }
+    });
+  });
 }

@@ -12,6 +12,7 @@ import 'data/repositories/auth_repository_impl.dart';
 import 'domain/repositories/auth_repository.dart';
 import 'data/repositories/audit_repository_impl.dart';
 import 'data/services/local_auth_service.dart';
+import 'data/services/network_connectivity_service.dart';
 import 'data/services/sync_service.dart';
 import 'data/services/terminal_identity_service.dart';
 import 'ui/features/auth/viewmodels/login_viewmodel.dart';
@@ -169,11 +170,16 @@ void main() async {
     inventoryRepository: inventoryRepository,
   );
 
+  final connectivityService = NetworkConnectivityService(dio);
+  connectivityService.start();
+
   final syncService = SyncService(
     auditRepository,
     salesRepository,
     inventoryRepository,
     dio,
+    database: database,
+    connectivityService: connectivityService,
   );
   syncService.start();
 
@@ -260,6 +266,13 @@ void main() async {
             inventoryRepository,
             authRepository,
             database,
+            null,
+            true,
+            null,
+            null,
+            null,
+            null,
+            syncService,
           ),
         ),
         Provider<AuthRepository>.value(value: authRepository),
@@ -269,6 +282,7 @@ void main() async {
         Provider<SalesRepositoryImpl>.value(value: salesRepository),
         Provider<DgiNumberingService>.value(value: numberingService),
         Provider<SyncService>.value(value: syncService),
+        Provider<NetworkConnectivityService>.value(value: connectivityService),
         Provider<PrinterConfigService>(
           create: (_) => PrinterConfigService(database.localConfigDao),
         ),

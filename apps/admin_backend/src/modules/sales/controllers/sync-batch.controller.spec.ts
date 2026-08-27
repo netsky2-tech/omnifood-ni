@@ -16,7 +16,10 @@ describe('SyncBatchController', () => {
       providers: [
         { provide: InvoicesService, useValue: invoicesService },
         { provide: AuthGuard, useValue: { canActivate: jest.fn() } },
-        { provide: SyncCreditNoteAuthGuard, useValue: { canActivate: jest.fn() } },
+        {
+          provide: SyncCreditNoteAuthGuard,
+          useValue: { canActivate: jest.fn() },
+        },
       ],
     }).compile();
 

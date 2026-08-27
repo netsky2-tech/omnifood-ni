@@ -24,9 +24,7 @@ import {
 @UseGuards(AuthGuard, RolesGuard)
 @UseInterceptors(TenantInterceptor)
 export class InventoryReportsController {
-  constructor(
-    private readonly reportsService: InventoryReportsService,
-  ) {}
+  constructor(private readonly reportsService: InventoryReportsService) {}
 
   @Get('valuation')
   @Roles(UserRole.OWNER, UserRole.MANAGER)

@@ -31,7 +31,9 @@ export class InventoryReportsService {
     private readonly movementRepo: Repository<InventoryMovement>,
   ) {}
 
-  async getValuationReport(tenantId: string): Promise<InventoryValuationReportDto> {
+  async getValuationReport(
+    tenantId: string,
+  ): Promise<InventoryValuationReportDto> {
     const insumos = await this.insumoRepo.find({
       where: { tenant_id: tenantId, is_active: true },
       order: { name: 'ASC' },
@@ -46,9 +48,12 @@ export class InventoryReportsService {
       const stock = round4(Number(insumo.stock ?? 0));
       const averageCostNio = round4(Number(insumo.averageCost ?? 0));
       const totalValuation = round4(stock * averageCostNio);
-      const stockMin = insumo.minStock != null ? round4(Number(insumo.minStock)) : undefined;
-      const stockMax = insumo.maxStock != null ? round4(Number(insumo.maxStock)) : undefined;
-      const parLevel = insumo.parLevel != null ? round4(Number(insumo.parLevel)) : undefined;
+      const stockMin =
+        insumo.minStock != null ? round4(Number(insumo.minStock)) : undefined;
+      const stockMax =
+        insumo.maxStock != null ? round4(Number(insumo.maxStock)) : undefined;
+      const parLevel =
+        insumo.parLevel != null ? round4(Number(insumo.parLevel)) : undefined;
 
       const isNegativeStock = stock < 0;
       const isLowStock = stockMin != null && stock <= stockMin;
@@ -147,7 +152,7 @@ export class InventoryReportsService {
           shrinkageCost: 0,
         });
       }
-      const agg = insumoAggregates.get(insumoId)!;
+      const agg = insumoAggregates.get(insumoId);
       const qty = Math.abs(Number(mov.quantity));
       const cost = Math.abs(
         Number(mov.totalCostNio ?? qty * (mov.unitCostNio ?? 0)),
@@ -259,7 +264,9 @@ export class InventoryReportsService {
         unitCostNio:
           mov.unitCostNio != null ? round4(Number(mov.unitCostNio)) : undefined,
         totalCostNio:
-          mov.totalCostNio != null ? round4(Number(mov.totalCostNio)) : undefined,
+          mov.totalCostNio != null
+            ? round4(Number(mov.totalCostNio))
+            : undefined,
         averageCostAfterNio:
           mov.averageCostAfterNio != null
             ? round4(Number(mov.averageCostAfterNio))
@@ -267,7 +274,9 @@ export class InventoryReportsService {
         reason: mov.reason,
         sourceDocumentType: mov.sourceDocumentType,
         sourceDocumentId: mov.sourceDocumentId,
-        createdAt: mov.timestamp ? mov.timestamp.toISOString() : new Date().toISOString(),
+        createdAt: mov.timestamp
+          ? mov.timestamp.toISOString()
+          : new Date().toISOString(),
       };
     });
 

@@ -2,7 +2,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { KardexRegularizationService } from './kardex-regularization.service';
-import { KardexRecalculateQueue, KardexQueueStatus } from '../entities/kardex-recalculate-queue.entity';
+import {
+  KardexRecalculateQueue,
+  KardexQueueStatus,
+} from '../entities/kardex-recalculate-queue.entity';
 import { KardexCorrection } from '../entities/kardex-correction.entity';
 import { InventoryMovement } from '../entities/inventory-movement.entity';
 import { GovernanceApprovalService } from './governance-approval.service';
@@ -70,12 +73,18 @@ describe('KardexRegularizationService', () => {
       ],
     }).compile();
 
-    service = module.get<KardexRegularizationService>(KardexRegularizationService);
-    governanceService = module.get<GovernanceApprovalService>(GovernanceApprovalService);
+    service = module.get<KardexRegularizationService>(
+      KardexRegularizationService,
+    );
+    governanceService = module.get<GovernanceApprovalService>(
+      GovernanceApprovalService,
+    );
   });
 
   it('retrieves pending queue items ordered by creation date', async () => {
-    const mockItems = [{ id: 'q-1', tenant_id: 'tenant-test', status: 'PENDING' }];
+    const mockItems = [
+      { id: 'q-1', tenant_id: 'tenant-test', status: 'PENDING' },
+    ];
     queueRepo.find.mockResolvedValue(mockItems);
 
     const result = await service.getPendingQueue('tenant-test');
@@ -175,7 +184,10 @@ describe('KardexRegularizationService', () => {
       estadoCosteo: 10,
     });
 
-    const result = await service.syncCorrections('tenant-test', correctionsInput);
+    const result = await service.syncCorrections(
+      'tenant-test',
+      correctionsInput,
+    );
 
     expect(result.syncedCount).toBe(1);
     expect(result.duplicatesCount).toBe(1);

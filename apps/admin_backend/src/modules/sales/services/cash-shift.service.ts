@@ -1,4 +1,8 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
@@ -80,7 +84,10 @@ export class CashShiftService {
     tenantId: string,
     dto: OpenShiftDto,
   ): Promise<CashShiftSession> {
-    const active = await this.getActiveShiftByTerminal(tenantId, dto.terminalId);
+    const active = await this.getActiveShiftByTerminal(
+      tenantId,
+      dto.terminalId,
+    );
     if (active) {
       throw new BadRequestException(
         'Ya existe un turno de caja abierto en este terminal',

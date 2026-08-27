@@ -112,27 +112,48 @@ describe('Batch 6b Backend E2E Integration: Complete Retrocalculation Lifecycle'
       .compile();
 
     controller = module.get<RegularizationController>(RegularizationController);
-    service = module.get<KardexRegularizationService>(KardexRegularizationService);
-    governanceService = module.get<GovernanceApprovalService>(GovernanceApprovalService);
-    queueRepo = module.get<Repository<KardexRecalculateQueue>>(getRepositoryToken(KardexRecalculateQueue));
-    correctionRepo = module.get<Repository<KardexCorrection>>(getRepositoryToken(KardexCorrection));
-    movementRepo = module.get<Repository<InventoryMovement>>(getRepositoryToken(InventoryMovement));
-    configRepo = module.get<Repository<SystemParametersConfig>>(getRepositoryToken(SystemParametersConfig));
+    service = module.get<KardexRegularizationService>(
+      KardexRegularizationService,
+    );
+    governanceService = module.get<GovernanceApprovalService>(
+      GovernanceApprovalService,
+    );
+    queueRepo = module.get<Repository<KardexRecalculateQueue>>(
+      getRepositoryToken(KardexRecalculateQueue),
+    );
+    correctionRepo = module.get<Repository<KardexCorrection>>(
+      getRepositoryToken(KardexCorrection),
+    );
+    movementRepo = module.get<Repository<InventoryMovement>>(
+      getRepositoryToken(InventoryMovement),
+    );
+    configRepo = module.get<Repository<SystemParametersConfig>>(
+      getRepositoryToken(SystemParametersConfig),
+    );
   });
 
   it('1. Governance Matrix: validates tiered authorization boundaries correctly', () => {
     // Under C$1,500.00 -> No approval required (automatic)
-    const autoEval = governanceService.evaluateApprovalRequirement(1200.0, false);
+    const autoEval = governanceService.evaluateApprovalRequirement(
+      1200.0,
+      false,
+    );
     expect(autoEval.requiresApproval).toBe(false);
 
     // C$1,500.01 - C$10,000.00 -> Manager allowed
-    const managerEval = governanceService.evaluateApprovalRequirement(5000.0, false);
+    const managerEval = governanceService.evaluateApprovalRequirement(
+      5000.0,
+      false,
+    );
     expect(managerEval.requiresApproval).toBe(true);
     expect(managerEval.allowedRoles).toContain('manager');
     expect(managerEval.reason).toBe('UMBRAL_EXCEDIDO');
 
     // > C$10,000.00 -> Admin / Owner required
-    const adminEval = governanceService.evaluateApprovalRequirement(15000.0, false);
+    const adminEval = governanceService.evaluateApprovalRequirement(
+      15000.0,
+      false,
+    );
     expect(adminEval.requiresApproval).toBe(true);
     expect(adminEval.allowedRoles).not.toContain('manager');
     expect(adminEval.allowedRoles).toContain('owner');
@@ -140,7 +161,10 @@ describe('Batch 6b Backend E2E Integration: Complete Retrocalculation Lifecycle'
     expect(adminEval.reason).toBe('UMBRAL_SUPERVISOR_EXCEDIDO');
 
     // Closed period -> Always Admin / Owner regardless of amount
-    const closedPeriodEval = governanceService.evaluateApprovalRequirement(500.0, true);
+    const closedPeriodEval = governanceService.evaluateApprovalRequirement(
+      500.0,
+      true,
+    );
     expect(closedPeriodEval.requiresApproval).toBe(true);
     expect(closedPeriodEval.allowedRoles).not.toContain('manager');
     expect(closedPeriodEval.allowedRoles).toContain('admin');
@@ -152,12 +176,14 @@ describe('Batch 6b Backend E2E Integration: Complete Retrocalculation Lifecycle'
       id: 'corr-existing',
       lineageHash: 'hash-existing-1',
     };
-    mockCorrectionRepo.findOne.mockImplementation(({ where }: { where: { lineageHash: string } }) => {
-      if (where.lineageHash === 'hash-existing-1') {
-        return Promise.resolve(existingCorrection);
-      }
-      return Promise.resolve(null);
-    });
+    mockCorrectionRepo.findOne.mockImplementation(
+      ({ where }: { where: { lineageHash: string } }) => {
+        if (where.lineageHash === 'hash-existing-1') {
+          return Promise.resolve(existingCorrection);
+        }
+        return Promise.resolve(null);
+      },
+    );
 
     const syncDto = {
       corrections: [

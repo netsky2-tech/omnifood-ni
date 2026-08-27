@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class CreateSystemParametersConfig1784000000000
-  implements MigrationInterface
-{
+export class CreateSystemParametersConfig1784000000000 implements MigrationInterface {
   name = 'CreateSystemParametersConfig1784000000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -86,10 +84,18 @@ export class CreateSystemParametersConfig1784000000000
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP VIEW IF EXISTS v_sys_parametros_config_active;`);
-    await queryRunner.query(`DROP POLICY IF EXISTS sys_parametros_config_tenant_isolation ON sys_parametros_config;`);
-    await queryRunner.query(`DROP TRIGGER IF EXISTS trg_sys_parametros_config_immutable ON sys_parametros_config;`);
-    await queryRunner.query(`DROP FUNCTION IF EXISTS reject_sys_parametros_config_mutation();`);
+    await queryRunner.query(
+      `DROP VIEW IF EXISTS v_sys_parametros_config_active;`,
+    );
+    await queryRunner.query(
+      `DROP POLICY IF EXISTS sys_parametros_config_tenant_isolation ON sys_parametros_config;`,
+    );
+    await queryRunner.query(
+      `DROP TRIGGER IF EXISTS trg_sys_parametros_config_immutable ON sys_parametros_config;`,
+    );
+    await queryRunner.query(
+      `DROP FUNCTION IF EXISTS reject_sys_parametros_config_mutation();`,
+    );
     await queryRunner.query(`DROP TABLE IF EXISTS sys_parametros_config;`);
   }
 }

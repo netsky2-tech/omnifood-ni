@@ -31,10 +31,7 @@ export class CashShiftController {
   constructor(private readonly shiftService: CashShiftService) {}
 
   @Post('open')
-  async openShift(
-    @Req() req: RequestWithUser,
-    @Body() dto: OpenCashShiftDto,
-  ) {
+  async openShift(@Req() req: RequestWithUser, @Body() dto: OpenCashShiftDto) {
     return this.shiftService.openShift(req.user.tenant_id, dto);
   }
 

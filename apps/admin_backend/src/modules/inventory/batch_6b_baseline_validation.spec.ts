@@ -74,14 +74,12 @@ describe('Batch 6b Baseline Validation', () => {
     };
 
     dataSource = {
-      transaction: jest
-        .fn()
-        .mockImplementation(async (callback) =>
-          callback({
-            getRepository: (entity: any) =>
-              entity === Insumo ? insumoRepo : movementRepo,
-          }),
-        ),
+      transaction: jest.fn().mockImplementation(async (callback) =>
+        callback({
+          getRepository: (entity: any) =>
+            entity === Insumo ? insumoRepo : movementRepo,
+        }),
+      ),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -114,7 +112,7 @@ describe('Batch 6b Baseline Validation', () => {
   describe('1. Negative Stock Acceptance & Outflow Handling', () => {
     it('allows outflows when stock is zero, resulting in negative stock balance', async () => {
       const insumo = createMockInsumo({ stock: 0, averageCost: 150.0 });
-      insumoRepo.findOne!.mockResolvedValue(insumo);
+      insumoRepo.findOne.mockResolvedValue(insumo);
 
       await inventoryService.syncMovements(
         [
@@ -150,7 +148,7 @@ describe('Batch 6b Baseline Validation', () => {
         existenciaActual: -5,
         averageCost: 135.5,
       });
-      insumoRepo.findOne!.mockResolvedValue(insumo);
+      insumoRepo.findOne.mockResolvedValue(insumo);
 
       await inventoryService.syncMovements(
         [
@@ -177,7 +175,7 @@ describe('Batch 6b Baseline Validation', () => {
   describe('2. Append-Only Kardex & Lineage Proof', () => {
     it('ensures movements are append-only and never update previous movement rows', async () => {
       const insumo = createMockInsumo({ stock: 10, averageCost: 100 });
-      insumoRepo.findOne!.mockResolvedValue(insumo);
+      insumoRepo.findOne.mockResolvedValue(insumo);
 
       await inventoryService.syncMovements(
         [
@@ -267,7 +265,7 @@ describe('Batch 6b Baseline Validation', () => {
         stock: 50,
       });
 
-      insumoRepo.findOne!.mockImplementation(async (options: any) => {
+      insumoRepo.findOne.mockImplementation(async (options: any) => {
         if (
           options?.where?.id === 'ins-A' &&
           options?.where?.tenant_id === mockTenantA

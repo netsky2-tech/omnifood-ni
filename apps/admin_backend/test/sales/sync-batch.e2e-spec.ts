@@ -138,7 +138,8 @@ describe('Sync batch route (e2e)', () => {
         {
           provide: ConfigService,
           useValue: {
-            get: (key: string) => (key === 'JWT_SECRET' ? 'test-secret' : undefined),
+            get: (key: string) =>
+              key === 'JWT_SECRET' ? 'test-secret' : undefined,
           },
         },
       ],
@@ -146,15 +147,17 @@ describe('Sync batch route (e2e)', () => {
 
     app = moduleFixture.createNestApplication();
     jwtService = moduleFixture.get(JwtService);
-    app.use((req: RequestWithUser, _res: Response, next: NextFunction): void => {
-      req.user = {
-        tenant_id: 'tenant-e2e',
-        sub: 'user-e2e',
-        email: 'sync@example.test',
-        role: 'admin',
-      };
-      next();
-    });
+    app.use(
+      (req: RequestWithUser, _res: Response, next: NextFunction): void => {
+        req.user = {
+          tenant_id: 'tenant-e2e',
+          sub: 'user-e2e',
+          email: 'sync@example.test',
+          role: 'admin',
+        };
+        next();
+      },
+    );
     app.useGlobalPipes(
       new ValidationPipe({
         whitelist: true,

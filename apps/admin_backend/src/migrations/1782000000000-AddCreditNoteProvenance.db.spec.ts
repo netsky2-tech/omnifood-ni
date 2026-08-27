@@ -5,7 +5,8 @@ import { AddCreditNoteProvenance1782000000000 } from './1782000000000-AddCreditN
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name]?.trim();
-  if (!value) throw new Error(`${name} is required for DB-backed migration tests`);
+  if (!value)
+    throw new Error(`${name} is required for DB-backed migration tests`);
   return value;
 }
 
@@ -13,7 +14,9 @@ function readPostgresPort(): number {
   const value = process.env.DB_PORT?.trim() ?? '5432';
   const port = Number(value);
   if (!Number.isInteger(port)) {
-    throw new Error('DB_PORT must be a valid integer for DB-backed migration tests');
+    throw new Error(
+      'DB_PORT must be a valid integer for DB-backed migration tests',
+    );
   }
   return port;
 }
@@ -36,7 +39,10 @@ async function withIsolatedSchema(
   schemaPrefix: string,
   assertion: (context: IsolatedSchemaContext) => Promise<void>,
 ): Promise<void> {
-  const dataSource = new DataSource({ type: 'postgres', ...postgresConnection });
+  const dataSource = new DataSource({
+    type: 'postgres',
+    ...postgresConnection,
+  });
   const suffix = randomUUID().replace(/-/g, '');
   const schema = `${schemaPrefix}_${suffix}`;
   const tenantRole = `${schemaPrefix}_role_${suffix}`;
@@ -70,7 +76,9 @@ async function withIsolatedSchema(
   }
 }
 
-async function createMinimalSalesTables(queryRunner: QueryRunner): Promise<void> {
+async function createMinimalSalesTables(
+  queryRunner: QueryRunner,
+): Promise<void> {
   await queryRunner.query(`
     CREATE TABLE invoices (
       id varchar PRIMARY KEY,
@@ -91,11 +99,21 @@ async function grantTenantRoleAccess(
   schema: string,
   tenantRole: string,
 ): Promise<void> {
-  await queryRunner.query(`GRANT USAGE ON SCHEMA "${schema}" TO "${tenantRole}"`);
-  await queryRunner.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON invoices TO "${tenantRole}"`);
-  await queryRunner.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON invoice_items TO "${tenantRole}"`);
-  await queryRunner.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON inventory_kardex TO "${tenantRole}"`);
-  await queryRunner.query(`GRANT USAGE, SELECT ON SEQUENCE inventory_kardex_id_seq TO "${tenantRole}"`);
+  await queryRunner.query(
+    `GRANT USAGE ON SCHEMA "${schema}" TO "${tenantRole}"`,
+  );
+  await queryRunner.query(
+    `GRANT SELECT, INSERT, UPDATE, DELETE ON invoices TO "${tenantRole}"`,
+  );
+  await queryRunner.query(
+    `GRANT SELECT, INSERT, UPDATE, DELETE ON invoice_items TO "${tenantRole}"`,
+  );
+  await queryRunner.query(
+    `GRANT SELECT, INSERT, UPDATE, DELETE ON inventory_kardex TO "${tenantRole}"`,
+  );
+  await queryRunner.query(
+    `GRANT USAGE, SELECT ON SEQUENCE inventory_kardex_id_seq TO "${tenantRole}"`,
+  );
 }
 
 async function bootstrapCreditNoteSchema(
@@ -151,7 +169,9 @@ async function withTenantTransaction(
   await queryRunner.startTransaction();
   try {
     await queryRunner.query(`SET LOCAL ROLE "${tenantRole}"`);
-    await queryRunner.query("SELECT set_config('app.tenant_id', $1, true)", [tenantId]);
+    await queryRunner.query("SELECT set_config('app.tenant_id', $1, true)", [
+      tenantId,
+    ]);
     await assertion();
     await queryRunner.commitTransaction();
   } catch (error) {
@@ -189,8 +209,12 @@ describe('AddCreditNoteProvenance1782000000000 (db)', () => {
             WHERE tenant_id = 'tenant-b' AND source_document_id = 'invoice:sale-b-1'
           `)) as Array<{ id: string }>;
 
-          await withTenantTransaction(queryRunner, tenantRole, 'tenant-a', async () => {
-            await queryRunner.query(`
+          await withTenantTransaction(
+            queryRunner,
+            tenantRole,
+            'tenant-a',
+            async () => {
+              await queryRunner.query(`
               INSERT INTO invoices (
                 id, tenant_id, type, origin_invoice_id, refund_reason_code,
                 refund_reason_policy, authorized_by_user_id, authorized_by_role
@@ -200,142 +224,142 @@ describe('AddCreditNoteProvenance1782000000000 (db)', () => {
                 'DAMAGED_RETURN', 'RESTOCK_ORIGINAL_BOM', 'manager-1', 'manager'
               )
             `);
-            await queryRunner.query(`
+              await queryRunner.query(`
               INSERT INTO invoice_items (id, tenant_id, invoice_id, origin_invoice_item_id)
               VALUES ('cn-a-valid-item-1', 'tenant-a', 'cn-a-valid', 'sale-a-1-item-1')
             `);
 
-            const accepted = (await queryRunner.query(`
+              const accepted = (await queryRunner.query(`
               SELECT i.id, ii.origin_invoice_item_id
               FROM invoices i
               JOIN invoice_items ii ON ii.invoice_id = i.id
               WHERE i.id = 'cn-a-valid'
             `)) as Array<{ id: string; origin_invoice_item_id: string }>;
-            expect(accepted).toEqual([
-              { id: 'cn-a-valid', origin_invoice_item_id: 'sale-a-1-item-1' },
-            ]);
+              expect(accepted).toEqual([
+                { id: 'cn-a-valid', origin_invoice_item_id: 'sale-a-1-item-1' },
+              ]);
 
-            await expectRejectedAtSavepoint(
-              queryRunner,
-              'empty_credit_item_origin',
-              `INSERT INTO invoice_items (id, tenant_id, invoice_id)
+              await expectRejectedAtSavepoint(
+                queryRunner,
+                'empty_credit_item_origin',
+                `INSERT INTO invoice_items (id, tenant_id, invoice_id)
                VALUES ('cn-a-missing-item-origin', 'tenant-a', 'cn-a-valid')`,
-              /requires origin invoice item/,
-            );
-            await queryRunner.query(`
+                /requires origin invoice item/,
+              );
+              await queryRunner.query(`
               INSERT INTO invoice_items (id, tenant_id, invoice_id)
               VALUES ('regular-originless-item', 'tenant-a', 'sale-a-1')
             `);
-            await expectRejectedAtSavepoint(
-              queryRunner,
-              'update_originless_item_into_credit_note',
-              `UPDATE invoice_items
+              await expectRejectedAtSavepoint(
+                queryRunner,
+                'update_originless_item_into_credit_note',
+                `UPDATE invoice_items
                SET invoice_id = 'cn-a-valid'
                WHERE id = 'regular-originless-item'`,
-              /requires origin invoice item/,
-            );
-            await expectRejectedAtSavepoint(
-              queryRunner,
-              'orphan_credit_invoice_origin',
-              `INSERT INTO invoices (
+                /requires origin invoice item/,
+              );
+              await expectRejectedAtSavepoint(
+                queryRunner,
+                'orphan_credit_invoice_origin',
+                `INSERT INTO invoices (
                  id, tenant_id, type, origin_invoice_id, refund_reason_code,
                  refund_reason_policy, authorized_by_user_id, authorized_by_role
                )
                VALUES ('cn-a-orphan-invoice', 'tenant-a', 'creditNote', 'missing-sale', 'DAMAGED_RETURN', 'FINANCIAL_ONLY', 'manager-1', 'manager')`,
-              /origin invoice was not found/,
-            );
-            await expectRejectedAtSavepoint(
-              queryRunner,
-              'credit_note_origin_invoice_is_credit_note',
-              `INSERT INTO invoices (
+                /origin invoice was not found/,
+              );
+              await expectRejectedAtSavepoint(
+                queryRunner,
+                'credit_note_origin_invoice_is_credit_note',
+                `INSERT INTO invoices (
                  id, tenant_id, type, origin_invoice_id, refund_reason_code,
                  refund_reason_policy, authorized_by_user_id, authorized_by_role
                )
                VALUES ('cn-a-credit-origin', 'tenant-a', 'creditNote', 'cn-a-origin', 'DAMAGED_RETURN', 'FINANCIAL_ONLY', 'manager-1', 'manager')`,
-              /origin invoice must be a regular active sale invoice/,
-            );
-            await expectRejectedAtSavepoint(
-              queryRunner,
-              'credit_note_origin_invoice_is_canceled',
-              `INSERT INTO invoices (
+                /origin invoice must be a regular active sale invoice/,
+              );
+              await expectRejectedAtSavepoint(
+                queryRunner,
+                'credit_note_origin_invoice_is_canceled',
+                `INSERT INTO invoices (
                  id, tenant_id, type, origin_invoice_id, refund_reason_code,
                  refund_reason_policy, authorized_by_user_id, authorized_by_role
                )
                VALUES ('cn-a-canceled-origin', 'tenant-a', 'creditNote', 'sale-a-canceled', 'DAMAGED_RETURN', 'FINANCIAL_ONLY', 'manager-1', 'manager')`,
-              /origin invoice must be a regular active sale invoice/,
-            );
-            await expectRejectedAtSavepoint(
-              queryRunner,
-              'credit_note_origin_invoice_is_not_regular',
-              `INSERT INTO invoices (
+                /origin invoice must be a regular active sale invoice/,
+              );
+              await expectRejectedAtSavepoint(
+                queryRunner,
+                'credit_note_origin_invoice_is_not_regular',
+                `INSERT INTO invoices (
                  id, tenant_id, type, origin_invoice_id, refund_reason_code,
                  refund_reason_policy, authorized_by_user_id, authorized_by_role
                )
                VALUES ('cn-a-proforma-origin', 'tenant-a', 'creditNote', 'quote-a-1', 'DAMAGED_RETURN', 'FINANCIAL_ONLY', 'manager-1', 'manager')`,
-              /origin invoice must be a regular active sale invoice/,
-            );
-            await expectRejectedAtSavepoint(
-              queryRunner,
-              'orphan_credit_item_origin',
-              `INSERT INTO invoice_items (id, tenant_id, invoice_id, origin_invoice_item_id)
+                /origin invoice must be a regular active sale invoice/,
+              );
+              await expectRejectedAtSavepoint(
+                queryRunner,
+                'orphan_credit_item_origin',
+                `INSERT INTO invoice_items (id, tenant_id, invoice_id, origin_invoice_item_id)
                VALUES ('cn-a-orphan-item', 'tenant-a', 'cn-a-valid', 'missing-item')`,
-              /origin invoice item was not found/,
-            );
-            await expectRejectedAtSavepoint(
-              queryRunner,
-              'mixed_credit_item_origin',
-              `INSERT INTO invoice_items (id, tenant_id, invoice_id, origin_invoice_item_id)
+                /origin invoice item was not found/,
+              );
+              await expectRejectedAtSavepoint(
+                queryRunner,
+                'mixed_credit_item_origin',
+                `INSERT INTO invoice_items (id, tenant_id, invoice_id, origin_invoice_item_id)
                VALUES ('cn-a-mixed-item', 'tenant-a', 'cn-a-valid', 'sale-a-2-item-1')`,
-              /must belong to the credit-note origin invoice/,
-            );
-            await expectRejectedAtSavepoint(
-              queryRunner,
-              'cross_tenant_credit_item_origin',
-              `INSERT INTO invoice_items (id, tenant_id, invoice_id, origin_invoice_item_id)
+                /must belong to the credit-note origin invoice/,
+              );
+              await expectRejectedAtSavepoint(
+                queryRunner,
+                'cross_tenant_credit_item_origin',
+                `INSERT INTO invoice_items (id, tenant_id, invoice_id, origin_invoice_item_id)
                VALUES ('cn-a-cross-item', 'tenant-a', 'cn-a-valid', 'sale-b-1-item-1')`,
-              /origin invoice item was not found|belongs to another tenant/,
-            );
-            await expectRejectedAtSavepoint(
-              queryRunner,
-              'invalid_refund_policy',
-              `INSERT INTO invoices (
+                /origin invoice item was not found|belongs to another tenant/,
+              );
+              await expectRejectedAtSavepoint(
+                queryRunner,
+                'invalid_refund_policy',
+                `INSERT INTO invoices (
                  id, tenant_id, type, origin_invoice_id, refund_reason_code,
                  refund_reason_policy, authorized_by_user_id, authorized_by_role
                )
                VALUES ('cn-a-bad-policy', 'tenant-a', 'creditNote', 'sale-a-1', 'DAMAGED_RETURN', 'RETURN_TO_ACTIVE_STOCK', 'manager-1', 'manager')`,
-              /chk_invoices_credit_note_origin_policy|violates check constraint/,
-            );
-            await expectRejectedAtSavepoint(
-              queryRunner,
-              'regular_invoice_spoofed_origin_invoice',
-              `INSERT INTO invoices (id, tenant_id, type, origin_invoice_id, refund_reason_policy)
+                /chk_invoices_credit_note_origin_policy|violates check constraint/,
+              );
+              await expectRejectedAtSavepoint(
+                queryRunner,
+                'regular_invoice_spoofed_origin_invoice',
+                `INSERT INTO invoices (id, tenant_id, type, origin_invoice_id, refund_reason_policy)
                VALUES ('regular-spoofed-origin', 'tenant-a', 'regular', 'sale-a-1', 'FINANCIAL_ONLY')`,
-              /non-credit invoice provenance fields must be null|chk_invoices_credit_note_origin_policy|violates check constraint/,
-            );
-            await expectRejectedAtSavepoint(
-              queryRunner,
-              'regular_invoice_spoofed_refund_reason_code',
-              `INSERT INTO invoices (id, tenant_id, type, refund_reason_code)
+                /non-credit invoice provenance fields must be null|chk_invoices_credit_note_origin_policy|violates check constraint/,
+              );
+              await expectRejectedAtSavepoint(
+                queryRunner,
+                'regular_invoice_spoofed_refund_reason_code',
+                `INSERT INTO invoices (id, tenant_id, type, refund_reason_code)
                VALUES ('regular-spoofed-reason', 'tenant-a', 'regular', 'DAMAGED_RETURN')`,
-              /non-credit invoice provenance fields must be null|chk_invoices_credit_note_origin_policy|violates check constraint/,
-            );
-            await expectRejectedAtSavepoint(
-              queryRunner,
-              'regular_item_spoofed_origin_item',
-              `INSERT INTO invoice_items (id, tenant_id, invoice_id, origin_invoice_item_id)
+                /non-credit invoice provenance fields must be null|chk_invoices_credit_note_origin_policy|violates check constraint/,
+              );
+              await expectRejectedAtSavepoint(
+                queryRunner,
+                'regular_item_spoofed_origin_item',
+                `INSERT INTO invoice_items (id, tenant_id, invoice_id, origin_invoice_item_id)
                VALUES ('regular-spoofed-item-origin', 'tenant-a', 'sale-a-1', 'sale-a-1-item-1')`,
-              /non-credit invoice item cannot reference an origin invoice item/,
-            );
+                /non-credit invoice item cannot reference an origin invoice item/,
+              );
 
-            const tenantAOrigin = (await queryRunner.query(`
+              const tenantAOrigin = (await queryRunner.query(`
               SELECT id FROM inventory_kardex
               WHERE tenant_id = 'tenant-a' AND source_document_id = 'invoice:sale-a-1'
             `)) as Array<{ id: string }>;
-            const tenantAOtherOrigin = (await queryRunner.query(`
+              const tenantAOtherOrigin = (await queryRunner.query(`
               SELECT id FROM inventory_kardex
               WHERE tenant_id = 'tenant-a' AND source_document_id = 'invoice:sale-a-2'
             `)) as Array<{ id: string }>;
-            await queryRunner.query(`
+              await queryRunner.query(`
               INSERT INTO inventory_kardex (
                 tenant_id, insumo_id, movement_type, quantity, unit_cost_nio,
                 total_cost_nio, stock_before, stock_after, source_document_type,
@@ -347,10 +371,10 @@ describe('AddCreditNoteProvenance1782000000000 (db)', () => {
                 ${tenantAOrigin[0].id}, 'sale-a-1-item-1', 'RESTOCK_ORIGINAL_BOM'
               )
             `);
-            await expectRejectedAtSavepoint(
-              queryRunner,
-              'cross_tenant_origin_movement',
-              `INSERT INTO inventory_kardex (
+              await expectRejectedAtSavepoint(
+                queryRunner,
+                'cross_tenant_origin_movement',
+                `INSERT INTO inventory_kardex (
                  tenant_id, insumo_id, movement_type, quantity, unit_cost_nio,
                  total_cost_nio, stock_before, stock_after, source_document_type,
                  source_document_id, origin_movement_id, origin_invoice_item_id,
@@ -360,12 +384,12 @@ describe('AddCreditNoteProvenance1782000000000 (db)', () => {
                  10.0000, 10.0000, 4.0000, 5.0000, 'CREDIT_NOTE', 'cn-a-valid',
                  ${tenantBOrigin[0].id}, 'sale-a-1-item-1', 'RESTOCK_ORIGINAL_BOM'
                 )`,
-              /origin movement was not found|belongs to another tenant/,
-            );
-            await expectRejectedAtSavepoint(
-              queryRunner,
-              'credit_note_kardex_missing_credit_note_invoice',
-              `INSERT INTO inventory_kardex (
+                /origin movement was not found|belongs to another tenant/,
+              );
+              await expectRejectedAtSavepoint(
+                queryRunner,
+                'credit_note_kardex_missing_credit_note_invoice',
+                `INSERT INTO inventory_kardex (
                  tenant_id, insumo_id, movement_type, quantity, unit_cost_nio,
                  total_cost_nio, stock_before, stock_after, source_document_type,
                  source_document_id, origin_movement_id, origin_invoice_item_id,
@@ -375,12 +399,12 @@ describe('AddCreditNoteProvenance1782000000000 (db)', () => {
                  10.0000, 10.0000, 4.0000, 5.0000, 'CREDIT_NOTE', 'sale-a-1',
                  ${tenantAOrigin[0].id}, 'sale-a-1-item-1', 'RESTOCK_ORIGINAL_BOM'
                )`,
-              /credit-note kardex source invoice must be a credit note/,
-            );
-            await expectRejectedAtSavepoint(
-              queryRunner,
-              'credit_note_kardex_policy_mismatch',
-              `INSERT INTO inventory_kardex (
+                /credit-note kardex source invoice must be a credit note/,
+              );
+              await expectRejectedAtSavepoint(
+                queryRunner,
+                'credit_note_kardex_policy_mismatch',
+                `INSERT INTO inventory_kardex (
                  tenant_id, insumo_id, movement_type, quantity, unit_cost_nio,
                  total_cost_nio, stock_before, stock_after, source_document_type,
                  source_document_id, origin_movement_id, origin_invoice_item_id,
@@ -390,12 +414,12 @@ describe('AddCreditNoteProvenance1782000000000 (db)', () => {
                  10.0000, 10.0000, 4.0000, 5.0000, 'CREDIT_NOTE', 'cn-a-valid',
                  ${tenantAOrigin[0].id}, 'sale-a-1-item-1', 'WASTE_NO_RESTOCK'
                )`,
-              /refund reason policy must match the credit-note invoice/,
-            );
-            await expectRejectedAtSavepoint(
-              queryRunner,
-              'credit_note_kardex_origin_movement_mismatch',
-              `INSERT INTO inventory_kardex (
+                /refund reason policy must match the credit-note invoice/,
+              );
+              await expectRejectedAtSavepoint(
+                queryRunner,
+                'credit_note_kardex_origin_movement_mismatch',
+                `INSERT INTO inventory_kardex (
                  tenant_id, insumo_id, movement_type, quantity, unit_cost_nio,
                  total_cost_nio, stock_before, stock_after, source_document_type,
                  source_document_id, origin_movement_id, origin_invoice_item_id,
@@ -405,12 +429,12 @@ describe('AddCreditNoteProvenance1782000000000 (db)', () => {
                  10.0000, 10.0000, 4.0000, 5.0000, 'CREDIT_NOTE', 'cn-a-valid',
                  ${tenantAOtherOrigin[0].id}, 'sale-a-1-item-1', 'RESTOCK_ORIGINAL_BOM'
                )`,
-              /origin movement must belong to the credit-note origin invoice/,
-            );
-            await expectRejectedAtSavepoint(
-              queryRunner,
-              'credit_note_kardex_missing_policy',
-              `INSERT INTO inventory_kardex (
+                /origin movement must belong to the credit-note origin invoice/,
+              );
+              await expectRejectedAtSavepoint(
+                queryRunner,
+                'credit_note_kardex_missing_policy',
+                `INSERT INTO inventory_kardex (
                  tenant_id, insumo_id, movement_type, quantity, unit_cost_nio,
                  total_cost_nio, stock_before, stock_after, source_document_type,
                  source_document_id, origin_movement_id, origin_invoice_item_id
@@ -419,12 +443,12 @@ describe('AddCreditNoteProvenance1782000000000 (db)', () => {
                  10.0000, 10.0000, 4.0000, 5.0000, 'CREDIT_NOTE', 'cn-a-missing-policy',
                  ${tenantAOrigin[0].id}, 'sale-a-1-item-1'
                )`,
-              /refund reason policy/,
-            );
-            await expectRejectedAtSavepoint(
-              queryRunner,
-              'credit_note_kardex_missing_origin_movement',
-              `INSERT INTO inventory_kardex (
+                /refund reason policy/,
+              );
+              await expectRejectedAtSavepoint(
+                queryRunner,
+                'credit_note_kardex_missing_origin_movement',
+                `INSERT INTO inventory_kardex (
                  tenant_id, insumo_id, movement_type, quantity, unit_cost_nio,
                  total_cost_nio, stock_before, stock_after, source_document_type,
                  source_document_id, origin_invoice_item_id, refund_reason_policy
@@ -433,12 +457,12 @@ describe('AddCreditNoteProvenance1782000000000 (db)', () => {
                  10.0000, 10.0000, 4.0000, 5.0000, 'CREDIT_NOTE', 'cn-a-missing-movement',
                  'sale-a-1-item-1', 'RESTOCK_ORIGINAL_BOM'
                )`,
-              /origin movement/,
-            );
-            await expectRejectedAtSavepoint(
-              queryRunner,
-              'credit_note_kardex_missing_origin_item',
-              `INSERT INTO inventory_kardex (
+                /origin movement/,
+              );
+              await expectRejectedAtSavepoint(
+                queryRunner,
+                'credit_note_kardex_missing_origin_item',
+                `INSERT INTO inventory_kardex (
                  tenant_id, insumo_id, movement_type, quantity, unit_cost_nio,
                  total_cost_nio, stock_before, stock_after, source_document_type,
                  source_document_id, origin_movement_id, refund_reason_policy
@@ -447,12 +471,12 @@ describe('AddCreditNoteProvenance1782000000000 (db)', () => {
                  10.0000, 10.0000, 4.0000, 5.0000, 'CREDIT_NOTE', 'cn-a-missing-item',
                  ${tenantAOrigin[0].id}, 'RESTOCK_ORIGINAL_BOM'
                )`,
-              /origin invoice item/,
-            );
-            await expectRejectedAtSavepoint(
-              queryRunner,
-              'sale_kardex_spoofed_credit_note_provenance',
-              `INSERT INTO inventory_kardex (
+                /origin invoice item/,
+              );
+              await expectRejectedAtSavepoint(
+                queryRunner,
+                'sale_kardex_spoofed_credit_note_provenance',
+                `INSERT INTO inventory_kardex (
                  tenant_id, insumo_id, movement_type, quantity, unit_cost_nio,
                  total_cost_nio, stock_before, stock_after, source_document_type,
                  source_document_id, origin_movement_id, origin_invoice_item_id,
@@ -462,50 +486,56 @@ describe('AddCreditNoteProvenance1782000000000 (db)', () => {
                  10.0000, 10.0000, 4.0000, 3.0000, 'SALE', 'sale-a-1',
                  ${tenantAOrigin[0].id}, 'sale-a-1-item-1', 'FINANCIAL_ONLY'
                )`,
-              /non-credit kardex provenance fields must be null|chk_inventory_kardex_refund_reason_policy|violates check constraint/,
-            );
+                /non-credit kardex provenance fields must be null|chk_inventory_kardex_refund_reason_policy|violates check constraint/,
+              );
 
-            await expectRejectedAtSavepoint(
-              queryRunner,
-              'kardex_update',
-              `UPDATE inventory_kardex SET stock_after = 99.0000
+              await expectRejectedAtSavepoint(
+                queryRunner,
+                'kardex_update',
+                `UPDATE inventory_kardex SET stock_after = 99.0000
                WHERE source_document_id = 'cn-a-valid'`,
-              /append-only/,
-            );
-            await expectRejectedAtSavepoint(
-              queryRunner,
-              'kardex_delete',
-              `DELETE FROM inventory_kardex WHERE source_document_id = 'cn-a-valid'`,
-              /append-only/,
-            );
+                /append-only/,
+              );
+              await expectRejectedAtSavepoint(
+                queryRunner,
+                'kardex_delete',
+                `DELETE FROM inventory_kardex WHERE source_document_id = 'cn-a-valid'`,
+                /append-only/,
+              );
 
-            await expectRejectedAtSavepoint(
-              queryRunner,
-              'credit_invoice_update',
-              `UPDATE invoices SET refund_reason_policy = 'WASTE_NO_RESTOCK' WHERE id = 'cn-a-valid'`,
-              /append-only/,
-            );
-            await expectRejectedAtSavepoint(
-              queryRunner,
-              'credit_invoice_delete',
-              `DELETE FROM invoices WHERE id = 'cn-a-valid'`,
-              /append-only/,
-            );
-            await expectRejectedAtSavepoint(
-              queryRunner,
-              'credit_item_update',
-              `UPDATE invoice_items SET origin_invoice_item_id = 'sale-a-2-item-1'
+              await expectRejectedAtSavepoint(
+                queryRunner,
+                'credit_invoice_update',
+                `UPDATE invoices SET refund_reason_policy = 'WASTE_NO_RESTOCK' WHERE id = 'cn-a-valid'`,
+                /append-only/,
+              );
+              await expectRejectedAtSavepoint(
+                queryRunner,
+                'credit_invoice_delete',
+                `DELETE FROM invoices WHERE id = 'cn-a-valid'`,
+                /append-only/,
+              );
+              await expectRejectedAtSavepoint(
+                queryRunner,
+                'credit_item_update',
+                `UPDATE invoice_items SET origin_invoice_item_id = 'sale-a-2-item-1'
                WHERE id = 'cn-a-valid-item-1'`,
-              /append-only|must belong to the credit-note origin invoice/,
-            );
-          });
+                /append-only|must belong to the credit-note origin invoice/,
+              );
+            },
+          );
 
-          await withTenantTransaction(queryRunner, tenantRole, 'tenant-b', async () => {
-            const tenantBRows = (await queryRunner.query(`
+          await withTenantTransaction(
+            queryRunner,
+            tenantRole,
+            'tenant-b',
+            async () => {
+              const tenantBRows = (await queryRunner.query(`
               SELECT id FROM invoices WHERE id = 'cn-a-valid'
             `)) as Array<{ id: string }>;
-            expect(tenantBRows).toEqual([]);
-          });
+              expect(tenantBRows).toEqual([]);
+            },
+          );
         },
       );
     },
@@ -619,19 +649,24 @@ describe('AddCreditNoteProvenance1782000000000 (db)', () => {
                10.0000, 10.0000, 0.0000, 1.0000, 'PURCHASE', 'rls-other-invoice');
           `);
 
-          await withTenantTransaction(queryRunner, tenantRole, 'tenant-a', async () => {
-            const invoices = (await queryRunner.query(`
+          await withTenantTransaction(
+            queryRunner,
+            tenantRole,
+            'tenant-a',
+            async () => {
+              const invoices = (await queryRunner.query(`
               SELECT id FROM invoices ORDER BY id
             `)) as Array<{ id: string }>;
-            const kardexRows = (await queryRunner.query(`
+              const kardexRows = (await queryRunner.query(`
               SELECT source_document_id FROM inventory_kardex ORDER BY source_document_id
             `)) as Array<{ source_document_id: string }>;
 
-            expect(invoices).toEqual([{ id: 'rls-own-invoice' }]);
-            expect(kardexRows).toEqual([
-              { source_document_id: 'rls-own-invoice' },
-            ]);
-          });
+              expect(invoices).toEqual([{ id: 'rls-own-invoice' }]);
+              expect(kardexRows).toEqual([
+                { source_document_id: 'rls-own-invoice' },
+              ]);
+            },
+          );
         },
       );
     },

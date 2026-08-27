@@ -123,7 +123,11 @@ export class InventoryMovement {
   @Column({ name: 'bloqueo_motivo', type: 'varchar', nullable: true })
   bloqueoMotivo: string | null;
 
-  @Column({ name: 'autorizado_por_usuario_id', type: 'varchar', nullable: true })
+  @Column({
+    name: 'autorizado_por_usuario_id',
+    type: 'varchar',
+    nullable: true,
+  })
   autorizadoPorUsuarioId: string | null;
 
   @Column({ name: 'fecha_autorizacion', type: 'timestamptz', nullable: true })

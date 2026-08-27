@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class AddBatch6bCostingLifecycle1785000000000
-  implements MigrationInterface
-{
+export class AddBatch6bCostingLifecycle1785000000000 implements MigrationInterface {
   name = 'AddBatch6bCostingLifecycle1785000000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -118,12 +116,20 @@ export class AddBatch6bCostingLifecycle1785000000000
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP POLICY IF EXISTS kardex_correction_tenant_isolation ON kardex_correction;`);
-    await queryRunner.query(`DROP TRIGGER IF EXISTS trg_kardex_correction_immutable ON kardex_correction;`);
-    await queryRunner.query(`DROP FUNCTION IF EXISTS reject_kardex_correction_mutation();`);
+    await queryRunner.query(
+      `DROP POLICY IF EXISTS kardex_correction_tenant_isolation ON kardex_correction;`,
+    );
+    await queryRunner.query(
+      `DROP TRIGGER IF EXISTS trg_kardex_correction_immutable ON kardex_correction;`,
+    );
+    await queryRunner.query(
+      `DROP FUNCTION IF EXISTS reject_kardex_correction_mutation();`,
+    );
     await queryRunner.query(`DROP TABLE IF EXISTS kardex_correction;`);
 
-    await queryRunner.query(`DROP POLICY IF EXISTS kardex_queue_tenant_isolation ON kardex_recalculate_queue;`);
+    await queryRunner.query(
+      `DROP POLICY IF EXISTS kardex_queue_tenant_isolation ON kardex_recalculate_queue;`,
+    );
     await queryRunner.query(`DROP TABLE IF EXISTS kardex_recalculate_queue;`);
 
     await queryRunner.query(`

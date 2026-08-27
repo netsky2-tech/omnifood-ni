@@ -536,6 +536,15 @@ class MockSaleViewModel extends _i1.Mock implements _i2.SaleViewModel {
       ) as _i10.Future<void>);
 
   @override
+  void dispose() => super.noSuchMethod(
+        Invocation.method(
+          #dispose,
+          [],
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
   void addListener(_i13.VoidCallback? listener) => super.noSuchMethod(
         Invocation.method(
           #addListener,
@@ -549,15 +558,6 @@ class MockSaleViewModel extends _i1.Mock implements _i2.SaleViewModel {
         Invocation.method(
           #removeListener,
           [listener],
-        ),
-        returnValueForMissingStub: null,
-      );
-
-  @override
-  void dispose() => super.noSuchMethod(
-        Invocation.method(
-          #dispose,
-          [],
         ),
         returnValueForMissingStub: null,
       );

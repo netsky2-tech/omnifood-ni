@@ -13,6 +13,7 @@ import '../../widgets/app_drawer.dart';
 import '../../features/identity/supervisor_override_modal.dart';
 import '../../design_system/design_system.dart';
 import 'widgets/multi_currency_checkout_dialog.dart';
+import 'widgets/cloud_sync_status_badge.dart';
 import 'tables/table_layout_view.dart';
 
 class SaleView extends StatefulWidget {
@@ -114,6 +115,7 @@ class _SaleViewState extends State<SaleView> {
                   onPressed: () => viewModel.loadProducts(),
                   tooltip: 'Recargar',
                 ),
+                const CloudSyncStatusBadge(),
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert),
                   tooltip: 'Más opciones',
@@ -238,16 +240,7 @@ class _SaleViewState extends State<SaleView> {
                   onPressed: viewModel.cart.isEmpty ? null : () => _showHoldTicketDialog(context),
                   tooltip: 'Poner en Espera',
                 ),
-                IconButton(
-                  icon: const Icon(Icons.cloud_upload),
-                  onPressed: () {
-                    context.read<SyncService>().triggerManualSync();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Sincronización Iniciada...')),
-                    );
-                  },
-                  tooltip: 'Sincronizar con la Nube',
-                ),
+                const CloudSyncStatusBadge(),
                 if (hasActiveSession && viewModel.canManageCashDrawer)
                   IconButton(
                     icon: const Icon(Icons.point_of_sale),

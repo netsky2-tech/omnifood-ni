@@ -10,7 +10,11 @@ import {
 import { Tenant } from '../../tenant/entities/tenant.entity';
 
 @Entity('sys_parametros_config')
-@Index('uq_sys_parametros_config_tenant_key_version', ['tenant_id', 'paramKey', 'version'], { unique: true })
+@Index(
+  'uq_sys_parametros_config_tenant_key_version',
+  ['tenant_id', 'paramKey', 'version'],
+  { unique: true },
+)
 export class SystemParametersConfig {
   @PrimaryGeneratedColumn({ type: 'bigint' })
   id: string;
@@ -31,7 +35,11 @@ export class SystemParametersConfig {
   @Column({ default: 1 })
   version: number;
 
-  @Column({ name: 'effective_from', type: 'timestamptz', default: () => 'CURRENT_TIMESTAMP' })
+  @Column({
+    name: 'effective_from',
+    type: 'timestamptz',
+    default: () => 'CURRENT_TIMESTAMP',
+  })
   effectiveFrom: Date;
 
   @Column({ name: 'effective_to', type: 'timestamptz', nullable: true })

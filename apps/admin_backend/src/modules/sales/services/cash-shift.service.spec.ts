@@ -207,13 +207,19 @@ describe('CashShiftService', () => {
       shiftRepo.findOne.mockResolvedValue(activeShift as CashShiftSession);
       shiftRepo.count.mockResolvedValue(14); // 14 previous closed shifts -> next Z = 15
 
-      shiftRepo.save.mockImplementation(async (entity) => entity as CashShiftSession);
+      shiftRepo.save.mockImplementation(
+        async (entity) => entity as CashShiftSession,
+      );
 
-      const closed = await service.closeShiftWithZReport('tenant-1', 'shift-1', {
-        finalCountedNio: 2480.0, // Faltante de 20 NIO
-        finalCountedUsd: 100.0,  // Exacto
-        notes: 'Cierre turno tarde',
-      });
+      const closed = await service.closeShiftWithZReport(
+        'tenant-1',
+        'shift-1',
+        {
+          finalCountedNio: 2480.0, // Faltante de 20 NIO
+          finalCountedUsd: 100.0, // Exacto
+          notes: 'Cierre turno tarde',
+        },
+      );
 
       expect(closed.status).toBe(CashShiftStatus.CLOSED);
       expect(closed.difference_nio).toBe(-20.0);
@@ -233,12 +239,18 @@ describe('CashShiftService', () => {
       shiftRepo.findOne.mockResolvedValue(activeShift as CashShiftSession);
       shiftRepo.count.mockResolvedValue(0);
 
-      shiftRepo.save.mockImplementation(async (entity) => entity as CashShiftSession);
+      shiftRepo.save.mockImplementation(
+        async (entity) => entity as CashShiftSession,
+      );
 
-      const closed = await service.closeShiftWithZReport('tenant-1', 'shift-2', {
-        finalCountedNio: 1050.0, // Sobrante de 50 NIO
-        finalCountedUsd: 70.0,   // Sobrante de 20 USD
-      });
+      const closed = await service.closeShiftWithZReport(
+        'tenant-1',
+        'shift-2',
+        {
+          finalCountedNio: 1050.0, // Sobrante de 50 NIO
+          finalCountedUsd: 70.0, // Sobrante de 20 USD
+        },
+      );
 
       expect(closed.difference_nio).toBe(50.0);
       expect(closed.difference_usd).toBe(20.0);

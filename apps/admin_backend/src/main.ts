@@ -4,7 +4,9 @@ import helmet from 'helmet';
 import { AppModule } from './core/app/app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { logger: ['error', 'warn', 'log', 'debug'] });
+  const app = await NestFactory.create(AppModule, {
+    logger: ['error', 'warn', 'log', 'debug'],
+  });
 
   // Global prefix
   app.setGlobalPrefix('api');
@@ -17,11 +19,13 @@ async function bootstrap() {
   });
 
   // Security - relaxed for local dev
-  app.use(helmet({
-    contentSecurityPolicy: false,
-    crossOriginEmbedderPolicy: false,
-    hsts: false,
-  }));
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+      crossOriginEmbedderPolicy: false,
+      hsts: false,
+    }),
+  );
   app.enableCors({ origin: true, credentials: true });
 
   // Validation

@@ -26,6 +26,15 @@ import 'package:pos_app/domain/services/config/tenant_config_service.dart';
 import 'package:pos_app/domain/services/kitchen/kitchen_order_service.dart';
 import 'sale_view_model_test.mocks.dart';
 import 'package:mockito/annotations.dart';
+import 'dart:async';
+import 'package:pos_app/data/services/sync_service.dart';
+
+class FakeSyncService extends Mock implements SyncService {
+  final _controller = StreamController<InboundSyncResult>.broadcast();
+  @override
+  Stream<InboundSyncResult> get onInboundSync => _controller.stream;
+  void emitSync(InboundSyncResult result) => _controller.add(result);
+}
 
 class FakeLocalConfigDao extends Mock implements LocalConfigDao {
   @override
@@ -524,6 +533,57 @@ void main() {
         cashierViewModel.applyManualDiscount(5.0);
         expect(cashierViewModel.errorMessage, 'Acceso denegado.');
         expect(cashierViewModel.totalDiscounts, 0.0);
+      },
+    );
+
+    test(
+      'reloads products automatically when syncService emits onInboundSync with products',
+      () async {
+        final fakeSyncService = FakeSyncService();
+        final productList = [
+          Product(
+            id: 'p-new',
+            sku: 'SKU-NEW',
+            name: 'New Product',
+            uom: 'unit',
+            sellPrice: 120,
+            stock: 5,
+            averageCost: 50,
+          ),
+        ];
+        when(mockInventoryRepo.getActiveProducts()).thenAnswer((_) async => productList);
+
+        final vm = SaleViewModel(
+          mockSalesRepo,
+          mockInventoryRepo,
+          mockAuthRepo,
+          mockDb,
+          null,
+          false, // autoLoad = false
+          fakeTenantConfigService,
+          fakeKitchenOrderService,
+          null,
+          null,
+          fakeSyncService,
+        );
+
+        expect(vm.products, isEmpty);
+
+        fakeSyncService.emitSync(
+          const InboundSyncResult(
+            productsCount: 1,
+            catalogValuesCount: 0,
+            timestamp: '2026-08-26T18:00:00Z',
+          ),
+        );
+
+        await Future<void>.delayed(Duration.zero);
+
+        expect(vm.products, hasLength(1));
+        expect(vm.products.first.id, 'p-new');
+        expect(vm.products.first.sellPrice, 120);
+
+        vm.dispose();
       },
     );
   });

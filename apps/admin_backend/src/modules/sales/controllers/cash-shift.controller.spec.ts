@@ -135,7 +135,9 @@ describe('CashShiftController', () => {
         amount_usd: 0.0,
         reason: 'Compra de bolsas',
       };
-      service.recordCashMovement.mockResolvedValue(mockMovement as CashMovement);
+      service.recordCashMovement.mockResolvedValue(
+        mockMovement as CashMovement,
+      );
 
       const result = await controller.recordMovement(
         { user: mockUser },

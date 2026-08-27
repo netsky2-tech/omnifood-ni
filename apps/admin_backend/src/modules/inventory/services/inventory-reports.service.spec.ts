@@ -360,19 +360,25 @@ describe('InventoryReportsService', () => {
       expect(summary.alerts).toHaveLength(3);
 
       // Warning alert
-      const warningAlert = summary.alerts.find((a: any) => a.insumoId === 'ins-warning');
+      const warningAlert = summary.alerts.find(
+        (a: any) => a.insumoId === 'ins-warning',
+      );
       expect(warningAlert).toBeDefined();
       expect(warningAlert.severity).toBe('WARNING');
       expect(warningAlert.suggestedReorderQuantity).toBe(16.0); // 20 - 4
 
       // Critical alert
-      const criticalAlert = summary.alerts.find((a: any) => a.insumoId === 'ins-critical-zero');
+      const criticalAlert = summary.alerts.find(
+        (a: any) => a.insumoId === 'ins-critical-zero',
+      );
       expect(criticalAlert).toBeDefined();
       expect(criticalAlert.severity).toBe('CRITICAL');
       expect(criticalAlert.suggestedReorderQuantity).toBe(200.0); // 200 - 0
 
       // Negative stock alert
-      const negativeAlert = summary.alerts.find((a: any) => a.insumoId === 'ins-negative');
+      const negativeAlert = summary.alerts.find(
+        (a: any) => a.insumoId === 'ins-negative',
+      );
       expect(negativeAlert).toBeDefined();
       expect(negativeAlert.severity).toBe('NEGATIVE_STOCK');
       expect(negativeAlert.suggestedReorderQuantity).toBe(33.0); // 30 - (-3)

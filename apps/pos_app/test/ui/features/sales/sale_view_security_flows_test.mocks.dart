@@ -38,6 +38,16 @@ import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.
 // ignore_for_file: camel_case_types
 // ignore_for_file: subtype_of_sealed_class
 
+class _FakeDuration_0 extends _i1.SmartFake implements Duration {
+  _FakeDuration_0(
+    Object parent,
+    Invocation parentInvocation,
+  ) : super(
+          parent,
+          parentInvocation,
+        );
+}
+
 /// A class which mocks [SaleViewModel].
 ///
 /// See the documentation for Mockito's code generation for more information.
@@ -564,6 +574,15 @@ class MockSaleViewModel extends _i1.Mock implements _i2.SaleViewModel {
       ) as _i10.Future<void>);
 
   @override
+  void dispose() => super.noSuchMethod(
+        Invocation.method(
+          #dispose,
+          [],
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
   void addListener(_i13.VoidCallback? listener) => super.noSuchMethod(
         Invocation.method(
           #addListener,
@@ -577,15 +596,6 @@ class MockSaleViewModel extends _i1.Mock implements _i2.SaleViewModel {
         Invocation.method(
           #removeListener,
           [listener],
-        ),
-        returnValueForMissingStub: null,
-      );
-
-  @override
-  void dispose() => super.noSuchMethod(
-        Invocation.method(
-          #dispose,
-          [],
         ),
         returnValueForMissingStub: null,
       );
@@ -847,6 +857,34 @@ class MockAuditRepository extends _i1.Mock implements _i16.AuditRepository {
 /// See the documentation for Mockito's code generation for more information.
 class MockSyncService extends _i1.Mock implements _i18.SyncService {
   @override
+  _i10.Stream<_i18.InboundSyncResult> get onInboundSync => (super.noSuchMethod(
+        Invocation.getter(#onInboundSync),
+        returnValue: _i10.Stream<_i18.InboundSyncResult>.empty(),
+        returnValueForMissingStub: _i10.Stream<_i18.InboundSyncResult>.empty(),
+      ) as _i10.Stream<_i18.InboundSyncResult>);
+
+  @override
+  _i10.Stream<_i18.CloudSyncStatus> get onStatusChanged => (super.noSuchMethod(
+        Invocation.getter(#onStatusChanged),
+        returnValue: _i10.Stream<_i18.CloudSyncStatus>.empty(),
+        returnValueForMissingStub: _i10.Stream<_i18.CloudSyncStatus>.empty(),
+      ) as _i10.Stream<_i18.CloudSyncStatus>);
+
+  @override
+  _i18.CloudSyncStatus get status => (super.noSuchMethod(
+        Invocation.getter(#status),
+        returnValue: _i18.CloudSyncStatus.idle,
+        returnValueForMissingStub: _i18.CloudSyncStatus.idle,
+      ) as _i18.CloudSyncStatus);
+
+  @override
+  int get consecutiveFailures => (super.noSuchMethod(
+        Invocation.getter(#consecutiveFailures),
+        returnValue: 0,
+        returnValueForMissingStub: 0,
+      ) as int);
+
+  @override
   void start() => super.noSuchMethod(
         Invocation.method(
           #start,
@@ -863,6 +901,47 @@ class MockSyncService extends _i1.Mock implements _i18.SyncService {
         ),
         returnValueForMissingStub: null,
       );
+
+  @override
+  void dispose() => super.noSuchMethod(
+        Invocation.method(
+          #dispose,
+          [],
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  Duration getNextBackoffDelay() => (super.noSuchMethod(
+        Invocation.method(
+          #getNextBackoffDelay,
+          [],
+        ),
+        returnValue: _FakeDuration_0(
+          this,
+          Invocation.method(
+            #getNextBackoffDelay,
+            [],
+          ),
+        ),
+        returnValueForMissingStub: _FakeDuration_0(
+          this,
+          Invocation.method(
+            #getNextBackoffDelay,
+            [],
+          ),
+        ),
+      ) as Duration);
+
+  @override
+  _i10.Future<int> getPendingOutboxCount() => (super.noSuchMethod(
+        Invocation.method(
+          #getPendingOutboxCount,
+          [],
+        ),
+        returnValue: _i10.Future<int>.value(0),
+        returnValueForMissingStub: _i10.Future<int>.value(0),
+      ) as _i10.Future<int>);
 
   @override
   _i10.Future<void> triggerManualSync() => (super.noSuchMethod(
@@ -885,4 +964,15 @@ class MockSyncService extends _i1.Mock implements _i18.SyncService {
         returnValue: <String, Object>{},
         returnValueForMissingStub: <String, Object>{},
       ) as Map<String, Object>);
+
+  @override
+  _i10.Future<_i18.InboundSyncResult?> pullInboundDeltas() =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #pullInboundDeltas,
+          [],
+        ),
+        returnValue: _i10.Future<_i18.InboundSyncResult?>.value(),
+        returnValueForMissingStub: _i10.Future<_i18.InboundSyncResult?>.value(),
+      ) as _i10.Future<_i18.InboundSyncResult?>);
 }

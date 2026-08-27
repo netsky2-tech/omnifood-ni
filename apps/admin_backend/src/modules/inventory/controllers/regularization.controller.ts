@@ -37,9 +37,7 @@ export class RegularizationController {
 
   @Get('pending')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
-  async getPending(
-    @GetTenantId() tenantId: string,
-  ) {
+  async getPending(@GetTenantId() tenantId: string) {
     return this.regularizationService.getPendingQueue(tenantId);
   }
 
@@ -67,6 +65,9 @@ export class RegularizationController {
     @GetTenantId() tenantId: string,
     @Body() dto: SyncRegularizationCorrectionsDto,
   ) {
-    return this.regularizationService.syncCorrections(tenantId, dto.corrections);
+    return this.regularizationService.syncCorrections(
+      tenantId,
+      dto.corrections,
+    );
   }
 }

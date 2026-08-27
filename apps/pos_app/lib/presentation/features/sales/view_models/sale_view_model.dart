@@ -22,9 +22,11 @@ import '../../../../domain/services/config/tenant_config_service.dart';
 import '../../../../domain/services/config/printer_config_service.dart';
 import '../../../../domain/services/printer/printer_resolver.dart';
 import '../../../../domain/services/printer/thermal_logo_processor.dart';
+import 'dart:async';
 import '../../../../domain/ports/printer_port.dart';
 import '../../../../domain/services/kitchen/kitchen_order_service.dart';
 import '../../../../domain/services/sales/table_order_service.dart';
+import '../../../../data/services/sync_service.dart';
 
 class SaleViewModel extends ChangeNotifier {
   final SalesRepository _salesRepository;
@@ -36,6 +38,7 @@ class SaleViewModel extends ChangeNotifier {
   final KitchenOrderService _kitchenOrderService;
   final PrinterConfigService _printerConfigService;
   final PrinterPort _printerPort;
+  StreamSubscription<InboundSyncResult>? _syncSubscription;
 
   SaleViewModel(
     this._salesRepository,
@@ -48,6 +51,7 @@ class SaleViewModel extends ChangeNotifier {
     KitchenOrderService? kitchenOrderService,
     PrinterConfigService? printerConfigService,
     PrinterPort? printerPort,
+    SyncService? syncService,
   ])  : _tableOrderService = tableOrderService ?? TableOrderService(_database),
         _tenantConfigService =
             tenantConfigService ?? TenantConfigService(_database.localConfigDao),
@@ -57,6 +61,13 @@ class SaleViewModel extends ChangeNotifier {
             printerConfigService ?? PrinterConfigService(_database.localConfigDao),
         _printerPort =
             printerPort ?? PrinterResolver.resolve(const PrinterConfig()) {
+    if (syncService != null) {
+      _syncSubscription = syncService.onInboundSync.listen((event) {
+        if (event.productsCount > 0 || event.catalogValuesCount > 0) {
+          loadProducts();
+        }
+      });
+    }
     if (autoLoad) {
       loadProducts();
       checkActiveSession();
@@ -887,5 +898,11 @@ class SaleViewModel extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  @override
+  void dispose() {
+    _syncSubscription?.cancel();
+    super.dispose();
   }
 }

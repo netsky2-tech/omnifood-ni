@@ -23,11 +23,19 @@ describe('AddBatch6bCostingLifecycle1785000000000', () => {
 
     const sql = queries.join('\n');
 
-    expect(sql).toContain('ADD COLUMN IF NOT EXISTS estado_costeo integer NOT NULL DEFAULT 30');
-    expect(sql).toContain('ADD COLUMN IF NOT EXISTS intentos_count integer NOT NULL DEFAULT 0');
+    expect(sql).toContain(
+      'ADD COLUMN IF NOT EXISTS estado_costeo integer NOT NULL DEFAULT 30',
+    );
+    expect(sql).toContain(
+      'ADD COLUMN IF NOT EXISTS intentos_count integer NOT NULL DEFAULT 0',
+    );
     expect(sql).toContain('ADD COLUMN IF NOT EXISTS bloqueo_motivo varchar');
-    expect(sql).toContain('ADD COLUMN IF NOT EXISTS autorizado_por_usuario_id varchar');
-    expect(sql).toContain('ADD COLUMN IF NOT EXISTS fecha_autorizacion timestamptz');
+    expect(sql).toContain(
+      'ADD COLUMN IF NOT EXISTS autorizado_por_usuario_id varchar',
+    );
+    expect(sql).toContain(
+      'ADD COLUMN IF NOT EXISTS fecha_autorizacion timestamptz',
+    );
     expect(sql).toContain('SET estado_costeo = 10');
     expect(sql).toContain('WHERE stock_after < 0');
   });
@@ -39,12 +47,18 @@ describe('AddBatch6bCostingLifecycle1785000000000', () => {
 
     const sql = queries.join('\n');
 
-    expect(sql).toContain('CREATE TABLE IF NOT EXISTS kardex_recalculate_queue');
+    expect(sql).toContain(
+      'CREATE TABLE IF NOT EXISTS kardex_recalculate_queue',
+    );
     expect(sql).toContain('CREATE TABLE IF NOT EXISTS kardex_correction');
     expect(sql).toContain('trg_kardex_correction_immutable');
     expect(sql).toContain('reject_kardex_correction_mutation()');
-    expect(sql).toContain('ALTER TABLE kardex_recalculate_queue ENABLE ROW LEVEL SECURITY');
-    expect(sql).toContain('ALTER TABLE kardex_correction ENABLE ROW LEVEL SECURITY');
+    expect(sql).toContain(
+      'ALTER TABLE kardex_recalculate_queue ENABLE ROW LEVEL SECURITY',
+    );
+    expect(sql).toContain(
+      'ALTER TABLE kardex_correction ENABLE ROW LEVEL SECURITY',
+    );
     expect(sql).toContain('kardex_queue_tenant_isolation');
     expect(sql).toContain('kardex_correction_tenant_isolation');
   });

@@ -1,8 +1,15 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { createHash } from 'crypto';
-import { KardexRecalculateQueue, KardexQueueStatus } from '../entities/kardex-recalculate-queue.entity';
+import {
+  KardexRecalculateQueue,
+  KardexQueueStatus,
+} from '../entities/kardex-recalculate-queue.entity';
 import { KardexCorrection } from '../entities/kardex-correction.entity';
 import { InventoryMovement } from '../entities/inventory-movement.entity';
 import { GovernanceApprovalService } from './governance-approval.service';
@@ -53,11 +60,15 @@ export class KardexRegularizationService {
       });
 
       if (!queueItem) {
-        throw new NotFoundException(`Elemento de cola ${input.queueId} no encontrado.`);
+        throw new NotFoundException(
+          `Elemento de cola ${input.queueId} no encontrado.`,
+        );
       }
 
       if (queueItem.status === KardexQueueStatus.COMPLETED) {
-        throw new BadRequestException(`El elemento ${input.queueId} ya fue regularizado.`);
+        throw new BadRequestException(
+          `El elemento ${input.queueId} ya fue regularizado.`,
+        );
       }
 
       const origin = await movementRepo.findOne({
@@ -68,7 +79,9 @@ export class KardexRegularizationService {
       });
 
       if (!origin || !trigger) {
-        throw new NotFoundException('Movimiento de origen o disparador no encontrado para regularización.');
+        throw new NotFoundException(
+          'Movimiento de origen o disparador no encontrado para regularización.',
+        );
       }
 
       const prevCost = Number(origin.unitCostNio || 0);

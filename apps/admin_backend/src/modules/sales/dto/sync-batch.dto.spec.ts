@@ -151,9 +151,7 @@ describe('SyncBatchEnvelopeDto', () => {
     expect(errors).toHaveLength(0);
     expect(dto.records[0].documentType).toBe('CREDIT_NOTE');
     expect(dto.records[0].invoice?.originInvoiceId).toBe('sale-inv-1');
-    expect(dto.records[0].invoice?.refundReasonPolicy).toBe(
-      'WASTE_NO_RESTOCK',
-    );
+    expect(dto.records[0].invoice?.refundReasonPolicy).toBe('WASTE_NO_RESTOCK');
     expect(dto.records[0].invoice?.items[0].originInvoiceItemId).toBe(
       'sale-item-1',
     );

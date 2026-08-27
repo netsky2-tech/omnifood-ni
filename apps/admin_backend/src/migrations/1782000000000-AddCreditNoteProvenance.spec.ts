@@ -52,15 +52,19 @@ describe('AddCreditNoteProvenance1782000000000', () => {
     expect(sql).not.toContain('ALTER TYPE');
     expect(sql).not.toContain('ADD VALUE');
     expect(sql).toContain("source_document_type = 'CREDIT_NOTE'");
-    expect(sql).toContain("refund_reason_policy IN (");
+    expect(sql).toContain('refund_reason_policy IN (');
   });
 
   it('enforces tenant RLS, same-tenant origin ownership, and append-only guards', async () => {
     const sql = await collectSql();
 
     for (const tableName of ['invoices', 'invoice_items', 'inventory_kardex']) {
-      expect(sql).toContain(`ALTER TABLE ${tableName} ENABLE ROW LEVEL SECURITY`);
-      expect(sql).toContain(`ALTER TABLE ${tableName} FORCE ROW LEVEL SECURITY`);
+      expect(sql).toContain(
+        `ALTER TABLE ${tableName} ENABLE ROW LEVEL SECURITY`,
+      );
+      expect(sql).toContain(
+        `ALTER TABLE ${tableName} FORCE ROW LEVEL SECURITY`,
+      );
     }
     for (const fragment of [
       "tenant_id::text = current_setting('app.tenant_id', true)",
@@ -95,17 +99,29 @@ describe('AddCreditNoteProvenance1782000000000', () => {
   it('rolls back migration-owned provenance schema objects', async () => {
     const sql = await collectSql('down');
 
-    expect(sql).toContain('DROP TRIGGER IF EXISTS trg_invoices_credit_note_provenance_immutable');
-    expect(sql).toContain('DROP FUNCTION IF EXISTS validate_credit_note_invoice_origin_tenant()');
-    expect(sql).toContain('DROP POLICY IF EXISTS credit_note_invoices_tenant_select');
+    expect(sql).toContain(
+      'DROP TRIGGER IF EXISTS trg_invoices_credit_note_provenance_immutable',
+    );
+    expect(sql).toContain(
+      'DROP FUNCTION IF EXISTS validate_credit_note_invoice_origin_tenant()',
+    );
+    expect(sql).toContain(
+      'DROP POLICY IF EXISTS credit_note_invoices_tenant_select',
+    );
     expect(sql).toContain('DROP COLUMN IF EXISTS origin_invoice_id');
     expect(sql).toContain('DROP COLUMN IF EXISTS origin_invoice_item_id');
     expect(sql).toContain('DROP COLUMN IF EXISTS origin_movement_id');
     expect(sql).toContain('FROM credit_note_provenance_rls_baseline');
     expect(sql).toContain('ALTER TABLE invoices DISABLE ROW LEVEL SECURITY');
     expect(sql).toContain('ALTER TABLE invoices NO FORCE ROW LEVEL SECURITY');
-    expect(sql).toContain('ALTER TABLE invoice_items DISABLE ROW LEVEL SECURITY');
-    expect(sql).toContain('ALTER TABLE inventory_kardex NO FORCE ROW LEVEL SECURITY');
-    expect(sql).toContain('DROP TABLE IF EXISTS credit_note_provenance_rls_baseline');
+    expect(sql).toContain(
+      'ALTER TABLE invoice_items DISABLE ROW LEVEL SECURITY',
+    );
+    expect(sql).toContain(
+      'ALTER TABLE inventory_kardex NO FORCE ROW LEVEL SECURITY',
+    );
+    expect(sql).toContain(
+      'DROP TABLE IF EXISTS credit_note_provenance_rls_baseline',
+    );
   });
 });

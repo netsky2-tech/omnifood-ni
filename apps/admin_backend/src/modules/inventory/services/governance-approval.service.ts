@@ -1,4 +1,8 @@
-import { Injectable, BadRequestException, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  UnauthorizedException,
+} from '@nestjs/common';
 
 export interface GovernanceCheckInput {
   totalDeltaNio: number;
@@ -11,7 +15,10 @@ export class GovernanceApprovalService {
   private readonly AUTO_APPROVE_THRESHOLD = 1500.0;
   private readonly MANAGER_MAX_THRESHOLD = 10000.0;
 
-  evaluateApprovalRequirement(totalDeltaNio: number, isClosedPeriod: boolean): {
+  evaluateApprovalRequirement(
+    totalDeltaNio: number,
+    isClosedPeriod: boolean,
+  ): {
     requiresApproval: boolean;
     allowedRoles: string[];
     reason?: string;
@@ -47,7 +54,10 @@ export class GovernanceApprovalService {
   }
 
   assertAuthorized(input: GovernanceCheckInput): void {
-    const requirement = this.evaluateApprovalRequirement(input.totalDeltaNio, input.isClosedPeriod);
+    const requirement = this.evaluateApprovalRequirement(
+      input.totalDeltaNio,
+      input.isClosedPeriod,
+    );
     if (!requirement.requiresApproval) {
       return;
     }

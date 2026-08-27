@@ -19,7 +19,11 @@ export enum KardexQueueStatus {
 }
 
 @Entity('kardex_recalculate_queue')
-@Index('uq_kardex_queue_origin_trigger', ['tenant_id', 'originMovementId', 'triggerMovementId'], { unique: true })
+@Index(
+  'uq_kardex_queue_origin_trigger',
+  ['tenant_id', 'originMovementId', 'triggerMovementId'],
+  { unique: true },
+)
 @Index('idx_kardex_queue_tenant_status', ['tenant_id', 'status', 'createdAt'])
 export class KardexRecalculateQueue {
   @PrimaryGeneratedColumn('uuid')

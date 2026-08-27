@@ -63,12 +63,17 @@ describe('RegularizationController', () => {
     }).compile();
 
     controller = module.get<RegularizationController>(RegularizationController);
-    regularizationService = module.get<KardexRegularizationService>(KardexRegularizationService);
+    regularizationService = module.get<KardexRegularizationService>(
+      KardexRegularizationService,
+    );
   });
 
   it('should be defined and guarded with AuthGuard and RolesGuard', () => {
     expect(controller).toBeDefined();
-    const guards = Reflect.getMetadata(GUARDS_METADATA, RegularizationController);
+    const guards = Reflect.getMetadata(
+      GUARDS_METADATA,
+      RegularizationController,
+    );
     expect(guards).toContain(AuthGuard);
     expect(guards).toContain(RolesGuard);
   });
@@ -79,7 +84,9 @@ describe('RegularizationController', () => {
 
     const result = await controller.getPending('tenant-123');
     expect(result).toBe(mockItems);
-    expect(regularizationServiceMock.getPendingQueue).toHaveBeenCalledWith('tenant-123');
+    expect(regularizationServiceMock.getPendingQueue).toHaveBeenCalledWith(
+      'tenant-123',
+    );
 
     const roles = Reflect.getMetadata(ROLES_KEY, controller.getPending);
     expect(roles).toEqual([UserRole.OWNER, UserRole.MANAGER]);
@@ -87,7 +94,9 @@ describe('RegularizationController', () => {
 
   it('approve delegates to service with userId, role, and authMethod from request', async () => {
     const mockCorrection = { id: 'corr-1', totalDeltaCostNio: 200 };
-    regularizationServiceMock.approveRegularization.mockResolvedValue(mockCorrection);
+    regularizationServiceMock.approveRegularization.mockResolvedValue(
+      mockCorrection,
+    );
 
     const result = await controller.approve(
       'tenant-123',
@@ -96,7 +105,9 @@ describe('RegularizationController', () => {
     );
 
     expect(result).toBe(mockCorrection);
-    expect(regularizationServiceMock.approveRegularization).toHaveBeenCalledWith('tenant-123', {
+    expect(
+      regularizationServiceMock.approveRegularization,
+    ).toHaveBeenCalledWith('tenant-123', {
       queueId: 'queue-uuid-1',
       approvedByUserId: 'user-supervisor-1',
       role: 'manager',
@@ -106,7 +117,9 @@ describe('RegularizationController', () => {
 
   it('syncCorrections delegates batch to service with tenantId', async () => {
     const mockResult = { syncedCount: 2, duplicatesCount: 0 };
-    regularizationServiceMock.syncCorrections = jest.fn().mockResolvedValue(mockResult);
+    regularizationServiceMock.syncCorrections = jest
+      .fn()
+      .mockResolvedValue(mockResult);
 
     const dto = {
       corrections: [

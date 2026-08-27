@@ -40,8 +40,12 @@ describe('CreateSystemParametersConfig1784000000000', () => {
 
     const sql = queries.join('\n');
 
-    expect(sql).toContain('ALTER TABLE sys_parametros_config ENABLE ROW LEVEL SECURITY');
-    expect(sql).toContain('ALTER TABLE sys_parametros_config FORCE ROW LEVEL SECURITY');
+    expect(sql).toContain(
+      'ALTER TABLE sys_parametros_config ENABLE ROW LEVEL SECURITY',
+    );
+    expect(sql).toContain(
+      'ALTER TABLE sys_parametros_config FORCE ROW LEVEL SECURITY',
+    );
     expect(sql).toContain('sys_parametros_config_tenant_isolation');
     expect(sql).toContain("current_setting('app.tenant_id', true)");
     expect(sql).toContain('v_sys_parametros_config_active');
@@ -56,9 +60,15 @@ describe('CreateSystemParametersConfig1784000000000', () => {
     const sql = queries.join('\n');
 
     expect(sql).toContain('DROP VIEW IF EXISTS v_sys_parametros_config_active');
-    expect(sql).toContain('DROP POLICY IF EXISTS sys_parametros_config_tenant_isolation');
-    expect(sql).toContain('DROP TRIGGER IF EXISTS trg_sys_parametros_config_immutable');
-    expect(sql).toContain('DROP FUNCTION IF EXISTS reject_sys_parametros_config_mutation()');
+    expect(sql).toContain(
+      'DROP POLICY IF EXISTS sys_parametros_config_tenant_isolation',
+    );
+    expect(sql).toContain(
+      'DROP TRIGGER IF EXISTS trg_sys_parametros_config_immutable',
+    );
+    expect(sql).toContain(
+      'DROP FUNCTION IF EXISTS reject_sys_parametros_config_mutation()',
+    );
     expect(sql).toContain('DROP TABLE IF EXISTS sys_parametros_config');
   });
 });

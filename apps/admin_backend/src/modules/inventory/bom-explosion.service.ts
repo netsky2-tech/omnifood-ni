@@ -13,7 +13,9 @@ export interface ExplodeBomInput {
 export interface ExplodeRecursiveBomInput {
   rootProductId: string;
   orderQuantity: number;
-  getRecipeComponents: (productId: string) => Promise<RecipeDetail[]> | RecipeDetail[];
+  getRecipeComponents: (
+    productId: string,
+  ) => Promise<RecipeDetail[]> | RecipeDetail[];
   maxDepth?: number;
 }
 
@@ -39,7 +41,9 @@ export class BomExplosionService {
   /**
    * Multi-level recursive BOM explosion with DAG cycle detection and depth limit.
    */
-  async explodeRecursive(input: ExplodeRecursiveBomInput): Promise<Map<string, number>> {
+  async explodeRecursive(
+    input: ExplodeRecursiveBomInput,
+  ): Promise<Map<string, number>> {
     const maxDepth = input.maxDepth ?? DEFAULT_MAX_BOM_DEPTH;
     const totals = new Map<string, number>();
     const visitedStack = new Set<string>();
@@ -62,7 +66,9 @@ export class BomExplosionService {
   private async _explodeInternal(
     currentProductId: string,
     currentMultiplier: number,
-    getRecipeComponents: (productId: string) => Promise<RecipeDetail[]> | RecipeDetail[],
+    getRecipeComponents: (
+      productId: string,
+    ) => Promise<RecipeDetail[]> | RecipeDetail[],
     totals: Map<string, number>,
     visitedStack: Set<string>,
     currentDepth: number,
@@ -86,7 +92,9 @@ export class BomExplosionService {
     const components = await getRecipeComponents(currentProductId);
 
     for (const component of components) {
-      const normalizedQuantity = round4(Number(component.quantity) * currentMultiplier);
+      const normalizedQuantity = round4(
+        Number(component.quantity) * currentMultiplier,
+      );
 
       if (component.ingredient_type === 'SUB_RECIPE') {
         await this._explodeInternal(

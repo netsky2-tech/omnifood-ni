@@ -132,7 +132,9 @@ export class CostCalculatorService {
     let totalBatchCostNio = 0;
 
     const rawComponents = input.components.map((c) => {
-      const lineCost = roundPurchaseCpp(Number(c.grossQuantity) * Number(c.unitCostNio));
+      const lineCost = roundPurchaseCpp(
+        Number(c.grossQuantity) * Number(c.unitCostNio),
+      );
       totalBatchCostNio = roundPurchaseCpp(totalBatchCostNio + lineCost);
       return {
         ingredientId: c.ingredientId,
@@ -145,22 +147,30 @@ export class CostCalculatorService {
       };
     });
 
-    const components: RecipeTheoreticalCostComponent[] = rawComponents.map((c) => ({
-      ...c,
-      costPercentage:
-        totalBatchCostNio > 0
-          ? roundPurchaseCpp((c.totalCostNio / totalBatchCostNio) * 100)
-          : 0,
-    }));
+    const components: RecipeTheoreticalCostComponent[] = rawComponents.map(
+      (c) => ({
+        ...c,
+        costPercentage:
+          totalBatchCostNio > 0
+            ? roundPurchaseCpp((c.totalCostNio / totalBatchCostNio) * 100)
+            : 0,
+      }),
+    );
 
-    const unitTheoreticalCostNio = roundPurchaseCpp(totalBatchCostNio / yieldQuantity);
+    const unitTheoreticalCostNio = roundPurchaseCpp(
+      totalBatchCostNio / yieldQuantity,
+    );
 
     let grossMarginNio: number | undefined;
     let grossMarginPct: number | undefined;
 
     if (input.sellingPriceNio != null && input.sellingPriceNio > 0) {
-      grossMarginNio = roundPurchaseCpp(input.sellingPriceNio - unitTheoreticalCostNio);
-      grossMarginPct = roundPurchaseCpp((grossMarginNio / input.sellingPriceNio) * 100);
+      grossMarginNio = roundPurchaseCpp(
+        input.sellingPriceNio - unitTheoreticalCostNio,
+      );
+      grossMarginPct = roundPurchaseCpp(
+        (grossMarginNio / input.sellingPriceNio) * 100,
+      );
     }
 
     return {

@@ -467,9 +467,11 @@ describe('RecipeService', () => {
     });
 
     it('successfully ingests valid SUB_RECIPE component and persists with reference version', async () => {
-      productRepo.findOne.mockImplementation(async ({ where }: { where: { id: string } }) => {
-        return { id: where.id, tenant_id: 'tenant-A' };
-      });
+      productRepo.findOne.mockImplementation(
+        async ({ where }: { where: { id: string } }) => {
+          return { id: where.id, tenant_id: 'tenant-A' };
+        },
+      );
       manager.findOne.mockResolvedValue(null);
 
       await service.ingestPosVersion({

@@ -42,22 +42,46 @@ describe('BomExplosionService', () => {
         [
           'prod-lasagna',
           [
-            { insumo_id: 'ins-pasta', ingredient_type: 'INSUMO', quantity: 0.2 } as RecipeDetail,
-            { insumo_id: 'prod-salsa-bolognese', ingredient_type: 'SUB_RECIPE', quantity: 0.3 } as RecipeDetail,
+            {
+              insumo_id: 'ins-pasta',
+              ingredient_type: 'INSUMO',
+              quantity: 0.2,
+            } as RecipeDetail,
+            {
+              insumo_id: 'prod-salsa-bolognese',
+              ingredient_type: 'SUB_RECIPE',
+              quantity: 0.3,
+            } as RecipeDetail,
           ],
         ],
         [
           'prod-salsa-bolognese',
           [
-            { insumo_id: 'ins-carne', ingredient_type: 'INSUMO', quantity: 0.5 } as RecipeDetail,
-            { insumo_id: 'prod-fondo-res', ingredient_type: 'SUB_RECIPE', quantity: 0.2 } as RecipeDetail,
+            {
+              insumo_id: 'ins-carne',
+              ingredient_type: 'INSUMO',
+              quantity: 0.5,
+            } as RecipeDetail,
+            {
+              insumo_id: 'prod-fondo-res',
+              ingredient_type: 'SUB_RECIPE',
+              quantity: 0.2,
+            } as RecipeDetail,
           ],
         ],
         [
           'prod-fondo-res',
           [
-            { insumo_id: 'ins-huesos', ingredient_type: 'INSUMO', quantity: 0.4 } as RecipeDetail,
-            { insumo_id: 'ins-agua', ingredient_type: 'INSUMO', quantity: 1.0 } as RecipeDetail,
+            {
+              insumo_id: 'ins-huesos',
+              ingredient_type: 'INSUMO',
+              quantity: 0.4,
+            } as RecipeDetail,
+            {
+              insumo_id: 'ins-agua',
+              ingredient_type: 'INSUMO',
+              quantity: 1.0,
+            } as RecipeDetail,
           ],
         ],
       ]);
@@ -86,15 +110,33 @@ describe('BomExplosionService', () => {
       const cyclicDb = new Map<string, RecipeDetail[]>([
         [
           'prod-a',
-          [{ insumo_id: 'prod-b', ingredient_type: 'SUB_RECIPE', quantity: 1.0 } as RecipeDetail],
+          [
+            {
+              insumo_id: 'prod-b',
+              ingredient_type: 'SUB_RECIPE',
+              quantity: 1.0,
+            } as RecipeDetail,
+          ],
         ],
         [
           'prod-b',
-          [{ insumo_id: 'prod-c', ingredient_type: 'SUB_RECIPE', quantity: 1.0 } as RecipeDetail],
+          [
+            {
+              insumo_id: 'prod-c',
+              ingredient_type: 'SUB_RECIPE',
+              quantity: 1.0,
+            } as RecipeDetail,
+          ],
         ],
         [
           'prod-c',
-          [{ insumo_id: 'prod-a', ingredient_type: 'SUB_RECIPE', quantity: 1.0 } as RecipeDetail],
+          [
+            {
+              insumo_id: 'prod-a',
+              ingredient_type: 'SUB_RECIPE',
+              quantity: 1.0,
+            } as RecipeDetail,
+          ],
         ],
       ]);
 
@@ -112,11 +154,19 @@ describe('BomExplosionService', () => {
       const deepDb = new Map<string, RecipeDetail[]>();
       for (let i = 1; i <= 6; i++) {
         deepDb.set(`level-${i}`, [
-          { insumo_id: `level-${i + 1}`, ingredient_type: 'SUB_RECIPE', quantity: 1.0 } as RecipeDetail,
+          {
+            insumo_id: `level-${i + 1}`,
+            ingredient_type: 'SUB_RECIPE',
+            quantity: 1.0,
+          } as RecipeDetail,
         ]);
       }
       deepDb.set('level-7', [
-        { insumo_id: 'ins-leaf', ingredient_type: 'INSUMO', quantity: 1.0 } as RecipeDetail,
+        {
+          insumo_id: 'ins-leaf',
+          ingredient_type: 'INSUMO',
+          quantity: 1.0,
+        } as RecipeDetail,
       ]);
 
       await expect(

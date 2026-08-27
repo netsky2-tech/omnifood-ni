@@ -68,7 +68,11 @@ export class Payment {
   @Column({ name: 'bank_pos', nullable: true })
   bankPos?: string;
 
-  @Column({ name: 'reconciliation_status', nullable: true, default: 'PENDIENTE' })
+  @Column({
+    name: 'reconciliation_status',
+    nullable: true,
+    default: 'PENDIENTE',
+  })
   reconciliationStatus?: string;
 
   @Column({ nullable: true })

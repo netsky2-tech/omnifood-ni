@@ -10,8 +10,14 @@ import {
 import { Tenant } from '../../tenant/entities/tenant.entity';
 
 @Entity('kardex_correction')
-@Index('uq_kardex_correction_lineage', ['tenant_id', 'lineageHash'], { unique: true })
-@Index('idx_kardex_correction_tenant_insumo', ['tenant_id', 'insumoId', 'createdAt'])
+@Index('uq_kardex_correction_lineage', ['tenant_id', 'lineageHash'], {
+  unique: true,
+})
+@Index('idx_kardex_correction_tenant_insumo', [
+  'tenant_id',
+  'insumoId',
+  'createdAt',
+])
 export class KardexCorrection {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -32,10 +38,18 @@ export class KardexCorrection {
   @Column({ name: 'trigger_movement_id', type: 'bigint' })
   triggerMovementId: string;
 
-  @Column('decimal', { precision: 14, scale: 4, name: 'previous_unit_cost_nio' })
+  @Column('decimal', {
+    precision: 14,
+    scale: 4,
+    name: 'previous_unit_cost_nio',
+  })
   previousUnitCostNio: number;
 
-  @Column('decimal', { precision: 14, scale: 4, name: 'recalculated_unit_cost_nio' })
+  @Column('decimal', {
+    precision: 14,
+    scale: 4,
+    name: 'recalculated_unit_cost_nio',
+  })
   recalculatedUnitCostNio: number;
 
   @Column('decimal', { precision: 14, scale: 4, name: 'delta_unit_cost_nio' })
