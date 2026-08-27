@@ -2997,6 +2997,41 @@ class _$InvoiceDao extends InvoiceDao {
   }
 
   @override
+  Future<List<InvoiceEntity>> getInvoicesByUserId(String userId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM invoices WHERE user_id = ?1 ORDER BY created_at DESC',
+        mapper: (Map<String, Object?> row) => InvoiceEntity(
+            id: row['id'] as String,
+            number: row['invoice_number'] as String,
+            createdAt: row['created_at'] as int,
+            userId: row['user_id'] as String,
+            subtotal: row['subtotal'] as double,
+            totalTax: row['total_tax'] as double,
+            total: row['total'] as double,
+            isCanceled: (row['is_canceled'] as int) != 0,
+            voidReason: row['void_reason'] as String?,
+            syncStatus: row['sync_status'] as String,
+            paymentStatus: row['payment_status'] as String,
+            customerId: row['customer_id'] as String?,
+            globalTaxOverride: (row['global_tax_override'] as int) != 0,
+            type: row['type'] as String,
+            relatedInvoiceId: row['related_invoice_id'] as String?,
+            originInvoiceId: row['origin_invoice_id'] as String?,
+            refundReasonPolicy: row['refund_reason_policy'] as String?,
+            refundReasonCode: row['refund_reason_code'] as String?,
+            authorizedByUserId: row['authorized_by_user_id'] as String?,
+            authorizedByRole: row['authorized_by_role'] as String?,
+            terminalId: row['terminal_id'] as String?,
+            sourceSequence: row['source_sequence'] as int?,
+            idempotencyKey: row['idempotency_key'] as String?,
+            payloadHash: row['payload_hash'] as String?,
+            bcnOfficialRate: row['bcn_official_rate'] as double,
+            commercialRate: row['commercial_rate'] as double,
+            totalUsd: row['total_usd'] as double),
+        arguments: [userId]);
+  }
+
+  @override
   Future<String?> getLastInvoiceNumber() async {
     return _queryAdapter.query('SELECT MAX(invoice_number) FROM invoices',
         mapper: (Map<String, Object?> row) => row.values.first as String);

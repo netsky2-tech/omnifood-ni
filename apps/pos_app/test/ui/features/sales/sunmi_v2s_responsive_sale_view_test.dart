@@ -10,6 +10,8 @@ import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/domain/repositories/audit_repository.dart';
 import 'package:pos_app/domain/repositories/auth_repository.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
+import 'package:pos_app/domain/models/config/tenant_config.dart';
+import 'package:pos_app/domain/services/config/business_mode_evaluator.dart';
 import 'package:pos_app/ui/features/sales/sale_view.dart';
 import 'package:provider/provider.dart';
 
@@ -87,6 +89,7 @@ void main() {
     when(mockViewModel.isGlobalTaxExempt).thenReturn(false);
     when(mockViewModel.supportsTables).thenReturn(false);
     when(mockViewModel.supportsBuzzerPager).thenReturn(false);
+    when(mockViewModel.businessModeEvaluator).thenReturn(const BusinessModeEvaluator(TenantConfig()));
     when(mockViewModel.buzzerNumber).thenReturn(null);
     when(mockViewModel.canManageCashDrawer).thenReturn(true);
     when(mockViewModel.currentUserRole).thenReturn(UserRole.cashier);

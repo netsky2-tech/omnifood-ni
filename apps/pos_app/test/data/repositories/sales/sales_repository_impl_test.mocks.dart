@@ -1036,6 +1036,17 @@ class MockInvoiceDao extends _i1.Mock implements _i25.InvoiceDao {
       ) as _i39.Future<List<_i43.InvoiceEntity>>);
 
   @override
+  _i39.Future<List<_i43.InvoiceEntity>> getInvoicesByUserId(String? userId) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getInvoicesByUserId,
+          [userId],
+        ),
+        returnValue:
+            _i39.Future<List<_i43.InvoiceEntity>>.value(<_i43.InvoiceEntity>[]),
+      ) as _i39.Future<List<_i43.InvoiceEntity>>);
+
+  @override
   _i39.Future<void> insertInvoice(_i43.InvoiceEntity? invoice) =>
       (super.noSuchMethod(
         Invocation.method(

@@ -31,8 +31,10 @@ import '../../../../domain/services/printer/thermal_logo_processor.dart';
 import 'dart:async';
 import '../../../../domain/ports/printer_port.dart';
 import '../../../../domain/services/kitchen/kitchen_order_service.dart';
-import '../../../../domain/services/sales/table_order_service.dart';
 import '../../../../data/services/sync_service.dart';
+import '../../../../domain/services/sales/tip_engine.dart';
+import '../../../../domain/services/sales/split_bill_engine.dart';
+import '../../../../domain/services/config/business_mode_evaluator.dart';
 
 class SaleViewModel extends ChangeNotifier {
   final SalesRepository _salesRepository;
@@ -354,6 +356,66 @@ class SaleViewModel extends ChangeNotifier {
   }
 
   double get total => subtotal + totalTax;
+
+  TipType _tipType = TipType.none;
+  double _customTipPercentage = 0.0;
+  double _fixedTipAmount = 0.0;
+
+  TipType get tipType => _tipType;
+  double get customTipPercentage => _customTipPercentage;
+  double get fixedTipAmount => _fixedTipAmount;
+
+  BusinessModeEvaluator get businessModeEvaluator =>
+      BusinessModeEvaluator(_tenantConfig ?? const TenantConfig());
+
+  TipCalculation get tipCalculation => TipEngine.calculate(
+        subtotalNio: subtotal,
+        taxNio: totalTax,
+        discountNio: 0.0,
+        tipType: _tipType,
+        customPercentage: _customTipPercentage,
+        fixedAmount: _fixedTipAmount,
+        commercialRate: _commercialRate,
+      );
+
+  double get tipAmount => tipCalculation.tipAmountNio;
+  double get grandTotalWithTip => total + tipAmount;
+
+  void setTip({
+    required TipType tipType,
+    double customPercentage = 0.0,
+    double fixedAmount = 0.0,
+  }) {
+    _tipType = tipType;
+    _customTipPercentage = customPercentage;
+    _fixedTipAmount = fixedAmount;
+    notifyListeners();
+  }
+
+  void clearTip() {
+    _tipType = TipType.none;
+    _customTipPercentage = 0.0;
+    _fixedTipAmount = 0.0;
+    notifyListeners();
+  }
+
+  SplitBillResult calculateEqualSplit(int coverCount) {
+    return SplitBillEngine.splitEqual(
+      subtotalNio: subtotal,
+      taxNio: totalTax,
+      tipNio: tipAmount,
+      discountNio: 0.0,
+      coverCount: coverCount,
+      commercialRate: _commercialRate,
+    );
+  }
+
+  SplitBillResult calculateItemizedSplit(List<ItemizedShareInput> shares) {
+    return SplitBillEngine.splitByItems(
+      shares: shares,
+      commercialRate: _commercialRate,
+    );
+  }
 
   void clearError() {
     _errorMessage = null;

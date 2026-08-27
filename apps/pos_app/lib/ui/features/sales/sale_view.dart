@@ -14,6 +14,7 @@ import '../../features/identity/supervisor_override_modal.dart';
 import '../../design_system/design_system.dart';
 import '../cash/cash_shift_view_model.dart';
 import 'widgets/multi_currency_checkout_dialog.dart';
+import 'widgets/split_bill_dialog.dart';
 import 'widgets/cloud_sync_status_badge.dart';
 import 'tables/table_layout_view.dart';
 import '../../../presentation/features/sales/widgets/customer_select_dialog.dart';
@@ -1100,7 +1101,7 @@ class CartSidebar extends StatelessWidget {
   Widget build(BuildContext context) {
     final viewModel = context.watch<SaleViewModel>();
     final colorScheme = Theme.of(context).colorScheme;
-    
+
     return Column(
       children: [
         Padding(
@@ -1121,53 +1122,69 @@ class CartSidebar extends StatelessWidget {
             ],
           ),
         ),
-        
         Expanded(
-          child: viewModel.cart.isEmpty
-              ? Center(
-                  child: Text(
-                    'Carrito vacío',
-                    style: TextStyle(color: colorScheme.outline),
+          child: ListView(
+            controller: scrollController,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            children: [
+              if (viewModel.cart.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24.0),
+                  child: Center(
+                    child: Text(
+                      'Carrito vacío',
+                      style: TextStyle(color: colorScheme.outline),
+                    ),
                   ),
                 )
-              : ListView.separated(
-                  controller: scrollController,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: viewModel.cart.length,
-                  separatorBuilder: (_, _) => const Divider(),
-                  itemBuilder: (context, index) {
-                    final item = viewModel.cart[index];
-                    return ListTile(
-                      dense: isMobileSheet,
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(item.productName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Row(
-                        children: [
-                          IconButton(
-                            icon: Icon(Icons.remove_circle_outline, size: 22, color: colorScheme.primary),
-                            onPressed: () => viewModel.updateQuantity(item.productId, item.quantity - 1, variantId: item.variantId, modifiers: item.selectedModifiers),
+              else
+                ...viewModel.cart.map((item) {
+                  return ListTile(
+                    dense: isMobileSheet,
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(item.productName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: Row(
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.remove_circle_outline, size: 22, color: colorScheme.primary),
+                          onPressed: () => viewModel.updateQuantity(
+                            item.productId,
+                            item.quantity - 1,
+                            variantId: item.variantId,
+                            modifiers: item.selectedModifiers,
                           ),
-                          Text('${item.quantity.toInt()}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-                          IconButton(
-                            icon: Icon(Icons.add_circle_outline, size: 22, color: colorScheme.primary),
-                            onPressed: () => viewModel.updateQuantity(item.productId, item.quantity + 1, variantId: item.variantId, modifiers: item.selectedModifiers),
+                        ),
+                        Text('${item.quantity.toInt()}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                        IconButton(
+                          icon: Icon(Icons.add_circle_outline, size: 22, color: colorScheme.primary),
+                          onPressed: () => viewModel.updateQuantity(
+                            item.productId,
+                            item.quantity + 1,
+                            variantId: item.variantId,
+                            modifiers: item.selectedModifiers,
                           ),
-                        ],
-                      ),
-                      trailing: Text('C\$ ${item.total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-                      onLongPress: () => viewModel.removeFromCart(item.productId, variantId: item.variantId, modifiers: item.selectedModifiers),
-                    );
-                  },
+                        ),
+                      ],
+                    ),
+                    trailing: Text('C\$ ${item.total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                    onLongPress: () => viewModel.removeFromCart(
+                      item.productId,
+                      variantId: item.variantId,
+                      modifiers: item.selectedModifiers,
+                    ),
+                  );
+                }),
+              const Divider(),
+              Container(
+                padding: EdgeInsets.all(isMobileSheet ? 12 : 16),
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceContainerHigh,
+                  border: Border(top: BorderSide(color: colorScheme.outlineVariant)),
                 ),
-        ),
-        
-        Container(
-          padding: EdgeInsets.all(isMobileSheet ? 12 : 16),
-          decoration: BoxDecoration(
-            color: colorScheme.surfaceContainerHigh,
-            border: Border(top: BorderSide(color: colorScheme.outlineVariant)),
+                child: const CartSummary(),
+              ),
+            ],
           ),
-          child: const CartSummary(),
         ),
       ],
     );
@@ -1181,14 +1198,14 @@ class CartSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     final viewModel = context.watch<SaleViewModel>();
     final colorScheme = Theme.of(context).colorScheme;
-    
+
     return Column(
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text('Subtotal'),
-            Text('C\$ ${(viewModel.subtotal + viewModel.totalDiscounts).toStringAsFixed(2)}'),
+            Text('C\$ ${((viewModel.subtotal) + (viewModel.totalDiscounts)).toStringAsFixed(2)}'),
           ],
         ),
         if (viewModel.totalDiscounts > 0)
@@ -1196,14 +1213,14 @@ class CartSummary extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Descuentos (Promos)', style: TextStyle(color: Colors.green)),
-              Text('-C\$ ${viewModel.totalDiscounts.toStringAsFixed(2)}', style: const TextStyle(color: Colors.green)),
+              Text('-C\$ ${(viewModel.totalDiscounts).toStringAsFixed(2)}', style: const TextStyle(color: Colors.green)),
             ],
           ),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text('IVA (15%)'),
-            Text('C\$ ${viewModel.totalTax.toStringAsFixed(2)}'),
+            Text('C\$ ${(viewModel.totalTax).toStringAsFixed(2)}'),
           ],
         ),
         const Divider(),
@@ -1214,14 +1231,19 @@ class CartSummary extends StatelessWidget {
             Flexible(
               child: FittedBox(
                 fit: BoxFit.scaleDown,
-                child: Text('C\$ ${viewModel.total.toStringAsFixed(2)}', 
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: ResponsiveBreakpoints.isHandheld(context) ? 20 : 24, color: colorScheme.primary)),
+                child: Text(
+                  'C\$ ${(viewModel.total).toStringAsFixed(2)}',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: ResponsiveBreakpoints.isHandheld(context) ? 20 : 24,
+                    color: colorScheme.primary,
+                  ),
+                ),
               ),
             ),
           ],
         ),
         const SizedBox(height: 12),
-        
         Row(
           children: [
             const Text('Exento General', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -1266,8 +1288,7 @@ class CartSummary extends StatelessWidget {
             label: Text(viewModel.selectedCustomer != null ? 'CAMBIAR CLIENTE' : 'ASIGNAR CLIENTE'),
           ),
         ),
-
-        if (viewModel.supportsBuzzerPager && viewModel.buzzerNumber != null) ...[
+        if ((viewModel.supportsBuzzerPager) && viewModel.buzzerNumber != null) ...[
           const SizedBox(height: 8),
           InputChip(
             key: const Key('cart_buzzer_chip'),
@@ -1277,14 +1298,25 @@ class CartSummary extends StatelessWidget {
             deleteIconColor: Colors.amber.shade900,
           ),
         ],
-
         const SizedBox(height: 8),
+        if ((viewModel.businessModeEvaluator != null && viewModel.businessModeEvaluator.isSplitBillAllowed) && viewModel.cart.isNotEmpty) ...[
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              key: const Key('btn_split_bill_cart'),
+              icon: const Icon(Icons.call_split_rounded, size: 18),
+              onPressed: () => _showSplitBillDialog(context),
+              label: const Text('DIVIDIR CUENTA'),
+            ),
+          ),
+          const SizedBox(height: 6),
+        ],
         SizedBox(
           width: double.infinity,
           child: ElevatedButton(
-            onPressed: viewModel.cart.isEmpty 
-              ? null 
-              : () => _showCheckoutDialog(context),
+            onPressed: viewModel.cart.isEmpty
+                ? null
+                : () => _showCheckoutDialog(context),
             child: const Text('COBRAR'),
           ),
         ),
@@ -1296,6 +1328,21 @@ class CartSummary extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) => const MultiCurrencyCheckoutDialog(),
+    );
+  }
+
+  void _showSplitBillDialog(BuildContext context) {
+    final vm = context.read<SaleViewModel>();
+    showDialog(
+      context: context,
+      builder: (context) => SplitBillDialog(
+        cart: vm.cart,
+        commercialRate: vm.commercialRate,
+        onPayShare: (share) {
+          Navigator.of(context).pop();
+          _showCheckoutDialog(context);
+        },
+      ),
     );
   }
 

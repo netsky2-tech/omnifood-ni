@@ -30,6 +30,9 @@ This document serves as the single source of truth for the platform implementati
 | **Batch 15.1**| Trazabilidad de Lotes Determinista (`ProductionBatchCodeGenerator`), Vida Útil (`diasVidaUtil`) & Ajuste de Líneas en MovementEngine | POS (Domain/Data) | `production_batch_code_generator_test.dart` (4 tests) + `movement_engine_test.dart` + Freezed models | **COMPLETADO ✅** |
 | **Batch 15.2**| Control de Rendimiento (`ProductionVarianceGuard`), Mermas a Cocina (`DESECHO_COCINA`) & Autorización de Supervisor (PIN/TOTP) | POS (Domain/UI) | `production_variance_guard_test.dart` (11 tests) + `production_order_view_model_test.dart` + UI tolerance badges | **COMPLETADO ✅** |
 | **Batch 15.3**| Impresión Térmica de Viñeta FIFO 58mm (Sunmi V2s / ESC-POS), Botón de Re-impresión & Flujo Integral E2E de Producción BOH | POS + Hardware | `receipt_58mm_formatter_test.dart` + `sunmi_printer_adapter_test.dart` + `mock_printer_adapter_test.dart` + `production_flow_e2e_test.dart` | **COMPLETADO ✅** |
+| **Batch 16.1**| Motores de Cálculo de Split Bills (Partes Iguales + Por Ítems), Propina Voluntaria (10% DGI Non-Taxable) & Evaluador de Modo Operativo (FoodPark QSR vs Restaurant vs Hybrid) | POS (Domain/Core) | `tip_engine_test.dart` (7 tests) + `split_bill_engine_test.dart` (7 tests) + `business_mode_evaluator_test.dart` (4 tests) + `split_bill_integration_flow_test.dart` (3 tests) + `salon_split_bill_responsive_e2e_test.dart` (3 tests) | **COMPLETADO ✅** |
+| **Batch 16.2**| Diálogo y Flujo Táctico de Split Bill Responsive (Sunmi V2s <500dp / Tablet >=500dp), Asignación de Ítems & Selector de Propina | POS (UI/Presentation) | `split_bill_dialog_test.dart` (5 tests) + `responsive_split_checkout_test.dart` (2 tests) | **COMPLETADO ✅** |
+| **Batch 16.3**| Liquidación de Mesero (`carteraMesero`), Transferencia/Fusión de Mesas con Recálculo y Auditoría Forense FOH + E2E Suite | POS (Domain/UI/E2E) | `waiter_settlement_service_test.dart` (3 tests) + `table_transfer_merge_test.dart` (3 tests) + `restaurant_split_tip_e2e_test.dart` (1 complete flow) | **COMPLETADO ✅** |
 
 ---
 
@@ -37,8 +40,6 @@ This document serves as the single source of truth for the platform implementati
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────────────┐
-│ Bloque 16: Gestión Avanzada de Salón, División de Cuentas (Split Bills) & Propinas│
-├───────────────────────────────────────────────────────────────────────────────────┤
 │ Bloque 17: Multi-Kiosco / Food Park Hub & Ruteo Centralizado de Comandas          │
 ├───────────────────────────────────────────────────────────────────────────────────┤
 │ Bloque 18: Red Local (LAN Broker), Comandas Satélite & KDS Multi-Dispositivo       │
@@ -49,11 +50,7 @@ This document serves as the single source of truth for the platform implementati
 
 ---
 
-### 1. Bloque 16: Gestión Avanzada de Salón, División de Cuentas (Split Bills) & Propinas
-- **PRD Reference**: [`docs/PRDs/prd_modulo_ventas.md`](file:///home/octavio_morales/omnifood-ni/docs/PRDs/prd_modulo_ventas.md)
-- **Alcance**: División de cuentas (en partes iguales o por ítem), propina voluntaria (10%), transferencia/fusión de mesas y liquidación de meseros.
-
-### 3. Bloque 17: Multi-Kiosco / Food Park Hub & Ruteo Centralizado de Comandas
+### 1. Bloque 17: Multi-Kiosco / Food Park Hub & Ruteo Centralizado de Comandas
 - **PRD Reference**: [`docs/PRDs/Product_Requirement_Document_v2.md`](file:///home/octavio_morales/omnifood-ni/docs/PRDs/Product_Requirement_Document_v2.md)
 - **Alcance**: Caja central multi-tenant, ruteo inteligente de comanda por kiosco/cocina y liquidación de locatarios.
 

@@ -348,6 +348,69 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
       ) as _i5.Future<_i3.PrinterResult>);
 
   @override
+  _i5.Future<_i3.PrinterResult> printProductionBatchLabel({
+    required String? productName,
+    required String? batchCode,
+    required double? quantity,
+    required String? uom,
+    required DateTime? productionDate,
+    required DateTime? expirationDate,
+    String? operatorName,
+    String? storageInstructions,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #printProductionBatchLabel,
+          [],
+          {
+            #productName: productName,
+            #batchCode: batchCode,
+            #quantity: quantity,
+            #uom: uom,
+            #productionDate: productionDate,
+            #expirationDate: expirationDate,
+            #operatorName: operatorName,
+            #storageInstructions: storageInstructions,
+          },
+        ),
+        returnValue: _i5.Future<_i3.PrinterResult>.value(_FakePrinterResult_1(
+          this,
+          Invocation.method(
+            #printProductionBatchLabel,
+            [],
+            {
+              #productName: productName,
+              #batchCode: batchCode,
+              #quantity: quantity,
+              #uom: uom,
+              #productionDate: productionDate,
+              #expirationDate: expirationDate,
+              #operatorName: operatorName,
+              #storageInstructions: storageInstructions,
+            },
+          ),
+        )),
+        returnValueForMissingStub:
+            _i5.Future<_i3.PrinterResult>.value(_FakePrinterResult_1(
+          this,
+          Invocation.method(
+            #printProductionBatchLabel,
+            [],
+            {
+              #productName: productName,
+              #batchCode: batchCode,
+              #quantity: quantity,
+              #uom: uom,
+              #productionDate: productionDate,
+              #expirationDate: expirationDate,
+              #operatorName: operatorName,
+              #storageInstructions: storageInstructions,
+            },
+          ),
+        )),
+      ) as _i5.Future<_i3.PrinterResult>);
+
+  @override
   _i5.Future<_i3.PrinterResult> printRawEscPos(List<int>? bytes) =>
       (super.noSuchMethod(
         Invocation.method(

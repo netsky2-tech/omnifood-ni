@@ -70,6 +70,12 @@ import 'domain/services/sales/dgi_numbering_service.dart';
 import 'data/services/sales/dgi_numbering_service_impl.dart';
 import 'domain/usecases/inventory/process_sale_inventory_use_case.dart';
 import 'domain/usecases/inventory/reverse_sale_inventory_use_case.dart';
+import 'domain/services/sales/table_order_service.dart';
+import 'domain/services/kitchen/kitchen_order_service.dart';
+import 'ui/features/sales/tables/table_layout_view.dart';
+import 'ui/features/sales/tables/table_layout_view_model.dart';
+import 'ui/features/kitchen/kitchen_display_view.dart';
+import 'ui/features/kitchen/kitchen_display_view_model.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -270,12 +276,23 @@ void main() async {
           },
         ),
         ChangeNotifierProvider(
+          create: (_) => TableLayoutViewModel(
+            database: database,
+            tableOrderService: TableOrderService(database),
+          ),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => KitchenDisplayViewModel(
+            kitchenOrderService: KitchenOrderService(database),
+          ),
+        ),
+        ChangeNotifierProvider(
           create: (_) => SaleViewModel(
             salesRepository,
             inventoryRepository,
             authRepository,
             database,
-            null,
+            TableOrderService(database),
             true,
             null,
             null,
@@ -481,6 +498,8 @@ class MyApp extends StatelessWidget {
             featureLabel: 'Costo de Ventas (COGS) BOH',
             child: CogsReportView(),
           ),
+          '/sales/tables': (context) => const TableLayoutView(),
+          '/kitchen': (context) => const KitchenDisplayView(),
           '/sales/reports': (context) => const DgiReportView(),
           '/sales/history': (context) => const SalesHistoryView(),
           '/sales/cash': (context) => const CashShiftView(),
