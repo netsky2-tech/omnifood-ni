@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../domain/repositories/auth_repository.dart';
 import '../../../domain/models/user.dart';
+import '../../../domain/services/config/tenant_config_service.dart';
 import '../features/inventory/boh/boh_permissions.dart';
 
 class AppDrawer extends StatefulWidget {
@@ -14,6 +15,7 @@ class AppDrawer extends StatefulWidget {
 class _AppDrawerState extends State<AppDrawer> {
   User? _currentUser;
   int _userCount = 0;
+  bool _supportsTables = false;
 
   @override
   void initState() {
@@ -25,10 +27,19 @@ class _AppDrawerState extends State<AppDrawer> {
     final authRepo = context.read<AuthRepository>();
     final user = await authRepo.getCurrentUser();
     final users = await authRepo.getAllUsers();
+
+    bool supportsTables = false;
+    try {
+      final configService = context.read<TenantConfigService>();
+      final config = await configService.getTenantConfig();
+      supportsTables = config.supportsTables;
+    } catch (_) {}
+
     if (mounted) {
       setState(() {
         _currentUser = user;
         _userCount = users.where((u) => u.isActive).length;
+        _supportsTables = supportsTables;
       });
     }
   }
@@ -167,14 +178,15 @@ class _AppDrawerState extends State<AppDrawer> {
                       Navigator.pushReplacementNamed(context, '/sales');
                     },
                   ),
-                  ListTile(
-                    leading: const Icon(Icons.table_restaurant),
-                    title: const Text('Salón y Mesas'),
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.pushNamed(context, '/sales/tables');
-                    },
-                  ),
+                  if (_supportsTables)
+                    ListTile(
+                      leading: const Icon(Icons.table_restaurant),
+                      title: const Text('Salón y Mesas'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.pushNamed(context, '/sales/tables');
+                      },
+                    ),
                   ListTile(
                     leading: const Icon(Icons.kitchen),
                     title: const Text('KDS - Pantalla de Cocina'),

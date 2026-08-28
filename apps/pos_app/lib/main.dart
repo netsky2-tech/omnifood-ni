@@ -76,6 +76,7 @@ import 'domain/usecases/inventory/process_sale_inventory_use_case.dart';
 import 'domain/usecases/inventory/reverse_sale_inventory_use_case.dart';
 import 'domain/services/sales/table_order_service.dart';
 import 'domain/services/kitchen/kitchen_order_service.dart';
+import 'domain/services/config/tenant_config_service.dart';
 import 'ui/features/sales/tables/table_layout_view.dart';
 import 'ui/features/sales/tables/table_layout_view_model.dart';
 import 'ui/features/kitchen/kitchen_display_view.dart';
@@ -317,6 +318,9 @@ void main() async {
         Provider<DgiNumberingService>.value(value: numberingService),
         Provider<SyncService>.value(value: syncService),
         Provider<NetworkConnectivityService>.value(value: connectivityService),
+        Provider<TenantConfigService>(
+          create: (_) => TenantConfigService(database.localConfigDao),
+        ),
         Provider<PrinterConfigService>(
           create: (_) => PrinterConfigService(database.localConfigDao),
         ),

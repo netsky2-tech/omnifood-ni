@@ -794,165 +794,172 @@ class SaleViewModel extends ChangeNotifier {
             )
             .toList();
 
-    await _salesRepository.saveSale(
-      invoice: invoice,
-      items: items,
-      payments: payments,
-    );
+    try {
+      await _salesRepository.saveSale(
+        invoice: invoice,
+        items: items,
+        payments: payments,
+      );
 
-    // Process Customer Loyalty Points (Redemption & Accumulation)
-    if (_selectedCustomer != null) {
-      final now = DateTime.now().millisecondsSinceEpoch;
-      // 1. Process redemption if points were used
-      if (_pointsToRedeem > 0) {
-        final redeemTx = _loyaltyService.createRedeemTransaction(
-          customerId: _selectedCustomer!.id,
-          currentBalance: _selectedCustomer!.pointsBalance,
-          pointsToRedeem: _pointsToRedeem,
-          invoiceId: invoiceId,
-        );
-        try {
-          await _database.customerPointTransactionDao
-              .recordPointTransactionAndUpdateBalance(
-            CustomerMapper.toPointTransactionEntity(redeemTx),
-            _selectedCustomer!.id,
-            redeemTx.balanceAfter,
-            now,
-          );
-          _selectedCustomer = _selectedCustomer!.copyWith(pointsBalance: redeemTx.balanceAfter);
-        } catch (_) {}
-      }
-
-      // 2. Process accumulation on the final net subtotal
-      final pointsEarned = _loyaltyService.calculatePointsEarned(subtotal);
-      if (pointsEarned > 0) {
-        final currentBalance = _selectedCustomer!.pointsBalance;
-        final earnTx = _loyaltyService.createEarnTransaction(
-          customerId: _selectedCustomer!.id,
-          currentBalance: currentBalance,
-          netAmount: subtotal,
-          invoiceId: invoiceId,
-        );
-        try {
-          await _database.customerPointTransactionDao
-              .recordPointTransactionAndUpdateBalance(
-            CustomerMapper.toPointTransactionEntity(earnTx),
-            _selectedCustomer!.id,
-            earnTx.balanceAfter,
-            now,
-          );
-          _selectedCustomer = _selectedCustomer!.copyWith(pointsBalance: earnTx.balanceAfter);
-        } catch (_) {}
-      }
-    }
-
-    // Update expected totals
-    for (final p in payments) {
-      if (_activeSession?.tipoModelo == CashSessionModel.carteraMesero &&
-          p.method != PaymentMethod.cash) {
-        continue;
-      }
-      final effectiveCashNio = (p.method == PaymentMethod.cash && p.amountNio > 0)
-          ? (p.amountNio - p.changeGiven)
-          : p.amount;
-      _sessionExpected[p.method] =
-          (_sessionExpected[p.method] ?? 0.0) + effectiveCashNio;
-    }
-
-    if (_activeLoadedHoldTicket != null) {
-      await _tableOrderService.liquidateOrder(_activeLoadedHoldTicket!.id);
-      _activeLoadedHoldTicket = null;
-    } else {
-      // Direct counter sale: dispatch to kitchen KDS if items exist
-      if (_cart.isNotEmpty) {
-        try {
-          await _kitchenOrderService.sendDirectSaleToKitchen(
+      // Process Customer Loyalty Points (Redemption & Accumulation)
+      if (_selectedCustomer != null) {
+        final now = DateTime.now().millisecondsSinceEpoch;
+        // 1. Process redemption if points were used
+        if (_pointsToRedeem > 0) {
+          final redeemTx = _loyaltyService.createRedeemTransaction(
+            customerId: _selectedCustomer!.id,
+            currentBalance: _selectedCustomer!.pointsBalance,
+            pointsToRedeem: _pointsToRedeem,
             invoiceId: invoiceId,
-            invoiceNumber: invoice.number,
-            items: List.from(_cart),
-            buzzerNumber: effectiveBuzzer,
-            customerName: effectiveCustomerName,
-            waiterName: user.name,
           );
-        } catch (_) {
-          // Graceful fallback for offline tests/setups
+          try {
+            await _database.customerPointTransactionDao
+                .recordPointTransactionAndUpdateBalance(
+              CustomerMapper.toPointTransactionEntity(redeemTx),
+              _selectedCustomer!.id,
+              redeemTx.balanceAfter,
+              now,
+            );
+            _selectedCustomer = _selectedCustomer!.copyWith(pointsBalance: redeemTx.balanceAfter);
+          } catch (_) {}
         }
-      }
-    }
 
-    // Auto-Printing & Hardware Drawer Kick (PRD Batch 7)
-    Invoice? savedInvoice;
-    try {
-      savedInvoice = await _salesRepository.getInvoiceById(invoiceId);
-    } catch (_) {
-      // Non-blocking fallback for offline environments or unstubbed test mocks
-    }
-    final invoiceToPrint = savedInvoice ?? invoice;
-    _lastProcessedInvoice = invoiceToPrint;
-    _lastPrintError = null;
-
-    try {
-      final printerConfig = await _printerConfigService.getPrinterConfig();
-      final hasCashPayment = payments.any((p) => p.method == PaymentMethod.cash);
-
-      if (printerConfig.openDrawerOnCash && hasCashPayment) {
-        await _printerPort.openCashDrawer();
-      }
-
-      List<int>? logoRasterBytes;
-      if (printerConfig.isLogoEnabled &&
-          printerConfig.logoBase64 != null &&
-          printerConfig.logoWidth != null &&
-          printerConfig.logoHeight != null) {
-        try {
-          final rawBytes = base64Decode(printerConfig.logoBase64!);
-          logoRasterBytes = ThermalLogoProcessor.buildEscPosRasterFrom1Bit(
-            raw1BitBitmap: rawBytes,
-            width: printerConfig.logoWidth!,
-            height: printerConfig.logoHeight!,
+        // 2. Process accumulation on the final net subtotal
+        final pointsEarned = _loyaltyService.calculatePointsEarned(subtotal);
+        if (pointsEarned > 0) {
+          final currentBalance = _selectedCustomer!.pointsBalance;
+          final earnTx = _loyaltyService.createEarnTransaction(
+            customerId: _selectedCustomer!.id,
+            currentBalance: currentBalance,
+            netAmount: subtotal,
+            invoiceId: invoiceId,
           );
-        } catch (_) {}
-      }
-
-      if (printerConfig.autoPrintInvoice) {
-        final printResult = await _printerPort.printInvoice(
-          invoiceToPrint,
-          items: items,
-          payments: payments,
-          businessName: printerConfig.headerBusinessName,
-          ruc: printerConfig.headerRuc,
-          address: printerConfig.headerAddress,
-          phone: printerConfig.headerPhone,
-          cashierName: user.name,
-          logoRasterBytes: logoRasterBytes,
-        );
-
-        if (!printResult.isSuccess) {
-          _lastPrintError = printResult.message ?? 'Error de impresión en hardware';
+          try {
+            await _database.customerPointTransactionDao
+                .recordPointTransactionAndUpdateBalance(
+              CustomerMapper.toPointTransactionEntity(earnTx),
+              _selectedCustomer!.id,
+              earnTx.balanceAfter,
+              now,
+            );
+            _selectedCustomer = _selectedCustomer!.copyWith(pointsBalance: earnTx.balanceAfter);
+          } catch (_) {}
         }
       }
 
-      if (printerConfig.autoPrintKitchen && items.isNotEmpty) {
-        await _printerPort.printKitchenOrder(
-          ticketId: invoiceToPrint.id.length > 8 ? invoiceToPrint.id.substring(0, 8) : invoiceToPrint.id,
-          orderTitle: 'Orden #${invoiceToPrint.number}',
-          cashierName: user.name,
-          timestamp: DateTime.now(),
-          items: items,
-          buzzerNumber: int.tryParse(effectiveBuzzer ?? ''),
-          tableName: _activeLoadedHoldTicket?.name,
-        );
+      // Update expected totals
+      for (final p in payments) {
+        if (_activeSession?.tipoModelo == CashSessionModel.carteraMesero &&
+            p.method != PaymentMethod.cash) {
+          continue;
+        }
+        final effectiveCashNio = (p.method == PaymentMethod.cash && p.amountNio > 0)
+            ? (p.amountNio - p.changeGiven)
+            : p.amount;
+        _sessionExpected[p.method] =
+            (_sessionExpected[p.method] ?? 0.0) + effectiveCashNio;
       }
+
+      if (_activeLoadedHoldTicket != null) {
+        await _tableOrderService.liquidateOrder(_activeLoadedHoldTicket!.id);
+        _activeLoadedHoldTicket = null;
+      } else {
+        // Direct counter sale: dispatch to kitchen KDS if items exist
+        if (_cart.isNotEmpty) {
+          try {
+            await _kitchenOrderService.sendDirectSaleToKitchen(
+              invoiceId: invoiceId,
+              invoiceNumber: invoice.number,
+              items: List.from(_cart),
+              buzzerNumber: effectiveBuzzer,
+              customerName: effectiveCustomerName,
+              waiterName: user.name,
+            );
+          } catch (_) {
+            // Graceful fallback for offline tests/setups
+          }
+        }
+      }
+
+      // Auto-Printing & Hardware Drawer Kick (PRD Batch 7)
+      Invoice? savedInvoice;
+      try {
+        savedInvoice = await _salesRepository.getInvoiceById(invoiceId);
+      } catch (_) {
+        // Non-blocking fallback for offline environments or unstubbed test mocks
+      }
+      final invoiceToPrint = savedInvoice ?? invoice;
+      _lastProcessedInvoice = invoiceToPrint;
+      _lastPrintError = null;
+
+      try {
+        final printerConfig = await _printerConfigService.getPrinterConfig();
+        final hasCashPayment = payments.any((p) => p.method == PaymentMethod.cash);
+
+        if (printerConfig.openDrawerOnCash && hasCashPayment) {
+          await _printerPort.openCashDrawer();
+        }
+
+        List<int>? logoRasterBytes;
+        if (printerConfig.isLogoEnabled &&
+            printerConfig.logoBase64 != null &&
+            printerConfig.logoWidth != null &&
+            printerConfig.logoHeight != null) {
+          try {
+            final rawBytes = base64Decode(printerConfig.logoBase64!);
+            logoRasterBytes = ThermalLogoProcessor.buildEscPosRasterFrom1Bit(
+              raw1BitBitmap: rawBytes,
+              width: printerConfig.logoWidth!,
+              height: printerConfig.logoHeight!,
+            );
+          } catch (_) {}
+        }
+
+        if (printerConfig.autoPrintInvoice) {
+          final printResult = await _printerPort.printInvoice(
+            invoiceToPrint,
+            items: items,
+            payments: payments,
+            businessName: printerConfig.headerBusinessName,
+            ruc: printerConfig.headerRuc,
+            address: printerConfig.headerAddress,
+            phone: printerConfig.headerPhone,
+            cashierName: user.name,
+            logoRasterBytes: logoRasterBytes,
+          );
+
+          if (!printResult.isSuccess) {
+            _lastPrintError = printResult.message ?? 'Error de impresión en hardware';
+          }
+        }
+
+        if (printerConfig.autoPrintKitchen && items.isNotEmpty) {
+          await _printerPort.printKitchenOrder(
+            ticketId: invoiceToPrint.id.length > 8 ? invoiceToPrint.id.substring(0, 8) : invoiceToPrint.id,
+            orderTitle: 'Orden #${invoiceToPrint.number}',
+            cashierName: user.name,
+            timestamp: DateTime.now(),
+            items: items,
+            buzzerNumber: int.tryParse(effectiveBuzzer ?? ''),
+            tableName: _activeLoadedHoldTicket?.name,
+          );
+        }
+      } catch (e) {
+        debugPrint('[SaleViewModel] Non-blocking hardware printing error: $e');
+        _lastPrintError = e.toString();
+      }
+
+      _buzzerNumber = null;
+      _customerName = null;
+      _selectedCustomer = null;
+      _errorMessage = null;
+      clearCart();
+      _consumeOverride();
     } catch (e) {
-      debugPrint('[SaleViewModel] Non-blocking hardware printing error: $e');
-      _lastPrintError = e.toString();
+      _errorMessage = 'Error al procesar la venta: $e';
+      notifyListeners();
+      rethrow;
     }
-
-    _buzzerNumber = null;
-    _customerName = null;
-    _selectedCustomer = null;
-    clearCart();
-    _consumeOverride();
   }
 
   /// Manually triggers a reprint of the last successfully processed invoice.

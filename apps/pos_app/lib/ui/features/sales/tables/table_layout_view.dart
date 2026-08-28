@@ -66,9 +66,39 @@ class TableLayoutContent extends StatelessWidget {
                 Expanded(
                   child: vm.filteredTables.isEmpty
                       ? Center(
-                          child: Text(
-                            'No hay mesas configuradas para esta área.',
-                            style: TextStyle(color: colorScheme.outline),
+                          child: Padding(
+                            padding: const EdgeInsets.all(24.0),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.table_restaurant_outlined,
+                                  size: 64,
+                                  color: colorScheme.outline.withOpacity(0.5),
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  vm.areas.isEmpty
+                                      ? 'No hay áreas ni mesas configuradas.'
+                                      : 'No hay mesas configuradas para esta área.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: colorScheme.onSurfaceVariant,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'En Modo Food Park (QSR) los pedidos se atienden por mostrador con buzzer. Las mesas se gestionan en Modo Restaurante o Híbrido.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: colorScheme.outline,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         )
                       : SingleChildScrollView(

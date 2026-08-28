@@ -35,7 +35,8 @@ class DgiNumberingServiceImpl implements DgiNumberingService {
     final current = await _configDao.getConfigByKey(_keyCurrent);
 
     if (prefix == null || current == null) {
-      throw Exception('DGI Numbering range not initialized');
+      await initializeRange(prefix: '001-001-01-', start: 1, end: 1000000);
+      return '001-001-01-00000001';
     }
 
     // Format: prefix + 8 digits (standard DGI)
@@ -46,7 +47,10 @@ class DgiNumberingServiceImpl implements DgiNumberingService {
   @override
   Future<void> incrementNumber() async {
     final current = await _configDao.getConfigByKey(_keyCurrent);
-    if (current == null) throw Exception('DGI Numbering range not initialized');
+    if (current == null) {
+      await initializeRange(prefix: '001-001-01-', start: 2, end: 1000000);
+      return;
+    }
 
     final next = int.parse(current.value) + 1;
     await _configDao.saveConfig(LocalConfigEntity(key: _keyCurrent, value: next.toString()));
@@ -57,7 +61,10 @@ class DgiNumberingServiceImpl implements DgiNumberingService {
     final current = await _configDao.getConfigByKey(_keyCurrent);
     final end = await _configDao.getConfigByKey(_keyEnd);
 
-    if (current == null || end == null) return true;
+    if (current == null || end == null) {
+      await initializeRange(prefix: '001-001-01-', start: 1, end: 1000000);
+      return false;
+    }
 
     return int.parse(current.value) >= int.parse(end.value);
   }

@@ -14,6 +14,7 @@ class KitchenDisplayView extends StatelessWidget {
       backgroundColor: const Color(0xFF0B1120), // Dark Navy Background
       appBar: AppBar(
         backgroundColor: const Color(0xFF0F172A), // Slate 900
+        iconTheme: const IconThemeData(color: Colors.white),
         elevation: 2,
         title: const Row(
           children: [

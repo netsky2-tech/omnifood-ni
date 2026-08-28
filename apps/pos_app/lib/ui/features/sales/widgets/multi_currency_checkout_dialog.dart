@@ -247,14 +247,32 @@ class _MultiCurrencyCheckoutDialogState
       return;
     }
 
-    await vm.processSale(
-      [_selectedMethod],
-      customPayments: [payment],
-      buzzerNumber: buzzerText.isNotEmpty ? buzzerText : null,
-      customerName: customerNameText.isNotEmpty ? customerNameText : null,
-    );
-    if (mounted) {
-      Navigator.of(context).pop();
+    try {
+      await vm.processSale(
+        [_selectedMethod],
+        customPayments: [payment],
+        buzzerNumber: buzzerText.isNotEmpty ? buzzerText : null,
+        customerName: customerNameText.isNotEmpty ? customerNameText : null,
+      );
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('¡Venta cobrada con éxito!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al procesar el cobro: $e'),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+      }
     }
   }
 
@@ -272,14 +290,32 @@ class _MultiCurrencyCheckoutDialogState
     }
 
     final methods = _splitCalculator.payments.map((p) => p.method).toSet().toList();
-    await vm.processSale(
-      methods,
-      customPayments: _splitCalculator.payments,
-      buzzerNumber: buzzerText.isNotEmpty ? buzzerText : null,
-      customerName: customerNameText.isNotEmpty ? customerNameText : null,
-    );
-    if (mounted) {
-      Navigator.of(context).pop();
+    try {
+      await vm.processSale(
+        methods,
+        customPayments: _splitCalculator.payments,
+        buzzerNumber: buzzerText.isNotEmpty ? buzzerText : null,
+        customerName: customerNameText.isNotEmpty ? customerNameText : null,
+      );
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('¡Venta dividida cobrada con éxito!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al procesar el cobro: $e'),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+      }
     }
   }
 
