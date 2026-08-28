@@ -33,8 +33,21 @@ class CatalogType {
   /// Returns `null` for unknown types so sync never crashes on a forward
   /// protocol extension it does not yet understand.
   static CatalogType? fromString(String raw) {
+    final normalized = raw.trim().toUpperCase();
     for (final type in all) {
-      if (type.value == raw) return type;
+      if (type.value == normalized) return type;
+    }
+    if (normalized == 'PRODUCTCATEGORY' || normalized == 'SALES_CATEGORY' || normalized == 'CATEGORY') {
+      return salesProductCategory;
+    }
+    if (normalized == 'PRODUCTTYPE' || normalized == 'SALES_TYPE' || normalized == 'TYPE') {
+      return salesProductType;
+    }
+    if (normalized == 'INVENTORYCATEGORY') {
+      return inventoryCategory;
+    }
+    if (normalized == 'INVENTORYTYPE') {
+      return inventoryType;
     }
     return null;
   }
