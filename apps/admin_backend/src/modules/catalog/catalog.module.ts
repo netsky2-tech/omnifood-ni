@@ -1,12 +1,10 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { JwtModule } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CatalogValue } from './entities/catalog-value.entity';
 import { CatalogService } from './catalog.service';
 import { CatalogController } from './catalog.controller';
-import { AuthGuard } from '../identity/guards/auth.guard';
-import { RolesGuard } from '../identity/guards/roles.guard';
+import { IdentityModule } from '../identity/identity.module';
 
 export const getRequiredCatalogJwtSecret = (
   configService: ConfigService,
@@ -19,19 +17,9 @@ export const getRequiredCatalogJwtSecret = (
 };
 
 @Module({
-  imports: [
-    ConfigModule,
-    JwtModule.registerAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => {
-        return { secret: getRequiredCatalogJwtSecret(configService) };
-      },
-    }),
-    TypeOrmModule.forFeature([CatalogValue]),
-  ],
+  imports: [IdentityModule, TypeOrmModule.forFeature([CatalogValue])],
   controllers: [CatalogController],
-  providers: [CatalogService, AuthGuard, RolesGuard],
+  providers: [CatalogService],
   exports: [CatalogService, TypeOrmModule],
 })
 export class CatalogModule {}

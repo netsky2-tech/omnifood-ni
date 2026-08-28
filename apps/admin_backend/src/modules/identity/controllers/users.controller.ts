@@ -13,6 +13,7 @@ import {
 import { UserService } from '../services/user.service';
 import { AuthGuard } from '../guards/auth.guard';
 import { RolesGuard } from '../guards/roles.guard';
+import { AuthoritativeCurrentUserGuard } from '../guards/authoritative-current-user.guard';
 import { PermissionsGuard } from '../guards/permissions.guard';
 import { Roles } from '../../../core/decorators/roles.decorator';
 import { UserRole } from '../entities/user.entity';
@@ -31,24 +32,26 @@ interface RequestWithUser extends Request {
 }
 
 @Controller('identity/users')
-@UseGuards(AuthGuard, RolesGuard, PermissionsGuard)
 @UseInterceptors(TenantInterceptor)
 export class UsersController {
   constructor(private userService: UserService) {}
 
   @Get('permissions/matrix')
+  @UseGuards(AuthGuard, RolesGuard)
   @Roles(UserRole.OWNER, UserRole.MANAGER)
   async getPermissionsMatrix() {
     return this.userService.getPermissionsMatrix();
   }
 
   @Get()
+  @UseGuards(AuthGuard, RolesGuard)
   @Roles(UserRole.OWNER)
   async list(@GetTenantId() tenantId: string) {
     return this.userService.findByTenant(tenantId || '');
   }
 
   @Post()
+  @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)
   @Roles(UserRole.OWNER)
   async create(
     @GetTenantId() tenantId: string,
@@ -59,6 +62,7 @@ export class UsersController {
   }
 
   @Put(':id')
+  @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)
   @Roles(UserRole.OWNER)
   async update(
     @Param('id') id: string,
@@ -70,6 +74,7 @@ export class UsersController {
   }
 
   @Delete(':id')
+  @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)
   @Roles(UserRole.OWNER)
   async delete(
     @Param('id') id: string,
@@ -80,6 +85,7 @@ export class UsersController {
   }
 
   @Get(':id/permissions')
+  @UseGuards(AuthGuard, RolesGuard)
   @Roles(UserRole.OWNER, UserRole.MANAGER)
   async getUserPermissions(
     @Param('id') id: string,
@@ -89,6 +95,7 @@ export class UsersController {
   }
 
   @Put(':id/permissions')
+  @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)
   @Roles(UserRole.OWNER)
   async updateUserPermissions(
     @Param('id') id: string,

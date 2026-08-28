@@ -5,7 +5,6 @@ import {
   NestInterceptor,
   ValidationPipe,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -23,12 +22,18 @@ import { ShrinkageService } from '../../src/modules/inventory/shrinkage.service'
 import { ProductionService } from '../../src/modules/inventory/production.service';
 import { TenantInterceptor } from '../../src/core/database/rls.interceptor';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
+import { AuthoritativeCurrentUserGuard } from '../../src/modules/identity/guards/authoritative-current-user.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
+import { CurrentUserAuthorizationService } from '../../src/modules/identity/services/current-user-authorization.service';
 import { Insumo } from '../../src/modules/inventory/entities/insumo.entity';
 import {
   InventoryMovement,
   MovementType,
 } from '../../src/modules/inventory/entities/inventory-movement.entity';
+import {
+  createIdentityJwtConfigProvider,
+  createIdentityJwtTestConfigProvider,
+} from '../support/identity-jwt-test.fixture';
 
 const INVENTORY_API_PREFIX = '/api/inventory';
 const TEST_TENANT_ID = 'tenant-count-session';
@@ -178,16 +183,16 @@ describe('Count session route (integration)', () => {
           useClass: TestTenantInterceptor,
         },
         AuthGuard,
+        AuthoritativeCurrentUserGuard,
         RolesGuard,
+        {
+          provide: CurrentUserAuthorizationService,
+          useValue: { authorize: jest.fn((token: unknown) => token) },
+        },
         Reflector,
         JwtService,
-        {
-          provide: ConfigService,
-          useValue: {
-            get: (key: string) =>
-              key === 'JWT_SECRET' ? 'test-secret' : undefined,
-          },
-        },
+        createIdentityJwtTestConfigProvider(),
+        createIdentityJwtConfigProvider(),
       ],
     }).compile();
 

@@ -1,0 +1,44 @@
+name: Audit v3 Cross-Runtime Conformance
+
+on:
+  pull_request:
+    paths:
+      - "apps/admin_backend/src/core/audit/v3/**"
+      - "apps/admin_backend/package.json"
+      - "apps/admin_backend/package-lock.json"
+      - "apps/pos_app/lib/core/audit/v3/**"
+      - "apps/pos_app/test/core/audit/v3/**"
+      - "apps/pos_app/pubspec.yaml"
+      - "apps/pos_app/pubspec.lock"
+      - "fixtures/audit/v3/**"
+      - ".github/workflows/audit-v3-conformance.yml"
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    defaults:
+      run:
+        working-directory: apps/admin_backend
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22.23.1"
+          cache: npm
+          cache-dependency-path: apps/admin_backend/package-lock.json
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: "3.41.8"
+          channel: stable
+          cache: true
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Dart dependencies
+        working-directory: apps/pos_app
+        run: flutter pub get
+      - name: Run real Node/Dart parity gate
+        run: AUDIT_V3_REAL_RUNTIME=1 node node_modules/jest/bin/jest.js --runInBand --testPathPatterns=conformance.spec.ts
+      - name: Verify deterministic receipt
+        working-directory: .
+        run: git diff --exit-code -- fixtures/audit/v3/conformance-receipt.json

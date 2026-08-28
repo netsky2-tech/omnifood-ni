@@ -23,10 +23,11 @@ import 'package:provider/provider.dart';
 
 class MockAuditRepository extends Mock implements AuditRepository {
   @override
-  Future<void> syncLogs() => super.noSuchMethod(
+  Future<AuditSyncOutcome> syncLogs() => super.noSuchMethod(
         Invocation.method(#syncLogs, []),
-        returnValue: Future.value(),
-        returnValueForMissingStub: Future.value(),
+        returnValue: Future.value(const AuditSyncOutcome.complete()),
+        returnValueForMissingStub:
+            Future.value(const AuditSyncOutcome.complete()),
       );
 
   @override

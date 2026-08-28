@@ -24,6 +24,7 @@ import { GetTenantId } from '../../core/decorators/tenant.decorator';
 import { TenantInterceptor } from '../../core/database/rls.interceptor';
 import { InventoryPurchaseService } from './inventory-purchase.service';
 import { AuthGuard } from '../identity/guards/auth.guard';
+import { AuthoritativeCurrentUserGuard } from '../identity/guards/authoritative-current-user.guard';
 import { RolesGuard } from '../identity/guards/roles.guard';
 import { Roles } from '../../core/decorators/roles.decorator';
 import { UserRole } from '../identity/entities/user.entity';
@@ -161,7 +162,7 @@ export class InventoryMovementController {
   }
 
   @Post('purchases')
-  @UseGuards(AuthGuard, RolesGuard)
+  @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)
   @Roles(UserRole.OWNER, UserRole.MANAGER)
   async recordPurchase(
     @Body() dto: PurchaseDocumentDto,
@@ -188,7 +189,7 @@ export class InventoryMovementController {
   }
 
   @Post('purchases/:id/correction')
-  @UseGuards(AuthGuard, RolesGuard)
+  @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)
   @Roles(UserRole.OWNER, UserRole.MANAGER)
   async correctPurchase(
     @Param('id') id: string,
@@ -234,7 +235,7 @@ export class InventoryMovementController {
   }
 
   @Post('production-orders/close')
-  @UseGuards(AuthGuard, RolesGuard)
+  @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)
   @Roles(UserRole.OWNER, UserRole.MANAGER)
   async closeProductionOrder(
     @Body() dto: ProductionOrderDocumentDto,
@@ -248,7 +249,7 @@ export class InventoryMovementController {
   }
 
   @Post('recipes/versions')
-  @UseGuards(AuthGuard, RolesGuard)
+  @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)
   @Roles(UserRole.OWNER, UserRole.MANAGER)
   async ingestRecipeVersion(
     @Body() dto: SyncRecipeVersionDocumentDto,

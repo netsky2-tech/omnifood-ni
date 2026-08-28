@@ -8,7 +8,7 @@ import 'dart:async' as _i6;
 import 'package:mockito/mockito.dart' as _i1;
 import 'package:mockito/src/dummies.dart' as _i5;
 import 'package:pos_app/data/daos/sales/sales_transaction_dao.dart' as _i29;
-import 'package:pos_app/data/database/app_database.dart' as _i2;
+import 'package:pos_app/data/database/app_database.dart' as _i3;
 import 'package:pos_app/data/models/audit_log_entity.dart' as _i36;
 import 'package:pos_app/data/models/inventory/insumo_entity.dart' as _i34;
 import 'package:pos_app/data/models/inventory/kardex_correction_entity.dart'
@@ -44,11 +44,11 @@ import 'package:pos_app/domain/models/inventory/uom_conversion.dart' as _i18;
 import 'package:pos_app/domain/models/inventory/warehouse.dart' as _i16;
 import 'package:pos_app/domain/models/sales/invoice_item.dart' as _i27;
 import 'package:pos_app/domain/models/user.dart' as _i40;
-import 'package:pos_app/domain/repositories/audit_repository.dart' as _i4;
+import 'package:pos_app/domain/repositories/audit_repository.dart' as _i2;
 import 'package:pos_app/domain/repositories/auth_repository.dart' as _i39;
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart'
     as _i8;
-import 'package:pos_app/domain/services/inventory/movement_engine.dart' as _i3;
+import 'package:pos_app/domain/services/inventory/movement_engine.dart' as _i4;
 import 'package:pos_app/domain/services/sales/dgi_numbering_service.dart'
     as _i37;
 import 'package:pos_app/domain/usecases/inventory/process_sale_inventory_use_case.dart'
@@ -69,8 +69,9 @@ import 'package:pos_app/domain/usecases/inventory/reverse_sale_inventory_use_cas
 // ignore_for_file: camel_case_types
 // ignore_for_file: subtype_of_sealed_class
 
-class _FakeAppDatabase_0 extends _i1.SmartFake implements _i2.AppDatabase {
-  _FakeAppDatabase_0(
+class _FakeAuditSyncOutcome_0 extends _i1.SmartFake
+    implements _i2.AuditSyncOutcome {
+  _FakeAuditSyncOutcome_0(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -79,9 +80,8 @@ class _FakeAppDatabase_0 extends _i1.SmartFake implements _i2.AppDatabase {
         );
 }
 
-class _FakeMovementEngine_1 extends _i1.SmartFake
-    implements _i3.MovementEngine {
-  _FakeMovementEngine_1(
+class _FakeAppDatabase_1 extends _i1.SmartFake implements _i3.AppDatabase {
+  _FakeAppDatabase_1(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -90,9 +90,20 @@ class _FakeMovementEngine_1 extends _i1.SmartFake
         );
 }
 
-class _FakeProductionCloseResult_2 extends _i1.SmartFake
-    implements _i3.ProductionCloseResult {
-  _FakeProductionCloseResult_2(
+class _FakeMovementEngine_2 extends _i1.SmartFake
+    implements _i4.MovementEngine {
+  _FakeMovementEngine_2(
+    Object parent,
+    Invocation parentInvocation,
+  ) : super(
+          parent,
+          parentInvocation,
+        );
+}
+
+class _FakeProductionCloseResult_3 extends _i1.SmartFake
+    implements _i4.ProductionCloseResult {
+  _FakeProductionCloseResult_3(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -104,7 +115,7 @@ class _FakeProductionCloseResult_2 extends _i1.SmartFake
 /// A class which mocks [AuditRepository].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockAuditRepository extends _i1.Mock implements _i4.AuditRepository {
+class MockAuditRepository extends _i1.Mock implements _i2.AuditRepository {
   MockAuditRepository() {
     _i1.throwOnMissingStub(this);
   }
@@ -169,14 +180,20 @@ class MockAuditRepository extends _i1.Mock implements _i4.AuditRepository {
       ) as _i6.Future<void>);
 
   @override
-  _i6.Future<void> syncLogs() => (super.noSuchMethod(
+  _i6.Future<_i2.AuditSyncOutcome> syncLogs() => (super.noSuchMethod(
         Invocation.method(
           #syncLogs,
           [],
         ),
-        returnValue: _i6.Future<void>.value(),
-        returnValueForMissingStub: _i6.Future<void>.value(),
-      ) as _i6.Future<void>);
+        returnValue:
+            _i6.Future<_i2.AuditSyncOutcome>.value(_FakeAuditSyncOutcome_0(
+          this,
+          Invocation.method(
+            #syncLogs,
+            [],
+          ),
+        )),
+      ) as _i6.Future<_i2.AuditSyncOutcome>);
 
   @override
   _i6.Future<List<_i7.AuditLog>> getLocalLogs({
@@ -208,13 +225,13 @@ class MockInventoryRepository extends _i1.Mock
   }
 
   @override
-  _i2.AppDatabase get database => (super.noSuchMethod(
+  _i3.AppDatabase get database => (super.noSuchMethod(
         Invocation.getter(#database),
-        returnValue: _FakeAppDatabase_0(
+        returnValue: _FakeAppDatabase_1(
           this,
           Invocation.getter(#database),
         ),
-      ) as _i2.AppDatabase);
+      ) as _i3.AppDatabase);
 
   @override
   _i6.Future<List<_i9.Insumo>> getActiveInsumos() => (super.noSuchMethod(
@@ -930,13 +947,13 @@ class MockProcessSaleInventoryUseCase extends _i1.Mock
   }
 
   @override
-  _i3.MovementEngine get engine => (super.noSuchMethod(
+  _i4.MovementEngine get engine => (super.noSuchMethod(
         Invocation.getter(#engine),
-        returnValue: _FakeMovementEngine_1(
+        returnValue: _FakeMovementEngine_2(
           this,
           Invocation.getter(#engine),
         ),
-      ) as _i3.MovementEngine);
+      ) as _i4.MovementEngine);
 
   @override
   _i6.Future<List<_i14.InventoryMovement>> execute(
@@ -961,13 +978,13 @@ class MockReverseSaleInventoryUseCase extends _i1.Mock
   }
 
   @override
-  _i3.MovementEngine get engine => (super.noSuchMethod(
+  _i4.MovementEngine get engine => (super.noSuchMethod(
         Invocation.getter(#engine),
-        returnValue: _FakeMovementEngine_1(
+        returnValue: _FakeMovementEngine_2(
           this,
           Invocation.getter(#engine),
         ),
-      ) as _i3.MovementEngine);
+      ) as _i4.MovementEngine);
 
   @override
   _i6.Future<List<_i14.InventoryMovement>> execute(
@@ -1243,7 +1260,7 @@ class MockDgiNumberingService extends _i1.Mock
 /// A class which mocks [MovementEngine].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockMovementEngine extends _i1.Mock implements _i3.MovementEngine {
+class MockMovementEngine extends _i1.Mock implements _i4.MovementEngine {
   MockMovementEngine() {
     _i1.throwOnMissingStub(this);
   }
@@ -1352,7 +1369,7 @@ class MockMovementEngine extends _i1.Mock implements _i3.MovementEngine {
       ) as _i6.Future<List<_i14.InventoryMovement>>);
 
   @override
-  _i6.Future<_i3.ProductionCloseResult> recordProductionClose({
+  _i6.Future<_i4.ProductionCloseResult> recordProductionClose({
     required String? recipeProductId,
     required String? producedInsumoId,
     required String? productionDocumentId,
@@ -1379,8 +1396,8 @@ class MockMovementEngine extends _i1.Mock implements _i3.MovementEngine {
             #customIngredientConsumptions: customIngredientConsumptions,
           },
         ),
-        returnValue: _i6.Future<_i3.ProductionCloseResult>.value(
-            _FakeProductionCloseResult_2(
+        returnValue: _i6.Future<_i4.ProductionCloseResult>.value(
+            _FakeProductionCloseResult_3(
           this,
           Invocation.method(
             #recordProductionClose,
@@ -1398,10 +1415,10 @@ class MockMovementEngine extends _i1.Mock implements _i3.MovementEngine {
             },
           ),
         )),
-      ) as _i6.Future<_i3.ProductionCloseResult>);
+      ) as _i6.Future<_i4.ProductionCloseResult>);
 
   @override
-  _i6.Future<_i3.ProductionCloseResult> buildProductionClose({
+  _i6.Future<_i4.ProductionCloseResult> buildProductionClose({
     required String? recipeProductId,
     required String? producedInsumoId,
     required String? productionDocumentId,
@@ -1428,8 +1445,8 @@ class MockMovementEngine extends _i1.Mock implements _i3.MovementEngine {
             #customIngredientConsumptions: customIngredientConsumptions,
           },
         ),
-        returnValue: _i6.Future<_i3.ProductionCloseResult>.value(
-            _FakeProductionCloseResult_2(
+        returnValue: _i6.Future<_i4.ProductionCloseResult>.value(
+            _FakeProductionCloseResult_3(
           this,
           Invocation.method(
             #buildProductionClose,
@@ -1447,7 +1464,7 @@ class MockMovementEngine extends _i1.Mock implements _i3.MovementEngine {
             },
           ),
         )),
-      ) as _i6.Future<_i3.ProductionCloseResult>);
+      ) as _i6.Future<_i4.ProductionCloseResult>);
 
   @override
   _i6.Future<void> recordAdjustment(

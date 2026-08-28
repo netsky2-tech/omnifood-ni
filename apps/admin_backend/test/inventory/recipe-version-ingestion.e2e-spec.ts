@@ -1,5 +1,4 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -20,10 +19,15 @@ import {
 import { ShrinkageService } from '../../src/modules/inventory/shrinkage.service';
 import { TenantInterceptor } from '../../src/core/database/rls.interceptor';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
+import { AuthoritativeCurrentUserGuard } from '../../src/modules/identity/guards/authoritative-current-user.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
+import { CurrentUserAuthorizationService } from '../../src/modules/identity/services/current-user-authorization.service';
 import { UserRole } from '../../src/modules/identity/entities/user.entity';
-
-const JWT_SECRET = process.env.JWT_SECRET?.trim() || 'test-secret';
+import {
+  createIdentityJwtConfigProvider,
+  createIdentityJwtTestConfigProvider,
+  signIdentityJwtAccessToken,
+} from '../support/identity-jwt-test.fixture';
 
 const validRecipeVersionPayload = {
   id: '00000000-0000-4000-8000-000000000001',
@@ -174,16 +178,16 @@ describe('Recipe version ingestion route (integration)', () => {
         },
         TenantInterceptor,
         AuthGuard,
+        AuthoritativeCurrentUserGuard,
         RolesGuard,
+        {
+          provide: CurrentUserAuthorizationService,
+          useValue: { authorize: jest.fn((token: unknown) => token) },
+        },
         Reflector,
         JwtService,
-        {
-          provide: ConfigService,
-          useValue: {
-            get: (key: string) =>
-              key === 'JWT_SECRET' ? JWT_SECRET : undefined,
-          },
-        },
+        createIdentityJwtTestConfigProvider(),
+        createIdentityJwtConfigProvider(),
       ],
     }).compile();
 
@@ -218,16 +222,13 @@ describe('Recipe version ingestion route (integration)', () => {
       tenant_id: string;
     }> = {},
   ): string =>
-    jwtService.sign(
-      {
-        sub: 'user-1',
-        email: 'manager@example.com',
-        role: UserRole.MANAGER,
-        tenant_id: 'tenant-A',
-        ...overrides,
-      },
-      { secret: JWT_SECRET },
-    );
+    signIdentityJwtAccessToken(jwtService, {
+      sub: 'user-1',
+      email: 'manager@example.com',
+      role: UserRole.MANAGER,
+      tenant_id: 'tenant-A',
+      ...overrides,
+    });
 
   it('returns 401 when no bearer token is provided', async () => {
     await request(app.getHttpServer())
@@ -248,7 +249,7 @@ describe('Recipe version ingestion route (integration)', () => {
       .expect(401);
 
     const body = response.body as UnauthorizedResponseBody;
-    expect(body.message).toBe('Tenant context is required');
+    expect(body.message).toBe('Unauthorized');
 
     expect(recipeService.ingestPosVersion).not.toHaveBeenCalled();
   });

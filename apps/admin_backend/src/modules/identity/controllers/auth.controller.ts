@@ -11,6 +11,8 @@ import {
 import { AuthService } from '../services/auth.service';
 import { SupervisorOverrideService } from '../services/supervisor-override.service';
 import { AuthGuard } from '../guards/auth.guard';
+import { AuthoritativeCurrentUserGuard } from '../guards/authoritative-current-user.guard';
+import { RolesGuard } from '../guards/roles.guard';
 import { TenantInterceptor } from '../../../core/database/rls.interceptor';
 import { GetTenantId } from '../../../core/decorators/tenant.decorator';
 import { LoginDto, RefreshTokenDto } from '../dto/identity.dto';
@@ -33,7 +35,7 @@ export class AuthController {
     return this.authService.refreshTokens(body.userId, body.refreshToken);
   }
 
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)
   @UseInterceptors(TenantInterceptor)
   @Post('auth/supervisor-override')
   async supervisorOverride(

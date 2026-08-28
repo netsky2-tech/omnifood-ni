@@ -1183,6 +1183,19 @@ final migration30_31 = Migration(30, 31, (database) async {
 });
 
 final migration31_32 = Migration(31, 32, (database) async {
+  final auditTable = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'audit_logs'",
+  );
+  if (auditTable.isNotEmpty) {
+    final auditColumns = await database.rawQuery('PRAGMA table_info(audit_logs)');
+    final existingAuditCols = auditColumns
+        .map((column) => column['name'] as String)
+        .toSet();
+    if (!existingAuditCols.contains('hash_version')) {
+      await database.execute('ALTER TABLE audit_logs ADD COLUMN hash_version TEXT');
+    }
+  }
+
   Future<void> addColumnIfMissing(
     String tableName,
     String columnName,
@@ -1266,6 +1279,26 @@ final migration31_32 = Migration(31, 32, (database) async {
 });
 
 final migration32_33 = Migration(32, 33, (database) async {
+  final auditTable = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'audit_logs'",
+  );
+  if (auditTable.isNotEmpty) {
+    final auditColumns = await database.rawQuery('PRAGMA table_info(audit_logs)');
+    final existingAuditCols = auditColumns
+        .map((column) => column['name'] as String)
+        .toSet();
+    if (!existingAuditCols.contains('has_metodo_autorizacion')) {
+      await database.execute(
+        'ALTER TABLE audit_logs ADD COLUMN has_metodo_autorizacion INTEGER',
+      );
+    }
+    if (!existingAuditCols.contains('has_usuario_autorizador_id')) {
+      await database.execute(
+        'ALTER TABLE audit_logs ADD COLUMN has_usuario_autorizador_id INTEGER',
+      );
+    }
+  }
+
   await database.execute('''
     CREATE TABLE IF NOT EXISTS `cashier_sessions` (
       `id` TEXT NOT NULL,
@@ -1349,6 +1382,22 @@ final migration32_33 = Migration(32, 33, (database) async {
 });
 
 final migration33_34 = Migration(33, 34, (database) async {
+  final auditTable = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'audit_logs'",
+  );
+  if (auditTable.isNotEmpty) {
+    final columns = await database.rawQuery('PRAGMA table_info(audit_logs)');
+    final names = columns.map((column) => column['name'] as String).toSet();
+    if (!names.contains('tenant_id')) {
+      await database.execute('ALTER TABLE audit_logs ADD COLUMN tenant_id TEXT');
+    }
+    if (!names.contains('metadata_raw')) {
+      await database.execute(
+        'ALTER TABLE audit_logs ADD COLUMN metadata_raw TEXT',
+      );
+    }
+  }
+
   final invoiceColumns = await database.rawQuery("PRAGMA table_info(`invoices`)");
   if (invoiceColumns.isNotEmpty) {
     final invColumnNames = invoiceColumns.map((col) => col['name'] as String).toSet();
@@ -1381,6 +1430,17 @@ final migration33_34 = Migration(33, 34, (database) async {
 });
 
 final migration34_35 = Migration(34, 35, (database) async {
+  final auditTable = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'audit_logs'",
+  );
+  if (auditTable.isNotEmpty) {
+    await database.execute(
+      'CREATE UNIQUE INDEX IF NOT EXISTS '
+      'index_audit_logs_tenant_id_device_id_user_id_sequence_no '
+      'ON audit_logs (tenant_id, device_id, user_id, sequence_no)',
+    );
+  }
+
   final paymentColumns = await database.rawQuery("PRAGMA table_info(`payments`)");
   if (paymentColumns.isNotEmpty) {
     final payColumnNames = paymentColumns.map((col) => col['name'] as String).toSet();

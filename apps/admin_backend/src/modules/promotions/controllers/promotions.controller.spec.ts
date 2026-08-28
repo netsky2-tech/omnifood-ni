@@ -46,27 +46,17 @@ describe('PromotionsController', () => {
       controllers: [PromotionsController],
       providers: [
         Reflector,
-        AuthGuard,
-        RolesGuard,
         {
           provide: PromotionsService,
           useValue: service,
         },
-        {
-          provide: ConfigService,
-          useValue: new ConfigService({
-            NODE_ENV: 'test',
-            JWT_SECRET: jwtSecret,
-            JWT_ISSUER: 'omnifood-admin',
-            JWT_AUDIENCE: 'omnifood-pos',
-            JWT_ACCESS_TTL_SECONDS: '3600',
-            JWT_REFRESH_TTL_SECONDS: '604800',
-            JWT_CLOCK_TOLERANCE_SECONDS: '5',
-            JWT_ALGORITHM: 'HS256',
-          }),
-        },
       ],
-    }).compile();
+    })
+      .overrideGuard(AuthGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(RolesGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     controller = module.get<PromotionsController>(PromotionsController);
   });

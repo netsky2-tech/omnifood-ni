@@ -57,6 +57,18 @@ class InboundSyncResult {
   });
 }
 
+enum SyncRunStatus { complete, partial, failed }
+
+class SyncRunOutcome {
+  const SyncRunOutcome(this.status);
+
+  const SyncRunOutcome.complete() : this(SyncRunStatus.complete);
+  const SyncRunOutcome.partial() : this(SyncRunStatus.partial);
+  const SyncRunOutcome.failed() : this(SyncRunStatus.failed);
+
+  final SyncRunStatus status;
+}
+
 class SyncService {
   final AuditRepository _auditRepository;
   // ignore: unused_field
@@ -204,8 +216,8 @@ class SyncService {
     return count;
   }
 
-  Future<void> triggerManualSync() async {
-    if (_isSyncing) return;
+  Future<SyncRunOutcome> triggerManualSync() async {
+    if (_isSyncing) return const SyncRunOutcome.partial();
 
     _isSyncing = true;
     _updateStatus(CloudSyncStatus.syncing);
@@ -215,60 +227,95 @@ class SyncService {
     try {
       developer.log('Starting sync pass with fault isolation...', name: 'SyncService');
 
-      // 1. Sync Audit Logs
-      try {
-        await _auditRepository.syncLogs();
-      } catch (e) {
-        developer.log('Error during audit log sync: $e', name: 'SyncService');
-        domainErrors.add('AuditLogs: $e');
-      }
+      var auditOutcome = const AuditSyncOutcome.retryable(failedStreams: 1);
+      var hasFailure = !await _runDomain('audit', () async {
+        auditOutcome = await _auditRepository.syncLogs();
+      });
+      hasFailure |= auditOutcome.status != AuditSyncStatus.complete;
+      if (hasFailure) domainErrors.add('AuditLogs');
 
-      // 1b. Sync fiscal sales documents (Outbox)
-      try {
-        await _syncSalesDocuments();
-      } catch (e) {
-        developer.log('Error during sales sync: $e', name: 'SyncService');
-        domainErrors.add('Sales: $e');
+      // 1b. Sync fiscal sales documents, including offline credit notes, before
+      // inventory movements so backend replay sees sale -> credit-note ordering.
+      final salesSuccess = await _runDomain('sales', _syncSalesDocuments);
+      if (!salesSuccess) {
+        hasFailure = true;
+        domainErrors.add('Sales');
       }
 
       // 2. Sync inventory outbox deltas
-      try {
-        await _syncPurchaseDocuments();
-        await _syncRecipeVersionDocuments();
-        final productionLinkedMovementIds =
-            await _syncProductionOrderDocuments();
-        await _syncCountSessionDocuments();
-        await _syncAlertLifecycleDocuments();
-        await _syncKardexCorrections();
-        await _syncInventoryOutbox(
+      var productionLinkedMovementIds = const <String>{};
+      final purchaseSuccess = await _runDomain('purchase', _syncPurchaseDocuments);
+      if (!purchaseSuccess) {
+        hasFailure = true;
+        domainErrors.add('Purchase');
+      }
+      final recipeSuccess = await _runDomain('recipe', _syncRecipeVersionDocuments);
+      if (!recipeSuccess) {
+        hasFailure = true;
+        domainErrors.add('Recipe');
+      }
+      final prodSuccess = await _runDomain('production', () async {
+        productionLinkedMovementIds = await _syncProductionOrderDocuments();
+      });
+      if (!prodSuccess) {
+        hasFailure = true;
+        domainErrors.add('Production');
+      }
+      final countSuccess = await _runDomain('count', _syncCountSessionDocuments);
+      if (!countSuccess) {
+        hasFailure = true;
+        domainErrors.add('Count');
+      }
+      final alertLifeSuccess = await _runDomain('alert lifecycle', _syncAlertLifecycleDocuments);
+      if (!alertLifeSuccess) {
+        hasFailure = true;
+        domainErrors.add('AlertLifecycle');
+      }
+      final kardexSuccess = await _runDomain('kardex corrections', _syncKardexCorrections);
+      if (!kardexSuccess) {
+        hasFailure = true;
+        domainErrors.add('KardexCorrections');
+      }
+      final invOutboxSuccess = await _runDomain(
+        'inventory',
+        () => _syncInventoryOutbox(
           blockedMovementIds: productionLinkedMovementIds,
-        );
-        await _refreshAlertInbox();
-      } catch (e) {
-        developer.log('Error during inventory sync: $e', name: 'SyncService');
-        domainErrors.add('Inventory: $e');
+        ),
+      );
+      if (!invOutboxSuccess) {
+        hasFailure = true;
+        domainErrors.add('InventoryOutbox');
+      }
+      final alertInboxSuccess = await _runDomain('alert inbox', _refreshAlertInbox);
+      if (!alertInboxSuccess) {
+        hasFailure = true;
+        domainErrors.add('AlertInbox');
       }
 
       // 3. Pull Master Catalog & Security Inbound Deltas
-      try {
-        await _pullInboundDeltas();
-      } catch (e) {
-        developer.log('Error during inbound catalog sync: $e', name: 'SyncService');
-        domainErrors.add('InboundCatalog: $e');
+      final inboundSuccess = await _runDomain('inbound deltas', _pullInboundDeltas);
+      if (!inboundSuccess) {
+        hasFailure = true;
+        domainErrors.add('InboundCatalog');
       }
 
-      if (domainErrors.isEmpty) {
+      if (!hasFailure) {
         _consecutiveFailures = 0;
         _lastSyncTime = DateTime.now();
         _lastSyncError = null;
         _updateStatus(CloudSyncStatus.success);
         _updateStatus(CloudSyncStatus.idle);
         developer.log('Sync completed successfully', name: 'SyncService');
+        return const SyncRunOutcome.complete();
       } else {
         _consecutiveFailures++;
         _lastSyncError = domainErrors.join('; ');
         _updateStatus(CloudSyncStatus.error);
-        developer.log('Sync completed with domain errors: $_lastSyncError', name: 'SyncService');
+        developer.log(
+          'Sync completed partially; domain errors: $_lastSyncError',
+          name: 'SyncService',
+        );
+        return const SyncRunOutcome.partial();
       }
     } catch (e, stackTrace) {
       _consecutiveFailures++;
@@ -280,8 +327,27 @@ class SyncService {
         error: e,
         stackTrace: stackTrace,
       );
+      return const SyncRunOutcome.failed();
     } finally {
       _isSyncing = false;
+    }
+  }
+
+  Future<bool> _runDomain(
+    String domain,
+    Future<void> Function() operation,
+  ) async {
+    try {
+      await operation();
+      return true;
+    } catch (error, stackTrace) {
+      developer.log(
+        'Sync $domain failed; later domains will continue.',
+        name: 'SyncService',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      return false;
     }
   }
 
@@ -468,6 +534,7 @@ class SyncService {
           purchase.id,
           error: e.message,
         );
+        rethrow;
       } catch (e, stackTrace) {
         developer.log(
           'Skipped purchase ${purchase.id}: $e',
@@ -479,6 +546,7 @@ class SyncService {
           purchase.id,
           error: e.toString(),
         );
+        rethrow;
       }
     }
   }
@@ -527,6 +595,7 @@ class SyncService {
           'Failed to sync recipe version ${document.id}: ${e.message}',
           name: 'SyncService',
         );
+        rethrow;
       }
     }
   }
@@ -564,6 +633,7 @@ class SyncService {
           document.movementReferences,
           error: e.message,
         );
+        rethrow;
       }
     }
     return linkedMovementIds;
@@ -599,6 +669,7 @@ class SyncService {
           document.movementReferences,
           error: e.message,
         );
+        rethrow;
       }
     }
   }
@@ -644,6 +715,7 @@ class SyncService {
           'Failed to sync alert lifecycle ${alert.id}: ${e.message}',
           name: 'SyncService',
         );
+        rethrow;
       }
     }
   }
@@ -683,6 +755,7 @@ class SyncService {
         'Failed to refresh forensic alerts: ${e.message}',
         name: 'SyncService',
       );
+      rethrow;
     }
   }
 

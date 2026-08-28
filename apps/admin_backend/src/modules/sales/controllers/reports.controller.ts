@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { Response } from 'express';
 import { AuthGuard } from '../../identity/guards/auth.guard';
+import { AuthoritativeCurrentUserGuard } from '../../identity/guards/authoritative-current-user.guard';
 import { RolesGuard } from '../../identity/guards/roles.guard';
 import { Roles } from '../../../core/decorators/roles.decorator';
 import { GetTenantId } from '../../../core/decorators/tenant.decorator';
@@ -42,7 +43,7 @@ import {
 } from '../dto/sales-export.dto';
 
 @Controller('sales/reports')
-@UseGuards(AuthGuard, RolesGuard)
+@UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)
 @UseInterceptors(TenantInterceptor)
 export class ReportsController {
   constructor(

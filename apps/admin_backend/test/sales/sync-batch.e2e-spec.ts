@@ -1,5 +1,4 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import { NextFunction, Request, Response } from 'express';
@@ -10,6 +9,11 @@ import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { SyncBatchController } from '../../src/modules/sales/controllers/sync-batch.controller';
 import { SyncCreditNoteAuthGuard } from '../../src/modules/sales/guards/sync-credit-note-auth.guard';
 import { InvoicesService } from '../../src/modules/sales/services/invoices.service';
+import {
+  createIdentityJwtConfigProvider,
+  createIdentityJwtTestConfigProvider,
+  signIdentityJwtAccessToken,
+} from '../support/identity-jwt-test.fixture';
 
 interface SyncBatchRecordRequest {
   idempotencyKey: string;
@@ -122,7 +126,7 @@ describe('Sync batch route (e2e)', () => {
   let jwtService: JwtService;
   const syncBatch = jest.fn();
   const signToken = (payload: Record<string, unknown>): string =>
-    jwtService.sign(payload, { secret: 'test-secret' });
+    signIdentityJwtAccessToken(jwtService, payload);
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -135,13 +139,8 @@ describe('Sync batch route (e2e)', () => {
         JwtService,
         AuthGuard,
         SyncCreditNoteAuthGuard,
-        {
-          provide: ConfigService,
-          useValue: {
-            get: (key: string) =>
-              key === 'JWT_SECRET' ? 'test-secret' : undefined,
-          },
-        },
+        createIdentityJwtTestConfigProvider(),
+        createIdentityJwtConfigProvider(),
       ],
     }).compile();
 
@@ -341,7 +340,7 @@ describe('Sync batch route (e2e)', () => {
       .post('/v1/sync/batch')
       .set('Authorization', `Bearer ${token}`)
       .send({ records: [buildCreditNoteRecord(2)] })
-      .expect(403);
+      .expect(401);
 
     expect(syncBatch).not.toHaveBeenCalled();
   });

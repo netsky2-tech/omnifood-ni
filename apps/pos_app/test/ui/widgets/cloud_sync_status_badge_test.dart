@@ -25,8 +25,9 @@ class MockAuditRepo implements AuditRepository {
   @override
   Future<List<AuditLog>> getUnsyncedLogs() async => [];
   @override
-  Future<void> syncLogs() async {
+  Future<AuditSyncOutcome> syncLogs() async {
     syncCalls++;
+    return const AuditSyncOutcome.complete();
   }
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -69,6 +70,19 @@ void main() {
 
     setUp(() {
       dio = Dio();
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            handler.resolve(
+              Response<dynamic>(
+                statusCode: 200,
+                requestOptions: options,
+                data: {'ok': true, 'data': []},
+              ),
+            );
+          },
+        ),
+      );
       auditRepo = MockAuditRepo();
       salesRepo = MockSalesRepo();
       inventoryRepo = MockInventoryRepo();
@@ -160,6 +174,7 @@ void main() {
 
       expect(find.text('Sincronización forzada iniciada...'), findsOneWidget);
       expect(auditRepo.syncCalls, 1);
+      await tester.pumpAndSettle();
     });
   });
 }

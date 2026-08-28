@@ -1,10 +1,13 @@
 import { INestApplication } from '@nestjs/common';
+import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { Test } from '@nestjs/testing';
 import * as request from 'supertest';
 import { ReportsController } from './reports.controller';
 import { RolesGuard } from '../../identity/guards/roles.guard';
 import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '../../identity/guards/auth.guard';
+import { AuthoritativeCurrentUserGuard } from '../../identity/guards/authoritative-current-user.guard';
+import { CurrentUserAuthorizationService } from '../../identity/services/current-user-authorization.service';
 import { UserRole } from '../../identity/entities/user.entity';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -28,9 +31,31 @@ import {
   SalesBookExportDto,
   ZReportsExportDto,
 } from '../dto/sales-export.dto';
+import {
+  IDENTITY_JWT_CONFIG,
+  type IdentityJwtConfig,
+} from '../../identity/config/identity-jwt.config';
 
 describe('ReportsController RBAC & Analytics & Fiscal & Export', () => {
-  const jwtSecret = 'test-only-jwt-secret-with-at-least-thirty-two-bytes';
+  const jwtEnvironment = {
+    NODE_ENV: 'test',
+    JWT_SECRET: 'test-only-jwt-secret-with-at-least-thirty-two-bytes',
+    JWT_ISSUER: 'omnifood-admin-test',
+    JWT_AUDIENCE: 'omnifood-pos-test',
+    JWT_ACCESS_TTL_SECONDS: '3600',
+    JWT_REFRESH_TTL_SECONDS: '604800',
+    JWT_CLOCK_TOLERANCE_SECONDS: '5',
+    JWT_ALGORITHM: 'HS256',
+  } as const;
+  const identityJwtConfig: IdentityJwtConfig = {
+    secret: jwtEnvironment.JWT_SECRET,
+    issuer: jwtEnvironment.JWT_ISSUER,
+    audience: jwtEnvironment.JWT_AUDIENCE,
+    accessTokenTtlSeconds: Number(jwtEnvironment.JWT_ACCESS_TTL_SECONDS),
+    refreshTokenTtlSeconds: Number(jwtEnvironment.JWT_REFRESH_TTL_SECONDS),
+    clockToleranceSeconds: Number(jwtEnvironment.JWT_CLOCK_TOLERANCE_SECONDS),
+    algorithm: jwtEnvironment.JWT_ALGORITHM,
+  };
   let app: INestApplication;
   let mockSalesReportsService: {
     getDashboard: jest.Mock;
@@ -232,12 +257,26 @@ describe('ReportsController RBAC & Analytics & Fiscal & Export', () => {
     };
 
     const moduleRef = await Test.createTestingModule({
-      imports: [JwtModule.register({ secret: jwtSecret })],
+      imports: [
+        JwtModule.register({
+          secret: jwtEnvironment.JWT_SECRET,
+          signOptions: {
+            algorithm: jwtEnvironment.JWT_ALGORITHM,
+            issuer: jwtEnvironment.JWT_ISSUER,
+            audience: jwtEnvironment.JWT_AUDIENCE,
+          },
+        }),
+      ],
       controllers: [ReportsController],
       providers: [
         Reflector,
         RolesGuard,
         AuthGuard,
+        AuthoritativeCurrentUserGuard,
+        {
+          provide: CurrentUserAuthorizationService,
+          useValue: { authorize: jest.fn((token: unknown) => token) },
+        },
         {
           provide: SalesReportsService,
           useValue: mockSalesReportsService,
@@ -252,16 +291,13 @@ describe('ReportsController RBAC & Analytics & Fiscal & Export', () => {
         },
         {
           provide: ConfigService,
-          useValue: new ConfigService({
-            NODE_ENV: 'test',
-            JWT_SECRET: jwtSecret,
-            JWT_ISSUER: 'omnifood-admin',
-            JWT_AUDIENCE: 'omnifood-pos',
-            JWT_ACCESS_TTL_SECONDS: '3600',
-            JWT_REFRESH_TTL_SECONDS: '604800',
-            JWT_CLOCK_TOLERANCE_SECONDS: '5',
-            JWT_ALGORITHM: 'HS256',
-          }),
+          useValue: {
+            get: (key: keyof typeof jwtEnvironment) => jwtEnvironment[key],
+          },
+        },
+        {
+          provide: IDENTITY_JWT_CONFIG,
+          useValue: identityJwtConfig,
         },
       ],
     }).compile();
@@ -275,26 +311,26 @@ describe('ReportsController RBAC & Analytics & Fiscal & Export', () => {
   });
 
   const signToken = (jwtService: JwtService, role: UserRole) =>
-    jwtService.sign(
-      {
-        sub: 'user-1',
-        email: 'user@omnifood.ni',
-        tenant_id: 'tenant-1',
-        role,
-        is_active: true,
-        token_type: 'access',
-        security_version: 1,
-      },
-      {
-        issuer: 'omnifood-admin',
-        audience: 'omnifood-pos',
-        expiresIn: 3600,
-        algorithm: 'HS256',
-      },
-    );
+    jwtService.sign({
+      sub: 'user-1',
+      email: 'manager@example.com',
+      role,
+      tenant_id: 'tenant-1',
+      is_active: true,
+      token_type: 'access',
+      security_version: 1,
+    });
 
   const getHttpServer = (): Parameters<typeof request>[0] =>
     app.getHttpServer() as Parameters<typeof request>[0];
+
+  it('requires authoritative authorization before role checks on X and Z reports', () => {
+    expect(Reflect.getMetadata(GUARDS_METADATA, ReportsController)).toEqual([
+      AuthGuard,
+      AuthoritativeCurrentUserGuard,
+      RolesGuard,
+    ]);
+  });
 
   it('returns 403 for CASHIER role on X report route', async () => {
     const jwtService = app.get(JwtService);

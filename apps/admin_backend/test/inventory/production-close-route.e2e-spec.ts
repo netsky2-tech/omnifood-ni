@@ -5,7 +5,6 @@ import {
   NestInterceptor,
   ValidationPipe,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -22,52 +21,41 @@ import { ProductionService } from '../../src/modules/inventory/production.servic
 import { RecipeService } from '../../src/modules/inventory/recipe.service';
 import { ShrinkageService } from '../../src/modules/inventory/shrinkage.service';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
+import { AuthoritativeCurrentUserGuard } from '../../src/modules/identity/guards/authoritative-current-user.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
+import { CurrentUserAuthorizationService } from '../../src/modules/identity/services/current-user-authorization.service';
 import { UserRole } from '../../src/modules/identity/entities/user.entity';
+import {
+  createIdentityJwtConfigProvider,
+  createIdentityJwtTestConfigProvider,
+  signIdentityJwtAccessToken,
+} from '../support/identity-jwt-test.fixture';
 
 const TEST_TENANT_ID = 'tenant-production-close';
-const PRODUCTION_CLOSE_ROUTE_TEST_JWT_SECRET =
-  process.env.OMNIFOOD_TEST_JWT_SECRET ??
-  'non-production-production-close-route-jwt-secret';
+const productionCloseRouteTestJwtService = new JwtService();
 
-const productionCloseRouteTestJwtService = new JwtService({
-  secret: PRODUCTION_CLOSE_ROUTE_TEST_JWT_SECRET,
-});
-
-const defaultClaims = {
-  sub: 'user-test-1',
-  email: 'test@omnifood.ni',
-  is_active: true,
-  token_type: 'access',
-  security_version: 1,
-};
-
-const signTestToken = (claims: Record<string, unknown>) =>
-  productionCloseRouteTestJwtService.sign(
-    {
-      ...defaultClaims,
-      ...claims,
-    },
-    {
-      issuer: 'omnifood-admin',
-      audience: 'omnifood-pos',
-      expiresIn: '1h',
-    },
-  );
-
-const AUTH_TOKEN = signTestToken({
-  tenant_id: TEST_TENANT_ID,
-  role: UserRole.MANAGER,
-});
-const CLAIMED_TERMINAL_AUTH_TOKEN = signTestToken({
-  tenant_id: TEST_TENANT_ID,
-  role: UserRole.MANAGER,
-  terminal_id: 'terminal-claim-1',
-});
-const UNAUTHORIZED_ROLE_TOKEN = signTestToken({
-  tenant_id: TEST_TENANT_ID,
-  role: UserRole.CASHIER,
-});
+const AUTH_TOKEN = signIdentityJwtAccessToken(
+  productionCloseRouteTestJwtService,
+  {
+    tenant_id: TEST_TENANT_ID,
+    role: UserRole.MANAGER,
+  },
+);
+const CLAIMED_TERMINAL_AUTH_TOKEN = signIdentityJwtAccessToken(
+  productionCloseRouteTestJwtService,
+  {
+    tenant_id: TEST_TENANT_ID,
+    role: UserRole.MANAGER,
+    terminal_id: 'terminal-claim-1',
+  },
+);
+const UNAUTHORIZED_ROLE_TOKEN = signIdentityJwtAccessToken(
+  productionCloseRouteTestJwtService,
+  {
+    tenant_id: TEST_TENANT_ID,
+    role: UserRole.CASHIER,
+  },
+);
 
 interface RequestWithUser {
   user?: {
@@ -149,27 +137,16 @@ describe('Production close route (integration)', () => {
         { provide: RecipeService, useValue: { ingestPosVersion: jest.fn() } },
         { provide: TenantInterceptor, useClass: TestTenantInterceptor },
         AuthGuard,
+        AuthoritativeCurrentUserGuard,
         RolesGuard,
+        {
+          provide: CurrentUserAuthorizationService,
+          useValue: { authorize: jest.fn((token: unknown) => token) },
+        },
         Reflector,
         JwtService,
-        {
-          provide: ConfigService,
-          useValue: {
-            get: (key: string) => {
-              const env: Record<string, string> = {
-                NODE_ENV: 'test',
-                JWT_SECRET: PRODUCTION_CLOSE_ROUTE_TEST_JWT_SECRET,
-                JWT_ISSUER: 'omnifood-admin',
-                JWT_AUDIENCE: 'omnifood-pos',
-                JWT_ACCESS_TTL_SECONDS: '3600',
-                JWT_REFRESH_TTL_SECONDS: '604800',
-                JWT_CLOCK_TOLERANCE_SECONDS: '5',
-                JWT_ALGORITHM: 'HS256',
-              };
-              return env[key] ?? null;
-            },
-          },
-        },
+        createIdentityJwtTestConfigProvider(),
+        createIdentityJwtConfigProvider(),
       ],
     }).compile();
 

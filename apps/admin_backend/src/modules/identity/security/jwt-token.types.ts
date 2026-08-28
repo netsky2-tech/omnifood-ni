@@ -3,7 +3,8 @@ export const JWT_TOKEN_TYPES = {
   REFRESH: 'refresh',
 } as const;
 
-type JwtTokenType = (typeof JWT_TOKEN_TYPES)[keyof typeof JWT_TOKEN_TYPES];
+export type JwtTokenType =
+  (typeof JWT_TOKEN_TYPES)[keyof typeof JWT_TOKEN_TYPES];
 
 interface JwtIdentityClaims {
   sub: string;
@@ -16,15 +17,20 @@ interface JwtIdentityClaims {
 
 export interface JwtSignPayload extends JwtIdentityClaims {
   security_version?: number;
+  refresh_token_family_id?: string;
 }
 
 export interface JwtAccessPayload extends JwtIdentityClaims {
   token_type: typeof JWT_TOKEN_TYPES.ACCESS;
   security_version: number;
-  iss: string;
-  aud: string;
-  iat: number;
-  exp: number;
+  [claim: string]: unknown;
+}
+
+export interface JwtRefreshPayload {
+  sub: string;
+  token_type: typeof JWT_TOKEN_TYPES.REFRESH;
+  jti?: string;
+  refresh_token_family_id?: string;
 }
 
 const isNonEmptyString = (value: unknown): value is string =>
@@ -52,3 +58,20 @@ export const isAccessTokenPayload = (
     Number.isFinite(payload.exp)
   );
 };
+
+export const isRefreshTokenPayloadForSubject = (
+  payload: unknown,
+  userId: string,
+): payload is JwtRefreshPayload =>
+  typeof payload === 'object' &&
+  payload !== null &&
+  'sub' in payload &&
+  'token_type' in payload &&
+  typeof payload.sub === 'string' &&
+  payload.sub.length > 0 &&
+  payload.sub === userId &&
+  payload.token_type === JWT_TOKEN_TYPES.REFRESH &&
+  (!('jti' in payload) ||
+    (typeof payload.jti === 'string' && payload.jti.trim().length > 0)) &&
+  (!('refresh_token_family_id' in payload) ||
+    typeof payload.refresh_token_family_id === 'string');

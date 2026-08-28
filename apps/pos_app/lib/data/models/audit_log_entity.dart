@@ -1,6 +1,14 @@
 import 'package:floor/floor.dart';
 
-@Entity(tableName: 'audit_logs')
+@Entity(
+  tableName: 'audit_logs',
+  indices: [
+    Index(
+      value: ['tenant_id', 'device_id', 'user_id', 'sequence_no'],
+      unique: true,
+    ),
+  ],
+)
 class AuditLogEntity {
   @PrimaryKey(autoGenerate: true)
   final int? id;
@@ -25,6 +33,16 @@ class AuditLogEntity {
   final String? usuarioAutorizadorId;
   @ColumnInfo(name: 'remote_ref_uuid')
   final String remoteRefUuid;
+  @ColumnInfo(name: 'hash_version')
+  final String? hashVersion;
+  @ColumnInfo(name: 'has_metodo_autorizacion')
+  final bool? hasMetodoAutorizacion;
+  @ColumnInfo(name: 'has_usuario_autorizador_id')
+  final bool? hasUsuarioAutorizadorId;
+  @ColumnInfo(name: 'tenant_id')
+  final String? tenantId;
+  @ColumnInfo(name: 'metadata_raw')
+  final String? metadataRaw;
 
   AuditLogEntity({
     this.id,
@@ -40,5 +58,10 @@ class AuditLogEntity {
     this.metodoAutorizacion,
     this.usuarioAutorizadorId,
     required this.remoteRefUuid,
+    this.hashVersion,
+    this.hasMetodoAutorizacion,
+    this.hasUsuarioAutorizadorId,
+    this.tenantId,
+    this.metadataRaw,
   });
 }

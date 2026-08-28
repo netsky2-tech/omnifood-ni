@@ -7,6 +7,7 @@ import '../models/security_profile_entity.dart';
 import '../models/user_entity.dart';
 import '../services/local_auth_service.dart';
 import '../mappers/user_mapper.dart';
+import 'tenant_capability_cache.dart';
 import '../security/local_totp_seed_cipher.dart';
 import '../security/totp_seed_key_provider.dart';
 import 'package:dio/dio.dart';
@@ -27,6 +28,7 @@ class AuthRepositoryImpl implements AuthRepository {
   final Map<String, List<DateTime>> _pinFailures = <String, List<DateTime>>{};
   final Map<String, DateTime> _pinLockedUntil = <String, DateTime>{};
   final TotpSeedKeyProvider _totpSeedKeyProvider;
+  final TenantCapabilityCache? _capabilityCache;
 
   AuthRepositoryImpl(
     this._userDao,
@@ -34,8 +36,10 @@ class AuthRepositoryImpl implements AuthRepository {
     this._localAuth,
     this._dio, {
     TotpSeedKeyProvider? totpSeedKeyProvider,
+    TenantCapabilityCache? capabilityCache,
   }) : _totpSeedKeyProvider =
-           totpSeedKeyProvider ?? DeviceBoundTotpSeedKeyProvider();
+            totpSeedKeyProvider ?? DeviceBoundTotpSeedKeyProvider(),
+       _capabilityCache = capabilityCache;
 
   @override
   bool get isPendingSync => _isPendingSync;
@@ -87,6 +91,7 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<User?> loginOnline(String email, String password) async {
+    _capabilityCache?.clear();
     try {
       final response = await _dio.post(
         '/identity/login',
@@ -99,6 +104,7 @@ class AuthRepositoryImpl implements AuthRepository {
       _currentUser = user;
       _isPendingSync = false;
       await _saveToken(token);
+      await _refreshAuditCapability(user);
 
       await syncStaff();
       return user;
@@ -146,6 +152,29 @@ class AuthRepositoryImpl implements AuthRepository {
     } catch (e) {
       debugPrint('[AuthRepository] Online login failed: $e');
       return null;
+    }
+  }
+
+  Future<void> _refreshAuditCapability(User user) async {
+    final cache = _capabilityCache;
+    final tenantId = user.tenantId;
+    if (cache == null || tenantId == null || tenantId.isEmpty) {
+      cache?.clear();
+      return;
+    }
+    try {
+      final response = await _dio.get('/identity/capabilities/audit');
+      final data = response.data;
+      if (data is! Map) {
+        cache.clear();
+        return;
+      }
+      await cache.refresh(
+        tenantId: tenantId,
+        response: Map<String, Object?>.from(data),
+      );
+    } catch (_) {
+      cache.clear();
     }
   }
 
@@ -249,6 +278,7 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<User?> loginOffline(String userId, String pin) async {
+    _capabilityCache?.clear();
     debugPrint('[AuthRepository] Attempting offline login for user: $userId');
 
     final entity = await _userDao.findUserById(userId);
@@ -357,6 +387,7 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<void> logout() async {
+    _capabilityCache?.clear();
     _currentUser = null;
     _accessToken = null;
     _dio.options.headers.remove('Authorization');

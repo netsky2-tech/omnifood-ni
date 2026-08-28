@@ -6,7 +6,7 @@
 import 'dart:async' as _i39;
 
 import 'package:mockito/mockito.dart' as _i1;
-import 'package:mockito/src/dummies.dart' as _i51;
+import 'package:mockito/src/dummies.dart' as _i52;
 import 'package:pos_app/data/daos/audit_log_dao.dart' as _i4;
 import 'package:pos_app/data/daos/catalog/catalog_value_dao.dart' as _i24;
 import 'package:pos_app/data/daos/customer/customer_dao.dart' as _i37;
@@ -50,30 +50,30 @@ import 'package:pos_app/data/daos/sales/sales_transaction_dao.dart' as _i29;
 import 'package:pos_app/data/daos/sales/tax_config_dao.dart' as _i28;
 import 'package:pos_app/data/daos/security_profile_dao.dart' as _i3;
 import 'package:pos_app/data/daos/user_dao.dart' as _i2;
-import 'package:pos_app/data/database/app_database.dart' as _i42;
-import 'package:pos_app/data/models/audit_log_entity.dart' as _i49;
-import 'package:pos_app/data/models/inventory/insumo_entity.dart' as _i47;
+import 'package:pos_app/data/database/app_database.dart' as _i43;
+import 'package:pos_app/data/models/audit_log_entity.dart' as _i50;
+import 'package:pos_app/data/models/inventory/insumo_entity.dart' as _i48;
 import 'package:pos_app/data/models/inventory/kardex_correction_entity.dart'
     as _i74;
 import 'package:pos_app/data/models/inventory/kardex_recalculate_queue_entity.dart'
     as _i75;
-import 'package:pos_app/data/models/inventory/movement_entity.dart' as _i48;
-import 'package:pos_app/data/models/sales/invoice_entity.dart' as _i43;
-import 'package:pos_app/data/models/sales/invoice_item_entity.dart' as _i44;
+import 'package:pos_app/data/models/inventory/movement_entity.dart' as _i49;
+import 'package:pos_app/data/models/sales/invoice_entity.dart' as _i44;
+import 'package:pos_app/data/models/sales/invoice_item_entity.dart' as _i45;
 import 'package:pos_app/data/models/sales/invoice_item_modifier_entity.dart'
-    as _i46;
-import 'package:pos_app/data/models/sales/payment_entity.dart' as _i45;
+    as _i47;
+import 'package:pos_app/data/models/sales/payment_entity.dart' as _i46;
 import 'package:pos_app/domain/models/audit_log.dart' as _i55;
 import 'package:pos_app/domain/models/catalog/catalog_type.dart' as _i70;
 import 'package:pos_app/domain/models/catalog/catalog_value.dart' as _i69;
 import 'package:pos_app/domain/models/inventory/batch.dart' as _i67;
-import 'package:pos_app/domain/models/inventory/batch_deduction.dart' as _i53;
+import 'package:pos_app/domain/models/inventory/batch_deduction.dart' as _i54;
 import 'package:pos_app/domain/models/inventory/count_session_document.dart'
     as _i64;
 import 'package:pos_app/domain/models/inventory/forensic_alert.dart' as _i72;
 import 'package:pos_app/domain/models/inventory/insumo.dart' as _i60;
 import 'package:pos_app/domain/models/inventory/inventory_movement.dart'
-    as _i52;
+    as _i53;
 import 'package:pos_app/domain/models/inventory/product.dart' as _i61;
 import 'package:pos_app/domain/models/inventory/production_order_document.dart'
     as _i73;
@@ -85,12 +85,12 @@ import 'package:pos_app/domain/models/inventory/supplier.dart' as _i65;
 import 'package:pos_app/domain/models/inventory/uom_conversion.dart' as _i68;
 import 'package:pos_app/domain/models/inventory/warehouse.dart' as _i66;
 import 'package:pos_app/domain/models/sales/invoice_item.dart' as _i57;
-import 'package:pos_app/domain/repositories/audit_repository.dart' as _i54;
+import 'package:pos_app/domain/repositories/audit_repository.dart' as _i42;
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart'
     as _i59;
 import 'package:pos_app/domain/services/inventory/movement_engine.dart' as _i41;
 import 'package:pos_app/domain/services/sales/dgi_numbering_service.dart'
-    as _i50;
+    as _i51;
 import 'package:pos_app/domain/usecases/inventory/process_sale_inventory_use_case.dart'
     as _i56;
 import 'package:pos_app/domain/usecases/inventory/reverse_sale_inventory_use_case.dart'
@@ -544,9 +544,9 @@ class _FakeProductionCloseResult_40 extends _i1.SmartFake
         );
 }
 
-class _FakeMovementEngine_41 extends _i1.SmartFake
-    implements _i41.MovementEngine {
-  _FakeMovementEngine_41(
+class _FakeAuditSyncOutcome_41 extends _i1.SmartFake
+    implements _i42.AuditSyncOutcome {
+  _FakeAuditSyncOutcome_41(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -555,8 +555,19 @@ class _FakeMovementEngine_41 extends _i1.SmartFake
         );
 }
 
-class _FakeAppDatabase_42 extends _i1.SmartFake implements _i42.AppDatabase {
-  _FakeAppDatabase_42(
+class _FakeMovementEngine_42 extends _i1.SmartFake
+    implements _i41.MovementEngine {
+  _FakeMovementEngine_42(
+    Object parent,
+    Invocation parentInvocation,
+  ) : super(
+          parent,
+          parentInvocation,
+        );
+}
+
+class _FakeAppDatabase_43 extends _i1.SmartFake implements _i43.AppDatabase {
+  _FakeAppDatabase_43(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -568,7 +579,7 @@ class _FakeAppDatabase_42 extends _i1.SmartFake implements _i42.AppDatabase {
 /// A class which mocks [AppDatabase].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockAppDatabase extends _i1.Mock implements _i42.AppDatabase {
+class MockAppDatabase extends _i1.Mock implements _i43.AppDatabase {
   MockAppDatabase() {
     _i1.throwOnMissingStub(this);
   }
@@ -977,37 +988,37 @@ class MockInvoiceDao extends _i1.Mock implements _i25.InvoiceDao {
   }
 
   @override
-  _i39.Future<_i43.InvoiceEntity?> getInvoiceById(String? id) =>
+  _i39.Future<_i44.InvoiceEntity?> getInvoiceById(String? id) =>
       (super.noSuchMethod(
         Invocation.method(
           #getInvoiceById,
           [id],
         ),
-        returnValue: _i39.Future<_i43.InvoiceEntity?>.value(),
-      ) as _i39.Future<_i43.InvoiceEntity?>);
+        returnValue: _i39.Future<_i44.InvoiceEntity?>.value(),
+      ) as _i39.Future<_i44.InvoiceEntity?>);
 
   @override
-  _i39.Future<_i43.InvoiceEntity?> getInvoiceByNumber(String? number) =>
+  _i39.Future<_i44.InvoiceEntity?> getInvoiceByNumber(String? number) =>
       (super.noSuchMethod(
         Invocation.method(
           #getInvoiceByNumber,
           [number],
         ),
-        returnValue: _i39.Future<_i43.InvoiceEntity?>.value(),
-      ) as _i39.Future<_i43.InvoiceEntity?>);
+        returnValue: _i39.Future<_i44.InvoiceEntity?>.value(),
+      ) as _i39.Future<_i44.InvoiceEntity?>);
 
   @override
-  _i39.Future<List<_i43.InvoiceEntity>> getAllInvoices() => (super.noSuchMethod(
+  _i39.Future<List<_i44.InvoiceEntity>> getAllInvoices() => (super.noSuchMethod(
         Invocation.method(
           #getAllInvoices,
           [],
         ),
         returnValue:
-            _i39.Future<List<_i43.InvoiceEntity>>.value(<_i43.InvoiceEntity>[]),
-      ) as _i39.Future<List<_i43.InvoiceEntity>>);
+            _i39.Future<List<_i44.InvoiceEntity>>.value(<_i44.InvoiceEntity>[]),
+      ) as _i39.Future<List<_i44.InvoiceEntity>>);
 
   @override
-  _i39.Future<List<_i43.InvoiceEntity>> getInvoicesBySyncStatus(
+  _i39.Future<List<_i44.InvoiceEntity>> getInvoicesBySyncStatus(
           String? status) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -1015,11 +1026,11 @@ class MockInvoiceDao extends _i1.Mock implements _i25.InvoiceDao {
           [status],
         ),
         returnValue:
-            _i39.Future<List<_i43.InvoiceEntity>>.value(<_i43.InvoiceEntity>[]),
-      ) as _i39.Future<List<_i43.InvoiceEntity>>);
+            _i39.Future<List<_i44.InvoiceEntity>>.value(<_i44.InvoiceEntity>[]),
+      ) as _i39.Future<List<_i44.InvoiceEntity>>);
 
   @override
-  _i39.Future<List<_i43.InvoiceEntity>> getInvoicesByTimeRange(
+  _i39.Future<List<_i44.InvoiceEntity>> getInvoicesByTimeRange(
     int? startTime,
     int? endTime,
   ) =>
@@ -1032,22 +1043,22 @@ class MockInvoiceDao extends _i1.Mock implements _i25.InvoiceDao {
           ],
         ),
         returnValue:
-            _i39.Future<List<_i43.InvoiceEntity>>.value(<_i43.InvoiceEntity>[]),
-      ) as _i39.Future<List<_i43.InvoiceEntity>>);
+            _i39.Future<List<_i44.InvoiceEntity>>.value(<_i44.InvoiceEntity>[]),
+      ) as _i39.Future<List<_i44.InvoiceEntity>>);
 
   @override
-  _i39.Future<List<_i43.InvoiceEntity>> getInvoicesByUserId(String? userId) =>
+  _i39.Future<List<_i44.InvoiceEntity>> getInvoicesByUserId(String? userId) =>
       (super.noSuchMethod(
         Invocation.method(
           #getInvoicesByUserId,
           [userId],
         ),
         returnValue:
-            _i39.Future<List<_i43.InvoiceEntity>>.value(<_i43.InvoiceEntity>[]),
-      ) as _i39.Future<List<_i43.InvoiceEntity>>);
+            _i39.Future<List<_i44.InvoiceEntity>>.value(<_i44.InvoiceEntity>[]),
+      ) as _i39.Future<List<_i44.InvoiceEntity>>);
 
   @override
-  _i39.Future<void> insertInvoice(_i43.InvoiceEntity? invoice) =>
+  _i39.Future<void> insertInvoice(_i44.InvoiceEntity? invoice) =>
       (super.noSuchMethod(
         Invocation.method(
           #insertInvoice,
@@ -1058,7 +1069,7 @@ class MockInvoiceDao extends _i1.Mock implements _i25.InvoiceDao {
       ) as _i39.Future<void>);
 
   @override
-  _i39.Future<void> updateInvoice(_i43.InvoiceEntity? invoice) =>
+  _i39.Future<void> updateInvoice(_i44.InvoiceEntity? invoice) =>
       (super.noSuchMethod(
         Invocation.method(
           #updateInvoice,
@@ -1104,19 +1115,19 @@ class MockInvoiceItemDao extends _i1.Mock implements _i26.InvoiceItemDao {
   }
 
   @override
-  _i39.Future<List<_i44.InvoiceItemEntity>> getItemsByInvoiceId(
+  _i39.Future<List<_i45.InvoiceItemEntity>> getItemsByInvoiceId(
           String? invoiceId) =>
       (super.noSuchMethod(
         Invocation.method(
           #getItemsByInvoiceId,
           [invoiceId],
         ),
-        returnValue: _i39.Future<List<_i44.InvoiceItemEntity>>.value(
-            <_i44.InvoiceItemEntity>[]),
-      ) as _i39.Future<List<_i44.InvoiceItemEntity>>);
+        returnValue: _i39.Future<List<_i45.InvoiceItemEntity>>.value(
+            <_i45.InvoiceItemEntity>[]),
+      ) as _i39.Future<List<_i45.InvoiceItemEntity>>);
 
   @override
-  _i39.Future<void> insertItems(List<_i44.InvoiceItemEntity>? items) =>
+  _i39.Future<void> insertItems(List<_i45.InvoiceItemEntity>? items) =>
       (super.noSuchMethod(
         Invocation.method(
           #insertItems,
@@ -1136,7 +1147,7 @@ class MockPaymentDao extends _i1.Mock implements _i27.PaymentDao {
   }
 
   @override
-  _i39.Future<List<_i45.PaymentEntity>> getPaymentsByInvoiceId(
+  _i39.Future<List<_i46.PaymentEntity>> getPaymentsByInvoiceId(
           String? invoiceId) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -1144,11 +1155,11 @@ class MockPaymentDao extends _i1.Mock implements _i27.PaymentDao {
           [invoiceId],
         ),
         returnValue:
-            _i39.Future<List<_i45.PaymentEntity>>.value(<_i45.PaymentEntity>[]),
-      ) as _i39.Future<List<_i45.PaymentEntity>>);
+            _i39.Future<List<_i46.PaymentEntity>>.value(<_i46.PaymentEntity>[]),
+      ) as _i39.Future<List<_i46.PaymentEntity>>);
 
   @override
-  _i39.Future<List<_i45.PaymentEntity>> getPaymentsByTimeRange(
+  _i39.Future<List<_i46.PaymentEntity>> getPaymentsByTimeRange(
     int? startTime,
     int? endTime,
   ) =>
@@ -1161,19 +1172,19 @@ class MockPaymentDao extends _i1.Mock implements _i27.PaymentDao {
           ],
         ),
         returnValue:
-            _i39.Future<List<_i45.PaymentEntity>>.value(<_i45.PaymentEntity>[]),
-      ) as _i39.Future<List<_i45.PaymentEntity>>);
+            _i39.Future<List<_i46.PaymentEntity>>.value(<_i46.PaymentEntity>[]),
+      ) as _i39.Future<List<_i46.PaymentEntity>>);
 
   @override
-  _i39.Future<List<_i45.PaymentEntity>> getPendingCardPayments() =>
+  _i39.Future<List<_i46.PaymentEntity>> getPendingCardPayments() =>
       (super.noSuchMethod(
         Invocation.method(
           #getPendingCardPayments,
           [],
         ),
         returnValue:
-            _i39.Future<List<_i45.PaymentEntity>>.value(<_i45.PaymentEntity>[]),
-      ) as _i39.Future<List<_i45.PaymentEntity>>);
+            _i39.Future<List<_i46.PaymentEntity>>.value(<_i46.PaymentEntity>[]),
+      ) as _i39.Future<List<_i46.PaymentEntity>>);
 
   @override
   _i39.Future<int?> countPendingCardPayments() => (super.noSuchMethod(
@@ -1185,7 +1196,7 @@ class MockPaymentDao extends _i1.Mock implements _i27.PaymentDao {
       ) as _i39.Future<int?>);
 
   @override
-  _i39.Future<void> updatePayment(_i45.PaymentEntity? payment) =>
+  _i39.Future<void> updatePayment(_i46.PaymentEntity? payment) =>
       (super.noSuchMethod(
         Invocation.method(
           #updatePayment,
@@ -1196,7 +1207,7 @@ class MockPaymentDao extends _i1.Mock implements _i27.PaymentDao {
       ) as _i39.Future<void>);
 
   @override
-  _i39.Future<void> insertPayments(List<_i45.PaymentEntity>? payments) =>
+  _i39.Future<void> insertPayments(List<_i46.PaymentEntity>? payments) =>
       (super.noSuchMethod(
         Invocation.method(
           #insertPayments,
@@ -1217,7 +1228,7 @@ class MockSalesTransactionDao extends _i1.Mock
   }
 
   @override
-  _i39.Future<void> insertInvoice(_i43.InvoiceEntity? invoice) =>
+  _i39.Future<void> insertInvoice(_i44.InvoiceEntity? invoice) =>
       (super.noSuchMethod(
         Invocation.method(
           #insertInvoice,
@@ -1228,7 +1239,7 @@ class MockSalesTransactionDao extends _i1.Mock
       ) as _i39.Future<void>);
 
   @override
-  _i39.Future<void> updateInvoice(_i43.InvoiceEntity? invoice) =>
+  _i39.Future<void> updateInvoice(_i44.InvoiceEntity? invoice) =>
       (super.noSuchMethod(
         Invocation.method(
           #updateInvoice,
@@ -1239,7 +1250,7 @@ class MockSalesTransactionDao extends _i1.Mock
       ) as _i39.Future<void>);
 
   @override
-  _i39.Future<void> insertInvoiceItems(List<_i44.InvoiceItemEntity>? items) =>
+  _i39.Future<void> insertInvoiceItems(List<_i45.InvoiceItemEntity>? items) =>
       (super.noSuchMethod(
         Invocation.method(
           #insertInvoiceItems,
@@ -1251,7 +1262,7 @@ class MockSalesTransactionDao extends _i1.Mock
 
   @override
   _i39.Future<void> insertInvoiceItemModifiers(
-          List<_i46.InvoiceItemModifierEntity>? modifiers) =>
+          List<_i47.InvoiceItemModifierEntity>? modifiers) =>
       (super.noSuchMethod(
         Invocation.method(
           #insertInvoiceItemModifiers,
@@ -1262,7 +1273,7 @@ class MockSalesTransactionDao extends _i1.Mock
       ) as _i39.Future<void>);
 
   @override
-  _i39.Future<void> insertPayments(List<_i45.PaymentEntity>? payments) =>
+  _i39.Future<void> insertPayments(List<_i46.PaymentEntity>? payments) =>
       (super.noSuchMethod(
         Invocation.method(
           #insertPayments,
@@ -1273,17 +1284,17 @@ class MockSalesTransactionDao extends _i1.Mock
       ) as _i39.Future<void>);
 
   @override
-  _i39.Future<_i47.InsumoEntity?> getInsumoById(String? id) =>
+  _i39.Future<_i48.InsumoEntity?> getInsumoById(String? id) =>
       (super.noSuchMethod(
         Invocation.method(
           #getInsumoById,
           [id],
         ),
-        returnValue: _i39.Future<_i47.InsumoEntity?>.value(),
-      ) as _i39.Future<_i47.InsumoEntity?>);
+        returnValue: _i39.Future<_i48.InsumoEntity?>.value(),
+      ) as _i39.Future<_i48.InsumoEntity?>);
 
   @override
-  _i39.Future<void> updateInsumo(_i47.InsumoEntity? insumo) =>
+  _i39.Future<void> updateInsumo(_i48.InsumoEntity? insumo) =>
       (super.noSuchMethod(
         Invocation.method(
           #updateInsumo,
@@ -1294,7 +1305,7 @@ class MockSalesTransactionDao extends _i1.Mock
       ) as _i39.Future<void>);
 
   @override
-  _i39.Future<void> insertMovement(_i48.MovementEntity? movement) =>
+  _i39.Future<void> insertMovement(_i49.MovementEntity? movement) =>
       (super.noSuchMethod(
         Invocation.method(
           #insertMovement,
@@ -1305,7 +1316,7 @@ class MockSalesTransactionDao extends _i1.Mock
       ) as _i39.Future<void>);
 
   @override
-  _i39.Future<void> insertAuditLog(_i49.AuditLogEntity? log) =>
+  _i39.Future<void> insertAuditLog(_i50.AuditLogEntity? log) =>
       (super.noSuchMethod(
         Invocation.method(
           #insertAuditLog,
@@ -1316,17 +1327,17 @@ class MockSalesTransactionDao extends _i1.Mock
       ) as _i39.Future<void>);
 
   @override
-  _i39.Future<_i43.InvoiceEntity?> getInvoiceById(String? id) =>
+  _i39.Future<_i44.InvoiceEntity?> getInvoiceById(String? id) =>
       (super.noSuchMethod(
         Invocation.method(
           #getInvoiceById,
           [id],
         ),
-        returnValue: _i39.Future<_i43.InvoiceEntity?>.value(),
-      ) as _i39.Future<_i43.InvoiceEntity?>);
+        returnValue: _i39.Future<_i44.InvoiceEntity?>.value(),
+      ) as _i39.Future<_i44.InvoiceEntity?>);
 
   @override
-  _i39.Future<List<_i43.InvoiceEntity>> getCreditNotesByRelatedId(
+  _i39.Future<List<_i44.InvoiceEntity>> getCreditNotesByRelatedId(
           String? relatedId) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -1334,8 +1345,8 @@ class MockSalesTransactionDao extends _i1.Mock
           [relatedId],
         ),
         returnValue:
-            _i39.Future<List<_i43.InvoiceEntity>>.value(<_i43.InvoiceEntity>[]),
-      ) as _i39.Future<List<_i43.InvoiceEntity>>);
+            _i39.Future<List<_i44.InvoiceEntity>>.value(<_i44.InvoiceEntity>[]),
+      ) as _i39.Future<List<_i44.InvoiceEntity>>);
 
   @override
   _i39.Future<int?> getNextInvoiceSourceSequence(String? terminalId) =>
@@ -1349,12 +1360,12 @@ class MockSalesTransactionDao extends _i1.Mock
 
   @override
   _i39.Future<void> executeSaleTransaction(
-    _i43.InvoiceEntity? invoice,
-    List<_i44.InvoiceItemEntity>? items,
-    List<_i46.InvoiceItemModifierEntity>? modifiers,
-    List<_i45.PaymentEntity>? payments,
-    List<_i48.MovementEntity>? movements,
-    _i49.AuditLogEntity? auditLog,
+    _i44.InvoiceEntity? invoice,
+    List<_i45.InvoiceItemEntity>? items,
+    List<_i47.InvoiceItemModifierEntity>? modifiers,
+    List<_i46.PaymentEntity>? payments,
+    List<_i49.MovementEntity>? movements,
+    _i50.AuditLogEntity? auditLog,
     bool? shouldFail,
   ) =>
       (super.noSuchMethod(
@@ -1376,9 +1387,9 @@ class MockSalesTransactionDao extends _i1.Mock
 
   @override
   _i39.Future<void> executeVoidTransaction(
-    List<_i48.MovementEntity>? movements,
-    _i43.InvoiceEntity? canceledInvoice,
-    _i49.AuditLogEntity? auditLog,
+    List<_i49.MovementEntity>? movements,
+    _i44.InvoiceEntity? canceledInvoice,
+    _i50.AuditLogEntity? auditLog,
     bool? shouldFail,
   ) =>
       (super.noSuchMethod(
@@ -1400,7 +1411,7 @@ class MockSalesTransactionDao extends _i1.Mock
 ///
 /// See the documentation for Mockito's code generation for more information.
 class MockDgiNumberingService extends _i1.Mock
-    implements _i50.DgiNumberingService {
+    implements _i51.DgiNumberingService {
   MockDgiNumberingService() {
     _i1.throwOnMissingStub(this);
   }
@@ -1431,7 +1442,7 @@ class MockDgiNumberingService extends _i1.Mock
           #getNextNumber,
           [],
         ),
-        returnValue: _i39.Future<String>.value(_i51.dummyValue<String>(
+        returnValue: _i39.Future<String>.value(_i52.dummyValue<String>(
           this,
           Invocation.method(
             #getNextNumber,
@@ -1550,7 +1561,7 @@ class MockMovementEngine extends _i1.Mock implements _i41.MovementEngine {
       ) as _i39.Future<void>);
 
   @override
-  _i39.Future<List<_i52.InventoryMovement>> recordProduction({
+  _i39.Future<List<_i53.InventoryMovement>> recordProduction({
     required String? recipeProductId,
     required String? producedInsumoId,
     required double? quantity,
@@ -1567,9 +1578,9 @@ class MockMovementEngine extends _i1.Mock implements _i41.MovementEngine {
             #reason: reason,
           },
         ),
-        returnValue: _i39.Future<List<_i52.InventoryMovement>>.value(
-            <_i52.InventoryMovement>[]),
-      ) as _i39.Future<List<_i52.InventoryMovement>>);
+        returnValue: _i39.Future<List<_i53.InventoryMovement>>.value(
+            <_i53.InventoryMovement>[]),
+      ) as _i39.Future<List<_i53.InventoryMovement>>);
 
   @override
   _i39.Future<_i41.ProductionCloseResult> recordProductionClose({
@@ -1710,7 +1721,7 @@ class MockMovementEngine extends _i1.Mock implements _i41.MovementEngine {
       ) as _i39.Future<void>);
 
   @override
-  _i39.Future<List<_i52.InventoryMovement>> getSaleMovements(
+  _i39.Future<List<_i53.InventoryMovement>> getSaleMovements(
     String? productId,
     double? quantity, {
     String? recipeVersionId,
@@ -1724,12 +1735,12 @@ class MockMovementEngine extends _i1.Mock implements _i41.MovementEngine {
           ],
           {#recipeVersionId: recipeVersionId},
         ),
-        returnValue: _i39.Future<List<_i52.InventoryMovement>>.value(
-            <_i52.InventoryMovement>[]),
-      ) as _i39.Future<List<_i52.InventoryMovement>>);
+        returnValue: _i39.Future<List<_i53.InventoryMovement>>.value(
+            <_i53.InventoryMovement>[]),
+      ) as _i39.Future<List<_i53.InventoryMovement>>);
 
   @override
-  _i39.Future<List<_i52.InventoryMovement>> getReversalMovements(
+  _i39.Future<List<_i53.InventoryMovement>> getReversalMovements(
     String? productId,
     double? quantity,
     String? reason, {
@@ -1745,12 +1756,12 @@ class MockMovementEngine extends _i1.Mock implements _i41.MovementEngine {
           ],
           {#recipeVersionId: recipeVersionId},
         ),
-        returnValue: _i39.Future<List<_i52.InventoryMovement>>.value(
-            <_i52.InventoryMovement>[]),
-      ) as _i39.Future<List<_i52.InventoryMovement>>);
+        returnValue: _i39.Future<List<_i53.InventoryMovement>>.value(
+            <_i53.InventoryMovement>[]),
+      ) as _i39.Future<List<_i53.InventoryMovement>>);
 
   @override
-  _i39.Future<List<_i53.BatchDeduction>> getBatchesForConsumption(
+  _i39.Future<List<_i54.BatchDeduction>> getBatchesForConsumption(
     String? insumoId,
     double? quantity,
   ) =>
@@ -1762,15 +1773,15 @@ class MockMovementEngine extends _i1.Mock implements _i41.MovementEngine {
             quantity,
           ],
         ),
-        returnValue: _i39.Future<List<_i53.BatchDeduction>>.value(
-            <_i53.BatchDeduction>[]),
-      ) as _i39.Future<List<_i53.BatchDeduction>>);
+        returnValue: _i39.Future<List<_i54.BatchDeduction>>.value(
+            <_i54.BatchDeduction>[]),
+      ) as _i39.Future<List<_i54.BatchDeduction>>);
 }
 
 /// A class which mocks [AuditRepository].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockAuditRepository extends _i1.Mock implements _i54.AuditRepository {
+class MockAuditRepository extends _i1.Mock implements _i42.AuditRepository {
   MockAuditRepository() {
     _i1.throwOnMissingStub(this);
   }
@@ -1778,7 +1789,7 @@ class MockAuditRepository extends _i1.Mock implements _i54.AuditRepository {
   @override
   String get deviceId => (super.noSuchMethod(
         Invocation.getter(#deviceId),
-        returnValue: _i51.dummyValue<String>(
+        returnValue: _i52.dummyValue<String>(
           this,
           Invocation.getter(#deviceId),
         ),
@@ -1835,14 +1846,20 @@ class MockAuditRepository extends _i1.Mock implements _i54.AuditRepository {
       ) as _i39.Future<void>);
 
   @override
-  _i39.Future<void> syncLogs() => (super.noSuchMethod(
+  _i39.Future<_i42.AuditSyncOutcome> syncLogs() => (super.noSuchMethod(
         Invocation.method(
           #syncLogs,
           [],
         ),
-        returnValue: _i39.Future<void>.value(),
-        returnValueForMissingStub: _i39.Future<void>.value(),
-      ) as _i39.Future<void>);
+        returnValue:
+            _i39.Future<_i42.AuditSyncOutcome>.value(_FakeAuditSyncOutcome_41(
+          this,
+          Invocation.method(
+            #syncLogs,
+            [],
+          ),
+        )),
+      ) as _i39.Future<_i42.AuditSyncOutcome>);
 
   @override
   _i39.Future<List<_i55.AuditLog>> getLocalLogs({
@@ -1876,23 +1893,23 @@ class MockProcessSaleInventoryUseCase extends _i1.Mock
   @override
   _i41.MovementEngine get engine => (super.noSuchMethod(
         Invocation.getter(#engine),
-        returnValue: _FakeMovementEngine_41(
+        returnValue: _FakeMovementEngine_42(
           this,
           Invocation.getter(#engine),
         ),
       ) as _i41.MovementEngine);
 
   @override
-  _i39.Future<List<_i52.InventoryMovement>> execute(
+  _i39.Future<List<_i53.InventoryMovement>> execute(
           List<_i57.InvoiceItem>? items) =>
       (super.noSuchMethod(
         Invocation.method(
           #execute,
           [items],
         ),
-        returnValue: _i39.Future<List<_i52.InventoryMovement>>.value(
-            <_i52.InventoryMovement>[]),
-      ) as _i39.Future<List<_i52.InventoryMovement>>);
+        returnValue: _i39.Future<List<_i53.InventoryMovement>>.value(
+            <_i53.InventoryMovement>[]),
+      ) as _i39.Future<List<_i53.InventoryMovement>>);
 }
 
 /// A class which mocks [ReverseSaleInventoryUseCase].
@@ -1907,14 +1924,14 @@ class MockReverseSaleInventoryUseCase extends _i1.Mock
   @override
   _i41.MovementEngine get engine => (super.noSuchMethod(
         Invocation.getter(#engine),
-        returnValue: _FakeMovementEngine_41(
+        returnValue: _FakeMovementEngine_42(
           this,
           Invocation.getter(#engine),
         ),
       ) as _i41.MovementEngine);
 
   @override
-  _i39.Future<List<_i52.InventoryMovement>> execute(
+  _i39.Future<List<_i53.InventoryMovement>> execute(
     List<_i57.InvoiceItem>? items,
     String? reason,
   ) =>
@@ -1926,9 +1943,9 @@ class MockReverseSaleInventoryUseCase extends _i1.Mock
             reason,
           ],
         ),
-        returnValue: _i39.Future<List<_i52.InventoryMovement>>.value(
-            <_i52.InventoryMovement>[]),
-      ) as _i39.Future<List<_i52.InventoryMovement>>);
+        returnValue: _i39.Future<List<_i53.InventoryMovement>>.value(
+            <_i53.InventoryMovement>[]),
+      ) as _i39.Future<List<_i53.InventoryMovement>>);
 }
 
 /// A class which mocks [InventoryRepository].
@@ -1941,13 +1958,13 @@ class MockInventoryRepository extends _i1.Mock
   }
 
   @override
-  _i42.AppDatabase get database => (super.noSuchMethod(
+  _i43.AppDatabase get database => (super.noSuchMethod(
         Invocation.getter(#database),
-        returnValue: _FakeAppDatabase_42(
+        returnValue: _FakeAppDatabase_43(
           this,
           Invocation.getter(#database),
         ),
-      ) as _i42.AppDatabase);
+      ) as _i43.AppDatabase);
 
   @override
   _i39.Future<List<_i60.Insumo>> getActiveInsumos() => (super.noSuchMethod(
@@ -2229,7 +2246,7 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i39.Future<void>);
 
   @override
-  _i39.Future<void> saveMovement(_i52.InventoryMovement? movement) =>
+  _i39.Future<void> saveMovement(_i53.InventoryMovement? movement) =>
       (super.noSuchMethod(
         Invocation.method(
           #saveMovement,
@@ -2240,26 +2257,26 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i39.Future<void>);
 
   @override
-  _i39.Future<List<_i52.InventoryMovement>> getAllMovements() =>
+  _i39.Future<List<_i53.InventoryMovement>> getAllMovements() =>
       (super.noSuchMethod(
         Invocation.method(
           #getAllMovements,
           [],
         ),
-        returnValue: _i39.Future<List<_i52.InventoryMovement>>.value(
-            <_i52.InventoryMovement>[]),
-      ) as _i39.Future<List<_i52.InventoryMovement>>);
+        returnValue: _i39.Future<List<_i53.InventoryMovement>>.value(
+            <_i53.InventoryMovement>[]),
+      ) as _i39.Future<List<_i53.InventoryMovement>>);
 
   @override
-  _i39.Future<List<_i52.InventoryMovement>> getUnsyncedMovements() =>
+  _i39.Future<List<_i53.InventoryMovement>> getUnsyncedMovements() =>
       (super.noSuchMethod(
         Invocation.method(
           #getUnsyncedMovements,
           [],
         ),
-        returnValue: _i39.Future<List<_i52.InventoryMovement>>.value(
-            <_i52.InventoryMovement>[]),
-      ) as _i39.Future<List<_i52.InventoryMovement>>);
+        returnValue: _i39.Future<List<_i53.InventoryMovement>>.value(
+            <_i53.InventoryMovement>[]),
+      ) as _i39.Future<List<_i53.InventoryMovement>>);
 
   @override
   _i39.Future<void> markMovementAsSynced(String? id) => (super.noSuchMethod(
@@ -2599,7 +2616,7 @@ class MockInventoryRepository extends _i1.Mock
   @override
   _i39.Future<void> saveProductionCloseTransaction(
     _i73.ProductionOrderDocument? document,
-    List<_i52.InventoryMovement>? movements, {
+    List<_i53.InventoryMovement>? movements, {
     bool? debugFailAfterWrites = false,
   }) =>
       (super.noSuchMethod(

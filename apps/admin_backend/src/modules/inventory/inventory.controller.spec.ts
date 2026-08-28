@@ -6,7 +6,13 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ROLES_KEY } from '../../core/decorators/roles.decorator';
 import { UserRole } from '../identity/entities/user.entity';
 import { AuthGuard } from '../identity/guards/auth.guard';
+import { AuthoritativeCurrentUserGuard } from '../identity/guards/authoritative-current-user.guard';
+import { CurrentUserAuthorizationService } from '../identity/services/current-user-authorization.service';
 import { RolesGuard } from '../identity/guards/roles.guard';
+import {
+  IDENTITY_JWT_CONFIG,
+  type IdentityJwtConfig,
+} from '../identity/config/identity-jwt.config';
 import { InventoryMovementController } from './inventory-movement.controller';
 import { FxRateResolverService } from './fx-rate-resolver.service';
 import { InventoryPurchaseService } from './inventory-purchase.service';
@@ -33,16 +39,29 @@ describe('InventoryController', () => {
     getAllAndOverride: jest.fn(),
   };
 
-  const configServiceMock = new ConfigService({
+  const jwtEnvironment = {
     NODE_ENV: 'test',
     JWT_SECRET: 'test-only-jwt-secret-with-at-least-thirty-two-bytes',
-    JWT_ISSUER: 'omnifood-admin',
-    JWT_AUDIENCE: 'omnifood-pos',
+    JWT_ISSUER: 'omnifood-admin-test',
+    JWT_AUDIENCE: 'omnifood-pos-test',
     JWT_ACCESS_TTL_SECONDS: '3600',
     JWT_REFRESH_TTL_SECONDS: '604800',
     JWT_CLOCK_TOLERANCE_SECONDS: '5',
     JWT_ALGORITHM: 'HS256',
-  });
+  } as const;
+
+  const configServiceMock = {
+    get: jest.fn((key: keyof typeof jwtEnvironment) => jwtEnvironment[key]),
+  };
+  const identityJwtConfig: IdentityJwtConfig = {
+    secret: jwtEnvironment.JWT_SECRET,
+    issuer: jwtEnvironment.JWT_ISSUER,
+    audience: jwtEnvironment.JWT_AUDIENCE,
+    accessTokenTtlSeconds: Number(jwtEnvironment.JWT_ACCESS_TTL_SECONDS),
+    refreshTokenTtlSeconds: Number(jwtEnvironment.JWT_REFRESH_TTL_SECONDS),
+    clockToleranceSeconds: Number(jwtEnvironment.JWT_CLOCK_TOLERANCE_SECONDS),
+    algorithm: jwtEnvironment.JWT_ALGORITHM,
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -93,7 +112,12 @@ describe('InventoryController', () => {
           },
         },
         AuthGuard,
+        AuthoritativeCurrentUserGuard,
         RolesGuard,
+        {
+          provide: CurrentUserAuthorizationService,
+          useValue: { authorize: jest.fn((token: unknown) => token) },
+        },
         {
           provide: JwtService,
           useValue: jwtServiceMock,
@@ -105,6 +129,10 @@ describe('InventoryController', () => {
         {
           provide: ConfigService,
           useValue: configServiceMock,
+        },
+        {
+          provide: IDENTITY_JWT_CONFIG,
+          useValue: identityJwtConfig,
         },
       ],
     }).compile();
@@ -128,6 +156,7 @@ describe('InventoryController', () => {
       | 'correctPurchase'
       | 'ingestRecipeVersion'
       | 'getBcnFxRate',
+    requiresAuthoritativeGuard = false,
   ): void => {
     const descriptor = Object.getOwnPropertyDescriptor(
       InventoryMovementController.prototype,
@@ -136,10 +165,11 @@ describe('InventoryController', () => {
     const handler = descriptor?.value;
 
     expect(handler).toBeDefined();
-    expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toEqual([
-      AuthGuard,
-      RolesGuard,
-    ]);
+    expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toEqual(
+      requiresAuthoritativeGuard
+        ? [AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard]
+        : [AuthGuard, RolesGuard],
+    );
     expect(Reflect.getMetadata(ROLES_KEY, handler)).toEqual([
       UserRole.OWNER,
       UserRole.MANAGER,
@@ -151,7 +181,7 @@ describe('InventoryController', () => {
   });
 
   it('keeps the recipe ingestion route protected by auth + role guards', () => {
-    expectRouteToRequireInventoryWriterRole('ingestRecipeVersion');
+    expectRouteToRequireInventoryWriterRole('ingestRecipeVersion', true);
     expect(configService).toBeDefined();
   });
 
@@ -160,14 +190,41 @@ describe('InventoryController', () => {
   });
 
   it('keeps the purchase posting route protected by auth + role guards', () => {
-    expectRouteToRequireInventoryWriterRole('recordPurchase');
+    expectRouteToRequireInventoryWriterRole('recordPurchase', true);
   });
 
   it('keeps the purchase correction route protected by auth + role guards', () => {
-    expectRouteToRequireInventoryWriterRole('correctPurchase');
+    expectRouteToRequireInventoryWriterRole('correctPurchase', true);
   });
 
   it('keeps the BCN FX lookup route protected by auth + role guards', () => {
+    expectRouteToRequireInventoryWriterRole('getBcnFxRate');
+  });
+
+  it('requires authoritative authorization only on approved inventory writes', () => {
+    for (const handlerName of [
+      'recordPurchase',
+      'correctPurchase',
+      'closeProductionOrder',
+      'ingestRecipeVersion',
+    ] as const) {
+      const handler: unknown = Object.getOwnPropertyDescriptor(
+        InventoryMovementController.prototype,
+        handlerName,
+      )?.value;
+
+      if (typeof handler !== 'function') {
+        throw new Error(`Missing ${handlerName} handler`);
+      }
+
+      expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toEqual([
+        AuthGuard,
+        AuthoritativeCurrentUserGuard,
+        RolesGuard,
+      ]);
+    }
+
+    expectRouteToRequireInventoryWriterRole('previewPurchase');
     expectRouteToRequireInventoryWriterRole('getBcnFxRate');
   });
 

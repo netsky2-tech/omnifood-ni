@@ -7,12 +7,46 @@ import { CATALOG_TYPE } from './catalog-type';
 import { RolesGuard } from '../identity/guards/roles.guard';
 import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '../identity/guards/auth.guard';
+import { AuthoritativeCurrentUserGuard } from '../identity/guards/authoritative-current-user.guard';
+import { CurrentUserAuthorizationService } from '../identity/services/current-user-authorization.service';
+import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { UserRole } from '../identity/entities/user.entity';
+import {
+  IDENTITY_JWT_CONFIG,
+  type IdentityJwtConfig,
+} from '../identity/config/identity-jwt.config';
+
+const createIdentityJwtConfig = (jwtEnvironment: {
+  JWT_SECRET: string;
+  JWT_ISSUER: string;
+  JWT_AUDIENCE: string;
+  JWT_ACCESS_TTL_SECONDS: string;
+  JWT_REFRESH_TTL_SECONDS: string;
+  JWT_CLOCK_TOLERANCE_SECONDS: string;
+  JWT_ALGORITHM: 'HS256';
+}): IdentityJwtConfig => ({
+  secret: jwtEnvironment.JWT_SECRET,
+  issuer: jwtEnvironment.JWT_ISSUER,
+  audience: jwtEnvironment.JWT_AUDIENCE,
+  accessTokenTtlSeconds: Number(jwtEnvironment.JWT_ACCESS_TTL_SECONDS),
+  refreshTokenTtlSeconds: Number(jwtEnvironment.JWT_REFRESH_TTL_SECONDS),
+  clockToleranceSeconds: Number(jwtEnvironment.JWT_CLOCK_TOLERANCE_SECONDS),
+  algorithm: jwtEnvironment.JWT_ALGORITHM,
+});
 
 describe('CatalogController', () => {
-  const jwtSecret = 'test-only-jwt-secret-with-at-least-thirty-two-bytes';
+  const jwtEnvironment = {
+    NODE_ENV: 'test',
+    JWT_SECRET: 'test-only-jwt-secret-with-at-least-thirty-two-bytes',
+    JWT_ISSUER: 'omnifood-admin-test',
+    JWT_AUDIENCE: 'omnifood-pos-test',
+    JWT_ACCESS_TTL_SECONDS: '3600',
+    JWT_REFRESH_TTL_SECONDS: '604800',
+    JWT_CLOCK_TOLERANCE_SECONDS: '5',
+    JWT_ALGORITHM: 'HS256',
+  } as const;
   let controller: CatalogController;
   let service: jest.Mocked<CatalogService>;
 
@@ -26,25 +60,36 @@ describe('CatalogController', () => {
     } as unknown as jest.Mocked<CatalogService>;
 
     const module: TestingModule = await Test.createTestingModule({
-      imports: [JwtModule.register({ secret: jwtSecret })],
+      imports: [
+        JwtModule.register({
+          secret: jwtEnvironment.JWT_SECRET,
+          signOptions: {
+            algorithm: jwtEnvironment.JWT_ALGORITHM,
+            issuer: jwtEnvironment.JWT_ISSUER,
+            audience: jwtEnvironment.JWT_AUDIENCE,
+          },
+        }),
+      ],
       controllers: [CatalogController],
       providers: [
         Reflector,
         AuthGuard,
+        AuthoritativeCurrentUserGuard,
         RolesGuard,
+        {
+          provide: CurrentUserAuthorizationService,
+          useValue: { authorize: jest.fn((token: unknown) => token) },
+        },
         { provide: CatalogService, useValue: service },
         {
           provide: ConfigService,
-          useValue: new ConfigService({
-            NODE_ENV: 'test',
-            JWT_SECRET: jwtSecret,
-            JWT_ISSUER: 'omnifood-admin',
-            JWT_AUDIENCE: 'omnifood-pos',
-            JWT_ACCESS_TTL_SECONDS: '3600',
-            JWT_REFRESH_TTL_SECONDS: '604800',
-            JWT_CLOCK_TOLERANCE_SECONDS: '5',
-            JWT_ALGORITHM: 'HS256',
-          }),
+          useValue: {
+            get: (key: keyof typeof jwtEnvironment) => jwtEnvironment[key],
+          },
+        },
+        {
+          provide: IDENTITY_JWT_CONFIG,
+          useValue: createIdentityJwtConfig(jwtEnvironment),
         },
       ],
     }).compile();
@@ -54,6 +99,32 @@ describe('CatalogController', () => {
 
   it('is defined', () => {
     expect(controller).toBeDefined();
+  });
+
+  it('requires authoritative authorization on writes but excludes GET :type', () => {
+    const handler = (name: string): object => {
+      const value: unknown = Object.getOwnPropertyDescriptor(
+        CatalogController.prototype,
+        name,
+      )?.value;
+      if (typeof value !== 'function') {
+        throw new Error(`Missing ${name} handler`);
+      }
+      return value;
+    };
+
+    for (const name of ['seedDefaults', 'create', 'update', 'deactivate']) {
+      expect(Reflect.getMetadata(GUARDS_METADATA, handler(name))).toEqual([
+        AuthGuard,
+        AuthoritativeCurrentUserGuard,
+        RolesGuard,
+      ]);
+    }
+
+    expect(Reflect.getMetadata(GUARDS_METADATA, handler('list'))).toEqual([
+      AuthGuard,
+      RolesGuard,
+    ]);
   });
 
   it('GET :type delegates to service.list with the resolved type and tenant', async () => {
@@ -130,7 +201,16 @@ describe('CatalogController', () => {
 });
 
 describe('CatalogController HTTP guards and route precedence', () => {
-  const jwtSecret = 'test-only-jwt-secret-with-at-least-thirty-two-bytes';
+  const jwtEnvironment = {
+    NODE_ENV: 'test',
+    JWT_SECRET: 'test-only-jwt-secret-with-at-least-thirty-two-bytes',
+    JWT_ISSUER: 'omnifood-admin-test',
+    JWT_AUDIENCE: 'omnifood-pos-test',
+    JWT_ACCESS_TTL_SECONDS: '3600',
+    JWT_REFRESH_TTL_SECONDS: '604800',
+    JWT_CLOCK_TOLERANCE_SECONDS: '5',
+    JWT_ALGORITHM: 'HS256',
+  } as const;
   let app: INestApplication;
   let service: jest.Mocked<CatalogService>;
 
@@ -144,25 +224,36 @@ describe('CatalogController HTTP guards and route precedence', () => {
     } as unknown as jest.Mocked<CatalogService>;
 
     const moduleRef = await Test.createTestingModule({
-      imports: [JwtModule.register({ secret: jwtSecret })],
+      imports: [
+        JwtModule.register({
+          secret: jwtEnvironment.JWT_SECRET,
+          signOptions: {
+            algorithm: jwtEnvironment.JWT_ALGORITHM,
+            issuer: jwtEnvironment.JWT_ISSUER,
+            audience: jwtEnvironment.JWT_AUDIENCE,
+          },
+        }),
+      ],
       controllers: [CatalogController],
       providers: [
         Reflector,
         RolesGuard,
         AuthGuard,
+        AuthoritativeCurrentUserGuard,
+        {
+          provide: CurrentUserAuthorizationService,
+          useValue: { authorize: jest.fn((token: unknown) => token) },
+        },
         { provide: CatalogService, useValue: service },
         {
           provide: ConfigService,
-          useValue: new ConfigService({
-            NODE_ENV: 'test',
-            JWT_SECRET: jwtSecret,
-            JWT_ISSUER: 'omnifood-admin',
-            JWT_AUDIENCE: 'omnifood-pos',
-            JWT_ACCESS_TTL_SECONDS: '3600',
-            JWT_REFRESH_TTL_SECONDS: '604800',
-            JWT_CLOCK_TOLERANCE_SECONDS: '5',
-            JWT_ALGORITHM: 'HS256',
-          }),
+          useValue: {
+            get: (key: keyof typeof jwtEnvironment) => jwtEnvironment[key],
+          },
+        },
+        {
+          provide: IDENTITY_JWT_CONFIG,
+          useValue: createIdentityJwtConfig(jwtEnvironment),
         },
       ],
     }).compile();
@@ -186,22 +277,14 @@ describe('CatalogController HTTP guards and route precedence', () => {
     app.getHttpServer() as Parameters<typeof request>[0];
 
   const signToken = (payload: Record<string, unknown>) =>
-    app.get(JwtService).sign(
-      {
-        sub: 'user-1',
-        email: 'user@omnifood.ni',
-        is_active: true,
-        token_type: 'access',
-        security_version: 1,
-        ...payload,
-      },
-      {
-        issuer: 'omnifood-admin',
-        audience: 'omnifood-pos',
-        expiresIn: 3600,
-        algorithm: 'HS256',
-      },
-    );
+    app.get(JwtService).sign({
+      sub: 'user-1',
+      email: 'manager@example.com',
+      is_active: true,
+      token_type: 'access',
+      security_version: 1,
+      ...payload,
+    });
 
   it('returns 401 without authentication', async () => {
     await request(getHttpServer()).get('/catalogs/UOM').expect(401);

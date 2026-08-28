@@ -1,10 +1,84 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { JwtService } from '@nestjs/jwt';
+import {
+  JwtService,
+  type JwtSignOptions,
+  type JwtVerifyOptions,
+} from '@nestjs/jwt';
+import { DataSource, type EntityManager } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { AuthService } from './auth.service';
 import { User, UserRole } from '../entities/user.entity';
-import { IDENTITY_JWT_CONFIG } from '../config/identity-jwt.config';
+import {
+  IDENTITY_JWT_CONFIG,
+  type IdentityJwtConfig,
+} from '../config/identity-jwt.config';
+import { JWT_TOKEN_TYPES } from '../security/jwt-token.types';
+import * as refreshTokenVerifier from '../security/refresh-token-verifier';
+
+const jwtConfig: IdentityJwtConfig = {
+  secret: 'test-only-jwt-secret-with-at-least-thirty-two-bytes',
+  issuer: 'omnifood-admin-test',
+  audience: 'omnifood-pos-test',
+  accessTokenTtlSeconds: 60 * 60,
+  refreshTokenTtlSeconds: 7 * 24 * 60 * 60,
+  clockToleranceSeconds: 5,
+  algorithm: 'HS256',
+};
+
+const realJwtService = new JwtService();
+const anyString = expect.any(String) as unknown as string;
+
+const createRefreshJwt = (
+  subject: string,
+  overrides: Record<string, unknown> = {},
+  options: {
+    secret?: string;
+    algorithm?: 'HS256' | 'HS384';
+    issuer?: string;
+    audience?: string;
+    expiresIn?: number;
+    jwtid?: string;
+    includeJti?: boolean;
+  } = {},
+) =>
+  realJwtService.signAsync(
+    {
+      sub: subject,
+      token_type: JWT_TOKEN_TYPES.REFRESH,
+      ...overrides,
+    },
+    {
+      secret: options.secret ?? jwtConfig.secret,
+      algorithm: options.algorithm ?? jwtConfig.algorithm,
+      issuer: options.issuer ?? jwtConfig.issuer,
+      audience: options.audience ?? jwtConfig.audience,
+      ...(options.includeJti === false
+        ? {}
+        : { jwtid: options.jwtid ?? 'test-refresh-jti' }),
+      ...(options.expiresIn === undefined
+        ? {}
+        : { expiresIn: options.expiresIn }),
+    },
+  );
+
+const createLockedRepository = (overrides: Record<string, unknown>) => ({
+  findOne: jest.fn().mockResolvedValue({
+    id: 'refresh-user',
+    email: 'refresh@omnifood.ni',
+    tenant_id: 'tenant-1',
+    role: UserRole.MANAGER,
+    is_active: true,
+    security_version: 1,
+    hashed_refresh_token: 'active-hash',
+    refresh_token_family_id: 'family-active',
+    refresh_token_revoked_at: null,
+    ...overrides,
+  }),
+  update: jest.fn().mockResolvedValue({ affected: 1 }),
+});
+
+type TransactionCallback = (manager: EntityManager) => unknown;
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -15,7 +89,19 @@ describe('AuthService', () => {
   };
   let mockJwtService: {
     signAsync: jest.Mock;
+    verifyAsync: jest.Mock;
   };
+  let mockDataSource: {
+    transaction: jest.Mock<unknown, [TransactionCallback]>;
+  };
+  const useLockedRepository = (
+    repository: ReturnType<typeof createLockedRepository>,
+  ) =>
+    mockDataSource.transaction.mockImplementation((callback) =>
+      callback({
+        getRepository: jest.fn().mockReturnValue(repository),
+      } as unknown as EntityManager),
+    );
 
   beforeEach(async () => {
     mockUserRepository = {
@@ -25,7 +111,16 @@ describe('AuthService', () => {
     };
     mockJwtService = {
       signAsync: jest.fn(),
+      verifyAsync: jest.fn(),
     };
+    mockDataSource = {
+      transaction: jest.fn<unknown, [TransactionCallback]>(),
+    };
+    mockDataSource.transaction.mockImplementation((callback) =>
+      callback({
+        getRepository: jest.fn().mockReturnValue(mockUserRepository),
+      } as unknown as EntityManager),
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -39,16 +134,12 @@ describe('AuthService', () => {
           useValue: mockJwtService,
         },
         {
+          provide: DataSource,
+          useValue: mockDataSource,
+        },
+        {
           provide: IDENTITY_JWT_CONFIG,
-          useValue: {
-            secret: 'test-only-jwt-secret-with-at-least-thirty-two-bytes',
-            issuer: 'omnifood-admin-test',
-            audience: 'omnifood-pos-test',
-            accessTokenTtlSeconds: 3600,
-            refreshTokenTtlSeconds: 604800,
-            clockToleranceSeconds: 5,
-            algorithm: 'HS256',
-          },
+          useValue: jwtConfig,
         },
       ],
     }).compile();
@@ -539,9 +630,73 @@ describe('AuthService', () => {
       role: UserRole.CASHIER,
       tenant_id: 'tenant-1',
     });
-    expect(mockUserRepository.update).toHaveBeenCalledWith('user-1', {
-      hashed_refresh_token: 'hashed-refresh',
+    expect(mockUserRepository.update).toHaveBeenCalled();
+    expect(mockJwtService.signAsync).toHaveBeenNthCalledWith(
+      1,
+      {
+        sub: 'user-1',
+        email: 'cashier@omnifood.ni',
+        tenant_id: 'tenant-1',
+        role: UserRole.CASHIER,
+        is_active: true,
+        token_type: JWT_TOKEN_TYPES.ACCESS,
+        security_version: 1,
+      },
+      {
+        expiresIn: 60 * 60,
+        algorithm: 'HS256',
+        issuer: 'omnifood-admin-test',
+        audience: 'omnifood-pos-test',
+      },
+    );
+    expect(mockJwtService.signAsync).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        sub: 'user-1',
+        email: 'cashier@omnifood.ni',
+        tenant_id: 'tenant-1',
+        role: UserRole.CASHIER,
+        is_active: true,
+        token_type: JWT_TOKEN_TYPES.REFRESH,
+      }),
+      {
+        expiresIn: 7 * 24 * 60 * 60,
+        algorithm: 'HS256',
+        issuer: 'omnifood-admin-test',
+        audience: 'omnifood-pos-test',
+        jwtid: anyString,
+      },
+    );
+  });
+
+  it('routes login refresh persistence through the canonical verifier', async () => {
+    mockUserRepository.findOne.mockResolvedValue({
+      id: 'verifier-login-user',
+      email: 'verifier-login@omnifood.ni',
+      name: 'Verifier Login',
+      password_hash: 'stored-password-hash',
+      role: UserRole.CASHIER,
+      tenant_id: 'tenant-1',
+      is_active: true,
+      security_version: 3,
     });
+    jest.spyOn(bcrypt, 'compare').mockResolvedValue(true as never);
+    const hash = jest
+      .spyOn(refreshTokenVerifier, 'hashRefreshTokenVerifier')
+      .mockResolvedValue('canonical-refresh-verifier');
+    mockJwtService.signAsync
+      .mockResolvedValueOnce('access-token')
+      .mockResolvedValueOnce('login-refresh-token');
+
+    await service.login('verifier-login@omnifood.ni', 'Password123!');
+
+    expect(hash).toHaveBeenCalledWith('login-refresh-token');
+    expect(mockUserRepository.update).toHaveBeenCalledWith(
+      'verifier-login-user',
+      expect.objectContaining({
+        hashed_refresh_token: 'canonical-refresh-verifier',
+      }),
+    );
   });
 
   it('rejects inactive login with a generic error', async () => {
@@ -560,7 +715,203 @@ describe('AuthService', () => {
     ).rejects.toThrow('Credenciales inválidas');
   });
 
-  it('refreshes tokens when refresh token hash matches', async () => {
+  const useRealJwtVerification = () => {
+    mockJwtService.verifyAsync.mockImplementation(
+      (token: string, options?: JwtVerifyOptions) =>
+        realJwtService.verifyAsync<Record<string, unknown>>(token, options),
+    );
+  };
+
+  const useRealJwtSigning = () => {
+    const sign = (payload: Record<string, unknown>, options?: JwtSignOptions) =>
+      realJwtService.signAsync(payload, {
+        ...options,
+        secret: jwtConfig.secret,
+      });
+    mockJwtService.signAsync.mockImplementation(sign);
+  };
+
+  it('issues distinct registered refresh jti values in the same second without changing access claims', async () => {
+    jest
+      .useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] })
+      .setSystemTime(new Date('2026-07-16T12:00:00.000Z'));
+    try {
+      useRealJwtSigning();
+
+      const first = await service.getTokens(
+        'same-second-user',
+        'same-second@omnifood.ni',
+        'tenant-1',
+        UserRole.MANAGER,
+        true,
+        9,
+        'family-same-second',
+      );
+      const second = await service.getTokens(
+        'same-second-user',
+        'same-second@omnifood.ni',
+        'tenant-1',
+        UserRole.MANAGER,
+        true,
+        9,
+        'family-same-second',
+      );
+
+      const firstRefresh = await realJwtService.verifyAsync<
+        Record<string, unknown>
+      >(first.refresh_token, {
+        secret: jwtConfig.secret,
+        issuer: jwtConfig.issuer,
+        audience: jwtConfig.audience,
+      });
+      const secondRefresh = await realJwtService.verifyAsync<
+        Record<string, unknown>
+      >(second.refresh_token, {
+        secret: jwtConfig.secret,
+        issuer: jwtConfig.issuer,
+        audience: jwtConfig.audience,
+      });
+      const access = await realJwtService.verifyAsync<Record<string, unknown>>(
+        first.access_token,
+        {
+          secret: jwtConfig.secret,
+          issuer: jwtConfig.issuer,
+          audience: jwtConfig.audience,
+        },
+      );
+
+      expect(first.refresh_token).not.toBe(second.refresh_token);
+      expect(firstRefresh.jti).toEqual(expect.any(String));
+      expect(firstRefresh.jti).not.toBe('');
+      expect(firstRefresh.jti).not.toBe(secondRefresh.jti);
+      expect(access).toMatchObject({
+        token_type: JWT_TOKEN_TYPES.ACCESS,
+        security_version: 9,
+        iss: jwtConfig.issuer,
+        aud: jwtConfig.audience,
+      });
+      expect(access.jti).toBeUndefined();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it.each([
+    ['empty', () => createRefreshJwt('user-3', {}, { jwtid: '' })],
+    ['whitespace', () => createRefreshJwt('user-3', {}, { jwtid: '   ' })],
+    [
+      'non-string',
+      () =>
+        realJwtService.signAsync(
+          { sub: 'user-3', token_type: JWT_TOKEN_TYPES.REFRESH, jti: 4 },
+          {
+            secret: jwtConfig.secret,
+            algorithm: jwtConfig.algorithm,
+            issuer: jwtConfig.issuer,
+            audience: jwtConfig.audience,
+          },
+        ),
+    ],
+  ])(
+    'rejects %s refresh jti before repository, bcrypt, signing, or persistence',
+    async (_caseName, createToken) => {
+      useRealJwtVerification();
+      const compare = jest.spyOn(bcrypt, 'compare');
+      const token = await createToken();
+
+      await expect(service.refreshTokens('user-3', token)).rejects.toThrow(
+        'Acceso denegado',
+      );
+
+      expect(mockUserRepository.findOne).not.toHaveBeenCalled();
+      expect(compare).not.toHaveBeenCalled();
+      expect(mockJwtService.signAsync).not.toHaveBeenCalled();
+      expect(mockUserRepository.update).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['malformed token', () => Promise.resolve('not-a-jwt')],
+    [
+      'invalid signature',
+      () => createRefreshJwt('user-3', {}, { secret: 'different-test-secret' }),
+    ],
+    [
+      'expired token beyond the configured clock tolerance',
+      () => createRefreshJwt('user-3', {}, { expiresIn: -6 }),
+    ],
+    [
+      'wrong issuer',
+      () => createRefreshJwt('user-3', {}, { issuer: 'other-issuer' }),
+    ],
+    [
+      'wrong audience',
+      () => createRefreshJwt('user-3', {}, { audience: 'other-audience' }),
+    ],
+    [
+      'non-HS256 algorithm',
+      () => createRefreshJwt('user-3', {}, { algorithm: 'HS384' }),
+    ],
+  ])(
+    'rejects %s before repository, bcrypt, signing, or persistence',
+    async (_caseName, createToken) => {
+      useRealJwtVerification();
+      const compare = jest.spyOn(bcrypt, 'compare');
+      const token = await createToken();
+
+      await expect(service.refreshTokens('user-3', token)).rejects.toThrow(
+        'Acceso denegado',
+      );
+
+      expect(mockJwtService.verifyAsync).toHaveBeenCalledWith(
+        token,
+        expect.objectContaining({
+          secret: jwtConfig.secret,
+          algorithms: ['HS256'],
+          issuer: jwtConfig.issuer,
+          audience: jwtConfig.audience,
+          clockTolerance: jwtConfig.clockToleranceSeconds,
+        }),
+      );
+      expect(mockUserRepository.findOne).not.toHaveBeenCalled();
+      expect(compare).not.toHaveBeenCalled();
+      expect(mockJwtService.signAsync).not.toHaveBeenCalled();
+      expect(mockUserRepository.update).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    [
+      'access type',
+      () => createRefreshJwt('user-3', { token_type: JWT_TOKEN_TYPES.ACCESS }),
+    ],
+    ['typeless', () => createRefreshJwt('user-3', { token_type: undefined })],
+    ['empty subject', () => createRefreshJwt('')],
+    ['mismatched subject', () => createRefreshJwt('other-user')],
+  ])(
+    'rejects %s refresh payload before repository, bcrypt, signing, or persistence',
+    async (_caseName, createToken) => {
+      useRealJwtVerification();
+      const compare = jest.spyOn(bcrypt, 'compare');
+      const token = await createToken();
+
+      await expect(service.refreshTokens('user-3', token)).rejects.toThrow(
+        'Acceso denegado',
+      );
+
+      expect(mockJwtService.verifyAsync).toHaveBeenCalledWith(
+        token,
+        expect.objectContaining({ secret: jwtConfig.secret }),
+      );
+      expect(mockUserRepository.findOne).not.toHaveBeenCalled();
+      expect(compare).not.toHaveBeenCalled();
+      expect(mockJwtService.signAsync).not.toHaveBeenCalled();
+      expect(mockUserRepository.update).not.toHaveBeenCalled();
+    },
+  );
+
+  it('refreshes tokens when a verified refresh JWT subject and refresh hash match', async () => {
+    useRealJwtVerification();
     mockUserRepository.findOne.mockResolvedValue({
       id: 'user-3',
       email: 'manager@omnifood.ni',
@@ -575,29 +926,331 @@ describe('AuthService', () => {
       .mockResolvedValueOnce('new-access')
       .mockResolvedValueOnce('new-refresh');
 
-    const tokens = await service.refreshTokens('user-3', 'refresh-plain');
+    const refreshToken = await createRefreshJwt('user-3');
+    const tokens = await service.refreshTokens('user-3', refreshToken);
 
     expect(tokens).toMatchObject({
       access_token: 'new-access',
       refresh_token: 'new-refresh',
     });
-    expect(mockUserRepository.update).toHaveBeenCalledWith('user-3', {
-      hashed_refresh_token: 'new-hash',
-    });
+    expect(mockUserRepository.update).toHaveBeenCalledWith(
+      'user-3',
+      expect.objectContaining({
+        hashed_refresh_token: 'new-hash',
+      }),
+    );
   });
 
-  it('rejects inactive refresh with a generic error', async () => {
+  it('routes modern rotation comparison and successor persistence through the canonical verifier', async () => {
+    useRealJwtVerification();
+    const lockedRepository = createLockedRepository({ id: 'modern-user' });
+    useLockedRepository(lockedRepository);
+    const compare = jest
+      .spyOn(refreshTokenVerifier, 'compareRefreshTokenVerifier')
+      .mockResolvedValue(true);
+    const hash = jest
+      .spyOn(refreshTokenVerifier, 'hashRefreshTokenVerifier')
+      .mockResolvedValue('modern-successor-verifier');
+    mockJwtService.signAsync
+      .mockResolvedValueOnce('modern-access-token')
+      .mockResolvedValueOnce('modern-successor-token');
+    const refreshToken = await createRefreshJwt('modern-user', {
+      refresh_token_family_id: 'family-active',
+    });
+
+    await expect(
+      service.refreshTokens('modern-user', refreshToken),
+    ).resolves.toEqual({
+      access_token: 'modern-access-token',
+      refresh_token: 'modern-successor-token',
+    });
+
+    expect(compare).toHaveBeenCalledWith(refreshToken, 'active-hash');
+    expect(hash).toHaveBeenCalledWith('modern-successor-token');
+    expect(lockedRepository.update).toHaveBeenCalledWith(
+      'modern-user',
+      expect.objectContaining({
+        hashed_refresh_token: 'modern-successor-verifier',
+      }),
+    );
+  });
+
+  it('migrates a matching pre-jti bearer into the stable persisted refresh family', async () => {
+    useRealJwtVerification();
+    const lockedRepository = createLockedRepository({
+      id: 'legacy-user',
+      security_version: 8,
+      hashed_refresh_token: 'legacy-hash',
+      refresh_token_family_id: 'family-active',
+    });
+    useLockedRepository(lockedRepository);
+    jest.spyOn(bcrypt, 'compare').mockResolvedValue(true as never);
+    jest.spyOn(bcrypt, 'hash').mockResolvedValue('upgraded-hash' as never);
+    mockJwtService.signAsync
+      .mockResolvedValueOnce('upgraded-access')
+      .mockResolvedValueOnce('upgraded-refresh');
+
+    await expect(
+      service.refreshTokens(
+        'legacy-user',
+        await createRefreshJwt(
+          'legacy-user',
+          { refresh_token_family_id: 'family-active' },
+          { includeJti: false },
+        ),
+      ),
+    ).resolves.toEqual({
+      access_token: 'upgraded-access',
+      refresh_token: 'upgraded-refresh',
+    });
+    expect(mockJwtService.signAsync).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ security_version: 8 }),
+      expect.any(Object),
+    );
+    const refreshClaims = (
+      Reflect.get(mockJwtService.signAsync.mock, 'calls') as [
+        unknown,
+        [{ refresh_token_family_id: string }],
+      ]
+    )[1][0];
+    const update = (
+      Reflect.get(lockedRepository.update.mock, 'calls') as [
+        [unknown, { refresh_token_family_id: string }],
+      ]
+    )[0][1];
+    expect(refreshClaims.refresh_token_family_id).toBe(
+      update.refresh_token_family_id,
+    );
+    expect(update.refresh_token_family_id).toBe('family-active');
+  });
+
+  it('routes pre-jti bridge comparison and successor persistence through the canonical verifier', async () => {
+    useRealJwtVerification();
+    const lockedRepository = createLockedRepository({
+      id: 'legacy-verifier-user',
+    });
+    useLockedRepository(lockedRepository);
+    const compare = jest
+      .spyOn(refreshTokenVerifier, 'compareRefreshTokenVerifier')
+      .mockResolvedValue(true);
+    const hash = jest
+      .spyOn(refreshTokenVerifier, 'hashRefreshTokenVerifier')
+      .mockResolvedValue('legacy-successor-verifier');
+    mockJwtService.signAsync
+      .mockResolvedValueOnce('legacy-access-token')
+      .mockResolvedValueOnce('legacy-successor-token');
+    const refreshToken = await createRefreshJwt(
+      'legacy-verifier-user',
+      { refresh_token_family_id: 'family-active' },
+      { includeJti: false },
+    );
+
+    await service.refreshTokens('legacy-verifier-user', refreshToken);
+
+    expect(compare).toHaveBeenCalledWith(refreshToken, 'active-hash');
+    expect(hash).toHaveBeenCalledWith('legacy-successor-token');
+  });
+
+  it('rejects a family-less pre-jti token without rotating an active stored family', async () => {
+    useRealJwtVerification();
+    const lockedRepository = createLockedRepository({ id: 'isolated-user' });
+    useLockedRepository(lockedRepository);
+    jest.spyOn(bcrypt, 'compare').mockResolvedValue(false as never);
+
+    await expect(
+      service.refreshTokens(
+        'isolated-user',
+        await createRefreshJwt('isolated-user', {}, { includeJti: false }),
+      ),
+    ).rejects.toThrow('Acceso denegado');
+
+    expect(lockedRepository.update).not.toHaveBeenCalled();
+    expect(mockJwtService.signAsync).not.toHaveBeenCalled();
+    const activeUser = (await lockedRepository.findOne()) as {
+      refresh_token_family_id: string;
+    };
+    expect(activeUser.refresh_token_family_id).toBe('family-active');
+  });
+
+  it('does not rotate a hash match when its signed family is foreign', async () => {
+    useRealJwtVerification();
+    const lockedRepository = createLockedRepository({ id: 'bound-user' });
+    useLockedRepository(lockedRepository);
+    jest.spyOn(bcrypt, 'compare').mockResolvedValue(true as never);
+
+    await expect(
+      service.refreshTokens(
+        'bound-user',
+        await createRefreshJwt('bound-user', {
+          refresh_token_family_id: 'family-foreign',
+        }),
+      ),
+    ).rejects.toThrow('Acceso denegado');
+
+    expect(lockedRepository.update).not.toHaveBeenCalled();
+    expect(mockJwtService.signAsync).not.toHaveBeenCalled();
+  });
+
+  it('serializes one pre-jti winner and revokes its replaying loser', async () => {
+    useRealJwtVerification();
+    useRealJwtSigning();
+    let committed = false;
+    const consumed = await createRefreshJwt(
+      'retry-user',
+      { refresh_token_family_id: 'family-active' },
+      { includeJti: false },
+    );
+    const lockedRepository = createLockedRepository({
+      id: 'retry-user',
+      security_version: 7,
+      hashed_refresh_token:
+        await refreshTokenVerifier.hashRefreshTokenVerifier(consumed),
+    });
+    let state = (await lockedRepository.findOne()) as Record<string, unknown>;
+    lockedRepository.findOne.mockImplementation(() => Promise.resolve(state));
+    mockDataSource.transaction.mockImplementation(async (callback) => {
+      const before = { ...state };
+      const staged = { ...state };
+      lockedRepository.update.mockImplementation((_id, update) =>
+        Promise.resolve(Object.assign(staged, update)),
+      );
+      try {
+        const outcome = await callback({
+          getRepository: jest.fn().mockReturnValue(lockedRepository),
+        } as unknown as EntityManager);
+        state = staged;
+        committed = true;
+        return outcome;
+      } catch (error: unknown) {
+        state = before;
+        throw error;
+      }
+    });
+    await service.refreshTokens('retry-user', consumed);
+    expect(lockedRepository.findOne).toHaveBeenCalledWith(
+      expect.objectContaining({ lock: { mode: 'pessimistic_write' } }),
+    );
+    expect(mockJwtService.signAsync).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ security_version: 7 }),
+      expect.any(Object),
+    );
+    committed = false;
+    await expect(service.refreshTokens('retry-user', consumed)).rejects.toThrow(
+      'Acceso denegado',
+    );
+    expect(committed).toBe(true);
+    expect(mockJwtService.signAsync).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ refresh_token_family_id: 'family-active' }),
+      expect.objectContaining({ jwtid: anyString }),
+    );
+    expect(state).toMatchObject({
+      hashed_refresh_token: null,
+      refresh_token_family_id: null,
+    });
+    expect(state.refresh_token_revoked_at).toBeInstanceOf(Date);
+  });
+
+  it('rejects refresh when no stored refresh hash exists', async () => {
+    useRealJwtVerification();
     mockUserRepository.findOne.mockResolvedValue({
       id: 'user-4',
       email: 'owner@omnifood.ni',
       tenant_id: 'tenant-1',
       role: UserRole.OWNER,
+      is_active: true,
+      hashed_refresh_token: null,
+    });
+
+    const compare = jest.spyOn(bcrypt, 'compare');
+    const refreshToken = await createRefreshJwt('user-4');
+
+    await expect(service.refreshTokens('user-4', refreshToken)).rejects.toThrow(
+      'Acceso denegado',
+    );
+
+    expect(mockJwtService.verifyAsync).toHaveBeenCalledWith(
+      refreshToken,
+      expect.objectContaining({ secret: jwtConfig.secret }),
+    );
+    expect(mockUserRepository.findOne).toHaveBeenCalled();
+    expect(compare).not.toHaveBeenCalled();
+    expect(mockJwtService.signAsync).not.toHaveBeenCalled();
+    expect(mockUserRepository.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects inactive users before comparing, signing, or rotating refresh tokens', async () => {
+    useRealJwtVerification();
+    mockUserRepository.findOne.mockResolvedValue({
+      id: 'inactive-user',
+      email: 'inactive@omnifood.ni',
+      tenant_id: 'tenant-1',
+      role: UserRole.CASHIER,
       is_active: false,
       hashed_refresh_token: 'stored-refresh',
     });
+    const compare = jest.spyOn(bcrypt, 'compare');
 
-    await expect(service.refreshTokens('user-4', 'refresh')).rejects.toThrow(
+    const refreshToken = await createRefreshJwt('inactive-user');
+
+    await expect(
+      service.refreshTokens('inactive-user', refreshToken),
+    ).rejects.toThrow('Acceso denegado');
+
+    expect(mockJwtService.verifyAsync).toHaveBeenCalledWith(
+      refreshToken,
+      expect.objectContaining({ secret: jwtConfig.secret }),
+    );
+    expect(mockUserRepository.findOne).toHaveBeenCalled();
+    expect(compare).not.toHaveBeenCalled();
+    expect(mockJwtService.signAsync).not.toHaveBeenCalled();
+    expect(mockUserRepository.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects a verified refresh token with a mismatched hash without an oracle or downstream update', async () => {
+    useRealJwtVerification();
+    mockUserRepository.findOne.mockResolvedValue({
+      id: 'user-5',
+      email: 'manager@omnifood.ni',
+      tenant_id: 'tenant-1',
+      role: UserRole.MANAGER,
+      is_active: true,
+      hashed_refresh_token: 'stored-refresh',
+    });
+    const compare = jest
+      .spyOn(refreshTokenVerifier, 'compareRefreshTokenVerifier')
+      .mockResolvedValue(false);
+    const refreshToken = await createRefreshJwt('user-5');
+
+    await expect(service.refreshTokens('user-5', refreshToken)).rejects.toThrow(
       'Acceso denegado',
     );
+
+    expect(mockJwtService.verifyAsync).toHaveBeenCalledWith(
+      refreshToken,
+      expect.objectContaining({ secret: jwtConfig.secret }),
+    );
+    expect(mockUserRepository.findOne).toHaveBeenCalled();
+    expect(compare).toHaveBeenCalledWith(refreshToken, 'stored-refresh');
+    expect(mockJwtService.signAsync).not.toHaveBeenCalled();
+    expect(mockUserRepository.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects inactive users before issuing login tokens', async () => {
+    mockUserRepository.findOne.mockResolvedValue({
+      id: 'inactive-user',
+      email: 'inactive@omnifood.ni',
+      password_hash: 'stored-hash',
+      role: UserRole.CASHIER,
+      tenant_id: 'tenant-1',
+      is_active: false,
+    });
+
+    await expect(
+      service.login('inactive@omnifood.ni', 'Password123!'),
+    ).rejects.toThrow('Credenciales inválidas');
+    expect(mockJwtService.signAsync).not.toHaveBeenCalled();
   });
 });

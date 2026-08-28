@@ -6,6 +6,9 @@ import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { MovementType } from '../entities/inventory-movement.entity';
 
+import { AuthGuard } from '../../identity/guards/auth.guard';
+import { RolesGuard } from '../../identity/guards/roles.guard';
+
 describe('InventoryReportsController', () => {
   let controller: InventoryReportsController;
   let service: jest.Mocked<InventoryReportsService>;
@@ -42,7 +45,12 @@ describe('InventoryReportsController', () => {
         },
         Reflector,
       ],
-    }).compile();
+    })
+      .overrideGuard(AuthGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(RolesGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     controller = module.get<InventoryReportsController>(
       InventoryReportsController,

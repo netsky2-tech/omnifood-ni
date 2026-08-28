@@ -10,6 +10,11 @@ import { RolesGuard } from '../../identity/guards/roles.guard';
 import { RegularizationController } from './regularization.controller';
 import { KardexRegularizationService } from '../services/kardex-regularization.service';
 
+import {
+  IDENTITY_JWT_CONFIG,
+  type IdentityJwtConfig,
+} from '../../identity/config/identity-jwt.config';
+
 describe('RegularizationController', () => {
   let controller: RegularizationController;
   let regularizationService: KardexRegularizationService;
@@ -28,16 +33,15 @@ describe('RegularizationController', () => {
     getAllAndOverride: jest.fn(),
   };
 
-  const configServiceMock = new ConfigService({
-    NODE_ENV: 'test',
-    JWT_SECRET: 'test-only-jwt-secret-with-at-least-thirty-two-bytes',
-    JWT_ISSUER: 'omnifood-admin',
-    JWT_AUDIENCE: 'omnifood-pos',
-    JWT_ACCESS_TTL_SECONDS: '3600',
-    JWT_REFRESH_TTL_SECONDS: '604800',
-    JWT_CLOCK_TOLERANCE_SECONDS: '5',
-    JWT_ALGORITHM: 'HS256',
-  });
+  const identityJwtConfig: IdentityJwtConfig = {
+    secret: 'test-only-jwt-secret-with-at-least-thirty-two-bytes',
+    issuer: 'omnifood-admin',
+    audience: 'omnifood-pos',
+    accessTokenTtlSeconds: 3600,
+    refreshTokenTtlSeconds: 604800,
+    clockToleranceSeconds: 5,
+    algorithm: 'HS256',
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -48,8 +52,8 @@ describe('RegularizationController', () => {
           useValue: regularizationServiceMock,
         },
         {
-          provide: ConfigService,
-          useValue: configServiceMock,
+          provide: IDENTITY_JWT_CONFIG,
+          useValue: identityJwtConfig,
         },
         {
           provide: JwtService,

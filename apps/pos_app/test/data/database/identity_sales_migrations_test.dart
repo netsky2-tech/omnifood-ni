@@ -122,6 +122,64 @@ void main() {
   });
 
   test(
+    'migration32_33 preserves historical audit rows and adds nullable authorization provenance',
+    () async {
+      final db = await databaseFactory.openDatabase(
+        dbPath,
+        options: OpenDatabaseOptions(
+          version: 32,
+          onCreate: (database, version) async {
+            await database.execute(
+              'CREATE TABLE audit_logs (id INTEGER PRIMARY KEY, entry_hash TEXT NOT NULL, metadata TEXT)',
+            );
+            await database.insert('audit_logs', {
+              'id': 1,
+              'entry_hash': 'historical-hash',
+              'metadata': '{"legacy":true}',
+            });
+          },
+        ),
+      );
+
+      await migration32_33.migrate(db);
+
+      final columns = await db.rawQuery('PRAGMA table_info(audit_logs)');
+      final row = (await db.query('audit_logs')).single;
+      expect(
+        columns.where((column) => column['name'] == 'has_metodo_autorizacion'),
+        hasLength(1),
+      );
+      expect(
+        columns.where(
+          (column) => column['name'] == 'has_usuario_autorizador_id',
+        ),
+        hasLength(1),
+      );
+      expect(row['has_metodo_autorizacion'], isNull);
+      expect(row['has_usuario_autorizador_id'], isNull);
+      expect(row['entry_hash'], 'historical-hash');
+      expect(row['metadata'], '{"legacy":true}');
+      await db.close();
+    },
+  );
+
+  test(
+    'migration32_33 leaves partial legacy schemas without audit logs untouched',
+    () async {
+      final db = await databaseFactory.openDatabase(
+        dbPath,
+        options: OpenDatabaseOptions(
+          version: 32,
+          onCreate: (database, version) async {},
+        ),
+      );
+
+      await migration32_33.migrate(db);
+      await db.close();
+    },
+  );
+
+  test(
     'migration28_29 backfills stable per-terminal production source sequences',
     () async {
       final db = await databaseFactory.openDatabase(
@@ -497,20 +555,21 @@ void main() {
       final terminalId = rows.first['terminal_id'];
       expect(terminalId, isA<String>());
       expect(terminalId, startsWith('pos-local-'));
-      expect(rows.take(2).map((row) => row['terminal_id']),
-          everyElement(terminalId));
+      expect(
+        rows.take(2).map((row) => row['terminal_id']),
+        everyElement(terminalId),
+      );
       expect(rows.map((row) => row['source_sequence']), [1, 2, -1]);
       expect(rows.map((row) => row['idempotency_key']), [
         'sale:$terminalId:legacy-pending-earlier',
         'sale:$terminalId:legacy-pending-later',
         'sale:$terminalId:legacy-synced',
       ]);
-      expect(rows.map((row) => row['payload_hash']),
-          [
-            'legacy-pending-earlier:F001-0001:115.0:1000',
-            'legacy-pending-later:F001-0002:115.0:2000',
-            'legacy-synced:F001-0003:115.0:3000',
-          ]);
+      expect(rows.map((row) => row['payload_hash']), [
+        'legacy-pending-earlier:F001-0001:115.0:1000',
+        'legacy-pending-later:F001-0002:115.0:2000',
+        'legacy-synced:F001-0003:115.0:3000',
+      ]);
 
       await db.close();
     },
@@ -525,9 +584,7 @@ void main() {
       final db = database.database;
 
       final indexRows = await db.rawQuery("PRAGMA index_list('invoices')");
-      final indexNames = indexRows
-          .map((row) => row['name'] as String)
-          .toSet();
+      final indexNames = indexRows.map((row) => row['name'] as String).toSet();
 
       expect(indexNames, contains('idx_invoices_origin_invoice_id'));
       expect(indexNames, contains('idx_invoices_terminal_source_sequence'));
@@ -912,13 +969,16 @@ void main() {
   test(
     'fresh schema allocates sale source sequence one after only negative legacy invoice sequences',
     () async {
-      final database = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
+      final database = await $FloorAppDatabase
+          .inMemoryDatabaseBuilder()
+          .build();
       try {
         await database.database.insert('invoices', {
           'id': 'legacy-synced-sale',
           'invoice_number': 'F001-000001',
-          'created_at': DateTime.parse('2026-07-13T10:00:00Z')
-              .millisecondsSinceEpoch,
+          'created_at': DateTime.parse(
+            '2026-07-13T10:00:00Z',
+          ).millisecondsSinceEpoch,
           'user_id': 'cashier-1',
           'subtotal': 100.0,
           'total_tax': 15.0,

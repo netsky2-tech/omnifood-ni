@@ -7,6 +7,8 @@ import { AuthGuard } from '../guards/auth.guard';
 import { RolesGuard } from '../guards/roles.guard';
 import { PermissionsGuard } from '../guards/permissions.guard';
 
+import { AuthoritativeCurrentUserGuard } from '../guards/authoritative-current-user.guard';
+
 describe('UsersController (Slice 10.1)', () => {
   let controller: UsersController;
   let userService: jest.Mocked<Partial<UserService>>;
@@ -36,6 +38,8 @@ describe('UsersController (Slice 10.1)', () => {
       .overrideGuard(RolesGuard)
       .useValue({ canActivate: () => true })
       .overrideGuard(PermissionsGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(AuthoritativeCurrentUserGuard)
       .useValue({ canActivate: () => true })
       .compile();
 

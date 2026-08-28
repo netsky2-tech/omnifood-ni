@@ -7,6 +7,7 @@ import {
 import { ConfigModule } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { JwtService } from '@nestjs/jwt';
+import { PATH_METADATA } from '@nestjs/common/constants';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import { DataSource, Repository } from 'typeorm';
@@ -14,23 +15,26 @@ import * as bcrypt from 'bcrypt';
 import { User, UserRole } from './entities/user.entity';
 import { AuditIntegrityAlert } from './entities/audit-integrity-alert.entity';
 import { AuditLog } from './entities/audit-log.entity';
+import { TenantCapabilityEvent } from './entities/tenant-capability-event.entity';
 import { SecurityProfile } from './entities/security-profile.entity';
 import { AuthGuard } from './guards/auth.guard';
 import { IdentityModule } from './identity.module';
 import { AuthService } from './services/auth.service';
+import { AuthController } from './controllers/auth.controller';
+import { AuditMetricsService } from './services/audit-metrics.service';
 
-interface TokenPayload {
+interface LoginPayload {
   sub: string;
   email: string;
   tenant_id: string;
   role: string;
   iat: number;
   exp: number;
-  iss: string;
-  aud: string;
-  token_type: string;
+  iss?: string;
+  aud?: string;
+  token_type: 'access';
   is_active: boolean;
-  security_version?: number;
+  security_version: number;
 }
 
 interface GuardRequest {
@@ -63,17 +67,18 @@ const createContext = (request: GuardRequest): ExecutionContext =>
     }),
   }) as unknown as ExecutionContext;
 
-describe('IdentityModule typed JWT cutover', () => {
+describe('IdentityModule strict typed access-token ownership', () => {
   let module: TestingModule;
   let authService: AuthService;
   let authGuard: AuthGuard;
   let jwtService: JwtService;
   let userRepository: Pick<Repository<User>, 'findOne' | 'update'>;
-  const originalEnvironment = new Map(
-    Object.keys(jwtEnvironment).map((key) => [key, process.env[key]]),
-  );
+  const originalJwtEnvironment = new Map<string, string | undefined>();
 
   beforeAll(async () => {
+    for (const key of Object.keys(jwtEnvironment)) {
+      originalJwtEnvironment.set(key, process.env[key]);
+    }
     Object.assign(process.env, jwtEnvironment);
     userRepository = {
       findOne: jest.fn(),
@@ -96,6 +101,8 @@ describe('IdentityModule typed JWT cutover', () => {
       .useValue({})
       .overrideProvider(getRepositoryToken(AuditIntegrityAlert))
       .useValue({})
+      .overrideProvider(getRepositoryToken(TenantCapabilityEvent))
+      .useValue({})
       .compile();
 
     authService = module.get(AuthService);
@@ -103,15 +110,28 @@ describe('IdentityModule typed JWT cutover', () => {
     jwtService = module.get(JwtService);
   });
 
-  afterAll(async () => {
-    await module.close();
-    for (const [key, value] of originalEnvironment) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
+  const closeModuleAndRestoreJwtEnvironment = async (): Promise<void> => {
+    try {
+      await module.close();
+    } finally {
+      for (const [key, value] of originalJwtEnvironment) {
+        if (value === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = value;
+        }
+      }
+      for (const [key, value] of originalJwtEnvironment) {
+        expect(process.env[key]).toBe(value);
+      }
     }
+  };
+
+  afterAll(async () => {
+    await closeModuleAndRestoreJwtEnvironment();
   });
 
-  it('issues real typed access and refresh tokens for an active login', async () => {
+  it('authenticates the real login access token through the strict guard', async () => {
     const user = Object.assign(new User(), {
       id: 'legacy-user-id',
       name: 'Legacy User',
@@ -137,7 +157,7 @@ describe('IdentityModule typed JWT cutover', () => {
       true,
     );
 
-    const payload = request.user as TokenPayload;
+    const payload = request.user as LoginPayload;
     expect(payload).toMatchObject({
       sub: user.id,
       email: user.email,
@@ -152,7 +172,7 @@ describe('IdentityModule typed JWT cutover', () => {
       security_version: 1,
     });
     expect(payload.exp - payload.iat).toBe(60 * 60);
-    const refresh = await jwtService.verifyAsync<TokenPayload>(
+    const refresh = await jwtService.verifyAsync<LoginPayload>(
       login.refresh_token,
       {
         issuer: jwtEnvironment.JWT_ISSUER,
@@ -172,12 +192,64 @@ describe('IdentityModule typed JWT cutover', () => {
     expect(refresh.exp - refresh.iat).toBe(7 * 24 * 60 * 60);
   });
 
-  it('keeps the production JwtModule default expiry close to one day', async () => {
-    const token = await jwtService.signAsync({ sub: 'legacy-default-expiry' });
-    const payload = await jwtService.verifyAsync<TokenPayload>(token);
+  it('uses the canonical typed JWT configuration for JwtModule defaults', async () => {
+    const token = await jwtService.signAsync({
+      sub: 'canonical-default-expiry',
+    });
+    const payload = await jwtService.verifyAsync<LoginPayload>(token);
 
-    expect(payload.exp - payload.iat).toBeGreaterThanOrEqual(24 * 60 * 60 - 1);
-    expect(payload.exp - payload.iat).toBeLessThanOrEqual(24 * 60 * 60 + 1);
+    expect(payload.exp - payload.iat).toBeGreaterThanOrEqual(60 * 60 - 1);
+    expect(payload.exp - payload.iat).toBeLessThanOrEqual(60 * 60 + 1);
+    expect(payload.iss).toBe(jwtEnvironment.JWT_ISSUER);
+    expect(payload.aud).toBe(jwtEnvironment.JWT_AUDIENCE);
+  });
+
+  it('registers the dormant audit metrics provider without changing module wiring', () => {
+    expect(module.get(AuditMetricsService)).toBeInstanceOf(AuditMetricsService);
+    expect(module.get(AuthService)).toBe(authService);
+    expect(module.get(AuthGuard)).toBe(authGuard);
+  });
+
+  it('does not expose a public identity logout route before 2A-L', () => {
+    const controllerPrototype = AuthController.prototype as unknown as Record<
+      string,
+      object
+    >;
+    const routes = Object.getOwnPropertyNames(controllerPrototype)
+      .map((method) => {
+        const path: unknown = Reflect.getMetadata(
+          PATH_METADATA,
+          controllerPrototype[method],
+        );
+        return path;
+      })
+      .filter((path): path is string => typeof path === 'string');
+
+    expect(routes).toEqual([
+      'identity',
+      'login',
+      'refresh',
+      'auth/supervisor-override',
+      'staff',
+    ]);
+    expect(routes).not.toContain('logout');
+  });
+
+  it('rejects a previously issued typeless access token', async () => {
+    const token = await jwtService.signAsync({
+      sub: 'legacy-access-user',
+      email: 'legacy-access@example.com',
+      tenant_id: 'legacy-tenant-id',
+      role: UserRole.MANAGER,
+    });
+    const request: GuardRequest = {
+      headers: { authorization: `Bearer ${token}` },
+    };
+
+    await expect(
+      authGuard.canActivate(createContext(request)),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(request.user).toBeUndefined();
   });
 
   it('rejects refresh and typeless tokens through the strict guard', async () => {
@@ -200,5 +272,21 @@ describe('IdentityModule typed JWT cutover', () => {
     await expect(
       authGuard.canActivate(createContext(legacyRequest)),
     ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('restores and deletes JWT environment values when module closure rejects', async () => {
+    const closeError = new Error('module close failed');
+    jest.spyOn(module, 'close').mockRejectedValueOnce(closeError);
+
+    await expect(closeModuleAndRestoreJwtEnvironment()).rejects.toThrow(
+      closeError,
+    );
+
+    for (const [key, value] of originalJwtEnvironment) {
+      expect(process.env[key]).toBe(value);
+      if (value === undefined) {
+        expect(key in process.env).toBe(false);
+      }
+    }
   });
 });
