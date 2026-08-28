@@ -22,6 +22,9 @@ void main() {
     when(mockSaleViewModel.totalTax).thenReturn(0.00);
     when(mockSaleViewModel.commercialRate).thenReturn(36.50);
     when(mockSaleViewModel.bcnOfficialRate).thenReturn(36.6241);
+    when(mockSaleViewModel.checkoutFxMode).thenReturn('COMMERCIAL');
+    when(mockSaleViewModel.activeCheckoutRate).thenReturn(36.50);
+    when(mockSaleViewModel.activeCheckoutRateLabel).thenReturn('TC Comercial: 36.50');
     when(mockSaleViewModel.isLoading).thenReturn(false);
     when(mockSaleViewModel.supportsBuzzerPager).thenReturn(false);
     when(mockSaleViewModel.supportsTables).thenReturn(true);
@@ -62,9 +65,8 @@ void main() {
     expect(find.textContaining('C\$ 365.00'), findsWidgets);
     expect(find.textContaining('\$10.00 USD'), findsWidgets);
 
-    // Check exchange rate badge
+    // Check single active exchange rate badge
     expect(find.textContaining('TC Comercial: 36.50'), findsOneWidget);
-    expect(find.textContaining('TC BCN: 36.6241'), findsOneWidget);
   });
 
   testWidgets('selecting USD tender updates breakdown and change in USD/NIO', (tester) async {

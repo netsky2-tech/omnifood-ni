@@ -52,12 +52,12 @@ class _MultiCurrencyCheckoutDialogState
     super.initState();
     final vm = context.read<SaleViewModel>();
     _singleCalculator = CurrencyCheckoutCalculator(
-      commercialRate: vm.commercialRate,
+      commercialRate: vm.activeCheckoutRate,
       bcnOfficialRate: vm.bcnOfficialRate,
     );
     _splitCalculator = SplitPaymentCalculator(
       totalNio: vm.total,
-      commercialRate: vm.commercialRate,
+      commercialRate: vm.activeCheckoutRate,
     );
 
     _tenderAmountController.text = vm.total.toStringAsFixed(2);
@@ -855,16 +855,10 @@ class _MultiCurrencyCheckoutDialogState
             children: [
               Chip(
                 visualDensity: VisualDensity.compact,
+                avatar: const Icon(Icons.currency_exchange, size: 14),
                 label: Text(
-                  'TC Comercial: ${viewModel.commercialRate.toStringAsFixed(2)}',
-                  style: const TextStyle(fontSize: 11),
-                ),
-              ),
-              Chip(
-                visualDensity: VisualDensity.compact,
-                label: Text(
-                  'TC BCN: ${viewModel.bcnOfficialRate.toStringAsFixed(4)}',
-                  style: const TextStyle(fontSize: 11),
+                  viewModel.activeCheckoutRateLabel,
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
                 ),
               ),
             ],

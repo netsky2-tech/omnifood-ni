@@ -263,7 +263,10 @@ void main() async {
           create: (_) => DgiReportViewModel(salesRepository, database),
         ),
         ChangeNotifierProvider(
-          create: (_) => BusinessProfileViewModel(database.localConfigDao),
+          create: (_) => BusinessProfileViewModel(
+            database.localConfigDao,
+            inventoryRepository,
+          ),
         ),
         ChangeNotifierProvider(
           create: (_) => HardwareSettingsViewModel(

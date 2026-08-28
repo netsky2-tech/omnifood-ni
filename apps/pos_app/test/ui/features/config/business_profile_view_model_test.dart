@@ -37,6 +37,8 @@ void main() {
           .thenAnswer((_) async => LocalConfigEntity(key: 'commercial_exchange_rate', value: '36.50'));
       when(() => mockConfigDao.getConfigByKey('bcn_official_exchange_rate'))
           .thenAnswer((_) async => LocalConfigEntity(key: 'bcn_official_exchange_rate', value: '36.6241'));
+      when(() => mockConfigDao.getConfigByKey('checkout_fx_mode'))
+          .thenAnswer((_) async => LocalConfigEntity(key: 'checkout_fx_mode', value: 'COMMERCIAL'));
       when(() => mockConfigDao.getConfigByKey('operation_mode'))
           .thenAnswer((_) async => LocalConfigEntity(key: 'operation_mode', value: 'FOODPARK_QSR'));
       when(() => mockConfigDao.getConfigByKey('dgi_prefix'))
@@ -55,6 +57,9 @@ void main() {
       expect(viewModel.config['business_name'], 'Café Managua');
       expect(viewModel.config['commercial_exchange_rate'], '36.50');
       expect(viewModel.config['bcn_official_exchange_rate'], '36.6241');
+      expect(viewModel.config['checkout_fx_mode'], 'COMMERCIAL');
+      expect(viewModel.checkoutFxMode, 'COMMERCIAL');
+      expect(viewModel.activeCheckoutRate, 36.50);
       expect(viewModel.config['operation_mode'], 'FOODPARK_QSR');
       expect(viewModel.config['dgi_current_number'], '550');
       expect(viewModel.operationMode, TenantOperationMode.foodparkQsr);
@@ -74,6 +79,7 @@ void main() {
         'legal_footer': 'Gracias por su compra',
         'commercial_exchange_rate': '36.80',
         'bcn_official_exchange_rate': '36.6241',
+        'checkout_fx_mode': 'BCN_OFFICIAL',
         'operation_mode': 'RESTAURANT',
         'dgi_prefix': '001-001-01-',
         'dgi_range_start': '1',
@@ -83,11 +89,24 @@ void main() {
       });
 
       expect(viewModel.config['commercial_exchange_rate'], '36.80');
+      expect(viewModel.config['checkout_fx_mode'], 'BCN_OFFICIAL');
+      expect(viewModel.activeCheckoutRate, 36.6241);
       expect(viewModel.config['operation_mode'], 'RESTAURANT');
       expect(viewModel.config['dgi_current_number'], '550');
       expect(viewModel.operationMode, TenantOperationMode.restaurant);
       expect(viewModel.commercialRate, 36.80);
-      verify(() => mockConfigDao.saveConfig(any())).called(13);
+      verify(() => mockConfigDao.saveConfig(any())).called(14);
+    });
+
+    test('fetchOfficialBcnRate updates bcn_official_exchange_rate and persists it', () async {
+      when(() => mockConfigDao.saveConfig(any())).thenAnswer((_) async {});
+
+      final result = await viewModel.fetchOfficialBcnRate(() async => 36.7150);
+
+      expect(result, 36.7150);
+      expect(viewModel.bcnOfficialRate, 36.7150);
+      expect(viewModel.config['bcn_official_exchange_rate'], '36.7150');
+      verify(() => mockConfigDao.saveConfig(any())).called(1);
     });
 
     test('setOperationMode updates state and notifies listeners', () {

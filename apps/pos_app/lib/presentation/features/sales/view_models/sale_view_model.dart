@@ -228,6 +228,16 @@ class SaleViewModel extends ChangeNotifier {
   double _bcnOfficialRate = 36.6241;
   double get bcnOfficialRate => _bcnOfficialRate;
 
+  String _checkoutFxMode = 'COMMERCIAL';
+  String get checkoutFxMode => _checkoutFxMode;
+
+  double get activeCheckoutRate =>
+      _checkoutFxMode == 'BCN_OFFICIAL' ? _bcnOfficialRate : _commercialRate;
+
+  String get activeCheckoutRateLabel => _checkoutFxMode == 'BCN_OFFICIAL'
+      ? 'TC BCN: ${_bcnOfficialRate.toStringAsFixed(4)}'
+      : 'TC Comercial: ${_commercialRate.toStringAsFixed(2)}';
+
   Future<void> loadExchangeRates() async {
     try {
       final commVal = await _database.localConfigDao.getConfigByKey('commercial_exchange_rate');
@@ -237,6 +247,10 @@ class SaleViewModel extends ChangeNotifier {
       final bcnVal = await _database.localConfigDao.getConfigByKey('bcn_official_exchange_rate');
       if (bcnVal != null) {
         _bcnOfficialRate = double.tryParse(bcnVal.value) ?? 36.6241;
+      }
+      final modeVal = await _database.localConfigDao.getConfigByKey('checkout_fx_mode');
+      if (modeVal != null && modeVal.value.isNotEmpty) {
+        _checkoutFxMode = modeVal.value;
       }
       notifyListeners();
     } catch (_) {

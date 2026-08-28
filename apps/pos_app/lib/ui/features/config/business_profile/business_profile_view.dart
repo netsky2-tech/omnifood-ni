@@ -103,6 +103,32 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                     const SizedBox(height: 32),
                     Text('TASAS DE CAMBIO Y MULTI-MONEDA', style: Theme.of(context).textTheme.labelLarge),
                     const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      key: const Key('checkout_fx_mode_dropdown'),
+                      value: viewModel.checkoutFxMode,
+                      decoration: const InputDecoration(
+                        labelText: 'Tasa a Utilizar en Pantalla de Cobro (POS)',
+                        prefixIcon: Icon(Icons.price_change),
+                        helperText: 'Seleccione cuál de las dos tasas se aplicará para convertir cobros en USD y dar vuelto.',
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'COMMERCIAL',
+                          child: Text('Tasa Comercial (Recomendada para caja)'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'BCN_OFFICIAL',
+                          child: Text('Tasa Oficial BCN (Banco Central de Nicaragua)'),
+                        ),
+                      ],
+                      onChanged: (mode) {
+                        if (mode != null) {
+                          viewModel.setCheckoutFxMode(mode);
+                          _controllers['checkout_fx_mode']?.text = mode;
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
                     TextFormField(
                       controller: _controllers['commercial_exchange_rate'],
                       decoration: const InputDecoration(
@@ -120,21 +146,67 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                       },
                     ),
                     const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _controllers['bcn_official_exchange_rate'],
-                      decoration: const InputDecoration(
-                        labelText: 'Tipo de Cambio Oficial BCN (Base Fiscal DGI)',
-                        hintText: '36.6241',
-                        prefixIcon: Icon(Icons.account_balance),
-                        helperText: 'Tasa oficial del Banco Central de Nicaragua utilizada exclusivamente para IVA y reportes DGI.',
-                      ),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      validator: (v) {
-                        if (v == null || v.isEmpty) return 'Requerido';
-                        final val = double.tryParse(v);
-                        if (val == null || val <= 0) return 'Ingrese una tasa válida mayor a 0';
-                        return null;
-                      },
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _controllers['bcn_official_exchange_rate'],
+                            decoration: InputDecoration(
+                              labelText: 'Tipo de Cambio Oficial BCN (Base Fiscal DGI)',
+                              hintText: '36.6241',
+                              prefixIcon: const Icon(Icons.account_balance),
+                              helperText: 'Tasa oficial del Banco Central de Nicaragua utilizada para base fiscal DGI.',
+                              suffixIcon: viewModel.isFetchingBcnRate
+                                  ? const Padding(
+                                      padding: EdgeInsets.all(12),
+                                      child: SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                      ),
+                                    )
+                                  : IconButton(
+                                      icon: const Icon(Icons.sync),
+                                      tooltip: 'Consultar Web Service BCN',
+                                      onPressed: () async {
+                                        try {
+                                          final rate = await viewModel.fetchOfficialBcnRate();
+                                          _controllers['bcn_official_exchange_rate']?.text =
+                                              rate.toStringAsFixed(4);
+                                          if (mounted && context.mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(
+                                                content: Text(
+                                                  'Tasa BCN actualizada exitosamente: C\$ ${rate.toStringAsFixed(4)}',
+                                                ),
+                                                backgroundColor: Colors.green,
+                                              ),
+                                            );
+                                          }
+                                        } catch (e) {
+                                          if (mounted && context.mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(
+                                                content: Text('No se pudo consultar el BCN: $e'),
+                                                backgroundColor: Colors.orange.shade800,
+                                              ),
+                                            );
+                                          }
+                                        }
+                                      },
+                                    ),
+                            ),
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            validator: (v) {
+                              if (v == null || v.isEmpty) return 'Requerido';
+                              final val = double.tryParse(v);
+                              if (val == null || val <= 0) return 'Ingrese una tasa válida mayor a 0';
+                              return null;
+                            },
+                          ),
+                        ),
+                      ],
                     ),
                     
                     const SizedBox(height: 32),

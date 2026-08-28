@@ -7,18 +7,18 @@ import 'dart:async' as _i17;
 import 'dart:ui' as _i20;
 
 import 'package:mockito/mockito.dart' as _i1;
-import 'package:mockito/src/dummies.dart' as _i16;
+import 'package:mockito/src/dummies.dart' as _i11;
 import 'package:pos_app/data/services/sync_service.dart' as _i8;
 import 'package:pos_app/domain/models/audit_log.dart' as _i23;
 import 'package:pos_app/domain/models/config/tenant_operation_mode.dart'
     as _i10;
 import 'package:pos_app/domain/models/customer/customer.dart' as _i5;
-import 'package:pos_app/domain/models/inventory/product.dart' as _i12;
-import 'package:pos_app/domain/models/sales/cart_item.dart' as _i11;
+import 'package:pos_app/domain/models/inventory/product.dart' as _i13;
+import 'package:pos_app/domain/models/sales/cart_item.dart' as _i12;
 import 'package:pos_app/domain/models/sales/cashier_session.dart' as _i18;
-import 'package:pos_app/domain/models/sales/hold_ticket.dart' as _i14;
-import 'package:pos_app/domain/models/sales/payment.dart' as _i15;
-import 'package:pos_app/domain/models/sales/promotion.dart' as _i13;
+import 'package:pos_app/domain/models/sales/hold_ticket.dart' as _i15;
+import 'package:pos_app/domain/models/sales/payment.dart' as _i16;
+import 'package:pos_app/domain/models/sales/promotion.dart' as _i14;
 import 'package:pos_app/domain/models/user.dart' as _i22;
 import 'package:pos_app/domain/repositories/audit_repository.dart' as _i7;
 import 'package:pos_app/domain/repositories/auth_repository.dart' as _i21;
@@ -199,39 +199,72 @@ class MockSaleViewModel extends _i1.Mock implements _i9.SaleViewModel {
       ) as double);
 
   @override
-  List<_i11.CartItem> get cart => (super.noSuchMethod(
+  String get checkoutFxMode => (super.noSuchMethod(
+        Invocation.getter(#checkoutFxMode),
+        returnValue: _i11.dummyValue<String>(
+          this,
+          Invocation.getter(#checkoutFxMode),
+        ),
+        returnValueForMissingStub: _i11.dummyValue<String>(
+          this,
+          Invocation.getter(#checkoutFxMode),
+        ),
+      ) as String);
+
+  @override
+  double get activeCheckoutRate => (super.noSuchMethod(
+        Invocation.getter(#activeCheckoutRate),
+        returnValue: 0.0,
+        returnValueForMissingStub: 0.0,
+      ) as double);
+
+  @override
+  String get activeCheckoutRateLabel => (super.noSuchMethod(
+        Invocation.getter(#activeCheckoutRateLabel),
+        returnValue: _i11.dummyValue<String>(
+          this,
+          Invocation.getter(#activeCheckoutRateLabel),
+        ),
+        returnValueForMissingStub: _i11.dummyValue<String>(
+          this,
+          Invocation.getter(#activeCheckoutRateLabel),
+        ),
+      ) as String);
+
+  @override
+  List<_i12.CartItem> get cart => (super.noSuchMethod(
         Invocation.getter(#cart),
-        returnValue: <_i11.CartItem>[],
-        returnValueForMissingStub: <_i11.CartItem>[],
-      ) as List<_i11.CartItem>);
+        returnValue: <_i12.CartItem>[],
+        returnValueForMissingStub: <_i12.CartItem>[],
+      ) as List<_i12.CartItem>);
 
   @override
-  List<_i12.Product> get products => (super.noSuchMethod(
+  List<_i13.Product> get products => (super.noSuchMethod(
         Invocation.getter(#products),
-        returnValue: <_i12.Product>[],
-        returnValueForMissingStub: <_i12.Product>[],
-      ) as List<_i12.Product>);
+        returnValue: <_i13.Product>[],
+        returnValueForMissingStub: <_i13.Product>[],
+      ) as List<_i13.Product>);
 
   @override
-  List<_i13.Promotion> get promotions => (super.noSuchMethod(
+  List<_i14.Promotion> get promotions => (super.noSuchMethod(
         Invocation.getter(#promotions),
-        returnValue: <_i13.Promotion>[],
-        returnValueForMissingStub: <_i13.Promotion>[],
-      ) as List<_i13.Promotion>);
+        returnValue: <_i14.Promotion>[],
+        returnValueForMissingStub: <_i14.Promotion>[],
+      ) as List<_i14.Promotion>);
 
   @override
-  List<_i14.HoldTicket> get holdTickets => (super.noSuchMethod(
+  List<_i15.HoldTicket> get holdTickets => (super.noSuchMethod(
         Invocation.getter(#holdTickets),
-        returnValue: <_i14.HoldTicket>[],
-        returnValueForMissingStub: <_i14.HoldTicket>[],
-      ) as List<_i14.HoldTicket>);
+        returnValue: <_i15.HoldTicket>[],
+        returnValueForMissingStub: <_i15.HoldTicket>[],
+      ) as List<_i15.HoldTicket>);
 
   @override
-  Map<_i15.PaymentMethod, double> get sessionExpected => (super.noSuchMethod(
+  Map<_i16.PaymentMethod, double> get sessionExpected => (super.noSuchMethod(
         Invocation.getter(#sessionExpected),
-        returnValue: <_i15.PaymentMethod, double>{},
-        returnValueForMissingStub: <_i15.PaymentMethod, double>{},
-      ) as Map<_i15.PaymentMethod, double>);
+        returnValue: <_i16.PaymentMethod, double>{},
+        returnValueForMissingStub: <_i16.PaymentMethod, double>{},
+      ) as Map<_i16.PaymentMethod, double>);
 
   @override
   bool get isGlobalTaxExempt => (super.noSuchMethod(
@@ -250,11 +283,11 @@ class MockSaleViewModel extends _i1.Mock implements _i9.SaleViewModel {
   @override
   String get searchQuery => (super.noSuchMethod(
         Invocation.getter(#searchQuery),
-        returnValue: _i16.dummyValue<String>(
+        returnValue: _i11.dummyValue<String>(
           this,
           Invocation.getter(#searchQuery),
         ),
-        returnValueForMissingStub: _i16.dummyValue<String>(
+        returnValueForMissingStub: _i11.dummyValue<String>(
           this,
           Invocation.getter(#searchQuery),
         ),
@@ -371,11 +404,11 @@ class MockSaleViewModel extends _i1.Mock implements _i9.SaleViewModel {
       ) as double);
 
   @override
-  List<_i12.Product> get filteredProducts => (super.noSuchMethod(
+  List<_i13.Product> get filteredProducts => (super.noSuchMethod(
         Invocation.getter(#filteredProducts),
-        returnValue: <_i12.Product>[],
-        returnValueForMissingStub: <_i12.Product>[],
-      ) as List<_i12.Product>);
+        returnValue: <_i13.Product>[],
+        returnValueForMissingStub: <_i13.Product>[],
+      ) as List<_i13.Product>);
 
   @override
   bool get hasListeners => (super.noSuchMethod(
@@ -712,7 +745,7 @@ class MockSaleViewModel extends _i1.Mock implements _i9.SaleViewModel {
       ) as _i17.Future<void>);
 
   @override
-  _i17.Future<void> recallTicket(_i14.HoldTicket? ticket) =>
+  _i17.Future<void> recallTicket(_i15.HoldTicket? ticket) =>
       (super.noSuchMethod(
         Invocation.method(
           #recallTicket,
@@ -768,10 +801,10 @@ class MockSaleViewModel extends _i1.Mock implements _i9.SaleViewModel {
 
   @override
   void addToCart(
-    _i12.Product? product, {
+    _i13.Product? product, {
     double? quantity = 1.0,
     String? variantId,
-    List<_i12.Modifier>? modifiers = const [],
+    List<_i13.Modifier>? modifiers = const [],
   }) =>
       super.noSuchMethod(
         Invocation.method(
@@ -790,7 +823,7 @@ class MockSaleViewModel extends _i1.Mock implements _i9.SaleViewModel {
   void removeFromCart(
     String? productId, {
     String? variantId,
-    List<_i12.Modifier>? modifiers,
+    List<_i13.Modifier>? modifiers,
   }) =>
       super.noSuchMethod(
         Invocation.method(
@@ -809,7 +842,7 @@ class MockSaleViewModel extends _i1.Mock implements _i9.SaleViewModel {
     String? productId,
     double? quantity, {
     String? variantId,
-    List<_i12.Modifier>? modifiers,
+    List<_i13.Modifier>? modifiers,
   }) =>
       super.noSuchMethod(
         Invocation.method(
@@ -845,7 +878,7 @@ class MockSaleViewModel extends _i1.Mock implements _i9.SaleViewModel {
       );
 
   @override
-  _i17.Future<void> finalizeSale(List<_i15.PaymentMethod>? methods) =>
+  _i17.Future<void> finalizeSale(List<_i16.PaymentMethod>? methods) =>
       (super.noSuchMethod(
         Invocation.method(
           #finalizeSale,
@@ -857,8 +890,8 @@ class MockSaleViewModel extends _i1.Mock implements _i9.SaleViewModel {
 
   @override
   _i17.Future<void> processSale(
-    List<_i15.PaymentMethod>? methods, {
-    List<_i15.Payment>? customPayments,
+    List<_i16.PaymentMethod>? methods, {
+    List<_i16.Payment>? customPayments,
     String? buzzerNumber,
     String? customerName,
   }) =>
@@ -1113,11 +1146,11 @@ class MockAuditRepository extends _i1.Mock implements _i7.AuditRepository {
   @override
   String get deviceId => (super.noSuchMethod(
         Invocation.getter(#deviceId),
-        returnValue: _i16.dummyValue<String>(
+        returnValue: _i11.dummyValue<String>(
           this,
           Invocation.getter(#deviceId),
         ),
-        returnValueForMissingStub: _i16.dummyValue<String>(
+        returnValueForMissingStub: _i11.dummyValue<String>(
           this,
           Invocation.getter(#deviceId),
         ),
