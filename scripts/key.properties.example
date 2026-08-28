@@ -1,0 +1,7 @@
+# Example key.properties for signing production release APKs
+# Place this file in apps/pos_app/android/key.properties (do NOT commit real keys to git)
+#
+# storePassword=your_keystore_password
+# keyPassword=your_key_password
+# keyAlias=your_key_alias
+# storeFile=/path/to/your/upload-keystore.jks

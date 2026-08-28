@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:uuid/uuid.dart';
 import '../../domain/models/sales/invoice.dart';
 import '../../domain/models/sales/invoice_item.dart';
@@ -13,6 +14,10 @@ import 'package:pos_app/data/models/sales/cashier_session_entity.dart';
 
 import 'package:pos_app/domain/models/sales/hold_ticket.dart';
 import 'package:pos_app/data/models/sales/hold_ticket_entity.dart';
+import 'package:pos_app/domain/models/sales/restaurant_area.dart';
+import 'package:pos_app/data/models/sales/restaurant_area_entity.dart';
+import 'package:pos_app/domain/models/sales/restaurant_table.dart';
+import 'package:pos_app/data/models/sales/restaurant_table_entity.dart';
 import 'package:pos_app/data/models/sales/invoice_item_modifier_entity.dart';
 import 'package:pos_app/domain/models/sales/cart_item.dart';
 import 'package:pos_app/domain/models/inventory/product.dart'; // For Modifier
@@ -20,14 +25,35 @@ import 'package:pos_app/domain/models/inventory/product.dart'; // For Modifier
 class SalesMapper {
   // --- Promotion ---
   static Promotion toPromotionDomain(PromotionEntity entity) {
+    List<int> days = [];
+    if (entity.daysOfWeek != null && entity.daysOfWeek!.isNotEmpty) {
+      days = entity.daysOfWeek!
+          .split(',')
+          .map((s) => int.tryParse(s.trim()))
+          .whereType<int>()
+          .toList();
+    }
+
     return Promotion(
       id: entity.id,
       name: entity.name,
-      type: PromotionType.values.firstWhere((e) => e.name == entity.type),
+      type: PromotionType.values.firstWhere(
+        (e) => e.name == entity.type,
+        orElse: () => PromotionType.buyXGetYFree,
+      ),
       targetProductId: entity.targetProductId,
+      targetCategoryId: entity.targetCategoryId,
       buyQuantity: entity.buyQuantity,
       getQuantity: entity.getQuantity,
       discountValue: entity.discountValue,
+      minOrderAmount: entity.minOrderAmount,
+      daysOfWeek: days,
+      startTime: entity.startTime,
+      endTime: entity.endTime,
+      startDate: entity.startDate,
+      endDate: entity.endDate,
+      priority: entity.priority,
+      isStackable: entity.isStackable,
       isActive: entity.isActive,
     );
   }
@@ -38,10 +64,67 @@ class SalesMapper {
       name: domain.name,
       type: domain.type.name,
       targetProductId: domain.targetProductId,
+      targetCategoryId: domain.targetCategoryId,
       buyQuantity: domain.buyQuantity,
       getQuantity: domain.getQuantity,
       discountValue: domain.discountValue,
+      minOrderAmount: domain.minOrderAmount,
+      daysOfWeek: domain.daysOfWeek.isNotEmpty ? domain.daysOfWeek.join(',') : null,
+      startTime: domain.startTime,
+      endTime: domain.endTime,
+      startDate: domain.startDate,
+      endDate: domain.endDate,
+      priority: domain.priority,
+      isStackable: domain.isStackable,
       isActive: domain.isActive,
+    );
+  }
+
+  // --- Restaurant Area ---
+  static RestaurantArea toAreaDomain(RestaurantAreaEntity entity) {
+    return RestaurantArea(
+      id: entity.id,
+      name: entity.name,
+      displayOrder: entity.displayOrder,
+      isActive: entity.isActive,
+    );
+  }
+
+  static RestaurantAreaEntity toAreaEntity(RestaurantArea domain) {
+    return RestaurantAreaEntity(
+      id: domain.id,
+      name: domain.name,
+      displayOrder: domain.displayOrder,
+      isActive: domain.isActive,
+    );
+  }
+
+  // --- Restaurant Table ---
+  static RestaurantTable toTableDomain(RestaurantTableEntity entity) {
+    return RestaurantTable(
+      id: entity.id,
+      areaId: entity.areaId,
+      tableNumber: entity.tableNumber,
+      capacity: entity.capacity,
+      status: entity.status,
+      currentTicketId: entity.currentTicketId,
+      activeGuests: entity.activeGuests,
+      openedAt: entity.openedAt != null
+          ? DateTime.fromMillisecondsSinceEpoch(entity.openedAt!)
+          : null,
+    );
+  }
+
+  static RestaurantTableEntity toTableEntity(RestaurantTable domain) {
+    return RestaurantTableEntity(
+      id: domain.id,
+      areaId: domain.areaId,
+      tableNumber: domain.tableNumber,
+      capacity: domain.capacity,
+      status: domain.status,
+      currentTicketId: domain.currentTicketId,
+      activeGuests: domain.activeGuests,
+      openedAt: domain.openedAt?.millisecondsSinceEpoch,
     );
   }
 
@@ -51,14 +134,35 @@ class SalesMapper {
       id: entity.id,
       name: entity.name,
       createdAt: DateTime.fromMillisecondsSinceEpoch(entity.createdAt),
+      updatedAt: entity.updatedAt != null
+          ? DateTime.fromMillisecondsSinceEpoch(entity.updatedAt!)
+          : null,
+      tableId: entity.tableId,
+      areaId: entity.areaId,
+      waiterId: entity.waiterId,
+      waiterName: entity.waiterName,
+      guestCount: entity.guestCount,
       isGlobalTaxExempt: entity.isGlobalTaxExempt,
-      items: itemEntities.map((e) => CartItem(
-        productId: e.productId,
-        productName: e.productName,
-        quantity: e.quantity,
-        unitPrice: e.unitPrice,
-        taxRate: e.taxRate,
-      )).toList(),
+      version: entity.version,
+      items: itemEntities.map((e) {
+        List<Modifier> modifiers = [];
+        if (e.modifiersJson != null && e.modifiersJson!.isNotEmpty) {
+          try {
+            final decoded = jsonDecode(e.modifiersJson!) as List;
+            modifiers = decoded.map((m) => Modifier.fromJson(m as Map<String, dynamic>)).toList();
+          } catch (_) {}
+        }
+        return CartItem(
+          productId: e.productId,
+          productName: e.productName,
+          quantity: e.quantity,
+          unitPrice: e.unitPrice,
+          taxRate: e.taxRate,
+          variantId: e.variantId,
+          notes: e.notes,
+          selectedModifiers: modifiers,
+        );
+      }).toList(),
     );
   }
 
@@ -67,20 +171,36 @@ class SalesMapper {
       id: domain.id,
       name: domain.name,
       createdAt: domain.createdAt.millisecondsSinceEpoch,
+      updatedAt: domain.updatedAt?.millisecondsSinceEpoch,
+      tableId: domain.tableId,
+      areaId: domain.areaId,
+      waiterId: domain.waiterId,
+      waiterName: domain.waiterName,
+      guestCount: domain.guestCount,
       isGlobalTaxExempt: domain.isGlobalTaxExempt,
+      version: domain.version,
     );
   }
 
   static List<HoldTicketItemEntity> toHoldTicketItemEntities(HoldTicket domain) {
-    return domain.items.map((item) => HoldTicketItemEntity(
-      id: const Uuid().v4(),
-      holdTicketId: domain.id,
-      productId: item.productId,
-      productName: item.productName,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      taxRate: item.taxRate,
-    )).toList();
+    return domain.items.map((item) {
+      String? modJson;
+      if (item.selectedModifiers.isNotEmpty) {
+        modJson = jsonEncode(item.selectedModifiers.map((m) => m.toJson()).toList());
+      }
+      return HoldTicketItemEntity(
+        id: const Uuid().v4(),
+        holdTicketId: domain.id,
+        productId: item.productId,
+        productName: item.productName,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        taxRate: item.taxRate,
+        variantId: item.variantId,
+        notes: item.notes,
+        modifiersJson: modJson,
+      );
+    }).toList();
   }
 
   // --- Cashier Session ---
@@ -88,6 +208,7 @@ class SalesMapper {
     return CashierSession(
       id: entity.id,
       userId: entity.userId,
+      terminalId: entity.terminalId,
       openedAt: DateTime.fromMillisecondsSinceEpoch(entity.openedAt),
       tipoModelo: entity.tipoModelo == 'CARTERA_MESERO'
           ? CashSessionModel.carteraMesero
@@ -95,11 +216,23 @@ class SalesMapper {
       closedAt: entity.closedAt != null
           ? DateTime.fromMillisecondsSinceEpoch(entity.closedAt!)
           : null,
-      openingBalance: entity.openingBalance,
-      closingBalance: entity.closingBalance,
+      openingBalance: entity.openingBalanceNio,
+      openingBalanceNio: entity.openingBalanceNio,
+      openingBalanceUsd: entity.openingBalanceUsd,
+      closingBalance: entity.closingCountedNio,
+      closingCountedNio: entity.closingCountedNio,
+      closingCountedUsd: entity.closingCountedUsd,
       totalSales: entity.totalSales,
-      totalExpected: entity.totalExpected,
+      totalExpected: entity.expectedNio,
+      expectedNio: entity.expectedNio,
+      expectedUsd: entity.expectedUsd,
+      differenceNio: entity.differenceNio,
+      differenceUsd: entity.differenceUsd,
+      zReportSequence: entity.zReportSequence,
       isClosed: entity.isClosed,
+      supervisorId: entity.supervisorId,
+      notes: entity.notes,
+      syncStatus: entity.syncStatus,
     );
   }
 
@@ -107,16 +240,25 @@ class SalesMapper {
     return CashierSessionEntity(
       id: domain.id,
       userId: domain.userId,
+      terminalId: domain.terminalId,
       openedAt: domain.openedAt.millisecondsSinceEpoch,
       tipoModelo: domain.tipoModelo == CashSessionModel.carteraMesero
           ? 'CARTERA_MESERO'
           : 'CAJA_CENTRAL',
       closedAt: domain.closedAt?.millisecondsSinceEpoch,
-      openingBalance: domain.openingBalance,
-      closingBalance: domain.closingBalance,
-      totalSales: domain.totalSales,
-      totalExpected: domain.totalExpected,
+      openingBalanceNio: domain.openingBalanceNio > 0 ? domain.openingBalanceNio : domain.openingBalance,
+      openingBalanceUsd: domain.openingBalanceUsd,
+      closingCountedNio: domain.closingCountedNio ?? domain.closingBalance,
+      closingCountedUsd: domain.closingCountedUsd,
+      expectedNio: domain.expectedNio > 0 ? domain.expectedNio : domain.totalExpected,
+      expectedUsd: domain.expectedUsd,
+      differenceNio: domain.differenceNio,
+      differenceUsd: domain.differenceUsd,
+      zReportSequence: domain.zReportSequence,
       isClosed: domain.isClosed,
+      supervisorId: domain.supervisorId,
+      notes: domain.notes,
+      syncStatus: domain.syncStatus,
     );
   }
 
@@ -156,6 +298,9 @@ class SalesMapper {
       sourceSequence: entity.sourceSequence,
       idempotencyKey: entity.idempotencyKey,
       payloadHash: entity.payloadHash,
+      bcnOfficialRate: entity.bcnOfficialRate,
+      commercialRate: entity.commercialRate,
+      totalUsd: entity.totalUsd,
     );
   }
 
@@ -185,6 +330,9 @@ class SalesMapper {
       sourceSequence: domain.sourceSequence,
       idempotencyKey: domain.idempotencyKey,
       payloadHash: domain.payloadHash,
+      bcnOfficialRate: domain.bcnOfficialRate,
+      commercialRate: domain.commercialRate,
+      totalUsd: domain.totalUsd,
     );
   }
 
@@ -251,6 +399,20 @@ class SalesMapper {
       amount: entity.amount,
       currency: entity.currency,
       exchangeRate: entity.exchangeRate,
+      amountNio: entity.amountNio,
+      changeGiven: entity.changeGiven,
+      changeCurrency: entity.changeCurrency,
+      voucherCode: entity.voucherCode,
+      cardBrand: entity.cardBrand,
+      cardType: entity.cardType,
+      bankPos: entity.bankPos,
+      reconciliationStatus: entity.reconciliationStatus,
+      last4: entity.last4,
+      batchNumber: entity.batchNumber,
+      reconciledAt: entity.reconciledAt != null
+          ? DateTime.fromMillisecondsSinceEpoch(entity.reconciledAt!)
+          : null,
+      reconciledByUserId: entity.reconciledByUserId,
       createdAt: entity.createdAt != null
           ? DateTime.fromMillisecondsSinceEpoch(entity.createdAt!)
           : null,
@@ -265,6 +427,18 @@ class SalesMapper {
       amount: domain.amount,
       currency: domain.currency,
       exchangeRate: domain.exchangeRate,
+      amountNio: domain.amountNio,
+      changeGiven: domain.changeGiven,
+      changeCurrency: domain.changeCurrency,
+      voucherCode: domain.voucherCode,
+      cardBrand: domain.cardBrand,
+      cardType: domain.cardType,
+      bankPos: domain.bankPos,
+      reconciliationStatus: domain.reconciliationStatus,
+      last4: domain.last4,
+      batchNumber: domain.batchNumber,
+      reconciledAt: domain.reconciledAt?.millisecondsSinceEpoch,
+      reconciledByUserId: domain.reconciledByUserId,
       createdAt: domain.createdAt?.millisecondsSinceEpoch,
     );
   }
@@ -284,18 +458,19 @@ class SalesMapper {
       'total': invoice.total,
       'isCanceled': invoice.isCanceled,
       'voidReason': invoice.voidReason,
+      'syncStatus': invoice.syncStatus.name,
       'paymentStatus': invoice.paymentStatus.name,
+      'type': invoice.type.name,
       'customerId': invoice.customerId,
       'globalTaxOverride': invoice.globalTaxOverride,
-      'type': invoice.type.name,
-      'documentType': invoice.type == InvoiceType.creditNote ? 'CREDIT_NOTE' : 'SALE',
       'relatedInvoiceId': invoice.relatedInvoiceId,
-      'originInvoiceId': invoice.originInvoiceId ?? invoice.relatedInvoiceId,
-      'refundReasonPolicy': invoice.refundReasonPolicy,
-      'refundReasonCode': invoice.refundReasonCode,
-      'authorizedByUserId': invoice.authorizedByUserId,
-      'authorizedByRole': invoice.authorizedByRole,
+      if (invoice.originInvoiceId?.isNotEmpty ?? false) 'originInvoiceId': invoice.originInvoiceId,
+      if (invoice.refundReasonPolicy?.isNotEmpty ?? false) 'refundReasonPolicy': invoice.refundReasonPolicy,
+      if (invoice.refundReasonCode?.isNotEmpty ?? false) 'refundReasonCode': invoice.refundReasonCode,
+      if (invoice.authorizedByUserId?.isNotEmpty ?? false) 'authorizedByUserId': invoice.authorizedByUserId,
+      if (invoice.authorizedByRole?.isNotEmpty ?? false) 'authorizedByRole': invoice.authorizedByRole,
       'terminalId': invoice.terminalId,
+      'documentType': invoice.type == InvoiceType.creditNote ? 'CREDIT_NOTE' : 'SALE',
       'sourceSequence': invoice.sourceSequence,
       'idempotencyKey': invoice.idempotencyKey,
       'payloadHash': invoice.payloadHash,
@@ -325,6 +500,18 @@ class SalesMapper {
         'amount': payment.amount,
         'currency': payment.currency,
         'exchangeRate': payment.exchangeRate,
+        'amountNio': payment.amountNio,
+        'changeGiven': payment.changeGiven,
+        'changeCurrency': payment.changeCurrency,
+        'voucherCode': payment.voucherCode,
+        'cardBrand': payment.cardBrand,
+        'cardType': payment.cardType,
+        'bankPos': payment.bankPos,
+        'reconciliationStatus': payment.reconciliationStatus,
+        'last4': payment.last4,
+        'batchNumber': payment.batchNumber,
+        'reconciledAt': payment.reconciledAt?.toIso8601String(),
+        'reconciledByUserId': payment.reconciledByUserId,
       }).toList(),
     };
   }

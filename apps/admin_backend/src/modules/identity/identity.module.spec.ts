@@ -172,6 +172,24 @@ describe('IdentityModule strict typed access-token ownership', () => {
       security_version: 1,
     });
     expect(payload.exp - payload.iat).toBe(60 * 60);
+    const refresh = await jwtService.verifyAsync<LoginPayload>(
+      login.refresh_token,
+      {
+        issuer: jwtEnvironment.JWT_ISSUER,
+        audience: jwtEnvironment.JWT_AUDIENCE,
+      },
+    );
+    expect(refresh).toMatchObject({
+      sub: user.id,
+      email: user.email,
+      tenant_id: user.tenant_id,
+      role: user.role,
+      is_active: true,
+      token_type: 'refresh',
+      iss: jwtEnvironment.JWT_ISSUER,
+      aud: jwtEnvironment.JWT_AUDIENCE,
+    });
+    expect(refresh.exp - refresh.iat).toBe(7 * 24 * 60 * 60);
   });
 
   it('uses the canonical typed JWT configuration for JwtModule defaults', async () => {
@@ -207,7 +225,13 @@ describe('IdentityModule strict typed access-token ownership', () => {
       })
       .filter((path): path is string => typeof path === 'string');
 
-    expect(routes).toEqual(['identity', 'login', 'refresh', 'staff']);
+    expect(routes).toEqual([
+      'identity',
+      'login',
+      'refresh',
+      'auth/supervisor-override',
+      'staff',
+    ]);
     expect(routes).not.toContain('logout');
   });
 
@@ -228,25 +252,25 @@ describe('IdentityModule strict typed access-token ownership', () => {
     expect(request.user).toBeUndefined();
   });
 
-  it('rejects invalid-signature and expired legacy tokens without token-type rules', async () => {
-    const validToken = await jwtService.signAsync({ sub: 'legacy-negative' });
-    const expiredToken = await jwtService.signAsync(
-      { sub: 'legacy-expired' },
-      { expiresIn: -1 },
-    );
+  it('rejects refresh and typeless tokens through the strict guard', async () => {
+    const refreshToken = await jwtService.signAsync({
+      sub: 'refresh-user',
+      token_type: 'refresh',
+    });
+    const legacyToken = await jwtService.signAsync({ sub: 'legacy-user' });
 
-    const invalidSignatureRequest: GuardRequest = {
-      headers: { authorization: `Bearer ${validToken}x` },
+    const refreshRequest: GuardRequest = {
+      headers: { authorization: `Bearer ${refreshToken}` },
     };
-    const expiredRequest: GuardRequest = {
-      headers: { authorization: `Bearer ${expiredToken}` },
+    const legacyRequest: GuardRequest = {
+      headers: { authorization: `Bearer ${legacyToken}` },
     };
 
     await expect(
-      authGuard.canActivate(createContext(invalidSignatureRequest)),
+      authGuard.canActivate(createContext(refreshRequest)),
     ).rejects.toBeInstanceOf(UnauthorizedException);
     await expect(
-      authGuard.canActivate(createContext(expiredRequest)),
+      authGuard.canActivate(createContext(legacyRequest)),
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 

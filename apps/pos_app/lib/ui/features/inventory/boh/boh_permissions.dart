@@ -9,6 +9,8 @@ class BohPermission {
   static const kardexView = 'inventory.boh.kardex.view';
   static const recipesView = 'inventory.boh.recipes.view';
   static const shrinkageView = 'inventory.boh.shrinkage.view';
+  static const valuationView = 'inventory.boh.valuation.view';
+  static const cogsView = 'inventory.boh.cogs.view';
 
   static const all = <String>[
     shell,
@@ -19,6 +21,8 @@ class BohPermission {
     kardexView,
     recipesView,
     shrinkageView,
+    valuationView,
+    cogsView,
   ];
 }
 

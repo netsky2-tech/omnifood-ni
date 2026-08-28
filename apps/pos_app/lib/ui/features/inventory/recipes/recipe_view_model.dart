@@ -50,6 +50,46 @@ class RecipeComparisonRow {
   final double targetShrink;
 }
 
+class RecipeComponentCostBreakdown {
+  const RecipeComponentCostBreakdown({
+    required this.ingredientId,
+    required this.ingredientName,
+    required this.ingredientType,
+    required this.grossQuantity,
+    required this.netQuantity,
+    required this.unitCostNio,
+    required this.totalCostNio,
+    required this.costPercentage,
+  });
+
+  final String ingredientId;
+  final String ingredientName;
+  final IngredientType ingredientType;
+  final double grossQuantity;
+  final double netQuantity;
+  final double unitCostNio;
+  final double totalCostNio;
+  final double costPercentage;
+}
+
+class RecipeTheoreticalCostBreakdown {
+  const RecipeTheoreticalCostBreakdown({
+    required this.totalBatchCostNio,
+    required this.unitTheoreticalCostNio,
+    required this.yieldQuantity,
+    required this.grossMarginNio,
+    required this.grossMarginPct,
+    required this.componentCosts,
+  });
+
+  final double totalBatchCostNio;
+  final double unitTheoreticalCostNio;
+  final double yieldQuantity;
+  final double grossMarginNio;
+  final double grossMarginPct;
+  final List<RecipeComponentCostBreakdown> componentCosts;
+}
+
 class RecipeViewModel extends ChangeNotifier {
   RecipeViewModel(this._inventoryRepository, {Uuid? uuid})
       : _uuid = uuid ?? const Uuid();
@@ -106,10 +146,21 @@ class RecipeViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> selectProduct(Product product) async {
+  Future<void> selectProduct(Product? product) async {
     _selectedProduct = product;
-    _isLoading = true;
     _errorMessage = null;
+
+    if (product == null) {
+      _currentRecipes = <Recipe>[];
+      _recipeVersions = <RecipeVersionDocument>[];
+      _draftComponents = <RecipeDraftComponent>[];
+      _compareBaseId = null;
+      _compareTargetId = null;
+      notifyListeners();
+      return;
+    }
+
+    _isLoading = true;
     notifyListeners();
 
     try {
@@ -357,6 +408,84 @@ class RecipeViewModel extends ChangeNotifier {
     return insumo?.consumptionUom;
   }
 
+  RecipeTheoreticalCostBreakdown calculateDraftTheoreticalCost({
+    double yieldQuantity = 1.0,
+    double? sellingPrice,
+  }) {
+    final effectiveYield = yieldQuantity > 0 ? yieldQuantity : 1.0;
+    double totalBatchCost = 0.0;
+    final rawLines = <_TempLineCost>[];
+
+    for (final draft in _draftComponents) {
+      final unitCost = _resolveIngredientUnitCost(
+        draft.ingredientId,
+        draft.ingredientType,
+      );
+      final lineCost = double.parse(
+        (draft.grossQuantity * unitCost).toStringAsFixed(4),
+      );
+      totalBatchCost += lineCost;
+      rawLines.add(_TempLineCost(
+        draft: draft,
+        unitCost: unitCost,
+        lineCost: lineCost,
+      ));
+    }
+
+    final totalCostFixed = double.parse(totalBatchCost.toStringAsFixed(4));
+    final unitCostFixed = double.parse(
+      (totalCostFixed / effectiveYield).toStringAsFixed(4),
+    );
+
+    final effectiveSellingPrice = sellingPrice ?? _selectedProduct?.sellPrice ?? 0.0;
+    final marginNio = effectiveSellingPrice > 0
+        ? double.parse((effectiveSellingPrice - unitCostFixed).toStringAsFixed(4))
+        : 0.0;
+    final marginPct = effectiveSellingPrice > 0
+        ? double.parse(((marginNio / effectiveSellingPrice) * 100).toStringAsFixed(2))
+        : 0.0;
+
+    final componentCosts = rawLines.map((line) {
+      final pct = totalCostFixed > 0
+          ? double.parse(((line.lineCost / totalCostFixed) * 100).toStringAsFixed(2))
+          : 0.0;
+      return RecipeComponentCostBreakdown(
+        ingredientId: line.draft.ingredientId,
+        ingredientName: line.draft.ingredientName,
+        ingredientType: line.draft.ingredientType,
+        grossQuantity: line.draft.grossQuantity,
+        netQuantity: line.draft.netQuantity,
+        unitCostNio: line.unitCost,
+        totalCostNio: line.lineCost,
+        costPercentage: pct,
+      );
+    }).toList(growable: false);
+
+    return RecipeTheoreticalCostBreakdown(
+      totalBatchCostNio: totalCostFixed,
+      unitTheoreticalCostNio: unitCostFixed,
+      yieldQuantity: effectiveYield,
+      grossMarginNio: marginNio,
+      grossMarginPct: marginPct,
+      componentCosts: componentCosts,
+    );
+  }
+
+  double _resolveIngredientUnitCost(String ingredientId, IngredientType type) {
+    if (type == IngredientType.insumo) {
+      final insumo = _insumos.cast<Insumo?>().firstWhere(
+            (i) => i?.id == ingredientId,
+            orElse: () => null,
+          );
+      return insumo?.averageCost ?? 0.0;
+    }
+    final product = _products.cast<Product?>().firstWhere(
+          (p) => p?.id == ingredientId,
+          orElse: () => null,
+        );
+    return product?.averageCost ?? 0.0;
+  }
+
   RecipeVersionDocument? _findVersion(String? id) {
     if (id == null || _recipeVersions.isEmpty) {
       return null;
@@ -368,4 +497,16 @@ class RecipeViewModel extends ChangeNotifier {
     }
     return _recipeVersions.first;
   }
+}
+
+class _TempLineCost {
+  const _TempLineCost({
+    required this.draft,
+    required this.unitCost,
+    required this.lineCost,
+  });
+
+  final RecipeDraftComponent draft;
+  final double unitCost;
+  final double lineCost;
 }

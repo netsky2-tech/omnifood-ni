@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../../domain/models/config/tenant_operation_mode.dart';
 import 'business_profile_view_model.dart';
 
 class BusinessProfileView extends StatefulWidget {
@@ -99,7 +100,68 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                       ),
                       maxLines: 3,
                     ),
+                    const SizedBox(height: 32),
+                    Text('TASAS DE CAMBIO Y MULTI-MONEDA', style: Theme.of(context).textTheme.labelLarge),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _controllers['commercial_exchange_rate'],
+                      decoration: const InputDecoration(
+                        labelText: 'Tipo de Cambio Comercial (POS / Atención al Cliente)',
+                        hintText: '36.50',
+                        prefixIcon: Icon(Icons.currency_exchange),
+                        helperText: 'Tasa utilizada para precios al público, cobro en USD y cálculo de vuelto en córdobas.',
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return 'Requerido';
+                        final val = double.tryParse(v);
+                        if (val == null || val <= 0) return 'Ingrese una tasa válida mayor a 0';
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _controllers['bcn_official_exchange_rate'],
+                      decoration: const InputDecoration(
+                        labelText: 'Tipo de Cambio Oficial BCN (Base Fiscal DGI)',
+                        hintText: '36.6241',
+                        prefixIcon: Icon(Icons.account_balance),
+                        helperText: 'Tasa oficial del Banco Central de Nicaragua utilizada exclusivamente para IVA y reportes DGI.',
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return 'Requerido';
+                        final val = double.tryParse(v);
+                        if (val == null || val <= 0) return 'Ingrese una tasa válida mayor a 0';
+                        return null;
+                      },
+                    ),
                     
+                    const SizedBox(height: 32),
+                    Text('MODO OPERATIVO DEL NEGOCIO', style: Theme.of(context).textTheme.labelLarge),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<TenantOperationMode>(
+                      key: const Key('operation_mode_dropdown'),
+                      value: viewModel.operationMode,
+                      decoration: const InputDecoration(
+                        labelText: 'Modo de Operación POS',
+                        prefixIcon: Icon(Icons.storefront),
+                        helperText: 'Determina el flujo de atención: Cobro directo en barra (Food Park), Servicio de Mesas (Restaurante), o Híbrido.',
+                      ),
+                      items: TenantOperationMode.values.map((mode) {
+                        return DropdownMenuItem(
+                          value: mode,
+                          child: Text(mode.displayName),
+                        );
+                      }).toList(),
+                      onChanged: (newMode) {
+                        if (newMode != null) {
+                          viewModel.setOperationMode(newMode);
+                          _controllers['operation_mode']?.text = newMode.code;
+                        }
+                      },
+                    ),
+
                     const SizedBox(height: 48),
                     Row(
                       children: [
@@ -111,6 +173,7 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                                 _controllers.forEach((key, controller) {
                                   newConfig[key] = controller.text;
                                 });
+                                newConfig['operation_mode'] = viewModel.operationMode.code;
                                 await viewModel.saveConfig(newConfig);
                                 if (mounted && context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(

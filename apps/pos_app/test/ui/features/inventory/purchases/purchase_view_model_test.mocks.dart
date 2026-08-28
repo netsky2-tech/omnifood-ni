@@ -7,10 +7,14 @@ import 'dart:async' as _i5;
 
 import 'package:mockito/mockito.dart' as _i1;
 import 'package:pos_app/data/database/app_database.dart' as _i2;
+import 'package:pos_app/data/models/inventory/kardex_correction_entity.dart'
+    as _i21;
+import 'package:pos_app/data/models/inventory/kardex_recalculate_queue_entity.dart'
+    as _i22;
 import 'package:pos_app/domain/models/catalog/catalog_type.dart' as _i17;
 import 'package:pos_app/domain/models/catalog/catalog_value.dart' as _i16;
 import 'package:pos_app/domain/models/inventory/batch.dart' as _i14;
-import 'package:pos_app/domain/models/inventory/batch_deduction.dart' as _i21;
+import 'package:pos_app/domain/models/inventory/batch_deduction.dart' as _i23;
 import 'package:pos_app/domain/models/inventory/count_session_document.dart'
     as _i10;
 import 'package:pos_app/domain/models/inventory/forensic_alert.dart' as _i19;
@@ -763,6 +767,28 @@ class MockInventoryRepository extends _i1.Mock
         returnValue: _i5.Future<void>.value(),
         returnValueForMissingStub: _i5.Future<void>.value(),
       ) as _i5.Future<void>);
+
+  @override
+  _i5.Future<List<_i21.KardexCorrectionEntity>> getKardexCorrections() =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getKardexCorrections,
+          [],
+        ),
+        returnValue: _i5.Future<List<_i21.KardexCorrectionEntity>>.value(
+            <_i21.KardexCorrectionEntity>[]),
+      ) as _i5.Future<List<_i21.KardexCorrectionEntity>>);
+
+  @override
+  _i5.Future<List<_i22.KardexRecalculateQueueEntity>> getPendingKardexQueue() =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getPendingKardexQueue,
+          [],
+        ),
+        returnValue: _i5.Future<List<_i22.KardexRecalculateQueueEntity>>.value(
+            <_i22.KardexRecalculateQueueEntity>[]),
+      ) as _i5.Future<List<_i22.KardexRecalculateQueueEntity>>);
 }
 
 /// A class which mocks [MovementEngine].
@@ -886,6 +912,7 @@ class MockMovementEngine extends _i1.Mock implements _i3.MovementEngine {
     required double? actualQuantity,
     required String? outcome,
     required String? reason,
+    Map<String, double>? customIngredientConsumptions,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -900,6 +927,7 @@ class MockMovementEngine extends _i1.Mock implements _i3.MovementEngine {
             #actualQuantity: actualQuantity,
             #outcome: outcome,
             #reason: reason,
+            #customIngredientConsumptions: customIngredientConsumptions,
           },
         ),
         returnValue: _i5.Future<_i3.ProductionCloseResult>.value(
@@ -917,6 +945,7 @@ class MockMovementEngine extends _i1.Mock implements _i3.MovementEngine {
               #actualQuantity: actualQuantity,
               #outcome: outcome,
               #reason: reason,
+              #customIngredientConsumptions: customIngredientConsumptions,
             },
           ),
         )),
@@ -932,6 +961,7 @@ class MockMovementEngine extends _i1.Mock implements _i3.MovementEngine {
     required double? actualQuantity,
     required String? outcome,
     required String? reason,
+    Map<String, double>? customIngredientConsumptions,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -946,6 +976,7 @@ class MockMovementEngine extends _i1.Mock implements _i3.MovementEngine {
             #actualQuantity: actualQuantity,
             #outcome: outcome,
             #reason: reason,
+            #customIngredientConsumptions: customIngredientConsumptions,
           },
         ),
         returnValue: _i5.Future<_i3.ProductionCloseResult>.value(
@@ -963,6 +994,7 @@ class MockMovementEngine extends _i1.Mock implements _i3.MovementEngine {
               #actualQuantity: actualQuantity,
               #outcome: outcome,
               #reason: reason,
+              #customIngredientConsumptions: customIngredientConsumptions,
             },
           ),
         )),
@@ -1049,7 +1081,7 @@ class MockMovementEngine extends _i1.Mock implements _i3.MovementEngine {
       ) as _i5.Future<List<_i11.InventoryMovement>>);
 
   @override
-  _i5.Future<List<_i21.BatchDeduction>> getBatchesForConsumption(
+  _i5.Future<List<_i23.BatchDeduction>> getBatchesForConsumption(
     String? insumoId,
     double? quantity,
   ) =>
@@ -1061,7 +1093,7 @@ class MockMovementEngine extends _i1.Mock implements _i3.MovementEngine {
             quantity,
           ],
         ),
-        returnValue: _i5.Future<List<_i21.BatchDeduction>>.value(
-            <_i21.BatchDeduction>[]),
-      ) as _i5.Future<List<_i21.BatchDeduction>>);
+        returnValue: _i5.Future<List<_i23.BatchDeduction>>.value(
+            <_i23.BatchDeduction>[]),
+      ) as _i5.Future<List<_i23.BatchDeduction>>);
 }

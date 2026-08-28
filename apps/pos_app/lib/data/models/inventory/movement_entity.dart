@@ -29,6 +29,16 @@ class MovementEntity {
   @ColumnInfo(name: 'batch_deductions')
   // ignore: non_constant_identifier_names
   final String? batch_deductions;
+  @ColumnInfo(name: 'estado_costeo')
+  final int estadoCosteo;
+  @ColumnInfo(name: 'intentos_count')
+  final int intentosCount;
+  @ColumnInfo(name: 'bloqueo_motivo')
+  final String? bloqueoMotivo;
+  @ColumnInfo(name: 'autorizado_por_usuario_id')
+  final String? autorizadoPorUsuarioId;
+  @ColumnInfo(name: 'fecha_autorizacion')
+  final String? fechaAutorizacion;
 
   MovementEntity({
     required this.id,
@@ -47,5 +57,10 @@ class MovementEntity {
     this.originInvoiceItemId,
     // ignore: non_constant_identifier_names
     this.batch_deductions,
+    this.estadoCosteo = 30,
+    this.intentosCount = 0,
+    this.bloqueoMotivo,
+    this.autorizadoPorUsuarioId,
+    this.fechaAutorizacion,
   });
 }

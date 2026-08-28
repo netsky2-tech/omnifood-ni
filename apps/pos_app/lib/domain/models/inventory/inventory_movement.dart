@@ -32,6 +32,11 @@ class InventoryMovement with _$InventoryMovement {
     String? originMovementId,
     String? originInvoiceItemId,
     List<BatchDeduction>? batchDeductions,
+    int? estadoCosteo,
+    int? intentosCount,
+    String? bloqueoMotivo,
+    String? autorizadoPorUsuarioId,
+    String? fechaAutorizacion,
   }) = _InventoryMovement;
 
   factory InventoryMovement.fromJson(Map<String, dynamic> json) => _$InventoryMovementFromJson(json);

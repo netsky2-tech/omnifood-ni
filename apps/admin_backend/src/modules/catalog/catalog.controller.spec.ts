@@ -276,7 +276,7 @@ describe('CatalogController HTTP guards and route precedence', () => {
   const getHttpServer = (): Parameters<typeof request>[0] =>
     app.getHttpServer() as Parameters<typeof request>[0];
 
-  const signToken = (payload: Record<string, string>) =>
+  const signToken = (payload: Record<string, unknown>) =>
     app.get(JwtService).sign({
       sub: 'user-1',
       email: 'manager@example.com',

@@ -475,11 +475,33 @@ export class RecipeService {
       seenIngredientIds.add(component.ingredientId);
 
       if (component.ingredientType === 'SUB_RECIPE') {
-        // Multi-level versioned BOM ingestion is deferred; reject rather
-        // than risk corrupting insumo lines with product references.
-        throw new BadRequestException(
-          `SUB_RECIPE components are not supported by this ingestion slice (${label}). Multi-level versioned BOM ingestion is deferred.`,
+        const subProduct = await this.productRepo.findOne({
+          where: { id: component.ingredientId, tenant_id: tenantId },
+        });
+
+        if (!subProduct) {
+          throw new BadRequestException(
+            `Sub-recipe product ${component.ingredientId} not found for tenant (${label})`,
+          );
+        }
+
+        await this.assertNoCircularDependency(
+          tenantId,
+          dto.productId,
+          component.ingredientId,
         );
+
+        resolved.push({
+          ingredientId: component.ingredientId,
+          ingredientName: component.ingredientName,
+          ingredientType: 'SUB_RECIPE',
+          grossQuantity: component.grossQuantity,
+          grossQuantityInBase: component.grossQuantity,
+          technicalShrinkPct: component.technicalShrinkPct,
+          componentUom: component.componentUom?.trim() || null,
+          referenceVersionId: component.referenceVersionId ?? null,
+        });
+        continue;
       }
 
       const insumo = await this.insumoRepo.findOne({
@@ -549,6 +571,50 @@ export class RecipeService {
       grossQuantity,
       Number(conversion.factor),
     );
+  }
+
+  private async assertNoCircularDependency(
+    tenantId: string,
+    rootProductId: string,
+    subRecipeProductId: string,
+  ): Promise<void> {
+    if (rootProductId === subRecipeProductId) {
+      throw new BadRequestException(
+        `Dependencia circular detectada: el producto no puede contenerse a sí mismo como sub-receta`,
+      );
+    }
+
+    const visited = new Set<string>([rootProductId]);
+    const queue = [subRecipeProductId];
+
+    while (queue.length > 0) {
+      const currentId = queue.shift();
+      if (currentId === rootProductId) {
+        throw new BadRequestException(
+          `Dependencia circular detectada en receta: ${rootProductId} -> ... -> ${subRecipeProductId} -> ${rootProductId}`,
+        );
+      }
+
+      if (visited.has(currentId)) {
+        continue;
+      }
+      visited.add(currentId);
+
+      const activeVersion = await this.findActiveVersion(tenantId, currentId);
+      if (activeVersion) {
+        const details = await this.recipeDetailRepo.find({
+          where: {
+            recipe_version_id: activeVersion.id,
+            tenant_id: tenantId,
+            ingredient_type: 'SUB_RECIPE',
+          },
+        });
+
+        for (const detail of details) {
+          queue.push(detail.insumo_id);
+        }
+      }
+    }
   }
 
   private isUniqueViolation(error: unknown): boolean {

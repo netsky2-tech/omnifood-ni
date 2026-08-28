@@ -42,6 +42,7 @@ abstract class MovementEngine {
     required double actualQuantity,
     required String outcome,
     required String reason,
+    Map<String, double>? customIngredientConsumptions,
   });
 
   /// Builds a one-level production close without writing to persistence.
@@ -54,6 +55,7 @@ abstract class MovementEngine {
     required double actualQuantity,
     required String outcome,
     required String reason,
+    Map<String, double>? customIngredientConsumptions,
   });
 
   /// Records a compensating inventory adjustment from a physical count.

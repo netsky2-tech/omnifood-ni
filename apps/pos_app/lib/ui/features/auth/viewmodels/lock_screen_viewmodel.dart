@@ -44,7 +44,7 @@ class LockScreenViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  void selectUser(User user) {
+  void selectUser(User? user) {
     _selectedUser = user;
     _error = null;
     notifyListeners();

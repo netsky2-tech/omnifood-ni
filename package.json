@@ -1,4 +1,7 @@
 {
+  "name": "omnifood-ni",
+  "private": true,
+  "packageManager": "pnpm@11.22.0",
   "devDependencies": {
     "ts-jest": "^29.4.9"
   }

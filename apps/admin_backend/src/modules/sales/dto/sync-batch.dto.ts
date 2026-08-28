@@ -96,13 +96,13 @@ function CreditNoteInvoiceProvenanceComplete(
 
           return Boolean(
             invoice.originInvoiceId &&
-              invoice.refundReasonCode?.trim() &&
-              invoice.refundReasonPolicy &&
-              invoice.authorizedByUserId?.trim() &&
-              (invoice.authorizedByRole === 'manager' ||
-                invoice.authorizedByRole === 'owner') &&
-              invoice.items?.length &&
-              invoice.items?.every((item) => item.originInvoiceItemId),
+            invoice.refundReasonCode?.trim() &&
+            invoice.refundReasonPolicy &&
+            invoice.authorizedByUserId?.trim() &&
+            (invoice.authorizedByRole === 'manager' ||
+              invoice.authorizedByRole === 'owner') &&
+            invoice.items?.length &&
+            invoice.items?.every((item) => item.originInvoiceItemId),
           );
         },
         defaultMessage() {
@@ -147,9 +147,7 @@ function CreditNoteDocumentTypeMatchesInvoiceType(
   };
 }
 
-function RejectCreditNoteMovementDeltas(
-  validationOptions?: ValidationOptions,
-) {
+function RejectCreditNoteMovementDeltas(validationOptions?: ValidationOptions) {
   return function (object: object, propertyName: string) {
     registerDecorator({
       name: 'rejectCreditNoteMovementDeltas',

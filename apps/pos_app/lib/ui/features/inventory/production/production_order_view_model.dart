@@ -4,8 +4,13 @@ import 'package:uuid/uuid.dart';
 import '../../../../../domain/models/inventory/insumo.dart';
 import '../../../../../domain/models/inventory/production_order_document.dart';
 import '../../../../../domain/models/inventory/recipe_version_document.dart';
+import '../../../../../domain/ports/printer_port.dart';
+import '../../../../../domain/repositories/auth_repository.dart';
 import '../../../../../domain/repositories/inventory/inventory_repository.dart';
 import '../../../../../domain/services/inventory/movement_engine.dart';
+import '../../../../../domain/services/inventory/production_batch_code_generator.dart';
+import '../../../../../domain/services/inventory/production_variance_guard.dart';
+import '../../../../../domain/services/printer/printer_resolver.dart';
 
 typedef ProductionOrderIdFactory = String Function();
 typedef ProductionOrderClock = DateTime Function();
@@ -15,17 +20,23 @@ class ProductionOrderViewModel extends ChangeNotifier {
   ProductionOrderViewModel(
     this._repository,
     this._movementEngine, {
+    AuthRepository? authRepository,
+    PrinterPort? printer,
     ProductionOrderIdFactory? createId,
     ProductionOrderClock? clock,
     ProductionTerminalIdProvider? terminalIdProvider,
     Uuid? uuid,
-  }) : _createId = createId ?? _defaultCreateId,
+  }) : _authRepository = authRepository,
+       _printer = printer ?? PrinterResolver.sharedSunmi,
+       _createId = createId ?? _defaultCreateId,
        _clock = clock ?? DateTime.now,
        _terminalIdProvider = terminalIdProvider ?? _missingTerminalIdProvider,
        _uuid = uuid ?? const Uuid();
 
   final InventoryRepository _repository;
   final MovementEngine _movementEngine;
+  final AuthRepository? _authRepository;
+  final PrinterPort? _printer;
   final ProductionOrderIdFactory _createId;
   final ProductionOrderClock _clock;
   final ProductionTerminalIdProvider _terminalIdProvider;
@@ -48,6 +59,35 @@ class ProductionOrderViewModel extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   String? get statusMessage => _statusMessage;
+
+  String generateNextBatchCode({DateTime? forDate}) {
+    final targetDate = forDate ?? _clock();
+    final existingCodes = _orders.map((order) => order.producedBatchNumber);
+    return ProductionBatchCodeGenerator.generateNextCode(
+      date: targetDate,
+      existingCodes: existingCodes,
+    );
+  }
+
+  DateTime calculateExpirationDate(
+    RecipeVersionDocument recipeVersion, {
+    DateTime? fromDate,
+  }) {
+    final baseDate = fromDate ?? _clock();
+    return recipeVersion.calculateExpirationDate(baseDate);
+  }
+
+  ProductionVarianceEvaluation evaluateVariance({
+    required RecipeVersionDocument recipeVersion,
+    required double plannedQuantity,
+    required double actualQuantity,
+  }) {
+    return ProductionVarianceGuard.evaluate(
+      plannedQuantity: plannedQuantity,
+      actualQuantity: actualQuantity,
+      allowedTolerancePercentage: recipeVersion.umbralDesviacionPermitido,
+    );
+  }
 
   Future<void> loadInitialData() async {
     _isLoading = true;
@@ -86,8 +126,33 @@ class ProductionOrderViewModel extends ChangeNotifier {
     required DateTime producedExpirationDate,
     String outcome = 'COMPLETED',
     String? varianceReason,
+    String? supervisorId,
+    String? supervisorPin,
+    String? supervisorTotp,
+    AuthRepository? authRepository,
+    Map<String, double>? customIngredientConsumptions,
   }) async {
-    final normalizedOutcome = outcome.trim().toUpperCase();
+    final evaluation = evaluateVariance(
+      recipeVersion: recipeVersion,
+      plannedQuantity: plannedQuantity,
+      actualQuantity: actualQuantity,
+    );
+
+    final resolvedAuth = authRepository ?? _authRepository;
+    if (resolvedAuth != null && evaluation.requiresSupervisorOverride) {
+      await ProductionVarianceGuard.validateAndAuthorize(
+        evaluation: evaluation,
+        authRepository: resolvedAuth,
+        supervisorId: supervisorId,
+        pin: supervisorPin,
+        totpCode: supervisorTotp,
+        varianceReason: varianceReason,
+      );
+    }
+
+    final normalizedOutcome = evaluation.isTotalLoss
+        ? 'FAILED'
+        : outcome.trim().toUpperCase();
     final isCompleted = normalizedOutcome == 'COMPLETED';
     if (plannedQuantity <= 0 || (isCompleted && actualQuantity <= 0)) {
       throw ArgumentError(
@@ -134,6 +199,7 @@ class ProductionOrderViewModel extends ChangeNotifier {
         actualQuantity: actualQuantity,
         outcome: normalizedOutcome,
         reason: movementReason,
+        customIngredientConsumptions: customIngredientConsumptions,
       );
       final now = _clock();
       final document = ProductionOrderDocument(
@@ -187,6 +253,42 @@ class ProductionOrderViewModel extends ChangeNotifier {
       }
     }
     return insumoId;
+  }
+
+  Future<PrinterResult> printBatchLabel({
+    required ProductionOrderDocument order,
+    PrinterPort? printer,
+    String? operatorName,
+    String? storageInstructions,
+  }) async {
+    final activePrinter = printer ?? _printer;
+    if (activePrinter == null) {
+      throw StateError(
+        'No hay impresora configurada para emitir viñeta de producción',
+      );
+    }
+
+    final insumo = _availableInsumos.firstWhere(
+      (ins) => ins.id == order.producedInsumoId,
+      orElse: () => Insumo(
+        id: order.producedInsumoId,
+        name: order.producedInsumoName ?? order.recipeProductName,
+        consumptionUom: 'un',
+        stock: 0,
+        averageCost: 0,
+      ),
+    );
+
+    return activePrinter.printProductionBatchLabel(
+      productName: order.producedInsumoName ?? order.recipeProductName,
+      batchCode: order.producedBatchNumber,
+      quantity: order.actualQuantity,
+      uom: insumo.consumptionUom,
+      productionDate: order.closedAt ?? order.operationDate,
+      expirationDate: order.producedExpirationDate,
+      operatorName: operatorName,
+      storageInstructions: storageInstructions,
+    );
   }
 
   void clearError() {

@@ -1,6 +1,8 @@
 import {
   Controller,
   Post,
+  Get,
+  Query,
   Body,
   UseGuards,
   UseInterceptors,
@@ -11,10 +13,19 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, QueryFailedError, Repository } from 'typeorm';
 import { AuditLog } from '../entities/audit-log.entity';
+import { UserRole } from '../entities/user.entity';
 import { AuthGuard } from '../guards/auth.guard';
+import { RolesGuard } from '../guards/roles.guard';
+import { Roles } from '../../../core/decorators/roles.decorator';
 import { TenantInterceptor } from '../../../core/database/rls.interceptor';
 import { GetTenantId } from '../../../core/decorators/tenant.decorator';
 import { PushAuditLogsDto } from '../dto/identity.dto';
+import {
+  QueryOverridesDto,
+  QueryDrawerOpensDto,
+  RecordManualDrawerOpenDto,
+} from '../dto/audit-query.dto';
+import { AuditTrailService } from '../services/audit-trail.service';
 import { AuditVerificationService } from '../services/audit-verification.service';
 
 @Controller('identity/audit')
@@ -25,8 +36,42 @@ export class AuditController {
     @InjectRepository(AuditLog)
     private auditRepository: Repository<AuditLog>,
     private readonly dataSource: DataSource,
+    private readonly auditTrailService: AuditTrailService,
     private readonly verificationService: AuditVerificationService,
   ) {}
+
+  @Get('overrides')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  async getOverrides(
+    @GetTenantId() tenantId: string,
+    @Query() query: QueryOverridesDto,
+  ) {
+    return this.auditTrailService.queryOverrides(query, tenantId || '');
+  }
+
+  @Get('drawer-opens')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  async getDrawerOpens(
+    @GetTenantId() tenantId: string,
+    @Query() query: QueryDrawerOpensDto,
+  ) {
+    return this.auditTrailService.queryDrawerOpens(query, tenantId || '');
+  }
+
+  @Post('drawer-opens')
+  async recordDrawerOpen(
+    @GetTenantId() tenantId: string,
+    @Body() dto: RecordManualDrawerOpenDto,
+    @Request() req: { user: { sub: string } },
+  ) {
+    return this.auditTrailService.recordManualDrawerOpen(
+      dto,
+      tenantId || '',
+      req.user.sub,
+    );
+  }
 
   @Post()
   async pushLogs(

@@ -1186,38 +1186,246 @@ final migration31_32 = Migration(31, 32, (database) async {
   final auditTable = await database.rawQuery(
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'audit_logs'",
   );
-  if (auditTable.isEmpty) return;
-  await database.execute('ALTER TABLE audit_logs ADD COLUMN hash_version TEXT');
+  if (auditTable.isNotEmpty) {
+    final auditColumns = await database.rawQuery('PRAGMA table_info(audit_logs)');
+    final existingAuditCols = auditColumns
+        .map((column) => column['name'] as String)
+        .toSet();
+    if (!existingAuditCols.contains('hash_version')) {
+      await database.execute('ALTER TABLE audit_logs ADD COLUMN hash_version TEXT');
+    }
+  }
+
+  Future<void> addColumnIfMissing(
+    String tableName,
+    String columnName,
+    String definition,
+  ) async {
+    final tables = await database.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = '$tableName'",
+    );
+    if (tables.isEmpty) return;
+
+    final columns = await database.rawQuery('PRAGMA table_info($tableName)');
+    final existingColumnNames = columns
+        .map((column) => column['name'] as String)
+        .toSet();
+    if (!existingColumnNames.contains(columnName)) {
+      await database.execute('ALTER TABLE $tableName ADD COLUMN $definition');
+    }
+  }
+
+  await addColumnIfMissing(
+    'inventory_movements',
+    'estado_costeo',
+    'estado_costeo INTEGER NOT NULL DEFAULT 30',
+  );
+  await addColumnIfMissing(
+    'inventory_movements',
+    'intentos_count',
+    'intentos_count INTEGER NOT NULL DEFAULT 0',
+  );
+  await addColumnIfMissing(
+    'inventory_movements',
+    'bloqueo_motivo',
+    'bloqueo_motivo TEXT',
+  );
+  await addColumnIfMissing(
+    'inventory_movements',
+    'autorizado_por_usuario_id',
+    'autorizado_por_usuario_id TEXT',
+  );
+  await addColumnIfMissing(
+    'inventory_movements',
+    'fecha_autorizacion',
+    'fecha_autorizacion TEXT',
+  );
+
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS `kardex_recalculate_queue` (
+      `id` TEXT NOT NULL,
+      `insumo_id` TEXT NOT NULL,
+      `origin_movement_id` TEXT NOT NULL,
+      `trigger_movement_id` TEXT NOT NULL,
+      `status` TEXT NOT NULL,
+      `attempts` INTEGER NOT NULL,
+      `claimed_at` TEXT,
+      `last_error` TEXT,
+      `created_at` TEXT NOT NULL,
+      `updated_at` TEXT NOT NULL,
+      PRIMARY KEY (`id`)
+    )
+  ''');
+
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS `kardex_corrections` (
+      `id` TEXT NOT NULL,
+      `insumo_id` TEXT NOT NULL,
+      `origin_movement_id` TEXT NOT NULL,
+      `trigger_movement_id` TEXT NOT NULL,
+      `previous_unit_cost_nio` REAL NOT NULL,
+      `recalculated_unit_cost_nio` REAL NOT NULL,
+      `delta_unit_cost_nio` REAL NOT NULL,
+      `total_delta_cost_nio` REAL NOT NULL,
+      `affected_quantity` REAL NOT NULL,
+      `lineage_hash` TEXT NOT NULL,
+      `authorized_by_user_id` TEXT,
+      `authorized_by_role` TEXT,
+      `authorization_method` TEXT,
+      `created_at` TEXT NOT NULL,
+      PRIMARY KEY (`id`)
+    )
+  ''');
 });
 
 final migration32_33 = Migration(32, 33, (database) async {
   final auditTable = await database.rawQuery(
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'audit_logs'",
   );
-  if (auditTable.isEmpty) return;
-  await database.execute(
-    'ALTER TABLE audit_logs ADD COLUMN has_metodo_autorizacion INTEGER',
-  );
-  await database.execute(
-    'ALTER TABLE audit_logs ADD COLUMN has_usuario_autorizador_id INTEGER',
-  );
+  if (auditTable.isNotEmpty) {
+    final auditColumns = await database.rawQuery('PRAGMA table_info(audit_logs)');
+    final existingAuditCols = auditColumns
+        .map((column) => column['name'] as String)
+        .toSet();
+    if (!existingAuditCols.contains('has_metodo_autorizacion')) {
+      await database.execute(
+        'ALTER TABLE audit_logs ADD COLUMN has_metodo_autorizacion INTEGER',
+      );
+    }
+    if (!existingAuditCols.contains('has_usuario_autorizador_id')) {
+      await database.execute(
+        'ALTER TABLE audit_logs ADD COLUMN has_usuario_autorizador_id INTEGER',
+      );
+    }
+  }
+
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS `cashier_sessions` (
+      `id` TEXT NOT NULL,
+      `user_id` TEXT NOT NULL,
+      `terminal_id` TEXT NOT NULL DEFAULT 'default-terminal',
+      `opened_at` INTEGER NOT NULL,
+      `tipo_modelo` TEXT NOT NULL DEFAULT 'CAJA_CENTRAL',
+      `closed_at` INTEGER,
+      `opening_balance_nio` REAL NOT NULL DEFAULT 0.0,
+      `opening_balance_usd` REAL NOT NULL DEFAULT 0.0,
+      `closing_counted_nio` REAL,
+      `closing_counted_usd` REAL,
+      `expected_nio` REAL NOT NULL DEFAULT 0.0,
+      `expected_usd` REAL NOT NULL DEFAULT 0.0,
+      `difference_nio` REAL,
+      `difference_usd` REAL,
+      `z_report_sequence` INTEGER,
+      `is_closed` INTEGER NOT NULL DEFAULT 0,
+      `supervisor_id` TEXT,
+      `notes` TEXT,
+      `sync_status` TEXT NOT NULL DEFAULT 'pending',
+      PRIMARY KEY (`id`)
+    )
+  ''');
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS `cash_movements` (
+      `id` TEXT NOT NULL,
+      `shift_id` TEXT NOT NULL,
+      `terminal_id` TEXT NOT NULL,
+      `type` TEXT NOT NULL,
+      `amount_nio` REAL NOT NULL,
+      `amount_usd` REAL NOT NULL,
+      `reason` TEXT NOT NULL,
+      `authorized_by_user_id` TEXT,
+      `timestamp` INTEGER NOT NULL,
+      `sync_status` TEXT NOT NULL,
+      PRIMARY KEY (`id`)
+    )
+  ''');
+  final columns = await database.rawQuery('PRAGMA table_info(cashier_sessions)');
+  final columnNames = columns.map((c) => c['name'] as String).toSet();
+  if (!columnNames.contains('terminal_id')) {
+    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `terminal_id` TEXT NOT NULL DEFAULT 'default-terminal'");
+  }
+  if (!columnNames.contains('opening_balance_nio')) {
+    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `opening_balance_nio` REAL NOT NULL DEFAULT 0.0");
+  }
+  if (!columnNames.contains('opening_balance_usd')) {
+    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `opening_balance_usd` REAL NOT NULL DEFAULT 0.0");
+  }
+  if (!columnNames.contains('closing_counted_nio')) {
+    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `closing_counted_nio` REAL");
+  }
+  if (!columnNames.contains('closing_counted_usd')) {
+    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `closing_counted_usd` REAL");
+  }
+  if (!columnNames.contains('expected_nio')) {
+    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `expected_nio` REAL NOT NULL DEFAULT 0.0");
+  }
+  if (!columnNames.contains('expected_usd')) {
+    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `expected_usd` REAL NOT NULL DEFAULT 0.0");
+  }
+  if (!columnNames.contains('difference_nio')) {
+    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `difference_nio` REAL");
+  }
+  if (!columnNames.contains('difference_usd')) {
+    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `difference_usd` REAL");
+  }
+  if (!columnNames.contains('z_report_sequence')) {
+    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `z_report_sequence` INTEGER");
+  }
+  if (!columnNames.contains('supervisor_id')) {
+    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `supervisor_id` TEXT");
+  }
+  if (!columnNames.contains('notes')) {
+    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `notes` TEXT");
+  }
+  if (!columnNames.contains('sync_status')) {
+    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `sync_status` TEXT NOT NULL DEFAULT 'pending'");
+  }
 });
 
 final migration33_34 = Migration(33, 34, (database) async {
   final auditTable = await database.rawQuery(
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'audit_logs'",
   );
-  if (auditTable.isEmpty) return;
-
-  final columns = await database.rawQuery('PRAGMA table_info(audit_logs)');
-  final names = columns.map((column) => column['name'] as String).toSet();
-  if (!names.contains('tenant_id')) {
-    await database.execute('ALTER TABLE audit_logs ADD COLUMN tenant_id TEXT');
+  if (auditTable.isNotEmpty) {
+    final columns = await database.rawQuery('PRAGMA table_info(audit_logs)');
+    final names = columns.map((column) => column['name'] as String).toSet();
+    if (!names.contains('tenant_id')) {
+      await database.execute('ALTER TABLE audit_logs ADD COLUMN tenant_id TEXT');
+    }
+    if (!names.contains('metadata_raw')) {
+      await database.execute(
+        'ALTER TABLE audit_logs ADD COLUMN metadata_raw TEXT',
+      );
+    }
   }
-  if (!names.contains('metadata_raw')) {
-    await database.execute(
-      'ALTER TABLE audit_logs ADD COLUMN metadata_raw TEXT',
-    );
+
+  final invoiceColumns = await database.rawQuery("PRAGMA table_info(`invoices`)");
+  if (invoiceColumns.isNotEmpty) {
+    final invColumnNames = invoiceColumns.map((col) => col['name'] as String).toSet();
+
+    if (!invColumnNames.contains('bcn_official_rate')) {
+      await database.execute("ALTER TABLE `invoices` ADD COLUMN `bcn_official_rate` REAL NOT NULL DEFAULT 36.6241");
+    }
+    if (!invColumnNames.contains('commercial_rate')) {
+      await database.execute("ALTER TABLE `invoices` ADD COLUMN `commercial_rate` REAL NOT NULL DEFAULT 36.50");
+    }
+    if (!invColumnNames.contains('total_usd')) {
+      await database.execute("ALTER TABLE `invoices` ADD COLUMN `total_usd` REAL NOT NULL DEFAULT 0.0");
+    }
+  }
+
+  final paymentColumns = await database.rawQuery("PRAGMA table_info(`payments`)");
+  if (paymentColumns.isNotEmpty) {
+    final payColumnNames = paymentColumns.map((col) => col['name'] as String).toSet();
+
+    if (!payColumnNames.contains('amount_nio')) {
+      await database.execute("ALTER TABLE `payments` ADD COLUMN `amount_nio` REAL NOT NULL DEFAULT 0.0");
+    }
+    if (!payColumnNames.contains('change_given')) {
+      await database.execute("ALTER TABLE `payments` ADD COLUMN `change_given` REAL NOT NULL DEFAULT 0.0");
+    }
+    if (!payColumnNames.contains('change_currency')) {
+      await database.execute("ALTER TABLE `payments` ADD COLUMN `change_currency` TEXT NOT NULL DEFAULT 'NIO'");
+    }
   }
 });
 
@@ -1225,12 +1433,257 @@ final migration34_35 = Migration(34, 35, (database) async {
   final auditTable = await database.rawQuery(
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'audit_logs'",
   );
-  if (auditTable.isEmpty) return;
-  await database.execute(
-    'CREATE UNIQUE INDEX IF NOT EXISTS '
-    'index_audit_logs_tenant_id_device_id_user_id_sequence_no '
-    'ON audit_logs (tenant_id, device_id, user_id, sequence_no)',
+  if (auditTable.isNotEmpty) {
+    await database.execute(
+      'CREATE UNIQUE INDEX IF NOT EXISTS '
+      'index_audit_logs_tenant_id_device_id_user_id_sequence_no '
+      'ON audit_logs (tenant_id, device_id, user_id, sequence_no)',
+    );
+  }
+
+  final paymentColumns = await database.rawQuery("PRAGMA table_info(`payments`)");
+  if (paymentColumns.isNotEmpty) {
+    final payColumnNames = paymentColumns.map((col) => col['name'] as String).toSet();
+
+    if (!payColumnNames.contains('voucher_code')) {
+      await database.execute("ALTER TABLE `payments` ADD COLUMN `voucher_code` TEXT");
+    }
+    if (!payColumnNames.contains('card_brand')) {
+      await database.execute("ALTER TABLE `payments` ADD COLUMN `card_brand` TEXT");
+    }
+    if (!payColumnNames.contains('card_type')) {
+      await database.execute("ALTER TABLE `payments` ADD COLUMN `card_type` TEXT");
+    }
+    if (!payColumnNames.contains('bank_pos')) {
+      await database.execute("ALTER TABLE `payments` ADD COLUMN `bank_pos` TEXT");
+    }
+    if (!payColumnNames.contains('reconciliation_status')) {
+      await database.execute("ALTER TABLE `payments` ADD COLUMN `reconciliation_status` TEXT");
+    }
+    if (!payColumnNames.contains('last4')) {
+      await database.execute("ALTER TABLE `payments` ADD COLUMN `last4` TEXT");
+    }
+    if (!payColumnNames.contains('batch_number')) {
+      await database.execute("ALTER TABLE `payments` ADD COLUMN `batch_number` TEXT");
+    }
+    if (!payColumnNames.contains('reconciled_at')) {
+      await database.execute("ALTER TABLE `payments` ADD COLUMN `reconciled_at` INTEGER");
+    }
+    if (!payColumnNames.contains('reconciled_by_user_id')) {
+      await database.execute("ALTER TABLE `payments` ADD COLUMN `reconciled_by_user_id` TEXT");
+    }
+  }
+});
+
+final migration35_36 = Migration(35, 36, (database) async {
+  // Create restaurant_areas table
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS `restaurant_areas` (
+      `id` TEXT NOT NULL,
+      `name` TEXT NOT NULL,
+      `display_order` INTEGER NOT NULL,
+      `is_active` INTEGER NOT NULL,
+      PRIMARY KEY (`id`)
+    )
+  ''');
+
+  // Create restaurant_tables table
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS `restaurant_tables` (
+      `id` TEXT NOT NULL,
+      `area_id` TEXT NOT NULL,
+      `table_number` TEXT NOT NULL,
+      `capacity` INTEGER NOT NULL,
+      `status` TEXT NOT NULL,
+      `current_ticket_id` TEXT,
+      `active_guests` INTEGER,
+      `opened_at` INTEGER,
+      FOREIGN KEY (`area_id`) REFERENCES `restaurant_areas` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE,
+      PRIMARY KEY (`id`)
+    )
+  ''');
+
+  // Alter hold_tickets columns
+  final holdColumns = await database.rawQuery("PRAGMA table_info(`hold_tickets`)");
+  if (holdColumns.isNotEmpty) {
+    final holdColumnNames = holdColumns.map((col) => col['name'] as String).toSet();
+
+    if (!holdColumnNames.contains('updated_at')) {
+      await database.execute("ALTER TABLE `hold_tickets` ADD COLUMN `updated_at` INTEGER");
+    }
+    if (!holdColumnNames.contains('table_id')) {
+      await database.execute("ALTER TABLE `hold_tickets` ADD COLUMN `table_id` TEXT");
+    }
+    if (!holdColumnNames.contains('area_id')) {
+      await database.execute("ALTER TABLE `hold_tickets` ADD COLUMN `area_id` TEXT");
+    }
+    if (!holdColumnNames.contains('waiter_id')) {
+      await database.execute("ALTER TABLE `hold_tickets` ADD COLUMN `waiter_id` TEXT");
+    }
+    if (!holdColumnNames.contains('waiter_name')) {
+      await database.execute("ALTER TABLE `hold_tickets` ADD COLUMN `waiter_name` TEXT");
+    }
+    if (!holdColumnNames.contains('guest_count')) {
+      await database.execute("ALTER TABLE `hold_tickets` ADD COLUMN `guest_count` INTEGER NOT NULL DEFAULT 1");
+    }
+    if (!holdColumnNames.contains('version')) {
+      await database.execute("ALTER TABLE `hold_tickets` ADD COLUMN `version` INTEGER NOT NULL DEFAULT 1");
+    }
+  }
+
+  // Alter hold_ticket_items columns
+  final itemColumns = await database.rawQuery("PRAGMA table_info(`hold_ticket_items`)");
+  if (itemColumns.isNotEmpty) {
+    final itemColumnNames = itemColumns.map((col) => col['name'] as String).toSet();
+
+    if (!itemColumnNames.contains('variant_id')) {
+      await database.execute("ALTER TABLE `hold_ticket_items` ADD COLUMN `variant_id` TEXT");
+    }
+    if (!itemColumnNames.contains('notes')) {
+      await database.execute("ALTER TABLE `hold_ticket_items` ADD COLUMN `notes` TEXT");
+    }
+    if (!itemColumnNames.contains('modifiers_json')) {
+      await database.execute("ALTER TABLE `hold_ticket_items` ADD COLUMN `modifiers_json` TEXT");
+    }
+  }
+});
+
+final migration36_37 = Migration(36, 37, (database) async {
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS `kitchen_orders` (
+      `id` TEXT NOT NULL,
+      `ticket_id` TEXT NOT NULL,
+      `table_number` TEXT,
+      `table_name` TEXT,
+      `waiter_name` TEXT,
+      `station` TEXT NOT NULL,
+      `status` TEXT NOT NULL,
+      `created_at` INTEGER NOT NULL,
+      `started_at` INTEGER,
+      `ready_at` INTEGER,
+      `served_at` INTEGER,
+      `notes` TEXT,
+      PRIMARY KEY (`id`)
+    )
+  ''');
+
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS `kitchen_order_items` (
+      `id` TEXT NOT NULL,
+      `kitchen_order_id` TEXT NOT NULL,
+      `product_id` TEXT NOT NULL,
+      `product_name` TEXT NOT NULL,
+      `quantity` REAL NOT NULL,
+      `status` TEXT NOT NULL,
+      `notes` TEXT,
+      `modifiers_json` TEXT,
+      FOREIGN KEY (`kitchen_order_id`) REFERENCES `kitchen_orders` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION,
+      PRIMARY KEY (`id`)
+    )
+  ''');
+
+  await database.execute('''
+    CREATE INDEX IF NOT EXISTS `idx_kitchen_orders_station_status`
+    ON `kitchen_orders` (`station`, `status`)
+  ''');
+
+  await database.execute('''
+    CREATE INDEX IF NOT EXISTS `idx_kitchen_orders_ticket_id`
+    ON `kitchen_orders` (`ticket_id`)
+  ''');
+
+  await database.execute('''
+    CREATE INDEX IF NOT EXISTS `idx_kitchen_order_items_order_id`
+    ON `kitchen_order_items` (`kitchen_order_id`)
+  ''');
+});
+
+final migration37_38 = Migration(37, 38, (database) async {
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS `customers` (
+      `id` TEXT NOT NULL,
+      `name` TEXT NOT NULL,
+      `tax_id` TEXT,
+      `phone` TEXT,
+      `email` TEXT,
+      `address` TEXT,
+      `points_balance` REAL NOT NULL,
+      `is_active` INTEGER NOT NULL,
+      `created_at` INTEGER NOT NULL,
+      `updated_at` INTEGER NOT NULL,
+      `sync_status` TEXT NOT NULL,
+      PRIMARY KEY (`id`)
+    )
+  ''');
+
+  await database.execute('''
+    CREATE INDEX IF NOT EXISTS `idx_customers_tax_id`
+    ON `customers` (`tax_id`)
+  ''');
+
+  await database.execute('''
+    CREATE INDEX IF NOT EXISTS `idx_customers_phone`
+    ON `customers` (`phone`)
+  ''');
+
+  await database.execute('''
+    CREATE INDEX IF NOT EXISTS `idx_customers_name`
+    ON `customers` (`name`)
+  ''');
+});
+
+final migration38_39 = Migration(38, 39, (database) async {
+  final tables = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='promotions'",
   );
+  if (tables.isNotEmpty) {
+    final columns = await database.rawQuery('PRAGMA table_info(promotions)');
+    final hasCol = columns.any((c) => c['name'] == 'target_category_id');
+    if (!hasCol) {
+      await database.execute('ALTER TABLE `promotions` ADD COLUMN `target_category_id` TEXT');
+      await database.execute('ALTER TABLE `promotions` ADD COLUMN `min_order_amount` REAL NOT NULL DEFAULT 0.0');
+      await database.execute('ALTER TABLE `promotions` ADD COLUMN `days_of_week` TEXT');
+      await database.execute('ALTER TABLE `promotions` ADD COLUMN `start_time` TEXT');
+      await database.execute('ALTER TABLE `promotions` ADD COLUMN `end_time` TEXT');
+      await database.execute('ALTER TABLE `promotions` ADD COLUMN `start_date` INTEGER');
+      await database.execute('ALTER TABLE `promotions` ADD COLUMN `end_date` INTEGER');
+      await database.execute('ALTER TABLE `promotions` ADD COLUMN `priority` INTEGER NOT NULL DEFAULT 0');
+      await database.execute('ALTER TABLE `promotions` ADD COLUMN `is_stackable` INTEGER NOT NULL DEFAULT 1');
+    }
+  }
+});
+
+final migration39_40 = Migration(39, 40, (database) async {
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS `customer_point_transactions` (
+      `id` TEXT NOT NULL,
+      `customer_id` TEXT NOT NULL,
+      `invoice_id` TEXT,
+      `type` TEXT NOT NULL,
+      `points` REAL NOT NULL,
+      `balance_after` REAL NOT NULL,
+      `conversion_rate` REAL NOT NULL,
+      `reason` TEXT,
+      `created_at` INTEGER NOT NULL,
+      `sync_status` TEXT NOT NULL,
+      PRIMARY KEY (`id`)
+    )
+  ''');
+
+  await database.execute('''
+    CREATE INDEX IF NOT EXISTS `idx_customer_point_transactions_customer_id`
+    ON `customer_point_transactions` (`customer_id`)
+  ''');
+
+  await database.execute('''
+    CREATE INDEX IF NOT EXISTS `idx_customer_point_transactions_invoice_id`
+    ON `customer_point_transactions` (`invoice_id`)
+  ''');
+
+  await database.execute('''
+    CREATE INDEX IF NOT EXISTS `idx_customer_point_transactions_created_at`
+    ON `customer_point_transactions` (`created_at`)
+  ''');
 });
 
 final allMigrations = [
@@ -1259,4 +1712,9 @@ final allMigrations = [
   migration32_33,
   migration33_34,
   migration34_35,
+  migration35_36,
+  migration36_37,
+  migration37_38,
+  migration38_39,
+  migration39_40,
 ];

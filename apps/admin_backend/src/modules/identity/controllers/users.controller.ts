@@ -14,11 +14,13 @@ import { UserService } from '../services/user.service';
 import { AuthGuard } from '../guards/auth.guard';
 import { RolesGuard } from '../guards/roles.guard';
 import { AuthoritativeCurrentUserGuard } from '../guards/authoritative-current-user.guard';
+import { PermissionsGuard } from '../guards/permissions.guard';
 import { Roles } from '../../../core/decorators/roles.decorator';
 import { UserRole } from '../entities/user.entity';
 import { TenantInterceptor } from '../../../core/database/rls.interceptor';
 import { GetTenantId } from '../../../core/decorators/tenant.decorator';
 import { CreateUserDto, UpdateUserDto } from '../dto/user-management.dto';
+import { UpdateUserPermissionsDto } from '../dto/permission-matrix.dto';
 
 interface RequestWithUser extends Request {
   user: {
@@ -33,6 +35,13 @@ interface RequestWithUser extends Request {
 @UseInterceptors(TenantInterceptor)
 export class UsersController {
   constructor(private userService: UserService) {}
+
+  @Get('permissions/matrix')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  async getPermissionsMatrix() {
+    return this.userService.getPermissionsMatrix();
+  }
 
   @Get()
   @UseGuards(AuthGuard, RolesGuard)
@@ -73,5 +82,32 @@ export class UsersController {
     @Request() req: RequestWithUser,
   ) {
     return this.userService.deactivate(id, tenantId || '', req.user.sub);
+  }
+
+  @Get(':id/permissions')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  async getUserPermissions(
+    @Param('id') id: string,
+    @GetTenantId() tenantId: string,
+  ) {
+    return this.userService.getUserEffectivePermissions(id, tenantId || '');
+  }
+
+  @Put(':id/permissions')
+  @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)
+  @Roles(UserRole.OWNER)
+  async updateUserPermissions(
+    @Param('id') id: string,
+    @GetTenantId() tenantId: string,
+    @Body() dto: UpdateUserPermissionsDto,
+    @Request() req: RequestWithUser,
+  ) {
+    return this.userService.setCustomPermissions(
+      id,
+      dto.custom_permissions,
+      tenantId || '',
+      req.user.sub,
+    );
   }
 }

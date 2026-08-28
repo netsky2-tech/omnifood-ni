@@ -22,6 +22,43 @@ class AuditLogViewModel extends ChangeNotifier {
   String? _selectedUserId;
   String? get selectedUserId => _selectedUserId;
 
+  String _searchQuery = '';
+  String get searchQuery => _searchQuery;
+
+  String? _actionCategory;
+  String? get actionCategory => _actionCategory;
+
+  List<AuditLog> get filteredLogs {
+    return _logs.where((log) {
+      if (_actionCategory != null) {
+        if (!log.action.toUpperCase().contains(_actionCategory!.toUpperCase())) {
+          return false;
+        }
+      }
+      if (_searchQuery.isNotEmpty) {
+        final q = _searchQuery.toLowerCase();
+        final matchAction = log.action.toLowerCase().contains(q);
+        final matchUser = log.userId.toLowerCase().contains(q);
+        final matchDevice = log.deviceId.toLowerCase().contains(q);
+        final matchMeta = log.metadata?.toLowerCase().contains(q) ?? false;
+        if (!matchAction && !matchUser && !matchDevice && !matchMeta) {
+          return false;
+        }
+      }
+      return true;
+    }).toList();
+  }
+
+  void setSearchQuery(String query) {
+    _searchQuery = query;
+    notifyListeners();
+  }
+
+  void setActionCategory(String? category) {
+    _actionCategory = category;
+    notifyListeners();
+  }
+
   Future<void> loadLogs() async {
     _isLoading = true;
     notifyListeners();
@@ -55,6 +92,8 @@ class AuditLogViewModel extends ChangeNotifier {
     _startDate = null;
     _endDate = null;
     _selectedUserId = null;
+    _searchQuery = '';
+    _actionCategory = null;
     loadLogs();
   }
 }

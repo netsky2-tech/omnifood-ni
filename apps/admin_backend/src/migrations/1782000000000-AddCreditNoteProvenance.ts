@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class AddCreditNoteProvenance1782000000000
-  implements MigrationInterface
-{
+export class AddCreditNoteProvenance1782000000000 implements MigrationInterface {
   name = 'AddCreditNoteProvenance1782000000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -157,7 +155,9 @@ export class AddCreditNoteProvenance1782000000000
     for (const tableName of ['invoices', 'invoice_items', 'inventory_kardex']) {
       await this.restoreRlsStateAfterPolicyRemoval(queryRunner, tableName);
     }
-    await queryRunner.query('DROP TABLE IF EXISTS credit_note_provenance_rls_baseline');
+    await queryRunner.query(
+      'DROP TABLE IF EXISTS credit_note_provenance_rls_baseline',
+    );
   }
 
   private async captureRlsBaseline(queryRunner: QueryRunner): Promise<void> {
@@ -185,7 +185,8 @@ export class AddCreditNoteProvenance1782000000000
     queryRunner: QueryRunner,
     tableName: string,
   ): Promise<void> {
-    const predicate = "tenant_id::text = current_setting('app.tenant_id', true)";
+    const predicate =
+      "tenant_id::text = current_setting('app.tenant_id', true)";
     await queryRunner.query(`
       ALTER TABLE ${tableName} ENABLE ROW LEVEL SECURITY;
       ALTER TABLE ${tableName} FORCE ROW LEVEL SECURITY;

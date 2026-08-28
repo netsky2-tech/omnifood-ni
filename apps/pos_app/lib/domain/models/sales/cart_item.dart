@@ -12,6 +12,7 @@ class CartItem with _$CartItem {
     required double quantity,
     required double unitPrice,
     required double taxRate,
+    String? category,
     String? variantId,
     String? notes,
     @Default([]) List<Modifier> selectedModifiers,

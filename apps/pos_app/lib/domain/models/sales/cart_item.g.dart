@@ -13,6 +13,7 @@ _$CartItemImpl _$$CartItemImplFromJson(Map<String, dynamic> json) =>
       quantity: (json['quantity'] as num).toDouble(),
       unitPrice: (json['unitPrice'] as num).toDouble(),
       taxRate: (json['taxRate'] as num).toDouble(),
+      category: json['category'] as String?,
       variantId: json['variantId'] as String?,
       notes: json['notes'] as String?,
       selectedModifiers: (json['selectedModifiers'] as List<dynamic>?)
@@ -28,6 +29,7 @@ Map<String, dynamic> _$$CartItemImplToJson(_$CartItemImpl instance) =>
       'quantity': instance.quantity,
       'unitPrice': instance.unitPrice,
       'taxRate': instance.taxRate,
+      'category': instance.category,
       'variantId': instance.variantId,
       'notes': instance.notes,
       'selectedModifiers': instance.selectedModifiers,

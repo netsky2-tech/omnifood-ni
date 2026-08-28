@@ -165,11 +165,40 @@ void main() {
     await tester.pumpWidget(buildApp());
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Café Molido').first);
+    final cafeFinder = find.descendant(
+      of: find.byType(DataTable),
+      matching: find.text('Café Molido'),
+    );
+    await tester.ensureVisible(cafeFinder);
+    await tester.tap(cafeFinder);
     await tester.pumpAndSettle();
 
     expect(find.text('Documento origen: PURCHASE · purchase-1'), findsOneWidget);
     expect(find.text('Valor total: 1095.00'), findsOneWidget);
     expect(find.text('Alertas relacionadas: 1'), findsOneWidget);
+  });
+
+  testWidgets('renders compact collapsible banner and card list on Sunmi V2s handheld (360x720dp)', (tester) async {
+    tester.view.physicalSize = const Size(360, 720);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
+
+    await tester.pumpWidget(buildApp());
+    await tester.pumpAndSettle();
+
+    // Banner is rendered with compact title
+    expect(find.text('Historial local de movimientos inventariables'), findsOneWidget);
+
+    // List cards rendered instead of DataTable
+    expect(find.byType(DataTable), findsNothing);
+    expect(find.text('Leche Entera'), findsOneWidget);
+    expect(find.text('Café Molido'), findsOneWidget);
+
+    // Tapping a card opens the bottom sheet detail
+    await tester.tap(find.text('Leche Entera'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Detalle del movimiento'), findsOneWidget);
+    expect(find.text('Stock final: 18.00'), findsOneWidget);
   });
 }

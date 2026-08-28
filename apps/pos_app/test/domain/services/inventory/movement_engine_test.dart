@@ -411,6 +411,101 @@ void main() {
         verifyNever(mockRepo.getInsumoById(producedInsumoId));
       },
     );
+
+    test(
+      'customIngredientConsumptions overrides theoretical quantities and updates costs accordingly',
+      () async {
+        const productId = 'salsa-base';
+        const producedInsumoId = 'finished-salsa';
+        final selectedVersion = RecipeVersionDocument(
+          id: 'rv-adjusted',
+          productId: productId,
+          productName: 'Salsa Base',
+          versionNumber: 1,
+          yieldQuantity: 10,
+          technicalShrinkPct: 0,
+          createdAt: DateTime(2026, 7, 1),
+          components: const [
+            RecipeVersionComponentDocument(
+              ingredientId: 'tomato',
+              ingredientName: 'Tomato',
+              ingredientType: 'INSUMO',
+              grossQuantity: 20,
+              netQuantity: 20,
+              technicalShrinkPct: 0,
+              componentUom: 'kg',
+            ),
+            RecipeVersionComponentDocument(
+              ingredientId: 'salt',
+              ingredientName: 'Salt',
+              ingredientType: 'INSUMO',
+              grossQuantity: 1,
+              netQuantity: 1,
+              technicalShrinkPct: 0,
+              componentUom: 'kg',
+            ),
+          ],
+        );
+        const tomato = Insumo(
+          id: 'tomato',
+          name: 'Tomato',
+          consumptionUom: 'kg',
+          stock: 30,
+          averageCost: 18,
+        );
+        const salt = Insumo(
+          id: 'salt',
+          name: 'Salt',
+          consumptionUom: 'kg',
+          stock: 5,
+          averageCost: 10,
+        );
+        const finished = Insumo(
+          id: producedInsumoId,
+          name: 'Finished salsa',
+          consumptionUom: 'kg',
+          stock: 0,
+          averageCost: 0,
+        );
+
+        when(
+          mockRepo.getRecipeVersionDocumentById('rv-adjusted'),
+        ).thenAnswer((_) async => selectedVersion);
+        when(
+          mockRepo.getInsumosByIds(['tomato', 'salt']),
+        ).thenAnswer((_) async => [tomato, salt]);
+        when(
+          mockRepo.getInsumoById(producedInsumoId),
+        ).thenAnswer((_) async => finished);
+
+        // Theoretical for 5kg yield would be 10kg tomato and 0.5kg salt.
+        // But the cook used 12kg tomato and 0.6kg salt (customIngredientConsumptions).
+        final result = await engine.recordProductionClose(
+          recipeProductId: productId,
+          producedInsumoId: producedInsumoId,
+          productionDocumentId: 'po-custom-consumption',
+          recipeVersionId: 'rv-adjusted',
+          plannedQuantity: 5,
+          actualQuantity: 5,
+          outcome: 'COMPLETED',
+          reason: 'PRODUCTION_CLOSE:po-custom-consumption',
+          customIngredientConsumptions: {
+            'tomato': 12.0,
+            'salt': 0.6,
+          },
+        );
+
+        // Consumed cost: 12 * 18 + 0.6 * 10 = 216 + 6 = 222 NIO
+        // Unit cost: 222 / 5 = 44.4 NIO/kg
+        expect(result.totalConsumedCostNio, 222.0);
+        expect(result.producedUnitCostNio, 44.4);
+        expect(result.movements, hasLength(3));
+
+        verify(mockRepo.updateInsumoStock('tomato', 18)).called(1); // 30 - 12 = 18
+        verify(mockRepo.updateInsumoStock('salt', 4.4)).called(1);   // 5 - 0.6 = 4.4
+        verify(mockRepo.updateInsumoStock(producedInsumoId, 5)).called(1); // 0 + 5 = 5
+      },
+    );
   });
 
   group('MovementEngine - recordProductShrinkage', () {

@@ -110,8 +110,7 @@ describe('AuditIntegrityService', () => {
       }),
     );
     const firstInsert = alertRepository.insert.mock.calls[0]?.[0] as
-      | { first_detected_at?: unknown; last_seen_at?: unknown }
-      | undefined;
+      { first_detected_at?: unknown; last_seen_at?: unknown } | undefined;
     expect(firstInsert?.first_detected_at).toBeInstanceOf(Date);
     expect(firstInsert?.last_seen_at).toBeInstanceOf(Date);
     expect(eventEmitter.emit).toHaveBeenCalledTimes(1);

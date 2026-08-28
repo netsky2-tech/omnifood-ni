@@ -9,6 +9,8 @@ import { TenantCapabilityEvent } from './entities/tenant-capability-event.entity
 import { AuthService } from './services/auth.service';
 import { UserService } from './services/user.service';
 import { AuditIntegrityService } from './services/audit-integrity.service';
+import { SupervisorOverrideService } from './services/supervisor-override.service';
+import { AuditTrailService } from './services/audit-trail.service';
 import { AuditMetricsService } from './services/audit-metrics.service';
 import { AuditVerificationService } from './services/audit-verification.service';
 import { AuthController } from './controllers/auth.controller';
@@ -17,6 +19,7 @@ import { UsersController } from './controllers/users.controller';
 import { CapabilityController } from './controllers/capability.controller';
 import { AuthGuard } from './guards/auth.guard';
 import { RolesGuard } from './guards/roles.guard';
+import { PermissionsGuard } from './guards/permissions.guard';
 import { AuthoritativeCurrentUserGuard } from './guards/authoritative-current-user.guard';
 import { CurrentUserAuthorizationService } from './services/current-user-authorization.service';
 import { TenantCapabilityService } from './services/tenant-capability.service';
@@ -60,11 +63,14 @@ import {
     AuthService,
     UserService,
     AuditIntegrityService,
+    SupervisorOverrideService,
+    AuditTrailService,
     AuditMetricsService,
     AuditVerificationService,
     AuthGuard,
     AuthoritativeCurrentUserGuard,
     RolesGuard,
+    PermissionsGuard,
     CurrentUserAuthorizationService,
     TenantCapabilityService,
   ],
@@ -74,11 +80,14 @@ import {
     AuthService,
     UserService,
     AuditIntegrityService,
+    SupervisorOverrideService,
+    AuditTrailService,
     AuditMetricsService,
     AuditVerificationService,
     AuthGuard,
     AuthoritativeCurrentUserGuard,
     RolesGuard,
+    PermissionsGuard,
     CurrentUserAuthorizationService,
     TenantCapabilityService,
   ],

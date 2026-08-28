@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import '../../domain/repositories/audit_repository.dart';
@@ -13,6 +14,15 @@ import '../../domain/models/inventory/count_session_document.dart';
 import '../../domain/models/inventory/forensic_alert.dart';
 import '../../domain/models/inventory/recipe_version_document.dart';
 import '../../domain/models/inventory/production_order_document.dart';
+import '../database/app_database.dart';
+import '../models/inventory/product_entity.dart';
+import '../models/catalog/catalog_value_entity.dart';
+import '../models/inventory/insumo_entity.dart';
+import '../models/inventory/recipe_entity.dart';
+import '../models/user_entity.dart';
+import '../models/security_profile_entity.dart';
+import '../models/local_config_entity.dart';
+import 'network_connectivity_service.dart';
 
 const Map<String, String> syncRole = {
   'EDGE_SERVER': 'EDGE_SERVER',
@@ -20,6 +30,32 @@ const Map<String, String> syncRole = {
 };
 
 typedef SyncRole = String;
+
+enum CloudSyncStatus {
+  idle,
+  syncing,
+  offline,
+  error,
+  success,
+}
+
+class InboundSyncResult {
+  final int productsCount;
+  final int catalogValuesCount;
+  final int insumosCount;
+  final int recipesCount;
+  final int usersCount;
+  final String timestamp;
+
+  const InboundSyncResult({
+    this.productsCount = 0,
+    this.catalogValuesCount = 0,
+    this.insumosCount = 0,
+    this.recipesCount = 0,
+    this.usersCount = 0,
+    required this.timestamp,
+  });
+}
 
 enum SyncRunStatus { complete, partial, failed }
 
@@ -41,8 +77,33 @@ class SyncService {
   final Dio _dio;
   static const int _batchEnvelopeLimit = 500;
   final SyncRole _role;
+  final AppDatabase? _database;
+  final NetworkConnectivityService? _connectivityService;
+
+  final StreamController<InboundSyncResult> _inboundSyncController =
+      StreamController<InboundSyncResult>.broadcast();
+
+  Stream<InboundSyncResult> get onInboundSync => _inboundSyncController.stream;
+
+  final StreamController<CloudSyncStatus> _statusController =
+      StreamController<CloudSyncStatus>.broadcast();
+
+  Stream<CloudSyncStatus> get onStatusChanged => _statusController.stream;
+
+  CloudSyncStatus _status = CloudSyncStatus.idle;
+  CloudSyncStatus get status => _status;
+
+  DateTime? _lastSyncTime;
+  DateTime? get lastSyncTime => _lastSyncTime;
+
+  String? _lastSyncError;
+  String? get lastSyncError => _lastSyncError;
+
+  int _consecutiveFailures = 0;
+  int get consecutiveFailures => _consecutiveFailures;
 
   Timer? _timer;
+  StreamSubscription<bool>? _connectivitySubscription;
   bool _isSyncing = false;
 
   SyncService(
@@ -51,10 +112,41 @@ class SyncService {
     this._inventoryRepository,
     this._dio, {
     SyncRole role = 'STANDALONE',
-  }) : _role = role;
+    AppDatabase? database,
+    NetworkConnectivityService? connectivityService,
+  })  : _role = role,
+        _database = database,
+        _connectivityService = connectivityService;
+
+  void _updateStatus(CloudSyncStatus newStatus) {
+    if (_status != newStatus) {
+      _status = newStatus;
+      if (!_statusController.isClosed) {
+        _statusController.add(newStatus);
+      }
+    }
+  }
 
   void start() {
+    // Listen to network transitions for immediate auto-sync
+    _connectivitySubscription?.cancel();
+    if (_connectivityService != null) {
+      _connectivitySubscription =
+          _connectivityService!.onConnectivityChanged.listen((isOnline) {
+        if (isOnline) {
+          developer.log(
+            'Network recovered! Triggering automatic sync...',
+            name: 'SyncService',
+          );
+          triggerManualSync();
+        } else {
+          _updateStatus(CloudSyncStatus.offline);
+        }
+      });
+    }
+
     // Sync every 5 minutes
+    _timer?.cancel();
     _timer = Timer.periodic(const Duration(minutes: 5), (_) async {
       await triggerManualSync();
     });
@@ -63,56 +155,174 @@ class SyncService {
 
   void stop() {
     _timer?.cancel();
+    _timer = null;
+    _connectivitySubscription?.cancel();
+    _connectivitySubscription = null;
     developer.log('SyncService stopped', name: 'SyncService');
+  }
+
+  void dispose() {
+    stop();
+    _inboundSyncController.close();
+    _statusController.close();
+  }
+
+  Duration getNextBackoffDelay() {
+    if (_consecutiveFailures == 0) return Duration.zero;
+    final seconds = min(300, (pow(2, _consecutiveFailures - 1) * 5).toInt());
+    return Duration(seconds: seconds);
+  }
+
+  Future<int> getPendingOutboxCount() async {
+    int count = 0;
+    try {
+      final sales = await _salesRepository.getUnsyncedAggregates();
+      count += sales.length;
+    } catch (_) {}
+
+    try {
+      final purchases = await _inventoryRepository.getUnsyncedPurchases();
+      count += purchases.length;
+    } catch (_) {}
+
+    try {
+      final counts =
+          await _inventoryRepository.getUnsyncedCountSessionDocuments();
+      count += counts.length;
+    } catch (_) {}
+
+    try {
+      final recipes =
+          await _inventoryRepository.getUnsyncedRecipeVersionDocuments();
+      count += recipes.length;
+    } catch (_) {}
+
+    try {
+      final orders =
+          await _inventoryRepository.getUnsyncedProductionOrders();
+      count += orders.length;
+    } catch (_) {}
+
+    try {
+      final alerts = await _inventoryRepository.getUnsyncedForensicAlerts();
+      count += alerts.length;
+    } catch (_) {}
+
+    try {
+      final movements = await _inventoryRepository.getUnsyncedMovements();
+      count += movements.length;
+    } catch (_) {}
+
+    return count;
   }
 
   Future<SyncRunOutcome> triggerManualSync() async {
     if (_isSyncing) return const SyncRunOutcome.partial();
 
     _isSyncing = true;
+    _updateStatus(CloudSyncStatus.syncing);
+
+    final List<String> domainErrors = [];
+
     try {
-      developer.log('Starting sync...', name: 'SyncService');
+      developer.log('Starting sync pass with fault isolation...', name: 'SyncService');
 
       var auditOutcome = const AuditSyncOutcome.retryable(failedStreams: 1);
       var hasFailure = !await _runDomain('audit', () async {
         auditOutcome = await _auditRepository.syncLogs();
       });
       hasFailure |= auditOutcome.status != AuditSyncStatus.complete;
+      if (hasFailure) domainErrors.add('AuditLogs');
 
       // 1b. Sync fiscal sales documents, including offline credit notes, before
       // inventory movements so backend replay sees sale -> credit-note ordering.
-      hasFailure |= !await _runDomain('sales', _syncSalesDocuments);
+      final salesSuccess = await _runDomain('sales', _syncSalesDocuments);
+      if (!salesSuccess) {
+        hasFailure = true;
+        domainErrors.add('Sales');
+      }
 
       // 2. Sync inventory outbox deltas
-      hasFailure |= !await _runDomain('purchase', _syncPurchaseDocuments);
-      hasFailure |= !await _runDomain('recipe', _syncRecipeVersionDocuments);
       var productionLinkedMovementIds = const <String>{};
-      hasFailure |= !await _runDomain('production', () async {
+      final purchaseSuccess = await _runDomain('purchase', _syncPurchaseDocuments);
+      if (!purchaseSuccess) {
+        hasFailure = true;
+        domainErrors.add('Purchase');
+      }
+      final recipeSuccess = await _runDomain('recipe', _syncRecipeVersionDocuments);
+      if (!recipeSuccess) {
+        hasFailure = true;
+        domainErrors.add('Recipe');
+      }
+      final prodSuccess = await _runDomain('production', () async {
         productionLinkedMovementIds = await _syncProductionOrderDocuments();
       });
-      hasFailure |= !await _runDomain('count', _syncCountSessionDocuments);
-      hasFailure |=
-          !await _runDomain('alert lifecycle', _syncAlertLifecycleDocuments);
-      hasFailure |= !await _runDomain(
+      if (!prodSuccess) {
+        hasFailure = true;
+        domainErrors.add('Production');
+      }
+      final countSuccess = await _runDomain('count', _syncCountSessionDocuments);
+      if (!countSuccess) {
+        hasFailure = true;
+        domainErrors.add('Count');
+      }
+      final alertLifeSuccess = await _runDomain('alert lifecycle', _syncAlertLifecycleDocuments);
+      if (!alertLifeSuccess) {
+        hasFailure = true;
+        domainErrors.add('AlertLifecycle');
+      }
+      final kardexSuccess = await _runDomain('kardex corrections', _syncKardexCorrections);
+      if (!kardexSuccess) {
+        hasFailure = true;
+        domainErrors.add('KardexCorrections');
+      }
+      final invOutboxSuccess = await _runDomain(
         'inventory',
         () => _syncInventoryOutbox(
           blockedMovementIds: productionLinkedMovementIds,
         ),
       );
-      hasFailure |= !await _runDomain('alert inbox', _refreshAlertInbox);
+      if (!invOutboxSuccess) {
+        hasFailure = true;
+        domainErrors.add('InventoryOutbox');
+      }
+      final alertInboxSuccess = await _runDomain('alert inbox', _refreshAlertInbox);
+      if (!alertInboxSuccess) {
+        hasFailure = true;
+        domainErrors.add('AlertInbox');
+      }
+
+      // 3. Pull Master Catalog & Security Inbound Deltas
+      final inboundSuccess = await _runDomain('inbound deltas', _pullInboundDeltas);
+      if (!inboundSuccess) {
+        hasFailure = true;
+        domainErrors.add('InboundCatalog');
+      }
 
       if (!hasFailure) {
+        _consecutiveFailures = 0;
+        _lastSyncTime = DateTime.now();
+        _lastSyncError = null;
+        _updateStatus(CloudSyncStatus.success);
+        _updateStatus(CloudSyncStatus.idle);
         developer.log('Sync completed successfully', name: 'SyncService');
         return const SyncRunOutcome.complete();
+      } else {
+        _consecutiveFailures++;
+        _lastSyncError = domainErrors.join('; ');
+        _updateStatus(CloudSyncStatus.error);
+        developer.log(
+          'Sync completed partially; domain errors: $_lastSyncError',
+          name: 'SyncService',
+        );
+        return const SyncRunOutcome.partial();
       }
-      developer.log(
-        'Sync completed partially; audit rows remain queued.',
-        name: 'SyncService',
-      );
-      return const SyncRunOutcome.partial();
     } catch (e, stackTrace) {
+      _consecutiveFailures++;
+      _lastSyncError = e.toString();
+      _updateStatus(CloudSyncStatus.error);
       developer.log(
-        'Sync failed',
+        'Fatal sync failure',
         name: 'SyncService',
         error: e,
         stackTrace: stackTrace,
@@ -1022,6 +1232,242 @@ class SyncService {
       parsed[result.idempotencyKey] = result;
     }
     return parsed;
+  }
+
+  Future<void> _syncKardexCorrections() async {
+    final corrections = await _inventoryRepository.getKardexCorrections();
+    if (corrections.isEmpty) return;
+
+    final payload = {
+      'corrections': corrections
+          .map((c) => {
+                'id': c.id,
+                'insumoId': c.insumoId,
+                'originMovementId': c.originMovementId,
+                'triggerMovementId': c.triggerMovementId,
+                'previousUnitCostNio': c.previousUnitCostNio,
+                'recalculatedUnitCostNio': c.recalculatedUnitCostNio,
+                'deltaUnitCostNio': c.deltaUnitCostNio,
+                'totalDeltaCostNio': c.totalDeltaCostNio,
+                'affectedQuantity': c.affectedQuantity,
+                'lineageHash': c.lineageHash,
+                'authorizedByUserId': c.authorizedByUserId,
+                'authorizedByRole': c.authorizedByRole,
+                'authorizationMethod': c.authorizationMethod,
+                'createdAt': c.createdAt,
+              })
+          .toList(growable: false),
+    };
+
+    try {
+      final response = await _dio.post(
+        '/inventory/regularization/sync',
+        data: payload,
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        developer.log(
+          'Synced ${corrections.length} kardex corrections to cloud',
+          name: 'SyncService',
+        );
+      }
+    } on DioException catch (e) {
+      developer.log(
+        'Failed to sync kardex corrections: ${e.message}',
+        name: 'SyncService',
+      );
+    }
+  }
+
+  Future<InboundSyncResult?> pullInboundDeltas() => _pullInboundDeltas();
+
+  Future<InboundSyncResult?> _pullInboundDeltas() async {
+    if (_database == null) return null;
+
+    try {
+      final lastSyncConfig = await _database!.localConfigDao.getConfigByKey(
+        'last_inbound_sync_version',
+      );
+      final sinceVersion = lastSyncConfig?.value;
+
+      final queryParams = <String, dynamic>{
+        if (sinceVersion != null && sinceVersion.trim().isNotEmpty)
+          'sinceVersion': sinceVersion.trim(),
+        'terminalId': _auditRepository.deviceId,
+      };
+
+      final response = await _dio.get(
+        '/v1/sync/inbound/deltas',
+        queryParameters: queryParams,
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = response.data;
+        if (data is! Map) return null;
+
+        final rawDeltas = data['deltas'];
+        if (rawDeltas is! Map) return null;
+
+        // 1. Products
+        final rawProducts =
+            rawDeltas['products'] as List<dynamic>? ?? const [];
+        final productEntities = rawProducts.map((p) {
+          final map = Map<String, dynamic>.from(p as Map);
+          return ProductEntity(
+            id: map['id'] as String,
+            name: map['name'] as String,
+            uom: map['uom'] as String? ?? 'UND',
+            stock: (map['stock'] as num?)?.toDouble() ?? 0.0,
+            averageCost: (map['averageCost'] as num?)?.toDouble() ?? 0.0,
+            sellPrice: (map['sellPrice'] as num?)?.toDouble() ?? 0.0,
+            isActive: map['isActive'] as bool? ?? true,
+            isPrepared: false,
+            createdAt: map['createdAt']?.toString(),
+          );
+        }).toList(growable: false);
+
+        if (productEntities.isNotEmpty) {
+          await _database!.productDao.insertProducts(productEntities);
+        }
+
+        // 2. Catalog Values
+        final rawCatalogValues =
+            rawDeltas['catalogValues'] as List<dynamic>? ?? const [];
+        final catalogEntities = rawCatalogValues.map((c) {
+          final map = Map<String, dynamic>.from(c as Map);
+          return CatalogValueEntity(
+            id: map['id'] as String,
+            catalogType: map['catalogType'] as String,
+            code: map['code'] as String,
+            name: map['name'] as String,
+            isActive: map['isActive'] as bool? ?? true,
+            sortOrder: (map['sortOrder'] as num?)?.toInt() ?? 0,
+          );
+        }).toList(growable: false);
+
+        if (catalogEntities.isNotEmpty) {
+          await _database!.catalogValueDao.insertCatalogValues(catalogEntities);
+        }
+
+        // 3. Insumos
+        final rawInsumos = rawDeltas['insumos'] as List<dynamic>? ?? const [];
+        final insumoEntities = rawInsumos.map<InsumoEntity>((i) {
+          final map = Map<String, dynamic>.from(i as Map);
+          return InsumoEntity(
+            id: map['id'] as String,
+            name: map['name'] as String,
+            consumptionUom: (map['consumptionUom'] ?? map['purchaseUom']) as String? ?? 'UND',
+            stock: (map['stock'] as num?)?.toDouble() ?? 0.0,
+            averageCost: (map['averageCost'] as num?)?.toDouble() ?? 0.0,
+            isActive: map['isActive'] as bool? ?? true,
+            isPerishable: map['isPerishable'] as bool? ?? false,
+          );
+        }).toList(growable: false);
+
+        if (insumoEntities.isNotEmpty) {
+          await _database!.insumoDao.insertInsumos(insumoEntities);
+        }
+
+        // 4. Recipes
+        final rawRecipes = rawDeltas['recipes'] as List<dynamic>? ?? const [];
+        final recipeEntities = rawRecipes.map((r) {
+          final map = Map<String, dynamic>.from(r as Map);
+          return RecipeEntity(
+            id: map['id'] as String,
+            productId: map['productId'] as String,
+            ingredientId: map['ingredientId'] as String,
+            ingredientType: map['ingredientType'] as String? ?? 'INSUMO',
+            quantity: (map['quantity'] as num?)?.toDouble() ?? 0.0,
+          );
+        }).toList(growable: false);
+
+        if (recipeEntities.isNotEmpty) {
+          await _database!.recipeDao.insertRecipes(recipeEntities);
+        }
+
+        // 5. Users & Security Profiles
+        final rawUsers = rawDeltas['users'] as List<dynamic>? ?? const [];
+        final userEntities = <UserEntity>[];
+        final profileEntities = <SecurityProfileEntity>[];
+
+        for (final u in rawUsers) {
+          final map = Map<String, dynamic>.from(u as Map);
+          final userId = map['id'] as String;
+          final secProfile = map['securityProfile'] as Map<String, dynamic>?;
+          final pinHash = (secProfile?['pinHash'] as String?) ?? '';
+
+          userEntities.add(
+            UserEntity(
+              id: userId,
+              name: map['name'] as String,
+              role: map['role'] as String,
+              pinHash: pinHash,
+              isActive: map['isActive'] as bool? ?? true,
+              email: map['email'] as String?,
+            ),
+          );
+
+          if (secProfile != null) {
+            profileEntities.add(
+              SecurityProfileEntity(
+                userId: userId,
+                pinHash: pinHash.isNotEmpty ? pinHash : null,
+                isPinEnabled: secProfile['isPinEnabled'] as bool? ?? true,
+                isTotpEnabled: secProfile['isTotpEnabled'] as bool? ?? false,
+              ),
+            );
+          }
+        }
+
+        if (userEntities.isNotEmpty) {
+          await _database!.userDao.insertUsers(userEntities);
+        }
+        if (profileEntities.isNotEmpty) {
+          await _database!.securityProfileDao.insertProfiles(profileEntities);
+        }
+
+        // Update local sync watermark version
+        final currentVersion = data['currentVersion'];
+        if (currentVersion != null) {
+          await _database!.localConfigDao.saveConfig(
+            LocalConfigEntity(
+              key: 'last_inbound_sync_version',
+              value: currentVersion.toString(),
+            ),
+          );
+        }
+
+        final result = InboundSyncResult(
+          productsCount: productEntities.length,
+          catalogValuesCount: catalogEntities.length,
+          insumosCount: insumoEntities.length,
+          recipesCount: recipeEntities.length,
+          usersCount: userEntities.length,
+          timestamp:
+              data['serverTime']?.toString() ??
+              DateTime.now().toIso8601String(),
+        );
+
+        if (!_inboundSyncController.isClosed) {
+          _inboundSyncController.add(result);
+        }
+        return result;
+      }
+    } on DioException catch (e) {
+      developer.log(
+        'Failed to pull inbound catalog deltas: ${e.message}',
+        name: 'SyncService',
+      );
+      rethrow;
+    } catch (e, stackTrace) {
+      developer.log(
+        'Error pulling inbound catalog deltas',
+        name: 'SyncService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+    return null;
   }
 }
 

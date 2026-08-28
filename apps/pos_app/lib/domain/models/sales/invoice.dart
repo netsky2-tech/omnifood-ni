@@ -35,8 +35,10 @@ class Invoice with _$Invoice {
     int? sourceSequence,
     String? idempotencyKey,
     String? payloadHash,
+    @Default(36.6241) double bcnOfficialRate,
+    @Default(36.50) double commercialRate,
+    @Default(0.0) double totalUsd,
   }) = _Invoice;
-
 
   factory Invoice.fromJson(Map<String, dynamic> json) => _$InvoiceFromJson(json);
 }

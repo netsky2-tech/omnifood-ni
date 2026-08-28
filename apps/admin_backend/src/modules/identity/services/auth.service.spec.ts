@@ -699,20 +699,20 @@ describe('AuthService', () => {
     );
   });
 
-  it('rejects login when password compare fails', async () => {
+  it('rejects inactive login with a generic error', async () => {
     mockUserRepository.findOne.mockResolvedValue({
       id: 'user-2',
       email: 'waiter@omnifood.ni',
       password_hash: 'stored-hash',
       role: UserRole.WAITER,
       tenant_id: 'tenant-1',
-      is_active: true,
+      is_active: false,
     });
-    jest.spyOn(bcrypt, 'compare').mockResolvedValue(false as never);
+    jest.spyOn(bcrypt, 'compare').mockResolvedValue(true as never);
 
-    await expect(service.login('waiter@omnifood.ni', 'wrong')).rejects.toThrow(
-      'Credenciales inválidas',
-    );
+    await expect(
+      service.login('waiter@omnifood.ni', 'password'),
+    ).rejects.toThrow('Credenciales inválidas');
   });
 
   const useRealJwtVerification = () => {

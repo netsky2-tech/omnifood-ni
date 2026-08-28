@@ -98,4 +98,41 @@ void main() {
     expect(find.text('PUBLICAR VERSIÓN'), findsOneWidget);
     expect(find.textContaining('Merma'), findsWidgets);
   });
+
+  testWidgets('renders adaptive master-detail navigation on Sunmi V2s handheld (360x720dp)', (tester) async {
+    tester.view.physicalSize = const Size(360, 720);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
+
+    final repository = _FakeInventoryRepository();
+    final viewModel = RecipeViewModel(repository);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<RecipeViewModel>.value(
+        value: viewModel,
+        child: const MaterialApp(home: RecipeView()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // 1. Initial product list view
+    expect(find.text('Recetas BOH'), findsOneWidget);
+    expect(find.text('Vanilla Latte'), findsOneWidget);
+    expect(find.text('Comparar versiones'), findsNothing);
+
+    // 2. Tap product to navigate to full editor
+    await tester.tap(find.text('Vanilla Latte'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Vanilla Latte'), findsOneWidget);
+    expect(find.text('Comparar versiones'), findsOneWidget);
+    expect(find.text('PUBLICAR VERSIÓN'), findsOneWidget);
+
+    // 3. Tap back button to return to product list
+    await tester.tap(find.byIcon(Icons.arrow_back));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Recetas BOH'), findsOneWidget);
+    expect(find.text('Vanilla Latte'), findsOneWidget);
+  });
 }

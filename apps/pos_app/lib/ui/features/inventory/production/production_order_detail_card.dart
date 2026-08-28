@@ -6,12 +6,16 @@ class ProductionOrderDetailCard extends StatelessWidget {
   const ProductionOrderDetailCard({
     super.key,
     required this.order,
+    this.onPrintLabel,
   });
 
   final ProductionOrderDocument order;
+  final VoidCallback? onPrintLabel;
 
   @override
   Widget build(BuildContext context) {
+    final canPrint = order.outcome == 'COMPLETED' && order.actualQuantity > 0;
+
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -26,9 +30,25 @@ class ProductionOrderDetailCard extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: Text(order.recipeProductName, style: Theme.of(context).textTheme.titleMedium),
+                  child: Text(
+                    order.recipeProductName,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
                 ),
-                Chip(label: Text(order.isSynced ? 'Synced' : 'Pending')),
+                if (canPrint && onPrintLabel != null)
+                  IconButton(
+                    icon: const Icon(Icons.print),
+                    tooltip: 'Imprimir viñeta FIFO',
+                    onPressed: onPrintLabel,
+                  ),
+                Chip(
+                  label: Text(
+                    order.isSynced ? 'Synced' : 'Pending',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 8),

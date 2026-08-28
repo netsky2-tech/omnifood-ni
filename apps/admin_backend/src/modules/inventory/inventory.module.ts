@@ -19,6 +19,9 @@ import { ShrinkageDetail } from './entities/shrinkage-detail.entity';
 import { InventorySyncOutbox } from './entities/inventory-sync-outbox.entity';
 import { InventorySyncReceipt } from './entities/inventory-sync-receipt.entity';
 import { BcnFxRate } from './entities/bcn-fx-rate.entity';
+import { SystemParametersConfig } from './entities/system-parameters-config.entity';
+import { KardexRecalculateQueue } from './entities/kardex-recalculate-queue.entity';
+import { KardexCorrection } from './entities/kardex-correction.entity';
 import { InventoryService } from './inventory.service';
 import { PurchaseService } from './purchase.service';
 import { ShrinkageService } from './shrinkage.service';
@@ -42,6 +45,11 @@ import {
 import { UomConversionCalculator } from './uom-conversion-calculator';
 import { IdentityModule } from '../identity/identity.module';
 import { CountSessionService } from './count-session.service';
+import { GovernanceApprovalService } from './services/governance-approval.service';
+import { KardexRegularizationService } from './services/kardex-regularization.service';
+import { RegularizationController } from './controllers/regularization.controller';
+import { InventoryReportsService } from './services/inventory-reports.service';
+import { InventoryReportsController } from './controllers/inventory-reports.controller';
 
 @Module({
   imports: [
@@ -66,9 +74,16 @@ import { CountSessionService } from './count-session.service';
       InventorySyncOutbox,
       InventorySyncReceipt,
       BcnFxRate,
+      SystemParametersConfig,
+      KardexRecalculateQueue,
+      KardexCorrection,
     ]),
   ],
-  controllers: [InventoryMovementController],
+  controllers: [
+    InventoryMovementController,
+    RegularizationController,
+    InventoryReportsController,
+  ],
   providers: [
     InventoryService,
     InventoryMovementService,
@@ -83,6 +98,9 @@ import { CountSessionService } from './count-session.service';
     InventoryAdjustmentService,
     CountSessionService,
     ForensicAlertService,
+    GovernanceApprovalService,
+    KardexRegularizationService,
+    InventoryReportsService,
     UomConversionCalculator,
     FxRateResolverService,
     {
@@ -111,6 +129,8 @@ import { CountSessionService } from './count-session.service';
     InventoryAdjustmentService,
     CountSessionService,
     ForensicAlertService,
+    GovernanceApprovalService,
+    KardexRegularizationService,
     UomConversionCalculator,
   ],
 })

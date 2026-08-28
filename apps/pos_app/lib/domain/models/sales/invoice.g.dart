@@ -37,6 +37,9 @@ _$InvoiceImpl _$$InvoiceImplFromJson(Map<String, dynamic> json) =>
       sourceSequence: json['sourceSequence'] as int?,
       idempotencyKey: json['idempotencyKey'] as String?,
       payloadHash: json['payloadHash'] as String?,
+      bcnOfficialRate: (json['bcnOfficialRate'] as num?)?.toDouble() ?? 36.6241,
+      commercialRate: (json['commercialRate'] as num?)?.toDouble() ?? 36.50,
+      totalUsd: (json['totalUsd'] as num?)?.toDouble() ?? 0.0,
     );
 
 Map<String, dynamic> _$$InvoiceImplToJson(_$InvoiceImpl instance) =>
@@ -65,6 +68,9 @@ Map<String, dynamic> _$$InvoiceImplToJson(_$InvoiceImpl instance) =>
       'sourceSequence': instance.sourceSequence,
       'idempotencyKey': instance.idempotencyKey,
       'payloadHash': instance.payloadHash,
+      'bcnOfficialRate': instance.bcnOfficialRate,
+      'commercialRate': instance.commercialRate,
+      'totalUsd': instance.totalUsd,
     };
 
 const _$SyncStatusEnumMap = {

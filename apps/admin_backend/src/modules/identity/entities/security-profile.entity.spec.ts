@@ -17,6 +17,20 @@ describe('SecurityProfile Entity', () => {
     expect(profile.is_totp_enabled).toBe(true);
   });
 
+  it('should support custom_permissions array override', () => {
+    const profile = new SecurityProfile();
+    profile.user_id = 'user-3';
+    profile.custom_permissions = [
+      'sales:void_invoice',
+      'cash:manual_drawer_open',
+    ];
+
+    expect(profile.custom_permissions).toEqual([
+      'sales:void_invoice',
+      'cash:manual_drawer_open',
+    ]);
+  });
+
   it('should support nullable secrets for deactivated methods', () => {
     const profile = new SecurityProfile();
     profile.user_id = 'user-2';

@@ -9,6 +9,7 @@ import 'package:pos_app/presentation/widgets/inventory_alert_overlay.dart';
 import 'package:pos_app/data/repositories/inventory/inventory_repository_impl.dart';
 import 'data/database/app_database.dart';
 import 'data/database/migrations.dart';
+import 'data/database/database_seeder.dart';
 import 'data/repositories/auth_repository_impl.dart';
 import 'core/clock/monotonic_clock.dart';
 import 'core/config/production_transport_config.dart';
@@ -16,6 +17,7 @@ import 'data/repositories/tenant_capability_cache.dart';
 import 'domain/repositories/auth_repository.dart';
 import 'data/repositories/audit_repository_impl.dart';
 import 'data/services/local_auth_service.dart';
+import 'data/services/network_connectivity_service.dart';
 import 'data/services/sync_service.dart';
 import 'data/services/terminal_identity_service.dart';
 import 'ui/features/auth/viewmodels/login_viewmodel.dart';
@@ -38,8 +40,14 @@ import 'ui/features/inventory/items/insumo_view.dart';
 import 'ui/features/inventory/purchases/purchase_view.dart';
 import 'ui/features/inventory/shrinkage/shrinkage_view.dart';
 import 'ui/features/inventory/alerts/forensic_alert_view.dart';
+import 'ui/features/inventory/alerts/stock_alerts_view.dart';
+import 'ui/features/inventory/alerts/stock_alerts_view_model.dart';
 import 'ui/features/inventory/production/production_order_view.dart';
 import 'ui/features/inventory/recipes/recipe_view.dart';
+import 'ui/features/inventory/reports/inventory_valuation_view.dart';
+import 'ui/features/inventory/reports/inventory_valuation_view_model.dart';
+import 'ui/features/inventory/reports/cogs_report_view.dart';
+import 'ui/features/inventory/reports/cogs_report_view_model.dart';
 import 'ui/features/inventory/suppliers/supplier_view.dart';
 import 'ui/features/inventory/warehouses/warehouse_view.dart';
 import 'data/repositories/sales/sales_repository_impl.dart';
@@ -49,8 +57,13 @@ import 'ui/features/sales/sales_history_view.dart';
 import 'presentation/features/sales/view_models/sales_history_view_model.dart';
 import 'ui/features/sales/reports/dgi_report_view_model.dart';
 import 'ui/features/sales/reports/dgi_report_view.dart';
+import 'ui/features/cash/cash_shift_view.dart';
+import 'ui/features/cash/cash_shift_view_model.dart';
 import 'ui/features/config/business_profile/business_profile_view_model.dart';
 import 'ui/features/config/business_profile/business_profile_view.dart';
+import 'ui/features/config/hardware/hardware_settings_view_model.dart';
+import 'ui/features/config/hardware/hardware_settings_view.dart';
+import 'domain/services/config/printer_config_service.dart';
 import 'ui/features/identity/audit/audit_log_view_model.dart';
 import 'ui/features/identity/audit/audit_log_view.dart';
 import 'ui/features/identity/users/user_management_view_model.dart';
@@ -61,6 +74,12 @@ import 'domain/services/sales/dgi_numbering_service.dart';
 import 'data/services/sales/dgi_numbering_service_impl.dart';
 import 'domain/usecases/inventory/process_sale_inventory_use_case.dart';
 import 'domain/usecases/inventory/reverse_sale_inventory_use_case.dart';
+import 'domain/services/sales/table_order_service.dart';
+import 'domain/services/kitchen/kitchen_order_service.dart';
+import 'ui/features/sales/tables/table_layout_view.dart';
+import 'ui/features/sales/tables/table_layout_view_model.dart';
+import 'ui/features/kitchen/kitchen_display_view.dart';
+import 'ui/features/kitchen/kitchen_display_view_model.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -79,6 +98,9 @@ void main() async {
       .addMigrations(allMigrations)
       .addCallback(inventoryMovementAppendOnlyCallback)
       .build();
+
+  // Populate seed test data if not present
+  await DatabaseSeeder.seedAll(database);
 
   // Initialize Services & Repositories
   final deviceId = await TerminalIdentityService(
@@ -166,11 +188,16 @@ void main() async {
     inventoryRepository: inventoryRepository,
   );
 
+  final connectivityService = NetworkConnectivityService(dio);
+  connectivityService.start();
+
   final syncService = SyncService(
     auditRepository,
     salesRepository,
     inventoryRepository,
     dio,
+    database: database,
+    connectivityService: connectivityService,
   );
   syncService.start();
 
@@ -212,6 +239,7 @@ void main() async {
           create: (_) => ProductionOrderViewModel(
             inventoryRepository,
             movementEngine,
+            authRepository: authRepository,
             terminalIdProvider: () => auditRepository.deviceId,
           ),
         ),
@@ -222,21 +250,63 @@ void main() async {
           create: (_) => RecipeViewModel(inventoryRepository),
         ),
         ChangeNotifierProvider(
+          create: (_) => InventoryValuationViewModel(inventoryRepository),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => CogsReportViewModel(inventoryRepository),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => StockAlertsViewModel(inventoryRepository),
+        ),
+        ChangeNotifierProvider(
           create: (_) => DgiReportViewModel(salesRepository, database),
         ),
         ChangeNotifierProvider(
           create: (_) => BusinessProfileViewModel(database.localConfigDao),
         ),
         ChangeNotifierProvider(
+          create: (_) => HardwareSettingsViewModel(
+            configService: PrinterConfigService(database.localConfigDao),
+          ),
+        ),
+        ChangeNotifierProvider(
           create: (_) => AuditLogViewModel(auditRepository),
         ),
         ChangeNotifierProvider(create: (_) => SalesHistoryViewModel(database)),
+        ChangeNotifierProvider(
+          create: (_) {
+            final vm = CashShiftViewModel.fromDatabase(
+              database: database,
+              currentUserId: 'user-cajero',
+            );
+            vm.init();
+            return vm;
+          },
+        ),
+        ChangeNotifierProvider(
+          create: (_) => TableLayoutViewModel(
+            database: database,
+            tableOrderService: TableOrderService(database),
+          ),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => KitchenDisplayViewModel(
+            kitchenOrderService: KitchenOrderService(database),
+          ),
+        ),
         ChangeNotifierProvider(
           create: (_) => SaleViewModel(
             salesRepository,
             inventoryRepository,
             authRepository,
             database,
+            TableOrderService(database),
+            true,
+            null,
+            null,
+            null,
+            null,
+            syncService,
           ),
         ),
         Provider<AuthRepository>.value(value: authRepository),
@@ -246,6 +316,10 @@ void main() async {
         Provider<SalesRepositoryImpl>.value(value: salesRepository),
         Provider<DgiNumberingService>.value(value: numberingService),
         Provider<SyncService>.value(value: syncService),
+        Provider<NetworkConnectivityService>.value(value: connectivityService),
+        Provider<PrinterConfigService>(
+          create: (_) => PrinterConfigService(database.localConfigDao),
+        ),
       ],
       child: MyApp(alertService: alertService),
     ),
@@ -397,6 +471,11 @@ class MyApp extends StatelessWidget {
             featureLabel: 'Alertas BOH',
             child: ForensicAlertView(),
           ),
+          '/inventory/alerts/stock': (context) => const BohRouteGuard(
+            permission: BohPermission.alertsView,
+            featureLabel: 'Alertas de Stock BOH',
+            child: StockAlertsView(),
+          ),
           '/inventory/counts': (context) => const BohRouteGuard(
             permission: BohPermission.countsView,
             featureLabel: 'Conteos y ajustes BOH',
@@ -417,10 +496,24 @@ class MyApp extends StatelessWidget {
             featureLabel: 'Recetas BOH',
             child: RecipeView(),
           ),
+          '/inventory/reports/valuation': (context) => const BohRouteGuard(
+            permission: BohPermission.valuationView,
+            featureLabel: 'Existencias & Valorización BOH',
+            child: InventoryValuationView(),
+          ),
+          '/inventory/reports/cogs': (context) => const BohRouteGuard(
+            permission: BohPermission.cogsView,
+            featureLabel: 'Costo de Ventas (COGS) BOH',
+            child: CogsReportView(),
+          ),
+          '/sales/tables': (context) => const TableLayoutView(),
+          '/kitchen': (context) => const KitchenDisplayView(),
           '/sales/reports': (context) => const DgiReportView(),
           '/sales/history': (context) => const SalesHistoryView(),
+          '/sales/cash': (context) => const CashShiftView(),
           '/identity/users': (context) => const UserManagementView(),
           '/config/profile': (context) => const BusinessProfileView(),
+          '/config/hardware': (context) => const HardwareSettingsView(),
           '/identity/audit': (context) => const AuditLogView(),
         },
       ),

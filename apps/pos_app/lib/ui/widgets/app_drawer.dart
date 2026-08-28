@@ -45,6 +45,21 @@ class _AppDrawerState extends State<AppDrawer> {
 
   bool get _canAccessBohShell => canAccessAnyBoh(_currentUser?.role);
 
+  String _getRoleLabel(UserRole? role) {
+    switch (role) {
+      case UserRole.owner:
+        return 'DUEÑO / ADMIN';
+      case UserRole.manager:
+        return 'GERENTE';
+      case UserRole.cashier:
+        return 'CAJERO';
+      case UserRole.waiter:
+        return 'MESERO';
+      default:
+        return 'USUARIO';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
@@ -56,27 +71,116 @@ class _AppDrawerState extends State<AppDrawer> {
       child: SafeArea(
         child: Column(
           children: [
+            // Header with User Profile
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              color: colorScheme.primary,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 18,
+                        backgroundColor: Colors.white,
+                        child: Icon(
+                          Icons.restaurant,
+                          color: colorScheme.primary,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'OmniFood NI',
+                              style: textTheme.titleLarge?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                              ),
+                            ),
+                            Text(
+                              'Retail-as-a-Service POS',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.8),
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (_currentUser != null) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _currentUser!.name,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.white.withOpacity(0.4), width: 0.8),
+                          ),
+                          child: Text(
+                            _getRoleLabel(_currentUser!.role),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
+            // Navigation Options
             Expanded(
               child: ListView(
                 padding: EdgeInsets.zero,
                 children: [
-                  DrawerHeader(
-                    decoration: BoxDecoration(
-                      color: colorScheme.primary,
-                    ),
-                    child: Center(
-                      child: Text(
-                        'OmniFood NI',
-                        style: textTheme.headlineMedium?.copyWith(color: colorScheme.onPrimary),
-                      ),
-                    ),
-                  ),
+                  // --- SECTION 1: FOH SALES & SALON ---
                   ListTile(
                     leading: const Icon(Icons.shopping_cart),
                     title: const Text('VENTAS (POS)'),
                     onTap: () {
                       Navigator.pop(context);
                       Navigator.pushReplacementNamed(context, '/sales');
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.table_restaurant),
+                    title: const Text('Salón y Mesas'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.pushNamed(context, '/sales/tables');
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.kitchen),
+                    title: const Text('KDS - Pantalla de Cocina'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.pushNamed(context, '/kitchen');
                     },
                   ),
                   ListTile(
@@ -87,6 +191,16 @@ class _AppDrawerState extends State<AppDrawer> {
                       Navigator.pushNamed(context, '/sales/history');
                     },
                   ),
+                  ListTile(
+                    leading: const Icon(Icons.point_of_sale),
+                    title: const Text('Control de Caja y Turnos'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.pushNamed(context, '/sales/cash');
+                    },
+                  ),
+
+                  // --- SECTION 2: GERENCIA & REPORTES (ADMIN / DUEÑO) ---
                   if (_canAccessDgiReports)
                     ListTile(
                       leading: const Icon(Icons.analytics),
@@ -96,6 +210,8 @@ class _AppDrawerState extends State<AppDrawer> {
                         Navigator.pushNamed(context, '/sales/reports');
                       },
                     ),
+
+                  // --- SECTION 3: INVENTARIO BOH ---
                   const Divider(),
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -117,6 +233,8 @@ class _AppDrawerState extends State<AppDrawer> {
                           }
                         : null,
                   ),
+
+                  // --- SECTION 4: CONFIGURACIÓN & SEGURIDAD ---
                   const Divider(),
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -126,6 +244,14 @@ class _AppDrawerState extends State<AppDrawer> {
                     leading: const Icon(Icons.business),
                     title: const Text('Perfil del Negocio'),
                     onTap: () => Navigator.pushNamed(context, '/config/profile'),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.print),
+                    title: const Text('Hardware e Impresora'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.pushNamed(context, '/config/hardware');
+                    },
                   ),
                   if (_userCount > 0)
                     ListTile(
@@ -148,10 +274,18 @@ class _AppDrawerState extends State<AppDrawer> {
                 ],
               ),
             ),
+
+            // Footer / Logout
             const Divider(),
             ListTile(
               leading: Icon(Icons.logout, color: colorScheme.error),
-              title: Text('CERRAR SESIÓN', style: TextStyle(color: colorScheme.error, fontWeight: FontWeight.bold)),
+              title: Text(
+                'CERRAR SESIÓN',
+                style: TextStyle(
+                  color: colorScheme.error,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               onTap: () async {
                 await context.read<AuthRepository>().logout();
                 if (context.mounted) {

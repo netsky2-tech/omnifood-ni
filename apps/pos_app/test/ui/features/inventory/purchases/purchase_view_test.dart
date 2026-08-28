@@ -163,6 +163,7 @@ class _FakeMovementEngine implements MovementEngine {
     required double actualQuantity,
     required String outcome,
     required String reason,
+    Map<String, double>? customIngredientConsumptions,
   }) async => const ProductionCloseResult(
     movements: <InventoryMovement>[],
     totalConsumedCostNio: 0,
@@ -179,6 +180,7 @@ class _FakeMovementEngine implements MovementEngine {
     required double actualQuantity,
     required String outcome,
     required String reason,
+    Map<String, double>? customIngredientConsumptions,
   }) async => const ProductionCloseResult(
     movements: <InventoryMovement>[],
     totalConsumedCostNio: 0,

@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
+import '../../../../domain/models/config/tenant_config.dart';
+import '../../../../domain/models/config/tenant_operation_mode.dart';
 import '../../../../domain/models/sales/invoice.dart';
 import '../../../../domain/models/sales/invoice_item.dart';
 import '../../../../domain/models/sales/payment.dart';
@@ -7,31 +9,239 @@ import '../../../../domain/models/sales/cashier_session.dart';
 import '../../../../domain/models/sales/cart_item.dart';
 import '../../../../domain/models/sales/hold_ticket.dart';
 import '../../../../domain/models/sales/promotion.dart';
+import '../../../../domain/models/customer/customer.dart';
 import '../../../../domain/models/inventory/product.dart';
 import '../../../../domain/models/user.dart';
 import '../../../../domain/repositories/sales/sales_repository.dart';
 import '../../../../domain/repositories/inventory/inventory_repository.dart';
 import '../../../../domain/repositories/auth_repository.dart';
+import 'dart:convert';
 import '../../../../data/database/app_database.dart';
 import '../../../../data/mappers/sales_mapper.dart';
+import '../../../../data/mappers/customer_mapper.dart';
+import '../../../../data/models/customer/customer_entity.dart';
+import '../../../../domain/models/config/printer_config.dart';
+import 'package:pos_app/domain/services/sales/table_order_service.dart';
+import 'package:pos_app/domain/services/sales/promotions_engine.dart';
+import 'package:pos_app/domain/services/sales/loyalty_service.dart';
+import 'package:pos_app/domain/services/config/tenant_config_service.dart';
+import '../../../../domain/services/config/printer_config_service.dart';
+import '../../../../domain/services/printer/printer_resolver.dart';
+import '../../../../domain/services/printer/thermal_logo_processor.dart';
+import 'dart:async';
+import '../../../../domain/ports/printer_port.dart';
+import '../../../../domain/services/kitchen/kitchen_order_service.dart';
+import '../../../../data/services/sync_service.dart';
+import '../../../../domain/services/sales/tip_engine.dart';
+import '../../../../domain/services/sales/split_bill_engine.dart';
+import '../../../../domain/services/config/business_mode_evaluator.dart';
 
 class SaleViewModel extends ChangeNotifier {
   final SalesRepository _salesRepository;
   final InventoryRepository _inventoryRepository;
   final AuthRepository _authRepository;
   final AppDatabase _database; // For session, hold, and promo DAOs
+  final TableOrderService _tableOrderService;
+  final TenantConfigService _tenantConfigService;
+  final KitchenOrderService _kitchenOrderService;
+  final PrinterConfigService _printerConfigService;
+  final PrinterPort _printerPort;
+  final PromotionsEngine _promotionsEngine;
+  final LoyaltyService _loyaltyService;
+  StreamSubscription<InboundSyncResult>? _syncSubscription;
 
   SaleViewModel(
     this._salesRepository,
     this._inventoryRepository,
     this._authRepository,
-    this._database,
-  ) {
-    loadProducts();
-    checkActiveSession();
-    loadHoldTickets();
-    loadPromotions();
-    _loadCurrentUserRole();
+    this._database, [
+    TableOrderService? tableOrderService,
+    bool autoLoad = true,
+    TenantConfigService? tenantConfigService,
+    KitchenOrderService? kitchenOrderService,
+    PrinterConfigService? printerConfigService,
+    PrinterPort? printerPort,
+    SyncService? syncService,
+    PromotionsEngine? promotionsEngine,
+    LoyaltyService? loyaltyService,
+  ])  : _tableOrderService = tableOrderService ?? TableOrderService(_database),
+        _tenantConfigService =
+            tenantConfigService ?? TenantConfigService(_database.localConfigDao),
+        _kitchenOrderService =
+            kitchenOrderService ?? KitchenOrderService(_database),
+        _printerConfigService =
+            printerConfigService ?? PrinterConfigService(_database.localConfigDao),
+        _printerPort =
+            printerPort ?? PrinterResolver.resolve(const PrinterConfig()),
+        _promotionsEngine = promotionsEngine ?? const PromotionsEngine(),
+        _loyaltyService = loyaltyService ?? const LoyaltyService() {
+    if (syncService != null) {
+      _syncSubscription = syncService.onInboundSync.listen((event) {
+        if (event.productsCount > 0 || event.catalogValuesCount > 0) {
+          loadProducts();
+        }
+      });
+    }
+    if (autoLoad) {
+      loadProducts();
+      checkActiveSession();
+      loadHoldTickets();
+      loadPromotions();
+      _loadCurrentUserRole();
+      loadExchangeRates();
+      loadTenantConfig();
+    }
+  }
+
+  String? _lastPrintError;
+  String? get lastPrintError => _lastPrintError;
+
+  Invoice? _lastProcessedInvoice;
+  Invoice? get lastProcessedInvoice => _lastProcessedInvoice;
+
+  TenantConfig? _tenantConfig;
+  TenantConfig? get tenantConfig => _tenantConfig;
+  TenantOperationMode get operationMode =>
+      _tenantConfig?.operationMode ?? TenantOperationMode.foodparkQsr;
+
+  bool get isFoodParkQsr => operationMode.isFoodParkQsr;
+  bool get supportsTables => operationMode.supportsTables;
+  bool get supportsBuzzerPager => operationMode.supportsBuzzerPager;
+
+  String? _buzzerNumber;
+  String? get buzzerNumber => _buzzerNumber;
+
+  void setBuzzerNumber(String? number) {
+    _buzzerNumber =
+        (number != null && number.trim().isNotEmpty) ? number.trim() : null;
+    notifyListeners();
+  }
+
+  String? _customerName;
+  String? get customerName => _customerName;
+
+  Customer? _selectedCustomer;
+  Customer? get selectedCustomer => _selectedCustomer;
+
+  void selectCustomer(Customer? customer) {
+    _selectedCustomer = customer;
+    _customerName = customer?.name;
+    _pointsToRedeem = 0.0;
+    notifyListeners();
+  }
+
+  void clearCustomer() {
+    _selectedCustomer = null;
+    _customerName = null;
+    _pointsToRedeem = 0.0;
+    notifyListeners();
+  }
+
+  double _pointsToRedeem = 0.0;
+  double get pointsToRedeem => _pointsToRedeem;
+  double get loyaltyDiscount => _loyaltyService.calculateDiscountFromPoints(_pointsToRedeem);
+  double get promoDiscounts => _totalDiscounts;
+
+  RedemptionValidationResult applyLoyaltyPoints(double points) {
+    if (_selectedCustomer == null) {
+      return RedemptionValidationResult.failure(
+        'Debe seleccionar un cliente para redimir puntos.',
+      );
+    }
+    final rawSubtotal = _cart.fold(
+      0.0,
+      (sum, item) => sum + item.subtotal + item.modifiersTotal,
+    );
+    final currentSubtotal = rawSubtotal - _totalDiscounts;
+    final result = _loyaltyService.validateRedemption(
+      customer: _selectedCustomer!,
+      pointsToRedeem: points,
+      orderTotal: currentSubtotal,
+    );
+    if (result.isValid) {
+      _pointsToRedeem = points;
+      notifyListeners();
+    }
+    return result;
+  }
+
+  void clearLoyaltyPoints() {
+    _pointsToRedeem = 0.0;
+    notifyListeners();
+  }
+
+  void setCustomerName(String? name) {
+    _customerName =
+        (name != null && name.trim().isNotEmpty) ? name.trim() : null;
+    notifyListeners();
+  }
+
+  Future<List<Customer>> searchCustomers(String query) async {
+    if (query.trim().isEmpty) {
+      final entities = await _database.customerDao.getAllCustomers();
+      return entities.map(CustomerMapper.toDomain).toList();
+    }
+    final entities = await _database.customerDao.searchCustomers(query.trim(), 20);
+    return entities.map(CustomerMapper.toDomain).toList();
+  }
+
+  Future<Customer> createExpressCustomer({
+    required String name,
+    String? taxId,
+    String? phone,
+    String? email,
+    String? address,
+  }) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final id = const Uuid().v4();
+    final entity = CustomerEntity(
+      id: id,
+      name: name.trim(),
+      taxId: (taxId != null && taxId.trim().isNotEmpty) ? taxId.trim().toUpperCase() : null,
+      phone: (phone != null && phone.trim().isNotEmpty) ? phone.trim() : null,
+      email: (email != null && email.trim().isNotEmpty) ? email.trim() : null,
+      address: (address != null && address.trim().isNotEmpty) ? address.trim() : null,
+      pointsBalance: 0.0,
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+      syncStatus: 'pending',
+    );
+    await _database.customerDao.saveCustomer(entity);
+    final domain = CustomerMapper.toDomain(entity);
+    selectCustomer(domain);
+    return domain;
+  }
+
+  Future<void> loadTenantConfig() async {
+    try {
+      _tenantConfig = await _tenantConfigService.getTenantConfig();
+      notifyListeners();
+    } catch (_) {
+      // Non-blocking fallback
+    }
+  }
+
+  double _commercialRate = 36.50;
+  double get commercialRate => _commercialRate;
+
+  double _bcnOfficialRate = 36.6241;
+  double get bcnOfficialRate => _bcnOfficialRate;
+
+  Future<void> loadExchangeRates() async {
+    try {
+      final commVal = await _database.localConfigDao.getConfigByKey('commercial_exchange_rate');
+      if (commVal != null) {
+        _commercialRate = double.tryParse(commVal.value) ?? 36.50;
+      }
+      final bcnVal = await _database.localConfigDao.getConfigByKey('bcn_official_exchange_rate');
+      if (bcnVal != null) {
+        _bcnOfficialRate = double.tryParse(bcnVal.value) ?? 36.6241;
+      }
+      notifyListeners();
+    } catch (_) {
+      // Fallback to default FX rates
+    }
   }
 
   final List<CartItem> _cart = [];
@@ -123,11 +333,13 @@ class SaleViewModel extends ChangeNotifier {
       0.0,
       (sum, item) => sum + item.subtotal + item.modifiersTotal,
     );
-    return rawSubtotal - _totalDiscounts;
+    final totalWithPromos = rawSubtotal - _totalDiscounts;
+    final afterLoyalty = totalWithPromos - loyaltyDiscount;
+    return afterLoyalty < 0.0 ? 0.0 : afterLoyalty;
   }
 
   double _totalDiscounts = 0.0;
-  double get totalDiscounts => _totalDiscounts;
+  double get totalDiscounts => _totalDiscounts + loyaltyDiscount;
 
   double get totalTax {
     if (_isGlobalTaxExempt) return 0.0;
@@ -145,6 +357,66 @@ class SaleViewModel extends ChangeNotifier {
 
   double get total => subtotal + totalTax;
 
+  TipType _tipType = TipType.none;
+  double _customTipPercentage = 0.0;
+  double _fixedTipAmount = 0.0;
+
+  TipType get tipType => _tipType;
+  double get customTipPercentage => _customTipPercentage;
+  double get fixedTipAmount => _fixedTipAmount;
+
+  BusinessModeEvaluator get businessModeEvaluator =>
+      BusinessModeEvaluator(_tenantConfig ?? const TenantConfig());
+
+  TipCalculation get tipCalculation => TipEngine.calculate(
+        subtotalNio: subtotal,
+        taxNio: totalTax,
+        discountNio: 0.0,
+        tipType: _tipType,
+        customPercentage: _customTipPercentage,
+        fixedAmount: _fixedTipAmount,
+        commercialRate: _commercialRate,
+      );
+
+  double get tipAmount => tipCalculation.tipAmountNio;
+  double get grandTotalWithTip => total + tipAmount;
+
+  void setTip({
+    required TipType tipType,
+    double customPercentage = 0.0,
+    double fixedAmount = 0.0,
+  }) {
+    _tipType = tipType;
+    _customTipPercentage = customPercentage;
+    _fixedTipAmount = fixedAmount;
+    notifyListeners();
+  }
+
+  void clearTip() {
+    _tipType = TipType.none;
+    _customTipPercentage = 0.0;
+    _fixedTipAmount = 0.0;
+    notifyListeners();
+  }
+
+  SplitBillResult calculateEqualSplit(int coverCount) {
+    return SplitBillEngine.splitEqual(
+      subtotalNio: subtotal,
+      taxNio: totalTax,
+      tipNio: tipAmount,
+      discountNio: 0.0,
+      coverCount: coverCount,
+      commercialRate: _commercialRate,
+    );
+  }
+
+  SplitBillResult calculateItemizedSplit(List<ItemizedShareInput> shares) {
+    return SplitBillEngine.splitByItems(
+      shares: shares,
+      commercialRate: _commercialRate,
+    );
+  }
+
   void clearError() {
     _errorMessage = null;
     notifyListeners();
@@ -157,22 +429,11 @@ class SaleViewModel extends ChangeNotifier {
   }
 
   void _applyPromotions() {
-    _totalDiscounts = 0.0;
-    for (final promo in _promotions) {
-      if (promo.type == PromotionType.buyXGetYFree) {
-        final items = _cart.where((i) => i.productId == promo.targetProductId);
-        if (items.isNotEmpty) {
-          final totalQty = items
-              .fold(0.0, (sum, i) => sum + i.quantity)
-              .toInt();
-          final sets = totalQty ~/ (promo.buyQuantity + promo.getQuantity);
-          if (sets > 0) {
-            final unitPrice = items.first.unitPrice;
-            _totalDiscounts += sets * promo.getQuantity * unitPrice;
-          }
-        }
-      }
-    }
+    final result = _promotionsEngine.evaluate(
+      cart: _cart,
+      promotions: _promotions,
+    );
+    _totalDiscounts = result.totalDiscount;
   }
 
   Future<void> loadProducts() async {
@@ -219,35 +480,45 @@ class SaleViewModel extends ChangeNotifier {
     }
   }
 
+  HoldTicket? _activeLoadedHoldTicket;
+  HoldTicket? get activeLoadedHoldTicket => _activeLoadedHoldTicket;
+  String? get activeTableId => _activeLoadedHoldTicket?.tableId;
+
   Future<void> loadHoldTickets() async {
-    final entities = await _database.holdTicketDao.getAllHoldTickets();
-    final List<HoldTicket> tickets = [];
-    for (final entity in entities) {
-      final itemEntities = await _database.holdTicketDao.getItemsByHoldTicketId(
-        entity.id,
-      );
-      tickets.add(SalesMapper.toHoldTicketDomain(entity, itemEntities));
-    }
-    _holdTickets = tickets;
+    _holdTickets = await _tableOrderService.getAllOpenOrders();
     notifyListeners();
   }
 
-  Future<void> holdCurrentTicket(String name) async {
+  Future<void> holdCurrentTicket(
+    String name, {
+    String? tableId,
+    String? areaId,
+    String? waiterId,
+    String? waiterName,
+    int guestCount = 1,
+  }) async {
     if (_cart.isEmpty) return;
 
-    final ticket = HoldTicket(
-      id: const Uuid().v4(),
-      name: name,
-      items: List.from(_cart),
-      createdAt: DateTime.now(),
-      isGlobalTaxExempt: _isGlobalTaxExempt,
-    );
+    if (_activeLoadedHoldTicket != null) {
+      await _tableOrderService.appendItemsToOrder(
+        ticketId: _activeLoadedHoldTicket!.id,
+        newItems: List.from(_cart),
+        expectedVersion: _activeLoadedHoldTicket!.version,
+      );
+    } else {
+      await _tableOrderService.parkOrder(
+        name: name,
+        tableId: tableId,
+        areaId: areaId,
+        waiterId: waiterId,
+        waiterName: waiterName,
+        guestCount: guestCount,
+        isGlobalTaxExempt: _isGlobalTaxExempt,
+        items: List.from(_cart),
+      );
+    }
 
-    await _database.holdTicketDao.saveHoldTicket(
-      SalesMapper.toHoldTicketEntity(ticket),
-      SalesMapper.toHoldTicketItemEntities(ticket),
-    );
-
+    _activeLoadedHoldTicket = null;
     clearCart();
     await loadHoldTickets();
   }
@@ -256,11 +527,16 @@ class SaleViewModel extends ChangeNotifier {
     _cart.clear();
     _cart.addAll(ticket.items);
     _isGlobalTaxExempt = ticket.isGlobalTaxExempt;
+    _activeLoadedHoldTicket = ticket;
 
-    await _database.holdTicketDao.deleteHoldTicket(ticket.id);
     await loadHoldTickets();
     _applyPromotions();
     notifyListeners();
+  }
+
+  void cancelLoadedHoldTicket() {
+    _activeLoadedHoldTicket = null;
+    clearCart();
   }
 
   Future<void> checkActiveSession() async {
@@ -301,6 +577,9 @@ class SaleViewModel extends ChangeNotifier {
       openedAt: DateTime.now(),
       tipoModelo: tipoModelo,
       openingBalance: balance,
+      openingBalanceNio: balance,
+      expectedNio: balance,
+      totalExpected: balance,
     );
     await _database.cashierSessionDao.insertSession(
       SalesMapper.toSessionEntity(session),
@@ -325,8 +604,10 @@ class SaleViewModel extends ChangeNotifier {
       isClosed: true,
       closedAt: DateTime.now(),
       closingBalance: closingBalance,
+      closingCountedNio: closingBalance,
       totalSales: totalSales,
-      totalExpected: _sessionExpected[PaymentMethod.cash],
+      totalExpected: _sessionExpected[PaymentMethod.cash] ?? 0.0,
+      expectedNio: _sessionExpected[PaymentMethod.cash] ?? 0.0,
     );
     await _database.cashierSessionDao.updateSession(
       SalesMapper.toSessionEntity(updated),
@@ -371,6 +652,7 @@ class SaleViewModel extends ChangeNotifier {
           quantity: quantity,
           unitPrice: unitPrice,
           taxRate: 0.15,
+          category: product.category,
           variantId: variantId,
           selectedModifiers: modifiers,
         ),
@@ -427,24 +709,41 @@ class SaleViewModel extends ChangeNotifier {
     _cart.clear();
     _isGlobalTaxExempt = false;
     _totalDiscounts = 0.0;
+    _pointsToRedeem = 0.0;
+    _activeLoadedHoldTicket = null;
     notifyListeners();
   }
 
-  Future<void> finalizeSale(List<PaymentMethod> methods) async {
-    if (_cart.isEmpty) return;
+  Future<void> finalizeSale(List<PaymentMethod> methods) => processSale(methods);
 
+  Future<void> processSale(
+    List<PaymentMethod> methods, {
+    List<Payment>? customPayments,
+    String? buzzerNumber,
+    String? customerName,
+  }) async {
     final user = await _authRepository.getCurrentUser();
     if (user == null) {
-      _errorMessage = 'Sesión de usuario expirada. Re-ingrese PIN.';
+      _errorMessage = 'Usuario no autenticado';
       notifyListeners();
       return;
     }
 
     final invoiceId = const Uuid().v4();
+    final totalUsd = _commercialRate > 0
+        ? ((total / _commercialRate) * 100).round() / 100
+        : 0.0;
+
+    final effectiveBuzzer = (buzzerNumber != null && buzzerNumber.trim().isNotEmpty)
+        ? buzzerNumber.trim()
+        : _buzzerNumber;
+    final effectiveCustomerName =
+        (customerName != null && customerName.trim().isNotEmpty)
+            ? customerName.trim()
+            : _customerName;
 
     final items = _cart.map((cartItem) {
       final appliedTaxRate = _isGlobalTaxExempt ? 0.0 : cartItem.taxRate;
-
       return InvoiceItem(
         id: const Uuid().v4(),
         invoiceId: invoiceId,
@@ -467,22 +766,33 @@ class SaleViewModel extends ChangeNotifier {
       number: 'PENDING',
       createdAt: DateTime.now(),
       userId: user.id,
+      customerId: _selectedCustomer?.id,
       subtotal: subtotal,
       totalTax: totalTax,
       total: total,
       globalTaxOverride: _isGlobalTaxExempt,
+      bcnOfficialRate: _bcnOfficialRate,
+      commercialRate: _commercialRate,
+      totalUsd: totalUsd,
     );
 
-    final payments = methods
-        .map(
-          (m) => Payment(
-            id: const Uuid().v4(),
-            invoiceId: invoiceId,
-            method: m,
-            amount: total / methods.length,
-          ),
-        )
-        .toList();
+    final payments = customPayments != null && customPayments.isNotEmpty
+        ? customPayments.map((p) => p.copyWith(invoiceId: invoiceId)).toList()
+        : methods
+            .map(
+              (m) => Payment(
+                id: const Uuid().v4(),
+                invoiceId: invoiceId,
+                method: m,
+                amount: total / methods.length,
+                currency: 'NIO',
+                exchangeRate: _commercialRate,
+                amountNio: total / methods.length,
+                changeGiven: 0.0,
+                changeCurrency: 'NIO',
+              ),
+            )
+            .toList();
 
     await _salesRepository.saveSale(
       invoice: invoice,
@@ -490,18 +800,240 @@ class SaleViewModel extends ChangeNotifier {
       payments: payments,
     );
 
+    // Process Customer Loyalty Points (Redemption & Accumulation)
+    if (_selectedCustomer != null) {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      // 1. Process redemption if points were used
+      if (_pointsToRedeem > 0) {
+        final redeemTx = _loyaltyService.createRedeemTransaction(
+          customerId: _selectedCustomer!.id,
+          currentBalance: _selectedCustomer!.pointsBalance,
+          pointsToRedeem: _pointsToRedeem,
+          invoiceId: invoiceId,
+        );
+        try {
+          await _database.customerPointTransactionDao
+              .recordPointTransactionAndUpdateBalance(
+            CustomerMapper.toPointTransactionEntity(redeemTx),
+            _selectedCustomer!.id,
+            redeemTx.balanceAfter,
+            now,
+          );
+          _selectedCustomer = _selectedCustomer!.copyWith(pointsBalance: redeemTx.balanceAfter);
+        } catch (_) {}
+      }
+
+      // 2. Process accumulation on the final net subtotal
+      final pointsEarned = _loyaltyService.calculatePointsEarned(subtotal);
+      if (pointsEarned > 0) {
+        final currentBalance = _selectedCustomer!.pointsBalance;
+        final earnTx = _loyaltyService.createEarnTransaction(
+          customerId: _selectedCustomer!.id,
+          currentBalance: currentBalance,
+          netAmount: subtotal,
+          invoiceId: invoiceId,
+        );
+        try {
+          await _database.customerPointTransactionDao
+              .recordPointTransactionAndUpdateBalance(
+            CustomerMapper.toPointTransactionEntity(earnTx),
+            _selectedCustomer!.id,
+            earnTx.balanceAfter,
+            now,
+          );
+          _selectedCustomer = _selectedCustomer!.copyWith(pointsBalance: earnTx.balanceAfter);
+        } catch (_) {}
+      }
+    }
+
     // Update expected totals
     for (final p in payments) {
       if (_activeSession?.tipoModelo == CashSessionModel.carteraMesero &&
           p.method != PaymentMethod.cash) {
         continue;
       }
+      final effectiveCashNio = (p.method == PaymentMethod.cash && p.amountNio > 0)
+          ? (p.amountNio - p.changeGiven)
+          : p.amount;
       _sessionExpected[p.method] =
-          (_sessionExpected[p.method] ?? 0.0) + p.amount;
+          (_sessionExpected[p.method] ?? 0.0) + effectiveCashNio;
     }
 
+    if (_activeLoadedHoldTicket != null) {
+      await _tableOrderService.liquidateOrder(_activeLoadedHoldTicket!.id);
+      _activeLoadedHoldTicket = null;
+    } else {
+      // Direct counter sale: dispatch to kitchen KDS if items exist
+      if (_cart.isNotEmpty) {
+        try {
+          await _kitchenOrderService.sendDirectSaleToKitchen(
+            invoiceId: invoiceId,
+            invoiceNumber: invoice.number,
+            items: List.from(_cart),
+            buzzerNumber: effectiveBuzzer,
+            customerName: effectiveCustomerName,
+            waiterName: user.name,
+          );
+        } catch (_) {
+          // Graceful fallback for offline tests/setups
+        }
+      }
+    }
+
+    // Auto-Printing & Hardware Drawer Kick (PRD Batch 7)
+    Invoice? savedInvoice;
+    try {
+      savedInvoice = await _salesRepository.getInvoiceById(invoiceId);
+    } catch (_) {
+      // Non-blocking fallback for offline environments or unstubbed test mocks
+    }
+    final invoiceToPrint = savedInvoice ?? invoice;
+    _lastProcessedInvoice = invoiceToPrint;
+    _lastPrintError = null;
+
+    try {
+      final printerConfig = await _printerConfigService.getPrinterConfig();
+      final hasCashPayment = payments.any((p) => p.method == PaymentMethod.cash);
+
+      if (printerConfig.openDrawerOnCash && hasCashPayment) {
+        await _printerPort.openCashDrawer();
+      }
+
+      List<int>? logoRasterBytes;
+      if (printerConfig.isLogoEnabled &&
+          printerConfig.logoBase64 != null &&
+          printerConfig.logoWidth != null &&
+          printerConfig.logoHeight != null) {
+        try {
+          final rawBytes = base64Decode(printerConfig.logoBase64!);
+          logoRasterBytes = ThermalLogoProcessor.buildEscPosRasterFrom1Bit(
+            raw1BitBitmap: rawBytes,
+            width: printerConfig.logoWidth!,
+            height: printerConfig.logoHeight!,
+          );
+        } catch (_) {}
+      }
+
+      if (printerConfig.autoPrintInvoice) {
+        final printResult = await _printerPort.printInvoice(
+          invoiceToPrint,
+          items: items,
+          payments: payments,
+          businessName: printerConfig.headerBusinessName,
+          ruc: printerConfig.headerRuc,
+          address: printerConfig.headerAddress,
+          phone: printerConfig.headerPhone,
+          cashierName: user.name,
+          logoRasterBytes: logoRasterBytes,
+        );
+
+        if (!printResult.isSuccess) {
+          _lastPrintError = printResult.message ?? 'Error de impresión en hardware';
+        }
+      }
+
+      if (printerConfig.autoPrintKitchen && items.isNotEmpty) {
+        await _printerPort.printKitchenOrder(
+          ticketId: invoiceToPrint.id.length > 8 ? invoiceToPrint.id.substring(0, 8) : invoiceToPrint.id,
+          orderTitle: 'Orden #${invoiceToPrint.number}',
+          cashierName: user.name,
+          timestamp: DateTime.now(),
+          items: items,
+          buzzerNumber: int.tryParse(effectiveBuzzer ?? ''),
+          tableName: _activeLoadedHoldTicket?.name,
+        );
+      }
+    } catch (e) {
+      debugPrint('[SaleViewModel] Non-blocking hardware printing error: $e');
+      _lastPrintError = e.toString();
+    }
+
+    _buzzerNumber = null;
+    _customerName = null;
+    _selectedCustomer = null;
     clearCart();
     _consumeOverride();
+  }
+
+  /// Manually triggers a reprint of the last successfully processed invoice.
+  Future<bool> reprintLastInvoice() async {
+    if (_lastProcessedInvoice == null) return false;
+    try {
+      final config = await _printerConfigService.getPrinterConfig();
+      final items = await _database.invoiceItemDao.getItemsByInvoiceId(_lastProcessedInvoice!.id);
+      final domainItems = items.map((e) => InvoiceItem(
+        id: e.id,
+        invoiceId: e.invoiceId,
+        productId: e.productId,
+        productName: e.productName,
+        quantity: e.quantity,
+        unitPrice: e.unitPrice,
+        originalTaxRate: e.originalTaxRate,
+        appliedTaxRate: e.appliedTaxRate,
+        taxAmount: e.taxAmount,
+        total: e.total,
+        discount: e.discount,
+        variantId: e.variantId,
+        notes: e.notes,
+      )).toList();
+
+      final payments = await _database.paymentDao.getPaymentsByInvoiceId(_lastProcessedInvoice!.id);
+      final domainPayments = payments.map((e) => Payment(
+        id: e.id,
+        invoiceId: e.invoiceId,
+        method: PaymentMethod.values.firstWhere(
+          (m) => m.name == e.method,
+          orElse: () => PaymentMethod.cash,
+        ),
+        amount: e.amount,
+        currency: e.currency,
+        exchangeRate: e.exchangeRate,
+        amountNio: e.amountNio,
+        changeGiven: e.changeGiven,
+        changeCurrency: e.changeCurrency,
+        voucherCode: e.voucherCode,
+        cardBrand: e.cardBrand,
+        bankPos: e.bankPos,
+        last4: e.last4,
+      )).toList();
+
+      List<int>? logoRasterBytes;
+      if (config.isLogoEnabled &&
+          config.logoBase64 != null &&
+          config.logoWidth != null &&
+          config.logoHeight != null) {
+        try {
+          final rawBytes = base64Decode(config.logoBase64!);
+          logoRasterBytes = ThermalLogoProcessor.buildEscPosRasterFrom1Bit(
+            raw1BitBitmap: rawBytes,
+            width: config.logoWidth!,
+            height: config.logoHeight!,
+          );
+        } catch (_) {}
+      }
+
+      final res = await _printerPort.printInvoice(
+        _lastProcessedInvoice!,
+        items: domainItems,
+        payments: domainPayments,
+        businessName: config.headerBusinessName,
+        ruc: config.headerRuc,
+        address: config.headerAddress,
+        phone: config.headerPhone,
+        logoRasterBytes: logoRasterBytes,
+      );
+
+      if (!res.isSuccess) {
+        _lastPrintError = res.message;
+        notifyListeners();
+        return false;
+      }
+      return true;
+    } catch (e) {
+      _lastPrintError = e.toString();
+      notifyListeners();
+      return false;
+    }
   }
 
   Future<void> processReturn(
@@ -571,5 +1103,11 @@ class SaleViewModel extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  @override
+  void dispose() {
+    _syncSubscription?.cancel();
+    super.dispose();
   }
 }

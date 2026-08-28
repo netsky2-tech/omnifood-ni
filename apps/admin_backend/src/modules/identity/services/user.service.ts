@@ -10,6 +10,16 @@ import { User } from '../entities/user.entity';
 import { AuditLog } from '../entities/audit-log.entity';
 import { SecurityProfile } from '../entities/security-profile.entity';
 import { CreateUserDto, UpdateUserDto } from '../dto/user-management.dto';
+import {
+  AppPermission,
+  ALL_APP_PERMISSIONS,
+  DEFAULT_ROLE_PERMISSIONS,
+  resolveEffectivePermissions,
+} from '../security/permissions.enum';
+import {
+  PermissionMatrixResponseDto,
+  UserEffectivePermissionsDto,
+} from '../dto/permission-matrix.dto';
 import { AuthService } from './auth.service';
 
 @Injectable()
@@ -216,6 +226,100 @@ export class UserService {
       manager,
     );
     return updatedUser;
+  }
+
+  getPermissionsMatrix(): PermissionMatrixResponseDto {
+    return {
+      role_defaults: DEFAULT_ROLE_PERMISSIONS as Record<
+        string,
+        AppPermission[]
+      >,
+      all_permissions: ALL_APP_PERMISSIONS,
+    };
+  }
+
+  async getUserEffectivePermissions(
+    userId: string,
+    tenantId: string,
+  ): Promise<UserEffectivePermissionsDto> {
+    const user = await this.userRepository.findOne({
+      where: { id: userId, tenant_id: tenantId, is_active: true },
+    });
+    if (!user) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    const profile = await this.securityProfileRepository.findOne({
+      where: { user_id: user.id },
+    });
+
+    const customPermissions = (profile?.custom_permissions ??
+      []) as AppPermission[];
+    const rolePermissions = (DEFAULT_ROLE_PERMISSIONS[user.role] ??
+      []) as AppPermission[];
+    const effectivePermissions = resolveEffectivePermissions(
+      user.role,
+      customPermissions,
+    );
+
+    return {
+      user_id: user.id,
+      role: user.role,
+      role_permissions: rolePermissions,
+      custom_permissions: customPermissions,
+      effective_permissions: effectivePermissions,
+    };
+  }
+
+  async setCustomPermissions(
+    userId: string,
+    customPermissions: AppPermission[],
+    tenantId: string,
+    adminId: string,
+  ): Promise<UserEffectivePermissionsDto> {
+    const user = await this.userRepository.findOne({
+      where: { id: userId, tenant_id: tenantId, is_active: true },
+    });
+    if (!user) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    let profile = await this.securityProfileRepository.findOne({
+      where: { user_id: user.id },
+    });
+    if (!profile) {
+      profile = this.securityProfileRepository.create({
+        user_id: user.id,
+        is_pin_enabled: false,
+        is_totp_enabled: false,
+        custom_permissions: [],
+      });
+    }
+
+    profile.custom_permissions = customPermissions;
+    await this.securityProfileRepository.save(profile);
+
+    await this.logAction(
+      'USER_PERMISSIONS_UPDATED',
+      user.id,
+      tenantId,
+      adminId,
+    );
+
+    const rolePermissions = (DEFAULT_ROLE_PERMISSIONS[user.role] ??
+      []) as AppPermission[];
+    const effectivePermissions = resolveEffectivePermissions(
+      user.role,
+      profile.custom_permissions,
+    );
+
+    return {
+      user_id: user.id,
+      role: user.role,
+      role_permissions: rolePermissions,
+      custom_permissions: profile.custom_permissions as AppPermission[],
+      effective_permissions: effectivePermissions,
+    };
   }
 
   private async logAction(

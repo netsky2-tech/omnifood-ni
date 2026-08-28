@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import '../../../../../data/daos/local_config_dao.dart';
 import '../../../../../data/models/local_config_entity.dart';
 
+import '../../../../domain/models/config/tenant_operation_mode.dart';
+
 class BusinessProfileViewModel extends ChangeNotifier {
   final LocalConfigDao _configDao;
 
@@ -13,8 +15,25 @@ class BusinessProfileViewModel extends ChangeNotifier {
     'address': '',
     'phone': '',
     'legal_footer': '',
+    'commercial_exchange_rate': '36.50',
+    'bcn_official_exchange_rate': '36.6241',
+    'operation_mode': 'FOODPARK_QSR',
   };
   Map<String, String> get config => _config;
+
+  TenantOperationMode get operationMode =>
+      TenantOperationMode.fromString(_config['operation_mode']);
+
+  void setOperationMode(TenantOperationMode mode) {
+    _config['operation_mode'] = mode.code;
+    notifyListeners();
+  }
+
+  double get commercialRate =>
+      double.tryParse(_config['commercial_exchange_rate'] ?? '36.50') ?? 36.50;
+
+  double get bcnOfficialRate =>
+      double.tryParse(_config['bcn_official_exchange_rate'] ?? '36.6241') ?? 36.6241;
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;

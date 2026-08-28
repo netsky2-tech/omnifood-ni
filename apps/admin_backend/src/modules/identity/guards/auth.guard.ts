@@ -17,7 +17,7 @@ import {
 } from '../security/jwt-token.types';
 
 interface RequestWithUser extends Request {
-  user?: unknown;
+  user?: StrictAccessTokenPayload;
 }
 
 interface StrictAccessTokenPayload extends Omit<

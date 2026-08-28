@@ -75,8 +75,7 @@ export class InventoryMovement {
   })
   totalCostNio: number;
 
-  @Column({ nullable: true })
-  idempotencyKey: string;
+  idempotencyKey?: string;
 
   @Column({ nullable: true, name: 'source_device_id' })
   sourceDeviceId: string;
@@ -114,8 +113,26 @@ export class InventoryMovement {
   @Column({ nullable: true, name: 'refund_reason_policy' })
   refundReasonPolicy: string | null;
 
-  @Column({ nullable: true })
-  user_id: string;
+  @Column({ name: 'estado_costeo', type: 'integer', default: 30 })
+  estadoCosteo: number;
+
+  @Column({ name: 'intentos_count', type: 'integer', default: 0 })
+  intentosCount: number;
+
+  @Column({ name: 'bloqueo_motivo', type: 'varchar', nullable: true })
+  bloqueoMotivo: string | null;
+
+  @Column({
+    name: 'autorizado_por_usuario_id',
+    type: 'varchar',
+    nullable: true,
+  })
+  autorizadoPorUsuarioId: string | null;
+
+  @Column({ name: 'fecha_autorizacion', type: 'timestamptz', nullable: true })
+  fechaAutorizacion: Date | null;
+
+  user_id?: string;
 
   @CreateDateColumn({ name: 'occurred_at' })
   timestamp: Date;

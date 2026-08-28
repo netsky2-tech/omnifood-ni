@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import '../viewmodels/lock_screen_viewmodel.dart';
 import '../../../widgets/pin_pad.dart';
 
+import '../../../design_system/design_system.dart';
+
 class LockScreenView extends StatefulWidget {
   const LockScreenView({super.key});
 
@@ -69,6 +71,41 @@ class _LockScreenViewState extends State<LockScreenView> {
     final viewModel = context.watch<LockScreenViewModel>();
     final textTheme = Theme.of(context).textTheme;
     final colorScheme = Theme.of(context).colorScheme;
+    final isHandheld = ResponsiveBreakpoints.isHandheld(context);
+
+    if (isHandheld) {
+      if (viewModel.selectedUser == null) {
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('Seleccionar Usuario'),
+            backgroundColor: colorScheme.surface,
+            elevation: 0,
+            shape: Border(bottom: BorderSide(color: colorScheme.outlineVariant)),
+          ),
+          body: _buildUserList(context, viewModel, colorScheme, textTheme, isHandheld: true),
+        );
+      } else {
+        return Scaffold(
+          appBar: AppBar(
+            title: Text('PIN: ${viewModel.selectedUser!.name}'),
+            backgroundColor: colorScheme.surface,
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back),
+              tooltip: 'Cambiar usuario',
+              onPressed: () {
+                _onClear();
+                viewModel.selectUser(null);
+              },
+            ),
+            shape: Border(bottom: BorderSide(color: colorScheme.outlineVariant)),
+          ),
+          body: SafeArea(
+            child: _buildPinPadContent(context, viewModel, colorScheme, textTheme, isHandheld: true),
+          ),
+        );
+      }
+    }
 
     return Scaffold(
       body: Row(
@@ -76,160 +113,192 @@ class _LockScreenViewState extends State<LockScreenView> {
           // Left Side: User List
           Expanded(
             flex: 1,
-            child: Container(
-              decoration: BoxDecoration(
-                color: colorScheme.surfaceContainerHighest,
-                border: const Border(
-                  right: BorderSide(color: Color(0xFF767777), width: 1),
-                ),
-              ),
-              child: viewModel.isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : ListView.separated(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: viewModel.users.length,
-                      separatorBuilder: (context, index) => const SizedBox(height: 8),
-                      itemBuilder: (context, index) {
-                        final user = viewModel.users[index];
-                        final isSelected = viewModel.selectedUser?.id == user.id;
-                        return InkWell(
-                          onTap: () => viewModel.selectUser(user),
-                          child: Container(
-                            height: 64, // high-efficiency row height
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            decoration: BoxDecoration(
-                              color: isSelected ? colorScheme.primary : Colors.white,
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(
-                                color: const Color(0xFF767777),
-                                width: 1,
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                CircleAvatar(
-                                  backgroundColor: isSelected ? Colors.white : colorScheme.primaryContainer,
-                                  foregroundColor: isSelected ? colorScheme.primary : Colors.white,
-                                  child: Text(user.name[0]),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        user.name,
-                                        style: textTheme.labelLarge?.copyWith(
-                                          color: isSelected ? Colors.white : colorScheme.onSurface,
-                                        ),
-                                      ),
-                                      Text(
-                                        user.role.toString().split('.').last.toUpperCase(),
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: isSelected ? Colors.white70 : colorScheme.onSurfaceVariant,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                if (isSelected)
-                                  const Icon(Icons.chevron_right, color: Colors.white),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-            ),
+            child: _buildUserList(context, viewModel, colorScheme, textTheme, isHandheld: false),
           ),
           // Right Side: PIN Pad
           Expanded(
             flex: 2,
-            child: Stack(
-              children: [
-                Container(
-                  color: colorScheme.surface,
-                  padding: const EdgeInsets.all(48.0),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      if (viewModel.selectedUser != null) ...[
-                        Text(
-                          'HOLA, ${viewModel.selectedUser!.name.toUpperCase()}',
-                          style: textTheme.headlineMedium,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'INGRESE SU PIN PARA CONTINUAR',
-                          style: textTheme.bodyMedium?.copyWith(color: colorScheme.outline),
-                        ),
-                      ] else ...[
-                        Text(
-                          'SELECCIONE UN USUARIO',
-                          style: textTheme.headlineMedium,
-                        ),
-                      ],
-                      const SizedBox(height: 48),
-                      // Masked PIN Display (Brutalist Style)
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: List.generate(6, (index) {
-                          final hasDigit = index < _pin.length;
-                          return Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 12),
-                            width: 24,
-                            height: 24,
-                            decoration: BoxDecoration(
-                              color: hasDigit ? colorScheme.primary : Colors.transparent,
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(
-                                color: const Color(0xFF767777),
-                                width: 2,
-                              ),
-                            ),
-                          );
-                        }),
-                      ),
-                      const SizedBox(height: 48),
-                      if (viewModel.error != null)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 24),
-                          child: Text(
-                            viewModel.error!,
-                            style: TextStyle(color: colorScheme.error, fontWeight: FontWeight.bold, fontSize: 18),
-                          ),
-                        ),
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 450, maxHeight: 340),
-                        child: AbsorbPointer(
-                          absorbing: viewModel.isLoading,
-                          child: Opacity(
-                            opacity: viewModel.isLoading ? 0.5 : 1.0,
-                            child: PinPad(
-                              onKeyPressed: _onPinPressed,
-                              onDelete: _onDelete,
-                              onClear: _onClear,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (viewModel.isLoading)
-                  Container(
-                    color: Colors.white.withValues(alpha: 0.3),
-                    child: const Center(
-                      child: CircularProgressIndicator(),
-                    ),
-                  ),
-              ],
-            ),
+            child: _buildPinPadContent(context, viewModel, colorScheme, textTheme, isHandheld: false),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildUserList(
+    BuildContext context,
+    LockScreenViewModel viewModel,
+    ColorScheme colorScheme,
+    TextTheme textTheme, {
+    required bool isHandheld,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest,
+        border: Border(
+          right: isHandheld ? BorderSide.none : const BorderSide(color: Color(0xFF767777), width: 1),
+        ),
+      ),
+      child: viewModel.isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView.separated(
+              padding: const EdgeInsets.all(16),
+              itemCount: viewModel.users.length,
+              separatorBuilder: (context, index) => const SizedBox(height: 8),
+              itemBuilder: (context, index) {
+                final user = viewModel.users[index];
+                final isSelected = viewModel.selectedUser?.id == user.id;
+                return InkWell(
+                  onTap: () => viewModel.selectUser(user),
+                  child: Container(
+                    height: 64, // high-efficiency row height
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: isSelected ? colorScheme.primary : Colors.white,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: const Color(0xFF767777),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          backgroundColor: isSelected ? Colors.white : colorScheme.primaryContainer,
+                          foregroundColor: isSelected ? colorScheme.primary : Colors.white,
+                          child: Text(user.name[0]),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                user.name,
+                                style: textTheme.labelLarge?.copyWith(
+                                  color: isSelected ? Colors.white : colorScheme.onSurface,
+                                ),
+                              ),
+                              Text(
+                                user.role.toString().split('.').last.toUpperCase(),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isSelected ? Colors.white70 : colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(
+                          Icons.chevron_right,
+                          color: isSelected ? Colors.white : colorScheme.outline,
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+    );
+  }
+
+  Widget _buildPinPadContent(
+    BuildContext context,
+    LockScreenViewModel viewModel,
+    ColorScheme colorScheme,
+    TextTheme textTheme, {
+    required bool isHandheld,
+  }) {
+    return Stack(
+      children: [
+        Container(
+          color: colorScheme.surface,
+          padding: EdgeInsets.all(isHandheld ? 16.0 : 48.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (viewModel.selectedUser != null) ...[
+                Text(
+                  'HOLA, ${viewModel.selectedUser!.name.toUpperCase()}',
+                  style: isHandheld ? textTheme.titleLarge : textTheme.headlineMedium,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'INGRESE SU PIN PARA CONTINUAR',
+                  style: textTheme.bodySmall?.copyWith(color: colorScheme.outline),
+                  textAlign: TextAlign.center,
+                ),
+              ] else ...[
+                Text(
+                  'SELECCIONE UN USUARIO',
+                  style: textTheme.headlineMedium,
+                  textAlign: TextAlign.center,
+                ),
+              ],
+              SizedBox(height: isHandheld ? 16 : 40),
+              // Masked PIN Display (Brutalist Style)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(6, (index) {
+                  final hasDigit = index < _pin.length;
+                  return Container(
+                    margin: EdgeInsets.symmetric(horizontal: isHandheld ? 6 : 12),
+                    width: isHandheld ? 18 : 24,
+                    height: isHandheld ? 18 : 24,
+                    decoration: BoxDecoration(
+                      color: hasDigit ? colorScheme.primary : Colors.transparent,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: const Color(0xFF767777),
+                        width: 2,
+                      ),
+                    ),
+                  );
+                }),
+              ),
+              SizedBox(height: isHandheld ? 16 : 40),
+              if (viewModel.error != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Text(
+                    viewModel.error!,
+                    style: TextStyle(
+                      color: colorScheme.error,
+                      fontWeight: FontWeight.bold,
+                      fontSize: isHandheld ? 15 : 18,
+                    ),
+                  ),
+                ),
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: isHandheld ? 340 : 450,
+                  maxHeight: isHandheld ? 300 : 340,
+                ),
+                child: AbsorbPointer(
+                  absorbing: viewModel.isLoading,
+                  child: Opacity(
+                    opacity: viewModel.isLoading ? 0.5 : 1.0,
+                    child: PinPad(
+                      onKeyPressed: _onPinPressed,
+                      onDelete: _onDelete,
+                      onClear: _onClear,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (viewModel.isLoading)
+          Container(
+            color: Colors.white.withValues(alpha: 0.3),
+            child: const Center(
+              child: CircularProgressIndicator(),
+            ),
+          ),
+      ],
     );
   }
 }

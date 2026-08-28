@@ -34,6 +34,13 @@ export class SecurityProfile {
   @Column({ default: true })
   is_pin_enabled: boolean;
 
+  @Column({
+    type: 'text',
+    array: true,
+    default: '{}',
+  })
+  custom_permissions: string[];
+
   @CreateDateColumn()
   created_at: Date;
 

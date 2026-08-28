@@ -46,6 +46,9 @@ mixin _$Invoice {
   int? get sourceSequence => throw _privateConstructorUsedError;
   String? get idempotencyKey => throw _privateConstructorUsedError;
   String? get payloadHash => throw _privateConstructorUsedError;
+  double get bcnOfficialRate => throw _privateConstructorUsedError;
+  double get commercialRate => throw _privateConstructorUsedError;
+  double get totalUsd => throw _privateConstructorUsedError;
 
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
   @JsonKey(ignore: true)
@@ -81,7 +84,10 @@ abstract class $InvoiceCopyWith<$Res> {
       String? terminalId,
       int? sourceSequence,
       String? idempotencyKey,
-      String? payloadHash});
+      String? payloadHash,
+      double bcnOfficialRate,
+      double commercialRate,
+      double totalUsd});
 }
 
 /// @nodoc
@@ -121,6 +127,9 @@ class _$InvoiceCopyWithImpl<$Res, $Val extends Invoice>
     Object? sourceSequence = freezed,
     Object? idempotencyKey = freezed,
     Object? payloadHash = freezed,
+    Object? bcnOfficialRate = null,
+    Object? commercialRate = null,
+    Object? totalUsd = null,
   }) {
     return _then(_value.copyWith(
       id: null == id
@@ -219,6 +228,18 @@ class _$InvoiceCopyWithImpl<$Res, $Val extends Invoice>
           ? _value.payloadHash
           : payloadHash // ignore: cast_nullable_to_non_nullable
               as String?,
+      bcnOfficialRate: null == bcnOfficialRate
+          ? _value.bcnOfficialRate
+          : bcnOfficialRate // ignore: cast_nullable_to_non_nullable
+              as double,
+      commercialRate: null == commercialRate
+          ? _value.commercialRate
+          : commercialRate // ignore: cast_nullable_to_non_nullable
+              as double,
+      totalUsd: null == totalUsd
+          ? _value.totalUsd
+          : totalUsd // ignore: cast_nullable_to_non_nullable
+              as double,
     ) as $Val);
   }
 }
@@ -254,7 +275,10 @@ abstract class _$$InvoiceImplCopyWith<$Res> implements $InvoiceCopyWith<$Res> {
       String? terminalId,
       int? sourceSequence,
       String? idempotencyKey,
-      String? payloadHash});
+      String? payloadHash,
+      double bcnOfficialRate,
+      double commercialRate,
+      double totalUsd});
 }
 
 /// @nodoc
@@ -292,6 +316,9 @@ class __$$InvoiceImplCopyWithImpl<$Res>
     Object? sourceSequence = freezed,
     Object? idempotencyKey = freezed,
     Object? payloadHash = freezed,
+    Object? bcnOfficialRate = null,
+    Object? commercialRate = null,
+    Object? totalUsd = null,
   }) {
     return _then(_$InvoiceImpl(
       id: null == id
@@ -390,6 +417,18 @@ class __$$InvoiceImplCopyWithImpl<$Res>
           ? _value.payloadHash
           : payloadHash // ignore: cast_nullable_to_non_nullable
               as String?,
+      bcnOfficialRate: null == bcnOfficialRate
+          ? _value.bcnOfficialRate
+          : bcnOfficialRate // ignore: cast_nullable_to_non_nullable
+              as double,
+      commercialRate: null == commercialRate
+          ? _value.commercialRate
+          : commercialRate // ignore: cast_nullable_to_non_nullable
+              as double,
+      totalUsd: null == totalUsd
+          ? _value.totalUsd
+          : totalUsd // ignore: cast_nullable_to_non_nullable
+              as double,
     ));
   }
 }
@@ -421,7 +460,10 @@ class _$InvoiceImpl implements _Invoice {
       this.terminalId,
       this.sourceSequence,
       this.idempotencyKey,
-      this.payloadHash});
+      this.payloadHash,
+      this.bcnOfficialRate = 36.6241,
+      this.commercialRate = 36.50,
+      this.totalUsd = 0.0});
 
   factory _$InvoiceImpl.fromJson(Map<String, dynamic> json) =>
       _$$InvoiceImplFromJson(json);
@@ -482,10 +524,19 @@ class _$InvoiceImpl implements _Invoice {
   final String? idempotencyKey;
   @override
   final String? payloadHash;
+  @override
+  @JsonKey()
+  final double bcnOfficialRate;
+  @override
+  @JsonKey()
+  final double commercialRate;
+  @override
+  @JsonKey()
+  final double totalUsd;
 
   @override
   String toString() {
-    return 'Invoice(id: $id, number: $number, createdAt: $createdAt, userId: $userId, subtotal: $subtotal, totalTax: $totalTax, total: $total, isCanceled: $isCanceled, voidReason: $voidReason, syncStatus: $syncStatus, paymentStatus: $paymentStatus, type: $type, customerId: $customerId, globalTaxOverride: $globalTaxOverride, relatedInvoiceId: $relatedInvoiceId, originInvoiceId: $originInvoiceId, refundReasonPolicy: $refundReasonPolicy, refundReasonCode: $refundReasonCode, authorizedByUserId: $authorizedByUserId, authorizedByRole: $authorizedByRole, terminalId: $terminalId, sourceSequence: $sourceSequence, idempotencyKey: $idempotencyKey, payloadHash: $payloadHash)';
+    return 'Invoice(id: $id, number: $number, createdAt: $createdAt, userId: $userId, subtotal: $subtotal, totalTax: $totalTax, total: $total, isCanceled: $isCanceled, voidReason: $voidReason, syncStatus: $syncStatus, paymentStatus: $paymentStatus, type: $type, customerId: $customerId, globalTaxOverride: $globalTaxOverride, relatedInvoiceId: $relatedInvoiceId, originInvoiceId: $originInvoiceId, refundReasonPolicy: $refundReasonPolicy, refundReasonCode: $refundReasonCode, authorizedByUserId: $authorizedByUserId, authorizedByRole: $authorizedByRole, terminalId: $terminalId, sourceSequence: $sourceSequence, idempotencyKey: $idempotencyKey, payloadHash: $payloadHash, bcnOfficialRate: $bcnOfficialRate, commercialRate: $commercialRate, totalUsd: $totalUsd)';
   }
 
   @override
@@ -535,7 +586,13 @@ class _$InvoiceImpl implements _Invoice {
             (identical(other.idempotencyKey, idempotencyKey) ||
                 other.idempotencyKey == idempotencyKey) &&
             (identical(other.payloadHash, payloadHash) ||
-                other.payloadHash == payloadHash));
+                other.payloadHash == payloadHash) &&
+            (identical(other.bcnOfficialRate, bcnOfficialRate) ||
+                other.bcnOfficialRate == bcnOfficialRate) &&
+            (identical(other.commercialRate, commercialRate) ||
+                other.commercialRate == commercialRate) &&
+            (identical(other.totalUsd, totalUsd) ||
+                other.totalUsd == totalUsd));
   }
 
   @JsonKey(ignore: true)
@@ -565,7 +622,10 @@ class _$InvoiceImpl implements _Invoice {
         terminalId,
         sourceSequence,
         idempotencyKey,
-        payloadHash
+        payloadHash,
+        bcnOfficialRate,
+        commercialRate,
+        totalUsd
       ]);
 
   @JsonKey(ignore: true)
@@ -607,7 +667,10 @@ abstract class _Invoice implements Invoice {
       final String? terminalId,
       final int? sourceSequence,
       final String? idempotencyKey,
-      final String? payloadHash}) = _$InvoiceImpl;
+      final String? payloadHash,
+      final double bcnOfficialRate,
+      final double commercialRate,
+      final double totalUsd}) = _$InvoiceImpl;
 
   factory _Invoice.fromJson(Map<String, dynamic> json) = _$InvoiceImpl.fromJson;
 
@@ -659,6 +722,12 @@ abstract class _Invoice implements Invoice {
   String? get idempotencyKey;
   @override
   String? get payloadHash;
+  @override
+  double get bcnOfficialRate;
+  @override
+  double get commercialRate;
+  @override
+  double get totalUsd;
   @override
   @JsonKey(ignore: true)
   _$$InvoiceImplCopyWith<_$InvoiceImpl> get copyWith =>

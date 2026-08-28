@@ -53,6 +53,7 @@ void main() {
       newStock: 6,
       timestamp: DateTime(2026, 6, 1, 8, 15),
       reason: 'Compra local',
+      unitCostNio: 130.0,
     ),
   ];
 
@@ -78,7 +79,8 @@ void main() {
     expect(viewModel.entries.first.referenceLabel, 'Leche Entera');
     expect(viewModel.entries.first.typeLabel, 'Merma');
     expect(viewModel.entries.first.stockAfterLabel, '18.00');
-    expect(viewModel.entries.first.unitCostLabel, 'N/D');
+    expect(viewModel.entries[1].unitCostLabel, '130.00');
+    expect(viewModel.entries[1].totalValueLabel, '390.00');
   });
 
   test('search and type filters narrow the visible kardex history', () async {
@@ -92,6 +94,22 @@ void main() {
     viewModel.setTypeFilter(KardexTypeFilter.purchase);
     expect(viewModel.visibleEntries, hasLength(1));
     expect(viewModel.visibleEntries.single.typeLabel, 'Compra');
+  });
+
+  test('filters by specific insumo and date range', () async {
+    await viewModel.loadInitialData();
+
+    viewModel.setSelectedInsumo('coffee');
+    expect(viewModel.visibleEntries, hasLength(1));
+    expect(viewModel.visibleEntries.single.referenceLabel, 'Café Molido');
+
+    viewModel.setSelectedInsumo(null);
+    viewModel.setDateRange(DateTime(2026, 6, 2), DateTime(2026, 6, 2));
+    expect(viewModel.visibleEntries, hasLength(1));
+    expect(viewModel.visibleEntries.single.referenceLabel, 'Leche Entera');
+
+    viewModel.clearDateRange();
+    expect(viewModel.visibleEntries, hasLength(2));
   });
 
   test('maps purchase source documents and related alert counts into kardex rows', () async {

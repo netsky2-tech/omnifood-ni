@@ -98,6 +98,10 @@ class _$AppDatabase extends AppDatabase {
 
   MovementSyncStateDao? _movementSyncStateDaoInstance;
 
+  KardexRecalculateQueueDao? _kardexRecalculateQueueDaoInstance;
+
+  KardexCorrectionDao? _kardexCorrectionDaoInstance;
+
   InventoryDao? _inventoryDaoInstance;
 
   SupplierDao? _supplierDaoInstance;
@@ -128,9 +132,21 @@ class _$AppDatabase extends AppDatabase {
 
   CashierSessionDao? _cashierSessionDaoInstance;
 
+  CashMovementDao? _cashMovementDaoInstance;
+
   HoldTicketDao? _holdTicketDaoInstance;
 
   PromotionDao? _promotionDaoInstance;
+
+  RestaurantAreaDao? _restaurantAreaDaoInstance;
+
+  RestaurantTableDao? _restaurantTableDaoInstance;
+
+  KitchenOrderDao? _kitchenOrderDaoInstance;
+
+  CustomerDao? _customerDaoInstance;
+
+  CustomerPointTransactionDao? _customerPointTransactionDaoInstance;
 
   Future<sqflite.Database> open(
     String path,
@@ -138,7 +154,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 35,
+      version: 40,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -180,9 +196,13 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `forensic_alerts` (`id` TEXT NOT NULL, `alert_type` TEXT NOT NULL, `severity` TEXT NOT NULL, `message` TEXT NOT NULL, `created_at` TEXT NOT NULL, `status` TEXT NOT NULL, `note` TEXT, `actor_label` TEXT, `acted_at` TEXT, `source_movement_id` TEXT, `source_document_id` TEXT, `source_document_type` TEXT, `metadata_json` TEXT, `is_synced` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `inventory_movements` (`id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `type` TEXT NOT NULL, `quantity` REAL NOT NULL, `previous_stock` REAL NOT NULL, `new_stock` REAL NOT NULL, `timestamp` TEXT NOT NULL, `reason` TEXT, `user_id` TEXT, `unit_cost_nio` REAL, `source_document_type` TEXT, `source_document_id` TEXT, `origin_movement_id` TEXT, `origin_invoice_item_id` TEXT, `batch_deductions` TEXT, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `inventory_movements` (`id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `type` TEXT NOT NULL, `quantity` REAL NOT NULL, `previous_stock` REAL NOT NULL, `new_stock` REAL NOT NULL, `timestamp` TEXT NOT NULL, `reason` TEXT, `user_id` TEXT, `unit_cost_nio` REAL, `source_document_type` TEXT, `source_document_id` TEXT, `origin_movement_id` TEXT, `origin_invoice_item_id` TEXT, `batch_deductions` TEXT, `estado_costeo` INTEGER NOT NULL, `intentos_count` INTEGER NOT NULL, `bloqueo_motivo` TEXT, `autorizado_por_usuario_id` TEXT, `fecha_autorizacion` TEXT, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `inventory_movement_sync_state` (`movement_id` TEXT NOT NULL, `sync_status` TEXT NOT NULL, `last_attempted_at` TEXT, `synced_at` TEXT, `last_error` TEXT, `terminal_id` TEXT, `flow_type` TEXT, `local_sequence` INTEGER, `idempotency_key` TEXT, `last_result_code` TEXT, FOREIGN KEY (`movement_id`) REFERENCES `inventory_movements` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE, PRIMARY KEY (`movement_id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `kardex_recalculate_queue` (`id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `origin_movement_id` TEXT NOT NULL, `trigger_movement_id` TEXT NOT NULL, `status` TEXT NOT NULL, `attempts` INTEGER NOT NULL, `claimed_at` TEXT, `last_error` TEXT, `created_at` TEXT NOT NULL, `updated_at` TEXT NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `kardex_corrections` (`id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `origin_movement_id` TEXT NOT NULL, `trigger_movement_id` TEXT NOT NULL, `previous_unit_cost_nio` REAL NOT NULL, `recalculated_unit_cost_nio` REAL NOT NULL, `delta_unit_cost_nio` REAL NOT NULL, `total_delta_cost_nio` REAL NOT NULL, `affected_quantity` REAL NOT NULL, `lineage_hash` TEXT NOT NULL, `authorized_by_user_id` TEXT, `authorized_by_role` TEXT, `authorization_method` TEXT, `created_at` TEXT NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `suppliers` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `phone` TEXT, `contact_person` TEXT, `credit_terms` TEXT, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
@@ -198,23 +218,37 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `catalog_values` (`id` TEXT NOT NULL, `catalog_type` TEXT NOT NULL, `code` TEXT NOT NULL, `name` TEXT NOT NULL, `is_active` INTEGER NOT NULL, `sort_order` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `invoices` (`id` TEXT NOT NULL, `invoice_number` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `user_id` TEXT NOT NULL, `subtotal` REAL NOT NULL, `total_tax` REAL NOT NULL, `total` REAL NOT NULL, `is_canceled` INTEGER NOT NULL, `void_reason` TEXT, `sync_status` TEXT NOT NULL, `payment_status` TEXT NOT NULL, `customer_id` TEXT, `global_tax_override` INTEGER NOT NULL, `type` TEXT NOT NULL, `related_invoice_id` TEXT, `origin_invoice_id` TEXT, `refund_reason_policy` TEXT, `refund_reason_code` TEXT, `authorized_by_user_id` TEXT, `authorized_by_role` TEXT, `terminal_id` TEXT, `source_sequence` INTEGER, `idempotency_key` TEXT, `payload_hash` TEXT, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `invoices` (`id` TEXT NOT NULL, `invoice_number` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `user_id` TEXT NOT NULL, `subtotal` REAL NOT NULL, `total_tax` REAL NOT NULL, `total` REAL NOT NULL, `is_canceled` INTEGER NOT NULL, `void_reason` TEXT, `sync_status` TEXT NOT NULL, `payment_status` TEXT NOT NULL, `customer_id` TEXT, `global_tax_override` INTEGER NOT NULL, `type` TEXT NOT NULL, `related_invoice_id` TEXT, `origin_invoice_id` TEXT, `refund_reason_policy` TEXT, `refund_reason_code` TEXT, `authorized_by_user_id` TEXT, `authorized_by_role` TEXT, `terminal_id` TEXT, `source_sequence` INTEGER, `idempotency_key` TEXT, `payload_hash` TEXT, `bcn_official_rate` REAL NOT NULL, `commercial_rate` REAL NOT NULL, `total_usd` REAL NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `invoice_items` (`id` TEXT NOT NULL, `invoice_id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `product_name` TEXT NOT NULL, `quantity` REAL NOT NULL, `unit_price` REAL NOT NULL, `original_tax_rate` REAL NOT NULL, `applied_tax_rate` REAL NOT NULL, `tax_amount` REAL NOT NULL, `total` REAL NOT NULL, `discount` REAL NOT NULL, `variant_id` TEXT, `notes` TEXT, `recipe_version_id` TEXT, `origin_invoice_item_id` TEXT, FOREIGN KEY (`invoice_id`) REFERENCES `invoices` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `invoice_item_modifiers` (`id` TEXT NOT NULL, `invoice_item_id` TEXT NOT NULL, `name` TEXT NOT NULL, `extra_price` REAL NOT NULL, FOREIGN KEY (`invoice_item_id`) REFERENCES `invoice_items` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `payments` (`id` TEXT NOT NULL, `invoice_id` TEXT NOT NULL, `method` TEXT NOT NULL, `amount` REAL NOT NULL, `currency` TEXT NOT NULL, `exchange_rate` REAL NOT NULL, `created_at` INTEGER, FOREIGN KEY (`invoice_id`) REFERENCES `invoices` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `payments` (`id` TEXT NOT NULL, `invoice_id` TEXT NOT NULL, `method` TEXT NOT NULL, `amount` REAL NOT NULL, `currency` TEXT NOT NULL, `exchange_rate` REAL NOT NULL, `amount_nio` REAL NOT NULL, `change_given` REAL NOT NULL, `change_currency` TEXT NOT NULL, `voucher_code` TEXT, `card_brand` TEXT, `card_type` TEXT, `bank_pos` TEXT, `reconciliation_status` TEXT, `last4` TEXT, `batch_number` TEXT, `reconciled_at` INTEGER, `reconciled_by_user_id` TEXT, `created_at` INTEGER, FOREIGN KEY (`invoice_id`) REFERENCES `invoices` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `tax_configurations` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `rate` REAL NOT NULL, `is_active` INTEGER NOT NULL, `is_default` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `cashier_sessions` (`id` TEXT NOT NULL, `user_id` TEXT NOT NULL, `opened_at` INTEGER NOT NULL, `tipo_modelo` TEXT NOT NULL, `closed_at` INTEGER, `opening_balance` REAL NOT NULL, `closing_balance` REAL, `total_sales` REAL, `total_expected` REAL, `is_closed` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `cashier_sessions` (`id` TEXT NOT NULL, `user_id` TEXT NOT NULL, `terminal_id` TEXT NOT NULL, `opened_at` INTEGER NOT NULL, `tipo_modelo` TEXT NOT NULL, `closed_at` INTEGER, `opening_balance_nio` REAL NOT NULL, `opening_balance_usd` REAL NOT NULL, `closing_counted_nio` REAL, `closing_counted_usd` REAL, `expected_nio` REAL NOT NULL, `expected_usd` REAL NOT NULL, `difference_nio` REAL, `difference_usd` REAL, `z_report_sequence` INTEGER, `is_closed` INTEGER NOT NULL, `supervisor_id` TEXT, `notes` TEXT, `sync_status` TEXT NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `hold_tickets` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `global_tax_exempt` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `cash_movements` (`id` TEXT NOT NULL, `shift_id` TEXT NOT NULL, `terminal_id` TEXT NOT NULL, `type` TEXT NOT NULL, `amount_nio` REAL NOT NULL, `amount_usd` REAL NOT NULL, `reason` TEXT NOT NULL, `authorized_by_user_id` TEXT, `timestamp` INTEGER NOT NULL, `sync_status` TEXT NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `hold_ticket_items` (`id` TEXT NOT NULL, `hold_ticket_id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `product_name` TEXT NOT NULL, `quantity` REAL NOT NULL, `unit_price` REAL NOT NULL, `tax_rate` REAL NOT NULL, FOREIGN KEY (`hold_ticket_id`) REFERENCES `hold_tickets` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `hold_tickets` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `table_id` TEXT, `area_id` TEXT, `waiter_id` TEXT, `waiter_name` TEXT, `guest_count` INTEGER NOT NULL, `global_tax_exempt` INTEGER NOT NULL, `version` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `promotions` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `type` TEXT NOT NULL, `target_product_id` TEXT NOT NULL, `buy_quantity` INTEGER NOT NULL, `get_quantity` INTEGER NOT NULL, `discount_value` REAL NOT NULL, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `hold_ticket_items` (`id` TEXT NOT NULL, `hold_ticket_id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `product_name` TEXT NOT NULL, `quantity` REAL NOT NULL, `unit_price` REAL NOT NULL, `tax_rate` REAL NOT NULL, `variant_id` TEXT, `notes` TEXT, `modifiers_json` TEXT, FOREIGN KEY (`hold_ticket_id`) REFERENCES `hold_tickets` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `promotions` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `type` TEXT NOT NULL, `target_product_id` TEXT, `target_category_id` TEXT, `buy_quantity` INTEGER NOT NULL, `get_quantity` INTEGER NOT NULL, `discount_value` REAL NOT NULL, `min_order_amount` REAL NOT NULL, `days_of_week` TEXT, `start_time` TEXT, `end_time` TEXT, `start_date` INTEGER, `end_date` INTEGER, `priority` INTEGER NOT NULL, `is_stackable` INTEGER NOT NULL, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `restaurant_areas` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `display_order` INTEGER NOT NULL, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `restaurant_tables` (`id` TEXT NOT NULL, `area_id` TEXT NOT NULL, `table_number` TEXT NOT NULL, `capacity` INTEGER NOT NULL, `status` TEXT NOT NULL, `current_ticket_id` TEXT, `active_guests` INTEGER, `opened_at` INTEGER, FOREIGN KEY (`area_id`) REFERENCES `restaurant_areas` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `kitchen_orders` (`id` TEXT NOT NULL, `ticket_id` TEXT NOT NULL, `table_number` TEXT, `table_name` TEXT, `waiter_name` TEXT, `station` TEXT NOT NULL, `status` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `started_at` INTEGER, `ready_at` INTEGER, `served_at` INTEGER, `notes` TEXT, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `kitchen_order_items` (`id` TEXT NOT NULL, `kitchen_order_id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `product_name` TEXT NOT NULL, `quantity` REAL NOT NULL, `status` TEXT NOT NULL, `notes` TEXT, `modifiers_json` TEXT, FOREIGN KEY (`kitchen_order_id`) REFERENCES `kitchen_orders` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `customers` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `tax_id` TEXT, `phone` TEXT, `email` TEXT, `address` TEXT, `points_balance` REAL NOT NULL, `is_active` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, `sync_status` TEXT NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `customer_point_transactions` (`id` TEXT NOT NULL, `customer_id` TEXT NOT NULL, `invoice_id` TEXT, `type` TEXT NOT NULL, `points` REAL NOT NULL, `balance_after` REAL NOT NULL, `conversion_rate` REAL NOT NULL, `reason` TEXT, `created_at` INTEGER NOT NULL, `sync_status` TEXT NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE UNIQUE INDEX `index_audit_logs_tenant_id_device_id_user_id_sequence_no` ON `audit_logs` (`tenant_id`, `device_id`, `user_id`, `sequence_no`)');
         await database.execute(
@@ -233,6 +267,24 @@ class _$AppDatabase extends AppDatabase {
             'CREATE UNIQUE INDEX `idx_invoices_terminal_source_sequence` ON `invoices` (`terminal_id`, `source_sequence`)');
         await database.execute(
             'CREATE UNIQUE INDEX `idx_invoices_idempotency_key` ON `invoices` (`idempotency_key`)');
+        await database.execute(
+            'CREATE INDEX `index_kitchen_orders_station_status` ON `kitchen_orders` (`station`, `status`)');
+        await database.execute(
+            'CREATE INDEX `index_kitchen_orders_ticket_id` ON `kitchen_orders` (`ticket_id`)');
+        await database.execute(
+            'CREATE INDEX `index_kitchen_order_items_kitchen_order_id` ON `kitchen_order_items` (`kitchen_order_id`)');
+        await database.execute(
+            'CREATE INDEX `idx_customers_tax_id` ON `customers` (`tax_id`)');
+        await database.execute(
+            'CREATE INDEX `idx_customers_phone` ON `customers` (`phone`)');
+        await database.execute(
+            'CREATE INDEX `idx_customers_name` ON `customers` (`name`)');
+        await database.execute(
+            'CREATE INDEX `index_customer_point_transactions_customer_id` ON `customer_point_transactions` (`customer_id`)');
+        await database.execute(
+            'CREATE INDEX `index_customer_point_transactions_invoice_id` ON `customer_point_transactions` (`invoice_id`)');
+        await database.execute(
+            'CREATE INDEX `index_customer_point_transactions_created_at` ON `customer_point_transactions` (`created_at`)');
 
         await callback?.onCreate?.call(database, version);
       },
@@ -309,6 +361,18 @@ class _$AppDatabase extends AppDatabase {
   MovementSyncStateDao get movementSyncStateDao {
     return _movementSyncStateDaoInstance ??=
         _$MovementSyncStateDao(database, changeListener);
+  }
+
+  @override
+  KardexRecalculateQueueDao get kardexRecalculateQueueDao {
+    return _kardexRecalculateQueueDaoInstance ??=
+        _$KardexRecalculateQueueDao(database, changeListener);
+  }
+
+  @override
+  KardexCorrectionDao get kardexCorrectionDao {
+    return _kardexCorrectionDaoInstance ??=
+        _$KardexCorrectionDao(database, changeListener);
   }
 
   @override
@@ -394,6 +458,12 @@ class _$AppDatabase extends AppDatabase {
   }
 
   @override
+  CashMovementDao get cashMovementDao {
+    return _cashMovementDaoInstance ??=
+        _$CashMovementDao(database, changeListener);
+  }
+
+  @override
   HoldTicketDao get holdTicketDao {
     return _holdTicketDaoInstance ??= _$HoldTicketDao(database, changeListener);
   }
@@ -401,6 +471,35 @@ class _$AppDatabase extends AppDatabase {
   @override
   PromotionDao get promotionDao {
     return _promotionDaoInstance ??= _$PromotionDao(database, changeListener);
+  }
+
+  @override
+  RestaurantAreaDao get restaurantAreaDao {
+    return _restaurantAreaDaoInstance ??=
+        _$RestaurantAreaDao(database, changeListener);
+  }
+
+  @override
+  RestaurantTableDao get restaurantTableDao {
+    return _restaurantTableDaoInstance ??=
+        _$RestaurantTableDao(database, changeListener);
+  }
+
+  @override
+  KitchenOrderDao get kitchenOrderDao {
+    return _kitchenOrderDaoInstance ??=
+        _$KitchenOrderDao(database, changeListener);
+  }
+
+  @override
+  CustomerDao get customerDao {
+    return _customerDaoInstance ??= _$CustomerDao(database, changeListener);
+  }
+
+  @override
+  CustomerPointTransactionDao get customerPointTransactionDao {
+    return _customerPointTransactionDaoInstance ??=
+        _$CustomerPointTransactionDao(database, changeListener);
   }
 }
 
@@ -789,7 +888,7 @@ class _$LocalConfigDao extends LocalConfigDao {
 
   @override
   Future<LocalConfigEntity?> getConfigByKey(String key) async {
-    return _queryAdapter.query('SELECT * FROM local_configs WHERE key = ?1',
+    return _queryAdapter.query('SELECT * FROM local_configs WHERE `key` = ?1',
         mapper: (Map<String, Object?> row) => LocalConfigEntity(
             key: row['key'] as String,
             value: row['value'] as String,
@@ -800,7 +899,7 @@ class _$LocalConfigDao extends LocalConfigDao {
   @override
   Future<void> deleteConfig(String key) async {
     await _queryAdapter.queryNoReturn(
-        'DELETE FROM local_configs WHERE key = ?1',
+        'DELETE FROM local_configs WHERE `key` = ?1',
         arguments: [key]);
   }
 
@@ -1550,7 +1649,12 @@ class _$MovementDao extends MovementDao {
                   'source_document_id': item.sourceDocumentId,
                   'origin_movement_id': item.originMovementId,
                   'origin_invoice_item_id': item.originInvoiceItemId,
-                  'batch_deductions': item.batch_deductions
+                  'batch_deductions': item.batch_deductions,
+                  'estado_costeo': item.estadoCosteo,
+                  'intentos_count': item.intentosCount,
+                  'bloqueo_motivo': item.bloqueoMotivo,
+                  'autorizado_por_usuario_id': item.autorizadoPorUsuarioId,
+                  'fecha_autorizacion': item.fechaAutorizacion
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -1580,7 +1684,12 @@ class _$MovementDao extends MovementDao {
             sourceDocumentId: row['source_document_id'] as String?,
             originMovementId: row['origin_movement_id'] as String?,
             originInvoiceItemId: row['origin_invoice_item_id'] as String?,
-            batch_deductions: row['batch_deductions'] as String?));
+            batch_deductions: row['batch_deductions'] as String?,
+            estadoCosteo: row['estado_costeo'] as int,
+            intentosCount: row['intentos_count'] as int,
+            bloqueoMotivo: row['bloqueo_motivo'] as String?,
+            autorizadoPorUsuarioId: row['autorizado_por_usuario_id'] as String?,
+            fechaAutorizacion: row['fecha_autorizacion'] as String?));
   }
 
   @override
@@ -1602,7 +1711,12 @@ class _$MovementDao extends MovementDao {
             sourceDocumentId: row['source_document_id'] as String?,
             originMovementId: row['origin_movement_id'] as String?,
             originInvoiceItemId: row['origin_invoice_item_id'] as String?,
-            batch_deductions: row['batch_deductions'] as String?));
+            batch_deductions: row['batch_deductions'] as String?,
+            estadoCosteo: row['estado_costeo'] as int,
+            intentosCount: row['intentos_count'] as int,
+            bloqueoMotivo: row['bloqueo_motivo'] as String?,
+            autorizadoPorUsuarioId: row['autorizado_por_usuario_id'] as String?,
+            fechaAutorizacion: row['fecha_autorizacion'] as String?));
   }
 
   @override
@@ -1612,7 +1726,7 @@ class _$MovementDao extends MovementDao {
   ) async {
     return _queryAdapter.queryList(
         'SELECT * FROM inventory_movements WHERE type = ?1 ORDER BY timestamp DESC LIMIT ?2',
-        mapper: (Map<String, Object?> row) => MovementEntity(id: row['id'] as String, insumoId: row['insumo_id'] as String, type: row['type'] as String, quantity: row['quantity'] as double, previousStock: row['previous_stock'] as double, newStock: row['new_stock'] as double, timestamp: row['timestamp'] as String, reason: row['reason'] as String?, userId: row['user_id'] as String?, unitCostNio: row['unit_cost_nio'] as double?, sourceDocumentType: row['source_document_type'] as String?, sourceDocumentId: row['source_document_id'] as String?, originMovementId: row['origin_movement_id'] as String?, originInvoiceItemId: row['origin_invoice_item_id'] as String?, batch_deductions: row['batch_deductions'] as String?),
+        mapper: (Map<String, Object?> row) => MovementEntity(id: row['id'] as String, insumoId: row['insumo_id'] as String, type: row['type'] as String, quantity: row['quantity'] as double, previousStock: row['previous_stock'] as double, newStock: row['new_stock'] as double, timestamp: row['timestamp'] as String, reason: row['reason'] as String?, userId: row['user_id'] as String?, unitCostNio: row['unit_cost_nio'] as double?, sourceDocumentType: row['source_document_type'] as String?, sourceDocumentId: row['source_document_id'] as String?, originMovementId: row['origin_movement_id'] as String?, originInvoiceItemId: row['origin_invoice_item_id'] as String?, batch_deductions: row['batch_deductions'] as String?, estadoCosteo: row['estado_costeo'] as int, intentosCount: row['intentos_count'] as int, bloqueoMotivo: row['bloqueo_motivo'] as String?, autorizadoPorUsuarioId: row['autorizado_por_usuario_id'] as String?, fechaAutorizacion: row['fecha_autorizacion'] as String?),
         arguments: [type, limit]);
   }
 
@@ -1704,6 +1818,265 @@ class _$MovementSyncStateDao extends MovementSyncStateDao {
   }
 }
 
+class _$KardexRecalculateQueueDao extends KardexRecalculateQueueDao {
+  _$KardexRecalculateQueueDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _kardexRecalculateQueueEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'kardex_recalculate_queue',
+            (KardexRecalculateQueueEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'insumo_id': item.insumoId,
+                  'origin_movement_id': item.originMovementId,
+                  'trigger_movement_id': item.triggerMovementId,
+                  'status': item.status,
+                  'attempts': item.attempts,
+                  'claimed_at': item.claimedAt,
+                  'last_error': item.lastError,
+                  'created_at': item.createdAt,
+                  'updated_at': item.updatedAt
+                }),
+        _kardexRecalculateQueueEntityUpdateAdapter = UpdateAdapter(
+            database,
+            'kardex_recalculate_queue',
+            ['id'],
+            (KardexRecalculateQueueEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'insumo_id': item.insumoId,
+                  'origin_movement_id': item.originMovementId,
+                  'trigger_movement_id': item.triggerMovementId,
+                  'status': item.status,
+                  'attempts': item.attempts,
+                  'claimed_at': item.claimedAt,
+                  'last_error': item.lastError,
+                  'created_at': item.createdAt,
+                  'updated_at': item.updatedAt
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<KardexRecalculateQueueEntity>
+      _kardexRecalculateQueueEntityInsertionAdapter;
+
+  final UpdateAdapter<KardexRecalculateQueueEntity>
+      _kardexRecalculateQueueEntityUpdateAdapter;
+
+  @override
+  Future<List<KardexRecalculateQueueEntity>> findQueueByStatus(
+      String status) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM kardex_recalculate_queue WHERE status = ?1 ORDER BY created_at ASC',
+        mapper: (Map<String, Object?> row) => KardexRecalculateQueueEntity(id: row['id'] as String, insumoId: row['insumo_id'] as String, originMovementId: row['origin_movement_id'] as String, triggerMovementId: row['trigger_movement_id'] as String, status: row['status'] as String, attempts: row['attempts'] as int, claimedAt: row['claimed_at'] as String?, lastError: row['last_error'] as String?, createdAt: row['created_at'] as String, updatedAt: row['updated_at'] as String),
+        arguments: [status]);
+  }
+
+  @override
+  Future<List<KardexRecalculateQueueEntity>> findQueueByInsumoId(
+      String insumoId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM kardex_recalculate_queue WHERE insumo_id = ?1 ORDER BY created_at ASC',
+        mapper: (Map<String, Object?> row) => KardexRecalculateQueueEntity(id: row['id'] as String, insumoId: row['insumo_id'] as String, originMovementId: row['origin_movement_id'] as String, triggerMovementId: row['trigger_movement_id'] as String, status: row['status'] as String, attempts: row['attempts'] as int, claimedAt: row['claimed_at'] as String?, lastError: row['last_error'] as String?, createdAt: row['created_at'] as String, updatedAt: row['updated_at'] as String),
+        arguments: [insumoId]);
+  }
+
+  @override
+  Future<KardexRecalculateQueueEntity?> findQueueById(String id) async {
+    return _queryAdapter.query(
+        'SELECT * FROM kardex_recalculate_queue WHERE id = ?1',
+        mapper: (Map<String, Object?> row) => KardexRecalculateQueueEntity(
+            id: row['id'] as String,
+            insumoId: row['insumo_id'] as String,
+            originMovementId: row['origin_movement_id'] as String,
+            triggerMovementId: row['trigger_movement_id'] as String,
+            status: row['status'] as String,
+            attempts: row['attempts'] as int,
+            claimedAt: row['claimed_at'] as String?,
+            lastError: row['last_error'] as String?,
+            createdAt: row['created_at'] as String,
+            updatedAt: row['updated_at'] as String),
+        arguments: [id]);
+  }
+
+  @override
+  Future<void> deleteQueueItemById(String id) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM kardex_recalculate_queue WHERE id = ?1',
+        arguments: [id]);
+  }
+
+  @override
+  Future<void> insertQueueItem(KardexRecalculateQueueEntity item) async {
+    await _kardexRecalculateQueueEntityInsertionAdapter.insert(
+        item, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> updateQueueItem(KardexRecalculateQueueEntity item) async {
+    await _kardexRecalculateQueueEntityUpdateAdapter.update(
+        item, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> claimQueueItem(
+    String id,
+    String status,
+    String claimedAt,
+    int attempts,
+  ) async {
+    if (database is sqflite.Transaction) {
+      await super.claimQueueItem(id, status, claimedAt, attempts);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.kardexRecalculateQueueDao
+            .claimQueueItem(id, status, claimedAt, attempts);
+      });
+    }
+  }
+}
+
+class _$KardexCorrectionDao extends KardexCorrectionDao {
+  _$KardexCorrectionDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _kardexCorrectionEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'kardex_corrections',
+            (KardexCorrectionEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'insumo_id': item.insumoId,
+                  'origin_movement_id': item.originMovementId,
+                  'trigger_movement_id': item.triggerMovementId,
+                  'previous_unit_cost_nio': item.previousUnitCostNio,
+                  'recalculated_unit_cost_nio': item.recalculatedUnitCostNio,
+                  'delta_unit_cost_nio': item.deltaUnitCostNio,
+                  'total_delta_cost_nio': item.totalDeltaCostNio,
+                  'affected_quantity': item.affectedQuantity,
+                  'lineage_hash': item.lineageHash,
+                  'authorized_by_user_id': item.authorizedByUserId,
+                  'authorized_by_role': item.authorizedByRole,
+                  'authorization_method': item.authorizationMethod,
+                  'created_at': item.createdAt
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<KardexCorrectionEntity>
+      _kardexCorrectionEntityInsertionAdapter;
+
+  @override
+  Future<List<KardexCorrectionEntity>> findCorrectionsByInsumoId(
+      String insumoId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM kardex_corrections WHERE insumo_id = ?1 ORDER BY created_at DESC',
+        mapper: (Map<String, Object?> row) => KardexCorrectionEntity(id: row['id'] as String, insumoId: row['insumo_id'] as String, originMovementId: row['origin_movement_id'] as String, triggerMovementId: row['trigger_movement_id'] as String, previousUnitCostNio: row['previous_unit_cost_nio'] as double, recalculatedUnitCostNio: row['recalculated_unit_cost_nio'] as double, deltaUnitCostNio: row['delta_unit_cost_nio'] as double, totalDeltaCostNio: row['total_delta_cost_nio'] as double, affectedQuantity: row['affected_quantity'] as double, lineageHash: row['lineage_hash'] as String, authorizedByUserId: row['authorized_by_user_id'] as String?, authorizedByRole: row['authorized_by_role'] as String?, authorizationMethod: row['authorization_method'] as String?, createdAt: row['created_at'] as String),
+        arguments: [insumoId]);
+  }
+
+  @override
+  Future<KardexCorrectionEntity?> findCorrectionByLineageHash(
+      String lineageHash) async {
+    return _queryAdapter.query(
+        'SELECT * FROM kardex_corrections WHERE lineage_hash = ?1 LIMIT 1',
+        mapper: (Map<String, Object?> row) => KardexCorrectionEntity(
+            id: row['id'] as String,
+            insumoId: row['insumo_id'] as String,
+            originMovementId: row['origin_movement_id'] as String,
+            triggerMovementId: row['trigger_movement_id'] as String,
+            previousUnitCostNio: row['previous_unit_cost_nio'] as double,
+            recalculatedUnitCostNio:
+                row['recalculated_unit_cost_nio'] as double,
+            deltaUnitCostNio: row['delta_unit_cost_nio'] as double,
+            totalDeltaCostNio: row['total_delta_cost_nio'] as double,
+            affectedQuantity: row['affected_quantity'] as double,
+            lineageHash: row['lineage_hash'] as String,
+            authorizedByUserId: row['authorized_by_user_id'] as String?,
+            authorizedByRole: row['authorized_by_role'] as String?,
+            authorizationMethod: row['authorization_method'] as String?,
+            createdAt: row['created_at'] as String),
+        arguments: [lineageHash]);
+  }
+
+  @override
+  Future<KardexCorrectionEntity?> findCorrectionById(String id) async {
+    return _queryAdapter.query('SELECT * FROM kardex_corrections WHERE id = ?1',
+        mapper: (Map<String, Object?> row) => KardexCorrectionEntity(
+            id: row['id'] as String,
+            insumoId: row['insumo_id'] as String,
+            originMovementId: row['origin_movement_id'] as String,
+            triggerMovementId: row['trigger_movement_id'] as String,
+            previousUnitCostNio: row['previous_unit_cost_nio'] as double,
+            recalculatedUnitCostNio:
+                row['recalculated_unit_cost_nio'] as double,
+            deltaUnitCostNio: row['delta_unit_cost_nio'] as double,
+            totalDeltaCostNio: row['total_delta_cost_nio'] as double,
+            affectedQuantity: row['affected_quantity'] as double,
+            lineageHash: row['lineage_hash'] as String,
+            authorizedByUserId: row['authorized_by_user_id'] as String?,
+            authorizedByRole: row['authorized_by_role'] as String?,
+            authorizationMethod: row['authorization_method'] as String?,
+            createdAt: row['created_at'] as String),
+        arguments: [id]);
+  }
+
+  @override
+  Future<List<KardexCorrectionEntity>> findAllCorrections() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM kardex_corrections ORDER BY created_at ASC',
+        mapper: (Map<String, Object?> row) => KardexCorrectionEntity(
+            id: row['id'] as String,
+            insumoId: row['insumo_id'] as String,
+            originMovementId: row['origin_movement_id'] as String,
+            triggerMovementId: row['trigger_movement_id'] as String,
+            previousUnitCostNio: row['previous_unit_cost_nio'] as double,
+            recalculatedUnitCostNio:
+                row['recalculated_unit_cost_nio'] as double,
+            deltaUnitCostNio: row['delta_unit_cost_nio'] as double,
+            totalDeltaCostNio: row['total_delta_cost_nio'] as double,
+            affectedQuantity: row['affected_quantity'] as double,
+            lineageHash: row['lineage_hash'] as String,
+            authorizedByUserId: row['authorized_by_user_id'] as String?,
+            authorizedByRole: row['authorized_by_role'] as String?,
+            authorizationMethod: row['authorization_method'] as String?,
+            createdAt: row['created_at'] as String));
+  }
+
+  @override
+  Future<void> insertCorrection(KardexCorrectionEntity correction) async {
+    await _kardexCorrectionEntityInsertionAdapter.insert(
+        correction, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> recordCorrectionWithLineage(
+      KardexCorrectionEntity correction) async {
+    if (database is sqflite.Transaction) {
+      await super.recordCorrectionWithLineage(correction);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.kardexCorrectionDao
+            .recordCorrectionWithLineage(correction);
+      });
+    }
+  }
+}
+
 class _$InventoryDao extends InventoryDao {
   _$InventoryDao(
     this.database,
@@ -1727,7 +2100,12 @@ class _$InventoryDao extends InventoryDao {
                   'source_document_id': item.sourceDocumentId,
                   'origin_movement_id': item.originMovementId,
                   'origin_invoice_item_id': item.originInvoiceItemId,
-                  'batch_deductions': item.batch_deductions
+                  'batch_deductions': item.batch_deductions,
+                  'estado_costeo': item.estadoCosteo,
+                  'intentos_count': item.intentosCount,
+                  'bloqueo_motivo': item.bloqueoMotivo,
+                  'autorizado_por_usuario_id': item.autorizadoPorUsuarioId,
+                  'fecha_autorizacion': item.fechaAutorizacion
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -2178,7 +2556,12 @@ class _$ProductionTransactionDao extends ProductionTransactionDao {
                   'source_document_id': item.sourceDocumentId,
                   'origin_movement_id': item.originMovementId,
                   'origin_invoice_item_id': item.originInvoiceItemId,
-                  'batch_deductions': item.batch_deductions
+                  'batch_deductions': item.batch_deductions,
+                  'estado_costeo': item.estadoCosteo,
+                  'intentos_count': item.intentosCount,
+                  'bloqueo_motivo': item.bloqueoMotivo,
+                  'autorizado_por_usuario_id': item.autorizadoPorUsuarioId,
+                  'fecha_autorizacion': item.fechaAutorizacion
                 }),
         _productionOrderDocumentEntityInsertionAdapter = InsertionAdapter(
             database,
@@ -2496,7 +2879,10 @@ class _$InvoiceDao extends InvoiceDao {
                   'terminal_id': item.terminalId,
                   'source_sequence': item.sourceSequence,
                   'idempotency_key': item.idempotencyKey,
-                  'payload_hash': item.payloadHash
+                  'payload_hash': item.payloadHash,
+                  'bcn_official_rate': item.bcnOfficialRate,
+                  'commercial_rate': item.commercialRate,
+                  'total_usd': item.totalUsd
                 }),
         _invoiceEntityUpdateAdapter = UpdateAdapter(
             database,
@@ -2526,7 +2912,10 @@ class _$InvoiceDao extends InvoiceDao {
                   'terminal_id': item.terminalId,
                   'source_sequence': item.sourceSequence,
                   'idempotency_key': item.idempotencyKey,
-                  'payload_hash': item.payloadHash
+                  'payload_hash': item.payloadHash,
+                  'bcn_official_rate': item.bcnOfficialRate,
+                  'commercial_rate': item.commercialRate,
+                  'total_usd': item.totalUsd
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -2566,7 +2955,10 @@ class _$InvoiceDao extends InvoiceDao {
             terminalId: row['terminal_id'] as String?,
             sourceSequence: row['source_sequence'] as int?,
             idempotencyKey: row['idempotency_key'] as String?,
-            payloadHash: row['payload_hash'] as String?),
+            payloadHash: row['payload_hash'] as String?,
+            bcnOfficialRate: row['bcn_official_rate'] as double,
+            commercialRate: row['commercial_rate'] as double,
+            totalUsd: row['total_usd'] as double),
         arguments: [id]);
   }
 
@@ -2598,7 +2990,10 @@ class _$InvoiceDao extends InvoiceDao {
             terminalId: row['terminal_id'] as String?,
             sourceSequence: row['source_sequence'] as int?,
             idempotencyKey: row['idempotency_key'] as String?,
-            payloadHash: row['payload_hash'] as String?),
+            payloadHash: row['payload_hash'] as String?,
+            bcnOfficialRate: row['bcn_official_rate'] as double,
+            commercialRate: row['commercial_rate'] as double,
+            totalUsd: row['total_usd'] as double),
         arguments: [number]);
   }
 
@@ -2630,7 +3025,10 @@ class _$InvoiceDao extends InvoiceDao {
             terminalId: row['terminal_id'] as String?,
             sourceSequence: row['source_sequence'] as int?,
             idempotencyKey: row['idempotency_key'] as String?,
-            payloadHash: row['payload_hash'] as String?));
+            payloadHash: row['payload_hash'] as String?,
+            bcnOfficialRate: row['bcn_official_rate'] as double,
+            commercialRate: row['commercial_rate'] as double,
+            totalUsd: row['total_usd'] as double));
   }
 
   @override
@@ -2661,7 +3059,10 @@ class _$InvoiceDao extends InvoiceDao {
             terminalId: row['terminal_id'] as String?,
             sourceSequence: row['source_sequence'] as int?,
             idempotencyKey: row['idempotency_key'] as String?,
-            payloadHash: row['payload_hash'] as String?),
+            payloadHash: row['payload_hash'] as String?,
+            bcnOfficialRate: row['bcn_official_rate'] as double,
+            commercialRate: row['commercial_rate'] as double,
+            totalUsd: row['total_usd'] as double),
         arguments: [status]);
   }
 
@@ -2696,8 +3097,46 @@ class _$InvoiceDao extends InvoiceDao {
             terminalId: row['terminal_id'] as String?,
             sourceSequence: row['source_sequence'] as int?,
             idempotencyKey: row['idempotency_key'] as String?,
-            payloadHash: row['payload_hash'] as String?),
+            payloadHash: row['payload_hash'] as String?,
+            bcnOfficialRate: row['bcn_official_rate'] as double,
+            commercialRate: row['commercial_rate'] as double,
+            totalUsd: row['total_usd'] as double),
         arguments: [startTime, endTime]);
+  }
+
+  @override
+  Future<List<InvoiceEntity>> getInvoicesByUserId(String userId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM invoices WHERE user_id = ?1 ORDER BY created_at DESC',
+        mapper: (Map<String, Object?> row) => InvoiceEntity(
+            id: row['id'] as String,
+            number: row['invoice_number'] as String,
+            createdAt: row['created_at'] as int,
+            userId: row['user_id'] as String,
+            subtotal: row['subtotal'] as double,
+            totalTax: row['total_tax'] as double,
+            total: row['total'] as double,
+            isCanceled: (row['is_canceled'] as int) != 0,
+            voidReason: row['void_reason'] as String?,
+            syncStatus: row['sync_status'] as String,
+            paymentStatus: row['payment_status'] as String,
+            customerId: row['customer_id'] as String?,
+            globalTaxOverride: (row['global_tax_override'] as int) != 0,
+            type: row['type'] as String,
+            relatedInvoiceId: row['related_invoice_id'] as String?,
+            originInvoiceId: row['origin_invoice_id'] as String?,
+            refundReasonPolicy: row['refund_reason_policy'] as String?,
+            refundReasonCode: row['refund_reason_code'] as String?,
+            authorizedByUserId: row['authorized_by_user_id'] as String?,
+            authorizedByRole: row['authorized_by_role'] as String?,
+            terminalId: row['terminal_id'] as String?,
+            sourceSequence: row['source_sequence'] as int?,
+            idempotencyKey: row['idempotency_key'] as String?,
+            payloadHash: row['payload_hash'] as String?,
+            bcnOfficialRate: row['bcn_official_rate'] as double,
+            commercialRate: row['commercial_rate'] as double,
+            totalUsd: row['total_usd'] as double),
+        arguments: [userId]);
   }
 
   @override
@@ -2814,6 +3253,43 @@ class _$PaymentDao extends PaymentDao {
                   'amount': item.amount,
                   'currency': item.currency,
                   'exchange_rate': item.exchangeRate,
+                  'amount_nio': item.amountNio,
+                  'change_given': item.changeGiven,
+                  'change_currency': item.changeCurrency,
+                  'voucher_code': item.voucherCode,
+                  'card_brand': item.cardBrand,
+                  'card_type': item.cardType,
+                  'bank_pos': item.bankPos,
+                  'reconciliation_status': item.reconciliationStatus,
+                  'last4': item.last4,
+                  'batch_number': item.batchNumber,
+                  'reconciled_at': item.reconciledAt,
+                  'reconciled_by_user_id': item.reconciledByUserId,
+                  'created_at': item.createdAt
+                }),
+        _paymentEntityUpdateAdapter = UpdateAdapter(
+            database,
+            'payments',
+            ['id'],
+            (PaymentEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'invoice_id': item.invoiceId,
+                  'method': item.method,
+                  'amount': item.amount,
+                  'currency': item.currency,
+                  'exchange_rate': item.exchangeRate,
+                  'amount_nio': item.amountNio,
+                  'change_given': item.changeGiven,
+                  'change_currency': item.changeCurrency,
+                  'voucher_code': item.voucherCode,
+                  'card_brand': item.cardBrand,
+                  'card_type': item.cardType,
+                  'bank_pos': item.bankPos,
+                  'reconciliation_status': item.reconciliationStatus,
+                  'last4': item.last4,
+                  'batch_number': item.batchNumber,
+                  'reconciled_at': item.reconciledAt,
+                  'reconciled_by_user_id': item.reconciledByUserId,
                   'created_at': item.createdAt
                 });
 
@@ -2824,6 +3300,8 @@ class _$PaymentDao extends PaymentDao {
   final QueryAdapter _queryAdapter;
 
   final InsertionAdapter<PaymentEntity> _paymentEntityInsertionAdapter;
+
+  final UpdateAdapter<PaymentEntity> _paymentEntityUpdateAdapter;
 
   @override
   Future<List<PaymentEntity>> getPaymentsByInvoiceId(String invoiceId) async {
@@ -2836,6 +3314,18 @@ class _$PaymentDao extends PaymentDao {
             amount: row['amount'] as double,
             currency: row['currency'] as String,
             exchangeRate: row['exchange_rate'] as double,
+            amountNio: row['amount_nio'] as double,
+            changeGiven: row['change_given'] as double,
+            changeCurrency: row['change_currency'] as String,
+            voucherCode: row['voucher_code'] as String?,
+            cardBrand: row['card_brand'] as String?,
+            cardType: row['card_type'] as String?,
+            bankPos: row['bank_pos'] as String?,
+            reconciliationStatus: row['reconciliation_status'] as String?,
+            last4: row['last4'] as String?,
+            batchNumber: row['batch_number'] as String?,
+            reconciledAt: row['reconciled_at'] as int?,
+            reconciledByUserId: row['reconciled_by_user_id'] as String?,
             createdAt: row['created_at'] as int?),
         arguments: [invoiceId]);
   }
@@ -2847,14 +3337,53 @@ class _$PaymentDao extends PaymentDao {
   ) async {
     return _queryAdapter.queryList(
         'SELECT p.* FROM payments p INNER JOIN invoices i ON p.invoice_id = i.id WHERE i.created_at >= ?1 AND i.created_at <= ?2',
-        mapper: (Map<String, Object?> row) => PaymentEntity(id: row['id'] as String, invoiceId: row['invoice_id'] as String, method: row['method'] as String, amount: row['amount'] as double, currency: row['currency'] as String, exchangeRate: row['exchange_rate'] as double, createdAt: row['created_at'] as int?),
+        mapper: (Map<String, Object?> row) => PaymentEntity(id: row['id'] as String, invoiceId: row['invoice_id'] as String, method: row['method'] as String, amount: row['amount'] as double, currency: row['currency'] as String, exchangeRate: row['exchange_rate'] as double, amountNio: row['amount_nio'] as double, changeGiven: row['change_given'] as double, changeCurrency: row['change_currency'] as String, voucherCode: row['voucher_code'] as String?, cardBrand: row['card_brand'] as String?, cardType: row['card_type'] as String?, bankPos: row['bank_pos'] as String?, reconciliationStatus: row['reconciliation_status'] as String?, last4: row['last4'] as String?, batchNumber: row['batch_number'] as String?, reconciledAt: row['reconciled_at'] as int?, reconciledByUserId: row['reconciled_by_user_id'] as String?, createdAt: row['created_at'] as int?),
         arguments: [startTime, endTime]);
+  }
+
+  @override
+  Future<List<PaymentEntity>> getPendingCardPayments() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM payments WHERE method = \'card\' AND reconciliation_status = \'PENDIENTE\' ORDER BY created_at ASC',
+        mapper: (Map<String, Object?> row) => PaymentEntity(
+            id: row['id'] as String,
+            invoiceId: row['invoice_id'] as String,
+            method: row['method'] as String,
+            amount: row['amount'] as double,
+            currency: row['currency'] as String,
+            exchangeRate: row['exchange_rate'] as double,
+            amountNio: row['amount_nio'] as double,
+            changeGiven: row['change_given'] as double,
+            changeCurrency: row['change_currency'] as String,
+            voucherCode: row['voucher_code'] as String?,
+            cardBrand: row['card_brand'] as String?,
+            cardType: row['card_type'] as String?,
+            bankPos: row['bank_pos'] as String?,
+            reconciliationStatus: row['reconciliation_status'] as String?,
+            last4: row['last4'] as String?,
+            batchNumber: row['batch_number'] as String?,
+            reconciledAt: row['reconciled_at'] as int?,
+            reconciledByUserId: row['reconciled_by_user_id'] as String?,
+            createdAt: row['created_at'] as int?));
+  }
+
+  @override
+  Future<int?> countPendingCardPayments() async {
+    return _queryAdapter.query(
+        'SELECT COUNT(*) FROM payments WHERE method = \'card\' AND reconciliation_status = \'PENDIENTE\'',
+        mapper: (Map<String, Object?> row) => row.values.first as int);
   }
 
   @override
   Future<void> insertPayments(List<PaymentEntity> payments) async {
     await _paymentEntityInsertionAdapter.insertList(
         payments, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> updatePayment(PaymentEntity payment) async {
+    await _paymentEntityUpdateAdapter.update(
+        payment, OnConflictStrategy.replace);
   }
 }
 
@@ -2963,7 +3492,10 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'terminal_id': item.terminalId,
                   'source_sequence': item.sourceSequence,
                   'idempotency_key': item.idempotencyKey,
-                  'payload_hash': item.payloadHash
+                  'payload_hash': item.payloadHash,
+                  'bcn_official_rate': item.bcnOfficialRate,
+                  'commercial_rate': item.commercialRate,
+                  'total_usd': item.totalUsd
                 }),
         _invoiceItemEntityInsertionAdapter = InsertionAdapter(
             database,
@@ -3004,6 +3536,18 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'amount': item.amount,
                   'currency': item.currency,
                   'exchange_rate': item.exchangeRate,
+                  'amount_nio': item.amountNio,
+                  'change_given': item.changeGiven,
+                  'change_currency': item.changeCurrency,
+                  'voucher_code': item.voucherCode,
+                  'card_brand': item.cardBrand,
+                  'card_type': item.cardType,
+                  'bank_pos': item.bankPos,
+                  'reconciliation_status': item.reconciliationStatus,
+                  'last4': item.last4,
+                  'batch_number': item.batchNumber,
+                  'reconciled_at': item.reconciledAt,
+                  'reconciled_by_user_id': item.reconciledByUserId,
                   'created_at': item.createdAt
                 }),
         _movementEntityInsertionAdapter = InsertionAdapter(
@@ -3024,7 +3568,12 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'source_document_id': item.sourceDocumentId,
                   'origin_movement_id': item.originMovementId,
                   'origin_invoice_item_id': item.originInvoiceItemId,
-                  'batch_deductions': item.batch_deductions
+                  'batch_deductions': item.batch_deductions,
+                  'estado_costeo': item.estadoCosteo,
+                  'intentos_count': item.intentosCount,
+                  'bloqueo_motivo': item.bloqueoMotivo,
+                  'autorizado_por_usuario_id': item.autorizadoPorUsuarioId,
+                  'fecha_autorizacion': item.fechaAutorizacion
                 }),
         _auditLogEntityInsertionAdapter = InsertionAdapter(
             database,
@@ -3082,7 +3631,10 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'terminal_id': item.terminalId,
                   'source_sequence': item.sourceSequence,
                   'idempotency_key': item.idempotencyKey,
-                  'payload_hash': item.payloadHash
+                  'payload_hash': item.payloadHash,
+                  'bcn_official_rate': item.bcnOfficialRate,
+                  'commercial_rate': item.commercialRate,
+                  'total_usd': item.totalUsd
                 }),
         _insumoEntityUpdateAdapter = UpdateAdapter(
             database,
@@ -3170,7 +3722,10 @@ class _$SalesTransactionDao extends SalesTransactionDao {
             terminalId: row['terminal_id'] as String?,
             sourceSequence: row['source_sequence'] as int?,
             idempotencyKey: row['idempotency_key'] as String?,
-            payloadHash: row['payload_hash'] as String?),
+            payloadHash: row['payload_hash'] as String?,
+            bcnOfficialRate: row['bcn_official_rate'] as double,
+            commercialRate: row['commercial_rate'] as double,
+            totalUsd: row['total_usd'] as double),
         arguments: [id]);
   }
 
@@ -3203,7 +3758,10 @@ class _$SalesTransactionDao extends SalesTransactionDao {
             terminalId: row['terminal_id'] as String?,
             sourceSequence: row['source_sequence'] as int?,
             idempotencyKey: row['idempotency_key'] as String?,
-            payloadHash: row['payload_hash'] as String?),
+            payloadHash: row['payload_hash'] as String?,
+            bcnOfficialRate: row['bcn_official_rate'] as double,
+            commercialRate: row['commercial_rate'] as double,
+            totalUsd: row['total_usd'] as double),
         arguments: [relatedId]);
   }
 
@@ -3326,14 +3884,23 @@ class _$CashierSessionDao extends CashierSessionDao {
             (CashierSessionEntity item) => <String, Object?>{
                   'id': item.id,
                   'user_id': item.userId,
+                  'terminal_id': item.terminalId,
                   'opened_at': item.openedAt,
                   'tipo_modelo': item.tipoModelo,
                   'closed_at': item.closedAt,
-                  'opening_balance': item.openingBalance,
-                  'closing_balance': item.closingBalance,
-                  'total_sales': item.totalSales,
-                  'total_expected': item.totalExpected,
-                  'is_closed': item.isClosed ? 1 : 0
+                  'opening_balance_nio': item.openingBalanceNio,
+                  'opening_balance_usd': item.openingBalanceUsd,
+                  'closing_counted_nio': item.closingCountedNio,
+                  'closing_counted_usd': item.closingCountedUsd,
+                  'expected_nio': item.expectedNio,
+                  'expected_usd': item.expectedUsd,
+                  'difference_nio': item.differenceNio,
+                  'difference_usd': item.differenceUsd,
+                  'z_report_sequence': item.zReportSequence,
+                  'is_closed': item.isClosed ? 1 : 0,
+                  'supervisor_id': item.supervisorId,
+                  'notes': item.notes,
+                  'sync_status': item.syncStatus
                 }),
         _cashierSessionEntityUpdateAdapter = UpdateAdapter(
             database,
@@ -3342,14 +3909,23 @@ class _$CashierSessionDao extends CashierSessionDao {
             (CashierSessionEntity item) => <String, Object?>{
                   'id': item.id,
                   'user_id': item.userId,
+                  'terminal_id': item.terminalId,
                   'opened_at': item.openedAt,
                   'tipo_modelo': item.tipoModelo,
                   'closed_at': item.closedAt,
-                  'opening_balance': item.openingBalance,
-                  'closing_balance': item.closingBalance,
-                  'total_sales': item.totalSales,
-                  'total_expected': item.totalExpected,
-                  'is_closed': item.isClosed ? 1 : 0
+                  'opening_balance_nio': item.openingBalanceNio,
+                  'opening_balance_usd': item.openingBalanceUsd,
+                  'closing_counted_nio': item.closingCountedNio,
+                  'closing_counted_usd': item.closingCountedUsd,
+                  'expected_nio': item.expectedNio,
+                  'expected_usd': item.expectedUsd,
+                  'difference_nio': item.differenceNio,
+                  'difference_usd': item.differenceUsd,
+                  'z_report_sequence': item.zReportSequence,
+                  'is_closed': item.isClosed ? 1 : 0,
+                  'supervisor_id': item.supervisorId,
+                  'notes': item.notes,
+                  'sync_status': item.syncStatus
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -3369,14 +3945,23 @@ class _$CashierSessionDao extends CashierSessionDao {
         mapper: (Map<String, Object?> row) => CashierSessionEntity(
             id: row['id'] as String,
             userId: row['user_id'] as String,
+            terminalId: row['terminal_id'] as String,
             openedAt: row['opened_at'] as int,
             tipoModelo: row['tipo_modelo'] as String,
             closedAt: row['closed_at'] as int?,
-            openingBalance: row['opening_balance'] as double,
-            closingBalance: row['closing_balance'] as double?,
-            totalSales: row['total_sales'] as double?,
-            totalExpected: row['total_expected'] as double?,
-            isClosed: (row['is_closed'] as int) != 0),
+            openingBalanceNio: row['opening_balance_nio'] as double?,
+            openingBalanceUsd: row['opening_balance_usd'] as double,
+            closingCountedNio: row['closing_counted_nio'] as double?,
+            closingCountedUsd: row['closing_counted_usd'] as double?,
+            expectedNio: row['expected_nio'] as double?,
+            expectedUsd: row['expected_usd'] as double,
+            differenceNio: row['difference_nio'] as double?,
+            differenceUsd: row['difference_usd'] as double?,
+            zReportSequence: row['z_report_sequence'] as int?,
+            isClosed: (row['is_closed'] as int) != 0,
+            supervisorId: row['supervisor_id'] as String?,
+            notes: row['notes'] as String?,
+            syncStatus: row['sync_status'] as String),
         arguments: [id]);
   }
 
@@ -3387,14 +3972,23 @@ class _$CashierSessionDao extends CashierSessionDao {
         mapper: (Map<String, Object?> row) => CashierSessionEntity(
             id: row['id'] as String,
             userId: row['user_id'] as String,
+            terminalId: row['terminal_id'] as String,
             openedAt: row['opened_at'] as int,
             tipoModelo: row['tipo_modelo'] as String,
             closedAt: row['closed_at'] as int?,
-            openingBalance: row['opening_balance'] as double,
-            closingBalance: row['closing_balance'] as double?,
-            totalSales: row['total_sales'] as double?,
-            totalExpected: row['total_expected'] as double?,
-            isClosed: (row['is_closed'] as int) != 0));
+            openingBalanceNio: row['opening_balance_nio'] as double?,
+            openingBalanceUsd: row['opening_balance_usd'] as double,
+            closingCountedNio: row['closing_counted_nio'] as double?,
+            closingCountedUsd: row['closing_counted_usd'] as double?,
+            expectedNio: row['expected_nio'] as double?,
+            expectedUsd: row['expected_usd'] as double,
+            differenceNio: row['difference_nio'] as double?,
+            differenceUsd: row['difference_usd'] as double?,
+            zReportSequence: row['z_report_sequence'] as int?,
+            isClosed: (row['is_closed'] as int) != 0,
+            supervisorId: row['supervisor_id'] as String?,
+            notes: row['notes'] as String?,
+            syncStatus: row['sync_status'] as String));
   }
 
   @override
@@ -3404,14 +3998,30 @@ class _$CashierSessionDao extends CashierSessionDao {
         mapper: (Map<String, Object?> row) => CashierSessionEntity(
             id: row['id'] as String,
             userId: row['user_id'] as String,
+            terminalId: row['terminal_id'] as String,
             openedAt: row['opened_at'] as int,
             tipoModelo: row['tipo_modelo'] as String,
             closedAt: row['closed_at'] as int?,
-            openingBalance: row['opening_balance'] as double,
-            closingBalance: row['closing_balance'] as double?,
-            totalSales: row['total_sales'] as double?,
-            totalExpected: row['total_expected'] as double?,
-            isClosed: (row['is_closed'] as int) != 0));
+            openingBalanceNio: row['opening_balance_nio'] as double?,
+            openingBalanceUsd: row['opening_balance_usd'] as double,
+            closingCountedNio: row['closing_counted_nio'] as double?,
+            closingCountedUsd: row['closing_counted_usd'] as double?,
+            expectedNio: row['expected_nio'] as double?,
+            expectedUsd: row['expected_usd'] as double,
+            differenceNio: row['difference_nio'] as double?,
+            differenceUsd: row['difference_usd'] as double?,
+            zReportSequence: row['z_report_sequence'] as int?,
+            isClosed: (row['is_closed'] as int) != 0,
+            supervisorId: row['supervisor_id'] as String?,
+            notes: row['notes'] as String?,
+            syncStatus: row['sync_status'] as String));
+  }
+
+  @override
+  Future<int?> countClosedSessions() async {
+    return _queryAdapter.query(
+        'SELECT COUNT(*) FROM cashier_sessions WHERE is_closed = 1',
+        mapper: (Map<String, Object?> row) => row.values.first as int);
   }
 
   @override
@@ -3427,6 +4037,97 @@ class _$CashierSessionDao extends CashierSessionDao {
   }
 }
 
+class _$CashMovementDao extends CashMovementDao {
+  _$CashMovementDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _cashMovementEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'cash_movements',
+            (CashMovementEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'shift_id': item.shiftId,
+                  'terminal_id': item.terminalId,
+                  'type': item.type,
+                  'amount_nio': item.amountNio,
+                  'amount_usd': item.amountUsd,
+                  'reason': item.reason,
+                  'authorized_by_user_id': item.authorizedByUserId,
+                  'timestamp': item.timestamp,
+                  'sync_status': item.syncStatus
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<CashMovementEntity>
+      _cashMovementEntityInsertionAdapter;
+
+  @override
+  Future<CashMovementEntity?> getMovementById(String id) async {
+    return _queryAdapter.query('SELECT * FROM cash_movements WHERE id = ?1',
+        mapper: (Map<String, Object?> row) => CashMovementEntity(
+            id: row['id'] as String,
+            shiftId: row['shift_id'] as String,
+            terminalId: row['terminal_id'] as String,
+            type: row['type'] as String,
+            amountNio: row['amount_nio'] as double,
+            amountUsd: row['amount_usd'] as double,
+            reason: row['reason'] as String,
+            authorizedByUserId: row['authorized_by_user_id'] as String?,
+            timestamp: row['timestamp'] as int,
+            syncStatus: row['sync_status'] as String),
+        arguments: [id]);
+  }
+
+  @override
+  Future<List<CashMovementEntity>> getMovementsByShiftId(String shiftId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM cash_movements WHERE shift_id = ?1 ORDER BY timestamp ASC',
+        mapper: (Map<String, Object?> row) => CashMovementEntity(id: row['id'] as String, shiftId: row['shift_id'] as String, terminalId: row['terminal_id'] as String, type: row['type'] as String, amountNio: row['amount_nio'] as double, amountUsd: row['amount_usd'] as double, reason: row['reason'] as String, authorizedByUserId: row['authorized_by_user_id'] as String?, timestamp: row['timestamp'] as int, syncStatus: row['sync_status'] as String),
+        arguments: [shiftId]);
+  }
+
+  @override
+  Future<List<CashMovementEntity>> getMovementsBySyncStatus(
+      String status) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM cash_movements WHERE sync_status = ?1',
+        mapper: (Map<String, Object?> row) => CashMovementEntity(
+            id: row['id'] as String,
+            shiftId: row['shift_id'] as String,
+            terminalId: row['terminal_id'] as String,
+            type: row['type'] as String,
+            amountNio: row['amount_nio'] as double,
+            amountUsd: row['amount_usd'] as double,
+            reason: row['reason'] as String,
+            authorizedByUserId: row['authorized_by_user_id'] as String?,
+            timestamp: row['timestamp'] as int,
+            syncStatus: row['sync_status'] as String),
+        arguments: [status]);
+  }
+
+  @override
+  Future<void> updateSyncStatus(
+    String id,
+    String status,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE cash_movements SET sync_status = ?2 WHERE id = ?1',
+        arguments: [id, status]);
+  }
+
+  @override
+  Future<void> insertMovement(CashMovementEntity movement) async {
+    await _cashMovementEntityInsertionAdapter.insert(
+        movement, OnConflictStrategy.replace);
+  }
+}
+
 class _$HoldTicketDao extends HoldTicketDao {
   _$HoldTicketDao(
     this.database,
@@ -3439,7 +4140,14 @@ class _$HoldTicketDao extends HoldTicketDao {
                   'id': item.id,
                   'name': item.name,
                   'created_at': item.createdAt,
-                  'global_tax_exempt': item.isGlobalTaxExempt ? 1 : 0
+                  'updated_at': item.updatedAt,
+                  'table_id': item.tableId,
+                  'area_id': item.areaId,
+                  'waiter_id': item.waiterId,
+                  'waiter_name': item.waiterName,
+                  'guest_count': item.guestCount,
+                  'global_tax_exempt': item.isGlobalTaxExempt ? 1 : 0,
+                  'version': item.version
                 }),
         _holdTicketItemEntityInsertionAdapter = InsertionAdapter(
             database,
@@ -3451,7 +4159,27 @@ class _$HoldTicketDao extends HoldTicketDao {
                   'product_name': item.productName,
                   'quantity': item.quantity,
                   'unit_price': item.unitPrice,
-                  'tax_rate': item.taxRate
+                  'tax_rate': item.taxRate,
+                  'variant_id': item.variantId,
+                  'notes': item.notes,
+                  'modifiers_json': item.modifiersJson
+                }),
+        _holdTicketEntityUpdateAdapter = UpdateAdapter(
+            database,
+            'hold_tickets',
+            ['id'],
+            (HoldTicketEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'name': item.name,
+                  'created_at': item.createdAt,
+                  'updated_at': item.updatedAt,
+                  'table_id': item.tableId,
+                  'area_id': item.areaId,
+                  'waiter_id': item.waiterId,
+                  'waiter_name': item.waiterName,
+                  'guest_count': item.guestCount,
+                  'global_tax_exempt': item.isGlobalTaxExempt ? 1 : 0,
+                  'version': item.version
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -3465,6 +4193,8 @@ class _$HoldTicketDao extends HoldTicketDao {
   final InsertionAdapter<HoldTicketItemEntity>
       _holdTicketItemEntityInsertionAdapter;
 
+  final UpdateAdapter<HoldTicketEntity> _holdTicketEntityUpdateAdapter;
+
   @override
   Future<List<HoldTicketEntity>> getAllHoldTickets() async {
     return _queryAdapter.queryList(
@@ -3473,7 +4203,50 @@ class _$HoldTicketDao extends HoldTicketDao {
             id: row['id'] as String,
             name: row['name'] as String,
             createdAt: row['created_at'] as int,
-            isGlobalTaxExempt: (row['global_tax_exempt'] as int) != 0));
+            updatedAt: row['updated_at'] as int?,
+            tableId: row['table_id'] as String?,
+            areaId: row['area_id'] as String?,
+            waiterId: row['waiter_id'] as String?,
+            waiterName: row['waiter_name'] as String?,
+            guestCount: row['guest_count'] as int,
+            isGlobalTaxExempt: (row['global_tax_exempt'] as int) != 0,
+            version: row['version'] as int));
+  }
+
+  @override
+  Future<HoldTicketEntity?> getHoldTicketById(String id) async {
+    return _queryAdapter.query('SELECT * FROM hold_tickets WHERE id = ?1',
+        mapper: (Map<String, Object?> row) => HoldTicketEntity(
+            id: row['id'] as String,
+            name: row['name'] as String,
+            createdAt: row['created_at'] as int,
+            updatedAt: row['updated_at'] as int?,
+            tableId: row['table_id'] as String?,
+            areaId: row['area_id'] as String?,
+            waiterId: row['waiter_id'] as String?,
+            waiterName: row['waiter_name'] as String?,
+            guestCount: row['guest_count'] as int,
+            isGlobalTaxExempt: (row['global_tax_exempt'] as int) != 0,
+            version: row['version'] as int),
+        arguments: [id]);
+  }
+
+  @override
+  Future<HoldTicketEntity?> getHoldTicketByTableId(String tableId) async {
+    return _queryAdapter.query('SELECT * FROM hold_tickets WHERE table_id = ?1',
+        mapper: (Map<String, Object?> row) => HoldTicketEntity(
+            id: row['id'] as String,
+            name: row['name'] as String,
+            createdAt: row['created_at'] as int,
+            updatedAt: row['updated_at'] as int?,
+            tableId: row['table_id'] as String?,
+            areaId: row['area_id'] as String?,
+            waiterId: row['waiter_id'] as String?,
+            waiterName: row['waiter_name'] as String?,
+            guestCount: row['guest_count'] as int,
+            isGlobalTaxExempt: (row['global_tax_exempt'] as int) != 0,
+            version: row['version'] as int),
+        arguments: [tableId]);
   }
 
   @override
@@ -3488,7 +4261,17 @@ class _$HoldTicketDao extends HoldTicketDao {
             productName: row['product_name'] as String,
             quantity: row['quantity'] as double,
             unitPrice: row['unit_price'] as double,
-            taxRate: row['tax_rate'] as double),
+            taxRate: row['tax_rate'] as double,
+            variantId: row['variant_id'] as String?,
+            notes: row['notes'] as String?,
+            modifiersJson: row['modifiers_json'] as String?),
+        arguments: [holdTicketId]);
+  }
+
+  @override
+  Future<void> deleteHoldTicketItems(String holdTicketId) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM hold_ticket_items WHERE hold_ticket_id = ?1',
         arguments: [holdTicketId]);
   }
 
@@ -3511,6 +4294,12 @@ class _$HoldTicketDao extends HoldTicketDao {
   }
 
   @override
+  Future<int> updateHoldTicket(HoldTicketEntity ticket) {
+    return _holdTicketEntityUpdateAdapter.updateAndReturnChangedRows(
+        ticket, OnConflictStrategy.replace);
+  }
+
+  @override
   Future<void> saveHoldTicket(
     HoldTicketEntity ticket,
     List<HoldTicketItemEntity> items,
@@ -3523,6 +4312,20 @@ class _$HoldTicketDao extends HoldTicketDao {
         final transactionDatabase = _$AppDatabase(changeListener)
           ..database = transaction;
         await transactionDatabase.holdTicketDao.saveHoldTicket(ticket, items);
+      });
+    }
+  }
+
+  @override
+  Future<void> deleteHoldTicketWithItems(String id) async {
+    if (database is sqflite.Transaction) {
+      await super.deleteHoldTicketWithItems(id);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.holdTicketDao.deleteHoldTicketWithItems(id);
       });
     }
   }
@@ -3541,9 +4344,18 @@ class _$PromotionDao extends PromotionDao {
                   'name': item.name,
                   'type': item.type,
                   'target_product_id': item.targetProductId,
+                  'target_category_id': item.targetCategoryId,
                   'buy_quantity': item.buyQuantity,
                   'get_quantity': item.getQuantity,
                   'discount_value': item.discountValue,
+                  'min_order_amount': item.minOrderAmount,
+                  'days_of_week': item.daysOfWeek,
+                  'start_time': item.startTime,
+                  'end_time': item.endTime,
+                  'start_date': item.startDate,
+                  'end_date': item.endDate,
+                  'priority': item.priority,
+                  'is_stackable': item.isStackable ? 1 : 0,
                   'is_active': item.isActive ? 1 : 0
                 }),
         _promotionEntityUpdateAdapter = UpdateAdapter(
@@ -3555,9 +4367,18 @@ class _$PromotionDao extends PromotionDao {
                   'name': item.name,
                   'type': item.type,
                   'target_product_id': item.targetProductId,
+                  'target_category_id': item.targetCategoryId,
                   'buy_quantity': item.buyQuantity,
                   'get_quantity': item.getQuantity,
                   'discount_value': item.discountValue,
+                  'min_order_amount': item.minOrderAmount,
+                  'days_of_week': item.daysOfWeek,
+                  'start_time': item.startTime,
+                  'end_time': item.endTime,
+                  'start_date': item.startDate,
+                  'end_date': item.endDate,
+                  'priority': item.priority,
+                  'is_stackable': item.isStackable ? 1 : 0,
                   'is_active': item.isActive ? 1 : 0
                 });
 
@@ -3574,15 +4395,24 @@ class _$PromotionDao extends PromotionDao {
   @override
   Future<List<PromotionEntity>> getActivePromotions() async {
     return _queryAdapter.queryList(
-        'SELECT * FROM promotions WHERE is_active = 1',
+        'SELECT * FROM promotions WHERE is_active = 1 ORDER BY priority DESC',
         mapper: (Map<String, Object?> row) => PromotionEntity(
             id: row['id'] as String,
             name: row['name'] as String,
             type: row['type'] as String,
-            targetProductId: row['target_product_id'] as String,
+            targetProductId: row['target_product_id'] as String?,
+            targetCategoryId: row['target_category_id'] as String?,
             buyQuantity: row['buy_quantity'] as int,
             getQuantity: row['get_quantity'] as int,
             discountValue: row['discount_value'] as double,
+            minOrderAmount: row['min_order_amount'] as double,
+            daysOfWeek: row['days_of_week'] as String?,
+            startTime: row['start_time'] as String?,
+            endTime: row['end_time'] as String?,
+            startDate: row['start_date'] as int?,
+            endDate: row['end_date'] as int?,
+            priority: row['priority'] as int,
+            isStackable: (row['is_stackable'] as int) != 0,
             isActive: (row['is_active'] as int) != 0));
   }
 
@@ -3590,8 +4420,23 @@ class _$PromotionDao extends PromotionDao {
   Future<List<PromotionEntity>> getPromotionsByProduct(String productId) async {
     return _queryAdapter.queryList(
         'SELECT * FROM promotions WHERE target_product_id = ?1 AND is_active = 1',
-        mapper: (Map<String, Object?> row) => PromotionEntity(id: row['id'] as String, name: row['name'] as String, type: row['type'] as String, targetProductId: row['target_product_id'] as String, buyQuantity: row['buy_quantity'] as int, getQuantity: row['get_quantity'] as int, discountValue: row['discount_value'] as double, isActive: (row['is_active'] as int) != 0),
+        mapper: (Map<String, Object?> row) => PromotionEntity(id: row['id'] as String, name: row['name'] as String, type: row['type'] as String, targetProductId: row['target_product_id'] as String?, targetCategoryId: row['target_category_id'] as String?, buyQuantity: row['buy_quantity'] as int, getQuantity: row['get_quantity'] as int, discountValue: row['discount_value'] as double, minOrderAmount: row['min_order_amount'] as double, daysOfWeek: row['days_of_week'] as String?, startTime: row['start_time'] as String?, endTime: row['end_time'] as String?, startDate: row['start_date'] as int?, endDate: row['end_date'] as int?, priority: row['priority'] as int, isStackable: (row['is_stackable'] as int) != 0, isActive: (row['is_active'] as int) != 0),
         arguments: [productId]);
+  }
+
+  @override
+  Future<List<PromotionEntity>> getPromotionsByCategory(
+      String categoryId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM promotions WHERE target_category_id = ?1 AND is_active = 1',
+        mapper: (Map<String, Object?> row) => PromotionEntity(id: row['id'] as String, name: row['name'] as String, type: row['type'] as String, targetProductId: row['target_product_id'] as String?, targetCategoryId: row['target_category_id'] as String?, buyQuantity: row['buy_quantity'] as int, getQuantity: row['get_quantity'] as int, discountValue: row['discount_value'] as double, minOrderAmount: row['min_order_amount'] as double, daysOfWeek: row['days_of_week'] as String?, startTime: row['start_time'] as String?, endTime: row['end_time'] as String?, startDate: row['start_date'] as int?, endDate: row['end_date'] as int?, priority: row['priority'] as int, isStackable: (row['is_stackable'] as int) != 0, isActive: (row['is_active'] as int) != 0),
+        arguments: [categoryId]);
+  }
+
+  @override
+  Future<void> deletePromotionById(String id) async {
+    await _queryAdapter
+        .queryNoReturn('DELETE FROM promotions WHERE id = ?1', arguments: [id]);
   }
 
   @override
@@ -3601,8 +4446,836 @@ class _$PromotionDao extends PromotionDao {
   }
 
   @override
+  Future<void> savePromotions(List<PromotionEntity> promotions) async {
+    await _promotionEntityInsertionAdapter.insertList(
+        promotions, OnConflictStrategy.replace);
+  }
+
+  @override
   Future<void> updatePromotion(PromotionEntity promotion) async {
     await _promotionEntityUpdateAdapter.update(
         promotion, OnConflictStrategy.replace);
+  }
+}
+
+class _$RestaurantAreaDao extends RestaurantAreaDao {
+  _$RestaurantAreaDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _restaurantAreaEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'restaurant_areas',
+            (RestaurantAreaEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'name': item.name,
+                  'display_order': item.displayOrder,
+                  'is_active': item.isActive ? 1 : 0
+                }),
+        _restaurantAreaEntityUpdateAdapter = UpdateAdapter(
+            database,
+            'restaurant_areas',
+            ['id'],
+            (RestaurantAreaEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'name': item.name,
+                  'display_order': item.displayOrder,
+                  'is_active': item.isActive ? 1 : 0
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<RestaurantAreaEntity>
+      _restaurantAreaEntityInsertionAdapter;
+
+  final UpdateAdapter<RestaurantAreaEntity> _restaurantAreaEntityUpdateAdapter;
+
+  @override
+  Future<List<RestaurantAreaEntity>> getActiveAreas() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM restaurant_areas WHERE is_active = 1 ORDER BY display_order ASC',
+        mapper: (Map<String, Object?> row) => RestaurantAreaEntity(
+            id: row['id'] as String,
+            name: row['name'] as String,
+            displayOrder: row['display_order'] as int,
+            isActive: (row['is_active'] as int) != 0));
+  }
+
+  @override
+  Future<List<RestaurantAreaEntity>> getAllAreas() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM restaurant_areas ORDER BY display_order ASC',
+        mapper: (Map<String, Object?> row) => RestaurantAreaEntity(
+            id: row['id'] as String,
+            name: row['name'] as String,
+            displayOrder: row['display_order'] as int,
+            isActive: (row['is_active'] as int) != 0));
+  }
+
+  @override
+  Future<RestaurantAreaEntity?> getAreaById(String id) async {
+    return _queryAdapter.query('SELECT * FROM restaurant_areas WHERE id = ?1',
+        mapper: (Map<String, Object?> row) => RestaurantAreaEntity(
+            id: row['id'] as String,
+            name: row['name'] as String,
+            displayOrder: row['display_order'] as int,
+            isActive: (row['is_active'] as int) != 0),
+        arguments: [id]);
+  }
+
+  @override
+  Future<void> deleteArea(String id) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM restaurant_areas WHERE id = ?1',
+        arguments: [id]);
+  }
+
+  @override
+  Future<void> insertArea(RestaurantAreaEntity area) async {
+    await _restaurantAreaEntityInsertionAdapter.insert(
+        area, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> insertAreas(List<RestaurantAreaEntity> areas) async {
+    await _restaurantAreaEntityInsertionAdapter.insertList(
+        areas, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<int> updateArea(RestaurantAreaEntity area) {
+    return _restaurantAreaEntityUpdateAdapter.updateAndReturnChangedRows(
+        area, OnConflictStrategy.replace);
+  }
+}
+
+class _$RestaurantTableDao extends RestaurantTableDao {
+  _$RestaurantTableDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _restaurantTableEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'restaurant_tables',
+            (RestaurantTableEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'area_id': item.areaId,
+                  'table_number': item.tableNumber,
+                  'capacity': item.capacity,
+                  'status': item.status,
+                  'current_ticket_id': item.currentTicketId,
+                  'active_guests': item.activeGuests,
+                  'opened_at': item.openedAt
+                }),
+        _restaurantTableEntityUpdateAdapter = UpdateAdapter(
+            database,
+            'restaurant_tables',
+            ['id'],
+            (RestaurantTableEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'area_id': item.areaId,
+                  'table_number': item.tableNumber,
+                  'capacity': item.capacity,
+                  'status': item.status,
+                  'current_ticket_id': item.currentTicketId,
+                  'active_guests': item.activeGuests,
+                  'opened_at': item.openedAt
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<RestaurantTableEntity>
+      _restaurantTableEntityInsertionAdapter;
+
+  final UpdateAdapter<RestaurantTableEntity>
+      _restaurantTableEntityUpdateAdapter;
+
+  @override
+  Future<List<RestaurantTableEntity>> getAllTables() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM restaurant_tables ORDER BY table_number ASC',
+        mapper: (Map<String, Object?> row) => RestaurantTableEntity(
+            id: row['id'] as String,
+            areaId: row['area_id'] as String,
+            tableNumber: row['table_number'] as String,
+            capacity: row['capacity'] as int,
+            status: row['status'] as String,
+            currentTicketId: row['current_ticket_id'] as String?,
+            activeGuests: row['active_guests'] as int?,
+            openedAt: row['opened_at'] as int?));
+  }
+
+  @override
+  Future<List<RestaurantTableEntity>> getTablesByArea(String areaId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM restaurant_tables WHERE area_id = ?1 ORDER BY table_number ASC',
+        mapper: (Map<String, Object?> row) => RestaurantTableEntity(id: row['id'] as String, areaId: row['area_id'] as String, tableNumber: row['table_number'] as String, capacity: row['capacity'] as int, status: row['status'] as String, currentTicketId: row['current_ticket_id'] as String?, activeGuests: row['active_guests'] as int?, openedAt: row['opened_at'] as int?),
+        arguments: [areaId]);
+  }
+
+  @override
+  Future<RestaurantTableEntity?> getTableById(String id) async {
+    return _queryAdapter.query('SELECT * FROM restaurant_tables WHERE id = ?1',
+        mapper: (Map<String, Object?> row) => RestaurantTableEntity(
+            id: row['id'] as String,
+            areaId: row['area_id'] as String,
+            tableNumber: row['table_number'] as String,
+            capacity: row['capacity'] as int,
+            status: row['status'] as String,
+            currentTicketId: row['current_ticket_id'] as String?,
+            activeGuests: row['active_guests'] as int?,
+            openedAt: row['opened_at'] as int?),
+        arguments: [id]);
+  }
+
+  @override
+  Future<RestaurantTableEntity?> getTableByTicketId(String ticketId) async {
+    return _queryAdapter.query(
+        'SELECT * FROM restaurant_tables WHERE current_ticket_id = ?1',
+        mapper: (Map<String, Object?> row) => RestaurantTableEntity(
+            id: row['id'] as String,
+            areaId: row['area_id'] as String,
+            tableNumber: row['table_number'] as String,
+            capacity: row['capacity'] as int,
+            status: row['status'] as String,
+            currentTicketId: row['current_ticket_id'] as String?,
+            activeGuests: row['active_guests'] as int?,
+            openedAt: row['opened_at'] as int?),
+        arguments: [ticketId]);
+  }
+
+  @override
+  Future<List<RestaurantTableEntity>> getTablesByStatus(String status) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM restaurant_tables WHERE status = ?1',
+        mapper: (Map<String, Object?> row) => RestaurantTableEntity(
+            id: row['id'] as String,
+            areaId: row['area_id'] as String,
+            tableNumber: row['table_number'] as String,
+            capacity: row['capacity'] as int,
+            status: row['status'] as String,
+            currentTicketId: row['current_ticket_id'] as String?,
+            activeGuests: row['active_guests'] as int?,
+            openedAt: row['opened_at'] as int?),
+        arguments: [status]);
+  }
+
+  @override
+  Future<void> occupyTable(
+    String id,
+    String status,
+    String ticketId,
+    int guests,
+    int openedAt,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE restaurant_tables SET status = ?2, current_ticket_id = ?3, active_guests = ?4, opened_at = ?5 WHERE id = ?1',
+        arguments: [id, status, ticketId, guests, openedAt]);
+  }
+
+  @override
+  Future<void> releaseTable(String id) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE restaurant_tables SET status = \'DISPONIBLE\', current_ticket_id = NULL, active_guests = NULL, opened_at = NULL WHERE id = ?1',
+        arguments: [id]);
+  }
+
+  @override
+  Future<void> deleteTable(String id) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM restaurant_tables WHERE id = ?1',
+        arguments: [id]);
+  }
+
+  @override
+  Future<void> insertTable(RestaurantTableEntity table) async {
+    await _restaurantTableEntityInsertionAdapter.insert(
+        table, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> insertTables(List<RestaurantTableEntity> tables) async {
+    await _restaurantTableEntityInsertionAdapter.insertList(
+        tables, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<int> updateTable(RestaurantTableEntity table) {
+    return _restaurantTableEntityUpdateAdapter.updateAndReturnChangedRows(
+        table, OnConflictStrategy.replace);
+  }
+}
+
+class _$KitchenOrderDao extends KitchenOrderDao {
+  _$KitchenOrderDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _kitchenOrderEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'kitchen_orders',
+            (KitchenOrderEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'ticket_id': item.ticketId,
+                  'table_number': item.tableNumber,
+                  'table_name': item.tableName,
+                  'waiter_name': item.waiterName,
+                  'station': item.station,
+                  'status': item.status,
+                  'created_at': item.createdAt,
+                  'started_at': item.startedAt,
+                  'ready_at': item.readyAt,
+                  'served_at': item.servedAt,
+                  'notes': item.notes
+                }),
+        _kitchenOrderItemEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'kitchen_order_items',
+            (KitchenOrderItemEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'kitchen_order_id': item.kitchenOrderId,
+                  'product_id': item.productId,
+                  'product_name': item.productName,
+                  'quantity': item.quantity,
+                  'status': item.status,
+                  'notes': item.notes,
+                  'modifiers_json': item.modifiersJson
+                }),
+        _kitchenOrderEntityUpdateAdapter = UpdateAdapter(
+            database,
+            'kitchen_orders',
+            ['id'],
+            (KitchenOrderEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'ticket_id': item.ticketId,
+                  'table_number': item.tableNumber,
+                  'table_name': item.tableName,
+                  'waiter_name': item.waiterName,
+                  'station': item.station,
+                  'status': item.status,
+                  'created_at': item.createdAt,
+                  'started_at': item.startedAt,
+                  'ready_at': item.readyAt,
+                  'served_at': item.servedAt,
+                  'notes': item.notes
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<KitchenOrderEntity>
+      _kitchenOrderEntityInsertionAdapter;
+
+  final InsertionAdapter<KitchenOrderItemEntity>
+      _kitchenOrderItemEntityInsertionAdapter;
+
+  final UpdateAdapter<KitchenOrderEntity> _kitchenOrderEntityUpdateAdapter;
+
+  @override
+  Future<List<KitchenOrderEntity>> getActiveOrders(String servedStatus) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM kitchen_orders WHERE status != ?1 ORDER BY created_at ASC',
+        mapper: (Map<String, Object?> row) => KitchenOrderEntity(id: row['id'] as String, ticketId: row['ticket_id'] as String, tableNumber: row['table_number'] as String?, tableName: row['table_name'] as String?, waiterName: row['waiter_name'] as String?, station: row['station'] as String, status: row['status'] as String, createdAt: row['created_at'] as int, startedAt: row['started_at'] as int?, readyAt: row['ready_at'] as int?, servedAt: row['served_at'] as int?, notes: row['notes'] as String?),
+        arguments: [servedStatus]);
+  }
+
+  @override
+  Future<List<KitchenOrderEntity>> getActiveOrdersByStation(
+    String station,
+    String servedStatus,
+  ) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM kitchen_orders WHERE station = ?1 AND status != ?2 ORDER BY created_at ASC',
+        mapper: (Map<String, Object?> row) => KitchenOrderEntity(id: row['id'] as String, ticketId: row['ticket_id'] as String, tableNumber: row['table_number'] as String?, tableName: row['table_name'] as String?, waiterName: row['waiter_name'] as String?, station: row['station'] as String, status: row['status'] as String, createdAt: row['created_at'] as int, startedAt: row['started_at'] as int?, readyAt: row['ready_at'] as int?, servedAt: row['served_at'] as int?, notes: row['notes'] as String?),
+        arguments: [station, servedStatus]);
+  }
+
+  @override
+  Future<List<KitchenOrderEntity>> getAllOrders() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM kitchen_orders ORDER BY created_at DESC',
+        mapper: (Map<String, Object?> row) => KitchenOrderEntity(
+            id: row['id'] as String,
+            ticketId: row['ticket_id'] as String,
+            tableNumber: row['table_number'] as String?,
+            tableName: row['table_name'] as String?,
+            waiterName: row['waiter_name'] as String?,
+            station: row['station'] as String,
+            status: row['status'] as String,
+            createdAt: row['created_at'] as int,
+            startedAt: row['started_at'] as int?,
+            readyAt: row['ready_at'] as int?,
+            servedAt: row['served_at'] as int?,
+            notes: row['notes'] as String?));
+  }
+
+  @override
+  Future<KitchenOrderEntity?> getOrderById(String id) async {
+    return _queryAdapter.query('SELECT * FROM kitchen_orders WHERE id = ?1',
+        mapper: (Map<String, Object?> row) => KitchenOrderEntity(
+            id: row['id'] as String,
+            ticketId: row['ticket_id'] as String,
+            tableNumber: row['table_number'] as String?,
+            tableName: row['table_name'] as String?,
+            waiterName: row['waiter_name'] as String?,
+            station: row['station'] as String,
+            status: row['status'] as String,
+            createdAt: row['created_at'] as int,
+            startedAt: row['started_at'] as int?,
+            readyAt: row['ready_at'] as int?,
+            servedAt: row['served_at'] as int?,
+            notes: row['notes'] as String?),
+        arguments: [id]);
+  }
+
+  @override
+  Future<List<KitchenOrderEntity>> getOrdersByTicketId(String ticketId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM kitchen_orders WHERE ticket_id = ?1',
+        mapper: (Map<String, Object?> row) => KitchenOrderEntity(
+            id: row['id'] as String,
+            ticketId: row['ticket_id'] as String,
+            tableNumber: row['table_number'] as String?,
+            tableName: row['table_name'] as String?,
+            waiterName: row['waiter_name'] as String?,
+            station: row['station'] as String,
+            status: row['status'] as String,
+            createdAt: row['created_at'] as int,
+            startedAt: row['started_at'] as int?,
+            readyAt: row['ready_at'] as int?,
+            servedAt: row['served_at'] as int?,
+            notes: row['notes'] as String?),
+        arguments: [ticketId]);
+  }
+
+  @override
+  Future<List<KitchenOrderItemEntity>> getItemsForOrder(String orderId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM kitchen_order_items WHERE kitchen_order_id = ?1',
+        mapper: (Map<String, Object?> row) => KitchenOrderItemEntity(
+            id: row['id'] as String,
+            kitchenOrderId: row['kitchen_order_id'] as String,
+            productId: row['product_id'] as String,
+            productName: row['product_name'] as String,
+            quantity: row['quantity'] as double,
+            status: row['status'] as String,
+            notes: row['notes'] as String?,
+            modifiersJson: row['modifiers_json'] as String?),
+        arguments: [orderId]);
+  }
+
+  @override
+  Future<void> updateOrderStatus(
+    String id,
+    String status,
+    int readyAt,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE kitchen_orders SET status = ?2, ready_at = ?3 WHERE id = ?1',
+        arguments: [id, status, readyAt]);
+  }
+
+  @override
+  Future<void> startOrderPreparation(
+    String id,
+    String status,
+    int startedAt,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE kitchen_orders SET status = ?2, started_at = ?3 WHERE id = ?1',
+        arguments: [id, status, startedAt]);
+  }
+
+  @override
+  Future<void> markOrderServed(
+    String id,
+    String status,
+    int servedAt,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE kitchen_orders SET status = ?2, served_at = ?3 WHERE id = ?1',
+        arguments: [id, status, servedAt]);
+  }
+
+  @override
+  Future<void> updateItemStatus(
+    String id,
+    String status,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE kitchen_order_items SET status = ?2 WHERE id = ?1',
+        arguments: [id, status]);
+  }
+
+  @override
+  Future<void> deleteOrdersByTicketId(String ticketId) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM kitchen_orders WHERE ticket_id = ?1',
+        arguments: [ticketId]);
+  }
+
+  @override
+  Future<void> deleteOrder(String id) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM kitchen_orders WHERE id = ?1',
+        arguments: [id]);
+  }
+
+  @override
+  Future<void> deleteItemsForOrder(String orderId) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM kitchen_order_items WHERE kitchen_order_id = ?1',
+        arguments: [orderId]);
+  }
+
+  @override
+  Future<void> insertOrder(KitchenOrderEntity order) async {
+    await _kitchenOrderEntityInsertionAdapter.insert(
+        order, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> insertOrders(List<KitchenOrderEntity> orders) async {
+    await _kitchenOrderEntityInsertionAdapter.insertList(
+        orders, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> insertOrderItems(List<KitchenOrderItemEntity> items) async {
+    await _kitchenOrderItemEntityInsertionAdapter.insertList(
+        items, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> updateOrder(KitchenOrderEntity order) async {
+    await _kitchenOrderEntityUpdateAdapter.update(
+        order, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> saveKitchenOrder(
+    KitchenOrderEntity order,
+    List<KitchenOrderItemEntity> items,
+  ) async {
+    if (database is sqflite.Transaction) {
+      await super.saveKitchenOrder(order, items);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.kitchenOrderDao
+            .saveKitchenOrder(order, items);
+      });
+    }
+  }
+
+  @override
+  Future<void> deleteKitchenOrderWithItems(String orderId) async {
+    if (database is sqflite.Transaction) {
+      await super.deleteKitchenOrderWithItems(orderId);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.kitchenOrderDao
+            .deleteKitchenOrderWithItems(orderId);
+      });
+    }
+  }
+}
+
+class _$CustomerDao extends CustomerDao {
+  _$CustomerDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _customerEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'customers',
+            (CustomerEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'name': item.name,
+                  'tax_id': item.taxId,
+                  'phone': item.phone,
+                  'email': item.email,
+                  'address': item.address,
+                  'points_balance': item.pointsBalance,
+                  'is_active': item.isActive ? 1 : 0,
+                  'created_at': item.createdAt,
+                  'updated_at': item.updatedAt,
+                  'sync_status': item.syncStatus
+                }),
+        _customerEntityUpdateAdapter = UpdateAdapter(
+            database,
+            'customers',
+            ['id'],
+            (CustomerEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'name': item.name,
+                  'tax_id': item.taxId,
+                  'phone': item.phone,
+                  'email': item.email,
+                  'address': item.address,
+                  'points_balance': item.pointsBalance,
+                  'is_active': item.isActive ? 1 : 0,
+                  'created_at': item.createdAt,
+                  'updated_at': item.updatedAt,
+                  'sync_status': item.syncStatus
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<CustomerEntity> _customerEntityInsertionAdapter;
+
+  final UpdateAdapter<CustomerEntity> _customerEntityUpdateAdapter;
+
+  @override
+  Future<List<CustomerEntity>> getAllCustomers() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM customers WHERE is_active = 1 ORDER BY name ASC',
+        mapper: (Map<String, Object?> row) => CustomerEntity(
+            id: row['id'] as String,
+            name: row['name'] as String,
+            taxId: row['tax_id'] as String?,
+            phone: row['phone'] as String?,
+            email: row['email'] as String?,
+            address: row['address'] as String?,
+            pointsBalance: row['points_balance'] as double,
+            isActive: (row['is_active'] as int) != 0,
+            createdAt: row['created_at'] as int,
+            updatedAt: row['updated_at'] as int,
+            syncStatus: row['sync_status'] as String));
+  }
+
+  @override
+  Future<CustomerEntity?> getCustomerById(String id) async {
+    return _queryAdapter.query('SELECT * FROM customers WHERE id = ?1',
+        mapper: (Map<String, Object?> row) => CustomerEntity(
+            id: row['id'] as String,
+            name: row['name'] as String,
+            taxId: row['tax_id'] as String?,
+            phone: row['phone'] as String?,
+            email: row['email'] as String?,
+            address: row['address'] as String?,
+            pointsBalance: row['points_balance'] as double,
+            isActive: (row['is_active'] as int) != 0,
+            createdAt: row['created_at'] as int,
+            updatedAt: row['updated_at'] as int,
+            syncStatus: row['sync_status'] as String),
+        arguments: [id]);
+  }
+
+  @override
+  Future<CustomerEntity?> getCustomerByTaxId(String taxId) async {
+    return _queryAdapter.query(
+        'SELECT * FROM customers WHERE tax_id = ?1 LIMIT 1',
+        mapper: (Map<String, Object?> row) => CustomerEntity(
+            id: row['id'] as String,
+            name: row['name'] as String,
+            taxId: row['tax_id'] as String?,
+            phone: row['phone'] as String?,
+            email: row['email'] as String?,
+            address: row['address'] as String?,
+            pointsBalance: row['points_balance'] as double,
+            isActive: (row['is_active'] as int) != 0,
+            createdAt: row['created_at'] as int,
+            updatedAt: row['updated_at'] as int,
+            syncStatus: row['sync_status'] as String),
+        arguments: [taxId]);
+  }
+
+  @override
+  Future<CustomerEntity?> getCustomerByPhone(String phone) async {
+    return _queryAdapter.query(
+        'SELECT * FROM customers WHERE phone = ?1 LIMIT 1',
+        mapper: (Map<String, Object?> row) => CustomerEntity(
+            id: row['id'] as String,
+            name: row['name'] as String,
+            taxId: row['tax_id'] as String?,
+            phone: row['phone'] as String?,
+            email: row['email'] as String?,
+            address: row['address'] as String?,
+            pointsBalance: row['points_balance'] as double,
+            isActive: (row['is_active'] as int) != 0,
+            createdAt: row['created_at'] as int,
+            updatedAt: row['updated_at'] as int,
+            syncStatus: row['sync_status'] as String),
+        arguments: [phone]);
+  }
+
+  @override
+  Future<List<CustomerEntity>> searchCustomers(
+    String query,
+    int limit,
+  ) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM customers      WHERE is_active = 1        AND (         name LIKE \'%\' || ?1 || \'%\'          OR tax_id LIKE \'%\' || ?1 || \'%\'          OR phone LIKE \'%\' || ?1 || \'%\'       )     ORDER BY name ASC      LIMIT ?2',
+        mapper: (Map<String, Object?> row) => CustomerEntity(id: row['id'] as String, name: row['name'] as String, taxId: row['tax_id'] as String?, phone: row['phone'] as String?, email: row['email'] as String?, address: row['address'] as String?, pointsBalance: row['points_balance'] as double, isActive: (row['is_active'] as int) != 0, createdAt: row['created_at'] as int, updatedAt: row['updated_at'] as int, syncStatus: row['sync_status'] as String),
+        arguments: [query, limit]);
+  }
+
+  @override
+  Future<int?> countCustomers() async {
+    return _queryAdapter.query('SELECT COUNT(*) FROM customers',
+        mapper: (Map<String, Object?> row) => row.values.first as int);
+  }
+
+  @override
+  Future<void> saveCustomer(CustomerEntity customer) async {
+    await _customerEntityInsertionAdapter.insert(
+        customer, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> saveCustomers(List<CustomerEntity> customers) async {
+    await _customerEntityInsertionAdapter.insertList(
+        customers, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> updateCustomer(CustomerEntity customer) async {
+    await _customerEntityUpdateAdapter.update(
+        customer, OnConflictStrategy.replace);
+  }
+}
+
+class _$CustomerPointTransactionDao extends CustomerPointTransactionDao {
+  _$CustomerPointTransactionDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _customerPointTransactionEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'customer_point_transactions',
+            (CustomerPointTransactionEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'customer_id': item.customerId,
+                  'invoice_id': item.invoiceId,
+                  'type': item.type,
+                  'points': item.points,
+                  'balance_after': item.balanceAfter,
+                  'conversion_rate': item.conversionRate,
+                  'reason': item.reason,
+                  'created_at': item.createdAt,
+                  'sync_status': item.syncStatus
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<CustomerPointTransactionEntity>
+      _customerPointTransactionEntityInsertionAdapter;
+
+  @override
+  Future<List<CustomerPointTransactionEntity>> getTransactionsByCustomer(
+      String customerId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM customer_point_transactions WHERE customer_id = ?1 ORDER BY created_at DESC',
+        mapper: (Map<String, Object?> row) => CustomerPointTransactionEntity(id: row['id'] as String, customerId: row['customer_id'] as String, invoiceId: row['invoice_id'] as String?, type: row['type'] as String, points: row['points'] as double, balanceAfter: row['balance_after'] as double, conversionRate: row['conversion_rate'] as double, reason: row['reason'] as String?, createdAt: row['created_at'] as int, syncStatus: row['sync_status'] as String),
+        arguments: [customerId]);
+  }
+
+  @override
+  Future<List<CustomerPointTransactionEntity>> getTransactionsByInvoice(
+      String invoiceId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM customer_point_transactions WHERE invoice_id = ?1',
+        mapper: (Map<String, Object?> row) => CustomerPointTransactionEntity(
+            id: row['id'] as String,
+            customerId: row['customer_id'] as String,
+            invoiceId: row['invoice_id'] as String?,
+            type: row['type'] as String,
+            points: row['points'] as double,
+            balanceAfter: row['balance_after'] as double,
+            conversionRate: row['conversion_rate'] as double,
+            reason: row['reason'] as String?,
+            createdAt: row['created_at'] as int,
+            syncStatus: row['sync_status'] as String),
+        arguments: [invoiceId]);
+  }
+
+  @override
+  Future<List<CustomerPointTransactionEntity>> getTransactionsBySyncStatus(
+      String status) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM customer_point_transactions WHERE sync_status = ?1',
+        mapper: (Map<String, Object?> row) => CustomerPointTransactionEntity(
+            id: row['id'] as String,
+            customerId: row['customer_id'] as String,
+            invoiceId: row['invoice_id'] as String?,
+            type: row['type'] as String,
+            points: row['points'] as double,
+            balanceAfter: row['balance_after'] as double,
+            conversionRate: row['conversion_rate'] as double,
+            reason: row['reason'] as String?,
+            createdAt: row['created_at'] as int,
+            syncStatus: row['sync_status'] as String),
+        arguments: [status]);
+  }
+
+  @override
+  Future<void> updateCustomerBalance(
+    String customerId,
+    double newBalance,
+    int updatedAt,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE customers SET points_balance = ?2, updated_at = ?3 WHERE id = ?1',
+        arguments: [customerId, newBalance, updatedAt]);
+  }
+
+  @override
+  Future<void> insertTransaction(CustomerPointTransactionEntity entity) async {
+    await _customerPointTransactionEntityInsertionAdapter.insert(
+        entity, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> insertTransactions(
+      List<CustomerPointTransactionEntity> entities) async {
+    await _customerPointTransactionEntityInsertionAdapter.insertList(
+        entities, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> recordPointTransactionAndUpdateBalance(
+    CustomerPointTransactionEntity entity,
+    String customerId,
+    double newBalance,
+    int updatedAt,
+  ) async {
+    if (database is sqflite.Transaction) {
+      await super.recordPointTransactionAndUpdateBalance(
+          entity, customerId, newBalance, updatedAt);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.customerPointTransactionDao
+            .recordPointTransactionAndUpdateBalance(
+                entity, customerId, newBalance, updatedAt);
+      });
+    }
   }
 }

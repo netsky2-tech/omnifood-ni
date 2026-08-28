@@ -14,6 +14,7 @@ enum KardexTypeFilter { all, purchase, sale, shrinkage, adjustment, reversal }
 class KardexEntryViewData {
   const KardexEntryViewData({
     required this.id,
+    required this.insumoId,
     required this.referenceLabel,
     required this.typeLabel,
     required this.type,
@@ -27,9 +28,13 @@ class KardexEntryViewData {
     required this.reasonLabel,
     required this.sourceDocumentLabel,
     required this.relatedAlertCount,
+    this.estadoCosteo = 30,
+    this.costingStateLabel = 'Estándar',
+    this.bloqueoMotivo,
   });
 
   final String id;
+  final String insumoId;
   final String referenceLabel;
   final String typeLabel;
   final MovementType type;
@@ -43,6 +48,9 @@ class KardexEntryViewData {
   final String reasonLabel;
   final String sourceDocumentLabel;
   final int relatedAlertCount;
+  final int estadoCosteo;
+  final String costingStateLabel;
+  final String? bloqueoMotivo;
 }
 
 class KardexViewModel extends ChangeNotifier {
@@ -52,13 +60,22 @@ class KardexViewModel extends ChangeNotifier {
 
   final InventoryRepository _repository;
   final List<KardexEntryViewData> _entries = <KardexEntryViewData>[];
+  List<Insumo> _availableInsumos = <Insumo>[];
   bool _isLoading = false;
   String _searchQuery = '';
   KardexTypeFilter _typeFilter = KardexTypeFilter.all;
+  String? _selectedInsumoId;
+  DateTime? _startDate;
+  DateTime? _endDate;
   String? _errorMessage;
 
   UnmodifiableListView<KardexEntryViewData> get entries =>
       UnmodifiableListView<KardexEntryViewData>(_entries);
+
+  List<Insumo> get availableInsumos => _availableInsumos;
+  String? get selectedInsumoId => _selectedInsumoId;
+  DateTime? get startDate => _startDate;
+  DateTime? get endDate => _endDate;
 
   List<KardexEntryViewData> get visibleEntries {
     final normalizedQuery = _searchQuery.trim().toLowerCase();
@@ -74,6 +91,18 @@ class KardexViewModel extends ChangeNotifier {
       };
 
       if (!typeMatches) {
+        return false;
+      }
+
+      if (_selectedInsumoId != null && entry.insumoId != _selectedInsumoId) {
+        return false;
+      }
+
+      if (_startDate != null && entry.timestamp.isBefore(_startDate!)) {
+        return false;
+      }
+
+      if (_endDate != null && entry.timestamp.isAfter(_endDate!)) {
         return false;
       }
 
@@ -108,6 +137,8 @@ class KardexViewModel extends ChangeNotifier {
       final insumos = insumoIds.isEmpty
           ? const <Insumo>[]
           : await _repository.getInsumosByIds(insumoIds);
+
+      _availableInsumos = insumos;
 
       final insumoNames = <String, String>{
         for (final insumo in insumos) insumo.id: insumo.name,
@@ -169,6 +200,27 @@ class KardexViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setSelectedInsumo(String? insumoId) {
+    _selectedInsumoId = insumoId;
+    notifyListeners();
+  }
+
+  void setDateRange(DateTime? start, DateTime? end) {
+    _startDate = start != null
+        ? DateTime(start.year, start.month, start.day)
+        : null;
+    _endDate = end != null
+        ? DateTime(end.year, end.month, end.day, 23, 59, 59, 999)
+        : null;
+    notifyListeners();
+  }
+
+  void clearDateRange() {
+    _startDate = null;
+    _endDate = null;
+    notifyListeners();
+  }
+
   String chipLabelFor(KardexTypeFilter filter) {
     return switch (filter) {
       KardexTypeFilter.all => 'Todos',
@@ -189,18 +241,20 @@ class KardexViewModel extends ChangeNotifier {
     final numberFormat = NumberFormat('0.00');
     final dateFormat = DateFormat('yyyy-MM-dd HH:mm');
     final purchase = purchaseById[movement.id];
-    final unitCostLabel = purchase == null
+    final cost = movement.unitCostNio ??
+        purchase?.unitCostNio ??
+        purchase?.unitCost;
+    final unitCostLabel = cost == null
         ? valuationUnavailableLabel
-        : numberFormat.format(purchase.unitCostNio ?? purchase.unitCost);
-    final totalValueLabel = purchase == null
+        : numberFormat.format(cost);
+    final totalValueLabel = cost == null
         ? valuationUnavailableLabel
-        : numberFormat.format(
-            (purchase.unitCostNio ?? purchase.unitCost) * purchase.quantity,
-          );
+        : numberFormat.format(cost * movement.quantity.abs());
     final sourceDocumentLabel = _resolveSourceDocumentLabel(movement, purchase);
 
     return KardexEntryViewData(
       id: movement.id,
+      insumoId: movement.insumoId,
       referenceLabel: insumoNames[movement.insumoId] ?? movement.insumoId,
       typeLabel: switch (movement.type) {
         MovementType.purchase => 'Compra',
@@ -223,6 +277,16 @@ class KardexViewModel extends ChangeNotifier {
           : 'Sin detalle operativo',
       sourceDocumentLabel: sourceDocumentLabel,
       relatedAlertCount: alertCountByMovementId[movement.id] ?? 0,
+      estadoCosteo: movement.estadoCosteo ?? 30,
+      costingStateLabel: switch (movement.estadoCosteo) {
+        10 => 'Provisional',
+        20 => 'En proceso',
+        30 => 'Regularizado',
+        40 => 'Bloqueado',
+        50 => 'Error DLQ',
+        _ => 'Estándar',
+      },
+      bloqueoMotivo: movement.bloqueoMotivo,
     );
   }
 

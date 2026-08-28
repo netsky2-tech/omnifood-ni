@@ -13,6 +13,8 @@ import { canonicalizeNumberFreeJson } from '../../../core/audit/v3/canonicalizer
 import { buildAuditV3Frame } from '../../../core/audit/v3/frame';
 import { sha256LowerHex } from '../../../core/audit/v3/sha256';
 
+import { AuditTrailService } from '../services/audit-trail.service';
+
 type AuthenticatedRequest = { user: { sub: string } };
 
 type AuditRepositoryMock = {
@@ -43,6 +45,7 @@ describe('AuditController', () => {
   let mockRepo: jest.Mocked<AuditRepositoryMock>;
   let mockQueryRunner: jest.Mocked<QueryRunnerMock>;
   let mockDataSource: jest.Mocked<DataSourceMock>;
+  let mockAuditTrailService: jest.Mocked<Partial<AuditTrailService>>;
   let verificationService: { verifyBatch: jest.Mock };
 
   beforeEach(async () => {
@@ -51,6 +54,12 @@ describe('AuditController', () => {
       findOne: jest.fn(),
     };
     mockRepo.findOne.mockResolvedValue(null);
+
+    mockAuditTrailService = {
+      queryOverrides: jest.fn(),
+      queryDrawerOpens: jest.fn(),
+      recordManualDrawerOpen: jest.fn(),
+    };
 
     mockQueryRunner = {
       connect: jest.fn(),
@@ -88,6 +97,10 @@ describe('AuditController', () => {
         {
           provide: DataSource,
           useValue: mockDataSource,
+        },
+        {
+          provide: AuditTrailService,
+          useValue: mockAuditTrailService,
         },
         {
           provide: AuditVerificationService,
@@ -824,6 +837,70 @@ describe('AuditController', () => {
       await expect(
         controller.pushLogs('tenant_1', dto as PushAuditLogsDto, req),
       ).rejects.toThrow('Duplicate forensic stream sequence detected');
+    });
+  });
+
+  describe('getOverrides', () => {
+    it('delegates query to AuditTrailService with tenantId', async () => {
+      mockAuditTrailService.queryOverrides.mockResolvedValue({
+        items: [],
+        total: 0,
+        limit: 50,
+        offset: 0,
+      });
+
+      const res = await controller.getOverrides('tenant_1', { limit: 10 });
+      expect(mockAuditTrailService.queryOverrides).toHaveBeenCalledWith(
+        { limit: 10 },
+        'tenant_1',
+      );
+      expect(res.total).toBe(0);
+    });
+  });
+
+  describe('getDrawerOpens', () => {
+    it('delegates drawer query to AuditTrailService with tenantId', async () => {
+      mockAuditTrailService.queryDrawerOpens.mockResolvedValue({
+        items: [],
+        total: 0,
+        limit: 50,
+        offset: 0,
+      });
+
+      const res = await controller.getDrawerOpens('tenant_1', {
+        reason: 'CHANGE_REPLENISHMENT',
+      });
+      expect(mockAuditTrailService.queryDrawerOpens).toHaveBeenCalledWith(
+        { reason: 'CHANGE_REPLENISHMENT' },
+        'tenant_1',
+      );
+      expect(res.total).toBe(0);
+    });
+  });
+
+  describe('recordDrawerOpen', () => {
+    it('delegates drawer open recording to AuditTrailService', async () => {
+      const mockResult = new AuditLog();
+      mockResult.id = 'drawer-log-1';
+      mockAuditTrailService.recordManualDrawerOpen.mockResolvedValue(
+        mockResult,
+      );
+
+      const res = await controller.recordDrawerOpen(
+        'tenant_1',
+        {
+          terminalId: 'POS-01',
+          reason: 'AUDIT_COUNT',
+        },
+        { user: { sub: 'user-1' } },
+      );
+
+      expect(mockAuditTrailService.recordManualDrawerOpen).toHaveBeenCalledWith(
+        { terminalId: 'POS-01', reason: 'AUDIT_COUNT' },
+        'tenant_1',
+        'user-1',
+      );
+      expect(res.id).toBe('drawer-log-1');
     });
   });
 });

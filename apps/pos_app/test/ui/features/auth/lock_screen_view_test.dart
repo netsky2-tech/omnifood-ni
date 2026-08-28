@@ -61,35 +61,78 @@ class _FakeUserDao implements UserDao {
 }
 
 void main() {
-  testWidgets('uses compact pin pad max-height constraint', (tester) async {
-    tester.view.physicalSize = const Size(1600, 1200);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+  group('LockScreenView Responsive', () {
+    testWidgets('uses compact pin pad max-height constraint on wide desktop (> 600dp)', (tester) async {
+      tester.view.physicalSize = const Size(1600, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-    final viewModel = LockScreenViewModel(_FakeAuthRepository(), _FakeUserDao());
+      final viewModel = LockScreenViewModel(_FakeAuthRepository(), _FakeUserDao());
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: ChangeNotifierProvider.value(
-          value: viewModel,
-          child: const LockScreenView(),
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ChangeNotifierProvider.value(
+            value: viewModel,
+            child: const LockScreenView(),
+          ),
         ),
-      ),
-    );
+      );
 
-    await tester.pumpAndSettle();
+      await tester.pumpAndSettle();
 
-    final constrainedBox = tester.widget<ConstrainedBox>(
-      find.byWidgetPredicate(
-        (widget) =>
-            widget is ConstrainedBox &&
-            widget.constraints.maxHeight == 340 &&
-            widget.constraints.maxWidth == 450,
-      ),
-    );
+      final constrainedBox = tester.widget<ConstrainedBox>(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is ConstrainedBox &&
+              widget.constraints.maxHeight == 340 &&
+              widget.constraints.maxWidth == 450,
+        ),
+      );
 
-    expect(constrainedBox.constraints.maxHeight, 340);
-    expect(find.byType(AbsorbPointer), findsWidgets);
+      expect(constrainedBox.constraints.maxHeight, 340);
+      expect(find.byType(AbsorbPointer), findsWidgets);
+    });
+
+    testWidgets('renders adaptive flow on Sunmi V2s handheld (360x720dp)', (tester) async {
+      tester.view.physicalSize = const Size(360, 720);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final viewModel = LockScreenViewModel(_FakeAuthRepository(), _FakeUserDao());
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ChangeNotifierProvider.value(
+            value: viewModel,
+            child: const LockScreenView(),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Step 1: In handheld with no user selected, shows user selection list
+      expect(find.text('Seleccionar Usuario'), findsOneWidget);
+      expect(find.text('Cajero'), findsOneWidget);
+
+      // Step 2: Tap on user to transition to PIN pad view
+      await tester.tap(find.text('Cajero'));
+      await tester.pumpAndSettle();
+
+      // Step 3: Now shows PIN pad with back button
+      expect(find.text('PIN: Cajero'), findsOneWidget);
+      expect(find.text('HOLA, CAJERO'), findsOneWidget);
+      expect(find.text('INGRESE SU PIN PARA CONTINUAR'), findsOneWidget);
+      expect(find.byTooltip('Cambiar usuario'), findsOneWidget);
+
+      // Step 4: Tap back to switch user
+      await tester.tap(find.byTooltip('Cambiar usuario'));
+      await tester.pumpAndSettle();
+
+      // Back to user list
+      expect(find.text('Seleccionar Usuario'), findsOneWidget);
+    });
   });
 }

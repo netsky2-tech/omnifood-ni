@@ -26,6 +26,19 @@ mixin _$Payment {
   double get amount => throw _privateConstructorUsedError;
   String get currency => throw _privateConstructorUsedError;
   double get exchangeRate => throw _privateConstructorUsedError;
+  double get amountNio => throw _privateConstructorUsedError;
+  double get changeGiven => throw _privateConstructorUsedError;
+  String get changeCurrency =>
+      throw _privateConstructorUsedError; // Voucher & Card Metadata (PRD Dos Capas)
+  String? get voucherCode => throw _privateConstructorUsedError;
+  String? get cardBrand => throw _privateConstructorUsedError;
+  String? get cardType => throw _privateConstructorUsedError;
+  String? get bankPos => throw _privateConstructorUsedError;
+  String? get reconciliationStatus => throw _privateConstructorUsedError;
+  String? get last4 => throw _privateConstructorUsedError;
+  String? get batchNumber => throw _privateConstructorUsedError;
+  DateTime? get reconciledAt => throw _privateConstructorUsedError;
+  String? get reconciledByUserId => throw _privateConstructorUsedError;
   DateTime? get createdAt => throw _privateConstructorUsedError;
 
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
@@ -45,6 +58,18 @@ abstract class $PaymentCopyWith<$Res> {
       double amount,
       String currency,
       double exchangeRate,
+      double amountNio,
+      double changeGiven,
+      String changeCurrency,
+      String? voucherCode,
+      String? cardBrand,
+      String? cardType,
+      String? bankPos,
+      String? reconciliationStatus,
+      String? last4,
+      String? batchNumber,
+      DateTime? reconciledAt,
+      String? reconciledByUserId,
       DateTime? createdAt});
 }
 
@@ -67,6 +92,18 @@ class _$PaymentCopyWithImpl<$Res, $Val extends Payment>
     Object? amount = null,
     Object? currency = null,
     Object? exchangeRate = null,
+    Object? amountNio = null,
+    Object? changeGiven = null,
+    Object? changeCurrency = null,
+    Object? voucherCode = freezed,
+    Object? cardBrand = freezed,
+    Object? cardType = freezed,
+    Object? bankPos = freezed,
+    Object? reconciliationStatus = freezed,
+    Object? last4 = freezed,
+    Object? batchNumber = freezed,
+    Object? reconciledAt = freezed,
+    Object? reconciledByUserId = freezed,
     Object? createdAt = freezed,
   }) {
     return _then(_value.copyWith(
@@ -94,6 +131,54 @@ class _$PaymentCopyWithImpl<$Res, $Val extends Payment>
           ? _value.exchangeRate
           : exchangeRate // ignore: cast_nullable_to_non_nullable
               as double,
+      amountNio: null == amountNio
+          ? _value.amountNio
+          : amountNio // ignore: cast_nullable_to_non_nullable
+              as double,
+      changeGiven: null == changeGiven
+          ? _value.changeGiven
+          : changeGiven // ignore: cast_nullable_to_non_nullable
+              as double,
+      changeCurrency: null == changeCurrency
+          ? _value.changeCurrency
+          : changeCurrency // ignore: cast_nullable_to_non_nullable
+              as String,
+      voucherCode: freezed == voucherCode
+          ? _value.voucherCode
+          : voucherCode // ignore: cast_nullable_to_non_nullable
+              as String?,
+      cardBrand: freezed == cardBrand
+          ? _value.cardBrand
+          : cardBrand // ignore: cast_nullable_to_non_nullable
+              as String?,
+      cardType: freezed == cardType
+          ? _value.cardType
+          : cardType // ignore: cast_nullable_to_non_nullable
+              as String?,
+      bankPos: freezed == bankPos
+          ? _value.bankPos
+          : bankPos // ignore: cast_nullable_to_non_nullable
+              as String?,
+      reconciliationStatus: freezed == reconciliationStatus
+          ? _value.reconciliationStatus
+          : reconciliationStatus // ignore: cast_nullable_to_non_nullable
+              as String?,
+      last4: freezed == last4
+          ? _value.last4
+          : last4 // ignore: cast_nullable_to_non_nullable
+              as String?,
+      batchNumber: freezed == batchNumber
+          ? _value.batchNumber
+          : batchNumber // ignore: cast_nullable_to_non_nullable
+              as String?,
+      reconciledAt: freezed == reconciledAt
+          ? _value.reconciledAt
+          : reconciledAt // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
+      reconciledByUserId: freezed == reconciledByUserId
+          ? _value.reconciledByUserId
+          : reconciledByUserId // ignore: cast_nullable_to_non_nullable
+              as String?,
       createdAt: freezed == createdAt
           ? _value.createdAt
           : createdAt // ignore: cast_nullable_to_non_nullable
@@ -116,6 +201,18 @@ abstract class _$$PaymentImplCopyWith<$Res> implements $PaymentCopyWith<$Res> {
       double amount,
       String currency,
       double exchangeRate,
+      double amountNio,
+      double changeGiven,
+      String changeCurrency,
+      String? voucherCode,
+      String? cardBrand,
+      String? cardType,
+      String? bankPos,
+      String? reconciliationStatus,
+      String? last4,
+      String? batchNumber,
+      DateTime? reconciledAt,
+      String? reconciledByUserId,
       DateTime? createdAt});
 }
 
@@ -136,6 +233,18 @@ class __$$PaymentImplCopyWithImpl<$Res>
     Object? amount = null,
     Object? currency = null,
     Object? exchangeRate = null,
+    Object? amountNio = null,
+    Object? changeGiven = null,
+    Object? changeCurrency = null,
+    Object? voucherCode = freezed,
+    Object? cardBrand = freezed,
+    Object? cardType = freezed,
+    Object? bankPos = freezed,
+    Object? reconciliationStatus = freezed,
+    Object? last4 = freezed,
+    Object? batchNumber = freezed,
+    Object? reconciledAt = freezed,
+    Object? reconciledByUserId = freezed,
     Object? createdAt = freezed,
   }) {
     return _then(_$PaymentImpl(
@@ -163,6 +272,54 @@ class __$$PaymentImplCopyWithImpl<$Res>
           ? _value.exchangeRate
           : exchangeRate // ignore: cast_nullable_to_non_nullable
               as double,
+      amountNio: null == amountNio
+          ? _value.amountNio
+          : amountNio // ignore: cast_nullable_to_non_nullable
+              as double,
+      changeGiven: null == changeGiven
+          ? _value.changeGiven
+          : changeGiven // ignore: cast_nullable_to_non_nullable
+              as double,
+      changeCurrency: null == changeCurrency
+          ? _value.changeCurrency
+          : changeCurrency // ignore: cast_nullable_to_non_nullable
+              as String,
+      voucherCode: freezed == voucherCode
+          ? _value.voucherCode
+          : voucherCode // ignore: cast_nullable_to_non_nullable
+              as String?,
+      cardBrand: freezed == cardBrand
+          ? _value.cardBrand
+          : cardBrand // ignore: cast_nullable_to_non_nullable
+              as String?,
+      cardType: freezed == cardType
+          ? _value.cardType
+          : cardType // ignore: cast_nullable_to_non_nullable
+              as String?,
+      bankPos: freezed == bankPos
+          ? _value.bankPos
+          : bankPos // ignore: cast_nullable_to_non_nullable
+              as String?,
+      reconciliationStatus: freezed == reconciliationStatus
+          ? _value.reconciliationStatus
+          : reconciliationStatus // ignore: cast_nullable_to_non_nullable
+              as String?,
+      last4: freezed == last4
+          ? _value.last4
+          : last4 // ignore: cast_nullable_to_non_nullable
+              as String?,
+      batchNumber: freezed == batchNumber
+          ? _value.batchNumber
+          : batchNumber // ignore: cast_nullable_to_non_nullable
+              as String?,
+      reconciledAt: freezed == reconciledAt
+          ? _value.reconciledAt
+          : reconciledAt // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
+      reconciledByUserId: freezed == reconciledByUserId
+          ? _value.reconciledByUserId
+          : reconciledByUserId // ignore: cast_nullable_to_non_nullable
+              as String?,
       createdAt: freezed == createdAt
           ? _value.createdAt
           : createdAt // ignore: cast_nullable_to_non_nullable
@@ -181,6 +338,18 @@ class _$PaymentImpl implements _Payment {
       required this.amount,
       this.currency = 'NIO',
       this.exchangeRate = 1.0,
+      this.amountNio = 0.0,
+      this.changeGiven = 0.0,
+      this.changeCurrency = 'NIO',
+      this.voucherCode,
+      this.cardBrand,
+      this.cardType,
+      this.bankPos,
+      this.reconciliationStatus,
+      this.last4,
+      this.batchNumber,
+      this.reconciledAt,
+      this.reconciledByUserId,
       this.createdAt});
 
   factory _$PaymentImpl.fromJson(Map<String, dynamic> json) =>
@@ -201,11 +370,39 @@ class _$PaymentImpl implements _Payment {
   @JsonKey()
   final double exchangeRate;
   @override
+  @JsonKey()
+  final double amountNio;
+  @override
+  @JsonKey()
+  final double changeGiven;
+  @override
+  @JsonKey()
+  final String changeCurrency;
+// Voucher & Card Metadata (PRD Dos Capas)
+  @override
+  final String? voucherCode;
+  @override
+  final String? cardBrand;
+  @override
+  final String? cardType;
+  @override
+  final String? bankPos;
+  @override
+  final String? reconciliationStatus;
+  @override
+  final String? last4;
+  @override
+  final String? batchNumber;
+  @override
+  final DateTime? reconciledAt;
+  @override
+  final String? reconciledByUserId;
+  @override
   final DateTime? createdAt;
 
   @override
   String toString() {
-    return 'Payment(id: $id, invoiceId: $invoiceId, method: $method, amount: $amount, currency: $currency, exchangeRate: $exchangeRate, createdAt: $createdAt)';
+    return 'Payment(id: $id, invoiceId: $invoiceId, method: $method, amount: $amount, currency: $currency, exchangeRate: $exchangeRate, amountNio: $amountNio, changeGiven: $changeGiven, changeCurrency: $changeCurrency, voucherCode: $voucherCode, cardBrand: $cardBrand, cardType: $cardType, bankPos: $bankPos, reconciliationStatus: $reconciliationStatus, last4: $last4, batchNumber: $batchNumber, reconciledAt: $reconciledAt, reconciledByUserId: $reconciledByUserId, createdAt: $createdAt)';
   }
 
   @override
@@ -222,14 +419,56 @@ class _$PaymentImpl implements _Payment {
                 other.currency == currency) &&
             (identical(other.exchangeRate, exchangeRate) ||
                 other.exchangeRate == exchangeRate) &&
+            (identical(other.amountNio, amountNio) ||
+                other.amountNio == amountNio) &&
+            (identical(other.changeGiven, changeGiven) ||
+                other.changeGiven == changeGiven) &&
+            (identical(other.changeCurrency, changeCurrency) ||
+                other.changeCurrency == changeCurrency) &&
+            (identical(other.voucherCode, voucherCode) ||
+                other.voucherCode == voucherCode) &&
+            (identical(other.cardBrand, cardBrand) ||
+                other.cardBrand == cardBrand) &&
+            (identical(other.cardType, cardType) ||
+                other.cardType == cardType) &&
+            (identical(other.bankPos, bankPos) || other.bankPos == bankPos) &&
+            (identical(other.reconciliationStatus, reconciliationStatus) ||
+                other.reconciliationStatus == reconciliationStatus) &&
+            (identical(other.last4, last4) || other.last4 == last4) &&
+            (identical(other.batchNumber, batchNumber) ||
+                other.batchNumber == batchNumber) &&
+            (identical(other.reconciledAt, reconciledAt) ||
+                other.reconciledAt == reconciledAt) &&
+            (identical(other.reconciledByUserId, reconciledByUserId) ||
+                other.reconciledByUserId == reconciledByUserId) &&
             (identical(other.createdAt, createdAt) ||
                 other.createdAt == createdAt));
   }
 
   @JsonKey(ignore: true)
   @override
-  int get hashCode => Object.hash(runtimeType, id, invoiceId, method, amount,
-      currency, exchangeRate, createdAt);
+  int get hashCode => Object.hashAll([
+        runtimeType,
+        id,
+        invoiceId,
+        method,
+        amount,
+        currency,
+        exchangeRate,
+        amountNio,
+        changeGiven,
+        changeCurrency,
+        voucherCode,
+        cardBrand,
+        cardType,
+        bankPos,
+        reconciliationStatus,
+        last4,
+        batchNumber,
+        reconciledAt,
+        reconciledByUserId,
+        createdAt
+      ]);
 
   @JsonKey(ignore: true)
   @override
@@ -253,6 +492,18 @@ abstract class _Payment implements Payment {
       required final double amount,
       final String currency,
       final double exchangeRate,
+      final double amountNio,
+      final double changeGiven,
+      final String changeCurrency,
+      final String? voucherCode,
+      final String? cardBrand,
+      final String? cardType,
+      final String? bankPos,
+      final String? reconciliationStatus,
+      final String? last4,
+      final String? batchNumber,
+      final DateTime? reconciledAt,
+      final String? reconciledByUserId,
       final DateTime? createdAt}) = _$PaymentImpl;
 
   factory _Payment.fromJson(Map<String, dynamic> json) = _$PaymentImpl.fromJson;
@@ -269,6 +520,30 @@ abstract class _Payment implements Payment {
   String get currency;
   @override
   double get exchangeRate;
+  @override
+  double get amountNio;
+  @override
+  double get changeGiven;
+  @override
+  String get changeCurrency;
+  @override // Voucher & Card Metadata (PRD Dos Capas)
+  String? get voucherCode;
+  @override
+  String? get cardBrand;
+  @override
+  String? get cardType;
+  @override
+  String? get bankPos;
+  @override
+  String? get reconciliationStatus;
+  @override
+  String? get last4;
+  @override
+  String? get batchNumber;
+  @override
+  DateTime? get reconciledAt;
+  @override
+  String? get reconciledByUserId;
   @override
   DateTime? get createdAt;
   @override
