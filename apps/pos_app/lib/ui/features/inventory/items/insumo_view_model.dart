@@ -42,27 +42,61 @@ class InsumoViewModel with ChangeNotifier {
   // hardcoded UI presets (commonConsumptionUoms, commonProductUoms,
   // productCategoryPresets) — these are now tenant-administrable via the
   // Admin backend and cached locally for offline-first operation.
+  static const defaultUomCatalog = <CatalogValue>[
+    CatalogValue(id: 'uom-und', catalogType: CatalogType.uom, code: 'UND', name: 'Unidad', sortOrder: 0),
+    CatalogValue(id: 'uom-kg', catalogType: CatalogType.uom, code: 'kg', name: 'Kilogramo', sortOrder: 1),
+    CatalogValue(id: 'uom-g', catalogType: CatalogType.uom, code: 'g', name: 'Gramo', sortOrder: 2),
+    CatalogValue(id: 'uom-lb', catalogType: CatalogType.uom, code: 'lb', name: 'Libra', sortOrder: 3),
+    CatalogValue(id: 'uom-oz', catalogType: CatalogType.uom, code: 'oz', name: 'Onza', sortOrder: 4),
+    CatalogValue(id: 'uom-l', catalogType: CatalogType.uom, code: 'L', name: 'Litro', sortOrder: 5),
+    CatalogValue(id: 'uom-ml', catalogType: CatalogType.uom, code: 'ml', name: 'Mililitro', sortOrder: 6),
+    CatalogValue(id: 'uom-gal', catalogType: CatalogType.uom, code: 'gal', name: 'Galón', sortOrder: 7),
+    CatalogValue(id: 'uom-saco', catalogType: CatalogType.uom, code: 'saco', name: 'Saco', sortOrder: 8),
+    CatalogValue(id: 'uom-paq', catalogType: CatalogType.uom, code: 'paq', name: 'Paquete', sortOrder: 9),
+    CatalogValue(id: 'uom-caja', catalogType: CatalogType.uom, code: 'caja', name: 'Caja', sortOrder: 10),
+    CatalogValue(id: 'uom-porcion', catalogType: CatalogType.uom, code: 'porcion', name: 'Porción', sortOrder: 11),
+  ];
+
+  static const defaultProductCategoryCatalog = <CatalogValue>[
+    CatalogValue(id: 'cat-bebidas', catalogType: CatalogType.salesProductCategory, code: 'BEBIDAS', name: 'Bebidas', sortOrder: 0),
+    CatalogValue(id: 'cat-comida', catalogType: CatalogType.salesProductCategory, code: 'COMIDA', name: 'Comida', sortOrder: 1),
+    CatalogValue(id: 'cat-postres', catalogType: CatalogType.salesProductCategory, code: 'POSTRES', name: 'Postres', sortOrder: 2),
+    CatalogValue(id: 'cat-snacks', catalogType: CatalogType.salesProductCategory, code: 'SNACKS', name: 'Snacks', sortOrder: 3),
+    CatalogValue(id: 'cat-otros', catalogType: CatalogType.salesProductCategory, code: 'OTROS', name: 'Otros', sortOrder: 4),
+  ];
+
+  static const defaultProductTypeCatalog = <CatalogValue>[
+    CatalogValue(id: 'type-reventa', catalogType: CatalogType.salesProductType, code: 'REVENTA', name: 'Reventa', sortOrder: 0),
+    CatalogValue(id: 'type-preparado', catalogType: CatalogType.salesProductType, code: 'PREPARADO', name: 'Preparado', sortOrder: 1),
+  ];
+
   List<CatalogValue> _uomCatalog = [];
-  List<CatalogValue> get uomCatalog => _uomCatalog;
+  List<CatalogValue> get uomCatalog =>
+      _uomCatalog.isNotEmpty ? _uomCatalog : defaultUomCatalog;
 
   List<CatalogValue> _productCategoryCatalog = [];
-  List<CatalogValue> get productCategoryCatalog => _productCategoryCatalog;
+  List<CatalogValue> get productCategoryCatalog =>
+      _productCategoryCatalog.isNotEmpty
+          ? _productCategoryCatalog
+          : defaultProductCategoryCatalog;
 
   List<CatalogValue> _productTypeCatalog = [];
-  List<CatalogValue> get productTypeCatalog => _productTypeCatalog;
+  List<CatalogValue> get productTypeCatalog =>
+      _productTypeCatalog.isNotEmpty
+          ? _productTypeCatalog
+          : defaultProductTypeCatalog;
 
-  /// UOM codes for dropdowns (inventory consumption + sales). Empty until the
-  /// local catalog is provisioned (migration seed or Admin sync).
-  List<String> get uomOptions =>
-      _uomCatalog.map((u) => u.code).toList(growable: false);
+  /// UOM codes for dropdowns (inventory consumption + sales). Falls back to
+  /// standard retail/restaurant UOMs if the local catalog has not synced yet.
+  List<String> get uomOptions => uomCatalog.map((u) => u.code).toList(growable: false);
 
   /// Sales product category display names for the product form dropdown.
   List<String> get productCategoryNames =>
-      _productCategoryCatalog.map((c) => c.name).toList(growable: false);
+      productCategoryCatalog.map((c) => c.name).toList(growable: false);
 
   /// Sales product type codes (e.g. PREPARADO, REVENTA) for the product form.
   List<String> get productTypeCodes =>
-      _productTypeCatalog.map((t) => t.code).toList(growable: false);
+      productTypeCatalog.map((t) => t.code).toList(growable: false);
 
   /// Maps the catalog type code to the persisted prepared flag.
   bool isPreparedForTypeCode(String? typeCode) =>
@@ -89,11 +123,18 @@ class InsumoViewModel with ChangeNotifier {
 
     // Load administrable master catalogs (offline-first: read from local cache
     // seeded by migration and kept fresh by Admin sync).
-    _uomCatalog = await repository.getActiveCatalog(CatalogType.uom);
-    _productCategoryCatalog =
+    final loadedUom = await repository.getActiveCatalog(CatalogType.uom);
+    _uomCatalog = loadedUom.isNotEmpty ? loadedUom : defaultUomCatalog;
+
+    final loadedCat =
         await repository.getActiveCatalog(CatalogType.salesProductCategory);
-    _productTypeCatalog =
+    _productCategoryCatalog =
+        loadedCat.isNotEmpty ? loadedCat : defaultProductCategoryCatalog;
+
+    final loadedType =
         await repository.getActiveCatalog(CatalogType.salesProductType);
+    _productTypeCatalog =
+        loadedType.isNotEmpty ? loadedType : defaultProductTypeCatalog;
 
     _isLoading = false;
     notifyListeners();

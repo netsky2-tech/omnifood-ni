@@ -280,8 +280,9 @@ class _InsumoViewState extends State<InsumoView> {
     );
     final uomOptions = _buildUomOptions(vm.uomOptions, insumo?.consumptionUom);
     String selectedUom =
-        insumo?.consumptionUom ??
-        (uomOptions.isNotEmpty ? uomOptions.first : '');
+        (insumo?.consumptionUom != null && insumo!.consumptionUom.trim().isNotEmpty)
+            ? insumo.consumptionUom.trim()
+            : (uomOptions.isNotEmpty ? uomOptions.first : 'UND');
     String? selectedWarehouseId = insumo?.warehouseId;
     bool isPerishable = insumo?.isPerishable ?? false;
 
@@ -454,7 +455,9 @@ class _InsumoViewState extends State<InsumoView> {
     );
     final uomOptions = _buildUomOptions(vm.uomOptions, product?.uom);
     String selectedUom =
-        product?.uom ?? (uomOptions.isNotEmpty ? uomOptions.first : '');
+        (product?.uom != null && product!.uom.trim().isNotEmpty)
+            ? product.uom.trim()
+            : (uomOptions.isNotEmpty ? uomOptions.first : 'UND');
     bool isPrepared = product?.isPrepared ?? true;
     // Sales product type comes from the administrable SALES_PRODUCT_TYPE
     // catalog (e.g. PREPARADO / REVENTA). It maps back to the persisted
@@ -696,15 +699,30 @@ class _InsumoViewState extends State<InsumoView> {
     );
   }
 
+  static const _defaultUomOptions = <String>[
+    'UND',
+    'kg',
+    'g',
+    'lb',
+    'oz',
+    'L',
+    'ml',
+    'gal',
+    'saco',
+    'paq',
+    'caja',
+    'porcion',
+  ];
+
   List<String> _buildUomOptions(List<String> catalog, String? current) {
-    final options = <String>[...catalog];
-    if (current != null && current.isNotEmpty && !options.contains(current)) {
-      options.insert(0, current);
+    final cleanCatalog = catalog.where((s) => s.trim().isNotEmpty).toList();
+    final effectiveCatalog =
+        cleanCatalog.isNotEmpty ? cleanCatalog : _defaultUomOptions;
+    final options = <String>[...effectiveCatalog];
+    if (current != null && current.trim().isNotEmpty && !options.contains(current.trim())) {
+      options.insert(0, current.trim());
     }
-    // Defensive: a DropdownButtonFormField needs at least one item. In
-    // production the catalog is seeded/synced so this branch is never hit; it
-    // only guards against an unprovisioned local catalog.
-    return options.isEmpty ? const [''] : options;
+    return options.isEmpty ? _defaultUomOptions : options;
   }
 
   /// Sales product type options from the administrable catalog, ordered so the
@@ -713,8 +731,9 @@ class _InsumoViewState extends State<InsumoView> {
     InsumoViewModel vm,
     bool currentIsPrepared,
   ) {
-    final catalog = vm.productTypeCatalog;
-    if (catalog.isEmpty) return const <CatalogValue>[];
+    final catalog = vm.productTypeCatalog.isNotEmpty
+        ? vm.productTypeCatalog
+        : InsumoViewModel.defaultProductTypeCatalog;
     final currentCode = vm.defaultProductTypeCode(currentIsPrepared);
     final sorted = <CatalogValue>[...catalog]
       ..sort((a, b) {
@@ -729,7 +748,9 @@ class _InsumoViewState extends State<InsumoView> {
   /// the product already holds a legacy category not in the catalog, it is
   /// injected first so it still renders (and is flagged in the UI).
   List<String> _buildCategoryOptions(InsumoViewModel vm, String? current) {
-    final names = vm.productCategoryNames;
+    final names = vm.productCategoryNames.isNotEmpty
+        ? vm.productCategoryNames
+        : InsumoViewModel.defaultProductCategoryCatalog.map((c) => c.name).toList();
     if (current == null || current.isEmpty) return names;
     if (names.contains(current)) return names;
     return <String>[current, ...names];
