@@ -26,7 +26,7 @@ class SplitPaymentCalculator {
 
   double get remainingNio {
     final diff = totalNio - totalPaidNio;
-    return diff <= 0.001 ? 0.0 : diff;
+    return diff <= 0.02 ? 0.0 : diff;
   }
 
   double get remainingUsd {
@@ -34,7 +34,7 @@ class SplitPaymentCalculator {
     return remainingNio / commercialRate;
   }
 
-  bool get isFullyPaid => remainingNio <= 0.001;
+  bool get isFullyPaid => remainingNio <= 0.02;
 
   SplitPaymentCalculator addPayment(Payment payment) {
     return SplitPaymentCalculator(
@@ -68,7 +68,12 @@ class SplitPaymentCalculator {
     String? invoiceId,
   }) {
     final rate = tenderCurrency == 'USD' ? commercialRate : 1.0;
-    final tenderAmountNio = tenderAmount * rate;
+    double tenderAmountNio;
+    if (tenderCurrency == 'USD' && (tenderAmount - remainingUsd).abs() < 0.005) {
+      tenderAmountNio = remainingNio;
+    } else {
+      tenderAmountNio = tenderAmount * rate;
+    }
 
     // Remaining balance in NIO before this tender
     final neededNio = remainingNio;
@@ -120,7 +125,12 @@ class SplitPaymentCalculator {
     String? invoiceId,
   }) {
     final rate = currency == 'USD' ? commercialRate : 1.0;
-    final amountNio = amount * rate;
+    double amountNio;
+    if (currency == 'USD' && (amount - remainingUsd).abs() < 0.005) {
+      amountNio = remainingNio;
+    } else {
+      amountNio = amount * rate;
+    }
 
     final finalVoucher = isFastCheckout
         ? 'PENDIENTE'

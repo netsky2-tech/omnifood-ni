@@ -215,5 +215,26 @@ void main() {
       expect(microBreakdown.isSufficient, isTrue);
       expect(microBreakdown.changeNio, 0.99);
     });
+
+    test('exact USD equivalent tender (e.g. C\\\$69.00 = \\\$1.89 USD at 36.50) is sufficient with 0 remaining', () {
+      final calc = CurrencyCheckoutCalculator(
+        commercialRate: 36.50,
+        bcnOfficialRate: 36.6241,
+      );
+
+      final totalUsd = calc.calculateTotalUsd(69.00);
+      expect(totalUsd, 1.89);
+
+      final breakdown = calc.calculateTender(
+        totalNio: 69.00,
+        tenderAmount: totalUsd,
+        tenderCurrency: 'USD',
+      );
+
+      expect(breakdown.isSufficient, isTrue);
+      expect(breakdown.remainingNio, 0.00);
+      expect(breakdown.changeNio, 0.00);
+      expect(breakdown.tenderAmountNio, 69.00);
+    });
   });
 }

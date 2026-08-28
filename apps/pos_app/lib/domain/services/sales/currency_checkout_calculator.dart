@@ -64,14 +64,21 @@ class CurrencyCheckoutCalculator {
 
     if (tenderCurrency == 'USD') {
       tenderUsd = tenderAmount;
-      tenderNio = round2(tenderAmount * commercialRate);
+      // If customer tenders the exact calculated total USD (within 0.005 USD),
+      // avoid sub-cent currency rounding artifacts by considering tenderNio == totalNio.
+      if ((tenderAmount - totalUsd).abs() < 0.005) {
+        tenderNio = totalNio;
+      } else {
+        tenderNio = round2(tenderAmount * commercialRate);
+      }
     } else {
       tenderNio = tenderAmount;
       tenderUsd = commercialRate > 0 ? round2(tenderAmount / commercialRate) : 0.0;
     }
 
     final diffNio = tenderNio - totalNio;
-    final isSufficient = diffNio >= -0.0001;
+    // Tolerance threshold of 0.02 NIO (2 centavos) for currency conversion rounding
+    final isSufficient = diffNio >= -0.02;
 
     double changeNio = 0.0;
     double changeUsd = 0.0;
@@ -79,7 +86,7 @@ class CurrencyCheckoutCalculator {
     double remainingUsd = 0.0;
 
     if (isSufficient) {
-      changeNio = round2(diffNio > 0 ? diffNio : 0.0);
+      changeNio = round2(diffNio > 0.02 ? diffNio : 0.0);
       changeUsd = commercialRate > 0 ? round2(changeNio / commercialRate) : 0.0;
     } else {
       remainingNio = round2(-diffNio);
