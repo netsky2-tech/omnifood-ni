@@ -18,6 +18,11 @@ class BusinessProfileViewModel extends ChangeNotifier {
     'commercial_exchange_rate': '36.50',
     'bcn_official_exchange_rate': '36.6241',
     'operation_mode': 'FOODPARK_QSR',
+    'dgi_prefix': '001-001-01-',
+    'dgi_range_start': '1',
+    'dgi_range_end': '10000',
+    'dgi_current_number': '1',
+    'dgi_authorization_code': '',
   };
   Map<String, String> get config => _config;
 

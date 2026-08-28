@@ -39,6 +39,16 @@ void main() {
           .thenAnswer((_) async => LocalConfigEntity(key: 'bcn_official_exchange_rate', value: '36.6241'));
       when(() => mockConfigDao.getConfigByKey('operation_mode'))
           .thenAnswer((_) async => LocalConfigEntity(key: 'operation_mode', value: 'FOODPARK_QSR'));
+      when(() => mockConfigDao.getConfigByKey('dgi_prefix'))
+          .thenAnswer((_) async => LocalConfigEntity(key: 'dgi_prefix', value: '001-001-01-'));
+      when(() => mockConfigDao.getConfigByKey('dgi_range_start'))
+          .thenAnswer((_) async => LocalConfigEntity(key: 'dgi_range_start', value: '1'));
+      when(() => mockConfigDao.getConfigByKey('dgi_range_end'))
+          .thenAnswer((_) async => LocalConfigEntity(key: 'dgi_range_end', value: '10000'));
+      when(() => mockConfigDao.getConfigByKey('dgi_current_number'))
+          .thenAnswer((_) async => LocalConfigEntity(key: 'dgi_current_number', value: '550'));
+      when(() => mockConfigDao.getConfigByKey('dgi_authorization_code'))
+          .thenAnswer((_) async => LocalConfigEntity(key: 'dgi_authorization_code', value: 'AUT-2026'));
 
       await viewModel.loadConfig();
 
@@ -46,6 +56,7 @@ void main() {
       expect(viewModel.config['commercial_exchange_rate'], '36.50');
       expect(viewModel.config['bcn_official_exchange_rate'], '36.6241');
       expect(viewModel.config['operation_mode'], 'FOODPARK_QSR');
+      expect(viewModel.config['dgi_current_number'], '550');
       expect(viewModel.operationMode, TenantOperationMode.foodparkQsr);
       expect(viewModel.commercialRate, 36.50);
       expect(viewModel.bcnOfficialRate, 36.6241);
@@ -64,13 +75,19 @@ void main() {
         'commercial_exchange_rate': '36.80',
         'bcn_official_exchange_rate': '36.6241',
         'operation_mode': 'RESTAURANT',
+        'dgi_prefix': '001-001-01-',
+        'dgi_range_start': '1',
+        'dgi_range_end': '10000',
+        'dgi_current_number': '550',
+        'dgi_authorization_code': 'AUT-2026',
       });
 
       expect(viewModel.config['commercial_exchange_rate'], '36.80');
       expect(viewModel.config['operation_mode'], 'RESTAURANT');
+      expect(viewModel.config['dgi_current_number'], '550');
       expect(viewModel.operationMode, TenantOperationMode.restaurant);
       expect(viewModel.commercialRate, 36.80);
-      verify(() => mockConfigDao.saveConfig(any())).called(8);
+      verify(() => mockConfigDao.saveConfig(any())).called(13);
     });
 
     test('setOperationMode updates state and notifies listeners', () {

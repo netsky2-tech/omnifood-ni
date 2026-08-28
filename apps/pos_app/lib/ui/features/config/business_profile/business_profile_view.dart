@@ -162,6 +162,95 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                       },
                     ),
 
+                    const SizedBox(height: 32),
+                    Text('AUTORIZACIÓN Y RANGO FISCAL DGI (Disposición 09-2007)', style: Theme.of(context).textTheme.labelLarge),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Configure el prefijo, rango autorizado y el número exacto con el que continuará la facturación de su negocio.',
+                      style: TextStyle(fontSize: 12, color: colorScheme.outline),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: TextFormField(
+                            key: const Key('dgi_prefix_input'),
+                            controller: _controllers['dgi_prefix'],
+                            decoration: const InputDecoration(
+                              labelText: 'Prefijo Fiscal DGI',
+                              hintText: '001-001-01-',
+                              prefixIcon: Icon(Icons.receipt_long),
+                              helperText: 'Prefijo oficial asignado por la DGI',
+                            ),
+                            validator: (v) => v == null || v.isEmpty ? 'Requerido' : null,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          flex: 3,
+                          child: TextFormField(
+                            key: const Key('dgi_current_number_input'),
+                            controller: _controllers['dgi_current_number'],
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Siguiente Factura a Emitir',
+                              hintText: '1',
+                              prefixIcon: Icon(Icons.pin),
+                              helperText: 'Número inicial o de continuidad de facturación',
+                            ),
+                            validator: (v) {
+                              if (v == null || v.isEmpty) return 'Requerido';
+                              final val = int.tryParse(v);
+                              if (val == null || val <= 0) return 'Número inválido';
+                              return null;
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            key: const Key('dgi_range_start_input'),
+                            controller: _controllers['dgi_range_start'],
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Rango Inicial DGI',
+                              hintText: '1',
+                            ),
+                            validator: (v) => v == null || v.isEmpty ? 'Requerido' : null,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: TextFormField(
+                            key: const Key('dgi_range_end_input'),
+                            controller: _controllers['dgi_range_end'],
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Rango Final DGI',
+                              hintText: '10000',
+                            ),
+                            validator: (v) => v == null || v.isEmpty ? 'Requerido' : null,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      key: const Key('dgi_authorization_code_input'),
+                      controller: _controllers['dgi_authorization_code'],
+                      decoration: const InputDecoration(
+                        labelText: 'Código / Resolución de Autorización DGI (CAFD)',
+                        hintText: 'Ej: AUT-DGI-2026-9876',
+                        prefixIcon: Icon(Icons.verified),
+                        helperText: 'Número de resolución o autorización fiscal emitido por la DGI',
+                      ),
+                    ),
+
                     const SizedBox(height: 48),
                     Row(
                       children: [
