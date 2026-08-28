@@ -21,8 +21,7 @@ import { FiscalSetupService } from './services/fiscal-setup.service';
 import { FiscalSetupController } from './controllers/fiscal-setup.controller';
 import { ImportStagingService } from './services/import-staging.service';
 import { ImportStagingController } from './controllers/import-staging.controller';
-import { AuthGuard } from '../identity/guards/auth.guard';
-import { RolesGuard } from '../identity/guards/roles.guard';
+import { IdentityModule } from '../identity/identity.module';
 
 export const getRequiredOnboardingJwtSecret = (
   configService: ConfigService,
@@ -37,13 +36,7 @@ export const getRequiredOnboardingJwtSecret = (
 @Module({
   imports: [
     ConfigModule,
-    JwtModule.registerAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => {
-        return { secret: getRequiredOnboardingJwtSecret(configService) };
-      },
-    }),
+    IdentityModule,
     TypeOrmModule.forFeature([
       IndustryTemplate,
       TemplateInsumo,
@@ -69,8 +62,6 @@ export const getRequiredOnboardingJwtSecret = (
     IndustryTemplateService,
     FiscalSetupService,
     ImportStagingService,
-    AuthGuard,
-    RolesGuard,
   ],
   exports: [
     IndustryTemplateService,
