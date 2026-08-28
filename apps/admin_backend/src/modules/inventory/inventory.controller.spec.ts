@@ -20,6 +20,7 @@ import { ShrinkageService } from './shrinkage.service';
 import { InventoryService } from './inventory.service';
 import { RecipeService } from './recipe.service';
 import { CountSessionService } from './count-session.service';
+import { InventoryReportsService } from './services/inventory-reports.service';
 import { ProductionService } from './production.service';
 
 describe('InventoryController', () => {
@@ -109,6 +110,12 @@ describe('InventoryController', () => {
           provide: ProductionService,
           useValue: {
             replayProductionClose: jest.fn(),
+          },
+        },
+        {
+          provide: InventoryReportsService,
+          useValue: {
+            getAlertsSummaryReport: jest.fn(),
           },
         },
         AuthGuard,

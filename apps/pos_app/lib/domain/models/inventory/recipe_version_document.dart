@@ -37,16 +37,18 @@ class RecipeVersionComponentDocument {
       };
 
   factory RecipeVersionComponentDocument.fromJson(Map<String, dynamic> json) {
+    final gross = (json['grossQuantity'] ?? json['gross_quantity'] as num?)?.toDouble() ?? 0.0;
+    final net = (json['netQuantity'] ?? json['net_quantity'] as num?)?.toDouble() ?? gross;
     return RecipeVersionComponentDocument(
-      ingredientId: json['ingredientId'] as String,
-      ingredientName: json['ingredientName'] as String,
-      ingredientType: json['ingredientType'] as String,
-      grossQuantity: (json['grossQuantity'] as num).toDouble(),
-      netQuantity: (json['netQuantity'] as num).toDouble(),
-      technicalShrinkPct: (json['technicalShrinkPct'] as num).toDouble(),
-      referenceVersionId: json['referenceVersionId'] as String?,
+      ingredientId: (json['ingredientId'] ?? json['ingredient_id'])?.toString() ?? '',
+      ingredientName: (json['ingredientName'] ?? json['ingredient_name'])?.toString() ?? 'Insumo',
+      ingredientType: (json['ingredientType'] ?? json['ingredient_type'])?.toString() ?? 'INSUMO',
+      grossQuantity: gross,
+      netQuantity: net,
+      technicalShrinkPct: (json['technicalShrinkPct'] ?? json['technical_shrink_pct'] as num?)?.toDouble() ?? 0.0,
+      referenceVersionId: (json['referenceVersionId'] ?? json['reference_version_id'])?.toString(),
       // Missing in legacy documents → null → resolved to base UOM at processing.
-      componentUom: json['componentUom'] as String?,
+      componentUom: (json['componentUom'] ?? json['component_uom'])?.toString(),
     );
   }
 }
@@ -134,26 +136,33 @@ class RecipeVersionDocument {
 
   factory RecipeVersionDocument.fromJson(Map<String, dynamic> json) {
     final componentList = (json['components'] as List<dynamic>? ?? const <dynamic>[])
+        .whereType<Map>()
         .map(
           (component) => RecipeVersionComponentDocument.fromJson(
-            Map<String, dynamic>.from(component as Map),
+            Map<String, dynamic>.from(component),
           ),
         )
         .toList(growable: false);
 
     return RecipeVersionDocument(
-      id: json['id'] as String,
-      productId: json['productId'] as String,
-      productName: json['productName'] as String,
-      versionNumber: (json['versionNumber'] as num).toInt(),
-      yieldQuantity: (json['yieldQuantity'] as num).toDouble(),
-      technicalShrinkPct: (json['technicalShrinkPct'] as num).toDouble(),
-      createdAt: DateTime.parse(json['createdAt'] as String),
-      versionNote: json['versionNote'] as String?,
-      publishedAt: json['publishedAt'] == null
-          ? null
-          : DateTime.parse(json['publishedAt'] as String),
-      isSynced: (json['isSynced'] as bool?) ?? false,
+      id: (json['id'] ?? json['recipe_version_id'])?.toString() ?? '',
+      productId: (json['productId'] ?? json['product_id'])?.toString() ?? '',
+      productName: (json['productName'] ?? json['product_name'])?.toString() ?? 'Producto',
+      versionNumber: (json['versionNumber'] ?? json['version_number'] as num?)?.toInt() ?? 1,
+      yieldQuantity: (json['yieldQuantity'] ?? json['yield_quantity'] as num?)?.toDouble() ?? 1.0,
+      technicalShrinkPct: (json['technicalShrinkPct'] ?? json['technical_shrink_pct'] as num?)?.toDouble() ?? 0.0,
+      createdAt: json['createdAt'] != null
+          ? DateTime.tryParse(json['createdAt'].toString()) ?? DateTime.now()
+          : (json['created_at'] != null
+              ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
+              : DateTime.now()),
+      versionNote: (json['versionNote'] ?? json['version_note'])?.toString(),
+      publishedAt: json['publishedAt'] != null
+          ? DateTime.tryParse(json['publishedAt'].toString())
+          : (json['published_at'] != null
+              ? DateTime.tryParse(json['published_at'].toString())
+              : null),
+      isSynced: (json['isSynced'] ?? json['is_synced'] as bool?) ?? false,
       diasVidaUtil: (json['diasVidaUtil'] ?? json['dias_vida_util'] as num?)?.toInt() ?? 2,
       umbralDesviacionPermitido:
           (json['umbralDesviacionPermitido'] ?? json['umbral_desviacion_permitido'] as num?)
@@ -163,14 +172,21 @@ class RecipeVersionDocument {
     );
   }
 
-  static List<RecipeVersionComponentDocument> decodeComponents(String encoded) {
-    final decoded = jsonDecode(encoded) as List<dynamic>;
-    return decoded
-        .map(
-          (component) => RecipeVersionComponentDocument.fromJson(
-            Map<String, dynamic>.from(component as Map),
-          ),
-        )
-        .toList(growable: false);
+  static List<RecipeVersionComponentDocument> decodeComponents(String? encoded) {
+    if (encoded == null || encoded.trim().isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(encoded);
+      if (decoded is List) {
+        return decoded
+            .whereType<Map>()
+            .map(
+              (component) => RecipeVersionComponentDocument.fromJson(
+                Map<String, dynamic>.from(component),
+              ),
+            )
+            .toList(growable: false);
+      }
+    } catch (_) {}
+    return const [];
   }
 }

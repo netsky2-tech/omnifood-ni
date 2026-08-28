@@ -35,6 +35,7 @@ import { CountSessionService } from './count-session.service';
 import { CountSessionDocumentDto } from './dto/count-session-document.dto';
 import { ProductionOrderDocumentDto } from './dto/production-order-document.dto';
 import { ProductionService } from './production.service';
+import { InventoryReportsService } from './services/inventory-reports.service';
 
 interface RequestWithProductionTerminalClaim extends Request {
   user?: {
@@ -73,37 +74,25 @@ const buildProductionIdempotencyKeyForTerminal = (
   return [segments[0], terminalId, ...segments.slice(2)].join(':');
 };
 
-const assertPayloadTerminalMatchesIdempotencyKey = (
-  document: ProductionOrderDocumentDto,
-): void => {
-  const segments = document.idempotencyKey.split(':');
-  if (
-    segments.length < 3 ||
-    segments[0] !== TERMINAL_IDEMPOTENCY_PREFIX ||
-    segments[1] !== document.terminalId
-  ) {
-    throw new BadRequestException(
-      'production terminalId must match the terminal segment in idempotencyKey when no authenticated terminal claim is available',
-    );
-  }
-};
-
 const bindProductionDocumentTerminal = (
   document: ProductionOrderDocumentDto,
   request: RequestWithProductionTerminalClaim,
 ): ProductionOrderDocumentDto => {
   const authenticatedTerminalId = readAuthenticatedTerminalId(request);
-  if (!authenticatedTerminalId) {
-    assertPayloadTerminalMatchesIdempotencyKey(document);
-    return document;
+  const terminalId = authenticatedTerminalId || document.terminalId?.trim();
+  if (!terminalId) {
+    throw new BadRequestException(
+      'terminalId is required for production order documents (claim or payload)',
+    );
   }
 
+  const idempotencyKey = document.idempotencyKey?.includes(':')
+    ? buildProductionIdempotencyKeyForTerminal(document.idempotencyKey, terminalId)
+    : `production:${terminalId}:${document.id}`;
+
   return Object.assign(new ProductionOrderDocumentDto(), document, {
-    idempotencyKey: buildProductionIdempotencyKeyForTerminal(
-      document.idempotencyKey,
-      authenticatedTerminalId,
-    ),
-    terminalId: authenticatedTerminalId,
+    idempotencyKey,
+    terminalId,
   });
 };
 
@@ -118,7 +107,15 @@ export class InventoryMovementController {
     private readonly recipeService: RecipeService,
     private readonly countSessionService: CountSessionService,
     private readonly productionService: ProductionService,
+    private readonly reportsService: InventoryReportsService,
   ) {}
+
+  @Get('alerts')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER)
+  async getAlerts(@GetTenantId() tenantId: string) {
+    return this.reportsService.getAlertsSummaryReport(tenantId);
+  }
 
   @Post('movements/sync')
   async syncMovements(

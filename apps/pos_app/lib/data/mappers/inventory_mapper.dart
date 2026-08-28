@@ -17,8 +17,8 @@ class InventoryMapper {
   static Insumo toInsumoDomain(InsumoEntity entity) {
     return Insumo(
       id: entity.id,
-      name: entity.name,
-      consumptionUom: entity.consumptionUom,
+      name: entity.name.isNotEmpty ? entity.name : 'Insumo',
+      consumptionUom: (entity.consumptionUom.isNotEmpty) ? entity.consumptionUom : 'UND',
       stock: entity.stock,
       averageCost: entity.averageCost,
       parLevel: entity.parLevel,
@@ -85,11 +85,17 @@ class InventoryMapper {
   }
 
   static Recipe toRecipeDomain(RecipeEntity entity) {
+    IngredientType ingredientType;
+    try {
+      ingredientType = IngredientType.values.byName(entity.ingredientType.toLowerCase());
+    } catch (_) {
+      ingredientType = IngredientType.insumo;
+    }
     return Recipe(
       id: entity.id,
       productId: entity.productId,
       ingredientId: entity.ingredientId,
-      ingredientType: IngredientType.values.byName(entity.ingredientType.toLowerCase()),
+      ingredientType: ingredientType,
       quantity: entity.quantity,
     );
   }
@@ -176,8 +182,8 @@ class InventoryMapper {
   }) {
     return Product(
       id: entity.id,
-      name: entity.name,
-      uom: entity.uom,
+      name: entity.name.isNotEmpty ? entity.name : 'Producto',
+      uom: entity.uom.isNotEmpty ? entity.uom : 'UND',
       stock: entity.stock,
       averageCost: entity.averageCost,
       sellPrice: entity.sellPrice,

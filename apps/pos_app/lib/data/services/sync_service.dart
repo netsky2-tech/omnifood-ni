@@ -726,26 +726,33 @@ class SyncService {
       final payload = response.data;
       final alertsPayload = payload is Map<String, dynamic>
           ? payload['alerts'] as List<dynamic>? ?? const <dynamic>[]
-          : const <dynamic>[];
+          : payload is List<dynamic>
+              ? payload
+              : const <dynamic>[];
 
       for (final row in alertsPayload) {
-        final map = Map<String, dynamic>.from(row as Map);
+        if (row is! Map) continue;
+        final map = Map<String, dynamic>.from(row);
+        final id = map['id']?.toString();
+        if (id == null || id.isEmpty) continue;
         await _inventoryRepository.saveForensicAlert(
           ForensicAlert(
-            id: map['id'] as String,
-            alertType: map['alertType'] as String,
-            severity: map['severity'] as String,
-            message: map['message'] as String,
-            createdAt: DateTime.parse(map['createdAt'] as String),
-            status: (map['status'] as String?) ?? 'active',
-            note: map['note'] as String?,
-            actorLabel: map['actorLabel'] as String?,
-            actedAt: map['actedAt'] == null
-                ? null
-                : DateTime.parse(map['actedAt'] as String),
-            sourceMovementId: map['sourceMovementId'] as String?,
-            sourceDocumentId: map['sourceDocumentId'] as String?,
-            sourceDocumentType: map['sourceDocumentType'] as String?,
+            id: id,
+            alertType: (map['alertType'] ?? map['alert_type'] ?? 'SYSTEM_ALERT').toString(),
+            severity: (map['severity'] ?? 'MEDIUM').toString(),
+            message: (map['message'] ?? '').toString(),
+            createdAt: map['createdAt'] != null
+                ? DateTime.tryParse(map['createdAt'].toString()) ?? DateTime.now()
+                : DateTime.now(),
+            status: (map['status'] ?? 'active').toString(),
+            note: map['note']?.toString(),
+            actorLabel: (map['actorLabel'] ?? map['actor_role'])?.toString(),
+            actedAt: map['actedAt'] != null
+                ? DateTime.tryParse(map['actedAt'].toString())
+                : null,
+            sourceMovementId: map['sourceMovementId']?.toString(),
+            sourceDocumentId: map['sourceDocumentId']?.toString(),
+            sourceDocumentType: map['sourceDocumentType']?.toString(),
             isSynced: true,
           ),
         );
@@ -755,7 +762,7 @@ class SyncService {
         'Failed to refresh forensic alerts: ${e.message}',
         name: 'SyncService',
       );
-      rethrow;
+      // Non-blocking for offline continuity
     }
   }
 
@@ -765,26 +772,38 @@ class SyncService {
       'insumoId': purchase.insumoId,
       'supplierId': purchase.supplierId,
       'invoiceNumber': purchase.invoiceNumber,
-      'fiscalAuthorizationCode': purchase.fiscalAuthorizationCode,
       'quantity': purchase.quantity,
       'unitCost': purchase.unitCost,
-      'currency': purchase.currency,
       'invoiceDate': purchase.invoiceDate.toIso8601String().split('T').first,
       'entryTimestamp': purchase.timestamp.toUtc().toIso8601String(),
-      'lotCode': purchase.lotCode,
-      'receivedDate': purchase.receivedDate?.toIso8601String().split('T').first,
-      'expirationDate': purchase.expirationDate
-          ?.toIso8601String()
-          .split('T')
-          .first,
+      'currency': purchase.currency,
     };
 
-    if (purchase.fxRateMode != null) {
-      payload['fxRateMode'] = purchase.fxRateMode;
+    if (purchase.fiscalAuthorizationCode != null &&
+        purchase.fiscalAuthorizationCode!.trim().isNotEmpty) {
+      payload['fiscalAuthorizationCode'] =
+          purchase.fiscalAuthorizationCode!.trim();
+    }
+
+    if (purchase.fxRateMode != null &&
+        purchase.fxRateMode!.trim().isNotEmpty) {
+      payload['fxRateMode'] = purchase.fxRateMode!.trim();
     }
 
     if (_requiresExplicitBcnRate(purchase)) {
       payload['bcnRate'] = purchase.bcnRate;
+    }
+
+    if (purchase.lotCode != null && purchase.lotCode!.trim().isNotEmpty) {
+      payload['lotCode'] = purchase.lotCode!.trim();
+    }
+
+    if (purchase.receivedDate != null) {
+      payload['receivedDate'] = purchase.receivedDate!.toIso8601String();
+    }
+
+    if (purchase.expirationDate != null) {
+      payload['expirationDate'] = purchase.expirationDate!.toIso8601String();
     }
 
     return payload;
@@ -812,10 +831,7 @@ class SyncService {
               'grossQuantity': component.grossQuantity,
               'technicalShrinkPct': component.technicalShrinkPct,
               'referenceVersionId': component.referenceVersionId,
-              // Slice 2.2: include the component UOM so the backend can
-              // validate/convert against the insumo base consumption UOM once
-              // a recipe-version ingestion endpoint exists.
-              'componentUom': component.componentUom,
+              'componentUom': component.componentUom ?? 'UND',
             },
           )
           .toList(growable: false),

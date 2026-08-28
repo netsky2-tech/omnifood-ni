@@ -124,45 +124,63 @@ class ProductionOrderDocument {
 
   factory ProductionOrderDocument.fromJson(Map<String, dynamic> json) {
     return ProductionOrderDocument(
-      id: json['id'] as String,
-      recipeVersionId: json['recipeVersionId'] as String,
-      recipeProductId: json['recipeProductId'] as String,
-      recipeProductName: json['recipeProductName'] as String,
-      producedInsumoId: json['producedInsumoId'] as String,
-      producedInsumoName: json['producedInsumoName'] as String,
-      plannedQuantity: (json['plannedQuantity'] as num).toDouble(),
-      actualQuantity: (json['actualQuantity'] as num).toDouble(),
-      producedBatchNumber: json['producedBatchNumber'] as String,
-      producedExpirationDate: DateTime.parse(
-        json['producedExpirationDate'] as String,
-      ),
-      operationDate: DateTime.parse(json['operationDate'] as String),
-      status: json['status'] as String,
-      outcome: (json['outcome'] as String?) ?? 'COMPLETED',
-      failureReason: json['failureReason'] as String?,
+      id: (json['id'] ?? json['order_id'])?.toString() ?? '',
+      recipeVersionId: (json['recipeVersionId'] ?? json['recipe_version_id'])?.toString() ?? '',
+      recipeProductId: (json['recipeProductId'] ?? json['recipe_product_id'])?.toString() ?? '',
+      recipeProductName: (json['recipeProductName'] ?? json['recipe_product_name'])?.toString() ?? 'Producto',
+      producedInsumoId: (json['producedInsumoId'] ?? json['produced_insumo_id'])?.toString() ?? '',
+      producedInsumoName: (json['producedInsumoName'] ?? json['produced_insumo_name'])?.toString() ?? 'Insumo',
+      plannedQuantity: (json['plannedQuantity'] ?? json['planned_quantity'] as num?)?.toDouble() ?? 0.0,
+      actualQuantity: (json['actualQuantity'] ?? json['actual_quantity'] as num?)?.toDouble() ?? 0.0,
+      producedBatchNumber: (json['producedBatchNumber'] ?? json['produced_batch_number'])?.toString() ?? 'LOTE-1',
+      producedExpirationDate: json['producedExpirationDate'] != null
+          ? DateTime.tryParse(json['producedExpirationDate'].toString()) ?? DateTime.now()
+          : (json['produced_expiration_date'] != null
+              ? DateTime.tryParse(json['produced_expiration_date'].toString()) ?? DateTime.now()
+              : DateTime.now()),
+      operationDate: json['operationDate'] != null
+          ? DateTime.tryParse(json['operationDate'].toString()) ?? DateTime.now()
+          : (json['operation_date'] != null
+              ? DateTime.tryParse(json['operation_date'].toString()) ?? DateTime.now()
+              : DateTime.now()),
+      status: (json['status'] ?? 'CLOSED').toString(),
+      outcome: (json['outcome'] ?? 'COMPLETED').toString(),
+      failureReason: (json['failureReason'] ?? json['failure_reason'])?.toString(),
       terminalId: _readTerminalId(json),
-      sourceSequence: (json['sourceSequence'] as num?)?.toInt() ?? 0,
-      idempotencyKey: json['idempotencyKey'] as String?,
-      payloadHash: json['payloadHash'] as String?,
+      sourceSequence: (json['sourceSequence'] ?? json['source_sequence'] as num?)?.toInt() ?? 0,
+      idempotencyKey: (json['idempotencyKey'] ?? json['idempotency_key'])?.toString(),
+      payloadHash: (json['payloadHash'] ?? json['payload_hash'])?.toString(),
       totalConsumedCostNio:
-          (json['totalConsumedCostNio'] as num?)?.toDouble() ?? 0,
+          (json['totalConsumedCostNio'] ?? json['total_consumed_cost_nio'] as num?)?.toDouble() ?? 0,
       producedUnitCostNio:
-          (json['producedUnitCostNio'] as num?)?.toDouble() ?? 0,
-      varianceReason: json['varianceReason'] as String?,
-      closedAt: json['closedAt'] == null
-          ? null
-          : DateTime.parse(json['closedAt'] as String),
+          (json['producedUnitCostNio'] ?? json['produced_unit_cost_nio'] as num?)?.toDouble() ?? 0,
+      varianceReason: (json['varianceReason'] ?? json['variance_reason'])?.toString(),
+      closedAt: json['closedAt'] != null
+          ? DateTime.tryParse(json['closedAt'].toString())
+          : (json['closed_at'] != null
+              ? DateTime.tryParse(json['closed_at'].toString())
+              : null),
       movementReferences:
-          (json['movementReferences'] as List<dynamic>? ?? const <dynamic>[])
-              .map((entry) => entry as String)
+          (json['movementReferences'] ?? json['movement_references'] as List<dynamic>? ?? const <dynamic>[])
+              .map((entry) => entry?.toString() ?? '')
+              .where((s) => s.isNotEmpty)
               .toList(growable: false),
-      isSynced: (json['isSynced'] as bool?) ?? false,
+      isSynced: (json['isSynced'] ?? json['is_synced'] as bool?) ?? false,
     );
   }
 
-  static List<String> decodeMovementReferences(String encoded) {
-    final decoded = jsonDecode(encoded) as List<dynamic>;
-    return decoded.map((entry) => entry as String).toList(growable: false);
+  static List<String> decodeMovementReferences(String? encoded) {
+    if (encoded == null || encoded.trim().isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(encoded);
+      if (decoded is List) {
+        return decoded
+            .map((entry) => entry?.toString() ?? '')
+            .where((s) => s.isNotEmpty)
+            .toList(growable: false);
+      }
+    } catch (_) {}
+    return const [];
   }
 
   static String _readTerminalId(Map<String, dynamic> json) {
