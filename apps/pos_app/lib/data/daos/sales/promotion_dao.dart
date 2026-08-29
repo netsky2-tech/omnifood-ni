@@ -6,6 +6,12 @@ abstract class PromotionDao {
   @Query('SELECT * FROM promotions WHERE is_active = 1 ORDER BY priority DESC')
   Future<List<PromotionEntity>> getActivePromotions();
 
+  @Query('SELECT * FROM promotions ORDER BY priority DESC')
+  Future<List<PromotionEntity>> getAllPromotions();
+
+  @Query('UPDATE promotions SET is_active = :isActive WHERE id = :id')
+  Future<void> setPromotionActive(String id, bool isActive);
+
   @Insert(onConflict: OnConflictStrategy.replace)
   Future<void> savePromotion(PromotionEntity promotion);
 

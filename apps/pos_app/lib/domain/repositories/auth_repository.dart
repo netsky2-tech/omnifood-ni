@@ -3,6 +3,7 @@ import '../models/user.dart';
 abstract class AuthRepository {
   bool get isPendingSync;
   DateTime? get lastSyncTimestamp;
+  String? get lastAuthError;
 
   Future<User?> loginOnline(String email, String password);
   Future<void> syncStaff();

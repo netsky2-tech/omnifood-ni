@@ -355,7 +355,7 @@ class _InsumoViewState extends State<InsumoView> {
                       controller: stockMinController,
                       decoration: const InputDecoration(
                         labelText: 'Stock mínimo',
-                        helperText: 'Umbral inferior (PRD §3).',
+                        helperText: 'Umbral inferior para alertas de reposición.',
                       ),
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,

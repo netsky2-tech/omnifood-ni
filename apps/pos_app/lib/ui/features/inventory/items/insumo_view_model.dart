@@ -178,8 +178,9 @@ class InsumoViewModel with ChangeNotifier {
             )
         : null;
 
+    final insumoId = id ?? _uuid.v4();
     final insumo = Insumo(
-      id: id ?? _uuid.v4(),
+      id: insumoId,
       name: name,
       consumptionUom: consumptionUom,
       stock: stock,
@@ -192,6 +193,18 @@ class InsumoViewModel with ChangeNotifier {
     );
 
     await repository.saveInsumo(insumo);
+    final existingConversions = await repository.getConversionsByInsumoId(insumoId);
+    if (existingConversions.isEmpty) {
+      await repository.saveConversion(
+        UomConversion(
+          id: 'uom-$insumoId-base',
+          insumoId: insumoId,
+          unitName: consumptionUom,
+          factor: 1.0,
+          isDefault: true,
+        ),
+      );
+    }
     await loadInitialData();
 
     if (previous != null) {

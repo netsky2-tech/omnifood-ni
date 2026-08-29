@@ -82,6 +82,9 @@ class PurchaseViewModel with ChangeNotifier {
   String? _errorMessage;
   String? get errorMessage => _errorMessage;
 
+  double _defaultBcnRate = 36.6241;
+  double get defaultBcnRate => _defaultBcnRate;
+
   PurchaseViewModel(this.repository, this.movementEngine);
 
   Future<void> loadInitialData({String? insumoId}) async {
@@ -90,8 +93,30 @@ class PurchaseViewModel with ChangeNotifier {
 
     _insumos = await repository.getActiveInsumos();
     _suppliers = await repository.getActiveSuppliers();
+    _defaultBcnRate = await repository.getCachedOfficialBcnRate();
     if (insumoId != null) {
-      _conversions = await repository.getConversionsByInsumoId(insumoId);
+      final list = await repository.getConversionsByInsumoId(insumoId);
+      if (list.isEmpty) {
+        final insumo = _insumos.cast<Insumo?>().firstWhere(
+              (i) => i?.id == insumoId,
+              orElse: () => null,
+            );
+        if (insumo != null) {
+          _conversions = [
+            UomConversion(
+              id: 'base-${insumo.id}',
+              insumoId: insumo.id,
+              unitName: insumo.consumptionUom,
+              factor: 1.0,
+              isDefault: true,
+            ),
+          ];
+        } else {
+          _conversions = [];
+        }
+      } else {
+        _conversions = list;
+      }
       _fifoRows = await _loadFifoRows(insumoId);
     }
 

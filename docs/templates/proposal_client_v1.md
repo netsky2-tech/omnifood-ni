@@ -1,53 +1,105 @@
-# Propuesta Técnico-Económica: OmniCore POS
+# Propuesta técnico-económica para SOHO
 
-**Fecha**: 20/05/2026
-**Cliente**: SOHO
-**Referencia**: OE-001OM
+**Proveedor:** OmniFood NI<br>
+**Cliente:** SOHO<br>
+**Referencia:** OE-001OM<br>
+**Fecha de emisión:** [dd/mm/aaaa]<br>
+**Vigencia de la propuesta:** [número] días
 
----
+> **Entrega y sesión de aceptación programadas:** sábado, 5 de septiembre de 2026.
 
-## 1. Introducción
-OmniCore POS es el sistema de Punto de Venta (POS) de la suite OmniCore Platform, diseñado para operar de forma ultra-resiliente bajo las condiciones reales del mercado nicaragüense. Nuestra arquitectura **Offline-First** y de **Red Local** garantiza la continuidad de sus operaciones frente a los cortes de internet y de energía eléctrica comunes en Managua.
+## Decisión comercial
 
-## 2. Nuestra Propuesta de Valor
+OmniFood NI ofrece a SOHO una implementación fundadora por **US$200** y el plan **OmniFood Operación por US$79 mensuales**. El servicio cubre una ubicación y un terminal Sunmi V2s propiedad de SOHO. El portal para propietarios está incluido y será entregado junto con la aplicación, disponible en la puesta en marcha formal aceptada.
 
-- **Continuidad Operativa Total (Offline-First & LAN)**: El POS factura y descuenta inventario localmente sin internet. Además, si la señal externa cae pero hay router Wi-Fi local, los meseros siguen enviando comandas de forma inalámbrica a la cocina (KDS) y a las ticketeras térmicas en tiempo real.
-- **Doble Esquema de Tipo de Cambio Desacoplado**: Permite registrar el Tipo de Cambio Oficial del Banco Central de Nicaragua para cumplimiento contable/fiscal, y a la vez definir un Tipo de Cambio Comercial personalizado (ej: recibir USD a 36.00) para cobros rápidos y cálculo automático del vuelto en caja.
-- **Motor de Vigilancia Fiscal (Fiscal Sentinel)**: Supervisa las resoluciones de facturación de la DGI de forma automática. Emite advertencias visuales al alcanzar el 90% de uso de folios y ejecuta un bloqueo preventivo (hard-stop) al llegar al 100% o la fecha de expiración para evitar que su negocio opere con facturas no autorizadas.
-- **Control de Costos de Producción**: Gestión de recetas avanzadas (Bill of Materials - BOM) para conocer su Costo Real de Venta, utilidad y control de mermas físicas en tiempo real.
-- **Aprobaciones Remotas Fuera de Línea (TOTP)**: Si un mesero o cajero necesita una anulación o descuento especial y el gerente está ausente, este puede dictarle un código temporal de un solo uso (tipo Google Authenticator) generado desde su celular para autorizar la acción de forma remota y sin internet.
+El precio fundador de US$79 se mantiene durante **24 meses** desde el go-live aceptado, siempre que SOHO permanezca en una ubicación y un terminal y conserve sus pagos al día. Al finalizar ese plazo, se aplicará el precio público vigente con aviso previo de 60 días.
 
-## 3. Inversión Económica
+No hay mes piloto gratuito. La facturación mensual inicia en la fecha del go-live aceptado.
 
-### 3.1 Implementación Inicial (Setup)
-**Monto: $200.00 (Pago único)**
-Incluye:
-- Configuración y vinculación del dispositivo POS inicial (sea Tablet de mano de 58mm o All-in-One de caja).
-- Carga masiva de catálogo de productos e insumos iniciales (hasta 150 ítems/recetas utilizando nuestras plantillas digitales de importación rápida en Excel).
-- Configuración de la red local del negocio (LAN) para comunicación multi-dispositivo (opcional si inicia con un solo terminal).
-- Capacitación integral del personal (Cajeros, Meseros y Administradores).
+## Alcance económico
 
-### 3.2 Suscripción de Servicio (SaaS)
-**Cuota Mensual: $60.00** (Plan Pro - Diseñado para crecer con su negocio)
-Incluye:
-- Licencia de uso del POS OmniCore POS.
-- **Escalabilidad de Dispositivos**: Puede iniciar operando con **una sola tablet con impresora térmica integrada (58mm)**. Cuando su negocio migre a restaurante, la misma suscripción le permite activar la red local LAN para conectar la caja central (80mm), comanderas de meseros y pantallas KDS en cocina, sin costo de licencia de software adicional.
-- Sincronización transaccional por deltas y almacenamiento seguro en la nube.
-- Respaldo de bitácoras de auditoría (*Audit Trail*) inalterables exigidas por DGI.
-- Actualizaciones de software gratuitas (mejoras operativas y parches legales).
+| Concepto | Precio | Frecuencia |
+| --- | ---: | --- |
+| Implementación inicial | US$200 | Una vez |
+| OmniFood Operación — plan fundador | US$79 | Mensual desde el go-live aceptado |
 
-## 4. Hardware Soportado y Recomendado
-El cliente adquiere el hardware recomendado por su cuenta con los proveedores sugeridos. La suite OmniCore POS es compatible con:
-- **Caja Principal**: Dispositivos táctiles All-in-One (Windows/Linux) con impresora térmica de 80mm.
-- **Meseros**: Dispositivos móviles Android portátiles (Handhelds) con impresora integrada de 58mm.
-- **Cocina/Barra**: Pantallas KDS (tablets Android o monitores HDMI estándar).
+**Acuerdo de cobro en etapa fundadora:** SOHO acepta documentar los pagos mediante recibos simples no fiscales, sin desglose de IVA, y reconoce que en esta etapa no solicita una factura fiscal. Cada parte continúa siendo responsable de sus propias obligaciones legales y tributarias. Este acuerdo comercial no constituye ni demuestra una exención fiscal. Si en el futuro resultan legalmente aplicables impuestos, retenciones o documentación fiscal, las condiciones de cobro y documentación se ajustarán para cumplirlos y preservar el precio neto del servicio de **US$79 mensuales** para OmniFood NI; toda retención practicada deberá acompañarse del comprobante correspondiente.
 
-## 5. Próximos Pasos
-1. Aceptación de la propuesta técnico-económica.
-2. Pago del Setup Fee ($200.00) y provisión del acceso administrativo del Tenant.
-3. Entrega de plantillas de Excel provistas por nosotros con el catálogo inicial del negocio.
-4. Despliegue técnico y Go-Live en 72 horas hábiles tras la entrega de datos.
+## Sesión programada de entrega y aceptación
 
----
-**OmniCore POS** - *Resiliencia sobre Conectividad*
+El sábado, 5 de septiembre de 2026, las partes realizarán:
+
+1. pruebas físicas del Sunmi V2s conforme al checklist;
+2. instalación y entrega del terminal con la aplicación POS;
+3. capacitación inicial a los responsables designados por SOHO;
+4. verificación del acceso al portal para propietarios;
+5. verificación de la configuración de respaldos; y
+6. registro conjunto de aceptación o de asuntos pendientes.
+
+La sesión se convertirá en go-live aceptado únicamente si los criterios contractuales y el checklist se cumplen y ambas partes registran su aceptación. La mensualidad comenzará el 5 de septiembre de 2026 solo en ese caso. Si existe algún pendiente crítico, se documentarán el asunto, responsable y seguimiento correctivo, y la aceptación y facturación mensual se aplazarán hasta su cierre.
+
+## Entregables incluidos al go-live
+
+- Aplicación POS configurada para una ubicación y un Sunmi V2s.
+- Operación local de ventas en un solo dispositivo cuando no haya internet.
+- Tipo de cambio oficial y comercial.
+- Catálogo inicial acordado, inventario, recetas con consumo de ingredientes, costo de los productos vendidos, margen bruto y mermas.
+- Funciones implementadas y configuradas según el alcance acordado: códigos temporales de un solo uso para autorizaciones de supervisor, auditoría, promociones, lealtad, producción y cuentas divididas.
+- Sincronización y reportes en la nube cuando exista conectividad.
+- Portal para propietarios, de consulta y disponible en el go-live aceptado.
+- Capacitación inicial breve para los usuarios responsables designados por SOHO.
+- Respaldos y procedimiento de recuperación descritos en el anexo de soporte y respaldos.
+- Mantenimiento del producto mediante parches correctivos y de seguridad, además de actualizaciones generales de la plataforma.
+- Soporte limitado al diagnóstico, contención y corrección de defectos reproducibles, incidentes de sincronización o infraestructura bajo control de OmniFood e incidentes de integridad o seguridad; incluye orientación de recuperación específica para el incidente atendido.
+
+## Hardware
+
+SOHO aporta y mantiene la propiedad de **un Sunmi V2s**. La compra, garantía, mantenimiento, reparación y sustitución del equipo no están incluidas. OmniFood puede recomendar proveedores sin asumir las obligaciones del fabricante o vendedor.
+
+La entrega queda sujeta a un checklist físico de aceptación del Sunmi V2s que confirme, como mínimo, encendido, pantalla, batería/carga, conectividad disponible e impresión integrada.
+
+## Exclusiones
+
+- Compra, alquiler, garantía, reparación o reemplazo de hardware.
+- Continuidad durante cortes de energía eléctrica o fallas físicas del equipo.
+- Instalación o soporte de internet y redes del cliente.
+- Operación de varios dispositivos conectados en la red local del negocio, pantallas digitales de cocina o licencias para terminales adicionales.
+- Compatibilidad universal con equipos Windows/Linux o periféricos no aceptados.
+- Facturación electrónica DGI mediante archivos electrónicos estructurados y firma digital, certificación bancaria o integración certificada con datáfonos.
+- Módulo automatizado de vigilancia fiscal (“Fiscal Sentinel”) completo, incluidas alertas al 90%, control de expiración u otras automatizaciones no aceptadas expresamente.
+- Desarrollo personalizado, migraciones extraordinarias, carga adicional de datos y capacitación fuera del alcance inicial.
+- Asistencia de operación cotidiana del negocio; puede contratarse según el anexo.
+
+## Aceptación y puesta en marcha
+
+El go-live se considera aceptado cuando ambas partes registren por escrito que:
+
+1. el Sunmi V2s superó el checklist físico;
+2. el POS ejecuta en un solo dispositivo los flujos de venta acordados, incluidos registro local sin internet y sincronización posterior al restablecer la conectividad;
+3. catálogo, usuarios y configuración inicial acordados están cargados;
+4. SOHO recibió la capacitación inicial;
+5. el portal para propietarios está disponible para los usuarios acordados;
+6. los respaldos de salida están configurados y se documentó el procedimiento de recuperación; y
+7. se registraron las observaciones aceptadas o pendientes, sus responsables y fechas.
+
+La indisponibilidad de internet no impide el uso local del POS, pero sí puede retrasar la sincronización y la actualización del portal. La operación con datos locales aún no sincronizados queda fuera del objetivo de recuperación de nube.
+
+## Soporte y condiciones complementarias
+
+El documento `annex_support_backups_v1.md` forma parte de esta propuesta y define soporte incluido, asistencia facturable, respaldos, objetivos de recuperación, comunicaciones y exclusiones.
+
+## Aceptación de la propuesta
+
+**Por SOHO**<br>
+Nombre: ______________________________<br>
+Cargo: _______________________________<br>
+Firma: _______________________________<br>
+Fecha: _______________________________
+
+**Por OmniFood NI**<br>
+Nombre: ______________________________<br>
+Cargo: _______________________________<br>
+Firma: _______________________________<br>
+Fecha: _______________________________
+
 Contacto: +505 8194 8526

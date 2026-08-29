@@ -13,6 +13,8 @@ class _FakeAuthRepository implements AuthRepository {
   bool get isPendingSync => false;
   @override
   DateTime? get lastSyncTimestamp => null;
+  @override
+  String? get lastAuthError => null;
 
   @override
   Future<void> logout() async {}

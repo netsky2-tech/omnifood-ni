@@ -16,7 +16,12 @@ import {
 export const COUNT_SESSION_STATUS = {
   DRAFT: 'draft',
   OPEN: 'open',
+  COUNTING: 'counting',
+  RECOUNT: 'recount',
+  APPROVAL_PENDING: 'approval_pending',
+  APPROVED: 'approved',
   POSTED: 'posted',
+  CLOSED: 'closed',
   CANCELED: 'canceled',
 } as const;
 
@@ -102,9 +107,10 @@ export class CountSessionDocumentDto {
   @IsString()
   notes?: string;
 
+  @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  movementReferences: string[];
+  movementReferences?: string[];
 
   @IsArray()
   @ArrayMaxSize(500)

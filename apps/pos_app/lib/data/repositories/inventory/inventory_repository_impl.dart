@@ -18,6 +18,7 @@ import '../../../domain/models/catalog/catalog_type.dart';
 import '../../models/inventory/insumo_entity.dart';
 import '../../models/inventory/uom_conversion_entity.dart';
 import '../../models/inventory/batch_entity.dart';
+import '../../models/local_config_entity.dart';
 import '../../models/catalog/catalog_value_entity.dart';
 import '../../mappers/inventory_mapper.dart';
 import '../../mappers/purchase_mapper.dart';
@@ -705,15 +706,21 @@ class InventoryRepositoryImpl
 
       final payload = response.data;
       final rawRate = payload?['rateNio'];
+      double? rate;
       if (rawRate is num) {
-        return rawRate.toDouble();
+        rate = rawRate.toDouble();
+      } else if (rawRate is String) {
+        rate = double.tryParse(rawRate);
       }
 
-      if (rawRate is String) {
-        final parsedRate = double.tryParse(rawRate);
-        if (parsedRate != null) {
-          return parsedRate;
-        }
+      if (rate != null) {
+        await _database.localConfigDao.saveConfig(
+          LocalConfigEntity(
+            key: 'bcn_official_exchange_rate',
+            value: rate.toStringAsFixed(4),
+          ),
+        );
+        return rate;
       }
 
       throw OfficialBcnRateLookupException(
@@ -730,6 +737,22 @@ class InventoryRepositoryImpl
         'Could not load the official BCN rate. Enter the BCN rate manually to continue.',
       );
     }
+  }
+
+  @override
+  Future<double> getCachedOfficialBcnRate() async {
+    try {
+      final config = await _database.localConfigDao.getConfigByKey(
+        'bcn_official_exchange_rate',
+      );
+      if (config != null && config.value.isNotEmpty) {
+        final parsed = double.tryParse(config.value);
+        if (parsed != null && parsed > 0) {
+          return parsed;
+        }
+      }
+    } catch (_) {}
+    return 36.6241;
   }
 
   @override

@@ -28,7 +28,7 @@ class _DgiReportViewState extends State<DgiReportView> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Reportes de Auditoría DGI'),
+        title: const Text('Reporte de Auditoría'),
         backgroundColor: colorScheme.surface,
         elevation: 0,
         shape: Border(bottom: BorderSide(color: colorScheme.outlineVariant)),

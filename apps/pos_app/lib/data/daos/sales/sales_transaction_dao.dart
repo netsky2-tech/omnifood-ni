@@ -9,21 +9,21 @@ import '../../models/audit_log_entity.dart';
 
 @dao
 abstract class SalesTransactionDao {
-  @Insert(onConflict: OnConflictStrategy.replace)
+  @Insert(onConflict: OnConflictStrategy.abort)
   Future<void> insertInvoice(InvoiceEntity invoice);
 
   @Update(onConflict: OnConflictStrategy.replace)
   Future<void> updateInvoice(InvoiceEntity invoice);
 
-  @Insert(onConflict: OnConflictStrategy.replace)
+  @Insert(onConflict: OnConflictStrategy.abort)
   Future<void> insertInvoiceItems(List<InvoiceItemEntity> items);
 
-  @Insert(onConflict: OnConflictStrategy.replace)
+  @Insert(onConflict: OnConflictStrategy.abort)
   Future<void> insertInvoiceItemModifiers(
     List<InvoiceItemModifierEntity> modifiers,
   );
 
-  @Insert(onConflict: OnConflictStrategy.replace)
+  @Insert(onConflict: OnConflictStrategy.abort)
   Future<void> insertPayments(List<PaymentEntity> payments);
 
   @Query('SELECT * FROM insumos WHERE id = :id')

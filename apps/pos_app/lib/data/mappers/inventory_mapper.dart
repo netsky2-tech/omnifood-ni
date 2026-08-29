@@ -84,18 +84,73 @@ class InventoryMapper {
     );
   }
 
-  static Recipe toRecipeDomain(RecipeEntity entity) {
-    IngredientType ingredientType;
-    try {
-      ingredientType = IngredientType.values.byName(entity.ingredientType.toLowerCase());
-    } catch (_) {
-      ingredientType = IngredientType.insumo;
+  static IngredientType _parseIngredientType(String raw) {
+    switch (raw.trim().toLowerCase()) {
+      case 'insumo':
+      case 'raw_material':
+      case 'rawmaterial':
+      case 'materia_prima':
+      case 'item':
+        return IngredientType.insumo;
+      case 'sub_recipe':
+      case 'subrecipe':
+      case 'sub_receta':
+      case 'subreceta':
+      case 'product':
+      case 'producto':
+        return IngredientType.product;
+      default:
+        try {
+          return IngredientType.values.byName(raw.trim().toLowerCase());
+        } catch (_) {
+          return IngredientType.insumo;
+        }
     }
+  }
+
+  static MovementType _parseMovementType(String raw) {
+    switch (raw.trim().toLowerCase()) {
+      case 'sale':
+      case 'sale_deduction':
+      case 'sales':
+      case 'venta':
+        return MovementType.sale;
+      case 'purchase':
+      case 'purchase_receipt':
+      case 'compra':
+        return MovementType.purchase;
+      case 'production':
+      case 'production_order':
+      case 'produccion':
+        return MovementType.production;
+      case 'shrinkage':
+      case 'waste':
+      case 'merma':
+        return MovementType.shrinkage;
+      case 'adjustment':
+      case 'manual_adjustment':
+      case 'ajuste':
+        return MovementType.adjustment;
+      case 'reversal':
+      case 'void':
+      case 'anulacion':
+      case 'reverso':
+        return MovementType.reversal;
+      default:
+        try {
+          return MovementType.values.byName(raw.trim().toLowerCase());
+        } catch (_) {
+          return MovementType.adjustment;
+        }
+    }
+  }
+
+  static Recipe toRecipeDomain(RecipeEntity entity) {
     return Recipe(
       id: entity.id,
       productId: entity.productId,
       ingredientId: entity.ingredientId,
-      ingredientType: ingredientType,
+      ingredientType: _parseIngredientType(entity.ingredientType),
       quantity: entity.quantity,
     );
   }
@@ -122,7 +177,7 @@ class InventoryMapper {
     return InventoryMovement(
       id: entity.id,
       insumoId: entity.insumoId,
-      type: MovementType.values.byName(entity.type.toLowerCase()),
+      type: _parseMovementType(entity.type),
       quantity: entity.quantity,
       previousStock: entity.previousStock,
       newStock: entity.newStock,

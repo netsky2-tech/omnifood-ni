@@ -37,6 +37,7 @@ void main() {
     when(mockRepo.getActiveSuppliers()).thenAnswer((_) async => []);
     when(mockRepo.getBatchesByInsumoId('i1')).thenAnswer((_) async => []);
     when(mockRepo.getPurchaseHistory()).thenAnswer((_) async => const []);
+    when(mockRepo.getCachedOfficialBcnRate()).thenAnswer((_) async => 36.6241);
   });
 
   group('recordPurchase', () {

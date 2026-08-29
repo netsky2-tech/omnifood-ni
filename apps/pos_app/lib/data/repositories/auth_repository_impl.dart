@@ -19,7 +19,9 @@ class AuthRepositoryImpl implements AuthRepository {
   final SecurityProfileDao _securityProfileDao;
   final LocalAuthService _localAuth;
   final Dio _dio;
-  final FlutterSecureStorage _storage = const FlutterSecureStorage();
+  final FlutterSecureStorage _storage = const FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
   SharedPreferences? _prefs;
   User? _currentUser;
   String? _accessToken;
@@ -41,11 +43,16 @@ class AuthRepositoryImpl implements AuthRepository {
             totpSeedKeyProvider ?? DeviceBoundTotpSeedKeyProvider(),
        _capabilityCache = capabilityCache;
 
+  String? _lastAuthError;
+
   @override
   bool get isPendingSync => _isPendingSync;
 
   @override
   DateTime? get lastSyncTimestamp => _lastSyncTimestamp;
+
+  @override
+  String? get lastAuthError => _lastAuthError;
 
   Future<LocalTotpSeedCipher> _buildTotpSeedCipher() async {
     final keyMaterial = await _totpSeedKeyProvider.getKeyMaterial();
@@ -78,11 +85,10 @@ class AuthRepositoryImpl implements AuthRepository {
     _dio.options.headers['Authorization'] = 'Bearer $token';
 
     try {
-      // Intentar persistencia segura (funciona en móvil y Web con HTTPS/localhost)
       await _storage.write(key: 'access_token', value: token);
     } catch (e) {
       debugPrint(
-        '[AuthRepository] Secure storage falló, usando SharedPreferences (Contexto no seguro): $e',
+        '[AuthRepository] Secure storage falló, usando SharedPreferences: $e',
       );
       _prefs ??= await SharedPreferences.getInstance();
       await _prefs?.setString('access_token', token);
@@ -92,6 +98,8 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<User?> loginOnline(String email, String password) async {
     _capabilityCache?.clear();
+    _lastAuthError = null;
+    debugPrint('[AuthRepository] POST /identity/login with email: $email');
     try {
       final response = await _dio.post(
         '/identity/login',
@@ -111,6 +119,7 @@ class AuthRepositoryImpl implements AuthRepository {
     } on DioException catch (e) {
       final isUnauthorized = e.response?.statusCode == 401 || e.response?.statusCode == 403;
       if (isUnauthorized) {
+        _lastAuthError = 'Correo o contraseña incorrectos. Verifique sus credenciales.';
         debugPrint('[AuthRepository] Online login rejected by backend: ${e.response?.statusCode}');
         return null;
       }
@@ -123,12 +132,17 @@ class AuthRepositoryImpl implements AuthRepository {
           (e.response?.statusCode != null && (e.response!.statusCode! >= 500));
 
       if (!isFallbackAllowed) {
+        final status = e.response?.statusCode;
+        _lastAuthError = status != null 
+            ? 'Error del servidor (HTTP $status): ${e.response?.data ?? e.message}'
+            : 'Error de red: ${e.message}';
         debugPrint('[AuthRepository] Online login failed without fallback eligibility: $e');
         return null;
       }
 
       final localUser = await _findLocalUserByIdentifier(email);
       if (localUser == null) {
+        _lastAuthError = 'Sin conexión al servidor y usuario no encontrado localmente.';
         debugPrint('[AuthRepository] Offline fallback denied: unknown local user');
         return null;
       }
@@ -136,12 +150,14 @@ class AuthRepositoryImpl implements AuthRepository {
       final profile = await _securityProfileDao.findByUserId(localUser.id);
       final pinHash = profile?.pinHash;
       if (profile == null || !profile.isPinEnabled || pinHash == null || pinHash.isEmpty) {
+        _lastAuthError = 'Perfil de seguridad local no disponible para este usuario.';
         debugPrint('[AuthRepository] Offline fallback denied: missing local security profile');
         return null;
       }
 
       final isPinValid = _localAuth.verifyPin(password, pinHash);
       if (!isPinValid) {
+        _lastAuthError = 'Contraseña o PIN local incorrecto.';
         debugPrint('[AuthRepository] Offline fallback denied: invalid local credentials');
         return null;
       }
@@ -150,6 +166,7 @@ class AuthRepositoryImpl implements AuthRepository {
       _isPendingSync = true;
       return _currentUser;
     } catch (e) {
+      _lastAuthError = 'Error inesperado: $e';
       debugPrint('[AuthRepository] Online login failed: $e');
       return null;
     }
@@ -277,14 +294,15 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
-  Future<User?> loginOffline(String userId, String pin) async {
+  Future<User?> loginOffline(String userIdOrEmail, String pin) async {
     _capabilityCache?.clear();
-    debugPrint('[AuthRepository] Attempting offline login for user: $userId');
+    debugPrint('[AuthRepository] Attempting offline login for user: $userIdOrEmail');
 
-    final entity = await _userDao.findUserById(userId);
+    var entity = await _userDao.findUserById(userIdOrEmail);
+    entity ??= await _findLocalUserByIdentifier(userIdOrEmail);
     if (entity == null) return null;
 
-    final profile = await _securityProfileDao.findByUserId(userId);
+    final profile = await _securityProfileDao.findByUserId(entity.id);
     if (profile == null || !profile.isPinEnabled) {
       return null;
     }
@@ -374,10 +392,12 @@ class AuthRepositoryImpl implements AuthRepository {
     if (_accessToken != null) return _accessToken;
 
     try {
-      _accessToken = await _storage.read(key: 'access_token');
+      _accessToken = await _storage
+          .read(key: 'access_token')
+          .timeout(const Duration(milliseconds: 300));
     } catch (e) {
       debugPrint(
-        '[AuthRepository] Error leyendo secure storage, intentando SharedPreferences: $e',
+        '[AuthRepository] Error o timeout leyendo secure storage, intentando SharedPreferences: $e',
       );
       _prefs ??= await SharedPreferences.getInstance();
       _accessToken = _prefs?.getString('access_token');

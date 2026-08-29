@@ -1,16 +1,43 @@
 import '../../../domain/services/sales/dgi_numbering_service.dart';
 import '../../daos/local_config_dao.dart';
+import '../../daos/sales/invoice_dao.dart';
 import '../../models/local_config_entity.dart';
 
 class DgiNumberingServiceImpl implements DgiNumberingService {
   final LocalConfigDao _configDao;
+  final InvoiceDao? _invoiceDao;
 
   static const String _keyPrefix = 'dgi_prefix';
   static const String _keyStart = 'dgi_range_start';
   static const String _keyEnd = 'dgi_range_end';
   static const String _keyCurrent = 'dgi_current_number';
 
-  DgiNumberingServiceImpl(this._configDao);
+  DgiNumberingServiceImpl(this._configDao, [this._invoiceDao]);
+
+  int _extractSequenceNumber(String invoiceNumber) {
+    final match = RegExp(r'(\d+)$').firstMatch(invoiceNumber.trim());
+    if (match != null) {
+      return int.tryParse(match.group(1)!) ?? 0;
+    }
+    return 0;
+  }
+
+  Future<int> _resolveNextSequence(int configuredCurrent) async {
+    if (_invoiceDao != null) {
+      final lastInvoiceNumber = await _invoiceDao!.getLastInvoiceNumber();
+      if (lastInvoiceNumber != null && lastInvoiceNumber.isNotEmpty) {
+        final lastSequence = _extractSequenceNumber(lastInvoiceNumber);
+        if (lastSequence >= configuredCurrent) {
+          final synchronized = lastSequence + 1;
+          await _configDao.saveConfig(
+            LocalConfigEntity(key: _keyCurrent, value: synchronized.toString()),
+          );
+          return synchronized;
+        }
+      }
+    }
+    return configuredCurrent;
+  }
 
   @override
   Future<void> initializeRange({
@@ -22,7 +49,6 @@ class DgiNumberingServiceImpl implements DgiNumberingService {
     await _configDao.saveConfig(LocalConfigEntity(key: _keyStart, value: start.toString()));
     await _configDao.saveConfig(LocalConfigEntity(key: _keyEnd, value: end.toString()));
     
-    // Only set current if it doesn't exist
     final current = await _configDao.getConfigByKey(_keyCurrent);
     if (current == null) {
       await _configDao.saveConfig(LocalConfigEntity(key: _keyCurrent, value: start.toString()));
@@ -31,28 +57,29 @@ class DgiNumberingServiceImpl implements DgiNumberingService {
 
   @override
   Future<String> getNextNumber() async {
-    final prefix = await _configDao.getConfigByKey(_keyPrefix);
-    final current = await _configDao.getConfigByKey(_keyCurrent);
+    var prefix = await _configDao.getConfigByKey(_keyPrefix);
+    var current = await _configDao.getConfigByKey(_keyCurrent);
 
     if (prefix == null || current == null) {
       await initializeRange(prefix: '001-001-01-', start: 1, end: 1000000);
-      return '001-001-01-00000001';
+      prefix = await _configDao.getConfigByKey(_keyPrefix);
+      current = await _configDao.getConfigByKey(_keyCurrent);
     }
 
-    // Format: prefix + 8 digits (standard DGI)
-    final numStr = current.value.padLeft(8, '0');
-    return '${prefix.value}$numStr';
+    final parsedCurrent = int.tryParse(current?.value ?? '1') ?? 1;
+    final validSequence = await _resolveNextSequence(parsedCurrent);
+
+    final numStr = validSequence.toString().padLeft(8, '0');
+    return '${prefix?.value ?? '001-001-01-'}$numStr';
   }
 
   @override
   Future<void> incrementNumber() async {
     final current = await _configDao.getConfigByKey(_keyCurrent);
-    if (current == null) {
-      await initializeRange(prefix: '001-001-01-', start: 2, end: 1000000);
-      return;
-    }
+    final parsedCurrent = int.tryParse(current?.value ?? '1') ?? 1;
+    final validSequence = await _resolveNextSequence(parsedCurrent);
 
-    final next = int.parse(current.value) + 1;
+    final next = validSequence + 1;
     await _configDao.saveConfig(LocalConfigEntity(key: _keyCurrent, value: next.toString()));
   }
 
@@ -66,6 +93,10 @@ class DgiNumberingServiceImpl implements DgiNumberingService {
       return false;
     }
 
-    return int.parse(current.value) >= int.parse(end.value);
+    final parsedCurrent = int.tryParse(current.value) ?? 1;
+    final validSequence = await _resolveNextSequence(parsedCurrent);
+    final parsedEnd = int.tryParse(end.value) ?? 1000000;
+
+    return validSequence >= parsedEnd;
   }
 }

@@ -267,6 +267,9 @@ class SaleViewModel extends ChangeNotifier {
   List<Promotion> _promotions = [];
   List<Promotion> get promotions => _promotions;
 
+  List<Promotion> _allPromotions = [];
+  List<Promotion> get allPromotions => _allPromotions;
+
   List<HoldTicket> _holdTickets = [];
   List<HoldTicket> get holdTickets => _holdTickets;
 
@@ -437,9 +440,16 @@ class SaleViewModel extends ChangeNotifier {
   }
 
   Future<void> loadPromotions() async {
-    final entities = await _database.promotionDao.getActivePromotions();
-    _promotions = entities.map(SalesMapper.toPromotionDomain).toList();
+    final allEntities = await _database.promotionDao.getAllPromotions();
+    _allPromotions = allEntities.map(SalesMapper.toPromotionDomain).toList();
+    _promotions = _allPromotions.where((p) => p.isActive).toList();
+    _applyPromotions();
     notifyListeners();
+  }
+
+  Future<void> togglePromotion(String promoId, bool isActive) async {
+    await _database.promotionDao.setPromotionActive(promoId, isActive);
+    await loadPromotions();
   }
 
   void _applyPromotions() {

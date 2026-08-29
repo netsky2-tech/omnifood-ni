@@ -18,14 +18,17 @@ class KitchenDisplayView extends StatelessWidget {
         elevation: 2,
         title: const Row(
           children: [
-            Icon(Icons.restaurant_menu, color: Colors.amber, size: 24),
-            SizedBox(width: 10),
-            Text(
-              'KDS - Pantalla de Cocina / Barra',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
+            Icon(Icons.restaurant_menu, color: Colors.amber, size: 22),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'KDS - Cocina / Barra',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 17,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],

@@ -1,11 +1,11 @@
-Fecha,Concepto,Categoria,Tipo,Monto (USD),Saldo Acumulado,Notas
-2026-05-18,Suscripcion Gemini,IA,Gasto,-20.00,-20.00,Costo mensual fijo
-2026-05-18,Suscripcion GPT,IA,Gasto,-20.00,-40.00,Costo mensual fijo
-2026-05-18,Suscripcion OpenGo,IA,Gasto,-5.00,-45.00,Costo mensual fijo
-2026-05-18,Pago Internet,Infraestructura,Gasto,-20.00,-65.00,Costo mensual fijo
-2026-05-19,Dominio .com (Hostinger),Infraestructura,Gasto,-15.00,-80.00,Anual - omnifoodni.com
-2026-05-19,Hosting VPS KVM2 (Hostinger),Infraestructura,Gasto,-96.00,-176.00,Anual - Servidor NestJS/Postgres
-2026-05-19,Google Play Dev Account,Publicacion,Gasto,-25.00,-201.00,Unico pago - Registro desarrollador
-2026-06-01,Setup Fee - Cliente 1,Venta Software,Ingreso,200.00,-1.00,Primer cliente Food Park (AIO)
-2026-07-01,SaaS - Cliente 1,Recurrente,Ingreso,60.00,59.00,Primer mes suscripcion
-2026-07-01,Gastos Mensuales (IA+Net),Operacion,Gasto,-65.00,-6.00,Cargos recurrentes mes 2
+transaction_id,date,status,direction,category,subcategory,client,description,amount,currency,fx_to_usd,amount_usd,cash_effect,recurring,reference,notes
+LEGACY-20260518-001,2026-05-18,UNVERIFIED,EXPENSE,AI,GEMINI,,Suscripcion Gemini,20.00,USD,1,20.00,YES,YES,legacy-row-2,"Migrado sin comprobante; originalmente: Costo mensual fijo; saldo acumulado -20.00."
+LEGACY-20260518-002,2026-05-18,UNVERIFIED,EXPENSE,AI,GPT,,Suscripcion GPT,20.00,USD,1,20.00,YES,YES,legacy-row-3,"Migrado sin comprobante; originalmente: Costo mensual fijo; saldo acumulado -40.00."
+LEGACY-20260518-003,2026-05-18,UNVERIFIED,EXPENSE,AI,OPENGO,,Suscripcion OpenGo,5.00,USD,1,5.00,YES,YES,legacy-row-4,"Migrado sin comprobante; originalmente: Costo mensual fijo; saldo acumulado -45.00."
+LEGACY-20260518-004,2026-05-18,UNVERIFIED,EXPENSE,OPERATIONS,INTERNET,,Pago Internet,20.00,USD,1,20.00,YES,YES,legacy-row-5,"Migrado sin comprobante; originalmente: Costo mensual fijo; saldo acumulado -65.00."
+LEGACY-20260519-001,2026-05-19,UNVERIFIED,EXPENSE,INFRASTRUCTURE,DOMAIN,,Dominio .com (Hostinger),15.00,USD,1,15.00,YES,NO,legacy-row-6,"Migrado sin comprobante; originalmente: Anual - omnifoodni.com; saldo acumulado -80.00."
+LEGACY-20260519-002,2026-05-19,UNVERIFIED,EXPENSE,INFRASTRUCTURE,HOSTING,,Hosting VPS KVM2 (Hostinger),96.00,USD,1,96.00,YES,NO,legacy-row-7,"Migrado sin comprobante; originalmente: Anual - Servidor NestJS/Postgres; saldo acumulado -176.00."
+LEGACY-20260519-003,2026-05-19,UNVERIFIED,EXPENSE,PUBLICATION,GOOGLE_PLAY,,Google Play Dev Account,25.00,USD,1,25.00,YES,NO,legacy-row-8,"Migrado sin comprobante; originalmente: Unico pago - Registro desarrollador; saldo acumulado -201.00."
+LEGACY-20260601-001,2026-06-01,UNVERIFIED,INCOME,REVENUE,SETUP,Cliente 1 (legacy),Setup Fee - Cliente 1,200.00,USD,1,200.00,YES,NO,legacy-row-9,"Migrado sin comprobante; originalmente: Primer cliente Food Park (AIO); saldo acumulado -1.00. No se identifica como SOHO."
+LEGACY-20260701-001,2026-07-01,UNVERIFIED,INCOME,REVENUE,SUBSCRIPTION,Cliente 1 (legacy),SaaS historico - Cliente 1,60.00,USD,1,60.00,YES,YES,legacy-row-10,"Migrado sin comprobante; registro legado de tarifa US$60, no oferta vigente; saldo acumulado 59.00. No se identifica como SOHO."
+LEGACY-20260701-002,2026-07-01,UNVERIFIED,EXPENSE,OPERATIONS,AI_AND_INTERNET,,Gastos Mensuales (IA+Net),65.00,USD,1,65.00,YES,YES,legacy-row-11,"Migrado sin comprobante; originalmente: Cargos recurrentes mes 2; saldo acumulado -6.00."

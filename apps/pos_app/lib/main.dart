@@ -86,7 +86,6 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Configuration (Could be loaded from .env)
-  //const String baseUrl = String.fromEnvironment('API_URL', defaultValue: 'http://192.168.0.6:3000/api');
   const String baseUrl = String.fromEnvironment(
     'API_URL',
     defaultValue: 'http://127.0.0.1:3000/api',
@@ -118,10 +117,16 @@ void main() async {
     capabilityCache: capabilityCache,
   );
 
-  // Add Auth Interceptor
+  // Add Auth & Path Normalization Interceptor
   dio.interceptors.add(
     InterceptorsWrapper(
       onRequest: (options, handler) async {
+        if (!options.baseUrl.endsWith('/')) {
+          options.baseUrl = '${options.baseUrl}/';
+        }
+        if (options.path.startsWith('/')) {
+          options.path = options.path.substring(1);
+        }
         final token = await authRepository.getAccessToken();
         if (token != null) {
           options.headers['Authorization'] = 'Bearer $token';
@@ -164,7 +169,10 @@ void main() async {
   final movementEngine = MovementEngineImpl(inventoryRepository, alertService);
 
   // Sales Module Initialization
-  final numberingService = DgiNumberingServiceImpl(database.localConfigDao);
+  final numberingService = DgiNumberingServiceImpl(
+    database.localConfigDao,
+    database.invoiceDao,
+  );
   // Provision initial DGI range for Pilot (Coffee Shop)
   await numberingService.initializeRange(
     prefix: '001-001-01-',
@@ -313,6 +321,7 @@ void main() async {
             syncService,
           ),
         ),
+        Provider<AppDatabase>.value(value: database),
         Provider<AuthRepository>.value(value: authRepository),
         Provider<AuditRepositoryImpl>.value(value: auditRepository),
         Provider<AlertService>.value(value: alertService),

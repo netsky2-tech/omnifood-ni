@@ -142,6 +142,7 @@ abstract class InventoryRepository {
   Future<List<Purchase>> getUnsyncedPurchases();
   Future<void> markPurchaseAsSynced(String id);
   Future<double> fetchOfficialBcnRateByInvoiceDate(DateTime invoiceDate);
+  Future<double> getCachedOfficialBcnRate();
 
   Future<List<ForensicAlert>> getForensicAlerts();
   Future<void> saveForensicAlert(ForensicAlert alert);

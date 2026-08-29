@@ -113,13 +113,6 @@ class _AppDrawerState extends State<AppDrawer> {
                                 fontSize: 18,
                               ),
                             ),
-                            Text(
-                              'Retail-as-a-Service POS',
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.8),
-                                fontSize: 11,
-                              ),
-                            ),
                           ],
                         ),
                       ),
@@ -216,7 +209,7 @@ class _AppDrawerState extends State<AppDrawer> {
                   if (_canAccessDgiReports)
                     ListTile(
                       leading: const Icon(Icons.analytics),
-                      title: const Text('Reportes DGI'),
+                      title: const Text('Reporte de Auditoría'),
                       onTap: () {
                         Navigator.pop(context);
                         Navigator.pushNamed(context, '/sales/reports');

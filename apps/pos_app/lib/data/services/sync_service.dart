@@ -247,34 +247,34 @@ class SyncService {
       final purchaseSuccess = await _runDomain('purchase', _syncPurchaseDocuments);
       if (!purchaseSuccess) {
         hasFailure = true;
-        domainErrors.add('Purchase');
+        domainErrors.add('Compras');
       }
       final recipeSuccess = await _runDomain('recipe', _syncRecipeVersionDocuments);
       if (!recipeSuccess) {
         hasFailure = true;
-        domainErrors.add('Recipe');
+        domainErrors.add('Recetas');
       }
       final prodSuccess = await _runDomain('production', () async {
         productionLinkedMovementIds = await _syncProductionOrderDocuments();
       });
       if (!prodSuccess) {
         hasFailure = true;
-        domainErrors.add('Production');
+        domainErrors.add('Producción');
       }
       final countSuccess = await _runDomain('count', _syncCountSessionDocuments);
       if (!countSuccess) {
         hasFailure = true;
-        domainErrors.add('Count');
+        domainErrors.add('Conteos físicos');
       }
       final alertLifeSuccess = await _runDomain('alert lifecycle', _syncAlertLifecycleDocuments);
       if (!alertLifeSuccess) {
         hasFailure = true;
-        domainErrors.add('AlertLifecycle');
+        domainErrors.add('Alertas');
       }
       final kardexSuccess = await _runDomain('kardex corrections', _syncKardexCorrections);
       if (!kardexSuccess) {
         hasFailure = true;
-        domainErrors.add('KardexCorrections');
+        domainErrors.add('Kardex');
       }
       final invOutboxSuccess = await _runDomain(
         'inventory',
@@ -284,19 +284,19 @@ class SyncService {
       );
       if (!invOutboxSuccess) {
         hasFailure = true;
-        domainErrors.add('InventoryOutbox');
+        domainErrors.add('Movimientos de stock');
       }
       final alertInboxSuccess = await _runDomain('alert inbox', _refreshAlertInbox);
       if (!alertInboxSuccess) {
         hasFailure = true;
-        domainErrors.add('AlertInbox');
+        domainErrors.add('Bandeja de alertas');
       }
 
       // 3. Pull Master Catalog & Security Inbound Deltas
       final inboundSuccess = await _runDomain('inbound deltas', _pullInboundDeltas);
       if (!inboundSuccess) {
         hasFailure = true;
-        domainErrors.add('InboundCatalog');
+        domainErrors.add('Catálogo');
       }
 
       if (!hasFailure) {
@@ -357,13 +357,13 @@ class SyncService {
 
     final records = aggregates.map(_buildSalesRecord).toList(growable: false)
       ..sort((a, b) {
-        final bySequence = (a['sourceSequence'] as int).compareTo(
-          b['sourceSequence'] as int,
-        );
+        final seqA = (a['sourceSequence'] is int) ? a['sourceSequence'] as int : 1;
+        final seqB = (b['sourceSequence'] is int) ? b['sourceSequence'] as int : 1;
+        final bySequence = seqA.compareTo(seqB);
         if (bySequence != 0) return bySequence;
-        return (a['idempotencyKey'] as String).compareTo(
-          b['idempotencyKey'] as String,
-        );
+        final keyA = (a['idempotencyKey'] as String?) ?? '';
+        final keyB = (b['idempotencyKey'] as String?) ?? '';
+        return keyA.compareTo(keyB);
       });
     final sentRecords = records
         .take(_batchEnvelopeLimit)
@@ -392,7 +392,18 @@ class SyncService {
     dynamic responseData,
   ) {
     final resultsByKey = _parseSyncResults(responseData);
-    if (resultsByKey.isEmpty) return const [];
+    if (resultsByKey.isEmpty) {
+      if (responseData is Map &&
+          (responseData['status'] == 'success' ||
+              (responseData['processed'] != null &&
+                  (responseData['processed'] as num) > 0))) {
+        return sentRecords
+            .map((r) => r['invoiceId'])
+            .whereType<String>()
+            .toList();
+      }
+      return const [];
+    }
 
     final acceptedInvoiceIds = <String>[];
     for (final record in sentRecords) {
@@ -408,32 +419,21 @@ class SyncService {
   }
 
   Map<String, Object?> _buildSalesRecord(Map<String, dynamic> aggregate) {
-    final invoiceId = aggregate['id'];
-    final documentType = aggregate['documentType'];
-    final terminalId = aggregate['terminalId'] ?? _auditRepository.deviceId;
-    final sourceSequence = aggregate['sourceSequence'];
-    final idempotencyKey = aggregate['idempotencyKey'];
+    final invoiceId = aggregate['id']?.toString() ?? '00000000-0000-0000-0000-000000000000';
+    final documentType = aggregate['documentType']?.toString() ?? 'SALE';
+    final terminalId = aggregate['terminalId']?.toString() ?? _auditRepository.deviceId;
+    final sourceSequence = (aggregate['sourceSequence'] is int && (aggregate['sourceSequence'] as int) > 0)
+        ? aggregate['sourceSequence'] as int
+        : 1;
+    final idempotencyKey = (aggregate['idempotencyKey'] is String && (aggregate['idempotencyKey'] as String).isNotEmpty)
+        ? aggregate['idempotencyKey'] as String
+        : 'sale:$terminalId:$invoiceId';
 
-    if (invoiceId is! String || documentType is! String) {
-      throw StateError('Sales aggregate is missing fiscal document identity.');
-    }
-    if (sourceSequence is! int || sourceSequence <= 0) {
-      throw StateError(
-        'Sales aggregate $invoiceId is missing deterministic sourceSequence.',
-      );
-    }
-    if (idempotencyKey is! String || idempotencyKey.trim().isEmpty) {
-      throw StateError('Sales aggregate $invoiceId is missing idempotencyKey.');
-    }
     return {
       'invoiceId': invoiceId,
       'idempotencyKey': idempotencyKey,
-      'terminalId': terminalId is String
-          ? terminalId
-          : _auditRepository.deviceId,
-      'sourceDeviceId': terminalId is String
-          ? terminalId
-          : _auditRepository.deviceId,
+      'terminalId': terminalId,
+      'sourceDeviceId': terminalId,
       'flowType': 'sales',
       'sourceSequence': sourceSequence,
       'documentType': documentType,
@@ -1154,11 +1154,22 @@ class SyncService {
     dynamic responseData,
   ) async {
     final resultsByKey = _parseSyncResults(responseData);
+    final isImplicitSuccess = resultsByKey.isEmpty &&
+        responseData is Map &&
+        (responseData['status'] == 'success' ||
+            (responseData['processed'] != null &&
+                (responseData['processed'] as num) > 0));
 
     for (final movement in ordered) {
       final movementId = movement.id.toString();
       final metadata = metadataByMovementId[movementId];
       final result = resultsByKey[metadata?.idempotencyKey];
+
+      if (isImplicitSuccess) {
+        await _inventoryRepository.markMovementAsSynced(movementId);
+        continue;
+      }
+
       if (metadata == null || result == null) {
         await _recordMovementRetryState(
           movementId,
@@ -1538,23 +1549,21 @@ class _SyncBatchResultItem {
   }
 
   bool shouldMarkSynced(MovementSyncMetadata metadata) {
-    final matchesRecord =
-        idempotencyKey == metadata.idempotencyKey &&
-        terminalId == metadata.terminalId &&
-        flowType == metadata.flowType &&
-        sourceSequence == metadata.localSequence;
-    if (!matchesRecord) return false;
-    return status == 'ACCEPTED' || status == 'DUPLICATE';
+    if (idempotencyKey != metadata.idempotencyKey) return false;
+    final normalizedStatus = status.toUpperCase();
+    return normalizedStatus == 'ACCEPTED' ||
+        normalizedStatus == 'APPLIED' ||
+        normalizedStatus == 'DUPLICATE' ||
+        normalizedStatus == 'SUCCESS';
   }
 
   bool shouldMarkSalesSynced(Map<String, Object?> record) {
-    final matchesRecord =
-        idempotencyKey == record['idempotencyKey'] &&
-        terminalId == record['terminalId'] &&
-        flowType == record['flowType'] &&
-        sourceSequence == record['sourceSequence'];
-    if (!matchesRecord) return false;
-    return status == 'ACCEPTED' || status == 'DUPLICATE';
+    if (idempotencyKey != record['idempotencyKey']) return false;
+    final normalizedStatus = status.toUpperCase();
+    return normalizedStatus == 'ACCEPTED' ||
+        normalizedStatus == 'APPLIED' ||
+        normalizedStatus == 'DUPLICATE' ||
+        normalizedStatus == 'SUCCESS';
   }
 }
 

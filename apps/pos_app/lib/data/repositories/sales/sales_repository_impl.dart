@@ -64,9 +64,9 @@ class SalesRepositoryImpl implements SalesRepository {
 
     final finalNumber = await numberingService.getNextNumber();
     final terminalId = 'pos-${invoice.userId}';
-    final sourceSequence = await transactionDao.getNextInvoiceSourceSequence(
+    final sourceSequence = (await transactionDao.getNextInvoiceSourceSequence(
       terminalId,
-    );
+    )) ?? 1;
     final payloadHash = _buildSalePayloadHash(
       invoice: invoice.copyWith(number: finalNumber),
       items: items,
@@ -115,7 +115,7 @@ class SalesRepositoryImpl implements SalesRepository {
       await auditRepository.log(
         'SALE_CREATED',
         metadata:
-            '{"invoice_id": "${updatedInvoice.id}", "number": "${updatedInvoice.number}", "total": ${updatedInvoice.total}}',
+            '{"invoice_id": "${updatedInvoice.id}", "number": "${updatedInvoice.number}", "total": "${updatedInvoice.total.toStringAsFixed(2)}"}',
       );
 
       await numberingService.incrementNumber();

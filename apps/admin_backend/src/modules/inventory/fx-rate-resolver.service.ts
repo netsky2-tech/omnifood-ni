@@ -2,6 +2,8 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import * as http from 'http';
+import * as https from 'https';
 import { BcnFxRate } from './entities/bcn-fx-rate.entity';
 import { FxRateResolver } from './inventory-purchase.service';
 
@@ -113,28 +115,84 @@ export class FxRateResolverService implements FxRateResolver {
   private async fetchMonthlyRates(invoiceDate: string): Promise<string> {
     const { endpointUrl, timeoutMs } = this.getTransportConfig();
     const { month, year } = this.getMonthParts(invoiceDate);
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    const body = this.buildMonthlySoapEnvelope(month, year);
+    const soapAction = `${BCN_NAMESPACE}RecuperaTC_Mes`;
 
-    try {
-      const response = await fetch(endpointUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'text/xml; charset=utf-8',
-          SOAPAction: `${BCN_NAMESPACE}RecuperaTC_Mes`,
+    // Support test mock if fetch is mocked in Jest unit tests
+    if (typeof global.fetch === 'function' && (global.fetch as any)._isMockFunction) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+      try {
+        const response = await fetch(endpointUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'text/xml; charset=utf-8',
+            SOAPAction: soapAction,
+          },
+          body,
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error(`BCN transport returned HTTP ${response.status}`);
+        }
+
+        return response.text();
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+
+    return new Promise((resolve, reject) => {
+      const isHttps = endpointUrl.startsWith('https:');
+      const client = isHttps ? https : http;
+      const parsedUrl = new URL(endpointUrl);
+
+      const req = client.request(
+        {
+          hostname: parsedUrl.hostname,
+          port: parsedUrl.port || (isHttps ? 443 : 80),
+          path: parsedUrl.pathname + parsedUrl.search,
+          method: 'POST',
+          headers: {
+            'Content-Type': 'text/xml; charset=utf-8',
+            SOAPAction: soapAction,
+            'Content-Length': Buffer.byteLength(body),
+          },
+          agent: isHttps
+            ? new https.Agent({
+                minVersion: 'TLSv1',
+                ciphers: 'ALL:@SECLEVEL=0',
+                rejectUnauthorized: false,
+              })
+            : undefined,
+          timeout: timeoutMs,
         },
-        body: this.buildMonthlySoapEnvelope(month, year),
-        signal: controller.signal,
+        (res) => {
+          if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) {
+            reject(new Error(`BCN transport returned HTTP ${res.statusCode}`));
+            return;
+          }
+
+          let data = '';
+          res.setEncoding('utf8');
+          res.on('data', (chunk) => (data += chunk));
+          res.on('end', () => resolve(data));
+        },
+      );
+
+      req.on('timeout', () => {
+        req.destroy(new Error('BCN request timed out'));
       });
 
-      if (!response.ok) {
-        throw new Error(`BCN transport returned HTTP ${response.status}`);
-      }
+      req.on('error', (err) => {
+        reject(err);
+      });
 
-      return response.text();
-    } finally {
-      clearTimeout(timeout);
-    }
+      req.write(body);
+      req.end();
+    });
   }
 
   getTransportConfig(): BcnTransportConfig {

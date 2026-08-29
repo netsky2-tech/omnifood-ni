@@ -1003,9 +1003,17 @@ class MovementEngineImpl implements MovementEngine {
   IngredientType _parseIngredientType(String raw) {
     switch (raw.trim().toLowerCase()) {
       case 'insumo':
+      case 'raw_material':
+      case 'rawmaterial':
+      case 'materia_prima':
+      case 'item':
         return IngredientType.insumo;
       case 'sub_recipe':
+      case 'subrecipe':
+      case 'sub_receta':
+      case 'subreceta':
       case 'product':
+      case 'producto':
         return IngredientType.product;
       default:
         throw StateError(

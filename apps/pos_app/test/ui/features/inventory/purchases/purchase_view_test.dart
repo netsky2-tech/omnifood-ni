@@ -76,6 +76,9 @@ class _FakeInventoryRepository implements InventoryRepository {
     }
     return officialBcnRate ?? 36.7123;
   }
+
+  @override
+  Future<double> getCachedOfficialBcnRate() async => 0.0;
 }
 
 class _FakeMovementEngine implements MovementEngine {
@@ -350,6 +353,9 @@ void main() {
       await _pumpPurchaseView(tester, viewModel);
       await _prepareUsdPurchaseWithOfficialLookup(tester);
 
+      await tester.tap(find.byIcon(Icons.lock));
+      await tester.pumpAndSettle();
+
       await tester.enterText(
         find.widgetWithText(TextFormField, 'Tasa de cambio BCN'),
         '36.9000',
@@ -382,6 +388,9 @@ void main() {
       await _pumpPurchaseView(tester, viewModel);
       await _prepareUsdPurchaseWithOfficialLookup(tester);
 
+      await tester.tap(find.byIcon(Icons.lock));
+      await tester.pumpAndSettle();
+
       await tester.enterText(
         find.widgetWithText(TextFormField, 'Tasa de cambio BCN'),
         '36.9000',
@@ -411,6 +420,9 @@ void main() {
 
       await _pumpPurchaseView(tester, viewModel);
       await _prepareUsdPurchaseWithOfficialLookup(tester);
+
+      await tester.tap(find.byIcon(Icons.lock));
+      await tester.pumpAndSettle();
 
       await tester.enterText(
         find.widgetWithText(TextFormField, 'Tasa de cambio BCN'),

@@ -24,12 +24,20 @@ class _PurchaseViewState extends State<PurchaseView> {
   DateTime _invoiceDate = DateTime.now();
   DateTime? _receivedDate;
   DateTime? _expirationDate;
+  bool _isBcnRateLocked = true;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<PurchaseViewModel>().loadInitialData();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final vm = context.read<PurchaseViewModel>();
+      await vm.loadInitialData();
+      if (mounted && _currency == 'USD' && _bcnRateController.text.isEmpty && vm.defaultBcnRate > 0) {
+        setState(() {
+          _bcnRateController.text = vm.defaultBcnRate.toStringAsFixed(4);
+          _isBcnRateLocked = true;
+        });
+      }
     });
   }
 
@@ -96,6 +104,11 @@ class _PurchaseViewState extends State<PurchaseView> {
                             });
                             if (value != null) {
                               await vm.loadInitialData(insumoId: value);
+                              if (mounted && vm.conversions.isNotEmpty) {
+                                setState(() {
+                                  _selectedUomId = vm.conversions.first.id;
+                                });
+                              }
                             }
                           },
                           validator: (value) =>
@@ -103,7 +116,7 @@ class _PurchaseViewState extends State<PurchaseView> {
                         ),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
-                          initialValue: _selectedUomId,
+                          value: _selectedUomId,
                           decoration: const InputDecoration(
                             labelText: 'Presentación',
                           ),
@@ -165,6 +178,9 @@ class _PurchaseViewState extends State<PurchaseView> {
                               _currency = nextCurrency;
                               if (shouldClearOfficialBcnRate) {
                                 _bcnRateController.clear();
+                              } else if (nextCurrency == 'USD' && _bcnRateController.text.isEmpty && vm.defaultBcnRate > 0) {
+                                _bcnRateController.text = vm.defaultBcnRate.toStringAsFixed(4);
+                                _isBcnRateLocked = true;
                               }
                             });
 
@@ -184,9 +200,9 @@ class _PurchaseViewState extends State<PurchaseView> {
                             );
                             if (picked != null) {
                               final didChangeDate =
-                                  picked.year != _invoiceDate.year ||
-                                  picked.month != _invoiceDate.month ||
-                                  picked.day != _invoiceDate.day;
+                                   picked.year != _invoiceDate.year ||
+                                   picked.month != _invoiceDate.month ||
+                                   picked.day != _invoiceDate.day;
                               final shouldClearOfficialBcnRate =
                                   didChangeDate && vm.hasOfficialBcnRate;
 
@@ -257,8 +273,21 @@ class _PurchaseViewState extends State<PurchaseView> {
                           const SizedBox(height: 12),
                           TextFormField(
                             controller: _bcnRateController,
-                            decoration: const InputDecoration(
+                            readOnly: _bcnRateController.text.isNotEmpty && _isBcnRateLocked,
+                            decoration: InputDecoration(
                               labelText: 'Tasa de cambio BCN',
+                              hintText: vm.defaultBcnRate.toStringAsFixed(4),
+                              suffixIcon: IconButton(
+                                icon: Icon(_isBcnRateLocked ? Icons.lock : Icons.lock_open),
+                                tooltip: _isBcnRateLocked
+                                    ? 'Tasa bloqueada (Clic para editar manualmente)'
+                                    : 'Bloquear tasa',
+                                onPressed: () {
+                                  setState(() {
+                                    _isBcnRateLocked = !_isBcnRateLocked;
+                                  });
+                                },
+                              ),
                             ),
                             keyboardType: const TextInputType.numberWithOptions(
                               decimal: true,
@@ -284,11 +313,15 @@ class _PurchaseViewState extends State<PurchaseView> {
                                       final rate = await vm
                                           .fetchOfficialBcnRate(_invoiceDate);
                                       if (!mounted || rate == null) {
+                                        setState(() {
+                                          _isBcnRateLocked = false;
+                                        });
                                         return;
                                       }
 
                                       _bcnRateController.text = rate
                                           .toStringAsFixed(4);
+                                      _isBcnRateLocked = true;
                                       setState(() {});
                                     },
                               child: Text(

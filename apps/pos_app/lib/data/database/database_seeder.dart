@@ -10,6 +10,8 @@ import '../models/inventory/warehouse_entity.dart';
 import '../models/inventory/supplier_entity.dart';
 import '../models/inventory/insumo_entity.dart';
 import '../models/inventory/product_entity.dart';
+import '../models/inventory/uom_conversion_entity.dart';
+import '../models/inventory/batch_entity.dart';
 import '../models/inventory/recipe_entity.dart';
 import '../models/inventory/recipe_version_document_entity.dart';
 import '../models/inventory/movement_entity.dart';
@@ -59,7 +61,8 @@ class DatabaseSeeder {
 
     // 2. Users & Security Profiles
     final existingUsers = await database.userDao.findAllUsers();
-    if (force || existingUsers.isEmpty) {
+    final adminUser = await database.userDao.findUserByEmail('admin@omnifood.ni');
+    if (force || existingUsers.isEmpty || adminUser == null) {
       final users = <UserEntity>[
         UserEntity(
           id: 'admin-1',
@@ -186,7 +189,95 @@ class DatabaseSeeder {
       await database.insumoDao.insertInsumos(insumos);
     }
 
-    // 6. Products, Variants & Modifiers
+    // 6. Insumo UOM Conversions
+    final existingConversions = await database.uomConversionDao.findConversionsByInsumoId('INS-01');
+    if (force || existingConversions.isEmpty) {
+      final conversions = <UomConversionEntity>[
+        UomConversionEntity(id: 'CONV-01-01', insumoId: 'INS-01', unitName: 'kg', factor: 1.0),
+        UomConversionEntity(id: 'CONV-01-02', insumoId: 'INS-01', unitName: 'lb', factor: 0.453592),
+        UomConversionEntity(id: 'CONV-01-03', insumoId: 'INS-01', unitName: 'g', factor: 0.001),
+        UomConversionEntity(id: 'CONV-01-04', insumoId: 'INS-01', unitName: 'saco', factor: 45.36),
+        UomConversionEntity(id: 'CONV-02-01', insumoId: 'INS-02', unitName: 'L', factor: 1.0),
+        UomConversionEntity(id: 'CONV-02-02', insumoId: 'INS-02', unitName: 'ml', factor: 0.001),
+        UomConversionEntity(id: 'CONV-02-03', insumoId: 'INS-02', unitName: 'gal', factor: 3.78541),
+        UomConversionEntity(id: 'CONV-02-04', insumoId: 'INS-02', unitName: 'caja', factor: 12.0),
+        UomConversionEntity(id: 'CONV-03-01', insumoId: 'INS-03', unitName: 'kg', factor: 1.0),
+        UomConversionEntity(id: 'CONV-03-02', insumoId: 'INS-03', unitName: 'lb', factor: 0.453592),
+        UomConversionEntity(id: 'CONV-03-03', insumoId: 'INS-03', unitName: 'saco', factor: 50.0),
+        UomConversionEntity(id: 'CONV-04-01', insumoId: 'INS-04', unitName: 'kg', factor: 1.0),
+        UomConversionEntity(id: 'CONV-04-02', insumoId: 'INS-04', unitName: 'lb', factor: 0.453592),
+        UomConversionEntity(id: 'CONV-05-01', insumoId: 'INS-05', unitName: 'kg', factor: 1.0),
+        UomConversionEntity(id: 'CONV-05-02', insumoId: 'INS-05', unitName: 'lb', factor: 0.453592),
+        UomConversionEntity(id: 'CONV-05-03', insumoId: 'INS-05', unitName: 'saco', factor: 45.36),
+        UomConversionEntity(id: 'CONV-06-01', insumoId: 'INS-06', unitName: 'kg', factor: 1.0),
+        UomConversionEntity(id: 'CONV-06-02', insumoId: 'INS-06', unitName: 'lb', factor: 0.453592),
+        UomConversionEntity(id: 'CONV-06-03', insumoId: 'INS-06', unitName: 'saco', factor: 45.36),
+        UomConversionEntity(id: 'CONV-07-01', insumoId: 'INS-07', unitName: 'L', factor: 1.0),
+        UomConversionEntity(id: 'CONV-07-02', insumoId: 'INS-07', unitName: 'ml', factor: 0.001),
+        UomConversionEntity(id: 'CONV-08-01', insumoId: 'INS-08', unitName: 'UND', factor: 1.0),
+        UomConversionEntity(id: 'CONV-08-02', insumoId: 'INS-08', unitName: 'paq', factor: 50.0),
+        UomConversionEntity(id: 'CONV-08-03', insumoId: 'INS-08', unitName: 'caja', factor: 1000.0),
+        UomConversionEntity(id: 'CONV-09-01', insumoId: 'INS-09', unitName: 'UND', factor: 1.0),
+        UomConversionEntity(id: 'CONV-09-02', insumoId: 'INS-09', unitName: 'paq', factor: 50.0),
+        UomConversionEntity(id: 'CONV-09-03', insumoId: 'INS-09', unitName: 'caja', factor: 1000.0),
+        UomConversionEntity(id: 'CONV-10-01', insumoId: 'INS-10', unitName: 'kg', factor: 1.0),
+        UomConversionEntity(id: 'CONV-10-02', insumoId: 'INS-10', unitName: 'lb', factor: 0.453592),
+        UomConversionEntity(id: 'CONV-10-03', insumoId: 'INS-10', unitName: 'paq', factor: 1.0),
+      ];
+      await database.uomConversionDao.insertConversions(conversions);
+    }
+
+    // 7. Batches (FIFO Stock Lots for Perishables)
+    final existingBatches = await database.batchDao.findActiveBatchesByInsumoId('INS-02');
+    if (force || existingBatches.isEmpty) {
+      final batches = <BatchEntity>[
+        BatchEntity(
+          id: 'BATCH-INS-02-01',
+          insumoId: 'INS-02',
+          batchNumber: 'LOTE-LEC-2026-08',
+          remainingStock: 38.0,
+          receivedDate: now.subtract(const Duration(days: 2)).toIso8601String(),
+          expirationDate: now.add(const Duration(days: 12)).toIso8601String(),
+          cost: 38.0,
+          isSynced: true,
+        ),
+        BatchEntity(
+          id: 'BATCH-INS-04-01',
+          insumoId: 'INS-04',
+          batchNumber: 'LOTE-QUE-2026-08',
+          remainingStock: 14.0,
+          receivedDate: now.subtract(const Duration(days: 1)).toIso8601String(),
+          expirationDate: now.add(const Duration(days: 8)).toIso8601String(),
+          cost: 115.0,
+          isSynced: true,
+        ),
+        BatchEntity(
+          id: 'BATCH-INS-07-01',
+          insumoId: 'INS-07',
+          batchNumber: 'LOTE-CRE-2026-08',
+          remainingStock: 11.5,
+          receivedDate: now.subtract(const Duration(days: 1)).toIso8601String(),
+          expirationDate: now.add(const Duration(days: 15)).toIso8601String(),
+          cost: 68.0,
+          isSynced: true,
+        ),
+        BatchEntity(
+          id: 'BATCH-INS-10-01',
+          insumoId: 'INS-10',
+          batchNumber: 'LOTE-PIT-2026-08',
+          remainingStock: 12.0,
+          receivedDate: now.subtract(const Duration(days: 3)).toIso8601String(),
+          expirationDate: now.add(const Duration(days: 45)).toIso8601String(),
+          cost: 45.0,
+          isSynced: true,
+        ),
+      ];
+      for (final b in batches) {
+        await database.batchDao.insertBatch(b);
+      }
+    }
+
+    // 8. Products, Variants & Modifiers
     final existingProducts = await database.productDao.findAllActiveProducts();
     if (force || existingProducts.isEmpty) {
       final products = <ProductEntity>[
@@ -221,19 +312,19 @@ class DatabaseSeeder {
       await database.productDao.insertModifiers(modifiers);
     }
 
-    // 7. Recipes & Version Documents
+    // 9. Recipes & Version Documents
     final existingRecipes = await database.recipeDao.findRecipeByProductId('PROD-01');
     if (force || existingRecipes.isEmpty) {
       final recipes = <RecipeEntity>[
-        RecipeEntity(id: 'REC-01-01', productId: 'PROD-01', ingredientId: 'INS-01', ingredientType: 'raw_material', quantity: 0.018),
-        RecipeEntity(id: 'REC-01-02', productId: 'PROD-01', ingredientId: 'INS-08', ingredientType: 'raw_material', quantity: 1.0),
-        RecipeEntity(id: 'REC-02-01', productId: 'PROD-02', ingredientId: 'INS-01', ingredientType: 'raw_material', quantity: 0.018),
-        RecipeEntity(id: 'REC-02-02', productId: 'PROD-02', ingredientId: 'INS-02', ingredientType: 'raw_material', quantity: 0.20),
-        RecipeEntity(id: 'REC-02-03', productId: 'PROD-02', ingredientId: 'INS-08', ingredientType: 'raw_material', quantity: 1.0),
-        RecipeEntity(id: 'REC-03-01', productId: 'PROD-03', ingredientId: 'INS-05', ingredientType: 'raw_material', quantity: 0.15),
-        RecipeEntity(id: 'REC-03-02', productId: 'PROD-03', ingredientId: 'INS-06', ingredientType: 'raw_material', quantity: 0.10),
-        RecipeEntity(id: 'REC-03-03', productId: 'PROD-03', ingredientId: 'INS-04', ingredientType: 'raw_material', quantity: 0.08),
-        RecipeEntity(id: 'REC-03-04', productId: 'PROD-03', ingredientId: 'INS-07', ingredientType: 'raw_material', quantity: 0.05),
+        RecipeEntity(id: 'REC-01-01', productId: 'PROD-01', ingredientId: 'INS-01', ingredientType: 'INSUMO', quantity: 0.018),
+        RecipeEntity(id: 'REC-01-02', productId: 'PROD-01', ingredientId: 'INS-08', ingredientType: 'INSUMO', quantity: 1.0),
+        RecipeEntity(id: 'REC-02-01', productId: 'PROD-02', ingredientId: 'INS-01', ingredientType: 'INSUMO', quantity: 0.018),
+        RecipeEntity(id: 'REC-02-02', productId: 'PROD-02', ingredientId: 'INS-02', ingredientType: 'INSUMO', quantity: 0.20),
+        RecipeEntity(id: 'REC-02-03', productId: 'PROD-02', ingredientId: 'INS-08', ingredientType: 'INSUMO', quantity: 1.0),
+        RecipeEntity(id: 'REC-03-01', productId: 'PROD-03', ingredientId: 'INS-05', ingredientType: 'INSUMO', quantity: 0.15),
+        RecipeEntity(id: 'REC-03-02', productId: 'PROD-03', ingredientId: 'INS-06', ingredientType: 'INSUMO', quantity: 0.10),
+        RecipeEntity(id: 'REC-03-03', productId: 'PROD-03', ingredientId: 'INS-04', ingredientType: 'INSUMO', quantity: 0.08),
+        RecipeEntity(id: 'REC-03-04', productId: 'PROD-03', ingredientId: 'INS-07', ingredientType: 'INSUMO', quantity: 0.05),
       ];
       await database.recipeDao.insertRecipes(recipes);
 
@@ -249,8 +340,8 @@ class DatabaseSeeder {
           publishedAt: now.toIso8601String(),
           versionNote: 'Receta estándar 12oz con grano Matagalpa',
           componentsJson: jsonEncode([
-            {'ingredient_id': 'INS-01', 'ingredient_name': 'Café en Grano Matagalpa', 'ingredient_type': 'raw_material', 'gross_quantity': 0.018, 'net_quantity': 0.018, 'technical_shrink_pct': 0.0, 'unit_cost_nio': 180.0, 'component_uom': 'kg'},
-            {'ingredient_id': 'INS-08', 'ingredient_name': 'Vaso Térmico 12oz', 'ingredient_type': 'raw_material', 'gross_quantity': 1.0, 'net_quantity': 1.0, 'technical_shrink_pct': 0.0, 'unit_cost_nio': 3.50, 'component_uom': 'UND'},
+            {'ingredient_id': 'INS-01', 'ingredient_name': 'Café en Grano Matagalpa', 'ingredient_type': 'INSUMO', 'gross_quantity': 0.018, 'net_quantity': 0.0176, 'technical_shrink_pct': 2.0, 'unit_cost_nio': 180.0, 'component_uom': 'kg'},
+            {'ingredient_id': 'INS-08', 'ingredient_name': 'Vaso Térmico 12oz', 'ingredient_type': 'INSUMO', 'gross_quantity': 1.0, 'net_quantity': 1.0, 'technical_shrink_pct': 0.0, 'unit_cost_nio': 3.50, 'component_uom': 'UND'},
           ]),
           isSynced: true,
         ),
@@ -265,15 +356,40 @@ class DatabaseSeeder {
           publishedAt: now.toIso8601String(),
           versionNote: 'Doble shot y leche texturizada',
           componentsJson: jsonEncode([
-            {'ingredient_id': 'INS-01', 'ingredient_name': 'Café en Grano Matagalpa', 'ingredient_type': 'raw_material', 'gross_quantity': 0.018, 'net_quantity': 0.018, 'technical_shrink_pct': 0.0, 'unit_cost_nio': 180.0, 'component_uom': 'kg'},
-            {'ingredient_id': 'INS-02', 'ingredient_name': 'Leche Entera La Perfecta', 'ingredient_type': 'raw_material', 'gross_quantity': 0.20, 'net_quantity': 0.20, 'technical_shrink_pct': 0.0, 'unit_cost_nio': 38.00, 'component_uom': 'L'},
-            {'ingredient_id': 'INS-08', 'ingredient_name': 'Vaso Térmico 12oz', 'ingredient_type': 'raw_material', 'gross_quantity': 1.0, 'net_quantity': 1.0, 'technical_shrink_pct': 0.0, 'unit_cost_nio': 3.50, 'component_uom': 'UND'},
+            {'ingredient_id': 'INS-01', 'ingredient_name': 'Café en Grano Matagalpa', 'ingredient_type': 'INSUMO', 'gross_quantity': 0.018, 'net_quantity': 0.0175, 'technical_shrink_pct': 3.0, 'unit_cost_nio': 180.0, 'component_uom': 'kg'},
+            {'ingredient_id': 'INS-02', 'ingredient_name': 'Leche Entera La Perfecta', 'ingredient_type': 'INSUMO', 'gross_quantity': 0.20, 'net_quantity': 0.194, 'technical_shrink_pct': 3.0, 'unit_cost_nio': 38.00, 'component_uom': 'L'},
+            {'ingredient_id': 'INS-08', 'ingredient_name': 'Vaso Térmico 12oz', 'ingredient_type': 'INSUMO', 'gross_quantity': 1.0, 'net_quantity': 1.0, 'technical_shrink_pct': 0.0, 'unit_cost_nio': 3.50, 'component_uom': 'UND'},
           ]),
           isSynced: true,
         ),
       ];
       for (final doc in recipeDocs) {
         await database.recipeVersionDocumentDao.upsertDocument(doc);
+      }
+    }
+
+    // Auto-migrate any existing legacy recipe documents in SQLite for demo products
+    for (final pid in ['PROD-01', 'PROD-02', 'PROD-03', 'PROD-04']) {
+      final docs = await database.recipeVersionDocumentDao.findByProductId(pid);
+      for (final doc in docs) {
+        if (doc.componentsJson.contains('raw_material')) {
+          final updatedJson = doc.componentsJson.replaceAll('raw_material', 'INSUMO');
+          await database.recipeVersionDocumentDao.upsertDocument(
+            RecipeVersionDocumentEntity(
+              id: doc.id,
+              productId: doc.productId,
+              productName: doc.productName,
+              versionNumber: doc.versionNumber,
+              yieldQuantity: doc.yieldQuantity,
+              technicalShrinkPct: doc.technicalShrinkPct,
+              createdAt: doc.createdAt,
+              publishedAt: doc.publishedAt,
+              versionNote: doc.versionNote,
+              componentsJson: updatedJson,
+              isSynced: doc.isSynced,
+            ),
+          );
+        }
       }
     }
 

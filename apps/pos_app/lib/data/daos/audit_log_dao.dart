@@ -7,7 +7,7 @@ abstract class AuditDao {
   Future<List<AuditLogEntity>> findAllLogs();
 
   @Query(
-    'SELECT * FROM audit_logs WHERE timestamp >= :start AND timestamp <= :end AND (:userId = "" OR user_id = :userId) ORDER BY timestamp DESC',
+    "SELECT * FROM audit_logs WHERE timestamp >= :start AND timestamp <= :end AND (:userId = '' OR user_id = :userId) ORDER BY timestamp DESC",
   )
   Future<List<AuditLogEntity>> findLogsWithFilters(
     String start,

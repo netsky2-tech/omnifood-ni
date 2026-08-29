@@ -30,6 +30,8 @@ class FakeAuthRepository implements AuthRepository {
   bool get isPendingSync => false;
   @override
   DateTime? get lastSyncTimestamp => null;
+  @override
+  String? get lastAuthError => null;
 
   @override
   Future<User?> loginOnline(String email, String password) async => null;

@@ -198,6 +198,12 @@ class MockSaleViewModel extends _i1.Mock implements _i7.SaleViewModel {
       ) as List<_i12.Promotion>);
 
   @override
+  List<_i12.Promotion> get allPromotions => (super.noSuchMethod(
+        Invocation.getter(#allPromotions),
+        returnValue: <_i12.Promotion>[],
+      ) as List<_i12.Promotion>);
+
+  @override
   List<_i13.HoldTicket> get holdTickets => (super.noSuchMethod(
         Invocation.getter(#holdTickets),
         returnValue: <_i13.HoldTicket>[],
@@ -552,6 +558,23 @@ class MockSaleViewModel extends _i1.Mock implements _i7.SaleViewModel {
         Invocation.method(
           #loadPromotions,
           [],
+        ),
+        returnValue: _i15.Future<void>.value(),
+        returnValueForMissingStub: _i15.Future<void>.value(),
+      ) as _i15.Future<void>);
+
+  @override
+  _i15.Future<void> togglePromotion(
+    String? promoId,
+    bool? isActive,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #togglePromotion,
+          [
+            promoId,
+            isActive,
+          ],
         ),
         returnValue: _i15.Future<void>.value(),
         returnValueForMissingStub: _i15.Future<void>.value(),

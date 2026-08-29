@@ -22,7 +22,8 @@ class LoginViewModel extends ChangeNotifier {
     
     _isLoading = false;
     if (user == null) {
-      _error = 'Error de autenticación. Verifique sus credenciales o conexión.';
+      _error = _authRepository.lastAuthError ??
+          'Error de autenticación. Verifique sus credenciales o conexión.';
       notifyListeners();
       return false;
     }

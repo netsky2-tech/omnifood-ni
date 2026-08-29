@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../../../core/utils/nicaragua_fiscal_validator.dart';
 import '../../../../domain/models/customer/customer.dart';
 import '../view_models/sale_view_model.dart';
@@ -15,7 +16,10 @@ class CustomerSelectDialog extends StatefulWidget {
     return showDialog<Customer?>(
       context: context,
       barrierDismissible: true,
-      builder: (_) => CustomerSelectDialog(viewModel: viewModel),
+      builder: (_) => ChangeNotifierProvider<SaleViewModel>.value(
+        value: viewModel,
+        child: CustomerSelectDialog(viewModel: viewModel),
+      ),
     );
   }
 
@@ -26,7 +30,7 @@ class CustomerSelectDialog extends StatefulWidget {
 class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
   final TextEditingController _searchController = TextEditingController();
   List<Customer> _searchResults = [];
-  bool _isLoading = false;
+  bool _isLoading = true;
   bool _isCreatingNew = false;
 
   // New Customer Form Controllers
@@ -57,7 +61,6 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
   }
 
   Future<void> _loadInitialCustomers() async {
-    setState(() => _isLoading = true);
     try {
       final results = await widget.viewModel.searchCustomers('');
       if (mounted) {
@@ -147,39 +150,43 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
+    return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        width: 520,
-        constraints: const BoxConstraints(maxHeight: 620),
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      title: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    Icon(
-                      _isCreatingNew ? Icons.person_add_alt_1 : Icons.people_alt_outlined,
-                      color: Theme.of(context).primaryColor,
-                      size: 28,
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      _isCreatingNew ? 'Nuevo Cliente' : 'Seleccionar Cliente',
-                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    ),
-                  ],
+                Icon(
+                  _isCreatingNew ? Icons.person_add_alt_1 : Icons.people_alt_outlined,
+                  color: Theme.of(context).primaryColor,
+                  size: 24,
                 ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.of(context).pop(),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _isCreatingNew ? 'Nuevo Cliente' : 'Seleccionar Cliente',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ),
-            const Divider(height: 24),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 480,
+        height: 480,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
             if (!_isCreatingNew) ...[
               Row(
                 children: [
@@ -188,7 +195,7 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
                       controller: _searchController,
                       onChanged: _onSearchChanged,
                       decoration: InputDecoration(
-                        hintText: 'Buscar por Nombre, Teléfono o Cédula/RUC...',
+                        hintText: 'Buscar por Nombre, Teléfono o Cédula...',
                         prefixIcon: const Icon(Icons.search),
                         suffixIcon: _searchController.text.isNotEmpty
                             ? IconButton(
@@ -360,11 +367,10 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
                         controller: _taxIdController,
                         onChanged: _validateTaxId,
                         decoration: InputDecoration(
-                          labelText: 'Cédula o RUC (Opcional)',
-                          hintText: '001-120590-0001A o J0310000000001',
+                          labelText: 'Cédula / RUC (Opcional)',
                           prefixIcon: const Icon(Icons.badge_outlined),
-                          errorText: _taxIdError,
                           border: const OutlineInputBorder(),
+                          errorText: _taxIdError,
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -372,7 +378,7 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
                         controller: _phoneController,
                         keyboardType: TextInputType.phone,
                         decoration: const InputDecoration(
-                          labelText: 'Teléfono / Móvil (Opcional)',
+                          labelText: 'Teléfono (Opcional)',
                           prefixIcon: Icon(Icons.phone_outlined),
                           border: OutlineInputBorder(),
                         ),
@@ -390,6 +396,7 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
                       const SizedBox(height: 12),
                       TextField(
                         controller: _addressController,
+                        maxLines: 2,
                         decoration: const InputDecoration(
                           labelText: 'Dirección (Opcional)',
                           prefixIcon: Icon(Icons.location_on_outlined),

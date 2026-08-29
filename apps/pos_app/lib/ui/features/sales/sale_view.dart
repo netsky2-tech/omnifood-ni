@@ -5,6 +5,7 @@ import '../../../domain/models/inventory/product.dart';
 import '../../../domain/models/sales/cart_item.dart';
 import '../../../data/services/sync_service.dart';
 import '../../../domain/models/sales/payment.dart';
+import '../../../domain/models/sales/promotion.dart';
 import '../../../domain/models/user.dart';
 import '../../../domain/repositories/auth_repository.dart';
 import '../../../domain/repositories/audit_repository.dart';
@@ -21,6 +22,121 @@ import '../../../presentation/features/sales/widgets/customer_select_dialog.dart
 
 class SaleView extends StatefulWidget {
   const SaleView({super.key});
+
+  static void showHoldTicketDialog(BuildContext context) async {
+    final vm = context.read<SaleViewModel>();
+    if (vm.cart.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Agregue productos al carrito antes de poner la venta en espera.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    final controller = TextEditingController();
+    List<dynamic> tables = [];
+    try {
+      final database = context.read<AppDatabase>();
+      tables = await database.restaurantTableDao.getTablesByStatus('DISPONIBLE');
+    } catch (e) {
+      debugPrint('[SaleView] Error obteniendo mesas disponibles: $e');
+    }
+
+    if (!context.mounted) return;
+
+    String? selectedTableId;
+    int guestCount = 2;
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: const Text('Poner Venta en Espera'),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 380),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: controller,
+                      decoration: const InputDecoration(
+                        labelText: 'Nombre / Identificador',
+                        hintText: 'Ej: Juan Perez / Barra',
+                      ),
+                      autofocus: true,
+                    ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String?>(
+                    decoration: const InputDecoration(labelText: 'Mesa Asignada (Opcional)'),
+                    value: selectedTableId,
+                    items: [
+                      const DropdownMenuItem(value: null, child: Text('Sin mesa (Para llevar)')),
+                      ...tables.map((t) => DropdownMenuItem(
+                            value: t.id,
+                            child: Text('${t.tableNumber} (Cap: ${t.capacity})'),
+                          )),
+                    ],
+                    onChanged: (val) => setState(() {
+                      selectedTableId = val;
+                      if (val != null && controller.text.isEmpty) {
+                        final found = tables.firstWhere((t) => t.id == val);
+                        controller.text = found.tableNumber;
+                      }
+                    }),
+                  ),
+                  if (selectedTableId != null) ...[
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        const Text('Comensales:'),
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(Icons.remove_circle_outline),
+                          onPressed: guestCount > 1 ? () => setState(() => guestCount--) : null,
+                        ),
+                        Text('$guestCount', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        IconButton(
+                          icon: const Icon(Icons.add_circle_outline),
+                          onPressed: guestCount < 20 ? () => setState(() => guestCount++) : null,
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('CANCELAR')),
+              ElevatedButton(
+                onPressed: () {
+                  final name = controller.text.trim().isEmpty ? 'Comanda' : controller.text.trim();
+                  vm.holdCurrentTicket(
+                    name,
+                    tableId: selectedTableId,
+                    guestCount: guestCount,
+                  );
+                  Navigator.pop(dialogCtx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Venta "$name" puesta en espera con éxito.'),
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                },
+                child: const Text('GUARDAR'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
 
   @override
   State<SaleView> createState() => _SaleViewState();
@@ -137,9 +253,10 @@ class _SaleViewState extends State<SaleView> {
                         _showRecallTicketsDialog(context);
                         break;
                       case 'hold':
-                        if (viewModel.cart.isNotEmpty) {
-                          _showHoldTicketDialog(context);
-                        }
+                        SaleView.showHoldTicketDialog(context);
+                        break;
+                      case 'promotions':
+                        PromotionsManagerDialog.show(context);
                         break;
                       case 'sync':
                         context.read<SyncService>().triggerManualSync();
@@ -174,16 +291,24 @@ class _SaleViewState extends State<SaleView> {
                         dense: true,
                       ),
                     ),
-                    if (viewModel.cart.isNotEmpty)
-                      const PopupMenuItem(
-                        value: 'hold',
-                        child: ListTile(
-                          leading: Icon(Icons.pause),
-                          title: Text('Poner en Espera'),
-                          contentPadding: EdgeInsets.zero,
-                          dense: true,
-                        ),
+                    const PopupMenuItem(
+                      value: 'hold',
+                      child: ListTile(
+                        leading: Icon(Icons.pause),
+                        title: Text('Poner en Espera'),
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
                       ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'promotions',
+                      child: ListTile(
+                        leading: Icon(Icons.local_offer, color: Colors.deepOrange),
+                        title: Text('Promociones'),
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                      ),
+                    ),
                     const PopupMenuItem(
                       value: 'sync',
                       child: ListTile(
@@ -246,7 +371,7 @@ class _SaleViewState extends State<SaleView> {
                 ),
                 IconButton(
                   icon: const Icon(Icons.pause),
-                  onPressed: viewModel.cart.isEmpty ? null : () => _showHoldTicketDialog(context),
+                  onPressed: () => SaleView.showHoldTicketDialog(context),
                   tooltip: 'Poner en Espera',
                 ),
                 const CloudSyncStatusBadge(),
@@ -373,99 +498,6 @@ class _SaleViewState extends State<SaleView> {
   // TODO: Implementar funcionalidad de devoluciones/notas de crédito
   // void _showReturnsDialog(BuildContext context) { ... }
 
-  void _showHoldTicketDialog(BuildContext context) async {
-    final controller = TextEditingController();
-    final database = context.read<AppDatabase>();
-    final tables = await database.restaurantTableDao.getTablesByStatus('DISPONIBLE');
-
-    if (!context.mounted) return;
-
-    String? selectedTableId;
-    int guestCount = 2;
-
-    showDialog(
-      context: context,
-      builder: (dialogCtx) => StatefulBuilder(
-        builder: (context, setState) {
-          return AlertDialog(
-            title: const Text('Poner Venta en Espera'),
-            content: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 380),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    TextField(
-                      controller: controller,
-                      decoration: const InputDecoration(
-                        labelText: 'Nombre / Identificador',
-                        hintText: 'Ej: Juan Perez / Barra',
-                      ),
-                      autofocus: true,
-                    ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String?>(
-                    decoration: const InputDecoration(labelText: 'Mesa Asignada (Opcional)'),
-                    value: selectedTableId,
-                    items: [
-                      const DropdownMenuItem(value: null, child: Text('Sin mesa (Para llevar)')),
-                      ...tables.map((t) => DropdownMenuItem(
-                            value: t.id,
-                            child: Text('${t.tableNumber} (Cap: ${t.capacity})'),
-                          )),
-                    ],
-                    onChanged: (val) => setState(() {
-                      selectedTableId = val;
-                      if (val != null && controller.text.isEmpty) {
-                        final found = tables.firstWhere((t) => t.id == val);
-                        controller.text = found.tableNumber;
-                      }
-                    }),
-                  ),
-                  if (selectedTableId != null) ...[
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        const Text('Comensales:'),
-                        const Spacer(),
-                        IconButton(
-                          icon: const Icon(Icons.remove_circle_outline),
-                          onPressed: guestCount > 1 ? () => setState(() => guestCount--) : null,
-                        ),
-                        Text('$guestCount', style: const TextStyle(fontWeight: FontWeight.bold)),
-                        IconButton(
-                          icon: const Icon(Icons.add_circle_outline),
-                          onPressed: guestCount < 20 ? () => setState(() => guestCount++) : null,
-                        ),
-                      ],
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('CANCELAR')),
-              ElevatedButton(
-                onPressed: () {
-                  final name = controller.text.trim().isEmpty ? 'Comanda' : controller.text.trim();
-                  context.read<SaleViewModel>().holdCurrentTicket(
-                        name,
-                        tableId: selectedTableId,
-                        guestCount: guestCount,
-                      );
-                  Navigator.pop(dialogCtx);
-                },
-                child: const Text('GUARDAR'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
   void _showCloseBoxDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -475,6 +507,14 @@ class _SaleViewState extends State<SaleView> {
 
   Future<void> _requestSupervisorOverrideForCloseBox() async {
     final authRepo = context.read<AuthRepository>();
+    final currentUser = await authRepo.getCurrentUser();
+    
+    // Si el usuario ya es Owner o Manager, abrir directamente el arqueo de cierre
+    if (currentUser?.role == UserRole.owner || currentUser?.role == UserRole.manager) {
+      if (mounted) _showCloseBoxDialog(context);
+      return;
+    }
+
     final auditRepo = context.read<AuditRepository>();
 
     final authorized = await showDialog<bool>(
@@ -495,7 +535,7 @@ class _SaleViewState extends State<SaleView> {
             'SUPERVISOR_OVERRIDE_CLOSE_SESSION',
             metodoAutorizacion: method,
             usuarioAutorizadorId: request.supervisorId,
-            metadata: 'close_box',
+            metadata: '{"action":"close_box"}',
           );
         },
       ),
@@ -532,7 +572,7 @@ class _SaleViewState extends State<SaleView> {
             'DRAWER_OPENED_MANUALLY',
             metodoAutorizacion: method,
             usuarioAutorizadorId: request.supervisorId,
-            metadata: 'manual_drawer_open:$justification',
+            metadata: '{"action":"manual_drawer_open","justification":"$justification"}',
           );
         },
       ),
@@ -763,49 +803,101 @@ class ProductGrid extends StatelessWidget {
     final isHandheld = ResponsiveBreakpoints.isHandheld(context);
     final colorScheme = Theme.of(context).colorScheme;
 
+    final viewModel = context.watch<SaleViewModel>();
+
     return GridView.builder(
       padding: EdgeInsets.all(isHandheld ? 10 : 16),
       gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: isHandheld ? 180 : 200,
-        childAspectRatio: 0.9,
+        childAspectRatio: isHandheld ? 0.82 : 0.84,
         crossAxisSpacing: isHandheld ? 8 : 12,
         mainAxisSpacing: isHandheld ? 8 : 12,
       ),
       itemCount: products.length,
       itemBuilder: (context, index) {
         final product = products[index];
+        final promo = viewModel.promotions
+            .where((p) => p.isActive && p.targetProductId == product.id)
+            .firstOrNull;
+
         return InkWell(
           onTap: () => _showProductOptions(context, product),
           child: Card(
             elevation: 0,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(4),
-              side: BorderSide(color: colorScheme.outlineVariant),
+              side: BorderSide(
+                color: promo != null
+                    ? Colors.deepOrange
+                    : colorScheme.outlineVariant,
+                width: promo != null ? 1.5 : 1,
+              ),
             ),
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.fastfood, size: isHandheld ? 32 : 40, color: colorScheme.primary),
-                  const SizedBox(height: 8),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                    child: Text(
-                      product.name, 
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: isHandheld ? 12 : 13),
+            child: Stack(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Icon(
+                        Icons.fastfood,
+                        size: isHandheld ? 32 : 40,
+                        color: promo != null ? Colors.deepOrange : colorScheme.primary,
+                      ),
+                      const SizedBox(height: 8),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                        child: Text(
+                          product.name,
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: isHandheld ? 12 : 13,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'C\$ ${product.sellPrice.toStringAsFixed(2)}',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: promo != null ? Colors.deepOrange : colorScheme.primary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: isHandheld ? 13 : 15,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (promo != null)
+                  Positioned(
+                    top: 4,
+                    right: 4,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.deepOrange,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        promo.type == PromotionType.buyXGetYFree
+                            ? '2x1'
+                            : (promo.type == PromotionType.percentageDiscount
+                                ? '-${promo.discountValue.toStringAsFixed(0)}%'
+                                : 'PROMO'),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'C\$ ${product.sellPrice.toStringAsFixed(2)}',
-                    style: TextStyle(color: colorScheme.primary, fontWeight: FontWeight.bold, fontSize: isHandheld ? 13 : 15),
-                  ),
-                ],
-              ),
+              ],
             ),
           ),
         );
@@ -1311,14 +1403,41 @@ class CartSummary extends StatelessWidget {
           ),
           const SizedBox(height: 6),
         ],
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton(
-            onPressed: viewModel.cart.isEmpty
-                ? null
-                : () => _showCheckoutDialog(context),
-            child: const Text('COBRAR'),
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: viewModel.cart.isEmpty
+                    ? () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Agregue productos al carrito antes de poner en espera.'),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      }
+                    : () => SaleView.showHoldTicketDialog(context),
+                icon: const Icon(Icons.pause, size: 18),
+                label: const Text('EN ESPERA'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              flex: 2,
+              child: ElevatedButton(
+                onPressed: viewModel.cart.isEmpty
+                    ? null
+                    : () => _showCheckoutDialog(context),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                child: const Text('COBRAR'),
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -1383,7 +1502,7 @@ class CartSummary extends StatelessWidget {
             'SUPERVISOR_OVERRIDE_MANUAL_DISCOUNT',
             metodoAutorizacion: method,
             usuarioAutorizadorId: request.supervisorId,
-            metadata: 'manual_discount',
+            metadata: '{"action":"manual_discount"}',
           );
         },
       ),
@@ -1538,6 +1657,97 @@ class _CheckoutDialogState extends State<CheckoutDialog> {
                 );
               }, 
           child: const Text('FINALIZAR'),
+        ),
+      ],
+    );
+  }
+}
+
+class PromotionsManagerDialog extends StatelessWidget {
+  const PromotionsManagerDialog({super.key});
+
+  static void show(BuildContext context) {
+    final saleViewModel = context.read<SaleViewModel>();
+    showDialog(
+      context: context,
+      builder: (dialogContext) => ChangeNotifierProvider<SaleViewModel>.value(
+        value: saleViewModel,
+        child: const PromotionsManagerDialog(),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final viewModel = context.watch<SaleViewModel>();
+    final promotions = viewModel.allPromotions;
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.local_offer, color: Colors.deepOrange),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Control de Promociones',
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 420,
+        height: 360,
+        child: promotions.isEmpty
+            ? const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Text(
+                    'No hay promociones registradas en el sistema.',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              )
+            : ListView.separated(
+                itemCount: promotions.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final promo = promotions[index];
+                  return SwitchListTile(
+                    dense: true,
+                    isThreeLine: true,
+                    title: Text(
+                      promo.name,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: promo.isActive ? colorScheme.onSurface : Colors.grey,
+                      ),
+                    ),
+                    subtitle: Text(
+                      promo.type == PromotionType.buyXGetYFree
+                          ? '2x1 (Paga ${promo.buyQuantity} Lleva ${promo.buyQuantity + promo.getQuantity})'
+                          : (promo.type == PromotionType.percentageDiscount
+                              ? '${promo.discountValue.toStringAsFixed(0)}% de descuento'
+                              : 'Descuento C\$ ${promo.discountValue.toStringAsFixed(2)}'),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: promo.isActive ? Colors.deepOrange.shade800 : Colors.grey,
+                      ),
+                    ),
+                    value: promo.isActive,
+                    activeColor: Colors.deepOrange,
+                    onChanged: (val) {
+                      viewModel.togglePromotion(promo.id, val);
+                    },
+                  );
+                },
+              ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('CERRAR'),
         ),
       ],
     );

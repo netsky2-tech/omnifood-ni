@@ -105,6 +105,7 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
                       key: const Key('checkout_fx_mode_dropdown'),
+                      isExpanded: true,
                       value: viewModel.checkoutFxMode,
                       decoration: const InputDecoration(
                         labelText: 'Tasa a Utilizar en Pantalla de Cobro (POS)',
@@ -114,11 +115,11 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                       items: const [
                         DropdownMenuItem(
                           value: 'COMMERCIAL',
-                          child: Text('Tasa Comercial (Recomendada para caja)'),
+                          child: Text('Tasa Comercial (Recomendada para caja)', overflow: TextOverflow.ellipsis),
                         ),
                         DropdownMenuItem(
                           value: 'BCN_OFFICIAL',
-                          child: Text('Tasa Oficial BCN (Banco Central de Nicaragua)'),
+                          child: Text('Tasa Oficial BCN (Banco Central de Nicaragua)', overflow: TextOverflow.ellipsis),
                         ),
                       ],
                       onChanged: (mode) {
@@ -214,6 +215,7 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                     const SizedBox(height: 12),
                     DropdownButtonFormField<TenantOperationMode>(
                       key: const Key('operation_mode_dropdown'),
+                      isExpanded: true,
                       value: viewModel.operationMode,
                       decoration: const InputDecoration(
                         labelText: 'Modo de Operación POS',
@@ -223,7 +225,7 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                       items: TenantOperationMode.values.map((mode) {
                         return DropdownMenuItem(
                           value: mode,
-                          child: Text(mode.displayName),
+                          child: Text(mode.displayName, overflow: TextOverflow.ellipsis),
                         );
                       }).toList(),
                       onChanged: (newMode) {

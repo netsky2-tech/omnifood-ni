@@ -2537,6 +2537,15 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i39.Future<double>);
 
   @override
+  _i39.Future<double> getCachedOfficialBcnRate() => (super.noSuchMethod(
+        Invocation.method(
+          #getCachedOfficialBcnRate,
+          [],
+        ),
+        returnValue: _i39.Future<double>.value(0.0),
+      ) as _i39.Future<double>);
+
+  @override
   _i39.Future<List<_i72.ForensicAlert>> getForensicAlerts() =>
       (super.noSuchMethod(
         Invocation.method(

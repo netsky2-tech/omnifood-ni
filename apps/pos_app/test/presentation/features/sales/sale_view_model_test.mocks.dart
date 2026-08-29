@@ -1265,6 +1265,15 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i40.Future<double>);
 
   @override
+  _i40.Future<double> getCachedOfficialBcnRate() => (super.noSuchMethod(
+        Invocation.method(
+          #getCachedOfficialBcnRate,
+          [],
+        ),
+        returnValue: _i40.Future<double>.value(0.0),
+      ) as _i40.Future<double>);
+
+  @override
   _i40.Future<List<_i61.ForensicAlert>> getForensicAlerts() =>
       (super.noSuchMethod(
         Invocation.method(
@@ -2170,6 +2179,34 @@ class MockPromotionDao extends _i1.Mock implements _i34.PromotionDao {
         returnValue: _i40.Future<List<_i68.PromotionEntity>>.value(
             <_i68.PromotionEntity>[]),
       ) as _i40.Future<List<_i68.PromotionEntity>>);
+
+  @override
+  _i40.Future<List<_i68.PromotionEntity>> getAllPromotions() =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getAllPromotions,
+          [],
+        ),
+        returnValue: _i40.Future<List<_i68.PromotionEntity>>.value(
+            <_i68.PromotionEntity>[]),
+      ) as _i40.Future<List<_i68.PromotionEntity>>);
+
+  @override
+  _i40.Future<void> setPromotionActive(
+    String? id,
+    bool? isActive,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #setPromotionActive,
+          [
+            id,
+            isActive,
+          ],
+        ),
+        returnValue: _i40.Future<void>.value(),
+        returnValueForMissingStub: _i40.Future<void>.value(),
+      ) as _i40.Future<void>);
 
   @override
   _i40.Future<void> savePromotion(_i68.PromotionEntity? promotion) =>

@@ -1,0 +1,15 @@
+budget_line_id,period,scenario,category,description,monthly_amount_usd,scope,notes
+GEMINI,RECURRING,LOW,AI,Gemini,20.00,FIXED,Gasto compartido mensual presupuestado.
+GPT,RECURRING,LOW,AI,GPT,100.00,FIXED,Gasto compartido mensual presupuestado.
+INTERNET,RECURRING,LOW,OPERATIONS,Internet,20.00,FIXED,Gasto mensual documentado.
+DOMAIN,RECURRING,LOW,INFRASTRUCTURE,Domain,1.92,FIXED,US$23 anuales normalizados.
+RAILWAY,RECURRING,LOW,INFRASTRUCTURE,Railway Pro and usage,20.00,FIXED,Escenario bajo; no sumar la alternativa conservadora.
+CLOUDFLARE_PAGES,RECURRING,LOW,INFRASTRUCTURE,Cloudflare Pages,0.00,FIXED,SPA estatica dentro del nivel inicial sin costo.
+CLOUDFLARE_R2,RECURRING,LOW,BACKUP,Cloudflare R2,0.00,FIXED,Dentro del nivel gratuito de 10 GB-mes.
+GEMINI,RECURRING,CONSERVATIVE,AI,Gemini,20.00,FIXED,Gasto compartido mensual presupuestado.
+GPT,RECURRING,CONSERVATIVE,AI,GPT,100.00,FIXED,Gasto compartido mensual presupuestado.
+INTERNET,RECURRING,CONSERVATIVE,OPERATIONS,Internet,20.00,FIXED,Gasto mensual documentado.
+DOMAIN,RECURRING,CONSERVATIVE,INFRASTRUCTURE,Domain,1.92,FIXED,US$23 anuales normalizados.
+RAILWAY,RECURRING,CONSERVATIVE,INFRASTRUCTURE,Railway Pro and usage,26.75,FIXED,Escenario conservador; no sumar la alternativa baja.
+CLOUDFLARE_PAGES,RECURRING,CONSERVATIVE,INFRASTRUCTURE,Cloudflare Pages,0.00,FIXED,SPA estatica dentro del nivel inicial sin costo.
+CLOUDFLARE_R2,RECURRING,CONSERVATIVE,BACKUP,Cloudflare R2,1.35,FIXED,Ejemplo de hasta 100 GB; sustituir por consumo medido.

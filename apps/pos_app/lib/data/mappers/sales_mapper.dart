@@ -469,10 +469,12 @@ class SalesMapper {
       if (invoice.refundReasonCode?.isNotEmpty ?? false) 'refundReasonCode': invoice.refundReasonCode,
       if (invoice.authorizedByUserId?.isNotEmpty ?? false) 'authorizedByUserId': invoice.authorizedByUserId,
       if (invoice.authorizedByRole?.isNotEmpty ?? false) 'authorizedByRole': invoice.authorizedByRole,
-      'terminalId': invoice.terminalId,
+      'terminalId': invoice.terminalId ?? 'term-main',
       'documentType': invoice.type == InvoiceType.creditNote ? 'CREDIT_NOTE' : 'SALE',
-      'sourceSequence': invoice.sourceSequence,
-      'idempotencyKey': invoice.idempotencyKey,
+      'sourceSequence': invoice.sourceSequence ?? 1,
+      'idempotencyKey': (invoice.idempotencyKey?.isNotEmpty ?? false)
+          ? invoice.idempotencyKey
+          : 'sale:${invoice.terminalId ?? 'term-main'}:${invoice.id}',
       'payloadHash': invoice.payloadHash,
       'items': items.map((item) => {
         'id': item.id,

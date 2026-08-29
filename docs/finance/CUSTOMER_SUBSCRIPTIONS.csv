@@ -1,0 +1,2 @@
+interval_id,subscription_id,client,status,effective_start_date,effective_end_date,monthly_fee_usd,setup_fee_usd,locations,terminals,variable_reserve_low_usd,variable_reserve_conservative_usd,planned_service_date,notes
+SOHO-PLAN-20260828,SOHO-FOUNDING-001,SOHO,PLANNED,2026-08-28,,79.00,200.00,1,1,1.00,5.00,2026-09-05,Activar solo despues de la puesta en marcha aceptada; la fecha planificada no crea MRR.

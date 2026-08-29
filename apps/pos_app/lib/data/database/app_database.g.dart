@@ -745,7 +745,7 @@ class _$AuditDao extends AuditDao {
     String userId,
   ) async {
     return _queryAdapter.queryList(
-        'SELECT * FROM audit_logs WHERE timestamp >= ?1 AND timestamp <= ?2 AND (?3 = \"\" OR user_id = ?3) ORDER BY timestamp DESC',
+        'SELECT * FROM audit_logs WHERE timestamp >= ?1 AND timestamp <= ?2 AND (?3 = \'\' OR user_id = ?3) ORDER BY timestamp DESC',
         mapper: (Map<String, Object?> row) => AuditLogEntity(id: row['id'] as int?, userId: row['user_id'] as String, action: row['action'] as String, timestamp: row['timestamp'] as String, deviceId: row['device_id'] as String, metadata: row['metadata'] as String?, isSynced: (row['is_synced'] as int) != 0, sequenceNo: row['sequence_no'] as int, prevHash: row['prev_hash'] as String, entryHash: row['entry_hash'] as String, metodoAutorizacion: row['metodo_autorizacion'] as String?, usuarioAutorizadorId: row['usuario_autorizador_id'] as String?, remoteRefUuid: row['remote_ref_uuid'] as String, hashVersion: row['hash_version'] as String?, hasMetodoAutorizacion: row['has_metodo_autorizacion'] == null ? null : (row['has_metodo_autorizacion'] as int) != 0, hasUsuarioAutorizadorId: row['has_usuario_autorizador_id'] == null ? null : (row['has_usuario_autorizador_id'] as int) != 0, tenantId: row['tenant_id'] as String?, metadataRaw: row['metadata_raw'] as String?),
         arguments: [start, end, userId]);
   }
@@ -3776,26 +3776,26 @@ class _$SalesTransactionDao extends SalesTransactionDao {
   @override
   Future<void> insertInvoice(InvoiceEntity invoice) async {
     await _invoiceEntityInsertionAdapter.insert(
-        invoice, OnConflictStrategy.replace);
+        invoice, OnConflictStrategy.abort);
   }
 
   @override
   Future<void> insertInvoiceItems(List<InvoiceItemEntity> items) async {
     await _invoiceItemEntityInsertionAdapter.insertList(
-        items, OnConflictStrategy.replace);
+        items, OnConflictStrategy.abort);
   }
 
   @override
   Future<void> insertInvoiceItemModifiers(
       List<InvoiceItemModifierEntity> modifiers) async {
     await _invoiceItemModifierEntityInsertionAdapter.insertList(
-        modifiers, OnConflictStrategy.replace);
+        modifiers, OnConflictStrategy.abort);
   }
 
   @override
   Future<void> insertPayments(List<PaymentEntity> payments) async {
     await _paymentEntityInsertionAdapter.insertList(
-        payments, OnConflictStrategy.replace);
+        payments, OnConflictStrategy.abort);
   }
 
   @override
@@ -4414,6 +4414,40 @@ class _$PromotionDao extends PromotionDao {
             priority: row['priority'] as int,
             isStackable: (row['is_stackable'] as int) != 0,
             isActive: (row['is_active'] as int) != 0));
+  }
+
+  @override
+  Future<List<PromotionEntity>> getAllPromotions() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM promotions ORDER BY priority DESC',
+        mapper: (Map<String, Object?> row) => PromotionEntity(
+            id: row['id'] as String,
+            name: row['name'] as String,
+            type: row['type'] as String,
+            targetProductId: row['target_product_id'] as String?,
+            targetCategoryId: row['target_category_id'] as String?,
+            buyQuantity: row['buy_quantity'] as int,
+            getQuantity: row['get_quantity'] as int,
+            discountValue: row['discount_value'] as double,
+            minOrderAmount: row['min_order_amount'] as double,
+            daysOfWeek: row['days_of_week'] as String?,
+            startTime: row['start_time'] as String?,
+            endTime: row['end_time'] as String?,
+            startDate: row['start_date'] as int?,
+            endDate: row['end_date'] as int?,
+            priority: row['priority'] as int,
+            isStackable: (row['is_stackable'] as int) != 0,
+            isActive: (row['is_active'] as int) != 0));
+  }
+
+  @override
+  Future<void> setPromotionActive(
+    String id,
+    bool isActive,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE promotions SET is_active = ?2 WHERE id = ?1',
+        arguments: [id, isActive ? 1 : 0]);
   }
 
   @override

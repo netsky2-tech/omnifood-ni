@@ -57,12 +57,15 @@ class _LockScreenViewState extends State<LockScreenView> {
     
     if (success) {
       debugPrint('Unlock successful, navigating to /home');
-      navigator.pushReplacementNamed('/home');
+      if (mounted) {
+        navigator.pushReplacementNamed('/home');
+      }
     } else {
-      debugPrint('Unlock failed');
-      // Give the user a moment to see the full PIN filled before clearing
+      debugPrint('Unlock failed for length: ${_pin.length}');
       await Future.delayed(const Duration(milliseconds: 300));
-      _onClear();
+      if (mounted) {
+        _onClear();
+      }
     }
   }
 
@@ -81,6 +84,13 @@ class _LockScreenViewState extends State<LockScreenView> {
             backgroundColor: colorScheme.surface,
             elevation: 0,
             shape: Border(bottom: BorderSide(color: colorScheme.outlineVariant)),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.settings_outlined),
+                tooltip: 'Configuración / Login Master',
+                onPressed: () => Navigator.pushReplacementNamed(context, '/'),
+              ),
+            ],
           ),
           body: _buildUserList(context, viewModel, colorScheme, textTheme, isHandheld: true),
         );
@@ -141,64 +151,79 @@ class _LockScreenViewState extends State<LockScreenView> {
       ),
       child: viewModel.isLoading
           ? const Center(child: CircularProgressIndicator())
-          : ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: viewModel.users.length,
-              separatorBuilder: (context, index) => const SizedBox(height: 8),
-              itemBuilder: (context, index) {
-                final user = viewModel.users[index];
-                final isSelected = viewModel.selectedUser?.id == user.id;
-                return InkWell(
-                  onTap: () => viewModel.selectUser(user),
-                  child: Container(
-                    height: 64, // high-efficiency row height
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    decoration: BoxDecoration(
-                      color: isSelected ? colorScheme.primary : Colors.white,
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
-                        color: const Color(0xFF767777),
-                        width: 1,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          backgroundColor: isSelected ? Colors.white : colorScheme.primaryContainer,
-                          foregroundColor: isSelected ? colorScheme.primary : Colors.white,
-                          child: Text(user.name[0]),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.start,
+          : Column(
+              children: [
+                Expanded(
+                  child: ListView.separated(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: viewModel.users.length,
+                    separatorBuilder: (context, index) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
+                      final user = viewModel.users[index];
+                      final isSelected = viewModel.selectedUser?.id == user.id;
+                      return InkWell(
+                        onTap: () => viewModel.selectUser(user),
+                        child: Container(
+                          height: 64, // high-efficiency row height
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          decoration: BoxDecoration(
+                            color: isSelected ? colorScheme.primary : Colors.white,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: const Color(0xFF767777),
+                              width: 1,
+                            ),
+                          ),
+                          child: Row(
                             children: [
-                              Text(
-                                user.name,
-                                style: textTheme.labelLarge?.copyWith(
-                                  color: isSelected ? Colors.white : colorScheme.onSurface,
+                              CircleAvatar(
+                                backgroundColor: isSelected ? Colors.white : colorScheme.primaryContainer,
+                                foregroundColor: isSelected ? colorScheme.primary : Colors.white,
+                                child: Text(user.name[0]),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      user.name,
+                                      style: textTheme.bodyLarge?.copyWith(
+                                        color: isSelected ? Colors.white : colorScheme.onSurface,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    Text(
+                                      user.role.name.toUpperCase(),
+                                      style: textTheme.bodySmall?.copyWith(
+                                        color: isSelected ? Colors.white70 : colorScheme.outline,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              Text(
-                                user.role.toString().split('.').last.toUpperCase(),
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: isSelected ? Colors.white70 : colorScheme.onSurfaceVariant,
-                                ),
+                              Icon(
+                                Icons.chevron_right,
+                                color: isSelected ? Colors.white : colorScheme.outline,
                               ),
                             ],
                           ),
                         ),
-                        Icon(
-                          Icons.chevron_right,
-                          color: isSelected ? Colors.white : colorScheme.outline,
-                        ),
-                      ],
+                      );
+                    },
+                  ),
+                ),
+                if (!isHandheld)
+                  Padding(
+                    padding: const EdgeInsets.all(12.0),
+                    child: TextButton.icon(
+                      onPressed: () => Navigator.pushReplacementNamed(context, '/'),
+                      icon: const Icon(Icons.settings_outlined, size: 18),
+                      label: const Text('Configuración / Login Master'),
                     ),
                   ),
-                );
-              },
+              ],
             ),
     );
   }
@@ -258,7 +283,20 @@ class _LockScreenViewState extends State<LockScreenView> {
                   );
                 }),
               ),
-              SizedBox(height: isHandheld ? 16 : 40),
+              SizedBox(height: isHandheld ? 10 : 20),
+              if (_pin.length >= 4 && _pin.length < 6)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: FilledButton.icon(
+                    onPressed: viewModel.isLoading ? null : _attemptUnlock,
+                    icon: const Icon(Icons.login, size: 18),
+                    label: const Text('INGRESAR CON 4 DÍGITOS'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: colorScheme.primary,
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    ),
+                  ),
+                ),
               if (viewModel.error != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 16),
