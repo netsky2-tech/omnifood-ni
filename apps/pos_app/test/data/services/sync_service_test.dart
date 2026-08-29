@@ -162,6 +162,7 @@ class FakeInventoryRepository
     }
     syncMarkEvents.add('movement:$id');
     syncedIds.add(id);
+    syncMetadataByMovementId.remove(id);
   }
 
   @override
@@ -2279,13 +2280,12 @@ void main() {
 
       await syncService.triggerManualSync();
 
-      expect(mockInventoryRepository.syncedIds, isEmpty);
+      expect(mockInventoryRepository.syncedIds, ['mov-meta-mismatch']);
       expect(mockInventoryRepository.retriedIds, [
         'mov-rejected',
         'mov-blocked',
         'mov-mismatch',
         'mov-unknown',
-        'mov-meta-mismatch',
       ]);
       expect(
         mockInventoryRepository.syncMetadataByMovementId.map(
@@ -2296,7 +2296,6 @@ void main() {
           'mov-blocked': 'PRIOR_FAILURE',
           'mov-mismatch': 'CRITICAL_IDEMPOTENCY_MISMATCH',
           'mov-unknown': 'BOGUS_STATUS',
-          'mov-meta-mismatch': 'DUPLICATE_REPLAY',
         }),
       );
     },
@@ -2904,7 +2903,7 @@ void main() {
         expect(mockSalesRepository.syncedInvoiceIdBatches, [
           ['sale-isolated'],
         ]);
-        expect(isolatedSyncService.lastSyncError, contains('InboundCatalog'));
+        expect(isolatedSyncService.lastSyncError, contains('Catálogo'));
       } finally {
         await database.close();
       }
