@@ -389,6 +389,8 @@ class SalesMapper {
 
   // --- Payment ---
   static Payment toPaymentDomain(PaymentEntity entity) {
+    // ignore: avoid_print
+    print('[SYNC-DEBUG] toPaymentDomain: entity.id="${entity.id}" method="${entity.method}"');
     return Payment(
       id: entity.id,
       invoiceId: entity.invoiceId,
@@ -420,6 +422,8 @@ class SalesMapper {
   }
 
   static PaymentEntity toPaymentEntity(Payment domain) {
+    // ignore: avoid_print
+    print('[SYNC-DEBUG] toPaymentEntity: domain.id="${domain.id}" method=${domain.method.name}');
     return PaymentEntity(
       id: domain.id,
       invoiceId: domain.invoiceId,
@@ -496,24 +500,28 @@ class SalesMapper {
           'extraPrice': m.extraPrice,
         })).toList(),
       }).toList(),
-      'payments': payments.map((payment) => {
-        'id': payment.id,
-        'method': payment.method.name,
-        'amount': payment.amount,
-        'currency': payment.currency,
-        'exchangeRate': payment.exchangeRate,
-        'amountNio': payment.amountNio,
-        'changeGiven': payment.changeGiven,
-        'changeCurrency': payment.changeCurrency,
-        'voucherCode': payment.voucherCode,
-        'cardBrand': payment.cardBrand,
-        'cardType': payment.cardType,
-        'bankPos': payment.bankPos,
-        'reconciliationStatus': payment.reconciliationStatus,
-        'last4': payment.last4,
-        'batchNumber': payment.batchNumber,
-        'reconciledAt': payment.reconciledAt?.toIso8601String(),
-        'reconciledByUserId': payment.reconciledByUserId,
+      'payments': payments.map((payment) {
+        // ignore: avoid_print
+        if (payment.id.isEmpty) print('[SYNC-DEBUG] EMPTY PAYMENT ID! invoiceId=${invoice.id} method=${payment.method.name}');
+        return {
+          'id': payment.id,
+          'method': payment.method.name,
+          'amount': payment.amount,
+          'currency': payment.currency,
+          'exchangeRate': payment.exchangeRate,
+          'amountNio': payment.amountNio,
+          'changeGiven': payment.changeGiven,
+          'changeCurrency': payment.changeCurrency,
+          'voucherCode': payment.voucherCode,
+          'cardBrand': payment.cardBrand,
+          'cardType': payment.cardType,
+          'bankPos': payment.bankPos,
+          'reconciliationStatus': payment.reconciliationStatus,
+          'last4': payment.last4,
+          'batchNumber': payment.batchNumber,
+          'reconciledAt': payment.reconciledAt?.toIso8601String(),
+          'reconciledByUserId': payment.reconciledByUserId,
+        };
       }).toList(),
     };
   }

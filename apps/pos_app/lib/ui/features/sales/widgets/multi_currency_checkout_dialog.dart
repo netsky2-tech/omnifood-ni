@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
 import '../../../../presentation/features/sales/view_models/sale_view_model.dart';
 import '../../../../domain/models/sales/payment.dart';
 import '../../../../domain/services/sales/currency_checkout_calculator.dart';
@@ -184,7 +185,7 @@ class _MultiCurrencyCheckoutDialogState
     Payment payment;
     if (_selectedMethod == PaymentMethod.cash) {
       payment = Payment(
-        id: '',
+        id: const Uuid().v4(),
         invoiceId: '',
         method: PaymentMethod.cash,
         amount: breakdown.tenderAmount,
@@ -202,7 +203,7 @@ class _MultiCurrencyCheckoutDialogState
       final amountNio = tenderAmount * rate;
 
       payment = Payment(
-        id: '',
+        id: const Uuid().v4(),
         invoiceId: '',
         method: PaymentMethod.card,
         amount: tenderAmount,
@@ -223,7 +224,7 @@ class _MultiCurrencyCheckoutDialogState
     } else {
       final rate = _tenderCurrency == 'USD' ? vm.commercialRate : 1.0;
       payment = Payment(
-        id: '',
+        id: const Uuid().v4(),
         invoiceId: '',
         method: _selectedMethod,
         amount: tenderAmount,

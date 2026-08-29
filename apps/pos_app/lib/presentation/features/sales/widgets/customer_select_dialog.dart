@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import '../../../../core/utils/nicaragua_fiscal_validator.dart';
 import '../../../../domain/models/customer/customer.dart';
 import '../view_models/sale_view_model.dart';
@@ -16,10 +15,7 @@ class CustomerSelectDialog extends StatefulWidget {
     return showDialog<Customer?>(
       context: context,
       barrierDismissible: true,
-      builder: (_) => ChangeNotifierProvider<SaleViewModel>.value(
-        value: viewModel,
-        child: CustomerSelectDialog(viewModel: viewModel),
-      ),
+      builder: (_) => CustomerSelectDialog(viewModel: viewModel),
     );
   }
 
@@ -181,9 +177,11 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
           ),
         ],
       ),
-      content: SizedBox(
-        width: 480,
-        height: 480,
+      content: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 480,
+          maxHeight: MediaQuery.of(context).size.height * 0.7,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

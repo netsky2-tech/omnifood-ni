@@ -152,9 +152,9 @@ class DatabaseSeeder {
     final existingWarehouses = await database.warehouseDao.findAllActiveWarehouses();
     if (force || existingWarehouses.isEmpty) {
       final warehouses = <WarehouseEntity>[
-        WarehouseEntity(id: 'BOD-01', name: 'Almacén Central', description: 'Bodega principal de insumos secos y granos'),
-        WarehouseEntity(id: 'BOD-02', name: 'Barra & Cafetería', description: 'Stock de operación inmediata para baristas'),
-        WarehouseEntity(id: 'BOD-03', name: 'Cocina & BOH', description: 'Almacén de cocina caliente y refrigerados'),
+        WarehouseEntity(id: 'a1000000-0000-4000-8000-000000000001', name: 'Almacén Central', description: 'Bodega principal de insumos secos y granos'),
+        WarehouseEntity(id: 'a1000000-0000-4000-8000-000000000002', name: 'Barra & Cafetería', description: 'Stock de operación inmediata para baristas'),
+        WarehouseEntity(id: 'a1000000-0000-4000-8000-000000000003', name: 'Cocina & BOH', description: 'Almacén de cocina caliente y refrigerados'),
       ];
       await database.warehouseDao.insertWarehouses(warehouses);
     }
@@ -163,10 +163,10 @@ class DatabaseSeeder {
     final existingSuppliers = await database.supplierDao.findAllActiveSuppliers();
     if (force || existingSuppliers.isEmpty) {
       final suppliers = <SupplierEntity>[
-        SupplierEntity(id: 'PROV-01', name: 'Café Las Flores S.A.', phone: '+505 2278-1111', contactPerson: 'Juan Flores', creditTerms: '30 días'),
-        SupplierEntity(id: 'PROV-02', name: 'Lácteos La Perfecta S.A.', phone: '+505 2249-2222', contactPerson: 'María Gómez', creditTerms: '15 días'),
-        SupplierEntity(id: 'PROV-03', name: 'Granos Básicos Tío Pelón', phone: '+505 2233-4444', contactPerson: 'Pedro Rivas', creditTerms: 'Contado'),
-        SupplierEntity(id: 'PROV-04', name: 'Empaques & Vasos Nicapack', phone: '+505 2255-6666', contactPerson: 'Ana Toruño', creditTerms: '30 días'),
+        SupplierEntity(id: 'b1000000-0000-4000-8000-000000000001', name: 'Café Las Flores S.A.', phone: '+505 2278-1111', contactPerson: 'Juan Flores', creditTerms: '30 días'),
+        SupplierEntity(id: 'b1000000-0000-4000-8000-000000000002', name: 'Lácteos La Perfecta S.A.', phone: '+505 2249-2222', contactPerson: 'María Gómez', creditTerms: '15 días'),
+        SupplierEntity(id: 'b1000000-0000-4000-8000-000000000003', name: 'Granos Básicos Tío Pelón', phone: '+505 2233-4444', contactPerson: 'Pedro Rivas', creditTerms: 'Contado'),
+        SupplierEntity(id: 'b1000000-0000-4000-8000-000000000004', name: 'Empaques & Vasos Nicapack', phone: '+505 2255-6666', contactPerson: 'Ana Toruño', creditTerms: '30 días'),
       ];
       await database.supplierDao.insertSuppliers(suppliers);
     }
@@ -175,65 +175,65 @@ class DatabaseSeeder {
     final existingInsumos = await database.insumoDao.findAllActiveInsumos();
     if (force || existingInsumos.isEmpty) {
       final insumos = <InsumoEntity>[
-        InsumoEntity(id: 'INS-01', name: 'Café en Grano Matagalpa', consumptionUom: 'kg', warehouseId: 'BOD-02', stock: 24.5, averageCost: 180.0, parLevel: 30.0, stockMin: 5.0, stockMax: 50.0),
-        InsumoEntity(id: 'INS-02', name: 'Leche Entera La Perfecta', consumptionUom: 'L', warehouseId: 'BOD-02', stock: 38.0, averageCost: 38.0, parLevel: 50.0, stockMin: 10.0, stockMax: 80.0, isPerishable: true),
-        InsumoEntity(id: 'INS-03', name: 'Azúcar Sulfitada San Antonio', consumptionUom: 'kg', warehouseId: 'BOD-02', stock: 48.0, averageCost: 22.0, parLevel: 60.0, stockMin: 10.0, stockMax: 100.0),
-        InsumoEntity(id: 'INS-04', name: 'Queso Chontaleño Fresco', consumptionUom: 'kg', warehouseId: 'BOD-03', stock: 14.0, averageCost: 115.0, parLevel: 20.0, stockMin: 3.0, stockMax: 30.0, isPerishable: true),
-        InsumoEntity(id: 'INS-05', name: 'Arroz 80/20 Calidad Superior', consumptionUom: 'kg', warehouseId: 'BOD-03', stock: 58.0, averageCost: 24.0, parLevel: 80.0, stockMin: 15.0, stockMax: 120.0),
-        InsumoEntity(id: 'INS-06', name: 'Frijol Rojo de Seda Nacional', consumptionUom: 'kg', warehouseId: 'BOD-03', stock: 42.0, averageCost: 36.0, parLevel: 60.0, stockMin: 10.0, stockMax: 90.0),
-        InsumoEntity(id: 'INS-07', name: 'Crema Ácida Nicaragüense', consumptionUom: 'L', warehouseId: 'BOD-03', stock: 11.5, averageCost: 68.0, parLevel: 18.0, stockMin: 3.0, stockMax: 25.0, isPerishable: true),
-        InsumoEntity(id: 'INS-08', name: 'Vaso Térmico 12oz con Tapa', consumptionUom: 'UND', warehouseId: 'BOD-02', stock: 220.0, averageCost: 3.50, parLevel: 350.0, stockMin: 50.0, stockMax: 500.0),
-        InsumoEntity(id: 'INS-09', name: 'Vaso Térmico 16oz con Tapa', consumptionUom: 'UND', warehouseId: 'BOD-02', stock: 175.0, averageCost: 4.20, parLevel: 300.0, stockMin: 40.0, stockMax: 400.0),
-        InsumoEntity(id: 'INS-10', name: 'Pulpa de Pitahaya Congelada', consumptionUom: 'kg', warehouseId: 'BOD-02', stock: 12.0, averageCost: 45.0, parLevel: 18.0, stockMin: 3.0, stockMax: 30.0, isPerishable: true),
+        InsumoEntity(id: 'c1000000-0000-4000-8000-000000000001', name: 'Café en Grano Matagalpa', consumptionUom: 'kg', warehouseId: 'a1000000-0000-4000-8000-000000000002', stock: 24.5, averageCost: 180.0, parLevel: 30.0, stockMin: 5.0, stockMax: 50.0),
+        InsumoEntity(id: 'c1000000-0000-4000-8000-000000000002', name: 'Leche Entera La Perfecta', consumptionUom: 'L', warehouseId: 'a1000000-0000-4000-8000-000000000002', stock: 38.0, averageCost: 38.0, parLevel: 50.0, stockMin: 10.0, stockMax: 80.0, isPerishable: true),
+        InsumoEntity(id: 'c1000000-0000-4000-8000-000000000003', name: 'Azúcar Sulfitada San Antonio', consumptionUom: 'kg', warehouseId: 'a1000000-0000-4000-8000-000000000002', stock: 48.0, averageCost: 22.0, parLevel: 60.0, stockMin: 10.0, stockMax: 100.0),
+        InsumoEntity(id: 'c1000000-0000-4000-8000-000000000004', name: 'Queso Chontaleño Fresco', consumptionUom: 'kg', warehouseId: 'a1000000-0000-4000-8000-000000000003', stock: 14.0, averageCost: 115.0, parLevel: 20.0, stockMin: 3.0, stockMax: 30.0, isPerishable: true),
+        InsumoEntity(id: 'c1000000-0000-4000-8000-000000000005', name: 'Arroz 80/20 Calidad Superior', consumptionUom: 'kg', warehouseId: 'a1000000-0000-4000-8000-000000000003', stock: 58.0, averageCost: 24.0, parLevel: 80.0, stockMin: 15.0, stockMax: 120.0),
+        InsumoEntity(id: 'c1000000-0000-4000-8000-000000000006', name: 'Frijol Rojo de Seda Nacional', consumptionUom: 'kg', warehouseId: 'a1000000-0000-4000-8000-000000000003', stock: 42.0, averageCost: 36.0, parLevel: 60.0, stockMin: 10.0, stockMax: 90.0),
+        InsumoEntity(id: 'c1000000-0000-4000-8000-000000000007', name: 'Crema Ácida Nicaragüense', consumptionUom: 'L', warehouseId: 'a1000000-0000-4000-8000-000000000003', stock: 11.5, averageCost: 68.0, parLevel: 18.0, stockMin: 3.0, stockMax: 25.0, isPerishable: true),
+        InsumoEntity(id: 'c1000000-0000-4000-8000-000000000008', name: 'Vaso Térmico 12oz con Tapa', consumptionUom: 'UND', warehouseId: 'a1000000-0000-4000-8000-000000000002', stock: 220.0, averageCost: 3.50, parLevel: 350.0, stockMin: 50.0, stockMax: 500.0),
+        InsumoEntity(id: 'c1000000-0000-4000-8000-000000000009', name: 'Vaso Térmico 16oz con Tapa', consumptionUom: 'UND', warehouseId: 'a1000000-0000-4000-8000-000000000002', stock: 175.0, averageCost: 4.20, parLevel: 300.0, stockMin: 40.0, stockMax: 400.0),
+        InsumoEntity(id: 'c1000000-0000-4000-8000-000000000010', name: 'Pulpa de Pitahaya Congelada', consumptionUom: 'kg', warehouseId: 'a1000000-0000-4000-8000-000000000002', stock: 12.0, averageCost: 45.0, parLevel: 18.0, stockMin: 3.0, stockMax: 30.0, isPerishable: true),
       ];
       await database.insumoDao.insertInsumos(insumos);
     }
 
     // 6. Insumo UOM Conversions
-    final existingConversions = await database.uomConversionDao.findConversionsByInsumoId('INS-01');
+    final existingConversions = await database.uomConversionDao.findConversionsByInsumoId('c1000000-0000-4000-8000-000000000001');
     if (force || existingConversions.isEmpty) {
       final conversions = <UomConversionEntity>[
-        UomConversionEntity(id: 'CONV-01-01', insumoId: 'INS-01', unitName: 'kg', factor: 1.0),
-        UomConversionEntity(id: 'CONV-01-02', insumoId: 'INS-01', unitName: 'lb', factor: 0.453592),
-        UomConversionEntity(id: 'CONV-01-03', insumoId: 'INS-01', unitName: 'g', factor: 0.001),
-        UomConversionEntity(id: 'CONV-01-04', insumoId: 'INS-01', unitName: 'saco', factor: 45.36),
-        UomConversionEntity(id: 'CONV-02-01', insumoId: 'INS-02', unitName: 'L', factor: 1.0),
-        UomConversionEntity(id: 'CONV-02-02', insumoId: 'INS-02', unitName: 'ml', factor: 0.001),
-        UomConversionEntity(id: 'CONV-02-03', insumoId: 'INS-02', unitName: 'gal', factor: 3.78541),
-        UomConversionEntity(id: 'CONV-02-04', insumoId: 'INS-02', unitName: 'caja', factor: 12.0),
-        UomConversionEntity(id: 'CONV-03-01', insumoId: 'INS-03', unitName: 'kg', factor: 1.0),
-        UomConversionEntity(id: 'CONV-03-02', insumoId: 'INS-03', unitName: 'lb', factor: 0.453592),
-        UomConversionEntity(id: 'CONV-03-03', insumoId: 'INS-03', unitName: 'saco', factor: 50.0),
-        UomConversionEntity(id: 'CONV-04-01', insumoId: 'INS-04', unitName: 'kg', factor: 1.0),
-        UomConversionEntity(id: 'CONV-04-02', insumoId: 'INS-04', unitName: 'lb', factor: 0.453592),
-        UomConversionEntity(id: 'CONV-05-01', insumoId: 'INS-05', unitName: 'kg', factor: 1.0),
-        UomConversionEntity(id: 'CONV-05-02', insumoId: 'INS-05', unitName: 'lb', factor: 0.453592),
-        UomConversionEntity(id: 'CONV-05-03', insumoId: 'INS-05', unitName: 'saco', factor: 45.36),
-        UomConversionEntity(id: 'CONV-06-01', insumoId: 'INS-06', unitName: 'kg', factor: 1.0),
-        UomConversionEntity(id: 'CONV-06-02', insumoId: 'INS-06', unitName: 'lb', factor: 0.453592),
-        UomConversionEntity(id: 'CONV-06-03', insumoId: 'INS-06', unitName: 'saco', factor: 45.36),
-        UomConversionEntity(id: 'CONV-07-01', insumoId: 'INS-07', unitName: 'L', factor: 1.0),
-        UomConversionEntity(id: 'CONV-07-02', insumoId: 'INS-07', unitName: 'ml', factor: 0.001),
-        UomConversionEntity(id: 'CONV-08-01', insumoId: 'INS-08', unitName: 'UND', factor: 1.0),
-        UomConversionEntity(id: 'CONV-08-02', insumoId: 'INS-08', unitName: 'paq', factor: 50.0),
-        UomConversionEntity(id: 'CONV-08-03', insumoId: 'INS-08', unitName: 'caja', factor: 1000.0),
-        UomConversionEntity(id: 'CONV-09-01', insumoId: 'INS-09', unitName: 'UND', factor: 1.0),
-        UomConversionEntity(id: 'CONV-09-02', insumoId: 'INS-09', unitName: 'paq', factor: 50.0),
-        UomConversionEntity(id: 'CONV-09-03', insumoId: 'INS-09', unitName: 'caja', factor: 1000.0),
-        UomConversionEntity(id: 'CONV-10-01', insumoId: 'INS-10', unitName: 'kg', factor: 1.0),
-        UomConversionEntity(id: 'CONV-10-02', insumoId: 'INS-10', unitName: 'lb', factor: 0.453592),
-        UomConversionEntity(id: 'CONV-10-03', insumoId: 'INS-10', unitName: 'paq', factor: 1.0),
+        UomConversionEntity(id: 'd1000000-0000-4000-8000-000000000001', insumoId: 'c1000000-0000-4000-8000-000000000001', unitName: 'kg', factor: 1.0),
+        UomConversionEntity(id: 'd1000000-0000-4000-8000-000000000002', insumoId: 'c1000000-0000-4000-8000-000000000001', unitName: 'lb', factor: 0.453592),
+        UomConversionEntity(id: 'd1000000-0000-4000-8000-000000000003', insumoId: 'c1000000-0000-4000-8000-000000000001', unitName: 'g', factor: 0.001),
+        UomConversionEntity(id: 'd1000000-0000-4000-8000-000000000004', insumoId: 'c1000000-0000-4000-8000-000000000001', unitName: 'saco', factor: 45.36),
+        UomConversionEntity(id: 'd1000000-0000-4000-8000-000000000005', insumoId: 'c1000000-0000-4000-8000-000000000002', unitName: 'L', factor: 1.0),
+        UomConversionEntity(id: 'd1000000-0000-4000-8000-000000000006', insumoId: 'c1000000-0000-4000-8000-000000000002', unitName: 'ml', factor: 0.001),
+        UomConversionEntity(id: 'd1000000-0000-4000-8000-000000000007', insumoId: 'c1000000-0000-4000-8000-000000000002', unitName: 'gal', factor: 3.78541),
+        UomConversionEntity(id: 'd1000000-0000-4000-8000-000000000008', insumoId: 'c1000000-0000-4000-8000-000000000002', unitName: 'caja', factor: 12.0),
+        UomConversionEntity(id: 'd1000000-0000-4000-8000-000000000009', insumoId: 'c1000000-0000-4000-8000-000000000003', unitName: 'kg', factor: 1.0),
+        UomConversionEntity(id: 'd1000000-0000-4000-8000-000000000010', insumoId: 'c1000000-0000-4000-8000-000000000003', unitName: 'lb', factor: 0.453592),
+        UomConversionEntity(id: 'd1000000-0000-4000-8000-000000000011', insumoId: 'c1000000-0000-4000-8000-000000000003', unitName: 'saco', factor: 50.0),
+        UomConversionEntity(id: 'd1000000-0000-4000-8000-000000000012', insumoId: 'c1000000-0000-4000-8000-000000000004', unitName: 'kg', factor: 1.0),
+        UomConversionEntity(id: 'd1000000-0000-4000-8000-000000000013', insumoId: 'c1000000-0000-4000-8000-000000000004', unitName: 'lb', factor: 0.453592),
+        UomConversionEntity(id: 'd1000000-0000-4000-8000-000000000014', insumoId: 'c1000000-0000-4000-8000-000000000005', unitName: 'kg', factor: 1.0),
+        UomConversionEntity(id: 'd1000000-0000-4000-8000-000000000015', insumoId: 'c1000000-0000-4000-8000-000000000005', unitName: 'lb', factor: 0.453592),
+        UomConversionEntity(id: 'd1000000-0000-4000-8000-000000000016', insumoId: 'c1000000-0000-4000-8000-000000000005', unitName: 'saco', factor: 45.36),
+        UomConversionEntity(id: 'd1000000-0000-4000-8000-000000000017', insumoId: 'c1000000-0000-4000-8000-000000000006', unitName: 'kg', factor: 1.0),
+        UomConversionEntity(id: 'd1000000-0000-4000-8000-000000000018', insumoId: 'c1000000-0000-4000-8000-000000000006', unitName: 'lb', factor: 0.453592),
+        UomConversionEntity(id: 'd1000000-0000-4000-8000-000000000019', insumoId: 'c1000000-0000-4000-8000-000000000006', unitName: 'saco', factor: 45.36),
+        UomConversionEntity(id: 'd1000000-0000-4000-8000-000000000020', insumoId: 'c1000000-0000-4000-8000-000000000007', unitName: 'L', factor: 1.0),
+        UomConversionEntity(id: 'd1000000-0000-4000-8000-000000000021', insumoId: 'c1000000-0000-4000-8000-000000000007', unitName: 'ml', factor: 0.001),
+        UomConversionEntity(id: 'd1000000-0000-4000-8000-000000000022', insumoId: 'c1000000-0000-4000-8000-000000000008', unitName: 'UND', factor: 1.0),
+        UomConversionEntity(id: 'd1000000-0000-4000-8000-000000000023', insumoId: 'c1000000-0000-4000-8000-000000000008', unitName: 'paq', factor: 50.0),
+        UomConversionEntity(id: 'd1000000-0000-4000-8000-000000000024', insumoId: 'c1000000-0000-4000-8000-000000000008', unitName: 'caja', factor: 1000.0),
+        UomConversionEntity(id: 'd1000000-0000-4000-8000-000000000025', insumoId: 'c1000000-0000-4000-8000-000000000009', unitName: 'UND', factor: 1.0),
+        UomConversionEntity(id: 'd1000000-0000-4000-8000-000000000026', insumoId: 'c1000000-0000-4000-8000-000000000009', unitName: 'paq', factor: 50.0),
+        UomConversionEntity(id: 'd1000000-0000-4000-8000-000000000027', insumoId: 'c1000000-0000-4000-8000-000000000009', unitName: 'caja', factor: 1000.0),
+        UomConversionEntity(id: 'd1000000-0000-4000-8000-000000000028', insumoId: 'c1000000-0000-4000-8000-000000000010', unitName: 'kg', factor: 1.0),
+        UomConversionEntity(id: 'd1000000-0000-4000-8000-000000000029', insumoId: 'c1000000-0000-4000-8000-000000000010', unitName: 'lb', factor: 0.453592),
+        UomConversionEntity(id: 'd1000000-0000-4000-8000-000000000030', insumoId: 'c1000000-0000-4000-8000-000000000010', unitName: 'paq', factor: 1.0),
       ];
       await database.uomConversionDao.insertConversions(conversions);
     }
 
     // 7. Batches (FIFO Stock Lots for Perishables)
-    final existingBatches = await database.batchDao.findActiveBatchesByInsumoId('INS-02');
+    final existingBatches = await database.batchDao.findActiveBatchesByInsumoId('c1000000-0000-4000-8000-000000000002');
     if (force || existingBatches.isEmpty) {
       final batches = <BatchEntity>[
         BatchEntity(
-          id: 'BATCH-INS-02-01',
-          insumoId: 'INS-02',
+          id: 'e1000000-0000-4000-8000-000000000001',
+          insumoId: 'c1000000-0000-4000-8000-000000000002',
           batchNumber: 'LOTE-LEC-2026-08',
           remainingStock: 38.0,
           receivedDate: now.subtract(const Duration(days: 2)).toIso8601String(),
@@ -242,8 +242,8 @@ class DatabaseSeeder {
           isSynced: true,
         ),
         BatchEntity(
-          id: 'BATCH-INS-04-01',
-          insumoId: 'INS-04',
+          id: 'e1000000-0000-4000-8000-000000000002',
+          insumoId: 'c1000000-0000-4000-8000-000000000004',
           batchNumber: 'LOTE-QUE-2026-08',
           remainingStock: 14.0,
           receivedDate: now.subtract(const Duration(days: 1)).toIso8601String(),
@@ -252,8 +252,8 @@ class DatabaseSeeder {
           isSynced: true,
         ),
         BatchEntity(
-          id: 'BATCH-INS-07-01',
-          insumoId: 'INS-07',
+          id: 'e1000000-0000-4000-8000-000000000003',
+          insumoId: 'c1000000-0000-4000-8000-000000000007',
           batchNumber: 'LOTE-CRE-2026-08',
           remainingStock: 11.5,
           receivedDate: now.subtract(const Duration(days: 1)).toIso8601String(),
@@ -262,8 +262,8 @@ class DatabaseSeeder {
           isSynced: true,
         ),
         BatchEntity(
-          id: 'BATCH-INS-10-01',
-          insumoId: 'INS-10',
+          id: 'e1000000-0000-4000-8000-000000000004',
+          insumoId: 'c1000000-0000-4000-8000-000000000010',
           batchNumber: 'LOTE-PIT-2026-08',
           remainingStock: 12.0,
           receivedDate: now.subtract(const Duration(days: 3)).toIso8601String(),
@@ -281,57 +281,57 @@ class DatabaseSeeder {
     final existingProducts = await database.productDao.findAllActiveProducts();
     if (force || existingProducts.isEmpty) {
       final products = <ProductEntity>[
-        ProductEntity(id: 'PROD-01', name: 'Café Americano', uom: 'UND', stock: 100.0, averageCost: 12.50, sellPrice: 60.0, sku: 'CAF-AME-01', category: 'Bebidas Calientes', isPrepared: true),
-        ProductEntity(id: 'PROD-02', name: 'Cappuccino Artesanal', uom: 'UND', stock: 100.0, averageCost: 22.00, sellPrice: 85.0, sku: 'CAF-CAP-01', category: 'Bebidas Calientes', isPrepared: true),
-        ProductEntity(id: 'PROD-03', name: 'Desayuno Típico Nica', uom: 'UND', stock: 50.0, averageCost: 42.00, sellPrice: 130.0, sku: 'DES-TIP-01', category: 'Desayunos', isPrepared: true),
-        ProductEntity(id: 'PROD-04', name: 'Quesillo Doble Especial', uom: 'UND', stock: 50.0, averageCost: 31.00, sellPrice: 95.0, sku: 'COM-QUE-01', category: 'Comidas', isPrepared: true),
-        ProductEntity(id: 'PROD-05', name: 'Nacatamal de Cerdo Tradicional', uom: 'UND', stock: 30.0, averageCost: 48.00, sellPrice: 120.0, sku: 'COM-NAC-01', category: 'Comidas', isPrepared: true),
-        ProductEntity(id: 'PROD-06', name: 'Jugo Natural de Pitahaya', uom: 'UND', stock: 60.0, averageCost: 16.00, sellPrice: 55.0, sku: 'BEB-PIT-01', category: 'Bebidas Frías', isPrepared: true),
-        ProductEntity(id: 'PROD-07', name: 'Pastel Tres Leches Artesanal', uom: 'UND', stock: 25.0, averageCost: 28.00, sellPrice: 90.0, sku: 'POS-3LE-01', category: 'Postres', isPrepared: true),
-        ProductEntity(id: 'PROD-08', name: 'Agua Purificada 600ml', uom: 'UND', stock: 80.0, averageCost: 12.00, sellPrice: 30.0, sku: 'BEB-AGU-01', category: 'Bebidas Frías', isPrepared: false),
+        ProductEntity(id: 'f1000000-0000-4000-8000-000000000001', name: 'Café Americano', uom: 'UND', stock: 100.0, averageCost: 12.50, sellPrice: 60.0, sku: 'CAF-AME-01', category: 'Bebidas Calientes', isPrepared: true),
+        ProductEntity(id: 'f1000000-0000-4000-8000-000000000002', name: 'Cappuccino Artesanal', uom: 'UND', stock: 100.0, averageCost: 22.00, sellPrice: 85.0, sku: 'CAF-CAP-01', category: 'Bebidas Calientes', isPrepared: true),
+        ProductEntity(id: 'f1000000-0000-4000-8000-000000000003', name: 'Desayuno Típico Nica', uom: 'UND', stock: 50.0, averageCost: 42.00, sellPrice: 130.0, sku: 'DES-TIP-01', category: 'Desayunos', isPrepared: true),
+        ProductEntity(id: 'f1000000-0000-4000-8000-000000000004', name: 'Quesillo Doble Especial', uom: 'UND', stock: 50.0, averageCost: 31.00, sellPrice: 95.0, sku: 'COM-QUE-01', category: 'Comidas', isPrepared: true),
+        ProductEntity(id: 'f1000000-0000-4000-8000-000000000005', name: 'Nacatamal de Cerdo Tradicional', uom: 'UND', stock: 30.0, averageCost: 48.00, sellPrice: 120.0, sku: 'COM-NAC-01', category: 'Comidas', isPrepared: true),
+        ProductEntity(id: 'f1000000-0000-4000-8000-000000000006', name: 'Jugo Natural de Pitahaya', uom: 'UND', stock: 60.0, averageCost: 16.00, sellPrice: 55.0, sku: 'BEB-PIT-01', category: 'Bebidas Frías', isPrepared: true),
+        ProductEntity(id: 'f1000000-0000-4000-8000-000000000007', name: 'Pastel Tres Leches Artesanal', uom: 'UND', stock: 25.0, averageCost: 28.00, sellPrice: 90.0, sku: 'POS-3LE-01', category: 'Postres', isPrepared: true),
+        ProductEntity(id: 'f1000000-0000-4000-8000-000000000008', name: 'Agua Purificada 600ml', uom: 'UND', stock: 80.0, averageCost: 12.00, sellPrice: 30.0, sku: 'BEB-AGU-01', category: 'Bebidas Frías', isPrepared: false),
       ];
       await database.productDao.insertProducts(products);
 
       final variants = <ProductVariantEntity>[
-        ProductVariantEntity(id: 'VAR-01-01', productId: 'PROD-01', name: '12oz Regular', priceAdjustment: 0.0),
-        ProductVariantEntity(id: 'VAR-01-02', productId: 'PROD-01', name: '16oz Grande', priceAdjustment: 25.0),
+        ProductVariantEntity(id: 'a2000000-0000-4000-8000-000000000001', productId: 'f1000000-0000-4000-8000-000000000001', name: '12oz Regular', priceAdjustment: 0.0),
+        ProductVariantEntity(id: 'a2000000-0000-4000-8000-000000000002', productId: 'f1000000-0000-4000-8000-000000000001', name: '16oz Grande', priceAdjustment: 25.0),
       ];
       await database.productDao.insertVariants(variants);
 
       final modifiers = <ProductModifierEntity>[
-        ProductModifierEntity(id: 'MOD-01-01', productId: 'PROD-01', name: 'Leche de Almendras', extraPrice: 20.0),
-        ProductModifierEntity(id: 'MOD-01-02', productId: 'PROD-01', name: 'Extra Shot Espresso', extraPrice: 15.0),
-        ProductModifierEntity(id: 'MOD-02-01', productId: 'PROD-02', name: 'Canela en Polvo', extraPrice: 5.0),
-        ProductModifierEntity(id: 'MOD-02-02', productId: 'PROD-02', name: 'Sirope de Vainilla', extraPrice: 15.0),
-        ProductModifierEntity(id: 'MOD-03-01', productId: 'PROD-03', name: 'Queso Frito Extra', extraPrice: 25.0),
-        ProductModifierEntity(id: 'MOD-03-02', productId: 'PROD-03', name: 'Huevo Extra al Gusto', extraPrice: 15.0),
-        ProductModifierEntity(id: 'MOD-04-01', productId: 'PROD-04', name: 'Con Chile Cabro', extraPrice: 0.0),
-        ProductModifierEntity(id: 'MOD-04-02', productId: 'PROD-04', name: 'Extra Crema Chontaleña', extraPrice: 15.0),
-        ProductModifierEntity(id: 'MOD-05-01', productId: 'PROD-05', name: 'Pan Simple Extra', extraPrice: 10.0),
+        ProductModifierEntity(id: 'b2000000-0000-4000-8000-000000000001', productId: 'f1000000-0000-4000-8000-000000000001', name: 'Leche de Almendras', extraPrice: 20.0),
+        ProductModifierEntity(id: 'b2000000-0000-4000-8000-000000000002', productId: 'f1000000-0000-4000-8000-000000000001', name: 'Extra Shot Espresso', extraPrice: 15.0),
+        ProductModifierEntity(id: 'b2000000-0000-4000-8000-000000000003', productId: 'f1000000-0000-4000-8000-000000000002', name: 'Canela en Polvo', extraPrice: 5.0),
+        ProductModifierEntity(id: 'b2000000-0000-4000-8000-000000000004', productId: 'f1000000-0000-4000-8000-000000000002', name: 'Sirope de Vainilla', extraPrice: 15.0),
+        ProductModifierEntity(id: 'b2000000-0000-4000-8000-000000000005', productId: 'f1000000-0000-4000-8000-000000000003', name: 'Queso Frito Extra', extraPrice: 25.0),
+        ProductModifierEntity(id: 'b2000000-0000-4000-8000-000000000006', productId: 'f1000000-0000-4000-8000-000000000003', name: 'Huevo Extra al Gusto', extraPrice: 15.0),
+        ProductModifierEntity(id: 'b2000000-0000-4000-8000-000000000007', productId: 'f1000000-0000-4000-8000-000000000004', name: 'Con Chile Cabro', extraPrice: 0.0),
+        ProductModifierEntity(id: 'b2000000-0000-4000-8000-000000000008', productId: 'f1000000-0000-4000-8000-000000000004', name: 'Extra Crema Chontaleña', extraPrice: 15.0),
+        ProductModifierEntity(id: 'b2000000-0000-4000-8000-000000000009', productId: 'f1000000-0000-4000-8000-000000000005', name: 'Pan Simple Extra', extraPrice: 10.0),
       ];
       await database.productDao.insertModifiers(modifiers);
     }
 
     // 9. Recipes & Version Documents
-    final existingRecipes = await database.recipeDao.findRecipeByProductId('PROD-01');
+    final existingRecipes = await database.recipeDao.findRecipeByProductId('f1000000-0000-4000-8000-000000000001');
     if (force || existingRecipes.isEmpty) {
       final recipes = <RecipeEntity>[
-        RecipeEntity(id: 'REC-01-01', productId: 'PROD-01', ingredientId: 'INS-01', ingredientType: 'INSUMO', quantity: 0.018),
-        RecipeEntity(id: 'REC-01-02', productId: 'PROD-01', ingredientId: 'INS-08', ingredientType: 'INSUMO', quantity: 1.0),
-        RecipeEntity(id: 'REC-02-01', productId: 'PROD-02', ingredientId: 'INS-01', ingredientType: 'INSUMO', quantity: 0.018),
-        RecipeEntity(id: 'REC-02-02', productId: 'PROD-02', ingredientId: 'INS-02', ingredientType: 'INSUMO', quantity: 0.20),
-        RecipeEntity(id: 'REC-02-03', productId: 'PROD-02', ingredientId: 'INS-08', ingredientType: 'INSUMO', quantity: 1.0),
-        RecipeEntity(id: 'REC-03-01', productId: 'PROD-03', ingredientId: 'INS-05', ingredientType: 'INSUMO', quantity: 0.15),
-        RecipeEntity(id: 'REC-03-02', productId: 'PROD-03', ingredientId: 'INS-06', ingredientType: 'INSUMO', quantity: 0.10),
-        RecipeEntity(id: 'REC-03-03', productId: 'PROD-03', ingredientId: 'INS-04', ingredientType: 'INSUMO', quantity: 0.08),
-        RecipeEntity(id: 'REC-03-04', productId: 'PROD-03', ingredientId: 'INS-07', ingredientType: 'INSUMO', quantity: 0.05),
+        RecipeEntity(id: 'c2000000-0000-4000-8000-000000000001', productId: 'f1000000-0000-4000-8000-000000000001', ingredientId: 'c1000000-0000-4000-8000-000000000001', ingredientType: 'INSUMO', quantity: 0.018),
+        RecipeEntity(id: 'c2000000-0000-4000-8000-000000000002', productId: 'f1000000-0000-4000-8000-000000000001', ingredientId: 'c1000000-0000-4000-8000-000000000008', ingredientType: 'INSUMO', quantity: 1.0),
+        RecipeEntity(id: 'c2000000-0000-4000-8000-000000000003', productId: 'f1000000-0000-4000-8000-000000000002', ingredientId: 'c1000000-0000-4000-8000-000000000001', ingredientType: 'INSUMO', quantity: 0.018),
+        RecipeEntity(id: 'c2000000-0000-4000-8000-000000000004', productId: 'f1000000-0000-4000-8000-000000000002', ingredientId: 'c1000000-0000-4000-8000-000000000002', ingredientType: 'INSUMO', quantity: 0.20),
+        RecipeEntity(id: 'c2000000-0000-4000-8000-000000000005', productId: 'f1000000-0000-4000-8000-000000000002', ingredientId: 'c1000000-0000-4000-8000-000000000008', ingredientType: 'INSUMO', quantity: 1.0),
+        RecipeEntity(id: 'c2000000-0000-4000-8000-000000000006', productId: 'f1000000-0000-4000-8000-000000000003', ingredientId: 'c1000000-0000-4000-8000-000000000005', ingredientType: 'INSUMO', quantity: 0.15),
+        RecipeEntity(id: 'c2000000-0000-4000-8000-000000000007', productId: 'f1000000-0000-4000-8000-000000000003', ingredientId: 'c1000000-0000-4000-8000-000000000006', ingredientType: 'INSUMO', quantity: 0.10),
+        RecipeEntity(id: 'c2000000-0000-4000-8000-000000000008', productId: 'f1000000-0000-4000-8000-000000000003', ingredientId: 'c1000000-0000-4000-8000-000000000004', ingredientType: 'INSUMO', quantity: 0.08),
+        RecipeEntity(id: 'c2000000-0000-4000-8000-000000000009', productId: 'f1000000-0000-4000-8000-000000000003', ingredientId: 'c1000000-0000-4000-8000-000000000007', ingredientType: 'INSUMO', quantity: 0.05),
       ];
       await database.recipeDao.insertRecipes(recipes);
 
       final recipeDocs = <RecipeVersionDocumentEntity>[
         RecipeVersionDocumentEntity(
-          id: 'RDOC-01',
-          productId: 'PROD-01',
+          id: 'd2000000-0000-4000-8000-000000000001',
+          productId: 'f1000000-0000-4000-8000-000000000001',
           productName: 'Café Americano',
           versionNumber: 1,
           yieldQuantity: 1.0,
@@ -340,14 +340,14 @@ class DatabaseSeeder {
           publishedAt: now.toIso8601String(),
           versionNote: 'Receta estándar 12oz con grano Matagalpa',
           componentsJson: jsonEncode([
-            {'ingredient_id': 'INS-01', 'ingredient_name': 'Café en Grano Matagalpa', 'ingredient_type': 'INSUMO', 'gross_quantity': 0.018, 'net_quantity': 0.0176, 'technical_shrink_pct': 2.0, 'unit_cost_nio': 180.0, 'component_uom': 'kg'},
-            {'ingredient_id': 'INS-08', 'ingredient_name': 'Vaso Térmico 12oz', 'ingredient_type': 'INSUMO', 'gross_quantity': 1.0, 'net_quantity': 1.0, 'technical_shrink_pct': 0.0, 'unit_cost_nio': 3.50, 'component_uom': 'UND'},
+            {'ingredient_id': 'c1000000-0000-4000-8000-000000000001', 'ingredient_name': 'Café en Grano Matagalpa', 'ingredient_type': 'INSUMO', 'gross_quantity': 0.018, 'net_quantity': 0.0176, 'technical_shrink_pct': 2.0, 'unit_cost_nio': 180.0, 'component_uom': 'kg'},
+            {'ingredient_id': '10000000-0000-4000-8000-000000000008', 'ingredient_name': 'Vaso Térmico 12oz', 'ingredient_type': 'INSUMO', 'gross_quantity': 1.0, 'net_quantity': 1.0, 'technical_shrink_pct': 0.0, 'unit_cost_nio': 3.50, 'component_uom': 'UND'},
           ]),
-          isSynced: true,
+          isSynced: false,
         ),
         RecipeVersionDocumentEntity(
-          id: 'RDOC-02',
-          productId: 'PROD-02',
+          id: 'd2000000-0000-4000-8000-000000000002',
+          productId: 'f1000000-0000-4000-8000-000000000002',
           productName: 'Cappuccino Artesanal',
           versionNumber: 1,
           yieldQuantity: 1.0,
@@ -356,11 +356,11 @@ class DatabaseSeeder {
           publishedAt: now.toIso8601String(),
           versionNote: 'Doble shot y leche texturizada',
           componentsJson: jsonEncode([
-            {'ingredient_id': 'INS-01', 'ingredient_name': 'Café en Grano Matagalpa', 'ingredient_type': 'INSUMO', 'gross_quantity': 0.018, 'net_quantity': 0.0175, 'technical_shrink_pct': 3.0, 'unit_cost_nio': 180.0, 'component_uom': 'kg'},
-            {'ingredient_id': 'INS-02', 'ingredient_name': 'Leche Entera La Perfecta', 'ingredient_type': 'INSUMO', 'gross_quantity': 0.20, 'net_quantity': 0.194, 'technical_shrink_pct': 3.0, 'unit_cost_nio': 38.00, 'component_uom': 'L'},
-            {'ingredient_id': 'INS-08', 'ingredient_name': 'Vaso Térmico 12oz', 'ingredient_type': 'INSUMO', 'gross_quantity': 1.0, 'net_quantity': 1.0, 'technical_shrink_pct': 0.0, 'unit_cost_nio': 3.50, 'component_uom': 'UND'},
+            {'ingredient_id': 'c1000000-0000-4000-8000-000000000001', 'ingredient_name': 'Café en Grano Matagalpa', 'ingredient_type': 'INSUMO', 'gross_quantity': 0.018, 'net_quantity': 0.0175, 'technical_shrink_pct': 3.0, 'unit_cost_nio': 180.0, 'component_uom': 'kg'},
+            {'ingredient_id': '10000000-0000-4000-8000-000000000002', 'ingredient_name': 'Leche Entera La Perfecta', 'ingredient_type': 'INSUMO', 'gross_quantity': 0.20, 'net_quantity': 0.194, 'technical_shrink_pct': 3.0, 'unit_cost_nio': 38.00, 'component_uom': 'L'},
+            {'ingredient_id': '10000000-0000-4000-8000-000000000008', 'ingredient_name': 'Vaso Térmico 12oz', 'ingredient_type': 'INSUMO', 'gross_quantity': 1.0, 'net_quantity': 1.0, 'technical_shrink_pct': 0.0, 'unit_cost_nio': 3.50, 'component_uom': 'UND'},
           ]),
-          isSynced: true,
+          isSynced: false,
         ),
       ];
       for (final doc in recipeDocs) {
@@ -369,7 +369,7 @@ class DatabaseSeeder {
     }
 
     // Auto-migrate any existing legacy recipe documents in SQLite for demo products
-    for (final pid in ['PROD-01', 'PROD-02', 'PROD-03', 'PROD-04']) {
+    for (final pid in ['f1000000-0000-4000-8000-000000000001', 'f1000000-0000-4000-8000-000000000002', 'f1000000-0000-4000-8000-000000000003', 'f1000000-0000-4000-8000-000000000004']) {
       final docs = await database.recipeVersionDocumentDao.findByProductId(pid);
       for (final doc in docs) {
         if (doc.componentsJson.contains('raw_material')) {
@@ -397,23 +397,23 @@ class DatabaseSeeder {
     final existingAreas = await database.restaurantAreaDao.getAllAreas();
     if (force || existingAreas.isEmpty) {
       final areas = <RestaurantAreaEntity>[
-        RestaurantAreaEntity(id: 'AREA-01', name: 'Terraza Food Park', displayOrder: 1, isActive: true),
-        RestaurantAreaEntity(id: 'AREA-02', name: 'Salón Climatizado', displayOrder: 2, isActive: true),
-        RestaurantAreaEntity(id: 'AREA-03', name: 'Barra Barista', displayOrder: 3, isActive: true),
+        RestaurantAreaEntity(id: 'e2000000-0000-4000-8000-000000000001', name: 'Terraza Food Park', displayOrder: 1, isActive: true),
+        RestaurantAreaEntity(id: 'e2000000-0000-4000-8000-000000000002', name: 'Salón Climatizado', displayOrder: 2, isActive: true),
+        RestaurantAreaEntity(id: 'e2000000-0000-4000-8000-000000000003', name: 'Barra Barista', displayOrder: 3, isActive: true),
       ];
       await database.restaurantAreaDao.insertAreas(areas);
 
       final tables = <RestaurantTableEntity>[
-        RestaurantTableEntity(id: 'TAB-01', areaId: 'AREA-01', tableNumber: 'T-01', capacity: 4, status: 'DISPONIBLE'),
-        RestaurantTableEntity(id: 'TAB-02', areaId: 'AREA-01', tableNumber: 'T-02', capacity: 4, status: 'DISPONIBLE'),
-        RestaurantTableEntity(id: 'TAB-03', areaId: 'AREA-01', tableNumber: 'T-03', capacity: 4, status: 'DISPONIBLE'),
-        RestaurantTableEntity(id: 'TAB-04', areaId: 'AREA-01', tableNumber: 'T-04', capacity: 6, status: 'DISPONIBLE'),
-        RestaurantTableEntity(id: 'TAB-05', areaId: 'AREA-02', tableNumber: 'M-01', capacity: 4, status: 'DISPONIBLE'),
-        RestaurantTableEntity(id: 'TAB-06', areaId: 'AREA-02', tableNumber: 'M-02', capacity: 4, status: 'DISPONIBLE'),
-        RestaurantTableEntity(id: 'TAB-07', areaId: 'AREA-02', tableNumber: 'M-03', capacity: 2, status: 'DISPONIBLE'),
-        RestaurantTableEntity(id: 'TAB-08', areaId: 'AREA-02', tableNumber: 'M-04', capacity: 6, status: 'DISPONIBLE'),
-        RestaurantTableEntity(id: 'TAB-09', areaId: 'AREA-03', tableNumber: 'B-01', capacity: 2, status: 'DISPONIBLE'),
-        RestaurantTableEntity(id: 'TAB-10', areaId: 'AREA-03', tableNumber: 'B-02', capacity: 2, status: 'DISPONIBLE'),
+        RestaurantTableEntity(id: 'f2000000-0000-4000-8000-000000000001', areaId: 'e2000000-0000-4000-8000-000000000001', tableNumber: 'T-01', capacity: 4, status: 'DISPONIBLE'),
+        RestaurantTableEntity(id: 'f2000000-0000-4000-8000-000000000002', areaId: 'e2000000-0000-4000-8000-000000000001', tableNumber: 'T-02', capacity: 4, status: 'DISPONIBLE'),
+        RestaurantTableEntity(id: 'f2000000-0000-4000-8000-000000000003', areaId: 'e2000000-0000-4000-8000-000000000001', tableNumber: 'T-03', capacity: 4, status: 'DISPONIBLE'),
+        RestaurantTableEntity(id: 'f2000000-0000-4000-8000-000000000004', areaId: 'e2000000-0000-4000-8000-000000000001', tableNumber: 'T-04', capacity: 6, status: 'DISPONIBLE'),
+        RestaurantTableEntity(id: 'f2000000-0000-4000-8000-000000000005', areaId: 'e2000000-0000-4000-8000-000000000002', tableNumber: 'M-01', capacity: 4, status: 'DISPONIBLE'),
+        RestaurantTableEntity(id: 'f2000000-0000-4000-8000-000000000006', areaId: 'e2000000-0000-4000-8000-000000000002', tableNumber: 'M-02', capacity: 4, status: 'DISPONIBLE'),
+        RestaurantTableEntity(id: 'f2000000-0000-4000-8000-000000000007', areaId: 'e2000000-0000-4000-8000-000000000002', tableNumber: 'M-03', capacity: 2, status: 'DISPONIBLE'),
+        RestaurantTableEntity(id: 'f2000000-0000-4000-8000-000000000008', areaId: 'e2000000-0000-4000-8000-000000000002', tableNumber: 'M-04', capacity: 6, status: 'DISPONIBLE'),
+        RestaurantTableEntity(id: 'f2000000-0000-4000-8000-000000000009', areaId: 'e2000000-0000-4000-8000-000000000003', tableNumber: 'B-01', capacity: 2, status: 'DISPONIBLE'),
+        RestaurantTableEntity(id: 'f2000000-0000-4000-8000-000000000010', areaId: 'e2000000-0000-4000-8000-000000000003', tableNumber: 'B-02', capacity: 2, status: 'DISPONIBLE'),
       ];
       await database.restaurantTableDao.insertTables(tables);
     }
@@ -423,20 +423,20 @@ class DatabaseSeeder {
     if (force || existingPromotions.isEmpty) {
       final promotions = <PromotionEntity>[
         PromotionEntity(
-          id: 'PROM-01',
+          id: 'a3000000-0000-4000-8000-000000000001',
           name: '2x1 en Café Americano',
           type: 'twoForOne',
-          targetProductId: 'PROD-01',
+          targetProductId: 'f1000000-0000-4000-8000-000000000001',
           buyQuantity: 1,
           getQuantity: 1,
           discountValue: 0.0,
           isActive: true,
         ),
         PromotionEntity(
-          id: 'PROM-02',
+          id: 'a3000000-0000-4000-8000-000000000002',
           name: '10% Descuento en Desayuno',
           type: 'percentageDiscount',
-          targetProductId: 'PROD-03',
+          targetProductId: 'f1000000-0000-4000-8000-000000000003',
           buyQuantity: 1,
           getQuantity: 1,
           discountValue: 10.0,
@@ -453,8 +453,8 @@ class DatabaseSeeder {
     if (force || existingMovements.isEmpty) {
       final movements = <MovementEntity>[
         MovementEntity(
-          id: 'MOV-01',
-          insumoId: 'INS-01',
+          id: 'b3000000-0000-4000-8000-000000000001',
+          insumoId: 'c1000000-0000-4000-8000-000000000001',
           type: 'PURCHASE_RECEIPT',
           quantity: 25.0,
           previousStock: 0.0,
@@ -465,8 +465,8 @@ class DatabaseSeeder {
           userId: 'admin-1',
         ),
         MovementEntity(
-          id: 'MOV-02',
-          insumoId: 'INS-02',
+          id: 'b3000000-0000-4000-8000-000000000002',
+          insumoId: 'c1000000-0000-4000-8000-000000000002',
           type: 'PURCHASE_RECEIPT',
           quantity: 40.0,
           previousStock: 0.0,
@@ -477,8 +477,8 @@ class DatabaseSeeder {
           userId: 'admin-1',
         ),
         MovementEntity(
-          id: 'MOV-03',
-          insumoId: 'INS-01',
+          id: 'b3000000-0000-4000-8000-000000000003',
+          insumoId: 'c1000000-0000-4000-8000-000000000001',
           type: 'SALE_DEDUCTION',
           quantity: -0.50,
           previousStock: 25.0,
@@ -489,8 +489,8 @@ class DatabaseSeeder {
           userId: 'cajero-1',
         ),
         MovementEntity(
-          id: 'MOV-04',
-          insumoId: 'INS-02',
+          id: 'b3000000-0000-4000-8000-000000000004',
+          insumoId: 'c1000000-0000-4000-8000-000000000002',
           type: 'SALE_DEDUCTION',
           quantity: -2.0,
           previousStock: 40.0,
@@ -518,7 +518,7 @@ class DatabaseSeeder {
     if (force || existingInvoices.isEmpty) {
       final invoices = <InvoiceEntity>[
         InvoiceEntity(
-          id: 'INV-01',
+          id: 'c3000000-0000-4000-8000-000000000001',
           number: '001-001-01-00000001',
           createdAt: now.subtract(const Duration(hours: 3)).millisecondsSinceEpoch,
           userId: 'cajero-1',
@@ -533,7 +533,7 @@ class DatabaseSeeder {
           sourceSequence: 1,
         ),
         InvoiceEntity(
-          id: 'INV-02',
+          id: 'c3000000-0000-4000-8000-000000000002',
           number: '001-001-01-00000002',
           createdAt: now.subtract(const Duration(hours: 2)).millisecondsSinceEpoch,
           userId: 'cajero-1',
@@ -556,8 +556,8 @@ class DatabaseSeeder {
       final invoiceItems = <InvoiceItemEntity>[
         InvoiceItemEntity(
           id: const Uuid().v4(),
-          invoiceId: 'INV-01',
-          productId: 'PROD-01',
+          invoiceId: 'c3000000-0000-4000-8000-000000000001',
+          productId: 'f1000000-0000-4000-8000-000000000001',
           productName: 'Café Americano',
           quantity: 1.0,
           unitPrice: 60.0,
@@ -568,8 +568,8 @@ class DatabaseSeeder {
         ),
         InvoiceItemEntity(
           id: const Uuid().v4(),
-          invoiceId: 'INV-01',
-          productId: 'PROD-07',
+          invoiceId: 'c3000000-0000-4000-8000-000000000001',
+          productId: 'f1000000-0000-4000-8000-000000000007',
           productName: 'Pastel Tres Leches Artesanal',
           quantity: 1.0,
           unitPrice: 90.0,
@@ -580,8 +580,8 @@ class DatabaseSeeder {
         ),
         InvoiceItemEntity(
           id: const Uuid().v4(),
-          invoiceId: 'INV-02',
-          productId: 'PROD-02',
+          invoiceId: 'c3000000-0000-4000-8000-000000000002',
+          productId: 'f1000000-0000-4000-8000-000000000002',
           productName: 'Cappuccino Artesanal',
           quantity: 2.0,
           unitPrice: 85.0,
@@ -592,8 +592,8 @@ class DatabaseSeeder {
         ),
         InvoiceItemEntity(
           id: const Uuid().v4(),
-          invoiceId: 'INV-02',
-          productId: 'PROD-03',
+          invoiceId: 'c3000000-0000-4000-8000-000000000002',
+          productId: 'f1000000-0000-4000-8000-000000000003',
           productName: 'Desayuno Típico Nica',
           quantity: 1.0,
           unitPrice: 130.0,
@@ -607,8 +607,8 @@ class DatabaseSeeder {
 
       final payments = <PaymentEntity>[
         PaymentEntity(
-          id: 'PAY-01',
-          invoiceId: 'INV-01',
+          id: 'd3000000-0000-4000-8000-000000000001',
+          invoiceId: 'c3000000-0000-4000-8000-000000000001',
           method: 'cash',
           amount: 172.50,
           currency: 'NIO',
@@ -618,8 +618,8 @@ class DatabaseSeeder {
           changeCurrency: 'NIO',
         ),
         PaymentEntity(
-          id: 'PAY-02',
-          invoiceId: 'INV-02',
+          id: 'd3000000-0000-4000-8000-000000000002',
+          invoiceId: 'c3000000-0000-4000-8000-000000000002',
           method: 'card',
           amount: 345.00,
           currency: 'NIO',

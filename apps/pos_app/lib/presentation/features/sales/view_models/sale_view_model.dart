@@ -801,7 +801,10 @@ class SaleViewModel extends ChangeNotifier {
     );
 
     final payments = customPayments != null && customPayments.isNotEmpty
-        ? customPayments.map((p) => p.copyWith(invoiceId: invoiceId)).toList()
+        ? customPayments.map((p) => p.copyWith(
+              invoiceId: invoiceId,
+              id: p.id.isEmpty ? const Uuid().v4() : p.id,
+            )).toList()
         : methods
             .map(
               (m) => Payment(

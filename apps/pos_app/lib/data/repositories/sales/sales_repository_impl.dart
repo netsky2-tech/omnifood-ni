@@ -183,6 +183,11 @@ class SalesRepositoryImpl implements SalesRepository {
       final items = await itemDao.getItemsByInvoiceId(invoice.id);
       final payments = await paymentDao.getPaymentsByInvoiceId(invoice.id);
 
+      // ignore: avoid_print
+      for (final pe in payments) {
+        print('[SYNC-DB] payment entity id="${pe.id}" invoiceId="${pe.invoiceId}" method="${pe.method}"');
+      }
+
       aggregates.add(
         SalesMapper.toSyncJson(
           invoice,

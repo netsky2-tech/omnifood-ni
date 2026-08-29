@@ -234,6 +234,14 @@ class SyncService {
       hasFailure |= auditOutcome.status != AuditSyncStatus.complete;
       if (hasFailure) domainErrors.add('AuditLogs');
 
+      // 1a. Sync recipe versions first so backend has recipe data
+      // before sales validation runs (validateInvoiceRecipeVersions).
+      final recipeSuccess = await _runDomain('recipe', _syncRecipeVersionDocuments);
+      if (!recipeSuccess) {
+        hasFailure = true;
+        domainErrors.add('Recetas');
+      }
+
       // 1b. Sync fiscal sales documents, including offline credit notes, before
       // inventory movements so backend replay sees sale -> credit-note ordering.
       final salesSuccess = await _runDomain('sales', _syncSalesDocuments);
@@ -248,11 +256,6 @@ class SyncService {
       if (!purchaseSuccess) {
         hasFailure = true;
         domainErrors.add('Compras');
-      }
-      final recipeSuccess = await _runDomain('recipe', _syncRecipeVersionDocuments);
-      if (!recipeSuccess) {
-        hasFailure = true;
-        domainErrors.add('Recetas');
       }
       final prodSuccess = await _runDomain('production', () async {
         productionLinkedMovementIds = await _syncProductionOrderDocuments();
@@ -352,38 +355,47 @@ class SyncService {
   }
 
   Future<void> _syncSalesDocuments() async {
-    final aggregates = await _salesRepository.getUnsyncedAggregates();
-    if (aggregates.isEmpty) return;
+    try {
+      developer.log('Sales sync: fetching unsynced aggregates...', name: 'SyncService');
+      final aggregates = await _salesRepository.getUnsyncedAggregates();
+      developer.log('Sales sync: found ${aggregates.length} unsynced aggregates', name: 'SyncService');
+      if (aggregates.isEmpty) return;
 
-    final records = aggregates.map(_buildSalesRecord).toList(growable: false)
-      ..sort((a, b) {
-        final seqA = (a['sourceSequence'] is int) ? a['sourceSequence'] as int : 1;
-        final seqB = (b['sourceSequence'] is int) ? b['sourceSequence'] as int : 1;
-        final bySequence = seqA.compareTo(seqB);
-        if (bySequence != 0) return bySequence;
-        final keyA = (a['idempotencyKey'] as String?) ?? '';
-        final keyB = (b['idempotencyKey'] as String?) ?? '';
-        return keyA.compareTo(keyB);
-      });
-    final sentRecords = records
-        .take(_batchEnvelopeLimit)
-        .toList(growable: false);
-    final response = await _dio.post(
-      '/v1/sync/batch',
-      data: {'records': sentRecords},
-      options: Options(
-        headers: {HttpHeaders.contentTypeHeader: 'application/json'},
-      ),
-    );
-    if (response.statusCode == 200 || response.statusCode == 201) {
-      final acceptedInvoiceIds = _acceptedSalesInvoiceIds(
-        sentRecords,
-        response.data,
+      final records = aggregates.map(_buildSalesRecord).toList(growable: false)
+        ..sort((a, b) {
+          final seqA = (a['sourceSequence'] is int) ? a['sourceSequence'] as int : 1;
+          final seqB = (b['sourceSequence'] is int) ? b['sourceSequence'] as int : 1;
+          final bySequence = seqA.compareTo(seqB);
+          if (bySequence != 0) return bySequence;
+          final keyA = (a['idempotencyKey'] as String?) ?? '';
+          final keyB = (b['idempotencyKey'] as String?) ?? '';
+          return keyA.compareTo(keyB);
+        });
+      final sentRecords = records
+          .take(_batchEnvelopeLimit)
+          .toList(growable: false);
+      developer.log('Sales sync: posting ${sentRecords.length} records to /v1/sync/batch', name: 'SyncService');
+      final response = await _dio.post(
+        '/v1/sync/batch',
+        data: {'records': sentRecords},
+        options: Options(
+          headers: {HttpHeaders.contentTypeHeader: 'application/json'},
+        ),
       );
-      if (acceptedInvoiceIds.isEmpty) return;
-      await _salesRepository.markAsSynced(
-        acceptedInvoiceIds,
-      );
+      developer.log('Sales sync: response status=${response.statusCode}', name: 'SyncService');
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final acceptedInvoiceIds = _acceptedSalesInvoiceIds(
+          sentRecords,
+          response.data,
+        );
+        if (acceptedInvoiceIds.isEmpty) return;
+        await _salesRepository.markAsSynced(
+          acceptedInvoiceIds,
+        );
+      }
+    } catch (e, st) {
+      developer.log('Sales sync: EXCEPTION', name: 'SyncService', error: e, stackTrace: st);
+      rethrow;
     }
   }
 
@@ -444,58 +456,70 @@ class SyncService {
   Future<void> _syncInventoryOutbox({
     Set<String> blockedMovementIds = const <String>{},
   }) async {
-    final unsynced = (await _inventoryRepository.getUnsyncedMovements())
-        .where(
-          (movement) =>
-              movement.type != MovementType.purchase &&
-              !(movement.reason?.startsWith('COUNT_SESSION:') ?? false) &&
-              !_isProductionLinkedMovement(movement) &&
-              !_isCreditNoteRestockMovement(movement) &&
-              !blockedMovementIds.contains(movement.id),
-        )
-        .toList(growable: false);
-    if (unsynced.isEmpty) return;
-
-    final replayCandidates = _orderByReplaySemantics(unsynced);
-    final candidatesForSend = replayCandidates
-        .take(_batchEnvelopeLimit)
-        .toList(growable: false);
-    final metadata = await _reserveMovementSyncMetadata(candidatesForSend);
-    final metadataByMovementId = {
-      for (final item in metadata) item.movementId: item,
-    };
-    final orderedBatch = _orderByReservedMetadata(
-      candidatesForSend,
-      metadataByMovementId,
-    );
-
     try {
-      final response = _role == syncRole['EDGE_SERVER']
-          ? await _postBatchEnvelope(orderedBatch, metadataByMovementId)
-          : await _postStandaloneDeltas(orderedBatch, metadataByMovementId);
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        developer.log(
-          'Synced ${orderedBatch.length} inventory deltas to cloud',
-          name: 'SyncService',
-        );
-        await _applyInventorySyncResults(
-          orderedBatch,
-          metadataByMovementId,
-          response.data,
-        );
-      }
-    } on DioException catch (e) {
-      developer.log('Failed to sync sales: ${e.message}', name: 'SyncService');
-      await _markMovementsAsFailed(orderedBatch, error: e.message);
-      rethrow;
-    } catch (e, stackTrace) {
-      developer.log(
-        'Failed to build/post inventory outbox payload',
-        name: 'SyncService',
-        error: e,
-        stackTrace: stackTrace,
+      developer.log('Inventory outbox: fetching unsynced movements...', name: 'SyncService');
+      final allUnsynced = await _inventoryRepository.getUnsyncedMovements();
+      developer.log('Inventory outbox: found ${allUnsynced.length} total unsynced movements', name: 'SyncService');
+      final unsynced = allUnsynced
+          .where(
+            (movement) =>
+                movement.type != MovementType.purchase &&
+                !(movement.reason?.startsWith('COUNT_SESSION:') ?? false) &&
+                !_isProductionLinkedMovement(movement) &&
+                !_isCreditNoteRestockMovement(movement) &&
+                !blockedMovementIds.contains(movement.id),
+          )
+          .toList(growable: false);
+      developer.log('Inventory outbox: ${unsynced.length} movements after filtering', name: 'SyncService');
+      if (unsynced.isEmpty) return;
+
+      final replayCandidates = _orderByReplaySemantics(unsynced);
+      final candidatesForSend = replayCandidates
+          .take(_batchEnvelopeLimit)
+          .toList(growable: false);
+      developer.log('Inventory outbox: reserving metadata for ${candidatesForSend.length} candidates', name: 'SyncService');
+      final metadata = await _reserveMovementSyncMetadata(candidatesForSend);
+      final metadataByMovementId = {
+        for (final item in metadata) item.movementId: item,
+      };
+      final orderedBatch = _orderByReservedMetadata(
+        candidatesForSend,
+        metadataByMovementId,
       );
-      await _markMovementsAsFailed(orderedBatch, error: e.toString());
+      developer.log('Inventory outbox: posting ${orderedBatch.length} records', name: 'SyncService');
+
+      try {
+        final response = _role == syncRole['EDGE_SERVER']
+            ? await _postBatchEnvelope(orderedBatch, metadataByMovementId)
+            : await _postStandaloneDeltas(orderedBatch, metadataByMovementId);
+        developer.log('Inventory outbox: response status=${response.statusCode}', name: 'SyncService');
+        if (response.statusCode == 200 || response.statusCode == 201) {
+          developer.log(
+            'Synced ${orderedBatch.length} inventory deltas to cloud',
+            name: 'SyncService',
+          );
+          await _applyInventorySyncResults(
+            orderedBatch,
+            metadataByMovementId,
+            response.data,
+          );
+        }
+      } on DioException catch (e) {
+        developer.log('Inventory outbox: DioException: ${e.type} - ${e.message}', name: 'SyncService', error: e);
+        await _markMovementsAsFailed(orderedBatch, error: e.message);
+        rethrow;
+      } catch (e, stackTrace) {
+        developer.log(
+          'Inventory outbox: EXCEPTION in build/post',
+          name: 'SyncService',
+          error: e,
+          stackTrace: stackTrace,
+        );
+        await _markMovementsAsFailed(orderedBatch, error: e.toString());
+        rethrow;
+      }
+    } catch (e, st) {
+      developer.log('Inventory outbox: TOP-LEVEL EXCEPTION', name: 'SyncService', error: e, stackTrace: st);
       rethrow;
     }
   }
