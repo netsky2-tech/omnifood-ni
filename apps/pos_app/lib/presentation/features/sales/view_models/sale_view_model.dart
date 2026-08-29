@@ -48,7 +48,9 @@ class SaleViewModel extends ChangeNotifier {
   final PrinterPort _printerPort;
   final PromotionsEngine _promotionsEngine;
   final LoyaltyService _loyaltyService;
+  SyncService? _syncService;
   StreamSubscription<InboundSyncResult>? _syncSubscription;
+  Timer? _syncDebounceTimer;
 
   SaleViewModel(
     this._salesRepository,
@@ -75,6 +77,7 @@ class SaleViewModel extends ChangeNotifier {
             printerPort ?? PrinterResolver.resolve(const PrinterConfig()),
         _promotionsEngine = promotionsEngine ?? const PromotionsEngine(),
         _loyaltyService = loyaltyService ?? const LoyaltyService() {
+    _syncService = syncService;
     if (syncService != null) {
       _syncSubscription = syncService.onInboundSync.listen((event) {
         if (event.productsCount > 0 || event.catalogValuesCount > 0) {
@@ -828,6 +831,13 @@ class SaleViewModel extends ChangeNotifier {
         payments: payments,
       );
 
+      // Fire-and-forget: trigger cloud sync after 3s debounce
+      // (batches rapid consecutive sales into one sync pass)
+      _syncDebounceTimer?.cancel();
+      _syncDebounceTimer = Timer(const Duration(seconds: 3), () {
+        _syncService?.triggerManualSync();
+      });
+
       // Process Customer Loyalty Points (Redemption & Accumulation)
       if (_selectedCustomer != null) {
         final now = DateTime.now().millisecondsSinceEpoch;
@@ -1141,6 +1151,7 @@ class SaleViewModel extends ChangeNotifier {
 
   @override
   void dispose() {
+    _syncDebounceTimer?.cancel();
     _syncSubscription?.cancel();
     super.dispose();
   }
