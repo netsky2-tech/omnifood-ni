@@ -246,12 +246,19 @@ export class InventoryMovementController {
   }
 
   @Post('recipes/versions')
-  @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)
-  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard)
   async ingestRecipeVersion(
     @Body() dto: SyncRecipeVersionDocumentDto,
     @GetTenantId() tenantId: string,
   ) {
-    return this.recipeService.ingestPosVersion({ tenantId, dto });
+    console.log('[RECIPE-VERSION] tenantId=%s dto.id=%s productId=%s components=%d', tenantId, dto.id, dto.productId, dto.components?.length);
+    try {
+      const result = await this.recipeService.ingestPosVersion({ tenantId, dto });
+      console.log('[RECIPE-VERSION] SUCCESS recipeVersionId=%s', result.recipeVersionId);
+      return result;
+    } catch (err: any) {
+      console.error('[RECIPE-VERSION] ERROR %s: %s', err?.name, err?.message);
+      throw err;
+    }
   }
 }

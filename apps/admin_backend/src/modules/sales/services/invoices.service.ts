@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, Repository } from 'typeorm';
-import { createHash } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { Invoice } from '../entities/invoice.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
 import { Payment } from '../entities/payment.entity';
@@ -204,29 +204,39 @@ export class InvoicesService {
       // persisting, reject any item id that already belongs to another
       // tenant so a colliding id cannot overwrite cross-tenant data.
       await this.assertItemTenantOwnership(tenantId, dto.items ?? [], manager);
-      await this.invoiceRepoFor(manager).upsert(
-        {
-          ...persistenceDto,
-          tenant_id: tenantId,
-          created_at: new Date(dto.createdAt),
-        },
-        ['id'],
-      );
+
+      const invoicePayload = {
+        ...persistenceDto,
+        tenant_id: tenantId,
+        created_at: new Date(dto.createdAt),
+      };
+      console.log('[SYNC-INVOICES] invoice upsert payload keys:', Object.keys(invoicePayload));
+      console.log('[SYNC-INVOICES] invoice id:', JSON.stringify(invoicePayload.id), 'userId:', JSON.stringify((invoicePayload as any).userId), 'number:', JSON.stringify((invoicePayload as any).number));
+
+      await this.invoiceRepoFor(manager).upsert(invoicePayload, ['id']);
       if (persistenceDto.items?.length) {
-        await this.itemRepoFor(manager).upsert(
-          persistenceDto.items.map((item) => ({
-            ...item,
-            invoiceId: dto.id,
-            tenant_id: tenantId,
-          })),
-          ['id'],
-        );
+        const itemPayloads = persistenceDto.items.map((item) => ({
+          ...item,
+          invoiceId: dto.id,
+          tenant_id: tenantId,
+        }));
+        console.log('[SYNC-INVOICES] items count:', itemPayloads.length);
+        for (const ip of itemPayloads) {
+          console.log('[SYNC-INVOICES] item id:', JSON.stringify(ip.id), 'productId:', JSON.stringify(ip.productId), 'recipeVersionId:', JSON.stringify(ip.recipeVersionId), 'variantId:', JSON.stringify(ip.variantId));
+        }
+        await this.itemRepoFor(manager).upsert(itemPayloads, ['id']);
       }
       if (dto.payments?.length) {
-        await this.paymentRepoFor(manager).upsert(
-          dto.payments.map((payment) => ({ ...payment, invoiceId: dto.id })),
-          ['id'],
-        );
+        const paymentPayloads = dto.payments.map((payment) => ({
+          ...payment,
+          id: payment.id && payment.id.trim() !== '' ? payment.id : randomUUID(),
+          invoiceId: dto.id,
+        }));
+        console.log('[SYNC-INVOICES] payments count:', paymentPayloads.length);
+        for (const pp of paymentPayloads) {
+          console.log('[SYNC-INVOICES] payment id:', JSON.stringify(pp.id), 'method:', JSON.stringify(pp.method), 'reconciledByUserId:', JSON.stringify(pp.reconciledByUserId));
+        }
+        await this.paymentRepoFor(manager).upsert(paymentPayloads, ['id']);
       }
     }
   }
@@ -808,6 +818,19 @@ export class InvoicesService {
         this.assertRecordCreditNoteBoundary(record);
         this.assertSupportedCreditNoteStockBehavior(record);
         if (record.invoice) {
+          console.log('[APPLY-RECORD] record.documentType:', record.documentType, 'record.flowType:', record.flowType);
+          console.log('[APPLY-RECORD] invoice.id:', record.invoice.id, 'userId:', record.invoice.userId, 'number:', record.invoice.number);
+          console.log('[APPLY-RECORD] invoice.items count:', record.invoice.items?.length, 'payments count:', record.invoice.payments?.length);
+          if (record.invoice.items?.length) {
+            for (const item of record.invoice.items) {
+              console.log('[APPLY-RECORD]   item:', item.id, 'productId:', item.productId, 'recipeVersionId:', item.recipeVersionId, 'variantId:', item.variantId);
+            }
+          }
+          if (record.invoice.payments?.length) {
+            for (const payment of record.invoice.payments) {
+              console.log('[APPLY-RECORD]   payment:', payment.id, 'method:', payment.method, 'reconciledByUserId:', payment.reconciledByUserId);
+            }
+          }
           await this.validateInvoiceRecipeVersions(
             tenantId,
             record.invoice,
@@ -846,6 +869,9 @@ export class InvoicesService {
       };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Sync failed';
+      const stack = error instanceof Error ? error.stack : undefined;
+      console.error('[APPLY-RECORD] CAUGHT ERROR:', message);
+      if (stack) console.error('[APPLY-RECORD] STACK:', stack.substring(0, 500));
       if (this.isCrossTenantItemCollisionError(error, message)) {
         return {
           accepted: false,

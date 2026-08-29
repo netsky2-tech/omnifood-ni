@@ -199,6 +199,14 @@ export class SyncMovementDeltaDto {
   @IsString()
   @IsOptional()
   refundReasonPolicy?: string;
+
+  @IsString()
+  @IsOptional()
+  sourceDocumentType?: string;
+
+  @IsString()
+  @IsOptional()
+  sourceDocumentId?: string;
 }
 
 export class SyncBatchRecordDto {
@@ -217,6 +225,14 @@ export class SyncBatchRecordDto {
 
   @IsEnum(SYNC_DOCUMENT_TYPE)
   documentType: SyncDocumentType;
+
+  @IsString()
+  @IsOptional()
+  invoiceId?: string;
+
+  @IsString()
+  @IsOptional()
+  terminalId?: string;
 
   @IsString()
   @IsOptional()

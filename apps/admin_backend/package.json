@@ -22,7 +22,8 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "migration:run": "ts-node -r tsconfig-paths/register src/data-source.ts migration:run",
     "migration:revert": "ts-node -r tsconfig-paths/register src/data-source.ts migration:revert",
-    "provision": "ts-node -r tsconfig-paths/register src/scripts/provision.ts"
+    "provision": "ts-node -r tsconfig-paths/register src/scripts/provision.ts",
+    "seed:test": "ts-node -r tsconfig-paths/register src/scripts/seed-test-data.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

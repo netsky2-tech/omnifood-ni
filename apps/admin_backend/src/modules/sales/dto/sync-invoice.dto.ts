@@ -192,6 +192,30 @@ export class SyncInvoiceDto {
   @IsOptional()
   totalUsd?: number;
 
+  @IsString()
+  @IsOptional()
+  syncStatus?: string;
+
+  @IsString()
+  @IsOptional()
+  terminalId?: string;
+
+  @IsString()
+  @IsOptional()
+  documentType?: string;
+
+  @IsNumber()
+  @IsOptional()
+  sourceSequence?: number;
+
+  @IsString()
+  @IsOptional()
+  idempotencyKey?: string;
+
+  @IsString()
+  @IsOptional()
+  payloadHash?: string;
+
   @IsBoolean()
   @IsOptional()
   isCanceled?: boolean;
