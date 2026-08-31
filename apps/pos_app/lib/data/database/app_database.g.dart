@@ -148,13 +148,15 @@ class _$AppDatabase extends AppDatabase {
 
   CustomerPointTransactionDao? _customerPointTransactionDaoInstance;
 
+  FulfillmentTopologyDao? _fulfillmentTopologyDaoInstance;
+
   Future<sqflite.Database> open(
     String path,
     List<Migration> migrations, [
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 41,
+      version: 42,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -249,6 +251,12 @@ class _$AppDatabase extends AppDatabase {
             'CREATE TABLE IF NOT EXISTS `customers` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `tax_id` TEXT, `phone` TEXT, `email` TEXT, `address` TEXT, `points_balance` REAL NOT NULL, `is_active` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, `sync_status` TEXT NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `customer_point_transactions` (`id` TEXT NOT NULL, `customer_id` TEXT NOT NULL, `invoice_id` TEXT, `type` TEXT NOT NULL, `points` REAL NOT NULL, `balance_after` REAL NOT NULL, `conversion_rate` REAL NOT NULL, `reason` TEXT, `created_at` INTEGER NOT NULL, `sync_status` TEXT NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `topology_snapshots` (`id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `revision` INTEGER NOT NULL, `hash` TEXT NOT NULL, `payload` TEXT NOT NULL, `received_at` TEXT NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `shift_topology_bindings` (`shift_id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `snapshot_id` TEXT NOT NULL, `bound_at` TEXT NOT NULL, PRIMARY KEY (`shift_id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `emergency_topology_audits` (`id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `shift_id` TEXT NOT NULL, `snapshot_id` TEXT NOT NULL, `actor_id` TEXT NOT NULL, `actor_role` TEXT NOT NULL, `device_id` TEXT NOT NULL, `reason` TEXT NOT NULL, `occurred_at` TEXT NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE UNIQUE INDEX `index_audit_logs_tenant_id_device_id_user_id_sequence_no` ON `audit_logs` (`tenant_id`, `device_id`, `user_id`, `sequence_no`)');
         await database.execute(
@@ -500,6 +508,12 @@ class _$AppDatabase extends AppDatabase {
   CustomerPointTransactionDao get customerPointTransactionDao {
     return _customerPointTransactionDaoInstance ??=
         _$CustomerPointTransactionDao(database, changeListener);
+  }
+
+  @override
+  FulfillmentTopologyDao get fulfillmentTopologyDao {
+    return _fulfillmentTopologyDaoInstance ??=
+        _$FulfillmentTopologyDao(database, changeListener);
   }
 }
 
@@ -5371,5 +5385,116 @@ class _$CustomerPointTransactionDao extends CustomerPointTransactionDao {
                 entity, customerId, newBalance, updatedAt);
       });
     }
+  }
+}
+
+class _$FulfillmentTopologyDao extends FulfillmentTopologyDao {
+  _$FulfillmentTopologyDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _topologySnapshotEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'topology_snapshots',
+            (TopologySnapshotEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'tenant_id': item.tenantId,
+                  'revision': item.revision,
+                  'hash': item.hash,
+                  'payload': item.payload,
+                  'received_at': item.receivedAt
+                }),
+        _shiftTopologyBindingEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'shift_topology_bindings',
+            (ShiftTopologyBindingEntity item) => <String, Object?>{
+                  'shift_id': item.shiftId,
+                  'tenant_id': item.tenantId,
+                  'snapshot_id': item.snapshotId,
+                  'bound_at': item.boundAt
+                }),
+        _emergencyTopologyAuditEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'emergency_topology_audits',
+            (EmergencyTopologyAuditEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'tenant_id': item.tenantId,
+                  'shift_id': item.shiftId,
+                  'snapshot_id': item.snapshotId,
+                  'actor_id': item.actorId,
+                  'actor_role': item.actorRole,
+                  'device_id': item.deviceId,
+                  'reason': item.reason,
+                  'occurred_at': item.occurredAt
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<TopologySnapshotEntity>
+      _topologySnapshotEntityInsertionAdapter;
+
+  final InsertionAdapter<ShiftTopologyBindingEntity>
+      _shiftTopologyBindingEntityInsertionAdapter;
+
+  final InsertionAdapter<EmergencyTopologyAuditEntity>
+      _emergencyTopologyAuditEntityInsertionAdapter;
+
+  @override
+  Future<TopologySnapshotEntity?> findSnapshot(
+    String id,
+    String tenantId,
+  ) async {
+    return _queryAdapter.query(
+        'SELECT * FROM topology_snapshots WHERE id = ?1 AND tenant_id = ?2',
+        mapper: (Map<String, Object?> row) => TopologySnapshotEntity(
+            id: row['id'] as String,
+            tenantId: row['tenant_id'] as String,
+            revision: row['revision'] as int,
+            hash: row['hash'] as String,
+            payload: row['payload'] as String,
+            receivedAt: row['received_at'] as String),
+        arguments: [id, tenantId]);
+  }
+
+  @override
+  Future<ShiftTopologyBindingEntity?> findBinding(
+    String shiftId,
+    String tenantId,
+  ) async {
+    return _queryAdapter.query(
+        'SELECT * FROM shift_topology_bindings WHERE shift_id = ?1 AND tenant_id = ?2',
+        mapper: (Map<String, Object?> row) => ShiftTopologyBindingEntity(shiftId: row['shift_id'] as String, tenantId: row['tenant_id'] as String, snapshotId: row['snapshot_id'] as String, boundAt: row['bound_at'] as String),
+        arguments: [shiftId, tenantId]);
+  }
+
+  @override
+  Future<List<EmergencyTopologyAuditEntity>> findEmergencyAudits(
+      String tenantId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM emergency_topology_audits WHERE tenant_id = ?1 ORDER BY occurred_at DESC',
+        mapper: (Map<String, Object?> row) => EmergencyTopologyAuditEntity(id: row['id'] as String, tenantId: row['tenant_id'] as String, shiftId: row['shift_id'] as String, snapshotId: row['snapshot_id'] as String, actorId: row['actor_id'] as String, actorRole: row['actor_role'] as String, deviceId: row['device_id'] as String, reason: row['reason'] as String, occurredAt: row['occurred_at'] as String),
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<void> insertSnapshot(TopologySnapshotEntity snapshot) async {
+    await _topologySnapshotEntityInsertionAdapter.insert(
+        snapshot, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> bindShift(ShiftTopologyBindingEntity binding) async {
+    await _shiftTopologyBindingEntityInsertionAdapter.insert(
+        binding, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> insertEmergencyAudit(EmergencyTopologyAuditEntity audit) async {
+    await _emergencyTopologyAuditEntityInsertionAdapter.insert(
+        audit, OnConflictStrategy.abort);
   }
 }
