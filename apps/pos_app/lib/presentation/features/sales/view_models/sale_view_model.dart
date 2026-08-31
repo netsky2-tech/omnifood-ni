@@ -933,8 +933,10 @@ class SaleViewModel extends ChangeNotifier {
         final printerConfig = await _printerConfigService.getPrinterConfig();
         final hasCashPayment = payments.any((p) => p.method == PaymentMethod.cash);
 
+        final activePrinterPort = PrinterResolver.resolve(printerConfig);
+
         if (printerConfig.openDrawerOnCash && hasCashPayment) {
-          await _printerPort.openCashDrawer();
+          await activePrinterPort.openCashDrawer();
         }
 
         List<int>? logoRasterBytes;
@@ -953,7 +955,7 @@ class SaleViewModel extends ChangeNotifier {
         }
 
         if (printerConfig.autoPrintInvoice) {
-          final printResult = await _printerPort.printInvoice(
+          final printResult = await activePrinterPort.printInvoice(
             invoiceToPrint,
             items: items,
             payments: payments,
@@ -971,7 +973,7 @@ class SaleViewModel extends ChangeNotifier {
         }
 
         if (printerConfig.autoPrintKitchen && items.isNotEmpty) {
-          await _printerPort.printKitchenOrder(
+          await activePrinterPort.printKitchenOrder(
             ticketId: invoiceToPrint.id.length > 8 ? invoiceToPrint.id.substring(0, 8) : invoiceToPrint.id,
             orderTitle: 'Orden #${invoiceToPrint.number}',
             cashierName: user.name,
@@ -1056,7 +1058,9 @@ class SaleViewModel extends ChangeNotifier {
         } catch (_) {}
       }
 
-      final res = await _printerPort.printInvoice(
+      final activePrinterPort = PrinterResolver.resolve(config);
+
+      final res = await activePrinterPort.printInvoice(
         _lastProcessedInvoice!,
         items: domainItems,
         payments: domainPayments,
