@@ -8,7 +8,7 @@ import 'esc_pos_builder.dart';
 /// Formatter and Layout Engine for 58mm Thermal Printers (32 columns).
 /// Adheres strictly to DGI Disposición Técnica 09-2007 and Food Park QSR needs.
 class Receipt58mmFormatter {
-  static const int lineWidth = 32;
+  static const int lineWidth = 38;
 
   // ==========================================
   // Layout & Text Manipulation Utilities
@@ -40,6 +40,39 @@ class Receipt58mmFormatter {
 
     final spaces = width - adjustedLeft.length - cleanRight.length;
     return '$adjustedLeft${' ' * (spaces > 0 ? spaces : 1)}$cleanRight';
+  }
+
+  /// Formats an item row with [qty] on the left (e.g. 4 chars), [desc] in middle,
+  /// and [total] strictly right-aligned.
+  static List<String> formatItemRow({
+    required String qty,
+    required String desc,
+    required String total,
+    int width = lineWidth,
+  }) {
+    final cleanQty = qty.trim();
+    final cleanTotal = total.trim();
+    final qtyPrefix = cleanQty.padRight(4); // e.g. "1   " or "10  "
+    final maxDescLen = width - qtyPrefix.length - cleanTotal.length - 1;
+
+    if (desc.trim().length <= maxDescLen) {
+      final descPart = desc.trim();
+      final spaces = width - qtyPrefix.length - descPart.length - cleanTotal.length;
+      return ['$qtyPrefix$descPart${' ' * (spaces > 0 ? spaces : 1)}$cleanTotal'];
+    }
+
+    // Wrap description if too long
+    final lines = <String>[];
+    final wrappedDesc = wrap(desc.trim(), maxDescLen);
+    for (int i = 0; i < wrappedDesc.length; i++) {
+      if (i == 0) {
+        final spaces = width - qtyPrefix.length - wrappedDesc[i].length - cleanTotal.length;
+        lines.add('$qtyPrefix${wrappedDesc[i]}${' ' * (spaces > 0 ? spaces : 1)}$cleanTotal');
+      } else {
+        lines.add('    ${wrappedDesc[i]}');
+      }
+    }
+    return lines;
   }
 
   /// Generates a continuous horizontal rule line of [char] with length [width].
@@ -92,7 +125,7 @@ class Receipt58mmFormatter {
   // 1. DGI Fiscal Customer Invoice
   // ==========================================
 
-  /// Formats a complete DGI-compliant invoice as plain 32-column text.
+  /// Formats a complete DGI-compliant invoice as plain text.
   static String formatInvoiceText(
     Invoice invoice, {
     required List<InvoiceItem> items,
@@ -141,7 +174,7 @@ class Receipt58mmFormatter {
     }
 
     buffer.writeln(divider('-'));
-    buffer.writeln(twoColumns('CANT  DESCRIPCION', 'TOTAL'));
+    buffer.writeln(twoColumns('CANT DESCRIPCION', 'TOTAL'));
     buffer.writeln(divider('-'));
 
     // Items
@@ -150,20 +183,28 @@ class Receipt58mmFormatter {
           ? item.quantity.toInt().toString()
           : item.quantity.toStringAsFixed(2);
       final itemTotalStr = 'C\$ ${item.total.toStringAsFixed(2)}';
-      buffer.writeln(twoColumns('$qtyStr x ${item.productName}', itemTotalStr));
+      
+      final rowLines = formatItemRow(
+        qty: qtyStr,
+        desc: item.productName,
+        total: itemTotalStr,
+      );
+      for (final l in rowLines) {
+        buffer.writeln(l);
+      }
 
       // Modifiers & Variants
       for (final mod in item.selectedModifiers) {
         final modPrice = mod.extraPrice > 0 ? ' (+C\$ ${mod.extraPrice.toStringAsFixed(2)})' : '';
-        buffer.writeln('  + ${mod.name}$modPrice');
+        buffer.writeln('    + ${mod.name}$modPrice');
       }
 
       if (item.discount > 0) {
-        buffer.writeln('  - Desc: C\$ ${item.discount.toStringAsFixed(2)}');
+        buffer.writeln('    - Desc: C\$ ${item.discount.toStringAsFixed(2)}');
       }
       if (item.notes != null && item.notes!.isNotEmpty) {
-        for (final line in wrap(item.notes!, lineWidth - 4)) {
-          buffer.writeln('  * $line');
+        for (final line in wrap(item.notes!, lineWidth - 6)) {
+          buffer.writeln('    * $line');
         }
       }
     }
@@ -175,16 +216,15 @@ class Receipt58mmFormatter {
     buffer.writeln(twoColumns('IVA (15%):', 'C\$ ${invoice.totalTax.toStringAsFixed(2)}'));
     buffer.writeln(twoColumns('TOTAL CORDOBAS:', 'C\$ ${invoice.total.toStringAsFixed(2)}'));
 
-    final commRate = invoice.commercialRate > 0 ? invoice.commercialRate : 36.50;
+    final commRate = invoice.commercialRate > 0 ? invoice.commercialRate : (invoice.bcnOfficialRate > 0 ? invoice.bcnOfficialRate : 36.50);
     final totalUsdCalc = invoice.totalUsd > 0
         ? invoice.totalUsd
         : (invoice.total / commRate);
     buffer.writeln(twoColumns('TOTAL DOLARES:', '\$${totalUsdCalc.toStringAsFixed(2)}'));
 
     buffer.writeln(divider('-'));
-    // Exchange Rates
-    buffer.writeln(twoColumns('T.C. Oficial (BCN):', invoice.bcnOfficialRate.toStringAsFixed(4)));
-    buffer.writeln(twoColumns('T.C. Comercial:', invoice.commercialRate.toStringAsFixed(2)));
+    // Show only the configured Commercial Rate used for the transaction
+    buffer.writeln(twoColumns('Tipo de Cambio:', 'C\$ ${commRate.toStringAsFixed(2)}'));
 
     buffer.writeln(divider('-'));
     buffer.writeln(center('DETALLE DE PAGO'));
@@ -229,7 +269,6 @@ class Receipt58mmFormatter {
 
     buffer.writeln(divider('='));
     buffer.writeln(center('*** GRACIAS POR SU COMPRA ***'));
-    buffer.writeln('');
     buffer.writeln('');
     buffer.writeln('');
 
