@@ -6,39 +6,39 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.os.IBinder
 import android.util.Log
-import com.iposprinter.iposprinterservice.IPosPrinterService
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import net.nyx.printerservice.print.IPrinterService
+import net.nyx.printerservice.print.PrintTextFormat
 
 /**
- * Native Android MethodChannel handler for Alacrity Q80 and iPos-compatible thermal printers.
- * Connects to the standard iPos AIDL service (com.iposprinter.iposprinterservice) with
- * graceful fallback for non-Q80 devices — mirrors the SunmiPrinterHandler pattern.
+ * Native Android MethodChannel handler for Alacrity Q80 (Nyx Printer Service: net.nyx.printerservice).
+ * Connects to the real hardware service found on this device.
  */
 class IPosPrinterHandler(private val context: Context) : MethodChannel.MethodCallHandler {
     companion object {
-        private const val TAG = "OmniFoodIPosPrinterNative"
+        private const val TAG = "OmniFoodNyxPrinterNative"
         private const val CHANNEL_NAME = "com.omnifood.pos/ipos_printer"
-        private const val SERVICE_PACKAGE = "com.iposprinter.iposprinterservice"
-        private const val SERVICE_ACTION = "com.iposprinter.iposprinterservice.IPosPrinterService"
+        private const val SERVICE_PACKAGE = "net.nyx.printerservice"
+        private const val SERVICE_ACTION = "net.nyx.printerservice.IPrinterService"
     }
 
     private var channel: MethodChannel? = null
-    private var iPosPrinterService: IPosPrinterService? = null
+    private var printerService: IPrinterService? = null
     private var isBound = false
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-            iPosPrinterService = IPosPrinterService.Stub.asInterface(service)
+            printerService = IPrinterService.Stub.asInterface(service)
             isBound = true
-            Log.i(TAG, "iPos Printer Service connected successfully.")
+            Log.i(TAG, "Nyx Printer Service (net.nyx.printerservice) connected successfully!")
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
-            iPosPrinterService = null
+            printerService = null
             isBound = false
-            Log.w(TAG, "iPos Printer Service disconnected.")
+            Log.w(TAG, "Nyx Printer Service disconnected.")
         }
     }
 
@@ -62,11 +62,13 @@ class IPosPrinterHandler(private val context: Context) : MethodChannel.MethodCal
                 setAction(SERVICE_ACTION)
             }
             val bound = context.bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
-            if (!bound) {
-                Log.d(TAG, "iPos Printer Service not present on this device (Standard Android / Non-Q80). Fallback mode active.")
+            if (bound) {
+                Log.i(TAG, "bindService succeeded for $SERVICE_PACKAGE")
+            } else {
+                Log.w(TAG, "bindService returned false for $SERVICE_PACKAGE")
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Exception while attempting to bind iPos Printer Service: ${e.message}. Fallback mode active.")
+            Log.e(TAG, "Exception binding Nyx Printer Service: ${e.message}", e)
         }
     }
 
@@ -75,9 +77,9 @@ class IPosPrinterHandler(private val context: Context) : MethodChannel.MethodCal
             try {
                 context.unbindService(serviceConnection)
                 isBound = false
-                iPosPrinterService = null
+                printerService = null
             } catch (e: Exception) {
-                Log.w(TAG, "Exception unbinding iPos service: ${e.message}")
+                Log.w(TAG, "Exception unbinding Nyx service: ${e.message}")
             }
         }
     }
@@ -93,28 +95,26 @@ class IPosPrinterHandler(private val context: Context) : MethodChannel.MethodCal
     }
 
     private fun handleGetPrinterStatus(result: MethodChannel.Result) {
-        val service = iPosPrinterService
+        val service = printerService
         if (service == null) {
-            // Non-Q80 device (e.g. Samsung, emulator) — return READY for simulation fallback
-            Log.d(TAG, "getPrinterStatus called without active iPos service. Returning READY fallback.")
-            result.success("READY")
+            Log.w(TAG, "getPrinterStatus: service is NULL (not bound yet).")
+            result.success("OFFLINE")
             return
         }
 
         try {
             val status = service.printerStatus
+            Log.i(TAG, "Nyx raw printer status code: $status")
             val statusString = when (status) {
                 0 -> "READY"
-                1 -> "OUT_OF_PAPER"
-                2 -> "OVERHEATING"
-                3 -> "BUSY"
-                4 -> "OFFLINE"
-                else -> "READY"
+                1, 240, 241 -> "OUT_OF_PAPER"
+                2, 242 -> "OVERHEATING"
+                3, 243 -> "BUSY"
+                else -> if (status < 0) "ERROR" else "READY"
             }
-            Log.d(TAG, "iPos native printer status: $status -> $statusString")
             result.success(statusString)
         } catch (e: Exception) {
-            Log.e(TAG, "Error querying iPos printer status: ${e.message}", e)
+            Log.e(TAG, "Error querying Nyx printer status: ${e.message}", e)
             result.error("STATUS_ERROR", e.message, null)
         }
     }
@@ -126,18 +126,24 @@ class IPosPrinterHandler(private val context: Context) : MethodChannel.MethodCal
             return
         }
 
-        val service = iPosPrinterService
+        val service = printerService
         if (service == null) {
-            Log.d(TAG, "printRawBytes (${bytes.size} bytes) simulated on non-Q80 device.")
-            result.success(true)
+            Log.w(TAG, "printRawBytes: service is NULL.")
+            result.error("NOT_CONNECTED", "Servicio de impresora no conectado", null)
             return
         }
 
         try {
-            service.printRawData(bytes, null)
+            val text = String(bytes, Charsets.ISO_8859_1)
+            val format = PrintTextFormat().apply {
+                textSize = 24
+            }
+            val res = service.printText(text, format)
+            service.paperOut(80)
+            Log.i(TAG, "printRawBytes via printText result: $res")
             result.success(true)
         } catch (e: Exception) {
-            Log.e(TAG, "Error sending raw bytes to iPos printer: ${e.message}", e)
+            Log.e(TAG, "Error printing raw text: ${e.message}", e)
             result.error("PRINT_ERROR", e.message, null)
         }
     }
@@ -149,35 +155,42 @@ class IPosPrinterHandler(private val context: Context) : MethodChannel.MethodCal
             return
         }
 
-        val service = iPosPrinterService
+        val service = printerService
         if (service == null) {
-            Log.d(TAG, "printText simulated on non-Q80 device: $text")
-            result.success(true)
+            Log.w(TAG, "printText: service is NULL.")
+            result.error("NOT_CONNECTED", "Servicio de impresora no conectado", null)
             return
         }
 
         try {
-            service.printText(text, 24f, false, false, null)
+            val format = PrintTextFormat().apply {
+                textSize = 24
+            }
+            val res = service.printText(text, format)
+            service.paperOut(80)
+            Log.i(TAG, "printText result: $res")
             result.success(true)
         } catch (e: Exception) {
-            Log.e(TAG, "Error sending text to iPos printer: ${e.message}", e)
+            Log.e(TAG, "Error sending text to Nyx printer: ${e.message}", e)
             result.error("PRINT_ERROR", e.message, null)
         }
     }
 
     private fun handleOpenDrawer(result: MethodChannel.Result) {
-        val service = iPosPrinterService
+        val service = printerService
         if (service == null) {
-            Log.d(TAG, "openDrawer simulated on non-Q80 device.")
-            result.success(true)
+            result.error("NOT_CONNECTED", "Servicio no conectado", null)
             return
         }
 
         try {
-            service.openCashBox(null)
+            // Send standard ESC/POS pulse command for RJ11 cash drawer
+            val pulse = "\u001Bp\u0000\u0019\u00FA"
+            val format = PrintTextFormat()
+            service.printText(pulse, format)
             result.success(true)
         } catch (e: Exception) {
-            Log.e(TAG, "Error opening drawer via iPos service: ${e.message}", e)
+            Log.e(TAG, "Error triggering cash drawer: ${e.message}", e)
             result.error("DRAWER_ERROR", e.message, null)
         }
     }
