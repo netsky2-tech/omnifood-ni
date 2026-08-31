@@ -6,6 +6,7 @@ import '../../domain/models/inventory/batch_deduction.dart';
 import '../../domain/models/inventory/supplier.dart';
 import '../../domain/models/inventory/warehouse.dart';
 import '../../domain/models/inventory/product.dart';
+import '../../domain/models/fulfillment/fulfillment_contracts.dart';
 import '../models/inventory/insumo_entity.dart';
 import '../models/inventory/recipe_entity.dart';
 import '../models/inventory/movement_entity.dart';
@@ -18,7 +19,9 @@ class InventoryMapper {
     return Insumo(
       id: entity.id,
       name: entity.name.isNotEmpty ? entity.name : 'Insumo',
-      consumptionUom: (entity.consumptionUom.isNotEmpty) ? entity.consumptionUom : 'UND',
+      consumptionUom: (entity.consumptionUom.isNotEmpty)
+          ? entity.consumptionUom
+          : 'UND',
       stock: entity.stock,
       averageCost: entity.averageCost,
       parLevel: entity.parLevel,
@@ -248,6 +251,8 @@ class InventoryMapper {
       category: entity.category,
       isPrepared: entity.isPrepared,
       createdAt: entity.createdAt,
+      inventoryPolicy: _parseInventoryPolicy(entity.inventoryPolicy),
+      directStockInsumoId: entity.directStockInsumoId,
       variants: variants,
       availableModifiers: modifiers,
     );
@@ -267,7 +272,18 @@ class InventoryMapper {
       category: domain.category,
       isPrepared: domain.isPrepared,
       createdAt: domain.createdAt,
+      inventoryPolicy: domain.inventoryPolicy?.name,
+      directStockInsumoId: domain.directStockInsumoId,
     );
+  }
+
+  static InventoryPolicy? _parseInventoryPolicy(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return null;
+    try {
+      return InventoryPolicy.values.byName(raw);
+    } catch (_) {
+      return null;
+    }
   }
 
   static ProductVariant toVariantDomain(ProductVariantEntity entity) {
@@ -278,7 +294,10 @@ class InventoryMapper {
     );
   }
 
-  static ProductVariantEntity toVariantEntity(String productId, ProductVariant domain) {
+  static ProductVariantEntity toVariantEntity(
+    String productId,
+    ProductVariant domain,
+  ) {
     return ProductVariantEntity(
       id: domain.id,
       productId: productId,
@@ -295,7 +314,10 @@ class InventoryMapper {
     );
   }
 
-  static ProductModifierEntity toModifierEntity(String productId, Modifier domain) {
+  static ProductModifierEntity toModifierEntity(
+    String productId,
+    Modifier domain,
+  ) {
     return ProductModifierEntity(
       id: domain.id,
       productId: productId,

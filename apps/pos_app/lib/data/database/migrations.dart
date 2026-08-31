@@ -1686,6 +1686,19 @@ final migration39_40 = Migration(39, 40, (database) async {
   ''');
 });
 
+final migration40_41 = Migration(40, 41, (database) async {
+  final productsTable = await database.rawQuery(
+    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'products'",
+  );
+  if (productsTable.isEmpty) return;
+  await database.execute(
+    'ALTER TABLE `products` ADD COLUMN `inventory_policy` TEXT',
+  );
+  await database.execute(
+    'ALTER TABLE `products` ADD COLUMN `direct_stock_insumo_id` TEXT',
+  );
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -1717,4 +1730,5 @@ final allMigrations = [
   migration37_38,
   migration38_39,
   migration39_40,
+  migration40_41,
 ];
