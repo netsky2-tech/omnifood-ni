@@ -150,13 +150,15 @@ class _$AppDatabase extends AppDatabase {
 
   FulfillmentTopologyDao? _fulfillmentTopologyDaoInstance;
 
+  FulfillmentPersistenceDao? _fulfillmentPersistenceDaoInstance;
+
   Future<sqflite.Database> open(
     String path,
     List<Migration> migrations, [
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 42,
+      version: 43,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -258,6 +260,12 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `emergency_topology_audits` (`id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `shift_id` TEXT NOT NULL, `snapshot_id` TEXT NOT NULL, `actor_id` TEXT NOT NULL, `actor_role` TEXT NOT NULL, `device_id` TEXT NOT NULL, `reason` TEXT NOT NULL, `occurred_at` TEXT NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
+            'CREATE TABLE IF NOT EXISTS `fulfillment_records` (`id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `sale_id` TEXT NOT NULL, `topology_snapshot_id` TEXT NOT NULL, `topology_revision` INTEGER NOT NULL, `channel` TEXT NOT NULL, `route_state` TEXT NOT NULL, `delivery_state` TEXT NOT NULL, `lines_payload` TEXT NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `print_jobs` (`id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `fulfillment_id` TEXT NOT NULL, `document_kind` TEXT NOT NULL, `sequence` INTEGER NOT NULL, `payload` TEXT NOT NULL, `state` TEXT NOT NULL, `retry_count` INTEGER NOT NULL, `idempotency_key` TEXT NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `fulfillment_outbox_events` (`event_id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `device_id` TEXT NOT NULL, `source_sequence` INTEGER NOT NULL, `aggregate_type` TEXT NOT NULL, `aggregate_id` TEXT NOT NULL, `idempotency_key` TEXT NOT NULL, `payload_hash` TEXT NOT NULL, `topology_revision` INTEGER NOT NULL, `state` TEXT NOT NULL, `attempts` INTEGER NOT NULL, PRIMARY KEY (`event_id`))');
+        await database.execute(
             'CREATE UNIQUE INDEX `index_audit_logs_tenant_id_device_id_user_id_sequence_no` ON `audit_logs` (`tenant_id`, `device_id`, `user_id`, `sequence_no`)');
         await database.execute(
             'CREATE UNIQUE INDEX `idx_movement_sync_state_stream_sequence` ON `inventory_movement_sync_state` (`terminal_id`, `flow_type`, `local_sequence`)');
@@ -293,6 +301,10 @@ class _$AppDatabase extends AppDatabase {
             'CREATE INDEX `index_customer_point_transactions_invoice_id` ON `customer_point_transactions` (`invoice_id`)');
         await database.execute(
             'CREATE INDEX `index_customer_point_transactions_created_at` ON `customer_point_transactions` (`created_at`)');
+        await database.execute(
+            'CREATE UNIQUE INDEX `index_print_jobs_tenant_id_idempotency_key` ON `print_jobs` (`tenant_id`, `idempotency_key`)');
+        await database.execute(
+            'CREATE UNIQUE INDEX `index_fulfillment_outbox_events_tenant_id_idempotency_key` ON `fulfillment_outbox_events` (`tenant_id`, `idempotency_key`)');
 
         await callback?.onCreate?.call(database, version);
       },
@@ -514,6 +526,12 @@ class _$AppDatabase extends AppDatabase {
   FulfillmentTopologyDao get fulfillmentTopologyDao {
     return _fulfillmentTopologyDaoInstance ??=
         _$FulfillmentTopologyDao(database, changeListener);
+  }
+
+  @override
+  FulfillmentPersistenceDao get fulfillmentPersistenceDao {
+    return _fulfillmentPersistenceDaoInstance ??=
+        _$FulfillmentPersistenceDao(database, changeListener);
   }
 }
 
@@ -5496,5 +5514,123 @@ class _$FulfillmentTopologyDao extends FulfillmentTopologyDao {
   Future<void> insertEmergencyAudit(EmergencyTopologyAuditEntity audit) async {
     await _emergencyTopologyAuditEntityInsertionAdapter.insert(
         audit, OnConflictStrategy.abort);
+  }
+}
+
+class _$FulfillmentPersistenceDao extends FulfillmentPersistenceDao {
+  _$FulfillmentPersistenceDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _fulfillmentRecordEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'fulfillment_records',
+            (FulfillmentRecordEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'tenant_id': item.tenantId,
+                  'sale_id': item.saleId,
+                  'topology_snapshot_id': item.topologySnapshotId,
+                  'topology_revision': item.topologyRevision,
+                  'channel': item.channel,
+                  'route_state': item.routeState,
+                  'delivery_state': item.deliveryState,
+                  'lines_payload': item.linesPayload
+                }),
+        _printJobEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'print_jobs',
+            (PrintJobEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'tenant_id': item.tenantId,
+                  'fulfillment_id': item.fulfillmentId,
+                  'document_kind': item.documentKind,
+                  'sequence': item.sequence,
+                  'payload': item.payload,
+                  'state': item.state,
+                  'retry_count': item.retryCount,
+                  'idempotency_key': item.idempotencyKey
+                }),
+        _outboxEventEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'fulfillment_outbox_events',
+            (OutboxEventEntity item) => <String, Object?>{
+                  'event_id': item.eventId,
+                  'tenant_id': item.tenantId,
+                  'device_id': item.deviceId,
+                  'source_sequence': item.sourceSequence,
+                  'aggregate_type': item.aggregateType,
+                  'aggregate_id': item.aggregateId,
+                  'idempotency_key': item.idempotencyKey,
+                  'payload_hash': item.payloadHash,
+                  'topology_revision': item.topologyRevision,
+                  'state': item.state,
+                  'attempts': item.attempts
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<FulfillmentRecordEntity>
+      _fulfillmentRecordEntityInsertionAdapter;
+
+  final InsertionAdapter<PrintJobEntity> _printJobEntityInsertionAdapter;
+
+  final InsertionAdapter<OutboxEventEntity> _outboxEventEntityInsertionAdapter;
+
+  @override
+  Future<FulfillmentRecordEntity?> findFulfillment(
+    String id,
+    String tenantId,
+  ) async {
+    return _queryAdapter.query(
+        'SELECT * FROM fulfillment_records WHERE id = ?1 AND tenant_id = ?2',
+        mapper: (Map<String, Object?> row) => FulfillmentRecordEntity(
+            id: row['id'] as String,
+            tenantId: row['tenant_id'] as String,
+            saleId: row['sale_id'] as String,
+            topologySnapshotId: row['topology_snapshot_id'] as String,
+            topologyRevision: row['topology_revision'] as int,
+            channel: row['channel'] as String,
+            routeState: row['route_state'] as String,
+            deliveryState: row['delivery_state'] as String,
+            linesPayload: row['lines_payload'] as String),
+        arguments: [id, tenantId]);
+  }
+
+  @override
+  Future<List<PrintJobEntity>> findRetryablePrintJobs(String tenantId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM print_jobs WHERE tenant_id = ?1 AND state IN (\'PENDING\', \'FAILED\') ORDER BY sequence',
+        mapper: (Map<String, Object?> row) => PrintJobEntity(id: row['id'] as String, tenantId: row['tenant_id'] as String, fulfillmentId: row['fulfillment_id'] as String, documentKind: row['document_kind'] as String, sequence: row['sequence'] as int, payload: row['payload'] as String, state: row['state'] as String, retryCount: row['retry_count'] as int, idempotencyKey: row['idempotency_key'] as String),
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<List<OutboxEventEntity>> findPendingOutboxEvents(
+      String tenantId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM fulfillment_outbox_events WHERE tenant_id = ?1 AND state = \'PENDING\' ORDER BY source_sequence',
+        mapper: (Map<String, Object?> row) => OutboxEventEntity(eventId: row['event_id'] as String, tenantId: row['tenant_id'] as String, deviceId: row['device_id'] as String, sourceSequence: row['source_sequence'] as int, aggregateType: row['aggregate_type'] as String, aggregateId: row['aggregate_id'] as String, idempotencyKey: row['idempotency_key'] as String, payloadHash: row['payload_hash'] as String, topologyRevision: row['topology_revision'] as int, state: row['state'] as String, attempts: row['attempts'] as int),
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<void> insertFulfillment(FulfillmentRecordEntity fulfillment) async {
+    await _fulfillmentRecordEntityInsertionAdapter.insert(
+        fulfillment, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> insertPrintJob(PrintJobEntity job) async {
+    await _printJobEntityInsertionAdapter.insert(job, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> insertOutboxEvent(OutboxEventEntity event) async {
+    await _outboxEventEntityInsertionAdapter.insert(
+        event, OnConflictStrategy.abort);
   }
 }
