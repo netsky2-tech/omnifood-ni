@@ -230,6 +230,9 @@ class Receipt58mmFormatter {
     buffer.writeln(divider('='));
     buffer.writeln(center('Disposicion Tecnica 09-2007'));
     buffer.writeln(center('GRACIAS POR SU COMPRA!'));
+    buffer.writeln('');
+    buffer.writeln('');
+    buffer.writeln('');
 
     return buffer.toString();
   }

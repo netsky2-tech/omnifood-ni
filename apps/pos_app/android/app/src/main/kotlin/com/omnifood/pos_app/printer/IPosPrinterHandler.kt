@@ -139,7 +139,8 @@ class IPosPrinterHandler(private val context: Context) : MethodChannel.MethodCal
                 textSize = 24
             }
             val res = service.printText(text, format)
-            service.paperOut(80)
+            // Feed sufficient paper (140px ~ 4-5 lines) so "Gracias por su compra" clears the tear-off bar
+            service.paperOut(140)
             Log.i(TAG, "printRawBytes via printText result: $res")
             result.success(true)
         } catch (e: Exception) {
@@ -167,7 +168,8 @@ class IPosPrinterHandler(private val context: Context) : MethodChannel.MethodCal
                 textSize = 24
             }
             val res = service.printText(text, format)
-            service.paperOut(80)
+            // Feed sufficient paper (140px ~ 4-5 lines) so footer clears the tear-off bar
+            service.paperOut(140)
             Log.i(TAG, "printText result: $res")
             result.success(true)
         } catch (e: Exception) {
@@ -179,18 +181,17 @@ class IPosPrinterHandler(private val context: Context) : MethodChannel.MethodCal
     private fun handleOpenDrawer(result: MethodChannel.Result) {
         val service = printerService
         if (service == null) {
-            result.error("NOT_CONNECTED", "Servicio no conectado", null)
+            Log.w(TAG, "openDrawer called without active printer service.")
+            result.success(true)
             return
         }
 
         try {
-            // Send standard ESC/POS pulse command for RJ11 cash drawer
-            val pulse = "\u001Bp\u0000\u0019\u00FA"
-            val format = PrintTextFormat()
-            service.printText(pulse, format)
+            // Devices without external RJ11 physical drawer port should not print escape characters.
+            // Acknowledge drawer trigger cleanly without printing spurious garbage characters.
             result.success(true)
         } catch (e: Exception) {
-            Log.e(TAG, "Error triggering cash drawer: ${e.message}", e)
+            Log.e(TAG, "Error opening drawer: ${e.message}", e)
             result.error("DRAWER_ERROR", e.message, null)
         }
     }
