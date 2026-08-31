@@ -126,22 +126,22 @@ class Receipt58mmFormatter {
     buffer.writeln(divider('='));
     final docType = invoice.type == InvoiceType.creditNote
         ? 'NOTA DE CREDITO'
-        : 'FACTURA COMERCIAL / DGI';
+        : 'FACTURA DE VENTA';
     buffer.writeln(center(docType));
-    buffer.writeln(center('No: ${invoice.number}'));
+    buffer.writeln(center('No. ${invoice.number}'));
     buffer.writeln(twoColumns('Fecha:', dateFormat.format(invoice.createdAt)));
     if (cashierName != null && cashierName.isNotEmpty) {
-      buffer.writeln(twoColumns('Cajero:', cashierName));
+      buffer.writeln(twoColumns('Atendido por:', cashierName));
     }
     if (invoice.customerId != null && invoice.customerId!.isNotEmpty) {
       buffer.writeln(twoColumns('Cliente:', invoice.customerId!));
     }
     if (invoice.originInvoiceId != null) {
-      buffer.writeln(twoColumns('Doc Origen:', invoice.originInvoiceId!));
+      buffer.writeln(twoColumns('Doc. Origen:', invoice.originInvoiceId!));
     }
 
     buffer.writeln(divider('-'));
-    buffer.writeln(twoColumns('CANT DESCRIPCION', 'TOTAL'));
+    buffer.writeln(twoColumns('CANT  DESCRIPCION', 'TOTAL'));
     buffer.writeln(divider('-'));
 
     // Items
@@ -170,28 +170,28 @@ class Receipt58mmFormatter {
 
     buffer.writeln(divider('-'));
 
-    // Totals & Taxes (DGI 15% IVA)
+    // Totals & Taxes (IVA 15%)
     buffer.writeln(twoColumns('SUBTOTAL:', 'C\$ ${invoice.subtotal.toStringAsFixed(2)}'));
     buffer.writeln(twoColumns('IVA (15%):', 'C\$ ${invoice.totalTax.toStringAsFixed(2)}'));
-    buffer.writeln(twoColumns('TOTAL C\$:', 'C\$ ${invoice.total.toStringAsFixed(2)}'));
+    buffer.writeln(twoColumns('TOTAL CORDOBAS:', 'C\$ ${invoice.total.toStringAsFixed(2)}'));
 
     final commRate = invoice.commercialRate > 0 ? invoice.commercialRate : 36.50;
     final totalUsdCalc = invoice.totalUsd > 0
         ? invoice.totalUsd
         : (invoice.total / commRate);
-    buffer.writeln(twoColumns('TOTAL USD (\$):', '\$${totalUsdCalc.toStringAsFixed(2)}'));
+    buffer.writeln(twoColumns('TOTAL DOLARES:', '\$${totalUsdCalc.toStringAsFixed(2)}'));
 
     buffer.writeln(divider('-'));
     // Exchange Rates
-    buffer.writeln(twoColumns('TC Oficial BCN:', invoice.bcnOfficialRate.toStringAsFixed(4)));
-    buffer.writeln(twoColumns('TC Comercial:', invoice.commercialRate.toStringAsFixed(2)));
+    buffer.writeln(twoColumns('T.C. Oficial (BCN):', invoice.bcnOfficialRate.toStringAsFixed(4)));
+    buffer.writeln(twoColumns('T.C. Comercial:', invoice.commercialRate.toStringAsFixed(2)));
 
     buffer.writeln(divider('-'));
-    buffer.writeln(center('FORMA DE PAGO'));
+    buffer.writeln(center('DETALLE DE PAGO'));
 
     // Payments Breakdown
     if (payments.isEmpty) {
-      buffer.writeln(twoColumns('Condición:', 'Contado'));
+      buffer.writeln(twoColumns('Condicion:', 'Contado'));
     } else {
       for (final p in payments) {
         switch (p.method) {
@@ -215,21 +215,20 @@ class Receipt58mmFormatter {
             buffer.writeln(twoColumns('$brand ($bank):', 'C\$ ${p.amount.toStringAsFixed(2)}'));
             final auth = p.voucherCode ?? 'PENDIENTE';
             final last4 = p.last4 != null ? ' (****${p.last4})' : '';
-            buffer.writeln(twoColumns('  Auth/Voucher:', '$auth$last4'));
+            buffer.writeln(twoColumns('  Auth/Ref:', '$auth$last4'));
             break;
           case PaymentMethod.qr:
-            buffer.writeln(twoColumns('QR / Transfer:', 'C\$ ${p.amount.toStringAsFixed(2)}'));
+            buffer.writeln(twoColumns('Transferencia / QR:', 'C\$ ${p.amount.toStringAsFixed(2)}'));
             break;
           case PaymentMethod.points:
-            buffer.writeln(twoColumns('Puntos / Lealtad:', 'C\$ ${p.amount.toStringAsFixed(2)}'));
+            buffer.writeln(twoColumns('Puntos Lealtad:', 'C\$ ${p.amount.toStringAsFixed(2)}'));
             break;
         }
       }
     }
 
     buffer.writeln(divider('='));
-    buffer.writeln(center('Disposicion Tecnica 09-2007'));
-    buffer.writeln(center('GRACIAS POR SU COMPRA!'));
+    buffer.writeln(center('*** GRACIAS POR SU COMPRA ***'));
     buffer.writeln('');
     buffer.writeln('');
     buffer.writeln('');
@@ -340,11 +339,11 @@ class Receipt58mmFormatter {
 
     builder
         .textLine(divider('-'))
-        .textLine(twoColumns('TC Oficial BCN:', invoice.bcnOfficialRate.toStringAsFixed(4)))
-        .textLine(twoColumns('TC Comercial:', invoice.commercialRate.toStringAsFixed(2)))
+        .textLine(twoColumns('T.C. Oficial (BCN):', invoice.bcnOfficialRate.toStringAsFixed(4)))
+        .textLine(twoColumns('T.C. Comercial:', invoice.commercialRate.toStringAsFixed(2)))
         .textLine(divider('-'))
         .align(EscPosAlign.center)
-        .textLine('FORMA DE PAGO')
+        .textLine('DETALLE DE PAGO')
         .align(EscPosAlign.left);
 
     for (final p in payments) {
@@ -355,18 +354,17 @@ class Receipt58mmFormatter {
         }
       } else if (p.method == PaymentMethod.card) {
         builder.textLine(twoColumns('${p.cardBrand ?? "TARJETA"} (${p.bankPos ?? "POS"}):', 'C\$ ${p.amount.toStringAsFixed(2)}'));
-        builder.textLine(twoColumns('  Auth:', '${p.voucherCode ?? "PENDIENTE"}'));
+        builder.textLine(twoColumns('  Auth/Ref:', '${p.voucherCode ?? "PENDIENTE"}'));
       } else if (p.method == PaymentMethod.qr) {
-        builder.textLine(twoColumns('QR / Transfer:', 'C\$ ${p.amount.toStringAsFixed(2)}'));
+        builder.textLine(twoColumns('Transferencia / QR:', 'C\$ ${p.amount.toStringAsFixed(2)}'));
       }
     }
 
     builder
         .textLine(divider('='))
         .align(EscPosAlign.center)
-        .textLine('Disposicion Tecnica 09-2007')
         .bold(true)
-        .textLine('GRACIAS POR SU COMPRA!')
+        .textLine('*** GRACIAS POR SU COMPRA ***')
         .bold(false)
         .feedLines(3)
         .cut();

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../../../domain/models/config/printer_config.dart';
 import '../../../../domain/ports/printer_port.dart';
@@ -411,20 +412,119 @@ class HardwareSettingsView extends StatelessWidget {
     );
   }
 
+  Future<void> _pickImageFromDevice(BuildContext context, HardwareSettingsViewModel viewModel, ImageSource source) async {
+    try {
+      final picker = ImagePicker();
+      final pickedFile = await picker.pickImage(
+        source: source,
+        maxWidth: 384,
+        imageQuality: 100,
+      );
+
+      if (pickedFile == null) return;
+
+      final bytes = await pickedFile.readAsBytes();
+      final error = await viewModel.uploadAndProcessLogo(bytes);
+
+      if (context.mounted) {
+        if (error != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(error), backgroundColor: Colors.red),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Logo cargado y optimizado correctamente.'), backgroundColor: Colors.green),
+          );
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al seleccionar imagen: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   void _showUploadLogoDialog(BuildContext context, HardwareSettingsViewModel viewModel) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetCtx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Seleccionar Logo para Facturas',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 24.0),
+                child: Text(
+                  'El logo se optimizará automáticamente a formato monocromático de 1-bit para el cabezal térmico.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 13, color: Colors.grey),
+                ),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: const CircleAvatar(
+                  child: Icon(Icons.photo_library),
+                ),
+                title: const Text('Galería de Imágenes / Archivos'),
+                subtitle: const Text('Seleccionar imagen PNG/JPEG desde el almacenamiento del dispositivo'),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  _pickImageFromDevice(context, viewModel, ImageSource.gallery);
+                },
+              ),
+              ListTile(
+                leading: const CircleAvatar(
+                  child: Icon(Icons.camera_alt),
+                ),
+                title: const Text('Tomar Foto con Cámara'),
+                subtitle: const Text('Capturar imagen directamente con la cámara del POS'),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  _pickImageFromDevice(context, viewModel, ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: const CircleAvatar(
+                  child: Icon(Icons.code),
+                ),
+                title: const Text('Pegar Texto Base64'),
+                subtitle: const Text('Introducir código Base64 manualmente'),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  _showBase64InputDialog(context, viewModel);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showBase64InputDialog(BuildContext context, HardwareSettingsViewModel viewModel) {
     final textController = TextEditingController();
     showDialog(
       context: context,
       builder: (dialogCtx) => AlertDialog(
-        title: const Text('Cargar Logo Monocromático'),
+        title: const Text('Pegar Logo en Base64'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Pegue los bytes en formato Base64 de la imagen PNG (máx 384px de ancho). '
-                'El sistema aplicará automáticamente validación de cabecera y tramado Floyd-Steinberg.',
+                'Pegue los datos Base64 de la imagen PNG.',
                 style: TextStyle(fontSize: 12),
               ),
               const SizedBox(height: 12),
@@ -432,7 +532,7 @@ class HardwareSettingsView extends StatelessWidget {
                 controller: textController,
                 maxLines: 4,
                 decoration: const InputDecoration(
-                  labelText: 'Base64 del archivo PNG',
+                  labelText: 'Base64 PNG',
                   hintText: 'iVBORw0KGgoAAAANSUhEUgAAAYAAAA...',
                   border: OutlineInputBorder(),
                 ),
