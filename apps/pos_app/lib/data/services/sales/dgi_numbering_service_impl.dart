@@ -17,22 +17,18 @@ class DgiNumberingServiceImpl implements DgiNumberingService {
   int _extractSequenceNumber(String invoiceNumber) {
     final match = RegExp(r'(\d+)$').firstMatch(invoiceNumber.trim());
     if (match != null) {
-      return int.tryParse(match.group(1)!) ?? 0;
+      return int.tryParse(match.group(1) ?? '') ?? 0;
     }
     return 0;
   }
 
   Future<int> _resolveNextSequence(int configuredCurrent) async {
     if (_invoiceDao != null) {
-      final lastInvoiceNumber = await _invoiceDao!.getLastInvoiceNumber();
+      final lastInvoiceNumber = await _invoiceDao.getLastInvoiceNumber();
       if (lastInvoiceNumber != null && lastInvoiceNumber.isNotEmpty) {
         final lastSequence = _extractSequenceNumber(lastInvoiceNumber);
         if (lastSequence >= configuredCurrent) {
-          final synchronized = lastSequence + 1;
-          await _configDao.saveConfig(
-            LocalConfigEntity(key: _keyCurrent, value: synchronized.toString()),
-          );
-          return synchronized;
+          return lastSequence + 1;
         }
       }
     }

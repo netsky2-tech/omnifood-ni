@@ -120,7 +120,7 @@ void main() {
         .thenAnswer((_) async => seq);
 
     // Transaction DAO executes and persists real entities in SQLite
-    when(mockTransactionDao.executeSaleTransaction(any, any, any, any, any, any, any))
+    when(mockTransactionDao.executeSaleWithDgiTransaction(any, any, any, any, any, any, any, any))
         .thenAnswer((invocation) async {
       final inv = invocation.positionalArguments[0] as InvoiceEntity;
       final items = invocation.positionalArguments[1] as List<InvoiceItemEntity>;

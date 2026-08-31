@@ -63,10 +63,10 @@ class SalesRepositoryImpl implements SalesRepository {
     }
 
     final finalNumber = await numberingService.getNextNumber();
+    final nextDgiSequence = _nextDgiSequence(finalNumber);
     final terminalId = 'pos-${invoice.userId}';
-    final sourceSequence = (await transactionDao.getNextInvoiceSourceSequence(
-      terminalId,
-    )) ?? 1;
+    final sourceSequence =
+        (await transactionDao.getNextInvoiceSourceSequence(terminalId)) ?? 1;
     final payloadHash = _buildSalePayloadHash(
       invoice: invoice.copyWith(number: finalNumber),
       items: items,
@@ -96,19 +96,24 @@ class SalesRepositoryImpl implements SalesRepository {
     final movementEntities = movements
         .map(
           (m) => InventoryMapper.toMovementEntity(
-            m.copyWith(userId: updatedInvoice.userId),
+            m.copyWith(
+              userId: updatedInvoice.userId,
+              sourceDocumentType: 'invoice',
+              sourceDocumentId: updatedInvoice.id,
+            ),
           ),
         )
         .toList();
 
     try {
-      await transactionDao.executeSaleTransaction(
+      await transactionDao.executeSaleWithDgiTransaction(
         invoiceEntity,
         itemEntities,
         [],
         paymentEntities,
         movementEntities,
         null, // Audit log is written separately
+        nextDgiSequence,
         false,
       );
 
@@ -117,11 +122,17 @@ class SalesRepositoryImpl implements SalesRepository {
         metadata:
             '{"invoice_id": "${updatedInvoice.id}", "number": "${updatedInvoice.number}", "total": "${updatedInvoice.total.toStringAsFixed(2)}"}',
       );
-
-      await numberingService.incrementNumber();
     } catch (e) {
       rethrow;
     }
+  }
+
+  String _nextDgiSequence(String invoiceNumber) {
+    final match = RegExp(r'(\d+)$').firstMatch(invoiceNumber.trim());
+    if (match == null) {
+      throw FormatException('DGI invoice number does not end in a sequence.');
+    }
+    return (int.parse(match.group(1)!) + 1).toString();
   }
 
   /// Resolves and freezes the [recipeVersionId] on each invoice line for
@@ -185,7 +196,9 @@ class SalesRepositoryImpl implements SalesRepository {
 
       // ignore: avoid_print
       for (final pe in payments) {
-        print('[SYNC-DB] payment entity id="${pe.id}" invoiceId="${pe.invoiceId}" method="${pe.method}"');
+        print(
+          '[SYNC-DB] payment entity id="${pe.id}" invoiceId="${pe.invoiceId}" method="${pe.method}"',
+        );
       }
 
       aggregates.add(
@@ -259,7 +272,11 @@ class SalesRepositoryImpl implements SalesRepository {
     final movementEntities = movements
         .map(
           (m) => InventoryMapper.toMovementEntity(
-            m.copyWith(userId: entity.userId),
+            m.copyWith(
+              userId: entity.userId,
+              sourceDocumentType: 'invoice',
+              sourceDocumentId: entity.id,
+            ),
           ),
         )
         .toList();

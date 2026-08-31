@@ -153,7 +153,8 @@ void main() {
         mockProcessInventoryUseCase.execute(any),
       ).thenAnswer((_) async => movements);
       when(
-        mockTransactionDao.executeSaleTransaction(
+        mockTransactionDao.executeSaleWithDgiTransaction(
+          any,
           any,
           any,
           any,
@@ -178,7 +179,8 @@ void main() {
       // Assert
       verify(mockProcessInventoryUseCase.execute(any)).called(1);
       verify(
-        mockTransactionDao.executeSaleTransaction(
+        mockTransactionDao.executeSaleWithDgiTransaction(
+          any,
           any,
           any,
           any,
@@ -237,7 +239,8 @@ void main() {
         mockTransactionDao.getNextInvoiceSourceSequence('pos-cashier-1'),
       ).thenAnswer((_) async => 17);
       when(
-        mockTransactionDao.executeSaleTransaction(
+        mockTransactionDao.executeSaleWithDgiTransaction(
+          any,
           any,
           any,
           any,
@@ -259,8 +262,9 @@ void main() {
       );
 
       final captured = verify(
-        mockTransactionDao.executeSaleTransaction(
+        mockTransactionDao.executeSaleWithDgiTransaction(
           captureAny,
+          any,
           any,
           any,
           any,
