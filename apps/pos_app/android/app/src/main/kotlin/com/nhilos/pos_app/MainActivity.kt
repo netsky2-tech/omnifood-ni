@@ -1,7 +1,7 @@
-package com.omnifood.pos_app
+package com.nhilos.pos_app
 
-import com.omnifood.pos_app.printer.IPosPrinterHandler
-import com.omnifood.pos_app.printer.SunmiPrinterHandler
+import com.nhilos.pos_app.printer.IPosPrinterHandler
+import com.nhilos.pos_app.printer.SunmiPrinterHandler
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 

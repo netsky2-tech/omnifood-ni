@@ -53,12 +53,12 @@ void main() {
         testInvoice,
         items: testItems,
         payments: testPayments,
-        businessName: 'OmniFood Test',
+        businessName: 'NHILOS POS Test',
       );
 
       expect(result.isSuccess, isTrue);
       expect(result.status, PrinterStatus.ready);
-      expect(adapter.lastPrintedText, contains('OmniFood Test'));
+      expect(adapter.lastPrintedText, contains('NHILOS POS Test'));
       expect(adapter.lastPrintedBytes, isNotNull);
       expect(adapter.printHistory.length, 1);
     });

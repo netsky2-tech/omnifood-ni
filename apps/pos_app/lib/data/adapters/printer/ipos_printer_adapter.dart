@@ -13,7 +13,7 @@ import '../../../domain/services/printer/receipt_layout_formatter.dart';
 /// Communicates via Android Platform Channel with fallback resilience for non-Q80 environments.
 class IPosPrinterAdapter implements PrinterPort {
   static const MethodChannel _defaultChannel =
-      MethodChannel('com.omnifood.pos/ipos_printer');
+      MethodChannel('com.nhilos.pos/ipos_printer');
 
   final MethodChannel _channel;
   bool _isHardwareDetected = false;

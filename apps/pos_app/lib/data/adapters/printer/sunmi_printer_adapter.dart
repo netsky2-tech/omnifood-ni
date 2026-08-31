@@ -13,7 +13,7 @@ import '../../../domain/services/printer/receipt_layout_formatter.dart';
 /// Communicates via Android Platform Channel with fallback resilience for non-Sunmi environments.
 class SunmiPrinterAdapter implements PrinterPort {
   static const MethodChannel _defaultChannel =
-      MethodChannel('com.omnifood.pos/sunmi_printer');
+      MethodChannel('com.nhilos.pos/sunmi_printer');
 
   final MethodChannel _channel;
   bool _isHardwareDetected = false;

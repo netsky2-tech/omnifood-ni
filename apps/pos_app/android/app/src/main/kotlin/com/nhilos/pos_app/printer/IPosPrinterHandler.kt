@@ -1,4 +1,4 @@
-package com.omnifood.pos_app.printer
+package com.nhilos.pos_app.printer
 
 import android.content.ComponentName
 import android.content.Context
@@ -19,8 +19,8 @@ import net.nyx.printerservice.print.PrintTextFormat
  */
 class IPosPrinterHandler(private val context: Context) : MethodChannel.MethodCallHandler {
     companion object {
-        private const val TAG = "OmniFoodNyxPrinterNative"
-        private const val CHANNEL_NAME = "com.omnifood.pos/ipos_printer"
+        private const val TAG = "NhilosPOSNyxPrinterNative"
+        private const val CHANNEL_NAME = "com.nhilos.pos/ipos_printer"
         private const val SERVICE_PACKAGE = "net.nyx.printerservice"
         private const val SERVICE_ACTION = "net.nyx.printerservice.IPrinterService"
     }
