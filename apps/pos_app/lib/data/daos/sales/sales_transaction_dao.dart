@@ -49,8 +49,81 @@ abstract class SalesTransactionDao {
   )
   Future<int?> getNextInvoiceSourceSequence(String terminalId);
 
+  @Query(
+    "UPDATE local_configs SET value = :nextSequence WHERE `key` = 'dgi_current_number'",
+  )
+  Future<void> advanceDgiCurrentNumber(String nextSequence);
+
+  @Query('SELECT value FROM local_configs WHERE `key` = :key')
+  Future<String?> getDgiConfig(String key);
+
+  @Query(
+    'SELECT id FROM inventory_movements WHERE source_document_id = :invoiceId AND insumo_id = :insumoId AND origin_movement_id IS NULL ORDER BY timestamp DESC LIMIT 1',
+  )
+  Future<String?> getOriginalMovementId(String invoiceId, String insumoId);
+
   @transaction
   Future<void> executeSaleTransaction(
+    InvoiceEntity invoice,
+    List<InvoiceItemEntity> items,
+    List<InvoiceItemModifierEntity> modifiers,
+    List<PaymentEntity> payments,
+    List<MovementEntity> movements,
+    AuditLogEntity? auditLog,
+    bool shouldFail,
+  ) async {
+    await _persistSale(
+      invoice,
+      items,
+      modifiers,
+      payments,
+      movements,
+      auditLog,
+      shouldFail,
+    );
+  }
+
+  /// Persists a sale and its DGI sequence advancement as one SQLite unit.
+  ///
+  /// The SQLite transaction reads and advances the configured sequence itself.
+  /// The legacy [nextDgiSequence] argument remains positional for existing
+  /// callers, but is not trusted as fiscal authority.
+  @transaction
+  Future<void> executeSaleWithDgiTransaction(
+    InvoiceEntity invoice,
+    List<InvoiceItemEntity> items,
+    List<InvoiceItemModifierEntity> modifiers,
+    List<PaymentEntity> payments,
+    List<MovementEntity> movements,
+    AuditLogEntity? auditLog,
+    String nextDgiSequence,
+    bool shouldFail,
+  ) async {
+    final current = await getDgiConfig('dgi_current_number');
+    final sequence = int.tryParse(current ?? '');
+    if (sequence == null || sequence < 1) {
+      throw StateError('DGI current number is not configured.');
+    }
+    final prefix =
+        await getDgiConfig('dgi_prefix') ??
+        invoice.number.replaceFirst(RegExp(r'\d+$'), '');
+    invoice.number = '$prefix${sequence.toString().padLeft(8, '0')}';
+    await _persistSale(
+      invoice,
+      items,
+      modifiers,
+      payments,
+      movements,
+      auditLog,
+      false,
+    );
+    await advanceDgiCurrentNumber((sequence + 1).toString());
+    if (shouldFail) {
+      throw Exception('Forced failure for testing');
+    }
+  }
+
+  Future<void> _persistSale(
     InvoiceEntity invoice,
     List<InvoiceItemEntity> items,
     List<InvoiceItemModifierEntity> modifiers,
@@ -152,6 +225,18 @@ abstract class SalesTransactionDao {
   ) async {
     // 1. Reversal movements + insumo stock updates.
     for (final movement in movements) {
+      final originMovementId =
+          movement.originMovementId ??
+          await getOriginalMovementId(canceledInvoice.id, movement.insumoId);
+      if (originMovementId == null &&
+          movement.sourceDocumentId == canceledInvoice.id) {
+        throw StateError(
+          'Cancellation reversal requires an original movement.',
+        );
+      }
+      if (originMovementId != null) {
+        movement.originMovementId = originMovementId;
+      }
       final insumo = await getInsumoById(movement.insumoId);
       if (insumo != null) {
         // Re-compute from the fresh row read inside the tx (positive

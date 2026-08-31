@@ -3782,6 +3782,32 @@ class _$SalesTransactionDao extends SalesTransactionDao {
   }
 
   @override
+  Future<void> advanceDgiCurrentNumber(String nextSequence) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE local_configs SET value = ?1 WHERE `key` = \'dgi_current_number\'',
+        arguments: [nextSequence]);
+  }
+
+  @override
+  Future<String?> getDgiConfig(String key) async {
+    return _queryAdapter.query(
+        'SELECT value FROM local_configs WHERE `key` = ?1',
+        mapper: (Map<String, Object?> row) => row.values.first as String,
+        arguments: [key]);
+  }
+
+  @override
+  Future<String?> getOriginalMovementId(
+    String invoiceId,
+    String insumoId,
+  ) async {
+    return _queryAdapter.query(
+        'SELECT id FROM inventory_movements WHERE source_document_id = ?1 AND insumo_id = ?2 AND origin_movement_id IS NULL ORDER BY timestamp DESC LIMIT 1',
+        mapper: (Map<String, Object?> row) => row.values.first as String,
+        arguments: [invoiceId, insumoId]);
+  }
+
+  @override
   Future<void> insertInvoice(InvoiceEntity invoice) async {
     await _invoiceEntityInsertionAdapter.insert(
         invoice, OnConflictStrategy.abort);
@@ -3855,6 +3881,32 @@ class _$SalesTransactionDao extends SalesTransactionDao {
             movements,
             auditLog,
             shouldFail);
+      });
+    }
+  }
+
+  @override
+  Future<void> executeSaleWithDgiTransaction(
+    InvoiceEntity invoice,
+    List<InvoiceItemEntity> items,
+    List<InvoiceItemModifierEntity> modifiers,
+    List<PaymentEntity> payments,
+    List<MovementEntity> movements,
+    AuditLogEntity? auditLog,
+    String nextDgiSequence,
+    bool shouldFail,
+  ) async {
+    if (database is sqflite.Transaction) {
+      await super.executeSaleWithDgiTransaction(invoice, items, modifiers,
+          payments, movements, auditLog, nextDgiSequence, shouldFail);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.salesTransactionDao
+            .executeSaleWithDgiTransaction(invoice, items, modifiers, payments,
+                movements, auditLog, nextDgiSequence, shouldFail);
       });
     }
   }

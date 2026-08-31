@@ -1359,6 +1359,42 @@ class MockSalesTransactionDao extends _i1.Mock
       ) as _i39.Future<int?>);
 
   @override
+  _i39.Future<void> advanceDgiCurrentNumber(String? nextSequence) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #advanceDgiCurrentNumber,
+          [nextSequence],
+        ),
+        returnValue: _i39.Future<void>.value(),
+        returnValueForMissingStub: _i39.Future<void>.value(),
+      ) as _i39.Future<void>);
+
+  @override
+  _i39.Future<String?> getDgiConfig(String? key) => (super.noSuchMethod(
+        Invocation.method(
+          #getDgiConfig,
+          [key],
+        ),
+        returnValue: _i39.Future<String?>.value(),
+      ) as _i39.Future<String?>);
+
+  @override
+  _i39.Future<String?> getOriginalMovementId(
+    String? invoiceId,
+    String? insumoId,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getOriginalMovementId,
+          [
+            invoiceId,
+            insumoId,
+          ],
+        ),
+        returnValue: _i39.Future<String?>.value(),
+      ) as _i39.Future<String?>);
+
+  @override
   _i39.Future<void> executeSaleTransaction(
     _i44.InvoiceEntity? invoice,
     List<_i45.InvoiceItemEntity>? items,
@@ -1378,6 +1414,35 @@ class MockSalesTransactionDao extends _i1.Mock
             payments,
             movements,
             auditLog,
+            shouldFail,
+          ],
+        ),
+        returnValue: _i39.Future<void>.value(),
+        returnValueForMissingStub: _i39.Future<void>.value(),
+      ) as _i39.Future<void>);
+
+  @override
+  _i39.Future<void> executeSaleWithDgiTransaction(
+    _i44.InvoiceEntity? invoice,
+    List<_i45.InvoiceItemEntity>? items,
+    List<_i47.InvoiceItemModifierEntity>? modifiers,
+    List<_i46.PaymentEntity>? payments,
+    List<_i49.MovementEntity>? movements,
+    _i50.AuditLogEntity? auditLog,
+    String? nextDgiSequence,
+    bool? shouldFail,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #executeSaleWithDgiTransaction,
+          [
+            invoice,
+            items,
+            modifiers,
+            payments,
+            movements,
+            auditLog,
+            nextDgiSequence,
             shouldFail,
           ],
         ),
