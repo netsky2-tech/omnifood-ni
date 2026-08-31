@@ -26,9 +26,9 @@ Chain strategy: feature-branch-chain
 
 ## Phase 1: Contracts (PR #1)
 
-- [ ] 1.1 RED: test immutable topology, inventory policy, route/channel/state objects and DGI identities; GREEN implement `apps/pos_app/lib/domain/models/fulfillment/*` and policy/routing services; REFACTOR keep validation infrastructure-free.
-- [ ] 1.2 RED beside GREEN: malformed/missing/stale profiles retain every physical line once in visible `DIRECT_HANDOFF/general-dispatch`, alert, and never block offline sale; REFACTOR table coverage.
-- [ ] 1.3 RED beside GREEN: pre-send failure, post-send disconnect, and response loss preserve order, retry only confirmed failure, and mark ambiguity `UNCERTAIN`; REFACTOR fault matrix.
+- [x] 1.1 RED: test immutable topology, inventory policy, route/channel/state objects and DGI identities; GREEN implement `apps/pos_app/lib/domain/models/fulfillment/*` and policy/routing services; REFACTOR keep validation infrastructure-free.
+- [x] 1.2 RED beside GREEN: malformed/missing/stale profiles retain every physical line once in visible `DIRECT_HANDOFF/general-dispatch`, alert, and never block offline sale; REFACTOR table coverage.
+- [x] 1.3 RED beside GREEN: pre-send failure, post-send disconnect, and response loss preserve order, retry only confirmed failure, and mark ambiguity `UNCERTAIN`; REFACTOR fault matrix.
 
 ## Phase 2: POS Persistence and Kardex (PR #2)
 
