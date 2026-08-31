@@ -1,11 +1,16 @@
 # openspec/config.yaml
 schema: spec-driven
+artifact_store: hybrid
+execution_mode: interactive
+delivery_strategy: ask-on-risk
+review_budget_lines: 400
 
 context: |
   Tech stack: Flutter, NestJS, SQLite, PostgreSQL
   Architecture: Clean Architecture, Hexagonal, Tactic DDD
   Testing: Jest (unit/e2e) for admin_backend, flutter_test (unit/widget) for pos_app
   Style: Conventional Commits, ESLint + Prettier (NestJS), flutter_lints (Flutter)
+  Constraints: Offline-first local SQLite source of truth, DGI invoice immutability, tenant isolation
 
 strict_tdd: true
 
