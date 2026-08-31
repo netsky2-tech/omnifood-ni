@@ -32,6 +32,8 @@ mixin _$Product {
   String? get category => throw _privateConstructorUsedError;
   bool get isPrepared => throw _privateConstructorUsedError;
   String? get createdAt => throw _privateConstructorUsedError;
+  InventoryPolicy? get inventoryPolicy => throw _privateConstructorUsedError;
+  String? get directStockInsumoId => throw _privateConstructorUsedError;
   List<ProductVariant> get variants => throw _privateConstructorUsedError;
   List<Modifier> get availableModifiers => throw _privateConstructorUsedError;
 
@@ -58,6 +60,8 @@ abstract class $ProductCopyWith<$Res> {
       String? category,
       bool isPrepared,
       String? createdAt,
+      InventoryPolicy? inventoryPolicy,
+      String? directStockInsumoId,
       List<ProductVariant> variants,
       List<Modifier> availableModifiers});
 }
@@ -87,6 +91,8 @@ class _$ProductCopyWithImpl<$Res, $Val extends Product>
     Object? category = freezed,
     Object? isPrepared = null,
     Object? createdAt = freezed,
+    Object? inventoryPolicy = freezed,
+    Object? directStockInsumoId = freezed,
     Object? variants = null,
     Object? availableModifiers = null,
   }) {
@@ -139,6 +145,14 @@ class _$ProductCopyWithImpl<$Res, $Val extends Product>
           ? _value.createdAt
           : createdAt // ignore: cast_nullable_to_non_nullable
               as String?,
+      inventoryPolicy: freezed == inventoryPolicy
+          ? _value.inventoryPolicy
+          : inventoryPolicy // ignore: cast_nullable_to_non_nullable
+              as InventoryPolicy?,
+      directStockInsumoId: freezed == directStockInsumoId
+          ? _value.directStockInsumoId
+          : directStockInsumoId // ignore: cast_nullable_to_non_nullable
+              as String?,
       variants: null == variants
           ? _value.variants
           : variants // ignore: cast_nullable_to_non_nullable
@@ -171,6 +185,8 @@ abstract class _$$ProductImplCopyWith<$Res> implements $ProductCopyWith<$Res> {
       String? category,
       bool isPrepared,
       String? createdAt,
+      InventoryPolicy? inventoryPolicy,
+      String? directStockInsumoId,
       List<ProductVariant> variants,
       List<Modifier> availableModifiers});
 }
@@ -198,6 +214,8 @@ class __$$ProductImplCopyWithImpl<$Res>
     Object? category = freezed,
     Object? isPrepared = null,
     Object? createdAt = freezed,
+    Object? inventoryPolicy = freezed,
+    Object? directStockInsumoId = freezed,
     Object? variants = null,
     Object? availableModifiers = null,
   }) {
@@ -250,6 +268,14 @@ class __$$ProductImplCopyWithImpl<$Res>
           ? _value.createdAt
           : createdAt // ignore: cast_nullable_to_non_nullable
               as String?,
+      inventoryPolicy: freezed == inventoryPolicy
+          ? _value.inventoryPolicy
+          : inventoryPolicy // ignore: cast_nullable_to_non_nullable
+              as InventoryPolicy?,
+      directStockInsumoId: freezed == directStockInsumoId
+          ? _value.directStockInsumoId
+          : directStockInsumoId // ignore: cast_nullable_to_non_nullable
+              as String?,
       variants: null == variants
           ? _value._variants
           : variants // ignore: cast_nullable_to_non_nullable
@@ -278,6 +304,8 @@ class _$ProductImpl implements _Product {
       this.category,
       this.isPrepared = false,
       this.createdAt,
+      this.inventoryPolicy,
+      this.directStockInsumoId,
       final List<ProductVariant> variants = const [],
       final List<Modifier> availableModifiers = const []})
       : _variants = variants,
@@ -312,6 +340,10 @@ class _$ProductImpl implements _Product {
   final bool isPrepared;
   @override
   final String? createdAt;
+  @override
+  final InventoryPolicy? inventoryPolicy;
+  @override
+  final String? directStockInsumoId;
   final List<ProductVariant> _variants;
   @override
   @JsonKey()
@@ -333,7 +365,7 @@ class _$ProductImpl implements _Product {
 
   @override
   String toString() {
-    return 'Product(id: $id, name: $name, uom: $uom, stock: $stock, averageCost: $averageCost, sellPrice: $sellPrice, isActive: $isActive, sku: $sku, barcode: $barcode, category: $category, isPrepared: $isPrepared, createdAt: $createdAt, variants: $variants, availableModifiers: $availableModifiers)';
+    return 'Product(id: $id, name: $name, uom: $uom, stock: $stock, averageCost: $averageCost, sellPrice: $sellPrice, isActive: $isActive, sku: $sku, barcode: $barcode, category: $category, isPrepared: $isPrepared, createdAt: $createdAt, inventoryPolicy: $inventoryPolicy, directStockInsumoId: $directStockInsumoId, variants: $variants, availableModifiers: $availableModifiers)';
   }
 
   @override
@@ -359,6 +391,10 @@ class _$ProductImpl implements _Product {
                 other.isPrepared == isPrepared) &&
             (identical(other.createdAt, createdAt) ||
                 other.createdAt == createdAt) &&
+            (identical(other.inventoryPolicy, inventoryPolicy) ||
+                other.inventoryPolicy == inventoryPolicy) &&
+            (identical(other.directStockInsumoId, directStockInsumoId) ||
+                other.directStockInsumoId == directStockInsumoId) &&
             const DeepCollectionEquality().equals(other._variants, _variants) &&
             const DeepCollectionEquality()
                 .equals(other._availableModifiers, _availableModifiers));
@@ -380,6 +416,8 @@ class _$ProductImpl implements _Product {
       category,
       isPrepared,
       createdAt,
+      inventoryPolicy,
+      directStockInsumoId,
       const DeepCollectionEquality().hash(_variants),
       const DeepCollectionEquality().hash(_availableModifiers));
 
@@ -411,6 +449,8 @@ abstract class _Product implements Product {
       final String? category,
       final bool isPrepared,
       final String? createdAt,
+      final InventoryPolicy? inventoryPolicy,
+      final String? directStockInsumoId,
       final List<ProductVariant> variants,
       final List<Modifier> availableModifiers}) = _$ProductImpl;
 
@@ -440,6 +480,10 @@ abstract class _Product implements Product {
   bool get isPrepared;
   @override
   String? get createdAt;
+  @override
+  InventoryPolicy? get inventoryPolicy;
+  @override
+  String? get directStockInsumoId;
   @override
   List<ProductVariant> get variants;
   @override

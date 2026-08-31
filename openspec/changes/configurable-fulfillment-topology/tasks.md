@@ -32,7 +32,8 @@ Chain strategy: feature-branch-chain
 
 ## Phase 2: POS Persistence and Kardex (PR #2)
 
-- [ ] 2.1 RED: transaction failure, DGI ordering, direct-stock/no-BOM, recipe, not-tracked, reversal; GREEN update `product_entity.dart`, `movement_engine*.dart`, `process_sale_inventory_use_case.dart`, `sales_transaction_dao.dart`; generate/review Floor/Freezed here; REFACTOR compatibility reads.
+- [x] 2.1A RED: direct-stock/no-BOM, recipe, not-tracked, and legacy compatibility; GREEN add product policy persistence, nullable Floor migration, and policy-based Kardex planning; generate/review required Floor/Freezed output; REFACTOR compatibility reads.
+- [ ] 2.1B RED: transaction failure, DGI ordering, and cancellation/reversal lineage; GREEN make fiscal advancement and cancellation effects atomic in the sale transaction; REFACTOR transaction boundaries. Depends on 2.1A.
 - [ ] 2.2 RED: offline mixed checkout creates one sale, fulfillment, print job, and outbox; GREEN wire `sales_repository_impl.dart`, shift-frozen snapshot DAOs, tenant/version/hash validation and emergency audit; REFACTOR idempotent local identities.
 
 ## Phase 3: Backend Provisioning and Sync (PR #3)

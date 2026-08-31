@@ -21,6 +21,10 @@ class ProductEntity {
   final bool isPrepared;
   @ColumnInfo(name: 'created_at')
   final String? createdAt;
+  @ColumnInfo(name: 'inventory_policy')
+  final String? inventoryPolicy;
+  @ColumnInfo(name: 'direct_stock_insumo_id')
+  final String? directStockInsumoId;
 
   ProductEntity({
     required this.id,
@@ -35,6 +39,8 @@ class ProductEntity {
     this.category,
     this.isPrepared = false,
     this.createdAt,
+    this.inventoryPolicy,
+    this.directStockInsumoId,
   });
 }
 
