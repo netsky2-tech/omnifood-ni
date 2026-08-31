@@ -53,4 +53,5 @@ const _$PrinterDriverTypeEnumMap = {
   PrinterDriverType.sunmiV2s: 'SUNMI_V2S',
   PrinterDriverType.escPosNetwork: 'ESCPOS_NETWORK',
   PrinterDriverType.mock: 'MOCK',
+  PrinterDriverType.iPosQ80: 'IPOS_Q80',
 };

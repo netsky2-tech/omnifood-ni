@@ -76,6 +76,11 @@ class HardwareSettingsView extends StatelessWidget {
                               label: Text('Red TCP/IP'),
                               icon: Icon(Icons.network_ping),
                             ),
+                            ButtonSegment(
+                              value: PrinterDriverType.iPosQ80,
+                              label: Text('Q80 / iPos'),
+                              icon: Icon(Icons.point_of_sale),
+                            ),
                           ],
                           selected: {config.driverType},
                           onSelectionChanged: (set) {

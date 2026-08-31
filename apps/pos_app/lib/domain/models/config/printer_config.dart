@@ -10,6 +10,8 @@ enum PrinterDriverType {
   escPosNetwork,
   @JsonValue('MOCK')
   mock,
+  @JsonValue('IPOS_Q80')
+  iPosQ80,
 }
 
 @freezed
