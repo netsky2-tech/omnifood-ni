@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import '../../../../domain/models/config/printer_config.dart';
+import '../../../../domain/models/config/tax_regime.dart';
+import '../../../../domain/models/sales/cashier_session.dart';
 import '../../../../domain/models/sales/invoice.dart';
 import '../../../../domain/models/sales/invoice_item.dart';
 import '../../../../domain/models/sales/payment.dart';
@@ -221,8 +223,14 @@ class HardwareSettingsViewModel extends ChangeNotifier {
         items: sampleItems,
         payments: samplePayments,
         businessName: _config.headerBusinessName,
+        legalName: _config.headerLegalName,
         ruc: _config.headerRuc ?? 'J0310000000001',
+        address: _config.headerAddress,
+        phone: _config.headerPhone,
         logoRasterBytes: logoRasterBytes,
+        taxRegime: TaxRegime.fromString(_config.taxRegime),
+        isTaxExempt: false,
+        paperWidthMm: _config.paperWidthMm,
       );
 
       if (result.isSuccess) {

@@ -1,11 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import '../../../domain/models/config/tax_regime.dart';
 import '../../../domain/models/sales/cashier_session.dart';
 import '../../../domain/models/sales/invoice.dart';
 import '../../../domain/models/sales/invoice_item.dart';
 import '../../../domain/models/sales/payment.dart';
 import '../../../domain/ports/printer_port.dart';
 import '../../../domain/services/printer/receipt_58mm_formatter.dart';
+import '../../../domain/services/printer/receipt_layout_formatter.dart';
 
 /// Hardware Driver Adapter for Alacrity Q80 and iPos-compatible thermal printers.
 /// Communicates via Android Platform Channel with fallback resilience for non-Q80 environments.
@@ -61,17 +63,21 @@ class IPosPrinterAdapter implements PrinterPort {
     required List<InvoiceItem> items,
     required List<Payment> payments,
     String? businessName,
+    String? legalName,
     String? ruc,
     String? address,
     String? phone,
     String? cashierName,
     List<int>? logoRasterBytes,
+    TaxRegime taxRegime = TaxRegime.regimenGeneral,
+    bool isTaxExempt = false,
+    int paperWidthMm = 58,
   }) async {
     final status = await checkStatus();
     if (status == PrinterStatus.outOfPaper) {
       return PrinterResult.failure(
         PrinterStatus.outOfPaper,
-        'La impresora no tiene papel. Por favor recargue el rollo de 58mm.',
+        'La impresora no tiene papel. Por favor recargue el rollo de papel térmico.',
       );
     } else if (status == PrinterStatus.overheating) {
       return PrinterResult.failure(
@@ -80,15 +86,19 @@ class IPosPrinterAdapter implements PrinterPort {
       );
     }
 
-    final formattedText = Receipt58mmFormatter.formatInvoiceText(
+    final layoutFormatter = ReceiptLayoutFormatter.fromPaperWidth(paperWidthMm);
+    final formattedText = layoutFormatter.formatInvoiceText(
       invoice,
       items: items,
       payments: payments,
       businessName: businessName,
+      legalName: legalName,
       ruc: ruc,
       address: address,
       phone: phone,
       cashierName: cashierName,
+      taxRegime: taxRegime,
+      isTaxExempt: isTaxExempt,
     );
 
     try {

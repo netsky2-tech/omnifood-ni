@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
+import '../../../../domain/models/config/tax_regime.dart';
 import '../../../../domain/models/config/tenant_config.dart';
 import '../../../../domain/models/config/tenant_operation_mode.dart';
 import '../../../../domain/models/sales/invoice.dart';
@@ -964,11 +965,15 @@ class SaleViewModel extends ChangeNotifier {
             items: items,
             payments: payments,
             businessName: printerConfig.headerBusinessName,
+            legalName: printerConfig.headerLegalName,
             ruc: printerConfig.headerRuc,
             address: printerConfig.headerAddress,
             phone: printerConfig.headerPhone,
             cashierName: user.name,
             logoRasterBytes: logoRasterBytes,
+            taxRegime: TaxRegime.fromString(printerConfig.taxRegime),
+            isTaxExempt: _isGlobalTaxExempt,
+            paperWidthMm: printerConfig.paperWidthMm,
           );
 
           if (!printResult.isSuccess) {
@@ -1073,10 +1078,14 @@ class SaleViewModel extends ChangeNotifier {
         items: domainItems,
         payments: domainPayments,
         businessName: config.headerBusinessName,
+        legalName: config.headerLegalName,
         ruc: config.headerRuc,
         address: config.headerAddress,
         phone: config.headerPhone,
         logoRasterBytes: logoRasterBytes,
+        taxRegime: TaxRegime.fromString(config.taxRegime),
+        isTaxExempt: _lastProcessedInvoice?.globalTaxOverride ?? _isGlobalTaxExempt,
+        paperWidthMm: config.paperWidthMm,
       );
 
       if (!res.isSuccess) {

@@ -1,14 +1,17 @@
 import 'package:intl/intl.dart';
+import '../../models/config/tax_regime.dart';
 import '../../models/sales/cashier_session.dart';
 import '../../models/sales/invoice.dart';
 import '../../models/sales/invoice_item.dart';
 import '../../models/sales/payment.dart';
 import 'esc_pos_builder.dart';
+import 'receipt_layout_formatter.dart';
 
-/// Formatter and Layout Engine for 58mm Thermal Printers (32 columns).
-/// Adheres strictly to DGI Disposición Técnica 09-2007 and Food Park QSR needs.
+/// Formatter and Layout Engine for 58mm Thermal Printers.
+/// Adheres strictly to DGI Disposición Técnica 09-2007, Ley 822, and Food Park QSR needs.
 class Receipt58mmFormatter {
   static const int lineWidth = 38;
+  static final ReceiptLayoutFormatter _formatter = ReceiptLayoutFormatter.format58mm();
 
   // ==========================================
   // Layout & Text Manipulation Utilities
@@ -42,7 +45,7 @@ class Receipt58mmFormatter {
     return '$adjustedLeft${' ' * (spaces > 0 ? spaces : 1)}$cleanRight';
   }
 
-  /// Formats an item row with [qty] on the left (e.g. 4 chars), [desc] in middle,
+  /// Formats an item row with [qty] on the left, [desc] in middle,
   /// and [total] strictly right-aligned.
   static List<String> formatItemRow({
     required String qty,
@@ -52,7 +55,7 @@ class Receipt58mmFormatter {
   }) {
     final cleanQty = qty.trim();
     final cleanTotal = total.trim();
-    final qtyPrefix = cleanQty.padRight(4); // e.g. "1   " or "10  "
+    final qtyPrefix = cleanQty.padRight(4);
     final maxDescLen = width - qtyPrefix.length - cleanTotal.length - 1;
 
     if (desc.trim().length <= maxDescLen) {
@@ -61,7 +64,6 @@ class Receipt58mmFormatter {
       return ['$qtyPrefix$descPart${' ' * (spaces > 0 ? spaces : 1)}$cleanTotal'];
     }
 
-    // Wrap description if too long
     final lines = <String>[];
     final wrappedDesc = wrap(desc.trim(), maxDescLen);
     for (int i = 0; i < wrappedDesc.length; i++) {
@@ -91,7 +93,6 @@ class Receipt58mmFormatter {
         if (word.length <= width) {
           currentLine = word;
         } else {
-          // Word longer than width: hard wrap
           var rem = word;
           while (rem.length > width) {
             lines.add(rem.substring(0, width));
@@ -131,148 +132,27 @@ class Receipt58mmFormatter {
     required List<InvoiceItem> items,
     required List<Payment> payments,
     String? businessName,
+    String? legalName,
     String? ruc,
     String? address,
     String? phone,
     String? cashierName,
+    TaxRegime taxRegime = TaxRegime.regimenGeneral,
+    bool isTaxExempt = false,
   }) {
-    final buffer = StringBuffer();
-    final dateFormat = DateFormat('yyyy-MM-dd HH:mm');
-
-    // Header
-    buffer.writeln(center(businessName ?? 'OMNIFOOD NI'));
-    if (ruc != null && ruc.isNotEmpty) {
-      buffer.writeln(center('RUC: $ruc'));
-    }
-    if (address != null && address.isNotEmpty) {
-      for (final line in wrap(address)) {
-        buffer.writeln(center(line));
-      }
-    }
-    if (phone != null && phone.isNotEmpty) {
-      buffer.writeln(center('Tel: $phone'));
-    }
-    if (invoice.terminalId != null && invoice.terminalId!.isNotEmpty) {
-      buffer.writeln(center('Terminal: ${invoice.terminalId}'));
-    }
-
-    buffer.writeln(divider('='));
-    final docType = invoice.type == InvoiceType.creditNote
-        ? 'NOTA DE CREDITO'
-        : 'FACTURA DE VENTA';
-    buffer.writeln(center(docType));
-    buffer.writeln(center('No. ${invoice.number}'));
-    buffer.writeln(twoColumns('Fecha:', dateFormat.format(invoice.createdAt)));
-    if (cashierName != null && cashierName.isNotEmpty) {
-      buffer.writeln(twoColumns('Atendido por:', cashierName));
-    }
-    if (invoice.customerId != null && invoice.customerId!.isNotEmpty) {
-      buffer.writeln(twoColumns('Cliente:', invoice.customerId!));
-    }
-    if (invoice.originInvoiceId != null) {
-      buffer.writeln(twoColumns('Doc. Origen:', invoice.originInvoiceId!));
-    }
-
-    buffer.writeln(divider('-'));
-    buffer.writeln(twoColumns('CANT DESCRIPCION', 'TOTAL'));
-    buffer.writeln(divider('-'));
-
-    // Items
-    for (final item in items) {
-      final qtyStr = item.quantity % 1 == 0
-          ? item.quantity.toInt().toString()
-          : item.quantity.toStringAsFixed(2);
-      final itemTotalStr = 'C\$ ${item.total.toStringAsFixed(2)}';
-      
-      final rowLines = formatItemRow(
-        qty: qtyStr,
-        desc: item.productName,
-        total: itemTotalStr,
-      );
-      for (final l in rowLines) {
-        buffer.writeln(l);
-      }
-
-      // Modifiers & Variants
-      for (final mod in item.selectedModifiers) {
-        final modPrice = mod.extraPrice > 0 ? ' (+C\$ ${mod.extraPrice.toStringAsFixed(2)})' : '';
-        buffer.writeln('    + ${mod.name}$modPrice');
-      }
-
-      if (item.discount > 0) {
-        buffer.writeln('    - Desc: C\$ ${item.discount.toStringAsFixed(2)}');
-      }
-      if (item.notes != null && item.notes!.isNotEmpty) {
-        for (final line in wrap(item.notes!, lineWidth - 6)) {
-          buffer.writeln('    * $line');
-        }
-      }
-    }
-
-    buffer.writeln(divider('-'));
-
-    // Totals & Taxes (IVA 15%)
-    buffer.writeln(twoColumns('SUBTOTAL:', 'C\$ ${invoice.subtotal.toStringAsFixed(2)}'));
-    buffer.writeln(twoColumns('IVA (15%):', 'C\$ ${invoice.totalTax.toStringAsFixed(2)}'));
-    buffer.writeln(twoColumns('TOTAL CORDOBAS:', 'C\$ ${invoice.total.toStringAsFixed(2)}'));
-
-    final commRate = invoice.commercialRate > 0 ? invoice.commercialRate : (invoice.bcnOfficialRate > 0 ? invoice.bcnOfficialRate : 36.50);
-    final totalUsdCalc = invoice.totalUsd > 0
-        ? invoice.totalUsd
-        : (invoice.total / commRate);
-    buffer.writeln(twoColumns('TOTAL DOLARES:', '\$${totalUsdCalc.toStringAsFixed(2)}'));
-
-    buffer.writeln(divider('-'));
-    // Show only the configured Commercial Rate used for the transaction
-    buffer.writeln(twoColumns('Tipo de Cambio:', 'C\$ ${commRate.toStringAsFixed(2)}'));
-
-    buffer.writeln(divider('-'));
-    buffer.writeln(center('DETALLE DE PAGO'));
-
-    // Payments Breakdown
-    if (payments.isEmpty) {
-      buffer.writeln(twoColumns('Condicion:', 'Contado'));
-    } else {
-      for (final p in payments) {
-        switch (p.method) {
-          case PaymentMethod.cash:
-            if (p.currency == 'USD') {
-              buffer.writeln(twoColumns('Efectivo USD:', '\$${p.amount.toStringAsFixed(2)}'));
-              if (p.changeGiven > 0) {
-                final cCurr = p.changeCurrency == 'USD' ? '\$' : 'C\$ ';
-                buffer.writeln(twoColumns('Cambio (${p.changeCurrency}):', '$cCurr${p.changeGiven.toStringAsFixed(2)}'));
-              }
-            } else {
-              buffer.writeln(twoColumns('Efectivo C\$:', 'C\$ ${p.amount.toStringAsFixed(2)}'));
-              if (p.changeGiven > 0) {
-                buffer.writeln(twoColumns('Cambio C\$:', 'C\$ ${p.changeGiven.toStringAsFixed(2)}'));
-              }
-            }
-            break;
-          case PaymentMethod.card:
-            final bank = p.bankPos ?? 'POS';
-            final brand = p.cardBrand ?? 'TARJETA';
-            buffer.writeln(twoColumns('$brand ($bank):', 'C\$ ${p.amount.toStringAsFixed(2)}'));
-            final auth = p.voucherCode ?? 'PENDIENTE';
-            final last4 = p.last4 != null ? ' (****${p.last4})' : '';
-            buffer.writeln(twoColumns('  Auth/Ref:', '$auth$last4'));
-            break;
-          case PaymentMethod.qr:
-            buffer.writeln(twoColumns('Transferencia / QR:', 'C\$ ${p.amount.toStringAsFixed(2)}'));
-            break;
-          case PaymentMethod.points:
-            buffer.writeln(twoColumns('Puntos Lealtad:', 'C\$ ${p.amount.toStringAsFixed(2)}'));
-            break;
-        }
-      }
-    }
-
-    buffer.writeln(divider('='));
-    buffer.writeln(center('*** GRACIAS POR SU COMPRA ***'));
-    buffer.writeln('');
-    buffer.writeln('');
-
-    return buffer.toString();
+    return _formatter.formatInvoiceText(
+      invoice,
+      items: items,
+      payments: payments,
+      businessName: businessName,
+      legalName: legalName,
+      ruc: ruc,
+      address: address,
+      phone: phone,
+      cashierName: cashierName,
+      taxRegime: taxRegime,
+      isTaxExempt: isTaxExempt,
+    );
   }
 
   /// Formats a complete DGI invoice into ESC/POS bytecode.
@@ -281,141 +161,36 @@ class Receipt58mmFormatter {
     required List<InvoiceItem> items,
     required List<Payment> payments,
     String? businessName,
+    String? legalName,
     String? ruc,
     String? address,
     String? phone,
     String? cashierName,
+    TaxRegime taxRegime = TaxRegime.regimenGeneral,
+    bool isTaxExempt = false,
     List<int>? logoRasterBytes,
   }) {
-    final builder = EscPosBuilder();
-    final dateFormat = DateFormat('yyyy-MM-dd HH:mm');
-
-    // Company Logo (1-bit monochrome thermal raster)
-    if (logoRasterBytes != null && logoRasterBytes.isNotEmpty) {
-      builder.rasterImage(logoRasterBytes).feedLines(1);
-    }
-
-    // Header
-    builder
-        .align(EscPosAlign.center)
-        .bold(true)
-        .fontSize(EscPosFontSize.doubleWidth)
-        .textLine(businessName ?? 'OMNIFOOD NI')
-        .fontSize(EscPosFontSize.normal)
-        .bold(false);
-
-    if (ruc != null && ruc.isNotEmpty) {
-      builder.textLine('RUC: $ruc');
-    }
-    if (address != null && address.isNotEmpty) {
-      for (final line in wrap(address)) {
-        builder.textLine(line);
-      }
-    }
-    if (phone != null && phone.isNotEmpty) {
-      builder.textLine('Tel: $phone');
-    }
-    if (invoice.terminalId != null && invoice.terminalId!.isNotEmpty) {
-      builder.textLine('Terminal: ${invoice.terminalId}');
-    }
-
-    builder
-        .textLine(divider('='))
-        .bold(true)
-        .textLine(invoice.type == InvoiceType.creditNote ? 'NOTA DE CREDITO' : 'FACTURA COMERCIAL')
-        .textLine('No: ${invoice.number}')
-        .bold(false)
-        .align(EscPosAlign.left)
-        .textLine(twoColumns('Fecha:', dateFormat.format(invoice.createdAt)));
-
-    if (cashierName != null && cashierName.isNotEmpty) {
-      builder.textLine(twoColumns('Cajero:', cashierName));
-    }
-    if (invoice.customerId != null && invoice.customerId!.isNotEmpty) {
-      builder.textLine(twoColumns('Cliente:', invoice.customerId!));
-    }
-
-    builder
-        .textLine(divider('-'))
-        .bold(true)
-        .textLine(twoColumns('CANT DESCRIPCION', 'TOTAL'))
-        .bold(false)
-        .textLine(divider('-'));
-
-    // Items
-    for (final item in items) {
-      final qtyStr = item.quantity % 1 == 0
-          ? item.quantity.toInt().toString()
-          : item.quantity.toStringAsFixed(2);
-      final itemTotalStr = 'C\$ ${item.total.toStringAsFixed(2)}';
-      builder.textLine(twoColumns('$qtyStr x ${item.productName}', itemTotalStr));
-
-      for (final mod in item.selectedModifiers) {
-        final modPrice = mod.extraPrice > 0 ? ' (+C\$ ${mod.extraPrice.toStringAsFixed(2)})' : '';
-        builder.textLine('  + ${mod.name}$modPrice');
-      }
-      if (item.discount > 0) {
-        builder.textLine('  - Desc: C\$ ${item.discount.toStringAsFixed(2)}');
-      }
-    }
-
-    builder.textLine(divider('-'));
-    builder.textLine(twoColumns('SUBTOTAL:', 'C\$ ${invoice.subtotal.toStringAsFixed(2)}'));
-    builder.textLine(twoColumns('IVA (15%):', 'C\$ ${invoice.totalTax.toStringAsFixed(2)}'));
-
-    builder
-        .bold(true)
-        .fontSize(EscPosFontSize.doubleHeight)
-        .textLine(twoColumns('TOTAL C\$:', 'C\$ ${invoice.total.toStringAsFixed(2)}'))
-        .fontSize(EscPosFontSize.normal)
-        .bold(false);
-
-    final commRate = invoice.commercialRate > 0 ? invoice.commercialRate : 36.50;
-    final totalUsdCalc = invoice.totalUsd > 0
-        ? invoice.totalUsd
-        : (invoice.total / commRate);
-    builder.textLine(twoColumns('TOTAL USD (\$):', '\$${totalUsdCalc.toStringAsFixed(2)}'));
-
-    builder
-        .textLine(divider('-'))
-        .textLine(twoColumns('T.C. Oficial (BCN):', invoice.bcnOfficialRate.toStringAsFixed(4)))
-        .textLine(twoColumns('T.C. Comercial:', invoice.commercialRate.toStringAsFixed(2)))
-        .textLine(divider('-'))
-        .align(EscPosAlign.center)
-        .textLine('DETALLE DE PAGO')
-        .align(EscPosAlign.left);
-
-    for (final p in payments) {
-      if (p.method == PaymentMethod.cash) {
-        builder.textLine(twoColumns('Efectivo ${p.currency}:', '${p.currency == "USD" ? "\$" : "C\$ "}${p.amount.toStringAsFixed(2)}'));
-        if (p.changeGiven > 0) {
-          builder.textLine(twoColumns('Cambio (${p.changeCurrency}):', '${p.changeCurrency == "USD" ? "\$" : "C\$ "}${p.changeGiven.toStringAsFixed(2)}'));
-        }
-      } else if (p.method == PaymentMethod.card) {
-        builder.textLine(twoColumns('${p.cardBrand ?? "TARJETA"} (${p.bankPos ?? "POS"}):', 'C\$ ${p.amount.toStringAsFixed(2)}'));
-        builder.textLine(twoColumns('  Auth/Ref:', '${p.voucherCode ?? "PENDIENTE"}'));
-      } else if (p.method == PaymentMethod.qr) {
-        builder.textLine(twoColumns('Transferencia / QR:', 'C\$ ${p.amount.toStringAsFixed(2)}'));
-      }
-    }
-
-    builder
-        .textLine(divider('='))
-        .align(EscPosAlign.center)
-        .bold(true)
-        .textLine('*** GRACIAS POR SU COMPRA ***')
-        .bold(false)
-        .feedLines(3)
-        .cut();
-
-    return builder.toBytes();
+    return _formatter.formatInvoiceEscPos(
+      invoice,
+      items: items,
+      payments: payments,
+      businessName: businessName,
+      legalName: legalName,
+      ruc: ruc,
+      address: address,
+      phone: phone,
+      cashierName: cashierName,
+      taxRegime: taxRegime,
+      isTaxExempt: isTaxExempt,
+      logoRasterBytes: logoRasterBytes,
+    );
   }
 
   // ==========================================
   // 2. Kitchen / KDS Order Ticket
   // ==========================================
 
-  /// Formats a kitchen order ticket as 32-column text.
+  /// Formats a kitchen order ticket as plain text.
   static String formatKitchenOrderText({
     required String ticketId,
     required String orderTitle,
@@ -429,10 +204,9 @@ class Receipt58mmFormatter {
     final buffer = StringBuffer();
     final timeFormat = DateFormat('HH:mm:ss');
 
-    buffer.writeln(center('*** COMANDA DE COCINA ***'));
+    buffer.writeln(center('*** COMANDA COCINA ***'));
     buffer.writeln(divider('='));
 
-    // Highlight Buzzer or Table
     if (buzzerNumber != null && buzzerNumber > 0) {
       buffer.writeln(center('================================'));
       buffer.writeln(center('>>> BUZZER / PAGER #$buzzerNumber <<<'));
@@ -571,7 +345,7 @@ class Receipt58mmFormatter {
   // 3. Cash Drawer Audits (Corte X & Corte Z)
   // ==========================================
 
-  /// Formats Partial Cash Audit (Corte X) as 32-column text.
+  /// Formats Partial Cash Audit (Corte X) as plain text.
   static String formatCorteXText(
     CashierSession session, {
     required String cashierName,
@@ -598,27 +372,26 @@ class Receipt58mmFormatter {
     final cardSales = totalsByMethod[PaymentMethod.card] ?? 0.0;
     final qrSales = totalsByMethod[PaymentMethod.qr] ?? 0.0;
     final pointsSales = totalsByMethod[PaymentMethod.points] ?? 0.0;
+    final totalSales = cashSales + cardSales + qrSales + pointsSales;
 
     buffer.writeln(twoColumns('Efectivo:', 'C\$ ${cashSales.toStringAsFixed(2)}'));
-    buffer.writeln(twoColumns('Tarjetas (Datáfono):', 'C\$ ${cardSales.toStringAsFixed(2)}'));
-    buffer.writeln(twoColumns('QR / Transfer:', 'C\$ ${qrSales.toStringAsFixed(2)}'));
-    if (pointsSales > 0) {
-      buffer.writeln(twoColumns('Puntos:', 'C\$ ${pointsSales.toStringAsFixed(2)}'));
-    }
-
+    buffer.writeln(twoColumns('Tarjeta POS:', 'C\$ ${cardSales.toStringAsFixed(2)}'));
+    buffer.writeln(twoColumns('Transferencia / QR:', 'C\$ ${qrSales.toStringAsFixed(2)}'));
+    buffer.writeln(twoColumns('Puntos Lealtad:', 'C\$ ${pointsSales.toStringAsFixed(2)}'));
     buffer.writeln(divider('-'));
-    final totalSales = cashSales + cardSales + qrSales + pointsSales;
     buffer.writeln(twoColumns('TOTAL VENTAS:', 'C\$ ${totalSales.toStringAsFixed(2)}'));
 
-    final expected = totalExpected ?? (session.openingBalanceNio + cashSales);
-    buffer.writeln(twoColumns('EFECTIVO ESPERADO:', 'C\$ ${expected.toStringAsFixed(2)}'));
-    buffer.writeln(divider('='));
-    buffer.writeln(center('DOCUMENTO NO FISCAL'));
+    if (totalExpected != null) {
+      buffer.writeln(divider('-'));
+      buffer.writeln(twoColumns('EFECTIVO ESPERADO EN CAJA:', 'C\$ ${totalExpected.toStringAsFixed(2)}'));
+    }
 
+    buffer.writeln(divider('='));
+    buffer.writeln(center('AUDITORIA INTERNA - NO FISCAL'));
     return buffer.toString();
   }
 
-  /// Formats Final Cash Audit (Corte Z) as 32-column text.
+  /// Formats Final Shift Cash Audit (Corte Z) as plain text.
   static String formatCorteZText(
     CashierSession session, {
     required String cashierName,
@@ -631,66 +404,56 @@ class Receipt58mmFormatter {
     final buffer = StringBuffer();
     final dateFormat = DateFormat('yyyy-MM-dd HH:mm');
 
-    buffer.writeln(center('*** CORTE Z (CIERRE DE CAJA) ***'));
+    buffer.writeln(center('*** CIERRE FISCAL (CORTE Z) ***'));
+    if (zSequence != null) {
+      buffer.writeln(center('SECUENCIA Z: #$zSequence'));
+    }
     buffer.writeln(divider('='));
     buffer.writeln(twoColumns('Terminal:', session.terminalId));
-    if (zSequence != null || session.zReportSequence != null) {
-      final seq = zSequence ?? session.zReportSequence;
-      buffer.writeln(twoColumns('Corte Z No:', '#${seq.toString().padLeft(4, '0')}'));
-    }
     buffer.writeln(twoColumns('Cajero:', cashierName));
     buffer.writeln(twoColumns('Apertura:', dateFormat.format(session.openedAt)));
-    buffer.writeln(twoColumns('Cierre:', dateFormat.format(session.closedAt ?? DateTime.now())));
+    buffer.writeln(twoColumns('Cierre:', session.closedAt != null ? dateFormat.format(session.closedAt!) : dateFormat.format(DateTime.now())));
     buffer.writeln(divider('-'));
 
-    buffer.writeln(twoColumns('FONDO APERTURA NIO:', 'C\$ ${session.openingBalanceNio.toStringAsFixed(2)}'));
-    buffer.writeln(twoColumns('FONDO APERTURA USD:', '\$ ${session.openingBalanceUsd.toStringAsFixed(2)}'));
+    buffer.writeln(twoColumns('FONDO INICIAL NIO:', 'C\$ ${session.openingBalanceNio.toStringAsFixed(2)}'));
+    buffer.writeln(twoColumns('FONDO INICIAL USD:', '\$ ${session.openingBalanceUsd.toStringAsFixed(2)}'));
     buffer.writeln(divider('-'));
 
-    buffer.writeln(center('VENTAS POR METODO'));
+    buffer.writeln(center('DESGLOSE DE INGRESOS'));
     final cashSales = totalsByMethod[PaymentMethod.cash] ?? 0.0;
     final cardSales = totalsByMethod[PaymentMethod.card] ?? 0.0;
     final qrSales = totalsByMethod[PaymentMethod.qr] ?? 0.0;
     final pointsSales = totalsByMethod[PaymentMethod.points] ?? 0.0;
-
-    buffer.writeln(twoColumns('Efectivo:', 'C\$ ${cashSales.toStringAsFixed(2)}'));
-    buffer.writeln(twoColumns('Tarjetas (Datáfono):', 'C\$ ${cardSales.toStringAsFixed(2)}'));
-    buffer.writeln(twoColumns('QR / Transfer:', 'C\$ ${qrSales.toStringAsFixed(2)}'));
-    if (pointsSales > 0) {
-      buffer.writeln(twoColumns('Puntos:', 'C\$ ${pointsSales.toStringAsFixed(2)}'));
-    }
-
-    buffer.writeln(divider('-'));
     final totalSales = cashSales + cardSales + qrSales + pointsSales;
+
+    buffer.writeln(twoColumns('Efectivo (NIO):', 'C\$ ${cashSales.toStringAsFixed(2)}'));
+    buffer.writeln(twoColumns('Tarjeta POS:', 'C\$ ${cardSales.toStringAsFixed(2)}'));
+    buffer.writeln(twoColumns('Transferencia / QR:', 'C\$ ${qrSales.toStringAsFixed(2)}'));
+    buffer.writeln(twoColumns('Puntos Lealtad:', 'C\$ ${pointsSales.toStringAsFixed(2)}'));
+    buffer.writeln(divider('-'));
     buffer.writeln(twoColumns('TOTAL VENTAS:', 'C\$ ${totalSales.toStringAsFixed(2)}'));
 
-    final expected = totalExpected ?? session.expectedNio;
-    final counted = totalCounted ?? session.closingCountedNio ?? 0.0;
-    final diff = difference ?? session.differenceNio ?? (counted - expected);
+    if (totalExpected != null && totalCounted != null) {
+      buffer.writeln(divider('-'));
+      buffer.writeln(center('ARQUEO Y CUADRE'));
+      buffer.writeln(twoColumns('Total Esperado:', 'C\$ ${totalExpected.toStringAsFixed(2)}'));
+      buffer.writeln(twoColumns('Total Contado:', 'C\$ ${totalCounted.toStringAsFixed(2)}'));
 
-    buffer.writeln(twoColumns('TOTAL ESPERADO:', 'C\$ ${expected.toStringAsFixed(2)}'));
-    buffer.writeln(twoColumns('TOTAL CONTADO:', 'C\$ ${counted.toStringAsFixed(2)}'));
-
-    final diffSign = diff >= 0 ? '+' : '';
-    buffer.writeln(twoColumns('DIFERENCIA (VAR):', 'C\$ $diffSign${diff.toStringAsFixed(2)}'));
-
-    String status = 'CUADRADO';
-    if (diff > 0) status = 'SOBRANTE';
-    if (diff < 0) status = 'FALTANTE';
-    buffer.writeln(twoColumns('ESTADO CIERRE:', status));
+      final diff = difference ?? (totalCounted - totalExpected);
+      final diffLabel = diff >= 0 ? 'Sobrante (+):' : 'Faltante (-):';
+      buffer.writeln(twoColumns(diffLabel, 'C\$ ${diff.abs().toStringAsFixed(2)}'));
+    }
 
     buffer.writeln(divider('='));
-    buffer.writeln(center('CIERRE DE TURNO OFICIAL'));
-    buffer.writeln(center('Disposicion Tecnica 09-2007'));
-
+    buffer.writeln(center('CIERRE DE TURNO DEFINITIVO'));
     return buffer.toString();
   }
 
   // ==========================================
-  // 4. BOH FIFO Production Batch Label (Viñeta)
+  // 4. BOH FIFO Production Batch Label
   // ==========================================
 
-  /// Formats a BOH FIFO Production Batch Label (Viñeta Térmica) as 32-column text.
+  /// Formats a Production Batch Label as plain text.
   static String formatProductionBatchLabelText({
     required String productName,
     required String batchCode,
@@ -702,36 +465,25 @@ class Receipt58mmFormatter {
     String? storageInstructions,
   }) {
     final buffer = StringBuffer();
-    final dateTimeFormat = DateFormat('yyyy-MM-dd HH:mm');
+    final dateFormat = DateFormat('yyyy-MM-dd HH:mm');
 
+    buffer.writeln(center('*** ETIQUETA DE PRODUCCION ***'));
+    buffer.writeln(center('CONTROL FIFO / INOCUIDAD'));
     buffer.writeln(divider('='));
-    buffer.writeln(center('ETIQUETA DE PRE-ELABORACION'));
-    buffer.writeln(center('BOH - ROTACION FIFO'));
-    buffer.writeln(divider('='));
-
-    buffer.writeln('PRODUCTO:');
-    for (final line in wrap(productName)) {
-      buffer.writeln('  $line');
-    }
+    buffer.writeln(center(productName));
     buffer.writeln(divider('-'));
+    buffer.writeln(twoColumns('Lote:', batchCode));
+    buffer.writeln(twoColumns('Cantidad:', '${quantity.toStringAsFixed(2)} $uom'));
+    buffer.writeln(twoColumns('Produccion:', dateFormat.format(productionDate)));
+    buffer.writeln(twoColumns('Vence:', dateFormat.format(expirationDate)));
 
-    buffer.writeln(twoColumns('LOTE:', batchCode));
-    final qtyStr = quantity % 1 == 0
-        ? '${quantity.toInt()} $uom'
-        : '${quantity.toStringAsFixed(2)} $uom';
-    buffer.writeln(twoColumns('CANTIDAD:', qtyStr));
-    buffer.writeln(twoColumns('ELABORADO:', dateTimeFormat.format(productionDate)));
-    buffer.writeln(twoColumns('VENCE:', dateTimeFormat.format(expirationDate)));
-
-    if (operatorName != null && operatorName.trim().isNotEmpty) {
-      buffer.writeln(divider('-'));
-      buffer.writeln(twoColumns('COCINERO / OP:', operatorName.trim()));
+    if (operatorName != null && operatorName.isNotEmpty) {
+      buffer.writeln(twoColumns('Elaborado por:', operatorName));
     }
-
-    if (storageInstructions != null && storageInstructions.trim().isNotEmpty) {
+    if (storageInstructions != null && storageInstructions.isNotEmpty) {
       buffer.writeln(divider('-'));
-      buffer.writeln('CONSERVACION:');
-      for (final line in wrap(storageInstructions.trim())) {
+      buffer.writeln('Almacenamiento:');
+      for (final line in wrap(storageInstructions, lineWidth)) {
         buffer.writeln('  $line');
       }
     }
@@ -740,7 +492,7 @@ class Receipt58mmFormatter {
     return buffer.toString();
   }
 
-  /// Formats a BOH FIFO Production Batch Label into ESC/POS bytecode.
+  /// Formats a Production Batch Label into ESC/POS bytecode.
   static List<int> formatProductionBatchLabelEscPos({
     required String productName,
     required String batchCode,
@@ -752,59 +504,37 @@ class Receipt58mmFormatter {
     String? storageInstructions,
   }) {
     final builder = EscPosBuilder();
-    final dateTimeFormat = DateFormat('yyyy-MM-dd HH:mm');
+    final dateFormat = DateFormat('yyyy-MM-dd HH:mm');
 
     builder
         .align(EscPosAlign.center)
         .bold(true)
-        .textLine(divider('='))
         .fontSize(EscPosFontSize.doubleWidth)
-        .textLine('PRE-ELABORACION')
+        .textLine('ETIQUETA PRODUCCION')
         .fontSize(EscPosFontSize.normal)
-        .textLine('ROTACION FIFO (BOH)')
+        .textLine('CONTROL FIFO / BOH')
         .textLine(divider('='))
+        .fontSize(EscPosFontSize.doubleSize)
+        .textLine(productName)
+        .fontSize(EscPosFontSize.normal)
+        .textLine(divider('-'))
         .align(EscPosAlign.left)
         .bold(false)
-        .textLine('PRODUCTO:')
+        .textLine(twoColumns('Lote:', batchCode))
+        .textLine(twoColumns('Cantidad:', '${quantity.toStringAsFixed(2)} $uom'))
+        .textLine(twoColumns('Produccion:', dateFormat.format(productionDate)))
         .bold(true)
-        .fontSize(EscPosFontSize.doubleHeight);
-
-    for (final line in wrap(productName)) {
-      builder.textLine(line);
-    }
-
-    builder
-        .fontSize(EscPosFontSize.normal)
-        .bold(false)
-        .textLine(divider('-'))
-        .bold(true)
-        .textLine(twoColumns('LOTE:', batchCode))
+        .textLine(twoColumns('Vence:', dateFormat.format(expirationDate)))
         .bold(false);
 
-    final qtyStr = quantity % 1 == 0
-        ? '${quantity.toInt()} $uom'
-        : '${quantity.toStringAsFixed(2)} $uom';
-    builder.textLine(twoColumns('CANTIDAD:', qtyStr));
-    builder.textLine(twoColumns('ELABORADO:', dateTimeFormat.format(productionDate)));
-
-    builder
-        .bold(true)
-        .fontSize(EscPosFontSize.doubleWidth)
-        .textLine(twoColumns('VENCE:', dateTimeFormat.format(expirationDate)))
-        .fontSize(EscPosFontSize.normal)
-        .bold(false);
-
-    if (operatorName != null && operatorName.trim().isNotEmpty) {
-      builder
-          .textLine(divider('-'))
-          .textLine(twoColumns('RESPONSABLE:', operatorName.trim()));
+    if (operatorName != null && operatorName.isNotEmpty) {
+      builder.textLine(twoColumns('Elaborado por:', operatorName));
     }
-
-    if (storageInstructions != null && storageInstructions.trim().isNotEmpty) {
+    if (storageInstructions != null && storageInstructions.isNotEmpty) {
       builder
           .textLine(divider('-'))
-          .textLine('CONSERVACION:');
-      for (final line in wrap(storageInstructions.trim())) {
+          .textLine('Almacenamiento:');
+      for (final line in wrap(storageInstructions, lineWidth)) {
         builder.textLine('  $line');
       }
     }
