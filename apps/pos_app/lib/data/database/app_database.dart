@@ -38,6 +38,7 @@ import 'package:pos_app/data/daos/sales/restaurant_table_dao.dart';
 import 'package:pos_app/data/daos/kitchen/kitchen_order_dao.dart';
 import 'package:pos_app/data/daos/local_config_dao.dart';
 import 'package:pos_app/data/daos/fulfillment/fulfillment_topology_dao.dart';
+import 'package:pos_app/data/daos/fulfillment/fulfillment_persistence_dao.dart';
 import '../daos/customer/customer_dao.dart';
 import '../models/customer/customer_entity.dart';
 import '../daos/customer/customer_point_transaction_dao.dart';
@@ -78,11 +79,12 @@ import 'package:pos_app/data/models/sales/restaurant_table_entity.dart';
 import 'package:pos_app/data/models/kitchen/kitchen_order_entity.dart';
 import 'package:pos_app/data/models/kitchen/kitchen_order_item_entity.dart';
 import 'package:pos_app/data/models/fulfillment/topology_persistence_entities.dart';
+import 'package:pos_app/data/models/fulfillment/fulfillment_persistence_entities.dart';
 
 part 'app_database.g.dart'; // generated code
 
 @Database(
-  version: 42,
+  version: 43,
   entities: [
     UserEntity,
     SecurityProfileEntity,
@@ -127,6 +129,9 @@ part 'app_database.g.dart'; // generated code
     TopologySnapshotEntity,
     ShiftTopologyBindingEntity,
     EmergencyTopologyAuditEntity,
+    FulfillmentRecordEntity,
+    PrintJobEntity,
+    OutboxEventEntity,
   ],
 )
 abstract class AppDatabase extends FloorDatabase {
@@ -169,4 +174,5 @@ abstract class AppDatabase extends FloorDatabase {
   CustomerDao get customerDao;
   CustomerPointTransactionDao get customerPointTransactionDao;
   FulfillmentTopologyDao get fulfillmentTopologyDao;
+  FulfillmentPersistenceDao get fulfillmentPersistenceDao;
 }

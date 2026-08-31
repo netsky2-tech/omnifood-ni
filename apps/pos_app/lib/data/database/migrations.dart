@@ -1715,6 +1715,14 @@ final migration41_42 = Migration(41, 42, (database) async {
   await _createTopologyPersistenceTriggers(database);
 });
 
+final migration42_43 = Migration(42, 43, (database) async {
+  await database.execute('CREATE TABLE fulfillment_records (id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, sale_id TEXT NOT NULL, topology_snapshot_id TEXT NOT NULL, topology_revision INTEGER NOT NULL, channel TEXT NOT NULL, route_state TEXT NOT NULL, delivery_state TEXT NOT NULL, lines_payload TEXT NOT NULL)');
+  await database.execute('CREATE TABLE print_jobs (id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, fulfillment_id TEXT NOT NULL, document_kind TEXT NOT NULL, sequence INTEGER NOT NULL, payload TEXT NOT NULL, state TEXT NOT NULL, retry_count INTEGER NOT NULL, idempotency_key TEXT NOT NULL)');
+  await database.execute('CREATE UNIQUE INDEX index_print_jobs_tenant_id_idempotency_key ON print_jobs (tenant_id, idempotency_key)');
+  await database.execute('CREATE TABLE fulfillment_outbox_events (event_id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, device_id TEXT NOT NULL, source_sequence INTEGER NOT NULL, aggregate_type TEXT NOT NULL, aggregate_id TEXT NOT NULL, idempotency_key TEXT NOT NULL, payload_hash TEXT NOT NULL, topology_revision INTEGER NOT NULL, state TEXT NOT NULL, attempts INTEGER NOT NULL)');
+  await database.execute('CREATE UNIQUE INDEX index_fulfillment_outbox_events_tenant_id_idempotency_key ON fulfillment_outbox_events (tenant_id, idempotency_key)');
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -1748,4 +1756,5 @@ final allMigrations = [
   migration39_40,
   migration40_41,
   migration41_42,
+  migration42_43,
 ];

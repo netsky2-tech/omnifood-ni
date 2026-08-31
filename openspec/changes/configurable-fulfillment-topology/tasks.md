@@ -35,7 +35,7 @@ Chain strategy: feature-branch-chain
 - [x] 2.1A RED: direct-stock/no-BOM, recipe, not-tracked, and legacy compatibility; GREEN add product policy persistence, nullable Floor migration, and policy-based Kardex planning; generate/review required Floor/Freezed output; REFACTOR compatibility reads.
 - [x] 2.1B RED: transaction failure, DGI ordering, and cancellation/reversal lineage; GREEN make fiscal advancement and cancellation effects atomic in the sale transaction; REFACTOR transaction boundaries. Depends on 2.1A.
 - [x] 2.2A RED: real SQLite topology/config/audit persistence; GREEN add tenant-scoped immutable snapshots, shift bindings, and append-only emergency activation audits with Floor registration/migration; REFACTOR query boundaries. Depends on 2.1B.
-- [ ] 2.2B RED: real SQLite fulfillment, print-job, and outbox persistence; GREEN add their stable local identities and Floor registration/migration; REFACTOR aggregate boundaries. Depends on 2.2A.
+- [x] 2.2B RED: real SQLite fulfillment, print-job, and outbox persistence; GREEN add their stable local identities and Floor registration/migration; REFACTOR aggregate boundaries. Depends on 2.2A.
 - [ ] 2.2C RED: atomic sale + fulfillment + print + outbox transaction rollback/idempotency; GREEN commit all effects once with stable identities; REFACTOR transaction boundaries. Depends on 2.2B.
 - [ ] 2.2D RED: repository validation, offline fallback/replay, and runtime harness; GREEN wire `sales_repository_impl.dart` with tenant/version/hash checks; REFACTOR idempotent local identities. Depends on 2.2C.
 
