@@ -21,12 +21,21 @@ Future<void> _createInventoryMovementAppendOnlyTriggers(
   ''');
 }
 
+Future<void> _createTopologyPersistenceTriggers(sqflite.DatabaseExecutor database) async {
+  for (final table in ['topology_snapshots', 'emergency_topology_audits']) {
+    await database.execute("CREATE TRIGGER IF NOT EXISTS ${table}_block_update BEFORE UPDATE ON $table BEGIN SELECT RAISE(ABORT, '$table is immutable'); END");
+    await database.execute("CREATE TRIGGER IF NOT EXISTS ${table}_block_delete BEFORE DELETE ON $table BEGIN SELECT RAISE(ABORT, '$table is append-only'); END");
+  }
+}
+
 final inventoryMovementAppendOnlyCallback = Callback(
   onCreate: (database, _) async {
     await _createInventoryMovementAppendOnlyTriggers(database);
+    await _createTopologyPersistenceTriggers(database);
   },
   onOpen: (database) async {
     await _createInventoryMovementAppendOnlyTriggers(database);
+    await _createTopologyPersistenceTriggers(database);
   },
 );
 
@@ -1699,6 +1708,13 @@ final migration40_41 = Migration(40, 41, (database) async {
   );
 });
 
+final migration41_42 = Migration(41, 42, (database) async {
+  await database.execute('CREATE TABLE topology_snapshots (id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, revision INTEGER NOT NULL, hash TEXT NOT NULL, payload TEXT NOT NULL, received_at TEXT NOT NULL)');
+  await database.execute('CREATE TABLE shift_topology_bindings (shift_id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, snapshot_id TEXT NOT NULL, bound_at TEXT NOT NULL)');
+  await database.execute('CREATE TABLE emergency_topology_audits (id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, shift_id TEXT NOT NULL, snapshot_id TEXT NOT NULL, actor_id TEXT NOT NULL, actor_role TEXT NOT NULL, device_id TEXT NOT NULL, reason TEXT NOT NULL, occurred_at TEXT NOT NULL)');
+  await _createTopologyPersistenceTriggers(database);
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -1731,4 +1747,5 @@ final allMigrations = [
   migration38_39,
   migration39_40,
   migration40_41,
+  migration41_42,
 ];
