@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.os.IBinder
 import android.util.Log
+import android.graphics.BitmapFactory
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -89,6 +90,7 @@ class IPosPrinterHandler(private val context: Context) : MethodChannel.MethodCal
             "getPrinterStatus" -> handleGetPrinterStatus(result)
             "printRawBytes" -> handlePrintRawBytes(call, result)
             "printText" -> handlePrintText(call, result)
+            "printBitmap" -> handlePrintBitmap(call, result)
             "openDrawer" -> handleOpenDrawer(result)
             else -> result.notImplemented()
         }
@@ -116,6 +118,36 @@ class IPosPrinterHandler(private val context: Context) : MethodChannel.MethodCal
         } catch (e: Exception) {
             Log.e(TAG, "Error querying Nyx printer status: ${e.message}", e)
             result.error("STATUS_ERROR", e.message, null)
+        }
+    }
+
+    private fun handlePrintBitmap(call: MethodCall, result: MethodChannel.Result) {
+        val bytes = call.argument<ByteArray>("bytes")
+        if (bytes == null || bytes.isEmpty()) {
+            result.error("INVALID_ARGS", "Bytes array is empty or null", null)
+            return
+        }
+
+        val service = printerService
+        if (service == null) {
+            Log.w(TAG, "printBitmap: service is NULL.")
+            result.error("NOT_CONNECTED", "Servicio de impresora no conectado", null)
+            return
+        }
+
+        try {
+            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            if (bitmap == null) {
+                result.error("DECODE_ERROR", "No se pudo decodificar la imagen PNG", null)
+                return
+            }
+            // type: 0 = normal bitmap printing, align: 1 = center align
+            val res = service.printBitmap(bitmap, 0, 1)
+            Log.i(TAG, "Nyx printBitmap result: $res")
+            result.success(true)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error printing bitmap on Nyx: ${e.message}", e)
+            result.error("PRINT_ERROR", e.message, null)
         }
     }
 

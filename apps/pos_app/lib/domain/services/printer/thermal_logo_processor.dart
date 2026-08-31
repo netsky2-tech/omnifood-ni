@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -181,6 +182,7 @@ class ThermalLogoProcessor {
         height: height,
         raw1BitBitmap: packedBitmap,
         escPosRasterBytes: escPosBytes,
+        base64Png: base64Encode(pngBytes),
       );
     } catch (e) {
       return LogoProcessingResult.failure('Error al procesar la imagen: $e');

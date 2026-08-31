@@ -941,16 +941,20 @@ class SaleViewModel extends ChangeNotifier {
 
         List<int>? logoRasterBytes;
         if (printerConfig.isLogoEnabled &&
-            printerConfig.logoBase64 != null &&
-            printerConfig.logoWidth != null &&
-            printerConfig.logoHeight != null) {
+            printerConfig.logoBase64 != null) {
           try {
             final rawBytes = base64Decode(printerConfig.logoBase64!);
-            logoRasterBytes = ThermalLogoProcessor.buildEscPosRasterFrom1Bit(
-              raw1BitBitmap: rawBytes,
-              width: printerConfig.logoWidth!,
-              height: printerConfig.logoHeight!,
-            );
+            if (ThermalLogoProcessor.isPng(rawBytes)) {
+              logoRasterBytes = rawBytes;
+            } else if (printerConfig.logoWidth != null && printerConfig.logoHeight != null) {
+              logoRasterBytes = ThermalLogoProcessor.buildEscPosRasterFrom1Bit(
+                raw1BitBitmap: rawBytes,
+                width: printerConfig.logoWidth!,
+                height: printerConfig.logoHeight!,
+              );
+            } else {
+              logoRasterBytes = rawBytes;
+            }
           } catch (_) {}
         }
 
@@ -1045,16 +1049,20 @@ class SaleViewModel extends ChangeNotifier {
 
       List<int>? logoRasterBytes;
       if (config.isLogoEnabled &&
-          config.logoBase64 != null &&
-          config.logoWidth != null &&
-          config.logoHeight != null) {
+          config.logoBase64 != null) {
         try {
           final rawBytes = base64Decode(config.logoBase64!);
-          logoRasterBytes = ThermalLogoProcessor.buildEscPosRasterFrom1Bit(
-            raw1BitBitmap: rawBytes,
-            width: config.logoWidth!,
-            height: config.logoHeight!,
-          );
+          if (ThermalLogoProcessor.isPng(rawBytes)) {
+            logoRasterBytes = rawBytes;
+          } else if (config.logoWidth != null && config.logoHeight != null) {
+            logoRasterBytes = ThermalLogoProcessor.buildEscPosRasterFrom1Bit(
+              raw1BitBitmap: rawBytes,
+              width: config.logoWidth!,
+              height: config.logoHeight!,
+            );
+          } else {
+            logoRasterBytes = rawBytes;
+          }
         } catch (_) {}
       }
 

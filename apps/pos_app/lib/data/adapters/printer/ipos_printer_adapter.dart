@@ -91,19 +91,28 @@ class IPosPrinterAdapter implements PrinterPort {
       cashierName: cashierName,
     );
 
-    final rawBytes = Receipt58mmFormatter.formatInvoiceEscPos(
-      invoice,
-      items: items,
-      payments: payments,
-      businessName: businessName,
-      ruc: ruc,
-      address: address,
-      phone: phone,
-      cashierName: cashierName,
-      logoRasterBytes: logoRasterBytes,
-    );
+    try {
+      // 1. If logo is provided, print it using native Nyx bitmap printing
+      if (logoRasterBytes != null && logoRasterBytes.isNotEmpty) {
+        await _channel.invokeMethod('printBitmap', {'bytes': Uint8List.fromList(logoRasterBytes)});
+      }
 
-    return _sendToHardware(rawBytes: rawBytes, plainText: formattedText);
+      // 2. Print formatted invoice text cleanly
+      await _channel.invokeMethod('printText', {'text': formattedText});
+      return PrinterResult.success(text: formattedText);
+    } on MissingPluginException {
+      debugPrint('[IPosPrinterAdapter Fallback Print Preview]:\n$formattedText');
+      return PrinterResult.success(text: formattedText);
+    } on PlatformException catch (e) {
+      debugPrint('[IPosPrinterAdapter] Platform print error: ${e.message}');
+      return PrinterResult.failure(
+        PrinterStatus.error,
+        e.message ?? 'Error en servicio de impresión iPos',
+      );
+    } catch (e) {
+      debugPrint('[IPosPrinterAdapter] General print error: $e');
+      return PrinterResult.failure(PrinterStatus.error, e.toString());
+    }
   }
 
   @override
@@ -136,18 +145,7 @@ class IPosPrinterAdapter implements PrinterPort {
       tableName: tableName,
     );
 
-    final rawBytes = Receipt58mmFormatter.formatKitchenOrderEscPos(
-      ticketId: ticketId,
-      orderTitle: orderTitle,
-      cashierName: cashierName,
-      timestamp: timestamp,
-      items: items,
-      notes: notes,
-      buzzerNumber: buzzerNumber,
-      tableName: tableName,
-    );
-
-    return _sendToHardware(rawBytes: rawBytes, plainText: formattedText);
+    return _sendToHardware(plainText: formattedText);
   }
 
   @override
