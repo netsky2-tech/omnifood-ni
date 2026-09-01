@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+@theme {
+  /* Primary (Navy) */
+  --color-primary: #013a57;
+  --color-primary-50: #e6eef2;
+  --color-primary-100: #b3cdd9;
+  --color-primary-200: #80acc0;
+  --color-primary-400: #1a6a8f;
+  --color-primary-600: #012d45;
+  --color-primary-700: #011f32;
+  --color-primary-foreground: #ffffff;
+
+  /* Secondary (Green) */
+  --color-secondary: #00be84;
+  --color-secondary-50: #e6faf3;
+  --color-secondary-100: #b3f0d9;
+  --color-secondary-200: #80e6bf;
+  --color-secondary-400: #00d99a;
+  --color-secondary-600: #009968;
+  --color-secondary-700: #00734e;
+  --color-secondary-foreground: #ffffff;
+
+  /* Status */
+  --color-destructive: #dc2626;
+  --color-destructive-foreground: #ffffff;
+  --color-destructive-50: #fef2f2;
+  --color-warning: #f59e0b;
+  --color-warning-foreground: #ffffff;
+  --color-warning-50: #fffbeb;
+  --color-info: #3b82f6;
+  --color-info-foreground: #ffffff;
+  --color-info-50: #eff6ff;
+
+  /* Neutral */
+  --color-background: #ffffff;
+  --color-foreground: #1a1a1a;
+  --color-muted: #f5f5f5;
+  --color-muted-foreground: #737373;
+  --color-card: #ffffff;
+  --color-card-foreground: #1a1a1a;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #1a1a1a;
+  --color-border: #e5e5e5;
+  --color-border-strong: #d4d4d4;
+  --color-input: #e5e5e5;
+  --color-ring: #013a57;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+
+  /* Fonts */
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    border-color: var(--color-border);
+  }
+
+  body {
+    color: var(--color-foreground);
+    background: var(--color-background);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@layer utilities {
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+}
