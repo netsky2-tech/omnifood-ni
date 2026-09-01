@@ -1,7 +1,13 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { InventoryPage } from "@/features/inventory/inventory-page";
+import {
+  useValuation,
+  useCogs,
+  useKardex,
+  useAlerts,
+} from "@/features/inventory/use-inventory-reports";
 
 vi.mock("@/features/inventory/use-inventory-reports", () => ({
   useValuation: vi.fn(() => ({
@@ -257,5 +263,108 @@ describe("W3 — InventoryPage", () => {
       expect(screen.getByText("CRITICAL")).toBeInTheDocument();
       expect(screen.getByText("WARNING")).toBeInTheDocument();
     });
+  });
+});
+
+describe("W3 — InventoryPage loading states", () => {
+  beforeEach(() => {
+    vi.mocked(useValuation).mockReturnValue({
+      data: undefined, isLoading: true, error: null,
+    } as ReturnType<typeof useValuation>);
+    vi.mocked(useCogs).mockReturnValue({
+      data: undefined, isLoading: true, error: null,
+    } as ReturnType<typeof useCogs>);
+    vi.mocked(useKardex).mockReturnValue({
+      data: undefined, isLoading: true, error: null,
+    } as ReturnType<typeof useKardex>);
+    vi.mocked(useAlerts).mockReturnValue({
+      data: undefined, isLoading: true, error: null,
+    } as ReturnType<typeof useAlerts>);
+  });
+
+  it("shows spinner on valuation tab while loading", () => {
+    render(<InventoryPage />, { wrapper: TestWrapper });
+    expect(document.querySelector(".animate-spin")).toBeInTheDocument();
+  });
+
+  it("shows spinner on COGS tab while loading", async () => {
+    render(<InventoryPage />, { wrapper: TestWrapper });
+    screen.getByText("COGS / Margen").click();
+    await waitFor(() => {
+      expect(document.querySelector(".animate-spin")).toBeInTheDocument();
+    });
+  });
+
+  it("shows spinner on kardex tab while loading", async () => {
+    render(<InventoryPage />, { wrapper: TestWrapper });
+    screen.getByText("Kardex").click();
+    await waitFor(() => {
+      expect(document.querySelector(".animate-spin")).toBeInTheDocument();
+    });
+  });
+
+  it("shows spinner on alerts tab while loading", async () => {
+    render(<InventoryPage />, { wrapper: TestWrapper });
+    screen.getByText("Alertas").click();
+    await waitFor(() => {
+      expect(document.querySelector(".animate-spin")).toBeInTheDocument();
+    });
+  });
+});
+
+describe("W3 — InventoryPage error states", () => {
+  beforeEach(() => {
+    vi.mocked(useValuation).mockReturnValue({
+      data: undefined, isLoading: false, error: new Error("DB connection lost"),
+    } as ReturnType<typeof useValuation>);
+    vi.mocked(useCogs).mockReturnValue({
+      data: undefined, isLoading: false, error: new Error("DB connection lost"),
+    } as ReturnType<typeof useCogs>);
+    vi.mocked(useKardex).mockReturnValue({
+      data: undefined, isLoading: false, error: new Error("DB connection lost"),
+    } as ReturnType<typeof useKardex>);
+    vi.mocked(useAlerts).mockReturnValue({
+      data: undefined, isLoading: false, error: new Error("DB connection lost"),
+    } as ReturnType<typeof useAlerts>);
+  });
+
+  it("renders empty state on valuation tab when error", () => {
+    render(<InventoryPage />, { wrapper: TestWrapper });
+    expect(screen.getByText("Sin datos de valoración")).toBeInTheDocument();
+  });
+
+  it("renders empty state on COGS tab when error", async () => {
+    render(<InventoryPage />, { wrapper: TestWrapper });
+    screen.getByText("COGS / Margen").click();
+    await waitFor(() => {
+      expect(screen.getByText("Sin datos de COGS")).toBeInTheDocument();
+    });
+  });
+
+  it("renders empty state on kardex tab when error", async () => {
+    render(<InventoryPage />, { wrapper: TestWrapper });
+    screen.getByText("Kardex").click();
+    await waitFor(() => {
+      expect(screen.getByText("Sin datos de kardex")).toBeInTheDocument();
+    });
+  });
+
+  it("renders empty state on alerts tab when error", async () => {
+    render(<InventoryPage />, { wrapper: TestWrapper });
+    screen.getByText("Alertas").click();
+    await waitFor(() => {
+      expect(screen.getByText("Sin datos de alertas")).toBeInTheDocument();
+    });
+  });
+
+  it("does not crash and still renders page heading", () => {
+    render(<InventoryPage />, { wrapper: TestWrapper });
+    expect(screen.getByText("Inventario")).toBeInTheDocument();
+  });
+
+  it("does not render data tables on error", () => {
+    render(<InventoryPage />, { wrapper: TestWrapper });
+    expect(screen.queryByText("Carne Molida")).not.toBeInTheDocument();
+    expect(screen.queryByText("Pan Brioche")).not.toBeInTheDocument();
   });
 });

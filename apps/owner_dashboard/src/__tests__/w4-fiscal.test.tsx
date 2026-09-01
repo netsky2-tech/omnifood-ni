@@ -1,7 +1,14 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FiscalPage } from "@/features/fiscal/fiscal-page";
+import {
+  useMonthlyFiscalSummary,
+  useVoidedInvoices,
+  useSequenceAudit,
+  useSalesBookExport,
+  useZReportsExport,
+} from "@/features/fiscal/use-fiscal-reports";
 
 vi.mock("@/features/fiscal/use-fiscal-reports", () => ({
   useMonthlyFiscalSummary: vi.fn(() => ({
@@ -231,5 +238,106 @@ describe("W4 — FiscalPage", () => {
       const jsonButtons = screen.getAllByText("JSON");
       expect(jsonButtons.length).toBeGreaterThanOrEqual(2);
     });
+  });
+});
+
+describe("W4 — FiscalPage loading states", () => {
+  beforeEach(() => {
+    vi.mocked(useMonthlyFiscalSummary).mockReturnValue({
+      data: undefined, isLoading: true, error: null,
+    } as ReturnType<typeof useMonthlyFiscalSummary>);
+    vi.mocked(useVoidedInvoices).mockReturnValue({
+      data: undefined, isLoading: true, error: null,
+    } as ReturnType<typeof useVoidedInvoices>);
+    vi.mocked(useSequenceAudit).mockReturnValue({
+      data: undefined, isLoading: true, error: null,
+    } as ReturnType<typeof useSequenceAudit>);
+    vi.mocked(useSalesBookExport).mockReturnValue({
+      data: undefined, isLoading: true, error: null,
+    } as ReturnType<typeof useSalesBookExport>);
+    vi.mocked(useZReportsExport).mockReturnValue({
+      data: undefined, isLoading: true, error: null,
+    } as ReturnType<typeof useZReportsExport>);
+  });
+
+  it("shows spinner on monthly summary tab while loading", () => {
+    render(<FiscalPage />, { wrapper: TestWrapper });
+    expect(document.querySelector(".animate-spin")).toBeInTheDocument();
+  });
+
+  it("shows spinner on voided tab while loading", async () => {
+    render(<FiscalPage />, { wrapper: TestWrapper });
+    screen.getByText("Anulaciones").click();
+    await waitFor(() => {
+      expect(document.querySelector(".animate-spin")).toBeInTheDocument();
+    });
+  });
+
+  it("shows spinner on sequence tab while loading", async () => {
+    render(<FiscalPage />, { wrapper: TestWrapper });
+    screen.getByText("Auditoría Secuencia").click();
+    await waitFor(() => {
+      expect(document.querySelector(".animate-spin")).toBeInTheDocument();
+    });
+  });
+
+  it("shows spinner on exports tab while loading", async () => {
+    render(<FiscalPage />, { wrapper: TestWrapper });
+    screen.getByText("Exportaciones").click();
+    await waitFor(() => {
+      expect(document.querySelector(".animate-spin")).toBeInTheDocument();
+    });
+  });
+});
+
+describe("W4 — FiscalPage error states", () => {
+  beforeEach(() => {
+    vi.mocked(useMonthlyFiscalSummary).mockReturnValue({
+      data: undefined, isLoading: false, error: new Error("DGI offline"),
+    } as ReturnType<typeof useMonthlyFiscalSummary>);
+    vi.mocked(useVoidedInvoices).mockReturnValue({
+      data: undefined, isLoading: false, error: new Error("DGI offline"),
+    } as ReturnType<typeof useVoidedInvoices>);
+    vi.mocked(useSequenceAudit).mockReturnValue({
+      data: undefined, isLoading: false, error: new Error("DGI offline"),
+    } as ReturnType<typeof useSequenceAudit>);
+    vi.mocked(useSalesBookExport).mockReturnValue({
+      data: undefined, isLoading: false, error: new Error("DGI offline"),
+    } as ReturnType<typeof useSalesBookExport>);
+    vi.mocked(useZReportsExport).mockReturnValue({
+      data: undefined, isLoading: false, error: new Error("DGI offline"),
+    } as ReturnType<typeof useZReportsExport>);
+  });
+
+  it("renders empty state on monthly summary tab when error", () => {
+    render(<FiscalPage />, { wrapper: TestWrapper });
+    expect(screen.getByText("Sin datos de resumen fiscal")).toBeInTheDocument();
+  });
+
+  it("renders empty state on voided tab when error", async () => {
+    render(<FiscalPage />, { wrapper: TestWrapper });
+    screen.getByText("Anulaciones").click();
+    await waitFor(() => {
+      expect(screen.getByText("Sin datos de anulaciones")).toBeInTheDocument();
+    });
+  });
+
+  it("renders empty state on sequence tab when error", async () => {
+    render(<FiscalPage />, { wrapper: TestWrapper });
+    screen.getByText("Auditoría Secuencia").click();
+    await waitFor(() => {
+      expect(screen.getByText("Sin datos de auditoría de secuencia")).toBeInTheDocument();
+    });
+  });
+
+  it("does not crash and still renders page heading", () => {
+    render(<FiscalPage />, { wrapper: TestWrapper });
+    expect(screen.getByText("Fiscal")).toBeInTheDocument();
+  });
+
+  it("does not render data tables on error", () => {
+    render(<FiscalPage />, { wrapper: TestWrapper });
+    expect(screen.queryByText("001-001-01-00000045")).not.toBeInTheDocument();
+    expect(screen.queryByText("María López")).not.toBeInTheDocument();
   });
 });

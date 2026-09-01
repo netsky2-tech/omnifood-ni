@@ -1,11 +1,17 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DashboardPage } from "@/features/dashboard/dashboard-page";
 import { SalesPage } from "@/features/sales/sales-page";
 import { KpiCard } from "@/components/kpi-card";
 import { FreshnessBadge } from "@/components/freshness-badge";
 import { DateRangePicker } from "@/components/date-range-picker";
+import {
+  useSalesDashboard,
+  useHourlySales,
+  useTopProducts,
+  useCashierPerformance,
+} from "@/features/sales/use-sales-reports";
 
 vi.mock("@/features/sales/use-sales-reports", () => ({
   useSalesDashboard: vi.fn(() => ({
@@ -173,5 +179,108 @@ describe("W2 — SalesPage", () => {
       expect(screen.getByText("María")).toBeInTheDocument();
       expect(screen.getByText("Carlos")).toBeInTheDocument();
     });
+  });
+});
+
+describe("W2 — SalesPage loading states", () => {
+  beforeEach(() => {
+    vi.mocked(useSalesDashboard).mockReturnValue({
+      data: undefined, isLoading: true, error: null,
+    } as ReturnType<typeof useSalesDashboard>);
+    vi.mocked(useHourlySales).mockReturnValue({
+      data: undefined, isLoading: true, error: null,
+    } as ReturnType<typeof useHourlySales>);
+    vi.mocked(useTopProducts).mockReturnValue({
+      data: undefined, isLoading: true, error: null,
+    } as ReturnType<typeof useTopProducts>);
+    vi.mocked(useCashierPerformance).mockReturnValue({
+      data: undefined, isLoading: true, error: null,
+    } as ReturnType<typeof useCashierPerformance>);
+  });
+
+  it("shows spinner on summary tab while loading", () => {
+    render(<SalesPage />, { wrapper: TestWrapper });
+    expect(document.querySelector(".animate-spin")).toBeInTheDocument();
+  });
+
+  it("shows spinner on hourly tab while loading", async () => {
+    render(<SalesPage />, { wrapper: TestWrapper });
+    screen.getByText("Ventas por Hora").click();
+    await waitFor(() => {
+      expect(document.querySelector(".animate-spin")).toBeInTheDocument();
+    });
+  });
+
+  it("shows spinner on products tab while loading", async () => {
+    render(<SalesPage />, { wrapper: TestWrapper });
+    screen.getByText("Top Productos").click();
+    await waitFor(() => {
+      expect(document.querySelector(".animate-spin")).toBeInTheDocument();
+    });
+  });
+
+  it("shows spinner on cashiers tab while loading", async () => {
+    render(<SalesPage />, { wrapper: TestWrapper });
+    screen.getByText("Rendimiento Cajeros").click();
+    await waitFor(() => {
+      expect(document.querySelector(".animate-spin")).toBeInTheDocument();
+    });
+  });
+});
+
+describe("W2 — SalesPage error states", () => {
+  beforeEach(() => {
+    vi.mocked(useSalesDashboard).mockReturnValue({
+      data: undefined, isLoading: false, error: new Error("API down"),
+    } as ReturnType<typeof useSalesDashboard>);
+    vi.mocked(useHourlySales).mockReturnValue({
+      data: undefined, isLoading: false, error: new Error("API down"),
+    } as ReturnType<typeof useHourlySales>);
+    vi.mocked(useTopProducts).mockReturnValue({
+      data: undefined, isLoading: false, error: new Error("API down"),
+    } as ReturnType<typeof useTopProducts>);
+    vi.mocked(useCashierPerformance).mockReturnValue({
+      data: undefined, isLoading: false, error: new Error("API down"),
+    } as ReturnType<typeof useCashierPerformance>);
+  });
+
+  it("renders empty state on summary tab when error", () => {
+    render(<SalesPage />, { wrapper: TestWrapper });
+    expect(screen.getByText("Sin datos de resumen")).toBeInTheDocument();
+  });
+
+  it("renders empty state on hourly tab when error", async () => {
+    render(<SalesPage />, { wrapper: TestWrapper });
+    screen.getByText("Ventas por Hora").click();
+    await waitFor(() => {
+      expect(screen.getByText("Sin datos horarios")).toBeInTheDocument();
+    });
+  });
+
+  it("renders empty state on products tab when error", async () => {
+    render(<SalesPage />, { wrapper: TestWrapper });
+    screen.getByText("Top Productos").click();
+    await waitFor(() => {
+      expect(screen.getByText("Sin datos de productos")).toBeInTheDocument();
+    });
+  });
+
+  it("renders empty state on cashiers tab when error", async () => {
+    render(<SalesPage />, { wrapper: TestWrapper });
+    screen.getByText("Rendimiento Cajeros").click();
+    await waitFor(() => {
+      expect(screen.getByText("Sin datos de cajeros")).toBeInTheDocument();
+    });
+  });
+
+  it("does not crash and still renders page heading", () => {
+    render(<SalesPage />, { wrapper: TestWrapper });
+    expect(screen.getByText("Ventas")).toBeInTheDocument();
+  });
+
+  it("does not render data tables on error", () => {
+    render(<SalesPage />, { wrapper: TestWrapper });
+    expect(screen.queryByText("Hamburguesa Clásica")).not.toBeInTheDocument();
+    expect(screen.queryByText("María")).not.toBeInTheDocument();
   });
 });
