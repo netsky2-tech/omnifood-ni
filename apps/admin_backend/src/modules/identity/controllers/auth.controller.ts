@@ -52,6 +52,15 @@ export class AuthController {
 
   @UseGuards(AuthGuard)
   @UseInterceptors(TenantInterceptor)
+  @Get('me')
+  async getMe(
+    @Req() req: { user?: { sub?: string } },
+  ) {
+    return this.authService.getMe(req.user?.sub || '');
+  }
+
+  @UseGuards(AuthGuard)
+  @UseInterceptors(TenantInterceptor)
   @Get('staff')
   async getStaff(
     @GetTenantId() tenantId: string,
