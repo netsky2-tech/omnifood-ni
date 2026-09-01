@@ -24,6 +24,7 @@ import 'package:pos_app/data/models/sales/invoice_item_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
 import 'package:pos_app/data/mappers/audit_mapper.dart';
 import 'package:pos_app/domain/models/user.dart';
+import 'package:pos_app/domain/models/fulfillment/fulfillment_checkout_context.dart';
 
 class SalesRepositoryImpl implements SalesRepository {
   final AppDatabase database;
@@ -37,6 +38,8 @@ class SalesRepositoryImpl implements SalesRepository {
   final ProcessSaleInventoryUseCase processInventoryUseCase;
   final ReverseSaleInventoryUseCase reverseInventoryUseCase;
   final InventoryRepository inventoryRepository;
+  final void Function(FulfillmentCheckoutContext)?
+  onFulfillmentCheckoutContextReady;
 
   SalesRepositoryImpl({
     required this.database,
@@ -50,6 +53,7 @@ class SalesRepositoryImpl implements SalesRepository {
     required this.processInventoryUseCase,
     required this.reverseInventoryUseCase,
     required this.inventoryRepository,
+    this.onFulfillmentCheckoutContextReady,
   });
 
   @override
@@ -57,6 +61,7 @@ class SalesRepositoryImpl implements SalesRepository {
     required Invoice invoice,
     required List<InvoiceItem> items,
     required List<Payment> payments,
+    FulfillmentCheckoutContext? fulfillmentContext,
   }) async {
     if (await numberingService.isRangeExhausted()) {
       throw Exception('DGI Authorized Numbering Range exhausted.');
@@ -106,6 +111,12 @@ class SalesRepositoryImpl implements SalesRepository {
         .toList();
 
     try {
+      // This boundary deliberately forwards the supplied frozen identity
+      // unchanged. Validation and the fulfillment transaction are added in
+      // the next slice; legacy tenants remain on the existing sale path.
+      if (fulfillmentContext != null) {
+        onFulfillmentCheckoutContextReady?.call(fulfillmentContext);
+      }
       await transactionDao.executeSaleWithDgiTransaction(
         invoiceEntity,
         itemEntities,
