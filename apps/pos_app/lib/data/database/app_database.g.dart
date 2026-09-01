@@ -3643,6 +3643,50 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'tenant_id': item.tenantId,
                   'metadata_raw': item.metadataRaw
                 }),
+        _fulfillmentRecordEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'fulfillment_records',
+            (FulfillmentRecordEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'tenant_id': item.tenantId,
+                  'sale_id': item.saleId,
+                  'topology_snapshot_id': item.topologySnapshotId,
+                  'topology_revision': item.topologyRevision,
+                  'channel': item.channel,
+                  'route_state': item.routeState,
+                  'delivery_state': item.deliveryState,
+                  'lines_payload': item.linesPayload
+                }),
+        _printJobEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'print_jobs',
+            (PrintJobEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'tenant_id': item.tenantId,
+                  'fulfillment_id': item.fulfillmentId,
+                  'document_kind': item.documentKind,
+                  'sequence': item.sequence,
+                  'payload': item.payload,
+                  'state': item.state,
+                  'retry_count': item.retryCount,
+                  'idempotency_key': item.idempotencyKey
+                }),
+        _outboxEventEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'fulfillment_outbox_events',
+            (OutboxEventEntity item) => <String, Object?>{
+                  'event_id': item.eventId,
+                  'tenant_id': item.tenantId,
+                  'device_id': item.deviceId,
+                  'source_sequence': item.sourceSequence,
+                  'aggregate_type': item.aggregateType,
+                  'aggregate_id': item.aggregateId,
+                  'idempotency_key': item.idempotencyKey,
+                  'payload_hash': item.payloadHash,
+                  'topology_revision': item.topologyRevision,
+                  'state': item.state,
+                  'attempts': item.attempts
+                }),
         _invoiceEntityUpdateAdapter = UpdateAdapter(
             database,
             'invoices',
@@ -3712,6 +3756,13 @@ class _$SalesTransactionDao extends SalesTransactionDao {
   final InsertionAdapter<MovementEntity> _movementEntityInsertionAdapter;
 
   final InsertionAdapter<AuditLogEntity> _auditLogEntityInsertionAdapter;
+
+  final InsertionAdapter<FulfillmentRecordEntity>
+      _fulfillmentRecordEntityInsertionAdapter;
+
+  final InsertionAdapter<PrintJobEntity> _printJobEntityInsertionAdapter;
+
+  final InsertionAdapter<OutboxEventEntity> _outboxEventEntityInsertionAdapter;
 
   final UpdateAdapter<InvoiceEntity> _invoiceEntityUpdateAdapter;
 
@@ -3840,6 +3891,17 @@ class _$SalesTransactionDao extends SalesTransactionDao {
   }
 
   @override
+  Future<OutboxEventEntity?> findReplay(
+    String tenantId,
+    String idempotencyKey,
+  ) async {
+    return _queryAdapter.query(
+        'SELECT * FROM fulfillment_outbox_events WHERE tenant_id = ?1 AND idempotency_key = ?2',
+        mapper: (Map<String, Object?> row) => OutboxEventEntity(eventId: row['event_id'] as String, tenantId: row['tenant_id'] as String, deviceId: row['device_id'] as String, sourceSequence: row['source_sequence'] as int, aggregateType: row['aggregate_type'] as String, aggregateId: row['aggregate_id'] as String, idempotencyKey: row['idempotency_key'] as String, payloadHash: row['payload_hash'] as String, topologyRevision: row['topology_revision'] as int, state: row['state'] as String, attempts: row['attempts'] as int),
+        arguments: [tenantId, idempotencyKey]);
+  }
+
+  @override
   Future<void> insertInvoice(InvoiceEntity invoice) async {
     await _invoiceEntityInsertionAdapter.insert(
         invoice, OnConflictStrategy.abort);
@@ -3874,6 +3936,23 @@ class _$SalesTransactionDao extends SalesTransactionDao {
   Future<void> insertAuditLog(AuditLogEntity log) async {
     await _auditLogEntityInsertionAdapter.insert(
         log, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> insertFulfillment(FulfillmentRecordEntity fulfillment) async {
+    await _fulfillmentRecordEntityInsertionAdapter.insert(
+        fulfillment, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> insertPrintJob(PrintJobEntity job) async {
+    await _printJobEntityInsertionAdapter.insert(job, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> insertOutboxEvent(OutboxEventEntity outbox) async {
+    await _outboxEventEntityInsertionAdapter.insert(
+        outbox, OnConflictStrategy.abort);
   }
 
   @override
@@ -3939,6 +4018,52 @@ class _$SalesTransactionDao extends SalesTransactionDao {
         await transactionDatabase.salesTransactionDao
             .executeSaleWithDgiTransaction(invoice, items, modifiers, payments,
                 movements, auditLog, nextDgiSequence, shouldFail);
+      });
+    }
+  }
+
+  @override
+  Future<void> executeFulfillmentSaleTransaction(
+    InvoiceEntity invoice,
+    List<InvoiceItemEntity> items,
+    List<InvoiceItemModifierEntity> modifiers,
+    List<PaymentEntity> payments,
+    List<MovementEntity> movements,
+    AuditLogEntity? auditLog,
+    FulfillmentRecordEntity fulfillment,
+    List<PrintJobEntity> printJobs,
+    OutboxEventEntity outbox,
+    bool shouldFail,
+  ) async {
+    if (database is sqflite.Transaction) {
+      await super.executeFulfillmentSaleTransaction(
+          invoice,
+          items,
+          modifiers,
+          payments,
+          movements,
+          auditLog,
+          fulfillment,
+          printJobs,
+          outbox,
+          shouldFail);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.salesTransactionDao
+            .executeFulfillmentSaleTransaction(
+                invoice,
+                items,
+                modifiers,
+                payments,
+                movements,
+                auditLog,
+                fulfillment,
+                printJobs,
+                outbox,
+                shouldFail);
       });
     }
   }
