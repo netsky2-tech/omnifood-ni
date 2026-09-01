@@ -341,3 +341,137 @@ describe("W4 — FiscalPage error states", () => {
     expect(screen.queryByText("María López")).not.toBeInTheDocument();
   });
 });
+
+describe("W4 — FiscalPage empty data edge cases", () => {
+  beforeEach(() => {
+    vi.mocked(useMonthlyFiscalSummary).mockReturnValue({
+      data: {
+        year: 2026, month: 9,
+        totalGrossSales: 0, totalTaxableSales: 0, totalExemptSales: 0,
+        totalTaxCollected: 0, totalCreditNotes: 0, totalCreditNotesTax: 0,
+        netTaxableSales: 0, netTaxPayable: 0,
+        invoiceCount: 0, creditNoteCount: 0,
+        generatedAt: "2026-09-01T00:00:00Z",
+      },
+      isLoading: false, error: null,
+    } as ReturnType<typeof useMonthlyFiscalSummary>);
+    vi.mocked(useVoidedInvoices).mockReturnValue({
+      data: {
+        totalVoidedCount: 0, totalVoidedAmount: 0,
+        generatedAt: "2026-09-01T00:00:00Z",
+        invoices: [],
+      },
+      isLoading: false, error: null,
+    } as ReturnType<typeof useVoidedInvoices>);
+    vi.mocked(useSequenceAudit).mockReturnValue({
+      data: {
+        startSequence: 1, endSequence: 5, expectedCount: 5, actualCount: 5,
+        missingSequences: [], duplicateSequences: [], hasGaps: false,
+        series: [
+          {
+            seriesPrefix: "001-001-01", startSequence: 1, endSequence: 5,
+            expectedCount: 5, actualCount: 5,
+            missingSequences: [], duplicateSequences: [], hasGaps: false,
+          },
+        ],
+        generatedAt: "2026-09-01T00:00:00Z",
+      },
+      isLoading: false, error: null,
+    } as ReturnType<typeof useSequenceAudit>);
+    vi.mocked(useSalesBookExport).mockReturnValue({
+      data: {
+        generatedAt: "2026-09-01T00:00:00Z",
+        totalRecords: 0, totalGrossNio: 0, totalTaxNio: 0, totalExemptNio: 0,
+        records: [],
+      },
+      isLoading: false, error: null,
+    } as ReturnType<typeof useSalesBookExport>);
+    vi.mocked(useZReportsExport).mockReturnValue({
+      data: {
+        generatedAt: "2026-09-01T00:00:00Z", totalRecords: 0, records: [],
+      },
+      isLoading: false, error: null,
+    } as ReturnType<typeof useZReportsExport>);
+  });
+
+  it("renders zero values in summary stats", () => {
+    render(<FiscalPage />, { wrapper: TestWrapper });
+    expect(screen.getAllByText("C$0.00").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("0").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("renders empty voided invoices table", async () => {
+    render(<FiscalPage />, { wrapper: TestWrapper });
+    screen.getByText("Anulaciones").click();
+    await waitFor(() => {
+      expect(screen.getByText("0")).toBeInTheDocument();
+      expect(screen.getByText("C$0.00")).toBeInTheDocument();
+    });
+  });
+
+  it("shows no gap warning when hasGaps is false", async () => {
+    render(<FiscalPage />, { wrapper: TestWrapper });
+    screen.getByText("Auditoría Secuencia").click();
+    await waitFor(() => {
+      expect(screen.queryByText(/faltante/)).not.toBeInTheDocument();
+    });
+  });
+
+  it("shows OK badge for series without gaps", async () => {
+    render(<FiscalPage />, { wrapper: TestWrapper });
+    screen.getByText("Auditoría Secuencia").click();
+    await waitFor(() => {
+      expect(screen.getByText("OK")).toBeInTheDocument();
+      expect(screen.queryByText("CON FALTAS")).not.toBeInTheDocument();
+    });
+  });
+
+  it("renders 0 missing sequences stat", async () => {
+    render(<FiscalPage />, { wrapper: TestWrapper });
+    screen.getByText("Auditoría Secuencia").click();
+    await waitFor(() => {
+      expect(screen.getByText("Secuencias Faltantes")).toBeInTheDocument();
+    });
+  });
+});
+
+describe("W4 — FiscalPage duplicate sequences", () => {
+  beforeEach(() => {
+    vi.mocked(useMonthlyFiscalSummary).mockReturnValue({
+      data: undefined, isLoading: false, error: null,
+    } as ReturnType<typeof useMonthlyFiscalSummary>);
+    vi.mocked(useVoidedInvoices).mockReturnValue({
+      data: undefined, isLoading: false, error: null,
+    } as ReturnType<typeof useVoidedInvoices>);
+    vi.mocked(useSequenceAudit).mockReturnValue({
+      data: {
+        startSequence: 1, endSequence: 10, expectedCount: 10, actualCount: 12,
+        missingSequences: [], duplicateSequences: [5, 10], hasGaps: false,
+        series: [
+          {
+            seriesPrefix: "001-001-01", startSequence: 1, endSequence: 10,
+            expectedCount: 10, actualCount: 12,
+            missingSequences: [], duplicateSequences: [5, 10], hasGaps: false,
+          },
+        ],
+        generatedAt: "2026-09-01T00:00:00Z",
+      },
+      isLoading: false, error: null,
+    } as ReturnType<typeof useSequenceAudit>);
+    vi.mocked(useSalesBookExport).mockReturnValue({
+      data: undefined, isLoading: false, error: null,
+    } as ReturnType<typeof useSalesBookExport>);
+    vi.mocked(useZReportsExport).mockReturnValue({
+      data: undefined, isLoading: false, error: null,
+    } as ReturnType<typeof useZReportsExport>);
+  });
+
+  it("shows duplicate sequences warning", async () => {
+    render(<FiscalPage />, { wrapper: TestWrapper });
+    screen.getByText("Auditoría Secuencia").click();
+    await waitFor(() => {
+      expect(screen.getByText(/2 secuencia\(s\) duplicada\(s\)/)).toBeInTheDocument();
+      expect(screen.getByText("5, 10")).toBeInTheDocument();
+    });
+  });
+});
