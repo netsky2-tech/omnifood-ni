@@ -39,7 +39,8 @@ Chain strategy: feature-branch-chain
 - [x] 2.2C RED: atomic sale + fulfillment + print + outbox transaction rollback/idempotency; GREEN commit all effects once with stable identities; REFACTOR transaction boundaries. Depends on 2.2B.
 - [ ] 2.2D RED: repository validation, offline fallback/replay, and runtime harness; GREEN wire `sales_repository_impl.dart` with tenant/version/hash checks; REFACTOR idempotent local identities. Depends on 2.2C.
   - [x] 2.2D.1 RED: require an explicit immutable checkout context carrying tenant and frozen topology snapshot identity/revision/hash/channel; GREEN forward it unchanged from the sales repository to its checkout boundary without inference; REFACTOR preserve legacy checkout compatibility. Depends on 2.2C.
-  - [ ] 2.2D.2 RED: validate the context against the tenant-scoped cached snapshot and invoke the atomic fulfillment transaction; prove offline/replay behavior with a real SQLite runtime harness. Depends on 2.2D.1.
+  - [x] 2.2D.2a RED: validate the production context against the tenant-scoped cached snapshot; GREEN invoke atomic fulfillment and prove offline/replay with `apps/pos_app/test/data/repositories/sales/sales_repository_fulfillment_checkout_test.dart` (365 lines); TRIANGULATE valid atomic commit/idempotent replay and missing/cross-tenant/stale/hash-mismatch no-mutation cases. Depends on 2.2D.1.
+  - [ ] 2.2D.2b RED/GREEN/REFACTOR: focused repository compatibility/regressions in `apps/pos_app/test/data/repositories/sales/sales_repository_impl_test.dart` (≤168 lines), explicitly preserving 2.2D.1 immutable context-forwarding and legacy checkout coverage; rerun repository, SQLite, and DGI regressions. Depends on 2.2D.2a.
 
 ## Phase 3: Backend Provisioning and Sync (PR #3)
 
