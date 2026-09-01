@@ -5,7 +5,7 @@ import { useLogin } from "@/features/auth/auth-hooks";
 
 const loginSchema = z.object({
   email: z.string().email("Correo inválido"),
-  password: z.string().min(6, "Mínimo 6 caracteres"),
+  pass: z.string().min(6, "Mínimo 6 caracteres"),
   tenantSlug: z.string().optional(),
 });
 
@@ -60,21 +60,21 @@ export function LoginPage() {
 
           <div>
             <label
-              htmlFor="password"
+              htmlFor="pass"
               className="mb-1 block text-sm font-medium text-foreground"
             >
               Contraseña
             </label>
             <input
-              id="password"
+              id="pass"
               type="password"
-              {...register("password")}
+              {...register("pass")}
               className="h-10 w-full rounded-md border border-input bg-white px-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
               placeholder="••••••"
             />
-            {errors.password && (
+            {errors.pass && (
               <p className="mt-1 text-xs text-destructive">
-                {errors.password.message}
+                {errors.pass.message}
               </p>
             )}
           </div>

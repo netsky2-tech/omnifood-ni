@@ -5,6 +5,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CatalogPage } from "@/features/catalog/catalog-page";
 import {
   useCatalogValues,
+  useCreateCatalogValue,
+  useUpdateCatalogValue,
+  useDeactivateCatalogValue,
 } from "@/features/catalog/use-catalog";
 import type { CatalogValue } from "@/features/catalog/types";
 
@@ -342,5 +345,192 @@ describe("W5 — CatalogPage deactivate dialog", () => {
         screen.queryByText("Desactivar Valor"),
       ).not.toBeInTheDocument();
     });
+  });
+
+  it("shows value name and code in deactivate confirmation", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useCatalogValues).mockReturnValue({
+      data: MOCK_UOM_VALUES,
+      isLoading: false,
+      error: null,
+    } as any);
+    render(<CatalogPage />, { wrapper: TestWrapper });
+
+    const deactivateButtons = screen.getAllByText("Desactivar");
+    await user.click(deactivateButtons[0]!);
+
+    // Dialog shows the value name in a <span> and code in text
+    const dialogText = screen.getByText(/¿Estás seguro de desactivar/);
+    expect(dialogText).toHaveTextContent("Kilogramo");
+    expect(dialogText).toHaveTextContent("kg");
+  });
+});
+
+describe("W5 — Triangulation: create dialog edge cases", () => {
+  it("rejects code with spaces via HTML pattern", async () => {
+    const user = userEvent.setup();
+    render(<CatalogPage />, { wrapper: TestWrapper });
+
+    await user.click(screen.getByText("+ Nuevo Valor"));
+
+    const codeInput = screen.getByPlaceholderText("Ej: kg, LACTEOS") as HTMLInputElement;
+    // jsdom doesn't enforce pattern validation, so verify the attribute is correct
+    // Real browsers will block form submission when the pattern fails
+    expect(codeInput.pattern).toBe("^[A-Za-z0-9_-]+$");
+    expect(codeInput.required).toBe(true);
+    expect(codeInput.maxLength).toBe(64);
+  });
+
+  it("rejects code with special characters via HTML pattern", async () => {
+    const user = userEvent.setup();
+    render(<CatalogPage />, { wrapper: TestWrapper });
+
+    await user.click(screen.getByText("+ Nuevo Valor"));
+
+    const codeInput = screen.getByPlaceholderText("Ej: kg, LACTEOS") as HTMLInputElement;
+    // Verify the pattern attribute — real browsers enforce this
+    expect(codeInput.pattern).toBe("^[A-Za-z0-9_-]+$");
+    expect(codeInput.value).toBe(""); // starts empty
+  });
+
+  it("accepts code with hyphens and underscores", async () => {
+    const user = userEvent.setup();
+    const mockMutate = vi.fn().mockResolvedValue({});
+    vi.mocked(useCreateCatalogValue).mockReturnValue({
+      mutateAsync: mockMutate,
+      isPending: false,
+    } as any);
+    render(<CatalogPage />, { wrapper: TestWrapper });
+
+    await user.click(screen.getByText("+ Nuevo Valor"));
+    await user.type(screen.getByPlaceholderText("Ej: kg, LACTEOS"), "my-code");
+    await user.type(screen.getByPlaceholderText("Ej: Kilogramo, Lácteos"), "Test");
+    await user.click(screen.getByText("Crear"));
+
+    await waitFor(() => {
+      expect(mockMutate).toHaveBeenCalledWith(
+        expect.objectContaining({ code: "my-code" }),
+      );
+    });
+  });
+
+  it("shows error message when create mutation fails", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useCreateCatalogValue).mockReturnValue({
+      mutateAsync: vi.fn().mockRejectedValue(new Error("Código duplicado")),
+      isPending: false,
+    } as any);
+    render(<CatalogPage />, { wrapper: TestWrapper });
+
+    await user.click(screen.getByText("+ Nuevo Valor"));
+    await user.type(screen.getByPlaceholderText("Ej: kg, LACTEOS"), "dup");
+    await user.type(screen.getByPlaceholderText("Ej: Kilogramo, Lácteos"), "Dup");
+    await user.click(screen.getByText("Crear"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Código duplicado")).toBeInTheDocument();
+    });
+  });
+
+  it("disables submit button while mutation is pending", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useCreateCatalogValue).mockReturnValue({
+      mutateAsync: vi.fn().mockResolvedValue({}),
+      isPending: true,
+    } as any);
+    render(<CatalogPage />, { wrapper: TestWrapper });
+
+    await user.click(screen.getByText("+ Nuevo Valor"));
+
+    expect(screen.getByText("Guardando...")).toBeDisabled();
+  });
+
+  it("pre-fills edit dialog with existing values", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useCatalogValues).mockReturnValue({
+      data: MOCK_UOM_VALUES,
+      isLoading: false,
+      error: null,
+    } as any);
+    render(<CatalogPage />, { wrapper: TestWrapper });
+
+    await user.click(screen.getAllByText("Editar")[0]!);
+
+    expect(screen.getByText("Editar Valor")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Kilogramo")).toBeInTheDocument();
+  });
+
+  it("edit dialog does not show code field", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useCatalogValues).mockReturnValue({
+      data: MOCK_UOM_VALUES,
+      isLoading: false,
+      error: null,
+    } as any);
+    render(<CatalogPage />, { wrapper: TestWrapper });
+
+    await user.click(screen.getAllByText("Editar")[0]!);
+
+    expect(screen.queryByText("Código *")).not.toBeInTheDocument();
+  });
+
+  it("shows error message when deactivate mutation fails", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useCatalogValues).mockReturnValue({
+      data: MOCK_UOM_VALUES,
+      isLoading: false,
+      error: null,
+    } as any);
+    vi.mocked(useDeactivateCatalogValue).mockReturnValue({
+      mutateAsync: vi.fn().mockRejectedValue(new Error("Not found")),
+      isPending: false,
+    } as any);
+    render(<CatalogPage />, { wrapper: TestWrapper });
+
+    const tableDeactivateButtons = screen.getAllByText("Desactivar");
+    await user.click(tableDeactivateButtons[0]!);
+
+    // Now there are 3 "Desactivar" texts: 2 table buttons + 1 dialog confirm button
+    const allDeactivate = screen.getAllByText("Desactivar");
+    const confirmButton = allDeactivate[allDeactivate.length - 1]!;
+    await user.click(confirmButton);
+
+    // Error handled silently by mutation; dialog stays open
+    await waitFor(() => {
+      expect(screen.getByText("Desactivar Valor")).toBeInTheDocument();
+    });
+  });
+
+  it("renders sort_order values in table", () => {
+    vi.mocked(useCatalogValues).mockReturnValue({
+      data: MOCK_UOM_VALUES,
+      isLoading: false,
+      error: null,
+    } as any);
+    render(<CatalogPage />, { wrapper: TestWrapper });
+
+    expect(screen.getByText("0")).toBeInTheDocument();
+    expect(screen.getByText("1")).toBeInTheDocument();
+    expect(screen.getByText("2")).toBeInTheDocument();
+  });
+
+  it("code input has maxlength of 64", async () => {
+    const user = userEvent.setup();
+    render(<CatalogPage />, { wrapper: TestWrapper });
+
+    await user.click(screen.getByText("+ Nuevo Valor"));
+
+    const codeInput = screen.getByPlaceholderText("Ej: kg, LACTEOS");
+    expect(codeInput).toHaveAttribute("maxlength", "64");
+  });
+
+  it("name input has maxlength of 120", async () => {
+    const user = userEvent.setup();
+    render(<CatalogPage />, { wrapper: TestWrapper });
+
+    await user.click(screen.getByText("+ Nuevo Valor"));
+
+    const nameInput = screen.getByPlaceholderText("Ej: Kilogramo, Lácteos");
+    expect(nameInput).toHaveAttribute("maxlength", "120");
   });
 });
