@@ -31,11 +31,15 @@ function formatNumber(n: number): string {
 }
 
 const MOVEMENT_LABELS: Record<MovementType, string> = {
-  ENTRY: "Entrada",
-  EXIT: "Salida",
-  ADJUSTMENT: "Ajuste",
-  TRANSFER: "Transferencia",
+  SALE: "Venta",
+  SALE_CANCEL: "Anulación Venta",
+  PURCHASE: "Compra",
+  ENTRADA_COMPRA: "Entrada Compra",
   SHRINKAGE: "Mermas",
+  PRODUCTION: "Producción",
+  CREDIT_NOTE_RESTOCK: "Nota Crédito",
+  ADJUSTMENT: "Ajuste",
+  REVERSAL: "Reversión",
 };
 
 const SEVERITY_STYLES: Record<AlertSeverity, string> = {

@@ -47,7 +47,16 @@ export interface CogsReport {
   items: CogsItem[];
 }
 
-export type MovementType = "ENTRY" | "EXIT" | "ADJUSTMENT" | "TRANSFER" | "SHRINKAGE";
+export type MovementType =
+  | "SALE"
+  | "SALE_CANCEL"
+  | "PURCHASE"
+  | "ENTRADA_COMPRA"
+  | "SHRINKAGE"
+  | "PRODUCTION"
+  | "CREDIT_NOTE_RESTOCK"
+  | "ADJUSTMENT"
+  | "REVERSAL";
 
 export interface KardexMovement {
   id: string;

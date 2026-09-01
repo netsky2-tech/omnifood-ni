@@ -8,6 +8,7 @@ import {
   useKardex,
   useAlerts,
 } from "@/features/inventory/use-inventory-reports";
+import type { MovementType } from "@/features/inventory/types";
 
 vi.mock("@/features/inventory/use-inventory-reports", () => ({
   useValuation: vi.fn(() => ({
@@ -107,7 +108,7 @@ vi.mock("@/features/inventory/use-inventory-reports", () => ({
           insumoId: "i1",
           insumoName: "Carne Molida",
           consumptionUom: "kg",
-          type: "ENTRY",
+          type: "SALE" as MovementType,
           quantity: 50,
           stockBefore: 0,
           stockAfter: 50,
@@ -119,7 +120,7 @@ vi.mock("@/features/inventory/use-inventory-reports", () => ({
           insumoId: "i1",
           insumoName: "Carne Molida",
           consumptionUom: "kg",
-          type: "EXIT",
+          type: "SHRINKAGE" as MovementType,
           quantity: 5,
           stockBefore: 50,
           stockAfter: 45,
@@ -144,7 +145,7 @@ vi.mock("@/features/inventory/use-inventory-reports", () => ({
           consumptionUom: "pz",
           stock: 3,
           minStock: 10,
-          severity: "CRITICAL",
+          severity: "CRITICAL" as const,
           message: "Stock por debajo del mínimo",
           suggestedReorderQuantity: 50,
           isPerishable: false,
@@ -155,7 +156,7 @@ vi.mock("@/features/inventory/use-inventory-reports", () => ({
           consumptionUom: "L",
           stock: 8,
           minStock: 15,
-          severity: "WARNING",
+          severity: "WARNING" as const,
           message: "Stock cerca del mínimo",
           suggestedReorderQuantity: 20,
           isPerishable: true,
@@ -223,19 +224,19 @@ describe("W3 — InventoryPage", () => {
     });
   });
 
-  it("switches to kardex tab with movement type filters", async () => {
+  it("switches to kardex tab with backend MovementType labels", async () => {
     render(<InventoryPage />, { wrapper: TestWrapper });
     screen.getByText("Kardex").click();
     await waitFor(() => {
       expect(screen.getByText("Todos")).toBeInTheDocument();
-      expect(screen.getAllByText("Entrada").length).toBeGreaterThanOrEqual(1);
-      expect(screen.getAllByText("Salida").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText("Venta").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText("Mermas").length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText("Ajuste")).toBeInTheDocument();
       expect(screen.getByText("2 movimiento(s)")).toBeInTheDocument();
     });
   });
 
-  it("renders kardex movements", async () => {
+  it("renders kardex movements with correct type badges", async () => {
     render(<InventoryPage />, { wrapper: TestWrapper });
     screen.getByText("Kardex").click();
     await waitFor(() => {
