@@ -38,6 +38,8 @@ Chain strategy: feature-branch-chain
 - [x] 2.2B RED: real SQLite fulfillment, print-job, and outbox persistence; GREEN add their stable local identities and Floor registration/migration; REFACTOR aggregate boundaries. Depends on 2.2A.
 - [x] 2.2C RED: atomic sale + fulfillment + print + outbox transaction rollback/idempotency; GREEN commit all effects once with stable identities; REFACTOR transaction boundaries. Depends on 2.2B.
 - [ ] 2.2D RED: repository validation, offline fallback/replay, and runtime harness; GREEN wire `sales_repository_impl.dart` with tenant/version/hash checks; REFACTOR idempotent local identities. Depends on 2.2C.
+  - [x] 2.2D.1 RED: require an explicit immutable checkout context carrying tenant and frozen topology snapshot identity/revision/hash/channel; GREEN forward it unchanged from the sales repository to its checkout boundary without inference; REFACTOR preserve legacy checkout compatibility. Depends on 2.2C.
+  - [ ] 2.2D.2 RED: validate the context against the tenant-scoped cached snapshot and invoke the atomic fulfillment transaction; prove offline/replay behavior with a real SQLite runtime harness. Depends on 2.2D.1.
 
 ## Phase 3: Backend Provisioning and Sync (PR #3)
 
