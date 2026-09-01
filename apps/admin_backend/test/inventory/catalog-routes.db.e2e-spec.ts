@@ -6,10 +6,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import * as request from 'supertest';
 import { DataSource } from 'typeorm';
 import { Tenant } from '../../src/modules/tenant/entities/tenant.entity';
-import { Product, ProductType } from '../../src/modules/inventory/entities/product.entity';
-import { ProductService } from '../../src/modules/inventory/product.service';
+import { CatalogValue } from '../../src/modules/catalog/entities/catalog-value.entity';
+import { CatalogService } from '../../src/modules/catalog/catalog.service';
 import { ChangeLogService } from '../../src/modules/audit/change-log.service';
-import { ProductController } from '../../src/modules/inventory/product.controller';
+import { CatalogController } from '../../src/modules/catalog/catalog.controller';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { AuthoritativeCurrentUserGuard } from '../../src/modules/identity/guards/authoritative-current-user.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
@@ -57,7 +57,7 @@ async function withIsolatedSchema(
       type: 'postgres',
       ...postgresConnection,
       schema,
-      entities: [Tenant, Product],
+      entities: [Tenant, CatalogValue],
       synchronize: true,
     });
     await dataSource.initialize();
@@ -69,10 +69,10 @@ async function withIsolatedSchema(
       [tenantId, `E2E Tenant ${schemaPrefix}`],
     );
 
-    const productService = new ProductService(dataSource, { log: jest.fn() } as unknown as ChangeLogService);
+    const catalogService = new CatalogService(dataSource, { log: jest.fn() } as unknown as ChangeLogService);
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
-      controllers: [ProductController],
+      controllers: [CatalogController],
       providers: [
         Reflector,
         AuthGuard,
@@ -82,7 +82,7 @@ async function withIsolatedSchema(
           provide: CurrentUserAuthorizationService,
           useValue: { authorize: jest.fn((token: unknown) => token) },
         },
-        { provide: ProductService, useValue: productService },
+        { provide: CatalogService, useValue: catalogService },
         JwtService,
         createIdentityJwtTestConfigProvider(),
         createIdentityJwtConfigProvider(),
@@ -106,35 +106,32 @@ async function withIsolatedSchema(
   }
 }
 
-describe('ProductController E2E — real PostgreSQL', () => {
+describe('CatalogController E2E — real PostgreSQL', () => {
   const TEST_TIMEOUT_MS = 30000;
 
-  describe('POST /products', () => {
+  describe('POST /catalogs/:type', () => {
     it(
-      'creates a product and persists it in the database',
+      'creates a catalog value and persists it in the database',
       async () => {
-        await withIsolatedSchema('e2e_create', async ({ app, jwtService, tenantId }) => {
+        await withIsolatedSchema('e2e_catalog_create', async ({ app, jwtService, tenantId }) => {
           const token = signIdentityJwtAccessToken(jwtService, {
             role: UserRole.OWNER,
             tenant_id: tenantId,
           });
 
           const res = await request(app.getHttpServer())
-            .post('/products')
+            .post('/catalogs/UOM')
             .set('Authorization', `Bearer ${token}`)
             .send({
-              name: 'Taza de Capuccino',
-              uom: 'un',
-              product_type: 'COMPOUND',
-              sellPrice: 45,
-              category_code: 'BEBIDA_CALIENTE',
+              code: 'kg',
+              name: 'Kilogramo',
             })
             .expect(201);
 
           expect(res.body.id).toBeDefined();
-          expect(res.body.name).toBe('Taza de Capuccino');
-          expect(res.body.product_type).toBe('COMPOUND');
-          expect(Number(res.body.sellPrice)).toBe(45);
+          expect(res.body.code).toBe('kg');
+          expect(res.body.name).toBe('Kilogramo');
+          expect(res.body.catalog_type).toBe('UOM');
           expect(res.body.is_active).toBe(true);
         });
       },
@@ -144,16 +141,16 @@ describe('ProductController E2E — real PostgreSQL', () => {
     it(
       'returns 400 for missing required fields',
       async () => {
-        await withIsolatedSchema('e2e_create_400', async ({ app, jwtService, tenantId }) => {
+        await withIsolatedSchema('e2e_catalog_create_400', async ({ app, jwtService, tenantId }) => {
           const token = signIdentityJwtAccessToken(jwtService, {
             role: UserRole.OWNER,
             tenant_id: tenantId,
           });
 
           await request(app.getHttpServer())
-            .post('/products')
+            .post('/catalogs/UOM')
             .set('Authorization', `Bearer ${token}`)
-            .send({ uom: 'un' })
+            .send({ code: 'kg' })
             .expect(400);
         });
       },
@@ -161,76 +158,49 @@ describe('ProductController E2E — real PostgreSQL', () => {
     );
 
     it(
-      'returns 400 for invalid product_type',
+      'returns 404 for invalid catalog type',
       async () => {
-        await withIsolatedSchema('e2e_create_invalid_type', async ({ app, jwtService, tenantId }) => {
+        await withIsolatedSchema('e2e_catalog_create_invalid_type', async ({ app, jwtService, tenantId }) => {
           const token = signIdentityJwtAccessToken(jwtService, {
             role: UserRole.OWNER,
             tenant_id: tenantId,
           });
 
           await request(app.getHttpServer())
-            .post('/products')
+            .post('/catalogs/INVALID_TYPE')
             .set('Authorization', `Bearer ${token}`)
-            .send({ name: 'Test', uom: 'un', product_type: 'INVALID' })
-            .expect(400);
+            .send({ code: 'test', name: 'Test' })
+            .expect(404);
         });
       },
       TEST_TIMEOUT_MS,
     );
   });
 
-  describe('GET /products', () => {
+  describe('GET /catalogs/:type', () => {
     it(
-      'returns products for the authenticated tenant',
+      'returns catalog values for the authenticated tenant',
       async () => {
-        await withIsolatedSchema('e2e_list', async ({ app, dataSource, jwtService, tenantId }) => {
+        await withIsolatedSchema('e2e_catalog_list', async ({ app, dataSource, jwtService, tenantId }) => {
           const token = signIdentityJwtAccessToken(jwtService, {
             role: UserRole.MANAGER,
             tenant_id: tenantId,
           });
 
           await dataSource.query(
-            `INSERT INTO products (id, tenant_id, name, uom, product_type, stock, "averageCost", "sellPrice", is_active, is_perishable, created_at, updated_at)
-             VALUES ($1, $2, 'Gaseosa', 'un', 'SIMPLE', 0, 0, 25, true, false, now(), now())`,
+            `INSERT INTO catalog_values (id, tenant_id, catalog_type, code, label, is_active, sort_order, created_at, updated_at)
+             VALUES ($1, $2, 'UOM', 'un', 'Unidad', true, 0, now(), now())`,
             [randomUUID(), tenantId],
           );
 
           const res = await request(app.getHttpServer())
-            .get('/products')
+            .get('/catalogs/UOM')
             .set('Authorization', `Bearer ${token}`)
             .expect(200);
 
           expect(res.body).toHaveLength(1);
-          expect(res.body[0].name).toBe('Gaseosa');
-        });
-      },
-      TEST_TIMEOUT_MS,
-    );
-
-    it(
-      'filters by productType query param',
-      async () => {
-        await withIsolatedSchema('e2e_list_type', async ({ app, dataSource, jwtService, tenantId }) => {
-          const token = signIdentityJwtAccessToken(jwtService, {
-            role: UserRole.MANAGER,
-            tenant_id: tenantId,
-          });
-
-          await dataSource.query(
-            `INSERT INTO products (id, tenant_id, name, uom, product_type, stock, "averageCost", "sellPrice", is_active, is_perishable, created_at, updated_at)
-             VALUES ($1, $2, 'Simple', 'un', 'SIMPLE', 0, 0, 10, true, false, now(), now()),
-                    ($3, $4, 'Compound', 'un', 'COMPOUND', 0, 0, 20, true, false, now(), now())`,
-            [randomUUID(), tenantId, randomUUID(), tenantId],
-          );
-
-          const res = await request(app.getHttpServer())
-            .get('/products?productType=COMPOUND')
-            .set('Authorization', `Bearer ${token}`)
-            .expect(200);
-
-          expect(res.body).toHaveLength(1);
-          expect(res.body[0].name).toBe('Compound');
+          expect(res.body[0].code).toBe('un');
+          expect(res.body[0].name).toBe('Unidad');
         });
       },
       TEST_TIMEOUT_MS,
@@ -239,27 +209,28 @@ describe('ProductController E2E — real PostgreSQL', () => {
     it(
       'excludes inactive by default, includes with includeInactive=true',
       async () => {
-        await withIsolatedSchema('e2e_list_inactive', async ({ app, dataSource, jwtService, tenantId }) => {
+        await withIsolatedSchema('e2e_catalog_list_inactive', async ({ app, dataSource, jwtService, tenantId }) => {
           const token = signIdentityJwtAccessToken(jwtService, {
             role: UserRole.MANAGER,
             tenant_id: tenantId,
           });
 
           await dataSource.query(
-            `INSERT INTO products (id, tenant_id, name, uom, product_type, stock, "averageCost", "sellPrice", is_active, is_perishable, created_at, updated_at)
-             VALUES ($1, $2, 'Active', 'un', 'SIMPLE', 0, 0, 10, true, false, now(), now()),
-                    ($3, $4, 'Inactive', 'un', 'SIMPLE', 0, 0, 10, false, false, now(), now())`,
+            `INSERT INTO catalog_values (id, tenant_id, catalog_type, code, label, is_active, sort_order, created_at, updated_at)
+             VALUES ($1, $2, 'UOM', 'kg', 'Kilogramo', true, 0, now(), now()),
+                    ($3, $4, 'UOM', 'lb', 'Libra', false, 1, now(), now())`,
             [randomUUID(), tenantId, randomUUID(), tenantId],
           );
 
           const activeRes = await request(app.getHttpServer())
-            .get('/products')
+            .get('/catalogs/UOM')
             .set('Authorization', `Bearer ${token}`)
             .expect(200);
           expect(activeRes.body).toHaveLength(1);
+          expect(activeRes.body[0].code).toBe('kg');
 
           const allRes = await request(app.getHttpServer())
-            .get('/products?includeInactive=true')
+            .get('/catalogs/UOM?includeInactive=true')
             .set('Authorization', `Bearer ${token}`)
             .expect(200);
           expect(allRes.body).toHaveLength(2);
@@ -271,9 +242,9 @@ describe('ProductController E2E — real PostgreSQL', () => {
     it(
       'returns 401 without token',
       async () => {
-        await withIsolatedSchema('e2e_list_401', async ({ app }) => {
+        await withIsolatedSchema('e2e_catalog_list_401', async ({ app }) => {
           await request(app.getHttpServer())
-            .get('/products')
+            .get('/catalogs/UOM')
             .expect(401);
         });
       },
@@ -283,61 +254,32 @@ describe('ProductController E2E — real PostgreSQL', () => {
     it(
       'returns 403 for CASHIER role',
       async () => {
-        await withIsolatedSchema('e2e_list_403', async ({ app, jwtService, tenantId }) => {
+        await withIsolatedSchema('e2e_catalog_list_403', async ({ app, jwtService, tenantId }) => {
           const token = signIdentityJwtAccessToken(jwtService, {
             role: UserRole.CASHIER,
             tenant_id: tenantId,
           });
 
           await request(app.getHttpServer())
-            .get('/products')
+            .get('/catalogs/UOM')
             .set('Authorization', `Bearer ${token}`)
             .expect(403);
         });
       },
       TEST_TIMEOUT_MS,
     );
-  });
-
-  describe('GET /products/:id', () => {
-    it(
-      'returns a product by id',
-      async () => {
-        await withIsolatedSchema('e2e_findone', async ({ app, dataSource, jwtService, tenantId }) => {
-          const token = signIdentityJwtAccessToken(jwtService, {
-            role: UserRole.MANAGER,
-            tenant_id: tenantId,
-          });
-          const productId = randomUUID();
-          await dataSource.query(
-            `INSERT INTO products (id, tenant_id, name, uom, product_type, stock, "averageCost", "sellPrice", is_active, is_perishable, created_at, updated_at)
-             VALUES ($1, $2, 'Find Me', 'un', 'SIMPLE', 0, 0, 30, true, false, now(), now())`,
-            [productId, tenantId],
-          );
-
-          const res = await request(app.getHttpServer())
-            .get(`/products/${productId}`)
-            .set('Authorization', `Bearer ${token}`)
-            .expect(200);
-
-          expect(res.body.id).toBe(productId);
-          expect(res.body.name).toBe('Find Me');
-        });
-      },
-      TEST_TIMEOUT_MS,
-    );
 
     it(
-      'returns 404 for nonexistent product',
+      'returns 404 for nonexistent catalog value by id',
       async () => {
-        await withIsolatedSchema('e2e_findone_404', async ({ app, jwtService, tenantId }) => {
+        await withIsolatedSchema('e2e_catalog_findone_404', async ({ app, jwtService, tenantId }) => {
           const token = signIdentityJwtAccessToken(jwtService, {
             role: UserRole.MANAGER,
             tenant_id: tenantId,
           });
 
           await request(app.getHttpServer())
-            .get(`/products/${randomUUID()}`)
+            .get(`/catalogs/UOM/${randomUUID()}`)
             .set('Authorization', `Bearer ${token}`)
             .expect(404);
         });
@@ -346,45 +288,45 @@ describe('ProductController E2E — real PostgreSQL', () => {
     );
   });
 
-  describe('PATCH /products/:id', () => {
+  describe('PATCH /catalogs/:type/:id', () => {
     it(
-      'updates product name',
+      'updates catalog value name',
       async () => {
-        await withIsolatedSchema('e2e_update', async ({ app, dataSource, jwtService, tenantId }) => {
+        await withIsolatedSchema('e2e_catalog_update', async ({ app, dataSource, jwtService, tenantId }) => {
           const token = signIdentityJwtAccessToken(jwtService, {
             role: UserRole.OWNER,
             tenant_id: tenantId,
           });
-          const productId = randomUUID();
+          const catalogId = randomUUID();
           await dataSource.query(
-            `INSERT INTO products (id, tenant_id, name, uom, product_type, stock, "averageCost", "sellPrice", is_active, is_perishable, created_at, updated_at)
-             VALUES ($1, $2, 'Old Name', 'un', 'SIMPLE', 0, 0, 10, true, false, now(), now())`,
-            [productId, tenantId],
+            `INSERT INTO catalog_values (id, tenant_id, catalog_type, code, label, is_active, sort_order, created_at, updated_at)
+             VALUES ($1, $2, 'UOM', 'kg', 'Kilogramo', true, 0, now(), now())`,
+            [catalogId, tenantId],
           );
 
           const res = await request(app.getHttpServer())
-            .patch(`/products/${productId}`)
+            .patch(`/catalogs/UOM/${catalogId}`)
             .set('Authorization', `Bearer ${token}`)
-            .send({ name: 'New Name' })
+            .send({ name: 'Kg Actualizado' })
             .expect(200);
 
-          expect(res.body.name).toBe('New Name');
+          expect(res.body.name).toBe('Kg Actualizado');
         });
       },
       TEST_TIMEOUT_MS,
     );
 
     it(
-      'returns 404 for nonexistent product',
+      'returns 404 for nonexistent catalog value',
       async () => {
-        await withIsolatedSchema('e2e_update_404', async ({ app, jwtService, tenantId }) => {
+        await withIsolatedSchema('e2e_catalog_update_404', async ({ app, jwtService, tenantId }) => {
           const token = signIdentityJwtAccessToken(jwtService, {
             role: UserRole.OWNER,
             tenant_id: tenantId,
           });
 
           await request(app.getHttpServer())
-            .patch(`/products/${randomUUID()}`)
+            .patch(`/catalogs/UOM/${randomUUID()}`)
             .set('Authorization', `Bearer ${token}`)
             .send({ name: 'X' })
             .expect(404);
@@ -394,33 +336,33 @@ describe('ProductController E2E — real PostgreSQL', () => {
     );
   });
 
-  describe('DELETE /products/:id', () => {
+  describe('DELETE /catalogs/:type/:id', () => {
     it(
-      'soft-deactivates product',
+      'soft-deactivates catalog value',
       async () => {
-        await withIsolatedSchema('e2e_deactivate', async ({ app, dataSource, jwtService, tenantId }) => {
+        await withIsolatedSchema('e2e_catalog_deactivate', async ({ app, dataSource, jwtService, tenantId }) => {
           const token = signIdentityJwtAccessToken(jwtService, {
             role: UserRole.OWNER,
             tenant_id: tenantId,
           });
-          const productId = randomUUID();
+          const catalogId = randomUUID();
           await dataSource.query(
-            `INSERT INTO products (id, tenant_id, name, uom, product_type, stock, "averageCost", "sellPrice", is_active, is_perishable, created_at, updated_at)
-             VALUES ($1, $2, 'To Deactivate', 'un', 'SIMPLE', 0, 0, 10, true, false, now(), now())`,
-            [productId, tenantId],
+            `INSERT INTO catalog_values (id, tenant_id, catalog_type, code, label, is_active, sort_order, created_at, updated_at)
+             VALUES ($1, $2, 'UOM', 'kg', 'Kilogramo', true, 0, now(), now())`,
+            [catalogId, tenantId],
           );
 
           const res = await request(app.getHttpServer())
-            .delete(`/products/${productId}`)
+            .delete(`/catalogs/UOM/${catalogId}`)
             .set('Authorization', `Bearer ${token}`)
             .expect(200);
 
-          expect(res.body).toEqual({ id: productId, deactivated: true });
+          expect(res.body).toEqual({ id: catalogId, deactivated: true });
 
           // Verify is_active is false in DB
           const rows = await dataSource.query(
-            `SELECT is_active FROM products WHERE id = $1`,
-            [productId],
+            `SELECT is_active FROM catalog_values WHERE id = $1`,
+            [catalogId],
           );
           expect(rows[0].is_active).toBe(false);
         });
@@ -429,16 +371,16 @@ describe('ProductController E2E — real PostgreSQL', () => {
     );
 
     it(
-      'returns 404 for nonexistent product',
+      'returns 404 for nonexistent catalog value',
       async () => {
-        await withIsolatedSchema('e2e_deactivate_404', async ({ app, jwtService, tenantId }) => {
+        await withIsolatedSchema('e2e_catalog_deactivate_404', async ({ app, jwtService, tenantId }) => {
           const token = signIdentityJwtAccessToken(jwtService, {
             role: UserRole.OWNER,
             tenant_id: tenantId,
           });
 
           await request(app.getHttpServer())
-            .delete(`/products/${randomUUID()}`)
+            .delete(`/catalogs/UOM/${randomUUID()}`)
             .set('Authorization', `Bearer ${token}`)
             .expect(404);
         });
@@ -449,9 +391,9 @@ describe('ProductController E2E — real PostgreSQL', () => {
 
   describe('Tenant isolation', () => {
     it(
-      'tenant A cannot see tenant B products via HTTP',
+      'tenant A cannot see tenant B catalog values via HTTP',
       async () => {
-        await withIsolatedSchema('e2e_tenant_isolation', async ({ app, dataSource, jwtService, tenantId }) => {
+        await withIsolatedSchema('e2e_catalog_tenant_isolation', async ({ app, dataSource, jwtService, tenantId }) => {
           const otherTenantId = randomUUID();
           await dataSource.query(
             `INSERT INTO tenants (id, name, is_active, created_at, updated_at) VALUES ($1, $2, true, now(), now())`,
@@ -463,16 +405,16 @@ describe('ProductController E2E — real PostgreSQL', () => {
             tenant_id: tenantId,
           });
 
-          // Insert product for other tenant directly in DB
+          // Insert catalog value for other tenant directly in DB
           await dataSource.query(
-            `INSERT INTO products (id, tenant_id, name, uom, product_type, stock, "averageCost", "sellPrice", is_active, is_perishable, created_at, updated_at)
-             VALUES ($1, $2, 'Secret Product', 'un', 'SIMPLE', 0, 0, 10, true, false, now(), now())`,
+            `INSERT INTO catalog_values (id, tenant_id, catalog_type, code, label, is_active, sort_order, created_at, updated_at)
+             VALUES ($1, $2, 'UOM', 'secret_unit', 'Secret Unit', true, 0, now(), now())`,
             [randomUUID(), otherTenantId],
           );
 
-          // Tenant A should see 0 products
+          // Tenant A should see 0 catalog values
           const res = await request(app.getHttpServer())
-            .get('/products')
+            .get('/catalogs/UOM')
             .set('Authorization', `Bearer ${tokenA}`)
             .expect(200);
 

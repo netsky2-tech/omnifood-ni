@@ -52,10 +52,12 @@ import { KardexRegularizationService } from './services/kardex-regularization.se
 import { RegularizationController } from './controllers/regularization.controller';
 import { InventoryReportsService } from './services/inventory-reports.service';
 import { InventoryReportsController } from './controllers/inventory-reports.controller';
+import { AuditModule } from '../audit/audit.module';
 
 @Module({
   imports: [
     IdentityModule,
+    AuditModule,
     TypeOrmModule.forFeature([
       Insumo,
       Product,

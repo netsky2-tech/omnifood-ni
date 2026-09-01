@@ -9,6 +9,8 @@ import { CatalogValue } from './entities/catalog-value.entity';
 import { CatalogType, isCatalogType } from './catalog-type';
 import { CreateCatalogValueDto } from './dto/create-catalog-value.dto';
 import { UpdateCatalogValueDto } from './dto/update-catalog-value.dto';
+import { ChangeLogService } from '../audit/change-log.service';
+import type { AuditUser } from '../inventory/product.service';
 
 /**
  * Default seed values per catalog type. These initialize a tenant's master data
@@ -69,7 +71,10 @@ export const DEFAULT_CATALOG_SEED: Readonly<
 
 @Injectable()
 export class CatalogService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly changeLogService: ChangeLogService,
+  ) {}
 
   private requireTenant(tenantId: string): string {
     const normalized = tenantId.trim();
@@ -133,8 +138,9 @@ export class CatalogService {
     type: CatalogType,
     tenantId: string,
     dto: CreateCatalogValueDto,
+    user?: AuditUser,
   ): Promise<CatalogValue> {
-    return this.withTenantContext(tenantId, async (repo) => {
+    const result = await this.withTenantContext(tenantId, async (repo) => {
       const normalizedTenantId = this.requireTenant(tenantId);
       const code = dto.code.trim();
       const existing = await repo.findOne({
@@ -156,6 +162,20 @@ export class CatalogService {
       });
       return repo.save(row);
     });
+
+    if (user) {
+      await this.changeLogService.log({
+        tenantId,
+        userId: user.userId,
+        userEmail: user.userEmail,
+        action: 'CREATE',
+        targetType: 'catalog_value',
+        targetId: result.id,
+        changes: { catalog_type: type, code: result.code, name: result.name },
+      });
+    }
+
+    return result;
   }
 
   async update(
@@ -163,8 +183,9 @@ export class CatalogService {
     id: string,
     tenantId: string,
     dto: UpdateCatalogValueDto,
+    user?: AuditUser,
   ): Promise<CatalogValue> {
-    return this.withTenantContext(tenantId, async (repo) => {
+    const result = await this.withTenantContext(tenantId, async (repo) => {
       const row = await repo.findOne({
         where: {
           id,
@@ -178,12 +199,27 @@ export class CatalogService {
         );
       }
 
-      if (dto.name !== undefined) row.name = dto.name.trim();
-      if (dto.is_active !== undefined) row.is_active = dto.is_active;
-      if (dto.sort_order !== undefined) row.sort_order = dto.sort_order;
+      const changes: Record<string, unknown> = {};
+      if (dto.name !== undefined) { changes.name = { from: row.name, to: dto.name.trim() }; row.name = dto.name.trim(); }
+      if (dto.is_active !== undefined) { changes.is_active = { from: row.is_active, to: dto.is_active }; row.is_active = dto.is_active; }
+      if (dto.sort_order !== undefined) { changes.sort_order = { from: row.sort_order, to: dto.sort_order }; row.sort_order = dto.sort_order; }
 
-      return repo.save(row);
+      return { saved: await repo.save(row), changes };
     });
+
+    if (user && Object.keys(result.changes).length > 0) {
+      await this.changeLogService.log({
+        tenantId,
+        userId: user.userId,
+        userEmail: user.userEmail,
+        action: 'UPDATE',
+        targetType: 'catalog_value',
+        targetId: id,
+        changes: result.changes,
+      });
+    }
+
+    return result.saved;
   }
 
   /**
@@ -193,6 +229,7 @@ export class CatalogService {
     type: CatalogType,
     id: string,
     tenantId: string,
+    user?: AuditUser,
   ): Promise<void> {
     await this.withTenantContext(tenantId, async (repo) => {
       const row = await repo.findOne({
@@ -210,6 +247,17 @@ export class CatalogService {
       row.is_active = false;
       await repo.save(row);
     });
+
+    if (user) {
+      await this.changeLogService.log({
+        tenantId,
+        userId: user.userId,
+        userEmail: user.userEmail,
+        action: 'DEACTIVATE',
+        targetType: 'catalog_value',
+        targetId: id,
+      });
+    }
   }
 
   /**

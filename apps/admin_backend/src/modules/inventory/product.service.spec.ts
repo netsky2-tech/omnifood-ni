@@ -3,6 +3,7 @@ import { DataSource, Repository } from 'typeorm';
 import { ProductService } from './product.service';
 import { Product, ProductType } from './entities/product.entity';
 import { NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { ChangeLogService } from '../audit/change-log.service';
 
 describe('ProductService', () => {
   let service: ProductService;
@@ -55,6 +56,7 @@ describe('ProductService', () => {
       providers: [
         ProductService,
         { provide: DataSource, useFactory: mockDataSource },
+        { provide: ChangeLogService, useValue: { log: jest.fn(), findByTarget: jest.fn(), findByTenant: jest.fn() } },
       ],
     }).compile();
 
@@ -435,7 +437,7 @@ describe('ProductService', () => {
       } as unknown as DataSource;
 
       const module = await Test.createTestingModule({
-        providers: [ProductService, { provide: DataSource, useValue: ds }],
+        providers: [ProductService, { provide: DataSource, useValue: ds }, { provide: ChangeLogService, useValue: { log: jest.fn() } }],
       }).compile();
 
       const svc = module.get(ProductService);
@@ -465,7 +467,7 @@ describe('ProductService', () => {
       } as unknown as DataSource;
 
       const module = await Test.createTestingModule({
-        providers: [ProductService, { provide: DataSource, useValue: ds }],
+        providers: [ProductService, { provide: DataSource, useValue: ds }, { provide: ChangeLogService, useValue: { log: jest.fn() } }],
       }).compile();
 
       const svc = module.get(ProductService);
@@ -499,7 +501,7 @@ describe('ProductService', () => {
       } as unknown as DataSource;
 
       const module = await Test.createTestingModule({
-        providers: [ProductService, { provide: DataSource, useValue: ds }],
+        providers: [ProductService, { provide: DataSource, useValue: ds }, { provide: ChangeLogService, useValue: { log: jest.fn() } }],
       }).compile();
 
       const svc = module.get(ProductService);

@@ -8,10 +8,19 @@ import { DataSource, Repository } from 'typeorm';
 import { Product, ProductType } from './entities/product.entity';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { ChangeLogService } from '../audit/change-log.service';
+
+export interface AuditUser {
+  userId: string;
+  userEmail?: string;
+}
 
 @Injectable()
 export class ProductService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly changeLogService: ChangeLogService,
+  ) {}
 
   private requireTenant(tenantId: string): string {
     const normalized = tenantId.trim();
@@ -89,8 +98,9 @@ export class ProductService {
   async create(
     tenantId: string,
     dto: CreateProductDto,
+    user?: AuditUser,
   ): Promise<Product> {
-    return this.withTenantContext(tenantId, async (repo) => {
+    const result = await this.withTenantContext(tenantId, async (repo) => {
       const normalizedTenantId = this.requireTenant(tenantId);
 
       const row = repo.create({
@@ -108,14 +118,29 @@ export class ProductService {
       });
       return repo.save(row);
     });
+
+    if (user) {
+      await this.changeLogService.log({
+        tenantId,
+        userId: user.userId,
+        userEmail: user.userEmail,
+        action: 'CREATE',
+        targetType: 'product',
+        targetId: result.id,
+        changes: { name: result.name, product_type: result.product_type },
+      });
+    }
+
+    return result;
   }
 
   async update(
     id: string,
     tenantId: string,
     dto: UpdateProductDto,
+    user?: AuditUser,
   ): Promise<Product> {
-    return this.withTenantContext(tenantId, async (repo) => {
+    const result = await this.withTenantContext(tenantId, async (repo) => {
       const row = await repo.findOne({
         where: {
           id,
@@ -126,23 +151,38 @@ export class ProductService {
         throw new NotFoundException(`Product ${id} not found`);
       }
 
-      if (dto.name !== undefined) row.name = dto.name.trim();
-      if (dto.uom !== undefined) row.uom = dto.uom.trim();
-      if (dto.product_type !== undefined) row.product_type = dto.product_type;
-      if (dto.category_code !== undefined) row.category_code = dto.category_code?.trim() ?? null;
-      if (dto.warehouse_id !== undefined) row.warehouse_id = dto.warehouse_id?.trim() ?? null;
-      if (dto.is_perishable !== undefined) row.is_perishable = dto.is_perishable;
-      if (dto.sellPrice !== undefined) row.sellPrice = dto.sellPrice;
-      if (dto.is_active !== undefined) row.is_active = dto.is_active;
+      const changes: Record<string, unknown> = {};
+      if (dto.name !== undefined) { changes.name = { from: row.name, to: dto.name.trim() }; row.name = dto.name.trim(); }
+      if (dto.uom !== undefined) { changes.uom = { from: row.uom, to: dto.uom.trim() }; row.uom = dto.uom.trim(); }
+      if (dto.product_type !== undefined) { changes.product_type = { from: row.product_type, to: dto.product_type }; row.product_type = dto.product_type; }
+      if (dto.category_code !== undefined) { changes.category_code = { from: row.category_code, to: dto.category_code?.trim() ?? null }; row.category_code = dto.category_code?.trim() ?? null; }
+      if (dto.warehouse_id !== undefined) { changes.warehouse_id = { from: row.warehouse_id, to: dto.warehouse_id?.trim() ?? null }; row.warehouse_id = dto.warehouse_id?.trim() ?? null; }
+      if (dto.is_perishable !== undefined) { changes.is_perishable = { from: row.is_perishable, to: dto.is_perishable }; row.is_perishable = dto.is_perishable; }
+      if (dto.sellPrice !== undefined) { changes.sellPrice = { from: row.sellPrice, to: dto.sellPrice }; row.sellPrice = dto.sellPrice; }
+      if (dto.is_active !== undefined) { changes.is_active = { from: row.is_active, to: dto.is_active }; row.is_active = dto.is_active; }
 
-      return repo.save(row);
+      return { saved: await repo.save(row), changes };
     });
+
+    if (user && Object.keys(result.changes).length > 0) {
+      await this.changeLogService.log({
+        tenantId,
+        userId: user.userId,
+        userEmail: user.userEmail,
+        action: 'UPDATE',
+        targetType: 'product',
+        targetId: id,
+        changes: result.changes,
+      });
+    }
+
+    return result.saved;
   }
 
   /**
    * Soft-deactivate (never hard-delete) to preserve historical references.
    */
-  async deactivate(id: string, tenantId: string): Promise<void> {
+  async deactivate(id: string, tenantId: string, user?: AuditUser): Promise<void> {
     await this.withTenantContext(tenantId, async (repo) => {
       const row = await repo.findOne({
         where: {
@@ -156,5 +196,16 @@ export class ProductService {
       row.is_active = false;
       await repo.save(row);
     });
+
+    if (user) {
+      await this.changeLogService.log({
+        tenantId,
+        userId: user.userId,
+        userEmail: user.userEmail,
+        action: 'DEACTIVATE',
+        targetType: 'product',
+        targetId: id,
+      });
+    }
   }
 }

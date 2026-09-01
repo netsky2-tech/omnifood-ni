@@ -12,6 +12,8 @@ import { OnboardingModule } from '../../modules/onboarding/onboarding.module';
 import { CustomersModule } from '../../modules/customers/customers.module';
 import { Customer } from '../../modules/customers/entities/customer.entity';
 import { CustomerPointTransaction } from '../../modules/customers/entities/customer-point-transaction.entity';
+import { AuditModule } from '../../modules/audit/audit.module';
+import { ChangeLog } from '../../modules/audit/entities/change-log.entity';
 import { PromotionsModule } from '../../modules/promotions/promotions.module';
 import { Promotion as CloudPromotion } from '../../modules/promotions/entities/promotion.entity';
 import { EventEmitterModule } from '@nestjs/event-emitter';
@@ -119,6 +121,7 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
     Customer,
     CloudPromotion,
     CustomerPointTransaction,
+    ChangeLog,
   ],
   synchronize: false,
 });
@@ -144,6 +147,7 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
     OnboardingModule,
     CustomersModule,
     PromotionsModule,
+    AuditModule,
   ],
   controllers: [AppController],
   providers: [AppService],

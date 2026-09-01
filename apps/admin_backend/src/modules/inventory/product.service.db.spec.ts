@@ -3,6 +3,7 @@ import { DataSource } from 'typeorm';
 import { Tenant } from '../tenant/entities/tenant.entity';
 import { Product, ProductType } from './entities/product.entity';
 import { ProductService } from './product.service';
+import { ChangeLogService } from '../audit/change-log.service';
 import { NotFoundException, UnauthorizedException } from '@nestjs/common';
 
 function getRequiredEnv(name: string): string {
@@ -70,7 +71,7 @@ async function seedTenant(dataSource: DataSource, tenantId: string, name: string
 }
 
 function createService(dataSource: DataSource): ProductService {
-  return new ProductService(dataSource);
+  return new ProductService(dataSource, { log: jest.fn() } as unknown as ChangeLogService);
 }
 
 describe('ProductService — real PostgreSQL', () => {

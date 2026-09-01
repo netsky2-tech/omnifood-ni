@@ -16,6 +16,7 @@ import { ProductType } from './entities/product.entity';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { GetTenantId } from '../../core/decorators/tenant.decorator';
+import { CurrentUser, CurrentUserPayload } from '../../core/decorators/current-user.decorator';
 import { TenantInterceptor } from '../../core/database/rls.interceptor';
 import { AuthGuard } from '../identity/guards/auth.guard';
 import { AuthoritativeCurrentUserGuard } from '../identity/guards/authoritative-current-user.guard';
@@ -81,8 +82,13 @@ export class ProductController {
   async create(
     @Body() dto: CreateProductDto,
     @GetTenantId() tenantId?: string,
+    @CurrentUser() user?: CurrentUserPayload,
   ) {
-    return this.productService.create(this.requireTenant(tenantId), dto);
+    return this.productService.create(
+      this.requireTenant(tenantId),
+      dto,
+      user ? { userId: user.sub, userEmail: user.email } : undefined,
+    );
   }
 
   @Patch(':id')
@@ -92,11 +98,13 @@ export class ProductController {
     @Param('id') id: string,
     @Body() dto: UpdateProductDto,
     @GetTenantId() tenantId?: string,
+    @CurrentUser() user?: CurrentUserPayload,
   ) {
     return this.productService.update(
       id,
       this.requireTenant(tenantId),
       dto,
+      user ? { userId: user.sub, userEmail: user.email } : undefined,
     );
   }
 
@@ -106,8 +114,13 @@ export class ProductController {
   async deactivate(
     @Param('id') id: string,
     @GetTenantId() tenantId?: string,
+    @CurrentUser() user?: CurrentUserPayload,
   ) {
-    await this.productService.deactivate(id, this.requireTenant(tenantId));
+    await this.productService.deactivate(
+      id,
+      this.requireTenant(tenantId),
+      user ? { userId: user.sub, userEmail: user.email } : undefined,
+    );
     return { id, deactivated: true };
   }
 }
