@@ -28,6 +28,8 @@ import { ShrinkageService } from './shrinkage.service';
 import { CostCalculatorService } from './cost-calculator.service';
 import { InventoryMovementController } from './inventory-movement.controller';
 import { InventoryMovementService } from './inventory-movement.service';
+import { ProductService } from './product.service';
+import { ProductController } from './product.controller';
 import {
   FX_RATE_RESOLVER,
   InventoryPurchaseService,
@@ -83,6 +85,7 @@ import { InventoryReportsController } from './controllers/inventory-reports.cont
     InventoryMovementController,
     RegularizationController,
     InventoryReportsController,
+    ProductController,
   ],
   providers: [
     InventoryService,
@@ -103,6 +106,7 @@ import { InventoryReportsController } from './controllers/inventory-reports.cont
     InventoryReportsService,
     UomConversionCalculator,
     FxRateResolverService,
+    ProductService,
     {
       provide: FORENSIC_ALERT_DISPATCHER,
       useValue: {
@@ -132,6 +136,7 @@ import { InventoryReportsController } from './controllers/inventory-reports.cont
     GovernanceApprovalService,
     KardexRegularizationService,
     UomConversionCalculator,
+    ProductService,
   ],
 })
 export class InventoryModule {}

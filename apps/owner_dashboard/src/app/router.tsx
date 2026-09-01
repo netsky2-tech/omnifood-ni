@@ -22,6 +22,9 @@ const FiscalPage = lazy(() =>
 const CatalogPage = lazy(() =>
   import("@/features/catalog/catalog-page").then((m) => ({ default: m.CatalogPage })),
 );
+const ProductPage = lazy(() =>
+  import("@/features/catalog/product-page").then((m) => ({ default: m.ProductPage })),
+);
 const PromotionsPage = lazy(() =>
   import("@/features/promotions/promotions-page").then((m) => ({ default: m.PromotionsPage })),
 );
@@ -88,6 +91,14 @@ export const router = createBrowserRouter([
         element: (
           <SuspenseWrapper>
             <CatalogPage />
+          </SuspenseWrapper>
+        ),
+      },
+      {
+        path: "products",
+        element: (
+          <SuspenseWrapper>
+            <ProductPage />
           </SuspenseWrapper>
         ),
       },

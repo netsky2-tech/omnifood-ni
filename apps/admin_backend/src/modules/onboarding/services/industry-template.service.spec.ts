@@ -394,6 +394,8 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
         warehouse_id: 'wh-1',
         name: 'Capuchino 8oz',
         uom: 'UN',
+        product_type: 'SIMPLE' as never,
+        category_code: null,
         sellPrice: 95.0,
         averageCost: 15.0,
         stock: 0,

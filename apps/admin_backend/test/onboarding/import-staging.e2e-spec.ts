@@ -444,6 +444,8 @@ describe('ImportStaging (Integration & E2E)', () => {
       warehouse_id: 'wh-1',
       name: 'Toña 350ml',
       uom: 'UN',
+      product_type: 'SIMPLE' as never,
+      category_code: null,
       sellPrice: 50,
       averageCost: 30,
       stock: 10,

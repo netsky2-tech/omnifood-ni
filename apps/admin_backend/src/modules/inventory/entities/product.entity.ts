@@ -9,6 +9,12 @@ import {
 } from 'typeorm';
 import { Tenant } from '../../tenant/entities/tenant.entity';
 
+export enum ProductType {
+  SIMPLE = 'SIMPLE',
+  COMPOUND = 'COMPOUND',
+  VARIANT_PARENT = 'VARIANT_PARENT',
+}
+
 @Entity('products')
 export class Product {
   @PrimaryGeneratedColumn('uuid')
@@ -32,6 +38,16 @@ export class Product {
 
   @Column()
   uom: string;
+
+  @Column({
+    type: 'enum',
+    enum: ProductType,
+    default: ProductType.SIMPLE,
+  })
+  product_type: ProductType;
+
+  @Column({ nullable: true })
+  category_code: string;
 
   @Column('decimal', { precision: 12, scale: 4, default: 0 })
   stock: number;
