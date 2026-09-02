@@ -152,7 +152,7 @@ describe("W4 API Layer — fiscal-api.ts", () => {
     it("sends Bearer token in request", async () => {
       mockFetchSuccess({ year: 2026, month: 9 });
       await fetchMonthlyFiscalSummary();
-      const [, options] = fetchSpy.mock.calls[0];
+      const [, options] = fetchSpy.mock.calls[0] ?? [];
       expect(options.headers.Authorization).toBe("Bearer test-access-token");
     });
   });

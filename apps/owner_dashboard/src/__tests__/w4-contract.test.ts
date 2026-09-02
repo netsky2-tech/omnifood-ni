@@ -133,8 +133,8 @@ describe("W4 Contract — Frontend types match backend DTOs", () => {
   for (const [dtoName, dtoSpec] of Object.entries(dtos)) {
     const feName = DTO_TO_FRONTEND[dtoName] ?? dtoName;
     describe(dtoName, () => {
-      const frontendFields = FRONTEND_FIELDS[feName];
-      const frontendTypes = TYPE_MAP[feName];
+      const frontendFields = FRONTEND_FIELDS[feName] ?? [];
+      const frontendTypes = TYPE_MAP[feName] ?? {};
 
       it("has all required fields from backend DTO", () => {
         for (const fieldName of Object.keys(dtoSpec.fields)) {
@@ -155,11 +155,12 @@ describe("W4 Contract — Frontend types match backend DTOs", () => {
       });
 
       for (const [fieldName, spec] of Object.entries(dtoSpec.fields)) {
-        if (frontendTypes?.[fieldName]) {
+        const frontendType = frontendTypes?.[fieldName];
+        if (frontendType) {
           it(`${fieldName} type compatibility`, () => {
             expect(
-              isTypeCompatible(spec.type, frontendTypes[fieldName]),
-              `${dtoName}.${fieldName}: backend "${spec.type}" not compatible with frontend "${frontendTypes[fieldName]}"`,
+              isTypeCompatible(spec.type, frontendType),
+              `${dtoName}.${fieldName}: backend "${spec.type}" not compatible with frontend "${frontendType}"`,
             ).toBe(true);
           });
         }

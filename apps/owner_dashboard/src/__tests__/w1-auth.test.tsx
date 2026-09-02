@@ -316,12 +316,12 @@ describe("W1 — useLogin hook", () => {
     const { result } = renderHook(() => useLogin(), { wrapper: TestWrapper });
 
     await act(async () => {
-      await result.current.mutateAsync({ email: "a@b.com", pass: "123456" });
+      await result.current.mutateAsync({ email: "a@b.com", password: "123456" });
     });
 
     expect(vi.mocked(apiModule.api.post)).toHaveBeenCalledWith("/identity/login", {
       email: "a@b.com",
-      pass: "123456",
+      password: "123456",
     });
     expect(vi.mocked(apiModule.setTokens)).toHaveBeenCalledWith({
       accessToken: "new-at",

@@ -3,7 +3,7 @@ const API_BASE = "/api";
 const STORAGE_KEY_ACCESS = "oc_access_token";
 const STORAGE_KEY_REFRESH = "oc_refresh_token";
 
-interface TokenPair {
+export interface TokenPair {
   accessToken: string;
   refreshToken: string;
 }
@@ -136,3 +136,7 @@ export const api = {
     apiFetch<T>(path, { method: "PATCH", body }),
   delete: <T>(path: string) => apiFetch<T>(path, { method: "DELETE" }),
 };
+
+export function isAuthenticated(): boolean {
+  return accessToken !== null;
+}

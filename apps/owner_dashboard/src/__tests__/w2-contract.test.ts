@@ -239,9 +239,9 @@ describe("W2 Contract — API functions handle backend response shapes", () => {
     expect(typeof result.totalSales).toBe("number");
     expect(Array.isArray(result.hourly)).toBe(true);
     expect(result.hourly.length).toBe(2);
-    expect(typeof result.hourly[0].hour).toBe("number");
-    expect(typeof result.hourly[0].invoiceCount).toBe("number");
-    expect(typeof result.hourly[0].totalSales).toBe("number");
+    expect(typeof result.hourly[0]?.hour).toBe("number");
+    expect(typeof result.hourly[0]?.invoiceCount).toBe("number");
+    expect(typeof result.hourly[0]?.totalSales).toBe("number");
   });
 
   it("fetchTopProducts returns typed response with products array", async () => {
@@ -256,10 +256,10 @@ describe("W2 Contract — API functions handle backend response shapes", () => {
     const result = await fetchTopProducts();
 
     expect(Array.isArray(result.products)).toBe(true);
-    expect(typeof result.products[0].productId).toBe("string");
-    expect(typeof result.products[0].productName).toBe("string");
-    expect(typeof result.products[0].totalQuantity).toBe("number");
-    expect(typeof result.products[0].totalRevenue).toBe("number");
+    expect(typeof result.products[0]?.productId).toBe("string");
+    expect(typeof result.products[0]?.productName).toBe("string");
+    expect(typeof result.products[0]?.totalQuantity).toBe("number");
+    expect(typeof result.products[0]?.totalRevenue).toBe("number");
   });
 
   it("fetchCashierPerformance returns typed response with cashiers array", async () => {
@@ -274,11 +274,12 @@ describe("W2 Contract — API functions handle backend response shapes", () => {
     const result = await fetchCashierPerformance();
 
     expect(Array.isArray(result.cashiers)).toBe(true);
-    expect(typeof result.cashiers[0].userId).toBe("string");
-    expect(typeof result.cashiers[0].cashierName).toBe("string");
-    expect(typeof result.cashiers[0].invoiceCount).toBe("number");
-    expect(typeof result.cashiers[0].totalSales).toBe("number");
-    expect(typeof result.cashiers[0].ticketAverage).toBe("number");
+    expect(result.cashiers.length).toBeGreaterThan(0);
+    expect(typeof result.cashiers[0]?.userId).toBe("string");
+    expect(typeof result.cashiers[0]?.cashierName).toBe("string");
+    expect(typeof result.cashiers[0]?.invoiceCount).toBe("number");
+    expect(typeof result.cashiers[0]?.totalSales).toBe("number");
+    expect(typeof result.cashiers[0]?.ticketAverage).toBe("number");
   });
 });
 

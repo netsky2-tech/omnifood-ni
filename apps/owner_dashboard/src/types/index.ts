@@ -25,7 +25,7 @@ export interface AuthState {
 
 export interface LoginRequest {
   email: string;
-  pass: string;
+  password: string;
   tenantSlug?: string;
 }
 

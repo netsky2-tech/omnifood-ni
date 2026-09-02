@@ -123,15 +123,19 @@ interface BackendInventoryAlertsSummaryDto {
 }
 
 // Type-level assignment compatibility checks (compile-time, not runtime)
+// @ts-expect-error - intentionally unused compile-time type assertion
 function _assertValuationReportAssignable(): BackendInventoryValuationReportDto {
   return {} as ValuationReport;
 }
+// @ts-expect-error - intentionally unused compile-time type assertion
 function _assertCogsReportAssignable(): BackendCogsReportDto {
   return {} as CogsReport;
 }
+// @ts-expect-error - intentionally unused compile-time type assertion
 function _assertKardexReportAssignable(): BackendKardexReportDto {
   return {} as KardexReport;
 }
+// @ts-expect-error - intentionally unused compile-time type assertion
 function _assertAlertsSummaryAssignable(): BackendInventoryAlertsSummaryDto {
   return {} as AlertsSummary;
 }
@@ -334,7 +338,7 @@ describe("W3 — API layer: query param construction", () => {
       limit: 50,
       offset: 0,
     });
-    const url = apiGet.mock.calls[0][0] as string;
+    const url = apiGet.mock.calls[0]?.[0] as string;
     expect(url).toContain("from=2026-08-01");
     expect(url).toContain("to=2026-08-31");
     expect(url).toContain("type=SALE");
@@ -345,7 +349,7 @@ describe("W3 — API layer: query param construction", () => {
   it("fetchKardex omits undefined params", async () => {
     const { fetchKardex } = await import("@/features/inventory/inventory-api");
     await fetchKardex({ insumoId: "i1" });
-    const url = apiGet.mock.calls[0][0] as string;
+    const url = apiGet.mock.calls[0]?.[0] as string;
     expect(url).toContain("insumoId=i1");
     expect(url).not.toContain("from=");
     expect(url).not.toContain("type=");
@@ -459,6 +463,7 @@ describe("W3 — Valuation computed logic matches backend service", () => {
   function computeValuation(items: { stock: number; averageCostNio: number }[]) {
     let totalValuationNio = 0;
     let itemsWithStockCount = 0;
+    // @ts-expect-error - intentionally unused variable for future low-stock logic
     let itemsLowStockCount = 0;
     let itemsNegativeStockCount = 0;
 

@@ -6,7 +6,6 @@ import { CatalogPage } from "@/features/catalog/catalog-page";
 import {
   useCatalogValues,
   useCreateCatalogValue,
-  useUpdateCatalogValue,
   useDeactivateCatalogValue,
 } from "@/features/catalog/use-catalog";
 import type { CatalogValue } from "@/features/catalog/types";

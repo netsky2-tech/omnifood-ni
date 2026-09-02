@@ -344,7 +344,21 @@ describe("W4 — FiscalPage error states", () => {
 
 describe("W4 — FiscalPage empty data edge cases", () => {
   beforeEach(() => {
+    const baseQueryResult = {
+      isLoading: false,
+      isError: false,
+      isSuccess: true,
+      error: null,
+      isPending: false,
+      isLoadingError: false,
+      isFetching: false,
+      refetch: vi.fn(),
+      fetchStatus: "idle",
+      status: "success",
+    };
+
     vi.mocked(useMonthlyFiscalSummary).mockReturnValue({
+      ...baseQueryResult,
       data: {
         year: 2026, month: 9,
         totalGrossSales: 0, totalTaxableSales: 0, totalExemptSales: 0,
@@ -353,17 +367,19 @@ describe("W4 — FiscalPage empty data edge cases", () => {
         invoiceCount: 0, creditNoteCount: 0,
         generatedAt: "2026-09-01T00:00:00Z",
       },
-      isLoading: false, error: null,
-    } as ReturnType<typeof useMonthlyFiscalSummary>);
+      error: null,
+    } as any);
     vi.mocked(useVoidedInvoices).mockReturnValue({
+      ...baseQueryResult,
       data: {
         totalVoidedCount: 0, totalVoidedAmount: 0,
         generatedAt: "2026-09-01T00:00:00Z",
         invoices: [],
       },
-      isLoading: false, error: null,
-    } as ReturnType<typeof useVoidedInvoices>);
+      error: null,
+    } as any);
     vi.mocked(useSequenceAudit).mockReturnValue({
+      ...baseQueryResult,
       data: {
         startSequence: 1, endSequence: 5, expectedCount: 5, actualCount: 5,
         missingSequences: [], duplicateSequences: [], hasGaps: false,
@@ -376,22 +392,24 @@ describe("W4 — FiscalPage empty data edge cases", () => {
         ],
         generatedAt: "2026-09-01T00:00:00Z",
       },
-      isLoading: false, error: null,
-    } as ReturnType<typeof useSequenceAudit>);
+      error: null,
+    } as any);
     vi.mocked(useSalesBookExport).mockReturnValue({
+      ...baseQueryResult,
       data: {
         generatedAt: "2026-09-01T00:00:00Z",
         totalRecords: 0, totalGrossNio: 0, totalTaxNio: 0, totalExemptNio: 0,
         records: [],
       },
-      isLoading: false, error: null,
-    } as ReturnType<typeof useSalesBookExport>);
+      error: null,
+    } as any);
     vi.mocked(useZReportsExport).mockReturnValue({
+      ...baseQueryResult,
       data: {
         generatedAt: "2026-09-01T00:00:00Z", totalRecords: 0, records: [],
       },
-      isLoading: false, error: null,
-    } as ReturnType<typeof useZReportsExport>);
+      error: null,
+    } as any);
   });
 
   it("renders zero values in summary stats", () => {
@@ -437,13 +455,29 @@ describe("W4 — FiscalPage empty data edge cases", () => {
 
 describe("W4 — FiscalPage duplicate sequences", () => {
   beforeEach(() => {
+    const baseQueryResult = {
+      isLoading: false,
+      isError: false,
+      isSuccess: true,
+      error: null,
+      isPending: false,
+      isLoadingError: false,
+      isFetching: false,
+      refetch: vi.fn(),
+      fetchStatus: "idle",
+      status: "success",
+    };
+
     vi.mocked(useMonthlyFiscalSummary).mockReturnValue({
-      data: undefined, isLoading: false, error: null,
-    } as ReturnType<typeof useMonthlyFiscalSummary>);
+      ...baseQueryResult,
+      data: undefined,
+    } as any);
     vi.mocked(useVoidedInvoices).mockReturnValue({
-      data: undefined, isLoading: false, error: null,
-    } as ReturnType<typeof useVoidedInvoices>);
+      ...baseQueryResult,
+      data: undefined,
+    } as any);
     vi.mocked(useSequenceAudit).mockReturnValue({
+      ...baseQueryResult,
       data: {
         startSequence: 1, endSequence: 10, expectedCount: 10, actualCount: 12,
         missingSequences: [], duplicateSequences: [5, 10], hasGaps: false,
@@ -456,14 +490,15 @@ describe("W4 — FiscalPage duplicate sequences", () => {
         ],
         generatedAt: "2026-09-01T00:00:00Z",
       },
-      isLoading: false, error: null,
-    } as ReturnType<typeof useSequenceAudit>);
+    } as any);
     vi.mocked(useSalesBookExport).mockReturnValue({
-      data: undefined, isLoading: false, error: null,
-    } as ReturnType<typeof useSalesBookExport>);
+      ...baseQueryResult,
+      data: undefined,
+    } as any);
     vi.mocked(useZReportsExport).mockReturnValue({
-      data: undefined, isLoading: false, error: null,
-    } as ReturnType<typeof useZReportsExport>);
+      ...baseQueryResult,
+      data: undefined,
+    } as any);
   });
 
   it("shows duplicate sequences warning", async () => {
