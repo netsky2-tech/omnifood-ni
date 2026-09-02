@@ -1,0 +1,61 @@
+producto_nombre,insumo_o_subreceta,tipo,cantidad_bruta,merma_tecnica_pct,unidad_componente
+Espresso Sencillo,Café Grano Arábica,insumo,18,5,g
+Espresso Sencillo,Agua Purificada,insumo,30,0,ml
+Espresso Doble,Café Grano Arábica,insumo,36,5,g
+Espresso Doble,Agua Purificada,insumo,60,0,ml
+Americano 12oz,Café Grano Arábica,insumo,18,5,g
+Americano 12oz,Agua Purificada,insumo,180,0,ml
+Americano 16oz,Café Grano Arábica,insumo,36,5,g
+Americano 16oz,Agua Purificada,insumo,240,0,ml
+Cappuccino 12oz,Café Grano Arábica,insumo,18,5,g
+Cappuccino 12oz,Leche Entera,insumo,120,0,ml
+Cappuccino 16oz,Café Grano Arábica,insumo,36,5,g
+Cappuccino 16oz,Leche Entera,insumo,180,0,ml
+Latte 12oz,Café Grano Arábica,insumo,18,5,g
+Latte 12oz,Leche Entera,insumo,200,0,ml
+Latte 16oz,Café Grano Arábica,insumo,36,5,g
+Latte 16oz,Leche Entera,insumo,300,0,ml
+Flat White 12oz,Café Grano Arábica,insumo,36,5,g
+Flat White 12oz,Leche Entera,insumo,120,0,ml
+Latte Vainilla 12oz,Café Grano Arábica,insumo,18,5,g
+Latte Vainilla 12oz,Leche Entera,insumo,200,0,ml
+Latte Vainilla 12oz,Jarabe Vainilla Casa,subreceta,15,0,ml
+Latte Vainilla 16oz,Café Grano Arábica,insumo,36,5,g
+Latte Vainilla 16oz,Leche Entera,insumo,300,0,ml
+Latte Vainilla 16oz,Jarabe Vainilla Casa,subreceta,20,0,ml
+Latte Caramelo 12oz,Café Grano Arábica,insumo,18,5,g
+Latte Caramelo 12oz,Leche Entera,insumo,200,0,ml
+Latte Caramelo 12oz,Jarabe Caramelo Casa,subreceta,15,0,ml
+Latte Caramelo 16oz,Café Grano Arábica,insumo,36,5,g
+Latte Caramelo 16oz,Leche Entera,insumo,300,0,ml
+Latte Caramelo 16oz,Jarabe Caramelo Casa,subreceta,20,0,ml
+Latte Avellana 12oz,Café Grano Arábica,insumo,18,5,g
+Latte Avellana 12oz,Leche Entera,insumo,200,0,ml
+Latte Avellana 12oz,Jarabe Avellana Casa,subreceta,15,0,ml
+Latte Avellana 16oz,Café Grano Arábica,insumo,36,5,g
+Latte Avellana 16oz,Leche Entera,insumo,300,0,ml
+Latte Avellana 16oz,Jarabe Avellana Casa,subreceta,20,0,ml
+Mocha 12oz,Café Grano Arábica,insumo,18,5,g
+Mocha 12oz,Leche Entera,insumo,180,0,ml
+Mocha 12oz,Cacao en Polvo,insumo,15,0,g
+Mocha 12oz,Azúcar Refinada,insumo,10,0,g
+Mocha 16oz,Café Grano Arábica,insumo,36,5,g
+Mocha 16oz,Leche Entera,insumo,270,0,ml
+Mocha 16oz,Cacao en Polvo,insumo,20,0,g
+Mocha 16oz,Azúcar Refinada,insumo,15,0,g
+Cold Brew 12oz,Cold Brew Concentrate,subreceta,60,0,ml
+Cold Brew 12oz,Agua Purificada,insumo,120,0,ml
+Cold Brew 12oz,Hielo,insumo,100,0,g
+Cold Brew 16oz,Cold Brew Concentrate,subreceta,80,0,ml
+Cold Brew 16oz,Agua Purificada,insumo,160,0,ml
+Cold Brew 16oz,Hielo,insumo,150,0,g
+Té Chai Latte 12oz,Leche Entera,insumo,200,0,ml
+Té Chai Latte 12oz,Jarabe Chai Casa,subreceta,30,0,ml
+Té Chai Latte 16oz,Leche Entera,insumo,300,0,ml
+Té Chai Latte 16oz,Jarabe Chai Casa,subreceta,40,0,ml
+Chocolate Caliente 12oz,Leche Entera,insumo,200,0,ml
+Chocolate Caliente 12oz,Cacao en Polvo,insumo,20,0,g
+Chocolate Caliente 12oz,Azúcar Refinada,insumo,15,0,g
+Chocolate Caliente 16oz,Leche Entera,insumo,300,0,ml
+Chocolate Caliente 16oz,Cacao en Polvo,insumo,30,0,g
+Chocolate Caliente 16oz,Azúcar Refinada,insumo,20,0,g
