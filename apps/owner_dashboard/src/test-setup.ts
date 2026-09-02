@@ -27,3 +27,17 @@ Object.defineProperty(window, "matchMedia", {
     dispatchEvent: vi.fn(),
   })),
 });
+
+// Mock hasPointerCapture / setPointerCapture (used by Radix UI Select/Dialog in jsdom)
+if (!HTMLElement.prototype.hasPointerCapture) {
+  HTMLElement.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+}
+if (!HTMLElement.prototype.setPointerCapture) {
+  HTMLElement.prototype.setPointerCapture = vi.fn();
+}
+
+// Override pointer-events for Radix Select options in jsdom
+// Radix portals render with computed pointer-events:none that blocks userEvent.click
+const style = document.createElement('style');
+style.textContent = '[role="option"] { pointer-events: auto !important; }';
+document.head.appendChild(style);

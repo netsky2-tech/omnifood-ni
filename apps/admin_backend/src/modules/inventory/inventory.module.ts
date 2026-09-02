@@ -30,6 +30,8 @@ import { InventoryMovementController } from './inventory-movement.controller';
 import { InventoryMovementService } from './inventory-movement.service';
 import { ProductService } from './product.service';
 import { ProductController } from './product.controller';
+import { RecipeController } from './recipe.controller';
+import { InsumoController } from './insumo.controller';
 import {
   FX_RATE_RESOLVER,
   InventoryPurchaseService,
@@ -88,6 +90,8 @@ import { AuditModule } from '../audit/audit.module';
     RegularizationController,
     InventoryReportsController,
     ProductController,
+    RecipeController,
+    InsumoController,
   ],
   providers: [
     InventoryService,
