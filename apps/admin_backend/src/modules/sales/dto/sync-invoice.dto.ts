@@ -6,7 +6,6 @@ import {
   IsDateString,
   IsOptional,
   IsArray,
-  IsNotEmpty,
   ValidateNested,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
@@ -239,34 +238,46 @@ export class SyncInvoiceDto {
   @IsOptional()
   type?: string;
 
-  @Transform(({ value }) => (typeof value === 'string' && value.trim() === '' ? undefined : value))
+  @Transform(({ value }: { value: unknown }): unknown =>
+    typeof value === 'string' && value.trim() === '' ? undefined : value,
+  )
   @IsString()
   @IsOptional()
   relatedInvoiceId?: string;
 
-  @Transform(({ value }) => (typeof value === 'string' && value.trim() === '' ? undefined : value))
+  @Transform(({ value }: { value: unknown }): unknown =>
+    typeof value === 'string' && value.trim() === '' ? undefined : value,
+  )
   @IsString()
   @IsOptional()
   originInvoiceId?: string;
 
-  @Transform(({ value }) => (typeof value === 'string' && value.trim() === '' ? undefined : value))
+  @Transform(({ value }: { value: unknown }): unknown =>
+    typeof value === 'string' && value.trim() === '' ? undefined : value,
+  )
   @IsString()
   @IsOptional()
   // Audit label only. The allowed taxonomy is implementation-defined until the
   // refund reason policy is formalized in product requirements.
   refundReasonCode?: string;
 
-  @Transform(({ value }) => (typeof value === 'string' && value.trim() === '' ? undefined : value))
+  @Transform(({ value }: { value: unknown }): unknown =>
+    typeof value === 'string' && value.trim() === '' ? undefined : value,
+  )
   @IsEnum(REFUND_REASON_POLICY)
   @IsOptional()
   refundReasonPolicy?: RefundReasonPolicy;
 
-  @Transform(({ value }) => (typeof value === 'string' && value.trim() === '' ? undefined : value))
+  @Transform(({ value }: { value: unknown }): unknown =>
+    typeof value === 'string' && value.trim() === '' ? undefined : value,
+  )
   @IsString()
   @IsOptional()
   authorizedByUserId?: string;
 
-  @Transform(({ value }) => (typeof value === 'string' && value.trim() === '' ? undefined : value))
+  @Transform(({ value }: { value: unknown }): unknown =>
+    typeof value === 'string' && value.trim() === '' ? undefined : value,
+  )
   @IsEnum(CREDIT_NOTE_AUTH_ROLE)
   @IsOptional()
   // POS metadata is not trusted by itself; CREDIT_NOTE sync also requires an
