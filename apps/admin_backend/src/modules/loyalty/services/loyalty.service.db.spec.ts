@@ -419,6 +419,44 @@ describe('LoyaltyService (db)', () => {
       expect(rewards[0].name).toBe('First');
       expect(rewards[1].name).toBe('Second');
     });
+
+    it('does not allow creating reward under another tenant program', async () => {
+      const program = await harness.service.createProgram('tenant-1', {
+        name: 'Tenant 1 Program for Cross Test',
+        program_type: LoyaltyProgramType.SPEND_POINTS,
+        earning_rule: { spendBlockNio: 10, pointsPerBlock: 1 },
+        eligibility_rule: {},
+      });
+
+      await expect(
+        harness.service.createReward('tenant-2', program.id, {
+          name: 'Cross Tenant Reward',
+          reward_type: RewardType.DISCOUNT_AMOUNT,
+          cost_units: 10,
+          benefit_config: { amountNio: 5 },
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('does not leak rewards across tenants', async () => {
+      const program = await harness.service.createProgram('tenant-1', {
+        name: 'Tenant 1 Program for Leak Test',
+        program_type: LoyaltyProgramType.SPEND_POINTS,
+        earning_rule: { spendBlockNio: 10, pointsPerBlock: 1 },
+        eligibility_rule: {},
+      });
+
+      await harness.service.createReward('tenant-1', program.id, {
+        name: 'Tenant 1 Reward',
+        reward_type: RewardType.DISCOUNT_AMOUNT,
+        cost_units: 10,
+        benefit_config: { amountNio: 5 },
+      });
+
+      await expect(
+        harness.service.findRewardsByProgram('tenant-2', program.id),
+      ).rejects.toThrow();
+    });
   });
 
   describe('Program type immutability hint', () => {

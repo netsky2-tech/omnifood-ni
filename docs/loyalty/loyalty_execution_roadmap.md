@@ -291,16 +291,16 @@ Extender inbound sync para distribuir Program/Reward/config activos al POS. Si e
 
 ## Gate de salida
 
-- [ ] No existe una segunda tabla/ledger autoritativo de Loyalty.
-- [ ] Program/Reward son tenant-scoped y RLS/FKs rechazan referencias cross-tenant.
-- [ ] Todas las nuevas reglas son typed/versioned; no se ejecuta JSON arbitrario.
-- [ ] `Customer.points_balance` ya no es usado por código V1 como source of truth.
-- [ ] Projection reconstruida == `SUM(ledger)`.
-- [ ] Duplicate ledger insert no altera balance ni `projectionVersion`.
-- [ ] Historia legacy se conserva 1:1 y cualquier excepción queda documentada.
-- [ ] Filas legacy fraccionarias no se redondean.
-- [ ] Program/Reward config puede llegar al POS y sobrevivir restart.
-- [ ] Tests legacy que siguen siendo válidos permanecen verdes.
+- [x] No existe una segunda tabla/ledger autoritativo de Loyalty.
+- [x] Program/Reward son tenant-scoped y RLS/FKs rechazan referencias cross-tenant.
+- [x] Todas las nuevas reglas son typed/versioned; no se ejecuta JSON arbitrario.
+- [x] `Customer.points_balance` ya no es usado por código V1 como source of truth.
+- [x] Projection reconstruida == `SUM(ledger)`.
+- [x] Duplicate ledger insert no altera balance ni `projectionVersion`.
+- [x] Historia legacy se conserva 1:1 y cualquier excepción queda documentada.
+- [x] Filas legacy fraccionarias no se redondean.
+- [x] Program/Reward config puede llegar al POS y sobrevivir restart.
+- [x] Tests legacy que siguen siendo válidos permanecen verdes.
 
 ## Evidencia mínima
 
@@ -435,19 +435,19 @@ Requisitos:
 
 ## Gate de salida
 
-- [ ] Un Ticket retry no duplica EARN.
-- [ ] Un mismo Ticket puede generar EARN independientes en SPEND, PRODUCT y VISIT.
-- [ ] `SPEND_POINTS` usa NIO y `floor` exactamente una vez.
-- [ ] PRODUCT_STAMPS es quantity-aware y excluye reward lines.
-- [ ] PRODUCT_STAMPS nunca redondea cantidades fraccionarias.
-- [ ] VISIT_STAMPS genera máximo una visita lógica por Program/Ticket.
-- [ ] `startsAt` incluye; `endsAt` excluye usando `paidAt` UTC.
-- [ ] Program `INACTIVE` no genera EARN.
-- [ ] Payment failure no deja EARN.
-- [ ] Customer desactivado entre preview y PAID no genera EARN y no bloquea Sales.
-- [ ] EARN conserva `programVersion` + `commercialSnapshot`.
-- [ ] Sync duplicate produce ACK/no-op.
-- [ ] Evaluación local de un Ticket común cumple objetivo <100 ms en hardware fundador con config cargada.
+- [x] Un Ticket retry no duplica EARN.
+- [x] Un mismo Ticket puede generar EARN independientes en SPEND, PRODUCT y VISIT.
+- [x] `SPEND_POINTS` usa NIO y `floor` exactamente una vez.
+- [x] PRODUCT_STAMPS es quantity-aware y excluye reward lines.
+- [x] PRODUCT_STAMPS nunca redondea cantidades fraccionarias.
+- [x] VISIT_STAMPS genera máximo una visita lógica por Program/Ticket.
+- [x] `startsAt` incluye; `endsAt` excluye usando `paidAt` UTC.
+- [x] Program `INACTIVE` no genera EARN.
+- [x] Payment failure no deja EARN.
+- [x] Customer desactivado entre preview y PAID no genera EARN y no bloquea Sales.
+- [x] EARN conserva `programVersion` + `commercialSnapshot`.
+- [x] Sync duplicate produce ACK/no-op.
+- [x] Evaluación local de un Ticket común cumple objetivo <100 ms en hardware fundador con config cargada.
 
 ## Evidencia mínima
 
@@ -581,18 +581,18 @@ SALE_VOIDED
 
 ## Gate de salida
 
-- [ ] Preview/selección de Reward no consume saldo.
-- [ ] Pago fallido no deja REDEEM.
-- [ ] Como máximo existe un REDEEM por Ticket.
-- [ ] Reward expirada/inactiva no redime y no elimina saldo.
-- [ ] `LoyaltyProgram.endsAt` no bloquea REDEEM si el Program sigue ACTIVE.
-- [ ] `INACTIVE` sí bloquea REDEEM.
-- [ ] FREE_PRODUCT usa línea explícita Sales y Loyalty no genera Kardex.
-- [ ] Reward line no genera earning.
-- [ ] VOID genera reversals exactos de los movimientos del Ticket.
-- [ ] Reintentar VOID no duplica reversals.
-- [ ] REVERSAL puede dejar saldo negativo.
-- [ ] Historias antiguas conservan costo/beneficio vía snapshot aunque la Reward cambie después.
+- [x] Preview/selección de Reward no consume saldo.
+- [x] Pago fallido no deja REDEEM.
+- [x] Como máximo existe un REDEEM por Ticket.
+- [x] Reward expirada/inactiva no redime y no elimina saldo.
+- [x] `LoyaltyProgram.endsAt` no bloquea REDEEM si el Program sigue ACTIVE.
+- [x] `INACTIVE` sí bloquea REDEEM.
+- [x] FREE_PRODUCT usa línea explícita Sales y Loyalty no genera Kardex.
+- [x] Reward line no genera earning.
+- [x] VOID genera reversals exactos de los movimientos del Ticket.
+- [x] Reintentar VOID no duplica reversals.
+- [x] REVERSAL puede dejar saldo negativo.
+- [x] Historias antiguas conservan costo/beneficio vía snapshot aunque la Reward cambie después.
 
 ## Evidencia mínima
 
@@ -878,16 +878,16 @@ Checkout la evalúa localmente
 
 ## Gate de salida
 
-- [ ] Owner puede configurar los tres tipos de Program.
-- [ ] Owner puede crear y mantener Rewards V1.
-- [ ] Fixture “Smash Burger Club” se crea, activa y llega al POS.
-- [ ] Program DRAFT no aparece como ejecutable en POS.
-- [ ] Program/Reward changes incrementan configVersion.
-- [ ] Customer profile muestra progreso derivado y history program-scoped.
-- [ ] Adjustment positivo/negativo requiere actor + razón + permiso.
-- [ ] Cashier sin permiso recibe deny de backend aunque intente llamar la API directamente.
-- [ ] Todas las mutaciones críticas generan Audit Trail.
-- [ ] UI sigue `DESIGN_BACKOFFICE.md` y estados stale/errores no se confunden con datos autoritativos.
+- [x] Owner puede configurar los tres tipos de Program.
+- [x] Owner puede crear y mantener Rewards V1.
+- [x] Fixture “Smash Burger Club” se crea, activa y llega al POS.
+- [x] Program DRAFT no aparece como ejecutable en POS.
+- [x] Program/Reward changes incrementan configVersion.
+- [x] Customer profile muestra progreso derivado y history program-scoped.
+- [x] Adjustment positivo/negativo requiere actor + razón + permiso.
+- [x] Cashier sin permiso recibe deny de backend aunque intente llamar la API directamente.
+- [x] Todas las mutaciones críticas generan Audit Trail.
+- [x] UI sigue `DESIGN_BACKOFFICE.md` y estados stale/errores no se confunden con datos autoritativos.
 
 ## Evidencia mínima
 

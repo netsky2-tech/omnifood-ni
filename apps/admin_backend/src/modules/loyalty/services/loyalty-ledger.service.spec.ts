@@ -237,6 +237,31 @@ describe('LoyaltyLedgerService (db)', () => {
       expect(projection!.balance_units).toBe(23);
     });
 
+    it('duplicate insert does not alter balance or increment projection_version', async () => {
+      const before = await harness.projectionRepo.findOne({
+        where: { tenant_id: 'tenant-1', customer_id: customerId, loyalty_program_id: programId },
+      });
+      const dto: AppendLoyaltyTxDto = {
+        tenantId: 'tenant-1',
+        customerId,
+        loyaltyProgramId: programId,
+        ticketId: 'ticket-001',
+        transactionType: 'EARN',
+        units: 10,
+        idempotencyKey: 'loyalty:earn:tenant-1:ticket-001:' + programId,
+        origin: 'POS',
+        occurredAt: new Date(),
+      };
+      const duplicate = await harness.ledgerService.appendTransaction(dto);
+      expect(duplicate).toBeDefined();
+
+      const after = await harness.projectionRepo.findOne({
+        where: { tenant_id: 'tenant-1', customer_id: customerId, loyalty_program_id: programId },
+      });
+      expect(after!.balance_units).toBe(before!.balance_units);
+      expect(after!.projection_version).toBe(before!.projection_version);
+    });
+
     it('handles negative units for REVERSAL', async () => {
       await harness.ledgerService.appendTransaction({
         tenantId: 'tenant-1',

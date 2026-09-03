@@ -8,9 +8,12 @@ import * as request from 'supertest';
 import { App } from 'supertest/types';
 import { LoyaltyController } from '../../src/modules/loyalty/controllers/loyalty.controller';
 import { LoyaltyService } from '../../src/modules/loyalty/services/loyalty.service';
+import { TicketPaidHandler } from '../../src/modules/loyalty/services/ticket-paid.handler';
+import { LegacyClassificationService } from '../../src/modules/loyalty/services/legacy-classification.service';
 import { LoyaltyProgram, LoyaltyProgramStatus } from '../../src/modules/loyalty/entities/loyalty-program.entity';
 import { RewardDefinition } from '../../src/modules/loyalty/entities/reward-definition.entity';
 import { CustomerLoyaltyAccountProjection } from '../../src/modules/loyalty/entities/customer-loyalty-account-projection.entity';
+import { Customer } from '../../src/modules/customers/entities/customer.entity';
 import { UserRole } from '../../src/modules/identity/entities/user.entity';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
@@ -26,6 +29,18 @@ describe('Loyalty API (E2E / Integration)', () => {
   // In-memory stores
   let dbPrograms: LoyaltyProgram[] = [];
   let dbRewards: RewardDefinition[] = [];
+  let dbCustomers: Customer[] = [];
+
+  const customerRepo = {
+    findOne: jest.fn((opts?: { where?: Record<string, unknown> }) => {
+      const found = dbCustomers.find((c) =>
+        opts?.where
+          ? Object.entries(opts.where).every(([k, v]) => (c as any)[k] === v)
+          : true,
+      );
+      return Promise.resolve(found || null);
+    }),
+  };
 
   const programRepo = {
     find: jest.fn((opts?: { where?: Record<string, unknown> }) => {
@@ -147,6 +162,21 @@ describe('Loyalty API (E2E / Integration)', () => {
           provide: getRepositoryToken(CustomerLoyaltyAccountProjection),
           useValue: projectionRepo,
         },
+        {
+          provide: getRepositoryToken(Customer),
+          useValue: customerRepo,
+        },
+        {
+          provide: TicketPaidHandler,
+          useValue: { handle: jest.fn().mockResolvedValue([]) },
+        },
+        {
+          provide: LegacyClassificationService,
+          useValue: {
+            ensureLegacyProgram: jest.fn(),
+            classifyLegacyTransactions: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -163,6 +193,7 @@ describe('Loyalty API (E2E / Integration)', () => {
   beforeEach(() => {
     dbPrograms = [];
     dbRewards = [];
+    dbCustomers = [];
     jest.clearAllMocks();
   });
 
@@ -342,6 +373,11 @@ describe('Loyalty API (E2E / Integration)', () => {
 
   describe('GET /loyalty/customers/:customerId/accounts', () => {
     it('returns loyalty accounts for a customer', async () => {
+      dbCustomers.push({
+        id: 'cust-1',
+        tenant_id: 'tenant-A',
+        name: 'Carlos Mendoza',
+      } as Customer);
       const token = createToken('tenant-A', UserRole.OWNER);
 
       const res = await request(app.getHttpServer())

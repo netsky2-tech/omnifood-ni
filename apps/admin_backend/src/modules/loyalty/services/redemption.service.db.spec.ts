@@ -307,6 +307,42 @@ describe('LV1.3 — Redemption & Reversal (db)', () => {
       ).rejects.toThrow(/expired|window/i);
     });
 
+    it('LoyaltyProgram.endsAt in the past does NOT block REDEEM if Program status remains ACTIVE', async () => {
+      // Program endsAt is in the past, but program is still ACTIVE and reward is not expired
+      const program = await h.loyaltyService.createProgram('tenant-1', {
+        name: `PastEndsAt-${randomUUID().slice(0, 6)}`,
+        program_type: 'SPEND_POINTS' as any,
+        earning_rule: { spendBlockNio: 10, pointsPerBlock: 1 },
+        eligibility_rule: {},
+        starts_at: '2020-01-01T00:00:00Z',
+        ends_at: '2020-12-31T23:59:59Z', // In the past!
+      });
+      await h.loyaltyService.activateProgram('tenant-1', program.id);
+
+      const reward = await h.loyaltyService.createReward('tenant-1', program.id, {
+        name: 'Valid Reward',
+        reward_type: 'DISCOUNT_AMOUNT' as any,
+        cost_units: 30,
+        benefit_config: { amountNio: 15 },
+        // reward ends_at is NOT in the past
+      });
+      await h.loyaltyService.activateReward('tenant-1', reward.id);
+
+      await earnPoints(h.customerId, program.id, 'ticket-earn-pastprog', 100);
+
+      const intent = await h.redemptionService.createRedemptionIntent({
+        tenantId: 'tenant-1',
+        customerId: h.customerId,
+        ticketId: 'ticket-redempt-pastprog',
+        loyaltyProgramId: program.id,
+        rewardId: reward.id,
+      });
+
+      expect(intent).toBeDefined();
+      expect(intent.id).toBeDefined();
+      expect(intent.application.costUnits).toBe(30);
+    });
+
     it('rejects duplicate redemption intent for same ticket', async () => {
       const { program, reward } = await setupProgramWithReward();
       await earnPoints(h.customerId, program.id, 'ticket-earn-dup', 100);
@@ -809,6 +845,150 @@ describe('LV1.3 — Redemption & Reversal (db)', () => {
       expect(result.redeemTransaction.units).toBe(-30);
       // reward_version is 2 because activateReward bumps config_version
       expect(result.redeemTransaction.reward_version).toBe(2);
+    });
+  });
+
+  describe('LV1.2 Earning Engine — DB integration', () => {
+    it('ticket retry is strictly idempotent and does not duplicate EARN transactions or balance in real DB', async () => {
+      const { program } = await setupProgramWithReward({
+        earningRule: { spendBlockNio: 10, pointsPerBlock: 1 },
+      });
+
+      const snapshot: LoyaltyTicketSnapshot = {
+        tenantId: 'tenant-1',
+        branchId: 'branch-1',
+        terminalId: 'term-1',
+        ticketId: `ticket-earn-idem-${randomUUID().slice(0, 8)}`,
+        customerId: h.customerId,
+        paidAt: new Date('2026-06-01T12:00:00Z'),
+        lines: [
+          { lineId: 'l1', productId: 'p1', quantity: 1, merchandiseNetNioAfterAllBenefits: 100, source: 'NORMAL' },
+        ],
+      };
+
+      const firstResults = await h.ticketPaidHandler.handle(snapshot);
+      const programResult = firstResults.find((r) => r.programId === program.id);
+      expect(programResult).toBeDefined();
+      expect(programResult!.units).toBe(10);
+
+      const firstProj = await h.dataSource.query(
+        `SELECT balance_units, projection_version FROM "${h.schema}".customer_loyalty_account_projection WHERE tenant_id = $1 AND customer_id = $2 AND loyalty_program_id = $3`,
+        ['tenant-1', h.customerId, program.id],
+      );
+      const balanceBefore = firstProj[0].balance_units;
+      const versionBefore = firstProj[0].projection_version;
+
+      // Retry the exact same ticket
+      const secondResults = await h.ticketPaidHandler.handle(snapshot);
+      const secondProgramResult = secondResults.find((r) => r.programId === program.id);
+      expect(secondProgramResult).toBeDefined();
+      expect(secondProgramResult!.units).toBe(10);
+
+      const secondProj = await h.dataSource.query(
+        `SELECT balance_units, projection_version FROM "${h.schema}".customer_loyalty_account_projection WHERE tenant_id = $1 AND customer_id = $2 AND loyalty_program_id = $3`,
+        ['tenant-1', h.customerId, program.id],
+      );
+      expect(secondProj[0].balance_units).toBe(balanceBefore);
+      expect(secondProj[0].projection_version).toBe(versionBefore);
+
+      // Verify only 1 EARN transaction exists for this ticket+program in customer_point_transactions
+      const txRows = await h.dataSource.query(
+        `SELECT id FROM "${h.schema}".customer_point_transactions WHERE ticket_id = $1 AND loyalty_program_id = $2`,
+        [snapshot.ticketId, program.id],
+      );
+      expect(txRows.length).toBe(1);
+    });
+
+    it('single ticket generates independent EARN for SPEND_POINTS, PRODUCT_STAMPS, and VISIT_STAMPS simultaneously', async () => {
+      // 1. SPEND_POINTS program
+      const progSpend = await h.loyaltyService.createProgram('tenant-1', {
+        name: `Multi-Spend-${randomUUID().slice(0, 6)}`,
+        program_type: 'SPEND_POINTS' as any,
+        earning_rule: { spendBlockNio: 20, pointsPerBlock: 2 },
+        eligibility_rule: {},
+        starts_at: '2026-01-01T00:00:00Z',
+        ends_at: '2027-12-31T23:59:59Z',
+      });
+      await h.loyaltyService.activateProgram('tenant-1', progSpend.id);
+
+      // 2. PRODUCT_STAMPS program
+      const progProd = await h.loyaltyService.createProgram('tenant-1', {
+        name: `Multi-Prod-${randomUUID().slice(0, 6)}`,
+        program_type: 'PRODUCT_STAMPS' as any,
+        earning_rule: { eligibleProductIds: ['prod-burger'], unitsPerPurchasedUnit: 1 },
+        eligibility_rule: {},
+        starts_at: '2026-01-01T00:00:00Z',
+        ends_at: '2027-12-31T23:59:59Z',
+      });
+      await h.loyaltyService.activateProgram('tenant-1', progProd.id);
+
+      // 3. VISIT_STAMPS program
+      const progVisit = await h.loyaltyService.createProgram('tenant-1', {
+        name: `Multi-Visit-${randomUUID().slice(0, 6)}`,
+        program_type: 'VISIT_STAMPS' as any,
+        earning_rule: { unitsPerVisit: 1 },
+        eligibility_rule: {},
+        starts_at: '2026-01-01T00:00:00Z',
+        ends_at: '2027-12-31T23:59:59Z',
+      });
+      await h.loyaltyService.activateProgram('tenant-1', progVisit.id);
+
+      const snapshot: LoyaltyTicketSnapshot = {
+        tenantId: 'tenant-1',
+        branchId: 'branch-1',
+        terminalId: 'term-1',
+        ticketId: `ticket-multi-${randomUUID().slice(0, 8)}`,
+        customerId: h.customerId,
+        paidAt: new Date('2026-06-01T12:00:00Z'),
+        lines: [
+          { lineId: 'l1', productId: 'prod-burger', quantity: 3, merchandiseNetNioAfterAllBenefits: 300, source: 'NORMAL' },
+          { lineId: 'l2', productId: 'prod-free', quantity: 1, merchandiseNetNioAfterAllBenefits: 50, source: 'LOYALTY_REWARD' },
+        ],
+      };
+
+      const results = await h.ticketPaidHandler.handle(snapshot);
+      const spendRes = results.find((r) => r.programId === progSpend.id);
+      const prodRes = results.find((r) => r.programId === progProd.id);
+      const visitRes = results.find((r) => r.programId === progVisit.id);
+
+      expect(spendRes).toBeDefined();
+      // Spend: only NORMAL lines count -> 300 NIO / 20 = 15 blocks * 2 points = 30 units
+      expect(spendRes!.units).toBe(30);
+
+      expect(prodRes).toBeDefined();
+      // Product: 3 burgers = 3 stamps (LOYALTY_REWARD line excluded)
+      expect(prodRes!.units).toBe(3);
+
+      expect(visitRes).toBeDefined();
+      // Visit: 1 visit stamp
+      expect(visitRes!.units).toBe(1);
+    });
+
+    it('INACTIVE program produces no EARN in real DB', async () => {
+      const progInactive = await h.loyaltyService.createProgram('tenant-1', {
+        name: `Inactive-${randomUUID().slice(0, 6)}`,
+        program_type: 'SPEND_POINTS' as any,
+        earning_rule: { spendBlockNio: 10, pointsPerBlock: 1 },
+        eligibility_rule: {},
+        starts_at: '2026-01-01T00:00:00Z',
+        ends_at: '2027-12-31T23:59:59Z',
+      });
+      // Remains in DRAFT / not activated
+
+      const snapshot: LoyaltyTicketSnapshot = {
+        tenantId: 'tenant-1',
+        branchId: 'branch-1',
+        terminalId: 'term-1',
+        ticketId: `ticket-inactive-${randomUUID().slice(0, 8)}`,
+        customerId: h.customerId,
+        paidAt: new Date('2026-06-01T12:00:00Z'),
+        lines: [
+          { lineId: 'l1', productId: 'p1', quantity: 1, merchandiseNetNioAfterAllBenefits: 100, source: 'NORMAL' },
+        ],
+      };
+
+      const results = await h.ticketPaidHandler.handle(snapshot);
+      expect(results.find((r) => r.programId === progInactive.id)).toBeUndefined();
     });
   });
 });

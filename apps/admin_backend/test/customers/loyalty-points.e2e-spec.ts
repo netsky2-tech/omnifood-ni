@@ -18,6 +18,7 @@ import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
 import { TenantInterceptor } from '../../src/core/database/rls.interceptor';
 import { JWT_TOKEN_TYPES } from '../../src/modules/identity/security/jwt-token.types';
+import { createIdentityJwtConfigProvider, signIdentityJwtAccessToken } from '../support/identity-jwt-test.fixture';
 
 describe('Customer Loyalty Points Module (E2E / Integration)', () => {
   const jwtSecret = 'test-only-jwt-secret-with-at-least-thirty-two-bytes';
@@ -91,6 +92,7 @@ describe('Customer Loyalty Points Module (E2E / Integration)', () => {
         Reflector,
         JwtService,
         TenantInterceptor,
+        createIdentityJwtConfigProvider(),
         {
           provide: getRepositoryToken(Customer),
           useValue: customerRepo,
@@ -121,23 +123,12 @@ describe('Customer Loyalty Points Module (E2E / Integration)', () => {
   });
 
   function createToken(tenantId: string, role: UserRole = UserRole.OWNER): string {
-    return jwtService.sign(
-      {
-        sub: 'user-001',
-        email: 'user@omnifood.ni',
-        tenant_id: tenantId,
-        role,
-        is_active: true,
-        token_type: JWT_TOKEN_TYPES.ACCESS,
-        security_version: 1,
-      },
-      {
-        secret: jwtSecret,
-        issuer: 'omnifood-admin',
-        audience: 'omnifood-pos',
-        expiresIn: '1h',
-      },
-    );
+    return signIdentityJwtAccessToken(jwtService, {
+      sub: 'user-001',
+      email: 'user@omnifood.ni',
+      tenant_id: tenantId,
+      role,
+    });
   }
 
   describe('POST /customers/:id/points/adjust', () => {
