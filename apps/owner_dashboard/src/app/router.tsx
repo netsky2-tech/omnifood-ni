@@ -40,6 +40,9 @@ const SettingsPage = lazy(() =>
 const CustomersPage = lazy(() =>
   import("@/features/customers/customers-page").then((m) => ({ default: m.CustomersPage })),
 );
+const LoyaltyPage = lazy(() =>
+  import("@/features/loyalty").then((m) => ({ default: m.LoyaltyPage })),
+);
 
 export const router = createBrowserRouter([
   {
@@ -133,6 +136,14 @@ export const router = createBrowserRouter([
         element: (
           <SuspenseWrapper>
             <CustomersPage />
+          </SuspenseWrapper>
+        ),
+      },
+      {
+        path: "loyalty",
+        element: (
+          <SuspenseWrapper>
+            <LoyaltyPage />
           </SuspenseWrapper>
         ),
       },
