@@ -4,13 +4,14 @@ import '../../models/sales/cashier_session.dart';
 import '../../models/sales/invoice.dart';
 import '../../models/sales/invoice_item.dart';
 import '../../models/sales/payment.dart';
+import '../sales/post_paid_feedback_service.dart';
 import 'esc_pos_builder.dart';
 import 'receipt_layout_formatter.dart';
 
 /// Formatter and Layout Engine for 58mm Thermal Printers.
 /// Adheres strictly to DGI Disposición Técnica 09-2007, Ley 822, and Food Park QSR needs.
 class Receipt58mmFormatter {
-  static const int lineWidth = 38;
+  static const int lineWidth = 32;
   static final ReceiptLayoutFormatter _formatter = ReceiptLayoutFormatter.format58mm();
 
   // ==========================================
@@ -139,6 +140,7 @@ class Receipt58mmFormatter {
     String? cashierName,
     TaxRegime taxRegime = TaxRegime.regimenGeneral,
     bool isTaxExempt = false,
+    PostPaidFeedback? loyaltyFeedback,
   }) {
     return _formatter.formatInvoiceText(
       invoice,
@@ -152,6 +154,7 @@ class Receipt58mmFormatter {
       cashierName: cashierName,
       taxRegime: taxRegime,
       isTaxExempt: isTaxExempt,
+      loyaltyFeedback: loyaltyFeedback,
     );
   }
 
@@ -169,6 +172,7 @@ class Receipt58mmFormatter {
     TaxRegime taxRegime = TaxRegime.regimenGeneral,
     bool isTaxExempt = false,
     List<int>? logoRasterBytes,
+    PostPaidFeedback? loyaltyFeedback,
   }) {
     return _formatter.formatInvoiceEscPos(
       invoice,
@@ -183,6 +187,7 @@ class Receipt58mmFormatter {
       taxRegime: taxRegime,
       isTaxExempt: isTaxExempt,
       logoRasterBytes: logoRasterBytes,
+      loyaltyFeedback: loyaltyFeedback,
     );
   }
 

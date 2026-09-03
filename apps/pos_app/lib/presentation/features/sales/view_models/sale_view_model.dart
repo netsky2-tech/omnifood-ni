@@ -25,6 +25,9 @@ import '../../../../domain/models/config/printer_config.dart';
 import 'package:pos_app/domain/services/sales/table_order_service.dart';
 import 'package:pos_app/domain/services/sales/promotions_engine.dart';
 import 'package:pos_app/domain/services/sales/loyalty_service.dart';
+import 'package:pos_app/domain/services/sales/post_paid_feedback_service.dart';
+import 'package:pos_app/domain/models/loyalty/loyalty_evaluation.dart';
+import 'package:pos_app/domain/models/loyalty/loyalty_program.dart';
 import 'package:pos_app/domain/services/config/tenant_config_service.dart';
 import '../../../../domain/services/config/printer_config_service.dart';
 import '../../../../domain/services/printer/printer_resolver.dart';
@@ -49,6 +52,7 @@ class SaleViewModel extends ChangeNotifier {
   final PrinterPort _printerPort;
   final PromotionsEngine _promotionsEngine;
   final LoyaltyService _loyaltyService;
+  final PostPaidFeedbackService _postPaidFeedbackService;
   SyncService? _syncService;
   StreamSubscription<InboundSyncResult>? _syncSubscription;
   Timer? _syncDebounceTimer;
@@ -77,7 +81,8 @@ class SaleViewModel extends ChangeNotifier {
         _printerPort =
             printerPort ?? PrinterResolver.resolve(const PrinterConfig()),
         _promotionsEngine = promotionsEngine ?? const PromotionsEngine(),
-        _loyaltyService = loyaltyService ?? const LoyaltyService() {
+        _loyaltyService = loyaltyService ?? const LoyaltyService(),
+        _postPaidFeedbackService = const PostPaidFeedbackService() {
     _syncService = syncService;
     if (syncService != null) {
       _syncSubscription = syncService.onInboundSync.listen((event) {
@@ -102,6 +107,9 @@ class SaleViewModel extends ChangeNotifier {
 
   Invoice? _lastProcessedInvoice;
   Invoice? get lastProcessedInvoice => _lastProcessedInvoice;
+
+  PostPaidFeedback? _lastPostPaidFeedback;
+  PostPaidFeedback? get lastPostPaidFeedback => _lastPostPaidFeedback;
 
   TenantConfig? _tenantConfig;
   TenantConfig? get tenantConfig => _tenantConfig;
@@ -739,6 +747,7 @@ class SaleViewModel extends ChangeNotifier {
     _totalDiscounts = 0.0;
     _pointsToRedeem = 0.0;
     _activeLoadedHoldTicket = null;
+    _lastPostPaidFeedback = null;
     notifyListeners();
   }
 
@@ -883,6 +892,30 @@ class SaleViewModel extends ChangeNotifier {
             _selectedCustomer = _selectedCustomer!.copyWith(pointsBalance: earnTx.balanceAfter);
           } catch (_) {}
         }
+
+        // 3. Compute PostPaidFeedback for receipt and UI
+        final redeemPts = _pointsToRedeem.toInt();
+        final earnedPts = pointsEarned.toInt();
+        final newBalance = _selectedCustomer!.pointsBalance.toInt();
+        final evaluation = LoyaltyEvaluation(
+          customerId: _selectedCustomer!.id,
+          ticketId: invoiceId,
+          programs: [
+            ProgramEvaluation(
+              programId: 'loyalty-default',
+              programName: 'Puntos',
+              programType: LoyaltyProgramType.spendPoints,
+              balanceUnits: newBalance,
+              earningPreviewUnits: earnedPts,
+            ),
+          ],
+        );
+        _lastPostPaidFeedback = _postPaidFeedbackService.compute(
+          evaluation: evaluation,
+          postCommitBalances: {'loyalty-default': newBalance},
+          earnedUnits: {'loyalty-default': earnedPts},
+          redeemedUnits: {'loyalty-default': redeemPts},
+        );
       }
 
       // Update expected totals
@@ -974,6 +1007,7 @@ class SaleViewModel extends ChangeNotifier {
             taxRegime: TaxRegime.fromString(printerConfig.taxRegime),
             isTaxExempt: _isGlobalTaxExempt,
             paperWidthMm: printerConfig.paperWidthMm,
+            loyaltyFeedback: _lastPostPaidFeedback,
           );
 
           if (!printResult.isSuccess) {

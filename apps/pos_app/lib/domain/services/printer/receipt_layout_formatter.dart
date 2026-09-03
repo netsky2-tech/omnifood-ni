@@ -4,6 +4,7 @@ import '../../models/sales/cashier_session.dart';
 import '../../models/sales/invoice.dart';
 import '../../models/sales/invoice_item.dart';
 import '../../models/sales/payment.dart';
+import '../sales/post_paid_feedback_service.dart';
 import 'esc_pos_builder.dart';
 
 /// Highly modular, robust layout engine and ticket generator for 58mm (32 cols) and 80mm (48 cols)
@@ -205,6 +206,7 @@ class ReceiptLayoutFormatter {
     String? cashierName,
     TaxRegime taxRegime = TaxRegime.regimenGeneral,
     bool isTaxExempt = false,
+    PostPaidFeedback? loyaltyFeedback,
   }) {
     final buffer = StringBuffer();
     final dateFormat = DateFormat('yyyy-MM-dd HH:mm');
@@ -376,6 +378,14 @@ class ReceiptLayoutFormatter {
     }
 
     buffer.writeln(drawLine('='));
+
+    // Loyalty block — inserted before GRACIAS, fiscal data never affected
+    if (loyaltyFeedback != null && loyaltyFeedback.hasContent) {
+      for (final line in formatLoyaltyBlock(feedback: loyaltyFeedback)) {
+        buffer.writeln(line);
+      }
+    }
+
     buffer.writeln(center('*** GRACIAS POR SU COMPRA ***'));
     buffer.writeln('');
     buffer.writeln('');
@@ -398,6 +408,7 @@ class ReceiptLayoutFormatter {
     TaxRegime taxRegime = TaxRegime.regimenGeneral,
     bool isTaxExempt = false,
     List<int>? logoRasterBytes,
+    PostPaidFeedback? loyaltyFeedback,
   }) {
     final builder = EscPosBuilder();
     final dateFormat = DateFormat('yyyy-MM-dd HH:mm');
@@ -564,6 +575,13 @@ class ReceiptLayoutFormatter {
       }
     }
 
+    // Loyalty block — inserted before GRACIAS, fiscal data never affected
+    if (loyaltyFeedback != null && loyaltyFeedback.hasContent) {
+      for (final line in formatLoyaltyBlock(feedback: loyaltyFeedback)) {
+        builder.textLine(line);
+      }
+    }
+
     builder
         .textLine(drawLine('='))
         .align(EscPosAlign.center)
@@ -574,6 +592,82 @@ class ReceiptLayoutFormatter {
         .cut();
 
     return builder.toBytes();
+  }
+
+  // ==========================================
+  // 4. Loyalty Block
+  // ==========================================
+
+  /// Generates the loyalty section lines for a receipt.
+  /// Returns empty list if feedback is null — fiscal data is never affected.
+  List<String> formatLoyaltyBlock({
+    required dynamic feedback,
+  }) {
+    if (feedback == null) return const [];
+
+    final programs = feedback.programs as List<dynamic>;
+    if (programs.isEmpty) return const [];
+
+    final lines = <String>[];
+    lines.add(drawLine('-'));
+    lines.add(center('LEALTAD'));
+    lines.add('');
+
+    for (final program in programs) {
+      final name = program.programName as String;
+      final type = program.programType;
+      final unitLabel = _loyaltyUnitLabel(type, program.unitsEarned as int);
+
+      final parts = <String>[];
+
+      if (program.unitsRedeemed as int > 0) {
+        parts.add('-${program.unitsRedeemed} $unitLabel');
+      }
+      if (program.unitsEarned as int > 0) {
+        parts.add('+${program.unitsEarned} $unitLabel');
+      }
+      if (parts.isNotEmpty) {
+        lines.add(formatTwoColumns(name, parts.join('  ')));
+      }
+
+      if (program.rewardRedeemed as bool &&
+          program.redeemedRewardName != null) {
+        lines.add(formatTwoColumns(
+          '  Redimido:',
+          '${program.redeemedRewardName}',
+        ));
+      } else if (program.rewardAvailable as bool &&
+          program.rewardName != null) {
+        lines.add(formatTwoColumns(
+          '  Recompensa:',
+          '${program.rewardName}',
+        ));
+      } else if (program.unitsToNextReward as int > 0) {
+        lines.add(formatTwoColumns(
+          '  Faltan:',
+          '${program.unitsToNextReward} $unitLabel',
+        ));
+      }
+
+      lines.add(formatTwoColumns('  Saldo:', '${program.newBalance}'));
+      lines.add('');
+    }
+
+    return lines;
+  }
+
+  static String _loyaltyUnitLabel(dynamic type, int count) {
+    final typeName = type.toString().split('.').last;
+    switch (typeName) {
+      case 'spendPoints':
+        return 'puntos';
+      case 'productStamps':
+        return count == 1 ? 'sello' : 'sellos';
+      case 'visitStamps':
+        return count == 1 ? 'visita' : 'visitas';
+      default:
+        return 'unidades';
+    }
   }
 
   // ==========================================

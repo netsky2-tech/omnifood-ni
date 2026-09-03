@@ -3,6 +3,7 @@ import '../models/sales/cashier_session.dart';
 import '../models/sales/invoice.dart';
 import '../models/sales/invoice_item.dart';
 import '../models/sales/payment.dart';
+import '../services/sales/post_paid_feedback_service.dart';
 
 enum PrinterStatus {
   ready,
@@ -66,6 +67,7 @@ abstract class PrinterPort {
     TaxRegime taxRegime = TaxRegime.regimenGeneral,
     bool isTaxExempt = false,
     int paperWidthMm = 58,
+    PostPaidFeedback? loyaltyFeedback,
   });
 
   /// Prints a kitchen / KDS order ticket with buzzer / table identification.

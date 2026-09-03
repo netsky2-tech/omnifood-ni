@@ -8,6 +8,7 @@ import '../../../domain/models/sales/payment.dart';
 import '../../../domain/ports/printer_port.dart';
 import '../../../domain/services/printer/receipt_58mm_formatter.dart';
 import '../../../domain/services/printer/receipt_layout_formatter.dart';
+import '../../../domain/services/sales/post_paid_feedback_service.dart';
 
 /// Hardware Driver Adapter for Alacrity Q80 and iPos-compatible thermal printers.
 /// Communicates via Android Platform Channel with fallback resilience for non-Q80 environments.
@@ -72,6 +73,7 @@ class IPosPrinterAdapter implements PrinterPort {
     TaxRegime taxRegime = TaxRegime.regimenGeneral,
     bool isTaxExempt = false,
     int paperWidthMm = 58,
+    PostPaidFeedback? loyaltyFeedback,
   }) async {
     final status = await checkStatus();
     if (status == PrinterStatus.outOfPaper) {
@@ -99,6 +101,7 @@ class IPosPrinterAdapter implements PrinterPort {
       cashierName: cashierName,
       taxRegime: taxRegime,
       isTaxExempt: isTaxExempt,
+      loyaltyFeedback: loyaltyFeedback,
     );
 
     try {

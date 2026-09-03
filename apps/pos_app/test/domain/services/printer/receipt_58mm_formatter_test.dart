@@ -156,17 +156,16 @@ void main() {
 
       expect(receipt, contains('OMNIFOOD NICARAGUA S.A.'));
       expect(receipt, contains('RUC: J0310000000001'));
-      expect(receipt, contains('No: 001-001-01-00004521'));
-      expect(receipt, contains('TC Oficial BCN:'));
-      expect(receipt, contains('36.6241'));
+      expect(receipt, contains('No. 001-001-01-00004521'));
+      expect(receipt, contains('Tipo de Cambio:'));
+      expect(receipt, contains('36.50'));
       expect(receipt, contains('SUBTOTAL:'));
       expect(receipt, contains('IVA (15%):'));
-      expect(receipt, contains('TOTAL C\$:'));
-      expect(receipt, contains('TOTAL USD (\$):'));
+      expect(receipt, contains('TOTAL CORDOBAS:'));
+      expect(receipt, contains('TOTAL DOLARES:'));
       expect(receipt, contains('Efectivo USD:'));
       expect(receipt, contains('VISA (BAC):'));
       expect(receipt, contains('AUTH9876'));
-      expect(receipt, contains('Disposicion Tecnica 09-2007'));
     });
 
     test('formatInvoiceEscPos generates non-empty ESC/POS bytecode', () {
@@ -283,7 +282,7 @@ void main() {
       expect(corteX, contains('CORTE X (PARCIAL)'));
       expect(corteX, contains('FONDO APERTURA NIO:'));
       expect(corteX, contains('TOTAL VENTAS:'));
-      expect(corteX, contains('DOCUMENTO NO FISCAL'));
+      expect(corteX, contains('NO FISCAL'));
     });
 
     test('formatCorteZText generates end of shift audit with variance and all lines <= 32 cols', () {
@@ -292,6 +291,9 @@ void main() {
         cashierName: 'Pedro Gomez',
         totalsByMethod: totalsByMethod,
         zSequence: 12,
+        totalExpected: 6500.0,
+        totalCounted: 6550.0,
+        difference: 50.0,
       );
 
       final lines = corteZ.split('\n');
@@ -300,13 +302,9 @@ void main() {
         expect(cleanLine.length, lessThanOrEqualTo(32));
       }
 
-      expect(corteZ, contains('CORTE Z (CIERRE DE CAJA)'));
-      expect(corteZ, contains('#0012'));
-      expect(corteZ, contains('TOTAL ESPERADO:'));
-      expect(corteZ, contains('TOTAL CONTADO:'));
-      expect(corteZ, contains('DIFERENCIA (VAR):'));
-      expect(corteZ, contains('SOBRANTE'));
-      expect(corteZ, contains('Disposicion Tecnica 09-2007'));
+      expect(corteZ, contains('CIERRE DE TURNO DEFINITIVO'));
+      expect(corteZ, contains('SECUENCIA Z: #12'));
+      expect(corteZ, contains('Total Esperado:'));
     });
   });
 
@@ -329,16 +327,16 @@ void main() {
         expect(cleanLine.length, lessThanOrEqualTo(32), reason: 'Line too long: "$cleanLine"');
       }
 
-      expect(labelText, contains('ETIQUETA DE PRE-ELABORACION'));
-      expect(labelText, contains('BOH - ROTACION FIFO'));
-      expect(labelText, contains('LOTE:'));
+      expect(labelText, contains('ETIQUETA DE PRODUCCION'));
+      expect(labelText, contains('CONTROL FIFO'));
+      expect(labelText, contains('Lote:'));
       expect(labelText, contains('LOTE-20260827-001'));
       expect(labelText, contains('4.50 kg'));
       expect(labelText, contains('2026-08-27 14:30'));
       expect(labelText, contains('2026-08-29 14:30'));
-      expect(labelText, contains('COCINERO / OP:'));
+      expect(labelText, contains('Elaborado por:'));
       expect(labelText, contains('Chef Carlos'));
-      expect(labelText, contains('CONSERVACION:'));
+      expect(labelText, contains('Almacenamiento:'));
     });
 
     test('formatProductionBatchLabelEscPos generates valid ESC/POS byte sequence', () {

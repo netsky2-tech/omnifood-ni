@@ -8,6 +8,7 @@ import '../../../domain/models/sales/payment.dart';
 import '../../../domain/ports/printer_port.dart';
 import '../../../domain/services/printer/receipt_58mm_formatter.dart';
 import '../../../domain/services/printer/receipt_layout_formatter.dart';
+import '../../../domain/services/sales/post_paid_feedback_service.dart';
 
 /// Hardware Driver Adapter for Sunmi V2s and Sunmi OS Integrated Thermal Printers (58mm).
 /// Communicates via Android Platform Channel with fallback resilience for non-Sunmi environments.
@@ -72,6 +73,7 @@ class SunmiPrinterAdapter implements PrinterPort {
     TaxRegime taxRegime = TaxRegime.regimenGeneral,
     bool isTaxExempt = false,
     int paperWidthMm = 58,
+    PostPaidFeedback? loyaltyFeedback,
   }) async {
     final status = await checkStatus();
     if (status == PrinterStatus.outOfPaper) {
@@ -99,6 +101,7 @@ class SunmiPrinterAdapter implements PrinterPort {
       cashierName: cashierName,
       taxRegime: taxRegime,
       isTaxExempt: isTaxExempt,
+      loyaltyFeedback: loyaltyFeedback,
     );
 
     final rawBytes = layoutFormatter.formatInvoiceEscPos(
@@ -114,6 +117,7 @@ class SunmiPrinterAdapter implements PrinterPort {
       taxRegime: taxRegime,
       isTaxExempt: isTaxExempt,
       logoRasterBytes: logoRasterBytes,
+      loyaltyFeedback: loyaltyFeedback,
     );
 
     return _sendToHardware(rawBytes: rawBytes, plainText: formattedText);

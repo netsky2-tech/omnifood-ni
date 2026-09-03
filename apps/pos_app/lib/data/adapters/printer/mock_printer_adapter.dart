@@ -6,6 +6,7 @@ import '../../../domain/models/sales/payment.dart';
 import '../../../domain/ports/printer_port.dart';
 import '../../../domain/services/printer/receipt_58mm_formatter.dart';
 import '../../../domain/services/printer/receipt_layout_formatter.dart';
+import '../../../domain/services/sales/post_paid_feedback_service.dart';
 
 /// In-memory Mock implementation of [PrinterPort] for unit testing and offline fallback.
 class MockPrinterAdapter implements PrinterPort {
@@ -48,6 +49,7 @@ class MockPrinterAdapter implements PrinterPort {
     TaxRegime taxRegime = TaxRegime.regimenGeneral,
     bool isTaxExempt = false,
     int paperWidthMm = 58,
+    PostPaidFeedback? loyaltyFeedback,
   }) async {
     if (shouldFail || currentStatus != PrinterStatus.ready) {
       String defaultMsg = 'Error de impresión en hardware simulado';
@@ -77,6 +79,7 @@ class MockPrinterAdapter implements PrinterPort {
       cashierName: cashierName,
       taxRegime: taxRegime,
       isTaxExempt: isTaxExempt,
+      loyaltyFeedback: loyaltyFeedback,
     );
 
     final bytes = layoutFormatter.formatInvoiceEscPos(
@@ -92,6 +95,7 @@ class MockPrinterAdapter implements PrinterPort {
       taxRegime: taxRegime,
       isTaxExempt: isTaxExempt,
       logoRasterBytes: logoRasterBytes,
+      loyaltyFeedback: loyaltyFeedback,
     );
 
     lastPrintedText = text;
