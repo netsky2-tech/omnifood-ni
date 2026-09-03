@@ -30,7 +30,26 @@ mixin _$CustomerPointTransaction {
   double get conversionRate => throw _privateConstructorUsedError;
   String? get reason => throw _privateConstructorUsedError;
   DateTime get createdAt => throw _privateConstructorUsedError;
-  SyncStatus get syncStatus => throw _privateConstructorUsedError;
+  SyncStatus get syncStatus =>
+      throw _privateConstructorUsedError; // --- V1 Loyalty fields ---
+  String? get loyaltyProgramId => throw _privateConstructorUsedError;
+  String? get ticketId => throw _privateConstructorUsedError;
+  String? get rewardId => throw _privateConstructorUsedError;
+  String? get transactionType => throw _privateConstructorUsedError;
+  int? get units => throw _privateConstructorUsedError;
+  String? get reversalOfTransactionId => throw _privateConstructorUsedError;
+  String? get idempotencyKey => throw _privateConstructorUsedError;
+  String? get sourceEventId => throw _privateConstructorUsedError;
+  String? get actorUserId => throw _privateConstructorUsedError;
+  String? get branchId => throw _privateConstructorUsedError;
+  String? get terminalId => throw _privateConstructorUsedError;
+  int? get programVersion => throw _privateConstructorUsedError;
+  int? get rewardVersion => throw _privateConstructorUsedError;
+  String? get commercialSnapshot => throw _privateConstructorUsedError;
+  String? get origin => throw _privateConstructorUsedError;
+  DateTime? get occurredAt => throw _privateConstructorUsedError;
+  DateTime? get recordedAt => throw _privateConstructorUsedError;
+  bool get legacyImported => throw _privateConstructorUsedError;
 
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
   @JsonKey(ignore: true)
@@ -54,7 +73,25 @@ abstract class $CustomerPointTransactionCopyWith<$Res> {
       double conversionRate,
       String? reason,
       DateTime createdAt,
-      SyncStatus syncStatus});
+      SyncStatus syncStatus,
+      String? loyaltyProgramId,
+      String? ticketId,
+      String? rewardId,
+      String? transactionType,
+      int? units,
+      String? reversalOfTransactionId,
+      String? idempotencyKey,
+      String? sourceEventId,
+      String? actorUserId,
+      String? branchId,
+      String? terminalId,
+      int? programVersion,
+      int? rewardVersion,
+      String? commercialSnapshot,
+      String? origin,
+      DateTime? occurredAt,
+      DateTime? recordedAt,
+      bool legacyImported});
 }
 
 /// @nodoc
@@ -81,6 +118,24 @@ class _$CustomerPointTransactionCopyWithImpl<$Res,
     Object? reason = freezed,
     Object? createdAt = null,
     Object? syncStatus = null,
+    Object? loyaltyProgramId = freezed,
+    Object? ticketId = freezed,
+    Object? rewardId = freezed,
+    Object? transactionType = freezed,
+    Object? units = freezed,
+    Object? reversalOfTransactionId = freezed,
+    Object? idempotencyKey = freezed,
+    Object? sourceEventId = freezed,
+    Object? actorUserId = freezed,
+    Object? branchId = freezed,
+    Object? terminalId = freezed,
+    Object? programVersion = freezed,
+    Object? rewardVersion = freezed,
+    Object? commercialSnapshot = freezed,
+    Object? origin = freezed,
+    Object? occurredAt = freezed,
+    Object? recordedAt = freezed,
+    Object? legacyImported = null,
   }) {
     return _then(_value.copyWith(
       id: null == id
@@ -123,6 +178,78 @@ class _$CustomerPointTransactionCopyWithImpl<$Res,
           ? _value.syncStatus
           : syncStatus // ignore: cast_nullable_to_non_nullable
               as SyncStatus,
+      loyaltyProgramId: freezed == loyaltyProgramId
+          ? _value.loyaltyProgramId
+          : loyaltyProgramId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      ticketId: freezed == ticketId
+          ? _value.ticketId
+          : ticketId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      rewardId: freezed == rewardId
+          ? _value.rewardId
+          : rewardId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      transactionType: freezed == transactionType
+          ? _value.transactionType
+          : transactionType // ignore: cast_nullable_to_non_nullable
+              as String?,
+      units: freezed == units
+          ? _value.units
+          : units // ignore: cast_nullable_to_non_nullable
+              as int?,
+      reversalOfTransactionId: freezed == reversalOfTransactionId
+          ? _value.reversalOfTransactionId
+          : reversalOfTransactionId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      idempotencyKey: freezed == idempotencyKey
+          ? _value.idempotencyKey
+          : idempotencyKey // ignore: cast_nullable_to_non_nullable
+              as String?,
+      sourceEventId: freezed == sourceEventId
+          ? _value.sourceEventId
+          : sourceEventId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      actorUserId: freezed == actorUserId
+          ? _value.actorUserId
+          : actorUserId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      branchId: freezed == branchId
+          ? _value.branchId
+          : branchId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      terminalId: freezed == terminalId
+          ? _value.terminalId
+          : terminalId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      programVersion: freezed == programVersion
+          ? _value.programVersion
+          : programVersion // ignore: cast_nullable_to_non_nullable
+              as int?,
+      rewardVersion: freezed == rewardVersion
+          ? _value.rewardVersion
+          : rewardVersion // ignore: cast_nullable_to_non_nullable
+              as int?,
+      commercialSnapshot: freezed == commercialSnapshot
+          ? _value.commercialSnapshot
+          : commercialSnapshot // ignore: cast_nullable_to_non_nullable
+              as String?,
+      origin: freezed == origin
+          ? _value.origin
+          : origin // ignore: cast_nullable_to_non_nullable
+              as String?,
+      occurredAt: freezed == occurredAt
+          ? _value.occurredAt
+          : occurredAt // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
+      recordedAt: freezed == recordedAt
+          ? _value.recordedAt
+          : recordedAt // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
+      legacyImported: null == legacyImported
+          ? _value.legacyImported
+          : legacyImported // ignore: cast_nullable_to_non_nullable
+              as bool,
     ) as $Val);
   }
 }
@@ -146,7 +273,25 @@ abstract class _$$CustomerPointTransactionImplCopyWith<$Res>
       double conversionRate,
       String? reason,
       DateTime createdAt,
-      SyncStatus syncStatus});
+      SyncStatus syncStatus,
+      String? loyaltyProgramId,
+      String? ticketId,
+      String? rewardId,
+      String? transactionType,
+      int? units,
+      String? reversalOfTransactionId,
+      String? idempotencyKey,
+      String? sourceEventId,
+      String? actorUserId,
+      String? branchId,
+      String? terminalId,
+      int? programVersion,
+      int? rewardVersion,
+      String? commercialSnapshot,
+      String? origin,
+      DateTime? occurredAt,
+      DateTime? recordedAt,
+      bool legacyImported});
 }
 
 /// @nodoc
@@ -172,6 +317,24 @@ class __$$CustomerPointTransactionImplCopyWithImpl<$Res>
     Object? reason = freezed,
     Object? createdAt = null,
     Object? syncStatus = null,
+    Object? loyaltyProgramId = freezed,
+    Object? ticketId = freezed,
+    Object? rewardId = freezed,
+    Object? transactionType = freezed,
+    Object? units = freezed,
+    Object? reversalOfTransactionId = freezed,
+    Object? idempotencyKey = freezed,
+    Object? sourceEventId = freezed,
+    Object? actorUserId = freezed,
+    Object? branchId = freezed,
+    Object? terminalId = freezed,
+    Object? programVersion = freezed,
+    Object? rewardVersion = freezed,
+    Object? commercialSnapshot = freezed,
+    Object? origin = freezed,
+    Object? occurredAt = freezed,
+    Object? recordedAt = freezed,
+    Object? legacyImported = null,
   }) {
     return _then(_$CustomerPointTransactionImpl(
       id: null == id
@@ -214,6 +377,78 @@ class __$$CustomerPointTransactionImplCopyWithImpl<$Res>
           ? _value.syncStatus
           : syncStatus // ignore: cast_nullable_to_non_nullable
               as SyncStatus,
+      loyaltyProgramId: freezed == loyaltyProgramId
+          ? _value.loyaltyProgramId
+          : loyaltyProgramId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      ticketId: freezed == ticketId
+          ? _value.ticketId
+          : ticketId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      rewardId: freezed == rewardId
+          ? _value.rewardId
+          : rewardId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      transactionType: freezed == transactionType
+          ? _value.transactionType
+          : transactionType // ignore: cast_nullable_to_non_nullable
+              as String?,
+      units: freezed == units
+          ? _value.units
+          : units // ignore: cast_nullable_to_non_nullable
+              as int?,
+      reversalOfTransactionId: freezed == reversalOfTransactionId
+          ? _value.reversalOfTransactionId
+          : reversalOfTransactionId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      idempotencyKey: freezed == idempotencyKey
+          ? _value.idempotencyKey
+          : idempotencyKey // ignore: cast_nullable_to_non_nullable
+              as String?,
+      sourceEventId: freezed == sourceEventId
+          ? _value.sourceEventId
+          : sourceEventId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      actorUserId: freezed == actorUserId
+          ? _value.actorUserId
+          : actorUserId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      branchId: freezed == branchId
+          ? _value.branchId
+          : branchId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      terminalId: freezed == terminalId
+          ? _value.terminalId
+          : terminalId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      programVersion: freezed == programVersion
+          ? _value.programVersion
+          : programVersion // ignore: cast_nullable_to_non_nullable
+              as int?,
+      rewardVersion: freezed == rewardVersion
+          ? _value.rewardVersion
+          : rewardVersion // ignore: cast_nullable_to_non_nullable
+              as int?,
+      commercialSnapshot: freezed == commercialSnapshot
+          ? _value.commercialSnapshot
+          : commercialSnapshot // ignore: cast_nullable_to_non_nullable
+              as String?,
+      origin: freezed == origin
+          ? _value.origin
+          : origin // ignore: cast_nullable_to_non_nullable
+              as String?,
+      occurredAt: freezed == occurredAt
+          ? _value.occurredAt
+          : occurredAt // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
+      recordedAt: freezed == recordedAt
+          ? _value.recordedAt
+          : recordedAt // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
+      legacyImported: null == legacyImported
+          ? _value.legacyImported
+          : legacyImported // ignore: cast_nullable_to_non_nullable
+              as bool,
     ));
   }
 }
@@ -231,7 +466,25 @@ class _$CustomerPointTransactionImpl implements _CustomerPointTransaction {
       this.conversionRate = 0.1,
       this.reason,
       required this.createdAt,
-      this.syncStatus = SyncStatus.pending});
+      this.syncStatus = SyncStatus.pending,
+      this.loyaltyProgramId,
+      this.ticketId,
+      this.rewardId,
+      this.transactionType,
+      this.units,
+      this.reversalOfTransactionId,
+      this.idempotencyKey,
+      this.sourceEventId,
+      this.actorUserId,
+      this.branchId,
+      this.terminalId,
+      this.programVersion,
+      this.rewardVersion,
+      this.commercialSnapshot,
+      this.origin,
+      this.occurredAt,
+      this.recordedAt,
+      this.legacyImported = false});
 
   factory _$CustomerPointTransactionImpl.fromJson(Map<String, dynamic> json) =>
       _$$CustomerPointTransactionImplFromJson(json);
@@ -258,10 +511,48 @@ class _$CustomerPointTransactionImpl implements _CustomerPointTransaction {
   @override
   @JsonKey()
   final SyncStatus syncStatus;
+// --- V1 Loyalty fields ---
+  @override
+  final String? loyaltyProgramId;
+  @override
+  final String? ticketId;
+  @override
+  final String? rewardId;
+  @override
+  final String? transactionType;
+  @override
+  final int? units;
+  @override
+  final String? reversalOfTransactionId;
+  @override
+  final String? idempotencyKey;
+  @override
+  final String? sourceEventId;
+  @override
+  final String? actorUserId;
+  @override
+  final String? branchId;
+  @override
+  final String? terminalId;
+  @override
+  final int? programVersion;
+  @override
+  final int? rewardVersion;
+  @override
+  final String? commercialSnapshot;
+  @override
+  final String? origin;
+  @override
+  final DateTime? occurredAt;
+  @override
+  final DateTime? recordedAt;
+  @override
+  @JsonKey()
+  final bool legacyImported;
 
   @override
   String toString() {
-    return 'CustomerPointTransaction(id: $id, customerId: $customerId, invoiceId: $invoiceId, type: $type, points: $points, balanceAfter: $balanceAfter, conversionRate: $conversionRate, reason: $reason, createdAt: $createdAt, syncStatus: $syncStatus)';
+    return 'CustomerPointTransaction(id: $id, customerId: $customerId, invoiceId: $invoiceId, type: $type, points: $points, balanceAfter: $balanceAfter, conversionRate: $conversionRate, reason: $reason, createdAt: $createdAt, syncStatus: $syncStatus, loyaltyProgramId: $loyaltyProgramId, ticketId: $ticketId, rewardId: $rewardId, transactionType: $transactionType, units: $units, reversalOfTransactionId: $reversalOfTransactionId, idempotencyKey: $idempotencyKey, sourceEventId: $sourceEventId, actorUserId: $actorUserId, branchId: $branchId, terminalId: $terminalId, programVersion: $programVersion, rewardVersion: $rewardVersion, commercialSnapshot: $commercialSnapshot, origin: $origin, occurredAt: $occurredAt, recordedAt: $recordedAt, legacyImported: $legacyImported)';
   }
 
   @override
@@ -284,13 +575,77 @@ class _$CustomerPointTransactionImpl implements _CustomerPointTransaction {
             (identical(other.createdAt, createdAt) ||
                 other.createdAt == createdAt) &&
             (identical(other.syncStatus, syncStatus) ||
-                other.syncStatus == syncStatus));
+                other.syncStatus == syncStatus) &&
+            (identical(other.loyaltyProgramId, loyaltyProgramId) ||
+                other.loyaltyProgramId == loyaltyProgramId) &&
+            (identical(other.ticketId, ticketId) ||
+                other.ticketId == ticketId) &&
+            (identical(other.rewardId, rewardId) ||
+                other.rewardId == rewardId) &&
+            (identical(other.transactionType, transactionType) ||
+                other.transactionType == transactionType) &&
+            (identical(other.units, units) || other.units == units) &&
+            (identical(
+                    other.reversalOfTransactionId, reversalOfTransactionId) ||
+                other.reversalOfTransactionId == reversalOfTransactionId) &&
+            (identical(other.idempotencyKey, idempotencyKey) ||
+                other.idempotencyKey == idempotencyKey) &&
+            (identical(other.sourceEventId, sourceEventId) ||
+                other.sourceEventId == sourceEventId) &&
+            (identical(other.actorUserId, actorUserId) ||
+                other.actorUserId == actorUserId) &&
+            (identical(other.branchId, branchId) ||
+                other.branchId == branchId) &&
+            (identical(other.terminalId, terminalId) ||
+                other.terminalId == terminalId) &&
+            (identical(other.programVersion, programVersion) ||
+                other.programVersion == programVersion) &&
+            (identical(other.rewardVersion, rewardVersion) ||
+                other.rewardVersion == rewardVersion) &&
+            (identical(other.commercialSnapshot, commercialSnapshot) ||
+                other.commercialSnapshot == commercialSnapshot) &&
+            (identical(other.origin, origin) || other.origin == origin) &&
+            (identical(other.occurredAt, occurredAt) ||
+                other.occurredAt == occurredAt) &&
+            (identical(other.recordedAt, recordedAt) ||
+                other.recordedAt == recordedAt) &&
+            (identical(other.legacyImported, legacyImported) ||
+                other.legacyImported == legacyImported));
   }
 
   @JsonKey(ignore: true)
   @override
-  int get hashCode => Object.hash(runtimeType, id, customerId, invoiceId, type,
-      points, balanceAfter, conversionRate, reason, createdAt, syncStatus);
+  int get hashCode => Object.hashAll([
+        runtimeType,
+        id,
+        customerId,
+        invoiceId,
+        type,
+        points,
+        balanceAfter,
+        conversionRate,
+        reason,
+        createdAt,
+        syncStatus,
+        loyaltyProgramId,
+        ticketId,
+        rewardId,
+        transactionType,
+        units,
+        reversalOfTransactionId,
+        idempotencyKey,
+        sourceEventId,
+        actorUserId,
+        branchId,
+        terminalId,
+        programVersion,
+        rewardVersion,
+        commercialSnapshot,
+        origin,
+        occurredAt,
+        recordedAt,
+        legacyImported
+      ]);
 
   @JsonKey(ignore: true)
   @override
@@ -318,7 +673,25 @@ abstract class _CustomerPointTransaction implements CustomerPointTransaction {
       final double conversionRate,
       final String? reason,
       required final DateTime createdAt,
-      final SyncStatus syncStatus}) = _$CustomerPointTransactionImpl;
+      final SyncStatus syncStatus,
+      final String? loyaltyProgramId,
+      final String? ticketId,
+      final String? rewardId,
+      final String? transactionType,
+      final int? units,
+      final String? reversalOfTransactionId,
+      final String? idempotencyKey,
+      final String? sourceEventId,
+      final String? actorUserId,
+      final String? branchId,
+      final String? terminalId,
+      final int? programVersion,
+      final int? rewardVersion,
+      final String? commercialSnapshot,
+      final String? origin,
+      final DateTime? occurredAt,
+      final DateTime? recordedAt,
+      final bool legacyImported}) = _$CustomerPointTransactionImpl;
 
   factory _CustomerPointTransaction.fromJson(Map<String, dynamic> json) =
       _$CustomerPointTransactionImpl.fromJson;
@@ -343,6 +716,42 @@ abstract class _CustomerPointTransaction implements CustomerPointTransaction {
   DateTime get createdAt;
   @override
   SyncStatus get syncStatus;
+  @override // --- V1 Loyalty fields ---
+  String? get loyaltyProgramId;
+  @override
+  String? get ticketId;
+  @override
+  String? get rewardId;
+  @override
+  String? get transactionType;
+  @override
+  int? get units;
+  @override
+  String? get reversalOfTransactionId;
+  @override
+  String? get idempotencyKey;
+  @override
+  String? get sourceEventId;
+  @override
+  String? get actorUserId;
+  @override
+  String? get branchId;
+  @override
+  String? get terminalId;
+  @override
+  int? get programVersion;
+  @override
+  int? get rewardVersion;
+  @override
+  String? get commercialSnapshot;
+  @override
+  String? get origin;
+  @override
+  DateTime? get occurredAt;
+  @override
+  DateTime? get recordedAt;
+  @override
+  bool get legacyImported;
   @override
   @JsonKey(ignore: true)
   _$$CustomerPointTransactionImplCopyWith<_$CustomerPointTransactionImpl>

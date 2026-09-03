@@ -21,6 +21,28 @@ _$CustomerPointTransactionImpl _$$CustomerPointTransactionImplFromJson(
       syncStatus:
           $enumDecodeNullable(_$SyncStatusEnumMap, json['syncStatus']) ??
               SyncStatus.pending,
+      loyaltyProgramId: json['loyaltyProgramId'] as String?,
+      ticketId: json['ticketId'] as String?,
+      rewardId: json['rewardId'] as String?,
+      transactionType: json['transactionType'] as String?,
+      units: json['units'] as int?,
+      reversalOfTransactionId: json['reversalOfTransactionId'] as String?,
+      idempotencyKey: json['idempotencyKey'] as String?,
+      sourceEventId: json['sourceEventId'] as String?,
+      actorUserId: json['actorUserId'] as String?,
+      branchId: json['branchId'] as String?,
+      terminalId: json['terminalId'] as String?,
+      programVersion: json['programVersion'] as int?,
+      rewardVersion: json['rewardVersion'] as int?,
+      commercialSnapshot: json['commercialSnapshot'] as String?,
+      origin: json['origin'] as String?,
+      occurredAt: json['occurredAt'] == null
+          ? null
+          : DateTime.parse(json['occurredAt'] as String),
+      recordedAt: json['recordedAt'] == null
+          ? null
+          : DateTime.parse(json['recordedAt'] as String),
+      legacyImported: json['legacyImported'] as bool? ?? false,
     );
 
 Map<String, dynamic> _$$CustomerPointTransactionImplToJson(
@@ -36,6 +58,24 @@ Map<String, dynamic> _$$CustomerPointTransactionImplToJson(
       'reason': instance.reason,
       'createdAt': instance.createdAt.toIso8601String(),
       'syncStatus': _$SyncStatusEnumMap[instance.syncStatus]!,
+      'loyaltyProgramId': instance.loyaltyProgramId,
+      'ticketId': instance.ticketId,
+      'rewardId': instance.rewardId,
+      'transactionType': instance.transactionType,
+      'units': instance.units,
+      'reversalOfTransactionId': instance.reversalOfTransactionId,
+      'idempotencyKey': instance.idempotencyKey,
+      'sourceEventId': instance.sourceEventId,
+      'actorUserId': instance.actorUserId,
+      'branchId': instance.branchId,
+      'terminalId': instance.terminalId,
+      'programVersion': instance.programVersion,
+      'rewardVersion': instance.rewardVersion,
+      'commercialSnapshot': instance.commercialSnapshot,
+      'origin': instance.origin,
+      'occurredAt': instance.occurredAt?.toIso8601String(),
+      'recordedAt': instance.recordedAt?.toIso8601String(),
+      'legacyImported': instance.legacyImported,
     };
 
 const _$PointTransactionTypeEnumMap = {

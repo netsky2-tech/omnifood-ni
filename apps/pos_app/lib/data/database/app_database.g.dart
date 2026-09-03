@@ -148,13 +148,17 @@ class _$AppDatabase extends AppDatabase {
 
   CustomerPointTransactionDao? _customerPointTransactionDaoInstance;
 
+  LoyaltyProgramDao? _loyaltyProgramDaoInstance;
+
+  LoyaltyRewardDao? _loyaltyRewardDaoInstance;
+
   Future<sqflite.Database> open(
     String path,
     List<Migration> migrations, [
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 40,
+      version: 42,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -248,7 +252,11 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `customers` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `tax_id` TEXT, `phone` TEXT, `email` TEXT, `address` TEXT, `points_balance` REAL NOT NULL, `is_active` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, `sync_status` TEXT NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `customer_point_transactions` (`id` TEXT NOT NULL, `customer_id` TEXT NOT NULL, `invoice_id` TEXT, `type` TEXT NOT NULL, `points` REAL NOT NULL, `balance_after` REAL NOT NULL, `conversion_rate` REAL NOT NULL, `reason` TEXT, `created_at` INTEGER NOT NULL, `sync_status` TEXT NOT NULL, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `customer_point_transactions` (`id` TEXT NOT NULL, `customer_id` TEXT NOT NULL, `invoice_id` TEXT, `type` TEXT NOT NULL, `points` REAL NOT NULL, `balance_after` REAL NOT NULL, `conversion_rate` REAL NOT NULL, `reason` TEXT, `created_at` INTEGER NOT NULL, `sync_status` TEXT NOT NULL, `loyalty_program_id` TEXT, `ticket_id` TEXT, `reward_id` TEXT, `transaction_type` TEXT, `units` INTEGER, `reversal_of_transaction_id` TEXT, `idempotency_key` TEXT, `source_event_id` TEXT, `actor_user_id` TEXT, `branch_id` TEXT, `terminal_id` TEXT, `program_version` INTEGER, `reward_version` INTEGER, `commercial_snapshot` TEXT, `origin` TEXT, `occurred_at` INTEGER, `recorded_at` INTEGER, `legacy_imported` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `loyalty_programs` (`id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `name` TEXT NOT NULL, `program_type` TEXT NOT NULL, `status` TEXT NOT NULL, `starts_at` INTEGER, `ends_at` INTEGER, `earning_rule_json` TEXT NOT NULL, `eligibility_rule_json` TEXT NOT NULL, `config_version` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `loyalty_rewards` (`id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `loyalty_program_id` TEXT NOT NULL, `name` TEXT NOT NULL, `reward_type` TEXT NOT NULL, `cost_units` INTEGER NOT NULL, `benefit_config_json` TEXT NOT NULL, `status` TEXT NOT NULL, `starts_at` INTEGER, `ends_at` INTEGER, `presentation_order` INTEGER NOT NULL, `config_version` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE UNIQUE INDEX `index_audit_logs_tenant_id_device_id_user_id_sequence_no` ON `audit_logs` (`tenant_id`, `device_id`, `user_id`, `sequence_no`)');
         await database.execute(
@@ -285,6 +293,22 @@ class _$AppDatabase extends AppDatabase {
             'CREATE INDEX `index_customer_point_transactions_invoice_id` ON `customer_point_transactions` (`invoice_id`)');
         await database.execute(
             'CREATE INDEX `index_customer_point_transactions_created_at` ON `customer_point_transactions` (`created_at`)');
+        await database.execute(
+            'CREATE INDEX `index_customer_point_transactions_loyalty_program_id` ON `customer_point_transactions` (`loyalty_program_id`)');
+        await database.execute(
+            'CREATE INDEX `index_customer_point_transactions_idempotency_key` ON `customer_point_transactions` (`idempotency_key`)');
+        await database.execute(
+            'CREATE INDEX `index_loyalty_programs_tenant_id` ON `loyalty_programs` (`tenant_id`)');
+        await database.execute(
+            'CREATE INDEX `index_loyalty_programs_status` ON `loyalty_programs` (`status`)');
+        await database.execute(
+            'CREATE INDEX `index_loyalty_programs_program_type` ON `loyalty_programs` (`program_type`)');
+        await database.execute(
+            'CREATE INDEX `index_loyalty_rewards_tenant_id` ON `loyalty_rewards` (`tenant_id`)');
+        await database.execute(
+            'CREATE INDEX `index_loyalty_rewards_loyalty_program_id` ON `loyalty_rewards` (`loyalty_program_id`)');
+        await database.execute(
+            'CREATE INDEX `index_loyalty_rewards_status` ON `loyalty_rewards` (`status`)');
 
         await callback?.onCreate?.call(database, version);
       },
@@ -500,6 +524,18 @@ class _$AppDatabase extends AppDatabase {
   CustomerPointTransactionDao get customerPointTransactionDao {
     return _customerPointTransactionDaoInstance ??=
         _$CustomerPointTransactionDao(database, changeListener);
+  }
+
+  @override
+  LoyaltyProgramDao get loyaltyProgramDao {
+    return _loyaltyProgramDaoInstance ??=
+        _$LoyaltyProgramDao(database, changeListener);
+  }
+
+  @override
+  LoyaltyRewardDao get loyaltyRewardDao {
+    return _loyaltyRewardDaoInstance ??=
+        _$LoyaltyRewardDao(database, changeListener);
   }
 }
 
@@ -5208,7 +5244,25 @@ class _$CustomerPointTransactionDao extends CustomerPointTransactionDao {
                   'conversion_rate': item.conversionRate,
                   'reason': item.reason,
                   'created_at': item.createdAt,
-                  'sync_status': item.syncStatus
+                  'sync_status': item.syncStatus,
+                  'loyalty_program_id': item.loyaltyProgramId,
+                  'ticket_id': item.ticketId,
+                  'reward_id': item.rewardId,
+                  'transaction_type': item.transactionType,
+                  'units': item.units,
+                  'reversal_of_transaction_id': item.reversalOfTransactionId,
+                  'idempotency_key': item.idempotencyKey,
+                  'source_event_id': item.sourceEventId,
+                  'actor_user_id': item.actorUserId,
+                  'branch_id': item.branchId,
+                  'terminal_id': item.terminalId,
+                  'program_version': item.programVersion,
+                  'reward_version': item.rewardVersion,
+                  'commercial_snapshot': item.commercialSnapshot,
+                  'origin': item.origin,
+                  'occurred_at': item.occurredAt,
+                  'recorded_at': item.recordedAt,
+                  'legacy_imported': item.legacyImported
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -5225,7 +5279,7 @@ class _$CustomerPointTransactionDao extends CustomerPointTransactionDao {
       String customerId) async {
     return _queryAdapter.queryList(
         'SELECT * FROM customer_point_transactions WHERE customer_id = ?1 ORDER BY created_at DESC',
-        mapper: (Map<String, Object?> row) => CustomerPointTransactionEntity(id: row['id'] as String, customerId: row['customer_id'] as String, invoiceId: row['invoice_id'] as String?, type: row['type'] as String, points: row['points'] as double, balanceAfter: row['balance_after'] as double, conversionRate: row['conversion_rate'] as double, reason: row['reason'] as String?, createdAt: row['created_at'] as int, syncStatus: row['sync_status'] as String),
+        mapper: (Map<String, Object?> row) => CustomerPointTransactionEntity(id: row['id'] as String, customerId: row['customer_id'] as String, invoiceId: row['invoice_id'] as String?, type: row['type'] as String, points: row['points'] as double, balanceAfter: row['balance_after'] as double, conversionRate: row['conversion_rate'] as double, reason: row['reason'] as String?, createdAt: row['created_at'] as int, syncStatus: row['sync_status'] as String, loyaltyProgramId: row['loyalty_program_id'] as String?, ticketId: row['ticket_id'] as String?, rewardId: row['reward_id'] as String?, transactionType: row['transaction_type'] as String?, units: row['units'] as int?, reversalOfTransactionId: row['reversal_of_transaction_id'] as String?, idempotencyKey: row['idempotency_key'] as String?, sourceEventId: row['source_event_id'] as String?, actorUserId: row['actor_user_id'] as String?, branchId: row['branch_id'] as String?, terminalId: row['terminal_id'] as String?, programVersion: row['program_version'] as int?, rewardVersion: row['reward_version'] as int?, commercialSnapshot: row['commercial_snapshot'] as String?, origin: row['origin'] as String?, occurredAt: row['occurred_at'] as int?, recordedAt: row['recorded_at'] as int?, legacyImported: row['legacy_imported'] as int),
         arguments: [customerId]);
   }
 
@@ -5244,7 +5298,26 @@ class _$CustomerPointTransactionDao extends CustomerPointTransactionDao {
             conversionRate: row['conversion_rate'] as double,
             reason: row['reason'] as String?,
             createdAt: row['created_at'] as int,
-            syncStatus: row['sync_status'] as String),
+            syncStatus: row['sync_status'] as String,
+            loyaltyProgramId: row['loyalty_program_id'] as String?,
+            ticketId: row['ticket_id'] as String?,
+            rewardId: row['reward_id'] as String?,
+            transactionType: row['transaction_type'] as String?,
+            units: row['units'] as int?,
+            reversalOfTransactionId:
+                row['reversal_of_transaction_id'] as String?,
+            idempotencyKey: row['idempotency_key'] as String?,
+            sourceEventId: row['source_event_id'] as String?,
+            actorUserId: row['actor_user_id'] as String?,
+            branchId: row['branch_id'] as String?,
+            terminalId: row['terminal_id'] as String?,
+            programVersion: row['program_version'] as int?,
+            rewardVersion: row['reward_version'] as int?,
+            commercialSnapshot: row['commercial_snapshot'] as String?,
+            origin: row['origin'] as String?,
+            occurredAt: row['occurred_at'] as int?,
+            recordedAt: row['recorded_at'] as int?,
+            legacyImported: row['legacy_imported'] as int),
         arguments: [invoiceId]);
   }
 
@@ -5263,8 +5336,36 @@ class _$CustomerPointTransactionDao extends CustomerPointTransactionDao {
             conversionRate: row['conversion_rate'] as double,
             reason: row['reason'] as String?,
             createdAt: row['created_at'] as int,
-            syncStatus: row['sync_status'] as String),
+            syncStatus: row['sync_status'] as String,
+            loyaltyProgramId: row['loyalty_program_id'] as String?,
+            ticketId: row['ticket_id'] as String?,
+            rewardId: row['reward_id'] as String?,
+            transactionType: row['transaction_type'] as String?,
+            units: row['units'] as int?,
+            reversalOfTransactionId:
+                row['reversal_of_transaction_id'] as String?,
+            idempotencyKey: row['idempotency_key'] as String?,
+            sourceEventId: row['source_event_id'] as String?,
+            actorUserId: row['actor_user_id'] as String?,
+            branchId: row['branch_id'] as String?,
+            terminalId: row['terminal_id'] as String?,
+            programVersion: row['program_version'] as int?,
+            rewardVersion: row['reward_version'] as int?,
+            commercialSnapshot: row['commercial_snapshot'] as String?,
+            origin: row['origin'] as String?,
+            occurredAt: row['occurred_at'] as int?,
+            recordedAt: row['recorded_at'] as int?,
+            legacyImported: row['legacy_imported'] as int),
         arguments: [status]);
+  }
+
+  @override
+  Future<CustomerPointTransactionEntity?> findByIdempotencyKey(
+      String key) async {
+    return _queryAdapter.query(
+        'SELECT * FROM customer_point_transactions WHERE idempotency_key = ?1 LIMIT 1',
+        mapper: (Map<String, Object?> row) => CustomerPointTransactionEntity(id: row['id'] as String, customerId: row['customer_id'] as String, invoiceId: row['invoice_id'] as String?, type: row['type'] as String, points: row['points'] as double, balanceAfter: row['balance_after'] as double, conversionRate: row['conversion_rate'] as double, reason: row['reason'] as String?, createdAt: row['created_at'] as int, syncStatus: row['sync_status'] as String, loyaltyProgramId: row['loyalty_program_id'] as String?, ticketId: row['ticket_id'] as String?, rewardId: row['reward_id'] as String?, transactionType: row['transaction_type'] as String?, units: row['units'] as int?, reversalOfTransactionId: row['reversal_of_transaction_id'] as String?, idempotencyKey: row['idempotency_key'] as String?, sourceEventId: row['source_event_id'] as String?, actorUserId: row['actor_user_id'] as String?, branchId: row['branch_id'] as String?, terminalId: row['terminal_id'] as String?, programVersion: row['program_version'] as int?, rewardVersion: row['reward_version'] as int?, commercialSnapshot: row['commercial_snapshot'] as String?, origin: row['origin'] as String?, occurredAt: row['occurred_at'] as int?, recordedAt: row['recorded_at'] as int?, legacyImported: row['legacy_imported'] as int),
+        arguments: [key]);
   }
 
   @override
@@ -5311,5 +5412,244 @@ class _$CustomerPointTransactionDao extends CustomerPointTransactionDao {
                 entity, customerId, newBalance, updatedAt);
       });
     }
+  }
+}
+
+class _$LoyaltyProgramDao extends LoyaltyProgramDao {
+  _$LoyaltyProgramDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _loyaltyProgramEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'loyalty_programs',
+            (LoyaltyProgramEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'tenant_id': item.tenantId,
+                  'name': item.name,
+                  'program_type': item.programType,
+                  'status': item.status,
+                  'starts_at': item.startsAt,
+                  'ends_at': item.endsAt,
+                  'earning_rule_json': item.earningRuleJson,
+                  'eligibility_rule_json': item.eligibilityRuleJson,
+                  'config_version': item.configVersion,
+                  'created_at': item.createdAt,
+                  'updated_at': item.updatedAt
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<LoyaltyProgramEntity>
+      _loyaltyProgramEntityInsertionAdapter;
+
+  @override
+  Future<List<LoyaltyProgramEntity>> getProgramsByStatus(
+    String tenantId,
+    String status,
+  ) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM loyalty_programs WHERE tenant_id = ?1 AND status = ?2',
+        mapper: (Map<String, Object?> row) => LoyaltyProgramEntity(
+            id: row['id'] as String,
+            tenantId: row['tenant_id'] as String,
+            name: row['name'] as String,
+            programType: row['program_type'] as String,
+            status: row['status'] as String,
+            startsAt: row['starts_at'] as int?,
+            endsAt: row['ends_at'] as int?,
+            earningRuleJson: row['earning_rule_json'] as String,
+            eligibilityRuleJson: row['eligibility_rule_json'] as String,
+            configVersion: row['config_version'] as int,
+            createdAt: row['created_at'] as int,
+            updatedAt: row['updated_at'] as int),
+        arguments: [tenantId, status]);
+  }
+
+  @override
+  Future<List<LoyaltyProgramEntity>> getAllPrograms(String tenantId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM loyalty_programs WHERE tenant_id = ?1',
+        mapper: (Map<String, Object?> row) => LoyaltyProgramEntity(
+            id: row['id'] as String,
+            tenantId: row['tenant_id'] as String,
+            name: row['name'] as String,
+            programType: row['program_type'] as String,
+            status: row['status'] as String,
+            startsAt: row['starts_at'] as int?,
+            endsAt: row['ends_at'] as int?,
+            earningRuleJson: row['earning_rule_json'] as String,
+            eligibilityRuleJson: row['eligibility_rule_json'] as String,
+            configVersion: row['config_version'] as int,
+            createdAt: row['created_at'] as int,
+            updatedAt: row['updated_at'] as int),
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<LoyaltyProgramEntity?> getProgramById(String id) async {
+    return _queryAdapter.query('SELECT * FROM loyalty_programs WHERE id = ?1',
+        mapper: (Map<String, Object?> row) => LoyaltyProgramEntity(
+            id: row['id'] as String,
+            tenantId: row['tenant_id'] as String,
+            name: row['name'] as String,
+            programType: row['program_type'] as String,
+            status: row['status'] as String,
+            startsAt: row['starts_at'] as int?,
+            endsAt: row['ends_at'] as int?,
+            earningRuleJson: row['earning_rule_json'] as String,
+            eligibilityRuleJson: row['eligibility_rule_json'] as String,
+            configVersion: row['config_version'] as int,
+            createdAt: row['created_at'] as int,
+            updatedAt: row['updated_at'] as int),
+        arguments: [id]);
+  }
+
+  @override
+  Future<void> deleteAllPrograms(String tenantId) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM loyalty_programs WHERE tenant_id = ?1',
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<List<LoyaltyProgramEntity>> getActivePrograms(String tenantId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM loyalty_programs WHERE tenant_id = ?1 AND status = \'ACTIVE\'',
+        mapper: (Map<String, Object?> row) => LoyaltyProgramEntity(id: row['id'] as String, tenantId: row['tenant_id'] as String, name: row['name'] as String, programType: row['program_type'] as String, status: row['status'] as String, startsAt: row['starts_at'] as int?, endsAt: row['ends_at'] as int?, earningRuleJson: row['earning_rule_json'] as String, eligibilityRuleJson: row['eligibility_rule_json'] as String, configVersion: row['config_version'] as int, createdAt: row['created_at'] as int, updatedAt: row['updated_at'] as int),
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<void> saveProgram(LoyaltyProgramEntity program) async {
+    await _loyaltyProgramEntityInsertionAdapter.insert(
+        program, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> savePrograms(List<LoyaltyProgramEntity> programs) async {
+    await _loyaltyProgramEntityInsertionAdapter.insertList(
+        programs, OnConflictStrategy.replace);
+  }
+}
+
+class _$LoyaltyRewardDao extends LoyaltyRewardDao {
+  _$LoyaltyRewardDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _loyaltyRewardEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'loyalty_rewards',
+            (LoyaltyRewardEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'tenant_id': item.tenantId,
+                  'loyalty_program_id': item.loyaltyProgramId,
+                  'name': item.name,
+                  'reward_type': item.rewardType,
+                  'cost_units': item.costUnits,
+                  'benefit_config_json': item.benefitConfigJson,
+                  'status': item.status,
+                  'starts_at': item.startsAt,
+                  'ends_at': item.endsAt,
+                  'presentation_order': item.presentationOrder,
+                  'config_version': item.configVersion,
+                  'created_at': item.createdAt,
+                  'updated_at': item.updatedAt
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<LoyaltyRewardEntity>
+      _loyaltyRewardEntityInsertionAdapter;
+
+  @override
+  Future<List<LoyaltyRewardEntity>> getRewardsByProgram(
+      String programId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM loyalty_rewards WHERE loyalty_program_id = ?1 ORDER BY presentation_order ASC',
+        mapper: (Map<String, Object?> row) => LoyaltyRewardEntity(id: row['id'] as String, tenantId: row['tenant_id'] as String, loyaltyProgramId: row['loyalty_program_id'] as String, name: row['name'] as String, rewardType: row['reward_type'] as String, costUnits: row['cost_units'] as int, benefitConfigJson: row['benefit_config_json'] as String, status: row['status'] as String, startsAt: row['starts_at'] as int?, endsAt: row['ends_at'] as int?, presentationOrder: row['presentation_order'] as int, configVersion: row['config_version'] as int, createdAt: row['created_at'] as int, updatedAt: row['updated_at'] as int),
+        arguments: [programId]);
+  }
+
+  @override
+  Future<List<LoyaltyRewardEntity>> getRewardsByStatus(
+    String tenantId,
+    String status,
+  ) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM loyalty_rewards WHERE tenant_id = ?1 AND status = ?2',
+        mapper: (Map<String, Object?> row) => LoyaltyRewardEntity(
+            id: row['id'] as String,
+            tenantId: row['tenant_id'] as String,
+            loyaltyProgramId: row['loyalty_program_id'] as String,
+            name: row['name'] as String,
+            rewardType: row['reward_type'] as String,
+            costUnits: row['cost_units'] as int,
+            benefitConfigJson: row['benefit_config_json'] as String,
+            status: row['status'] as String,
+            startsAt: row['starts_at'] as int?,
+            endsAt: row['ends_at'] as int?,
+            presentationOrder: row['presentation_order'] as int,
+            configVersion: row['config_version'] as int,
+            createdAt: row['created_at'] as int,
+            updatedAt: row['updated_at'] as int),
+        arguments: [tenantId, status]);
+  }
+
+  @override
+  Future<LoyaltyRewardEntity?> getRewardById(String id) async {
+    return _queryAdapter.query('SELECT * FROM loyalty_rewards WHERE id = ?1',
+        mapper: (Map<String, Object?> row) => LoyaltyRewardEntity(
+            id: row['id'] as String,
+            tenantId: row['tenant_id'] as String,
+            loyaltyProgramId: row['loyalty_program_id'] as String,
+            name: row['name'] as String,
+            rewardType: row['reward_type'] as String,
+            costUnits: row['cost_units'] as int,
+            benefitConfigJson: row['benefit_config_json'] as String,
+            status: row['status'] as String,
+            startsAt: row['starts_at'] as int?,
+            endsAt: row['ends_at'] as int?,
+            presentationOrder: row['presentation_order'] as int,
+            configVersion: row['config_version'] as int,
+            createdAt: row['created_at'] as int,
+            updatedAt: row['updated_at'] as int),
+        arguments: [id]);
+  }
+
+  @override
+  Future<void> deleteAllRewards(String tenantId) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM loyalty_rewards WHERE tenant_id = ?1',
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<List<LoyaltyRewardEntity>> getActiveRewards(String tenantId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM loyalty_rewards WHERE tenant_id = ?1 AND status = \'ACTIVE\' ORDER BY presentation_order ASC',
+        mapper: (Map<String, Object?> row) => LoyaltyRewardEntity(id: row['id'] as String, tenantId: row['tenant_id'] as String, loyaltyProgramId: row['loyalty_program_id'] as String, name: row['name'] as String, rewardType: row['reward_type'] as String, costUnits: row['cost_units'] as int, benefitConfigJson: row['benefit_config_json'] as String, status: row['status'] as String, startsAt: row['starts_at'] as int?, endsAt: row['ends_at'] as int?, presentationOrder: row['presentation_order'] as int, configVersion: row['config_version'] as int, createdAt: row['created_at'] as int, updatedAt: row['updated_at'] as int),
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<void> saveReward(LoyaltyRewardEntity reward) async {
+    await _loyaltyRewardEntityInsertionAdapter.insert(
+        reward, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> saveRewards(List<LoyaltyRewardEntity> rewards) async {
+    await _loyaltyRewardEntityInsertionAdapter.insertList(
+        rewards, OnConflictStrategy.replace);
   }
 }

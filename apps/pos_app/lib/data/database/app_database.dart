@@ -41,6 +41,10 @@ import '../daos/customer/customer_dao.dart';
 import '../models/customer/customer_entity.dart';
 import '../daos/customer/customer_point_transaction_dao.dart';
 import '../models/customer/customer_point_transaction_entity.dart';
+import '../models/loyalty/loyalty_program_entity.dart';
+import '../models/loyalty/loyalty_reward_entity.dart';
+import '../daos/loyalty/loyalty_program_dao.dart';
+import '../daos/loyalty/loyalty_reward_dao.dart';
 import 'package:pos_app/data/models/user_entity.dart';
 import 'package:pos_app/data/models/audit_log_entity.dart';
 import 'package:pos_app/data/models/security_profile_entity.dart';
@@ -80,7 +84,7 @@ import 'package:pos_app/data/models/kitchen/kitchen_order_item_entity.dart';
 part 'app_database.g.dart'; // generated code
 
 @Database(
-  version: 41,
+  version: 42,
   entities: [
     UserEntity,
     SecurityProfileEntity,
@@ -122,6 +126,8 @@ part 'app_database.g.dart'; // generated code
     KitchenOrderItemEntity,
     CustomerEntity,
     CustomerPointTransactionEntity,
+    LoyaltyProgramEntity,
+    LoyaltyRewardEntity,
   ],
 )
 abstract class AppDatabase extends FloorDatabase {
@@ -163,4 +169,6 @@ abstract class AppDatabase extends FloorDatabase {
   KitchenOrderDao get kitchenOrderDao;
   CustomerDao get customerDao;
   CustomerPointTransactionDao get customerPointTransactionDao;
+  LoyaltyProgramDao get loyaltyProgramDao;
+  LoyaltyRewardDao get loyaltyRewardDao;
 }

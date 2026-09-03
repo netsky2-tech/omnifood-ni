@@ -1686,7 +1686,7 @@ final migration39_40 = Migration(39, 40, (database) async {
   ''');
 });
 
-Future<void> _addColumnIfMissing(DatabaseExecutor db, String tableName, String columnName, String definition) async {
+Future<void> _addColumnIfMissing(sqflite.DatabaseExecutor db, String tableName, String columnName, String definition) async {
   final table = await db.rawQuery(
     "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
     [tableName],
@@ -1722,6 +1722,66 @@ final migration40_41 = Migration(40, 41, (database) async {
   await _addColumnIfMissing(database, table, 'legacy_imported', "legacy_imported INTEGER NOT NULL DEFAULT 0");
 });
 
+final migration41_42 = Migration(41, 42, (database) async {
+  // Create loyalty_programs table
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS loyalty_programs (
+      id TEXT NOT NULL PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      program_type TEXT NOT NULL,
+      status TEXT NOT NULL,
+      starts_at INTEGER,
+      ends_at INTEGER,
+      earning_rule_json TEXT NOT NULL,
+      eligibility_rule_json TEXT NOT NULL,
+      config_version INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    )
+  ''');
+
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS idx_loyalty_programs_tenant_id ON loyalty_programs (tenant_id)',
+  );
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS idx_loyalty_programs_status ON loyalty_programs (status)',
+  );
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS idx_loyalty_programs_program_type ON loyalty_programs (program_type)',
+  );
+
+  // Create loyalty_rewards table
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS loyalty_rewards (
+      id TEXT NOT NULL PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      loyalty_program_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      reward_type TEXT NOT NULL,
+      cost_units INTEGER NOT NULL,
+      benefit_config_json TEXT NOT NULL,
+      status TEXT NOT NULL,
+      starts_at INTEGER,
+      ends_at INTEGER,
+      presentation_order INTEGER NOT NULL DEFAULT 0,
+      config_version INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    )
+  ''');
+
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS idx_loyalty_rewards_tenant_id ON loyalty_rewards (tenant_id)',
+  );
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS idx_loyalty_rewards_program_id ON loyalty_rewards (loyalty_program_id)',
+  );
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS idx_loyalty_rewards_status ON loyalty_rewards (status)',
+  );
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -1754,4 +1814,5 @@ final allMigrations = [
   migration38_39,
   migration39_40,
   migration40_41,
+  migration41_42,
 ];
