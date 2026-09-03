@@ -177,11 +177,9 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
           ),
         ],
       ),
-      content: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxWidth: 480,
-          maxHeight: MediaQuery.of(context).size.height * 0.7,
-        ),
+      content: SizedBox(
+        width: 480,
+        height: MediaQuery.of(context).size.height * 0.7,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

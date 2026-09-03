@@ -187,7 +187,9 @@ export class IndustryTemplateService {
               tenant_id: trimmedTenant,
               name: tProduct.name.trim(),
               uom: tProduct.uom ?? 'UN',
-              sellPrice: tProduct.suggested_price ? Number(tProduct.suggested_price) : 0,
+              sellPrice: tProduct.suggested_price
+                ? Number(tProduct.suggested_price)
+                : 0,
               averageCost: 0,
               stock: 0,
               is_perishable: tProduct.is_perishable,
@@ -235,9 +237,7 @@ export class IndustryTemplateService {
                 if (matchedInsumo) {
                   const grossQty = Number(item.gross_quantity || 0);
                   const shrinkPct = Number(item.technical_shrink_pct || 0);
-                  const netQuantity = round4(
-                    grossQty * (1 - shrinkPct / 100),
-                  );
+                  const netQuantity = round4(grossQty * (1 - shrinkPct / 100));
 
                   const recipeDetail = manager.create(RecipeDetail, {
                     tenant_id: trimmedTenant,

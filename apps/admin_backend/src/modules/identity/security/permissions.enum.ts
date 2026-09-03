@@ -63,7 +63,9 @@ const VALID_PERMISSIONS_SET = new Set<string>(Object.values(AppPermission));
 export function resolveEffectivePermissions(
   role?: UserRole | string,
   customPermissions?:
-    (string | AppPermission)[] | readonly (string | AppPermission)[] | null,
+    | (string | AppPermission)[]
+    | readonly (string | AppPermission)[]
+    | null,
 ): AppPermission[] {
   const rolePermissions: AppPermission[] = isUserRole(role)
     ? [...DEFAULT_ROLE_PERMISSIONS[role]]

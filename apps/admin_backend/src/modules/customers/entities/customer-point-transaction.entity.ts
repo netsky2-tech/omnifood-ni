@@ -55,7 +55,8 @@ export class CustomerPointTransaction {
     default: 0.0,
     transformer: {
       to: (value: number) => value,
-      from: (value: string | number) => (typeof value === 'string' ? parseFloat(value) : value),
+      from: (value: string | number) =>
+        typeof value === 'string' ? parseFloat(value) : value,
     },
   })
   points: number;
@@ -67,7 +68,8 @@ export class CustomerPointTransaction {
     default: 0.0,
     transformer: {
       to: (value: number) => value,
-      from: (value: string | number) => (typeof value === 'string' ? parseFloat(value) : value),
+      from: (value: string | number) =>
+        typeof value === 'string' ? parseFloat(value) : value,
     },
   })
   balance_after: number;
@@ -79,7 +81,8 @@ export class CustomerPointTransaction {
     default: 0.1,
     transformer: {
       to: (value: number) => value,
-      from: (value: string | number) => (typeof value === 'string' ? parseFloat(value) : value),
+      from: (value: string | number) =>
+        typeof value === 'string' ? parseFloat(value) : value,
     },
   })
   conversion_rate: number;

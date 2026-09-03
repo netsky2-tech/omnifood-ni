@@ -868,12 +868,15 @@ export class InvoicesService {
           record.fulfillment &&
           manager.connection.hasMetadata(TenantFulfillmentRecord)
         ) {
-          const parsedLines =
+          const parsedLines: Record<string, unknown>[] =
             record.fulfillment.linesPayload != null
               ? typeof record.fulfillment.linesPayload === 'string'
-                ? JSON.parse(record.fulfillment.linesPayload)
-                : record.fulfillment.linesPayload
-              : record.fulfillment.lines;
+                ? (JSON.parse(record.fulfillment.linesPayload) as Record<
+                    string,
+                    unknown
+                  >[])
+                : (record.fulfillment.linesPayload as Record<string, unknown>[])
+              : (record.fulfillment.lines ?? []);
           await manager.getRepository(TenantFulfillmentRecord).upsert(
             {
               id: record.fulfillment.id,

@@ -83,7 +83,6 @@ describe('CatalogService', () => {
 
       expect(repo.find).toHaveBeenCalledWith(
         expect.objectContaining({
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           where: expect.objectContaining({
             tenant_id: 'tenant-A',
             catalog_type: CATALOG_TYPE.UOM,
@@ -105,9 +104,7 @@ describe('CatalogService', () => {
       await service.list(CATALOG_TYPE.UOM, 'tenant-A', true);
       expect(repo.find).toHaveBeenCalledWith(
         expect.objectContaining({
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           where: expect.not.objectContaining({
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
             is_active: expect.any(Boolean),
           }),
         }),

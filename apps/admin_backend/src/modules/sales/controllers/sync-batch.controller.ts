@@ -62,7 +62,12 @@ export class SyncBatchController {
       }
       return { status: 'success', ...result };
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : String(error);
+      const msg =
+        error instanceof Error
+          ? error.message
+          : typeof error === 'string'
+            ? error
+            : JSON.stringify(error);
       this.logger.error(`[SYNC-BATCH] FAILED: ${msg}`, (error as Error)?.stack);
       throw error;
     }

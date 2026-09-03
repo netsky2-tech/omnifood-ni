@@ -14,7 +14,6 @@ import { UserService } from '../services/user.service';
 import { AuthGuard } from '../guards/auth.guard';
 import { RolesGuard } from '../guards/roles.guard';
 import { AuthoritativeCurrentUserGuard } from '../guards/authoritative-current-user.guard';
-import { PermissionsGuard } from '../guards/permissions.guard';
 import { Roles } from '../../../core/decorators/roles.decorator';
 import { UserRole } from '../entities/user.entity';
 import { TenantInterceptor } from '../../../core/database/rls.interceptor';
@@ -39,7 +38,7 @@ export class UsersController {
   @Get('permissions/matrix')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles(UserRole.OWNER, UserRole.MANAGER)
-  async getPermissionsMatrix() {
+  getPermissionsMatrix() {
     return this.userService.getPermissionsMatrix();
   }
 

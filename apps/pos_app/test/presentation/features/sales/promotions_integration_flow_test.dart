@@ -12,6 +12,7 @@ import 'package:pos_app/domain/services/kitchen/kitchen_order_service.dart';
 import 'package:pos_app/domain/services/config/printer_config_service.dart';
 import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/domain/models/inventory/product.dart';
+import 'package:pos_app/domain/models/fulfillment/fulfillment_checkout_context.dart';
 import 'package:pos_app/domain/models/sales/payment.dart';
 import 'package:pos_app/domain/models/sales/invoice.dart';
 import 'package:pos_app/domain/models/sales/invoice_item.dart';
@@ -23,6 +24,7 @@ class FakeSalesRepository implements SalesRepository {
 
   @override
   Future<void> saveSale({
+    FulfillmentCheckoutContext? fulfillmentContext,
     required Invoice invoice,
     required List<InvoiceItem> items,
     required List<Payment> payments,

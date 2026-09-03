@@ -50,7 +50,7 @@ export class AuthController {
     );
   }
 
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)
   @UseInterceptors(TenantInterceptor)
   @Get('staff')
   async getStaff(

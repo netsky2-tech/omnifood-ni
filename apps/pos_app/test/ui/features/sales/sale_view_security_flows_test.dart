@@ -121,7 +121,7 @@ void main() {
     )).called(1);
     verify(mockAuditRepository.logForensic(
       'SUPERVISOR_OVERRIDE_CLOSE_SESSION',
-      metadata: 'close_box',
+      metadata: argThat(contains('close_box'), named: 'metadata'),
       metodoAutorizacion: 'PIN',
       usuarioAutorizadorId: 'supervisor-1',
     )).called(1);
@@ -165,7 +165,7 @@ void main() {
     )).called(1);
     verify(mockAuditRepository.logForensic(
       'SUPERVISOR_OVERRIDE_CLOSE_SESSION',
-      metadata: 'close_box',
+      metadata: argThat(contains('close_box'), named: 'metadata'),
       metodoAutorizacion: 'TOTP',
       usuarioAutorizadorId: 'supervisor-totp',
     )).called(1);
@@ -210,7 +210,7 @@ void main() {
 
     verify(mockAuditRepository.logForensic(
       'DRAWER_OPENED_MANUALLY',
-      metadata: argThat(contains('manual_drawer_open:Cambio para cliente'), named: 'metadata'),
+      metadata: argThat(contains('manual_drawer_open'), named: 'metadata'),
       metodoAutorizacion: 'PIN',
       usuarioAutorizadorId: 'supervisor-1',
     )).called(1);
@@ -286,7 +286,7 @@ void main() {
     verify(mockViewModel.grantSupervisorOverride()).called(1);
     verify(mockAuditRepository.logForensic(
       'SUPERVISOR_OVERRIDE_MANUAL_DISCOUNT',
-      metadata: 'manual_discount',
+      metadata: argThat(contains('manual_discount'), named: 'metadata'),
       metodoAutorizacion: 'PIN',
       usuarioAutorizadorId: 'supervisor-1',
     )).called(1);

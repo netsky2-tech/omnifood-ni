@@ -38,7 +38,7 @@ void main() {
       await tester.pumpWidget(createWidgetUnderTest());
       await tester.pumpAndSettle();
 
-      expect(find.text('KDS - Pantalla de Cocina / Barra'), findsOneWidget);
+      expect(find.text('KDS - Cocina / Barra'), findsOneWidget);
       expect(find.text('No hay comandas pendientes en ninguna estación.'), findsOneWidget);
       expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
     });

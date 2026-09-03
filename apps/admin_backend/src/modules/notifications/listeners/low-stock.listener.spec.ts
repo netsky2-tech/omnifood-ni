@@ -33,7 +33,6 @@ describe('LowStockListener', () => {
     const event = new LowStockEvent('Café', 100, 200, 'tenant-1');
     await listener.handleLowStockEvent(event);
 
-    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(emailProvider.send).toHaveBeenCalledWith(
       'owner@omnifood.ni',
       expect.stringContaining('Café'),
@@ -45,7 +44,6 @@ describe('LowStockListener', () => {
     const event = new LowStockEvent('Café', 40, 100, 'tenant-1');
     await listener.handleLowStockEvent(event);
 
-    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(smsProvider.send).toHaveBeenCalled();
   });
 
@@ -53,7 +51,6 @@ describe('LowStockListener', () => {
     const event = new LowStockEvent('Café', 80, 100, 'tenant-1');
     await listener.handleLowStockEvent(event);
 
-    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(smsProvider.send).not.toHaveBeenCalled();
   });
 });

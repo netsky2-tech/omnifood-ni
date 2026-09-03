@@ -10,6 +10,8 @@ import 'package:mockito/src/dummies.dart' as _i5;
 import 'package:pos_app/data/daos/sales/sales_transaction_dao.dart' as _i29;
 import 'package:pos_app/data/database/app_database.dart' as _i3;
 import 'package:pos_app/data/models/audit_log_entity.dart' as _i36;
+import 'package:pos_app/data/models/fulfillment/fulfillment_persistence_entities.dart'
+    as _i37;
 import 'package:pos_app/data/models/inventory/insumo_entity.dart' as _i34;
 import 'package:pos_app/data/models/inventory/kardex_correction_entity.dart'
     as _i24;
@@ -25,7 +27,7 @@ import 'package:pos_app/domain/models/audit_log.dart' as _i7;
 import 'package:pos_app/domain/models/catalog/catalog_type.dart' as _i20;
 import 'package:pos_app/domain/models/catalog/catalog_value.dart' as _i19;
 import 'package:pos_app/domain/models/inventory/batch.dart' as _i17;
-import 'package:pos_app/domain/models/inventory/batch_deduction.dart' as _i38;
+import 'package:pos_app/domain/models/inventory/batch_deduction.dart' as _i39;
 import 'package:pos_app/domain/models/inventory/count_session_document.dart'
     as _i13;
 import 'package:pos_app/domain/models/inventory/forensic_alert.dart' as _i22;
@@ -43,14 +45,14 @@ import 'package:pos_app/domain/models/inventory/supplier.dart' as _i15;
 import 'package:pos_app/domain/models/inventory/uom_conversion.dart' as _i18;
 import 'package:pos_app/domain/models/inventory/warehouse.dart' as _i16;
 import 'package:pos_app/domain/models/sales/invoice_item.dart' as _i27;
-import 'package:pos_app/domain/models/user.dart' as _i40;
+import 'package:pos_app/domain/models/user.dart' as _i41;
 import 'package:pos_app/domain/repositories/audit_repository.dart' as _i2;
-import 'package:pos_app/domain/repositories/auth_repository.dart' as _i39;
+import 'package:pos_app/domain/repositories/auth_repository.dart' as _i40;
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart'
     as _i8;
 import 'package:pos_app/domain/services/inventory/movement_engine.dart' as _i4;
 import 'package:pos_app/domain/services/sales/dgi_numbering_service.dart'
-    as _i37;
+    as _i38;
 import 'package:pos_app/domain/usecases/inventory/process_sale_inventory_use_case.dart'
     as _i26;
 import 'package:pos_app/domain/usecases/inventory/reverse_sale_inventory_use_case.dart'
@@ -1190,6 +1192,22 @@ class MockSalesTransactionDao extends _i1.Mock
       ) as _i6.Future<String?>);
 
   @override
+  _i6.Future<_i37.OutboxEventEntity?> findReplay(
+    String? tenantId,
+    String? idempotencyKey,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #findReplay,
+          [
+            tenantId,
+            idempotencyKey,
+          ],
+        ),
+        returnValue: _i6.Future<_i37.OutboxEventEntity?>.value(),
+      ) as _i6.Future<_i37.OutboxEventEntity?>);
+
+  @override
   _i6.Future<void> executeSaleTransaction(
     _i30.InvoiceEntity? invoice,
     List<_i31.InvoiceItemEntity>? items,
@@ -1246,6 +1264,73 @@ class MockSalesTransactionDao extends _i1.Mock
       ) as _i6.Future<void>);
 
   @override
+  _i6.Future<void> executeFulfillmentSaleTransaction(
+    _i30.InvoiceEntity? invoice,
+    List<_i31.InvoiceItemEntity>? items,
+    List<_i32.InvoiceItemModifierEntity>? modifiers,
+    List<_i33.PaymentEntity>? payments,
+    List<_i35.MovementEntity>? movements,
+    _i36.AuditLogEntity? auditLog,
+    _i37.FulfillmentRecordEntity? fulfillment,
+    List<_i37.PrintJobEntity>? printJobs,
+    _i37.OutboxEventEntity? outbox,
+    bool? shouldFail,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #executeFulfillmentSaleTransaction,
+          [
+            invoice,
+            items,
+            modifiers,
+            payments,
+            movements,
+            auditLog,
+            fulfillment,
+            printJobs,
+            outbox,
+            shouldFail,
+          ],
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+
+  @override
+  _i6.Future<void> insertFulfillment(
+          _i37.FulfillmentRecordEntity? fulfillment) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #insertFulfillment,
+          [fulfillment],
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+
+  @override
+  _i6.Future<void> insertPrintJob(_i37.PrintJobEntity? job) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #insertPrintJob,
+          [job],
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+
+  @override
+  _i6.Future<void> insertOutboxEvent(_i37.OutboxEventEntity? outbox) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #insertOutboxEvent,
+          [outbox],
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+
+  @override
   _i6.Future<void> executeVoidTransaction(
     List<_i35.MovementEntity>? movements,
     _i30.InvoiceEntity? canceledInvoice,
@@ -1271,7 +1356,7 @@ class MockSalesTransactionDao extends _i1.Mock
 ///
 /// See the documentation for Mockito's code generation for more information.
 class MockDgiNumberingService extends _i1.Mock
-    implements _i37.DgiNumberingService {
+    implements _i38.DgiNumberingService {
   MockDgiNumberingService() {
     _i1.throwOnMissingStub(this);
   }
@@ -1621,7 +1706,7 @@ class MockMovementEngine extends _i1.Mock implements _i4.MovementEngine {
       ) as _i6.Future<List<_i14.InventoryMovement>>);
 
   @override
-  _i6.Future<List<_i38.BatchDeduction>> getBatchesForConsumption(
+  _i6.Future<List<_i39.BatchDeduction>> getBatchesForConsumption(
     String? insumoId,
     double? quantity,
   ) =>
@@ -1633,15 +1718,15 @@ class MockMovementEngine extends _i1.Mock implements _i4.MovementEngine {
             quantity,
           ],
         ),
-        returnValue: _i6.Future<List<_i38.BatchDeduction>>.value(
-            <_i38.BatchDeduction>[]),
-      ) as _i6.Future<List<_i38.BatchDeduction>>);
+        returnValue: _i6.Future<List<_i39.BatchDeduction>>.value(
+            <_i39.BatchDeduction>[]),
+      ) as _i6.Future<List<_i39.BatchDeduction>>);
 }
 
 /// A class which mocks [AuthRepository].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockAuthRepository extends _i1.Mock implements _i39.AuthRepository {
+class MockAuthRepository extends _i1.Mock implements _i40.AuthRepository {
   MockAuthRepository() {
     _i1.throwOnMissingStub(this);
   }
@@ -1653,7 +1738,7 @@ class MockAuthRepository extends _i1.Mock implements _i39.AuthRepository {
       ) as bool);
 
   @override
-  _i6.Future<_i40.User?> loginOnline(
+  _i6.Future<_i41.User?> loginOnline(
     String? email,
     String? password,
   ) =>
@@ -1665,8 +1750,8 @@ class MockAuthRepository extends _i1.Mock implements _i39.AuthRepository {
             password,
           ],
         ),
-        returnValue: _i6.Future<_i40.User?>.value(),
-      ) as _i6.Future<_i40.User?>);
+        returnValue: _i6.Future<_i41.User?>.value(),
+      ) as _i6.Future<_i41.User?>);
 
   @override
   _i6.Future<void> syncStaff() => (super.noSuchMethod(
@@ -1679,7 +1764,7 @@ class MockAuthRepository extends _i1.Mock implements _i39.AuthRepository {
       ) as _i6.Future<void>);
 
   @override
-  _i6.Future<_i40.User?> loginOffline(
+  _i6.Future<_i41.User?> loginOffline(
     String? userId,
     String? pin,
   ) =>
@@ -1691,8 +1776,8 @@ class MockAuthRepository extends _i1.Mock implements _i39.AuthRepository {
             pin,
           ],
         ),
-        returnValue: _i6.Future<_i40.User?>.value(),
-      ) as _i6.Future<_i40.User?>);
+        returnValue: _i6.Future<_i41.User?>.value(),
+      ) as _i6.Future<_i41.User?>);
 
   @override
   _i6.Future<bool> authorizeOverride({
@@ -1714,13 +1799,13 @@ class MockAuthRepository extends _i1.Mock implements _i39.AuthRepository {
       ) as _i6.Future<bool>);
 
   @override
-  _i6.Future<_i40.User?> getCurrentUser() => (super.noSuchMethod(
+  _i6.Future<_i41.User?> getCurrentUser() => (super.noSuchMethod(
         Invocation.method(
           #getCurrentUser,
           [],
         ),
-        returnValue: _i6.Future<_i40.User?>.value(),
-      ) as _i6.Future<_i40.User?>);
+        returnValue: _i6.Future<_i41.User?>.value(),
+      ) as _i6.Future<_i41.User?>);
 
   @override
   _i6.Future<String?> getAccessToken() => (super.noSuchMethod(
@@ -1742,17 +1827,17 @@ class MockAuthRepository extends _i1.Mock implements _i39.AuthRepository {
       ) as _i6.Future<void>);
 
   @override
-  _i6.Future<List<_i40.User>> getAllUsers() => (super.noSuchMethod(
+  _i6.Future<List<_i41.User>> getAllUsers() => (super.noSuchMethod(
         Invocation.method(
           #getAllUsers,
           [],
         ),
-        returnValue: _i6.Future<List<_i40.User>>.value(<_i40.User>[]),
-      ) as _i6.Future<List<_i40.User>>);
+        returnValue: _i6.Future<List<_i41.User>>.value(<_i41.User>[]),
+      ) as _i6.Future<List<_i41.User>>);
 
   @override
   _i6.Future<void> saveUser(
-    _i40.User? user, {
+    _i41.User? user, {
     String? pin,
   }) =>
       (super.noSuchMethod(

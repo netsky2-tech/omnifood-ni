@@ -1,6 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { JwtModule } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { PromotionsController } from './promotions.controller';
 import { PromotionsService } from '../services/promotions.service';
@@ -37,7 +36,9 @@ describe('PromotionsController', () => {
       findAll: jest.fn().mockResolvedValue([mockPromotion()]),
       findOne: jest.fn().mockResolvedValue(mockPromotion()),
       create: jest.fn().mockResolvedValue(mockPromotion()),
-      update: jest.fn().mockResolvedValue(mockPromotion({ name: 'Actualizada' })),
+      update: jest
+        .fn()
+        .mockResolvedValue(mockPromotion({ name: 'Actualizada' })),
       remove: jest.fn().mockResolvedValue(undefined),
     };
 

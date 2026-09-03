@@ -38,6 +38,7 @@ import { Payment } from '../../src/modules/sales/entities/payment.entity';
 import { InvoiceItemModifier } from '../../src/modules/sales/entities/invoice-item-modifier.entity';
 import { SalesModule } from '../../src/modules/sales/sales.module';
 import { signIdentityJwtAccessToken } from '../support/identity-jwt-test.fixture';
+import { ensurePublicAuthTables } from '../support/fulfillment-test-db.helper';
 import { SyncBatchRecordDto } from '../../src/modules/sales/dto/sync-batch.dto';
 
 describe('SyncOutboxReplay (e2e - Real PostgreSQL, No Mocks)', () => {
@@ -110,6 +111,8 @@ describe('SyncOutboxReplay (e2e - Real PostgreSQL, No Mocks)', () => {
     const m2 = new AddDeterministicSyncSequencing1780000000000();
     await m1.up(runner);
     await m2.up(runner);
+
+    await ensurePublicAuthTables(runner);
 
     // Seed tenants and users in public tables for auth & AuthoritativeCurrentUserGuard
     await runner.query(
