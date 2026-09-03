@@ -4,6 +4,7 @@ import 'package:pos_app/data/database/migrations.dart';
 import 'package:pos_app/data/models/fulfillment/fulfillment_persistence_entities.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
 import 'package:pos_app/data/models/sales/invoice_entity.dart';
+import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'package:pos_app/domain/models/sales/invoice.dart';
 import 'package:pos_app/domain/models/sales/invoice_item.dart';
 import 'package:pos_app/domain/models/sales/payment.dart';
@@ -26,11 +27,15 @@ class _FakePrinterPort implements PrinterPort {
     required List<InvoiceItem> items,
     required List<Payment> payments,
     String? businessName,
+    String? legalName,
     String? ruc,
     String? address,
     String? phone,
     String? cashierName,
     List<int>? logoRasterBytes,
+    TaxRegime taxRegime = TaxRegime.regimenGeneral,
+    bool isTaxExempt = false,
+    int paperWidthMm = 58,
   }) async {
     if (failReceipt) {
       return PrinterResult.failure(PrinterStatus.error, 'Receipt failed');

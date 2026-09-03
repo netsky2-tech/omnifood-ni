@@ -54,4 +54,4 @@ Chain strategy: feature-branch-chain
 
 ## Phase 5: Rollout Proof (PR #5)
 
-- [ ] 5.1 RED: backfill discrepancy, rollback, retention, and pilot acceptance tests; GREEN add gated compatibility/backfill/rollback runbooks and dashboards; REFACTOR record end-to-end evidence for legacy tenants, modes, offline sale, replay, reprint, RLS and observability.
+- [x] 5.1 RED: backfill discrepancy, rollback, retention, and pilot acceptance tests; GREEN add gated compatibility/backfill/rollback runbooks and dashboards; REFACTOR record end-to-end evidence for legacy tenants, modes, offline sale, replay, reprint, RLS and observability.

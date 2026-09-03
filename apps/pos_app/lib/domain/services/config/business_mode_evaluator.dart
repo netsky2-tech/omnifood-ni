@@ -1,6 +1,6 @@
 import '../../models/config/tenant_config.dart';
 
-/// Checkout workflows supported by OmniFood NI POS.
+/// Checkout workflows supported by NHILOS POS.
 enum CheckoutWorkflowType {
   fastCounterQsr,
   restaurantTable,

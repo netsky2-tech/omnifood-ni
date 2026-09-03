@@ -86,9 +86,11 @@ La indisponibilidad de internet no impide el uso local del POS, pero sí puede r
 
 ## Soporte y condiciones complementarias
 
-El documento `annex_support_backups_v1.md` forma parte de esta propuesta y define soporte incluido, asistencia facturable, respaldos, objetivos de recuperación, comunicaciones y exclusiones.
+El **Anexo de soporte, respaldos y recuperación** forma parte integral de esta propuesta y define soporte incluido, asistencia facturable, respaldos, objetivos de recuperación, comunicaciones y exclusiones.
 
 ## Aceptación de la propuesta
+
+Al firmar, las partes confirman también que el Anexo de soporte, respaldos y recuperación complementa la propuesta **OE-001OM** y que sus objetivos de recuperación son objetivos operativos, no garantías, SLA ni certificaciones.
 
 **Por SOHO**<br>
 Nombre: ______________________________<br>

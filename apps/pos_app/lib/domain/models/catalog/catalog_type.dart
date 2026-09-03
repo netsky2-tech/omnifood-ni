@@ -3,7 +3,7 @@
 /// The set of catalog TYPES is a system protocol/invariant: fixed by the
 /// application contract and NOT tenant-configurable. Only the VALUES inside
 /// each catalog are tenant-administrable (synced from the Admin backend and
-/// cached locally for offline-first operation). This respects the OmniFood NI
+/// cached locally for offline-first operation). This respects the NHILOS POS
 /// rule: business/tenant catalogs must be administrable from the system, while
 /// protocol/invariant states may remain as technical constants.
 ///
