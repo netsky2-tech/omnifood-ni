@@ -60,6 +60,29 @@ class CustomerMapper {
         (s) => s.name == entity.syncStatus,
         orElse: () => SyncStatus.pending,
       ),
+      // V1 fields
+      loyaltyProgramId: entity.loyaltyProgramId,
+      ticketId: entity.ticketId,
+      rewardId: entity.rewardId,
+      transactionType: entity.transactionType,
+      units: entity.units,
+      reversalOfTransactionId: entity.reversalOfTransactionId,
+      idempotencyKey: entity.idempotencyKey,
+      sourceEventId: entity.sourceEventId,
+      actorUserId: entity.actorUserId,
+      branchId: entity.branchId,
+      terminalId: entity.terminalId,
+      programVersion: entity.programVersion,
+      rewardVersion: entity.rewardVersion,
+      commercialSnapshot: entity.commercialSnapshot,
+      origin: entity.origin,
+      occurredAt: entity.occurredAt != null
+          ? DateTime.fromMillisecondsSinceEpoch(entity.occurredAt!)
+          : null,
+      recordedAt: entity.recordedAt != null
+          ? DateTime.fromMillisecondsSinceEpoch(entity.recordedAt!)
+          : null,
+      legacyImported: entity.legacyImported == 1,
     );
   }
 
@@ -77,6 +100,25 @@ class CustomerMapper {
       reason: domain.reason,
       createdAt: domain.createdAt.millisecondsSinceEpoch,
       syncStatus: domain.syncStatus.name,
+      // V1 fields
+      loyaltyProgramId: domain.loyaltyProgramId,
+      ticketId: domain.ticketId,
+      rewardId: domain.rewardId,
+      transactionType: domain.transactionType,
+      units: domain.units,
+      reversalOfTransactionId: domain.reversalOfTransactionId,
+      idempotencyKey: domain.idempotencyKey,
+      sourceEventId: domain.sourceEventId,
+      actorUserId: domain.actorUserId,
+      branchId: domain.branchId,
+      terminalId: domain.terminalId,
+      programVersion: domain.programVersion,
+      rewardVersion: domain.rewardVersion,
+      commercialSnapshot: domain.commercialSnapshot,
+      origin: domain.origin,
+      occurredAt: domain.occurredAt?.millisecondsSinceEpoch,
+      recordedAt: domain.recordedAt?.millisecondsSinceEpoch,
+      legacyImported: domain.legacyImported ? 1 : 0,
     );
   }
 }

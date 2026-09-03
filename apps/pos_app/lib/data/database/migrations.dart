@@ -1686,6 +1686,42 @@ final migration39_40 = Migration(39, 40, (database) async {
   ''');
 });
 
+Future<void> _addColumnIfMissing(DatabaseExecutor db, String tableName, String columnName, String definition) async {
+  final table = await db.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+    [tableName],
+  );
+  if (table.isEmpty) return;
+  final columns = await db.rawQuery('PRAGMA table_info($tableName)');
+  final existingNames = columns.map((c) => c['name'] as String).toSet();
+  if (!existingNames.contains(columnName)) {
+    await db.execute('ALTER TABLE $tableName ADD COLUMN $definition');
+  }
+}
+
+final migration40_41 = Migration(40, 41, (database) async {
+  const table = 'customer_point_transactions';
+
+  await _addColumnIfMissing(database, table, 'loyalty_program_id', "loyalty_program_id TEXT");
+  await _addColumnIfMissing(database, table, 'ticket_id', "ticket_id TEXT");
+  await _addColumnIfMissing(database, table, 'reward_id', "reward_id TEXT");
+  await _addColumnIfMissing(database, table, 'transaction_type', "transaction_type TEXT");
+  await _addColumnIfMissing(database, table, 'units', "units INTEGER");
+  await _addColumnIfMissing(database, table, 'reversal_of_transaction_id', "reversal_of_transaction_id TEXT");
+  await _addColumnIfMissing(database, table, 'idempotency_key', "idempotency_key TEXT");
+  await _addColumnIfMissing(database, table, 'source_event_id', "source_event_id TEXT");
+  await _addColumnIfMissing(database, table, 'actor_user_id', "actor_user_id TEXT");
+  await _addColumnIfMissing(database, table, 'branch_id', "branch_id TEXT");
+  await _addColumnIfMissing(database, table, 'terminal_id', "terminal_id TEXT");
+  await _addColumnIfMissing(database, table, 'program_version', "program_version INTEGER");
+  await _addColumnIfMissing(database, table, 'reward_version', "reward_version INTEGER");
+  await _addColumnIfMissing(database, table, 'commercial_snapshot', "commercial_snapshot TEXT");
+  await _addColumnIfMissing(database, table, 'origin', "origin TEXT");
+  await _addColumnIfMissing(database, table, 'occurred_at', "occurred_at INTEGER");
+  await _addColumnIfMissing(database, table, 'recorded_at', "recorded_at INTEGER");
+  await _addColumnIfMissing(database, table, 'legacy_imported', "legacy_imported INTEGER NOT NULL DEFAULT 0");
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -1717,4 +1753,5 @@ final allMigrations = [
   migration37_38,
   migration38_39,
   migration39_40,
+  migration40_41,
 ];
