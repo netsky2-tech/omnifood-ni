@@ -60,7 +60,7 @@ describe('UsersController (Slice 10.1)', () => {
       };
       userService.getPermissionsMatrix = jest.fn().mockReturnValue(mockMatrix);
 
-      const result = await controller.getPermissionsMatrix();
+      const result = controller.getPermissionsMatrix();
       expect(result).toEqual(mockMatrix);
       expect(userService.getPermissionsMatrix).toHaveBeenCalled();
     });

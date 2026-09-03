@@ -87,7 +87,10 @@ const bindProductionDocumentTerminal = (
   }
 
   const idempotencyKey = document.idempotencyKey?.includes(':')
-    ? buildProductionIdempotencyKeyForTerminal(document.idempotencyKey, terminalId)
+    ? buildProductionIdempotencyKeyForTerminal(
+        document.idempotencyKey,
+        terminalId,
+      )
     : `production:${terminalId}:${document.id}`;
 
   return Object.assign(new ProductionOrderDocumentDto(), document, {
@@ -251,13 +254,32 @@ export class InventoryMovementController {
     @Body() dto: SyncRecipeVersionDocumentDto,
     @GetTenantId() tenantId: string,
   ) {
-    console.log('[RECIPE-VERSION] tenantId=%s dto.id=%s productId=%s components=%d', tenantId, dto.id, dto.productId, dto.components?.length);
+    console.log(
+      '[RECIPE-VERSION] tenantId=%s dto.id=%s productId=%s components=%d',
+      tenantId,
+      dto.id,
+      dto.productId,
+      dto.components?.length,
+    );
     try {
-      const result = await this.recipeService.ingestPosVersion({ tenantId, dto });
-      console.log('[RECIPE-VERSION] SUCCESS recipeVersionId=%s', result.recipeVersionId);
+      const result = await this.recipeService.ingestPosVersion({
+        tenantId,
+        dto,
+      });
+      console.log(
+        '[RECIPE-VERSION] SUCCESS recipeVersionId=%s',
+        result.recipeVersionId,
+      );
       return result;
-    } catch (err: any) {
-      console.error('[RECIPE-VERSION] ERROR %s: %s', err?.name, err?.message);
+    } catch (err: unknown) {
+      const errName = err instanceof Error ? err.name : 'Unknown';
+      const errMessage =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'string'
+            ? err
+            : JSON.stringify(err);
+      console.error('[RECIPE-VERSION] ERROR %s: %s', errName, errMessage);
       throw err;
     }
   }

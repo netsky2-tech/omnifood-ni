@@ -216,7 +216,6 @@ describe('InventoryService', () => {
 
       await service.syncMovements(movements, 'tenant-A');
 
-      /* eslint-disable @typescript-eslint/no-unsafe-assignment -- Jest expect.objectContaining returns any */
       expect(findOneSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
@@ -225,7 +224,6 @@ describe('InventoryService', () => {
           }),
         }),
       );
-      /* eslint-enable @typescript-eslint/no-unsafe-assignment */
     });
 
     it('rejects inbound synced movements that cannot freeze a cost snapshot', async () => {
@@ -373,7 +371,6 @@ describe('InventoryService', () => {
 
       await service.recordPurchase('ins-1', 5, 130, 'tenant-A');
 
-      /* eslint-disable @typescript-eslint/no-unsafe-assignment -- Jest expect.objectContaining returns any */
       expect(findOneSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
@@ -382,7 +379,6 @@ describe('InventoryService', () => {
           }),
         }),
       );
-      /* eslint-enable @typescript-eslint/no-unsafe-assignment */
     });
 
     it('should NOT return insumo from different tenant in recordPurchase (RED)', async () => {

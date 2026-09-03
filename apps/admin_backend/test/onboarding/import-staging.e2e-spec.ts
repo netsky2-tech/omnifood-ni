@@ -73,7 +73,8 @@ describe('ImportStaging (Integration & E2E)', () => {
         options?: FindManyOptions<ImportStaging | Product>,
       ) => {
         const where = options?.where as
-          { tenant_id?: string; token_sesion_importacion?: string } | undefined;
+          | { tenant_id?: string; token_sesion_importacion?: string }
+          | undefined;
         if (entityClass === ImportStaging) {
           return Promise.resolve(
             dbStaging.filter(
@@ -96,7 +97,8 @@ describe('ImportStaging (Integration & E2E)', () => {
     findOne: jest.fn(
       (entityClass: unknown, options?: FindOneOptions<Product>) => {
         const where = options?.where as
-          { tenant_id?: string; id?: string } | undefined;
+          | { tenant_id?: string; id?: string }
+          | undefined;
         if (entityClass === Product) {
           return Promise.resolve(
             dbProducts.find(

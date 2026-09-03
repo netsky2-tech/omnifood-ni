@@ -47,10 +47,7 @@ export class CustomersController {
 
   @Get(':id')
   @Roles(UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER, UserRole.WAITER)
-  async findOne(
-    @Param('id') id: string,
-    @GetTenantId() tenantId?: string,
-  ) {
+  async findOne(@Param('id') id: string, @GetTenantId() tenantId?: string) {
     return this.customersService.findOne(this.requireTenant(tenantId), id);
   }
 
@@ -101,10 +98,7 @@ export class CustomersController {
 
   @Delete(':id')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
-  async remove(
-    @Param('id') id: string,
-    @GetTenantId() tenantId?: string,
-  ) {
+  async remove(@Param('id') id: string, @GetTenantId() tenantId?: string) {
     await this.customersService.remove(this.requireTenant(tenantId), id);
     return { success: true };
   }

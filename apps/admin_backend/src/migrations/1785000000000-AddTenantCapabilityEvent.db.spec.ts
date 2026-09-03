@@ -58,7 +58,7 @@ describe('AddTenantCapabilityEvent1785000000000 (db)', () => {
           contract_version: 1,
           reason: 'activate',
           revision: 1,
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+
           created_at: expect.any(Date),
         }),
         expect.objectContaining({

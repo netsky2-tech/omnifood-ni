@@ -94,7 +94,9 @@ const materialize = (
     try {
       const decoded = JSON.parse(input.metadata_input) as unknown;
       metadata =
-        decoded !== null && !Array.isArray(decoded) && typeof decoded === 'object'
+        decoded !== null &&
+        !Array.isArray(decoded) &&
+        typeof decoded === 'object'
           ? (decoded as Record<string, unknown>)
           : { value: decoded };
     } catch {
@@ -104,10 +106,7 @@ const materialize = (
   return { ...common, ...input, metadata };
 };
 
-const calculate = (
-  vector: MaterializedInput,
-  mode: HashMode,
-): HashResult => {
+const calculate = (vector: MaterializedInput, mode: HashMode): HashResult => {
   const action = vector.action ?? vector.tipo_accion;
   const metadataRaw =
     vector.metadata_raw ??
@@ -140,7 +139,8 @@ const mismatchMessage = (
   const actualBytes = Buffer.from(actual.payload_utf8_hex, 'hex');
   const length = Math.max(expectedBytes.length, actualBytes.length);
   let offset = 0;
-  while (offset < length && expectedBytes[offset] === actualBytes[offset]) offset++;
+  while (offset < length && expectedBytes[offset] === actualBytes[offset])
+    offset++;
   return `${id} ${mode}: first differing byte offset=${offset}; expected bytes=${expected.payload_utf8_hex}; actual bytes=${actual.payload_utf8_hex}; expected digest=${expected.sha256}; actual digest=${actual.sha256}`;
 };
 
@@ -158,8 +158,7 @@ describe('backend logout audit golden vectors', () => {
       },
     });
     expect(fixture.runtime).toEqual({
-      dart:
-        '3.11.5 (stable) (Wed Apr 15 00:36:32 2026 -0700) on "windows_x64"',
+      dart: '3.11.5 (stable) (Wed Apr 15 00:36:32 2026 -0700) on "windows_x64"',
       node: 'v24.0.2',
     });
     expect(fixture.comparison).toEqual({
@@ -219,9 +218,9 @@ describe('backend logout audit golden vectors', () => {
         metadata_raw: 'preserved-raw',
       }),
     ).toBe('preserved-raw');
-    expect(
-      legacySegment({ id: 'raw-text', metadata_input: '{broken' }),
-    ).toBe('{broken');
+    expect(legacySegment({ id: 'raw-text', metadata_input: '{broken' })).toBe(
+      '{broken',
+    );
     expect(legacySegment({ id: 'literal-null', metadata_input: '{}' })).toBe(
       'null',
     );

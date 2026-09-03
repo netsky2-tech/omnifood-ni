@@ -1,6 +1,14 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe, Logger, ExceptionFilter, Catch, ArgumentsHost, HttpException } from '@nestjs/common';
+import {
+  ValidationPipe,
+  Logger,
+  ExceptionFilter,
+  Catch,
+  ArgumentsHost,
+  HttpException,
+} from '@nestjs/common';
 import helmet from 'helmet';
+import { Request, Response, NextFunction } from 'express';
 import { AppModule } from './core/app/app.module';
 
 @Catch()
@@ -9,8 +17,8 @@ class AllExceptionsFilter implements ExceptionFilter {
 
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
-    const response = ctx.getResponse();
-    const request = ctx.getRequest();
+    const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<Request>();
 
     let status = 500;
     let message: unknown = 'Internal server error';
@@ -38,8 +46,10 @@ async function bootstrap() {
 
   // Request logging
   const logger = new Logger('HTTP');
-  app.use((req: any, _res: any, next: () => void) => {
-    logger.log(`${req.method} ${req.url} from ${req.socket?.remoteAddress}`);
+  app.use((req: Request, _res: Response, next: NextFunction) => {
+    logger.log(
+      `${req.method} ${req.url} from ${req.socket.remoteAddress ?? 'unknown'}`,
+    );
     next();
   });
 

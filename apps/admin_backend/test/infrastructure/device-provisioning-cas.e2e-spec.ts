@@ -36,9 +36,10 @@ interface PolicyMatrix {
 
 @Controller('infrastructure')
 class InfrastructureE2EController {
-  private activationCodes: Record<string, { code: string; tenantId: string }> = {
-    '123456': { code: '123456', tenantId: 'tenant-demo' },
-  };
+  private activationCodes: Record<string, { code: string; tenantId: string }> =
+    {
+      '123456': { code: '123456', tenantId: 'tenant-demo' },
+    };
 
   private registeredDevices: Record<string, DeviceRegistration> = {};
 
@@ -50,7 +51,11 @@ class InfrastructureE2EController {
       etag: '"w/v1"',
       permissions: {
         CASHIER: ['pos:sale:create', 'pos:sale:read'],
-        MANAGER: ['pos:drawer:open_manual', 'pos:discount:override', 'pos:void_sale'],
+        MANAGER: [
+          'pos:drawer:open_manual',
+          'pos:discount:override',
+          'pos:void_sale',
+        ],
       },
       updatedAt: new Date().toISOString(),
     },
@@ -61,7 +66,10 @@ class InfrastructureE2EController {
   enrollDevice(@Body() body: { activationCode: string; deviceId: string }) {
     const valid = this.activationCodes[body.activationCode];
     if (!valid) {
-      throw new HttpException('Invalid or expired activation code', HttpStatus.UNAUTHORIZED);
+      throw new HttpException(
+        'Invalid or expired activation code',
+        HttpStatus.UNAUTHORIZED,
+      );
     }
 
     const registration: DeviceRegistration = {
@@ -94,7 +102,11 @@ class InfrastructureE2EController {
       throw new HttpException('Device not found', HttpStatus.NOT_FOUND);
     }
     device.status = 'REVOKED';
-    return { status: 'REVOKED', deviceId, message: 'Device kill-switch activated' };
+    return {
+      status: 'REVOKED',
+      deviceId,
+      message: 'Device kill-switch activated',
+    };
   }
 
   // Sincronización de dispositivo: si está revocado, responde 403 KILL_SWITCH_TRIGGERED
@@ -141,7 +153,8 @@ class InfrastructureE2EController {
         {
           statusCode: HttpStatus.PRECONDITION_FAILED,
           error: 'PRECONDITION_FAILED',
-          message: 'La política fue modificada concurrentemente por otro administrador. Por favor recargue.',
+          message:
+            'La política fue modificada concurrentemente por otro administrador. Por favor recargue.',
           currentVersion: policy.version,
           currentEtag: policy.etag,
         },
@@ -201,7 +214,9 @@ describe('Fase 8: Motor de Provisión y Concurrencia (Infraestructura & CAS) (e2
     expect(response.body.status).toEqual('ENROLLED');
     expect(response.body.certificate).toContain('CERT-tablet-pos-new-01');
     expect(response.body.initialCatalog).toBeDefined();
-    expect(response.body.initialCatalog.policies.permissions.MANAGER).toContain('pos:drawer:open_manual');
+    expect(response.body.initialCatalog.policies.permissions.MANAGER).toContain(
+      'pos:drawer:open_manual',
+    );
   });
 
   it('2. Revocación (Kill-Switch): Dispositivo revocado recibe 403 para purgar SQLite local', async () => {

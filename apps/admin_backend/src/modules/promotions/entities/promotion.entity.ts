@@ -60,7 +60,8 @@ export class Promotion {
     default: 0.0,
     transformer: {
       to: (value: number) => value,
-      from: (value: string | number) => (typeof value === 'string' ? parseFloat(value) : value),
+      from: (value: string | number) =>
+        typeof value === 'string' ? parseFloat(value) : value,
     },
   })
   discount_value: number;
@@ -72,7 +73,8 @@ export class Promotion {
     default: 0.0,
     transformer: {
       to: (value: number) => value,
-      from: (value: string | number) => (typeof value === 'string' ? parseFloat(value) : value),
+      from: (value: string | number) =>
+        typeof value === 'string' ? parseFloat(value) : value,
     },
   })
   min_order_amount: number;
