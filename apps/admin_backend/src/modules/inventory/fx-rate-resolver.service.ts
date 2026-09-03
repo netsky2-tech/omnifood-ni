@@ -122,7 +122,7 @@ export class FxRateResolverService implements FxRateResolver {
     if (
       typeof global.fetch === 'function' &&
       '_isMockFunction' in (global.fetch as object) &&
-      (global.fetch as Record<string, unknown>)['_isMockFunction']
+      (global.fetch as unknown as Record<string, unknown>)['_isMockFunction']
     ) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), timeoutMs);

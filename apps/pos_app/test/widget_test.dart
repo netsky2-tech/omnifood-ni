@@ -141,7 +141,7 @@ void main() {
     await tester.pumpWidget(buildApp());
 
     // Verify that login screen is shown
-    expect(find.text('INGRESAR'), findsOneWidget);
+    expect(find.text('SINCRONIZAR Y CONFIGURAR'), findsOneWidget);
 
     final materialApp = tester.widget<MaterialApp>(find.byType(MaterialApp));
     expect(materialApp.routes, isNotNull);

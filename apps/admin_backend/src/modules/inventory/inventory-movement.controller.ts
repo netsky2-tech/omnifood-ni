@@ -249,7 +249,8 @@ export class InventoryMovementController {
   }
 
   @Post('recipes/versions')
-  @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard)
+  @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
   async ingestRecipeVersion(
     @Body() dto: SyncRecipeVersionDocumentDto,
     @GetTenantId() tenantId: string,
@@ -268,7 +269,7 @@ export class InventoryMovementController {
       });
       console.log(
         '[RECIPE-VERSION] SUCCESS recipeVersionId=%s',
-        result.recipeVersionId,
+        result?.recipeVersionId,
       );
       return result;
     } catch (err: unknown) {
