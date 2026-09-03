@@ -1,5 +1,9 @@
 packages:
   - "apps/*"
 allowBuilds:
+  '@swc/core': true
   bcrypt: true
+  esbuild: true
   unrs-resolver: true
+minimumReleaseAgeExclude:
+  - lucide-react@1.39.0
