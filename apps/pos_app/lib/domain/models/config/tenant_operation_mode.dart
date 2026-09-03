@@ -1,6 +1,6 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
-/// Defines the operational mode of a tenant in OmniFood NI POS.
+/// Defines the operational mode of a tenant in NHILOS POS.
 ///
 /// - [foodparkQsr]: Fast counter pre-pay + buzzer/pager queue. Direct cashier checkout without tables.
 /// - [restaurant]: Full dining restaurant with table layout, open tabs (comandas), and table service.

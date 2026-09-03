@@ -1,9 +1,11 @@
+import '../../../domain/models/config/tax_regime.dart';
 import '../../../domain/models/sales/cashier_session.dart';
 import '../../../domain/models/sales/invoice.dart';
 import '../../../domain/models/sales/invoice_item.dart';
 import '../../../domain/models/sales/payment.dart';
 import '../../../domain/ports/printer_port.dart';
 import '../../../domain/services/printer/receipt_58mm_formatter.dart';
+import '../../../domain/services/printer/receipt_layout_formatter.dart';
 
 /// In-memory Mock implementation of [PrinterPort] for unit testing and offline fallback.
 class MockPrinterAdapter implements PrinterPort {
@@ -37,11 +39,15 @@ class MockPrinterAdapter implements PrinterPort {
     required List<InvoiceItem> items,
     required List<Payment> payments,
     String? businessName,
+    String? legalName,
     String? ruc,
     String? address,
     String? phone,
     String? cashierName,
     List<int>? logoRasterBytes,
+    TaxRegime taxRegime = TaxRegime.regimenGeneral,
+    bool isTaxExempt = false,
+    int paperWidthMm = 58,
   }) async {
     if (shouldFail || currentStatus != PrinterStatus.ready) {
       String defaultMsg = 'Error de impresión en hardware simulado';
@@ -58,26 +64,33 @@ class MockPrinterAdapter implements PrinterPort {
       return res;
     }
 
-    final text = Receipt58mmFormatter.formatInvoiceText(
+    final layoutFormatter = ReceiptLayoutFormatter.fromPaperWidth(paperWidthMm);
+    final text = layoutFormatter.formatInvoiceText(
       invoice,
       items: items,
       payments: payments,
       businessName: businessName,
+      legalName: legalName,
       ruc: ruc,
       address: address,
       phone: phone,
       cashierName: cashierName,
+      taxRegime: taxRegime,
+      isTaxExempt: isTaxExempt,
     );
 
-    final bytes = Receipt58mmFormatter.formatInvoiceEscPos(
+    final bytes = layoutFormatter.formatInvoiceEscPos(
       invoice,
       items: items,
       payments: payments,
       businessName: businessName,
+      legalName: legalName,
       ruc: ruc,
       address: address,
       phone: phone,
       cashierName: cashierName,
+      taxRegime: taxRegime,
+      isTaxExempt: isTaxExempt,
       logoRasterBytes: logoRasterBytes,
     );
 

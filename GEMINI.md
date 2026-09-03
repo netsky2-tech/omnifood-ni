@@ -103,7 +103,7 @@ Usamos **Aggregates** (ej: Venta + Items), **Value Objects** y **Entities** para
 | Path Changed  | Pipeline Runs                 |
 | ------------- | ----------------------------- |
 | `apps/api/**` | `pint` (lint) + `pest` (test) |
-| `apps/web/**` | `eslint` + `vitest` + `build` |
+| `apps/owner_dashboard/**` | `eslint` + `vitest` + `build` |
 | Root config   | Full pipeline                 |
 
 ### Release

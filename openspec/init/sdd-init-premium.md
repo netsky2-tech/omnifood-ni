@@ -1,10 +1,10 @@
-# SDD Init Premium — omnifood-ni
+# SDD Init — omnifood-ni
 
 ## Mode
 
-- artifact_store: `openspec`
+- artifact_store: `hybrid`
 - execution_mode: `interactive`
-- chained_pr_strategy: `ask-always`
+- delivery_strategy: `ask-on-risk`
 - review_budget_lines: `400`
 
 ## Detected Stack & Conventions
@@ -25,6 +25,14 @@
 - Source: `openspec/config.yaml`
 - Value: `strict_tdd: true`
 
+## Persistence
+
+- Engram context: `sdd-init/omnifood-ni`
+- Engram testing capabilities: `sdd/omnifood-ni/testing-capabilities`
+- Engram skill registry: `skill-registry`
+- OpenSpec configuration: `openspec/config.yaml`
+- Existing OpenSpec specifications, active changes, and historical archives were preserved.
+
 ## Testing Capabilities
 
 | Workspace | Runner | Test Layers | Coverage | Lint/Analyze | Type/Compile | Formatter |
@@ -40,4 +48,5 @@
 ## Init/Bootstrap Artifacts Updated
 
 - `.atl/skill-registry.md` (generated)
+- `openspec/config.yaml`
 - `openspec/init/sdd-init-premium.md` (this report)

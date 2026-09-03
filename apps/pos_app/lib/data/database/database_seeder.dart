@@ -61,7 +61,7 @@ class DatabaseSeeder {
 
     // 2. Users & Security Profiles
     final existingUsers = await database.userDao.findAllUsers();
-    final adminUser = await database.userDao.findUserByEmail('admin@omnifood.ni');
+    final adminUser = await database.userDao.findUserByEmail('admin@nhilospos.ni');
     if (force || existingUsers.isEmpty || adminUser == null) {
       final users = <UserEntity>[
         UserEntity(
@@ -70,7 +70,7 @@ class DatabaseSeeder {
           role: 'admin',
           pinHash: localAuth.hashPin('1234'),
           isActive: true,
-          email: 'admin@omnifood.ni',
+          email: 'admin@nhilospos.ni',
           tenantId: 'pilot-cafe',
         ),
         UserEntity(
@@ -79,7 +79,7 @@ class DatabaseSeeder {
           role: 'cashier',
           pinHash: localAuth.hashPin('1111'),
           isActive: true,
-          email: 'carlos@omnifood.ni',
+          email: 'carlos@nhilospos.ni',
           tenantId: 'pilot-cafe',
         ),
         UserEntity(
@@ -88,7 +88,7 @@ class DatabaseSeeder {
           role: 'waiter',
           pinHash: localAuth.hashPin('2222'),
           isActive: true,
-          email: 'mario@omnifood.ni',
+          email: 'mario@nhilospos.ni',
           tenantId: 'pilot-cafe',
         ),
         UserEntity(
@@ -97,7 +97,7 @@ class DatabaseSeeder {
           role: 'kitchen',
           pinHash: localAuth.hashPin('3333'),
           isActive: true,
-          email: 'roberto@omnifood.ni',
+          email: 'roberto@nhilospos.ni',
           tenantId: 'pilot-cafe',
         ),
         UserEntity(
@@ -106,7 +106,7 @@ class DatabaseSeeder {
           role: 'supervisor',
           pinHash: localAuth.hashPin('9999'),
           isActive: true,
-          email: 'sofia@omnifood.ni',
+          email: 'sofia@nhilospos.ni',
           tenantId: 'pilot-cafe',
         ),
       ];

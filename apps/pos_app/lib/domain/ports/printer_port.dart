@@ -1,3 +1,4 @@
+import '../models/config/tax_regime.dart';
 import '../models/sales/cashier_session.dart';
 import '../models/sales/invoice.dart';
 import '../models/sales/invoice_item.dart';
@@ -56,11 +57,15 @@ abstract class PrinterPort {
     required List<InvoiceItem> items,
     required List<Payment> payments,
     String? businessName,
+    String? legalName,
     String? ruc,
     String? address,
     String? phone,
     String? cashierName,
     List<int>? logoRasterBytes,
+    TaxRegime taxRegime = TaxRegime.regimenGeneral,
+    bool isTaxExempt = false,
+    int paperWidthMm = 58,
   });
 
   /// Prints a kitchen / KDS order ticket with buzzer / table identification.

@@ -10,6 +10,8 @@ enum PrinterDriverType {
   escPosNetwork,
   @JsonValue('MOCK')
   mock,
+  @JsonValue('IPOS_Q80')
+  iPosQ80,
 }
 
 @freezed
@@ -24,9 +26,11 @@ class PrinterConfig with _$PrinterConfig {
     @Default(9100) int networkPort,
     @Default(1) int copies,
     @Default('OMNIFOOD NI') String headerBusinessName,
+    String? headerLegalName,
     String? headerRuc,
     String? headerAddress,
     String? headerPhone,
+    @Default('REGIMEN_GENERAL') String taxRegime,
     String? logoBase64,
     int? logoWidth,
     int? logoHeight,

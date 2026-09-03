@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -49,6 +50,8 @@ class LogoProcessingResult {
 /// Implements pure 1-bit Floyd-Steinberg error diffusion and ESC/POS raster byte generation.
 class ThermalLogoProcessor {
   static const int maxThermalWidth58mm = 384; // 384 dots max on 58mm 203dpi head
+  static const int maxThermalWidth80mm = 576; // 576 dots max on 80mm 203dpi head
+  static const int maxSafetyHeight = 160;     // 160 dots max height to prevent paper waste
 
   /// Validates PNG magic header [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A].
   static bool isPng(Uint8List bytes) {
@@ -64,9 +67,11 @@ class ThermalLogoProcessor {
   }
 
   /// Processes raw PNG bytes into a strict 1-bit monochrome thermal raster image.
+  /// Automatically resizes keeping aspect ratio to fit within [maxWidth] and [maxHeight].
   static Future<LogoProcessingResult> processPngBytes(
     Uint8List pngBytes, {
     int maxWidth = maxThermalWidth58mm,
+    int maxHeight = maxSafetyHeight,
     bool applyDithering = true,
   }) async {
     if (!isPng(pngBytes)) {
@@ -78,25 +83,48 @@ class ThermalLogoProcessor {
     try {
       final codec = await ui.instantiateImageCodec(pngBytes);
       final frame = await codec.getNextFrame();
-      final image = frame.image;
+      final originalImage = frame.image;
 
-      final originalWidth = image.width;
-      final originalHeight = image.height;
+      int targetWidth = originalImage.width;
+      int targetHeight = originalImage.height;
 
-      if (originalWidth > maxWidth) {
-        return LogoProcessingResult.failure(
-          'El ancho de la imagen (${originalWidth}px) excede el máximo permitido de ${maxWidth}px para cabezales de 58mm.',
-        );
+      // Calculate aspect ratio scaling if image exceeds maxWidth or maxHeight
+      final double widthScale = maxWidth / targetWidth;
+      final double heightScale = maxHeight / targetHeight;
+      final double scale = [widthScale, heightScale, 1.0].reduce((a, b) => a < b ? a : b);
+
+      targetWidth = (targetWidth * scale).round();
+      targetHeight = (targetHeight * scale).round();
+
+      // Ensure width is multiple of 8 for byte alignment
+      if (targetWidth % 8 != 0) {
+        targetWidth = (targetWidth ~/ 8) * 8;
+        if (targetWidth < 8) targetWidth = 8;
       }
 
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      // Draw and scale on a Canvas
+      final recorder = ui.PictureRecorder();
+      final canvas = ui.Canvas(recorder);
+      final paint = ui.Paint()..filterQuality = ui.FilterQuality.medium;
+
+      canvas.drawImageRect(
+        originalImage,
+        ui.Rect.fromLTWH(0, 0, originalImage.width.toDouble(), originalImage.height.toDouble()),
+        ui.Rect.fromLTWH(0, 0, targetWidth.toDouble(), targetHeight.toDouble()),
+        paint,
+      );
+
+      final picture = recorder.endRecording();
+      final resizedImage = await picture.toImage(targetWidth, targetHeight);
+
+      final byteData = await resizedImage.toByteData(format: ui.ImageByteFormat.rawRgba);
       if (byteData == null) {
         return LogoProcessingResult.failure('No se pudieron extraer los píxeles de la imagen.');
       }
 
       final rgbaBytes = byteData.buffer.asUint8List();
-      final width = originalWidth;
-      final height = originalHeight;
+      final width = targetWidth;
+      final height = targetHeight;
 
       // 1. Convert to 2D Grayscale array with Alpha transparency blending (White background)
       final List<List<double>> gray = List.generate(
@@ -176,11 +204,16 @@ class ThermalLogoProcessor {
         0x1B, 0x61, 0x00, // Reset left align
       ];
 
+      // Also encode the optimized PNG for native bitmap printer drivers
+      final pngByteData = await resizedImage.toByteData(format: ui.ImageByteFormat.png);
+      final optimizedPngBytes = pngByteData?.buffer.asUint8List() ?? pngBytes;
+
       return LogoProcessingResult.success(
         width: width,
         height: height,
         raw1BitBitmap: packedBitmap,
         escPosRasterBytes: escPosBytes,
+        base64Png: base64Encode(optimizedPngBytes),
       );
     } catch (e) {
       return LogoProcessingResult.failure('Error al procesar la imagen: $e');

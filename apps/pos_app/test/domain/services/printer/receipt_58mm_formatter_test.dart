@@ -55,7 +55,7 @@ void main() {
     });
 
     test('wrap() breaks long text into chunks of <= 32 characters', () {
-      const longText = 'Restaurante y Café OmniFood Managua Plaza Mayor Módulo 14';
+      const longText = 'Restaurante y Café NHILOS POS Managua Plaza Mayor Módulo 14';
       final lines = Receipt58mmFormatter.wrap(longText, 32);
       for (final line in lines) {
         expect(line.length, lessThanOrEqualTo(32));
