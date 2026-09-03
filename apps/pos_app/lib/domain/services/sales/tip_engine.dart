@@ -3,7 +3,7 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 part 'tip_engine.freezed.dart';
 part 'tip_engine.g.dart';
 
-/// Supported types of voluntary tips in OmniFood NI POS.
+/// Supported types of voluntary tips in NHILOS POS.
 enum TipType {
   @JsonValue('SUGGESTED_10_PERCENT')
   suggestedTenPercent,

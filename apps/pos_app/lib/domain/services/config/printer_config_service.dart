@@ -59,6 +59,8 @@ class PrinterConfigService {
         driverType = PrinterDriverType.mock;
       } else if (driverEntity.value == 'ESCPOS_NETWORK') {
         driverType = PrinterDriverType.escPosNetwork;
+      } else if (driverEntity.value == 'IPOS_Q80') {
+        driverType = PrinterDriverType.iPosQ80;
       } else {
         driverType = PrinterDriverType.sunmiV2s;
       }
@@ -111,6 +113,9 @@ class PrinterConfigService {
         break;
       case PrinterDriverType.sunmiV2s:
         driverCode = 'SUNMI_V2S';
+        break;
+      case PrinterDriverType.iPosQ80:
+        driverCode = 'IPOS_Q80';
         break;
     }
 
