@@ -37,21 +37,21 @@ Chain strategy: feature-branch-chain
 - [x] 2.2A RED: real SQLite topology/config/audit persistence; GREEN add tenant-scoped immutable snapshots, shift bindings, and append-only emergency activation audits with Floor registration/migration; REFACTOR query boundaries. Depends on 2.1B.
 - [x] 2.2B RED: real SQLite fulfillment, print-job, and outbox persistence; GREEN add their stable local identities and Floor registration/migration; REFACTOR aggregate boundaries. Depends on 2.2A.
 - [x] 2.2C RED: atomic sale + fulfillment + print + outbox transaction rollback/idempotency; GREEN commit all effects once with stable identities; REFACTOR transaction boundaries. Depends on 2.2B.
-- [ ] 2.2D RED: repository validation, offline fallback/replay, and runtime harness; GREEN wire `sales_repository_impl.dart` with tenant/version/hash checks; REFACTOR idempotent local identities. Depends on 2.2C.
+- [x] 2.2D RED: repository validation, offline fallback/replay, and runtime harness; GREEN wire `sales_repository_impl.dart` with tenant/version/hash checks; REFACTOR idempotent local identities. Depends on 2.2C.
   - [x] 2.2D.1 RED: require an explicit immutable checkout context carrying tenant and frozen topology snapshot identity/revision/hash/channel; GREEN forward it unchanged from the sales repository to its checkout boundary without inference; REFACTOR preserve legacy checkout compatibility. Depends on 2.2C.
   - [x] 2.2D.2a RED: validate the production context against the tenant-scoped cached snapshot; GREEN invoke atomic fulfillment and prove offline/replay with `apps/pos_app/test/data/repositories/sales/sales_repository_fulfillment_checkout_test.dart` (365 lines); TRIANGULATE valid atomic commit/idempotent replay and missing/cross-tenant/stale/hash-mismatch no-mutation cases. Depends on 2.2D.1.
-  - [ ] 2.2D.2b RED/GREEN/REFACTOR: focused repository compatibility/regressions in `apps/pos_app/test/data/repositories/sales/sales_repository_impl_test.dart` (≤168 lines), explicitly preserving 2.2D.1 immutable context-forwarding and legacy checkout coverage; rerun repository, SQLite, and DGI regressions. Depends on 2.2D.2a.
+  - [x] 2.2D.2b RED/GREEN/REFACTOR: focused repository compatibility/regressions in `apps/pos_app/test/data/repositories/sales/sales_repository_impl_test.dart` (256 test lines; complete child under 400 changed lines), explicitly preserving 2.2D.1 immutable context-forwarding and legacy checkout coverage; rerun repository, SQLite, and DGI regressions. Depends on 2.2D.2a.
 
 ## Phase 3: Backend Provisioning and Sync (PR #3)
 
-- [ ] 3.1 RED: immutable revision, base conflict `409`, legacy compatibility, RLS isolation, append-only audit, and cross-tenant rejection; GREEN add fulfillment DTOs/controllers/services, TypeORM migrations/entities, permissions and policies; generate/review TypeORM artifacts here; REFACTOR pipes.
-- [ ] 3.2 RED: duplicate reconnect acknowledgement; GREEN implement ordered tenant/device outbox replay and sync DTOs; REFACTOR observability for lag/duplicates.
+- [x] 3.1 RED: immutable revision, base conflict `409`, legacy compatibility, RLS isolation, append-only audit, and cross-tenant rejection; GREEN add fulfillment DTOs/controllers/services, TypeORM migrations/entities, permissions and policies; generate/review TypeORM artifacts here; REFACTOR pipes.
+- [x] 3.2 RED: duplicate reconnect acknowledgement; GREEN implement ordered tenant/device outbox replay and sync DTOs; REFACTOR observability for lag/duplicates.
 
 ## Phase 4: Execution and Recovery (PR #4)
 
-- [ ] 4.1 RED: PRINT_ONLY/KDS_ONLY/KDS_AND_PRINT, active-query suppression, delivery independence; GREEN wire `kitchen_order_*`, KDS/history UI and `sync_service.dart`; REFACTOR legacy read adapter.
-- [ ] 4.2 RED beside GREEN: durable attempts, receipt-before-ticket, safe retry, uncertainty resolution, authorized copy audit, 90-day purge excluding invoices/Kardex; update `printer_port.dart` and UI; REFACTOR metrics/alerts.
+- [x] 4.1 RED: PRINT_ONLY/KDS_ONLY/KDS_AND_PRINT, active-query suppression, delivery independence; GREEN wire `kitchen_order_*`, KDS/history UI and `sync_service.dart`; REFACTOR legacy read adapter.
+- [x] 4.2 RED beside GREEN: durable attempts, receipt-before-ticket, safe retry, uncertainty resolution, authorized copy audit, 90-day purge excluding invoices/Kardex; update `printer_port.dart` and UI; REFACTOR metrics/alerts.
 
 ## Phase 5: Rollout Proof (PR #5)
 
-- [ ] 5.1 RED: backfill discrepancy, rollback, retention, and pilot acceptance tests; GREEN add gated compatibility/backfill/rollback runbooks and dashboards; REFACTOR record end-to-end evidence for legacy tenants, modes, offline sale, replay, reprint, RLS and observability.
+- [x] 5.1 RED: backfill discrepancy, rollback, retention, and pilot acceptance tests; GREEN add gated compatibility/backfill/rollback runbooks and dashboards; REFACTOR record end-to-end evidence for legacy tenants, modes, offline sale, replay, reprint, RLS and observability.

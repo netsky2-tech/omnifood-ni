@@ -29,9 +29,11 @@ mixin _$PrinterConfig {
   int get networkPort => throw _privateConstructorUsedError;
   int get copies => throw _privateConstructorUsedError;
   String get headerBusinessName => throw _privateConstructorUsedError;
+  String? get headerLegalName => throw _privateConstructorUsedError;
   String? get headerRuc => throw _privateConstructorUsedError;
   String? get headerAddress => throw _privateConstructorUsedError;
   String? get headerPhone => throw _privateConstructorUsedError;
+  String get taxRegime => throw _privateConstructorUsedError;
   String? get logoBase64 => throw _privateConstructorUsedError;
   int? get logoWidth => throw _privateConstructorUsedError;
   int? get logoHeight => throw _privateConstructorUsedError;
@@ -59,9 +61,11 @@ abstract class $PrinterConfigCopyWith<$Res> {
       int networkPort,
       int copies,
       String headerBusinessName,
+      String? headerLegalName,
       String? headerRuc,
       String? headerAddress,
       String? headerPhone,
+      String taxRegime,
       String? logoBase64,
       int? logoWidth,
       int? logoHeight,
@@ -90,9 +94,11 @@ class _$PrinterConfigCopyWithImpl<$Res, $Val extends PrinterConfig>
     Object? networkPort = null,
     Object? copies = null,
     Object? headerBusinessName = null,
+    Object? headerLegalName = freezed,
     Object? headerRuc = freezed,
     Object? headerAddress = freezed,
     Object? headerPhone = freezed,
+    Object? taxRegime = null,
     Object? logoBase64 = freezed,
     Object? logoWidth = freezed,
     Object? logoHeight = freezed,
@@ -135,6 +141,10 @@ class _$PrinterConfigCopyWithImpl<$Res, $Val extends PrinterConfig>
           ? _value.headerBusinessName
           : headerBusinessName // ignore: cast_nullable_to_non_nullable
               as String,
+      headerLegalName: freezed == headerLegalName
+          ? _value.headerLegalName
+          : headerLegalName // ignore: cast_nullable_to_non_nullable
+              as String?,
       headerRuc: freezed == headerRuc
           ? _value.headerRuc
           : headerRuc // ignore: cast_nullable_to_non_nullable
@@ -147,6 +157,10 @@ class _$PrinterConfigCopyWithImpl<$Res, $Val extends PrinterConfig>
           ? _value.headerPhone
           : headerPhone // ignore: cast_nullable_to_non_nullable
               as String?,
+      taxRegime: null == taxRegime
+          ? _value.taxRegime
+          : taxRegime // ignore: cast_nullable_to_non_nullable
+              as String,
       logoBase64: freezed == logoBase64
           ? _value.logoBase64
           : logoBase64 // ignore: cast_nullable_to_non_nullable
@@ -185,9 +199,11 @@ abstract class _$$PrinterConfigImplCopyWith<$Res>
       int networkPort,
       int copies,
       String headerBusinessName,
+      String? headerLegalName,
       String? headerRuc,
       String? headerAddress,
       String? headerPhone,
+      String taxRegime,
       String? logoBase64,
       int? logoWidth,
       int? logoHeight,
@@ -214,9 +230,11 @@ class __$$PrinterConfigImplCopyWithImpl<$Res>
     Object? networkPort = null,
     Object? copies = null,
     Object? headerBusinessName = null,
+    Object? headerLegalName = freezed,
     Object? headerRuc = freezed,
     Object? headerAddress = freezed,
     Object? headerPhone = freezed,
+    Object? taxRegime = null,
     Object? logoBase64 = freezed,
     Object? logoWidth = freezed,
     Object? logoHeight = freezed,
@@ -259,6 +277,10 @@ class __$$PrinterConfigImplCopyWithImpl<$Res>
           ? _value.headerBusinessName
           : headerBusinessName // ignore: cast_nullable_to_non_nullable
               as String,
+      headerLegalName: freezed == headerLegalName
+          ? _value.headerLegalName
+          : headerLegalName // ignore: cast_nullable_to_non_nullable
+              as String?,
       headerRuc: freezed == headerRuc
           ? _value.headerRuc
           : headerRuc // ignore: cast_nullable_to_non_nullable
@@ -271,6 +293,10 @@ class __$$PrinterConfigImplCopyWithImpl<$Res>
           ? _value.headerPhone
           : headerPhone // ignore: cast_nullable_to_non_nullable
               as String?,
+      taxRegime: null == taxRegime
+          ? _value.taxRegime
+          : taxRegime // ignore: cast_nullable_to_non_nullable
+              as String,
       logoBase64: freezed == logoBase64
           ? _value.logoBase64
           : logoBase64 // ignore: cast_nullable_to_non_nullable
@@ -304,9 +330,11 @@ class _$PrinterConfigImpl implements _PrinterConfig {
       this.networkPort = 9100,
       this.copies = 1,
       this.headerBusinessName = 'OMNIFOOD NI',
+      this.headerLegalName,
       this.headerRuc,
       this.headerAddress,
       this.headerPhone,
+      this.taxRegime = 'REGIMEN_GENERAL',
       this.logoBase64,
       this.logoWidth,
       this.logoHeight,
@@ -342,11 +370,16 @@ class _$PrinterConfigImpl implements _PrinterConfig {
   @JsonKey()
   final String headerBusinessName;
   @override
+  final String? headerLegalName;
+  @override
   final String? headerRuc;
   @override
   final String? headerAddress;
   @override
   final String? headerPhone;
+  @override
+  @JsonKey()
+  final String taxRegime;
   @override
   final String? logoBase64;
   @override
@@ -359,7 +392,7 @@ class _$PrinterConfigImpl implements _PrinterConfig {
 
   @override
   String toString() {
-    return 'PrinterConfig(driverType: $driverType, autoPrintInvoice: $autoPrintInvoice, autoPrintKitchen: $autoPrintKitchen, openDrawerOnCash: $openDrawerOnCash, paperWidthMm: $paperWidthMm, networkIp: $networkIp, networkPort: $networkPort, copies: $copies, headerBusinessName: $headerBusinessName, headerRuc: $headerRuc, headerAddress: $headerAddress, headerPhone: $headerPhone, logoBase64: $logoBase64, logoWidth: $logoWidth, logoHeight: $logoHeight, isLogoEnabled: $isLogoEnabled)';
+    return 'PrinterConfig(driverType: $driverType, autoPrintInvoice: $autoPrintInvoice, autoPrintKitchen: $autoPrintKitchen, openDrawerOnCash: $openDrawerOnCash, paperWidthMm: $paperWidthMm, networkIp: $networkIp, networkPort: $networkPort, copies: $copies, headerBusinessName: $headerBusinessName, headerLegalName: $headerLegalName, headerRuc: $headerRuc, headerAddress: $headerAddress, headerPhone: $headerPhone, taxRegime: $taxRegime, logoBase64: $logoBase64, logoWidth: $logoWidth, logoHeight: $logoHeight, isLogoEnabled: $isLogoEnabled)';
   }
 
   @override
@@ -384,12 +417,16 @@ class _$PrinterConfigImpl implements _PrinterConfig {
             (identical(other.copies, copies) || other.copies == copies) &&
             (identical(other.headerBusinessName, headerBusinessName) ||
                 other.headerBusinessName == headerBusinessName) &&
+            (identical(other.headerLegalName, headerLegalName) ||
+                other.headerLegalName == headerLegalName) &&
             (identical(other.headerRuc, headerRuc) ||
                 other.headerRuc == headerRuc) &&
             (identical(other.headerAddress, headerAddress) ||
                 other.headerAddress == headerAddress) &&
             (identical(other.headerPhone, headerPhone) ||
                 other.headerPhone == headerPhone) &&
+            (identical(other.taxRegime, taxRegime) ||
+                other.taxRegime == taxRegime) &&
             (identical(other.logoBase64, logoBase64) ||
                 other.logoBase64 == logoBase64) &&
             (identical(other.logoWidth, logoWidth) ||
@@ -413,9 +450,11 @@ class _$PrinterConfigImpl implements _PrinterConfig {
       networkPort,
       copies,
       headerBusinessName,
+      headerLegalName,
       headerRuc,
       headerAddress,
       headerPhone,
+      taxRegime,
       logoBase64,
       logoWidth,
       logoHeight,
@@ -446,9 +485,11 @@ abstract class _PrinterConfig implements PrinterConfig {
       final int networkPort,
       final int copies,
       final String headerBusinessName,
+      final String? headerLegalName,
       final String? headerRuc,
       final String? headerAddress,
       final String? headerPhone,
+      final String taxRegime,
       final String? logoBase64,
       final int? logoWidth,
       final int? logoHeight,
@@ -476,11 +517,15 @@ abstract class _PrinterConfig implements PrinterConfig {
   @override
   String get headerBusinessName;
   @override
+  String? get headerLegalName;
+  @override
   String? get headerRuc;
   @override
   String? get headerAddress;
   @override
   String? get headerPhone;
+  @override
+  String get taxRegime;
   @override
   String? get logoBase64;
   @override

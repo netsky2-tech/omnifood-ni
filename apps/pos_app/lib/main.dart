@@ -352,7 +352,7 @@ class MyApp extends StatelessWidget {
     return InventoryAlertOverlay(
       alertService: alertService,
       child: MaterialApp(
-        title: 'OmniFood NI POS',
+        title: 'NHILOS POS',
         theme: ThemeData(
           useMaterial3: true,
           colorScheme: const ColorScheme(
@@ -543,7 +543,7 @@ class PlaceholderHome extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('OmniFood NI - POS')),
+      appBar: AppBar(title: const Text('NHILOS POS')),
       body: const Center(child: Text('Bienvenido al Punto de Venta')),
     );
   }
