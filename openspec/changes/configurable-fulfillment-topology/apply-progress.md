@@ -67,3 +67,20 @@
 **Workload / PR boundary**: 3.1a only, chained feature-branch slice; no generated artifacts. Rollback boundary: revert only the listed migration and fulfillment files.
 
 **Verification**: `corepack pnpm --filter admin_backend build` and `git diff --check` passed. **Status consumed**: authoritative `both`/OpenSpec status; `actionContext` allowed the dedicated worktree roots. Remaining tasks: `- [ ] 3.1 RED: immutable revision, base conflict \`409\`, legacy compatibility, RLS isolation, append-only audit, and cross-tenant rejection; GREEN add fulfillment DTOs/controllers/services, TypeORM migrations/entities, permissions and policies; generate/review TypeORM artifacts here; REFACTOR pipes.`
+
+## 3.1b Progress — Real-PostgreSQL GREEN Complete
+
+- Added DTOs `CreateTenantTopologyRevisionDto` (strict class-validator: baseRevision, contractVersion, topology, hash) and `TenantTopologyResponseDto`.
+- Added controller `FulfillmentTopologyController` with route `/fulfillment/topology`:
+  - `GET /current`: Authenticated for all tenant staff roles (OWNER, MANAGER, CASHIER, WAITER); returns current revision or `{ provisioned: false, revision: 0 }`.
+  - `POST /revisions`: Restricted to OWNER role via `AuthoritativeCurrentUserGuard` and `RolesGuard`; maps `TopologyRevisionConflictError` to HTTP 409 Conflict.
+- Added additive migration `1794000000001-AddTenantTopologyRevisionsRls.ts` enforcing PostgreSQL Row-Level Security (RLS) with SELECT and INSERT policies scoped to `app.tenant_id`.
+- Bound `app.tenant_id` session variable in `TenantTopologyRevisionService.inTransaction`.
+- Registered `FulfillmentModule` and `TenantTopologyRevision` entity in `AppModule`.
+
+| TDD stage | Evidence |
+|---|---|
+| RED | Controller unit tests failed initially without controller/DTOs; E2E suite failed before schema & migration setup. |
+| GREEN | Controller unit tests passed 8/8 (`fulfillment-topology.controller.spec.ts`); DB spec with real PostgreSQL RLS passed 1/1 (`tenant-topology-revision.service.db.spec.ts`); full HTTP E2E with real PostgreSQL passed 8/8 (`test/fulfillment/fulfillment-topology.e2e-spec.ts`). |
+| TRIANGULATE | Verified 401 unauthenticated, 403 non-owner, 400 invalid payload, 201 valid revision, 409 stale base revision, and complete tenant isolation across Tenant A & Tenant B in both DB RLS and HTTP E2E. |
+| REFACTOR | ESLint and Prettier passed with 0 errors/0 warnings; NestJS build succeeded. |

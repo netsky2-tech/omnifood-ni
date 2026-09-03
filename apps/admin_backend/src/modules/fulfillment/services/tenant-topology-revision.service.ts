@@ -101,6 +101,9 @@ export class TenantTopologyRevisionService {
     try {
       await runner.connect();
       await runner.startTransaction();
+      await runner.query("SELECT set_config('app.tenant_id', $1, true)", [
+        tenantId,
+      ]);
       const result = await action(runner);
       await runner.commitTransaction();
       return result;
