@@ -1,4 +1,4 @@
-# OmniFood POS - ProGuard / R8 Rules for Release Builds
+# NHILOS POS - ProGuard / R8 Rules for Release Builds
 # Protects SQLite (Floor/Sqflite), Freezed Models, Sunmi AIDL and Security Storage
 
 # Flutter Framework & Plugins
@@ -12,7 +12,7 @@
 # Sunmi AIDL Interfaces & Driver
 -keep class woyou.aidlservice.jiu_mi.** { *; }
 -keep interface woyou.aidlservice.jiu_mi.** { *; }
--keep class com.omnifood.pos_app.printer.** { *; }
+-keep class com.nhilos.pos_app.printer.** { *; }
 
 # SQLite & Persistence (Floor, Sqflite, Android Room)
 -keep class com.tekartik.sqflite.** { *; }

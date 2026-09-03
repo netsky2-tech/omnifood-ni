@@ -30,7 +30,7 @@ void main() {
         autoPrintKitchen: false,
         openDrawerOnCash: true,
         paperWidthMm: 58,
-        headerBusinessName: 'OmniFood HW Test',
+        headerBusinessName: 'NHILOS POS HW Test',
       ),
     );
 
