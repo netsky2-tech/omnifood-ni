@@ -174,7 +174,7 @@ class SaleViewModel extends ChangeNotifier {
     if (_identificationService == null) return null;
     final result = await _identificationService!.identify(input);
     if (result == null) return null;
-    selectCustomer(result.customer);
+    await selectCustomer(result.customer);
     return result.customer;
   }
 
@@ -210,7 +210,7 @@ class SaleViewModel extends ChangeNotifier {
       // Build balance map from program IDs
       final balanceMap = <String, int>{};
       for (final p in programs) {
-        balanceMap[p.id] = 0; // Default; actual balance derived from ledger in future
+        balanceMap[p.id] = _selectedCustomer!.pointsBalance.toInt();
       }
 
       // Build snapshot from current cart
