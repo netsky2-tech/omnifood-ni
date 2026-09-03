@@ -17,6 +17,7 @@ import { UpdateCustomerDto } from '../dto/update-customer.dto';
 import { CustomerQueryDto } from '../dto/customer-query.dto';
 import { AdjustPointsDto } from '../dto/adjust-points.dto';
 import { GetTenantId } from '../../../core/decorators/tenant.decorator';
+import { CurrentUser } from '../../../core/decorators/current-user.decorator';
 import { TenantInterceptor } from '../../../core/database/rls.interceptor';
 import { AuthGuard } from '../../identity/guards/auth.guard';
 import { RolesGuard } from '../../identity/guards/roles.guard';
@@ -72,11 +73,13 @@ export class CustomersController {
     @Param('id') id: string,
     @Body() dto: AdjustPointsDto,
     @GetTenantId() tenantId?: string,
+    @CurrentUser('sub') actorUserId?: string,
   ) {
     return this.customersService.adjustPoints(
       this.requireTenant(tenantId),
       id,
       dto,
+      actorUserId,
     );
   }
 

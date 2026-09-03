@@ -11,6 +11,8 @@ import { LoyaltyService } from '../../src/modules/loyalty/services/loyalty.servi
 import { TicketPaidHandler } from '../../src/modules/loyalty/services/ticket-paid.handler';
 import { LegacyClassificationService } from '../../src/modules/loyalty/services/legacy-classification.service';
 import { LoyaltyProfitAwareService } from '../../src/modules/loyalty/services/loyalty-profit-aware.service';
+import { RedemptionService } from '../../src/modules/loyalty/services/redemption.service';
+import { LoyaltyLedgerService } from '../../src/modules/loyalty/services/loyalty-ledger.service';
 import { LoyaltyProgram, LoyaltyProgramStatus } from '../../src/modules/loyalty/entities/loyalty-program.entity';
 import { RewardDefinition } from '../../src/modules/loyalty/entities/reward-definition.entity';
 import { CustomerLoyaltyAccountProjection } from '../../src/modules/loyalty/entities/customer-loyalty-account-projection.entity';
@@ -176,6 +178,22 @@ describe('Loyalty API (E2E / Integration)', () => {
           useValue: {
             ensureLegacyProgram: jest.fn(),
             classifyLegacyTransactions: jest.fn(),
+          },
+        },
+        {
+          provide: RedemptionService,
+          useValue: {
+            createRedemptionIntent: jest.fn(),
+            consolidateRedemption: jest.fn(),
+            voidIntent: jest.fn(),
+            reverseTicketLoyalty: jest.fn(),
+          },
+        },
+        {
+          provide: LoyaltyLedgerService,
+          useValue: {
+            appendTransaction: jest.fn(),
+            rebuildProjection: jest.fn(),
           },
         },
         {

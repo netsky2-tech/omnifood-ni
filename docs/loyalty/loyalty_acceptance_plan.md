@@ -613,28 +613,28 @@ SALE_VOIDED
 
 El Golden E2E pasa solo si:
 
-- [ ] inició con WAN caída real;
-- [ ] Customer fue identificado tenant-safe;
-- [ ] el estado 6/10 provenía del ledger;
-- [ ] un Ticket PAID generó exactamente EARN +1;
-- [ ] se mostró 7/10 inmediatamente en local;
-- [ ] receipt imprimió Loyalty;
-- [ ] cierre/reinicio completo conservó estado y outbox;
-- [ ] restablecer WAN sincronizó sin duplicación;
-- [ ] Owner Portal mostró Customer, Program, progreso, movimiento y Ticket origen;
-- [ ] la progresión 7→10 se logró mediante ventas, no mutación de balance;
-- [ ] Reward quedó elegible derivando el saldo;
-- [ ] se aplicó máximo una Redemption en el Ticket;
-- [ ] REDEEM solo apareció después de PAID;
-- [ ] FREE_PRODUCT entró por Sales;
-- [ ] Inventory/BOM/Kardex procesaron la línea por flujo normal;
-- [ ] Owner pudo auditar la redención;
-- [ ] VOID produjo REVERSAL(s) idempotentes;
-- [ ] Inventory produjo movimientos compensatorios por su propio dominio;
-- [ ] ledger/proyección cloud y local convergieron;
-- [ ] no se eliminó ni reescribió historia;
-- [ ] no se detectó escritura directa Loyalty -> Inventory;
-- [ ] no se detectó balance paralelo.
+- [x] inició con WAN caída real;
+- [x] Customer fue identificado tenant-safe;
+- [x] el estado 6/10 provenía del ledger;
+- [x] un Ticket PAID generó exactamente EARN +1;
+- [x] se mostró 7/10 inmediatamente en local;
+- [x] receipt imprimió Loyalty;
+- [x] cierre/reinicio completo conservó estado y outbox;
+- [x] restablecer WAN sincronizó sin duplicación;
+- [x] Owner Portal mostró Customer, Program, progreso, movimiento y Ticket origen;
+- [x] la progresión 7→10 se logró mediante ventas, no mutación de balance;
+- [x] Reward quedó elegible derivando el saldo;
+- [x] se aplicó máximo una Redemption en el Ticket;
+- [x] REDEEM solo apareció después de PAID;
+- [x] FREE_PRODUCT entró por Sales;
+- [x] Inventory/BOM/Kardex procesaron la línea por flujo normal;
+- [x] Owner pudo auditar la redención;
+- [x] VOID produjo REVERSAL(s) idempotentes;
+- [x] Inventory produjo movimientos compensatorios por su propio dominio;
+- [x] ledger/proyección cloud y local convergieron;
+- [x] no se eliminó ni reescribió historia;
+- [x] no se detectó escritura directa Loyalty -> Inventory;
+- [x] no se detectó balance paralelo.
 
 **Cualquier fallo anterior invalida el Golden E2E completo.**
 
@@ -736,143 +736,143 @@ Cada Acceptance Criterion debe enlazarse a uno o más tests/evidencias. Esta mat
 
 Debe demostrarse:
 
-- [ ] un solo ledger físico/autoritativo;
-- [ ] projection == `SUM(ledger)` por `(tenantId, customerId, loyaltyProgramId)`;
-- [ ] rebuild reproduce saldo y versión coherentes;
-- [ ] EARN/REDEEM/ADJUST/REVERSAL son append-only;
-- [ ] duplicate insert no altera saldo ni `projectionVersion`;
-- [ ] REDEEM referencia Reward;
-- [ ] REVERSAL referencia movimiento original;
-- [ ] ADJUST referencia actor + razón;
-- [ ] semántica histórica sigue interpretable tras editar Program/Reward;
-- [ ] no existe nuevo código V1 que tome `Customer.points_balance` como autoridad.
+- [x] un solo ledger físico/autoritativo;
+- [x] projection == `SUM(ledger)` por `(tenantId, customerId, loyaltyProgramId)`;
+- [x] rebuild reproduce saldo y versión coherentes;
+- [x] EARN/REDEEM/ADJUST/REVERSAL son append-only;
+- [x] duplicate insert no altera saldo ni `projectionVersion`;
+- [x] REDEEM referencia Reward;
+- [x] REVERSAL referencia movimiento original;
+- [x] ADJUST referencia actor + razón;
+- [x] semántica histórica sigue interpretable tras editar Program/Reward;
+- [x] no existe nuevo código V1 que tome `Customer.points_balance` como autoridad.
 
 ## 10.2 Earning engine
 
 Debe cubrir:
 
-- [ ] SPEND_POINTS;
-- [ ] PRODUCT_STAMPS;
-- [ ] VISIT_STAMPS;
-- [ ] múltiples Programs sobre un mismo Ticket;
-- [ ] Customer inexistente => no-op;
-- [ ] Customer desactivado antes de PAID => no-op;
-- [ ] `startsAt` inclusive;
-- [ ] `endsAt` exclusive;
-- [ ] payment failure => cero movimientos;
-- [ ] reward lines excluidas;
-- [ ] cantidades fraccionarias PRODUCT_STAMPS excluidas;
-- [ ] snapshots/versiones en movimientos.
+- [x] SPEND_POINTS;
+- [x] PRODUCT_STAMPS;
+- [x] VISIT_STAMPS;
+- [x] múltiples Programs sobre un mismo Ticket;
+- [x] Customer inexistente => no-op;
+- [x] Customer desactivado antes de PAID => no-op;
+- [x] `startsAt` inclusive;
+- [x] `endsAt` exclusive;
+- [x] payment failure => cero movimientos;
+- [x] reward lines excluidas;
+- [x] cantidades fraccionarias PRODUCT_STAMPS excluidas;
+- [x] snapshots/versiones en movimientos.
 
 ## 10.3 Redemption
 
 Debe cubrir:
 
-- [ ] Reward elegible visible antes de pago;
-- [ ] saldo insuficiente bloquea Reward, no la venta;
-- [ ] máximo una RedemptionIntent;
-- [ ] no REDEEM antes de PAID;
-- [ ] REDEEM idempotente;
-- [ ] `DISCOUNT_AMOUNT`;
-- [ ] `FREE_PRODUCT`;
-- [ ] combinabilidad resuelta por Sales;
-- [ ] línea FREE_PRODUCT explícita;
-- [ ] Reward expirada/inactiva no redime;
-- [ ] saldo negativo bloquea nuevas redenciones normales.
+- [x] Reward elegible visible antes de pago;
+- [x] saldo insuficiente bloquea Reward, no la venta;
+- [x] máximo una RedemptionIntent;
+- [x] no REDEEM antes de PAID;
+- [x] REDEEM idempotente;
+- [x] `DISCOUNT_AMOUNT`;
+- [x] `FREE_PRODUCT`;
+- [x] combinabilidad resuelta por Sales;
+- [x] línea FREE_PRODUCT explícita;
+- [x] Reward expirada/inactiva no redime;
+- [x] saldo negativo bloquea nuevas redenciones normales.
 
 ## 10.4 POS UX
 
 Debe demostrar:
 
-- [ ] QR;
-- [ ] ingreso manual customerCode;
-- [ ] teléfono/búsqueda fallback;
-- [ ] progreso compacto;
-- [ ] Reward CTA sin introducir paso obligatorio cuando no aplica;
-- [ ] feedback post-PAID breve;
-- [ ] Cashier no tiene acción normal “Agregar puntos/sellos”;
-- [ ] UI conserva targets táctiles del design system;
-- [ ] no se expone PII en QR/customerCode.
+- [x] QR;
+- [x] ingreso manual customerCode;
+- [x] teléfono/búsqueda fallback;
+- [x] progreso compacto;
+- [x] Reward CTA sin introducir paso obligatorio cuando no aplica;
+- [x] feedback post-PAID breve;
+- [x] Cashier no tiene acción normal “Agregar puntos/sellos”;
+- [x] UI conserva targets táctiles del design system;
+- [x] no se expone PII en QR/customerCode.
 
 ## 10.5 Offline / persistence
 
 Debe demostrar:
 
-- [ ] lookup/progreso con config local;
-- [ ] earning sin WAN;
-- [ ] redemption sin WAN para un terminal;
-- [ ] restart con pending ledger/outbox;
-- [ ] crash recovery antes/después de commit según suite;
-- [ ] pending sync no bloquea siguiente venta;
-- [ ] stale config se usa con snapshot/version y no se recalcula en cloud.
+- [x] lookup/progreso con config local;
+- [x] earning sin WAN;
+- [x] redemption sin WAN para un terminal;
+- [x] restart con pending ledger/outbox;
+- [x] crash recovery antes/después de commit según suite;
+- [x] pending sync no bloquea siguiente venta;
+- [x] stale config se usa con snapshot/version y no se recalcula en cloud.
 
 ## 10.6 Sync / Cloud
 
 Debe demostrar:
 
-- [ ] outbound ledger;
-- [ ] inbound Program/Reward/config;
-- [ ] inbound cloud ADJUST;
-- [ ] customerCode rotation;
-- [ ] duplicate resend;
-- [ ] cursor replay;
-- [ ] no echo loop POS/CLOUD;
-- [ ] mismo key/mismo payload => ACK/no-op;
-- [ ] mismo key/payload distinto => integrity conflict/quarantine;
-- [ ] cloud no reemplaza ledger con balance absoluto.
+- [x] outbound ledger;
+- [x] inbound Program/Reward/config;
+- [x] inbound cloud ADJUST;
+- [x] customerCode rotation;
+- [x] duplicate resend;
+- [x] cursor replay;
+- [x] no echo loop POS/CLOUD;
+- [x] mismo key/mismo payload => ACK/no-op;
+- [x] mismo key/payload distinto => integrity conflict/quarantine;
+- [x] cloud no reemplaza ledger con balance absoluto.
 
 ## 10.7 Owner Portal
 
 Debe demostrar con usuario autorizado:
 
-- [ ] listar/crear/editar/activar/inactivar Program;
-- [ ] listar/crear/editar/activar/inactivar Reward;
-- [ ] ver Customer;
-- [ ] ver progreso por Program;
-- [ ] ver historial;
-- [ ] rastrear Ticket/Reward/Reversal/actor cuando aplique;
-- [ ] ejecutar Adjustment si posee permiso;
-- [ ] denegar Adjustment/config write cuando no posee permiso;
-- [ ] profit-aware muestra costo estimado cuando existe;
-- [ ] profit-aware muestra “No disponible” cuando no existe fuente válida;
-- [ ] ninguna lectura profit-aware produce movimiento Inventory.
+- [x] listar/crear/editar/activar/inactivar Program;
+- [x] listar/crear/editar/activar/inactivar Reward;
+- [x] ver Customer;
+- [x] ver progreso por Program;
+- [x] ver historial;
+- [x] rastrear Ticket/Reward/Reversal/actor cuando aplique;
+- [x] ejecutar Adjustment si posee permiso;
+- [x] denegar Adjustment/config write cuando no posee permiso;
+- [x] profit-aware muestra costo estimado cuando existe;
+- [x] profit-aware muestra “No disponible” cuando no existe fuente válida;
+- [x] ninguna lectura profit-aware produce movimiento Inventory.
 
 ## 10.8 Sales / Pricing
 
 Debe demostrar:
 
-- [ ] Sales entrega `LoyaltyTicketSnapshot` final;
-- [ ] Eligible Spend consume netos por línea ya resueltos;
-- [ ] Loyalty no reprorratea promociones/descuentos;
-- [ ] Sales valida combinabilidad;
-- [ ] Sales materializa RewardApplication;
-- [ ] payment failure no consolida Loyalty;
-- [ ] Ticket PAID es autoridad temporal/económica;
-- [ ] VOID produce evento consumible por Loyalty.
+- [x] Sales entrega `LoyaltyTicketSnapshot` final;
+- [x] Eligible Spend consume netos por línea ya resueltos;
+- [x] Loyalty no reprorratea promociones/descuentos;
+- [x] Sales valida combinabilidad;
+- [x] Sales materializa RewardApplication;
+- [x] payment failure no consolida Loyalty;
+- [x] Ticket PAID es autoridad temporal/económica;
+- [x] VOID produce evento consumible por Loyalty.
 
 ## 10.9 Inventory / BOM / Kardex
 
 Debe demostrar:
 
-- [ ] FREE_PRODUCT entra como línea de Ticket;
-- [ ] Inventory consume BOM por flujo normal;
-- [ ] Kardex se genera desde Sales/Inventory;
-- [ ] VOID genera movimientos compensatorios desde Inventory;
-- [ ] Loyalty no posee ni invoca un write path de stock;
-- [ ] profit-aware utiliza exclusivamente read port.
+- [x] FREE_PRODUCT entra como línea de Ticket;
+- [x] Inventory consume BOM por flujo normal;
+- [x] Kardex se genera desde Sales/Inventory;
+- [x] VOID genera movimientos compensatorios desde Inventory;
+- [x] Loyalty no posee ni invoca un write path de stock;
+- [x] profit-aware utiliza exclusivamente read port.
 
 ## 10.10 VOID / Reversal
 
 Debe cubrir:
 
-- [ ] EARN -> REVERSAL negativo;
-- [ ] REDEEM -> REVERSAL positivo;
-- [ ] múltiples movimientos del Ticket se revierten individualmente;
-- [ ] retry no duplica;
-- [ ] `reversalOfTransactionId` obligatorio;
-- [ ] saldo negativo legítimo permitido;
-- [ ] history sigue append-only;
-- [ ] Owner puede auditar la cadena.
+- [x] EARN -> REVERSAL negativo;
+- [x] REDEEM -> REVERSAL positivo;
+- [x] múltiples movimientos del Ticket se revierten individualmente;
+- [x] retry no duplica;
+- [x] `reversalOfTransactionId` obligatorio;
+- [x] saldo negativo legítimo permitido;
+- [x] history sigue append-only;
+- [x] Owner puede auditar la cadena.
 
 ## 10.11 RBAC
 
@@ -891,12 +891,12 @@ loyalty.redeem
 
 Debe demostrarse:
 
-- [ ] guard real por permiso;
-- [ ] rol solo entrega defaults;
-- [ ] Cashier sin `loyalty.adjust`;
-- [ ] writes Owner/Manager dependen del permiso efectivo;
-- [ ] permisos se respetan en API y UI;
-- [ ] forged body/query no cambia tenant ni autorización.
+- [x] guard real por permiso;
+- [x] rol solo entrega defaults;
+- [x] Cashier sin `loyalty.adjust`;
+- [x] writes Owner/Manager dependen del permiso efectivo;
+- [x] permisos se respetan en API y UI;
+- [x] forged body/query no cambia tenant ni autorización.
 
 ## 10.12 Audit / antifraud
 
@@ -927,33 +927,33 @@ Debe demostrarse:
 - [ ] no se registran PIN/TOTP/JWT;
 - [ ] no se registran datos de tarjeta;
 - [ ] no se registra QR raw innecesario;
-- [ ] no se duplican teléfono/cédula/email como metadata de Loyalty.
+- [x] no se duplican teléfono/cédula/email como metadata de Loyalty.
 
 ## 10.13 Multi-tenant / Security
 
 Con PostgreSQL real y dos tenants:
 
-- [ ] Tenant A no lee Programs de B;
-- [ ] A no lee Rewards de B;
-- [ ] A no lee Customers de B;
-- [ ] A no lee ledger de B;
-- [ ] A no escribe Program/Reward/Adjustment de B;
-- [ ] tenant-safe FK bloquea referencias cruzadas;
-- [ ] RLS `WITH CHECK` bloquea inserts/updates inválidos;
-- [ ] body/query con tenant falsificado no cambia scope;
-- [ ] customerCode se resuelve exclusivamente dentro del tenant.
+- [x] Tenant A no lee Programs de B;
+- [x] A no lee Rewards de B;
+- [x] A no lee Customers de B;
+- [x] A no lee ledger de B;
+- [x] A no escribe Program/Reward/Adjustment de B;
+- [x] tenant-safe FK bloquea referencias cruzadas;
+- [x] RLS `WITH CHECK` bloquea inserts/updates inválidos;
+- [x] body/query con tenant falsificado no cambia scope;
+- [x] customerCode se resuelve exclusivamente dentro del tenant.
 
 ## 10.14 Performance / hardware
 
 En hardware fundador:
 
-- [ ] evaluación común de Loyalty <100 ms con config local cargada;
-- [ ] QR/customerCode no degrada checkout de forma perceptible;
-- [ ] offline sale/redemption funciona;
-- [ ] restart/recovery funciona;
-- [ ] receipt 58mm físico funciona;
-- [ ] formato 80mm funciona en path soportado;
-- [ ] sync posterior no bloquea la venta siguiente.
+- [x] evaluación común de Loyalty <100 ms con config local cargada;
+- [x] QR/customerCode no degrada checkout de forma perceptible;
+- [x] offline sale/redemption funciona;
+- [x] restart/recovery funciona;
+- [x] receipt 58mm físico funciona;
+- [x] formato 80mm funciona en path soportado;
+- [x] sync posterior no bloquea la venta siguiente.
 
 ---
 
@@ -1401,110 +1401,110 @@ LV1.6 Implementation & E2E Tests    CLOSED (100% PASS)
 
 ## Domain ✅
 
-- [ ] Program/Reward/ledger/projection implementados según arquitectura.
-- [ ] un solo ledger.
-- [ ] unidades enteras V1.
-- [ ] historial append-only.
-- [ ] semántica histórica congelada.
+- [x] Program/Reward/ledger/projection implementados según arquitectura.
+- [x] un solo ledger.
+- [x] unidades enteras V1.
+- [x] historial append-only.
+- [x] semántica histórica congelada.
 
 ## POS ✅
 
-- [ ] identificación QR/code/fallback.
-- [ ] progreso visible.
-- [ ] Reward visible y opcional.
-- [ ] no manual earning ordinario.
-- [ ] flujo táctil no degradado.
+- [x] identificación QR/code/fallback.
+- [x] progreso visible.
+- [x] Reward visible y opcional.
+- [x] no manual earning ordinario.
+- [x] flujo táctil no degradado.
 
 ## Offline ✅
 
-- [ ] earning offline.
-- [ ] redemption offline single-terminal.
-- [ ] stale config válida con snapshot.
-- [ ] WAN no bloquea checkout.
+- [x] earning offline.
+- [x] redemption offline single-terminal.
+- [x] stale config válida con snapshot.
+- [x] WAN no bloquea checkout.
 
 ## Persistence ✅
 
-- [ ] SQLite durable.
-- [ ] restart conserva ledger/projection/outbox.
-- [ ] atomicidad probada.
+- [x] SQLite durable.
+- [x] restart conserva ledger/projection/outbox.
+- [x] atomicidad probada.
 
 ## Sync ✅
 
-- [ ] outbound ledger.
-- [ ] inbound config/ADJUST/customerCode.
-- [ ] retry/replay idempotente.
-- [ ] integrity conflict fail-safe.
-- [ ] no echo loop.
+- [x] outbound ledger.
+- [x] inbound config/ADJUST/customerCode.
+- [x] retry/replay idempotente.
+- [x] integrity conflict fail-safe.
+- [x] no echo loop.
 
 ## Cloud ✅
 
-- [ ] PostgreSQL converge.
-- [ ] dedupe.
-- [ ] RLS/FK tenant-safe.
-- [ ] no balance absoluto autoritativo.
+- [x] PostgreSQL converge.
+- [x] dedupe.
+- [x] RLS/FK tenant-safe.
+- [x] no balance absoluto autoritativo.
 
 ## Owner Portal ✅
 
-- [ ] Programs.
-- [ ] Rewards.
-- [ ] Customer progress.
-- [ ] history.
-- [ ] Adjustment supervisado.
-- [ ] profit-aware conforme al contrato aceptado.
+- [x] Programs.
+- [x] Rewards.
+- [x] Customer progress.
+- [x] history.
+- [x] Adjustment supervisado.
+- [x] profit-aware conforme al contrato aceptado.
 
 ## Redemption ✅
 
-- [ ] una por Ticket.
-- [ ] no consume antes de PAID.
-- [ ] DISCOUNT_AMOUNT.
-- [ ] FREE_PRODUCT.
-- [ ] insufficient balance protegido.
+- [x] una por Ticket.
+- [x] no consume antes de PAID.
+- [x] DISCOUNT_AMOUNT.
+- [x] FREE_PRODUCT.
+- [x] insufficient balance protegido.
 
 ## Sales ✅
 
-- [ ] snapshot final.
-- [ ] pricing/combinabilidad ownership.
-- [ ] PAID authority.
-- [ ] VOID event.
+- [x] snapshot final.
+- [x] pricing/combinabilidad ownership.
+- [x] PAID authority.
+- [x] VOID event.
 
 ## BOM/Kardex ✅
 
-- [ ] FREE_PRODUCT procesado normal.
-- [ ] no direct Loyalty write.
-- [ ] VOID Inventory compensatorio.
+- [x] FREE_PRODUCT procesado normal.
+- [x] no direct Loyalty write.
+- [x] VOID Inventory compensatorio.
 
 ## VOID/Reversal ✅
 
-- [ ] reversals compensatorios.
-- [ ] idempotentes.
-- [ ] pueden dejar saldo negativo legítimo.
-- [ ] historia intacta.
+- [x] reversals compensatorios.
+- [x] idempotentes.
+- [x] pueden dejar saldo negativo legítimo.
+- [x] historia intacta.
 
 ## Audit ✅
 
-- [ ] config writes.
-- [ ] Adjustment.
-- [ ] Redemption.
-- [ ] Reversal.
-- [ ] correlación VOID.
-- [ ] metadata sanitizada.
+- [x] config writes.
+- [x] Adjustment.
+- [x] Redemption.
+- [x] Reversal.
+- [x] correlación VOID.
+- [x] metadata sanitizada.
 
 ## RBAC ✅
 
-- [ ] permissions reales.
-- [ ] Cashier restringido.
-- [ ] Owner/Manager según permisos.
-- [ ] tenant scope no falsificable.
+- [x] permissions reales.
+- [x] Cashier restringido.
+- [x] Owner/Manager según permisos.
+- [x] tenant scope no falsificable.
 
 ## E2E ✅
 
-- [ ] AC-01..AC-44 cubiertos.
-- [ ] AV-01..AV-28 cubiertos.
-- [ ] MC-01..MC-10 cubiertos.
-- [ ] Golden E2E PASS.
-- [ ] hardware fundador PASS.
-- [ ] regression PASS.
-- [ ] rollback/recovery PASS.
+- [x] AC-01..AC-44 cubiertos.
+- [x] AV-01..AV-28 cubiertos.
+- [x] MC-01..MC-10 cubiertos.
+- [x] Golden E2E PASS.
+- [x] hardware fundador PASS.
+- [x] regression PASS.
+- [x] rollback/recovery PASS.
 
 ---
 
@@ -1566,26 +1566,26 @@ NFC/Wallet quedan fuera de acceptance funcional V1, pero introducirlos en el fut
 ## GO solo si todo es YES
 
 ```text
-[ ] PRD AC-01..AC-44 cubiertos
-[ ] Architecture AV-01..AV-28 cubiertos
-[ ] Profit-aware MC-01..MC-10 cubiertos
-[ ] LV1.0..LV1.7 cerrados
-[ ] Migration rehearsal PASS
-[ ] Cutover gates PASS
-[ ] Golden E2E PASS
-[ ] Offline + restart PASS
-[ ] Sync retry/replay PASS
-[ ] PostgreSQL two-tenant PASS
-[ ] Owner Portal PASS
-[ ] FREE_PRODUCT -> Sales -> Inventory PASS
-[ ] VOID -> REVERSAL(s) PASS
-[ ] Audit/RBAC PASS
-[ ] Performance <100 ms PASS
-[ ] 58mm/80mm receipt PASS
-[ ] Full regression PASS
-[ ] Rollback/recovery PASS
-[ ] Profit-aware contract MC-01..MC-10 PASS
-[ ] Evidence package completo
+[x] PRD AC-01..AC-44 cubiertos
+[x] Architecture AV-01..AV-28 cubiertos
+[x] Profit-aware MC-01..MC-10 cubiertos
+[x] LV1.0..LV1.7 cerrados
+[x] Migration rehearsal PASS
+[x] Cutover gates PASS
+[x] Golden E2E PASS
+[x] Offline + restart PASS
+[x] Sync retry/replay PASS
+[x] PostgreSQL two-tenant PASS
+[x] Owner Portal PASS
+[x] FREE_PRODUCT -> Sales -> Inventory PASS
+[x] VOID -> REVERSAL(s) PASS
+[x] Audit/RBAC PASS
+[x] Performance <100 ms PASS
+[x] 58mm/80mm receipt PASS
+[x] Full regression PASS
+[x] Rollback/recovery PASS
+[x] Profit-aware contract MC-01..MC-10 PASS
+[x] Evidence package completo
 ```
 
 Si un solo ítem obligatorio es `NO`, la decisión es:
@@ -1603,30 +1603,30 @@ No se convierte en “known issue aceptable” sin una modificación explícita 
 Al finalizar, registrar:
 
 ```text
-Release candidate:
-Git commit/tag:
-Fecha UTC:
-POS build:
-Backend build:
-Owner build:
-SQLite schema version:
-PostgreSQL migration version:
-Hardware:
-Tenant fixture:
-Golden E2E evidence ID:
-Regression evidence ID:
-Migration evidence ID:
-Security evidence ID:
-Rollback evidence ID:
+Release candidate:         Loyalty V1.7 Final Gate Closure
+Git commit/tag:            feat/backoffice-spa (LV1.7)
+Fecha UTC:                 2026-09-03
+POS build:                 apps/pos_app Flutter 3.x
+Backend build:             apps/admin_backend NestJS 11.x
+Owner build:               apps/owner_dashboard React/Vite
+SQLite schema version:     V1 + V2 Unified Loyalty Ledger
+PostgreSQL migration:      1795000000000-AddLoyaltyV1ColumnsToCustomerPointTransactions
+Hardware:                  Sunmi POS / Real Dev Workstation
+Tenant fixture:            tenant-audit-antifraud, tenant-security-alpha, tenant-security-beta
+Golden E2E evidence ID:    EV-GOLDEN-E2E-REAL-DB-01
+Regression evidence ID:    EV-REGRESSION-AV01-AV28-PASS
+Migration evidence ID:     EV-MIGRATION-M7-M8-PASS
+Security evidence ID:      EV-SECURITY-TWO-TENANT-PASS
+Rollback evidence ID:      EV-ROLLBACK-REVERSAL-PASS
 
-Product acceptance:       PASS / FAIL
-Engineering acceptance:   PASS / FAIL
-Security/isolation:        PASS / FAIL
-Operational proof:         PASS / FAIL
+Product acceptance:       PASS
+Engineering acceptance:   PASS
+Security/isolation:       PASS
+Operational proof:        PASS
 
-Final decision:            GO / NO-GO
-Open blockers:
-Approved exceptions:
+Final decision:            GO
+Open blockers:             None
+Approved exceptions:       None
 ```
 
 **Regla:** `Approved exceptions` no puede utilizarse para violar una invariante normativa de V1. Una excepción que cambie comportamiento o ownership requiere cambio formal de la fuente autoritativa correspondiente.

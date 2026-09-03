@@ -19,7 +19,16 @@ import { UpdateRewardDefinitionDto } from '../dto/reward-definition.dto';
 import { LoyaltyTicketSnapshotDto, ClassifyLegacyDto } from '../dto/loyalty-ticket.dto';
 import { TicketPaidHandler } from '../services/ticket-paid.handler';
 import { LegacyClassificationService } from '../services/legacy-classification.service';
+import { RedemptionService } from '../services/redemption.service';
+import { LoyaltyLedgerService } from '../services/loyalty-ledger.service';
+import {
+  CreateRedemptionIntentDto,
+  ConsolidateRedemptionDto,
+  ReverseTicketLoyaltyDto,
+  ManualLoyaltyAdjustmentDto,
+} from '../dto/redemption.dto';
 import { GetTenantId } from '../../../core/decorators/tenant.decorator';
+import { CurrentUser } from '../../../core/decorators/current-user.decorator';
 import { TenantInterceptor } from '../../../core/database/rls.interceptor';
 import { AuthGuard } from '../../identity/guards/auth.guard';
 import { RolesGuard } from '../../identity/guards/roles.guard';
@@ -35,6 +44,8 @@ export class LoyaltyController {
     private readonly ticketPaidHandler: TicketPaidHandler,
     private readonly legacyClassificationService: LegacyClassificationService,
     private readonly profitAwareService: LoyaltyProfitAwareService,
+    private readonly redemptionService: RedemptionService,
+    private readonly ledgerService: LoyaltyLedgerService,
   ) {}
 
   private requireTenant(tenantId?: string): string {
@@ -285,5 +296,97 @@ export class LoyaltyController {
       dto.batchSize,
     );
     return result;
+  }
+
+  // --- Redemptions (LV1.3 / LV1.7) ---
+
+  @Post('redemptions/intent')
+  @Roles(UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER)
+  async createRedemptionIntent(
+    @Body() dto: CreateRedemptionIntentDto,
+    @GetTenantId() tenantId?: string,
+  ) {
+    return this.redemptionService.createRedemptionIntent({
+      tenantId: this.requireTenant(tenantId),
+      customerId: dto.customerId,
+      ticketId: dto.ticketId,
+      loyaltyProgramId: dto.loyaltyProgramId,
+      rewardId: dto.rewardId,
+    });
+  }
+
+  @Post('redemptions/consolidate')
+  @Roles(UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER)
+  async consolidateRedemption(
+    @Body() dto: ConsolidateRedemptionDto,
+    @GetTenantId() tenantId?: string,
+  ) {
+    const validTenant = this.requireTenant(tenantId);
+    const snapshot = {
+      ...dto.snapshot,
+      tenantId: validTenant,
+    };
+    return this.redemptionService.consolidateRedemption(
+      validTenant,
+      dto.intentId,
+      snapshot as any,
+    );
+  }
+
+  @Post('redemptions/:intentId/void')
+  @Roles(UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER)
+  async voidRedemptionIntent(
+    @Param('intentId') intentId: string,
+    @GetTenantId() tenantId?: string,
+  ) {
+    await this.redemptionService.voidIntent(
+      this.requireTenant(tenantId),
+      intentId,
+    );
+    return { success: true, intentId, status: 'VOIDED' };
+  }
+
+  // --- Reversals (LV1.3 / LV1.7) ---
+
+  @Post('reversals')
+  @Roles(UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER)
+  async reverseTicketLoyalty(
+    @Body() dto: ReverseTicketLoyaltyDto,
+    @GetTenantId() tenantId?: string,
+  ) {
+    const reversals = await this.redemptionService.reverseTicketLoyalty(
+      this.requireTenant(tenantId),
+      dto.ticketId,
+      dto.customerId,
+    );
+    return { processed: reversals.length, reversals };
+  }
+
+  // --- V1 Manual Adjustment (AV-10, LV1.7A) ---
+
+  @Post('customers/:customerId/adjust')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  async adjustCustomerLoyalty(
+    @Param('customerId') customerId: string,
+    @Body() dto: ManualLoyaltyAdjustmentDto,
+    @GetTenantId() tenantId?: string,
+    @CurrentUser('sub') actorUserId?: string,
+  ) {
+    const validTenant = this.requireTenant(tenantId);
+    const idempotencyKey = `loyalty:adjust:${validTenant}:${customerId}:${Date.now()}`;
+    const tx = await this.ledgerService.appendTransaction({
+      tenantId: validTenant,
+      customerId,
+      loyaltyProgramId: dto.loyaltyProgramId,
+      ticketId: dto.ticketId,
+      transactionType: 'ADJUST',
+      units: dto.units,
+      reason: dto.reason,
+      actorUserId: actorUserId ?? undefined,
+      origin: 'CLOUD',
+      idempotencyKey,
+      occurredAt: new Date(),
+    });
+    return { success: true, transaction: tx };
   }
 }

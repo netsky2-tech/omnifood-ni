@@ -15,6 +15,7 @@ import {
   RewardStatus,
 } from '../entities/reward-definition.entity';
 import { CustomerLoyaltyAccountProjection } from '../entities/customer-loyalty-account-projection.entity';
+import { CustomerPointTransaction } from '../../customers/entities/customer-point-transaction.entity';
 import { Customer } from '../../customers/entities/customer.entity';
 import { CreateLoyaltyProgramDto } from '../dto/loyalty-program.dto';
 import { UpdateLoyaltyProgramDto } from '../dto/loyalty-program.dto';
@@ -324,7 +325,7 @@ export class LoyaltyService {
     programId?: string,
   ) {
     const qb = this.projectionRepository.manager
-      .createQueryBuilder('tx', 't')
+      .createQueryBuilder(CustomerPointTransaction, 't')
       .where('t.tenant_id = :tenantId', { tenantId })
       .andWhere('t.customer_id = :customerId', { customerId })
       .andWhere('t.legacy_imported = :legacy', { legacy: false });

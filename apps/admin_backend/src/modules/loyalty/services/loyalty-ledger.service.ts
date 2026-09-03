@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CustomerPointTransaction } from '../../customers/entities/customer-point-transaction.entity';
@@ -23,6 +23,7 @@ export interface AppendLoyaltyTxDto {
   commercialSnapshot?: Record<string, unknown>;
   origin?: string;
   occurredAt?: Date;
+  reason?: string;
 }
 
 @Injectable()
@@ -39,7 +40,21 @@ export class LoyaltyLedgerService {
       const existing = await this.txRepo.findOne({
         where: { idempotency_key: dto.idempotencyKey, tenant_id: dto.tenantId },
       });
-      if (existing) return existing;
+      if (existing) {
+        const matchesCustomer = !dto.customerId || existing.customer_id === dto.customerId;
+        const matchesProgram = !dto.loyaltyProgramId || existing.loyalty_program_id === dto.loyaltyProgramId;
+        const matchesUnits = dto.units === undefined || Number(existing.units) === Number(dto.units);
+        const existingType = (existing.transaction_type ?? existing.type)?.toLowerCase();
+        const incomingType = dto.transactionType?.toLowerCase();
+        const matchesType = !incomingType || existingType === incomingType;
+
+        if (!matchesCustomer || !matchesProgram || !matchesUnits || !matchesType) {
+          throw new ConflictException(
+            `Integrity conflict: idempotency key '${dto.idempotencyKey}' already used with different payload`,
+          );
+        }
+        return existing;
+      }
     }
 
     const now = new Date();
@@ -50,7 +65,10 @@ export class LoyaltyLedgerService {
       ticket_id: dto.ticketId ?? null,
       reward_id: dto.rewardId ?? null,
       transaction_type: dto.transactionType,
+      type: (dto.transactionType?.toLowerCase() ?? 'earn') as any,
       units: dto.units,
+      points: dto.units ?? 0,
+      reason: dto.reason ?? null,
       reversal_of_transaction_id: dto.reversalOfTransactionId ?? null,
       idempotency_key: dto.idempotencyKey ?? null,
       source_event_id: dto.sourceEventId ?? null,

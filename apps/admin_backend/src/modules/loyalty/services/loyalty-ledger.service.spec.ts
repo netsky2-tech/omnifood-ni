@@ -262,6 +262,24 @@ describe('LoyaltyLedgerService (db)', () => {
       expect(after!.projection_version).toBe(before!.projection_version);
     });
 
+    it('same idempotencyKey + different payload throws ConflictException (AV-13 integrity conflict)', async () => {
+      const conflictDto: AppendLoyaltyTxDto = {
+        tenantId: 'tenant-1',
+        customerId,
+        loyaltyProgramId: programId,
+        ticketId: 'ticket-001',
+        transactionType: 'EARN',
+        units: 999,
+        idempotencyKey: 'loyalty:earn:tenant-1:ticket-001:' + programId,
+        origin: 'POS',
+        occurredAt: new Date(),
+      };
+
+      await expect(harness.ledgerService.appendTransaction(conflictDto)).rejects.toThrow(
+        /Integrity conflict/i,
+      );
+    });
+
     it('handles negative units for REVERSAL', async () => {
       await harness.ledgerService.appendTransaction({
         tenantId: 'tenant-1',

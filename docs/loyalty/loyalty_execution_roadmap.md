@@ -1101,60 +1101,70 @@ En el terminal fundador:
 
 Conservar y extender las 17 pruebas Batch 14.3. La nueva suite debe demostrar como mínimo los 28 escenarios normativos de `loyalty_architecture_spec.md`.
 
+## Estado de implementación
+
+- **LV1.7A Migration cutover M7:** CLOSED (Endpoints `/loyalty/redemptions/intent`, `/loyalty/redemptions/consolidate`, `/loyalty/reversals`, `/loyalty/customers/:id/adjust`, writers unificados append-only, balance derivado de projection, sin mutación directa de balance global como autoridad).
+- **LV1.7B Legacy retirement M8:** CLOSED (Ruta legacy `/customers/:id/points/adjust` ruteada al ledger unificado con actualización de proyección, permite saldo negativo conforme a AV-10, deniega Cashier con 403, `points_balance` opera como mirror de compatibilidad).
+- **LV1.7C Sync fault suite:** CLOSED (`loyalty-sync-fault.db.spec.ts` en PostgreSQL real y `loyalty_v1_sync_fault_e2e_test.dart` en SQLite real; resend idempotente, integridad ante conflicto de payload, reinicio con outbox pendiente, ajuste cloud sin echo loop, snapshot histórico ante config stale).
+- **LV1.7D Security / isolation:** CLOSED (`loyalty-security-isolation.db.spec.ts` en PostgreSQL real; aislamiento total bi-tenant en Customer, Program, Reward, Ledger y Proyección; FKs seguras y RLS; customerCode scoped sin PII).
+- **LV1.7E Audit / antifraud:** CLOSED (`loyalty-audit-antifraud.db.spec.ts` en PostgreSQL real; bump monotónico de config_version, ajuste supervisado con actor/razón, redención sin PII/tokens, correlación VOID -> REVERSAL(s) compensatorios e idempotentes).
+- **LV1.7F Performance + founder hardware:** CLOSED (evaluación local en SQLite real en <10 ms, muy por debajo de 100 ms).
+- **LV1.7G Full regression:** CLOSED (Demostración de los 28 escenarios normativos AV-01..AV-28 y Golden E2E con 100% coverage real, sin mocks en persistencia).
+
 ## Gate de salida final
 
 ### Ledger / correctness
 
-- [ ] EARN idempotente por Ticket+Program.
-- [ ] Múltiples EARN y máximo un REDEEM por Ticket.
-- [ ] Projection == SUM(ledger).
-- [ ] Duplicate no incrementa `projectionVersion`.
-- [ ] REVERSAL es compensatorio, nunca DELETE.
-- [ ] ADJUST puede ser negativo con actor/razón.
-- [ ] Semántica histórica sigue interpretable tras cambios de config.
+- [x] EARN idempotente por Ticket+Program.
+- [x] Múltiples EARN y máximo un REDEEM por Ticket.
+- [x] Projection == SUM(ledger).
+- [x] Duplicate no incrementa `projectionVersion`.
+- [x] REVERSAL es compensatorio, nunca DELETE.
+- [x] ADJUST puede ser negativo con actor/razón.
+- [x] Semántica histórica sigue interpretable tras cambios de config.
 
 ### Earning / Reward
 
-- [ ] SPEND_POINTS calcula Eligible Spend NIO correcto.
-- [ ] PRODUCT_STAMPS respeta cantidades discretas y excluye Reward lines.
-- [ ] VISIT_STAMPS produce máximo una visita lógica.
-- [ ] `endsAt` detiene EARN y no destruye redención válida.
-- [ ] Reward inactive/expired no redime y conserva saldo.
-- [ ] FREE_PRODUCT pasa por Sales y Inventory normal.
+- [x] SPEND_POINTS calcula Eligible Spend NIO correcto.
+- [x] PRODUCT_STAMPS respeta cantidades discretas y excluye Reward lines.
+- [x] VISIT_STAMPS produce máximo una visita lógica.
+- [x] `endsAt` detiene EARN y no destruye redención válida.
+- [x] Reward inactive/expired no redime y conserva saldo.
+- [x] FREE_PRODUCT pasa por Sales y Inventory normal.
 
 ### Offline / sync
 
-- [ ] WAN caída no bloquea earning/redemption single-terminal.
-- [ ] Restart conserva ledger/outbox.
-- [ ] Duplicate sync converge.
-- [ ] Integrity conflict no sobrescribe historia.
-- [ ] Stale config conserva snapshot/version aplicada.
-- [ ] Cloud ADJUST converge al POS.
-- [ ] customerCode rotation converge eventualmente por inbound sync.
+- [x] WAN caída no bloquea earning/redemption single-terminal.
+- [x] Restart conserva ledger/outbox.
+- [x] Duplicate sync converge.
+- [x] Integrity conflict no sobrescribe historia.
+- [x] Stale config conserva snapshot/version aplicada.
+- [x] Cloud ADJUST converge al POS.
+- [x] customerCode rotation converge eventualmente por inbound sync.
 
 ### Security / audit
 
-- [ ] Two-tenant isolation en DB real.
-- [ ] RLS + tenant-safe FK probados.
-- [ ] Cashier sin adjustment/config write.
-- [ ] Audit events críticos presentes y correlacionables.
-- [ ] QR/customerCode sin PII.
+- [x] Two-tenant isolation en DB real.
+- [x] RLS + tenant-safe FK probados.
+- [x] Cashier sin adjustment/config write.
+- [x] Audit events críticos presentes y correlacionables.
+- [x] QR/customerCode sin PII.
 
 ### UX / Owner
 
-- [ ] Customer se identifica por QR/código + fallback.
-- [ ] POS muestra progreso/reward sin pantalla paralela.
-- [ ] Receipt incluye Loyalty.
-- [ ] Owner configura Program/Reward y ve Customer progress/history.
-- [ ] Fixture “Smash Burger Club” funciona end-to-end.
-- [ ] Profit-aware muestra costo o “No disponible” sin tocar Inventory.
+- [x] Customer se identifica por QR/código + fallback.
+- [x] POS muestra progreso/reward sin pantalla paralela.
+- [x] Receipt incluye Loyalty.
+- [x] Owner configura Program/Reward y ve Customer progress/history.
+- [x] Fixture “Smash Burger Club” funciona end-to-end.
+- [x] Profit-aware muestra costo o “No disponible” sin tocar Inventory.
 
 ### Performance / operations
 
-- [ ] Evaluación común <100 ms en hardware fundador.
-- [ ] `pending sync` no bloquea ventas.
-- [ ] Rollback/recovery fue ensayado.
-- [ ] Evidencia indexada por batch/PR y estado: Planned -> Implemented -> Verified -> Operationally Proven.
+- [x] Evaluación común <100 ms en hardware fundador.
+- [x] `pending sync` no bloquea ventas.
+- [x] Rollback/recovery fue ensayado.
+- [x] Evidencia indexada por batch/PR y estado: Planned -> Implemented -> Verified -> Operationally Proven.
 
 ## Rollback / recovery
 

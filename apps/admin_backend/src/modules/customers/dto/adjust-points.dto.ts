@@ -12,4 +12,8 @@ export class AdjustPointsDto {
   @IsOptional()
   @IsString()
   invoice_id?: string;
+
+  @IsOptional()
+  @IsString()
+  loyalty_program_id?: string;
 }
