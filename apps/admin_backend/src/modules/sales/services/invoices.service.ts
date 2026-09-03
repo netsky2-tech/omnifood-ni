@@ -21,6 +21,7 @@ import {
   type NegativeStockPolicy,
 } from '../../inventory/entities/insumo.entity';
 import { User, UserRole } from '../../identity/entities/user.entity';
+import { TenantFulfillmentRecord } from '../../fulfillment/entities/tenant-fulfillment-record.entity';
 
 const SCALE_4 = 4;
 const SET_LOCAL_TENANT_SQL = "SELECT set_config('app.tenant_id', $1, true)";
@@ -863,6 +864,32 @@ export class InvoicesService {
           });
         }
         await this.appendInventoryDeltas(tenantId, record, manager);
+        if (
+          record.fulfillment &&
+          manager.connection.hasMetadata(TenantFulfillmentRecord)
+        ) {
+          const parsedLines =
+            record.fulfillment.linesPayload != null
+              ? typeof record.fulfillment.linesPayload === 'string'
+                ? JSON.parse(record.fulfillment.linesPayload)
+                : record.fulfillment.linesPayload
+              : record.fulfillment.lines;
+          await manager.getRepository(TenantFulfillmentRecord).upsert(
+            {
+              id: record.fulfillment.id,
+              tenant_id: tenantId,
+              sale_id: record.fulfillment.saleId ?? record.aggregateId,
+              topology_snapshot_id: record.fulfillment.topologySnapshotId,
+              topology_revision: record.fulfillment.topologyRevision,
+              channel: record.fulfillment.channel,
+              route_state: record.fulfillment.routeState,
+              delivery_state: record.fulfillment.deliveryState ?? 'PENDING',
+              lines_payload: parsedLines,
+              synced_at: new Date(),
+            },
+            ['id'],
+          );
+        }
         await manager.save(
           this.receiptRepository.create({
             tenant_id: tenantId,

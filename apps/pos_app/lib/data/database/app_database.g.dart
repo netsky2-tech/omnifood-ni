@@ -5726,11 +5726,71 @@ class _$FulfillmentPersistenceDao extends FulfillmentPersistenceDao {
   }
 
   @override
+  Future<FulfillmentRecordEntity?> findFulfillmentBySaleId(
+    String saleId,
+    String tenantId,
+  ) async {
+    return _queryAdapter.query(
+        'SELECT * FROM fulfillment_records WHERE sale_id = ?1 AND tenant_id = ?2',
+        mapper: (Map<String, Object?> row) => FulfillmentRecordEntity(id: row['id'] as String, tenantId: row['tenant_id'] as String, saleId: row['sale_id'] as String, topologySnapshotId: row['topology_snapshot_id'] as String, topologyRevision: row['topology_revision'] as int, channel: row['channel'] as String, routeState: row['route_state'] as String, deliveryState: row['delivery_state'] as String, linesPayload: row['lines_payload'] as String),
+        arguments: [saleId, tenantId]);
+  }
+
+  @override
+  Future<List<FulfillmentRecordEntity>> findAllFulfillments(
+      String tenantId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM fulfillment_records WHERE tenant_id = ?1',
+        mapper: (Map<String, Object?> row) => FulfillmentRecordEntity(
+            id: row['id'] as String,
+            tenantId: row['tenant_id'] as String,
+            saleId: row['sale_id'] as String,
+            topologySnapshotId: row['topology_snapshot_id'] as String,
+            topologyRevision: row['topology_revision'] as int,
+            channel: row['channel'] as String,
+            routeState: row['route_state'] as String,
+            deliveryState: row['delivery_state'] as String,
+            linesPayload: row['lines_payload'] as String),
+        arguments: [tenantId]);
+  }
+
+  @override
   Future<List<PrintJobEntity>> findRetryablePrintJobs(String tenantId) async {
     return _queryAdapter.queryList(
         'SELECT * FROM print_jobs WHERE tenant_id = ?1 AND state IN (\'PENDING\', \'FAILED\') ORDER BY sequence',
         mapper: (Map<String, Object?> row) => PrintJobEntity(id: row['id'] as String, tenantId: row['tenant_id'] as String, fulfillmentId: row['fulfillment_id'] as String, documentKind: row['document_kind'] as String, sequence: row['sequence'] as int, payload: row['payload'] as String, state: row['state'] as String, retryCount: row['retry_count'] as int, idempotencyKey: row['idempotency_key'] as String),
         arguments: [tenantId]);
+  }
+
+  @override
+  Future<List<PrintJobEntity>> findPrintJobsByFulfillment(
+    String fulfillmentId,
+    String tenantId,
+  ) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM print_jobs WHERE fulfillment_id = ?1 AND tenant_id = ?2 ORDER BY sequence',
+        mapper: (Map<String, Object?> row) => PrintJobEntity(id: row['id'] as String, tenantId: row['tenant_id'] as String, fulfillmentId: row['fulfillment_id'] as String, documentKind: row['document_kind'] as String, sequence: row['sequence'] as int, payload: row['payload'] as String, state: row['state'] as String, retryCount: row['retry_count'] as int, idempotencyKey: row['idempotency_key'] as String),
+        arguments: [fulfillmentId, tenantId]);
+  }
+
+  @override
+  Future<PrintJobEntity?> findPrintJob(
+    String id,
+    String tenantId,
+  ) async {
+    return _queryAdapter.query(
+        'SELECT * FROM print_jobs WHERE id = ?1 AND tenant_id = ?2',
+        mapper: (Map<String, Object?> row) => PrintJobEntity(
+            id: row['id'] as String,
+            tenantId: row['tenant_id'] as String,
+            fulfillmentId: row['fulfillment_id'] as String,
+            documentKind: row['document_kind'] as String,
+            sequence: row['sequence'] as int,
+            payload: row['payload'] as String,
+            state: row['state'] as String,
+            retryCount: row['retry_count'] as int,
+            idempotencyKey: row['idempotency_key'] as String),
+        arguments: [id, tenantId]);
   }
 
   @override
@@ -5740,6 +5800,81 @@ class _$FulfillmentPersistenceDao extends FulfillmentPersistenceDao {
         'SELECT * FROM fulfillment_outbox_events WHERE tenant_id = ?1 AND state = \'PENDING\' ORDER BY source_sequence',
         mapper: (Map<String, Object?> row) => OutboxEventEntity(eventId: row['event_id'] as String, tenantId: row['tenant_id'] as String, deviceId: row['device_id'] as String, sourceSequence: row['source_sequence'] as int, aggregateType: row['aggregate_type'] as String, aggregateId: row['aggregate_id'] as String, idempotencyKey: row['idempotency_key'] as String, payloadHash: row['payload_hash'] as String, topologyRevision: row['topology_revision'] as int, state: row['state'] as String, attempts: row['attempts'] as int),
         arguments: [tenantId]);
+  }
+
+  @override
+  Future<void> updateRouteState(
+    String id,
+    String tenantId,
+    String routeState,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE fulfillment_records SET route_state = ?3 WHERE id = ?1 AND tenant_id = ?2',
+        arguments: [id, tenantId, routeState]);
+  }
+
+  @override
+  Future<void> updateDeliveryState(
+    String id,
+    String tenantId,
+    String deliveryState,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE fulfillment_records SET delivery_state = ?3 WHERE id = ?1 AND tenant_id = ?2',
+        arguments: [id, tenantId, deliveryState]);
+  }
+
+  @override
+  Future<void> updatePrintJobState(
+    String id,
+    String tenantId,
+    String state,
+    int retryCount,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE print_jobs SET state = ?3, retry_count = ?4 WHERE id = ?1 AND tenant_id = ?2',
+        arguments: [id, tenantId, state, retryCount]);
+  }
+
+  @override
+  Future<void> updateOutboxEventState(
+    String eventId,
+    String tenantId,
+    String state,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE fulfillment_outbox_events SET state = ?3 WHERE event_id = ?1 AND tenant_id = ?2',
+        arguments: [eventId, tenantId, state]);
+  }
+
+  @override
+  Future<void> deleteFulfillment(
+    String id,
+    String tenantId,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM fulfillment_records WHERE id = ?1 AND tenant_id = ?2',
+        arguments: [id, tenantId]);
+  }
+
+  @override
+  Future<void> deletePrintJobsByFulfillment(
+    String fulfillmentId,
+    String tenantId,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM print_jobs WHERE fulfillment_id = ?1 AND tenant_id = ?2',
+        arguments: [fulfillmentId, tenantId]);
+  }
+
+  @override
+  Future<void> deleteOutboxEventsByFulfillment(
+    String fulfillmentId,
+    String tenantId,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM fulfillment_outbox_events WHERE aggregate_id = ?1 AND tenant_id = ?2',
+        arguments: [fulfillmentId, tenantId]);
   }
 
   @override

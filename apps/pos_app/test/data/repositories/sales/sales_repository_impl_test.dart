@@ -63,13 +63,13 @@ class _StubFulfillmentTopologyDao implements FulfillmentTopologyDao {
   ) async => [];
 }
 
-class _FulfillmentAppDatabase extends Mock implements AppDatabase {
+class _FulfillmentAppDatabase extends Fake implements AppDatabase {
   _FulfillmentAppDatabase(this.fulfillmentTopologyDao);
   @override
   final FulfillmentTopologyDao fulfillmentTopologyDao;
 }
 
-class _FulfillmentSalesTransactionDao extends Mock
+class _FulfillmentSalesTransactionDao extends Fake
     implements SalesTransactionDao {
   int fulfillmentTransactionCalls = 0;
   @override
