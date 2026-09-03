@@ -91,19 +91,3 @@ Quedan fuera del soporte incluido:
 - obligaciones legales, fiscales o contables propias del cliente.
 
 SOHO debe conservar acceso físico y administrativo al equipo, proteger sus credenciales, reportar incidentes oportunamente y permitir las ventanas acordadas de diagnóstico o restauración.
-
-## 9. Aceptación
-
-Las partes confirman que este anexo complementa la propuesta OE-001OM y que sus objetivos de recuperación no son garantías ni certificaciones.
-
-**Por SOHO**<br>
-Nombre: ______________________________<br>
-Cargo: _______________________________<br>
-Firma: _______________________________<br>
-Fecha: _______________________________
-
-**Por OmniFood NI**<br>
-Nombre: ______________________________<br>
-Cargo: _______________________________<br>
-Firma: _______________________________<br>
-Fecha: _______________________________

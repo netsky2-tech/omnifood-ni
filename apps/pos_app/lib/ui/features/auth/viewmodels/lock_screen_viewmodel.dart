@@ -34,7 +34,7 @@ class LockScreenViewModel extends ChangeNotifier {
       _users.add(const User(
         id: 'setup-admin',
         name: 'Admin Inicial (Setup)',
-        email: 'admin@omnifood.ni',
+        email: 'admin@nhilospos.ni',
         role: UserRole.owner,
         isActive: true,
       ));

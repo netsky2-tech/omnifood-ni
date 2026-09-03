@@ -765,10 +765,10 @@ void main() {
     );
 
     expect(result.isSuccess, isTrue);
-    expect(mockPrinter.lastPrintedText, contains('ETIQUETA DE PRE-ELABORACION'));
+    expect(mockPrinter.lastPrintedText, contains('ETIQUETA DE PRODUCCION'));
     expect(mockPrinter.lastPrintedText, contains('Base de Café'));
     expect(mockPrinter.lastPrintedText, contains('LOTE-20260601-001'));
-    expect(mockPrinter.lastPrintedText, contains('10 kg'));
+    expect(mockPrinter.lastPrintedText, contains('10.00 kg'));
     expect(mockPrinter.lastPrintedText, contains('Chef Roberto'));
   });
 }

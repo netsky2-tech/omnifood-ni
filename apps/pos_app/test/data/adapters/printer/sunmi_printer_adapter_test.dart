@@ -106,7 +106,7 @@ void main() {
         testInvoice,
         items: testItems,
         payments: testPayments,
-        businessName: 'OmniFood Sunmi Test',
+        businessName: 'NHILOS POS Sunmi Test',
       );
 
       expect(result.isSuccess, isTrue);

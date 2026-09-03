@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dgi_report_view_model.dart';
 import '../../../design_system/design_system.dart';
-import '../../../../domain/models/sales/cashier_session.dart';
+import '../../../../domain/services/config/printer_config_service.dart';
+import '../../../../domain/services/printer/printer_resolver.dart';
 
 class DgiReportView extends StatefulWidget {
   const DgiReportView({super.key});
@@ -345,7 +347,29 @@ class _DgiReportViewState extends State<DgiReportView> {
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('CERRAR')),
-          ElevatedButton(onPressed: () => Navigator.pop(context), child: const Text('ENVIAR A IMPRESORA')),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              final configService = context.read<PrinterConfigService>();
+              final config = await configService.getPrinterConfig();
+              final printerPort = PrinterResolver.resolve(config);
+              final bytes = utf8.encode('$text\n\n\n');
+              final result = await printerPort.printRawEscPos(bytes);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      result.isSuccess
+                          ? 'Reporte enviado a la impresora'
+                          : 'Error al imprimir: ${result.message ?? "desconocido"}',
+                    ),
+                    backgroundColor: result.isSuccess ? Colors.green : Colors.red,
+                  ),
+                );
+              }
+            },
+            child: const Text('ENVIAR A IMPRESORA'),
+          ),
         ],
       ),
     );

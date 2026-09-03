@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Screen breakpoint constants for OmniFood NI POS.
+/// Screen breakpoint constants for NHILOS POS.
 /// Sunmi V2s and handheld terminals have a width of ~360-412dp (<= 600dp).
 /// Tablets and POS desktop stations have widths > 600dp.
 class ResponsiveBreakpoints {
