@@ -1,6 +1,5 @@
 'use client';
 
-import React from 'react';
 import {
   Dialog,
   DialogContent,
@@ -110,10 +109,10 @@ export function RewardProfitAwareDialog({
   open,
   onOpenChange,
 }: RewardProfitAwareDialogProps) {
-  if (!open || !reward) return null;
-
-  const queryResult = useRewardProfitAware(reward.id);
+  const queryResult = useRewardProfitAware(reward?.id ?? '');
   const { data: metrics, isLoading = false, error = null } = queryResult ?? {};
+
+  if (!open || !reward) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
