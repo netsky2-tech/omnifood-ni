@@ -5,6 +5,7 @@ import 'package:pos_app/data/models/sales/invoice_entity.dart';
 import 'package:pos_app/data/models/audit_log_entity.dart';
 import 'package:pos_app/data/models/inventory/insumo_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
+import 'package:pos_app/data/models/local_config_entity.dart';
 
 void main() {
   late AppDatabase database;
@@ -23,6 +24,75 @@ void main() {
   });
 
   group('SalesTransactionDao Integrity', () {
+    test('commits DGI sequence advancement with a successful sale', () async {
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'dgi_current_number', value: '1'),
+      );
+      final invoice = InvoiceEntity(
+        id: 'dgi-success',
+        number: '001-001-01-00000001',
+        createdAt: DateTime.now().millisecondsSinceEpoch,
+        userId: 'u1',
+        subtotal: 100,
+        totalTax: 15,
+        total: 115,
+        type: 'regular',
+      );
+
+      await database.salesTransactionDao.executeSaleWithDgiTransaction(
+        invoice,
+        [],
+        [],
+        [],
+        [],
+        null,
+        '2',
+        false,
+      );
+
+      final current = await database.localConfigDao.getConfigByKey(
+        'dgi_current_number',
+      );
+      expect(current?.value, '2');
+      expect(await database.invoiceDao.getInvoiceById(invoice.id), isNotNull);
+    });
+
+    test('rolls back DGI sequence advancement when sale persistence fails', () async {
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'dgi_current_number', value: '1'),
+      );
+      final invoice = InvoiceEntity(
+        id: 'dgi-rollback',
+        number: '001-001-01-00000001',
+        createdAt: DateTime.now().millisecondsSinceEpoch,
+        userId: 'u1',
+        subtotal: 100,
+        totalTax: 15,
+        total: 115,
+        type: 'regular',
+      );
+
+      await expectLater(
+        database.salesTransactionDao.executeSaleWithDgiTransaction(
+          invoice,
+          [],
+          [],
+          [],
+          [],
+          null,
+          '2',
+          true,
+        ),
+        throwsA(isA<Exception>()),
+      );
+
+      final current = await database.localConfigDao.getConfigByKey(
+        'dgi_current_number',
+      );
+      expect(current?.value, '1');
+      expect(await database.invoiceDao.getInvoiceById(invoice.id), isNull);
+    });
+
     test('executeSaleTransaction should insert audit log inside transaction', () async {
       final invoice = InvoiceEntity(
         id: 'inv1',

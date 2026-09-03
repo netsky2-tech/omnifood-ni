@@ -24,6 +24,7 @@ import 'package:pos_app/data/models/sales/invoice_item_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
 import 'package:pos_app/data/mappers/audit_mapper.dart';
 import 'package:pos_app/domain/models/user.dart';
+import 'package:pos_app/domain/models/fulfillment/fulfillment_checkout_context.dart';
 
 class SalesRepositoryImpl implements SalesRepository {
   final AppDatabase database;
@@ -37,6 +38,8 @@ class SalesRepositoryImpl implements SalesRepository {
   final ProcessSaleInventoryUseCase processInventoryUseCase;
   final ReverseSaleInventoryUseCase reverseInventoryUseCase;
   final InventoryRepository inventoryRepository;
+  final void Function(FulfillmentCheckoutContext)?
+  onFulfillmentCheckoutContextReady;
 
   SalesRepositoryImpl({
     required this.database,
@@ -50,6 +53,7 @@ class SalesRepositoryImpl implements SalesRepository {
     required this.processInventoryUseCase,
     required this.reverseInventoryUseCase,
     required this.inventoryRepository,
+    this.onFulfillmentCheckoutContextReady,
   });
 
   @override
@@ -57,16 +61,17 @@ class SalesRepositoryImpl implements SalesRepository {
     required Invoice invoice,
     required List<InvoiceItem> items,
     required List<Payment> payments,
+    FulfillmentCheckoutContext? fulfillmentContext,
   }) async {
     if (await numberingService.isRangeExhausted()) {
       throw Exception('DGI Authorized Numbering Range exhausted.');
     }
 
     final finalNumber = await numberingService.getNextNumber();
+    final nextDgiSequence = _nextDgiSequence(finalNumber);
     final terminalId = 'pos-${invoice.userId}';
-    final sourceSequence = (await transactionDao.getNextInvoiceSourceSequence(
-      terminalId,
-    )) ?? 1;
+    final sourceSequence =
+        (await transactionDao.getNextInvoiceSourceSequence(terminalId)) ?? 1;
     final payloadHash = _buildSalePayloadHash(
       invoice: invoice.copyWith(number: finalNumber),
       items: items,
@@ -96,19 +101,30 @@ class SalesRepositoryImpl implements SalesRepository {
     final movementEntities = movements
         .map(
           (m) => InventoryMapper.toMovementEntity(
-            m.copyWith(userId: updatedInvoice.userId),
+            m.copyWith(
+              userId: updatedInvoice.userId,
+              sourceDocumentType: 'invoice',
+              sourceDocumentId: updatedInvoice.id,
+            ),
           ),
         )
         .toList();
 
     try {
-      await transactionDao.executeSaleTransaction(
+      // This boundary deliberately forwards the supplied frozen identity
+      // unchanged. Validation and the fulfillment transaction are added in
+      // the next slice; legacy tenants remain on the existing sale path.
+      if (fulfillmentContext != null) {
+        onFulfillmentCheckoutContextReady?.call(fulfillmentContext);
+      }
+      await transactionDao.executeSaleWithDgiTransaction(
         invoiceEntity,
         itemEntities,
         [],
         paymentEntities,
         movementEntities,
         null, // Audit log is written separately
+        nextDgiSequence,
         false,
       );
 
@@ -117,11 +133,17 @@ class SalesRepositoryImpl implements SalesRepository {
         metadata:
             '{"invoice_id": "${updatedInvoice.id}", "number": "${updatedInvoice.number}", "total": "${updatedInvoice.total.toStringAsFixed(2)}"}',
       );
-
-      await numberingService.incrementNumber();
     } catch (e) {
       rethrow;
     }
+  }
+
+  String _nextDgiSequence(String invoiceNumber) {
+    final match = RegExp(r'(\d+)$').firstMatch(invoiceNumber.trim());
+    if (match == null) {
+      throw FormatException('DGI invoice number does not end in a sequence.');
+    }
+    return (int.parse(match.group(1)!) + 1).toString();
   }
 
   /// Resolves and freezes the [recipeVersionId] on each invoice line for
@@ -185,7 +207,9 @@ class SalesRepositoryImpl implements SalesRepository {
 
       // ignore: avoid_print
       for (final pe in payments) {
-        print('[SYNC-DB] payment entity id="${pe.id}" invoiceId="${pe.invoiceId}" method="${pe.method}"');
+        print(
+          '[SYNC-DB] payment entity id="${pe.id}" invoiceId="${pe.invoiceId}" method="${pe.method}"',
+        );
       }
 
       aggregates.add(
@@ -259,7 +283,11 @@ class SalesRepositoryImpl implements SalesRepository {
     final movementEntities = movements
         .map(
           (m) => InventoryMapper.toMovementEntity(
-            m.copyWith(userId: entity.userId),
+            m.copyWith(
+              userId: entity.userId,
+              sourceDocumentType: 'invoice',
+              sourceDocumentId: entity.id,
+            ),
           ),
         )
         .toList();

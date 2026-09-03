@@ -25,6 +25,7 @@ import 'package:pos_app/data/models/audit_log_entity.dart';
 import 'package:pos_app/domain/models/audit_log.dart';
 import 'package:pos_app/domain/repositories/sales/sales_repository.dart';
 import 'package:pos_app/domain/models/user.dart';
+import 'package:pos_app/domain/models/fulfillment/fulfillment_checkout_context.dart';
 
 import 'sales_repository_impl_test.mocks.dart';
 
@@ -153,7 +154,8 @@ void main() {
         mockProcessInventoryUseCase.execute(any),
       ).thenAnswer((_) async => movements);
       when(
-        mockTransactionDao.executeSaleTransaction(
+        mockTransactionDao.executeSaleWithDgiTransaction(
+          any,
           any,
           any,
           any,
@@ -178,7 +180,8 @@ void main() {
       // Assert
       verify(mockProcessInventoryUseCase.execute(any)).called(1);
       verify(
-        mockTransactionDao.executeSaleTransaction(
+        mockTransactionDao.executeSaleWithDgiTransaction(
+          any,
           any,
           any,
           any,
@@ -237,7 +240,8 @@ void main() {
         mockTransactionDao.getNextInvoiceSourceSequence('pos-cashier-1'),
       ).thenAnswer((_) async => 17);
       when(
-        mockTransactionDao.executeSaleTransaction(
+        mockTransactionDao.executeSaleWithDgiTransaction(
+          any,
           any,
           any,
           any,
@@ -259,8 +263,9 @@ void main() {
       );
 
       final captured = verify(
-        mockTransactionDao.executeSaleTransaction(
+        mockTransactionDao.executeSaleWithDgiTransaction(
           captureAny,
+          any,
           any,
           any,
           any,
@@ -276,6 +281,195 @@ void main() {
       expect(persisted.idempotencyKey, 'sale:pos-cashier-1:sale-offline-1');
       expect(persisted.payloadHash, isNotNull);
       expect(persisted.payloadHash, isNotEmpty);
+    },
+  );
+
+  test(
+    'passes an explicit frozen fulfillment context to the checkout boundary',
+    () async {
+      final contexts = <FulfillmentCheckoutContext>[];
+      repository = SalesRepositoryImpl(
+        database: mockDatabase,
+        invoiceDao: mockInvoiceDao,
+        itemDao: mockItemDao,
+        paymentDao: mockPaymentDao,
+        transactionDao: mockTransactionDao,
+        numberingService: mockNumberingService,
+        movementEngine: mockMovementEngine,
+        auditRepository: mockAuditRepository,
+        processInventoryUseCase: mockProcessInventoryUseCase,
+        reverseInventoryUseCase: mockReverseInventoryUseCase,
+        inventoryRepository: mockInventoryRepository,
+        onFulfillmentCheckoutContextReady: contexts.add,
+      );
+      const fulfillmentContext = FulfillmentCheckoutContext(
+        tenantId: 'tenant-1',
+        topologySnapshotId: 'tenant-1-r3',
+        topologyRevision: 3,
+        topologyHash: 'snapshot-hash',
+        channel: 'KDS_AND_PRINT',
+      );
+      final invoice = Invoice(
+        id: 'context-sale',
+        number: 'draft',
+        createdAt: DateTime.parse('2026-08-31T10:00:00Z'),
+        userId: 'cashier-1',
+        subtotal: 100,
+        totalTax: 15,
+        total: 115,
+        paymentStatus: PaymentStatus.paid,
+        syncStatus: SyncStatus.pending,
+        type: InvoiceType.regular,
+      );
+
+      when(
+        mockNumberingService.isRangeExhausted(),
+      ).thenAnswer((_) async => false);
+      when(
+        mockNumberingService.getNextNumber(),
+      ).thenAnswer((_) async => 'F001-000127');
+      when(
+        mockInventoryRepository.getProductById('prod-1'),
+      ).thenAnswer((_) async => null);
+      when(
+        mockProcessInventoryUseCase.execute(any),
+      ).thenAnswer((_) async => []);
+      when(
+        mockTransactionDao.executeSaleWithDgiTransaction(
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+        ),
+      ).thenAnswer((_) async {
+        expect(contexts, [fulfillmentContext]);
+      });
+      when(
+        mockAuditRepository.log(any, metadata: anyNamed('metadata')),
+      ).thenAnswer((_) async {});
+
+      await repository.saveSale(
+        invoice: invoice,
+        items: const [
+          InvoiceItem(
+            id: 'context-line',
+            invoiceId: 'context-sale',
+            productId: 'prod-1',
+            productName: 'Product 1',
+            quantity: 1,
+            unitPrice: 100,
+            taxAmount: 15,
+            total: 115,
+            originalTaxRate: 15,
+            appliedTaxRate: 15,
+          ),
+        ],
+        payments: const [],
+        fulfillmentContext: fulfillmentContext,
+      );
+
+      expect(contexts.single.tenantId, 'tenant-1');
+      expect(contexts.single.topologySnapshotId, 'tenant-1-r3');
+      expect(contexts.single.topologyRevision, 3);
+      expect(contexts.single.topologyHash, 'snapshot-hash');
+      expect(contexts.single.channel, 'KDS_AND_PRINT');
+    },
+  );
+
+  test(
+    'keeps legacy checkout on the existing transaction when context is absent',
+    () async {
+      final contexts = <FulfillmentCheckoutContext>[];
+      repository = SalesRepositoryImpl(
+        database: mockDatabase,
+        invoiceDao: mockInvoiceDao,
+        itemDao: mockItemDao,
+        paymentDao: mockPaymentDao,
+        transactionDao: mockTransactionDao,
+        numberingService: mockNumberingService,
+        movementEngine: mockMovementEngine,
+        auditRepository: mockAuditRepository,
+        processInventoryUseCase: mockProcessInventoryUseCase,
+        reverseInventoryUseCase: mockReverseInventoryUseCase,
+        inventoryRepository: mockInventoryRepository,
+        onFulfillmentCheckoutContextReady: contexts.add,
+      );
+      final invoice = Invoice(
+        id: 'legacy-context-sale',
+        number: 'draft',
+        createdAt: DateTime.parse('2026-08-31T11:00:00Z'),
+        userId: 'cashier-1',
+        subtotal: 100,
+        totalTax: 15,
+        total: 115,
+        paymentStatus: PaymentStatus.paid,
+        syncStatus: SyncStatus.pending,
+        type: InvoiceType.regular,
+      );
+      when(
+        mockNumberingService.isRangeExhausted(),
+      ).thenAnswer((_) async => false);
+      when(
+        mockNumberingService.getNextNumber(),
+      ).thenAnswer((_) async => 'F001-000128');
+      when(
+        mockInventoryRepository.getProductById('prod-2'),
+      ).thenAnswer((_) async => null);
+      when(
+        mockProcessInventoryUseCase.execute(any),
+      ).thenAnswer((_) async => []);
+      when(
+        mockTransactionDao.executeSaleWithDgiTransaction(
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+        ),
+      ).thenAnswer((_) async {});
+      when(
+        mockAuditRepository.log(any, metadata: anyNamed('metadata')),
+      ).thenAnswer((_) async {});
+
+      await repository.saveSale(
+        invoice: invoice,
+        items: const [
+          InvoiceItem(
+            id: 'legacy-context-line',
+            invoiceId: 'legacy-context-sale',
+            productId: 'prod-2',
+            productName: 'Product 2',
+            quantity: 1,
+            unitPrice: 100,
+            taxAmount: 15,
+            total: 115,
+            originalTaxRate: 15,
+            appliedTaxRate: 15,
+          ),
+        ],
+        payments: const [],
+      );
+
+      expect(contexts, isEmpty);
+      verify(
+        mockTransactionDao.executeSaleWithDgiTransaction(
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+        ),
+      ).called(1);
     },
   );
 

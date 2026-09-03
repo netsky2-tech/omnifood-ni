@@ -21,12 +21,21 @@ Future<void> _createInventoryMovementAppendOnlyTriggers(
   ''');
 }
 
+Future<void> _createTopologyPersistenceTriggers(sqflite.DatabaseExecutor database) async {
+  for (final table in ['topology_snapshots', 'emergency_topology_audits']) {
+    await database.execute("CREATE TRIGGER IF NOT EXISTS ${table}_block_update BEFORE UPDATE ON $table BEGIN SELECT RAISE(ABORT, '$table is immutable'); END");
+    await database.execute("CREATE TRIGGER IF NOT EXISTS ${table}_block_delete BEFORE DELETE ON $table BEGIN SELECT RAISE(ABORT, '$table is append-only'); END");
+  }
+}
+
 final inventoryMovementAppendOnlyCallback = Callback(
   onCreate: (database, _) async {
     await _createInventoryMovementAppendOnlyTriggers(database);
+    await _createTopologyPersistenceTriggers(database);
   },
   onOpen: (database) async {
     await _createInventoryMovementAppendOnlyTriggers(database);
+    await _createTopologyPersistenceTriggers(database);
   },
 );
 
@@ -1686,6 +1695,34 @@ final migration39_40 = Migration(39, 40, (database) async {
   ''');
 });
 
+final migration40_41 = Migration(40, 41, (database) async {
+  final productsTable = await database.rawQuery(
+    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'products'",
+  );
+  if (productsTable.isEmpty) return;
+  await database.execute(
+    'ALTER TABLE `products` ADD COLUMN `inventory_policy` TEXT',
+  );
+  await database.execute(
+    'ALTER TABLE `products` ADD COLUMN `direct_stock_insumo_id` TEXT',
+  );
+});
+
+final migration41_42 = Migration(41, 42, (database) async {
+  await database.execute('CREATE TABLE topology_snapshots (id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, revision INTEGER NOT NULL, hash TEXT NOT NULL, payload TEXT NOT NULL, received_at TEXT NOT NULL)');
+  await database.execute('CREATE TABLE shift_topology_bindings (shift_id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, snapshot_id TEXT NOT NULL, bound_at TEXT NOT NULL)');
+  await database.execute('CREATE TABLE emergency_topology_audits (id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, shift_id TEXT NOT NULL, snapshot_id TEXT NOT NULL, actor_id TEXT NOT NULL, actor_role TEXT NOT NULL, device_id TEXT NOT NULL, reason TEXT NOT NULL, occurred_at TEXT NOT NULL)');
+  await _createTopologyPersistenceTriggers(database);
+});
+
+final migration42_43 = Migration(42, 43, (database) async {
+  await database.execute('CREATE TABLE fulfillment_records (id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, sale_id TEXT NOT NULL, topology_snapshot_id TEXT NOT NULL, topology_revision INTEGER NOT NULL, channel TEXT NOT NULL, route_state TEXT NOT NULL, delivery_state TEXT NOT NULL, lines_payload TEXT NOT NULL)');
+  await database.execute('CREATE TABLE print_jobs (id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, fulfillment_id TEXT NOT NULL, document_kind TEXT NOT NULL, sequence INTEGER NOT NULL, payload TEXT NOT NULL, state TEXT NOT NULL, retry_count INTEGER NOT NULL, idempotency_key TEXT NOT NULL)');
+  await database.execute('CREATE UNIQUE INDEX index_print_jobs_tenant_id_idempotency_key ON print_jobs (tenant_id, idempotency_key)');
+  await database.execute('CREATE TABLE fulfillment_outbox_events (event_id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, device_id TEXT NOT NULL, source_sequence INTEGER NOT NULL, aggregate_type TEXT NOT NULL, aggregate_id TEXT NOT NULL, idempotency_key TEXT NOT NULL, payload_hash TEXT NOT NULL, topology_revision INTEGER NOT NULL, state TEXT NOT NULL, attempts INTEGER NOT NULL)');
+  await database.execute('CREATE UNIQUE INDEX index_fulfillment_outbox_events_tenant_id_idempotency_key ON fulfillment_outbox_events (tenant_id, idempotency_key)');
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -1717,4 +1754,7 @@ final allMigrations = [
   migration37_38,
   migration38_39,
   migration39_40,
+  migration40_41,
+  migration41_42,
+  migration42_43,
 ];

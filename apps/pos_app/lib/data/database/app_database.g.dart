@@ -148,13 +148,17 @@ class _$AppDatabase extends AppDatabase {
 
   CustomerPointTransactionDao? _customerPointTransactionDaoInstance;
 
+  FulfillmentTopologyDao? _fulfillmentTopologyDaoInstance;
+
+  FulfillmentPersistenceDao? _fulfillmentPersistenceDaoInstance;
+
   Future<sqflite.Database> open(
     String path,
     List<Migration> migrations, [
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 40,
+      version: 43,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -180,7 +184,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `insumos` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `consumption_uom` TEXT NOT NULL, `warehouse_id` TEXT, `is_perishable` INTEGER NOT NULL, `stock` REAL NOT NULL, `average_cost` REAL NOT NULL, `par_level` REAL, `stock_min` REAL, `stock_max` REAL, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `products` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `uom` TEXT NOT NULL, `stock` REAL NOT NULL, `average_cost` REAL NOT NULL, `sell_price` REAL NOT NULL, `is_active` INTEGER NOT NULL, `sku` TEXT, `barcode` TEXT, `category` TEXT, `is_prepared` INTEGER NOT NULL, `created_at` TEXT, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `products` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `uom` TEXT NOT NULL, `stock` REAL NOT NULL, `average_cost` REAL NOT NULL, `sell_price` REAL NOT NULL, `is_active` INTEGER NOT NULL, `sku` TEXT, `barcode` TEXT, `category` TEXT, `is_prepared` INTEGER NOT NULL, `created_at` TEXT, `inventory_policy` TEXT, `direct_stock_insumo_id` TEXT, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `product_variants` (`id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `name` TEXT NOT NULL, `price_adjustment` REAL NOT NULL, FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
@@ -250,6 +254,18 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `customer_point_transactions` (`id` TEXT NOT NULL, `customer_id` TEXT NOT NULL, `invoice_id` TEXT, `type` TEXT NOT NULL, `points` REAL NOT NULL, `balance_after` REAL NOT NULL, `conversion_rate` REAL NOT NULL, `reason` TEXT, `created_at` INTEGER NOT NULL, `sync_status` TEXT NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
+            'CREATE TABLE IF NOT EXISTS `topology_snapshots` (`id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `revision` INTEGER NOT NULL, `hash` TEXT NOT NULL, `payload` TEXT NOT NULL, `received_at` TEXT NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `shift_topology_bindings` (`shift_id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `snapshot_id` TEXT NOT NULL, `bound_at` TEXT NOT NULL, PRIMARY KEY (`shift_id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `emergency_topology_audits` (`id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `shift_id` TEXT NOT NULL, `snapshot_id` TEXT NOT NULL, `actor_id` TEXT NOT NULL, `actor_role` TEXT NOT NULL, `device_id` TEXT NOT NULL, `reason` TEXT NOT NULL, `occurred_at` TEXT NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `fulfillment_records` (`id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `sale_id` TEXT NOT NULL, `topology_snapshot_id` TEXT NOT NULL, `topology_revision` INTEGER NOT NULL, `channel` TEXT NOT NULL, `route_state` TEXT NOT NULL, `delivery_state` TEXT NOT NULL, `lines_payload` TEXT NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `print_jobs` (`id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `fulfillment_id` TEXT NOT NULL, `document_kind` TEXT NOT NULL, `sequence` INTEGER NOT NULL, `payload` TEXT NOT NULL, `state` TEXT NOT NULL, `retry_count` INTEGER NOT NULL, `idempotency_key` TEXT NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `fulfillment_outbox_events` (`event_id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `device_id` TEXT NOT NULL, `source_sequence` INTEGER NOT NULL, `aggregate_type` TEXT NOT NULL, `aggregate_id` TEXT NOT NULL, `idempotency_key` TEXT NOT NULL, `payload_hash` TEXT NOT NULL, `topology_revision` INTEGER NOT NULL, `state` TEXT NOT NULL, `attempts` INTEGER NOT NULL, PRIMARY KEY (`event_id`))');
+        await database.execute(
             'CREATE UNIQUE INDEX `index_audit_logs_tenant_id_device_id_user_id_sequence_no` ON `audit_logs` (`tenant_id`, `device_id`, `user_id`, `sequence_no`)');
         await database.execute(
             'CREATE UNIQUE INDEX `idx_movement_sync_state_stream_sequence` ON `inventory_movement_sync_state` (`terminal_id`, `flow_type`, `local_sequence`)');
@@ -285,6 +301,10 @@ class _$AppDatabase extends AppDatabase {
             'CREATE INDEX `index_customer_point_transactions_invoice_id` ON `customer_point_transactions` (`invoice_id`)');
         await database.execute(
             'CREATE INDEX `index_customer_point_transactions_created_at` ON `customer_point_transactions` (`created_at`)');
+        await database.execute(
+            'CREATE UNIQUE INDEX `index_print_jobs_tenant_id_idempotency_key` ON `print_jobs` (`tenant_id`, `idempotency_key`)');
+        await database.execute(
+            'CREATE UNIQUE INDEX `index_fulfillment_outbox_events_tenant_id_idempotency_key` ON `fulfillment_outbox_events` (`tenant_id`, `idempotency_key`)');
 
         await callback?.onCreate?.call(database, version);
       },
@@ -500,6 +520,18 @@ class _$AppDatabase extends AppDatabase {
   CustomerPointTransactionDao get customerPointTransactionDao {
     return _customerPointTransactionDaoInstance ??=
         _$CustomerPointTransactionDao(database, changeListener);
+  }
+
+  @override
+  FulfillmentTopologyDao get fulfillmentTopologyDao {
+    return _fulfillmentTopologyDaoInstance ??=
+        _$FulfillmentTopologyDao(database, changeListener);
+  }
+
+  @override
+  FulfillmentPersistenceDao get fulfillmentPersistenceDao {
+    return _fulfillmentPersistenceDaoInstance ??=
+        _$FulfillmentPersistenceDao(database, changeListener);
   }
 }
 
@@ -1059,7 +1091,9 @@ class _$ProductDao extends ProductDao {
                   'barcode': item.barcode,
                   'category': item.category,
                   'is_prepared': item.isPrepared ? 1 : 0,
-                  'created_at': item.createdAt
+                  'created_at': item.createdAt,
+                  'inventory_policy': item.inventoryPolicy,
+                  'direct_stock_insumo_id': item.directStockInsumoId
                 }),
         _productVariantEntityInsertionAdapter = InsertionAdapter(
             database,
@@ -1109,7 +1143,9 @@ class _$ProductDao extends ProductDao {
             barcode: row['barcode'] as String?,
             category: row['category'] as String?,
             isPrepared: (row['is_prepared'] as int) != 0,
-            createdAt: row['created_at'] as String?));
+            createdAt: row['created_at'] as String?,
+            inventoryPolicy: row['inventory_policy'] as String?,
+            directStockInsumoId: row['direct_stock_insumo_id'] as String?));
   }
 
   @override
@@ -1127,7 +1163,9 @@ class _$ProductDao extends ProductDao {
             barcode: row['barcode'] as String?,
             category: row['category'] as String?,
             isPrepared: (row['is_prepared'] as int) != 0,
-            createdAt: row['created_at'] as String?),
+            createdAt: row['created_at'] as String?,
+            inventoryPolicy: row['inventory_policy'] as String?,
+            directStockInsumoId: row['direct_stock_insumo_id'] as String?),
         arguments: [id]);
   }
 
@@ -1176,7 +1214,9 @@ class _$ProductDao extends ProductDao {
             barcode: row['barcode'] as String?,
             category: row['category'] as String?,
             isPrepared: (row['is_prepared'] as int) != 0,
-            createdAt: row['created_at'] as String?),
+            createdAt: row['created_at'] as String?,
+            inventoryPolicy: row['inventory_policy'] as String?,
+            directStockInsumoId: row['direct_stock_insumo_id'] as String?),
         arguments: [sku, barcode]);
   }
 
@@ -3603,6 +3643,50 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'tenant_id': item.tenantId,
                   'metadata_raw': item.metadataRaw
                 }),
+        _fulfillmentRecordEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'fulfillment_records',
+            (FulfillmentRecordEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'tenant_id': item.tenantId,
+                  'sale_id': item.saleId,
+                  'topology_snapshot_id': item.topologySnapshotId,
+                  'topology_revision': item.topologyRevision,
+                  'channel': item.channel,
+                  'route_state': item.routeState,
+                  'delivery_state': item.deliveryState,
+                  'lines_payload': item.linesPayload
+                }),
+        _printJobEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'print_jobs',
+            (PrintJobEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'tenant_id': item.tenantId,
+                  'fulfillment_id': item.fulfillmentId,
+                  'document_kind': item.documentKind,
+                  'sequence': item.sequence,
+                  'payload': item.payload,
+                  'state': item.state,
+                  'retry_count': item.retryCount,
+                  'idempotency_key': item.idempotencyKey
+                }),
+        _outboxEventEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'fulfillment_outbox_events',
+            (OutboxEventEntity item) => <String, Object?>{
+                  'event_id': item.eventId,
+                  'tenant_id': item.tenantId,
+                  'device_id': item.deviceId,
+                  'source_sequence': item.sourceSequence,
+                  'aggregate_type': item.aggregateType,
+                  'aggregate_id': item.aggregateId,
+                  'idempotency_key': item.idempotencyKey,
+                  'payload_hash': item.payloadHash,
+                  'topology_revision': item.topologyRevision,
+                  'state': item.state,
+                  'attempts': item.attempts
+                }),
         _invoiceEntityUpdateAdapter = UpdateAdapter(
             database,
             'invoices',
@@ -3672,6 +3756,13 @@ class _$SalesTransactionDao extends SalesTransactionDao {
   final InsertionAdapter<MovementEntity> _movementEntityInsertionAdapter;
 
   final InsertionAdapter<AuditLogEntity> _auditLogEntityInsertionAdapter;
+
+  final InsertionAdapter<FulfillmentRecordEntity>
+      _fulfillmentRecordEntityInsertionAdapter;
+
+  final InsertionAdapter<PrintJobEntity> _printJobEntityInsertionAdapter;
+
+  final InsertionAdapter<OutboxEventEntity> _outboxEventEntityInsertionAdapter;
 
   final UpdateAdapter<InvoiceEntity> _invoiceEntityUpdateAdapter;
 
@@ -3774,6 +3865,43 @@ class _$SalesTransactionDao extends SalesTransactionDao {
   }
 
   @override
+  Future<void> advanceDgiCurrentNumber(String nextSequence) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE local_configs SET value = ?1 WHERE `key` = \'dgi_current_number\'',
+        arguments: [nextSequence]);
+  }
+
+  @override
+  Future<String?> getDgiConfig(String key) async {
+    return _queryAdapter.query(
+        'SELECT value FROM local_configs WHERE `key` = ?1',
+        mapper: (Map<String, Object?> row) => row.values.first as String,
+        arguments: [key]);
+  }
+
+  @override
+  Future<String?> getOriginalMovementId(
+    String invoiceId,
+    String insumoId,
+  ) async {
+    return _queryAdapter.query(
+        'SELECT id FROM inventory_movements WHERE source_document_id = ?1 AND insumo_id = ?2 AND origin_movement_id IS NULL ORDER BY timestamp DESC LIMIT 1',
+        mapper: (Map<String, Object?> row) => row.values.first as String,
+        arguments: [invoiceId, insumoId]);
+  }
+
+  @override
+  Future<OutboxEventEntity?> findReplay(
+    String tenantId,
+    String idempotencyKey,
+  ) async {
+    return _queryAdapter.query(
+        'SELECT * FROM fulfillment_outbox_events WHERE tenant_id = ?1 AND idempotency_key = ?2',
+        mapper: (Map<String, Object?> row) => OutboxEventEntity(eventId: row['event_id'] as String, tenantId: row['tenant_id'] as String, deviceId: row['device_id'] as String, sourceSequence: row['source_sequence'] as int, aggregateType: row['aggregate_type'] as String, aggregateId: row['aggregate_id'] as String, idempotencyKey: row['idempotency_key'] as String, payloadHash: row['payload_hash'] as String, topologyRevision: row['topology_revision'] as int, state: row['state'] as String, attempts: row['attempts'] as int),
+        arguments: [tenantId, idempotencyKey]);
+  }
+
+  @override
   Future<void> insertInvoice(InvoiceEntity invoice) async {
     await _invoiceEntityInsertionAdapter.insert(
         invoice, OnConflictStrategy.abort);
@@ -3808,6 +3936,23 @@ class _$SalesTransactionDao extends SalesTransactionDao {
   Future<void> insertAuditLog(AuditLogEntity log) async {
     await _auditLogEntityInsertionAdapter.insert(
         log, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> insertFulfillment(FulfillmentRecordEntity fulfillment) async {
+    await _fulfillmentRecordEntityInsertionAdapter.insert(
+        fulfillment, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> insertPrintJob(PrintJobEntity job) async {
+    await _printJobEntityInsertionAdapter.insert(job, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> insertOutboxEvent(OutboxEventEntity outbox) async {
+    await _outboxEventEntityInsertionAdapter.insert(
+        outbox, OnConflictStrategy.abort);
   }
 
   @override
@@ -3847,6 +3992,78 @@ class _$SalesTransactionDao extends SalesTransactionDao {
             movements,
             auditLog,
             shouldFail);
+      });
+    }
+  }
+
+  @override
+  Future<void> executeSaleWithDgiTransaction(
+    InvoiceEntity invoice,
+    List<InvoiceItemEntity> items,
+    List<InvoiceItemModifierEntity> modifiers,
+    List<PaymentEntity> payments,
+    List<MovementEntity> movements,
+    AuditLogEntity? auditLog,
+    String nextDgiSequence,
+    bool shouldFail,
+  ) async {
+    if (database is sqflite.Transaction) {
+      await super.executeSaleWithDgiTransaction(invoice, items, modifiers,
+          payments, movements, auditLog, nextDgiSequence, shouldFail);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.salesTransactionDao
+            .executeSaleWithDgiTransaction(invoice, items, modifiers, payments,
+                movements, auditLog, nextDgiSequence, shouldFail);
+      });
+    }
+  }
+
+  @override
+  Future<void> executeFulfillmentSaleTransaction(
+    InvoiceEntity invoice,
+    List<InvoiceItemEntity> items,
+    List<InvoiceItemModifierEntity> modifiers,
+    List<PaymentEntity> payments,
+    List<MovementEntity> movements,
+    AuditLogEntity? auditLog,
+    FulfillmentRecordEntity fulfillment,
+    List<PrintJobEntity> printJobs,
+    OutboxEventEntity outbox,
+    bool shouldFail,
+  ) async {
+    if (database is sqflite.Transaction) {
+      await super.executeFulfillmentSaleTransaction(
+          invoice,
+          items,
+          modifiers,
+          payments,
+          movements,
+          auditLog,
+          fulfillment,
+          printJobs,
+          outbox,
+          shouldFail);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.salesTransactionDao
+            .executeFulfillmentSaleTransaction(
+                invoice,
+                items,
+                modifiers,
+                payments,
+                movements,
+                auditLog,
+                fulfillment,
+                printJobs,
+                outbox,
+                shouldFail);
       });
     }
   }
@@ -5311,5 +5528,234 @@ class _$CustomerPointTransactionDao extends CustomerPointTransactionDao {
                 entity, customerId, newBalance, updatedAt);
       });
     }
+  }
+}
+
+class _$FulfillmentTopologyDao extends FulfillmentTopologyDao {
+  _$FulfillmentTopologyDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _topologySnapshotEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'topology_snapshots',
+            (TopologySnapshotEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'tenant_id': item.tenantId,
+                  'revision': item.revision,
+                  'hash': item.hash,
+                  'payload': item.payload,
+                  'received_at': item.receivedAt
+                }),
+        _shiftTopologyBindingEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'shift_topology_bindings',
+            (ShiftTopologyBindingEntity item) => <String, Object?>{
+                  'shift_id': item.shiftId,
+                  'tenant_id': item.tenantId,
+                  'snapshot_id': item.snapshotId,
+                  'bound_at': item.boundAt
+                }),
+        _emergencyTopologyAuditEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'emergency_topology_audits',
+            (EmergencyTopologyAuditEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'tenant_id': item.tenantId,
+                  'shift_id': item.shiftId,
+                  'snapshot_id': item.snapshotId,
+                  'actor_id': item.actorId,
+                  'actor_role': item.actorRole,
+                  'device_id': item.deviceId,
+                  'reason': item.reason,
+                  'occurred_at': item.occurredAt
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<TopologySnapshotEntity>
+      _topologySnapshotEntityInsertionAdapter;
+
+  final InsertionAdapter<ShiftTopologyBindingEntity>
+      _shiftTopologyBindingEntityInsertionAdapter;
+
+  final InsertionAdapter<EmergencyTopologyAuditEntity>
+      _emergencyTopologyAuditEntityInsertionAdapter;
+
+  @override
+  Future<TopologySnapshotEntity?> findSnapshot(
+    String id,
+    String tenantId,
+  ) async {
+    return _queryAdapter.query(
+        'SELECT * FROM topology_snapshots WHERE id = ?1 AND tenant_id = ?2',
+        mapper: (Map<String, Object?> row) => TopologySnapshotEntity(
+            id: row['id'] as String,
+            tenantId: row['tenant_id'] as String,
+            revision: row['revision'] as int,
+            hash: row['hash'] as String,
+            payload: row['payload'] as String,
+            receivedAt: row['received_at'] as String),
+        arguments: [id, tenantId]);
+  }
+
+  @override
+  Future<ShiftTopologyBindingEntity?> findBinding(
+    String shiftId,
+    String tenantId,
+  ) async {
+    return _queryAdapter.query(
+        'SELECT * FROM shift_topology_bindings WHERE shift_id = ?1 AND tenant_id = ?2',
+        mapper: (Map<String, Object?> row) => ShiftTopologyBindingEntity(shiftId: row['shift_id'] as String, tenantId: row['tenant_id'] as String, snapshotId: row['snapshot_id'] as String, boundAt: row['bound_at'] as String),
+        arguments: [shiftId, tenantId]);
+  }
+
+  @override
+  Future<List<EmergencyTopologyAuditEntity>> findEmergencyAudits(
+      String tenantId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM emergency_topology_audits WHERE tenant_id = ?1 ORDER BY occurred_at DESC',
+        mapper: (Map<String, Object?> row) => EmergencyTopologyAuditEntity(id: row['id'] as String, tenantId: row['tenant_id'] as String, shiftId: row['shift_id'] as String, snapshotId: row['snapshot_id'] as String, actorId: row['actor_id'] as String, actorRole: row['actor_role'] as String, deviceId: row['device_id'] as String, reason: row['reason'] as String, occurredAt: row['occurred_at'] as String),
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<void> insertSnapshot(TopologySnapshotEntity snapshot) async {
+    await _topologySnapshotEntityInsertionAdapter.insert(
+        snapshot, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> bindShift(ShiftTopologyBindingEntity binding) async {
+    await _shiftTopologyBindingEntityInsertionAdapter.insert(
+        binding, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> insertEmergencyAudit(EmergencyTopologyAuditEntity audit) async {
+    await _emergencyTopologyAuditEntityInsertionAdapter.insert(
+        audit, OnConflictStrategy.abort);
+  }
+}
+
+class _$FulfillmentPersistenceDao extends FulfillmentPersistenceDao {
+  _$FulfillmentPersistenceDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _fulfillmentRecordEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'fulfillment_records',
+            (FulfillmentRecordEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'tenant_id': item.tenantId,
+                  'sale_id': item.saleId,
+                  'topology_snapshot_id': item.topologySnapshotId,
+                  'topology_revision': item.topologyRevision,
+                  'channel': item.channel,
+                  'route_state': item.routeState,
+                  'delivery_state': item.deliveryState,
+                  'lines_payload': item.linesPayload
+                }),
+        _printJobEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'print_jobs',
+            (PrintJobEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'tenant_id': item.tenantId,
+                  'fulfillment_id': item.fulfillmentId,
+                  'document_kind': item.documentKind,
+                  'sequence': item.sequence,
+                  'payload': item.payload,
+                  'state': item.state,
+                  'retry_count': item.retryCount,
+                  'idempotency_key': item.idempotencyKey
+                }),
+        _outboxEventEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'fulfillment_outbox_events',
+            (OutboxEventEntity item) => <String, Object?>{
+                  'event_id': item.eventId,
+                  'tenant_id': item.tenantId,
+                  'device_id': item.deviceId,
+                  'source_sequence': item.sourceSequence,
+                  'aggregate_type': item.aggregateType,
+                  'aggregate_id': item.aggregateId,
+                  'idempotency_key': item.idempotencyKey,
+                  'payload_hash': item.payloadHash,
+                  'topology_revision': item.topologyRevision,
+                  'state': item.state,
+                  'attempts': item.attempts
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<FulfillmentRecordEntity>
+      _fulfillmentRecordEntityInsertionAdapter;
+
+  final InsertionAdapter<PrintJobEntity> _printJobEntityInsertionAdapter;
+
+  final InsertionAdapter<OutboxEventEntity> _outboxEventEntityInsertionAdapter;
+
+  @override
+  Future<FulfillmentRecordEntity?> findFulfillment(
+    String id,
+    String tenantId,
+  ) async {
+    return _queryAdapter.query(
+        'SELECT * FROM fulfillment_records WHERE id = ?1 AND tenant_id = ?2',
+        mapper: (Map<String, Object?> row) => FulfillmentRecordEntity(
+            id: row['id'] as String,
+            tenantId: row['tenant_id'] as String,
+            saleId: row['sale_id'] as String,
+            topologySnapshotId: row['topology_snapshot_id'] as String,
+            topologyRevision: row['topology_revision'] as int,
+            channel: row['channel'] as String,
+            routeState: row['route_state'] as String,
+            deliveryState: row['delivery_state'] as String,
+            linesPayload: row['lines_payload'] as String),
+        arguments: [id, tenantId]);
+  }
+
+  @override
+  Future<List<PrintJobEntity>> findRetryablePrintJobs(String tenantId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM print_jobs WHERE tenant_id = ?1 AND state IN (\'PENDING\', \'FAILED\') ORDER BY sequence',
+        mapper: (Map<String, Object?> row) => PrintJobEntity(id: row['id'] as String, tenantId: row['tenant_id'] as String, fulfillmentId: row['fulfillment_id'] as String, documentKind: row['document_kind'] as String, sequence: row['sequence'] as int, payload: row['payload'] as String, state: row['state'] as String, retryCount: row['retry_count'] as int, idempotencyKey: row['idempotency_key'] as String),
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<List<OutboxEventEntity>> findPendingOutboxEvents(
+      String tenantId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM fulfillment_outbox_events WHERE tenant_id = ?1 AND state = \'PENDING\' ORDER BY source_sequence',
+        mapper: (Map<String, Object?> row) => OutboxEventEntity(eventId: row['event_id'] as String, tenantId: row['tenant_id'] as String, deviceId: row['device_id'] as String, sourceSequence: row['source_sequence'] as int, aggregateType: row['aggregate_type'] as String, aggregateId: row['aggregate_id'] as String, idempotencyKey: row['idempotency_key'] as String, payloadHash: row['payload_hash'] as String, topologyRevision: row['topology_revision'] as int, state: row['state'] as String, attempts: row['attempts'] as int),
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<void> insertFulfillment(FulfillmentRecordEntity fulfillment) async {
+    await _fulfillmentRecordEntityInsertionAdapter.insert(
+        fulfillment, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> insertPrintJob(PrintJobEntity job) async {
+    await _printJobEntityInsertionAdapter.insert(job, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> insertOutboxEvent(OutboxEventEntity event) async {
+    await _outboxEventEntityInsertionAdapter.insert(
+        event, OnConflictStrategy.abort);
   }
 }

@@ -23,7 +23,7 @@ class MovementEntity {
   @ColumnInfo(name: 'source_document_id')
   final String? sourceDocumentId;
   @ColumnInfo(name: 'origin_movement_id')
-  final String? originMovementId;
+  String? originMovementId;
   @ColumnInfo(name: 'origin_invoice_item_id')
   final String? originInvoiceItemId;
   @ColumnInfo(name: 'batch_deductions')

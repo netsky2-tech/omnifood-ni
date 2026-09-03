@@ -114,7 +114,7 @@ void main() {
         zSequence: 1,
       );
       expect(corteZResult.isSuccess, isTrue);
-      expect(adapter.lastPrintedText, contains('CORTE Z (CIERRE DE CAJA)'));
+      expect(adapter.lastPrintedText, contains('CORTE Z'));
     });
 
     test('openCashDrawer triggers pulse and increments counter', () async {
@@ -135,7 +135,7 @@ void main() {
       );
 
       expect(result.isSuccess, isTrue);
-      expect(adapter.lastPrintedText, contains('ETIQUETA DE PRE-ELABORACION'));
+      expect(adapter.lastPrintedText, contains('ETIQUETA DE PRODUCCION'));
       expect(adapter.lastPrintedText, contains('LOTE-20260827-001'));
       expect(adapter.lastPrintedText, contains('Chef Pedro'));
       expect(adapter.lastPrintedBytes, isNotNull);

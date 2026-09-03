@@ -1,4 +1,5 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
+import '../fulfillment/fulfillment_contracts.dart';
 
 part 'product.freezed.dart';
 part 'product.g.dart';
@@ -18,11 +19,14 @@ class Product with _$Product {
     String? category,
     @Default(false) bool isPrepared,
     String? createdAt,
+    InventoryPolicy? inventoryPolicy,
+    String? directStockInsumoId,
     @Default([]) List<ProductVariant> variants,
     @Default([]) List<Modifier> availableModifiers,
   }) = _Product;
 
-  factory Product.fromJson(Map<String, dynamic> json) => _$ProductFromJson(json);
+  factory Product.fromJson(Map<String, dynamic> json) =>
+      _$ProductFromJson(json);
 }
 
 @freezed
