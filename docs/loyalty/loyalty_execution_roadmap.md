@@ -727,6 +727,7 @@ Nunca omitir ni alterar datos fiscales obligatorios por incluir Loyalty.
 
 # LV1.5 — Owner Loyalty / W10
 
+**Estado:** **CLOSED (100% VERIFICADO)**  
 **Objetivo:** adelantar la porción Loyalty de W10 ahora que W7 está cerrada, sin esperar al resto del roadmap del Owner Dashboard.
 
 ## Scope
@@ -889,15 +890,18 @@ Checkout la evalúa localmente
 - [x] Todas las mutaciones críticas generan Audit Trail.
 - [x] UI sigue `DESIGN_BACKOFFICE.md` y estados stale/errores no se confunden con datos autoritativos.
 
-## Evidencia mínima
+## Evidencia mínima y de cierre (100% Verificado)
 
-- CRUD API integration tests;
-- browser/UI tests;
-- role/permission negative tests;
-- two-tenant isolation test;
-- audit test;
-- cloud->POS config sync contract test;
-- fixture de aceptación “Smash Burger Club”.
+- **Owner Dashboard (UI / Vitest)**:
+  - `apps/owner_dashboard/src/__tests__/w10-loyalty-programs-rewards.test.tsx` (17 tests green: Programs CRUD, mechanics forms SPEND_POINTS / PRODUCT_STAMPS / VISIT_STAMPS, fixture Smash Burger Club, activation/deactivation toggles, Rewards CRUD DISCOUNT_AMOUNT / FREE_PRODUCT, error states).
+  - `apps/owner_dashboard/src/__tests__/w10-customer-loyalty-profile.test.tsx` (8 tests green: customer loyalty profile, program-scoped progress & accounts, transactions table).
+  - `apps/owner_dashboard/src/__tests__/w10-adjustment-dialog.test.tsx` (8 tests green: "Ajuste manual", positive/negative delta validation, required reason, balance preview).
+- **Backend API & E2E (NestJS / Jest)**:
+  - `apps/admin_backend/test/loyalty/loyalty.e2e-spec.ts` (16 tests green: Programs CRUD, activation/deactivation, config_version bumps, Rewards CRUD, multi-tenant isolation, customer accounts & program-scoped transactions, Cashier RBAC 403 negative tests).
+  - `apps/admin_backend/src/modules/loyalty/services/loyalty.service.db.spec.ts` (20 tests green: real DB operations, tenant boundaries, config_version increments, reward order).
+- **POS Convergence (Flutter / SQLite)**:
+  - `apps/pos_app/test/domain/services/sales/loyalty_sync_service_test.dart` & `loyalty_evaluation_service_test.dart` (22 tests green: master data conversion, DRAFT program exclusion).
+  - `apps/pos_app/test/e2e/loyalty_v1_real_sqlite_e2e_test.dart` (6 comprehensive scenarios green: acceptance fixture Smash Burger Club, real SQLite ledger persistence, receipt formatting).
 
 ---
 

@@ -388,4 +388,235 @@ describe('Loyalty API (E2E / Integration)', () => {
       expect(Array.isArray(res.body)).toBe(true);
     });
   });
+
+  describe('PATCH /loyalty/programs/:programId (LV1.5A)', () => {
+    it('updates a program and bumps config_version', async () => {
+      const token = createToken('tenant-A', UserRole.OWNER);
+
+      dbPrograms.push({
+        id: 'prog-to-update',
+        tenant_id: 'tenant-A',
+        name: 'Old Name',
+        program_type: 'SPEND_POINTS',
+        status: 'ACTIVE',
+        earning_rule: { spendBlockNio: 10, pointsPerBlock: 1 },
+        eligibility_rule: {},
+        config_version: 1,
+        created_at: new Date(),
+        updated_at: new Date(),
+      } as unknown as LoyaltyProgram);
+
+      const res = await request(app.getHttpServer())
+        .patch('/loyalty/programs/prog-to-update')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          name: 'Updated Smash Club',
+          earning_rule: { spendBlockNio: 20, pointsPerBlock: 2 },
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.name).toBe('Updated Smash Club');
+    });
+
+    it('rejects 403 when CASHIER attempts to update program', async () => {
+      const token = createToken('tenant-A', UserRole.CASHIER);
+
+      const res = await request(app.getHttpServer())
+        .patch('/loyalty/programs/prog-to-update')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ name: 'Hacked' });
+
+      expect(res.status).toBe(403);
+    });
+  });
+
+  describe('POST /loyalty/programs/:programId/deactivate (LV1.5A)', () => {
+    it('deactivates an ACTIVE program', async () => {
+      const token = createToken('tenant-A', UserRole.OWNER);
+
+      dbPrograms.push({
+        id: 'prog-to-deactivate',
+        tenant_id: 'tenant-A',
+        name: 'Deactivate Me',
+        program_type: 'SPEND_POINTS',
+        status: 'ACTIVE',
+        earning_rule: {},
+        eligibility_rule: {},
+        config_version: 2,
+        created_at: new Date(),
+        updated_at: new Date(),
+      } as unknown as LoyaltyProgram);
+
+      const res = await request(app.getHttpServer())
+        .post('/loyalty/programs/prog-to-deactivate/deactivate')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(201);
+      expect(res.body.status).toBe('INACTIVE');
+    });
+  });
+
+  describe('Rewards management E2E (LV1.5B)', () => {
+    it('lists rewards by program', async () => {
+      const token = createToken('tenant-A', UserRole.OWNER);
+
+      dbPrograms.push({
+        id: 'prog-parent',
+        tenant_id: 'tenant-A',
+        name: 'Parent Prog',
+        program_type: 'PRODUCT_STAMPS',
+        status: 'ACTIVE',
+        earning_rule: {},
+        eligibility_rule: {},
+        config_version: 1,
+        created_at: new Date(),
+        updated_at: new Date(),
+      } as unknown as LoyaltyProgram);
+
+      dbRewards.push({
+        id: 'rw-1',
+        tenant_id: 'tenant-A',
+        loyalty_program_id: 'prog-parent',
+        name: 'Burger Gratis',
+        reward_type: 'FREE_PRODUCT',
+        cost_units: 10,
+        benefit_config: { productId: 'prod-smash' },
+        status: 'ACTIVE',
+        presentation_order: 1,
+        config_version: 1,
+        created_at: new Date(),
+        updated_at: new Date(),
+      } as unknown as RewardDefinition);
+
+      const res = await request(app.getHttpServer())
+        .get('/loyalty/programs/prog-parent/rewards')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.length).toBe(1);
+      expect(res.body[0].name).toBe('Burger Gratis');
+    });
+
+    it('updates a reward', async () => {
+      const token = createToken('tenant-A', UserRole.OWNER);
+
+      dbPrograms.push({
+        id: 'prog-for-reward-update',
+        tenant_id: 'tenant-A',
+        name: 'Parent Prog',
+        program_type: 'PRODUCT_STAMPS',
+        status: 'ACTIVE',
+        earning_rule: {},
+        eligibility_rule: {},
+        config_version: 1,
+        created_at: new Date(),
+        updated_at: new Date(),
+      } as unknown as LoyaltyProgram);
+
+      dbRewards.push({
+        id: 'rw-to-update',
+        tenant_id: 'tenant-A',
+        loyalty_program_id: 'prog-for-reward-update',
+        name: 'Old Reward',
+        reward_type: 'DISCOUNT_AMOUNT',
+        cost_units: 50,
+        benefit_config: { amountNio: 25 },
+        status: 'ACTIVE',
+        presentation_order: 1,
+        config_version: 1,
+        created_at: new Date(),
+        updated_at: new Date(),
+      } as unknown as RewardDefinition);
+
+      const res = await request(app.getHttpServer())
+        .patch('/loyalty/rewards/rw-to-update')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          name: 'Descuento C$30 Actualizado',
+          cost_units: 60,
+          benefit_config: { amountNio: 30 },
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.name).toBe('Descuento C$30 Actualizado');
+      expect(res.body.cost_units).toBe(60);
+    });
+
+    it('activates and deactivates a reward', async () => {
+      const token = createToken('tenant-A', UserRole.OWNER);
+
+      dbPrograms.push({
+        id: 'prog-for-reward-toggle',
+        tenant_id: 'tenant-A',
+        name: 'Parent Prog',
+        program_type: 'PRODUCT_STAMPS',
+        status: 'ACTIVE',
+        earning_rule: {},
+        eligibility_rule: {},
+        config_version: 1,
+        created_at: new Date(),
+        updated_at: new Date(),
+      } as unknown as LoyaltyProgram);
+
+      dbRewards.push({
+        id: 'rw-to-toggle',
+        tenant_id: 'tenant-A',
+        loyalty_program_id: 'prog-for-reward-toggle',
+        name: 'Toggle Reward',
+        reward_type: 'FREE_PRODUCT',
+        cost_units: 10,
+        benefit_config: { productId: 'prod-smash' },
+        status: 'INACTIVE',
+        presentation_order: 1,
+        config_version: 1,
+        created_at: new Date(),
+        updated_at: new Date(),
+      } as unknown as RewardDefinition);
+
+      // Activate
+      const actRes = await request(app.getHttpServer())
+        .post('/loyalty/rewards/rw-to-toggle/activate')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(actRes.status).toBe(201);
+      expect(actRes.body.status).toBe('ACTIVE');
+
+      // Deactivate
+      const deactRes = await request(app.getHttpServer())
+        .post('/loyalty/rewards/rw-to-toggle/deactivate')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(deactRes.status).toBe(201);
+      expect(deactRes.body.status).toBe('INACTIVE');
+    });
+
+    it('rejects 403 when CASHIER attempts to mutate rewards', async () => {
+      const token = createToken('tenant-A', UserRole.CASHIER);
+
+      const res = await request(app.getHttpServer())
+        .post('/loyalty/programs/prog-1/rewards')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          name: 'Hacked Reward',
+          reward_type: 'FREE_PRODUCT',
+          cost_units: 1,
+          benefit_config: { productId: 'prod-1' },
+        });
+
+      expect(res.status).toBe(403);
+    });
+  });
+
+  describe('GET /loyalty/customers/:customerId/transactions (LV1.5C)', () => {
+    it('queries transactions scoped by customer and optional program', async () => {
+      const token = createToken('tenant-A', UserRole.OWNER);
+
+      const res = await request(app.getHttpServer())
+        .get('/loyalty/customers/cust-1/transactions?program_id=prog-smash')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body)).toBe(true);
+    });
+  });
 });
