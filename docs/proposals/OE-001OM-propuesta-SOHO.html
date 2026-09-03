@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="document-reference" content="OE-001OM">
+  <title>OE-001OM · Propuesta técnico-económica para SOHO</title>
+  <style>
+:root{--ink:#1a1c1c;--muted:#546163;--teal:#3f6167;--teal-dark:#294c52;--teal-pale:#d7e5e8;--paper:#faf9f9;--white:#ffffff;--line:#c1c8c9;--brown:#79573f;--brown-pale:#ffdcc5}
+.editable-meta{position:absolute;left:20mm;top:183mm;color:#d7e5e8;font-size:8pt;line-height:1.7}.editable-meta strong{color:#fff}
+.compact-section h2{font-size:17pt;margin-bottom:5mm}.compact-section+.compact-section{border-top:1px solid var(--line);margin-top:7mm;padding-top:6mm}.compact-section p{margin-bottom:3mm}.compact-section li{margin-bottom:1.4mm}
+.signature-grid{display:grid;grid-template-columns:1fr 1fr;gap:12mm;margin:13mm 0 8mm;break-inside:avoid}.signature-block{border-top:2px solid var(--teal);padding-top:5mm;break-inside:avoid}.signature-block h2{font-family:Georgia,"Times New Roman",serif;font-size:15pt;margin:0 0 7mm}.signature-field{min-height:16mm;display:flex;flex-direction:column;justify-content:flex-end}.signature-field span{color:var(--muted);font-size:7.5pt;font-weight:700;letter-spacing:.08em;text-transform:uppercase}.signature-field i{display:block;border-bottom:1px solid var(--outline,#71787a);height:6mm}.signature-field.signature-line{min-height:27mm}.acceptance .signature-grid+p{margin-top:5mm;color:var(--muted)}
+*{box-sizing:border-box}html{background:#d9dddd;color:var(--ink);font-family:"Aptos","Segoe UI",sans-serif;font-size:10.5pt;line-height:1.55}body{margin:0}.page{position:relative;width:210mm;min-height:297mm;margin:10mm auto;background:var(--paper);padding:22mm 20mm 20mm;break-after:page;overflow:hidden}.running-head,.page footer{position:absolute;left:20mm;right:20mm;display:flex;justify-content:space-between;color:var(--muted);font-size:7.5pt;letter-spacing:.09em;text-transform:uppercase}.running-head{top:11mm;border-bottom:1px solid var(--line);padding-bottom:3mm}.page footer{bottom:9mm;border-top:1px solid var(--line);padding-top:3mm}.cover{background:var(--teal-dark);color:var(--white);padding-top:28mm}.cover .running-head,.cover footer,.annex-cover .running-head,.annex-cover footer{color:#d7e5e8;border-color:#577a80}.brand{display:flex;align-items:center;gap:4mm;font-size:18pt;letter-spacing:-.035em}.brand small{display:block;font-size:7pt;letter-spacing:.32em;margin-top:-1mm}.monogram{position:relative;width:13mm;height:13mm;border:2px solid currentColor;transform:rotate(45deg);display:inline-block}.monogram:before,.monogram:after,.monogram i{content:"";position:absolute;border:2px solid currentColor}.monogram:before{inset:2mm}.monogram:after{left:50%;top:-2px;bottom:-2px;border-width:0 0 0 2px}.monogram i{top:50%;left:-2px;right:-2px;border-width:2px 0 0}.official-logo{display:block;max-width:52mm;max-height:18mm;object-fit:contain;object-position:left center}.cover-rule{height:1px;background:#a8cdd3;margin:30mm 0 15mm}.eyebrow{color:var(--teal);font-size:8pt;font-weight:700;letter-spacing:.16em;text-transform:uppercase}.cover .eyebrow,.annex-cover .eyebrow{color:#a8cdd3}.page h1{font-family:Georgia,"Times New Roman",serif;font-size:29pt;line-height:1.08;letter-spacing:-.025em;margin:4mm 0 10mm}.cover h1{font-size:37pt;max-width:150mm}.cover-client{font-size:15pt;margin-top:16mm}.cover-meta{position:absolute;left:20mm;right:20mm;bottom:31mm;display:grid;grid-template-columns:1fr 1.6fr;gap:12mm;border-top:1px solid #577a80;padding-top:6mm}.cover-meta span{display:block;color:#a8cdd3;font-size:7.5pt;letter-spacing:.08em;text-transform:uppercase}.cover-meta strong{display:block;margin-top:1.5mm}.cover>main>p:last-child{display:none}.content-section{max-width:166mm}.content-section h2,.annex-acceptance h2{font-family:Georgia,"Times New Roman",serif;font-size:22pt;line-height:1.2;margin:0 0 8mm;break-after:avoid-page}.content-section p{margin:0 0 4mm;orphans:3;widows:3}.content-section ul,.content-section ol{margin:2mm 0 5mm;padding-left:7mm}.content-section li{margin-bottom:2mm;break-inside:avoid}.callout{border-left:3px solid var(--brown);background:var(--brown-pale);padding:4mm 5mm;margin:6mm 0;font-weight:600;break-inside:avoid}.table-wrap{break-inside:avoid;margin:6mm 0 7mm}table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}th{background:var(--teal-dark);color:white;text-align:left;font-size:8pt;letter-spacing:.05em;text-transform:uppercase}th,td{padding:3.5mm;border-bottom:1px solid var(--line);vertical-align:top}th:nth-child(2),td:nth-child(2){text-align:right}.investment{margin-top:11mm;border-top:2px solid var(--teal);padding-top:7mm}.investment h2{font-size:15pt}.investment table td:nth-child(2){font-size:16pt;font-weight:700;color:var(--teal-dark)}strong{font-weight:700}code{font-family:inherit;background:#e8e8e8;padding:.2em}.annex-cover{background:#2f3131;color:#f1f1f0;padding-top:28mm}.annex-cover h1{font-size:34pt;margin-top:18mm}.annex-cover>main>p{max-width:115mm}.annex-index{display:grid;grid-template-columns:1fr 1fr;gap:3mm 10mm;margin-top:15mm;border-top:1px solid #546163;padding-top:7mm;color:#d7e5e8;font-size:8.5pt}.annex-index span{break-inside:avoid}.acceptance h1{margin-bottom:7mm}.acceptance p{white-space:normal}.acceptance .annex-acceptance{margin-top:12mm;border-top:2px solid var(--teal);padding-top:7mm}.acceptance .annex-acceptance h2{font-size:15pt}.acceptance p:has(br){font-family:"Courier New",monospace;line-height:2}.acceptance p:last-child{font-family:inherit;line-height:1.5}.acceptance .annex-acceptance p:first-of-type{font-family:inherit;line-height:1.5}
+@media print{@page{size:A4;margin:0}html,body{background:white}.page{margin:0;width:210mm;height:297mm;min-height:297mm;page-break-after:always}.page:last-child{page-break-after:auto}}
+@media screen and (max-width:800px){html{background:var(--paper)}.page{width:100%;min-height:auto;margin:0;padding:24mm 8vw}.running-head,.page footer{left:8vw;right:8vw}.cover-meta{position:static;margin-top:25mm;grid-template-columns:1fr}.cover{min-height:100vh}.annex-index{grid-template-columns:1fr}}
+</style>
+</head>
+<body><article class="page cover">
+    <header class="running-head"><span>OmniFood NI</span><span>OE-001OM</span></header>
+    <main><div class="brand" aria-label="OmniFood NI"><span class="monogram" aria-hidden="true"><i></i></span><span><b>OmniFood</b><small>NI</small></span></div><div class="cover-rule"></div><p class="eyebrow">Propuesta técnico-económica</p><h1>Operación confiable,<br>incluso sin internet.</h1><p class="cover-client">Preparada para <strong>SOHO</strong></p><div class="editable-meta"><p><strong>Proveedor:</strong> OmniFood NI<br> <strong>Cliente:</strong> SOHO<br> <strong>Referencia:</strong> OE-001OM<br> <strong>Fecha de emisión:</strong> [dd/mm/aaaa]<br> <strong>Vigencia de la propuesta:</strong> [número] días</p></div><div class="cover-meta"><div><span>Referencia</span><strong>OE-001OM</strong></div><div><span>Entrega, pruebas y capacitación</span><strong>sábado, 5 de septiembre de 2026</strong></div></div></main>
+    <footer><span>Propuesta técnico-económica</span><span>Página 1 de 12</span></footer>
+  </article>
+<article class="page ">
+    <header class="running-head"><span>OmniFood NI</span><span>OE-001OM</span></header>
+    <main><p class="eyebrow">Decisión comercial</p><h1>Una base clara para iniciar.</h1><p>OmniFood NI ofrece a SOHO una implementación fundadora por <strong>US$200</strong> y el plan <strong>OmniFood Operación por US$79 mensuales</strong>. El servicio cubre una ubicación y un terminal Sunmi V2s propiedad de SOHO. El portal para propietarios está incluido y será entregado junto con la aplicación, disponible en la puesta en marcha formal aceptada.</p><p>El precio fundador de US$79 se mantiene durante <strong>24 meses</strong> desde el go-live aceptado, siempre que SOHO permanezca en una ubicación y un terminal y conserve sus pagos al día. Al finalizar ese plazo, se aplicará el precio público vigente con aviso previo de 60 días.</p><p>No hay mes piloto gratuito. La facturación mensual inicia en la fecha del go-live aceptado.</p>
+  <section class="content-section investment">
+    <h2>Alcance económico</h2>
+    <div class="table-wrap"><table><thead><tr><th>Concepto</th><th>Precio</th><th>Frecuencia</th></tr></thead><tbody><tr><td>Implementación inicial</td><td>US$200</td><td>Una vez</td></tr><tr><td>OmniFood Operación — plan fundador</td><td>US$79</td><td>Mensual desde el go-live aceptado</td></tr></tbody></table></div>
+<p><strong>Acuerdo de cobro en etapa fundadora:</strong> SOHO acepta documentar los pagos mediante recibos simples no fiscales, sin desglose de IVA, y reconoce que en esta etapa no solicita una factura fiscal. Cada parte continúa siendo responsable de sus propias obligaciones legales y tributarias. Este acuerdo comercial no constituye ni demuestra una exención fiscal. Si en el futuro resultan legalmente aplicables impuestos, retenciones o documentación fiscal, las condiciones de cobro y documentación se ajustarán para cumplirlos y preservar el precio neto del servicio de <strong>US$79 mensuales</strong> para OmniFood NI; toda retención practicada deberá acompañarse del comprobante correspondiente.</p>
+  </section></main>
+    <footer><span>Resumen ejecutivo e inversión</span><span>Página 2 de 12</span></footer>
+  </article>
+<article class="page ">
+    <header class="running-head"><span>OmniFood NI</span><span>OE-001OM</span></header>
+    <main>
+  <section class="content-section compact-section">
+    <h2>Sesión programada de entrega y aceptación</h2>
+    <p>El sábado, 5 de septiembre de 2026, las partes realizarán:</p>
+<ol><li>pruebas físicas del Sunmi V2s conforme al checklist;</li><li>instalación y entrega del terminal con la aplicación POS;</li><li>capacitación inicial a los responsables designados por SOHO;</li><li>verificación del acceso al portal para propietarios;</li><li>verificación de la configuración de respaldos; y</li><li>registro conjunto de aceptación o de asuntos pendientes.</li></ol>
+<p>La sesión se convertirá en go-live aceptado únicamente si los criterios contractuales y el checklist se cumplen y ambas partes registran su aceptación. La mensualidad comenzará el 5 de septiembre de 2026 solo en ese caso. Si existe algún pendiente crítico, se documentarán el asunto, responsable y seguimiento correctivo, y la aceptación y facturación mensual se aplazarán hasta su cierre.</p>
+  </section>
+
+  <section class="content-section compact-section">
+    <h2>Entregables incluidos al go-live</h2>
+    <ul><li>Aplicación POS configurada para una ubicación y un Sunmi V2s.</li><li>Operación local de ventas en un solo dispositivo cuando no haya internet.</li><li>Tipo de cambio oficial y comercial.</li><li>Catálogo inicial acordado, inventario, recetas con consumo de ingredientes, costo de los productos vendidos, margen bruto y mermas.</li><li>Funciones implementadas y configuradas según el alcance acordado: códigos temporales de un solo uso para autorizaciones de supervisor, auditoría, promociones, lealtad, producción y cuentas divididas.</li><li>Sincronización y reportes en la nube cuando exista conectividad.</li><li>Portal para propietarios, de consulta y disponible en el go-live aceptado.</li><li>Capacitación inicial breve para los usuarios responsables designados por SOHO.</li><li>Respaldos y procedimiento de recuperación descritos en el anexo de soporte y respaldos.</li><li>Mantenimiento del producto mediante parches correctivos y de seguridad, además de actualizaciones generales de la plataforma.</li><li>Soporte limitado al diagnóstico, contención y corrección de defectos reproducibles, incidentes de sincronización o infraestructura bajo control de OmniFood e incidentes de integridad o seguridad; incluye orientación de recuperación específica para el incidente atendido.</li></ul>
+  </section></main>
+    <footer><span>Entrega y alcance</span><span>Página 3 de 12</span></footer>
+  </article>
+<article class="page ">
+    <header class="running-head"><span>OmniFood NI</span><span>OE-001OM</span></header>
+    <main>
+  <section class="content-section compact-section">
+    <h2>Hardware</h2>
+    <p>SOHO aporta y mantiene la propiedad de <strong>un Sunmi V2s</strong>. La compra, garantía, mantenimiento, reparación y sustitución del equipo no están incluidas. OmniFood puede recomendar proveedores sin asumir las obligaciones del fabricante o vendedor.</p>
+<p>La entrega queda sujeta a un checklist físico de aceptación del Sunmi V2s que confirme, como mínimo, encendido, pantalla, batería/carga, conectividad disponible e impresión integrada.</p>
+  </section>
+
+  <section class="content-section compact-section">
+    <h2>Exclusiones</h2>
+    <ul><li>Compra, alquiler, garantía, reparación o reemplazo de hardware.</li><li>Continuidad durante cortes de energía eléctrica o fallas físicas del equipo.</li><li>Instalación o soporte de internet y redes del cliente.</li><li>Operación de varios dispositivos conectados en la red local del negocio, pantallas digitales de cocina o licencias para terminales adicionales.</li><li>Compatibilidad universal con equipos Windows/Linux o periféricos no aceptados.</li><li>Facturación electrónica DGI mediante archivos electrónicos estructurados y firma digital, certificación bancaria o integración certificada con datáfonos.</li><li>Módulo automatizado de vigilancia fiscal (“Fiscal Sentinel”) completo, incluidas alertas al 90%, control de expiración u otras automatizaciones no aceptadas expresamente.</li><li>Desarrollo personalizado, migraciones extraordinarias, carga adicional de datos y capacitación fuera del alcance inicial.</li><li>Asistencia de operación cotidiana del negocio; puede contratarse según el anexo.</li></ul>
+  </section></main>
+    <footer><span>Condiciones y exclusiones</span><span>Página 4 de 12</span></footer>
+  </article>
+<article class="page ">
+    <header class="running-head"><span>OmniFood NI</span><span>OE-001OM</span></header>
+    <main>
+  <section class="content-section compact-section">
+    <h2>Aceptación y puesta en marcha</h2>
+    <p>El go-live se considera aceptado cuando ambas partes registren por escrito que:</p>
+<ol><li>el Sunmi V2s superó el checklist físico;</li><li>el POS ejecuta en un solo dispositivo los flujos de venta acordados, incluidos registro local sin internet y sincronización posterior al restablecer la conectividad;</li><li>catálogo, usuarios y configuración inicial acordados están cargados;</li><li>SOHO recibió la capacitación inicial;</li><li>el portal para propietarios está disponible para los usuarios acordados;</li><li>los respaldos de salida están configurados y se documentó el procedimiento de recuperación; y</li><li>se registraron las observaciones aceptadas o pendientes, sus responsables y fechas.</li></ol>
+<p>La indisponibilidad de internet no impide el uso local del POS, pero sí puede retrasar la sincronización y la actualización del portal. La operación con datos locales aún no sincronizados queda fuera del objetivo de recuperación de nube.</p>
+  </section>
+
+  <section class="content-section compact-section">
+    <h2>Soporte y condiciones complementarias</h2>
+    <p>El <strong>Anexo de soporte, respaldos y recuperación</strong> forma parte integral de esta propuesta y define soporte incluido, asistencia facturable, respaldos, objetivos de recuperación, comunicaciones y exclusiones.</p>
+  </section></main>
+    <footer><span>Puesta en marcha y soporte</span><span>Página 5 de 12</span></footer>
+  </article>
+<article class="page annex-cover">
+    <header class="running-head"><span>OmniFood NI</span><span>OE-001OM</span></header>
+    <main><div class="brand" aria-label="OmniFood NI"><span class="monogram" aria-hidden="true"><i></i></span><span><b>OmniFood</b><small>NI</small></span></div><p class="eyebrow">Anexo contractual · Versión 1.0</p><h1>Soporte, respaldos<br>y recuperación.</h1><p><strong>Propuesta de referencia:</strong> OE-001OM<br> <strong>Cliente:</strong> SOHO<br> <strong>Versión:</strong> 1.0<br> <strong>Fecha:</strong> [dd/mm/aaaa]</p><div class="annex-index"><span>1. Mantenimiento del producto incluido</span><span>2. Soporte de plataforma incluido</span><span>3. Asistencia facturable</span><span>4. Capas de respaldo incluidas al go-live</span><span>5. Archivo fiscal de largo plazo</span><span>6. Objetivos seguros de recuperación</span><span>7. Comunicación de incidentes</span><span>8. Exclusiones y responsabilidades del cliente</span></div></main>
+    <footer><span>Anexo de soporte y respaldos</span><span>Página 6 de 12</span></footer>
+  </article>
+<article class="page ">
+    <header class="running-head"><span>OmniFood NI</span><span>OE-001OM</span></header>
+    <main>
+  <section class="content-section compact-section">
+    <h2>1. Mantenimiento del producto incluido</h2>
+    <p>La suscripción OmniFood Operación incluye parches correctivos y de seguridad, además de actualizaciones generales de la plataforma. Este mantenimiento no comprende desarrollo personalizado, consultoría ni adaptación de procesos del negocio.</p>
+  </section>
+
+  <section class="content-section compact-section">
+    <h2>2. Soporte de plataforma incluido</h2>
+    <p>El soporte incluido se limita al diagnóstico, contención y corrección de:</p>
+<ul><li>defectos reproducibles del producto;</li><li>incidentes de sincronización o infraestructura bajo control de OmniFood;</li><li>incidentes de integridad o seguridad relacionados con la plataforma; y</li><li>orientación de recuperación específica para el incidente atendido.</li></ul>
+<p>No incluye orientación general ilimitada, consultoría, capacitación, digitación, operación del negocio ni administración de equipos del cliente.</p>
+  </section>
+
+  <section class="content-section compact-section">
+    <h2>3. Asistencia facturable</h2>
+    <div class="table-wrap"><table><thead><tr><th>Modalidad</th><th>Precio</th><th>Condiciones</th></tr></thead><tbody><tr><td>Remota</td><td>US$40/hora</td><td>Sin mínimo de horas</td></tr><tr><td>Presencial</td><td>US$50/hora</td><td>Mínimo de dos horas, más transporte previamente informado</td></tr><tr><td>OmniFood Care</td><td>US$99/mes</td><td>Dos horas remotas por mes, no acumulables, y agenda prioritaria</td></tr><tr><td>Horas adicionales con Care</td><td>US$40/hora</td><td>Requieren autorización del cliente</td></tr></tbody></table></div>
+<p>OmniFood Care es opcional y adicional a OmniFood Operación; no sustituye la suscripción. Su tratamiento tributario y cualquier retención legal se regirán por la cláusula fiscal de la propuesta y deberán confirmarse antes de la firma.</p>
+  </section></main>
+    <footer><span>Anexo · Mantenimiento y asistencia</span><span>Página 7 de 12</span></footer>
+  </article>
+<article class="page ">
+    <header class="running-head"><span>OmniFood NI</span><span>OE-001OM</span></header>
+    <main>
+  <section class="content-section compact-section">
+    <h2>4. Capas de respaldo incluidas al go-live</h2>
+    <ol><li><strong>Railway nativo:</strong> programación diaria, semanal y mensual sobre el volumen de PostgreSQL.</li><li><strong>Copia externa:</strong> dump lógico diario de PostgreSQL, cifrado del lado del cliente antes de salir, almacenado en un bucket privado de Cloudflare R2.</li><li><strong>Verificación:</strong> SHA-256 y manifiesto para comprobar la copia y sus metadatos.</li><li><strong>Restauración:</strong> prueba mensual en un entorno aislado, sin reemplazar automáticamente producción.</li></ol>
+<p>Retención nativa de Railway: diaria por 6 días, semanal por 1 mes y mensual por 3 meses. La base recomendada para R2 es conservar 35 copias diarias y 12 cierres mensuales. Esta recomendación queda sujeta a confirmación legal y contable de la retención fiscal obligatoria.</p>
+<p>Estas copias no se ofrecen como inmutables ni como certificadas para cumplimiento regulatorio.</p>
+  </section></main>
+    <footer><span>Anexo · Capas de respaldo</span><span>Página 8 de 12</span></footer>
+  </article>
+<article class="page ">
+    <header class="running-head"><span>OmniFood NI</span><span>OE-001OM</span></header>
+    <main>
+  <section class="content-section compact-section">
+    <h2>5. Archivo fiscal de largo plazo</h2>
+    <p>Además de los respaldos operativos, OmniFood proporcionará el mecanismo técnico contratado para generar un paquete anual de cierre y exportación que contenga:</p>
+<ul><li>facturas, anulaciones y notas de crédito;</li><li>evidencia de secuencia y auditoría; y</li><li>manifiestos requeridos para identificar y verificar el paquete.</li></ul>
+<p>El paquete anual se conservará durante <strong>10 años</strong> como línea base técnica conservadora, sujeta a validación legal y contable del cliente. Este plazo se aplica al archivo anual, no a cada copia operativa diaria: las copias diarias de Railway y R2 mantienen las ventanas definidas en la sección anterior y no se conservan todas durante 10 años.</p>
+<p><strong>Retención por procedimiento abierto:</strong> ante una auditoría, reclamación, recurso, apelación u otro procedimiento abierto, se suspenderá la eliminación programada de los archivos relacionados hasta recibir autorización documentada para reanudarla.</p>
+<p>SOHO conserva la responsabilidad legal de determinar y cumplir los plazos, formatos y documentos que le correspondan. OmniFood proporciona los mecanismos técnicos contratados, pero no sustituye la validación legal, fiscal o contable del cliente. El archivo no se presenta como inmutable ni certificado para cumplimiento regulatorio.</p>
+  </section></main>
+    <footer><span>Anexo · Archivo fiscal</span><span>Página 9 de 12</span></footer>
+  </article>
+<article class="page ">
+    <header class="running-head"><span>OmniFood NI</span><span>OE-001OM</span></header>
+    <main>
+  <section class="content-section compact-section">
+    <h2>6. Objetivos seguros de recuperación</h2>
+    <ul><li><strong>RPO objetivo:</strong> hasta 24 horas para información que ya fue sincronizada a la nube.</li><li><strong>Exclusión del RPO de nube:</strong> ventas u otros datos que permanezcan únicamente en el POS local y todavía no se hayan sincronizado.</li><li><strong>RTO objetivo durante el piloto:</strong> un día hábil desde que existe acceso, información y condiciones técnicas suficientes para iniciar la recuperación.</li></ul>
+<p>Son objetivos operativos, no un SLA ni una garantía. Solo podrán revisarse como compromiso formal después de al menos tres simulacros consecutivos de restauración satisfactorios y documentados.</p>
+  </section>
+
+  <section class="content-section compact-section">
+    <h2>7. Comunicación de incidentes</h2>
+    <p>SOHO reportará el incidente por el canal acordado con hora, usuario afectado, pasos observados, mensajes de error y evidencia disponible, evitando compartir contraseñas o códigos de acceso.</p>
+<p>OmniFood comunicará:</p>
+<ol><li>acuse de recibo y alcance inicial cuando sea posible;</li><li>estado de investigación y medidas temporales relevantes;</li><li>confirmación de recuperación o siguiente acción; y</li><li>cierre resumido cuando el incidente afecte integridad, sincronización, seguridad o disponibilidad de plataforma.</li></ol>
+<p>La agenda prioritaria de OmniFood Care ordena la atención, pero no constituye un tiempo de respuesta garantizado.</p>
+  </section></main>
+    <footer><span>Anexo · Recuperación e incidentes</span><span>Página 10 de 12</span></footer>
+  </article>
+<article class="page ">
+    <header class="running-head"><span>OmniFood NI</span><span>OE-001OM</span></header>
+    <main>
+  <section class="content-section compact-section">
+    <h2>8. Exclusiones y responsabilidades del cliente</h2>
+    <p>Quedan fuera del soporte incluido:</p>
+<ul><li>fallas, garantía, reparación o sustitución del Sunmi V2s y otros equipos;</li><li>cortes eléctricos, baterías agotadas, daño físico o condiciones ambientales;</li><li>servicio de internet, router, cableado o red administrada por SOHO;</li><li>errores de terceros, bancos, proveedores o servicios fuera del control de OmniFood;</li><li>recuperación de información local que nunca se sincronizó ni estuvo disponible en una copia;</li><li>cambios de catálogo, digitación, capacitación adicional, personalizaciones o integraciones no contratadas;</li><li>uso indebido, credenciales compartidas o incumplimiento del procedimiento de seguridad; y</li><li>obligaciones legales, fiscales o contables propias del cliente.</li></ul>
+<p>SOHO debe conservar acceso físico y administrativo al equipo, proteger sus credenciales, reportar incidentes oportunamente y permitir las ventanas acordadas de diagnóstico o restauración.</p>
+  </section></main>
+    <footer><span>Anexo · Responsabilidades y exclusiones</span><span>Página 11 de 12</span></footer>
+  </article>
+<article class="page acceptance">
+    <header class="running-head"><span>OmniFood NI</span><span>OE-001OM</span></header>
+    <main><p class="eyebrow">Cierre contractual</p><h1>Aceptación bilateral</h1><p>Al firmar, las partes confirman también que el Anexo de soporte, respaldos y recuperación complementa la propuesta <strong>OE-001OM</strong> y que sus objetivos de recuperación son objetivos operativos, no garantías, SLA ni certificaciones.</p><div class="signature-grid"><section class="signature-block">
+      <h2>Por SOHO</h2>
+      <div class="signature-field "><span>Nombre</span><i aria-hidden="true"></i></div>
+<div class="signature-field "><span>Cargo</span><i aria-hidden="true"></i></div>
+<div class="signature-field signature-line"><span>Firma</span><i aria-hidden="true"></i></div>
+<div class="signature-field "><span>Fecha</span><i aria-hidden="true"></i></div>
+    </section>
+<section class="signature-block">
+      <h2>Por OmniFood NI</h2>
+      <div class="signature-field "><span>Nombre</span><i aria-hidden="true"></i></div>
+<div class="signature-field "><span>Cargo</span><i aria-hidden="true"></i></div>
+<div class="signature-field signature-line"><span>Firma</span><i aria-hidden="true"></i></div>
+<div class="signature-field "><span>Fecha</span><i aria-hidden="true"></i></div>
+    </section></div><p>Contacto: +505 8194 8526</p></main>
+    <footer><span>Aceptación bilateral</span><span>Página 12 de 12</span></footer>
+  </article></body>
+</html>

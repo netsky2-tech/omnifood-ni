@@ -17,6 +17,12 @@
 # Node.js
 **/node_modules/
 **/dist/
+# Keep finalized customer proposals as explicit repository deliverables.
+!/dist/
+/dist/*
+!/dist/proposals/
+/dist/proposals/*
+!/dist/proposals/OE-001OM-propuesta-SOHO.pdf
 **/npm-debug.log*
 **/.env
 **/coverage/
