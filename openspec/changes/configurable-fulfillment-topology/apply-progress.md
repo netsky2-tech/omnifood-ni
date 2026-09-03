@@ -48,3 +48,22 @@
 **Native correction evidence revision**: `sha256:8e52e779448b2b5da4448fabc7066292cb94aaad0297d9b7904c2e4250bee11b`.
 **Native settle**: complete, remediating failed revision `sha256:4ee8dec9c064627c18d75231ee38915721b871e114e3a59da9cae308782e9faf`.
 **Final normalized ordinary-delivery evidence revision**: `sha256:dc249544cf0ca159f0c6c67b4559902eb40df8247f3704a1bb27e28991462f82`.
+
+## 3.1a Progress — Real-PostgreSQL GREEN Complete
+
+- Added the additive `tenant_topology_revisions` migration, TypeORM entity, immutable database trigger, and a tenant-scoped revision service. The service represents no stored revision as `{ provisioned: false, revision: 0 }`, serializes create operations with a transaction-scoped advisory lock, and raises `TopologyRevisionConflictError` for a stale `baseRevision` (for later HTTP 409 mapping).
+- Added a real-PostgreSQL-focused DB test that exercises first creation, next revision, stale-base rejection, persisted snapshot preservation, and SQL-level mutation rejection. It does not infer any topology fields or provision existing/new tenants automatically.
+- Blank/whitespace `tenantId` is rejected before `createQueryRunner`/transaction creation. No controller, DTO, permission, RLS, audit, onboarding, POS/DGI, defaults, or checkbox changes were made. Overall task `3.1` remains unchecked by explicit slice instruction.
+
+| TDD stage | Evidence |
+|---|---|
+| RED | With explicit Docker PostgreSQL credentials, the new whitespace-ID test resolved `{ provisioned: false, revision: 0 }` instead of rejecting (focused test failed). |
+| GREEN | Added pre-transaction tenant validation; focused `test:db` passed 1/1 against a temporary `postgres:16-alpine` container on an isolated non-default loopback port; container removed. |
+| TRIANGULATE | Passed empty base, revisions 1/2, stale base, same-base concurrent writers (exactly one success/one `TopologyRevisionConflictError`), immutable history, and blank ID/no transaction. |
+| REFACTOR | Prettier check and ESLint check passed; no further refactor. |
+
+**Implementation/test files changed**: `apps/admin_backend/src/migrations/1794000000000-CreateTenantTopologyRevisions.ts`; `apps/admin_backend/src/modules/fulfillment/{domain/topology-revision-conflict.error.ts,entities/tenant-topology-revision.entity.ts,services/tenant-topology-revision.service.ts,services/tenant-topology-revision.service.db.spec.ts}`. This progress artifact was updated with the evidence above.
+
+**Workload / PR boundary**: 3.1a only, chained feature-branch slice; no generated artifacts. Rollback boundary: revert only the listed migration and fulfillment files.
+
+**Verification**: `corepack pnpm --filter admin_backend build` and `git diff --check` passed. **Status consumed**: authoritative `both`/OpenSpec status; `actionContext` allowed the dedicated worktree roots. Remaining tasks: `- [ ] 3.1 RED: immutable revision, base conflict \`409\`, legacy compatibility, RLS isolation, append-only audit, and cross-tenant rejection; GREEN add fulfillment DTOs/controllers/services, TypeORM migrations/entities, permissions and policies; generate/review TypeORM artifacts here; REFACTOR pipes.`
