@@ -22,6 +22,7 @@ import { AuditLog } from '../../src/modules/identity/entities/audit-log.entity';
 import { AuditIntegrityAlert } from '../../src/modules/identity/entities/audit-integrity-alert.entity';
 import { SecurityProfile } from '../../src/modules/identity/entities/security-profile.entity';
 import { signIdentityJwtAccessToken } from '../support/identity-jwt-test.fixture';
+import { ensurePublicAuthTables } from '../support/fulfillment-test-db.helper';
 
 describe('FulfillmentTopology (e2e - Real PostgreSQL)', () => {
   let app: INestApplication<App>;
@@ -67,6 +68,8 @@ describe('FulfillmentTopology (e2e - Real PostgreSQL)', () => {
     const m2 = new AddTenantTopologyRevisionsRls1794000000001();
     await m1.up(runner);
     await m2.up(runner);
+
+    await ensurePublicAuthTables(runner);
 
     // Seed tenants and users in public tables for auth & AuthoritativeCurrentUserGuard
     await runner.query(

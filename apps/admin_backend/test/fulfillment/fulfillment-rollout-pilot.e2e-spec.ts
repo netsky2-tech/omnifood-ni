@@ -44,6 +44,7 @@ import { InvoiceItemModifier } from '../../src/modules/sales/entities/invoice-it
 import { TenantTopologyRevision } from '../../src/modules/fulfillment/entities/tenant-topology-revision.entity';
 import { TenantFulfillmentRecord } from '../../src/modules/fulfillment/entities/tenant-fulfillment-record.entity';
 import { signIdentityJwtAccessToken } from '../support/identity-jwt-test.fixture';
+import { ensurePublicAuthTables } from '../support/fulfillment-test-db.helper';
 import { SyncBatchRecordDto } from '../../src/modules/sales/dto/sync-batch.dto';
 import {
   BackfillScanResult,
@@ -168,6 +169,8 @@ describe('FulfillmentRolloutPilot (e2e - Real PostgreSQL, Zero Mocks)', () => {
 
     const tenantAName = `Tenant A Pilot ${randomUUID().substring(0, 8)}`;
     const tenantBName = `Tenant B Pilot ${randomUUID().substring(0, 8)}`;
+
+    await ensurePublicAuthTables(runner);
 
     await runner.query(
       `INSERT INTO tenants (id, name, created_at, updated_at) VALUES
