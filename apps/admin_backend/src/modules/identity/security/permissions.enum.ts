@@ -9,6 +9,14 @@ export enum AppPermission {
   CASH_REOPEN_SHIFT = 'cash:reopen_shift',
   INVENTORY_RECIPE_EDIT = 'inventory:recipe_edit',
   REPORTS_VIEW_FISCAL = 'reports:view_fiscal',
+  LOYALTY_PROGRAM_READ = 'loyalty:program_read',
+  LOYALTY_PROGRAM_WRITE = 'loyalty:program_write',
+  LOYALTY_REWARD_READ = 'loyalty:reward_read',
+  LOYALTY_REWARD_WRITE = 'loyalty:reward_write',
+  LOYALTY_CUSTOMER_READ = 'loyalty:customer_read',
+  LOYALTY_HISTORY_READ = 'loyalty:history_read',
+  LOYALTY_ADJUST = 'loyalty:adjust',
+  LOYALTY_REDEEM = 'loyalty:redeem',
 }
 
 export type Permission = `${AppPermission}` | AppPermission;
@@ -22,6 +30,14 @@ export const APP_PERMISSIONS = {
   CASH_REOPEN_SHIFT: AppPermission.CASH_REOPEN_SHIFT,
   INVENTORY_RECIPE_EDIT: AppPermission.INVENTORY_RECIPE_EDIT,
   REPORTS_VIEW_FISCAL: AppPermission.REPORTS_VIEW_FISCAL,
+  LOYALTY_PROGRAM_READ: AppPermission.LOYALTY_PROGRAM_READ,
+  LOYALTY_PROGRAM_WRITE: AppPermission.LOYALTY_PROGRAM_WRITE,
+  LOYALTY_REWARD_READ: AppPermission.LOYALTY_REWARD_READ,
+  LOYALTY_REWARD_WRITE: AppPermission.LOYALTY_REWARD_WRITE,
+  LOYALTY_CUSTOMER_READ: AppPermission.LOYALTY_CUSTOMER_READ,
+  LOYALTY_HISTORY_READ: AppPermission.LOYALTY_HISTORY_READ,
+  LOYALTY_ADJUST: AppPermission.LOYALTY_ADJUST,
+  LOYALTY_REDEEM: AppPermission.LOYALTY_REDEEM,
 } as const;
 
 export const ALL_APP_PERMISSIONS = Object.values(AppPermission);
@@ -41,6 +57,14 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
     AppPermission.CASH_REOPEN_SHIFT,
     AppPermission.INVENTORY_RECIPE_EDIT,
     AppPermission.REPORTS_VIEW_FISCAL,
+    AppPermission.LOYALTY_PROGRAM_READ,
+    AppPermission.LOYALTY_PROGRAM_WRITE,
+    AppPermission.LOYALTY_REWARD_READ,
+    AppPermission.LOYALTY_REWARD_WRITE,
+    AppPermission.LOYALTY_CUSTOMER_READ,
+    AppPermission.LOYALTY_HISTORY_READ,
+    AppPermission.LOYALTY_ADJUST,
+    AppPermission.LOYALTY_REDEEM,
   ],
   [UserRole.MANAGER]: [
     AppPermission.SALES_VOID_INVOICE,
@@ -50,6 +74,10 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
     AppPermission.CASH_MANUAL_DRAWER_OPEN,
     AppPermission.CASH_REOPEN_SHIFT,
     AppPermission.REPORTS_VIEW_FISCAL,
+    AppPermission.LOYALTY_PROGRAM_READ,
+    AppPermission.LOYALTY_REWARD_READ,
+    AppPermission.LOYALTY_CUSTOMER_READ,
+    AppPermission.LOYALTY_HISTORY_READ,
   ],
   [UserRole.CASHIER]: [],
   [UserRole.WAITER]: [],

@@ -12,6 +12,10 @@ import { OnboardingModule } from '../../modules/onboarding/onboarding.module';
 import { CustomersModule } from '../../modules/customers/customers.module';
 import { Customer } from '../../modules/customers/entities/customer.entity';
 import { CustomerPointTransaction } from '../../modules/customers/entities/customer-point-transaction.entity';
+import { LoyaltyModule } from '../../modules/loyalty/loyalty.module';
+import { LoyaltyProgram } from '../../modules/loyalty/entities/loyalty-program.entity';
+import { RewardDefinition } from '../../modules/loyalty/entities/reward-definition.entity';
+import { CustomerLoyaltyAccountProjection } from '../../modules/loyalty/entities/customer-loyalty-account-projection.entity';
 import { AuditModule } from '../../modules/audit/audit.module';
 import { ChangeLog } from '../../modules/audit/entities/change-log.entity';
 import { PromotionsModule } from '../../modules/promotions/promotions.module';
@@ -122,6 +126,9 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
     CloudPromotion,
     CustomerPointTransaction,
     ChangeLog,
+    LoyaltyProgram,
+    RewardDefinition,
+    CustomerLoyaltyAccountProjection,
   ],
   synchronize: false,
 });
@@ -146,6 +153,7 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
     NotificationsModule,
     OnboardingModule,
     CustomersModule,
+    LoyaltyModule,
     PromotionsModule,
     AuditModule,
   ],
