@@ -49,8 +49,8 @@ Chain strategy: feature-branch-chain
 
 ## Phase 4: Execution and Recovery (PR #4)
 
-- [ ] 4.1 RED: PRINT_ONLY/KDS_ONLY/KDS_AND_PRINT, active-query suppression, delivery independence; GREEN wire `kitchen_order_*`, KDS/history UI and `sync_service.dart`; REFACTOR legacy read adapter.
-- [ ] 4.2 RED beside GREEN: durable attempts, receipt-before-ticket, safe retry, uncertainty resolution, authorized copy audit, 90-day purge excluding invoices/Kardex; update `printer_port.dart` and UI; REFACTOR metrics/alerts.
+- [x] 4.1 RED: PRINT_ONLY/KDS_ONLY/KDS_AND_PRINT, active-query suppression, delivery independence; GREEN wire `kitchen_order_*`, KDS/history UI and `sync_service.dart`; REFACTOR legacy read adapter.
+- [x] 4.2 RED beside GREEN: durable attempts, receipt-before-ticket, safe retry, uncertainty resolution, authorized copy audit, 90-day purge excluding invoices/Kardex; update `printer_port.dart` and UI; REFACTOR metrics/alerts.
 
 ## Phase 5: Rollout Proof (PR #5)
 
