@@ -49,6 +49,7 @@ class SaleViewModel extends ChangeNotifier {
   final PrinterPort _printerPort;
   final PromotionsEngine _promotionsEngine;
   final LoyaltyService _loyaltyService;
+  final bool _hasCustomPrinterPort;
   SyncService? _syncService;
   StreamSubscription<InboundSyncResult>? _syncSubscription;
   Timer? _syncDebounceTimer;
@@ -74,6 +75,7 @@ class SaleViewModel extends ChangeNotifier {
             kitchenOrderService ?? KitchenOrderService(_database),
         _printerConfigService =
             printerConfigService ?? PrinterConfigService(_database.localConfigDao),
+        _hasCustomPrinterPort = printerPort != null,
         _printerPort =
             printerPort ?? PrinterResolver.resolve(const PrinterConfig()),
         _promotionsEngine = promotionsEngine ?? const PromotionsEngine(),
@@ -834,10 +836,12 @@ class SaleViewModel extends ChangeNotifier {
 
       // Fire-and-forget: trigger cloud sync after 3s debounce
       // (batches rapid consecutive sales into one sync pass)
-      _syncDebounceTimer?.cancel();
-      _syncDebounceTimer = Timer(const Duration(seconds: 3), () {
-        _syncService?.triggerManualSync();
-      });
+      if (_syncService != null) {
+        _syncDebounceTimer?.cancel();
+        _syncDebounceTimer = Timer(const Duration(seconds: 3), () {
+          _syncService?.triggerManualSync();
+        });
+      }
 
       // Process Customer Loyalty Points (Redemption & Accumulation)
       if (_selectedCustomer != null) {
@@ -934,7 +938,9 @@ class SaleViewModel extends ChangeNotifier {
         final printerConfig = await _printerConfigService.getPrinterConfig();
         final hasCashPayment = payments.any((p) => p.method == PaymentMethod.cash);
 
-        final activePrinterPort = PrinterResolver.resolve(printerConfig);
+        final activePrinterPort = _hasCustomPrinterPort
+            ? _printerPort
+            : PrinterResolver.resolve(printerConfig);
 
         if (printerConfig.openDrawerOnCash && hasCashPayment) {
           await activePrinterPort.openCashDrawer();
@@ -1071,7 +1077,9 @@ class SaleViewModel extends ChangeNotifier {
         } catch (_) {}
       }
 
-      final activePrinterPort = PrinterResolver.resolve(config);
+      final activePrinterPort = _hasCustomPrinterPort
+          ? _printerPort
+          : PrinterResolver.resolve(config);
 
       final res = await activePrinterPort.printInvoice(
         _lastProcessedInvoice!,

@@ -23,6 +23,7 @@ import { UserRole } from '../../src/modules/identity/entities/user.entity';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
 import { JWT_TOKEN_TYPES } from '../../src/modules/identity/security/jwt-token.types';
+import { createIdentityJwtConfigProvider } from '../support/identity-jwt-test.fixture';
 
 const API_PREFIX = '/api/onboarding/import';
 
@@ -73,7 +74,8 @@ describe('ImportStaging (Integration & E2E)', () => {
         options?: FindManyOptions<ImportStaging | Product>,
       ) => {
         const where = options?.where as
-          { tenant_id?: string; token_sesion_importacion?: string } | undefined;
+          | { tenant_id?: string; token_sesion_importacion?: string }
+          | undefined;
         if (entityClass === ImportStaging) {
           return Promise.resolve(
             dbStaging.filter(
@@ -96,7 +98,8 @@ describe('ImportStaging (Integration & E2E)', () => {
     findOne: jest.fn(
       (entityClass: unknown, options?: FindOneOptions<Product>) => {
         const where = options?.where as
-          { tenant_id?: string; id?: string } | undefined;
+          | { tenant_id?: string; id?: string }
+          | undefined;
         if (entityClass === Product) {
           return Promise.resolve(
             dbProducts.find(
@@ -191,6 +194,7 @@ describe('ImportStaging (Integration & E2E)', () => {
         RolesGuard,
         Reflector,
         JwtService,
+        createIdentityJwtConfigProvider(),
       ],
     }).compile();
 

@@ -20,6 +20,7 @@ import { InventoryService } from '../../src/modules/inventory/inventory.service'
 import { RecipeService } from '../../src/modules/inventory/recipe.service';
 import { ShrinkageService } from '../../src/modules/inventory/shrinkage.service';
 import { ProductionService } from '../../src/modules/inventory/production.service';
+import { InventoryReportsService } from '../../src/modules/inventory/services/inventory-reports.service';
 import { TenantInterceptor } from '../../src/core/database/rls.interceptor';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { AuthoritativeCurrentUserGuard } from '../../src/modules/identity/guards/authoritative-current-user.guard';
@@ -177,6 +178,10 @@ describe('Count session route (integration)', () => {
         {
           provide: ProductionService,
           useValue: { replayProductionClose: jest.fn() },
+        },
+        {
+          provide: InventoryReportsService,
+          useValue: { getAlertsSummaryReport: jest.fn() },
         },
         {
           provide: TenantInterceptor,

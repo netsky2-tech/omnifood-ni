@@ -22,8 +22,10 @@ import 'package:pos_app/domain/services/sales/dgi_numbering_service.dart';
 import 'package:pos_app/data/models/sales/invoice_entity.dart';
 import 'package:pos_app/data/models/sales/invoice_item_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
+import 'package:pos_app/data/models/fulfillment/fulfillment_persistence_entities.dart';
 import 'package:pos_app/data/mappers/audit_mapper.dart';
 import 'package:pos_app/domain/models/user.dart';
+import 'package:pos_app/domain/models/fulfillment/fulfillment_checkout_context.dart';
 
 class SalesRepositoryImpl implements SalesRepository {
   final AppDatabase database;
@@ -37,6 +39,8 @@ class SalesRepositoryImpl implements SalesRepository {
   final ProcessSaleInventoryUseCase processInventoryUseCase;
   final ReverseSaleInventoryUseCase reverseInventoryUseCase;
   final InventoryRepository inventoryRepository;
+  final void Function(FulfillmentCheckoutContext)?
+  onFulfillmentCheckoutContextReady;
 
   SalesRepositoryImpl({
     required this.database,
@@ -50,6 +54,7 @@ class SalesRepositoryImpl implements SalesRepository {
     required this.processInventoryUseCase,
     required this.reverseInventoryUseCase,
     required this.inventoryRepository,
+    this.onFulfillmentCheckoutContextReady,
   });
 
   @override
@@ -57,16 +62,23 @@ class SalesRepositoryImpl implements SalesRepository {
     required Invoice invoice,
     required List<InvoiceItem> items,
     required List<Payment> payments,
+    FulfillmentCheckoutContext? fulfillmentContext,
   }) async {
+    if (fulfillmentContext != null) {
+      await _validateFulfillmentContext(fulfillmentContext);
+    }
     if (await numberingService.isRangeExhausted()) {
       throw Exception('DGI Authorized Numbering Range exhausted.');
     }
 
     final finalNumber = await numberingService.getNextNumber();
-    final terminalId = 'pos-${invoice.userId}';
-    final sourceSequence = (await transactionDao.getNextInvoiceSourceSequence(
-      terminalId,
-    )) ?? 1;
+    final nextDgiSequence = _nextDgiSequence(finalNumber);
+    final existingInvoice = await invoiceDao.getInvoiceById(invoice.id);
+    final terminalId = existingInvoice?.terminalId ?? 'pos-${invoice.userId}';
+    final sourceSequence =
+        existingInvoice?.sourceSequence ??
+        (await transactionDao.getNextInvoiceSourceSequence(terminalId)) ??
+        1;
     final payloadHash = _buildSalePayloadHash(
       invoice: invoice.copyWith(number: finalNumber),
       items: items,
@@ -96,32 +108,143 @@ class SalesRepositoryImpl implements SalesRepository {
     final movementEntities = movements
         .map(
           (m) => InventoryMapper.toMovementEntity(
-            m.copyWith(userId: updatedInvoice.userId),
+            m.copyWith(
+              userId: updatedInvoice.userId,
+              sourceDocumentType: 'invoice',
+              sourceDocumentId: updatedInvoice.id,
+            ),
           ),
         )
         .toList();
 
     try {
-      await transactionDao.executeSaleTransaction(
-        invoiceEntity,
-        itemEntities,
-        [],
-        paymentEntities,
-        movementEntities,
-        null, // Audit log is written separately
-        false,
-      );
+      if (fulfillmentContext != null) {
+        onFulfillmentCheckoutContextReady?.call(fulfillmentContext);
+        await transactionDao.executeFulfillmentSaleTransaction(
+          invoiceEntity,
+          itemEntities,
+          [],
+          paymentEntities,
+          movementEntities,
+          null,
+          _fulfillment(updatedInvoice, fulfillmentContext, resolvedItems),
+          _printJobs(updatedInvoice, fulfillmentContext, resolvedItems),
+          _outbox(updatedInvoice, fulfillmentContext),
+          false,
+        );
+      } else {
+        await transactionDao.executeSaleWithDgiTransaction(
+          invoiceEntity,
+          itemEntities,
+          [],
+          paymentEntities,
+          movementEntities,
+          null, // Audit log is written separately
+          nextDgiSequence,
+          false,
+        );
+      }
 
       await auditRepository.log(
         'SALE_CREATED',
         metadata:
             '{"invoice_id": "${updatedInvoice.id}", "number": "${updatedInvoice.number}", "total": "${updatedInvoice.total.toStringAsFixed(2)}"}',
       );
-
-      await numberingService.incrementNumber();
     } catch (e) {
       rethrow;
     }
+  }
+
+  Future<void> _validateFulfillmentContext(
+    FulfillmentCheckoutContext context,
+  ) async {
+    final snapshot = await database.fulfillmentTopologyDao.findSnapshot(
+      context.topologySnapshotId,
+      context.tenantId,
+    );
+    if (snapshot == null ||
+        snapshot.revision != context.topologyRevision ||
+        snapshot.hash != context.topologyHash) {
+      throw StateError('Fulfillment checkout topology snapshot is invalid.');
+    }
+  }
+
+  FulfillmentRecordEntity _fulfillment(
+    Invoice invoice,
+    FulfillmentCheckoutContext context,
+    List<InvoiceItem> items,
+  ) => FulfillmentRecordEntity(
+    id: 'fulfillment-${invoice.id}',
+    tenantId: context.tenantId,
+    saleId: invoice.id,
+    topologySnapshotId: context.topologySnapshotId,
+    topologyRevision: context.topologyRevision,
+    channel: context.channel,
+    routeState: 'ROUTED',
+    deliveryState: 'PENDING',
+    linesPayload: _linesPayload(items),
+  );
+
+  List<PrintJobEntity> _printJobs(
+    Invoice invoice,
+    FulfillmentCheckoutContext context,
+    List<InvoiceItem> items,
+  ) {
+    if (!context.channel.contains('PRINT')) return const [];
+    final fulfillmentId = 'fulfillment-${invoice.id}';
+    return [
+      PrintJobEntity(
+        id: 'print-${invoice.id}',
+        tenantId: context.tenantId,
+        fulfillmentId: fulfillmentId,
+        documentKind: 'TICKET',
+        sequence: 0,
+        payload: _linesPayload(items),
+        state: 'PENDING',
+        retryCount: 0,
+        idempotencyKey: 'print:$fulfillmentId:ticket:0',
+      ),
+    ];
+  }
+
+  OutboxEventEntity _outbox(
+    Invoice invoice,
+    FulfillmentCheckoutContext context,
+  ) {
+    final fulfillmentId = 'fulfillment-${invoice.id}';
+    return OutboxEventEntity(
+      eventId: 'event:$fulfillmentId',
+      tenantId: context.tenantId,
+      deviceId: invoice.terminalId ?? 'pos-${invoice.userId}',
+      sourceSequence: invoice.sourceSequence ?? 1,
+      aggregateType: 'fulfillment',
+      aggregateId: fulfillmentId,
+      idempotencyKey: 'outbox:${context.tenantId}:$fulfillmentId',
+      payloadHash: 'pending',
+      topologyRevision: context.topologyRevision,
+      state: 'PENDING',
+      attempts: 0,
+    );
+  }
+
+  String _linesPayload(List<InvoiceItem> items) => jsonEncode(
+    items
+        .map(
+          (item) => {
+            'lineId': item.id,
+            'productId': item.productId,
+            'quantity': item.quantity,
+          },
+        )
+        .toList(growable: false),
+  );
+
+  String _nextDgiSequence(String invoiceNumber) {
+    final match = RegExp(r'(\d+)$').firstMatch(invoiceNumber.trim());
+    if (match == null) {
+      throw FormatException('DGI invoice number does not end in a sequence.');
+    }
+    return (int.parse(match.group(1)!) + 1).toString();
   }
 
   /// Resolves and freezes the [recipeVersionId] on each invoice line for
@@ -185,7 +308,9 @@ class SalesRepositoryImpl implements SalesRepository {
 
       // ignore: avoid_print
       for (final pe in payments) {
-        print('[SYNC-DB] payment entity id="${pe.id}" invoiceId="${pe.invoiceId}" method="${pe.method}"');
+        print(
+          '[SYNC-DB] payment entity id="${pe.id}" invoiceId="${pe.invoiceId}" method="${pe.method}"',
+        );
       }
 
       aggregates.add(
@@ -259,7 +384,11 @@ class SalesRepositoryImpl implements SalesRepository {
     final movementEntities = movements
         .map(
           (m) => InventoryMapper.toMovementEntity(
-            m.copyWith(userId: entity.userId),
+            m.copyWith(
+              userId: entity.userId,
+              sourceDocumentType: 'invoice',
+              sourceDocumentId: entity.id,
+            ),
           ),
         )
         .toList();

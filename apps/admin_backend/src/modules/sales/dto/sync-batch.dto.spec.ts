@@ -257,4 +257,60 @@ describe('SyncBatchEnvelopeDto', () => {
       'CREDIT_NOTE inventory movement deltas are not supported',
     );
   });
+
+  it('accepts flowType=fulfillment, documentType=FULFILLMENT, and outbox envelope metadata', () => {
+    const fulfillmentRecord = {
+      idempotencyKey: 'outbox:tenant-1:fulfillment-sale-1',
+      sourceDeviceId: 'terminal-1',
+      sourceSequence: 1,
+      flowType: 'fulfillment',
+      documentType: 'FULFILLMENT',
+      aggregateType: 'fulfillment',
+      aggregateId: 'fulfillment-sale-1',
+      eventId: 'event:fulfillment-sale-1',
+      topologyRevision: 3,
+      fulfillment: {
+        id: 'fulfillment-sale-1',
+        saleId: 'sale-1',
+        channel: 'PRINT_ONLY',
+        routeState: 'ROUTED',
+        deliveryState: 'PENDING',
+        topologySnapshotId: 'tenant-1-r3',
+        topologyRevision: 3,
+        linesPayload: JSON.stringify([
+          { lineId: 'line-1', productId: 'prod-1', quantity: 1 },
+        ]),
+      },
+    };
+
+    const { errors, dto } = validate([fulfillmentRecord]);
+    expect(errors).toHaveLength(0);
+    expect(dto.records[0]).toMatchObject({
+      flowType: 'fulfillment',
+      documentType: 'FULFILLMENT',
+      aggregateType: 'fulfillment',
+      aggregateId: 'fulfillment-sale-1',
+      eventId: 'event:fulfillment-sale-1',
+      topologyRevision: 3,
+    });
+    expect(dto.records[0].fulfillment?.id).toBe('fulfillment-sale-1');
+    expect(dto.records[0].fulfillment?.channel).toBe('PRINT_ONLY');
+    expect(dto.records[0].fulfillment?.routeState).toBe('ROUTED');
+  });
+
+  it('rejects FULFILLMENT envelope when fulfillment payload is missing required channel or routeState', () => {
+    const invalidRecord = {
+      idempotencyKey: 'outbox:tenant-1:fulfillment-sale-2',
+      sourceDeviceId: 'terminal-1',
+      sourceSequence: 2,
+      flowType: 'fulfillment',
+      documentType: 'FULFILLMENT',
+      fulfillment: {
+        id: 'fulfillment-sale-2',
+      },
+    };
+
+    const { errors } = validate([invalidRecord]);
+    expect(errors.length).toBeGreaterThan(0);
+  });
 });

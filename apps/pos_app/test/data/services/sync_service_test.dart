@@ -5,6 +5,7 @@ import 'package:pos_app/data/database/migrations.dart';
 import 'package:pos_app/data/repositories/inventory/inventory_repository_impl.dart';
 import 'package:pos_app/data/services/sync_service.dart';
 import 'package:pos_app/data/services/network_connectivity_service.dart';
+import 'package:pos_app/domain/models/fulfillment/fulfillment_checkout_context.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_sync_state_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
@@ -89,6 +90,7 @@ class MockSalesRepository implements SalesRepository {
     required Invoice invoice,
     required List<InvoiceItem> items,
     required List<Payment> payments,
+    FulfillmentCheckoutContext? fulfillmentContext,
   }) async => throw UnimplementedError();
 
   @override

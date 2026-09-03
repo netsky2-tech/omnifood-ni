@@ -216,7 +216,7 @@ void main() {
     await tester.tap(find.byIcon(Icons.print));
     await tester.pumpAndSettle();
 
-    expect(mockPrinter.lastPrintedText, contains('ETIQUETA DE PRE-ELABORACION'));
+    expect(mockPrinter.lastPrintedText, contains('ETIQUETA DE PRODUCCION'));
     expect(mockPrinter.lastPrintedText, contains('LOTE-20260601-001'));
     expect(find.text('Viñeta de producción enviada a impresora'), findsOneWidget);
   });

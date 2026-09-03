@@ -20,6 +20,9 @@ _$ProductImpl _$$ProductImplFromJson(Map<String, dynamic> json) =>
       category: json['category'] as String?,
       isPrepared: json['isPrepared'] as bool? ?? false,
       createdAt: json['createdAt'] as String?,
+      inventoryPolicy: $enumDecodeNullable(
+          _$InventoryPolicyEnumMap, json['inventoryPolicy']),
+      directStockInsumoId: json['directStockInsumoId'] as String?,
       variants: (json['variants'] as List<dynamic>?)
               ?.map((e) => ProductVariant.fromJson(e as Map<String, dynamic>))
               .toList() ??
@@ -44,9 +47,17 @@ Map<String, dynamic> _$$ProductImplToJson(_$ProductImpl instance) =>
       'category': instance.category,
       'isPrepared': instance.isPrepared,
       'createdAt': instance.createdAt,
+      'inventoryPolicy': _$InventoryPolicyEnumMap[instance.inventoryPolicy],
+      'directStockInsumoId': instance.directStockInsumoId,
       'variants': instance.variants,
       'availableModifiers': instance.availableModifiers,
     };
+
+const _$InventoryPolicyEnumMap = {
+  InventoryPolicy.recipeBom: 'recipeBom',
+  InventoryPolicy.directStock: 'directStock',
+  InventoryPolicy.notTracked: 'notTracked',
+};
 
 _$ProductVariantImpl _$$ProductVariantImplFromJson(Map<String, dynamic> json) =>
     _$ProductVariantImpl(

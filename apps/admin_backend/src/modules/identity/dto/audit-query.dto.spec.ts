@@ -6,7 +6,6 @@ import {
   QueryDrawerOpensDto,
   RecordManualDrawerOpenDto,
   DRAWER_OPEN_REASONS,
-  DrawerOpenReason,
 } from './audit-query.dto';
 import { AppPermission } from '../security/permissions.enum';
 

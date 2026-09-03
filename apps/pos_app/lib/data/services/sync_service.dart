@@ -250,6 +250,13 @@ class SyncService {
         domainErrors.add('Sales');
       }
 
+      final fulfillmentSuccess =
+          await _runDomain('fulfillment', _syncFulfillmentEvents);
+      if (!fulfillmentSuccess) {
+        hasFailure = true;
+        domainErrors.add('Fulfillment');
+      }
+
       // 2. Sync inventory outbox deltas
       var productionLinkedMovementIds = const <String>{};
       final purchaseSuccess = await _runDomain('purchase', _syncPurchaseDocuments);
@@ -395,6 +402,85 @@ class SyncService {
       }
     } catch (e, st) {
       developer.log('Sales sync: EXCEPTION', name: 'SyncService', error: e, stackTrace: st);
+      rethrow;
+    }
+  }
+
+  Future<void> _syncFulfillmentEvents() async {
+    final db = _database;
+    if (db == null) return;
+    try {
+      final tenantConfig =
+          await db.localConfigDao.getConfigByKey('tenant_id');
+      final tenantId = tenantConfig?.value ?? 'tenant-1';
+
+      final pendingEvents = await db.fulfillmentPersistenceDao
+          .findPendingOutboxEvents(tenantId);
+      if (pendingEvents.isEmpty) return;
+
+      final records = <Map<String, Object?>>[];
+      for (final event in pendingEvents.take(_batchEnvelopeLimit)) {
+        final fulfillment = await db.fulfillmentPersistenceDao
+            .findFulfillment(event.aggregateId, event.tenantId);
+
+        records.add({
+          'idempotencyKey': event.idempotencyKey,
+          'sourceDeviceId': event.deviceId,
+          'sourceSequence': event.sourceSequence,
+          'flowType': 'fulfillment',
+          'documentType': 'FULFILLMENT',
+          'aggregateType': event.aggregateType,
+          'aggregateId': event.aggregateId,
+          'eventId': event.eventId,
+          'topologyRevision': event.topologyRevision,
+          if (fulfillment != null)
+            'fulfillment': {
+              'id': fulfillment.id,
+              'saleId': fulfillment.saleId,
+              'topologySnapshotId': fulfillment.topologySnapshotId,
+              'topologyRevision': fulfillment.topologyRevision,
+              'channel': fulfillment.channel,
+              'routeState': fulfillment.routeState,
+              'deliveryState': fulfillment.deliveryState,
+              'linesPayload': fulfillment.linesPayload,
+            },
+        });
+      }
+
+      if (records.isEmpty) return;
+
+      developer.log(
+        'Fulfillment sync: posting ${records.length} records to /v1/sync/batch',
+        name: 'SyncService',
+      );
+      final response = await _dio.post(
+        '/v1/sync/batch',
+        data: {'records': records},
+        options: Options(
+          headers: {HttpHeaders.contentTypeHeader: 'application/json'},
+        ),
+      );
+      developer.log(
+        'Fulfillment sync: response status=${response.statusCode}',
+        name: 'SyncService',
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        for (final event in pendingEvents.take(_batchEnvelopeLimit)) {
+          await db.fulfillmentPersistenceDao.updateOutboxEventState(
+            event.eventId,
+            event.tenantId,
+            'SENT',
+          );
+        }
+      }
+    } catch (e, st) {
+      developer.log(
+        'Fulfillment sync: EXCEPTION',
+        name: 'SyncService',
+        error: e,
+        stackTrace: st,
+      );
       rethrow;
     }
   }

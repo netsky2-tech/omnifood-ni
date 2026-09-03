@@ -21,6 +21,7 @@ import {
   type NegativeStockPolicy,
 } from '../../inventory/entities/insumo.entity';
 import { User, UserRole } from '../../identity/entities/user.entity';
+import { TenantFulfillmentRecord } from '../../fulfillment/entities/tenant-fulfillment-record.entity';
 
 const SCALE_4 = 4;
 const SET_LOCAL_TENANT_SQL = "SELECT set_config('app.tenant_id', $1, true)";
@@ -124,11 +125,16 @@ export const calculateSyncPayloadHash = (record: SyncBatchRecordDto): string =>
   createHash('sha256')
     .update(
       stableStringify({
+        aggregateId: record.aggregateId,
+        aggregateType: record.aggregateType,
         documentType: record.documentType,
+        eventId: record.eventId,
         flowType: record.flowType,
+        fulfillment: record.fulfillment,
         invoice: record.invoice,
         movements: record.movements,
         recipeVersionId: record.recipeVersionId,
+        topologyRevision: record.topologyRevision,
       }),
     )
     .digest('hex');
@@ -210,8 +216,6 @@ export class InvoicesService {
         tenant_id: tenantId,
         created_at: new Date(dto.createdAt),
       };
-      console.log('[SYNC-INVOICES] invoice upsert payload keys:', Object.keys(invoicePayload));
-      console.log('[SYNC-INVOICES] invoice id:', JSON.stringify(invoicePayload.id), 'userId:', JSON.stringify((invoicePayload as any).userId), 'number:', JSON.stringify((invoicePayload as any).number));
 
       await this.invoiceRepoFor(manager).upsert(invoicePayload, ['id']);
       if (persistenceDto.items?.length) {
@@ -222,19 +226,36 @@ export class InvoicesService {
         }));
         console.log('[SYNC-INVOICES] items count:', itemPayloads.length);
         for (const ip of itemPayloads) {
-          console.log('[SYNC-INVOICES] item id:', JSON.stringify(ip.id), 'productId:', JSON.stringify(ip.productId), 'recipeVersionId:', JSON.stringify(ip.recipeVersionId), 'variantId:', JSON.stringify(ip.variantId));
+          console.log(
+            '[SYNC-INVOICES] item id:',
+            JSON.stringify(ip.id),
+            'productId:',
+            JSON.stringify(ip.productId),
+            'recipeVersionId:',
+            JSON.stringify(ip.recipeVersionId),
+            'variantId:',
+            JSON.stringify(ip.variantId),
+          );
         }
         await this.itemRepoFor(manager).upsert(itemPayloads, ['id']);
       }
       if (dto.payments?.length) {
         const paymentPayloads = dto.payments.map((payment) => ({
           ...payment,
-          id: payment.id && payment.id.trim() !== '' ? payment.id : randomUUID(),
+          id:
+            payment.id && payment.id.trim() !== '' ? payment.id : randomUUID(),
           invoiceId: dto.id,
         }));
         console.log('[SYNC-INVOICES] payments count:', paymentPayloads.length);
         for (const pp of paymentPayloads) {
-          console.log('[SYNC-INVOICES] payment id:', JSON.stringify(pp.id), 'method:', JSON.stringify(pp.method), 'reconciledByUserId:', JSON.stringify(pp.reconciledByUserId));
+          console.log(
+            '[SYNC-INVOICES] payment id:',
+            JSON.stringify(pp.id),
+            'method:',
+            JSON.stringify(pp.method),
+            'reconciledByUserId:',
+            JSON.stringify(pp.reconciledByUserId),
+          );
         }
         await this.paymentRepoFor(manager).upsert(paymentPayloads, ['id']);
       }
@@ -360,6 +381,9 @@ export class InvoicesService {
           continue;
         }
         duplicates += 1;
+        this.logger.log(
+          `[SYNC-DUPLICATE] tenant=${tenantId} device=${record.sourceDeviceId} flow=${flowType} seq=${record.sourceSequence} idempotencyKey=${record.idempotencyKey} code=DUPLICATE_REPLAY`,
+        );
         results.push(
           this.buildResult(record, SYNC_RESULT_STATUS.DUPLICATE, {
             code: 'DUPLICATE_REPLAY',
@@ -391,6 +415,9 @@ export class InvoicesService {
           continue;
         }
         duplicates += 1;
+        this.logger.log(
+          `[SYNC-DUPLICATE] tenant=${tenantId} device=${record.sourceDeviceId} flow=${flowType} seq=${record.sourceSequence} idempotencyKey=${record.idempotencyKey} code=DUPLICATE_SEQUENCE_REPLAY`,
+        );
         results.push(
           this.buildResult(record, SYNC_RESULT_STATUS.DUPLICATE, {
             code: 'DUPLICATE_SEQUENCE_REPLAY',
@@ -421,6 +448,10 @@ export class InvoicesService {
       );
 
       if (record.sourceSequence > expectedSequence) {
+        const lag = record.sourceSequence - expectedSequence;
+        this.logger.warn(
+          `[SYNC-LAG] tenant=${tenantId} device=${record.sourceDeviceId} flow=${flowType} expected=${expectedSequence} received=${record.sourceSequence} lag=${lag}`,
+        );
         const stagedConflict = await this.stageFutureRecord(
           tenantId,
           record,
@@ -466,6 +497,11 @@ export class InvoicesService {
         flowType,
         record.sourceSequence + 1,
       );
+      if (drained.length > 0) {
+        this.logger.log(
+          `[SYNC-DRAIN] tenant=${tenantId} device=${record.sourceDeviceId} flow=${flowType} drainedCount=${drained.length}`,
+        );
+      }
       processed += drained.filter(
         (item) => item.status === SYNC_RESULT_STATUS.ACCEPTED,
       ).length;
@@ -818,19 +854,6 @@ export class InvoicesService {
         this.assertRecordCreditNoteBoundary(record);
         this.assertSupportedCreditNoteStockBehavior(record);
         if (record.invoice) {
-          console.log('[APPLY-RECORD] record.documentType:', record.documentType, 'record.flowType:', record.flowType);
-          console.log('[APPLY-RECORD] invoice.id:', record.invoice.id, 'userId:', record.invoice.userId, 'number:', record.invoice.number);
-          console.log('[APPLY-RECORD] invoice.items count:', record.invoice.items?.length, 'payments count:', record.invoice.payments?.length);
-          if (record.invoice.items?.length) {
-            for (const item of record.invoice.items) {
-              console.log('[APPLY-RECORD]   item:', item.id, 'productId:', item.productId, 'recipeVersionId:', item.recipeVersionId, 'variantId:', item.variantId);
-            }
-          }
-          if (record.invoice.payments?.length) {
-            for (const payment of record.invoice.payments) {
-              console.log('[APPLY-RECORD]   payment:', payment.id, 'method:', payment.method, 'reconciledByUserId:', payment.reconciledByUserId);
-            }
-          }
           await this.validateInvoiceRecipeVersions(
             tenantId,
             record.invoice,
@@ -841,6 +864,35 @@ export class InvoicesService {
           });
         }
         await this.appendInventoryDeltas(tenantId, record, manager);
+        if (
+          record.fulfillment &&
+          manager.connection.hasMetadata(TenantFulfillmentRecord)
+        ) {
+          const parsedLines: Record<string, unknown>[] =
+            record.fulfillment.linesPayload != null
+              ? typeof record.fulfillment.linesPayload === 'string'
+                ? (JSON.parse(record.fulfillment.linesPayload) as Record<
+                    string,
+                    unknown
+                  >[])
+                : (record.fulfillment.linesPayload as Record<string, unknown>[])
+              : (record.fulfillment.lines ?? []);
+          await manager.getRepository(TenantFulfillmentRecord).upsert(
+            {
+              id: record.fulfillment.id,
+              tenant_id: tenantId,
+              sale_id: record.fulfillment.saleId ?? record.aggregateId,
+              topology_snapshot_id: record.fulfillment.topologySnapshotId,
+              topology_revision: record.fulfillment.topologyRevision,
+              channel: record.fulfillment.channel,
+              route_state: record.fulfillment.routeState,
+              delivery_state: record.fulfillment.deliveryState ?? 'PENDING',
+              lines_payload: parsedLines,
+              synced_at: new Date(),
+            },
+            ['id'],
+          );
+        }
         await manager.save(
           this.receiptRepository.create({
             tenant_id: tenantId,
@@ -869,9 +921,6 @@ export class InvoicesService {
       };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Sync failed';
-      const stack = error instanceof Error ? error.stack : undefined;
-      console.error('[APPLY-RECORD] CAUGHT ERROR:', message);
-      if (stack) console.error('[APPLY-RECORD] STACK:', stack.substring(0, 500));
       if (this.isCrossTenantItemCollisionError(error, message)) {
         return {
           accepted: false,

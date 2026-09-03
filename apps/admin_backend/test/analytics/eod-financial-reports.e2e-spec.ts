@@ -48,7 +48,7 @@ class AnalyticsReportsE2EController {
     const cogs = 3500.0; // Costo deducido en Kardex
     const grossProfit = netSales - cogs; // C$ 6,500.00
     const grossMarginPct = (grossProfit / netSales) * 100; // 65.0%
-    const shrinkageExpense = 187.50; // Merma de 0.5kg valorada al CPP de C$ 375.00
+    const shrinkageExpense = 187.5; // Merma de 0.5kg valorada al CPP de C$ 375.00
     const netOperatingProfit = grossProfit - shrinkageExpense; // C$ 6,312.50
 
     return {
@@ -70,7 +70,12 @@ class AnalyticsReportsE2EController {
     @Query('tenantId') tenantId: string,
     @Query('startDate') startDate: string,
     @Query('endDate') endDate: string,
-  ): { items: ShrinkageAuditItem[]; totalShrinkageNio: number } {
+  ): {
+    items: ShrinkageAuditItem[];
+    totalShrinkageNio: number;
+    tenantId: string;
+    period: string;
+  } {
     const items: ShrinkageAuditItem[] = [
       {
         movementId: 'mov-shrink-001',
@@ -79,7 +84,7 @@ class AnalyticsReportsE2EController {
         quantity: 0.5,
         uom: 'kg',
         unitCostNio: 375.0, // CPP en el momento de la merma
-        totalCostNio: 187.50,
+        totalCostNio: 187.5,
         reason: 'Merma/Derrame de grano en tolva',
         timestamp: '2026-08-28T11:30:00Z',
       },
@@ -90,6 +95,8 @@ class AnalyticsReportsE2EController {
     return {
       items,
       totalShrinkageNio: total,
+      tenantId,
+      period: `${startDate}/${endDate}`,
     };
   }
 }
@@ -123,14 +130,18 @@ describe('Fase 9: Consolidación Analítica (Reportes End-of-Day P&L) (e2e)', ()
     expect(report.cogsNio).toEqual(3500.0);
     expect(report.grossProfitNio).toEqual(6500.0);
     expect(report.grossMarginPct).toEqual(65.0);
-    expect(report.shrinkageExpenseNio).toEqual(187.50);
-    expect(report.netOperatingProfitNio).toEqual(6312.50);
+    expect(report.shrinkageExpenseNio).toEqual(187.5);
+    expect(report.netOperatingProfitNio).toEqual(6312.5);
   });
 
   it('2. Auditoría de Mermas: Registra merma valorada al CPP histórico impactando gasto operativo', async () => {
     const response = await request(app.getHttpServer())
       .get('/analytics/reports/shrinkage-audit')
-      .query({ tenantId: 'tenant-demo', startDate: '2026-08-28', endDate: '2026-08-28' })
+      .query({
+        tenantId: 'tenant-demo',
+        startDate: '2026-08-28',
+        endDate: '2026-08-28',
+      })
       .expect(200);
 
     expect(response.body.items).toHaveLength(1);
@@ -139,8 +150,8 @@ describe('Fase 9: Consolidación Analítica (Reportes End-of-Day P&L) (e2e)', ()
     expect(item.insumoName).toEqual('Café Grano');
     expect(item.quantity).toEqual(0.5);
     expect(item.unitCostNio).toEqual(375.0); // CPP exacto
-    expect(item.totalCostNio).toEqual(187.50);
+    expect(item.totalCostNio).toEqual(187.5);
     expect(item.reason).toContain('Merma/Derrame');
-    expect(response.body.totalShrinkageNio).toEqual(187.50);
+    expect(response.body.totalShrinkageNio).toEqual(187.5);
   });
 });

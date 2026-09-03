@@ -15,7 +15,6 @@ describe('KardexRegularizationService', () => {
   let queueRepo: any;
   let correctionRepo: any;
   let movementRepo: any;
-  let governanceService: GovernanceApprovalService;
   let dataSource: any;
 
   beforeEach(async () => {
@@ -75,9 +74,6 @@ describe('KardexRegularizationService', () => {
 
     service = module.get<KardexRegularizationService>(
       KardexRegularizationService,
-    );
-    governanceService = module.get<GovernanceApprovalService>(
-      GovernanceApprovalService,
     );
   });
 

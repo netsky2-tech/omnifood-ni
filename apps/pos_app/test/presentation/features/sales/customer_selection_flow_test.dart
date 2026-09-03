@@ -13,6 +13,7 @@ import 'package:pos_app/domain/services/config/tenant_config_service.dart';
 import 'package:pos_app/domain/services/kitchen/kitchen_order_service.dart';
 import 'package:pos_app/domain/services/config/printer_config_service.dart';
 import 'package:pos_app/domain/models/user.dart';
+import 'package:pos_app/domain/models/fulfillment/fulfillment_checkout_context.dart';
 import 'package:pos_app/domain/models/inventory/product.dart';
 import 'package:pos_app/domain/models/sales/payment.dart';
 import 'package:pos_app/domain/models/sales/invoice.dart';
@@ -25,6 +26,7 @@ class FakeSalesRepository implements SalesRepository {
 
   @override
   Future<void> saveSale({
+    FulfillmentCheckoutContext? fulfillmentContext,
     required Invoice invoice,
     required List<InvoiceItem> items,
     required List<Payment> payments,
@@ -317,7 +319,7 @@ void main() {
       expect(find.text('El nombre del cliente es obligatorio'), findsOneWidget);
 
       // Ingresar Cédula Inválida
-      final taxIdField = find.widgetWithText(TextField, 'Cédula o RUC (Opcional)');
+      final taxIdField = find.widgetWithText(TextField, 'Cédula / RUC (Opcional)');
       await tester.enterText(taxIdField, '12345-INVALID');
       await tester.pumpAndSettle();
       expect(find.textContaining('Cédula o RUC inválido'), findsOneWidget);
