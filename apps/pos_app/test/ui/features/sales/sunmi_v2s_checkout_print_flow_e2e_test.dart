@@ -175,7 +175,7 @@ void main() {
       );
       expect(invoicePrint.printedText, contains('001-001-01-00009999'));
       expect(invoicePrint.printedText, contains('Hamburguesa'));
-      expect(invoicePrint.printedText, contains('Disposicion Tecnica 09-2007'));
+      expect(invoicePrint.printedText, contains('REGIMEN: GENERAL'));
 
       // 4. Verify cart cleared
       expect(viewModel.cart, isEmpty);

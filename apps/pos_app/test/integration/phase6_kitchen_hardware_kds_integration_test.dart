@@ -185,7 +185,7 @@ void main() {
         buzzerNumber: beeperNumber,
       );
 
-      expect(kitchenTicketText, contains('*** COMANDA DE COCINA ***'));
+      expect(kitchenTicketText, contains('*** COMANDA COCINA ***'));
       expect(kitchenTicketText, contains('>>> BUZZER / PAGER #12 <<<'));
       expect(kitchenTicketText, contains('2 x Hamburguesa Doble Queso'));
 
