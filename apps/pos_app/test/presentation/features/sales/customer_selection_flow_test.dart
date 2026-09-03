@@ -319,7 +319,7 @@ void main() {
       expect(find.text('El nombre del cliente es obligatorio'), findsOneWidget);
 
       // Ingresar Cédula Inválida
-      final taxIdField = find.widgetWithText(TextField, 'Cédula o RUC (Opcional)');
+      final taxIdField = find.widgetWithText(TextField, 'Cédula / RUC (Opcional)');
       await tester.enterText(taxIdField, '12345-INVALID');
       await tester.pumpAndSettle();
       expect(find.textContaining('Cédula o RUC inválido'), findsOneWidget);

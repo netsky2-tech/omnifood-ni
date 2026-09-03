@@ -120,6 +120,7 @@ void main() {
     when(mockSessionDao.getActiveSession()).thenAnswer((_) async => null);
     when(mockHoldDao.getAllHoldTickets()).thenAnswer((_) async => []);
     when(mockPromoDao.getActivePromotions()).thenAnswer((_) async => []);
+    when(mockPromoDao.getAllPromotions()).thenAnswer((_) async => []);
 
     viewModel = SaleViewModel(
       mockSalesRepo,
