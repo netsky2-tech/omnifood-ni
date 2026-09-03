@@ -10,7 +10,9 @@
 - [x] 2.2D.1
 - [x] 2.2D.2a
 - [x] 2.2D.2b
-- [ ] 3.1–5.1
+- [x] 3.1–3.2
+- [x] 4.1–4.2
+- [x] 5.1
 
 ## 2.2D.2a Evidence
 
@@ -84,3 +86,20 @@
 | GREEN | Controller unit tests passed 8/8 (`fulfillment-topology.controller.spec.ts`); DB spec with real PostgreSQL RLS passed 1/1 (`tenant-topology-revision.service.db.spec.ts`); full HTTP E2E with real PostgreSQL passed 8/8 (`test/fulfillment/fulfillment-topology.e2e-spec.ts`). |
 | TRIANGULATE | Verified 401 unauthenticated, 403 non-owner, 400 invalid payload, 201 valid revision, 409 stale base revision, and complete tenant isolation across Tenant A & Tenant B in both DB RLS and HTTP E2E. |
 | REFACTOR | ESLint and Prettier passed with 0 errors/0 warnings; NestJS build succeeded. |
+
+## 5.1 Progress — Rollout Proof & Observability (GREEN Complete)
+
+- Implemented `FulfillmentRolloutService` and `FulfillmentRolloutController` providing catalog backfill discrepancy scanning, emergency rollback feature gate, and live telemetry dashboard.
+- Unit and triangulation tests covering missing BOM, foreign tenant insumo leaks, and safe unrouted product fallbacks (8/8 tests passed).
+- Real PostgreSQL 16 DB integration tests with dynamic schema isolation and zero mocks (2/2 tests passed).
+- Complete HTTP E2E pilot journey test with Supertest and native PostgreSQL 16 proving multi-tenant RLS, 3 fulfillment channels, outbox batch sync, duplicate reconnect replay, and dashboard aggregation (1/1 test passed; full fulfillment E2E suite 18/18 passed).
+- Flutter POS SQLite integration test covering legacy tenant compatibility, channel semantics, unrouted offline fallback, and authorized copy reprint (4/4 tests passed; full POS fulfillment suite 32/32 passed).
+- Created operational runbook in `docs/fulfillment-rollout-runbook.md`.
+
+| TDD stage | Evidence |
+|---|---|
+| RED | Unit tests failed before service implementation; DB and E2E suites failed before controller, service, and routes wiring. |
+| GREEN | Jest unit tests 8/8 passed; PostgreSQL 16 DB tests 2/2 passed; E2E pilot 1/1 passed; Flutter pilot 4/4 passed. |
+| TRIANGULATE | Verified missing recipe BOM, cross-tenant leak, unrouted fallback, rollback toggle on/off, 3 channels (PRINT_ONLY, KDS_ONLY, KDS_AND_PRINT), and replay idempotency. |
+| REFACTOR | ESLint passed with 0 errors / 0 warnings; Flutter analyze passed with 0 issues; NestJS build succeeded. |
+
