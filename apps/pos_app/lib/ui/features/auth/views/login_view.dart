@@ -29,10 +29,9 @@ class _LoginViewState extends State<LoginView> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    'OmniFood NI',
-                    style: textTheme.headlineLarge?.copyWith(color: const Color(0xFF3F6167)),
-                    textAlign: TextAlign.center,
+                  Image.asset(
+                    'assets/icons/app_icon.png',
+                    height: 100,
                   ),
                   const SizedBox(height: 12),
                   Text(

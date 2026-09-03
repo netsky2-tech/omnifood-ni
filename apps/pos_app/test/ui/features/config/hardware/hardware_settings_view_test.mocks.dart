@@ -7,7 +7,8 @@ import 'dart:async' as _i5;
 
 import 'package:mockito/mockito.dart' as _i1;
 import 'package:pos_app/domain/models/config/printer_config.dart' as _i2;
-import 'package:pos_app/domain/models/sales/cashier_session.dart' as _i9;
+import 'package:pos_app/domain/models/config/tax_regime.dart' as _i9;
+import 'package:pos_app/domain/models/sales/cashier_session.dart' as _i10;
 import 'package:pos_app/domain/models/sales/invoice.dart' as _i6;
 import 'package:pos_app/domain/models/sales/invoice_item.dart' as _i7;
 import 'package:pos_app/domain/models/sales/payment.dart' as _i8;
@@ -126,11 +127,15 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
     required List<_i7.InvoiceItem>? items,
     required List<_i8.Payment>? payments,
     String? businessName,
+    String? legalName,
     String? ruc,
     String? address,
     String? phone,
     String? cashierName,
     List<int>? logoRasterBytes,
+    _i9.TaxRegime? taxRegime = _i9.TaxRegime.regimenGeneral,
+    bool? isTaxExempt = false,
+    int? paperWidthMm = 58,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -140,11 +145,15 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
             #items: items,
             #payments: payments,
             #businessName: businessName,
+            #legalName: legalName,
             #ruc: ruc,
             #address: address,
             #phone: phone,
             #cashierName: cashierName,
             #logoRasterBytes: logoRasterBytes,
+            #taxRegime: taxRegime,
+            #isTaxExempt: isTaxExempt,
+            #paperWidthMm: paperWidthMm,
           },
         ),
         returnValue: _i5.Future<_i3.PrinterResult>.value(_FakePrinterResult_1(
@@ -156,11 +165,15 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
               #items: items,
               #payments: payments,
               #businessName: businessName,
+              #legalName: legalName,
               #ruc: ruc,
               #address: address,
               #phone: phone,
               #cashierName: cashierName,
               #logoRasterBytes: logoRasterBytes,
+              #taxRegime: taxRegime,
+              #isTaxExempt: isTaxExempt,
+              #paperWidthMm: paperWidthMm,
             },
           ),
         )),
@@ -174,11 +187,15 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
               #items: items,
               #payments: payments,
               #businessName: businessName,
+              #legalName: legalName,
               #ruc: ruc,
               #address: address,
               #phone: phone,
               #cashierName: cashierName,
               #logoRasterBytes: logoRasterBytes,
+              #taxRegime: taxRegime,
+              #isTaxExempt: isTaxExempt,
+              #paperWidthMm: paperWidthMm,
             },
           ),
         )),
@@ -249,7 +266,7 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
 
   @override
   _i5.Future<_i3.PrinterResult> printCorteX(
-    _i9.CashierSession? session, {
+    _i10.CashierSession? session, {
     required String? cashierName,
     required Map<_i8.PaymentMethod, double>? totalsByMethod,
     double? totalExpected,
@@ -293,7 +310,7 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
 
   @override
   _i5.Future<_i3.PrinterResult> printCorteZ(
-    _i9.CashierSession? session, {
+    _i10.CashierSession? session, {
     required String? cashierName,
     required Map<_i8.PaymentMethod, double>? totalsByMethod,
     int? zSequence,

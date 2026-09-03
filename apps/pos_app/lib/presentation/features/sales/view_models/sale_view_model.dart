@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
+import '../../../../domain/models/config/tax_regime.dart';
 import '../../../../domain/models/config/tenant_config.dart';
 import '../../../../domain/models/config/tenant_operation_mode.dart';
 import '../../../../domain/models/sales/invoice.dart';
@@ -48,6 +49,7 @@ class SaleViewModel extends ChangeNotifier {
   final PrinterPort _printerPort;
   final PromotionsEngine _promotionsEngine;
   final LoyaltyService _loyaltyService;
+  final bool _hasCustomPrinterPort;
   SyncService? _syncService;
   StreamSubscription<InboundSyncResult>? _syncSubscription;
   Timer? _syncDebounceTimer;
@@ -73,6 +75,7 @@ class SaleViewModel extends ChangeNotifier {
             kitchenOrderService ?? KitchenOrderService(_database),
         _printerConfigService =
             printerConfigService ?? PrinterConfigService(_database.localConfigDao),
+        _hasCustomPrinterPort = printerPort != null,
         _printerPort =
             printerPort ?? PrinterResolver.resolve(const PrinterConfig()),
         _promotionsEngine = promotionsEngine ?? const PromotionsEngine(),
@@ -833,10 +836,12 @@ class SaleViewModel extends ChangeNotifier {
 
       // Fire-and-forget: trigger cloud sync after 3s debounce
       // (batches rapid consecutive sales into one sync pass)
-      _syncDebounceTimer?.cancel();
-      _syncDebounceTimer = Timer(const Duration(seconds: 3), () {
-        _syncService?.triggerManualSync();
-      });
+      if (_syncService != null) {
+        _syncDebounceTimer?.cancel();
+        _syncDebounceTimer = Timer(const Duration(seconds: 3), () {
+          _syncService?.triggerManualSync();
+        });
+      }
 
       // Process Customer Loyalty Points (Redemption & Accumulation)
       if (_selectedCustomer != null) {
@@ -933,36 +938,48 @@ class SaleViewModel extends ChangeNotifier {
         final printerConfig = await _printerConfigService.getPrinterConfig();
         final hasCashPayment = payments.any((p) => p.method == PaymentMethod.cash);
 
+        final activePrinterPort = _hasCustomPrinterPort
+            ? _printerPort
+            : PrinterResolver.resolve(printerConfig);
+
         if (printerConfig.openDrawerOnCash && hasCashPayment) {
-          await _printerPort.openCashDrawer();
+          await activePrinterPort.openCashDrawer();
         }
 
         List<int>? logoRasterBytes;
         if (printerConfig.isLogoEnabled &&
-            printerConfig.logoBase64 != null &&
-            printerConfig.logoWidth != null &&
-            printerConfig.logoHeight != null) {
+            printerConfig.logoBase64 != null) {
           try {
             final rawBytes = base64Decode(printerConfig.logoBase64!);
-            logoRasterBytes = ThermalLogoProcessor.buildEscPosRasterFrom1Bit(
-              raw1BitBitmap: rawBytes,
-              width: printerConfig.logoWidth!,
-              height: printerConfig.logoHeight!,
-            );
+            if (ThermalLogoProcessor.isPng(rawBytes)) {
+              logoRasterBytes = rawBytes;
+            } else if (printerConfig.logoWidth != null && printerConfig.logoHeight != null) {
+              logoRasterBytes = ThermalLogoProcessor.buildEscPosRasterFrom1Bit(
+                raw1BitBitmap: rawBytes,
+                width: printerConfig.logoWidth!,
+                height: printerConfig.logoHeight!,
+              );
+            } else {
+              logoRasterBytes = rawBytes;
+            }
           } catch (_) {}
         }
 
         if (printerConfig.autoPrintInvoice) {
-          final printResult = await _printerPort.printInvoice(
+          final printResult = await activePrinterPort.printInvoice(
             invoiceToPrint,
             items: items,
             payments: payments,
             businessName: printerConfig.headerBusinessName,
+            legalName: printerConfig.headerLegalName,
             ruc: printerConfig.headerRuc,
             address: printerConfig.headerAddress,
             phone: printerConfig.headerPhone,
             cashierName: user.name,
             logoRasterBytes: logoRasterBytes,
+            taxRegime: TaxRegime.fromString(printerConfig.taxRegime),
+            isTaxExempt: _isGlobalTaxExempt,
+            paperWidthMm: printerConfig.paperWidthMm,
           );
 
           if (!printResult.isSuccess) {
@@ -971,7 +988,7 @@ class SaleViewModel extends ChangeNotifier {
         }
 
         if (printerConfig.autoPrintKitchen && items.isNotEmpty) {
-          await _printerPort.printKitchenOrder(
+          await activePrinterPort.printKitchenOrder(
             ticketId: invoiceToPrint.id.length > 8 ? invoiceToPrint.id.substring(0, 8) : invoiceToPrint.id,
             orderTitle: 'Orden #${invoiceToPrint.number}',
             cashierName: user.name,
@@ -1043,28 +1060,40 @@ class SaleViewModel extends ChangeNotifier {
 
       List<int>? logoRasterBytes;
       if (config.isLogoEnabled &&
-          config.logoBase64 != null &&
-          config.logoWidth != null &&
-          config.logoHeight != null) {
+          config.logoBase64 != null) {
         try {
           final rawBytes = base64Decode(config.logoBase64!);
-          logoRasterBytes = ThermalLogoProcessor.buildEscPosRasterFrom1Bit(
-            raw1BitBitmap: rawBytes,
-            width: config.logoWidth!,
-            height: config.logoHeight!,
-          );
+          if (ThermalLogoProcessor.isPng(rawBytes)) {
+            logoRasterBytes = rawBytes;
+          } else if (config.logoWidth != null && config.logoHeight != null) {
+            logoRasterBytes = ThermalLogoProcessor.buildEscPosRasterFrom1Bit(
+              raw1BitBitmap: rawBytes,
+              width: config.logoWidth!,
+              height: config.logoHeight!,
+            );
+          } else {
+            logoRasterBytes = rawBytes;
+          }
         } catch (_) {}
       }
 
-      final res = await _printerPort.printInvoice(
+      final activePrinterPort = _hasCustomPrinterPort
+          ? _printerPort
+          : PrinterResolver.resolve(config);
+
+      final res = await activePrinterPort.printInvoice(
         _lastProcessedInvoice!,
         items: domainItems,
         payments: domainPayments,
         businessName: config.headerBusinessName,
+        legalName: config.headerLegalName,
         ruc: config.headerRuc,
         address: config.headerAddress,
         phone: config.headerPhone,
         logoRasterBytes: logoRasterBytes,
+        taxRegime: TaxRegime.fromString(config.taxRegime),
+        isTaxExempt: _lastProcessedInvoice?.globalTaxOverride ?? _isGlobalTaxExempt,
+        paperWidthMm: config.paperWidthMm,
       );
 
       if (!res.isSuccess) {

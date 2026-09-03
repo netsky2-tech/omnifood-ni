@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import '../../../../domain/models/config/printer_config.dart';
+import '../../../../domain/models/config/tax_regime.dart';
+import '../../../../domain/models/sales/cashier_session.dart';
 import '../../../../domain/models/sales/invoice.dart';
 import '../../../../domain/models/sales/invoice_item.dart';
 import '../../../../domain/models/sales/payment.dart';
@@ -120,7 +122,7 @@ class HardwareSettingsViewModel extends ChangeNotifier {
         return result.errorMessage;
       }
 
-      final base64String = base64Encode(result.raw1BitBitmap!);
+      final base64String = result.base64Png ?? base64Encode(result.raw1BitBitmap!);
 
       _config = _config.copyWith(
         logoBase64: base64String,
@@ -130,7 +132,7 @@ class HardwareSettingsViewModel extends ChangeNotifier {
       );
 
       await _configService.savePrinterConfig(_config);
-      _statusMessage = 'Logo procesado (${result.width}x${result.height} px, 1-bit Floyd-Steinberg) guardado correctamente.';
+      _statusMessage = 'Logo procesado (${result.width}x${result.height} px) guardado correctamente.';
       return null;
     } catch (e) {
       _statusMessage = 'Error al procesar logo: $e';
@@ -199,16 +201,20 @@ class HardwareSettingsViewModel extends ChangeNotifier {
 
       List<int>? logoRasterBytes;
       if (_config.isLogoEnabled &&
-          _config.logoBase64 != null &&
-          _config.logoWidth != null &&
-          _config.logoHeight != null) {
+          _config.logoBase64 != null) {
         try {
           final rawBytes = base64Decode(_config.logoBase64!);
-          logoRasterBytes = ThermalLogoProcessor.buildEscPosRasterFrom1Bit(
-            raw1BitBitmap: rawBytes,
-            width: _config.logoWidth!,
-            height: _config.logoHeight!,
-          );
+          if (ThermalLogoProcessor.isPng(rawBytes)) {
+            logoRasterBytes = rawBytes;
+          } else if (_config.logoWidth != null && _config.logoHeight != null) {
+            logoRasterBytes = ThermalLogoProcessor.buildEscPosRasterFrom1Bit(
+              raw1BitBitmap: rawBytes,
+              width: _config.logoWidth!,
+              height: _config.logoHeight!,
+            );
+          } else {
+            logoRasterBytes = rawBytes;
+          }
         } catch (_) {}
       }
 
@@ -217,8 +223,14 @@ class HardwareSettingsViewModel extends ChangeNotifier {
         items: sampleItems,
         payments: samplePayments,
         businessName: _config.headerBusinessName,
+        legalName: _config.headerLegalName,
         ruc: _config.headerRuc ?? 'J0310000000001',
+        address: _config.headerAddress,
+        phone: _config.headerPhone,
         logoRasterBytes: logoRasterBytes,
+        taxRegime: TaxRegime.fromString(_config.taxRegime),
+        isTaxExempt: false,
+        paperWidthMm: _config.paperWidthMm,
       );
 
       if (result.isSuccess) {

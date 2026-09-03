@@ -1,4 +1,4 @@
-package com.omnifood.pos_app.printer
+package com.nhilos.pos_app.printer
 
 import android.content.ComponentName
 import android.content.Context
@@ -17,8 +17,8 @@ import woyou.aidlservice.jiu_mi.IWoyouService
  */
 class SunmiPrinterHandler(private val context: Context) : MethodChannel.MethodCallHandler {
     companion object {
-        private const val TAG = "OmniFoodSunmiNative"
-        private const val CHANNEL_NAME = "com.omnifood.pos/sunmi_printer"
+        private const val TAG = "NhilosPOSSunmiNative"
+        private const val CHANNEL_NAME = "com.nhilos.pos/sunmi_printer"
         private const val SERVICE_PACKAGE = "woyou.aidlservice.jiu-mi"
         private const val SERVICE_ACTION = "woyou.aidlservice.jiu-mi.IWoyouService"
     }
