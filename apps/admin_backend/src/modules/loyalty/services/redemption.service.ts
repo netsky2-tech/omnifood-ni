@@ -150,6 +150,22 @@ export class RedemptionService {
     // Create REDEEM transaction with idempotency key
     const idempotencyKey = `loyalty:redeem:${tenantId}:${intent.ticketId}`;
 
+    const benefitConfig = intent.application.benefitConfig as Record<string, unknown>;
+    const rewardType = intent.application.rewardType;
+    const commercialSnapshot: Record<string, unknown> = {
+      rewardType,
+      benefitConfig: intent.application.benefitConfig,
+      costUnits: intent.application.costUnits,
+    };
+
+    if (rewardType === 'DISCOUNT_AMOUNT') {
+      commercialSnapshot.appliedBenefitNio = Number(benefitConfig?.amountNio ?? 0);
+    } else if (rewardType === 'FREE_PRODUCT') {
+      commercialSnapshot.rewardProductId = benefitConfig?.productId;
+      commercialSnapshot.rewardVariantId = benefitConfig?.variantId;
+      commercialSnapshot.rewardQuantity = Number(benefitConfig?.quantity ?? 1);
+    }
+
     const redeemTx = await this.ledgerService.appendTransaction({
       tenantId,
       customerId: intent.customerId,
@@ -163,11 +179,7 @@ export class RedemptionService {
       branchId: snapshot.branchId,
       terminalId: snapshot.terminalId,
       rewardVersion: intent.rewardVersion,
-      commercialSnapshot: {
-        rewardType: intent.application.rewardType,
-        benefitConfig: intent.application.benefitConfig,
-        costUnits: intent.application.costUnits,
-      },
+      commercialSnapshot,
       origin: 'POS',
       occurredAt: snapshot.paidAt,
     });

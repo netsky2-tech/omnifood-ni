@@ -465,6 +465,7 @@ describe('LV1.3 — Redemption & Reversal (db)', () => {
       expect(redeemResult.redeemTransaction.transaction_type).toBe('REDEEM');
       expect(redeemResult.redeemTransaction.units).toBe(-50);
       expect(redeemResult.redeemTransaction.reward_id).toBe(reward.id);
+      expect((redeemResult.redeemTransaction.commercial_snapshot as any)?.appliedBenefitNio).toBe(25);
     });
 
     it('is idempotent: consolidating same intent twice returns existing', async () => {

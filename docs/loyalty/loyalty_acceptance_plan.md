@@ -1369,18 +1369,18 @@ El estado stale se propaga desde el contrato transversal de freshness del Owner 
 
 ## 17.9 Acceptance suite profit-aware
 
-| ID | Gate |
-|---|---|
-| **MC-01** | ventana exacta `[asOf-30d, asOf)` |
-| **MC-02** | `qualifiedSales` usa snapshot histórico, no reevalúa reglas |
-| **MC-03** | EARN revertido deja de contribuir |
-| **MC-04** | FREE_PRODUCT usa precio base de producto/variante exacto |
-| **MC-05** | múltiples price lists no generan promedio/min/max |
-| **MC-06** | Reward cost cumple DISCOUNT_AMOUNT/FREE_PRODUCT |
-| **MC-07** | `C$120 / C$20,000 = 0.60%` |
-| **MC-08** | ventas >0 + cero redenciones => 0.00% |
-| **MC-09** | denominador cero/costo incompleto => NOT_AVAILABLE |
-| **MC-10** | read-only, tenant-safe y freshness-aware |
+| ID | Gate | Status | Evidencia de Test |
+|---|---|---|---|
+| **MC-01** | ventana exacta `[asOf-30d, asOf)` | PASS | `profit-aware-metrics.spec.ts` + `loyalty-profit-aware.service.db.spec.ts` |
+| **MC-02** | `qualifiedSales` usa snapshot histórico, no reevalúa reglas | PASS | `profit-aware-metrics.spec.ts` + `earning-strategy.spec.ts` |
+| **MC-03** | EARN revertido deja de contribuir | PASS | `profit-aware-metrics.spec.ts` + `loyalty-profit-aware.service.db.spec.ts` |
+| **MC-04** | FREE_PRODUCT usa precio base de producto/variante exacto | PASS | `profit-aware-metrics.spec.ts` + `loyalty-profit-aware.service.db.spec.ts` |
+| **MC-05** | múltiples price lists no generan promedio/min/max | PASS | `profit-aware-metrics.spec.ts` + `inventory-cost-query.adapter.ts` |
+| **MC-06** | Reward cost cumple DISCOUNT_AMOUNT/FREE_PRODUCT | PASS | `profit-aware-metrics.spec.ts` + `loyalty-profit-aware.service.db.spec.ts` |
+| **MC-07** | `C$120 / C$20,000 = 0.60%` | PASS | `profit-aware-metrics.spec.ts` + `loyalty-profit-aware.service.db.spec.ts` |
+| **MC-08** | ventas >0 + cero redenciones => 0.00% | PASS | `profit-aware-metrics.spec.ts` + `loyalty-profit-aware.service.db.spec.ts` |
+| **MC-09** | denominador cero/costo incompleto => NOT_AVAILABLE | PASS | `profit-aware-metrics.spec.ts` + `loyalty-profit-aware.service.db.spec.ts` |
+| **MC-10** | read-only, tenant-safe y freshness-aware | PASS | `loyalty-profit-aware.service.db.spec.ts` (zero-write + two-tenant isolation) |
 
 ## 17.10 Decisión de cierre
 
@@ -1391,6 +1391,7 @@ effectiveIncentiveRate formula      CLOSED
 retailPrice semantics               CLOSED
 multiple price-list treatment       CLOSED
 Acceptance dependency               CLOSED
+LV1.6 Implementation & E2E Tests    CLOSED (100% PASS)
 ```
 
 **No quedan decisiones profit-aware abiertas en Loyalty V1.**

@@ -56,7 +56,7 @@ describe('SpendPointsStrategy', () => {
     expect(strategy.evaluate(snapshot, program)).toBeNull();
   });
 
-  it('calculates floor(eligibleSpend / spendBlock) * pointsPerBlock', () => {
+  it('calculates floor(eligibleSpend / spendBlock) * pointsPerBlock and records earningBaseNio in commercialSnapshot', () => {
     const snapshot = makeSnapshot({
       lines: [{ lineId: 'l1', productId: 'p1', quantity: 1, merchandiseNetNioAfterAllBenefits: 250, source: 'NORMAL' }],
     });
@@ -64,6 +64,7 @@ describe('SpendPointsStrategy', () => {
     const result = strategy.evaluate(snapshot, program);
     expect(result).not.toBeNull();
     expect(result!.units).toBe(25);
+    expect(result!.commercialSnapshot.earningBaseNio).toBe(250);
   });
 
   it('applies floor for fractional blocks', () => {
@@ -110,7 +111,7 @@ describe('ProductStampsStrategy', () => {
     expect(strategy.evaluate(snapshot, program)).toBeNull();
   });
 
-  it('counts discrete quantities of eligible products', () => {
+  it('counts discrete quantities of eligible products and records earningBaseNio', () => {
     const snapshot = makeSnapshot({
       lines: [
         { lineId: 'l1', productId: 'prod-1', quantity: 3, merchandiseNetNioAfterAllBenefits: 30, source: 'NORMAL' },
@@ -124,6 +125,7 @@ describe('ProductStampsStrategy', () => {
     const result = strategy.evaluate(snapshot, program);
     expect(result).not.toBeNull();
     expect(result!.units).toBe(3);
+    expect(result!.commercialSnapshot.earningBaseNio).toBe(30);
   });
 
   it('excludes fractional quantities', () => {
@@ -185,7 +187,7 @@ describe('ProductStampsStrategy', () => {
 describe('VisitStampsStrategy', () => {
   const strategy = new VisitStampsStrategy();
 
-  it('returns 1 visit stamp for any eligible ticket', () => {
+  it('returns 1 visit stamp for any eligible ticket and records earningBaseNio', () => {
     const snapshot = makeSnapshot();
     const program = makeProgram({
       program_type: LoyaltyProgramType.VISIT_STAMPS,
@@ -194,6 +196,7 @@ describe('VisitStampsStrategy', () => {
     const result = strategy.evaluate(snapshot, program);
     expect(result).not.toBeNull();
     expect(result!.units).toBe(1);
+    expect(result!.commercialSnapshot.earningBaseNio).toBe(100);
   });
 
   it('returns null when minimumSpendNio not met', () => {

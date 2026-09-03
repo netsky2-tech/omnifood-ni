@@ -11,6 +11,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { LoyaltyService } from '../services/loyalty.service';
+import { LoyaltyProfitAwareService } from '../services/loyalty-profit-aware.service';
 import { CreateLoyaltyProgramDto } from '../dto/loyalty-program.dto';
 import { UpdateLoyaltyProgramDto } from '../dto/loyalty-program.dto';
 import { CreateRewardDefinitionDto } from '../dto/reward-definition.dto';
@@ -33,6 +34,7 @@ export class LoyaltyController {
     private readonly loyaltyService: LoyaltyService,
     private readonly ticketPaidHandler: TicketPaidHandler,
     private readonly legacyClassificationService: LegacyClassificationService,
+    private readonly profitAwareService: LoyaltyProfitAwareService,
   ) {}
 
   private requireTenant(tenantId?: string): string {
@@ -194,6 +196,22 @@ export class LoyaltyController {
     return this.loyaltyService.deactivateReward(
       this.requireTenant(tenantId),
       rewardId,
+    );
+  }
+
+  // --- Profit-aware Reward Metrics (LV1.6) ---
+
+  @Get('rewards/:rewardId/profit-aware')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  async getRewardProfitAwareMetrics(
+    @Param('rewardId') rewardId: string,
+    @Query('as_of') asOf?: string,
+    @GetTenantId() tenantId?: string,
+  ) {
+    return this.profitAwareService.getRewardProfitAwareMetrics(
+      this.requireTenant(tenantId),
+      rewardId,
+      asOf,
     );
   }
 

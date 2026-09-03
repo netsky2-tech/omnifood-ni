@@ -10,6 +10,7 @@ import type {
   CreateRewardInput,
   UpdateRewardInput,
   AdjustPointsInput,
+  RewardProfitAwareView,
 } from './types';
 
 // --- Programs ---
@@ -96,5 +97,16 @@ export function adjustPoints(customerId: string, input: AdjustPointsInput) {
   return api.post<CustomerPointTransaction>(
     `/customers/${customerId}/points/adjust`,
     input,
+  );
+}
+
+// --- Profit-aware Reward Metrics (LV1.6) ---
+
+export function fetchRewardProfitAwareMetrics(rewardId: string, asOf?: string) {
+  const query = new URLSearchParams();
+  if (asOf) query.set('as_of', asOf);
+  const qs = query.toString();
+  return api.get<RewardProfitAwareView>(
+    `/loyalty/rewards/${rewardId}/profit-aware${qs ? `?${qs}` : ''}`,
   );
 }

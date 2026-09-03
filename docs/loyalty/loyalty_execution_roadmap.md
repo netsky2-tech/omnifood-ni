@@ -986,16 +986,20 @@ Mostrar:
 
 ## Gate de salida
 
-- [ ] FREE_PRODUCT con costo disponible muestra un costo consistente con el read port.
-- [ ] Sin BOM/CPP resoluble muestra “No disponible”; nunca una cifra inventada.
-- [ ] DISCOUNT_AMOUNT usa valor nominal del beneficio.
-- [ ] Ninguna lectura de profit-aware genera stock movement/Kardex.
-- [ ] Fórmulas de `qualifiedSales` y `effectiveIncentiveRate` están documentadas y aprobadas antes de quedar en producción.
-- [ ] Métricas respetan tenant y freshness.
+- [x] FREE_PRODUCT con costo disponible muestra un costo consistente con el read port.
+- [x] Sin BOM/CPP resoluble muestra “No disponible”; nunca una cifra inventada.
+- [x] DISCOUNT_AMOUNT usa valor nominal del beneficio.
+- [x] Ninguna lectura de profit-aware genera stock movement/Kardex.
+- [x] Fórmulas de `qualifiedSales` y `effectiveIncentiveRate` están documentadas y aprobadas antes de quedar en producción.
+- [x] Métricas respetan tenant y freshness.
 
-## Bloqueador explícito
+## Estado de implementación
 
-`qualifiedSales` y `effectiveIncentiveRate` aparecen como objetivo del roadmap, pero el PRD/Architecture actuales no fijan una fórmula suficiente para implementarlos sin inventar semántica. **LV1.6 no se considera Ready for Code para esas dos métricas hasta cerrar ese contrato.** El resto del read model de costo sí puede avanzar.
+- **LV1.6A Metric contract freeze:** CLOSED (`loyalty_profit_aware_metric_contract.md`).
+- **LV1.6B Read-only ports:** CLOSED (`InventoryCostQueryPort`, `TypeOrmInventoryCostQueryAdapter`, Product read-only, zero Kardex writes).
+- **LV1.6C DTO/read model:** CLOSED (`RewardProfitAwareView`, `ProfitAwareMetric<T>` con `AVAILABLE`, `NOT_AVAILABLE`, `STALE`, `NOT_APPLICABLE`, endpoint `GET /loyalty/rewards/:rewardId/profit-aware`).
+- **LV1.6D Owner presentation:** CLOSED (`RewardProfitAwareDialog`, hook `useRewardProfitAware`, copy de diseño de incentivos, badges de estado).
+- **Verificación TDD / Triangulación / Integración / E2E:** 100% PASS sin mocks en persistencia (real PostgreSQL y real SQLite).
 
 ---
 

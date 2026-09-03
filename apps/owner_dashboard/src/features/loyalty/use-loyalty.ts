@@ -15,6 +15,7 @@ import {
   fetchCustomerTransactions,
   fetchCustomers,
   adjustPoints,
+  fetchRewardProfitAwareMetrics,
 } from './loyalty-api';
 import type {
   CreateLoyaltyProgramInput,
@@ -182,5 +183,16 @@ export function useAdjustPoints() {
       qc.invalidateQueries({ queryKey: ['loyalty', 'customer-accounts', variables.customerId] });
       qc.invalidateQueries({ queryKey: ['loyalty', 'customer-transactions', variables.customerId] });
     },
+  });
+}
+
+// --- Profit-aware Reward Metrics (LV1.6) ---
+
+export function useRewardProfitAware(rewardId: string | null, asOf?: string) {
+  return useQuery({
+    queryKey: ['loyalty', 'rewards', rewardId, 'profit-aware', asOf],
+    queryFn: () => fetchRewardProfitAwareMetrics(rewardId!, asOf),
+    enabled: !!rewardId,
+    staleTime: 60 * 1000,
   });
 }

@@ -26,6 +26,7 @@ export class SpendPointsStrategy implements EarningStrategy {
       units: earned,
       strategy: 'SPEND_POINTS',
       commercialSnapshot: {
+        earningBaseNio: eligibleSpend,
         eligibleSpendNio: eligibleSpend,
         spendBlockNio,
         pointsPerBlock,
@@ -55,12 +56,18 @@ export class ProductStampsStrategy implements EarningStrategy {
     const earned = totalQuantity * unitsPerPurchasedUnit;
     if (earned <= 0) return null;
 
+    const earningBaseNio = eligibleLines.reduce(
+      (sum, l) => sum + l.merchandiseNetNioAfterAllBenefits,
+      0,
+    );
+
     return {
       programId: program.id,
       programVersion: program.config_version,
       units: earned,
       strategy: 'PRODUCT_STAMPS',
       commercialSnapshot: {
+        earningBaseNio,
         eligibleLines: eligibleLines.length,
         totalQuantity,
         unitsPerPurchasedUnit,
@@ -75,12 +82,12 @@ export class VisitStampsStrategy implements EarningStrategy {
     const unitsPerVisit = Number(rule.unitsPerVisit ?? 1);
     const minimumSpendNio = Number(rule.minimumSpendNio ?? 0);
 
-    if (minimumSpendNio > 0) {
-      const totalSpend = snapshot.lines
-        .filter((l) => l.source === 'NORMAL')
-        .reduce((sum, l) => sum + l.merchandiseNetNioAfterAllBenefits, 0);
+    const eligibleSpend = snapshot.lines
+      .filter((l) => l.source === 'NORMAL')
+      .reduce((sum, l) => sum + l.merchandiseNetNioAfterAllBenefits, 0);
 
-      if (totalSpend < minimumSpendNio) return null;
+    if (minimumSpendNio > 0) {
+      if (eligibleSpend < minimumSpendNio) return null;
     }
 
     return {
@@ -89,6 +96,7 @@ export class VisitStampsStrategy implements EarningStrategy {
       units: unitsPerVisit,
       strategy: 'VISIT_STAMPS',
       commercialSnapshot: {
+        earningBaseNio: eligibleSpend,
         unitsPerVisit,
         minimumSpendNio,
       },

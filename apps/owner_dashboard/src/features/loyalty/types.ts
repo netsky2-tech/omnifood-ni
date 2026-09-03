@@ -149,3 +149,36 @@ export interface AdjustPointsInput {
   reason: string;
   invoice_id?: string;
 }
+
+// --- Profit-aware Reward Metrics (LV1.6) ---
+
+export type MetricStatus = 'AVAILABLE' | 'NOT_AVAILABLE' | 'STALE' | 'NOT_APPLICABLE';
+
+export interface ProfitAwareMetric<T> {
+  status: MetricStatus;
+  value?: T;
+  reason?: string;
+  asOfUtc?: string;
+  lastCompleteSyncAt?: string;
+  source?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ProfitAwareWindow {
+  startUtc: string;
+  endUtc: string;
+  label: string; // 'LAST_30_DAYS'
+}
+
+export interface RewardProfitAwareView {
+  rewardId: string;
+  programId: string;
+  asOfUtc: string;
+  window: ProfitAwareWindow;
+  retailPriceNio: ProfitAwareMetric<number>;
+  estimatedCppNio: ProfitAwareMetric<number>;
+  estimatedRewardCostNio: ProfitAwareMetric<number>;
+  qualifiedSalesNio: ProfitAwareMetric<number>;
+  estimatedIncentiveCostInWindowNio: ProfitAwareMetric<number>;
+  effectiveIncentiveRatePct: ProfitAwareMetric<number>;
+}

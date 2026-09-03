@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, Search, Star, Trophy, Tag, Edit, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Plus, Search, Star, Trophy, Tag, Edit, ToggleLeft, ToggleRight, TrendingUp } from 'lucide-react';
+import { RewardProfitAwareDialog } from './reward-profit-aware-dialog';
 import {
   usePrograms,
   useRewards,
@@ -520,6 +521,7 @@ export function LoyaltyPage() {
   const [editingProgram, setEditingProgram] = useState<LoyaltyProgram | null>(null);
   const [showCreateReward, setShowCreateReward] = useState(false);
   const [editingReward, setEditingReward] = useState<any>(null);
+  const [profitAwareReward, setProfitAwareReward] = useState<any>(null);
 
   const { data: programs, isLoading, error } = usePrograms(
     statusFilter ? { status: statusFilter } : undefined,
@@ -697,7 +699,7 @@ export function LoyaltyPage() {
                                 {reward.status === 'ACTIVE' ? 'Activo' : 'Inactivo'}
                               </Badge>
                             </div>
-                            <div className="flex gap-1">
+                            <div className="flex gap-1 items-center">
                               <Button
                                 size="sm"
                                 variant="ghost"
@@ -717,6 +719,16 @@ export function LoyaltyPage() {
                                 onClick={(e) => { e.stopPropagation(); setEditingReward(reward); }}
                               >
                                 <Edit className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 px-1.5 text-xs text-muted-foreground hover:text-foreground"
+                                title="Ver métricas económicas"
+                                onClick={(e) => { e.stopPropagation(); setProfitAwareReward(reward); }}
+                              >
+                                <TrendingUp className="h-3 w-3 mr-1" />
+                                Métricas
                               </Button>
                             </div>
                           </div>
@@ -798,6 +810,13 @@ export function LoyaltyPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Profit-aware Reward Dialog */}
+      <RewardProfitAwareDialog
+        reward={profitAwareReward}
+        open={!!profitAwareReward}
+        onOpenChange={(open) => !open && setProfitAwareReward(null)}
+      />
     </div>
   );
 }

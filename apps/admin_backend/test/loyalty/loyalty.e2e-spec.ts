@@ -1,4 +1,4 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication, ValidationPipe, NotFoundException } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { Reflector } from '@nestjs/core';
@@ -10,6 +10,7 @@ import { LoyaltyController } from '../../src/modules/loyalty/controllers/loyalty
 import { LoyaltyService } from '../../src/modules/loyalty/services/loyalty.service';
 import { TicketPaidHandler } from '../../src/modules/loyalty/services/ticket-paid.handler';
 import { LegacyClassificationService } from '../../src/modules/loyalty/services/legacy-classification.service';
+import { LoyaltyProfitAwareService } from '../../src/modules/loyalty/services/loyalty-profit-aware.service';
 import { LoyaltyProgram, LoyaltyProgramStatus } from '../../src/modules/loyalty/entities/loyalty-program.entity';
 import { RewardDefinition } from '../../src/modules/loyalty/entities/reward-definition.entity';
 import { CustomerLoyaltyAccountProjection } from '../../src/modules/loyalty/entities/customer-loyalty-account-projection.entity';
@@ -175,6 +176,31 @@ describe('Loyalty API (E2E / Integration)', () => {
           useValue: {
             ensureLegacyProgram: jest.fn(),
             classifyLegacyTransactions: jest.fn(),
+          },
+        },
+        {
+          provide: LoyaltyProfitAwareService,
+          useValue: {
+            getRewardProfitAwareMetrics: jest.fn().mockImplementation((tenantId: string, rewardId: string, asOf?: string) => {
+              const reward = dbRewards.find((r) => r.id === rewardId && r.tenant_id === tenantId);
+              if (!reward) throw new NotFoundException('Reward not found');
+              return Promise.resolve({
+                rewardId,
+                programId: reward.loyalty_program_id,
+                asOfUtc: asOf ?? '2026-09-02T12:00:00.000Z',
+                window: {
+                  startUtc: '2026-08-03T12:00:00.000Z',
+                  endUtc: '2026-09-02T12:00:00.000Z',
+                  label: 'LAST_30_DAYS',
+                },
+                retailPriceNio: { status: 'NOT_APPLICABLE', reason: 'ONLY_FOR_FREE_PRODUCT' },
+                estimatedCppNio: { status: 'NOT_APPLICABLE', reason: 'ONLY_FOR_FREE_PRODUCT' },
+                estimatedRewardCostNio: { status: 'AVAILABLE', value: 50 },
+                qualifiedSalesNio: { status: 'AVAILABLE', value: 10000 },
+                estimatedIncentiveCostInWindowNio: { status: 'AVAILABLE', value: 100 },
+                effectiveIncentiveRatePct: { status: 'AVAILABLE', value: 1.0 },
+              });
+            }),
           },
         },
       ],
@@ -617,6 +643,60 @@ describe('Loyalty API (E2E / Integration)', () => {
 
       expect(res.status).toBe(200);
       expect(Array.isArray(res.body)).toBe(true);
+    });
+  });
+
+  describe('GET /loyalty/rewards/:rewardId/profit-aware (LV1.6)', () => {
+    it('returns profit-aware reward metrics for OWNER with 200', async () => {
+      const token = createToken('tenant-A', UserRole.OWNER);
+
+      dbRewards.push({
+        id: 'rw-pa-1',
+        tenant_id: 'tenant-A',
+        loyalty_program_id: 'prog-1',
+        name: 'Reward Profit-aware',
+        reward_type: 'DISCOUNT_AMOUNT' as any,
+        cost_units: 50,
+        benefit_config: { amountNio: 50 },
+        status: 'ACTIVE' as any,
+        presentation_order: 0,
+        config_version: 1,
+        created_at: new Date(),
+        updated_at: new Date(),
+      } as unknown as RewardDefinition);
+
+      const res = await request(app.getHttpServer())
+        .get('/loyalty/rewards/rw-pa-1/profit-aware?as_of=2026-09-02T12:00:00.000Z')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.rewardId).toBe('rw-pa-1');
+      expect(res.body.window.label).toBe('LAST_30_DAYS');
+      expect(res.body.estimatedRewardCostNio.status).toBe('AVAILABLE');
+      expect(res.body.estimatedRewardCostNio.value).toBe(50);
+      expect(res.body.qualifiedSalesNio.status).toBe('AVAILABLE');
+      expect(res.body.qualifiedSalesNio.value).toBe(10000);
+      expect(res.body.effectiveIncentiveRatePct.value).toBe(1.0);
+    });
+
+    it('rejects 403 when CASHIER attempts to view profit-aware metrics', async () => {
+      const token = createToken('tenant-A', UserRole.CASHIER);
+
+      const res = await request(app.getHttpServer())
+        .get('/loyalty/rewards/rw-pa-1/profit-aware')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(403);
+    });
+
+    it('returns 404 when reward does not exist for tenant', async () => {
+      const token = createToken('tenant-A', UserRole.OWNER);
+
+      const res = await request(app.getHttpServer())
+        .get('/loyalty/rewards/non-existent/profit-aware')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(404);
     });
   });
 });

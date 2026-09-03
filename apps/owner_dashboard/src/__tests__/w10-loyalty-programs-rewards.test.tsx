@@ -28,6 +28,7 @@ vi.mock('@/features/loyalty/use-loyalty', () => ({
   useUpdateReward: vi.fn(),
   useActivateReward: vi.fn(),
   useDeactivateReward: vi.fn(),
+  useRewardProfitAware: vi.fn(),
 }));
 
 function TestWrapper({ children }: { children: React.ReactNode }) {
