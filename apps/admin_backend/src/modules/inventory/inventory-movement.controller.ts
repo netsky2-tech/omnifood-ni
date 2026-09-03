@@ -86,6 +86,15 @@ const bindProductionDocumentTerminal = (
     );
   }
 
+  if (!authenticatedTerminalId && document.idempotencyKey?.includes(':')) {
+    const segments = document.idempotencyKey.split(':');
+    if (segments.length >= 3 && segments[1] !== terminalId) {
+      throw new BadRequestException(
+        'production terminalId must match the terminal segment in idempotencyKey when no authenticated terminal claim is available',
+      );
+    }
+  }
+
   const idempotencyKey = document.idempotencyKey?.includes(':')
     ? buildProductionIdempotencyKeyForTerminal(
         document.idempotencyKey,

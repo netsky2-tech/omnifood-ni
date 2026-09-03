@@ -20,6 +20,10 @@ import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
 import { CurrentUserAuthorizationService } from '../../src/modules/identity/services/current-user-authorization.service';
 import { AuthController } from '../../src/modules/identity/controllers/auth.controller';
 import { AuthService } from '../../src/modules/identity/services/auth.service';
+import { SupervisorOverrideService } from '../../src/modules/identity/services/supervisor-override.service';
+import { SalesReportsService } from '../../src/modules/sales/services/sales-reports.service';
+import { FiscalReportsService } from '../../src/modules/sales/services/fiscal-reports.service';
+import { SalesExportService } from '../../src/modules/sales/services/sales-export.service';
 import { UsersController } from '../../src/modules/identity/controllers/users.controller';
 import { ReportsController } from '../../src/modules/sales/controllers/reports.controller';
 import { InventoryMovementController } from '../../src/modules/inventory/inventory-movement.controller';
@@ -31,6 +35,7 @@ import { InventoryService } from '../../src/modules/inventory/inventory.service'
 import { RecipeService } from '../../src/modules/inventory/recipe.service';
 import { CountSessionService } from '../../src/modules/inventory/count-session.service';
 import { ProductionService } from '../../src/modules/inventory/production.service';
+import { InventoryReportsService } from '../../src/modules/inventory/services/inventory-reports.service';
 import { CatalogService } from '../../src/modules/catalog/catalog.service';
 import {
   IDENTITY_JWT_CONFIG,
@@ -228,6 +233,10 @@ describe('authoritative remaining sensitive routes (e2e)', () => {
         AuthoritativeCurrentUserGuard,
         RolesGuard,
         AuthService,
+        { provide: SupervisorOverrideService, useValue: {} },
+        { provide: SalesReportsService, useValue: {} },
+        { provide: FiscalReportsService, useValue: {} },
+        { provide: SalesExportService, useValue: {} },
         { provide: CurrentUserAuthorizationService, useValue: { authorize } },
         { provide: ConfigService, useValue: {} },
         { provide: IDENTITY_JWT_CONFIG, useValue: jwtConfig },
@@ -238,6 +247,10 @@ describe('authoritative remaining sensitive routes (e2e)', () => {
         { provide: RecipeService, useValue: {} },
         { provide: CountSessionService, useValue: {} },
         { provide: ProductionService, useValue: {} },
+        {
+          provide: InventoryReportsService,
+          useValue: { getAlertsSummaryReport: jest.fn() },
+        },
         { provide: CatalogService, useValue: catalogService },
         { provide: getRepositoryToken(User), useValue: users },
         { provide: DataSource, useValue: {} },

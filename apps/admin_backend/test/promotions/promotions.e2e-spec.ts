@@ -17,6 +17,7 @@ import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
 import { TenantInterceptor } from '../../src/core/database/rls.interceptor';
 import { JWT_TOKEN_TYPES } from '../../src/modules/identity/security/jwt-token.types';
+import { createIdentityJwtConfigProvider } from '../support/identity-jwt-test.fixture';
 
 describe('Promotions Module (E2E / Integration)', () => {
   const jwtSecret = 'test-only-jwt-secret-with-at-least-thirty-two-bytes';
@@ -94,6 +95,7 @@ describe('Promotions Module (E2E / Integration)', () => {
         RolesGuard,
         Reflector,
         JwtService,
+        createIdentityJwtConfigProvider(),
         TenantInterceptor,
         {
           provide: getRepositoryToken(Promotion),
