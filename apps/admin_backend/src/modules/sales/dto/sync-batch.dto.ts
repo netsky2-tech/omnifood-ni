@@ -23,6 +23,7 @@ const SYNC_DOCUMENT_TYPE = {
   PRODUCTION: 'PRODUCTION',
   ADJUSTMENT: 'ADJUSTMENT',
   REVERSAL: 'REVERSAL',
+  FULFILLMENT: 'FULFILLMENT',
 } as const;
 
 export type SyncDocumentType =
@@ -31,6 +32,7 @@ export type SyncDocumentType =
 const SYNC_FLOW_TYPE = {
   INVENTORY: 'inventory',
   SALES: 'sales',
+  FULFILLMENT: 'fulfillment',
 } as const;
 
 export type SyncFlowType = (typeof SYNC_FLOW_TYPE)[keyof typeof SYNC_FLOW_TYPE];
@@ -209,6 +211,41 @@ export class SyncMovementDeltaDto {
   sourceDocumentId?: string;
 }
 
+export class SyncFulfillmentDto {
+  @IsString()
+  id: string;
+
+  @IsString()
+  @IsOptional()
+  saleId?: string;
+
+  @IsString()
+  @IsOptional()
+  topologySnapshotId?: string;
+
+  @IsNumber()
+  @IsOptional()
+  topologyRevision?: number;
+
+  @IsString()
+  channel: string;
+
+  @IsString()
+  routeState: string;
+
+  @IsString()
+  @IsOptional()
+  deliveryState?: string;
+
+  @IsString()
+  @IsOptional()
+  linesPayload?: string;
+
+  @IsArray()
+  @IsOptional()
+  lines?: Array<Record<string, unknown>>;
+}
+
 export class SyncBatchRecordDto {
   @IsString()
   idempotencyKey: string;
@@ -238,6 +275,26 @@ export class SyncBatchRecordDto {
   @IsOptional()
   recipeVersionId?: string;
 
+  @IsString()
+  @IsOptional()
+  aggregateType?: string;
+
+  @IsString()
+  @IsOptional()
+  aggregateId?: string;
+
+  @IsString()
+  @IsOptional()
+  eventId?: string;
+
+  @IsNumber()
+  @IsOptional()
+  topologyRevision?: number;
+
+  @IsString()
+  @IsOptional()
+  payloadHash?: string;
+
   @IsObject()
   @IsOptional()
   @ValidateNested()
@@ -253,6 +310,12 @@ export class SyncBatchRecordDto {
   @RejectAbsoluteStockFields()
   @RejectCreditNoteMovementDeltas()
   movements?: SyncMovementDeltaDto[];
+
+  @IsObject()
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => SyncFulfillmentDto)
+  fulfillment?: SyncFulfillmentDto;
 }
 
 export class SyncBatchEnvelopeDto {
