@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, Search, Star, Trophy, Tag, Edit, ToggleLeft, ToggleRight, ChevronRight } from 'lucide-react';
+import { Plus, Search, Star, Trophy, Tag, Edit, ToggleLeft, ToggleRight } from 'lucide-react';
 import {
   usePrograms,
   useRewards,
@@ -16,9 +16,11 @@ import {
 } from './use-loyalty';
 import type {
   LoyaltyProgram,
+  LoyaltyProgramType,
   LoyaltyProgramStatus,
   CreateLoyaltyProgramInput,
   UpdateLoyaltyProgramInput,
+  RewardType,
   CreateRewardInput,
   UpdateRewardInput,
 } from './types';
@@ -49,8 +51,39 @@ function ProgramForm({
   onSuccess: () => void;
   onCancel: () => void;
 }) {
+  const isEditing = !!initial;
   const [name, setName] = useState(initial?.name ?? '');
-  const [programType, setProgramType] = useState(initial?.program_type ?? 'SPEND_POINTS');
+  const [programType, setProgramType] = useState<LoyaltyProgramType>(initial?.program_type ?? 'SPEND_POINTS');
+
+  // Specific fields for SPEND_POINTS
+  const [spendBlockNio, setSpendBlockNio] = useState<number>(
+    Number((initial?.earning_rule as any)?.spendBlockNio ?? 10)
+  );
+  const [pointsPerBlock, setPointsPerBlock] = useState<number>(
+    Number((initial?.earning_rule as any)?.pointsPerBlock ?? 1)
+  );
+
+  // Specific fields for PRODUCT_STAMPS
+  const [eligibleProductIds, setEligibleProductIds] = useState<string>(
+    Array.isArray((initial?.earning_rule as any)?.eligibleProductIds)
+      ? (initial?.earning_rule as any).eligibleProductIds.join(', ')
+      : 'prod-smash'
+  );
+  const [unitsPerPurchasedUnit, setUnitsPerPurchasedUnit] = useState<number>(
+    Number((initial?.earning_rule as any)?.unitsPerPurchasedUnit ?? 1)
+  );
+
+  // Specific fields for VISIT_STAMPS
+  const [unitsPerVisit, setUnitsPerVisit] = useState<number>(
+    Number((initial?.earning_rule as any)?.unitsPerVisit ?? 1)
+  );
+  const [minimumSpendNio, setMinimumSpendNio] = useState<string>(
+    (initial?.earning_rule as any)?.minimumSpendNio != null
+      ? String((initial?.earning_rule as any).minimumSpendNio)
+      : ''
+  );
+
+  const [useCustomJson, setUseCustomJson] = useState(false);
   const [earningRule, setEarningRule] = useState(
     JSON.stringify(initial?.earning_rule ?? {}, null, 2),
   );
@@ -59,18 +92,39 @@ function ProgramForm({
   const createMutation = useCreateProgram();
   const updateMutation = useUpdateProgram();
 
-  const isEditing = !!initial;
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
     let parsedRule: Record<string, unknown>;
-    try {
-      parsedRule = JSON.parse(earningRule);
-    } catch {
-      setError('earning_rule debe ser JSON válido');
-      return;
+    if (useCustomJson) {
+      try {
+        parsedRule = JSON.parse(earningRule);
+      } catch {
+        setError('earning_rule debe ser JSON válido');
+        return;
+      }
+    } else {
+      if (programType === 'SPEND_POINTS') {
+        parsedRule = {
+          spendBlockNio: Number(spendBlockNio),
+          pointsPerBlock: Number(pointsPerBlock),
+        };
+      } else if (programType === 'PRODUCT_STAMPS') {
+        const prodList = eligibleProductIds
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+        parsedRule = {
+          eligibleProductIds: prodList.length > 0 ? prodList : ['prod-smash'],
+          unitsPerPurchasedUnit: Number(unitsPerPurchasedUnit),
+        };
+      } else {
+        parsedRule = {
+          unitsPerVisit: Number(unitsPerVisit),
+          ...(minimumSpendNio.trim() ? { minimumSpendNio: Number(minimumSpendNio) } : {}),
+        };
+      }
     }
 
     try {
@@ -99,7 +153,7 @@ function ProgramForm({
           id="program-name"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Ej: Club Smash Burger"
+          placeholder="Ej: Smash Burger Club"
           required
         />
       </div>
@@ -120,16 +174,127 @@ function ProgramForm({
         </div>
       )}
 
-      <div>
-        <label htmlFor="earning-rule" className="block text-sm font-medium mb-1">Regla de acumulación (JSON)</label>
-        <textarea
-          id="earning-rule"
-          value={earningRule}
-          onChange={(e) => setEarningRule(e.target.value)}
-          rows={4}
-          className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm font-mono shadow-sm placeholder:text-muted-foreground"
-          placeholder='{"spendBlockNio": 10, "pointsPerBlock": 1}'
-        />
+      {/* Dynamic structured fields according to mechanics */}
+      {!useCustomJson ? (
+        <div className="space-y-3 p-3 bg-muted/40 rounded-md border border-border/60">
+          <p className="text-xs font-semibold uppercase text-muted-foreground">
+            Regla de acumulación ({programType})
+          </p>
+
+          {programType === 'SPEND_POINTS' && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="spend-block" className="block text-xs font-medium mb-1">
+                  Monto bloque (C$)
+                </label>
+                <Input
+                  id="spend-block"
+                  type="number"
+                  min={1}
+                  value={spendBlockNio}
+                  onChange={(e) => setSpendBlockNio(Number(e.target.value))}
+                  required
+                />
+              </div>
+              <div>
+                <label htmlFor="points-per-block" className="block text-xs font-medium mb-1">
+                  Puntos por bloque
+                </label>
+                <Input
+                  id="points-per-block"
+                  type="number"
+                  min={1}
+                  value={pointsPerBlock}
+                  onChange={(e) => setPointsPerBlock(Number(e.target.value))}
+                  required
+                />
+              </div>
+            </div>
+          )}
+
+          {programType === 'PRODUCT_STAMPS' && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="eligible-products" className="block text-xs font-medium mb-1">
+                  Productos elegibles (IDs)
+                </label>
+                <Input
+                  id="eligible-products"
+                  value={eligibleProductIds}
+                  onChange={(e) => setEligibleProductIds(e.target.value)}
+                  placeholder="prod-smash, prod-burger"
+                  required
+                />
+              </div>
+              <div>
+                <label htmlFor="units-per-unit" className="block text-xs font-medium mb-1">
+                  Sellos por unidad
+                </label>
+                <Input
+                  id="units-per-unit"
+                  type="number"
+                  min={1}
+                  value={unitsPerPurchasedUnit}
+                  onChange={(e) => setUnitsPerPurchasedUnit(Number(e.target.value))}
+                  required
+                />
+              </div>
+            </div>
+          )}
+
+          {programType === 'VISIT_STAMPS' && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="units-per-visit" className="block text-xs font-medium mb-1">
+                  Sellos por visita
+                </label>
+                <Input
+                  id="units-per-visit"
+                  type="number"
+                  min={1}
+                  value={unitsPerVisit}
+                  onChange={(e) => setUnitsPerVisit(Number(e.target.value))}
+                  required
+                />
+              </div>
+              <div>
+                <label htmlFor="min-spend" className="block text-xs font-medium mb-1">
+                  Gasto mínimo (C$, opcional)
+                </label>
+                <Input
+                  id="min-spend"
+                  type="number"
+                  min={0}
+                  value={minimumSpendNio}
+                  onChange={(e) => setMinimumSpendNio(e.target.value)}
+                  placeholder="0"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div>
+          <label htmlFor="earning-rule" className="block text-sm font-medium mb-1">Regla de acumulación (JSON)</label>
+          <textarea
+            id="earning-rule"
+            value={earningRule}
+            onChange={(e) => setEarningRule(e.target.value)}
+            rows={4}
+            className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm font-mono shadow-sm placeholder:text-muted-foreground"
+            placeholder='{"spendBlockNio": 10, "pointsPerBlock": 1}'
+          />
+        </div>
+      )}
+
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => setUseCustomJson(!useCustomJson)}
+          className="text-xs text-primary underline"
+        >
+          {useCustomJson ? 'Usar formulario guiado' : 'Modo JSON avanzado'}
+        </button>
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
@@ -155,10 +320,23 @@ function RewardForm({
   onSuccess: () => void;
   onCancel: () => void;
 }) {
+  const isEditing = !!initial;
   const [name, setName] = useState(initial?.name ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
-  const [rewardType, setRewardType] = useState(initial?.reward_type ?? 'DISCOUNT_AMOUNT');
-  const [costUnits, setCostUnits] = useState(initial?.cost_units ?? 100);
+  const [rewardType, setRewardType] = useState<RewardType>(initial?.reward_type ?? 'DISCOUNT_AMOUNT');
+  const [costUnits, setCostUnits] = useState(initial?.cost_units ?? 10);
+
+  // Specific field for DISCOUNT_AMOUNT
+  const [amountNio, setAmountNio] = useState<number>(
+    Number((initial?.benefit_config as any)?.amountNio ?? 50)
+  );
+
+  // Specific field for FREE_PRODUCT
+  const [productId, setProductId] = useState<string>(
+    (initial?.benefit_config as any)?.productId ?? 'prod-smash'
+  );
+
+  const [useCustomJson, setUseCustomJson] = useState(false);
   const [benefitConfig, setBenefitConfig] = useState(
     JSON.stringify(initial?.benefit_config ?? {}, null, 2),
   );
@@ -167,18 +345,24 @@ function RewardForm({
   const createMutation = useCreateReward();
   const updateMutation = useUpdateReward();
 
-  const isEditing = !!initial;
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
     let parsedConfig: Record<string, unknown>;
-    try {
-      parsedConfig = JSON.parse(benefitConfig);
-    } catch {
-      setError('benefit_config debe ser JSON válido');
-      return;
+    if (useCustomJson) {
+      try {
+        parsedConfig = JSON.parse(benefitConfig);
+      } catch {
+        setError('benefit_config debe ser JSON válido');
+        return;
+      }
+    } else {
+      if (rewardType === 'DISCOUNT_AMOUNT') {
+        parsedConfig = { amountNio: Number(amountNio) };
+      } else {
+        parsedConfig = { productId: productId.trim() || 'prod-smash' };
+      }
     }
 
     try {
@@ -214,7 +398,7 @@ function RewardForm({
           id="reward-name"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Ej: Descuento C$50"
+          placeholder="Ej: 1 Smash Burger gratis"
           required
         />
       </div>
@@ -257,16 +441,63 @@ function RewardForm({
         />
       </div>
 
-      <div>
-        <label htmlFor="benefit-config" className="block text-sm font-medium mb-1">Configuración de beneficio (JSON)</label>
-        <textarea
-          id="benefit-config"
-          value={benefitConfig}
-          onChange={(e) => setBenefitConfig(e.target.value)}
-          rows={3}
-          className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm font-mono shadow-sm placeholder:text-muted-foreground"
-          placeholder='{"amountNio": 50}'
-        />
+      {/* Dynamic structured fields according to reward type */}
+      {!useCustomJson ? (
+        <div className="p-3 bg-muted/40 rounded-md border border-border/60">
+          <p className="text-xs font-semibold uppercase text-muted-foreground mb-2">
+            Beneficio ({rewardType})
+          </p>
+          {rewardType === 'DISCOUNT_AMOUNT' ? (
+            <div>
+              <label htmlFor="benefit-amount" className="block text-xs font-medium mb-1">
+                Monto de descuento (C$)
+              </label>
+              <Input
+                id="benefit-amount"
+                type="number"
+                min={1}
+                value={amountNio}
+                onChange={(e) => setAmountNio(Number(e.target.value))}
+                required
+              />
+            </div>
+          ) : (
+            <div>
+              <label htmlFor="benefit-product" className="block text-xs font-medium mb-1">
+                ID de producto a entregar
+              </label>
+              <Input
+                id="benefit-product"
+                value={productId}
+                onChange={(e) => setProductId(e.target.value)}
+                placeholder="prod-smash"
+                required
+              />
+            </div>
+          )}
+        </div>
+      ) : (
+        <div>
+          <label htmlFor="benefit-config" className="block text-sm font-medium mb-1">Configuración de beneficio (JSON)</label>
+          <textarea
+            id="benefit-config"
+            value={benefitConfig}
+            onChange={(e) => setBenefitConfig(e.target.value)}
+            rows={3}
+            className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm font-mono shadow-sm placeholder:text-muted-foreground"
+            placeholder='{"amountNio": 50}'
+          />
+        </div>
+      )}
+
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => setUseCustomJson(!useCustomJson)}
+          className="text-xs text-primary underline"
+        >
+          {useCustomJson ? 'Usar formulario guiado' : 'Modo JSON avanzado'}
+        </button>
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}

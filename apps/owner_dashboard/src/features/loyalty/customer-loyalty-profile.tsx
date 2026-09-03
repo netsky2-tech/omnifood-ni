@@ -241,9 +241,9 @@ export function CustomerLoyaltyProfile() {
                   {[selectedCustomer.phone, selectedCustomer.email].filter(Boolean).join(' · ') || selectedCustomer.id}
                 </p>
               </div>
-              <Button onClick={() => setShowAdjust(true)}>
+              <Button onClick={() => setShowAdjust(true)} aria-label="Ajuste manual">
                 <RefreshCw className="h-4 w-4 mr-1" />
-                Ajustar puntos
+                Ajuste manual
               </Button>
             </div>
 
@@ -332,9 +332,9 @@ export function CustomerLoyaltyProfile() {
       <Dialog open={showAdjust} onOpenChange={setShowAdjust}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Ajustar puntos</DialogTitle>
+            <DialogTitle>Ajuste manual</DialogTitle>
             <DialogDescription>
-              Agregue o deduzca puntos manualmente para este cliente
+              Agregue o deduzca puntos o unidades manualmente para este cliente
             </DialogDescription>
           </DialogHeader>
           {selectedCustomer && (

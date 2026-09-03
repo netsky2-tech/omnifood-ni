@@ -113,7 +113,7 @@ export function useUpdateReward() {
   return useMutation({
     mutationFn: ({ rewardId, input }: { rewardId: string; input: UpdateRewardInput }) =>
       updateReward(rewardId, input),
-    onSuccess: (_data, variables) => {
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['loyalty', 'rewards'] });
       qc.invalidateQueries({ queryKey: ['loyalty', 'programs'] });
     },

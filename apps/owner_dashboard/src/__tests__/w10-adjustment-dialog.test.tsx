@@ -93,7 +93,7 @@ beforeEach(() => {
 });
 
 describe('LV1.5E — Adjustment Dialog', () => {
-  it('opens adjust dialog when "Ajustar puntos" button is clicked', async () => {
+  it('opens adjust dialog when "Ajuste manual" button is clicked', async () => {
     const user = userEvent.setup();
 
     render(
@@ -105,10 +105,10 @@ describe('LV1.5E — Adjustment Dialog', () => {
     await user.click(screen.getByText('Carlos Mendoza'));
 
     await waitFor(() => {
-      expect(screen.getByText('Ajustar puntos')).toBeInTheDocument();
+      expect(screen.getByText('Ajuste manual')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText('Ajustar puntos'));
+    await user.click(screen.getByText('Ajuste manual'));
 
     await waitFor(() => {
       expect(screen.getByText('Cantidad de puntos')).toBeInTheDocument();
@@ -128,10 +128,10 @@ describe('LV1.5E — Adjustment Dialog', () => {
     await user.click(screen.getByText('Carlos Mendoza'));
 
     await waitFor(() => {
-      expect(screen.getByText('Ajustar puntos')).toBeInTheDocument();
+      expect(screen.getByText('Ajuste manual')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText('Ajustar puntos'));
+    await user.click(screen.getByText('Ajuste manual'));
 
     await waitFor(() => {
       expect(screen.getByText('Saldo actual: 250 pts')).toBeInTheDocument();
@@ -150,10 +150,10 @@ describe('LV1.5E — Adjustment Dialog', () => {
     await user.click(screen.getByText('Carlos Mendoza'));
 
     await waitFor(() => {
-      expect(screen.getByText('Ajustar puntos')).toBeInTheDocument();
+      expect(screen.getByText('Ajuste manual')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText('Ajustar puntos'));
+    await user.click(screen.getByText('Ajuste manual'));
 
     await waitFor(() => {
       expect(screen.getByLabelText(/cantidad de puntos/i)).toBeInTheDocument();
@@ -184,10 +184,10 @@ describe('LV1.5E — Adjustment Dialog', () => {
     await user.click(screen.getByText('Carlos Mendoza'));
 
     await waitFor(() => {
-      expect(screen.getByText('Ajustar puntos')).toBeInTheDocument();
+      expect(screen.getByText('Ajuste manual')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText('Ajustar puntos'));
+    await user.click(screen.getByText('Ajuste manual'));
 
     await waitFor(() => {
       expect(screen.getByLabelText(/cantidad de puntos/i)).toBeInTheDocument();
@@ -219,10 +219,10 @@ describe('LV1.5E — Adjustment Dialog', () => {
     await user.click(screen.getByText('Carlos Mendoza'));
 
     await waitFor(() => {
-      expect(screen.getByText('Ajustar puntos')).toBeInTheDocument();
+      expect(screen.getByText('Ajuste manual')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText('Ajustar puntos'));
+    await user.click(screen.getByText('Ajuste manual'));
 
     await waitFor(() => {
       expect(screen.getByLabelText(/cantidad de puntos/i)).toBeInTheDocument();
@@ -258,10 +258,10 @@ describe('LV1.5E — Adjustment Dialog', () => {
     await user.click(screen.getByText('Carlos Mendoza'));
 
     await waitFor(() => {
-      expect(screen.getByText('Ajustar puntos')).toBeInTheDocument();
+      expect(screen.getByText('Ajuste manual')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText('Ajustar puntos'));
+    await user.click(screen.getByText('Ajuste manual'));
 
     await waitFor(() => {
       expect(screen.getByLabelText(/cantidad de puntos/i)).toBeInTheDocument();
@@ -298,10 +298,10 @@ describe('LV1.5E — Adjustment Dialog', () => {
     await user.click(screen.getByText('Carlos Mendoza'));
 
     await waitFor(() => {
-      expect(screen.getByText('Ajustar puntos')).toBeInTheDocument();
+      expect(screen.getByText('Ajuste manual')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText('Ajustar puntos'));
+    await user.click(screen.getByText('Ajuste manual'));
 
     await waitFor(() => {
       expect(screen.getByLabelText(/cantidad de puntos/i)).toBeInTheDocument();
@@ -333,10 +333,10 @@ describe('LV1.5E — Adjustment Dialog', () => {
     await user.click(screen.getByText('Carlos Mendoza'));
 
     await waitFor(() => {
-      expect(screen.getByText('Ajustar puntos')).toBeInTheDocument();
+      expect(screen.getByText('Ajuste manual')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText('Ajustar puntos'));
+    await user.click(screen.getByText('Ajuste manual'));
 
     await waitFor(() => {
       expect(screen.getByLabelText(/cantidad de puntos/i)).toBeInTheDocument();
