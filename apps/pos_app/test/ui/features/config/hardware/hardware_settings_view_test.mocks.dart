@@ -8,13 +8,15 @@ import 'dart:async' as _i5;
 import 'package:mockito/mockito.dart' as _i1;
 import 'package:pos_app/domain/models/config/printer_config.dart' as _i2;
 import 'package:pos_app/domain/models/config/tax_regime.dart' as _i9;
-import 'package:pos_app/domain/models/sales/cashier_session.dart' as _i10;
+import 'package:pos_app/domain/models/sales/cashier_session.dart' as _i11;
 import 'package:pos_app/domain/models/sales/invoice.dart' as _i6;
 import 'package:pos_app/domain/models/sales/invoice_item.dart' as _i7;
 import 'package:pos_app/domain/models/sales/payment.dart' as _i8;
 import 'package:pos_app/domain/ports/printer_port.dart' as _i3;
 import 'package:pos_app/domain/services/config/printer_config_service.dart'
     as _i4;
+import 'package:pos_app/domain/services/sales/post_paid_feedback_service.dart'
+    as _i10;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values
@@ -136,6 +138,7 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
     _i9.TaxRegime? taxRegime = _i9.TaxRegime.regimenGeneral,
     bool? isTaxExempt = false,
     int? paperWidthMm = 58,
+    _i10.PostPaidFeedback? loyaltyFeedback,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -154,6 +157,7 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
             #taxRegime: taxRegime,
             #isTaxExempt: isTaxExempt,
             #paperWidthMm: paperWidthMm,
+            #loyaltyFeedback: loyaltyFeedback,
           },
         ),
         returnValue: _i5.Future<_i3.PrinterResult>.value(_FakePrinterResult_1(
@@ -174,6 +178,7 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
               #taxRegime: taxRegime,
               #isTaxExempt: isTaxExempt,
               #paperWidthMm: paperWidthMm,
+              #loyaltyFeedback: loyaltyFeedback,
             },
           ),
         )),
@@ -196,6 +201,7 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
               #taxRegime: taxRegime,
               #isTaxExempt: isTaxExempt,
               #paperWidthMm: paperWidthMm,
+              #loyaltyFeedback: loyaltyFeedback,
             },
           ),
         )),
@@ -266,7 +272,7 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
 
   @override
   _i5.Future<_i3.PrinterResult> printCorteX(
-    _i10.CashierSession? session, {
+    _i11.CashierSession? session, {
     required String? cashierName,
     required Map<_i8.PaymentMethod, double>? totalsByMethod,
     double? totalExpected,
@@ -310,7 +316,7 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
 
   @override
   _i5.Future<_i3.PrinterResult> printCorteZ(
-    _i10.CashierSession? session, {
+    _i11.CashierSession? session, {
     required String? cashierName,
     required Map<_i8.PaymentMethod, double>? totalsByMethod,
     int? zSequence,

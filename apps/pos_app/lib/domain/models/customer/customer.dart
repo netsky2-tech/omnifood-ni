@@ -17,6 +17,7 @@ class Customer with _$Customer {
     DateTime? createdAt,
     DateTime? updatedAt,
     @Default('synced') String syncStatus,
+    String? customerCode, // Opaque, tenant-scoped identifier for QR/code lookup
   }) = _Customer;
 
   factory Customer.fromJson(Map<String, dynamic> json) => _$CustomerFromJson(json);

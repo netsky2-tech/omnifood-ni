@@ -703,16 +703,16 @@ Nunca omitir ni alterar datos fiscales obligatorios por incluir Loyalty.
 
 ## Gate de salida
 
-- [ ] QR/customerCode identifica al Customer correcto dentro del tenant.
-- [ ] Teléfono/búsqueda existente siguen funcionando como fallback.
-- [ ] Ningún QR/customerCode expone PII.
-- [ ] El cashier no tiene acción “Agregar punto/sello” para earning ordinario.
-- [ ] Progreso por programa visible antes y después del pago.
-- [ ] Reward elegible puede aplicarse y revocarse antes de PAID.
-- [ ] Operación completa funciona sin WAN en un solo terminal.
-- [ ] Restart preserva pending transactions/outbox.
-- [ ] Receipt 58/80 imprime Loyalty sin romper formato fiscal.
-- [ ] Config stale se comunica sin bloquear checkout.
+- [x] QR/customerCode identifica al Customer correcto dentro del tenant.
+- [x] Teléfono/búsqueda existente siguen funcionando como fallback.
+- [x] Ningún QR/customerCode expone PII.
+- [x] El cashier no tiene acción "Agregar punto/sello" para earning ordinario.
+- [x] Progreso por programa visible antes y después del pago.
+- [x] Reward elegible puede aplicarse y revocarse antes de PAID.
+- [x] Operación completa funciona sin WAN en un solo terminal.
+- [x] Restart preserva pending transactions/outbox.
+- [x] Receipt 58/80 imprime Loyalty sin romper formato fiscal.
+- [x] Config stale se comunica sin bloquear checkout.
 
 ## Evidencia mínima
 

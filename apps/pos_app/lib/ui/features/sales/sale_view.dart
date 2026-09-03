@@ -19,6 +19,9 @@ import 'widgets/split_bill_dialog.dart';
 import 'widgets/cloud_sync_status_badge.dart';
 import 'tables/table_layout_view.dart';
 import '../../../presentation/features/sales/widgets/customer_select_dialog.dart';
+import '../../../presentation/features/sales/widgets/loyalty_compact_widget.dart';
+import '../../../presentation/features/sales/widgets/reward_cta_widget.dart';
+import '../../../presentation/features/sales/widgets/reward_confirmation_dialog.dart';
 
 class SaleView extends StatefulWidget {
   const SaleView({super.key});
@@ -1370,6 +1373,9 @@ class CartSummary extends StatelessWidget {
             deleteIconColor: Colors.red.shade700,
           ),
           const SizedBox(height: 8),
+          // Loyalty evaluation display
+          LoyaltyCompactWidget(evaluation: viewModel.currentEvaluation),
+          const SizedBox(height: 8),
         ],
         SizedBox(
           width: double.infinity,
@@ -1403,6 +1409,12 @@ class CartSummary extends StatelessWidget {
           ),
           const SizedBox(height: 6),
         ],
+        // Reward CTA when eligible reward exists
+        RewardCtaWidget(
+          evaluation: viewModel.currentEvaluation,
+          onApplyReward: () => _showRewardConfirmationDialog(context, viewModel),
+        ),
+        const SizedBox(height: 8),
         Row(
           children: [
             Expanded(
@@ -1544,6 +1556,27 @@ class CartSummary extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _showRewardConfirmationDialog(BuildContext context, SaleViewModel viewModel) async {
+    final nextReward = viewModel.currentEvaluation?.nextReward;
+    if (nextReward == null) return;
+
+    final confirmed = await RewardConfirmationDialog.show(
+      context,
+      reward: nextReward,
+    );
+
+    if (confirmed == true && context.mounted) {
+      // Apply the reward via the view model
+      viewModel.selectReward(nextReward.rewardId);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Recompensa "${nextReward.name}" aplicada'),
+          backgroundColor: Colors.green.shade700,
+        ),
+      );
+    }
   }
 }
 

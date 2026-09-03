@@ -90,7 +90,7 @@ class MockableSaleViewModel extends ChangeNotifier implements SaleViewModel {
   String? get customerName => _customerName;
 
   @override
-  void selectCustomer(Customer? customer) {
+  Future<void> selectCustomer(Customer? customer) async {
     _selectedCustomer = customer;
     _customerName = customer?.name;
     notifyListeners();
@@ -272,8 +272,13 @@ void main() {
       expect(find.text('Roberto Gómez'), findsOneWidget);
       expect(find.text('120 pts'), findsOneWidget);
 
-      // Buscar "Lucía"
-      await tester.enterText(find.byType(TextField).first, 'Lucía');
+      // Buscar "Lucía" in the search field (not the customer code input)
+      await tester.enterText(
+        find.byWidgetPredicate((widget) {
+          return widget is TextField && widget.decoration?.hintText?.contains('Buscar por Nombre') == true;
+        }),
+        'Lucía',
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('Lucía Méndez'), findsOneWidget);

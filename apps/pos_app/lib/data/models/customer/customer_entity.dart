@@ -27,6 +27,8 @@ class CustomerEntity {
   final int updatedAt; // Store as timestamp millis
   @ColumnInfo(name: 'sync_status')
   final String syncStatus;
+  @ColumnInfo(name: 'customer_code')
+  final String? customerCode;
 
   CustomerEntity({
     required this.id,
@@ -40,5 +42,6 @@ class CustomerEntity {
     required this.createdAt,
     required this.updatedAt,
     this.syncStatus = 'synced',
+    this.customerCode,
   });
 }

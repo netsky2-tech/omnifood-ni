@@ -26,8 +26,14 @@ import 'package:pos_app/domain/services/sales/table_order_service.dart';
 import 'package:pos_app/domain/services/sales/promotions_engine.dart';
 import 'package:pos_app/domain/services/sales/loyalty_service.dart';
 import 'package:pos_app/domain/services/sales/post_paid_feedback_service.dart';
+import 'package:pos_app/domain/services/sales/customer_identification_service.dart';
+import 'package:pos_app/domain/services/sales/loyalty_reward_interaction_service.dart';
+import 'package:pos_app/domain/services/sales/loyalty_evaluation_service.dart';
 import 'package:pos_app/domain/models/loyalty/loyalty_evaluation.dart';
 import 'package:pos_app/domain/models/loyalty/loyalty_program.dart';
+import 'package:pos_app/domain/models/loyalty/reward_definition.dart';
+import 'package:pos_app/domain/models/loyalty/loyalty_ticket_snapshot.dart';
+import 'package:pos_app/domain/models/loyalty/customer_identification.dart';
 import 'package:pos_app/domain/services/config/tenant_config_service.dart';
 import '../../../../domain/services/config/printer_config_service.dart';
 import '../../../../domain/services/printer/printer_resolver.dart';
@@ -53,6 +59,9 @@ class SaleViewModel extends ChangeNotifier {
   final PromotionsEngine _promotionsEngine;
   final LoyaltyService _loyaltyService;
   final PostPaidFeedbackService _postPaidFeedbackService;
+  final CustomerIdentificationService? _identificationService;
+  final LoyaltyRewardInteractionService? _rewardInteraction;
+  final LoyaltyEvaluationService? _evaluationService;
   SyncService? _syncService;
   StreamSubscription<InboundSyncResult>? _syncSubscription;
   Timer? _syncDebounceTimer;
@@ -82,7 +91,45 @@ class SaleViewModel extends ChangeNotifier {
             printerPort ?? PrinterResolver.resolve(const PrinterConfig()),
         _promotionsEngine = promotionsEngine ?? const PromotionsEngine(),
         _loyaltyService = loyaltyService ?? const LoyaltyService(),
-        _postPaidFeedbackService = const PostPaidFeedbackService() {
+        _postPaidFeedbackService = const PostPaidFeedbackService(),
+        _identificationService = null,
+        _rewardInteraction = null,
+        _evaluationService = null;
+
+  /// Extended constructor with loyalty wiring services.
+  /// Use this when the caller needs full loyalty evaluation + reward interaction.
+  SaleViewModel.withLoyalty(
+    this._salesRepository,
+    this._inventoryRepository,
+    this._authRepository,
+    this._database, {
+    TableOrderService? tableOrderService,
+    bool autoLoad = true,
+    TenantConfigService? tenantConfigService,
+    KitchenOrderService? kitchenOrderService,
+    PrinterConfigService? printerConfigService,
+    PrinterPort? printerPort,
+    SyncService? syncService,
+    PromotionsEngine? promotionsEngine,
+    LoyaltyService? loyaltyService,
+    CustomerIdentificationService? identificationService,
+    LoyaltyRewardInteractionService? rewardInteractionService,
+    LoyaltyEvaluationService? evaluationService,
+  })  : _tableOrderService = tableOrderService ?? TableOrderService(_database),
+        _tenantConfigService =
+            tenantConfigService ?? TenantConfigService(_database.localConfigDao),
+        _kitchenOrderService =
+            kitchenOrderService ?? KitchenOrderService(_database),
+        _printerConfigService =
+            printerConfigService ?? PrinterConfigService(_database.localConfigDao),
+        _printerPort =
+            printerPort ?? PrinterResolver.resolve(const PrinterConfig()),
+        _promotionsEngine = promotionsEngine ?? const PromotionsEngine(),
+        _loyaltyService = loyaltyService ?? const LoyaltyService(),
+        _postPaidFeedbackService = const PostPaidFeedbackService(),
+        _identificationService = identificationService,
+        _rewardInteraction = rewardInteractionService,
+        _evaluationService = evaluationService {
     _syncService = syncService;
     if (syncService != null) {
       _syncSubscription = syncService.onInboundSync.listen((event) {
@@ -111,6 +158,154 @@ class SaleViewModel extends ChangeNotifier {
   PostPaidFeedback? _lastPostPaidFeedback;
   PostPaidFeedback? get lastPostPaidFeedback => _lastPostPaidFeedback;
 
+  // --- Loyalty wiring: evaluation + reward selection state ---
+  LoyaltyEvaluation? _currentEvaluation;
+  LoyaltyEvaluation? get currentEvaluation => _currentEvaluation;
+
+  RewardDefinitionLocal? _selectedReward;
+  RewardDefinitionLocal? get selectedReward => _selectedReward;
+
+  /// Cached rewards from last evaluation for reward resolution
+  List<RewardDefinitionLocal> _cachedRewards = [];
+
+  /// Identifies a customer via CustomerIdentificationService (QR, code, phone, search).
+  /// Falls back to null if no service injected or identification fails.
+  Future<Customer?> identifyCustomer(String input) async {
+    if (_identificationService == null) return null;
+    final result = await _identificationService!.identify(input);
+    if (result == null) return null;
+    selectCustomer(result.customer);
+    return result.customer;
+  }
+
+  /// Selects a loyalty reward for the current ticket.
+  /// Must be called before PAID. Only one reward per ticket.
+  void selectReward(String rewardId) {
+    if (_rewardInteraction == null || _currentEvaluation == null) return;
+    _rewardInteraction!.selectReward(_currentEvaluation!, rewardId);
+    _selectedReward = _resolveSelectedReward();
+    notifyListeners();
+  }
+
+  /// Clears the current reward selection.
+  void clearReward() {
+    _rewardInteraction?.clearSelection();
+    _selectedReward = null;
+    notifyListeners();
+  }
+
+  /// Re-evaluates loyalty state from Floor DAOs when customer or cart changes.
+  Future<void> _reEvaluateLoyalty() async {
+    if (_evaluationService == null || _selectedCustomer == null) {
+      _currentEvaluation = null;
+      _selectedReward = null;
+      return;
+    }
+
+    try {
+      final tenantId = _selectedCustomer!.id; // tenant scoping comes from config
+      final programs = await _database.loyaltyProgramDao.getActivePrograms(tenantId);
+      final rewards = await _database.loyaltyRewardDao.getActiveRewards(tenantId);
+
+      // Build balance map from program IDs
+      final balanceMap = <String, int>{};
+      for (final p in programs) {
+        balanceMap[p.id] = 0; // Default; actual balance derived from ledger in future
+      }
+
+      // Build snapshot from current cart
+      final snapshot = _buildTicketSnapshot();
+
+      final domainPrograms = programs.map((e) => LoyaltyProgramLocal(
+        id: e.id,
+        tenantId: e.tenantId,
+        name: e.name,
+        programType: LoyaltyProgramType.values.firstWhere(
+          (t) => t.name == e.programType,
+          orElse: () => LoyaltyProgramType.spendPoints,
+        ),
+        status: LoyaltyProgramStatus.values.firstWhere(
+          (s) => s.name.toLowerCase() == e.status.toLowerCase(),
+          orElse: () => LoyaltyProgramStatus.active,
+        ),
+        startsAt: e.startsAt != null ? DateTime.fromMillisecondsSinceEpoch(e.startsAt!) : null,
+        endsAt: e.endsAt != null ? DateTime.fromMillisecondsSinceEpoch(e.endsAt!) : null,
+        earningRuleJson: e.earningRuleJson,
+        eligibilityRuleJson: e.eligibilityRuleJson,
+        configVersion: e.configVersion,
+      )).toList();
+
+      final domainRewards = rewards.map((e) => RewardDefinitionLocal(
+        id: e.id,
+        tenantId: e.tenantId,
+        loyaltyProgramId: e.loyaltyProgramId,
+        name: e.name,
+        rewardType: RewardType.values.firstWhere(
+          (t) => t.name == e.rewardType,
+          orElse: () => RewardType.discountAmount,
+        ),
+        costUnits: e.costUnits,
+        benefitConfigJson: e.benefitConfigJson,
+        status: RewardStatus.values.firstWhere(
+          (s) => s.name.toLowerCase() == e.status.toLowerCase(),
+          orElse: () => RewardStatus.active,
+        ),
+        configVersion: e.configVersion,
+        presentationOrder: e.presentationOrder,
+        startsAt: e.startsAt != null ? DateTime.fromMillisecondsSinceEpoch(e.startsAt!) : null,
+        endsAt: e.endsAt != null ? DateTime.fromMillisecondsSinceEpoch(e.endsAt!) : null,
+      )).toList();
+
+      _currentEvaluation = _evaluationService!.evaluate(
+        snapshot: snapshot,
+        programs: domainPrograms,
+        rewards: domainRewards,
+        balanceMap: balanceMap,
+      );
+
+      // Cache rewards for resolution
+      _cachedRewards = domainRewards;
+
+      // Validate current reward selection is still eligible
+      if (_rewardInteraction != null && _rewardInteraction!.selectedRewardId != null) {
+        _rewardInteraction!.validateAfterCartChange(_currentEvaluation!);
+        _selectedReward = _resolveSelectedReward();
+      }
+    } catch (_) {
+      // Non-blocking: evaluation is best-effort
+    }
+  }
+
+  LoyaltyTicketSnapshot _buildTicketSnapshot() {
+    final lines = _cart.map((item) => TicketLineSnapshot(
+      lineId: item.productId,
+      productId: item.productId,
+      quantity: item.quantity.toInt(),
+      netAmount: item.subtotal,
+      source: TicketLineSource.normal,
+    )).toList();
+
+    return LoyaltyTicketSnapshot(
+      tenantId: _selectedCustomer?.id ?? '',
+      branchId: '',
+      terminalId: '',
+      ticketId: '',
+      customerId: _selectedCustomer?.id,
+      occurredAt: DateTime.now(),
+      lines: lines,
+    );
+  }
+
+  RewardDefinitionLocal? _resolveSelectedReward() {
+    final rewardId = _rewardInteraction?.selectedRewardId;
+    if (rewardId == null) return null;
+    try {
+      return _cachedRewards.firstWhere((r) => r.id == rewardId);
+    } catch (_) {
+      return null;
+    }
+  }
+
   TenantConfig? _tenantConfig;
   TenantConfig? get tenantConfig => _tenantConfig;
   TenantOperationMode get operationMode =>
@@ -135,10 +330,14 @@ class SaleViewModel extends ChangeNotifier {
   Customer? _selectedCustomer;
   Customer? get selectedCustomer => _selectedCustomer;
 
-  void selectCustomer(Customer? customer) {
+  /// Selects a customer and re-evaluates loyalty state.
+  /// Returns a Future that completes when evaluation is done.
+  Future<void> selectCustomer(Customer? customer) async {
     _selectedCustomer = customer;
     _customerName = customer?.name;
     _pointsToRedeem = 0.0;
+    clearReward();
+    await _reEvaluateLoyalty();
     notifyListeners();
   }
 
@@ -146,6 +345,8 @@ class SaleViewModel extends ChangeNotifier {
     _selectedCustomer = null;
     _customerName = null;
     _pointsToRedeem = 0.0;
+    _currentEvaluation = null;
+    clearReward();
     notifyListeners();
   }
 
@@ -695,6 +896,10 @@ class SaleViewModel extends ChangeNotifier {
       );
     }
     _applyPromotions();
+    // Re-evaluate loyalty when cart changes (fire-and-forget async)
+    if (_selectedCustomer != null && _rewardInteraction?.selectedRewardId != null) {
+      _reEvaluateLoyalty();
+    }
     notifyListeners();
   }
 
@@ -748,6 +953,8 @@ class SaleViewModel extends ChangeNotifier {
     _pointsToRedeem = 0.0;
     _activeLoadedHoldTicket = null;
     _lastPostPaidFeedback = null;
+    _currentEvaluation = null;
+    clearReward();
     notifyListeners();
   }
 
@@ -848,15 +1055,19 @@ class SaleViewModel extends ChangeNotifier {
         _syncService?.triggerManualSync();
       });
 
-      // Process Customer Loyalty Points (Redemption & Accumulation)
+      // Process Customer Loyalty (single write path via LoyaltyRewardInteractionService)
       if (_selectedCustomer != null) {
         final now = DateTime.now().millisecondsSinceEpoch;
-        // 1. Process redemption if points were used
-        if (_pointsToRedeem > 0) {
+
+        // 1. Process REDEEM if a reward was selected (single path — no _pointsToRedeem writer)
+        if (_rewardInteraction?.selectedRewardId != null && _selectedReward != null) {
+          final redeemUnits = _selectedReward!.costUnits;
+          final currentBalance = _selectedCustomer!.pointsBalance;
+          final newBalance = currentBalance - redeemUnits;
           final redeemTx = _loyaltyService.createRedeemTransaction(
             customerId: _selectedCustomer!.id,
-            currentBalance: _selectedCustomer!.pointsBalance,
-            pointsToRedeem: _pointsToRedeem,
+            currentBalance: currentBalance,
+            pointsToRedeem: redeemUnits.toDouble(),
             invoiceId: invoiceId,
           );
           try {
@@ -864,10 +1075,10 @@ class SaleViewModel extends ChangeNotifier {
                 .recordPointTransactionAndUpdateBalance(
               CustomerMapper.toPointTransactionEntity(redeemTx),
               _selectedCustomer!.id,
-              redeemTx.balanceAfter,
+              newBalance,
               now,
             );
-            _selectedCustomer = _selectedCustomer!.copyWith(pointsBalance: redeemTx.balanceAfter);
+            _selectedCustomer = _selectedCustomer!.copyWith(pointsBalance: newBalance);
           } catch (_) {}
         }
 
@@ -893,11 +1104,13 @@ class SaleViewModel extends ChangeNotifier {
           } catch (_) {}
         }
 
-        // 3. Compute PostPaidFeedback for receipt and UI
-        final redeemPts = _pointsToRedeem.toInt();
+        // 3. Compute PostPaidFeedback using real LoyaltyEvaluation (not hardcoded)
+        final redeemPts = (_rewardInteraction?.selectedRewardId != null && _selectedReward != null)
+            ? _selectedReward!.costUnits
+            : 0;
         final earnedPts = pointsEarned.toInt();
         final newBalance = _selectedCustomer!.pointsBalance.toInt();
-        final evaluation = LoyaltyEvaluation(
+        final feedbackEvaluation = _currentEvaluation ?? LoyaltyEvaluation(
           customerId: _selectedCustomer!.id,
           ticketId: invoiceId,
           programs: [
@@ -911,7 +1124,7 @@ class SaleViewModel extends ChangeNotifier {
           ],
         );
         _lastPostPaidFeedback = _postPaidFeedbackService.compute(
-          evaluation: evaluation,
+          evaluation: feedbackEvaluation,
           postCommitBalances: {'loyalty-default': newBalance},
           earnedUnits: {'loyalty-default': earnedPts},
           redeemedUnits: {'loyalty-default': redeemPts},

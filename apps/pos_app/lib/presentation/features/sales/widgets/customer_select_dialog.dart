@@ -25,9 +25,11 @@ class CustomerSelectDialog extends StatefulWidget {
 
 class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
   final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _codeController = TextEditingController();
   List<Customer> _searchResults = [];
   bool _isLoading = true;
   bool _isCreatingNew = false;
+  String? _identificationError;
 
   // New Customer Form Controllers
   final TextEditingController _nameController = TextEditingController();
@@ -48,6 +50,7 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
   @override
   void dispose() {
     _searchController.dispose();
+    _codeController.dispose();
     _nameController.dispose();
     _taxIdController.dispose();
     _phoneController.dispose();
@@ -87,6 +90,45 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  Future<void> _onCodeSubmitted() async {
+    final code = _codeController.text.trim();
+    if (code.isEmpty) return;
+
+    setState(() {
+      _isLoading = true;
+      _identificationError = null;
+    });
+
+    try {
+      final customer = await widget.viewModel.identifyCustomer(code);
+      if (mounted) {
+        if (customer != null) {
+          await widget.viewModel.selectCustomer(customer);
+          Navigator.of(context).pop(customer);
+        } else {
+          setState(() {
+            _identificationError = 'Cliente no encontrado con ese código';
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _identificationError = 'Error al identificar cliente';
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _onQrScanRequested() async {
+    // QR scanning is handled by mobile_scanner behind CustomerIdentificationPort.
+    // The actual camera flow will be wired in a subsequent step.
+    // For now, this button triggers identifyCustomer with a QR prefix.
+    // TODO: Wire to mobile_scanner overlay when package is installed.
   }
 
   void _validateTaxId(String value) {
@@ -184,6 +226,59 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (!_isCreatingNew) ...[
+              // QR scan + Code input row
+              Row(
+                children: [
+                  IconButton(
+                    key: const Key('qr_scan_button'),
+                    icon: const Icon(Icons.qr_code_scanner),
+                    tooltip: 'Escanear código QR del cliente',
+                    onPressed: _onQrScanRequested,
+                  ),
+                  Expanded(
+                    child: TextField(
+                      key: const Key('customer_code_input'),
+                      controller: _codeController,
+                      decoration: InputDecoration(
+                        hintText: 'Código del cliente...',
+                        prefixIcon: const Icon(Icons.pin_outlined, size: 20),
+                        suffixIcon: _codeController.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 18),
+                                onPressed: () {
+                                  _codeController.clear();
+                                  setState(() => _identificationError = null);
+                                },
+                              )
+                            : null,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        isDense: true,
+                      ),
+                      textInputAction: TextInputAction.go,
+                      onSubmitted: (_) => _onCodeSubmitted(),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    key: const Key('customer_code_submit'),
+                    icon: const Icon(Icons.login, size: 20),
+                    tooltip: 'Identificar por código',
+                    onPressed: _onCodeSubmitted,
+                  ),
+                ],
+              ),
+              if (_identificationError != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    _identificationError!,
+                    style: TextStyle(color: Colors.red.shade700, fontSize: 12),
+                  ),
+                ),
+              const SizedBox(height: 8),
+              // Existing search bar + New button
               Row(
                 children: [
                   Expanded(

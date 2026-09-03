@@ -339,6 +339,34 @@ class MockSaleViewModel extends _i1.Mock implements _i7.SaleViewModel {
       ) as bool);
 
   @override
+  _i15.Future<_i5.Customer?> identifyCustomer(String? input) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #identifyCustomer,
+          [input],
+        ),
+        returnValue: _i15.Future<_i5.Customer?>.value(),
+      ) as _i15.Future<_i5.Customer?>);
+
+  @override
+  void selectReward(String? rewardId) => super.noSuchMethod(
+        Invocation.method(
+          #selectReward,
+          [rewardId],
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  void clearReward() => super.noSuchMethod(
+        Invocation.method(
+          #clearReward,
+          [],
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
   void setBuzzerNumber(String? number) => super.noSuchMethod(
         Invocation.method(
           #setBuzzerNumber,
@@ -348,13 +376,15 @@ class MockSaleViewModel extends _i1.Mock implements _i7.SaleViewModel {
       );
 
   @override
-  void selectCustomer(_i5.Customer? customer) => super.noSuchMethod(
+  _i15.Future<void> selectCustomer(_i5.Customer? customer) =>
+      (super.noSuchMethod(
         Invocation.method(
           #selectCustomer,
           [customer],
         ),
-        returnValueForMissingStub: null,
-      );
+        returnValue: _i15.Future<void>.value(),
+        returnValueForMissingStub: _i15.Future<void>.value(),
+      ) as _i15.Future<void>);
 
   @override
   void clearCustomer() => super.noSuchMethod(
