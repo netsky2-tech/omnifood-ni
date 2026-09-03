@@ -833,10 +833,12 @@ class SaleViewModel extends ChangeNotifier {
 
       // Fire-and-forget: trigger cloud sync after 3s debounce
       // (batches rapid consecutive sales into one sync pass)
-      _syncDebounceTimer?.cancel();
-      _syncDebounceTimer = Timer(const Duration(seconds: 3), () {
-        _syncService?.triggerManualSync();
-      });
+      if (_syncService != null) {
+        _syncDebounceTimer?.cancel();
+        _syncDebounceTimer = Timer(const Duration(seconds: 3), () {
+          _syncService?.triggerManualSync();
+        });
+      }
 
       // Process Customer Loyalty Points (Redemption & Accumulation)
       if (_selectedCustomer != null) {

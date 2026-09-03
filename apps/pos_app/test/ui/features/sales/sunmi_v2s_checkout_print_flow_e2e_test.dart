@@ -127,6 +127,10 @@ void main() {
     );
   });
 
+  tearDown(() {
+    viewModel.dispose();
+  });
+
   Widget buildE2EApp() {
     return ChangeNotifierProvider<SaleViewModel>.value(
       value: viewModel,

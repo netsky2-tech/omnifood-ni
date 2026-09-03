@@ -209,7 +209,7 @@ class _AppDrawerState extends State<AppDrawer> {
                   if (_canAccessDgiReports)
                     ListTile(
                       leading: const Icon(Icons.analytics),
-                      title: const Text('Reporte de Auditoría'),
+                      title: const Text('Reportes DGI'),
                       onTap: () {
                         Navigator.pop(context);
                         Navigator.pushNamed(context, '/sales/reports');
