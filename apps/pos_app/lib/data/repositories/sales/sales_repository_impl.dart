@@ -22,6 +22,7 @@ import 'package:pos_app/domain/services/sales/dgi_numbering_service.dart';
 import 'package:pos_app/data/models/sales/invoice_entity.dart';
 import 'package:pos_app/data/models/sales/invoice_item_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
+import 'package:pos_app/data/models/fulfillment/fulfillment_persistence_entities.dart';
 import 'package:pos_app/data/mappers/audit_mapper.dart';
 import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/domain/models/fulfillment/fulfillment_checkout_context.dart';
@@ -63,15 +64,21 @@ class SalesRepositoryImpl implements SalesRepository {
     required List<Payment> payments,
     FulfillmentCheckoutContext? fulfillmentContext,
   }) async {
+    if (fulfillmentContext != null) {
+      await _validateFulfillmentContext(fulfillmentContext);
+    }
     if (await numberingService.isRangeExhausted()) {
       throw Exception('DGI Authorized Numbering Range exhausted.');
     }
 
     final finalNumber = await numberingService.getNextNumber();
     final nextDgiSequence = _nextDgiSequence(finalNumber);
-    final terminalId = 'pos-${invoice.userId}';
+    final existingInvoice = await invoiceDao.getInvoiceById(invoice.id);
+    final terminalId = existingInvoice?.terminalId ?? 'pos-${invoice.userId}';
     final sourceSequence =
-        (await transactionDao.getNextInvoiceSourceSequence(terminalId)) ?? 1;
+        existingInvoice?.sourceSequence ??
+        (await transactionDao.getNextInvoiceSourceSequence(terminalId)) ??
+        1;
     final payloadHash = _buildSalePayloadHash(
       invoice: invoice.copyWith(number: finalNumber),
       items: items,
@@ -111,22 +118,32 @@ class SalesRepositoryImpl implements SalesRepository {
         .toList();
 
     try {
-      // This boundary deliberately forwards the supplied frozen identity
-      // unchanged. Validation and the fulfillment transaction are added in
-      // the next slice; legacy tenants remain on the existing sale path.
       if (fulfillmentContext != null) {
         onFulfillmentCheckoutContextReady?.call(fulfillmentContext);
+        await transactionDao.executeFulfillmentSaleTransaction(
+          invoiceEntity,
+          itemEntities,
+          [],
+          paymentEntities,
+          movementEntities,
+          null,
+          _fulfillment(updatedInvoice, fulfillmentContext, resolvedItems),
+          _printJobs(updatedInvoice, fulfillmentContext, resolvedItems),
+          _outbox(updatedInvoice, fulfillmentContext),
+          false,
+        );
+      } else {
+        await transactionDao.executeSaleWithDgiTransaction(
+          invoiceEntity,
+          itemEntities,
+          [],
+          paymentEntities,
+          movementEntities,
+          null, // Audit log is written separately
+          nextDgiSequence,
+          false,
+        );
       }
-      await transactionDao.executeSaleWithDgiTransaction(
-        invoiceEntity,
-        itemEntities,
-        [],
-        paymentEntities,
-        movementEntities,
-        null, // Audit log is written separately
-        nextDgiSequence,
-        false,
-      );
 
       await auditRepository.log(
         'SALE_CREATED',
@@ -137,6 +154,90 @@ class SalesRepositoryImpl implements SalesRepository {
       rethrow;
     }
   }
+
+  Future<void> _validateFulfillmentContext(
+    FulfillmentCheckoutContext context,
+  ) async {
+    final snapshot = await database.fulfillmentTopologyDao.findSnapshot(
+      context.topologySnapshotId,
+      context.tenantId,
+    );
+    if (snapshot == null ||
+        snapshot.revision != context.topologyRevision ||
+        snapshot.hash != context.topologyHash) {
+      throw StateError('Fulfillment checkout topology snapshot is invalid.');
+    }
+  }
+
+  FulfillmentRecordEntity _fulfillment(
+    Invoice invoice,
+    FulfillmentCheckoutContext context,
+    List<InvoiceItem> items,
+  ) => FulfillmentRecordEntity(
+    id: 'fulfillment-${invoice.id}',
+    tenantId: context.tenantId,
+    saleId: invoice.id,
+    topologySnapshotId: context.topologySnapshotId,
+    topologyRevision: context.topologyRevision,
+    channel: context.channel,
+    routeState: 'ROUTED',
+    deliveryState: 'PENDING',
+    linesPayload: _linesPayload(items),
+  );
+
+  List<PrintJobEntity> _printJobs(
+    Invoice invoice,
+    FulfillmentCheckoutContext context,
+    List<InvoiceItem> items,
+  ) {
+    if (!context.channel.contains('PRINT')) return const [];
+    final fulfillmentId = 'fulfillment-${invoice.id}';
+    return [
+      PrintJobEntity(
+        id: 'print-${invoice.id}',
+        tenantId: context.tenantId,
+        fulfillmentId: fulfillmentId,
+        documentKind: 'TICKET',
+        sequence: 0,
+        payload: _linesPayload(items),
+        state: 'PENDING',
+        retryCount: 0,
+        idempotencyKey: 'print:$fulfillmentId:ticket:0',
+      ),
+    ];
+  }
+
+  OutboxEventEntity _outbox(
+    Invoice invoice,
+    FulfillmentCheckoutContext context,
+  ) {
+    final fulfillmentId = 'fulfillment-${invoice.id}';
+    return OutboxEventEntity(
+      eventId: 'event:$fulfillmentId',
+      tenantId: context.tenantId,
+      deviceId: invoice.terminalId ?? 'pos-${invoice.userId}',
+      sourceSequence: invoice.sourceSequence ?? 1,
+      aggregateType: 'fulfillment',
+      aggregateId: fulfillmentId,
+      idempotencyKey: 'outbox:${context.tenantId}:$fulfillmentId',
+      payloadHash: 'pending',
+      topologyRevision: context.topologyRevision,
+      state: 'PENDING',
+      attempts: 0,
+    );
+  }
+
+  String _linesPayload(List<InvoiceItem> items) => jsonEncode(
+    items
+        .map(
+          (item) => {
+            'lineId': item.id,
+            'productId': item.productId,
+            'quantity': item.quantity,
+          },
+        )
+        .toList(growable: false),
+  );
 
   String _nextDgiSequence(String invoiceNumber) {
     final match = RegExp(r'(\d+)$').firstMatch(invoiceNumber.trim());
