@@ -251,7 +251,7 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
           dataSource.getRepository(InventorySyncReceipt),
           dataSource.getRepository(InventorySyncOutbox),
           { findActiveVersion: jest.fn(), getSnapshot: jest.fn() } as never,
-          { explode: jest.fn() },
+          { explode: jest.fn() } as never,
         );
 
         await dataSource.query(`SET ROLE "${tenantRole}"`);
@@ -398,7 +398,7 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
           dataSource.getRepository(InventorySyncReceipt),
           dataSource.getRepository(InventorySyncOutbox),
           { findActiveVersion: jest.fn(), getSnapshot: jest.fn() } as never,
-          { explode: jest.fn() },
+          { explode: jest.fn() } as never,
         );
 
         await dataSource.query(`SET ROLE "${tenantRole}"`);
@@ -576,7 +576,7 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
           dataSource.getRepository(InventorySyncReceipt),
           dataSource.getRepository(InventorySyncOutbox),
           { findActiveVersion: jest.fn(), getSnapshot: jest.fn() } as never,
-          { explode: jest.fn() },
+          { explode: jest.fn() } as never,
         );
 
         await dataSource.query(`SET ROLE "${tenantRole}"`);
@@ -734,7 +734,7 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
           dataSource.getRepository(InventorySyncReceipt),
           dataSource.getRepository(InventorySyncOutbox),
           { findActiveVersion: jest.fn().mockResolvedValue(null) } as never,
-          { explode: jest.fn() },
+          { explode: jest.fn() } as never,
         );
 
         const saleResult = await service.syncBatch(tenantId, [

@@ -45,7 +45,7 @@ Chain strategy: feature-branch-chain
 ## Phase 3: Backend Provisioning and Sync (PR #3)
 
 - [x] 3.1 RED: immutable revision, base conflict `409`, legacy compatibility, RLS isolation, append-only audit, and cross-tenant rejection; GREEN add fulfillment DTOs/controllers/services, TypeORM migrations/entities, permissions and policies; generate/review TypeORM artifacts here; REFACTOR pipes.
-- [ ] 3.2 RED: duplicate reconnect acknowledgement; GREEN implement ordered tenant/device outbox replay and sync DTOs; REFACTOR observability for lag/duplicates.
+- [x] 3.2 RED: duplicate reconnect acknowledgement; GREEN implement ordered tenant/device outbox replay and sync DTOs; REFACTOR observability for lag/duplicates.
 
 ## Phase 4: Execution and Recovery (PR #4)
 
