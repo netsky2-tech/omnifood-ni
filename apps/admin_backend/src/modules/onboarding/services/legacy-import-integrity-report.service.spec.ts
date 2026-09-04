@@ -12,7 +12,14 @@ import {
   LegacyImportIntegrityReport,
   LegacyImportIntegrityStatus,
 } from '../entities/legacy-import-integrity-report.entity';
-import { LegacyOnboardingMigrationReceipt } from '../entities/legacy-migration-receipt.entity';
+import {
+  LegacyOnboardingMigrationReceipt,
+  LegacyMigrationDecision,
+} from '../entities/legacy-migration-receipt.entity';
+import {
+  OnboardingSession,
+  OnboardingLifecycleState,
+} from '../entities/onboarding-session.entity';
 
 describe('LegacyImportIntegrityReportService (Unit & Triangulation / ONB1.4H)', () => {
   let service: LegacyImportIntegrityReportService;
@@ -20,6 +27,7 @@ describe('LegacyImportIntegrityReportService (Unit & Triangulation / ONB1.4H)', 
   let productRepo: jest.Mocked<Repository<Product>>;
   let reportRepo: jest.Mocked<Repository<LegacyImportIntegrityReport>>;
   let receiptRepo: jest.Mocked<Repository<LegacyOnboardingMigrationReceipt>>;
+  let sessionRepo: jest.Mocked<Repository<OnboardingSession>>;
   let dataSource: jest.Mocked<DataSource>;
 
   const tenantId = 'tenant-uuid-1';
@@ -54,12 +62,18 @@ describe('LegacyImportIntegrityReportService (Unit & Triangulation / ONB1.4H)', 
       query: jest.fn().mockResolvedValue([]),
     } as unknown as jest.Mocked<DataSource>;
 
+    sessionRepo = {
+      findOne: jest.fn(),
+      save: jest.fn((session) => Promise.resolve(session)),
+    } as unknown as jest.Mocked<Repository<OnboardingSession>>;
+
     service = new LegacyImportIntegrityReportService(
       stagingRepo,
       productRepo,
       reportRepo,
       receiptRepo,
       dataSource,
+      sessionRepo,
     );
   });
 
@@ -214,5 +228,117 @@ describe('LegacyImportIntegrityReportService (Unit & Triangulation / ONB1.4H)', 
         decision: 'EXPIRED_REJECTED',
       }),
     );
+  });
+
+  it('ONB1.10A: remediates report strictly via inventory command reference and issues REMEDIATED receipt (AC-39, Rule 72)', async () => {
+    const existingReport = {
+      id: 'report-disc-1',
+      tenant_id: tenantId,
+      legacy_import_refs: ['session-legacy-1'],
+      affected_product_refs: ['prod-legacy-1'],
+      observed_direct_stock_or_cost_writes: [
+        {
+          productId: 'prod-legacy-1',
+          productName: 'Producto Legacy',
+          productStock: 50,
+          kardexStock: 0,
+          discrepancy: 50,
+          directCostObserved: 60,
+        },
+      ],
+      kardex_evidence_present: false,
+      status: LegacyImportIntegrityStatus.REVIEW_REQUIRED,
+      reviewed_by: null,
+      remediation_refs: [],
+      created_at: new Date(),
+    } as LegacyImportIntegrityReport;
+
+    reportRepo.findOne.mockResolvedValue(existingReport);
+
+    const remediated = await service.remediateReportWithInventoryCommand(
+      tenantId,
+      'report-disc-1',
+      'INV_ADJUSTMENT:cmd-kardex-adj-999',
+      'user-inventory-auditor',
+    );
+
+    expect(remediated.status).toBe(LegacyImportIntegrityStatus.REMEDIATED);
+    expect(remediated.reviewed_by).toBe('user-inventory-auditor');
+    expect(remediated.remediation_refs).toContain(
+      'INV_ADJUSTMENT:cmd-kardex-adj-999',
+    );
+    expect(reportRepo.save).toHaveBeenCalled();
+    expect(receiptRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        receipt_type: 'LEGACY_IMPORT_REMEDIATION',
+        target_entity_type: 'LEGACY_IMPORT_INTEGRITY_REPORT',
+        target_entity_id: 'report-disc-1',
+        decision: LegacyMigrationDecision.REMEDIATED,
+        executed_by: 'user-inventory-auditor',
+      }),
+    );
+  });
+
+  it('ONB1.10A: accepts report as-is with audited rationale and issues ACCEPTED_AS_IS receipt (Rule 72)', async () => {
+    const existingReport = {
+      id: 'report-disc-2',
+      tenant_id: tenantId,
+      legacy_import_refs: ['session-legacy-2'],
+      affected_product_refs: ['prod-legacy-2'],
+      observed_direct_stock_or_cost_writes: [],
+      kardex_evidence_present: false,
+      status: LegacyImportIntegrityStatus.REVIEW_REQUIRED,
+      reviewed_by: null,
+      remediation_refs: [],
+      created_at: new Date(),
+    } as LegacyImportIntegrityReport;
+
+    reportRepo.findOne.mockResolvedValue(existingReport);
+
+    const accepted = await service.acceptReportAsIs(
+      tenantId,
+      'report-disc-2',
+      'Discrepancy verified as non-material promotional samples; accepted by finance',
+      'user-finance-director',
+    );
+
+    expect(accepted.status).toBe(LegacyImportIntegrityStatus.ACCEPTED_AS_IS);
+    expect(accepted.reviewed_by).toBe('user-finance-director');
+    expect(receiptRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        receipt_type: 'LEGACY_IMPORT_ACCEPT_AS_IS',
+        decision: LegacyMigrationDecision.ACCEPTED_AS_IS,
+        executed_by: 'user-finance-director',
+      }),
+    );
+  });
+
+  it('ONB1.10A: formally reconciles legacy baseline tenant (measurementEligible=false) without fabricating synthetic TTFSS (Rule 73, AC-56)', async () => {
+    const legacySession = {
+      id: 'session-legacy-tenant-1',
+      tenantId,
+      lifecycleState: OnboardingLifecycleState.ACTIVATED,
+      legacyBaseline: true,
+      measurementEligible: false,
+      onboardingStartedAt: null,
+      firstSuccessfulSaleAt: null, // Critical: must NOT be fabricated!
+      saleReadyFirstAt: null,
+    } as OnboardingSession;
+
+    sessionRepo.findOne.mockResolvedValue(legacySession);
+
+    const receipt = await service.reconcileLegacyBaselineSession(
+      tenantId,
+      'user-compliance-auditor',
+    );
+
+    expect(receipt.receipt_type).toBe('LEGACY_BASELINE_RECONCILIATION');
+    expect(receipt.decision).toBe(LegacyMigrationDecision.LEGACY_BASELINE_CLOSED);
+    expect(receipt.evidence_json).toMatchObject({
+      legacyBaseline: true,
+      measurementEligible: false,
+      firstSuccessfulSaleAt: null,
+    });
+    expect(legacySession.firstSuccessfulSaleAt).toBeNull(); // Still null, no fake TTFSS!
   });
 });

@@ -1598,43 +1598,43 @@ BOH enrichment continues
 
 ## Work units
 
-### ONB1.10A — Migration reconciliation closure
+### ONB1.10A — Migration reconciliation closure (Cerrado en PR-ONB-24)
 
 Cerrar receipts pendientes de:
 
-- legacy template recipes;
-- legacy staging incompatible;
-- `LegacyImportIntegrityReport`;
-- Inventory remediation refs cuando correspondan;
-- legacy `measurementEligible=false` tenants.
+- [x] legacy template recipes (`KEEP_PUBLISHED` | `MOVE_TO_DRAFT` / `LegacyTemplateRecipeScanService`);
+- [x] legacy staging incompatible (`expireIncompatibleLegacyStaging` / `LegacyOnboardingMigrationReceipt`);
+- [x] `LegacyImportIntegrityReport` (forensic scan de escrituras directas de stock/costo fuera de Kardex);
+- [x] Inventory remediation refs cuando correspondan (`remediateReportWithInventoryCommand` y `acceptReportAsIs`);
+- [x] legacy `measurementEligible=false` tenants (`reconcileLegacyBaselineSession` sin TTFSS inventado).
 
-### ONB1.10B — Fault injection suite
+### ONB1.10B — Fault injection suite (Cerrado en PR-ONB-24)
 
 Cubrir:
 
-- HTTP timeout after commit;
-- duplicate command;
-- same key/different payload;
-- stale idempotency lease takeover;
-- crash before/after UoW commit;
-- upload chunk retry;
-- POS restart mid-Activation;
-- WAN outage;
-- duplicate outbox resend;
-- cloud down during finalization;
-- sync integrity mismatch;
-- clock skew/restart.
+- [x] HTTP timeout after commit;
+- [x] duplicate command;
+- [x] same key/different payload;
+- [x] stale idempotency lease takeover;
+- [x] crash before/after UoW commit;
+- [x] upload chunk retry;
+- [x] POS restart mid-Activation (Floor SQLite en disco real);
+- [x] WAN outage (`SYNC_VERIFICATION_PENDING` outbox durability);
+- [x] duplicate outbox resend;
+- [x] cloud down during finalization;
+- [x] sync integrity mismatch;
+- [x] clock skew/restart (`clockConfidence: DEGRADED` y elapsed monotónico).
 
-### ONB1.10C — Security / isolation suite
+### ONB1.10C — Security / isolation suite (Cerrado en PR-ONB-24)
 
 En PostgreSQL real:
 
-- Tenant A no lee/escribe session/import/template/activation de B;
-- forged tenant body/query no altera scope;
-- RLS/predicates fallan closed;
-- permissions se verifican server-side;
-- support requiere tenant grant;
-- device evidence se liga a `DevicePrincipal`.
+- [x] Tenant A no lee/escribe session/import/template/activation de B;
+- [x] forged tenant body/query no altera scope;
+- [x] RLS/predicates fallan closed;
+- [x] permissions se verifican server-side (OWNER, MANAGER, CASHIER);
+- [x] support requiere tenant grant y justificación sustantiva auditada;
+- [x] device evidence se liga a `DevicePrincipal` con detección estricta de forgery.
 
 ### ONB1.10D — Full regression
 

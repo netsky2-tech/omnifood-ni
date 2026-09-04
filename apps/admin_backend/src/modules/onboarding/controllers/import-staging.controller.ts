@@ -5,12 +5,13 @@ import {
   Optional,
   Param,
   Post,
+  Req,
   Res,
   UnauthorizedException,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { ImportStagingService } from '../services/import-staging.service';
 import {
   UploadBatchDto,
@@ -32,6 +33,16 @@ import {
   generateOfficialProductTemplateCsv,
 } from '../services/import-contract-version';
 import { LegacyImportIntegrityReportService } from '../services/legacy-import-integrity-report.service';
+
+interface RequestWithUser extends Request {
+  user?: {
+    sub?: string;
+    userId?: string;
+    tenantId?: string;
+    tenant_id?: string;
+    role?: string;
+  };
+}
 
 @Controller('onboarding/import')
 @UseGuards(AuthGuard, RolesGuard, PermissionsGuard)
@@ -207,6 +218,56 @@ export class ImportStagingController {
     }
     return this.integrityReportService.expireIncompatibleLegacyStaging(
       validTenantId,
+    );
+  }
+
+  /**
+   * Remediate a LegacyImportIntegrityReport using an inventory command/Kardex ref (ONB1.10A).
+   */
+  @Post('integrity-reports/:id/remediate')
+  @Roles(UserRole.OWNER)
+  @RequirePermissions(AppPermission.ONBOARDING_PRODUCT_IMPORT_MANAGE)
+  async remediateReport(
+    @Req() req: RequestWithUser,
+    @Param('id') reportId: string,
+    @Body() body: { inventoryCommandRef: string },
+    @GetTenantId() tenantId?: string,
+  ) {
+    const validTenantId = this.requireTenant(tenantId);
+    if (!this.integrityReportService) {
+      throw new UnauthorizedException('Integrity report service unavailable');
+    }
+    const actorId = req.user?.sub ?? req.user?.userId;
+    return this.integrityReportService.remediateReportWithInventoryCommand(
+      validTenantId,
+      reportId,
+      body?.inventoryCommandRef,
+      actorId,
+    );
+  }
+
+  /**
+   * Accept a LegacyImportIntegrityReport as-is with substantive rationale (ONB1.10A).
+   */
+  @Post('integrity-reports/:id/accept-as-is')
+  @Roles(UserRole.OWNER)
+  @RequirePermissions(AppPermission.ONBOARDING_PRODUCT_IMPORT_MANAGE)
+  async acceptReportAsIs(
+    @Req() req: RequestWithUser,
+    @Param('id') reportId: string,
+    @Body() body: { rationale: string },
+    @GetTenantId() tenantId?: string,
+  ) {
+    const validTenantId = this.requireTenant(tenantId);
+    if (!this.integrityReportService) {
+      throw new UnauthorizedException('Integrity report service unavailable');
+    }
+    const actorId = req.user?.sub ?? req.user?.userId;
+    return this.integrityReportService.acceptReportAsIs(
+      validTenantId,
+      reportId,
+      body?.rationale,
+      actorId,
     );
   }
 }

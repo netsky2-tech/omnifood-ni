@@ -29,6 +29,8 @@ describe('ImportStagingController (Unit)', () => {
     integrityService = {
       generateIntegrityReport: jest.fn(),
       expireIncompatibleLegacyStaging: jest.fn(),
+      remediateReportWithInventoryCommand: jest.fn(),
+      acceptReportAsIs: jest.fn(),
     } as unknown as jest.Mocked<LegacyImportIntegrityReportService>;
 
     controller = new ImportStagingController(service, integrityService);
@@ -270,6 +272,54 @@ describe('ImportStagingController (Unit)', () => {
       expect(
         integrityService.expireIncompatibleLegacyStaging,
       ).toHaveBeenCalledWith('tenant-1');
+    });
+
+    it('delegates remediateReport to integrityReportService (ONB1.10A)', async () => {
+      integrityService.remediateReportWithInventoryCommand.mockResolvedValueOnce({
+        id: 'report-1',
+        status: LegacyImportIntegrityStatus.REMEDIATED,
+      } as never);
+
+      const req = { user: { sub: 'user-audit-1' } } as never;
+      const result = await controller.remediateReport(
+        req,
+        'report-1',
+        { inventoryCommandRef: 'INV_ADJ:001' },
+        'tenant-1',
+      );
+
+      expect(result).toMatchObject({ status: 'REMEDIATED' });
+      expect(
+        integrityService.remediateReportWithInventoryCommand,
+      ).toHaveBeenCalledWith(
+        'tenant-1',
+        'report-1',
+        'INV_ADJ:001',
+        'user-audit-1',
+      );
+    });
+
+    it('delegates acceptReportAsIs to integrityReportService (ONB1.10A)', async () => {
+      integrityService.acceptReportAsIs.mockResolvedValueOnce({
+        id: 'report-2',
+        status: LegacyImportIntegrityStatus.ACCEPTED_AS_IS,
+      } as never);
+
+      const req = { user: { sub: 'user-finance-1' } } as never;
+      const result = await controller.acceptReportAsIs(
+        req,
+        'report-2',
+        { rationale: 'Approved immaterial promotional samples' },
+        'tenant-1',
+      );
+
+      expect(result).toMatchObject({ status: 'ACCEPTED_AS_IS' });
+      expect(integrityService.acceptReportAsIs).toHaveBeenCalledWith(
+        'tenant-1',
+        'report-2',
+        'Approved immaterial promotional samples',
+        'user-finance-1',
+      );
     });
   });
 });

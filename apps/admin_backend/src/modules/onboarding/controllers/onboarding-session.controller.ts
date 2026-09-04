@@ -8,6 +8,7 @@ import {
   Req,
   HttpCode,
   HttpStatus,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
 import { Request } from 'express';
@@ -26,6 +27,7 @@ import {
 } from '../services/onboarding-session.service';
 import { OnboardingReadinessEvaluator } from '../services/onboarding-readiness.evaluator';
 import { OnboardingStateReconciler } from '../services/onboarding-state.reconciler';
+import { LegacyImportIntegrityReportService } from '../services/legacy-import-integrity-report.service';
 
 interface RequestWithUser extends Request {
   user?: {
@@ -49,6 +51,8 @@ export class OnboardingSessionController {
     private readonly sessionService: OnboardingSessionService,
     private readonly readinessEvaluator: OnboardingReadinessEvaluator,
     private readonly stateReconciler: OnboardingStateReconciler,
+    @Optional()
+    private readonly integrityReportService?: LegacyImportIntegrityReportService,
   ) {}
 
   private requireTenant(tenantId?: string): string {
@@ -128,5 +132,29 @@ export class OnboardingSessionController {
       tenantIdParam ?? req.user?.tenant_id ?? req.user?.tenantId,
     );
     return this.readinessEvaluator.evaluate(tenantId);
+  }
+
+  /**
+   * Formally reconcile legacy baseline tenant with measurementEligible=false (ONB1.10A).
+   * INVARIANT: Never fabricates or synthesizes a fake historical TTFSS (Rule 73, AC-56).
+   */
+  @Post('session/legacy-baseline/reconcile')
+  @Roles(UserRole.OWNER)
+  @RequirePermissions(AppPermission.ONBOARDING_START)
+  async reconcileLegacyBaseline(
+    @Req() req: RequestWithUser,
+    @GetTenantId() tenantIdParam?: string,
+  ) {
+    const tenantId = this.requireTenant(
+      tenantIdParam ?? req.user?.tenant_id ?? req.user?.tenantId,
+    );
+    const actorId = req.user?.sub ?? req.user?.userId;
+    if (!this.integrityReportService) {
+      throw new UnauthorizedException('Reconciliation service unavailable');
+    }
+    return this.integrityReportService.reconcileLegacyBaselineSession(
+      tenantId,
+      actorId,
+    );
   }
 }

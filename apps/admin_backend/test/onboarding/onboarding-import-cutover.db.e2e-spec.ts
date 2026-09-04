@@ -149,6 +149,10 @@ async function withImportCutoverIsolatedSchema(
           provide: 'LegacyOnboardingMigrationReceiptRepository',
           useValue: dataSource.getRepository(LegacyOnboardingMigrationReceipt),
         },
+        {
+          provide: 'OnboardingSessionRepository',
+          useValue: dataSource.getRepository(OnboardingSession),
+        },
       ],
     }).compile();
 
@@ -491,6 +495,111 @@ describe('ONB1.4 Product Import Safe Cutover (Real PostgreSQL E2E / Zero Mocks)'
           .set('Authorization', `Bearer ${ownerTokenB}`)
           .send({ sessionToken: sessionTokenA, mode: 'VALID_ONLY' })
           .expect(404);
+      },
+    );
+  });
+
+  it('ONB1.10A: verifies full migration reconciliation closure: Kardex remediation reference, accept-as-is, and measurementEligible=false legacy baseline receipt (AC-38, AC-39, Rule 72, Rule 73)', async () => {
+    await withImportCutoverIsolatedSchema(
+      'onb110a_reconciliation',
+      async ({ app, dataSource, tenantAId, ownerTokenA }) => {
+        // 1. Seed a legacy committed staging row with direct stock write outside Kardex
+        const legacySessionToken = randomUUID();
+        const prodId = randomUUID();
+        await dataSource.query(
+          `INSERT INTO products (id, tenant_id, name, uom, "sellPrice", "averageCost", stock, is_active, is_perishable, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, true, false, now(), now())`,
+          [prodId, tenantAId, 'Ceviche Mixto Legacy', 'PLATO', 250.0, 120.0, 30.0],
+        );
+
+        await dataSource.query(
+          `INSERT INTO staging_importacion_productos (
+            id, tenant_id, token_sesion_importacion, raw_nombre, raw_precio_venta, raw_stock_inicial,
+            parsed_nombre, parsed_precio_venta, parsed_stock_inicial, estado_fila, row_ordinal, created_at, updated_at
+           ) VALUES (
+            $1, $2, $3, 'Ceviche Mixto Legacy', '250', '30', 'Ceviche Mixto Legacy', 250.0, 30.0, 'COMMITTED', 1, now(), now()
+           )`,
+          [randomUUID(), tenantAId, legacySessionToken],
+        );
+
+        // 2. Run integrity scan via API -> Status must be REVIEW_REQUIRED due to unbacked direct write
+        const scanRes = await request(app.getHttpServer())
+          .post('/api/onboarding/import/integrity-scan')
+          .set('Authorization', `Bearer ${ownerTokenA}`)
+          .expect(201);
+
+        expect(scanRes.body.status).toBe(LegacyImportIntegrityStatus.REVIEW_REQUIRED);
+        expect(scanRes.body.observed_direct_stock_or_cost_writes).toHaveLength(1);
+        const reportId = scanRes.body.id;
+
+        // 3. Remediate report via inventory command reference
+        const remediateRes = await request(app.getHttpServer())
+          .post(`/api/onboarding/import/integrity-reports/${reportId}/remediate`)
+          .set('Authorization', `Bearer ${ownerTokenA}`)
+          .send({ inventoryCommandRef: 'INV_ADJUSTMENT:cmd-kardex-op-bal-555' })
+          .expect(201);
+
+        expect(remediateRes.body.status).toBe(LegacyImportIntegrityStatus.REMEDIATED);
+        expect(remediateRes.body.remediation_refs).toContain('INV_ADJUSTMENT:cmd-kardex-op-bal-555');
+
+        // 4. Verify in PostgreSQL that a formal REMEDIATED receipt was stored
+        const remediationReceipts = await dataSource.query(
+          `SELECT receipt_type, decision, executed_by, evidence_json FROM legacy_onboarding_migration_receipts WHERE tenant_id = $1 AND receipt_type = 'LEGACY_IMPORT_REMEDIATION'`,
+          [tenantAId],
+        );
+        expect(remediationReceipts).toHaveLength(1);
+        expect(remediationReceipts[0].decision).toBe('REMEDIATED');
+        expect(remediationReceipts[0].evidence_json.inventoryCommandRef).toBe('INV_ADJUSTMENT:cmd-kardex-op-bal-555');
+
+        // 5. Test accept-as-is on another report with audited rationale
+        const report2Id = randomUUID();
+        await dataSource.query(
+          `INSERT INTO legacy_import_integrity_reports (
+            id, tenant_id, legacy_import_refs, affected_product_refs, observed_direct_stock_or_cost_writes,
+            kardex_evidence_present, status, remediation_refs, created_at
+           ) VALUES ($1, $2, '[]', '[]', '[]', false, 'REVIEW_REQUIRED', '[]', now())`,
+          [report2Id, tenantAId],
+        );
+
+        const acceptRes = await request(app.getHttpServer())
+          .post(`/api/onboarding/import/integrity-reports/${report2Id}/accept-as-is`)
+          .set('Authorization', `Bearer ${ownerTokenA}`)
+          .send({ rationale: 'Variance reconciled against manual audit sheets; approved by leadership' })
+          .expect(201);
+
+        expect(acceptRes.body.status).toBe(LegacyImportIntegrityStatus.ACCEPTED_AS_IS);
+
+        const acceptReceipts = await dataSource.query(
+          `SELECT receipt_type, decision, reason FROM legacy_onboarding_migration_receipts WHERE tenant_id = $1 AND receipt_type = 'LEGACY_IMPORT_ACCEPT_AS_IS'`,
+          [tenantAId],
+        );
+        expect(acceptReceipts).toHaveLength(1);
+        expect(acceptReceipts[0].decision).toBe('ACCEPTED_AS_IS');
+
+        // 6. Test legacy baseline session reconciliation with measurementEligible=false
+        const sessionId = randomUUID();
+        await dataSource.query(
+          `INSERT INTO onboarding_sessions (
+            id, tenant_id, lifecycle_state, legacy_baseline, measurement_eligible,
+            onboarding_started_at, first_successful_sale_at, optimistic_version, created_at, updated_at
+           ) VALUES ($1, $2, 'ACTIVATED', true, false, NULL, NULL, 1, now(), now())`,
+          [sessionId, tenantAId],
+        );
+
+        const integrityService = app.get(LegacyImportIntegrityReportService);
+        const baselineReceipt = await integrityService.reconcileLegacyBaselineSession(tenantAId, 'auditor-compliance-1');
+
+        expect(baselineReceipt.receipt_type).toBe('LEGACY_BASELINE_RECONCILIATION');
+        expect(baselineReceipt.decision).toBe('LEGACY_BASELINE_CLOSED');
+
+        // Verify session in DB: first_successful_sale_at remains NULL, no fake TTFSS invented!
+        const sessionRows = await dataSource.query(
+          `SELECT legacy_baseline, measurement_eligible, first_successful_sale_at FROM onboarding_sessions WHERE id = $1`,
+          [sessionId],
+        );
+        expect(sessionRows[0].legacy_baseline).toBe(true);
+        expect(sessionRows[0].measurement_eligible).toBe(false);
+        expect(sessionRows[0].first_successful_sale_at).toBeNull();
       },
     );
   });

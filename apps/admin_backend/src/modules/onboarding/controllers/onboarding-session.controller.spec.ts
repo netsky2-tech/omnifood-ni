@@ -10,6 +10,8 @@ import {
   OnboardingLifecycleState,
 } from '../entities/onboarding-session.entity';
 import { UnauthorizedException } from '@nestjs/common';
+import { LegacyImportIntegrityReportService } from '../services/legacy-import-integrity-report.service';
+import { LegacyMigrationDecision } from '../entities/legacy-migration-receipt.entity';
 
 describe('OnboardingSessionController (Unit)', () => {
   let controller: OnboardingSessionController;
@@ -51,10 +53,15 @@ describe('OnboardingSessionController (Unit)', () => {
       reconcile: jest.fn(),
     } as unknown as jest.Mocked<OnboardingStateReconciler>;
 
+    const integrityReportService = {
+      reconcileLegacyBaselineSession: jest.fn(),
+    } as unknown as jest.Mocked<LegacyImportIntegrityReportService>;
+
     controller = new OnboardingSessionController(
       sessionService,
       readinessEvaluator,
       stateReconciler,
+      integrityReportService,
     );
   });
 
@@ -168,6 +175,26 @@ describe('OnboardingSessionController (Unit)', () => {
       expect(snapshot.saleReady).toBe(true);
       expect(readinessEvaluator.evaluate).toHaveBeenCalledWith('tenant-123');
       expect(stateReconciler.reconcile).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('reconcileLegacyBaseline', () => {
+    it('formally reconciles legacy baseline tenant via integrityReportService (ONB1.10A)', async () => {
+      const integrityService = (controller as any).integrityReportService;
+      integrityService.reconcileLegacyBaselineSession.mockResolvedValueOnce({
+        id: 'receipt-legacy-1',
+        receipt_type: 'LEGACY_BASELINE_RECONCILIATION',
+        decision: LegacyMigrationDecision.LEGACY_BASELINE_CLOSED,
+      });
+
+      const req: any = { user: { tenantId: 'tenant-123', sub: 'user-admin-1' } };
+      const receipt = await controller.reconcileLegacyBaseline(req, 'tenant-123');
+
+      expect(receipt.decision).toBe(LegacyMigrationDecision.LEGACY_BASELINE_CLOSED);
+      expect(integrityService.reconcileLegacyBaselineSession).toHaveBeenCalledWith(
+        'tenant-123',
+        'user-admin-1',
+      );
     });
   });
 });

@@ -1,4 +1,9 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository, In } from 'typeorm';
 import {
@@ -14,6 +19,7 @@ import {
   LegacyMigrationDecision,
   LegacyOnboardingMigrationReceipt,
 } from '../entities/legacy-migration-receipt.entity';
+import { OnboardingSession } from '../entities/onboarding-session.entity';
 
 export interface LegacyScanResult {
   expiredSessions: string[];
@@ -32,6 +38,9 @@ export class LegacyImportIntegrityReportService {
     @InjectRepository(LegacyOnboardingMigrationReceipt)
     private readonly receiptRepo: Repository<LegacyOnboardingMigrationReceipt>,
     private readonly dataSource: DataSource,
+    @Optional()
+    @InjectRepository(OnboardingSession)
+    private readonly sessionRepo?: Repository<OnboardingSession>,
   ) {}
 
   /**
@@ -253,5 +262,179 @@ export class LegacyImportIntegrityReportService {
       expiredSessions: sessionTokens,
       expiredRowsCount: incompatibleRows.length,
     };
+  }
+
+  /**
+   * Formally remediates a LegacyImportIntegrityReport strictly via inventory command/Kardex reference.
+   * Onboarding NEVER mutates product stock or CPP directly via ad-hoc SQL updates (AC-39, Rule 72).
+   */
+  async remediateReportWithInventoryCommand(
+    tenantId: string,
+    reportId: string,
+    inventoryCommandRef: string,
+    reviewedBy?: string,
+  ): Promise<LegacyImportIntegrityReport> {
+    const trimmedTenant = tenantId?.trim();
+    if (!trimmedTenant) {
+      throw new BadRequestException('Tenant ID is required');
+    }
+    const trimmedReportId = reportId?.trim();
+    if (!trimmedReportId) {
+      throw new BadRequestException('Report ID is required');
+    }
+    const trimmedRef = inventoryCommandRef?.trim();
+    if (!trimmedRef) {
+      throw new BadRequestException('Inventory command reference is required');
+    }
+
+    const report = await this.reportRepo.findOne({
+      where: { id: trimmedReportId, tenant_id: trimmedTenant },
+    });
+    if (!report) {
+      throw new NotFoundException(
+        `LegacyImportIntegrityReport '${trimmedReportId}' not found for tenant '${trimmedTenant}'`,
+      );
+    }
+
+    if (report.status === LegacyImportIntegrityStatus.REMEDIATED) {
+      return report;
+    }
+
+    const updatedRemediationRefs = [
+      ...(report.remediation_refs || []),
+      trimmedRef,
+    ];
+    report.remediation_refs = updatedRemediationRefs;
+    report.status = LegacyImportIntegrityStatus.REMEDIATED;
+    report.reviewed_by = reviewedBy || 'SYSTEM';
+
+    const savedReport = await this.reportRepo.save(report);
+
+    const receipt = this.receiptRepo.create({
+      tenant_id: trimmedTenant,
+      receipt_type: 'LEGACY_IMPORT_REMEDIATION',
+      target_entity_type: 'LEGACY_IMPORT_INTEGRITY_REPORT',
+      target_entity_id: savedReport.id,
+      decision: LegacyMigrationDecision.REMEDIATED,
+      reason:
+        'Discrepancy remediated strictly via inventory command and Kardex receipt reference.',
+      evidence_json: {
+        reportId: savedReport.id,
+        inventoryCommandRef: trimmedRef,
+        previousStatus: 'REVIEW_REQUIRED',
+        remediationRefs: updatedRemediationRefs,
+      },
+      executed_by: reviewedBy || 'SYSTEM',
+    });
+    await this.receiptRepo.save(receipt);
+
+    return savedReport;
+  }
+
+  /**
+   * Accepts a LegacyImportIntegrityReport as-is with audited justification (Rule 72).
+   */
+  async acceptReportAsIs(
+    tenantId: string,
+    reportId: string,
+    rationale: string,
+    reviewedBy?: string,
+  ): Promise<LegacyImportIntegrityReport> {
+    const trimmedTenant = tenantId?.trim();
+    if (!trimmedTenant) {
+      throw new BadRequestException('Tenant ID is required');
+    }
+    const trimmedReportId = reportId?.trim();
+    if (!trimmedReportId) {
+      throw new BadRequestException('Report ID is required');
+    }
+    const trimmedRationale = rationale?.trim();
+    if (!trimmedRationale || trimmedRationale.length < 10) {
+      throw new BadRequestException(
+        'A substantive rationale (at least 10 characters) is required to accept legacy discrepancy as-is',
+      );
+    }
+
+    const report = await this.reportRepo.findOne({
+      where: { id: trimmedReportId, tenant_id: trimmedTenant },
+    });
+    if (!report) {
+      throw new NotFoundException(
+        `LegacyImportIntegrityReport '${trimmedReportId}' not found for tenant '${trimmedTenant}'`,
+      );
+    }
+
+    report.status = LegacyImportIntegrityStatus.ACCEPTED_AS_IS;
+    report.reviewed_by = reviewedBy || 'SYSTEM';
+
+    const savedReport = await this.reportRepo.save(report);
+
+    const receipt = this.receiptRepo.create({
+      tenant_id: trimmedTenant,
+      receipt_type: 'LEGACY_IMPORT_ACCEPT_AS_IS',
+      target_entity_type: 'LEGACY_IMPORT_INTEGRITY_REPORT',
+      target_entity_id: savedReport.id,
+      decision: LegacyMigrationDecision.ACCEPTED_AS_IS,
+      reason: trimmedRationale,
+      evidence_json: {
+        reportId: savedReport.id,
+        rationale: trimmedRationale,
+      },
+      executed_by: reviewedBy || 'SYSTEM',
+    });
+    await this.receiptRepo.save(receipt);
+
+    return savedReport;
+  }
+
+  /**
+   * Formally reconciles legacy baseline tenants (measurementEligible=false).
+   * INVARIANT: Never fabricates or synthesizes a fake historical TTFSS (Rule 73, AC-56).
+   */
+  async reconcileLegacyBaselineSession(
+    tenantId: string,
+    reviewedBy?: string,
+  ): Promise<LegacyOnboardingMigrationReceipt> {
+    const trimmedTenant = tenantId?.trim();
+    if (!trimmedTenant) {
+      throw new BadRequestException('Tenant ID is required');
+    }
+    if (!this.sessionRepo) {
+      throw new BadRequestException('Session repository unavailable');
+    }
+
+    const session = await this.sessionRepo.findOne({
+      where: { tenantId: trimmedTenant },
+    });
+    if (!session) {
+      throw new NotFoundException(
+        `Onboarding session not found for tenant '${trimmedTenant}'`,
+      );
+    }
+
+    // Enforce legacy baseline invariants
+    session.legacyBaseline = true;
+    session.measurementEligible = false;
+    // INVARIANT: firstSuccessfulSaleAt remains untampered! If null, NEVER invent a timestamp
+    const savedSession = await this.sessionRepo.save(session);
+
+    const receipt = this.receiptRepo.create({
+      tenant_id: trimmedTenant,
+      receipt_type: 'LEGACY_BASELINE_RECONCILIATION',
+      target_entity_type: 'ONBOARDING_SESSION',
+      target_entity_id: savedSession.id,
+      decision: LegacyMigrationDecision.LEGACY_BASELINE_CLOSED,
+      reason:
+        'Legacy baseline tenant formally reconciled with measurementEligible=false; no synthetic TTFSS published.',
+      evidence_json: {
+        sessionId: savedSession.id,
+        legacyBaseline: savedSession.legacyBaseline,
+        measurementEligible: savedSession.measurementEligible,
+        firstSuccessfulSaleAt: savedSession.firstSuccessfulSaleAt,
+      },
+      executed_by: reviewedBy || 'SYSTEM',
+    });
+
+    return this.receiptRepo.save(receipt);
   }
 }
