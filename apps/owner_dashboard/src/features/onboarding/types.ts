@@ -92,6 +92,7 @@ export interface SetupCenterProgress {
   isSaleReady: boolean;
   isLegacyBaseline: boolean;
   isMeasurementEligible: boolean;
+  saleReadyFirstAt?: string | null;
   optimisticVersion: number;
   blockers: string[];
   warnings: string[];

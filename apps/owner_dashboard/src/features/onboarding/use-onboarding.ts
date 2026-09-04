@@ -30,6 +30,7 @@ export function calculateSetupCenterProgress(
     session?.lifecycleState ?? OnboardingLifecycleState.PROVISIONED;
   const isLegacyBaseline = session?.legacyBaseline ?? false;
   const isMeasurementEligible = session?.measurementEligible ?? true;
+  const saleReadyFirstAt = session?.saleReadyFirstAt ?? null;
   const optimisticVersion = session?.optimisticVersion ?? 1;
 
   const identityReady =
@@ -138,6 +139,7 @@ export function calculateSetupCenterProgress(
     isSaleReady,
     isLegacyBaseline,
     isMeasurementEligible,
+    saleReadyFirstAt,
     optimisticVersion,
     blockers: readiness?.blockers ?? [],
     warnings: readiness?.warnings ?? [],

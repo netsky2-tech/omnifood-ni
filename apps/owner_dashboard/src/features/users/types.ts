@@ -42,6 +42,14 @@ export const AppPermission = {
   LOYALTY_HISTORY_READ: "loyalty:history_read",
   LOYALTY_ADJUST: "loyalty:adjust",
   LOYALTY_REDEEM: "loyalty:redeem",
+  // Onboarding & Setup Capabilities
+  ONBOARDING_READ: "onboarding:read",
+  ONBOARDING_START: "onboarding:start",
+  ONBOARDING_FISCAL_CONFIGURE: "onboarding:fiscal:configure",
+  ONBOARDING_TEMPLATE_APPLY: "onboarding:template:apply",
+  ONBOARDING_PRODUCT_IMPORT_MANAGE: "onboarding:product_import:manage",
+  ONBOARDING_ACTIVATION_MANAGE: "onboarding:activation:manage",
+  ONBOARDING_SUPPORT_ASSIST: "onboarding:support:assist",
 } as const;
 
 export type AppPermission = (typeof AppPermission)[keyof typeof AppPermission];
@@ -52,7 +60,7 @@ export interface PermissionMetadata {
   key: AppPermission;
   label: string;
   description: string;
-  category: "Ventas" | "Caja & Turnos" | "Inventario" | "Reportes" | "Lealtad";
+  category: "Ventas" | "Caja & Turnos" | "Inventario" | "Reportes" | "Lealtad" | "Onboarding & Activación";
 }
 
 export const PERMISSIONS_CATALOG: Record<AppPermission, PermissionMetadata> = {
@@ -152,6 +160,48 @@ export const PERMISSIONS_CATALOG: Record<AppPermission, PermissionMetadata> = {
     description: "Autorizar redenciones en punto de venta",
     category: "Lealtad",
   },
+  [AppPermission.ONBOARDING_READ]: {
+    key: AppPermission.ONBOARDING_READ,
+    label: "Consultar Onboarding",
+    description: "Ver el progreso del Setup Center y estado de preparación",
+    category: "Onboarding & Activación",
+  },
+  [AppPermission.ONBOARDING_START]: {
+    key: AppPermission.ONBOARDING_START,
+    label: "Iniciar Onboarding",
+    description: "Iniciar o reanudar formalmente el proceso de configuración",
+    category: "Onboarding & Activación",
+  },
+  [AppPermission.ONBOARDING_FISCAL_CONFIGURE]: {
+    key: AppPermission.ONBOARDING_FISCAL_CONFIGURE,
+    label: "Configurar Régimen Fiscal",
+    description: "Modificar datos fiscales DGI mínimos de facturación",
+    category: "Onboarding & Activación",
+  },
+  [AppPermission.ONBOARDING_TEMPLATE_APPLY]: {
+    key: AppPermission.ONBOARDING_TEMPLATE_APPLY,
+    label: "Aplicar Plantilla de Industria",
+    description: "Cargar catálogo base según giro de negocio",
+    category: "Onboarding & Activación",
+  },
+  [AppPermission.ONBOARDING_PRODUCT_IMPORT_MANAGE]: {
+    key: AppPermission.ONBOARDING_PRODUCT_IMPORT_MANAGE,
+    label: "Gestionar Carga Masiva de Productos",
+    description: "Subir, previsualizar y confirmar importación CSV de catálogo",
+    category: "Onboarding & Activación",
+  },
+  [AppPermission.ONBOARDING_ACTIVATION_MANAGE]: {
+    key: AppPermission.ONBOARDING_ACTIVATION_MANAGE,
+    label: "Gestionar Activación de Terminal POS",
+    description: "Autorizar e iniciar la activación en terminal POS físico",
+    category: "Onboarding & Activación",
+  },
+  [AppPermission.ONBOARDING_SUPPORT_ASSIST]: {
+    key: AppPermission.ONBOARDING_SUPPORT_ASSIST,
+    label: "Soporte Asistido de Onboarding",
+    description: "Asistir y guiar la configuración del comercio",
+    category: "Onboarding & Activación",
+  },
 };
 
 export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, readonly AppPermission[]> = {
@@ -172,6 +222,12 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, readonly AppPermission[]
     AppPermission.LOYALTY_HISTORY_READ,
     AppPermission.LOYALTY_ADJUST,
     AppPermission.LOYALTY_REDEEM,
+    AppPermission.ONBOARDING_READ,
+    AppPermission.ONBOARDING_START,
+    AppPermission.ONBOARDING_FISCAL_CONFIGURE,
+    AppPermission.ONBOARDING_TEMPLATE_APPLY,
+    AppPermission.ONBOARDING_PRODUCT_IMPORT_MANAGE,
+    AppPermission.ONBOARDING_ACTIVATION_MANAGE,
   ],
   [UserRole.MANAGER]: [
     AppPermission.SALES_VOID_INVOICE,
@@ -185,6 +241,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, readonly AppPermission[]
     AppPermission.LOYALTY_REWARD_READ,
     AppPermission.LOYALTY_CUSTOMER_READ,
     AppPermission.LOYALTY_HISTORY_READ,
+    AppPermission.ONBOARDING_READ,
   ],
   [UserRole.CASHIER]: [],
   [UserRole.WAITER]: [],
@@ -204,6 +261,21 @@ export function resolveEffectivePermissions(
   );
 
   return Array.from(new Set([...roleDefaults, ...validCustom]));
+}
+
+export function hasEffectivePermission(
+  user:
+    | {
+        role?: UserRole | string;
+        permissions?: (string | AppPermission)[];
+      }
+    | null
+    | undefined,
+  permission: AppPermission | string,
+): boolean {
+  if (!user || !user.role) return false;
+  const effective = resolveEffectivePermissions(user.role, user.permissions);
+  return effective.includes(permission as AppPermission);
 }
 
 // Data Entities

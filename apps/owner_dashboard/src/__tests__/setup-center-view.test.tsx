@@ -187,7 +187,7 @@ describe("ONB1.2 — SetupCenterView Component (State-based Authority & Concurre
     });
 
     expect(screen.getByTestId("legacy-baseline-badge")).toBeInTheDocument();
-    expect(screen.getByText(/Tenant Histórico/i)).toBeInTheDocument();
+    expect(screen.getByTestId("legacy-baseline-badge")).toHaveTextContent(/Tenant Histórico/i);
   });
 
   it("renders concurrency conflict banner on VERSION_CONFLICT error with reconcile button", async () => {

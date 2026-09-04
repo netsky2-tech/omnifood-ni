@@ -411,14 +411,21 @@ describe("W8 — Users & Permissions Management API & Schemas (TDD RED)", () => 
     describe("Permission catalog metadata & resolution edge cases", () => {
       it("guarantees every AppPermission has valid catalog metadata with category and non-empty label", () => {
         const catalogKeys = Object.keys(PERMISSIONS_CATALOG);
-        expect(catalogKeys.length).toBe(16);
+        expect(catalogKeys.length).toBe(ALL_APP_PERMISSIONS.length);
 
         for (const perm of ALL_APP_PERMISSIONS) {
           const meta = PERMISSIONS_CATALOG[perm];
           expect(meta).toBeDefined();
           expect(meta.label.length).toBeGreaterThan(0);
           expect(meta.description.length).toBeGreaterThan(0);
-          expect(["Ventas", "Caja & Turnos", "Inventario", "Reportes", "Lealtad"]).toContain(meta.category);
+          expect([
+            "Ventas",
+            "Caja & Turnos",
+            "Inventario",
+            "Reportes",
+            "Lealtad",
+            "Onboarding & Activación",
+          ]).toContain(meta.category);
         }
       });
 

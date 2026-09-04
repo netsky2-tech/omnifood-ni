@@ -117,10 +117,16 @@ export async function apiFetch<T>(
   }
 
   if (!response.ok) {
-    const errorBody = await response.json().catch(() => null);
-    throw new Error(
-      (errorBody as { message?: string })?.message ?? `API error: ${response.status}`,
-    );
+    const errorBody = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    const message =
+      (typeof errorBody?.message === "string" && errorBody.message) ||
+      `API error: ${response.status}`;
+    const err = new Error(message);
+    (err as any).status = response.status;
+    (err as any).statusCode = response.status;
+    (err as any).code = errorBody?.code;
+    (err as any).responseBody = errorBody;
+    throw err;
   }
 
   return response.json() as Promise<T>;

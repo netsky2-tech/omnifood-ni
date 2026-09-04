@@ -27,6 +27,7 @@ import {
   useUploadImportBatch,
 } from "../settings/use-settings";
 import { useCreateManualProduct } from "./use-onboarding";
+import { isVersionConflictError } from "./onboarding-api";
 import {
   Sparkles,
   FileSpreadsheet,
@@ -41,6 +42,8 @@ import {
   Download,
   Upload,
   Info,
+  AlertCircle,
+  AlertTriangle,
 } from "lucide-react";
 import { CANONICAL_PRODUCT_TEMPLATE_CSV } from "../settings/types";
 
@@ -367,6 +370,40 @@ export function CatalogAcquisitionModal({
             </Alert>
 
             <form onSubmit={handleSubmit(onManualSubmit)} className="space-y-4" data-testid="manual-product-form">
+              {createManualMutation.isError && (
+                <>
+                  {isVersionConflictError(createManualMutation.error) ? (
+                    <Alert
+                      variant="destructive"
+                      data-testid="manual-product-conflict-alert"
+                      className="border-amber-500 bg-amber-50/50 text-amber-900"
+                    >
+                      <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                      <AlertTitle className="font-bold text-amber-900 text-xs">
+                        Conflicto de concurrencia detectado (VERSION_CONFLICT)
+                      </AlertTitle>
+                      <AlertDescription className="text-xs text-amber-800/90 mt-1">
+                        La sesión de onboarding fue actualizada concurrentemente desde otra pestaña o dispositivo. Tus datos ingresados se mantienen intactos. Presioná nuevamente para guardar.
+                      </AlertDescription>
+                    </Alert>
+                  ) : (
+                    <Alert
+                      variant="destructive"
+                      data-testid="manual-product-error-alert"
+                      className="text-xs py-2"
+                    >
+                      <AlertCircle className="h-4 w-4 shrink-0" />
+                      <AlertTitle className="font-bold text-xs">Error al guardar producto</AlertTitle>
+                      <AlertDescription className="text-xs mt-0.5">
+                        {createManualMutation.error instanceof Error
+                          ? createManualMutation.error.message
+                          : "No se pudo guardar el producto. Verificá los campos e intentá nuevamente."}
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5 md:col-span-2">
                   <Label htmlFor="manual-name" className="text-xs">Nombre del Producto *</Label>
@@ -435,7 +472,7 @@ export function CatalogAcquisitionModal({
                   size="sm"
                   disabled={createManualMutation.isPending || isSubmittingManual}
                   data-testid="submit-manual-product-btn"
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white focus-visible:ring-2 focus-visible:ring-[#013a57] focus-visible:ring-offset-2"
                 >
                   {createManualMutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />}
                   Guardar y Habilitar Venta

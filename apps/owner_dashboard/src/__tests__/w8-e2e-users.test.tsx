@@ -196,7 +196,7 @@ describe("W8 E2E — Complete Users & Granular Permissions Lifecycle", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Matriz de Permisos Granulares")).toBeInTheDocument();
-      expect(screen.getByText(/0 de 16 permisos/i)).toBeInTheDocument();
+      expect(screen.getByText(/0 de \d+ permisos/i)).toBeInTheDocument();
     });
 
     // Grant custom capabilities: "Anular Facturas" and "Apertura Manual de Gaveta"
@@ -206,7 +206,7 @@ describe("W8 E2E — Complete Users & Granular Permissions Lifecycle", () => {
     await user.click(voidCheckbox);
     await user.click(drawerCheckbox);
 
-    expect(screen.getByText(/2 de 16 permisos/i)).toBeInTheDocument();
+    expect(screen.getByText(/2 de \d+ permisos/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Guardar Permisos" }));
 

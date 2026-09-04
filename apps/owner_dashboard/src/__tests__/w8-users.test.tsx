@@ -373,7 +373,7 @@ describe("W8 — Users & Permissions Integration Suite (Real React Query + UI)",
 
     await waitFor(() => {
       expect(screen.getByText("Matriz de Permisos Granulares")).toBeInTheDocument();
-      expect(screen.getByText(/0 de 16 permisos/i)).toBeInTheDocument();
+      expect(screen.getByText(/0 de \d+ permisos/i)).toBeInTheDocument();
     });
 
     // Grant "Anular Facturas" custom permission
@@ -382,13 +382,13 @@ describe("W8 — Users & Permissions Integration Suite (Real React Query + UI)",
 
     await user.click(voidCheckbox);
     expect(voidCheckbox).toBeChecked();
-    expect(screen.getByText(/1 de 16 permisos/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 de \d+ permisos/i)).toBeInTheDocument();
 
     // Grant "Ajuste Manual de Puntos" (Loyalty)
     const adjustCheckbox = screen.getByRole("checkbox", { name: /Ajuste Manual de Puntos/i });
     await user.click(adjustCheckbox);
     expect(adjustCheckbox).toBeChecked();
-    expect(screen.getByText(/2 de 16 permisos/i)).toBeInTheDocument();
+    expect(screen.getByText(/2 de \d+ permisos/i)).toBeInTheDocument();
 
     // Save permissions
     await user.click(screen.getByRole("button", { name: "Guardar Permisos" }));
