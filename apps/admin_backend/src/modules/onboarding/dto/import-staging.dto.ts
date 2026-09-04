@@ -48,6 +48,28 @@ export class UploadBatchDto {
   @ValidateNested({ each: true })
   @Type(() => ImportRowDto)
   rows: ImportRowDto[];
+
+  @IsOptional()
+  @IsUUID('4')
+  onboardingSessionId?: string;
+}
+
+export class UploadRawCsvDto {
+  @IsOptional()
+  @IsUUID('4', { message: 'sessionToken debe ser un UUID válido' })
+  sessionToken?: string;
+
+  @IsNotEmpty({ message: 'El contenido CSV es obligatorio' })
+  @IsString()
+  csvContent: string;
+
+  @IsOptional()
+  @IsString()
+  fileName?: string;
+
+  @IsOptional()
+  @IsUUID('4')
+  onboardingSessionId?: string;
 }
 
 export type CommitMode = 'VALID_ONLY' | 'ALL_OR_NOTHING';
@@ -68,6 +90,47 @@ export class CommitImportDto {
     message: 'duplicateResolution debe ser REPLACE, SKIP o FAIL',
   })
   duplicateResolution?: DuplicateResolution;
+
+  @IsOptional()
+  @IsIn(['REPLACE', 'SKIP', 'FAIL'], {
+    message: 'duplicatePolicy debe ser REPLACE, SKIP o FAIL',
+  })
+  duplicatePolicy?: DuplicateResolution;
+
+  @IsOptional()
+  @IsString()
+  idempotencyKey?: string;
+}
+
+export interface DuplicatePreviewItem {
+  rowOrdinal: number;
+  productName: string;
+  sku: string | null;
+  matchedBy: 'NORMALIZED_NAME' | 'SKU';
+  targetProductId: string;
+  targetProductName: string;
+  currentPrice: number;
+  newPrice: number;
+  currentUom: string;
+  newUom: string;
+  fieldsToChange: string[];
+  isConflict: boolean;
+  conflictReason: string | null;
+}
+
+export interface ImportPreviewResponse {
+  sessionToken: string;
+  status: string;
+  parserContractVersion: string;
+  sourceHash: string;
+  totalRows: number;
+  validRows: number;
+  errorRows: number;
+  duplicatesCount: number;
+  conflictsCount: number;
+  duplicates: DuplicatePreviewItem[];
+  unsupportedColumns: string[];
+  unknownColumns: string[];
 }
 
 export interface RowErrorDiagnostic {

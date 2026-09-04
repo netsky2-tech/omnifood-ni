@@ -10,6 +10,11 @@ export enum LegacyMigrationDecision {
   KEEP_PUBLISHED = 'KEEP_PUBLISHED',
   MOVE_TO_DRAFT = 'MOVE_TO_DRAFT',
   UNKNOWN_PROVENANCE = 'UNKNOWN_PROVENANCE',
+  // ONB1.4 Import Cutover decisions
+  CLEAN = 'CLEAN',
+  REVIEW_REQUIRED = 'REVIEW_REQUIRED',
+  EXPIRED_REJECTED = 'EXPIRED_REJECTED',
+  IMPORT_COMMITTED = 'IMPORT_COMMITTED',
 }
 
 @Entity('legacy_onboarding_migration_receipts')

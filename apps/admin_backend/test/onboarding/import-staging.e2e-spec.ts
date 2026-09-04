@@ -431,8 +431,9 @@ describe('ImportStaging (Integration & E2E)', () => {
     expect(dbProducts).toHaveLength(1);
     expect(dbProducts[0].name).toBe('Capuchino Vainilla');
     expect(dbProducts[0].sellPrice).toBe(110);
-    expect(dbProducts[0].averageCost).toBe(45);
-    expect(dbProducts[0].stock).toBe(15);
+    // AC-24: stock/cost writes neutralized outside Kardex
+    expect(dbProducts[0].averageCost).toBe(0);
+    expect(dbProducts[0].stock).toBe(0);
   });
 
   it('handles duplicates on commit with REPLACE mode updating existing products (UC-03)', async () => {
@@ -492,8 +493,9 @@ describe('ImportStaging (Integration & E2E)', () => {
 
     expect(dbProducts).toHaveLength(1);
     expect(dbProducts[0].sellPrice).toBe(65);
-    expect(dbProducts[0].averageCost).toBe(35);
-    expect(dbProducts[0].stock).toBe(50);
+    // AC-52: REPLACE does not touch stock or averageCost
+    expect(dbProducts[0].averageCost).toBe(30);
+    expect(dbProducts[0].stock).toBe(10);
   });
 
   it('guarantees multi-tenant isolation across upload and commit operations', async () => {

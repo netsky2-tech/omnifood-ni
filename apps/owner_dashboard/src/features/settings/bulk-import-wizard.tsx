@@ -65,11 +65,10 @@ function parseCsv(text: string): ImportRowDto[] {
       values[0] ||
       `Fila #${i}`;
 
+    // Barcode is NOT SKU (AC-51). Do NOT alias codigo_barras / barcode to sku.
     const sku =
       rowObj["sku"] ||
       rowObj["codigo"] ||
-      rowObj["codigo_barras"] ||
-      rowObj["codigobarras"] ||
       undefined;
 
     const precioVenta =
