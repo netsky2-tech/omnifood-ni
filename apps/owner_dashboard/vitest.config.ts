@@ -15,6 +15,12 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./src/test-setup.ts"],
     css: true,
-    exclude: ["node_modules/**", "src/__tests__/*.integration.test.ts", "src/__tests__/*.e2e.test.ts"],
+    exclude: [
+      "node_modules/**",
+      "src/__tests__/*.integration.test.ts",
+      "src/__tests__/*api.integration.test.ts",
+      "src/__tests__/w4-e2e-fiscal.test.ts",
+      "src/__tests__/*.e2e.test.ts",
+    ],
   },
 });

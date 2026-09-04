@@ -23,6 +23,7 @@ import { UserRole } from '../../src/modules/identity/entities/user.entity';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
 import { JWT_TOKEN_TYPES } from '../../src/modules/identity/security/jwt-token.types';
+import { createIdentityJwtConfigProvider } from '../support/identity-jwt-test.fixture';
 
 const API_PREFIX = '/api/onboarding/import';
 
@@ -174,6 +175,7 @@ describe('ImportStaging (Integration & E2E)', () => {
       controllers: [ImportStagingController],
       providers: [
         ImportStagingService,
+        createIdentityJwtConfigProvider(),
         {
           provide: 'ImportStagingRepository',
           useValue: stagingRepo,

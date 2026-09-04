@@ -23,6 +23,7 @@ import { UserRole } from '../../src/modules/identity/entities/user.entity';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
 import { JWT_TOKEN_TYPES } from '../../src/modules/identity/security/jwt-token.types';
+import { createIdentityJwtConfigProvider } from '../support/identity-jwt-test.fixture';
 
 const API_PREFIX = '/api/onboarding/templates';
 
@@ -288,6 +289,7 @@ describe('IndustryTemplate (Integration & E2E)', () => {
       controllers: [IndustryTemplateController],
       providers: [
         IndustryTemplateService,
+        createIdentityJwtConfigProvider(),
         {
           provide: 'IndustryTemplateRepository',
           useValue: templateRepo,
