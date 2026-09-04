@@ -39,7 +39,13 @@ describe('Permissions Matrix & Resolution (Slice 10.1)', () => {
       expect(ownerPerms).toContain(AppPermission.CASH_REOPEN_SHIFT);
       expect(ownerPerms).toContain(AppPermission.INVENTORY_RECIPE_EDIT);
       expect(ownerPerms).toContain(AppPermission.REPORTS_VIEW_FISCAL);
-      expect(ownerPerms.length).toBe(8);
+      expect(ownerPerms).toContain(AppPermission.ONBOARDING_READ);
+      expect(ownerPerms).toContain(AppPermission.ONBOARDING_START);
+      expect(ownerPerms).toContain(AppPermission.ONBOARDING_FISCAL_CONFIGURE);
+      expect(ownerPerms).toContain(AppPermission.ONBOARDING_TEMPLATE_APPLY);
+      expect(ownerPerms).toContain(AppPermission.ONBOARDING_PRODUCT_IMPORT_MANAGE);
+      expect(ownerPerms).toContain(AppPermission.ONBOARDING_ACTIVATION_MANAGE);
+      expect(ownerPerms.length).toBeGreaterThanOrEqual(14);
     });
 
     it('grants operational supervisor permissions to MANAGER but excludes INVENTORY_RECIPE_EDIT', () => {

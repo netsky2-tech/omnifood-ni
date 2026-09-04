@@ -37,6 +37,9 @@ const UsersPage = lazy(() =>
 const SettingsPage = lazy(() =>
   import("@/features/settings/settings-page").then((m) => ({ default: m.SettingsPage })),
 );
+const OnboardingPage = lazy(() =>
+  import("@/features/onboarding").then((m) => ({ default: m.OnboardingPage })),
+);
 const CustomersPage = lazy(() =>
   import("@/features/customers/customers-page").then((m) => ({ default: m.CustomersPage })),
 );
@@ -152,6 +155,14 @@ export const router = createBrowserRouter([
         element: (
           <SuspenseWrapper>
             <SettingsPage />
+          </SuspenseWrapper>
+        ),
+      },
+      {
+        path: "onboarding",
+        element: (
+          <SuspenseWrapper>
+            <OnboardingPage />
           </SuspenseWrapper>
         ),
       },

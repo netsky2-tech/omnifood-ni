@@ -17,6 +17,13 @@ export enum AppPermission {
   LOYALTY_HISTORY_READ = 'loyalty:history_read',
   LOYALTY_ADJUST = 'loyalty:adjust',
   LOYALTY_REDEEM = 'loyalty:redeem',
+  ONBOARDING_READ = 'onboarding:read',
+  ONBOARDING_START = 'onboarding:start',
+  ONBOARDING_FISCAL_CONFIGURE = 'onboarding:fiscal:configure',
+  ONBOARDING_TEMPLATE_APPLY = 'onboarding:template:apply',
+  ONBOARDING_PRODUCT_IMPORT_MANAGE = 'onboarding:product_import:manage',
+  ONBOARDING_ACTIVATION_MANAGE = 'onboarding:activation:manage',
+  ONBOARDING_SUPPORT_ASSIST = 'onboarding:support:assist',
 }
 
 export type Permission = `${AppPermission}` | AppPermission;
@@ -38,6 +45,13 @@ export const APP_PERMISSIONS = {
   LOYALTY_HISTORY_READ: AppPermission.LOYALTY_HISTORY_READ,
   LOYALTY_ADJUST: AppPermission.LOYALTY_ADJUST,
   LOYALTY_REDEEM: AppPermission.LOYALTY_REDEEM,
+  ONBOARDING_READ: AppPermission.ONBOARDING_READ,
+  ONBOARDING_START: AppPermission.ONBOARDING_START,
+  ONBOARDING_FISCAL_CONFIGURE: AppPermission.ONBOARDING_FISCAL_CONFIGURE,
+  ONBOARDING_TEMPLATE_APPLY: AppPermission.ONBOARDING_TEMPLATE_APPLY,
+  ONBOARDING_PRODUCT_IMPORT_MANAGE: AppPermission.ONBOARDING_PRODUCT_IMPORT_MANAGE,
+  ONBOARDING_ACTIVATION_MANAGE: AppPermission.ONBOARDING_ACTIVATION_MANAGE,
+  ONBOARDING_SUPPORT_ASSIST: AppPermission.ONBOARDING_SUPPORT_ASSIST,
 } as const;
 
 export const ALL_APP_PERMISSIONS = Object.values(AppPermission);
@@ -65,6 +79,12 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
     AppPermission.LOYALTY_HISTORY_READ,
     AppPermission.LOYALTY_ADJUST,
     AppPermission.LOYALTY_REDEEM,
+    AppPermission.ONBOARDING_READ,
+    AppPermission.ONBOARDING_START,
+    AppPermission.ONBOARDING_FISCAL_CONFIGURE,
+    AppPermission.ONBOARDING_TEMPLATE_APPLY,
+    AppPermission.ONBOARDING_PRODUCT_IMPORT_MANAGE,
+    AppPermission.ONBOARDING_ACTIVATION_MANAGE,
   ],
   [UserRole.MANAGER]: [
     AppPermission.SALES_VOID_INVOICE,
@@ -78,6 +98,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
     AppPermission.LOYALTY_REWARD_READ,
     AppPermission.LOYALTY_CUSTOMER_READ,
     AppPermission.LOYALTY_HISTORY_READ,
+    AppPermission.ONBOARDING_READ,
   ],
   [UserRole.CASHIER]: [],
   [UserRole.WAITER]: [],

@@ -10,6 +10,7 @@ import {
   FlaskConical,
   Users,
   Settings,
+  Store,
   UserCircle,
   Star,
   ChevronLeft,
@@ -31,6 +32,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: "Dashboard", path: "/", icon: LayoutDashboard, section: "Principal" },
+  { label: "Setup Center", path: "/onboarding", icon: Store, section: "Principal", requiredRoles: ["OWNER", "MANAGER"] },
   { label: "Ventas", path: "/sales", icon: ShoppingCart, section: "Principal" },
   { label: "Inventario", path: "/inventory", icon: Package, section: "Principal" },
   { label: "Fiscal", path: "/fiscal", icon: FileText, section: "Principal" },

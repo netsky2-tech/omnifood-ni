@@ -7,7 +7,10 @@ import { TemplateInsumo } from './entities/template-insumo.entity';
 import { TemplateProduct } from './entities/template-product.entity';
 import { TemplateRecipeItem } from './entities/template-recipe-item.entity';
 import { ImportStaging } from './entities/import-staging.entity';
+import { OnboardingSession } from './entities/onboarding-session.entity';
+import { OnboardingIdempotencyRecord } from './entities/onboarding-idempotency.entity';
 import { Tenant } from '../tenant/entities/tenant.entity';
+import { User } from '../identity/entities/user.entity';
 import { SystemParametersConfig } from '../inventory/entities/system-parameters-config.entity';
 import { Insumo } from '../inventory/entities/insumo.entity';
 import { Product } from '../inventory/entities/product.entity';
@@ -21,6 +24,17 @@ import { FiscalSetupService } from './services/fiscal-setup.service';
 import { FiscalSetupController } from './controllers/fiscal-setup.controller';
 import { ImportStagingService } from './services/import-staging.service';
 import { ImportStagingController } from './controllers/import-staging.controller';
+import { OnboardingSessionService } from './services/onboarding-session.service';
+import { OnboardingReadinessEvaluator } from './services/onboarding-readiness.evaluator';
+import { OnboardingStateReconciler } from './services/onboarding-state.reconciler';
+import { OnboardingIdempotencyCoordinator } from './services/onboarding-idempotency.coordinator';
+import { OnboardingSessionController } from './controllers/onboarding-session.controller';
+import { IDENTITY_READINESS_PORT } from './ports/identity-readiness.port';
+import { FISCAL_READINESS_PORT } from './ports/fiscal-readiness.port';
+import { CATALOG_READINESS_PORT } from './ports/catalog-readiness.port';
+import { IdentityReadinessAdapter } from './adapters/identity-readiness.adapter';
+import { FiscalReadinessAdapter } from './adapters/fiscal-readiness.adapter';
+import { CatalogReadinessAdapter } from './adapters/catalog-readiness.adapter';
 import { IdentityModule } from '../identity/identity.module';
 
 export const getRequiredOnboardingJwtSecret = (
@@ -43,7 +57,10 @@ export const getRequiredOnboardingJwtSecret = (
       TemplateProduct,
       TemplateRecipeItem,
       ImportStaging,
+      OnboardingSession,
+      OnboardingIdempotencyRecord,
       Tenant,
+      User,
       SystemParametersConfig,
       Insumo,
       Product,
@@ -57,16 +74,37 @@ export const getRequiredOnboardingJwtSecret = (
     IndustryTemplateController,
     FiscalSetupController,
     ImportStagingController,
+    OnboardingSessionController,
   ],
   providers: [
     IndustryTemplateService,
     FiscalSetupService,
     ImportStagingService,
+    OnboardingSessionService,
+    OnboardingReadinessEvaluator,
+    OnboardingStateReconciler,
+    OnboardingIdempotencyCoordinator,
+    {
+      provide: IDENTITY_READINESS_PORT,
+      useClass: IdentityReadinessAdapter,
+    },
+    {
+      provide: FISCAL_READINESS_PORT,
+      useClass: FiscalReadinessAdapter,
+    },
+    {
+      provide: CATALOG_READINESS_PORT,
+      useClass: CatalogReadinessAdapter,
+    },
   ],
   exports: [
     IndustryTemplateService,
     FiscalSetupService,
     ImportStagingService,
+    OnboardingSessionService,
+    OnboardingReadinessEvaluator,
+    OnboardingStateReconciler,
+    OnboardingIdempotencyCoordinator,
     TypeOrmModule,
   ],
 })
