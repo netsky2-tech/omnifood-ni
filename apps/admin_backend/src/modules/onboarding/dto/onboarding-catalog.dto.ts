@@ -53,3 +53,14 @@ export interface OnboardingCatalogSummaryResponse {
   hasSellableProduct: boolean;
   sampleProducts: OnboardingCatalogProductSummary[];
 }
+
+export interface VerificationProductCandidateResponse {
+  verificationProductId: string;
+  name: string;
+  sellPrice: number;
+  uom: string;
+  tenantId: string;
+  isActive: boolean;
+  verificationProductRevision: number;
+  verificationProductFingerprint: string;
+}

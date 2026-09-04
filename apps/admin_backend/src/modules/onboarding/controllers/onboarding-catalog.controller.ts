@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Post,
+  Query,
   Req,
   UnauthorizedException,
   UseGuards,
@@ -72,5 +73,22 @@ export class OnboardingCatalogController {
       tenantIdParam ?? req.user?.tenant_id ?? req.user?.tenantId,
     );
     return this.catalogService.getCatalogSummary(tenantId);
+  }
+
+  @Get('verification-candidate')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  @RequirePermissions(AppPermission.ONBOARDING_READ)
+  async getVerificationProductCandidate(
+    @Req() req: RequestWithUser,
+    @Query('productId') productId?: string,
+    @GetTenantId() tenantIdParam?: string,
+  ) {
+    const tenantId = this.requireTenant(
+      tenantIdParam ?? req.user?.tenant_id ?? req.user?.tenantId,
+    );
+    return this.catalogService.getVerificationProductCandidate(
+      tenantId,
+      productId,
+    );
   }
 }

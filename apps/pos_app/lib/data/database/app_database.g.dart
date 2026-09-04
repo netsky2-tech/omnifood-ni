@@ -160,7 +160,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 43,
+      version: 44,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -186,7 +186,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `insumos` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `consumption_uom` TEXT NOT NULL, `warehouse_id` TEXT, `is_perishable` INTEGER NOT NULL, `stock` REAL NOT NULL, `average_cost` REAL NOT NULL, `par_level` REAL, `stock_min` REAL, `stock_max` REAL, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `products` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `uom` TEXT NOT NULL, `stock` REAL NOT NULL, `average_cost` REAL NOT NULL, `sell_price` REAL NOT NULL, `is_active` INTEGER NOT NULL, `sku` TEXT, `barcode` TEXT, `category` TEXT, `is_prepared` INTEGER NOT NULL, `created_at` TEXT, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `products` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `uom` TEXT NOT NULL, `stock` REAL NOT NULL, `average_cost` REAL NOT NULL, `sell_price` REAL NOT NULL, `is_active` INTEGER NOT NULL, `sku` TEXT, `barcode` TEXT, `category` TEXT, `is_prepared` INTEGER NOT NULL, `created_at` TEXT, `tenant_id` TEXT, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `product_variants` (`id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `name` TEXT NOT NULL, `price_adjustment` REAL NOT NULL, FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
@@ -1105,7 +1105,8 @@ class _$ProductDao extends ProductDao {
                   'barcode': item.barcode,
                   'category': item.category,
                   'is_prepared': item.isPrepared ? 1 : 0,
-                  'created_at': item.createdAt
+                  'created_at': item.createdAt,
+                  'tenant_id': item.tenantId
                 }),
         _productVariantEntityInsertionAdapter = InsertionAdapter(
             database,
@@ -1155,7 +1156,8 @@ class _$ProductDao extends ProductDao {
             barcode: row['barcode'] as String?,
             category: row['category'] as String?,
             isPrepared: (row['is_prepared'] as int) != 0,
-            createdAt: row['created_at'] as String?));
+            createdAt: row['created_at'] as String?,
+            tenantId: row['tenant_id'] as String?));
   }
 
   @override
@@ -1173,8 +1175,42 @@ class _$ProductDao extends ProductDao {
             barcode: row['barcode'] as String?,
             category: row['category'] as String?,
             isPrepared: (row['is_prepared'] as int) != 0,
-            createdAt: row['created_at'] as String?),
+            createdAt: row['created_at'] as String?,
+            tenantId: row['tenant_id'] as String?),
         arguments: [id]);
+  }
+
+  @override
+  Future<ProductEntity?> findProductByIdAndTenant(
+    String id,
+    String tenantId,
+  ) async {
+    return _queryAdapter.query(
+        'SELECT * FROM products WHERE id = ?1 AND (tenant_id = ?2 OR tenant_id IS NULL)',
+        mapper: (Map<String, Object?> row) => ProductEntity(id: row['id'] as String, name: row['name'] as String, uom: row['uom'] as String, stock: row['stock'] as double, averageCost: row['average_cost'] as double, sellPrice: row['sell_price'] as double, isActive: (row['is_active'] as int) != 0, sku: row['sku'] as String?, barcode: row['barcode'] as String?, category: row['category'] as String?, isPrepared: (row['is_prepared'] as int) != 0, createdAt: row['created_at'] as String?, tenantId: row['tenant_id'] as String?),
+        arguments: [id, tenantId]);
+  }
+
+  @override
+  Future<List<ProductEntity>> findActiveProductsByTenant(
+      String tenantId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM products WHERE tenant_id = ?1 AND is_active = 1',
+        mapper: (Map<String, Object?> row) => ProductEntity(
+            id: row['id'] as String,
+            name: row['name'] as String,
+            uom: row['uom'] as String,
+            stock: row['stock'] as double,
+            averageCost: row['average_cost'] as double,
+            sellPrice: row['sell_price'] as double,
+            isActive: (row['is_active'] as int) != 0,
+            sku: row['sku'] as String?,
+            barcode: row['barcode'] as String?,
+            category: row['category'] as String?,
+            isPrepared: (row['is_prepared'] as int) != 0,
+            createdAt: row['created_at'] as String?,
+            tenantId: row['tenant_id'] as String?),
+        arguments: [tenantId]);
   }
 
   @override
@@ -1222,7 +1258,8 @@ class _$ProductDao extends ProductDao {
             barcode: row['barcode'] as String?,
             category: row['category'] as String?,
             isPrepared: (row['is_prepared'] as int) != 0,
-            createdAt: row['created_at'] as String?),
+            createdAt: row['created_at'] as String?,
+            tenantId: row['tenant_id'] as String?),
         arguments: [sku, barcode]);
   }
 

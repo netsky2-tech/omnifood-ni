@@ -25,6 +25,12 @@ abstract class ProductDao {
   @Query('SELECT * FROM products WHERE id = :id')
   Future<ProductEntity?> findProductById(String id);
 
+  @Query('SELECT * FROM products WHERE id = :id AND (tenant_id = :tenantId OR tenant_id IS NULL)')
+  Future<ProductEntity?> findProductByIdAndTenant(String id, String tenantId);
+
+  @Query('SELECT * FROM products WHERE tenant_id = :tenantId AND is_active = 1')
+  Future<List<ProductEntity>> findActiveProductsByTenant(String tenantId);
+
   @Query('SELECT * FROM product_variants WHERE product_id = :productId')
   Future<List<ProductVariantEntity>> findVariantsByProductId(String productId);
 

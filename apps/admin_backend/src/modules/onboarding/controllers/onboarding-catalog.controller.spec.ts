@@ -125,4 +125,33 @@ describe('OnboardingCatalogController (Unit)', () => {
       expect(service.getCatalogSummary).toHaveBeenCalledWith('tenant-test');
     });
   });
+
+  describe('getVerificationProductCandidate (ONB1.6D)', () => {
+    it('throws UnauthorizedException when tenantId is missing', async () => {
+      const req: any = { user: { sub: 'user-1' } };
+      await expect(
+        controller.getVerificationProductCandidate(req, undefined, undefined),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('delegates to catalogService.getVerificationProductCandidate with tenant and optional productId', async () => {
+      const req: any = { user: { sub: 'user-1', tenant_id: 'tenant-test' } };
+      const expectedCandidate = {
+        verificationProductId: 'prod-123',
+        name: 'Café Latte',
+        sellPrice: 55,
+        uom: 'UN',
+        tenantId: 'tenant-test',
+        isActive: true,
+        verificationProductRevision: 1,
+        verificationProductFingerprint: 'abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234',
+      };
+
+      service.getVerificationProductCandidate = jest.fn().mockResolvedValueOnce(expectedCandidate);
+
+      const result = await controller.getVerificationProductCandidate(req, 'prod-123', 'tenant-test');
+      expect(result).toEqual(expectedCandidate);
+      expect(service.getVerificationProductCandidate).toHaveBeenCalledWith('tenant-test', 'prod-123');
+    });
+  });
 });

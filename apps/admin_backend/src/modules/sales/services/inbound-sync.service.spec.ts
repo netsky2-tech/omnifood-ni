@@ -153,6 +153,7 @@ describe('InboundSyncService', () => {
         is_active: true,
         is_perishable: true,
         warehouse_id: 'wh-1',
+        tenant_id: 'tenant-abc',
         created_at: new Date('2026-08-01T00:00:00Z'),
         updated_at: new Date('2026-08-02T00:00:00Z'),
       } as unknown as Product,
@@ -207,6 +208,7 @@ describe('InboundSyncService', () => {
       isActive: true,
       isPerishable: true,
       warehouseId: 'wh-1',
+      tenantId: 'tenant-abc',
       createdAt: expect.any(Date) as Date,
       updatedAt: expect.any(Date) as Date,
     });

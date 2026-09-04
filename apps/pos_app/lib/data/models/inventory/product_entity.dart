@@ -21,6 +21,8 @@ class ProductEntity {
   final bool isPrepared;
   @ColumnInfo(name: 'created_at')
   final String? createdAt;
+  @ColumnInfo(name: 'tenant_id')
+  final String? tenantId;
 
   ProductEntity({
     required this.id,
@@ -35,6 +37,7 @@ class ProductEntity {
     this.category,
     this.isPrepared = false,
     this.createdAt,
+    this.tenantId,
   });
 }
 

@@ -1382,6 +1382,7 @@ class SyncService {
             isActive: map['isActive'] as bool? ?? true,
             isPrepared: false,
             createdAt: map['createdAt']?.toString(),
+            tenantId: map['tenantId'] as String?,
           );
         }).toList(growable: false);
 

@@ -173,4 +173,111 @@ describe('OnboardingCatalogService (Unit)', () => {
       expect(summary.sampleProducts[0].costStatus).toBe('COST_PENDING');
     });
   });
+
+  describe('getVerificationProductCandidate (ONB1.6D)', () => {
+    it('throws BadRequestException if tenantId is missing or empty', async () => {
+      await expect(service.getVerificationProductCandidate('')).rejects.toThrow(BadRequestException);
+      await expect(service.getVerificationProductCandidate('   ')).rejects.toThrow(BadRequestException);
+    });
+
+    it('returns default active sellable candidate when requestedProductId is omitted', async () => {
+      const candidateProduct = {
+        id: 'prod-candidate-1',
+        name: 'Café Expreso',
+        sellPrice: 40,
+        uom: 'UN',
+        tenant_id: 'tenant-test',
+        is_active: true,
+        created_at: new Date('2026-09-01T10:00:00Z'),
+      } as unknown as Product;
+
+      productRepo.findOne = jest.fn().mockResolvedValue(candidateProduct);
+
+      const result = await service.getVerificationProductCandidate('tenant-test');
+
+      expect(result.verificationProductId).toBe('prod-candidate-1');
+      expect(result.name).toBe('Café Expreso');
+      expect(result.sellPrice).toBe(40);
+      expect(result.uom).toBe('UN');
+      expect(result.tenantId).toBe('tenant-test');
+      expect(result.isActive).toBe(true);
+      expect(result.verificationProductRevision).toBe(1);
+      expect(typeof result.verificationProductFingerprint).toBe('string');
+      expect(result.verificationProductFingerprint.length).toBe(64);
+    });
+
+    it('throws BadRequestException if no sellable product exists for tenant', async () => {
+      productRepo.findOne = jest.fn().mockResolvedValue(null);
+
+      await expect(service.getVerificationProductCandidate('tenant-empty')).rejects.toThrow(
+        new BadRequestException('No sellable verification product candidate found for tenant'),
+      );
+    });
+
+    it('validates requestedProductId belongs to tenant and is sellable', async () => {
+      const requestedProduct = {
+        id: 'prod-req-123',
+        name: 'Panini de Jamón',
+        sellPrice: 85,
+        uom: 'UN',
+        tenant_id: 'tenant-test',
+        is_active: true,
+      } as unknown as Product;
+
+      productRepo.findOne = jest.fn().mockResolvedValue(requestedProduct);
+
+      const result = await service.getVerificationProductCandidate('tenant-test', 'prod-req-123');
+
+      expect(result.verificationProductId).toBe('prod-req-123');
+      expect(result.name).toBe('Panini de Jamón');
+      expect(result.sellPrice).toBe(85);
+      expect(result.tenantId).toBe('tenant-test');
+    });
+
+    it('rejects requestedProductId if belongs to another tenant (Tenant B cannot be accessed by Tenant A)', async () => {
+      productRepo.findOne = jest.fn().mockResolvedValue(null); // findOne filtered by tenant_id returns null
+
+      await expect(
+        service.getVerificationProductCandidate('tenant-A', 'prod-from-tenant-B'),
+      ).rejects.toThrow(
+        new BadRequestException('Verification product not found or does not belong to tenant'),
+      );
+    });
+
+    it('rejects requestedProductId if inactive or sellPrice <= 0', async () => {
+      const inactiveProduct = {
+        id: 'prod-inactive',
+        name: 'Item Inactivo',
+        sellPrice: 50,
+        uom: 'UN',
+        tenant_id: 'tenant-test',
+        is_active: false,
+      } as unknown as Product;
+
+      productRepo.findOne = jest.fn().mockResolvedValue(inactiveProduct);
+
+      await expect(
+        service.getVerificationProductCandidate('tenant-test', 'prod-inactive'),
+      ).rejects.toThrow(
+        new BadRequestException('Verification product is not active or sellable'),
+      );
+
+      const zeroPriceProduct = {
+        id: 'prod-zero',
+        name: 'Item Cero',
+        sellPrice: 0,
+        uom: 'UN',
+        tenant_id: 'tenant-test',
+        is_active: true,
+      } as unknown as Product;
+
+      productRepo.findOne = jest.fn().mockResolvedValue(zeroPriceProduct);
+
+      await expect(
+        service.getVerificationProductCandidate('tenant-test', 'prod-zero'),
+      ).rejects.toThrow(
+        new BadRequestException('Verification product is not active or sellable'),
+      );
+    });
+  });
 });

@@ -48,6 +48,7 @@ export interface InboundSyncProductDto {
   warehouseId?: string | null;
   createdAt: Date;
   updatedAt: Date;
+  tenantId?: string;
 }
 
 export interface InboundSyncCatalogValueDto {

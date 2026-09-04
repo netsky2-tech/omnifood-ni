@@ -213,6 +213,7 @@ export class InboundSyncService {
       warehouseId: p.warehouse_id ?? null,
       createdAt: p.created_at,
       updatedAt: p.updated_at,
+      tenantId: p.tenant_id,
     }));
   }
 

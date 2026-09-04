@@ -157,4 +157,45 @@ describe('OnboardingStateReconciler (Unit)', () => {
 
     expect(reconciled.lifecycleState).toBe(OnboardingLifecycleState.ACTIVATED);
   });
+
+  it('preserves SALE_READY cloud state even when local activation checks or attempts fail (ONB1.6F)', async () => {
+    const session: OnboardingSession = {
+      id: 'session-sale-ready-1',
+      tenantId: 'tenant-sale-ready',
+      lifecycleState: OnboardingLifecycleState.SALE_READY,
+      onboardingStartedAt: new Date('2026-09-01T10:00:00Z'),
+      saleReadyFirstAt: new Date('2026-09-01T12:00:00Z'),
+      activationStartedAt: null,
+      activatedAt: null,
+      firstSuccessfulSaleAt: null,
+      firstCustomerSaleAt: null,
+      lastActivityAt: null,
+      currentActivationAttemptId: null,
+      measurementEligible: true,
+      legacyBaseline: false,
+      optimisticVersion: 3,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    sessionService.getSession.mockResolvedValue(session);
+    // Cloud domains still fulfill minimum requirements
+    evaluator.evaluate.mockResolvedValue({
+      saleReady: true,
+      identity: { tenantExists: true, initialOwnerExists: true, ownerCanAuthenticate: true, tenantContextValid: true },
+      fiscal: { minimumConfigurationValid: true },
+      catalog: { sellableProductCount: 1, hasSellableProduct: true },
+      inventoryReady: false,
+      costingReady: false,
+      operationsReady: false,
+      blockers: [],
+      warnings: [],
+      evaluatedAt: new Date(),
+    });
+
+    const reconciled = await reconciler.reconcile('tenant-sale-ready');
+
+    expect(reconciled.lifecycleState).toBe(OnboardingLifecycleState.SALE_READY);
+    expect(reconciled.saleReadyFirstAt).toEqual(new Date('2026-09-01T12:00:00Z'));
+  });
 });

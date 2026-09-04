@@ -1794,6 +1794,17 @@ final migration42_43 = Migration(42, 43, (database) async {
   ''');
 });
 
+final migration43_44 = Migration(43, 44, (database) async {
+  final columns = await database.rawQuery('PRAGMA table_info(products)');
+  final columnNames = columns.map((col) => col['name'] as String).toSet();
+  if (!columnNames.contains('tenant_id')) {
+    await database.execute('ALTER TABLE products ADD COLUMN tenant_id TEXT');
+  }
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS idx_products_tenant_id ON products (tenant_id)',
+  );
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -1828,4 +1839,5 @@ final allMigrations = [
   migration40_41,
   migration41_42,
   migration42_43,
+  migration43_44,
 ];

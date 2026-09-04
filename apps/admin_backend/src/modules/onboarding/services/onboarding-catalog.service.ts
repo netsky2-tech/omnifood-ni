@@ -15,7 +15,9 @@ import {
   CreateManualProductDto,
   OnboardingCatalogSummaryResponse,
   OnboardingManualProductResponse,
+  VerificationProductCandidateResponse,
 } from '../dto/onboarding-catalog.dto';
+import { computeJcsSha256 } from '../utils/canonical-jcs';
 
 @Injectable()
 export class OnboardingCatalogService {
@@ -124,6 +126,69 @@ export class OnboardingCatalogService {
         costStatus: p.averageCost > 0 ? 'CONFIGURED' : 'COST_PENDING',
         is_active: p.is_active,
       })),
+    };
+  }
+
+  async getVerificationProductCandidate(
+    tenantId: string,
+    requestedProductId?: string,
+  ): Promise<VerificationProductCandidateResponse> {
+    const trimmedTenant = tenantId?.trim();
+    if (!trimmedTenant) {
+      throw new BadRequestException('Tenant context is required');
+    }
+
+    let product: Product | null = null;
+    if (requestedProductId?.trim()) {
+      const trimmedId = requestedProductId.trim();
+      product = await this.productRepository.findOne({
+        where: { id: trimmedId, tenant_id: trimmedTenant },
+      });
+      if (!product) {
+        throw new BadRequestException(
+          'Verification product not found or does not belong to tenant',
+        );
+      }
+      if (!product.is_active || Number(product.sellPrice) <= 0) {
+        throw new BadRequestException(
+          'Verification product is not active or sellable',
+        );
+      }
+    } else {
+      product = await this.productRepository.findOne({
+        where: {
+          tenant_id: trimmedTenant,
+          is_active: true,
+        },
+        order: { created_at: 'ASC' },
+      });
+      if (!product || Number(product.sellPrice) <= 0) {
+        throw new BadRequestException(
+          'No sellable verification product candidate found for tenant',
+        );
+      }
+    }
+
+    const fingerprintPayload = {
+      id: product.id,
+      isActive: product.is_active,
+      name: product.name,
+      sellPrice: Number(product.sellPrice),
+      tenantId: product.tenant_id,
+      uom: product.uom,
+    };
+
+    const fingerprint = computeJcsSha256(fingerprintPayload);
+
+    return {
+      verificationProductId: product.id,
+      name: product.name,
+      sellPrice: Number(product.sellPrice),
+      uom: product.uom,
+      tenantId: product.tenant_id,
+      isActive: product.is_active,
+      verificationProductRevision: 1,
+      verificationProductFingerprint: fingerprint,
     };
   }
 }
