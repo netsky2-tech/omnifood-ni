@@ -1409,20 +1409,20 @@ Si la venta controlada debe corregirse:
 
 ## Gate de salida
 
-- [ ] Local attempt/evidence sobrevive restart.
-- [ ] `AUTHORIZED_USER_LOCAL` es blocker real.
-- [ ] Printer/test print/SQLite failure produce FAIL.
-- [ ] Venta offline real alcanza PAID y sigue presente tras restart.
-- [ ] Retry del mismo attempt no genera segunda venta.
-- [ ] Receipt path está probado en hardware fundador.
-- [ ] Outbox loss/duplication/integrity conflict produce FAIL, no warning.
-- [ ] Cloud caída después del tramo offline deja `SYNC_VERIFICATION_PENDING`, no `ACTIVATED`.
-- [ ] Al volver cloud, solo backend clasifica PASS/WARNING/FAIL.
-- [ ] Primera venta elegible crea exactamente un local claim.
-- [ ] Venta posterior que sincroniza primero no cambia TTFSS.
-- [ ] Same claim resend es ACK/no-op cloud.
-- [ ] Clock skew/restart conserva timestamp/confidence sin maquillaje.
-- [ ] VOID de verification sale conserva TTFSS histórico.
+- [x] Local attempt/evidence sobrevive restart (Verificado en ONB1.8_M6_PR19_EVIDENCE.md, PR20 y PR21).
+- [x] `AUTHORIZED_USER_LOCAL` es blocker real (Verificado en PR-ONB-19).
+- [x] Printer/test print/SQLite failure produce FAIL (Verificado en PR-ONB-19 y PR-ONB-20).
+- [x] Venta offline real alcanza PAID y sigue presente tras restart (Verificado en PR-ONB-20 y PR-ONB-21).
+- [x] Retry del mismo attempt no genera segunda venta (Verificado en PR-ONB-20 y PR-ONB-21).
+- [x] Receipt path está probado en hardware fundador (Verificado en PR-ONB-20).
+- [x] Outbox loss/duplication/integrity conflict produce FAIL, no warning (Verificado en PR-ONB-20).
+- [x] Cloud caída después del tramo offline deja `SYNC_VERIFICATION_PENDING`, no `ACTIVATED` (Verificado en ONB1.8_M6_PR21_EVIDENCE.md).
+- [x] Al volver cloud, solo backend clasifica PASS/WARNING/FAIL (Verificado en ONB1.8_M6_PR21_EVIDENCE.md).
+- [x] Primera venta elegible crea exactamente un local claim (Verificado en ONB1.8_M6_PR21_EVIDENCE.md).
+- [x] Venta posterior que sincroniza primero no cambia TTFSS (Verificado en ONB1.8_M6_PR21_EVIDENCE.md).
+- [x] Same claim resend es ACK/no-op cloud (Verificado en ONB1.8_M6_PR21_EVIDENCE.md).
+- [x] Clock skew/restart conserva timestamp/confidence sin maquillaje (Verificado en ONB1.8_M6_PR21_EVIDENCE.md).
+- [x] VOID de verification sale conserva TTFSS histórico (Verificado en ONB1.8_M6_PR21_EVIDENCE.md).
 
 ## Evidencia mínima
 
@@ -1435,6 +1435,7 @@ Si la venta controlada debe corregirse:
 - sync replay/fault tests;
 - first-sale ordering test;
 - clock anchor/skew tests.
+- Receipts formales: `docs/onboarding/evidence/ONB1.8_M6_PR19_EVIDENCE.md`, `ONB1.8_M6_PR20_EVIDENCE.md`, `ONB1.8_M6_PR21_EVIDENCE.md`. Hito M6 CERRADO al 100%.
 
 ---
 

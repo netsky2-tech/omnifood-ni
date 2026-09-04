@@ -11,7 +11,9 @@ import '../database/app_database.dart';
 import '../models/activation/activation_attempt_local_entity.dart';
 import '../models/activation/activation_check_result_local_entity.dart';
 import '../models/activation/activation_outbox_envelope_entity.dart';
+import '../models/activation/first_successful_sale_claim_entity.dart';
 import '../models/sales/invoice_entity.dart';
+import 'activation_clock_manager.dart';
 
 class ControlledSaleParams {
   final String tenantId;
@@ -34,6 +36,7 @@ class ControlledSaleParams {
 class ControlledSaleResult {
   final bool isSuccess;
   final String? verificationTicketId;
+  final FirstSuccessfulSaleClaimEntity? firstSaleClaim;
   final String attemptStatus;
   final Map<String, ActivationCheckResultLocalEntity> checks;
   final List<ActivationOutboxEnvelopeEntity> outboxEnvelopes;
@@ -42,6 +45,7 @@ class ControlledSaleResult {
   const ControlledSaleResult({
     required this.isSuccess,
     this.verificationTicketId,
+    this.firstSaleClaim,
     required this.attemptStatus,
     this.checks = const {},
     this.outboxEnvelopes = const [],
@@ -53,14 +57,17 @@ class ActivationControlledSaleRunner {
   final AppDatabase _database;
   final SalesRepository _salesRepository;
   final PrinterPort _printerPort;
+  final ActivationClockManager? _clockManager;
 
   ActivationControlledSaleRunner({
     required AppDatabase database,
     required SalesRepository salesRepository,
     required PrinterPort printerPort,
+    ActivationClockManager? clockManager,
   })  : _database = database,
         _salesRepository = salesRepository,
-        _printerPort = printerPort;
+        _printerPort = printerPort,
+        _clockManager = clockManager;
 
   Future<ControlledSaleResult> executeControlledOfflineSale(
     ControlledSaleParams params,
@@ -80,6 +87,21 @@ class ActivationControlledSaleRunner {
         errors: ["ActivationAttemptLocal '$trimmedAttemptId' not found in SQLite"],
       );
     }
+
+    // Initialize clock context and anchor if present in attempt
+    final clock = _clockManager ?? ActivationClockManager.instance;
+    if (attempt.serverTimeAnchorAt != null && attempt.anchorMonotonicTicks != null) {
+      clock.setAnchor(
+        serverTimeAnchorAt: DateTime.parse(attempt.serverTimeAnchorAt!),
+        anchorMonotonicTicks: attempt.anchorMonotonicTicks!,
+        serverTimeAnchorId: 'anchor-${attempt.attemptId}',
+        bootSessionId: attempt.bootSessionId ?? clock.bootSessionId,
+      );
+    }
+    final clockRes = clock.resolveClockContext(
+      deviceWallClock: now,
+      currentBootSessionId: attempt.bootSessionId,
+    );
 
     if (attempt.tenantId.trim() != trimmedTenantId) {
       return ControlledSaleResult(
@@ -375,6 +397,48 @@ class ActivationControlledSaleRunner {
       },
     );
 
+    // 6.1 TTFSS First Successful Sale Claim (ONB1.8E & ONB1.8F)
+    final claimOutboxEventId = const Uuid().v4();
+    final candidateClaim = FirstSuccessfulSaleClaimEntity(
+      tenantId: trimmedTenantId,
+      terminalId: attempt.candidateTerminalId,
+      ticketId: ticketId,
+      activationAttemptId: trimmedAttemptId,
+      deviceOccurredAt: clockRes.deviceOccurredAt,
+      anchoredOccurredAt: clockRes.anchoredOccurredAt,
+      clockConfidence: clockRes.clockConfidence,
+      serverTimeAnchorId: clockRes.serverTimeAnchorId,
+      posBuild: '1.0.0+1',
+      outboxEventId: claimOutboxEventId,
+      createdAtLocal: nowIso,
+    );
+
+    // Atomic write-once insert: ON CONFLICT DO NOTHING (OnConflictStrategy.ignore in Floor DAO)
+    await _database.firstSuccessfulSaleClaimDao.insertClaim(candidateClaim);
+
+    // Verify if this ticket is the authoritative winning claim for this tenant
+    final persistedClaim = await _database.firstSuccessfulSaleClaimDao.getClaimByTenantId(trimmedTenantId);
+    final isWinningClaim = persistedClaim != null && persistedClaim.ticketId == ticketId;
+
+    if (isWinningClaim) {
+      addEnvelope(
+        eventType: 'FIRST_SUCCESSFUL_SALE_OBSERVED',
+        idempotencyKey: 'onboarding:first-sale:$trimmedTenantId',
+        payload: {
+          'ticketId': ticketId,
+          'tenantId': trimmedTenantId,
+          'terminalId': attempt.candidateTerminalId,
+          'activationAttemptId': trimmedAttemptId,
+          'deviceOccurredAt': clockRes.deviceOccurredAt,
+          'anchoredOccurredAt': clockRes.anchoredOccurredAt,
+          'clockConfidence': clockRes.clockConfidence,
+          'serverTimeAnchorId': clockRes.serverTimeAnchorId,
+          'posBuild': '1.0.0+1',
+          'outboxEventId': persistedClaim.outboxEventId,
+        },
+      );
+    }
+
     // Persist checks & envelopes to Floor SQLite
     await _database.activationCheckResultLocalDao.insertChecks(checks.values.toList());
 
@@ -438,6 +502,7 @@ class ActivationControlledSaleRunner {
     return ControlledSaleResult(
       isSuccess: allChecksPassed,
       verificationTicketId: ticketId,
+      firstSaleClaim: persistedClaim,
       attemptStatus: updatedAttempt.localStatus,
       checks: checks,
       outboxEnvelopes: outboxEnvelopes,

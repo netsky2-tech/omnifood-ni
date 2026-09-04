@@ -824,5 +824,263 @@ void main() {
         throwsA(anything),
       );
     });
+
+    group('ONB1.8E & ONB1.8F — TTFSS First Successful Sale Claim & Clock Semantics', () {
+      const tenantId = 'tenant-founder-01';
+      const attemptId = 'attempt-pr21-uuid-1';
+      const verificationProductId = 'prod-pin-001';
+      const cashierId = 'cashier-off-01';
+
+      Future<void> seedPrerequisites({
+        String attemptStatus = 'RUNNING',
+        String? serverTimeAnchorAt,
+        int? anchorMonotonicTicks,
+        String? bootSessionId,
+      }) async {
+        await database.localConfigDao.saveConfig(
+          LocalConfigEntity(key: 'dgi_prefix', value: '001-001-01'),
+        );
+        await database.localConfigDao.saveConfig(
+          LocalConfigEntity(key: 'dgi_current_seq', value: '1'),
+        );
+        await database.localConfigDao.saveConfig(
+          LocalConfigEntity(key: 'dgi_range_end', value: '1000'),
+        );
+
+        await database.userDao.insertUsers([
+          UserEntity(
+            id: cashierId,
+            name: 'Cajero Offline',
+            role: 'CASHIER',
+            pinHash: '',
+            isActive: true,
+            tenantId: tenantId,
+          ),
+        ]);
+        await database.securityProfileDao.insertProfiles([
+          SecurityProfileEntity(
+            userId: cashierId,
+            pinHash: localAuth.hashPin('123456'),
+            isPinEnabled: true,
+            isTotpEnabled: false,
+          ),
+        ]);
+
+        await database.productDao.insertProducts([
+          ProductEntity(
+            id: verificationProductId,
+            name: 'Café de Prueba Activación',
+            sellPrice: 50.0,
+            averageCost: 15.0,
+            stock: 100.0,
+            uom: 'CUP',
+            barcode: 'PROD-ACT-001',
+            isActive: true,
+            isPrepared: false,
+            tenantId: tenantId,
+          ),
+        ]);
+
+        await database.activationAttemptLocalDao.saveAttempt(
+          ActivationAttemptLocalEntity(
+            attemptId: attemptId,
+            tenantId: tenantId,
+            candidateTerminalId: 'pos-terminal-founder-01',
+            localStatus: attemptStatus,
+            requiredFiscalRevision: 1,
+            requiredFiscalFingerprint: 'fiscal-fp-123',
+            verificationProductId: verificationProductId,
+            serverTimeAnchorAt: serverTimeAnchorAt,
+            anchorMonotonicTicks: anchorMonotonicTicks,
+            bootSessionId: bootSessionId,
+            assignedAt: '2026-09-04T12:00:00.000Z',
+            updatedAt: '2026-09-04T12:00:00.000Z',
+          ),
+        );
+      }
+
+      test('creates atomic FirstSuccessfulSaleClaimEntity and emits FIRST_SUCCESSFUL_SALE_OBSERVED outbox envelope', () async {
+        await seedPrerequisites(
+          serverTimeAnchorAt: '2026-09-04T12:00:00.000Z',
+          anchorMonotonicTicks: 1000000,
+          bootSessionId: 'boot-session-pr21',
+        );
+
+        final result = await saleRunner.executeControlledOfflineSale(
+          const ControlledSaleParams(
+            tenantId: tenantId,
+            attemptId: attemptId,
+            cashierUserId: cashierId,
+          ),
+        );
+
+        expect(result.isSuccess, isTrue);
+        expect(result.verificationTicketId, isNotNull);
+
+        // 1. Verify FirstSuccessfulSaleClaimEntity in Floor SQLite
+        final claim = await database.firstSuccessfulSaleClaimDao.getClaimByTenantId(tenantId);
+        expect(claim, isNotNull);
+        expect(claim!.tenantId, equals(tenantId));
+        expect(claim.terminalId, equals('pos-terminal-founder-01'));
+        expect(claim.ticketId, equals(result.verificationTicketId));
+        expect(claim.activationAttemptId, equals(attemptId));
+        expect(claim.clockConfidence, equals('ANCHORED'));
+        expect(claim.anchoredOccurredAt, isNotNull);
+        expect(claim.deviceOccurredAt, isNotEmpty);
+        expect(claim.outboxEventId, isNotEmpty);
+
+        // 2. Verify FIRST_SUCCESSFUL_SALE_OBSERVED envelope in outbox
+        final envelopes = await database.activationOutboxDao.getPendingEnvelopes(tenantId);
+        final firstSaleEnv = envelopes.firstWhere((e) => e.eventType == 'FIRST_SUCCESSFUL_SALE_OBSERVED');
+        expect(firstSaleEnv, isNotNull);
+        expect(firstSaleEnv.idempotencyKey, equals('onboarding:first-sale:$tenantId'));
+        expect(firstSaleEnv.syncStatus, equals('PENDING'));
+
+        final payload = jsonDecode(firstSaleEnv.payloadJson) as Map<String, dynamic>;
+        expect(payload['ticketId'], equals(result.verificationTicketId));
+        expect(payload['clockConfidence'], equals('ANCHORED'));
+        expect(payload['anchoredOccurredAt'], isNotNull);
+      });
+
+      test('write-once invariant: second sale or attempt retry NEVER overwrites winning claim nor emits second FIRST_SUCCESSFUL_SALE_OBSERVED', () async {
+        await seedPrerequisites(
+          serverTimeAnchorAt: '2026-09-04T12:00:00.000Z',
+          anchorMonotonicTicks: 1000000,
+          bootSessionId: 'boot-session-pr21',
+        );
+
+        // First sale
+        final firstResult = await saleRunner.executeControlledOfflineSale(
+          const ControlledSaleParams(
+            tenantId: tenantId,
+            attemptId: attemptId,
+            cashierUserId: cashierId,
+          ),
+        );
+        expect(firstResult.isSuccess, isTrue);
+        final winningTicketId = firstResult.verificationTicketId!;
+
+        final claimBefore = await database.firstSuccessfulSaleClaimDao.getClaimByTenantId(tenantId);
+        expect(claimBefore!.ticketId, equals(winningTicketId));
+
+        // Re-execute or simulate a second attempt / sale
+        final retryResult = await saleRunner.executeControlledOfflineSale(
+          const ControlledSaleParams(
+            tenantId: tenantId,
+            attemptId: attemptId,
+            cashierUserId: cashierId,
+          ),
+        );
+        expect(retryResult.isSuccess, isTrue);
+
+        // Claim must still be the original winning ticket
+        final claimAfter = await database.firstSuccessfulSaleClaimDao.getClaimByTenantId(tenantId);
+        expect(claimAfter!.ticketId, equals(winningTicketId));
+        expect(claimAfter.createdAtLocal, equals(claimBefore.createdAtLocal));
+
+        // Exactly one FIRST_SUCCESSFUL_SALE_OBSERVED outbox envelope must exist
+        final envelopes = await database.activationOutboxDao.getPendingEnvelopes(tenantId);
+        final firstSaleEnvs = envelopes.where((e) => e.eventType == 'FIRST_SUCCESSFUL_SALE_OBSERVED').toList();
+        expect(firstSaleEnvs.length, equals(1));
+      });
+
+      test('claim survives database restart with real SQLite disk persistence', () async {
+        final tempDir = await Directory.systemTemp.createTemp('pos_claim_disk_test_');
+        final dbFile = File(p.join(tempDir.path, 'pos_claim_test.db'));
+
+        try {
+          // Open DB on disk
+          var diskDb = await $FloorAppDatabase.databaseBuilder(dbFile.path).build();
+
+          // Seed configs
+          await diskDb.localConfigDao.saveConfig(LocalConfigEntity(key: 'dgi_prefix', value: '001-001-01'));
+          await diskDb.localConfigDao.saveConfig(LocalConfigEntity(key: 'dgi_current_seq', value: '1'));
+          await diskDb.localConfigDao.saveConfig(LocalConfigEntity(key: 'dgi_range_end', value: '1000'));
+          await diskDb.userDao.insertUsers([
+            UserEntity(id: cashierId, name: 'Cajero Offline', role: 'CASHIER', pinHash: '', isActive: true, tenantId: tenantId),
+          ]);
+          await diskDb.securityProfileDao.insertProfiles([
+            SecurityProfileEntity(userId: cashierId, pinHash: localAuth.hashPin('123456'), isPinEnabled: true, isTotpEnabled: false),
+          ]);
+          await diskDb.productDao.insertProducts([
+            ProductEntity(id: verificationProductId, name: 'Café de Prueba', sellPrice: 50.0, averageCost: 15.0, stock: 100.0, uom: 'CUP', barcode: 'PROD-01', isActive: true, isPrepared: false, tenantId: tenantId),
+          ]);
+          await diskDb.activationAttemptLocalDao.saveAttempt(
+            ActivationAttemptLocalEntity(
+              attemptId: attemptId,
+              tenantId: tenantId,
+              candidateTerminalId: 'pos-terminal-founder-01',
+              localStatus: 'RUNNING',
+              requiredFiscalRevision: 1,
+              requiredFiscalFingerprint: 'fiscal-fp-123',
+              verificationProductId: verificationProductId,
+              serverTimeAnchorAt: '2026-09-04T12:00:00.000Z',
+              anchorMonotonicTicks: 1000000,
+              bootSessionId: 'boot-session-pr21',
+              assignedAt: '2026-09-04T12:00:00.000Z',
+              updatedAt: '2026-09-04T12:00:00.000Z',
+            ),
+          );
+
+          final capCache = TenantCapabilityCache(
+            configDao: diskDb.localConfigDao,
+            clock: StopwatchMonotonicClock(),
+            bootSessionId: 'disk-session',
+            nowUtc: () => DateTime.now().toUtc(),
+          );
+          final aRepo = AuthRepositoryImpl(diskDb.userDao, diskDb.securityProfileDao, localAuth, mockDio, capabilityCache: capCache);
+          final audRepo = AuditRepositoryImpl(diskDb.auditDao, aRepo, mockDio, 'pos-terminal-founder-01', capabilityCache: capCache, forensicAlertDao: diskDb.forensicAlertDao);
+          final invRepo = InventoryRepositoryImpl(
+            insumoDao: diskDb.insumoDao, recipeDao: diskDb.recipeDao, movementDao: diskDb.movementDao,
+            movementSyncStateDao: diskDb.movementSyncStateDao, supplierDao: diskDb.supplierDao,
+            warehouseDao: diskDb.warehouseDao, countSessionDao: diskDb.countSessionDao,
+            countLineDao: diskDb.countLineDao, forensicAlertDao: diskDb.forensicAlertDao,
+            uomConversionDao: diskDb.uomConversionDao, batchDao: diskDb.batchDao,
+            purchaseDao: diskDb.purchaseDao, recipeVersionDocumentDao: diskDb.recipeVersionDocumentDao,
+            productionOrderDocumentDao: diskDb.productionOrderDocumentDao, dio: mockDio, database: diskDb,
+          );
+          final movEng = MovementEngineImpl(invRepo, mockAlertService);
+          final numServ = DgiNumberingServiceImpl(diskDb.localConfigDao);
+          final sRepo = SalesRepositoryImpl(
+            database: diskDb, invoiceDao: diskDb.invoiceDao, itemDao: diskDb.invoiceItemDao,
+            paymentDao: diskDb.paymentDao, transactionDao: diskDb.salesTransactionDao,
+            numberingService: numServ, movementEngine: movEng, auditRepository: audRepo,
+            processInventoryUseCase: ProcessSaleInventoryUseCase(movEng),
+            reverseInventoryUseCase: ReverseSaleInventoryUseCase(movEng),
+            inventoryRepository: invRepo,
+          );
+
+          final runner = ActivationControlledSaleRunner(
+            database: diskDb,
+            salesRepository: sRepo,
+            printerPort: printerAdapter,
+          );
+
+          final res = await runner.executeControlledOfflineSale(
+            const ControlledSaleParams(tenantId: tenantId, attemptId: attemptId, cashierUserId: cashierId),
+          );
+          expect(res.isSuccess, isTrue);
+
+          // Close database connection (simulating reboot/crash)
+          await diskDb.close();
+
+          // Re-open from disk
+          diskDb = await $FloorAppDatabase.databaseBuilder(dbFile.path).build();
+          final reloadedClaim = await diskDb.firstSuccessfulSaleClaimDao.getClaimByTenantId(tenantId);
+          expect(reloadedClaim, isNotNull);
+          expect(reloadedClaim!.ticketId, equals(res.verificationTicketId));
+          expect(reloadedClaim.clockConfidence, equals('ANCHORED'));
+
+          final envelopes = await diskDb.activationOutboxDao.getPendingEnvelopes(tenantId);
+          expect(envelopes.any((e) => e.eventType == 'FIRST_SUCCESSFUL_SALE_OBSERVED'), isTrue);
+
+          await diskDb.close();
+        } finally {
+          if (await tempDir.exists()) {
+            await tempDir.delete(recursive: true);
+          }
+        }
+      });
+    });
   });
 }
