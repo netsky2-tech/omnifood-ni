@@ -62,6 +62,11 @@ import { TemplateInsumo } from '../../modules/onboarding/entities/template-insum
 import { TemplateProduct } from '../../modules/onboarding/entities/template-product.entity';
 import { TemplateRecipeItem } from '../../modules/onboarding/entities/template-recipe-item.entity';
 import { ImportStaging } from '../../modules/onboarding/entities/import-staging.entity';
+import { OnboardingSession } from '../../modules/onboarding/entities/onboarding-session.entity';
+import { OnboardingIdempotencyRecord } from '../../modules/onboarding/entities/onboarding-idempotency.entity';
+import { TemplateApplication } from '../../modules/onboarding/entities/template-application.entity';
+import { TemplateSeedLink } from '../../modules/onboarding/entities/template-seed-link.entity';
+import { LegacyOnboardingMigrationReceipt } from '../../modules/onboarding/entities/legacy-migration-receipt.entity';
 
 export const getRequiredConfigValue = (
   configService: ConfigService,
@@ -122,6 +127,11 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
     TemplateProduct,
     TemplateRecipeItem,
     ImportStaging,
+    OnboardingSession,
+    OnboardingIdempotencyRecord,
+    TemplateApplication,
+    TemplateSeedLink,
+    LegacyOnboardingMigrationReceipt,
     Customer,
     CloudPromotion,
     CustomerPointTransaction,

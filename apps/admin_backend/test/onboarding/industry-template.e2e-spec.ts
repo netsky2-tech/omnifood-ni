@@ -9,6 +9,12 @@ import { DataSource, FindManyOptions, FindOneOptions } from 'typeorm';
 import { TenantInterceptor } from '../../src/core/database/rls.interceptor';
 import { IndustryTemplateController } from '../../src/modules/onboarding/controllers/industry-template.controller';
 import { IndustryTemplateService } from '../../src/modules/onboarding/services/industry-template.service';
+import { TemplatePreviewService } from '../../src/modules/onboarding/services/template-preview.service';
+import { TemplateSeedLink } from '../../src/modules/onboarding/entities/template-seed-link.entity';
+import { LegacyTemplateRecipeScanService } from '../../src/modules/onboarding/services/legacy-template-recipe-scan.service';
+import { OnboardingIdempotencyCoordinator } from '../../src/modules/onboarding/services/onboarding-idempotency.coordinator';
+import { RecipeOrigin, RecipePublicationState, RecipeSuggestionState } from '../../src/modules/inventory/entities/recipe-version.entity';
+
 import { IndustryTemplate } from '../../src/modules/onboarding/entities/industry-template.entity';
 import {
   Insumo,
@@ -57,6 +63,8 @@ describe('IndustryTemplate (Integration & E2E)', () => {
       description: 'Plantilla especializada en café de especialidad y bebidas.',
       icon: 'coffee',
       is_active: true,
+      version: 1,
+      source_fingerprint: 'fp-cafe',
       created_at: new Date('2026-01-01'),
       updated_at: new Date('2026-01-01'),
       templateInsumos: [
@@ -137,6 +145,8 @@ describe('IndustryTemplate (Integration & E2E)', () => {
       description: 'Plantilla para gastronomía y coctelería.',
       icon: 'utensils',
       is_active: true,
+      version: 1,
+      source_fingerprint: 'fp-bar',
       created_at: new Date('2026-01-01'),
       updated_at: new Date('2026-01-01'),
       templateInsumos: [],
@@ -149,6 +159,8 @@ describe('IndustryTemplate (Integration & E2E)', () => {
       description: 'Plantilla para abarrotes y snacks.',
       icon: 'shopping-cart',
       is_active: true,
+      version: 1,
+      source_fingerprint: 'fp-retail',
       created_at: new Date('2026-01-01'),
       updated_at: new Date('2026-01-01'),
       templateInsumos: [],
@@ -162,6 +174,7 @@ describe('IndustryTemplate (Integration & E2E)', () => {
   let dbRecipeVersions: RecipeVersion[] = [];
   let dbRecipeDetails: RecipeDetail[] = [];
   let dbRecipes: Recipe[] = [];
+  let dbSeedLinks: any[] = [];
   let dbConversions: UomConversion[] = [];
 
   const templateRepo = {
@@ -222,8 +235,7 @@ describe('IndustryTemplate (Integration & E2E)', () => {
             dbRecipeVersions.find(
               (r) =>
                 r.tenant_id === tenantId &&
-                r.product_id === productId &&
-                r.is_active,
+                r.product_id === productId,
             ) || null,
           );
         }
@@ -254,6 +266,7 @@ describe('IndustryTemplate (Integration & E2E)', () => {
         if (entityClass === RecipeDetail)
           dbRecipeDetails.push(withId as unknown as RecipeDetail);
         if (entityClass === Recipe) dbRecipes.push(withId as unknown as Recipe);
+            if ((entityClass as any)?.name === 'TemplateSeedLink' || (entityClass as any) === TemplateSeedLink) dbSeedLinks.push(withId);
         if (entityClass === UomConversion)
           dbConversions.push(withId as unknown as UomConversion);
         return withId;
@@ -289,7 +302,49 @@ describe('IndustryTemplate (Integration & E2E)', () => {
       controllers: [IndustryTemplateController],
       providers: [
         IndustryTemplateService,
+        TemplatePreviewService,
+        LegacyTemplateRecipeScanService,
+        OnboardingIdempotencyCoordinator,
         createIdentityJwtConfigProvider(),
+        {
+          provide: 'TemplateSeedLinkRepository',
+          useValue: {
+            find: jest.fn().mockResolvedValue([]),
+            findOne: jest.fn().mockResolvedValue(null),
+            create: jest.fn((x) => x),
+            save: jest.fn((x) => Promise.resolve(x)),
+          },
+        },
+        {
+          provide: 'TemplateApplicationRepository',
+          useValue: {
+            create: jest.fn((x) => x),
+            save: jest.fn((x) => Promise.resolve({ ...x, id: 'app-1' })),
+          },
+        },
+        {
+          provide: 'OnboardingSessionRepository',
+          useValue: { findOne: jest.fn().mockResolvedValue(null) },
+        },
+        {
+          provide: 'OnboardingIdempotencyRecordRepository',
+          useValue: {
+            findOne: jest.fn().mockResolvedValue(null),
+            create: jest.fn((x) => x),
+            save: jest.fn((x) => Promise.resolve(x)),
+          },
+        },
+        {
+          provide: 'LegacyOnboardingMigrationReceiptRepository',
+          useValue: {
+            create: jest.fn((x) => x),
+            save: jest.fn((x) => Promise.resolve({ ...x, id: 'rec-1' })),
+          },
+        },
+        {
+          provide: 'InvoiceItemRepository',
+          useValue: { count: jest.fn().mockResolvedValue(0) },
+        },
         {
           provide: 'IndustryTemplateRepository',
           useValue: templateRepo,
@@ -484,6 +539,8 @@ describe('IndustryTemplate (Integration & E2E)', () => {
     expect(response.body).toEqual({
       tenantId: 'tenant-A',
       templateCode: 'CAFETERIA',
+      templateVersion: 1,
+      applicationId: expect.any(String),
       insumosCreated: 2,
       insumosSkipped: 0,
       productsCreated: 1,
@@ -526,6 +583,8 @@ describe('IndustryTemplate (Integration & E2E)', () => {
     expect(response.body).toEqual({
       tenantId: 'tenant-A',
       templateCode: 'CAFETERIA',
+      templateVersion: 1,
+      applicationId: expect.any(String),
       insumosCreated: 0,
       insumosSkipped: 2,
       productsCreated: 0,

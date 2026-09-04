@@ -29,6 +29,12 @@ export class IndustryTemplate {
   @Column({ type: 'boolean', default: true })
   is_active: boolean;
 
+  @Column({ type: 'int', default: 1 })
+  version: number;
+
+  @Column({ type: 'varchar', length: 128, nullable: true })
+  source_fingerprint: string | null;
+
   @OneToMany(() => TemplateInsumo, (insumo) => insumo.template, {
     cascade: true,
   })

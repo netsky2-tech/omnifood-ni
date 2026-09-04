@@ -11,7 +11,12 @@ import {
   QueryFailedError,
   Repository,
 } from 'typeorm';
-import { RecipeVersion } from './entities/recipe-version.entity';
+import {
+  RecipeOrigin,
+  RecipePublicationState,
+  RecipeSuggestionState,
+  RecipeVersion,
+} from './entities/recipe-version.entity';
 import { RecipeDetail } from './entities/recipe-detail.entity';
 import { Insumo } from './entities/insumo.entity';
 import { Product } from './entities/product.entity';
@@ -144,9 +149,56 @@ export class RecipeService {
         tenant_id: tenantId,
         product_id: productId,
         is_active: true,
+        publication_state: RecipePublicationState.PUBLISHED,
       },
       order: { version_number: 'DESC' },
     });
+  }
+
+  async publishDraftVersion(
+    tenantId: string,
+    recipeVersionId: string,
+  ): Promise<RecipeVersion> {
+    const draft = await this.recipeVersionRepo.findOne({
+      where: { id: recipeVersionId, tenant_id: tenantId },
+    });
+
+    if (!draft) {
+      throw new NotFoundException(
+        `Recipe version ${recipeVersionId} not found`,
+      );
+    }
+
+    if (
+      draft.publication_state === RecipePublicationState.PUBLISHED &&
+      draft.is_active
+    ) {
+      return draft;
+    }
+
+    // Deactivate prior active version for this product
+    const priorActive = await this.recipeVersionRepo.findOne({
+      where: {
+        tenant_id: tenantId,
+        product_id: draft.product_id,
+        is_active: true,
+      },
+      order: { version_number: 'DESC' },
+    });
+
+    if (priorActive && priorActive.id !== draft.id) {
+      priorActive.is_active = false;
+      priorActive.fecha_fin_vigencia = new Date();
+      await this.recipeVersionRepo.save(priorActive);
+    }
+
+    draft.is_active = true;
+    draft.publication_state = RecipePublicationState.PUBLISHED;
+    draft.suggestion_state = RecipeSuggestionState.CONFIRMED;
+    draft.published_at = new Date();
+    draft.fecha_inicio_vigencia = draft.fecha_inicio_vigencia ?? new Date();
+
+    return this.recipeVersionRepo.save(draft);
   }
 
   async getSnapshot(

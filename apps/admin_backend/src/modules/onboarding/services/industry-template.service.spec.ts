@@ -14,6 +14,12 @@ import { RecipeVersion } from '../../inventory/entities/recipe-version.entity';
 import { RecipeDetail } from '../../inventory/entities/recipe-detail.entity';
 import { Recipe } from '../../inventory/entities/recipe.entity';
 import { UomConversion } from '../../inventory/entities/uom-conversion.entity';
+import { RecipeOrigin, RecipePublicationState, RecipeSuggestionState } from '../../inventory/entities/recipe-version.entity';
+import { TemplateSeedLink } from '../entities/template-seed-link.entity';
+import { TemplateApplication } from '../entities/template-application.entity';
+import { TemplatePreviewService } from './template-preview.service';
+import { OnboardingIdempotencyCoordinator } from './onboarding-idempotency.coordinator';
+
 
 describe('IndustryTemplateService (Unit & Triangulation)', () => {
   let service: IndustryTemplateService;
@@ -29,6 +35,11 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
   let uomConversionRepo: jest.Mocked<Repository<UomConversion>>;
   let dataSource: jest.Mocked<DataSource>;
   let mockManager: jest.Mocked<EntityManager>;
+  let seedLinkRepo: jest.Mocked<Repository<TemplateSeedLink>>;
+  let templateApplicationRepo: jest.Mocked<Repository<TemplateApplication>>;
+  let previewService: jest.Mocked<TemplatePreviewService>;
+  let idempotencyCoordinator: jest.Mocked<OnboardingIdempotencyCoordinator>;
+
 
   const mockTemplates: IndustryTemplate[] = [
     {
@@ -39,6 +50,8 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
         'Plantilla especializada en café de especialidad, bebidas frías y calientes.',
       icon: 'coffee',
       is_active: true,
+      version: 1,
+      source_fingerprint: 'fp-cafeteria',
       created_at: new Date('2026-01-01'),
       updated_at: new Date('2026-01-01'),
       templateInsumos: [
@@ -120,6 +133,8 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
         'Plantilla para gastronomía, hamburguesas, cortes y coctelería.',
       icon: 'utensils',
       is_active: true,
+      version: 1,
+      source_fingerprint: 'fp-bar',
       created_at: new Date('2026-01-01'),
       updated_at: new Date('2026-01-01'),
       templateInsumos: [],
@@ -133,6 +148,8 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
         'Plantilla para abarrotes, bebidas embotelladas y snacks sin receta.',
       icon: 'shopping-cart',
       is_active: true,
+      version: 1,
+      source_fingerprint: 'fp-retail',
       created_at: new Date('2026-01-01'),
       updated_at: new Date('2026-01-01'),
       templateInsumos: [],
@@ -202,10 +219,36 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
       create: jest.fn(
         (_entityClass: unknown, plain: unknown) => plain as object,
       ),
-      save: jest.fn((_entityClass: unknown, entities: unknown) =>
-        Promise.resolve(entities),
-      ),
+      save: jest.fn((_entityClass: unknown, entities: unknown) => { console.log("SAVE CALLED WITH:", (_entityClass as any)?.name || _entityClass, entities);
+        if (_entityClass === TemplateApplication) {
+          return Promise.resolve({ ...(entities as any), id: 'app-uuid-1' });
+        }
+        return Promise.resolve(entities);
+      }),
     } as unknown as jest.Mocked<EntityManager>;
+
+    seedLinkRepo = {
+      find: jest.fn().mockResolvedValue([]),
+      findOne: jest.fn().mockResolvedValue(null),
+      create: jest.fn((e: any) => e),
+      save: jest.fn((e: any) => Promise.resolve(e)),
+    } as any;
+
+    templateApplicationRepo = {
+      create: jest.fn((e: any) => e),
+      save: jest.fn((e: any) => Promise.resolve({ ...e, id: 'app-uuid-1' })),
+    } as any;
+
+    previewService = {
+      computeFingerprint: jest.fn((o: any) => 'fp-' + JSON.stringify(o).length),
+      buildPreview: jest.fn().mockResolvedValue({} as any),
+    } as any;
+
+    idempotencyCoordinator = {
+      acquireLease: jest.fn().mockResolvedValue({ state: 'ACQUIRED', record: { id: 'lease-1' } }),
+      completeSuccess: jest.fn().mockResolvedValue(undefined),
+      completeFailure: jest.fn().mockResolvedValue(undefined),
+    } as any;
 
     dataSource = {
       transaction: jest.fn((cb: (mgr: EntityManager) => Promise<unknown>) =>
@@ -224,6 +267,10 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
       recipeDetailRepo,
       recipeRepo,
       uomConversionRepo,
+      seedLinkRepo,
+      templateApplicationRepo,
+      previewService,
+      idempotencyCoordinator,
       dataSource,
     );
   });
@@ -351,6 +398,8 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
       expect(result).toEqual({
         tenantId,
         templateCode: 'CAFETERIA',
+        templateVersion: 1,
+        applicationId: expect.any(String),
         insumosCreated: 2,
         insumosSkipped: 0,
         productsCreated: 1,
@@ -422,6 +471,9 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
         version_note: null,
         published_at: null,
         pos_created_at: null,
+        origin: RecipeOrigin.MANUAL,
+        publication_state: RecipePublicationState.PUBLISHED,
+        suggestion_state: RecipeSuggestionState.CONFIRMED,
         created_at: new Date(),
       };
 
@@ -463,6 +515,8 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
       expect(result).toEqual({
         tenantId,
         templateCode: 'CAFETERIA',
+        templateVersion: 1,
+        applicationId: expect.any(String),
         insumosCreated: 1,
         insumosSkipped: 1,
         productsCreated: 0,
@@ -479,6 +533,8 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
         description: 'Plantilla minimarket',
         icon: 'shopping-cart',
         is_active: true,
+        version: 1,
+        source_fingerprint: 'fp-retail',
         created_at: new Date(),
         updated_at: new Date(),
         templateInsumos: [],
@@ -522,6 +578,8 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
       expect(result).toEqual({
         tenantId,
         templateCode: 'RETAIL_MINIMARKET',
+        templateVersion: 1,
+        applicationId: expect.any(String),
         insumosCreated: 0,
         insumosSkipped: 0,
         productsCreated: 1,

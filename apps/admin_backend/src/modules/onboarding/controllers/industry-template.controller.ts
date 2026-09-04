@@ -9,6 +9,8 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { IndustryTemplateService } from '../services/industry-template.service';
+import { TemplatePreviewService, TemplatePreviewOptions } from '../services/template-preview.service';
+import { LegacyTemplateRecipeScanService, ScanOptions } from '../services/legacy-template-recipe-scan.service';
 import { ApplyTemplateDto } from '../dto/apply-template.dto';
 import { GetTenantId } from '../../../core/decorators/tenant.decorator';
 import { TenantInterceptor } from '../../../core/database/rls.interceptor';
@@ -23,6 +25,8 @@ import { UserRole } from '../../identity/entities/user.entity';
 export class IndustryTemplateController {
   constructor(
     private readonly industryTemplateService: IndustryTemplateService,
+    private readonly templatePreviewService: TemplatePreviewService,
+    private readonly legacyScanService: LegacyTemplateRecipeScanService,
   ) {}
 
   private requireTenant(tenantId?: string): string {
@@ -42,6 +46,27 @@ export class IndustryTemplateController {
   @Roles(UserRole.OWNER, UserRole.MANAGER)
   async getTemplate(@Param('code') code: string) {
     return this.industryTemplateService.getTemplateByCode(code);
+  }
+
+  @Post(':code/preview')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  async previewTemplate(
+    @Param('code') code: string,
+    @Body() dto: TemplatePreviewOptions,
+    @GetTenantId() tenantId?: string,
+  ) {
+    const validTenantId = this.requireTenant(tenantId);
+    return this.templatePreviewService.buildPreview(validTenantId, code, dto);
+  }
+
+  @Post('legacy-recipe-scan')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  async scanLegacyRecipes(
+    @Body() dto: ScanOptions,
+    @GetTenantId() tenantId?: string,
+  ) {
+    const validTenantId = this.requireTenant(tenantId);
+    return this.legacyScanService.scanAndRemediate(validTenantId, dto);
   }
 
   @Post(':code/apply')

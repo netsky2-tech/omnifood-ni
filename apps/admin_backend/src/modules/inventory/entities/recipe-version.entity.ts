@@ -10,6 +10,24 @@ import {
 import { Tenant } from '../../tenant/entities/tenant.entity';
 import { Product } from './product.entity';
 
+export enum RecipeOrigin {
+  MANUAL = 'MANUAL',
+  INDUSTRY_TEMPLATE = 'INDUSTRY_TEMPLATE',
+  IMPORT = 'IMPORT',
+}
+
+export enum RecipePublicationState {
+  DRAFT = 'DRAFT',
+  PUBLISHED = 'PUBLISHED',
+  ARCHIVED = 'ARCHIVED',
+}
+
+export enum RecipeSuggestionState {
+  SUGGESTED = 'SUGGESTED',
+  CONFIRMED = 'CONFIRMED',
+  REJECTED = 'REJECTED',
+}
+
 /**
  * Historical recipe version snapshot.
  *
@@ -96,6 +114,27 @@ export class RecipeVersion {
   /** POS-side creation timestamp (snapshot of document.createdAt). */
   @Column({ type: 'timestamptz', nullable: true })
   pos_created_at: Date | null;
+
+  @Column({
+    type: 'varchar',
+    length: 64,
+    default: RecipeOrigin.MANUAL,
+  })
+  origin: RecipeOrigin;
+
+  @Column({
+    type: 'varchar',
+    length: 64,
+    default: RecipePublicationState.PUBLISHED,
+  })
+  publication_state: RecipePublicationState;
+
+  @Column({
+    type: 'varchar',
+    length: 64,
+    default: RecipeSuggestionState.CONFIRMED,
+  })
+  suggestion_state: RecipeSuggestionState;
 
   @CreateDateColumn()
   created_at: Date;

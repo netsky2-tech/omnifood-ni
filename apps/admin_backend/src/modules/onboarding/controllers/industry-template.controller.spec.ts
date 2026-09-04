@@ -1,11 +1,15 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { IndustryTemplateController } from './industry-template.controller';
 import { IndustryTemplateService } from '../services/industry-template.service';
+import { TemplatePreviewService } from '../services/template-preview.service';
+import { LegacyTemplateRecipeScanService } from '../services/legacy-template-recipe-scan.service';
 import { IndustryTemplate } from '../entities/industry-template.entity';
 
 describe('IndustryTemplateController (Unit)', () => {
   let controller: IndustryTemplateController;
   let service: jest.Mocked<IndustryTemplateService>;
+  let previewService: jest.Mocked<TemplatePreviewService>;
+  let legacyScanService: jest.Mocked<LegacyTemplateRecipeScanService>;
 
   beforeEach(() => {
     service = {
@@ -14,7 +18,19 @@ describe('IndustryTemplateController (Unit)', () => {
       applyTemplate: jest.fn(),
     } as unknown as jest.Mocked<IndustryTemplateService>;
 
-    controller = new IndustryTemplateController(service);
+    previewService = {
+      buildPreview: jest.fn(),
+    } as unknown as jest.Mocked<TemplatePreviewService>;
+
+    legacyScanService = {
+      scanAndRemediate: jest.fn(),
+    } as unknown as jest.Mocked<LegacyTemplateRecipeScanService>;
+
+    controller = new IndustryTemplateController(
+      service,
+      previewService,
+      legacyScanService,
+    );
   });
 
   describe('listTemplates', () => {
@@ -47,6 +63,8 @@ describe('IndustryTemplateController (Unit)', () => {
         description: 'Plantilla de cafetería',
         icon: 'coffee',
         is_active: true,
+        version: 1,
+        source_fingerprint: 'fp-1',
         templateInsumos: [],
         templateProducts: [],
         created_at: new Date(),
@@ -57,6 +75,84 @@ describe('IndustryTemplateController (Unit)', () => {
       const result = await controller.getTemplate('CAFETERIA');
       expect(result).toEqual(mockTemplate);
       expect(service.getTemplateByCode).toHaveBeenCalledWith('CAFETERIA');
+    });
+  });
+
+  describe('previewTemplate', () => {
+    it('throws UnauthorizedException when tenantId is missing or empty', async () => {
+      await expect(
+        controller.previewTemplate('CAFETERIA', {}, undefined),
+      ).rejects.toThrow(UnauthorizedException);
+
+      await expect(
+        controller.previewTemplate('CAFETERIA', {}, '   '),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('delegates to previewService.buildPreview with trimmed tenantId', async () => {
+      const mockPreviewResult = {
+        templateCode: 'CAFETERIA',
+        templateVersion: 1,
+        templateName: 'Cafetería',
+        templateFingerprint: 'fp-1',
+        items: [],
+        summary: {
+          totalItems: 0,
+          newCount: 0,
+          existingLinkedCount: 0,
+          existingUnlinkedCount: 0,
+          conflictCount: 0,
+          unsupportedCount: 0,
+        },
+      };
+      previewService.buildPreview.mockResolvedValueOnce(mockPreviewResult);
+
+      const dto = { selectedItemIds: ['item-1'] };
+      const result = await controller.previewTemplate(
+        'CAFETERIA',
+        dto,
+        ' tenant-1 ',
+      );
+
+      expect(result).toEqual(mockPreviewResult);
+      expect(previewService.buildPreview).toHaveBeenCalledWith(
+        'tenant-1',
+        'CAFETERIA',
+        dto,
+      );
+    });
+  });
+
+  describe('scanLegacyRecipes', () => {
+    it('throws UnauthorizedException when tenantId is missing or empty', async () => {
+      await expect(
+        controller.scanLegacyRecipes({}, undefined),
+      ).rejects.toThrow(UnauthorizedException);
+
+      await expect(
+        controller.scanLegacyRecipes({}, '   '),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('delegates to legacyScanService.scanAndRemediate with trimmed tenantId', async () => {
+      const mockScanResult = {
+        tenantId: 'tenant-1',
+        scannedCount: 2,
+        migratedToDraftCount: 1,
+        keptPublishedCount: 1,
+        unknownProvenanceCount: 0,
+        receipts: [],
+      };
+      legacyScanService.scanAndRemediate.mockResolvedValueOnce(mockScanResult);
+
+      const dto = {};
+      const result = await controller.scanLegacyRecipes(dto, ' tenant-1 ');
+
+      expect(result).toEqual(mockScanResult);
+      expect(legacyScanService.scanAndRemediate).toHaveBeenCalledWith(
+        'tenant-1',
+        dto,
+      );
     });
   });
 

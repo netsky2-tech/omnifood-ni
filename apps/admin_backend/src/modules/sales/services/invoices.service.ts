@@ -15,6 +15,7 @@ import { InventorySyncOutbox } from '../../inventory/entities/inventory-sync-out
 import { SyncBatchRecordDto } from '../dto/sync-batch.dto';
 import { RecipeService } from '../../inventory/recipe.service';
 import { BomExplosionService } from '../../inventory/bom-explosion.service';
+import { RecipePublicationState } from '../../inventory/entities/recipe-version.entity';
 import {
   Insumo,
   NEGATIVE_STOCK_POLICY,
@@ -1408,6 +1409,17 @@ export class InvoicesService {
     recipeVersionId?: string,
   ): Promise<string | null> {
     if (recipeVersionId) {
+      const snapshot = await this.recipeService.getSnapshot(
+        recipeVersionId,
+        tenantId,
+        productId,
+      );
+      if (
+        snapshot.recipeVersion?.publication_state ===
+        RecipePublicationState.DRAFT
+      ) {
+        return null;
+      }
       return recipeVersionId;
     }
 

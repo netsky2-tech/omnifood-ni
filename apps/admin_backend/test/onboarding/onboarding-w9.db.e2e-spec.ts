@@ -19,6 +19,14 @@ import { TemplateInsumo } from '../../src/modules/onboarding/entities/template-i
 import { TemplateProduct } from '../../src/modules/onboarding/entities/template-product.entity';
 import { TemplateRecipeItem } from '../../src/modules/onboarding/entities/template-recipe-item.entity';
 import { ImportStaging } from '../../src/modules/onboarding/entities/import-staging.entity';
+import { TemplateSeedLink } from '../../src/modules/onboarding/entities/template-seed-link.entity';
+import { TemplateApplication } from '../../src/modules/onboarding/entities/template-application.entity';
+import { LegacyOnboardingMigrationReceipt } from '../../src/modules/onboarding/entities/legacy-migration-receipt.entity';
+import { OnboardingSession } from '../../src/modules/onboarding/entities/onboarding-session.entity';
+import { OnboardingIdempotencyRecord } from '../../src/modules/onboarding/entities/onboarding-idempotency.entity';
+import { TemplatePreviewService } from '../../src/modules/onboarding/services/template-preview.service';
+import { LegacyTemplateRecipeScanService } from '../../src/modules/onboarding/services/legacy-template-recipe-scan.service';
+import { OnboardingIdempotencyCoordinator } from '../../src/modules/onboarding/services/onboarding-idempotency.coordinator';
 import { FiscalSetupController } from '../../src/modules/onboarding/controllers/fiscal-setup.controller';
 import { IndustryTemplateController } from '../../src/modules/onboarding/controllers/industry-template.controller';
 import { ImportStagingController } from '../../src/modules/onboarding/controllers/import-staging.controller';
@@ -82,6 +90,11 @@ async function withOnboardingIsolatedSchema(
         TemplateProduct,
         TemplateRecipeItem,
         ImportStaging,
+        TemplateSeedLink,
+        TemplateApplication,
+        LegacyOnboardingMigrationReceipt,
+        OnboardingSession,
+        OnboardingIdempotencyRecord,
       ],
       synchronize: true,
     });
@@ -224,9 +237,36 @@ async function withOnboardingIsolatedSchema(
           useValue: dataSource.getRepository(ImportStaging),
         },
         {
+          provide: 'TemplateSeedLinkRepository',
+          useValue: dataSource.getRepository(TemplateSeedLink),
+        },
+        {
+          provide: 'TemplateApplicationRepository',
+          useValue: dataSource.getRepository(TemplateApplication),
+        },
+        {
+          provide: 'LegacyOnboardingMigrationReceiptRepository',
+          useValue: dataSource.getRepository(LegacyOnboardingMigrationReceipt),
+        },
+        {
+          provide: 'OnboardingSessionRepository',
+          useValue: dataSource.getRepository(OnboardingSession),
+        },
+        {
+          provide: 'OnboardingIdempotencyRecordRepository',
+          useValue: dataSource.getRepository(OnboardingIdempotencyRecord),
+        },
+        {
+          provide: 'InvoiceItemRepository',
+          useValue: { count: jest.fn().mockResolvedValue(0) },
+        },
+        {
           provide: EventEmitter2,
           useValue: { emit: jest.fn() },
         },
+        TemplatePreviewService,
+        LegacyTemplateRecipeScanService,
+        OnboardingIdempotencyCoordinator,
         FiscalSetupService,
         IndustryTemplateService,
         ImportStagingService,

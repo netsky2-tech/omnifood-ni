@@ -9,6 +9,9 @@ import { TemplateRecipeItem } from './entities/template-recipe-item.entity';
 import { ImportStaging } from './entities/import-staging.entity';
 import { OnboardingSession } from './entities/onboarding-session.entity';
 import { OnboardingIdempotencyRecord } from './entities/onboarding-idempotency.entity';
+import { TemplateApplication } from './entities/template-application.entity';
+import { TemplateSeedLink } from './entities/template-seed-link.entity';
+import { LegacyOnboardingMigrationReceipt } from './entities/legacy-migration-receipt.entity';
 import { Tenant } from '../tenant/entities/tenant.entity';
 import { User } from '../identity/entities/user.entity';
 import { SystemParametersConfig } from '../inventory/entities/system-parameters-config.entity';
@@ -19,6 +22,8 @@ import { RecipeDetail } from '../inventory/entities/recipe-detail.entity';
 import { Recipe } from '../inventory/entities/recipe.entity';
 import { UomConversion } from '../inventory/entities/uom-conversion.entity';
 import { IndustryTemplateService } from './services/industry-template.service';
+import { TemplatePreviewService } from './services/template-preview.service';
+import { LegacyTemplateRecipeScanService } from './services/legacy-template-recipe-scan.service';
 import { IndustryTemplateController } from './controllers/industry-template.controller';
 import { FiscalSetupService } from './services/fiscal-setup.service';
 import { FiscalSetupController } from './controllers/fiscal-setup.controller';
@@ -59,6 +64,9 @@ export const getRequiredOnboardingJwtSecret = (
       ImportStaging,
       OnboardingSession,
       OnboardingIdempotencyRecord,
+      TemplateApplication,
+      TemplateSeedLink,
+      LegacyOnboardingMigrationReceipt,
       Tenant,
       User,
       SystemParametersConfig,
@@ -78,6 +86,8 @@ export const getRequiredOnboardingJwtSecret = (
   ],
   providers: [
     IndustryTemplateService,
+    TemplatePreviewService,
+    LegacyTemplateRecipeScanService,
     FiscalSetupService,
     ImportStagingService,
     OnboardingSessionService,
@@ -99,6 +109,8 @@ export const getRequiredOnboardingJwtSecret = (
   ],
   exports: [
     IndustryTemplateService,
+    TemplatePreviewService,
+    LegacyTemplateRecipeScanService,
     FiscalSetupService,
     ImportStagingService,
     OnboardingSessionService,
