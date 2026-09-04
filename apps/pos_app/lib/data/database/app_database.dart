@@ -42,10 +42,12 @@ import 'package:pos_app/data/models/fiscal_config_local_entity.dart';
 import '../daos/activation/activation_attempt_local_dao.dart';
 import '../daos/activation/activation_check_result_local_dao.dart';
 import '../daos/activation/first_successful_sale_claim_dao.dart';
+import '../daos/activation/first_customer_sale_observation_dao.dart';
 import '../daos/activation/activation_outbox_dao.dart';
 import '../models/activation/activation_attempt_local_entity.dart';
 import '../models/activation/activation_check_result_local_entity.dart';
 import '../models/activation/first_successful_sale_claim_entity.dart';
+import '../models/activation/first_customer_sale_observation_entity.dart';
 import '../models/activation/activation_outbox_envelope_entity.dart';
 import '../daos/customer/customer_dao.dart';
 import '../models/customer/customer_entity.dart';
@@ -94,7 +96,7 @@ import 'package:pos_app/data/models/kitchen/kitchen_order_item_entity.dart';
 part 'app_database.g.dart'; // generated code
 
 @Database(
-  version: 46,
+  version: 47,
   entities: [
     UserEntity,
     SecurityProfileEntity,
@@ -142,6 +144,7 @@ part 'app_database.g.dart'; // generated code
     ActivationAttemptLocalEntity,
     ActivationCheckResultLocalEntity,
     FirstSuccessfulSaleClaimEntity,
+    FirstCustomerSaleObservationEntity,
     ActivationOutboxEnvelopeEntity,
   ],
 )
@@ -190,5 +193,6 @@ abstract class AppDatabase extends FloorDatabase {
   ActivationAttemptLocalDao get activationAttemptLocalDao;
   ActivationCheckResultLocalDao get activationCheckResultLocalDao;
   FirstSuccessfulSaleClaimDao get firstSuccessfulSaleClaimDao;
+  FirstCustomerSaleObservationDao get firstCustomerSaleObservationDao;
   ActivationOutboxDao get activationOutboxDao;
 }

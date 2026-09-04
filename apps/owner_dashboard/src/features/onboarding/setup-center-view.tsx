@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   useOnboardingSession,
   useOnboardingCatalogSummary,
 } from "./use-onboarding";
 import { isVersionConflictError } from "./onboarding-api";
+import { emitOnboardingTelemetry } from "./onboarding-telemetry-client";
 import { OnboardingLifecycleState, type OnboardingStepKey } from "./types";
 import { CatalogAcquisitionModal } from "./catalog-acquisition-modal";
 import { useHasPermission } from "@/features/users/use-has-permission";
@@ -45,6 +46,18 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
   const hasActivationPermission = useHasPermission(AppPermission.ONBOARDING_ACTIVATION_MANAGE);
 
   const [catalogModalOpen, setCatalogModalOpen] = useState(false);
+
+  useEffect(() => {
+    emitOnboardingTelemetry({
+      eventName: "STEP_VIEWED",
+      stepId: "SETUP_CENTER",
+      properties: {
+        lifecycleState: session?.lifecycleState,
+      },
+    }).catch(() => {
+      // Observability only: failures never break UI
+    });
+  }, [session?.lifecycleState]);
 
   if (isLoading) {
     return (
@@ -591,6 +604,70 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
           )}
         </CardContent>
       </Card>
+
+      {/* ONB1.9G — Activation Sales & First Customer Sale Observation */}
+      {session.lifecycleState === OnboardingLifecycleState.ACTIVATED && (
+        <Card data-testid="onboarding-activation-sales-card" className="border-border/80 shadow-sm bg-gradient-to-r from-emerald-50/20 via-background to-card">
+          <CardHeader className="py-3.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <CardTitle className="text-sm font-semibold flex items-center gap-2 text-foreground">
+                  <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
+                  Métricas de Activación & Primera Venta Comercial (ONB1.9G)
+                </CardTitle>
+                <CardDescription className="text-xs text-muted-foreground mt-0.5">
+                  Observabilidad desacoplada entre el hito técnico de activación (TTFSS) y la primera venta comercial a cliente final.
+                </CardDescription>
+              </div>
+              <Badge variant="outline" className="text-[11px] font-mono shrink-0">
+                ONB1.9G
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="pb-3.5 pt-0">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div
+                data-testid="onboarding-ttfss-claim"
+                className="p-3 rounded-md border bg-card/60 flex flex-col justify-between"
+              >
+                <span className="text-xs font-semibold text-muted-foreground">
+                  TTFSS Consolidado (Venta Técnica M6)
+                </span>
+                <div className="mt-1 text-sm font-medium text-foreground">
+                  {session.firstSuccessfulSaleAt ? (
+                    new Date(session.firstSuccessfulSaleAt).toLocaleString("es-NI")
+                  ) : (
+                    <span className="text-muted-foreground italic">No registrado</span>
+                  )}
+                </div>
+                <span className="text-[10px] text-muted-foreground/80 mt-1">
+                  Inmutable: Base histórica de Time to First Successful Sale.
+                </span>
+              </div>
+              <div
+                data-testid="onboarding-first-customer-sale"
+                className="p-3 rounded-md border bg-card/60 flex flex-col justify-between"
+              >
+                <span className="text-xs font-semibold text-muted-foreground">
+                  Primer Ticket Comercial Cliente Final
+                </span>
+                <div className="mt-1 text-sm font-medium text-foreground">
+                  {session.firstCustomerSaleAt ? (
+                    new Date(session.firstCustomerSaleAt).toLocaleString("es-NI")
+                  ) : (
+                    <span className="text-amber-700 dark:text-amber-400 font-normal">
+                      Pendiente de primera venta comercial
+                    </span>
+                  )}
+                </div>
+                <span className="text-[10px] text-muted-foreground/80 mt-1">
+                  Observado de forma desacoplada; no altera el TTFSS histórico.
+                </span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ONB1.9A–D Progressive BOH Checklist & Direct Backoffice Links */}
       <Card data-testid="boh-progressive-checklist" className="border-border/80 shadow-sm">

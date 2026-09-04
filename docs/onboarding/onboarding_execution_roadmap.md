@@ -1546,19 +1546,19 @@ No modifica TTFSS.
 - [x] Tenant ACTIVATED puede permanecer `COST_PENDING` y vender (verificado en PR-ONB-22).
 - [x] Avanzar a Inventory/Costing/Operations Ready no modifica `activatedAt` (verificado en PR-ONB-22).
 - [x] Costo desconocido nunca se presenta como cero confirmado (verificado en PR-ONB-22).
-- [ ] `STEP_SKIPPED` solo aplica a contenido opcional/postergable.
-- [ ] Telemetry no controla lifecycle.
-- [ ] Telemetry no contiene raw CSV/secretos.
-- [ ] Audit material es correlacionable con session/command/target.
-- [ ] First Customer Sale se observa separadamente de TTFSS.
+- [x] `STEP_SKIPPED` solo aplica a contenido opcional/postergable (verificado en PR-ONB-23).
+- [x] Telemetry no controla lifecycle (verificado en PR-ONB-23).
+- [x] Telemetry no contiene raw CSV/secretos (verificado en PR-ONB-23).
+- [x] Audit material es correlacionable con session/command/target (verificado en PR-ONB-23).
+- [x] First Customer Sale se observa separadamente de TTFSS (verificado en PR-ONB-23).
 
 ## Evidencia mínima
 
 - readiness adapter unit/integration tests (ONB1.9_M7_PR22_EVIDENCE.md);
 - activated + BOH incomplete E2E (ONB1.9_M7_PR22_EVIDENCE.md);
-- telemetry schema/PII review;
-- audit correlation test;
-- analytics event fixture.
+- telemetry schema/PII review (ONB1.9_M7_PR23_EVIDENCE.md);
+- audit correlation test (ONB1.9_M7_PR23_EVIDENCE.md);
+- analytics event fixture (ONB1.9_M7_PR23_EVIDENCE.md).
 
 ---
 

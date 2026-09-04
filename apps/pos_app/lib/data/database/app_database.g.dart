@@ -160,6 +160,8 @@ class _$AppDatabase extends AppDatabase {
 
   FirstSuccessfulSaleClaimDao? _firstSuccessfulSaleClaimDaoInstance;
 
+  FirstCustomerSaleObservationDao? _firstCustomerSaleObservationDaoInstance;
+
   ActivationOutboxDao? _activationOutboxDaoInstance;
 
   Future<sqflite.Database> open(
@@ -168,7 +170,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 46,
+      version: 47,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -276,6 +278,8 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `first_successful_sale_claims` (`tenant_id` TEXT NOT NULL, `terminal_id` TEXT NOT NULL, `ticket_id` TEXT NOT NULL, `activation_attempt_id` TEXT, `device_occurred_at` TEXT NOT NULL, `anchored_occurred_at` TEXT, `clock_confidence` TEXT NOT NULL, `server_time_anchor_id` TEXT, `pos_build` TEXT, `outbox_event_id` TEXT NOT NULL, `created_at_local` TEXT NOT NULL, PRIMARY KEY (`tenant_id`))');
         await database.execute(
+            'CREATE TABLE IF NOT EXISTS `first_customer_sale_observations` (`tenant_id` TEXT NOT NULL, `terminal_id` TEXT NOT NULL, `ticket_id` TEXT NOT NULL, `occurred_at` TEXT NOT NULL, `outbox_event_id` TEXT NOT NULL, `created_at_local` TEXT NOT NULL, PRIMARY KEY (`tenant_id`))');
+        await database.execute(
             'CREATE TABLE IF NOT EXISTS `activation_outbox_envelopes` (`id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `activation_attempt_id` TEXT NOT NULL, `event_type` TEXT NOT NULL, `idempotency_key` TEXT NOT NULL, `payload_json` TEXT NOT NULL, `payload_hash` TEXT NOT NULL, `sync_status` TEXT NOT NULL, `created_at` TEXT NOT NULL, `synced_at` TEXT, `last_error` TEXT, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE UNIQUE INDEX `index_audit_logs_tenant_id_device_id_user_id_sequence_no` ON `audit_logs` (`tenant_id`, `device_id`, `user_id`, `sequence_no`)');
@@ -335,6 +339,10 @@ class _$AppDatabase extends AppDatabase {
             'CREATE UNIQUE INDEX `index_first_successful_sale_claims_ticket_id` ON `first_successful_sale_claims` (`ticket_id`)');
         await database.execute(
             'CREATE UNIQUE INDEX `index_first_successful_sale_claims_outbox_event_id` ON `first_successful_sale_claims` (`outbox_event_id`)');
+        await database.execute(
+            'CREATE UNIQUE INDEX `index_first_customer_sale_observations_ticket_id` ON `first_customer_sale_observations` (`ticket_id`)');
+        await database.execute(
+            'CREATE UNIQUE INDEX `index_first_customer_sale_observations_outbox_event_id` ON `first_customer_sale_observations` (`outbox_event_id`)');
         await database.execute(
             'CREATE UNIQUE INDEX `index_activation_outbox_envelopes_tenant_id_idempotency_key` ON `activation_outbox_envelopes` (`tenant_id`, `idempotency_key`)');
         await database.execute(
@@ -590,6 +598,12 @@ class _$AppDatabase extends AppDatabase {
   FirstSuccessfulSaleClaimDao get firstSuccessfulSaleClaimDao {
     return _firstSuccessfulSaleClaimDaoInstance ??=
         _$FirstSuccessfulSaleClaimDao(database, changeListener);
+  }
+
+  @override
+  FirstCustomerSaleObservationDao get firstCustomerSaleObservationDao {
+    return _firstCustomerSaleObservationDaoInstance ??=
+        _$FirstCustomerSaleObservationDao(database, changeListener);
   }
 
   @override
@@ -6217,6 +6231,78 @@ class _$FirstSuccessfulSaleClaimDao extends FirstSuccessfulSaleClaimDao {
   Future<int> insertClaim(FirstSuccessfulSaleClaimEntity claim) {
     return _firstSuccessfulSaleClaimEntityInsertionAdapter.insertAndReturnId(
         claim, OnConflictStrategy.ignore);
+  }
+}
+
+class _$FirstCustomerSaleObservationDao
+    extends FirstCustomerSaleObservationDao {
+  _$FirstCustomerSaleObservationDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _firstCustomerSaleObservationEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'first_customer_sale_observations',
+            (FirstCustomerSaleObservationEntity item) => <String, Object?>{
+                  'tenant_id': item.tenantId,
+                  'terminal_id': item.terminalId,
+                  'ticket_id': item.ticketId,
+                  'occurred_at': item.occurredAt,
+                  'outbox_event_id': item.outboxEventId,
+                  'created_at_local': item.createdAtLocal
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<FirstCustomerSaleObservationEntity>
+      _firstCustomerSaleObservationEntityInsertionAdapter;
+
+  @override
+  Future<FirstCustomerSaleObservationEntity?> getObservationByTenantId(
+      String tenantId) async {
+    return _queryAdapter.query(
+        'SELECT * FROM first_customer_sale_observations WHERE tenant_id = ?1',
+        mapper: (Map<String, Object?> row) =>
+            FirstCustomerSaleObservationEntity(
+                tenantId: row['tenant_id'] as String,
+                terminalId: row['terminal_id'] as String,
+                ticketId: row['ticket_id'] as String,
+                occurredAt: row['occurred_at'] as String,
+                outboxEventId: row['outbox_event_id'] as String,
+                createdAtLocal: row['created_at_local'] as String),
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<List<FirstCustomerSaleObservationEntity>> getAll() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM first_customer_sale_observations',
+        mapper: (Map<String, Object?> row) =>
+            FirstCustomerSaleObservationEntity(
+                tenantId: row['tenant_id'] as String,
+                terminalId: row['terminal_id'] as String,
+                ticketId: row['ticket_id'] as String,
+                occurredAt: row['occurred_at'] as String,
+                outboxEventId: row['outbox_event_id'] as String,
+                createdAtLocal: row['created_at_local'] as String));
+  }
+
+  @override
+  Future<void> deleteByTenantId(String tenantId) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM first_customer_sale_observations WHERE tenant_id = ?1',
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<int> insertObservation(
+      FirstCustomerSaleObservationEntity observation) {
+    return _firstCustomerSaleObservationEntityInsertionAdapter
+        .insertAndReturnId(observation, OnConflictStrategy.ignore);
   }
 }
 

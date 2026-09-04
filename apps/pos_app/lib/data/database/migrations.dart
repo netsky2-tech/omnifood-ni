@@ -1900,6 +1900,29 @@ final migration45_46 = Migration(45, 46, (database) async {
   ''');
 });
 
+final migration46_47 = Migration(46, 47, (database) async {
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS first_customer_sale_observations (
+      tenant_id TEXT NOT NULL PRIMARY KEY,
+      terminal_id TEXT NOT NULL,
+      ticket_id TEXT NOT NULL,
+      occurred_at TEXT NOT NULL,
+      outbox_event_id TEXT NOT NULL,
+      created_at_local TEXT NOT NULL
+    )
+  ''');
+
+  await database.execute('''
+    CREATE UNIQUE INDEX IF NOT EXISTS index_first_customer_sale_observations_ticket_id
+    ON first_customer_sale_observations (ticket_id)
+  ''');
+
+  await database.execute('''
+    CREATE UNIQUE INDEX IF NOT EXISTS index_first_customer_sale_observations_outbox_event_id
+    ON first_customer_sale_observations (outbox_event_id)
+  ''');
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -1937,4 +1960,5 @@ final allMigrations = [
   migration43_44,
   migration44_45,
   migration45_46,
+  migration46_47,
 ];

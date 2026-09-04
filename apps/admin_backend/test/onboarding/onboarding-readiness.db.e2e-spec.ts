@@ -52,6 +52,12 @@ import { CatalogReadinessAdapter } from '../../src/modules/onboarding/adapters/c
 import { InventoryReadinessAdapter } from '../../src/modules/onboarding/adapters/inventory-readiness.adapter';
 import { CostingReadinessAdapter } from '../../src/modules/onboarding/adapters/costing-readiness.adapter';
 import { OperationsReadinessAdapter } from '../../src/modules/onboarding/adapters/operations-readiness.adapter';
+import { OnboardingTelemetryEvent } from '../../src/modules/onboarding/entities/onboarding-telemetry-event.entity';
+import { OnboardingTelemetryController } from '../../src/modules/onboarding/controllers/onboarding-telemetry.controller';
+import { OnboardingTelemetryService } from '../../src/modules/onboarding/telemetry/onboarding-telemetry.service';
+import { OnboardingCustomerSaleObserver } from '../../src/modules/onboarding/services/onboarding-customer-sale.observer';
+import { ChangeLog } from '../../src/modules/audit/entities/change-log.entity';
+import { ChangeLogService } from '../../src/modules/audit/change-log.service';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
 import { PermissionsGuard } from '../../src/modules/identity/guards/permissions.guard';
@@ -81,6 +87,8 @@ async function withReadinessIsolatedSchema(
     ownerTokenB: string;
     managerTokenA: string;
     cashierTokenA: string;
+    customerSaleObserver: OnboardingCustomerSaleObserver;
+    telemetryService: OnboardingTelemetryService;
   }) => Promise<void>,
 ): Promise<void> {
   const bootstrap = new DataSource({ type: 'postgres', ...postgresConnection });
@@ -117,6 +125,8 @@ async function withReadinessIsolatedSchema(
         Warehouse,
         Supplier,
         InventoryMovement,
+        OnboardingTelemetryEvent,
+        ChangeLog,
       ],
       synchronize: true,
     });
@@ -169,7 +179,10 @@ async function withReadinessIsolatedSchema(
     ]);
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
-      controllers: [OnboardingSessionController],
+      controllers: [
+        OnboardingSessionController,
+        OnboardingTelemetryController,
+      ],
       providers: [
         Reflector,
         AuthGuard,
@@ -230,6 +243,17 @@ async function withReadinessIsolatedSchema(
           provide: 'RecipeVersionRepository',
           useValue: dataSource.getRepository(RecipeVersion),
         },
+        {
+          provide: 'OnboardingTelemetryEventRepository',
+          useValue: dataSource.getRepository(OnboardingTelemetryEvent),
+        },
+        {
+          provide: 'ChangeLogRepository',
+          useValue: dataSource.getRepository(ChangeLog),
+        },
+        ChangeLogService,
+        OnboardingTelemetryService,
+        OnboardingCustomerSaleObserver,
         FiscalSetupService,
         OnboardingSessionService,
         OnboardingReadinessEvaluator,
@@ -301,6 +325,13 @@ async function withReadinessIsolatedSchema(
       role: UserRole.CASHIER,
     });
 
+    const customerSaleObserver = moduleFixture.get<OnboardingCustomerSaleObserver>(
+      OnboardingCustomerSaleObserver,
+    );
+    const telemetryService = moduleFixture.get<OnboardingTelemetryService>(
+      OnboardingTelemetryService,
+    );
+
     await assertion({
       app,
       dataSource,
@@ -311,6 +342,8 @@ async function withReadinessIsolatedSchema(
       ownerTokenB,
       managerTokenA,
       cashierTokenA,
+      customerSaleObserver,
+      telemetryService,
     });
   } finally {
     if (app) {
@@ -613,6 +646,175 @@ describe('Onboarding Readiness & State Reconciler (Real PostgreSQL DB)', () => {
         expect(postBohSessionRes.body.readiness.costing.knownCostCount).toBe(1);
         expect(postBohSessionRes.body.readiness.costing.pendingCostCount).toBe(
           0,
+        );
+      },
+    );
+  });
+
+  it('demonstrates ONB1.9E–G: Canonical Product Telemetry, Zero Secrets Guardrail, and Decoupled First Customer Sale Observation (AC-07, AC-08, AC-40, AC-41)', async () => {
+    await withReadinessIsolatedSchema(
+      'onb_telemetry_cust_sale',
+      async ({ app, dataSource, tenantAId, ownerTokenA, customerSaleObserver, telemetryService }) => {
+        // 1. Start session
+        await request(app.getHttpServer())
+          .post('/onboarding/session/start')
+          .set('Authorization', `Bearer ${ownerTokenA}`)
+          .send({ source: 'SETUP_CENTER' })
+          .expect(200);
+
+        // 2. Telemetry Ingestion: Post canonical telemetry events through API
+        // a) STEP_VIEWED -> 200 OK
+        const viewRes = await request(app.getHttpServer())
+          .post('/onboarding/telemetry/events')
+          .set('Authorization', `Bearer ${ownerTokenA}`)
+          .send({
+            eventName: 'STEP_VIEWED',
+            stepId: 'FISCAL_SETUP',
+            durationMs: 150,
+            properties: { navigationPath: '/onboarding/fiscal' },
+          })
+          .expect(200);
+
+        expect(viewRes.body.accepted).toBe(true);
+        expect(viewRes.body.eventName).toBe('STEP_VIEWED');
+
+        // b) INVARIANT: STEP_SKIPPED on required blocker FISCAL_SETUP -> 400 Bad Request
+        await request(app.getHttpServer())
+          .post('/onboarding/telemetry/events')
+          .set('Authorization', `Bearer ${ownerTokenA}`)
+          .send({
+            eventName: 'STEP_SKIPPED',
+            stepId: 'FISCAL_SETUP', // REQUIRED
+          })
+          .expect(400);
+
+        // c) STEP_SKIPPED on optional BOH_INVENTORY -> 200 OK
+        const skipRes = await request(app.getHttpServer())
+          .post('/onboarding/telemetry/events')
+          .set('Authorization', `Bearer ${ownerTokenA}`)
+          .send({
+            eventName: 'STEP_SKIPPED',
+            stepId: 'BOH_INVENTORY', // OPTIONAL
+          })
+          .expect(200);
+        expect(skipRes.body.accepted).toBe(true);
+
+        // d) Zero Secrets Guardrail: Post telemetry containing JWT, password, card, and raw CSV
+        const rawCsv = 'barcode,name,price\n743001,Soda,30.0\n743002,Juice,25.0';
+        await request(app.getHttpServer())
+          .post('/onboarding/telemetry/events')
+          .set('Authorization', `Bearer ${ownerTokenA}`)
+          .send({
+            eventName: 'IMPORT_VALIDATED',
+            properties: {
+              admin_password: 'superSecretPassword123!',
+              token_jwt: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIn0.sig',
+              card_number: '4532015012345678',
+              raw_csv: rawCsv,
+              legitimateCounter: 42,
+            },
+          })
+          .expect(200);
+
+        // Query real PostgreSQL database table to verify zero secrets stored physically
+        const telemetryRepo = dataSource.getRepository(OnboardingTelemetryEvent);
+        const importEvent = await telemetryRepo.findOne({
+          where: { tenantId: tenantAId, eventName: 'IMPORT_VALIDATED' as any },
+        });
+
+        expect(importEvent).toBeDefined();
+        const storedProps = importEvent!.propertiesSanitizedJson!;
+        expect(storedProps.admin_password).toBe('[REDACTED_SECRET]');
+        expect(storedProps.token_jwt).toContain('[REDACTED_JWT]');
+        expect(storedProps.card_number).toBe('[REDACTED_CARD]');
+        expect(storedProps.raw_csv).toEqual({
+          redacted: true,
+          type: 'RAW_CSV_REDACTED',
+          lineCount: 3,
+          byteLength: rawCsv.length,
+        });
+        expect(storedProps.legitimateCounter).toBe(42);
+
+        // 3. ONB1.9G — Decoupled First Customer Sale Observation
+        // Establish historical Activation state (M6): controlled verification sale performed
+        const sessionRepo = dataSource.getRepository(OnboardingSession);
+        const historicalTtfss = new Date('2026-09-04T12:00:00.000Z');
+        const historicalActivatedAt = new Date('2026-09-04T12:05:00.000Z');
+
+        await sessionRepo.update(
+          { tenantId: tenantAId },
+          {
+            lifecycleState: OnboardingLifecycleState.ACTIVATED,
+            activatedAt: historicalActivatedAt,
+            firstSuccessfulSaleAt: historicalTtfss,
+            firstCustomerSaleAt: null,
+          },
+        );
+
+        // First commercial sale to end-customer happens 2 hours later
+        const firstCustomerSaleTime = new Date('2026-09-04T14:15:00.000Z');
+        const obsResult = await customerSaleObserver.observeSale({
+          tenantId: tenantAId,
+          ticketId: 'ticket-commercial-final-001',
+          occurredAt: firstCustomerSaleTime,
+          isActivationVerificationSale: false,
+        });
+
+        expect(obsResult.observed).toBe(true);
+        expect(obsResult.isFirstCustomerSale).toBe(true);
+        expect(obsResult.firstCustomerSaleAt).toEqual(firstCustomerSaleTime);
+
+        // INVARIANT CHECK: In real PostgreSQL, verify that:
+        // - firstCustomerSaleAt is persisted
+        // - historical firstSuccessfulSaleAt is 100% UNCHANGED
+        // - historical activatedAt is 100% UNCHANGED
+        const sessionInDb = await sessionRepo.findOne({
+          where: { tenantId: tenantAId },
+        });
+
+        expect(sessionInDb).toBeDefined();
+        expect(sessionInDb!.firstCustomerSaleAt?.toISOString()).toBe(
+          firstCustomerSaleTime.toISOString(),
+        );
+        expect(sessionInDb!.firstSuccessfulSaleAt?.toISOString()).toBe(
+          historicalTtfss.toISOString(),
+        );
+        expect(sessionInDb!.activatedAt?.toISOString()).toBe(
+          historicalActivatedAt.toISOString(),
+        );
+
+        // Verify that FIRST_CUSTOMER_SALE telemetry event was persisted in DB
+        const custSaleTelemetry = await telemetryRepo.findOne({
+          where: { tenantId: tenantAId, eventName: 'FIRST_CUSTOMER_SALE' as any },
+        });
+        expect(custSaleTelemetry).toBeDefined();
+        expect(custSaleTelemetry!.propertiesSanitizedJson!.ticketId).toBe(
+          'ticket-commercial-final-001',
+        );
+        expect(custSaleTelemetry!.propertiesSanitizedJson!.historicalTtfssPreserved).toBe(
+          true,
+        );
+
+        // Subsequent commercial sale (ticket 002) at 16:00 does NOT overwrite firstCustomerSaleAt
+        const secondSaleTime = new Date('2026-09-04T16:00:00.000Z');
+        const secondObsResult = await customerSaleObserver.observeSale({
+          tenantId: tenantAId,
+          ticketId: 'ticket-commercial-final-002',
+          occurredAt: secondSaleTime,
+          isActivationVerificationSale: false,
+        });
+
+        expect(secondObsResult.observed).toBe(false);
+        expect(secondObsResult.isFirstCustomerSale).toBe(false);
+
+        const sessionAfterSecond = await sessionRepo.findOne({
+          where: { tenantId: tenantAId },
+        });
+        expect(sessionAfterSecond!.firstCustomerSaleAt?.toISOString()).toBe(
+          firstCustomerSaleTime.toISOString(),
+        );
+        expect(sessionAfterSecond!.firstSuccessfulSaleAt?.toISOString()).toBe(
+          historicalTtfss.toISOString(),
         );
       },
     );
