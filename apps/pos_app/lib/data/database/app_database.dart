@@ -37,6 +37,8 @@ import 'package:pos_app/data/daos/sales/restaurant_area_dao.dart';
 import 'package:pos_app/data/daos/sales/restaurant_table_dao.dart';
 import 'package:pos_app/data/daos/kitchen/kitchen_order_dao.dart';
 import 'package:pos_app/data/daos/local_config_dao.dart';
+import 'package:pos_app/data/daos/fiscal_config_local_dao.dart';
+import 'package:pos_app/data/models/fiscal_config_local_entity.dart';
 import '../daos/customer/customer_dao.dart';
 import '../models/customer/customer_entity.dart';
 import '../daos/customer/customer_point_transaction_dao.dart';
@@ -84,7 +86,7 @@ import 'package:pos_app/data/models/kitchen/kitchen_order_item_entity.dart';
 part 'app_database.g.dart'; // generated code
 
 @Database(
-  version: 42,
+  version: 43,
   entities: [
     UserEntity,
     SecurityProfileEntity,
@@ -128,6 +130,7 @@ part 'app_database.g.dart'; // generated code
     CustomerPointTransactionEntity,
     LoyaltyProgramEntity,
     LoyaltyRewardEntity,
+    FiscalConfigLocalEntity,
   ],
 )
 abstract class AppDatabase extends FloorDatabase {
@@ -171,4 +174,5 @@ abstract class AppDatabase extends FloorDatabase {
   CustomerPointTransactionDao get customerPointTransactionDao;
   LoyaltyProgramDao get loyaltyProgramDao;
   LoyaltyRewardDao get loyaltyRewardDao;
+  FiscalConfigLocalDao get fiscalConfigLocalDao;
 }

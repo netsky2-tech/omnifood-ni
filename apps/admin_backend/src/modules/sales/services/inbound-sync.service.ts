@@ -1,4 +1,11 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Optional,
+  UnauthorizedException,
+  forwardRef,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Product } from '../../inventory/entities/product.entity';
@@ -18,6 +25,11 @@ import {
   InboundSyncRecipeVersionDto,
   InboundSyncUserDto,
 } from '../dto/inbound-sync.dto';
+import {
+  FiscalAckDto,
+  FiscalConfigSnapshot,
+} from '../../onboarding/dto/fiscal-config-version.dto';
+import { FiscalConfigVersionService } from '../../onboarding/services/fiscal-config-version.service';
 
 @Injectable()
 export class InboundSyncService {
@@ -34,6 +46,9 @@ export class InboundSyncService {
     private readonly recipeVersionRepository: Repository<RecipeVersion>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @Optional()
+    @Inject(forwardRef(() => FiscalConfigVersionService))
+    private readonly fiscalConfigVersionService?: FiscalConfigVersionService,
   ) {}
 
   async getInboundDeltas(
@@ -47,6 +62,24 @@ export class InboundSyncService {
     const now = new Date();
     const sinceDate = this.parseSinceDate(query.since, query.sinceVersion);
     const requestedTypes = this.parseRequestedTypes(query.types);
+
+    const includeFiscal =
+      requestedTypes.has('fiscal') ||
+      requestedTypes.has('fiscal_config') ||
+      requestedTypes.has('fiscalconfig') ||
+      requestedTypes.has('config');
+
+    let fiscalConfig: FiscalConfigSnapshot | null = null;
+    if (includeFiscal && this.fiscalConfigVersionService) {
+      try {
+        fiscalConfig =
+          await this.fiscalConfigVersionService.getFiscalConfigSnapshot(
+            tenantId,
+          );
+      } catch (_err) {
+        fiscalConfig = null;
+      }
+    }
 
     const deltas: InboundSyncDeltasDto = {
       products: requestedTypes.has('products')
@@ -72,6 +105,7 @@ export class InboundSyncService {
       users: requestedTypes.has('users')
         ? await this.fetchUserDeltas(tenantId, sinceDate)
         : [],
+      fiscalConfig,
     };
 
     return {
@@ -79,6 +113,34 @@ export class InboundSyncService {
       serverTime: now.toISOString(),
       currentVersion: now.getTime(),
       deltas,
+      fiscalConfig,
+    };
+  }
+
+  async recordFiscalAck(
+    tenantId: string,
+    dto: FiscalAckDto,
+  ): Promise<{
+    status: string;
+    acknowledgedRevision: number;
+    acknowledgedFingerprint: string;
+  }> {
+    if (dto.tenantId && dto.tenantId.trim() !== tenantId.trim()) {
+      throw new BadRequestException(
+        'tenantId in payload does not match auth context',
+      );
+    }
+    if (this.fiscalConfigVersionService) {
+      await this.fiscalConfigVersionService.validateIntegrity(
+        tenantId,
+        dto.revision,
+        dto.fingerprint,
+      );
+    }
+    return {
+      status: 'success',
+      acknowledgedRevision: dto.revision,
+      acknowledgedFingerprint: dto.fingerprint,
     };
   }
 
@@ -113,6 +175,9 @@ export class InboundSyncService {
         'recipeversions',
         'recipe_versions',
         'users',
+        'fiscal',
+        'fiscal_config',
+        'fiscalconfig',
       ]);
     }
     const tokens = types

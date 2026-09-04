@@ -17,6 +17,11 @@ import {
   FiscalSetupResponse,
 } from '../dto/fiscal-setup.dto';
 import {
+  FiscalConfigSnapshot,
+  FiscalConfigVersion,
+} from '../dto/fiscal-config-version.dto';
+import { FiscalConfigVersionService } from './fiscal-config-version.service';
+import {
   OnboardingSessionService,
   OnboardingStartSource,
 } from './onboarding-session.service';
@@ -51,6 +56,9 @@ export class FiscalSetupService {
     @Optional()
     @Inject(forwardRef(() => OnboardingStateReconciler))
     private readonly stateReconciler?: OnboardingStateReconciler,
+    @Optional()
+    @Inject(forwardRef(() => FiscalConfigVersionService))
+    private readonly fiscalConfigVersionService?: FiscalConfigVersionService,
   ) {}
 
   async getFiscalSetup(tenantId: string): Promise<FiscalSetupResponse> {
@@ -100,6 +108,14 @@ export class FiscalSetupService {
     const commercialFxSpread =
       typeof rawFxSpread === 'number' ? rawFxSpread : 0.5;
 
+    let configVersion: FiscalConfigVersion | undefined;
+    if (this.fiscalConfigVersionService) {
+      const latest = await this.fiscalConfigVersionService.getLatestRevision(trimmedTenantId);
+      if (latest) {
+        configVersion = { revision: latest.revision, fingerprint: latest.fingerprint };
+      }
+    }
+
     return {
       tenantId: tenant.id,
       businessName: tenant.name,
@@ -108,7 +124,19 @@ export class FiscalSetupService {
       taxRateIva,
       pricesIncludeTax,
       commercialFxSpread,
+      configVersion,
     };
+  }
+
+  async getFiscalConfigSnapshot(tenantId: string): Promise<FiscalConfigSnapshot> {
+    const trimmedTenantId = tenantId?.trim();
+    if (!trimmedTenantId) {
+      throw new BadRequestException('Tenant ID is required');
+    }
+    if (!this.fiscalConfigVersionService) {
+      throw new BadRequestException('FiscalConfigVersionService is not configured');
+    }
+    return this.fiscalConfigVersionService.getFiscalConfigSnapshot(trimmedTenantId);
   }
 
   async configureFiscalSetup(
@@ -185,7 +213,17 @@ export class FiscalSetupService {
           userId,
         );
 
-        // 3. Emit Domain Audit Event
+        // 3. Record or Update FiscalConfigVersion
+        let configVersion: FiscalConfigVersion | undefined;
+        if (this.fiscalConfigVersionService) {
+          configVersion =
+            await this.fiscalConfigVersionService.recordRevisionChange(
+              trimmedTenantId,
+              manager,
+            );
+        }
+
+        // 4. Emit Domain Audit Event
         this.eventEmitter.emit('ONBOARDING_FISCAL_SETUP_COMPLETED', {
           tenantId: trimmedTenantId,
           userId,
@@ -193,6 +231,7 @@ export class FiscalSetupService {
           taxRateIva: targetTaxRate,
           commercialFxSpread: dto.commercialFxSpread,
           pricesIncludeTax: dto.pricesIncludeTax,
+          configVersion,
           configuredAt,
         });
 
@@ -204,6 +243,7 @@ export class FiscalSetupService {
           taxRateIva: targetTaxRate,
           pricesIncludeTax: dto.pricesIncludeTax,
           commercialFxSpread: dto.commercialFxSpread,
+          configVersion,
           configuredAt,
         };
       });

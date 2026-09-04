@@ -152,13 +152,15 @@ class _$AppDatabase extends AppDatabase {
 
   LoyaltyRewardDao? _loyaltyRewardDaoInstance;
 
+  FiscalConfigLocalDao? _fiscalConfigLocalDaoInstance;
+
   Future<sqflite.Database> open(
     String path,
     List<Migration> migrations, [
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 42,
+      version: 43,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -257,6 +259,8 @@ class _$AppDatabase extends AppDatabase {
             'CREATE TABLE IF NOT EXISTS `loyalty_programs` (`id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `name` TEXT NOT NULL, `program_type` TEXT NOT NULL, `status` TEXT NOT NULL, `starts_at` INTEGER, `ends_at` INTEGER, `earning_rule_json` TEXT NOT NULL, `eligibility_rule_json` TEXT NOT NULL, `config_version` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `loyalty_rewards` (`id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `loyalty_program_id` TEXT NOT NULL, `name` TEXT NOT NULL, `reward_type` TEXT NOT NULL, `cost_units` INTEGER NOT NULL, `benefit_config_json` TEXT NOT NULL, `status` TEXT NOT NULL, `starts_at` INTEGER, `ends_at` INTEGER, `presentation_order` INTEGER NOT NULL, `config_version` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `fiscal_config_local` (`tenant_id` TEXT NOT NULL, `revision` INTEGER NOT NULL, `fingerprint` TEXT NOT NULL, `payload` TEXT NOT NULL, `applied_at` TEXT NOT NULL, PRIMARY KEY (`tenant_id`))');
         await database.execute(
             'CREATE UNIQUE INDEX `index_audit_logs_tenant_id_device_id_user_id_sequence_no` ON `audit_logs` (`tenant_id`, `device_id`, `user_id`, `sequence_no`)');
         await database.execute(
@@ -536,6 +540,12 @@ class _$AppDatabase extends AppDatabase {
   LoyaltyRewardDao get loyaltyRewardDao {
     return _loyaltyRewardDaoInstance ??=
         _$LoyaltyRewardDao(database, changeListener);
+  }
+
+  @override
+  FiscalConfigLocalDao get fiscalConfigLocalDao {
+    return _fiscalConfigLocalDaoInstance ??=
+        _$FiscalConfigLocalDao(database, changeListener);
   }
 }
 
@@ -5665,5 +5675,83 @@ class _$LoyaltyRewardDao extends LoyaltyRewardDao {
   Future<void> saveRewards(List<LoyaltyRewardEntity> rewards) async {
     await _loyaltyRewardEntityInsertionAdapter.insertList(
         rewards, OnConflictStrategy.replace);
+  }
+}
+
+class _$FiscalConfigLocalDao extends FiscalConfigLocalDao {
+  _$FiscalConfigLocalDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _fiscalConfigLocalEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'fiscal_config_local',
+            (FiscalConfigLocalEntity item) => <String, Object?>{
+                  'tenant_id': item.tenantId,
+                  'revision': item.revision,
+                  'fingerprint': item.fingerprint,
+                  'payload': item.payload,
+                  'applied_at': item.appliedAt
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<FiscalConfigLocalEntity>
+      _fiscalConfigLocalEntityInsertionAdapter;
+
+  @override
+  Future<FiscalConfigLocalEntity?> getByTenantId(String tenantId) async {
+    return _queryAdapter.query(
+        'SELECT * FROM fiscal_config_local WHERE tenant_id = ?1',
+        mapper: (Map<String, Object?> row) => FiscalConfigLocalEntity(
+            tenantId: row['tenant_id'] as String,
+            revision: row['revision'] as int,
+            fingerprint: row['fingerprint'] as String,
+            payload: row['payload'] as String,
+            appliedAt: row['applied_at'] as String),
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<void> deleteByTenantId(String tenantId) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM fiscal_config_local WHERE tenant_id = ?1',
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<List<FiscalConfigLocalEntity>> getAll() async {
+    return _queryAdapter.queryList('SELECT * FROM fiscal_config_local',
+        mapper: (Map<String, Object?> row) => FiscalConfigLocalEntity(
+            tenantId: row['tenant_id'] as String,
+            revision: row['revision'] as int,
+            fingerprint: row['fingerprint'] as String,
+            payload: row['payload'] as String,
+            appliedAt: row['applied_at'] as String));
+  }
+
+  @override
+  Future<void> insertOrReplace(FiscalConfigLocalEntity entity) async {
+    await _fiscalConfigLocalEntityInsertionAdapter.insert(
+        entity, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> applyFiscalConfig(FiscalConfigLocalEntity entity) async {
+    if (database is sqflite.Transaction) {
+      await super.applyFiscalConfig(entity);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.fiscalConfigLocalDao
+            .applyFiscalConfig(entity);
+      });
+    }
   }
 }

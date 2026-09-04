@@ -14,6 +14,7 @@ import { TemplateSeedLink } from './entities/template-seed-link.entity';
 import { LegacyOnboardingMigrationReceipt } from './entities/legacy-migration-receipt.entity';
 import { ProductImportSession } from './entities/product-import-session.entity';
 import { LegacyImportIntegrityReport } from './entities/legacy-import-integrity-report.entity';
+import { FiscalConfigRevision } from './entities/fiscal-config-revision.entity';
 import { Tenant } from '../tenant/entities/tenant.entity';
 import { User } from '../identity/entities/user.entity';
 import { SystemParametersConfig } from '../inventory/entities/system-parameters-config.entity';
@@ -30,6 +31,7 @@ import { LegacyImportIntegrityReportService } from './services/legacy-import-int
 import { CanonicalCsvParserService } from './services/canonical-csv-parser.service';
 import { IndustryTemplateController } from './controllers/industry-template.controller';
 import { FiscalSetupService } from './services/fiscal-setup.service';
+import { FiscalConfigVersionService } from './services/fiscal-config-version.service';
 import { FiscalSetupController } from './controllers/fiscal-setup.controller';
 import { ImportStagingService } from './services/import-staging.service';
 import { ImportStagingController } from './controllers/import-staging.controller';
@@ -75,6 +77,7 @@ export const getRequiredOnboardingJwtSecret = (
       LegacyOnboardingMigrationReceipt,
       ProductImportSession,
       LegacyImportIntegrityReport,
+      FiscalConfigRevision,
       Tenant,
       User,
       SystemParametersConfig,
@@ -100,6 +103,7 @@ export const getRequiredOnboardingJwtSecret = (
     LegacyImportIntegrityReportService,
     CanonicalCsvParserService,
     FiscalSetupService,
+    FiscalConfigVersionService,
     ImportStagingService,
     OnboardingSessionService,
     OnboardingReadinessEvaluator,
@@ -126,6 +130,7 @@ export const getRequiredOnboardingJwtSecret = (
     LegacyImportIntegrityReportService,
     CanonicalCsvParserService,
     FiscalSetupService,
+    FiscalConfigVersionService,
     ImportStagingService,
     OnboardingSessionService,
     OnboardingReadinessEvaluator,

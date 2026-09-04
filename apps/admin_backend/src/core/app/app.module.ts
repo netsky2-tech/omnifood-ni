@@ -67,6 +67,7 @@ import { OnboardingIdempotencyRecord } from '../../modules/onboarding/entities/o
 import { TemplateApplication } from '../../modules/onboarding/entities/template-application.entity';
 import { TemplateSeedLink } from '../../modules/onboarding/entities/template-seed-link.entity';
 import { LegacyOnboardingMigrationReceipt } from '../../modules/onboarding/entities/legacy-migration-receipt.entity';
+import { FiscalConfigRevision } from '../../modules/onboarding/entities/fiscal-config-revision.entity';
 
 export const getRequiredConfigValue = (
   configService: ConfigService,
@@ -132,6 +133,7 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
     TemplateApplication,
     TemplateSeedLink,
     LegacyOnboardingMigrationReceipt,
+    FiscalConfigRevision,
     Customer,
     CloudPromotion,
     CustomerPointTransaction,

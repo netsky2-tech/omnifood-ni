@@ -1,4 +1,5 @@
 import { IsOptional, IsString } from 'class-validator';
+import { FiscalConfigSnapshot } from '../../onboarding/dto/fiscal-config-version.dto';
 
 export class InboundSyncQueryDto {
   @IsOptional()
@@ -105,6 +106,7 @@ export interface InboundSyncDeltasDto {
   recipes: InboundSyncRecipeDto[];
   recipeVersions: InboundSyncRecipeVersionDto[];
   users: InboundSyncUserDto[];
+  fiscalConfig?: FiscalConfigSnapshot | null;
 }
 
 export interface InboundSyncResponseDto {
@@ -112,4 +114,5 @@ export interface InboundSyncResponseDto {
   serverTime: string;
   currentVersion: number;
   deltas: InboundSyncDeltasDto;
+  fiscalConfig?: FiscalConfigSnapshot | null;
 }

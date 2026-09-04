@@ -1,6 +1,8 @@
 import {
+  Body,
   Controller,
   Get,
+  Post,
   Query,
   UnauthorizedException,
   UseGuards,
@@ -11,6 +13,7 @@ import {
   InboundSyncQueryDto,
   InboundSyncResponseDto,
 } from '../dto/inbound-sync.dto';
+import { FiscalAckDto } from '../../onboarding/dto/fiscal-config-version.dto';
 import { InboundSyncService } from '../services/inbound-sync.service';
 
 @Controller('v1/sync/inbound')
@@ -55,6 +58,17 @@ export class InboundSyncController {
     return this.inboundSyncService.getInboundDeltas(
       this.requireTenant(tenantId),
       query,
+    );
+  }
+
+  @Post('fiscal/ack')
+  async acknowledgeFiscalConfig(
+    @GetTenantId() tenantId: string | undefined,
+    @Body() ackDto: FiscalAckDto,
+  ) {
+    return this.inboundSyncService.recordFiscalAck(
+      this.requireTenant(tenantId),
+      ackDto,
     );
   }
 }

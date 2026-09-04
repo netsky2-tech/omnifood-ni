@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { UnauthorizedException } from '@nestjs/common';
+import { UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { InboundSyncService } from './inbound-sync.service';
 import { Product } from '../../inventory/entities/product.entity';
 import { CatalogValue } from '../../catalog/entities/catalog-value.entity';
@@ -9,6 +9,8 @@ import { Recipe } from '../../inventory/entities/recipe.entity';
 import { RecipeVersion } from '../../inventory/entities/recipe-version.entity';
 import { User, UserRole } from '../../identity/entities/user.entity';
 import { CatalogType } from '../../catalog/catalog-type';
+import { FiscalConfigVersionService } from '../../onboarding/services/fiscal-config-version.service';
+import { FiscalRegime } from '../../onboarding/dto/fiscal-setup.dto';
 
 interface MockQueryBuilder<T> {
   where: jest.Mock;
@@ -73,9 +75,32 @@ describe('InboundSyncService', () => {
       createQueryBuilder: jest.fn().mockReturnValue(userQb),
     };
 
+    const mockFiscalService = {
+      getFiscalConfigSnapshot: jest.fn().mockResolvedValue({
+        tenantId: 'tenant-abc',
+        businessName: 'Café Granada',
+        ruc: 'J0310000000001',
+        fiscalRegime: FiscalRegime.REGIMEN_GENERAL,
+        taxRate: 0.15,
+        pricesIncludeTax: true,
+        commercialFxSpread: 0.5,
+        configVersion: {
+          revision: 1,
+          fingerprint:
+            '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+        },
+        generatedAt: '2026-03-30T12:00:00Z',
+      }),
+      validateIntegrity: jest.fn().mockResolvedValue(undefined),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         InboundSyncService,
+        {
+          provide: FiscalConfigVersionService,
+          useValue: mockFiscalService,
+        },
         {
           provide: getRepositoryToken(Product),
           useValue: mockProductRepo,
@@ -291,5 +316,40 @@ describe('InboundSyncService', () => {
     expect(response.deltas.insumos).toEqual([]);
     expect(response.deltas.recipes).toEqual([]);
     expect(response.deltas.recipeVersions).toEqual([]);
+  });
+
+  it('includes FiscalConfigSnapshot in outbound deltas when requested or default', async () => {
+    const response = await service.getInboundDeltas('tenant-abc', {});
+
+    expect(response.deltas.fiscalConfig).toBeDefined();
+    expect(response.deltas.fiscalConfig!.businessName).toBe('Café Granada');
+    expect(response.deltas.fiscalConfig!.configVersion.revision).toBe(1);
+    expect(response.fiscalConfig).toBeDefined();
+  });
+
+  it('records fiscal ACK and validates integrity', async () => {
+    const ack = await service.recordFiscalAck('tenant-abc', {
+      tenantId: 'tenant-abc',
+      terminalId: 'term-1',
+      revision: 1,
+      fingerprint:
+        '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+      appliedAt: '2026-03-30T12:00:00Z',
+    });
+
+    expect(ack.status).toBe('success');
+    expect(ack.acknowledgedRevision).toBe(1);
+  });
+
+  it('rejects fiscal ACK if tenantId in body does not match auth tenant', async () => {
+    await expect(
+      service.recordFiscalAck('tenant-abc', {
+        tenantId: 'tenant-xyz',
+        terminalId: 'term-1',
+        revision: 1,
+        fingerprint: 'fingerprint',
+        appliedAt: '2026-03-30T12:00:00Z',
+      }),
+    ).rejects.toThrow(BadRequestException);
   });
 });

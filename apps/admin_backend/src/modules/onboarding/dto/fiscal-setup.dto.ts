@@ -7,6 +7,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
+import { FiscalConfigVersion } from './fiscal-config-version.dto';
 
 export enum FiscalRegime {
   CUOTA_FIJA = 'CUOTA_FIJA',
@@ -51,5 +52,6 @@ export interface FiscalSetupResponse {
   taxRateIva: number;
   pricesIncludeTax: boolean;
   commercialFxSpread: number;
+  configVersion?: FiscalConfigVersion;
   configuredAt?: Date;
 }

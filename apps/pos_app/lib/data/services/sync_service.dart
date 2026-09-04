@@ -22,6 +22,7 @@ import '../models/inventory/recipe_entity.dart';
 import '../models/user_entity.dart';
 import '../models/security_profile_entity.dart';
 import '../models/local_config_entity.dart';
+import 'fiscal_inbox_handler.dart';
 import 'network_connectivity_service.dart';
 
 const Map<String, String> syncRole = {
@@ -45,6 +46,8 @@ class InboundSyncResult {
   final int insumosCount;
   final int recipesCount;
   final int usersCount;
+  final int? appliedFiscalRevision;
+  final String? appliedFiscalFingerprint;
   final String timestamp;
 
   const InboundSyncResult({
@@ -53,6 +56,8 @@ class InboundSyncResult {
     this.insumosCount = 0,
     this.recipesCount = 0,
     this.usersCount = 0,
+    this.appliedFiscalRevision,
+    this.appliedFiscalFingerprint,
     required this.timestamp,
   });
 }
@@ -79,6 +84,7 @@ class SyncService {
   final SyncRole _role;
   final AppDatabase? _database;
   final NetworkConnectivityService? _connectivityService;
+  final FiscalInboxHandler? _fiscalInboxHandler;
 
   final StreamController<InboundSyncResult> _inboundSyncController =
       StreamController<InboundSyncResult>.broadcast();
@@ -114,9 +120,12 @@ class SyncService {
     SyncRole role = 'STANDALONE',
     AppDatabase? database,
     NetworkConnectivityService? connectivityService,
+    FiscalInboxHandler? fiscalInboxHandler,
   })  : _role = role,
         _database = database,
-        _connectivityService = connectivityService;
+        _connectivityService = connectivityService,
+        _fiscalInboxHandler = fiscalInboxHandler ??
+            (database != null ? FiscalInboxHandler(database) : null);
 
   void _updateStatus(CloudSyncStatus newStatus) {
     if (_status != newStatus) {
@@ -1476,6 +1485,40 @@ class SyncService {
           await _database!.securityProfileDao.insertProfiles(profileEntities);
         }
 
+        // 6. Fiscal Configuration projection
+        int? appliedFiscalRevision;
+        String? appliedFiscalFingerprint;
+        final rawFiscal = rawDeltas['fiscalConfig'] ?? data['fiscalConfig'];
+        if (rawFiscal is Map && _database != null) {
+          final handler = _fiscalInboxHandler ?? FiscalInboxHandler(_database!);
+          try {
+            final outcome = await handler.handleFiscalEnvelope(
+              Map<String, dynamic>.from(rawFiscal),
+              throwOnConflict: false,
+            );
+            if (outcome.status == FiscalInboxStatus.applied) {
+              appliedFiscalRevision = outcome.revision;
+              appliedFiscalFingerprint = outcome.fingerprint;
+              if (outcome.entity != null) {
+                await _sendFiscalAck(
+                  tenantId: outcome.entity!.tenantId,
+                  revision: outcome.revision,
+                  fingerprint: outcome.fingerprint,
+                  appliedAt: outcome.entity!.appliedAt,
+                );
+              }
+            } else if (outcome.status == FiscalInboxStatus.idempotentNoOp) {
+              appliedFiscalRevision = outcome.revision;
+              appliedFiscalFingerprint = outcome.fingerprint;
+            }
+          } catch (e) {
+            developer.log(
+              'Failed to process fiscal envelope: $e',
+              name: 'SyncService',
+            );
+          }
+        }
+
         // Update local sync watermark version
         final currentVersion = data['currentVersion'];
         if (currentVersion != null) {
@@ -1493,6 +1536,8 @@ class SyncService {
           insumosCount: insumoEntities.length,
           recipesCount: recipeEntities.length,
           usersCount: userEntities.length,
+          appliedFiscalRevision: appliedFiscalRevision,
+          appliedFiscalFingerprint: appliedFiscalFingerprint,
           timestamp:
               data['serverTime']?.toString() ??
               DateTime.now().toIso8601String(),
@@ -1519,6 +1564,33 @@ class SyncService {
       rethrow;
     }
     return null;
+  }
+
+  Future<void> _sendFiscalAck({
+    required String tenantId,
+    required int revision,
+    required String fingerprint,
+    required String appliedAt,
+  }) async {
+    try {
+      await _dio.post(
+        '/v1/sync/inbound/fiscal/ack',
+        data: {
+          'tenantId': tenantId,
+          'terminalId': _auditRepository.deviceId,
+          'revision': revision,
+          'fingerprint': fingerprint,
+          'appliedAt': appliedAt,
+        },
+      );
+    } on DioException catch (e) {
+      developer.log(
+        'Fiscal ACK delivery failed: ${e.message}',
+        name: 'SyncService',
+      );
+    } catch (e) {
+      developer.log('Fiscal ACK error: $e', name: 'SyncService');
+    }
   }
 }
 

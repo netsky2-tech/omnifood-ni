@@ -30,11 +30,14 @@ import { SalesReportsService } from './services/sales-reports.service';
 import { FiscalReportsService } from './services/fiscal-reports.service';
 import { SalesExportService } from './services/sales-export.service';
 import { IdentityModule } from '../identity/identity.module';
+import { OnboardingModule } from '../onboarding/onboarding.module';
+import { forwardRef } from '@nestjs/common';
 
 @Module({
   imports: [
     IdentityModule,
     InventoryModule,
+    forwardRef(() => OnboardingModule),
     TypeOrmModule.forFeature([
       Invoice,
       InvoiceItem,

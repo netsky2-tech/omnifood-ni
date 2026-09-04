@@ -1782,6 +1782,18 @@ final migration41_42 = Migration(41, 42, (database) async {
   );
 });
 
+final migration42_43 = Migration(42, 43, (database) async {
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS fiscal_config_local (
+      tenant_id TEXT PRIMARY KEY NOT NULL,
+      revision INTEGER NOT NULL,
+      fingerprint TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      applied_at TEXT NOT NULL
+    )
+  ''');
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -1815,4 +1827,5 @@ final allMigrations = [
   migration39_40,
   migration40_41,
   migration41_42,
+  migration42_43,
 ];
