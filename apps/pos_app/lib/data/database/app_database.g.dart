@@ -154,13 +154,19 @@ class _$AppDatabase extends AppDatabase {
 
   FiscalConfigLocalDao? _fiscalConfigLocalDaoInstance;
 
+  ActivationAttemptLocalDao? _activationAttemptLocalDaoInstance;
+
+  ActivationCheckResultLocalDao? _activationCheckResultLocalDaoInstance;
+
+  FirstSuccessfulSaleClaimDao? _firstSuccessfulSaleClaimDaoInstance;
+
   Future<sqflite.Database> open(
     String path,
     List<Migration> migrations, [
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 44,
+      version: 45,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -262,6 +268,12 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `fiscal_config_local` (`tenant_id` TEXT NOT NULL, `revision` INTEGER NOT NULL, `fingerprint` TEXT NOT NULL, `payload` TEXT NOT NULL, `applied_at` TEXT NOT NULL, PRIMARY KEY (`tenant_id`))');
         await database.execute(
+            'CREATE TABLE IF NOT EXISTS `activation_attempts_local` (`attempt_id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `candidate_terminal_id` TEXT NOT NULL, `local_status` TEXT NOT NULL, `required_fiscal_revision` INTEGER NOT NULL, `required_fiscal_fingerprint` TEXT NOT NULL, `verification_product_id` TEXT NOT NULL, `verification_ticket_id` TEXT, `server_time_anchor_at` TEXT, `anchor_monotonic_ticks` INTEGER, `boot_session_id` TEXT, `assigned_at` TEXT NOT NULL, `updated_at` TEXT NOT NULL, PRIMARY KEY (`attempt_id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `activation_checks_local` (`id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `activation_attempt_id` TEXT NOT NULL, `check_code` TEXT NOT NULL, `required` INTEGER NOT NULL, `status` TEXT NOT NULL, `evidence_type` TEXT, `evidence_ref` TEXT, `occurred_at` TEXT, `recorded_at` TEXT NOT NULL, `details_sanitized_json` TEXT, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `first_successful_sale_claims` (`tenant_id` TEXT NOT NULL, `terminal_id` TEXT NOT NULL, `ticket_id` TEXT NOT NULL, `activation_attempt_id` TEXT, `device_occurred_at` TEXT NOT NULL, `anchored_occurred_at` TEXT, `clock_confidence` TEXT NOT NULL, `server_time_anchor_id` TEXT, `pos_build` TEXT, `outbox_event_id` TEXT NOT NULL, `created_at_local` TEXT NOT NULL, PRIMARY KEY (`tenant_id`))');
+        await database.execute(
             'CREATE UNIQUE INDEX `index_audit_logs_tenant_id_device_id_user_id_sequence_no` ON `audit_logs` (`tenant_id`, `device_id`, `user_id`, `sequence_no`)');
         await database.execute(
             'CREATE UNIQUE INDEX `idx_movement_sync_state_stream_sequence` ON `inventory_movement_sync_state` (`terminal_id`, `flow_type`, `local_sequence`)');
@@ -313,6 +325,12 @@ class _$AppDatabase extends AppDatabase {
             'CREATE INDEX `index_loyalty_rewards_loyalty_program_id` ON `loyalty_rewards` (`loyalty_program_id`)');
         await database.execute(
             'CREATE INDEX `index_loyalty_rewards_status` ON `loyalty_rewards` (`status`)');
+        await database.execute(
+            'CREATE UNIQUE INDEX `index_activation_checks_local_tenant_id_activation_attempt_id_check_code` ON `activation_checks_local` (`tenant_id`, `activation_attempt_id`, `check_code`)');
+        await database.execute(
+            'CREATE UNIQUE INDEX `index_first_successful_sale_claims_ticket_id` ON `first_successful_sale_claims` (`ticket_id`)');
+        await database.execute(
+            'CREATE UNIQUE INDEX `index_first_successful_sale_claims_outbox_event_id` ON `first_successful_sale_claims` (`outbox_event_id`)');
 
         await callback?.onCreate?.call(database, version);
       },
@@ -546,6 +564,24 @@ class _$AppDatabase extends AppDatabase {
   FiscalConfigLocalDao get fiscalConfigLocalDao {
     return _fiscalConfigLocalDaoInstance ??=
         _$FiscalConfigLocalDao(database, changeListener);
+  }
+
+  @override
+  ActivationAttemptLocalDao get activationAttemptLocalDao {
+    return _activationAttemptLocalDaoInstance ??=
+        _$ActivationAttemptLocalDao(database, changeListener);
+  }
+
+  @override
+  ActivationCheckResultLocalDao get activationCheckResultLocalDao {
+    return _activationCheckResultLocalDaoInstance ??=
+        _$ActivationCheckResultLocalDao(database, changeListener);
+  }
+
+  @override
+  FirstSuccessfulSaleClaimDao get firstSuccessfulSaleClaimDao {
+    return _firstSuccessfulSaleClaimDaoInstance ??=
+        _$FirstSuccessfulSaleClaimDao(database, changeListener);
   }
 }
 
@@ -5790,5 +5826,347 @@ class _$FiscalConfigLocalDao extends FiscalConfigLocalDao {
             .applyFiscalConfig(entity);
       });
     }
+  }
+}
+
+class _$ActivationAttemptLocalDao extends ActivationAttemptLocalDao {
+  _$ActivationAttemptLocalDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _activationAttemptLocalEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'activation_attempts_local',
+            (ActivationAttemptLocalEntity item) => <String, Object?>{
+                  'attempt_id': item.attemptId,
+                  'tenant_id': item.tenantId,
+                  'candidate_terminal_id': item.candidateTerminalId,
+                  'local_status': item.localStatus,
+                  'required_fiscal_revision': item.requiredFiscalRevision,
+                  'required_fiscal_fingerprint': item.requiredFiscalFingerprint,
+                  'verification_product_id': item.verificationProductId,
+                  'verification_ticket_id': item.verificationTicketId,
+                  'server_time_anchor_at': item.serverTimeAnchorAt,
+                  'anchor_monotonic_ticks': item.anchorMonotonicTicks,
+                  'boot_session_id': item.bootSessionId,
+                  'assigned_at': item.assignedAt,
+                  'updated_at': item.updatedAt
+                }),
+        _activationAttemptLocalEntityUpdateAdapter = UpdateAdapter(
+            database,
+            'activation_attempts_local',
+            ['attempt_id'],
+            (ActivationAttemptLocalEntity item) => <String, Object?>{
+                  'attempt_id': item.attemptId,
+                  'tenant_id': item.tenantId,
+                  'candidate_terminal_id': item.candidateTerminalId,
+                  'local_status': item.localStatus,
+                  'required_fiscal_revision': item.requiredFiscalRevision,
+                  'required_fiscal_fingerprint': item.requiredFiscalFingerprint,
+                  'verification_product_id': item.verificationProductId,
+                  'verification_ticket_id': item.verificationTicketId,
+                  'server_time_anchor_at': item.serverTimeAnchorAt,
+                  'anchor_monotonic_ticks': item.anchorMonotonicTicks,
+                  'boot_session_id': item.bootSessionId,
+                  'assigned_at': item.assignedAt,
+                  'updated_at': item.updatedAt
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<ActivationAttemptLocalEntity>
+      _activationAttemptLocalEntityInsertionAdapter;
+
+  final UpdateAdapter<ActivationAttemptLocalEntity>
+      _activationAttemptLocalEntityUpdateAdapter;
+
+  @override
+  Future<ActivationAttemptLocalEntity?> getAttemptById(String attemptId) async {
+    return _queryAdapter.query(
+        'SELECT * FROM activation_attempts_local WHERE attempt_id = ?1',
+        mapper: (Map<String, Object?> row) => ActivationAttemptLocalEntity(
+            attemptId: row['attempt_id'] as String,
+            tenantId: row['tenant_id'] as String,
+            candidateTerminalId: row['candidate_terminal_id'] as String,
+            localStatus: row['local_status'] as String,
+            requiredFiscalRevision: row['required_fiscal_revision'] as int,
+            requiredFiscalFingerprint:
+                row['required_fiscal_fingerprint'] as String,
+            verificationProductId: row['verification_product_id'] as String,
+            verificationTicketId: row['verification_ticket_id'] as String?,
+            serverTimeAnchorAt: row['server_time_anchor_at'] as String?,
+            anchorMonotonicTicks: row['anchor_monotonic_ticks'] as int?,
+            bootSessionId: row['boot_session_id'] as String?,
+            assignedAt: row['assigned_at'] as String,
+            updatedAt: row['updated_at'] as String),
+        arguments: [attemptId]);
+  }
+
+  @override
+  Future<ActivationAttemptLocalEntity?> getLatestAttempt(
+      String tenantId) async {
+    return _queryAdapter.query(
+        'SELECT * FROM activation_attempts_local WHERE tenant_id = ?1 ORDER BY assigned_at DESC LIMIT 1',
+        mapper: (Map<String, Object?> row) => ActivationAttemptLocalEntity(attemptId: row['attempt_id'] as String, tenantId: row['tenant_id'] as String, candidateTerminalId: row['candidate_terminal_id'] as String, localStatus: row['local_status'] as String, requiredFiscalRevision: row['required_fiscal_revision'] as int, requiredFiscalFingerprint: row['required_fiscal_fingerprint'] as String, verificationProductId: row['verification_product_id'] as String, verificationTicketId: row['verification_ticket_id'] as String?, serverTimeAnchorAt: row['server_time_anchor_at'] as String?, anchorMonotonicTicks: row['anchor_monotonic_ticks'] as int?, bootSessionId: row['boot_session_id'] as String?, assignedAt: row['assigned_at'] as String, updatedAt: row['updated_at'] as String),
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<ActivationAttemptLocalEntity?> getActiveAttempt(
+      String tenantId) async {
+    return _queryAdapter.query(
+        'SELECT * FROM activation_attempts_local WHERE tenant_id = ?1 AND local_status NOT IN (\'EVIDENCE_ACKED\', \'FAIL\') ORDER BY assigned_at DESC LIMIT 1',
+        mapper: (Map<String, Object?> row) => ActivationAttemptLocalEntity(attemptId: row['attempt_id'] as String, tenantId: row['tenant_id'] as String, candidateTerminalId: row['candidate_terminal_id'] as String, localStatus: row['local_status'] as String, requiredFiscalRevision: row['required_fiscal_revision'] as int, requiredFiscalFingerprint: row['required_fiscal_fingerprint'] as String, verificationProductId: row['verification_product_id'] as String, verificationTicketId: row['verification_ticket_id'] as String?, serverTimeAnchorAt: row['server_time_anchor_at'] as String?, anchorMonotonicTicks: row['anchor_monotonic_ticks'] as int?, bootSessionId: row['boot_session_id'] as String?, assignedAt: row['assigned_at'] as String, updatedAt: row['updated_at'] as String),
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<void> deleteByTenantId(String tenantId) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM activation_attempts_local WHERE tenant_id = ?1',
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<List<ActivationAttemptLocalEntity>> getAll() async {
+    return _queryAdapter.queryList('SELECT * FROM activation_attempts_local',
+        mapper: (Map<String, Object?> row) => ActivationAttemptLocalEntity(
+            attemptId: row['attempt_id'] as String,
+            tenantId: row['tenant_id'] as String,
+            candidateTerminalId: row['candidate_terminal_id'] as String,
+            localStatus: row['local_status'] as String,
+            requiredFiscalRevision: row['required_fiscal_revision'] as int,
+            requiredFiscalFingerprint:
+                row['required_fiscal_fingerprint'] as String,
+            verificationProductId: row['verification_product_id'] as String,
+            verificationTicketId: row['verification_ticket_id'] as String?,
+            serverTimeAnchorAt: row['server_time_anchor_at'] as String?,
+            anchorMonotonicTicks: row['anchor_monotonic_ticks'] as int?,
+            bootSessionId: row['boot_session_id'] as String?,
+            assignedAt: row['assigned_at'] as String,
+            updatedAt: row['updated_at'] as String));
+  }
+
+  @override
+  Future<void> insertOrReplace(ActivationAttemptLocalEntity attempt) async {
+    await _activationAttemptLocalEntityInsertionAdapter.insert(
+        attempt, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> updateAttempt(ActivationAttemptLocalEntity attempt) async {
+    await _activationAttemptLocalEntityUpdateAdapter.update(
+        attempt, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> saveAttempt(ActivationAttemptLocalEntity attempt) async {
+    if (database is sqflite.Transaction) {
+      await super.saveAttempt(attempt);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.activationAttemptLocalDao
+            .saveAttempt(attempt);
+      });
+    }
+  }
+}
+
+class _$ActivationCheckResultLocalDao extends ActivationCheckResultLocalDao {
+  _$ActivationCheckResultLocalDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _activationCheckResultLocalEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'activation_checks_local',
+            (ActivationCheckResultLocalEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'tenant_id': item.tenantId,
+                  'activation_attempt_id': item.activationAttemptId,
+                  'check_code': item.checkCode,
+                  'required': item.required,
+                  'status': item.status,
+                  'evidence_type': item.evidenceType,
+                  'evidence_ref': item.evidenceRef,
+                  'occurred_at': item.occurredAt,
+                  'recorded_at': item.recordedAt,
+                  'details_sanitized_json': item.detailsSanitizedJson
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<ActivationCheckResultLocalEntity>
+      _activationCheckResultLocalEntityInsertionAdapter;
+
+  @override
+  Future<ActivationCheckResultLocalEntity?> getCheck(
+    String tenantId,
+    String attemptId,
+    String checkCode,
+  ) async {
+    return _queryAdapter.query(
+        'SELECT * FROM activation_checks_local WHERE tenant_id = ?1 AND activation_attempt_id = ?2 AND check_code = ?3',
+        mapper: (Map<String, Object?> row) => ActivationCheckResultLocalEntity(id: row['id'] as String, tenantId: row['tenant_id'] as String, activationAttemptId: row['activation_attempt_id'] as String, checkCode: row['check_code'] as String, required: row['required'] as int, status: row['status'] as String, evidenceType: row['evidence_type'] as String?, evidenceRef: row['evidence_ref'] as String?, occurredAt: row['occurred_at'] as String?, recordedAt: row['recorded_at'] as String, detailsSanitizedJson: row['details_sanitized_json'] as String?),
+        arguments: [tenantId, attemptId, checkCode]);
+  }
+
+  @override
+  Future<List<ActivationCheckResultLocalEntity>> getChecksForAttempt(
+    String tenantId,
+    String attemptId,
+  ) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM activation_checks_local WHERE tenant_id = ?1 AND activation_attempt_id = ?2',
+        mapper: (Map<String, Object?> row) => ActivationCheckResultLocalEntity(id: row['id'] as String, tenantId: row['tenant_id'] as String, activationAttemptId: row['activation_attempt_id'] as String, checkCode: row['check_code'] as String, required: row['required'] as int, status: row['status'] as String, evidenceType: row['evidence_type'] as String?, evidenceRef: row['evidence_ref'] as String?, occurredAt: row['occurred_at'] as String?, recordedAt: row['recorded_at'] as String, detailsSanitizedJson: row['details_sanitized_json'] as String?),
+        arguments: [tenantId, attemptId]);
+  }
+
+  @override
+  Future<void> deleteChecksForAttempt(
+    String tenantId,
+    String attemptId,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM activation_checks_local WHERE tenant_id = ?1 AND activation_attempt_id = ?2',
+        arguments: [tenantId, attemptId]);
+  }
+
+  @override
+  Future<List<ActivationCheckResultLocalEntity>> getAll() async {
+    return _queryAdapter.queryList('SELECT * FROM activation_checks_local',
+        mapper: (Map<String, Object?> row) => ActivationCheckResultLocalEntity(
+            id: row['id'] as String,
+            tenantId: row['tenant_id'] as String,
+            activationAttemptId: row['activation_attempt_id'] as String,
+            checkCode: row['check_code'] as String,
+            required: row['required'] as int,
+            status: row['status'] as String,
+            evidenceType: row['evidence_type'] as String?,
+            evidenceRef: row['evidence_ref'] as String?,
+            occurredAt: row['occurred_at'] as String?,
+            recordedAt: row['recorded_at'] as String,
+            detailsSanitizedJson: row['details_sanitized_json'] as String?));
+  }
+
+  @override
+  Future<void> insertOrReplace(ActivationCheckResultLocalEntity check) async {
+    await _activationCheckResultLocalEntityInsertionAdapter.insert(
+        check, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> insertChecks(
+      List<ActivationCheckResultLocalEntity> checks) async {
+    await _activationCheckResultLocalEntityInsertionAdapter.insertList(
+        checks, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> saveCheckResult(ActivationCheckResultLocalEntity check) async {
+    if (database is sqflite.Transaction) {
+      await super.saveCheckResult(check);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.activationCheckResultLocalDao
+            .saveCheckResult(check);
+      });
+    }
+  }
+}
+
+class _$FirstSuccessfulSaleClaimDao extends FirstSuccessfulSaleClaimDao {
+  _$FirstSuccessfulSaleClaimDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _firstSuccessfulSaleClaimEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'first_successful_sale_claims',
+            (FirstSuccessfulSaleClaimEntity item) => <String, Object?>{
+                  'tenant_id': item.tenantId,
+                  'terminal_id': item.terminalId,
+                  'ticket_id': item.ticketId,
+                  'activation_attempt_id': item.activationAttemptId,
+                  'device_occurred_at': item.deviceOccurredAt,
+                  'anchored_occurred_at': item.anchoredOccurredAt,
+                  'clock_confidence': item.clockConfidence,
+                  'server_time_anchor_id': item.serverTimeAnchorId,
+                  'pos_build': item.posBuild,
+                  'outbox_event_id': item.outboxEventId,
+                  'created_at_local': item.createdAtLocal
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<FirstSuccessfulSaleClaimEntity>
+      _firstSuccessfulSaleClaimEntityInsertionAdapter;
+
+  @override
+  Future<FirstSuccessfulSaleClaimEntity?> getClaimByTenantId(
+      String tenantId) async {
+    return _queryAdapter.query(
+        'SELECT * FROM first_successful_sale_claims WHERE tenant_id = ?1',
+        mapper: (Map<String, Object?> row) => FirstSuccessfulSaleClaimEntity(
+            tenantId: row['tenant_id'] as String,
+            terminalId: row['terminal_id'] as String,
+            ticketId: row['ticket_id'] as String,
+            activationAttemptId: row['activation_attempt_id'] as String?,
+            deviceOccurredAt: row['device_occurred_at'] as String,
+            anchoredOccurredAt: row['anchored_occurred_at'] as String?,
+            clockConfidence: row['clock_confidence'] as String,
+            serverTimeAnchorId: row['server_time_anchor_id'] as String?,
+            posBuild: row['pos_build'] as String?,
+            outboxEventId: row['outbox_event_id'] as String,
+            createdAtLocal: row['created_at_local'] as String),
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<List<FirstSuccessfulSaleClaimEntity>> getAll() async {
+    return _queryAdapter.queryList('SELECT * FROM first_successful_sale_claims',
+        mapper: (Map<String, Object?> row) => FirstSuccessfulSaleClaimEntity(
+            tenantId: row['tenant_id'] as String,
+            terminalId: row['terminal_id'] as String,
+            ticketId: row['ticket_id'] as String,
+            activationAttemptId: row['activation_attempt_id'] as String?,
+            deviceOccurredAt: row['device_occurred_at'] as String,
+            anchoredOccurredAt: row['anchored_occurred_at'] as String?,
+            clockConfidence: row['clock_confidence'] as String,
+            serverTimeAnchorId: row['server_time_anchor_id'] as String?,
+            posBuild: row['pos_build'] as String?,
+            outboxEventId: row['outbox_event_id'] as String,
+            createdAtLocal: row['created_at_local'] as String));
+  }
+
+  @override
+  Future<void> deleteByTenantId(String tenantId) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM first_successful_sale_claims WHERE tenant_id = ?1',
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<int> insertClaim(FirstSuccessfulSaleClaimEntity claim) {
+    return _firstSuccessfulSaleClaimEntityInsertionAdapter.insertAndReturnId(
+        claim, OnConflictStrategy.ignore);
   }
 }

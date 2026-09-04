@@ -1805,6 +1805,73 @@ final migration43_44 = Migration(43, 44, (database) async {
   );
 });
 
+final migration44_45 = Migration(44, 45, (database) async {
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS activation_attempts_local (
+      attempt_id TEXT NOT NULL PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      candidate_terminal_id TEXT NOT NULL,
+      local_status TEXT NOT NULL,
+      required_fiscal_revision INTEGER NOT NULL,
+      required_fiscal_fingerprint TEXT NOT NULL,
+      verification_product_id TEXT NOT NULL,
+      verification_ticket_id TEXT,
+      server_time_anchor_at TEXT,
+      anchor_monotonic_ticks INTEGER,
+      boot_session_id TEXT,
+      assigned_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  ''');
+
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS activation_checks_local (
+      id TEXT NOT NULL PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      activation_attempt_id TEXT NOT NULL,
+      check_code TEXT NOT NULL,
+      required INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      evidence_type TEXT,
+      evidence_ref TEXT,
+      occurred_at TEXT,
+      recorded_at TEXT NOT NULL,
+      details_sanitized_json TEXT
+    )
+  ''');
+
+  await database.execute('''
+    CREATE UNIQUE INDEX IF NOT EXISTS index_activation_checks_local_tenant_id_activation_attempt_id_check_code
+    ON activation_checks_local (tenant_id, activation_attempt_id, check_code)
+  ''');
+
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS first_successful_sale_claims (
+      tenant_id TEXT NOT NULL PRIMARY KEY,
+      terminal_id TEXT NOT NULL,
+      ticket_id TEXT NOT NULL,
+      activation_attempt_id TEXT,
+      device_occurred_at TEXT NOT NULL,
+      anchored_occurred_at TEXT,
+      clock_confidence TEXT NOT NULL,
+      server_time_anchor_id TEXT,
+      pos_build TEXT,
+      outbox_event_id TEXT NOT NULL,
+      created_at_local TEXT NOT NULL
+    )
+  ''');
+
+  await database.execute('''
+    CREATE UNIQUE INDEX IF NOT EXISTS index_first_successful_sale_claims_ticket_id
+    ON first_successful_sale_claims (ticket_id)
+  ''');
+
+  await database.execute('''
+    CREATE UNIQUE INDEX IF NOT EXISTS index_first_successful_sale_claims_outbox_event_id
+    ON first_successful_sale_claims (outbox_event_id)
+  ''');
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -1840,4 +1907,5 @@ final allMigrations = [
   migration41_42,
   migration42_43,
   migration43_44,
+  migration44_45,
 ];
