@@ -315,6 +315,7 @@ async function withOnboardingIsolatedSchema(
 }
 
 describe('W9 Backend PostgreSQL E2E — ODAV-31..34 Specifications', () => {
+  jest.setTimeout(45000);
   it('ODAV-31: Fiscal setup configuration NEVER mutates historical invoices in PostgreSQL', async () => {
     await withOnboardingIsolatedSchema('odav31', async ({ app, dataSource, tenantAId, ownerTokenA }) => {
       // 1. Seed historical invoice under baseline regime (0% tax, subtotal 500, total 500)

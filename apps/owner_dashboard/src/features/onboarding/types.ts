@@ -96,3 +96,34 @@ export interface SetupCenterProgress {
   blockers: string[];
   warnings: string[];
 }
+
+export interface CreateManualProductDto {
+  name: string;
+  sellPrice: number;
+  uom?: string;
+  category_code?: string;
+}
+
+export type CostReadinessStatus = "COST_PENDING" | "CONFIGURED";
+
+export interface OnboardingCatalogProductSummary {
+  id: string;
+  name: string;
+  sellPrice: number;
+  uom: string;
+  category_code?: string | null;
+  costStatus: CostReadinessStatus;
+  is_active: boolean;
+}
+
+export interface OnboardingManualProductResponse {
+  product: OnboardingCatalogProductSummary;
+  session: OnboardingSession;
+  readiness: OnboardingReadinessSnapshot;
+}
+
+export interface OnboardingCatalogSummaryResponse {
+  sellableProductCount: number;
+  hasSellableProduct: boolean;
+  sampleProducts: OnboardingCatalogProductSummary[];
+}

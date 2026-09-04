@@ -22,6 +22,8 @@ import {
 import { UserRole } from '../../src/modules/identity/entities/user.entity';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
+import { PermissionsGuard } from '../../src/modules/identity/guards/permissions.guard';
+import { AppPermission } from '../../src/modules/identity/security/permissions.enum';
 import { JWT_TOKEN_TYPES } from '../../src/modules/identity/security/jwt-token.types';
 import { createIdentityJwtConfigProvider } from '../support/identity-jwt-test.fixture';
 
@@ -191,6 +193,7 @@ describe('ImportStaging (Integration & E2E)', () => {
         TenantInterceptor,
         AuthGuard,
         RolesGuard,
+        PermissionsGuard,
         Reflector,
         JwtService,
       ],
@@ -228,15 +231,17 @@ describe('ImportStaging (Integration & E2E)', () => {
       email: string;
       role: UserRole;
       tenant_id: string;
+      custom_permissions?: string[];
     }> = {},
   ): string =>
     jwtService.sign(
       {
         sub: overrides.sub ?? 'user-1',
-        email: overrides.email ?? 'manager@example.com',
-        role: overrides.role ?? UserRole.MANAGER,
+        email: overrides.email ?? 'owner@example.com',
+        role: overrides.role ?? UserRole.OWNER,
         tenant_id:
           overrides.tenant_id !== undefined ? overrides.tenant_id : 'tenant-A',
+        custom_permissions: overrides.custom_permissions,
         is_active: true,
         token_type: JWT_TOKEN_TYPES.ACCESS,
         security_version: 1,
@@ -268,6 +273,16 @@ describe('ImportStaging (Integration & E2E)', () => {
 
   it('returns 403 when user has CASHIER role', async () => {
     const token = signToken({ role: UserRole.CASHIER });
+
+    await request(app.getHttpServer())
+      .post(`${API_PREFIX}/upload`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ rows: [{ nombre: 'Cafe', precioVenta: 50 }] })
+      .expect(403);
+  });
+
+  it('returns 403 when user is MANAGER without ONBOARDING_PRODUCT_IMPORT_MANAGE attempting to upload', async () => {
+    const token = signToken({ role: UserRole.MANAGER });
 
     await request(app.getHttpServer())
       .post(`${API_PREFIX}/upload`)

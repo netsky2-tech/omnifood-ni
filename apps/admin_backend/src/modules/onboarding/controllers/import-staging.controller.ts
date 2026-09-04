@@ -21,7 +21,10 @@ import { GetTenantId } from '../../../core/decorators/tenant.decorator';
 import { TenantInterceptor } from '../../../core/database/rls.interceptor';
 import { AuthGuard } from '../../identity/guards/auth.guard';
 import { RolesGuard } from '../../identity/guards/roles.guard';
+import { PermissionsGuard } from '../../identity/guards/permissions.guard';
 import { Roles } from '../../../core/decorators/roles.decorator';
+import { RequirePermissions } from '../../identity/decorators/permissions.decorator';
+import { AppPermission } from '../../identity/security/permissions.enum';
 import { UserRole } from '../../identity/entities/user.entity';
 import {
   CANONICAL_COLUMN_NAMES,
@@ -31,7 +34,7 @@ import {
 import { LegacyImportIntegrityReportService } from '../services/legacy-import-integrity-report.service';
 
 @Controller('onboarding/import')
-@UseGuards(AuthGuard, RolesGuard)
+@UseGuards(AuthGuard, RolesGuard, PermissionsGuard)
 @UseInterceptors(TenantInterceptor)
 export class ImportStagingController {
   constructor(
@@ -52,6 +55,7 @@ export class ImportStagingController {
    */
   @Get('template')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
+  @RequirePermissions(AppPermission.ONBOARDING_READ)
   getOfficialTemplate() {
     return {
       version: CANONICAL_IMPORT_CONTRACT_V1.version,
@@ -68,6 +72,7 @@ export class ImportStagingController {
    */
   @Post('upload')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
+  @RequirePermissions(AppPermission.ONBOARDING_PRODUCT_IMPORT_MANAGE)
   async uploadBatch(
     @Body() dto: UploadBatchDto,
     @GetTenantId() tenantId?: string,
@@ -81,6 +86,7 @@ export class ImportStagingController {
    */
   @Post('upload-csv')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
+  @RequirePermissions(AppPermission.ONBOARDING_PRODUCT_IMPORT_MANAGE)
   async uploadRawCsv(
     @Body() dto: UploadRawCsvDto,
     @GetTenantId() tenantId?: string,
@@ -94,6 +100,7 @@ export class ImportStagingController {
    */
   @Get('preview/:sessionToken')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
+  @RequirePermissions(AppPermission.ONBOARDING_READ)
   async getPreview(
     @Param('sessionToken') sessionToken: string,
     @GetTenantId() tenantId?: string,
@@ -107,6 +114,7 @@ export class ImportStagingController {
    */
   @Post('commit')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
+  @RequirePermissions(AppPermission.ONBOARDING_PRODUCT_IMPORT_MANAGE)
   async commitImport(
     @Body() dto: CommitImportDto,
     @GetTenantId() tenantId?: string,
@@ -120,6 +128,7 @@ export class ImportStagingController {
    */
   @Get('errors/:sessionToken')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
+  @RequirePermissions(AppPermission.ONBOARDING_READ)
   async getFailedRows(
     @Param('sessionToken') sessionToken: string,
     @GetTenantId() tenantId?: string,
@@ -133,6 +142,7 @@ export class ImportStagingController {
    */
   @Get('errors/:sessionToken/csv')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
+  @RequirePermissions(AppPermission.ONBOARDING_READ)
   async exportFailedRowsCsv(
     @Param('sessionToken') sessionToken: string,
     @Res() res: Response,
@@ -165,6 +175,7 @@ export class ImportStagingController {
    */
   @Post('integrity-scan')
   @Roles(UserRole.OWNER)
+  @RequirePermissions(AppPermission.ONBOARDING_PRODUCT_IMPORT_MANAGE)
   async runIntegrityScan(@GetTenantId() tenantId?: string) {
     const validTenantId = this.requireTenant(tenantId);
     if (!this.integrityReportService) {
@@ -178,6 +189,7 @@ export class ImportStagingController {
    */
   @Post('expire-legacy-staging')
   @Roles(UserRole.OWNER)
+  @RequirePermissions(AppPermission.ONBOARDING_PRODUCT_IMPORT_MANAGE)
   async expireLegacyStaging(@GetTenantId() tenantId?: string) {
     const validTenantId = this.requireTenant(tenantId);
     if (!this.integrityReportService) {

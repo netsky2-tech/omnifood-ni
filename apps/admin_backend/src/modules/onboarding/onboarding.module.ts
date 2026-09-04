@@ -38,6 +38,8 @@ import { OnboardingReadinessEvaluator } from './services/onboarding-readiness.ev
 import { OnboardingStateReconciler } from './services/onboarding-state.reconciler';
 import { OnboardingIdempotencyCoordinator } from './services/onboarding-idempotency.coordinator';
 import { OnboardingSessionController } from './controllers/onboarding-session.controller';
+import { OnboardingCatalogService } from './services/onboarding-catalog.service';
+import { OnboardingCatalogController } from './controllers/onboarding-catalog.controller';
 import { IDENTITY_READINESS_PORT } from './ports/identity-readiness.port';
 import { FISCAL_READINESS_PORT } from './ports/fiscal-readiness.port';
 import { CATALOG_READINESS_PORT } from './ports/catalog-readiness.port';
@@ -89,6 +91,7 @@ export const getRequiredOnboardingJwtSecret = (
     FiscalSetupController,
     ImportStagingController,
     OnboardingSessionController,
+    OnboardingCatalogController,
   ],
   providers: [
     IndustryTemplateService,
@@ -102,6 +105,7 @@ export const getRequiredOnboardingJwtSecret = (
     OnboardingReadinessEvaluator,
     OnboardingStateReconciler,
     OnboardingIdempotencyCoordinator,
+    OnboardingCatalogService,
     {
       provide: IDENTITY_READINESS_PORT,
       useClass: IdentityReadinessAdapter,
@@ -127,6 +131,7 @@ export const getRequiredOnboardingJwtSecret = (
     OnboardingReadinessEvaluator,
     OnboardingStateReconciler,
     OnboardingIdempotencyCoordinator,
+    OnboardingCatalogService,
     TypeOrmModule,
   ],
 })

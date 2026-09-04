@@ -2,6 +2,9 @@ import { api } from "@/lib/api";
 import type {
   OnboardingSessionResponse,
   OnboardingReadinessSnapshot,
+  CreateManualProductDto,
+  OnboardingManualProductResponse,
+  OnboardingCatalogSummaryResponse,
 } from "./types";
 
 export function isVersionConflictError(error: unknown): boolean {
@@ -32,4 +35,14 @@ export async function startOnboardingSession(
   source = "SETUP_CENTER",
 ): Promise<OnboardingSessionResponse> {
   return api.post<OnboardingSessionResponse>("/onboarding/session/start", { source });
+}
+
+export async function createManualOnboardingProduct(
+  dto: CreateManualProductDto,
+): Promise<OnboardingManualProductResponse> {
+  return api.post<OnboardingManualProductResponse>("/onboarding/catalog/manual-product", dto);
+}
+
+export async function fetchOnboardingCatalogSummary(): Promise<OnboardingCatalogSummaryResponse> {
+  return api.get<OnboardingCatalogSummaryResponse>("/onboarding/catalog/summary");
 }

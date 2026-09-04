@@ -3,6 +3,8 @@ import {
   fetchOnboardingSession,
   fetchOnboardingReadiness,
   startOnboardingSession,
+  createManualOnboardingProduct,
+  fetchOnboardingCatalogSummary,
 } from "./onboarding-api";
 import {
   OnboardingLifecycleState,
@@ -10,12 +12,14 @@ import {
   type OnboardingReadinessSnapshot,
   type OnboardingStep,
   type SetupCenterProgress,
+  type CreateManualProductDto,
 } from "./types";
 
 export const onboardingKeys = {
   all: ["onboarding"] as const,
   session: () => [...onboardingKeys.all, "session"] as const,
   readiness: () => [...onboardingKeys.all, "readiness"] as const,
+  catalogSummary: () => [...onboardingKeys.all, "catalog-summary"] as const,
 };
 
 export function calculateSetupCenterProgress(
@@ -182,6 +186,33 @@ export function useStartOnboardingSession() {
     onSuccess: (data) => {
       queryClient.setQueryData(onboardingKeys.session(), data);
       queryClient.setQueryData(onboardingKeys.readiness(), data.readiness);
+      queryClient.invalidateQueries({ queryKey: onboardingKeys.all });
+    },
+  });
+}
+
+export function useOnboardingCatalogSummary() {
+  return useQuery({
+    queryKey: onboardingKeys.catalogSummary(),
+    queryFn: fetchOnboardingCatalogSummary,
+    staleTime: 10_000,
+  });
+}
+
+export function useCreateManualProduct() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (dto: CreateManualProductDto) => createManualOnboardingProduct(dto),
+    onSuccess: (data) => {
+      queryClient.setQueryData(onboardingKeys.session(), {
+        session: data.session,
+        readiness: data.readiness,
+      });
+      queryClient.setQueryData(onboardingKeys.readiness(), data.readiness);
+      queryClient.invalidateQueries({ queryKey: onboardingKeys.all });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["catalogs"] });
     },
   });
 }

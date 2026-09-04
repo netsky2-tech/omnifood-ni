@@ -1,7 +1,10 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   NotFoundException,
+  Optional,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
@@ -37,6 +40,11 @@ import {
   ApplyTemplateResult,
   TemplateSummaryResponse,
 } from '../dto/apply-template.dto';
+import {
+  OnboardingSessionService,
+  OnboardingStartSource,
+} from './onboarding-session.service';
+import { OnboardingStateReconciler } from './onboarding-state.reconciler';
 
 const SCALE_4 = 4;
 const round4 = (val: number | string): number => {
@@ -74,6 +82,12 @@ export class IndustryTemplateService {
     private readonly previewService: TemplatePreviewService,
     private readonly idempotencyCoordinator: OnboardingIdempotencyCoordinator,
     private readonly dataSource: DataSource,
+    @Optional()
+    @Inject(forwardRef(() => OnboardingSessionService))
+    private readonly sessionService?: OnboardingSessionService,
+    @Optional()
+    @Inject(forwardRef(() => OnboardingStateReconciler))
+    private readonly stateReconciler?: OnboardingStateReconciler,
   ) {}
 
   async listTemplates(): Promise<TemplateSummaryResponse[]> {
@@ -531,6 +545,16 @@ export class IndustryTemplateService {
           return finalResult;
         },
       );
+
+      if (this.sessionService) {
+        await this.sessionService.ensureOnboardingStarted({
+          tenantId: trimmedTenant,
+          source: OnboardingStartSource.TEMPLATE,
+        });
+      }
+      if (this.stateReconciler) {
+        await this.stateReconciler.reconcile(trimmedTenant);
+      }
 
       return result;
     } catch (error: any) {

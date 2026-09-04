@@ -16,11 +16,14 @@ import { GetTenantId } from '../../../core/decorators/tenant.decorator';
 import { TenantInterceptor } from '../../../core/database/rls.interceptor';
 import { AuthGuard } from '../../identity/guards/auth.guard';
 import { RolesGuard } from '../../identity/guards/roles.guard';
+import { PermissionsGuard } from '../../identity/guards/permissions.guard';
 import { Roles } from '../../../core/decorators/roles.decorator';
+import { RequirePermissions } from '../../identity/decorators/permissions.decorator';
+import { AppPermission } from '../../identity/security/permissions.enum';
 import { UserRole } from '../../identity/entities/user.entity';
 
 @Controller('onboarding/templates')
-@UseGuards(AuthGuard, RolesGuard)
+@UseGuards(AuthGuard, RolesGuard, PermissionsGuard)
 @UseInterceptors(TenantInterceptor)
 export class IndustryTemplateController {
   constructor(
@@ -38,18 +41,21 @@ export class IndustryTemplateController {
 
   @Get()
   @Roles(UserRole.OWNER, UserRole.MANAGER)
+  @RequirePermissions(AppPermission.ONBOARDING_READ)
   async listTemplates() {
     return this.industryTemplateService.listTemplates();
   }
 
   @Get(':code')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
+  @RequirePermissions(AppPermission.ONBOARDING_READ)
   async getTemplate(@Param('code') code: string) {
     return this.industryTemplateService.getTemplateByCode(code);
   }
 
   @Post(':code/preview')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
+  @RequirePermissions(AppPermission.ONBOARDING_READ)
   async previewTemplate(
     @Param('code') code: string,
     @Body() dto: TemplatePreviewOptions,
@@ -61,6 +67,7 @@ export class IndustryTemplateController {
 
   @Post('legacy-recipe-scan')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
+  @RequirePermissions(AppPermission.ONBOARDING_TEMPLATE_APPLY)
   async scanLegacyRecipes(
     @Body() dto: ScanOptions,
     @GetTenantId() tenantId?: string,
@@ -71,6 +78,7 @@ export class IndustryTemplateController {
 
   @Post(':code/apply')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
+  @RequirePermissions(AppPermission.ONBOARDING_TEMPLATE_APPLY)
   async applyTemplate(
     @Param('code') code: string,
     @Body() dto: ApplyTemplateDto,

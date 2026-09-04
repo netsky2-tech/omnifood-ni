@@ -1,9 +1,11 @@
 import { useState } from "react";
 import {
   useOnboardingSession,
+  useOnboardingCatalogSummary,
 } from "./use-onboarding";
 import { isVersionConflictError } from "./onboarding-api";
 import { OnboardingLifecycleState, type OnboardingStepKey } from "./types";
+import { CatalogAcquisitionModal } from "./catalog-acquisition-modal";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,6 +25,8 @@ import {
   Zap,
   Layers,
   History,
+  Info,
+  Package,
 } from "lucide-react";
 
 interface SetupCenterViewProps {
@@ -32,10 +36,9 @@ interface SetupCenterViewProps {
 export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
   const { session, readiness, progress, isLoading, isError, error, refetch, isFetching } =
     useOnboardingSession();
+  const { data: catalogSummary } = useOnboardingCatalogSummary();
 
-  const [activeSubTab, setActiveSubTab] = useState<"overview" | "fiscal" | "templates" | "import">(
-    "overview",
-  );
+  const [catalogModalOpen, setCatalogModalOpen] = useState(false);
 
   if (isLoading) {
     return (
@@ -111,9 +114,12 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
   };
 
   const handleStepAction = (actionKey: OnboardingStepKey) => {
+    if (actionKey === "catalog") {
+      setCatalogModalOpen(true);
+      return;
+    }
     if (onNavigateToTab) {
       if (actionKey === "fiscal") onNavigateToTab("fiscal");
-      if (actionKey === "catalog") onNavigateToTab("templates");
     }
   };
 
@@ -213,24 +219,14 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
               <div className="flex gap-2">
                 <Button
                   size="sm"
-                  onClick={() => handleStepAction("catalog")}
+                  onClick={() => setCatalogModalOpen(true)}
                   className="flex items-center gap-2"
+                  data-testid="open-catalog-acquisition-btn"
                 >
                   <Sparkles className="h-4 w-4" />
-                  Elegir Plantilla de Industria
+                  Adquirir Catálogo (Plantilla / CSV / Manual)
                   <ArrowRight className="h-4 w-4" />
                 </Button>
-                {onNavigateToTab && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => onNavigateToTab("import")}
-                    className="flex items-center gap-2"
-                  >
-                    <FileSpreadsheet className="h-4 w-4" />
-                    Carga Masiva CSV
-                  </Button>
-                )}
               </div>
             )}
             {progress.nextRecommendedAction.actionKey === "activation" && (
@@ -312,41 +308,90 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                   </div>
                 )}
 
-                {/* Step CTA */}
-                <div className="flex justify-end">
-                  {step.key === "fiscal" && !isDone && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleStepAction("fiscal")}
-                      className="text-xs flex items-center gap-1.5"
-                    >
-                      <Landmark className="h-3.5 w-3.5" />
-                      Configurar Fiscal
-                    </Button>
-                  )}
-                  {step.key === "catalog" && !isDone && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleStepAction("catalog")}
-                      className="text-xs flex items-center gap-1.5"
-                    >
-                      <Sparkles className="h-3.5 w-3.5" />
-                      Cargar Productos
-                    </Button>
-                  )}
-                  {step.key === "activation" && isDone && (
-                    <Badge variant="outline" className="text-emerald-700 border-emerald-300">
-                      Terminal Operativo
-                    </Badge>
-                  )}
-                </div>
+                  {/* Step CTA */}
+                  <div className="flex items-center justify-between">
+                    {step.key === "catalog" && (
+                      <span className="text-[11px] text-muted-foreground">
+                        {catalogSummary?.sellableProductCount
+                          ? `${catalogSummary.sellableProductCount} producto(s) vendible(s)`
+                          : "Sin productos aún"}
+                      </span>
+                    )}
+                    <div className="flex justify-end gap-2 ml-auto">
+                      {step.key === "fiscal" && !isDone && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleStepAction("fiscal")}
+                          className="text-xs flex items-center gap-1.5"
+                          data-testid="configure-fiscal-btn"
+                        >
+                          <Landmark className="h-3.5 w-3.5" />
+                          Configurar Fiscal
+                        </Button>
+                      )}
+                      {step.key === "catalog" && (
+                        <Button
+                          size="sm"
+                          variant={isDone ? "ghost" : "outline"}
+                          onClick={() => setCatalogModalOpen(true)}
+                          className="text-xs flex items-center gap-1.5"
+                          data-testid="catalog-step-action-btn"
+                        >
+                          <Sparkles className="h-3.5 w-3.5" />
+                          {isDone ? "+ Agregar Más" : "Adquirir Catálogo"}
+                        </Button>
+                      )}
+                      {step.key === "activation" && isDone && (
+                        <Badge variant="outline" className="text-emerald-700 border-emerald-300">
+                          Terminal Operativo
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
               </CardContent>
             </Card>
           );
         })}
       </div>
+
+      {/* Sale Ready Review & Operational Explainability (AC-27, AC-28) */}
+      {progress.isSaleReady && (
+        <Card className="border-emerald-500/40 bg-emerald-50/20" data-testid="sale-ready-review-card">
+          <CardHeader className="py-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-semibold text-emerald-900 flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                Evaluación de Preparación para Venta (SALE_READY)
+              </CardTitle>
+              <Badge className="bg-emerald-600 text-white text-[10px]">Criterios Mínimos Cumplidos</Badge>
+            </div>
+            <CardDescription className="text-xs text-muted-foreground mt-1">
+              Tu comercio cumple todos los requisitos normativos para abrir caja y emitir facturas en el terminal POS.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="py-2 space-y-2 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="p-2 rounded bg-background border flex items-center gap-2">
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                <span>Identidad de Propietario (OWNER único suficiente, AC-26)</span>
+              </div>
+              <div className="p-2 rounded bg-background border flex items-center gap-2">
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                <span>Configuración Fiscal DGI Mínima (AC-04)</span>
+              </div>
+              <div className="p-2 rounded bg-background border flex items-center gap-2">
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                <span>Catálogo Vendible Activo con Precio (AC-06)</span>
+              </div>
+              <div className="p-2 rounded bg-background border flex items-center gap-2 text-muted-foreground">
+                <Info className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                <span>BOH (Stock/Recetas/Costos): Opcional no bloqueante (AC-07, AC-08)</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Global Blockers & Readiness Details */}
       {progress.blockers.length > 0 && (
@@ -367,6 +412,13 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
           </CardContent>
         </Card>
       )}
+
+      {/* Unified Catalog Acquisition Modal */}
+      <CatalogAcquisitionModal
+        open={catalogModalOpen}
+        onOpenChange={setCatalogModalOpen}
+        onNavigateToTab={onNavigateToTab}
+      />
     </div>
   );
 }

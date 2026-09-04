@@ -200,24 +200,40 @@ export function FiscalSetupForm() {
               </div>
             </div>
 
-            {/* Teléfono opcional */}
+            {/* Teléfono opcional (AC-05: no persistido) */}
             <div className="space-y-2">
-              <Label htmlFor="phone">Teléfono de Contacto</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="phone">Teléfono de Contacto</Label>
+                <Badge variant="outline" className="text-[10px] text-muted-foreground" data-testid="phone-non-persisted-badge">
+                  No persistido fiscalmente
+                </Badge>
+              </div>
               <Input
                 id="phone"
                 placeholder="+505 8888-0000"
                 {...register("phone")}
               />
+              <p className="text-[11px] text-muted-foreground" data-testid="phone-non-persisted-note">
+                Campo informativo local. No se almacena en el perfil fiscal DGI ni afecta la preparación para venta (AC-05).
+              </p>
             </div>
 
-            {/* Dirección opcional */}
+            {/* Dirección opcional (AC-05: no persistido) */}
             <div className="space-y-2">
-              <Label htmlFor="address">Dirección Fiscal / Local</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="address">Dirección Fiscal / Local</Label>
+                <Badge variant="outline" className="text-[10px] text-muted-foreground" data-testid="address-non-persisted-badge">
+                  No persistido fiscalmente
+                </Badge>
+              </div>
               <Input
                 id="address"
                 placeholder="Dirección del establecimiento"
                 {...register("address")}
               />
+              <p className="text-[11px] text-muted-foreground" data-testid="address-non-persisted-note">
+                Campo informativo local. No se almacena en el perfil fiscal DGI ni afecta la preparación para venta (AC-05).
+              </p>
             </div>
           </div>
 

@@ -1,8 +1,10 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   NotFoundException,
   Optional,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
@@ -34,6 +36,11 @@ import {
   UploadRawCsvDto,
   UploadSummaryResponse,
 } from '../dto/import-staging.dto';
+import {
+  OnboardingSessionService,
+  OnboardingStartSource,
+} from './onboarding-session.service';
+import { OnboardingStateReconciler } from './onboarding-state.reconciler';
 
 const CHUNK_SIZE = 100;
 
@@ -68,6 +75,12 @@ export class ImportStagingService {
     private readonly receiptRepo?: Repository<LegacyOnboardingMigrationReceipt>,
     @Optional()
     canonicalParser?: CanonicalCsvParserService,
+    @Optional()
+    @Inject(forwardRef(() => OnboardingSessionService))
+    private readonly onboardingSessionService?: OnboardingSessionService,
+    @Optional()
+    @Inject(forwardRef(() => OnboardingStateReconciler))
+    private readonly onboardingStateReconciler?: OnboardingStateReconciler,
   ) {
     this.canonicalParser = canonicalParser || new CanonicalCsvParserService();
   }
@@ -627,7 +640,7 @@ export class ImportStagingService {
     const duplicateResolution: DuplicateResolution =
       dto.duplicatePolicy || dto.duplicateResolution || 'REPLACE';
 
-    return this.dataSource.transaction(async (manager: EntityManager) => {
+    const result = await this.dataSource.transaction(async (manager: EntityManager) => {
       const stagedRows = await manager.find(ImportStaging, {
         where: {
           tenant_id: trimmedTenant,
@@ -765,6 +778,18 @@ export class ImportStagingService {
         committedAt: new Date(),
       };
     });
+
+    if (this.onboardingSessionService) {
+      await this.onboardingSessionService.ensureOnboardingStarted({
+        tenantId: trimmedTenant,
+        source: OnboardingStartSource.PRODUCT_IMPORT,
+      });
+    }
+    if (this.onboardingStateReconciler) {
+      await this.onboardingStateReconciler.reconcile(trimmedTenant);
+    }
+
+    return result;
   }
 
   async getFailedRows(

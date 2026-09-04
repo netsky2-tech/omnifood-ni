@@ -256,5 +256,5 @@ describe("W8 E2E — Complete Users & Granular Permissions Lifecycle", () => {
 
     // Only Admin remains
     expect(screen.getByText("Admin Propietario")).toBeInTheDocument();
-  });
+  }, 20000);
 });

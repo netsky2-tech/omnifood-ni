@@ -9,8 +9,8 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { Request } from 'express';
-import { FiscalSetupService } from '../services/fiscal-setup.service';
-import { FiscalSetupDto } from '../dto/fiscal-setup.dto';
+import { OnboardingCatalogService } from '../services/onboarding-catalog.service';
+import { CreateManualProductDto } from '../dto/onboarding-catalog.dto';
 import { GetTenantId } from '../../../core/decorators/tenant.decorator';
 import { TenantInterceptor } from '../../../core/database/rls.interceptor';
 import { AuthGuard } from '../../identity/guards/auth.guard';
@@ -24,6 +24,7 @@ import { UserRole } from '../../identity/entities/user.entity';
 interface RequestWithUser extends Request {
   user?: {
     sub?: string;
+    userId?: string;
     email?: string;
     role?: string;
     tenant_id?: string;
@@ -32,11 +33,11 @@ interface RequestWithUser extends Request {
   };
 }
 
-@Controller('onboarding/fiscal-setup')
+@Controller('onboarding/catalog')
 @UseGuards(AuthGuard, RolesGuard, PermissionsGuard)
 @UseInterceptors(TenantInterceptor)
-export class FiscalSetupController {
-  constructor(private readonly fiscalSetupService: FiscalSetupService) {}
+export class OnboardingCatalogController {
+  constructor(private readonly catalogService: OnboardingCatalogService) {}
 
   private requireTenant(tenantId?: string): string {
     if (!tenantId?.trim()) {
@@ -45,28 +46,31 @@ export class FiscalSetupController {
     return tenantId.trim();
   }
 
-  @Get()
+  @Post('manual-product')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
-  @RequirePermissions(AppPermission.ONBOARDING_READ)
-  async getFiscalSetup(@GetTenantId() tenantId?: string) {
-    const validTenantId = this.requireTenant(tenantId);
-    return this.fiscalSetupService.getFiscalSetup(validTenantId);
+  @RequirePermissions(AppPermission.ONBOARDING_PRODUCT_IMPORT_MANAGE)
+  async createManualProduct(
+    @Body() dto: CreateManualProductDto,
+    @Req() req: RequestWithUser,
+    @GetTenantId() tenantIdParam?: string,
+  ) {
+    const tenantId = this.requireTenant(
+      tenantIdParam ?? req.user?.tenant_id ?? req.user?.tenantId,
+    );
+    const userId = req.user?.sub ?? req.user?.userId;
+    return this.catalogService.createManualProduct(tenantId, dto, userId);
   }
 
-  @Post()
+  @Get('summary')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
-  @RequirePermissions(AppPermission.ONBOARDING_FISCAL_CONFIGURE)
-  async configureFiscalSetup(
-    @Body() dto: FiscalSetupDto,
+  @RequirePermissions(AppPermission.ONBOARDING_READ)
+  async getCatalogSummary(
     @Req() req: RequestWithUser,
-    @GetTenantId() tenantId?: string,
+    @GetTenantId() tenantIdParam?: string,
   ) {
-    const validTenantId = this.requireTenant(tenantId);
-    const userId = req.user?.sub;
-    return this.fiscalSetupService.configureFiscalSetup(
-      validTenantId,
-      dto,
-      userId,
+    const tenantId = this.requireTenant(
+      tenantIdParam ?? req.user?.tenant_id ?? req.user?.tenantId,
     );
+    return this.catalogService.getCatalogSummary(tenantId);
   }
 }
