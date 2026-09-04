@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { IndustryTemplate } from './entities/industry-template.entity';
 import { TemplateInsumo } from './entities/template-insumo.entity';
@@ -27,6 +26,9 @@ import { RecipeVersion } from '../inventory/entities/recipe-version.entity';
 import { RecipeDetail } from '../inventory/entities/recipe-detail.entity';
 import { Recipe } from '../inventory/entities/recipe.entity';
 import { UomConversion } from '../inventory/entities/uom-conversion.entity';
+import { Warehouse } from '../inventory/entities/warehouse.entity';
+import { Supplier } from '../inventory/entities/supplier.entity';
+import { InventoryMovement } from '../inventory/entities/inventory-movement.entity';
 import { IndustryTemplateService } from './services/industry-template.service';
 import { TemplatePreviewService } from './services/template-preview.service';
 import { LegacyTemplateRecipeScanService } from './services/legacy-template-recipe-scan.service';
@@ -50,9 +52,15 @@ import { ActivationController } from './controllers/activation.controller';
 import { IDENTITY_READINESS_PORT } from './ports/identity-readiness.port';
 import { FISCAL_READINESS_PORT } from './ports/fiscal-readiness.port';
 import { CATALOG_READINESS_PORT } from './ports/catalog-readiness.port';
+import { INVENTORY_READINESS_PORT } from './ports/inventory-readiness.port';
+import { COSTING_READINESS_PORT } from './ports/costing-readiness.port';
+import { OPERATIONS_READINESS_PORT } from './ports/operations-readiness.port';
 import { IdentityReadinessAdapter } from './adapters/identity-readiness.adapter';
 import { FiscalReadinessAdapter } from './adapters/fiscal-readiness.adapter';
 import { CatalogReadinessAdapter } from './adapters/catalog-readiness.adapter';
+import { InventoryReadinessAdapter } from './adapters/inventory-readiness.adapter';
+import { CostingReadinessAdapter } from './adapters/costing-readiness.adapter';
+import { OperationsReadinessAdapter } from './adapters/operations-readiness.adapter';
 import { IdentityModule } from '../identity/identity.module';
 import { AuditModule } from '../audit/audit.module';
 
@@ -97,6 +105,9 @@ export const getRequiredOnboardingJwtSecret = (
       RecipeDetail,
       Recipe,
       UomConversion,
+      Warehouse,
+      Supplier,
+      InventoryMovement,
     ]),
   ],
   controllers: [
@@ -133,6 +144,18 @@ export const getRequiredOnboardingJwtSecret = (
     {
       provide: CATALOG_READINESS_PORT,
       useClass: CatalogReadinessAdapter,
+    },
+    {
+      provide: INVENTORY_READINESS_PORT,
+      useClass: InventoryReadinessAdapter,
+    },
+    {
+      provide: COSTING_READINESS_PORT,
+      useClass: CostingReadinessAdapter,
+    },
+    {
+      provide: OPERATIONS_READINESS_PORT,
+      useClass: OperationsReadinessAdapter,
     },
   ],
   exports: [

@@ -20,7 +20,6 @@ import {
   ArrowRight,
   RefreshCw,
   Store,
-  FileSpreadsheet,
   Sparkles,
   Landmark,
   ShieldCheck,
@@ -29,6 +28,10 @@ import {
   History,
   Info,
   Package,
+  Boxes,
+  DollarSign,
+  Users,
+  ExternalLink,
 } from "lucide-react";
 
 interface SetupCenterViewProps {
@@ -345,7 +348,7 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {progress.steps.map((step) => {
           const isDone = step.status === "COMPLETED";
-          const isBlocked = step.status === "BLOCKED";
+          const _isBlocked = step.status === "BLOCKED";
           const inProgress = step.status === "IN_PROGRESS";
 
           return (
@@ -586,6 +589,171 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
               </div>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* ONB1.9A–D Progressive BOH Checklist & Direct Backoffice Links */}
+      <Card data-testid="boh-progressive-checklist" className="border-border/80 shadow-sm">
+        <CardHeader className="py-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <CardTitle className="text-base font-semibold flex items-center gap-2 text-foreground">
+                <Boxes className="h-5 w-5 text-primary shrink-0" />
+                Checklist Progresivo BOH (Backoffice Readiness)
+              </CardTitle>
+              <CardDescription className="text-xs text-muted-foreground mt-0.5">
+                Enriquecimiento posterior de almacenes, costeo y operaciones. Opcional y no bloqueante para ventas POS (AC-07, AC-08, AC-40, AC-41).
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-[11px] font-mono">
+                ONB1.9A–D
+              </Badge>
+              {session.lifecycleState === OnboardingLifecycleState.ACTIVATED && (
+                <Badge variant="secondary" className="text-[11px] bg-emerald-50 text-emerald-800 border-emerald-300">
+                  Activación Intacta
+                </Badge>
+              )}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4 pb-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {/* ONB1.9A — Inventory Readiness */}
+            <div
+              data-testid="boh-inventory-card"
+              className="p-3.5 rounded-lg border bg-card/60 flex flex-col justify-between space-y-3"
+            >
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-xs flex items-center gap-1.5 text-foreground">
+                    <Package className="h-4 w-4 text-primary shrink-0" />
+                    Inventario & Almacenes
+                  </span>
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] ${
+                      readiness.inventoryReady
+                        ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                        : "bg-amber-50 text-amber-800 border-amber-300"
+                    }`}
+                  >
+                    {readiness.inventoryReady ? "LISTO" : "PENDIENTE"}
+                  </Badge>
+                </div>
+                <div className="text-[11px] text-muted-foreground space-y-1">
+                  <div>
+                    Alcance: <span className="font-medium text-foreground">{readiness.inventory?.scope ?? "BÁSICO"}</span>
+                  </div>
+                  <div>
+                    Almacenes: <span className="font-medium text-foreground">{readiness.inventory?.warehouseCount ?? 0}</span> | Ítems rastreados: <span className="font-medium text-foreground">{readiness.inventory?.trackedProductCount ?? 0}</span>
+                  </div>
+                  <div className="text-[10px] text-muted-foreground/90 font-medium">
+                    Stock en 0 no bloquea venta (AC-07, AC-40)
+                  </div>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                data-testid="boh-link-inventory"
+                onClick={() => window.open("/inventory", "_blank")}
+                className="w-full text-xs h-8 flex items-center justify-center gap-1.5"
+              >
+                <span>Ir a Inventario BOH</span>
+                <ExternalLink className="h-3 w-3" />
+              </Button>
+            </div>
+
+            {/* ONB1.9B — Costing Readiness */}
+            <div
+              data-testid="boh-costing-card"
+              className="p-3.5 rounded-lg border bg-card/60 flex flex-col justify-between space-y-3"
+            >
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-xs flex items-center gap-1.5 text-foreground">
+                    <DollarSign className="h-4 w-4 text-primary shrink-0" />
+                    Costeo & Valorización
+                  </span>
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] ${
+                      readiness.costingReady
+                        ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                        : "bg-amber-50 text-amber-800 border-amber-300"
+                    }`}
+                  >
+                    {readiness.costingReady ? "COSTING_READY" : "COST_PENDING"}
+                  </Badge>
+                </div>
+                <div className="text-[11px] text-muted-foreground space-y-1">
+                  <div>
+                    Estado: <span className="font-medium text-foreground">{readiness.costing?.knownCostCount ?? 0} conocido(s)</span>, <span className="font-medium text-foreground">{readiness.costing?.pendingCostCount ?? 0} pendiente(s)</span>
+                  </div>
+                  <div className="text-[10px] text-muted-foreground/90 font-medium">
+                    COST_PENDING no bloquea venta
+                  </div>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                data-testid="boh-link-costing"
+                onClick={() => window.open("/inventory/kardex", "_blank")}
+                className="w-full text-xs h-8 flex items-center justify-center gap-1.5"
+              >
+                <span>Ir a Costeo & Kardex</span>
+                <ExternalLink className="h-3 w-3" />
+              </Button>
+            </div>
+
+            {/* ONB1.9C — Operations Readiness */}
+            <div
+              data-testid="boh-operations-card"
+              className="p-3.5 rounded-lg border bg-card/60 flex flex-col justify-between space-y-3"
+            >
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-xs flex items-center gap-1.5 text-foreground">
+                    <Users className="h-4 w-4 text-primary shrink-0" />
+                    Operaciones & Enriquecimiento
+                  </span>
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] ${
+                      readiness.operationsReady
+                        ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                        : "bg-slate-100 text-slate-800 border-slate-300"
+                    }`}
+                  >
+                    {readiness.operationsReady ? "ENRIQUECIDO" : "BÁSICO"}
+                  </Badge>
+                </div>
+                <div className="text-[11px] text-muted-foreground space-y-1">
+                  <div>
+                    Staff adicional: {readiness.operations?.additionalStaffCount ?? 0} | Recetas: {readiness.operations?.publishedRecipeCount ?? 0}
+                  </div>
+                  <div>
+                    Proveedores: {readiness.operations?.supplierCount ?? 0} | Categorías: {readiness.operations?.categoryCount ?? 0}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground/90 font-medium">
+                    Enriquecimiento opcional; no revoca ACTIVATED
+                  </div>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                data-testid="boh-link-operations"
+                onClick={() => window.open("/users", "_blank")}
+                className="w-full text-xs h-8 flex items-center justify-center gap-1.5"
+              >
+                <span>Ir a Gestión de Usuarios</span>
+                <ExternalLink className="h-3 w-3" />
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 

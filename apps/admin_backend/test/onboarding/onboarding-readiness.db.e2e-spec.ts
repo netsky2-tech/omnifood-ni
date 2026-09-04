@@ -22,6 +22,9 @@ import { Recipe } from '../../src/modules/inventory/entities/recipe.entity';
 import { RecipeVersion } from '../../src/modules/inventory/entities/recipe-version.entity';
 import { RecipeDetail } from '../../src/modules/inventory/entities/recipe-detail.entity';
 import { UomConversion } from '../../src/modules/inventory/entities/uom-conversion.entity';
+import { Warehouse } from '../../src/modules/inventory/entities/warehouse.entity';
+import { Supplier } from '../../src/modules/inventory/entities/supplier.entity';
+import { InventoryMovement } from '../../src/modules/inventory/entities/inventory-movement.entity';
 import { IndustryTemplate } from '../../src/modules/onboarding/entities/industry-template.entity';
 import { TemplateInsumo } from '../../src/modules/onboarding/entities/template-insumo.entity';
 import { TemplateProduct } from '../../src/modules/onboarding/entities/template-product.entity';
@@ -40,9 +43,15 @@ import { FiscalSetupService } from '../../src/modules/onboarding/services/fiscal
 import { IDENTITY_READINESS_PORT } from '../../src/modules/onboarding/ports/identity-readiness.port';
 import { FISCAL_READINESS_PORT } from '../../src/modules/onboarding/ports/fiscal-readiness.port';
 import { CATALOG_READINESS_PORT } from '../../src/modules/onboarding/ports/catalog-readiness.port';
+import { INVENTORY_READINESS_PORT } from '../../src/modules/onboarding/ports/inventory-readiness.port';
+import { COSTING_READINESS_PORT } from '../../src/modules/onboarding/ports/costing-readiness.port';
+import { OPERATIONS_READINESS_PORT } from '../../src/modules/onboarding/ports/operations-readiness.port';
 import { IdentityReadinessAdapter } from '../../src/modules/onboarding/adapters/identity-readiness.adapter';
 import { FiscalReadinessAdapter } from '../../src/modules/onboarding/adapters/fiscal-readiness.adapter';
 import { CatalogReadinessAdapter } from '../../src/modules/onboarding/adapters/catalog-readiness.adapter';
+import { InventoryReadinessAdapter } from '../../src/modules/onboarding/adapters/inventory-readiness.adapter';
+import { CostingReadinessAdapter } from '../../src/modules/onboarding/adapters/costing-readiness.adapter';
+import { OperationsReadinessAdapter } from '../../src/modules/onboarding/adapters/operations-readiness.adapter';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
 import { PermissionsGuard } from '../../src/modules/identity/guards/permissions.guard';
@@ -105,6 +114,9 @@ async function withReadinessIsolatedSchema(
         ImportStaging,
         OnboardingSession,
         OnboardingIdempotencyRecord,
+        Warehouse,
+        Supplier,
+        InventoryMovement,
       ],
       synchronize: true,
     });
@@ -198,6 +210,26 @@ async function withReadinessIsolatedSchema(
           provide: 'OnboardingIdempotencyRecordRepository',
           useValue: dataSource.getRepository(OnboardingIdempotencyRecord),
         },
+        {
+          provide: 'WarehouseRepository',
+          useValue: dataSource.getRepository(Warehouse),
+        },
+        {
+          provide: 'SupplierRepository',
+          useValue: dataSource.getRepository(Supplier),
+        },
+        {
+          provide: 'InventoryMovementRepository',
+          useValue: dataSource.getRepository(InventoryMovement),
+        },
+        {
+          provide: 'InsumoRepository',
+          useValue: dataSource.getRepository(Insumo),
+        },
+        {
+          provide: 'RecipeVersionRepository',
+          useValue: dataSource.getRepository(RecipeVersion),
+        },
         FiscalSetupService,
         OnboardingSessionService,
         OnboardingReadinessEvaluator,
@@ -213,6 +245,18 @@ async function withReadinessIsolatedSchema(
         {
           provide: CATALOG_READINESS_PORT,
           useClass: CatalogReadinessAdapter,
+        },
+        {
+          provide: INVENTORY_READINESS_PORT,
+          useClass: InventoryReadinessAdapter,
+        },
+        {
+          provide: COSTING_READINESS_PORT,
+          useClass: CostingReadinessAdapter,
+        },
+        {
+          provide: OPERATIONS_READINESS_PORT,
+          useClass: OperationsReadinessAdapter,
         },
       ],
     }).compile();
@@ -459,6 +503,117 @@ describe('Onboarding Readiness & State Reconciler (Real PostgreSQL DB)', () => {
           .expect(200);
 
         expect(mgrReadinessRes.body.saleReady).toBeDefined();
+      },
+    );
+  });
+
+  it('demonstrates ONB1.9A–D Progressive BOH Readiness: tenant reaches SALE_READY with stock=0 and COST_PENDING, then advances to ACTIVATED and subsequent BOH enrichment does not modify activatedAt or revoke ACTIVATED (AC-07, AC-08, AC-40, AC-41)', async () => {
+    await withReadinessIsolatedSchema(
+      'onb_progressive_boh',
+      async ({ app, dataSource, tenantAId, ownerTokenA }) => {
+        // 1. Start session with 0 products
+        await request(app.getHttpServer())
+          .post('/onboarding/session/start')
+          .set('Authorization', `Bearer ${ownerTokenA}`)
+          .send({ source: 'SETUP_CENTER' })
+          .expect(200);
+
+        // 2. Insert sellable product with stock=0 and averageCost=0 (AC-07, AC-08)
+        const productRepo = dataSource.getRepository(Product);
+        await productRepo.save(
+          productRepo.create({
+            id: randomUUID(),
+            tenant_id: tenantAId,
+            name: 'Café Americano BOH Test',
+            uom: 'UN',
+            stock: 0,
+            averageCost: 0,
+            sellPrice: 40.0,
+            is_active: true,
+            product_type: ProductType.SIMPLE,
+          }),
+        );
+
+        // 3. GET /onboarding/readiness: verify saleReady = true, costingReady = false (COST_PENDING), inventoryReady = true
+        const readinessRes = await request(app.getHttpServer())
+          .get('/onboarding/readiness')
+          .set('Authorization', `Bearer ${ownerTokenA}`)
+          .expect(200);
+
+        expect(readinessRes.body.saleReady).toBe(true);
+        expect(readinessRes.body.blockers).toEqual([]);
+        expect(readinessRes.body.inventoryReady).toBe(true);
+        expect(readinessRes.body.costingReady).toBe(false);
+        expect(readinessRes.body.costing.pendingCostCount).toBe(1);
+        expect(readinessRes.body.costing.items[0].state).toBe('COST_PENDING');
+        expect(readinessRes.body.warnings).toContain(
+          'COSTING_PENDING_PROVENANCE',
+        );
+
+        // 4. Progress session to ACTIVATED (monotonically locked)
+        const sessionRepo = dataSource.getRepository(OnboardingSession);
+        const originalActivatedAt = new Date('2026-09-04T12:00:00.000Z');
+        await sessionRepo.update(
+          { tenantId: tenantAId },
+          {
+            lifecycleState: OnboardingLifecycleState.ACTIVATED,
+            activatedAt: originalActivatedAt,
+          },
+        );
+
+        // 5. Subsequent BOH enrichment: Add Warehouse, published Recipe, Supplier, and positive averageCost
+        const warehouseRepo = dataSource.getRepository(Warehouse);
+        await warehouseRepo.save(
+          warehouseRepo.create({
+            id: randomUUID(),
+            tenant_id: tenantAId,
+            name: 'Bodega Principal BOH',
+            is_active: true,
+          }),
+        );
+
+        const supplierRepo = dataSource.getRepository(Supplier);
+        await supplierRepo.save(
+          supplierRepo.create({
+            id: randomUUID(),
+            tenant_id: tenantAId,
+            name: 'Distribuidora Central S.A.',
+            is_active: true,
+          }),
+        );
+
+        // Update product to have confirmed positive cost (AC-41)
+        await productRepo.update(
+          { tenant_id: tenantAId },
+          { averageCost: 18.5 },
+        );
+
+        // 6. GET /onboarding/session: Reconciler runs and confirms:
+        // - inventoryReady = true
+        // - costingReady = true
+        // - operationsReady = true
+        // - lifecycleState REMAINS ACTIVATED
+        // - activatedAt REMAINS UNMODIFIED (AC-40, AC-41)
+        const postBohSessionRes = await request(app.getHttpServer())
+          .get('/onboarding/session')
+          .set('Authorization', `Bearer ${ownerTokenA}`)
+          .expect(200);
+
+        expect(postBohSessionRes.body.session.lifecycleState).toBe(
+          OnboardingLifecycleState.ACTIVATED,
+        );
+        expect(
+          new Date(postBohSessionRes.body.session.activatedAt).toISOString(),
+        ).toBe(originalActivatedAt.toISOString());
+
+        expect(postBohSessionRes.body.readiness.saleReady).toBe(true);
+        expect(postBohSessionRes.body.readiness.inventoryReady).toBe(true);
+        expect(postBohSessionRes.body.readiness.costingReady).toBe(true);
+        expect(postBohSessionRes.body.readiness.operationsReady).toBe(true);
+        expect(postBohSessionRes.body.readiness.costing.knownCostCount).toBe(1);
+        expect(postBohSessionRes.body.readiness.costing.pendingCostCount).toBe(
+          0,
+        );
       },
     );
   });

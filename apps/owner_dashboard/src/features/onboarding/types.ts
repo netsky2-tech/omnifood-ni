@@ -45,10 +45,62 @@ export interface CatalogReadinessResult {
   hasSellableProduct: boolean;
 }
 
+export type CostStateKind = "KNOWN" | "COST_PENDING" | "NOT_APPLICABLE";
+
+export interface ProductCostState {
+  productId: string;
+  productName: string;
+  state: CostStateKind;
+  value?: number;
+  reason?: string;
+  provenance?: string;
+}
+
+export interface InventoryReadinessResult {
+  inventoryReady: boolean;
+  scope: "NONE" | "BASIC" | "ADVANCED";
+  warehouseCount: number;
+  trackedProductCount: number;
+  trackedInsumoCount: number;
+  itemsWithStockCount: number;
+  hasDefaultWarehouse: boolean;
+  notes?: string[];
+}
+
+export interface CostingReadinessResult {
+  costingReady: boolean;
+  totalProducts: number;
+  knownCostCount: number;
+  pendingCostCount: number;
+  notApplicableCount: number;
+  items?: ProductCostState[];
+}
+
+export interface OperationsReadinessDetails {
+  hasAdditionalStaff: boolean;
+  hasPublishedRecipes: boolean;
+  hasSuppliers: boolean;
+  hasCategories: boolean;
+}
+
+export interface OperationsReadinessResult {
+  operationsReady: boolean;
+  staffCount: number;
+  additionalStaffCount: number;
+  publishedRecipeCount: number;
+  supplierCount: number;
+  categoryCount: number;
+  details?: OperationsReadinessDetails;
+  notes?: string[];
+}
+
 export interface OnboardingReadinessSnapshot {
   identity: IdentityReadinessResult;
   fiscal: FiscalReadinessResult;
   catalog: CatalogReadinessResult;
+  inventory?: InventoryReadinessResult;
+  costing?: CostingReadinessResult;
+  operations?: OperationsReadinessResult;
   saleReady: boolean;
   inventoryReady: boolean;
   costingReady: boolean;

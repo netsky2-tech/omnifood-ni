@@ -12,12 +12,27 @@ import {
   CATALOG_READINESS_PORT,
   CatalogReadinessPort,
 } from '../ports/catalog-readiness.port';
+import {
+  INVENTORY_READINESS_PORT,
+  InventoryReadinessPort,
+} from '../ports/inventory-readiness.port';
+import {
+  COSTING_READINESS_PORT,
+  CostingReadinessPort,
+} from '../ports/costing-readiness.port';
+import {
+  OPERATIONS_READINESS_PORT,
+  OperationsReadinessPort,
+} from '../ports/operations-readiness.port';
 
 describe('OnboardingReadinessEvaluator (Unit)', () => {
   let evaluator: OnboardingReadinessEvaluator;
   let identityPort: jest.Mocked<IdentityReadinessPort>;
   let fiscalPort: jest.Mocked<FiscalReadinessPort>;
   let catalogPort: jest.Mocked<CatalogReadinessPort>;
+  let inventoryPort: jest.Mocked<InventoryReadinessPort>;
+  let costingPort: jest.Mocked<CostingReadinessPort>;
+  let operationsPort: jest.Mocked<OperationsReadinessPort>;
 
   beforeEach(async () => {
     identityPort = {
@@ -29,6 +44,15 @@ describe('OnboardingReadinessEvaluator (Unit)', () => {
     catalogPort = {
       evaluateCatalogReadiness: jest.fn(),
     };
+    inventoryPort = {
+      evaluateInventoryReadiness: jest.fn(),
+    };
+    costingPort = {
+      evaluateCostingReadiness: jest.fn(),
+    };
+    operationsPort = {
+      evaluateOperationsReadiness: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -36,6 +60,9 @@ describe('OnboardingReadinessEvaluator (Unit)', () => {
         { provide: IDENTITY_READINESS_PORT, useValue: identityPort },
         { provide: FISCAL_READINESS_PORT, useValue: fiscalPort },
         { provide: CATALOG_READINESS_PORT, useValue: catalogPort },
+        { provide: INVENTORY_READINESS_PORT, useValue: inventoryPort },
+        { provide: COSTING_READINESS_PORT, useValue: costingPort },
+        { provide: OPERATIONS_READINESS_PORT, useValue: operationsPort },
       ],
     }).compile();
 
@@ -44,7 +71,7 @@ describe('OnboardingReadinessEvaluator (Unit)', () => {
     );
   });
 
-  it('returns saleReady = true when identity, fiscal and at least 1 sellable product exist', async () => {
+  it('returns saleReady = true when identity, fiscal and at least 1 sellable product exist, even if BOH has pending cost and no physical stock (AC-07, AC-08)', async () => {
     identityPort.evaluateIdentityReadiness.mockResolvedValue({
       tenantExists: true,
       initialOwnerExists: true,
@@ -61,11 +88,56 @@ describe('OnboardingReadinessEvaluator (Unit)', () => {
       sellableProductCount: 2,
       hasSellableProduct: true,
     });
+    inventoryPort.evaluateInventoryReadiness.mockResolvedValue({
+      inventoryReady: true,
+      scope: 'BASIC',
+      warehouseCount: 1,
+      trackedProductCount: 2,
+      trackedInsumoCount: 0,
+      itemsWithStockCount: 0,
+      hasDefaultWarehouse: true,
+      notes: ['INITIAL_STOCK_NOT_LOADED_OPTIONAL'],
+    });
+    costingPort.evaluateCostingReadiness.mockResolvedValue({
+      costingReady: false,
+      totalProducts: 2,
+      knownCostCount: 0,
+      pendingCostCount: 2,
+      notApplicableCount: 0,
+      items: [
+        {
+          productId: 'prod-1',
+          productName: 'Plato del Día',
+          state: 'COST_PENDING',
+          reason: 'ZERO_COST_WITHOUT_INVENTORY_PROVENANCE',
+          provenance: 'NONE',
+        },
+      ],
+    });
+    operationsPort.evaluateOperationsReadiness.mockResolvedValue({
+      operationsReady: false,
+      staffCount: 1,
+      additionalStaffCount: 0,
+      publishedRecipeCount: 0,
+      supplierCount: 0,
+      categoryCount: 0,
+      details: {
+        hasAdditionalStaff: false,
+        hasPublishedRecipes: false,
+        hasSuppliers: false,
+        hasCategories: false,
+      },
+      notes: [],
+    });
 
     const snapshot = await evaluator.evaluate('tenant-123');
 
     expect(snapshot.saleReady).toBe(true);
     expect(snapshot.blockers).toEqual([]);
+    expect(snapshot.inventoryReady).toBe(true);
+    expect(snapshot.costingReady).toBe(false);
+    expect(snapshot.operationsReady).toBe(false);
+    expect(snapshot.warnings).toContain('COSTING_PENDING_PROVENANCE');
     expect(snapshot.identity.tenantContextValid).toBe(true);
     expect(snapshot.fiscal.minimumConfigurationValid).toBe(true);
     expect(snapshot.catalog.sellableProductCount).toBe(2);
@@ -84,6 +156,39 @@ describe('OnboardingReadinessEvaluator (Unit)', () => {
     catalogPort.evaluateCatalogReadiness.mockResolvedValue({
       sellableProductCount: 0,
       hasSellableProduct: false,
+    });
+    inventoryPort.evaluateInventoryReadiness.mockResolvedValue({
+      inventoryReady: false,
+      scope: 'NONE',
+      warehouseCount: 0,
+      trackedProductCount: 0,
+      trackedInsumoCount: 0,
+      itemsWithStockCount: 0,
+      hasDefaultWarehouse: false,
+      notes: [],
+    });
+    costingPort.evaluateCostingReadiness.mockResolvedValue({
+      costingReady: false,
+      totalProducts: 0,
+      knownCostCount: 0,
+      pendingCostCount: 0,
+      notApplicableCount: 0,
+      items: [],
+    });
+    operationsPort.evaluateOperationsReadiness.mockResolvedValue({
+      operationsReady: false,
+      staffCount: 1,
+      additionalStaffCount: 0,
+      publishedRecipeCount: 0,
+      supplierCount: 0,
+      categoryCount: 0,
+      details: {
+        hasAdditionalStaff: false,
+        hasPublishedRecipes: false,
+        hasSuppliers: false,
+        hasCategories: false,
+      },
+      notes: [],
     });
 
     const snapshot = await evaluator.evaluate('tenant-123');
@@ -105,6 +210,39 @@ describe('OnboardingReadinessEvaluator (Unit)', () => {
     catalogPort.evaluateCatalogReadiness.mockResolvedValue({
       sellableProductCount: 5,
       hasSellableProduct: true,
+    });
+    inventoryPort.evaluateInventoryReadiness.mockResolvedValue({
+      inventoryReady: true,
+      scope: 'BASIC',
+      warehouseCount: 1,
+      trackedProductCount: 5,
+      trackedInsumoCount: 0,
+      itemsWithStockCount: 0,
+      hasDefaultWarehouse: true,
+      notes: [],
+    });
+    costingPort.evaluateCostingReadiness.mockResolvedValue({
+      costingReady: true,
+      totalProducts: 5,
+      knownCostCount: 5,
+      pendingCostCount: 0,
+      notApplicableCount: 0,
+      items: [],
+    });
+    operationsPort.evaluateOperationsReadiness.mockResolvedValue({
+      operationsReady: true,
+      staffCount: 2,
+      additionalStaffCount: 1,
+      publishedRecipeCount: 0,
+      supplierCount: 1,
+      categoryCount: 2,
+      details: {
+        hasAdditionalStaff: true,
+        hasPublishedRecipes: false,
+        hasSuppliers: true,
+        hasCategories: true,
+      },
+      notes: [],
     });
 
     const snapshot = await evaluator.evaluate('tenant-123');

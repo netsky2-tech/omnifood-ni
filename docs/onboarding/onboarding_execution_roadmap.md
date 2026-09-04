@@ -1543,9 +1543,9 @@ No modifica TTFSS.
 
 ## Gate de salida
 
-- [ ] Tenant ACTIVATED puede permanecer `COST_PENDING` y vender.
-- [ ] Avanzar a Inventory/Costing/Operations Ready no modifica `activatedAt`.
-- [ ] Costo desconocido nunca se presenta como cero confirmado.
+- [x] Tenant ACTIVATED puede permanecer `COST_PENDING` y vender (verificado en PR-ONB-22).
+- [x] Avanzar a Inventory/Costing/Operations Ready no modifica `activatedAt` (verificado en PR-ONB-22).
+- [x] Costo desconocido nunca se presenta como cero confirmado (verificado en PR-ONB-22).
 - [ ] `STEP_SKIPPED` solo aplica a contenido opcional/postergable.
 - [ ] Telemetry no controla lifecycle.
 - [ ] Telemetry no contiene raw CSV/secretos.
@@ -1554,8 +1554,8 @@ No modifica TTFSS.
 
 ## Evidencia mínima
 
-- readiness adapter unit/integration tests;
-- activated + BOH incomplete E2E;
+- readiness adapter unit/integration tests (ONB1.9_M7_PR22_EVIDENCE.md);
+- activated + BOH incomplete E2E (ONB1.9_M7_PR22_EVIDENCE.md);
 - telemetry schema/PII review;
 - audit correlation test;
 - analytics event fixture.

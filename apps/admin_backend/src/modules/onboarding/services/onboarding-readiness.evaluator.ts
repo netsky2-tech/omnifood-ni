@@ -14,11 +14,29 @@ import {
   CatalogReadinessPort,
   CatalogReadinessResult,
 } from '../ports/catalog-readiness.port';
+import {
+  INVENTORY_READINESS_PORT,
+  InventoryReadinessPort,
+  InventoryReadinessResult,
+} from '../ports/inventory-readiness.port';
+import {
+  COSTING_READINESS_PORT,
+  CostingReadinessPort,
+  CostingReadinessResult,
+} from '../ports/costing-readiness.port';
+import {
+  OPERATIONS_READINESS_PORT,
+  OperationsReadinessPort,
+  OperationsReadinessResult,
+} from '../ports/operations-readiness.port';
 
 export interface OnboardingReadinessSnapshot {
   identity: IdentityReadinessResult;
   fiscal: FiscalReadinessResult;
   catalog: CatalogReadinessResult;
+  inventory?: InventoryReadinessResult;
+  costing?: CostingReadinessResult;
+  operations?: OperationsReadinessResult;
   saleReady: boolean;
   inventoryReady: boolean;
   costingReady: boolean;
@@ -37,14 +55,24 @@ export class OnboardingReadinessEvaluator {
     private readonly fiscalPort: FiscalReadinessPort,
     @Inject(CATALOG_READINESS_PORT)
     private readonly catalogPort: CatalogReadinessPort,
+    @Inject(INVENTORY_READINESS_PORT)
+    private readonly inventoryPort: InventoryReadinessPort,
+    @Inject(COSTING_READINESS_PORT)
+    private readonly costingPort: CostingReadinessPort,
+    @Inject(OPERATIONS_READINESS_PORT)
+    private readonly operationsPort: OperationsReadinessPort,
   ) {}
 
   async evaluate(tenantId: string): Promise<OnboardingReadinessSnapshot> {
-    const [identity, fiscal, catalog] = await Promise.all([
-      this.identityPort.evaluateIdentityReadiness(tenantId),
-      this.fiscalPort.evaluateFiscalReadiness(tenantId),
-      this.catalogPort.evaluateCatalogReadiness(tenantId),
-    ]);
+    const [identity, fiscal, catalog, inventory, costing, operations] =
+      await Promise.all([
+        this.identityPort.evaluateIdentityReadiness(tenantId),
+        this.fiscalPort.evaluateFiscalReadiness(tenantId),
+        this.catalogPort.evaluateCatalogReadiness(tenantId),
+        this.inventoryPort.evaluateInventoryReadiness(tenantId),
+        this.costingPort.evaluateCostingReadiness(tenantId),
+        this.operationsPort.evaluateOperationsReadiness(tenantId),
+      ]);
 
     const blockers: string[] = [];
     const warnings: string[] = [];
@@ -62,16 +90,27 @@ export class OnboardingReadinessEvaluator {
       blockers.push('CATALOG_NO_SELLABLE_PRODUCTS');
     }
 
+    // AC-07, AC-08, AC-40, AC-41: BOH deficiencies produce non-blocking warnings, NEVER blockers
+    if (costing.pendingCostCount > 0) {
+      warnings.push('COSTING_PENDING_PROVENANCE');
+    }
+    if (!inventory.inventoryReady) {
+      warnings.push('INVENTORY_NOT_INITIALIZED_OPTIONAL');
+    }
+
     const saleReady = blockers.length === 0;
 
     return {
       identity,
       fiscal,
       catalog,
+      inventory,
+      costing,
+      operations,
       saleReady,
-      inventoryReady: false,
-      costingReady: false,
-      operationsReady: false,
+      inventoryReady: inventory.inventoryReady,
+      costingReady: costing.costingReady,
+      operationsReady: operations.operationsReady,
       blockers,
       warnings,
       evaluatedAt: new Date(),
