@@ -76,7 +76,7 @@ class SalesRepositoryImpl implements SalesRepository {
       number: finalNumber,
       terminalId: terminalId,
       sourceSequence: sourceSequence,
-      idempotencyKey: 'sale:$terminalId:${invoice.id}',
+      idempotencyKey: invoice.idempotencyKey ?? 'sale:$terminalId:${invoice.id}',
       payloadHash: payloadHash,
     );
 

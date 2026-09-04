@@ -160,13 +160,15 @@ class _$AppDatabase extends AppDatabase {
 
   FirstSuccessfulSaleClaimDao? _firstSuccessfulSaleClaimDaoInstance;
 
+  ActivationOutboxDao? _activationOutboxDaoInstance;
+
   Future<sqflite.Database> open(
     String path,
     List<Migration> migrations, [
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 45,
+      version: 46,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -274,6 +276,8 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `first_successful_sale_claims` (`tenant_id` TEXT NOT NULL, `terminal_id` TEXT NOT NULL, `ticket_id` TEXT NOT NULL, `activation_attempt_id` TEXT, `device_occurred_at` TEXT NOT NULL, `anchored_occurred_at` TEXT, `clock_confidence` TEXT NOT NULL, `server_time_anchor_id` TEXT, `pos_build` TEXT, `outbox_event_id` TEXT NOT NULL, `created_at_local` TEXT NOT NULL, PRIMARY KEY (`tenant_id`))');
         await database.execute(
+            'CREATE TABLE IF NOT EXISTS `activation_outbox_envelopes` (`id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `activation_attempt_id` TEXT NOT NULL, `event_type` TEXT NOT NULL, `idempotency_key` TEXT NOT NULL, `payload_json` TEXT NOT NULL, `payload_hash` TEXT NOT NULL, `sync_status` TEXT NOT NULL, `created_at` TEXT NOT NULL, `synced_at` TEXT, `last_error` TEXT, PRIMARY KEY (`id`))');
+        await database.execute(
             'CREATE UNIQUE INDEX `index_audit_logs_tenant_id_device_id_user_id_sequence_no` ON `audit_logs` (`tenant_id`, `device_id`, `user_id`, `sequence_no`)');
         await database.execute(
             'CREATE UNIQUE INDEX `idx_movement_sync_state_stream_sequence` ON `inventory_movement_sync_state` (`terminal_id`, `flow_type`, `local_sequence`)');
@@ -331,6 +335,10 @@ class _$AppDatabase extends AppDatabase {
             'CREATE UNIQUE INDEX `index_first_successful_sale_claims_ticket_id` ON `first_successful_sale_claims` (`ticket_id`)');
         await database.execute(
             'CREATE UNIQUE INDEX `index_first_successful_sale_claims_outbox_event_id` ON `first_successful_sale_claims` (`outbox_event_id`)');
+        await database.execute(
+            'CREATE UNIQUE INDEX `index_activation_outbox_envelopes_tenant_id_idempotency_key` ON `activation_outbox_envelopes` (`tenant_id`, `idempotency_key`)');
+        await database.execute(
+            'CREATE INDEX `index_activation_outbox_envelopes_tenant_id_activation_attempt_id` ON `activation_outbox_envelopes` (`tenant_id`, `activation_attempt_id`)');
 
         await callback?.onCreate?.call(database, version);
       },
@@ -582,6 +590,12 @@ class _$AppDatabase extends AppDatabase {
   FirstSuccessfulSaleClaimDao get firstSuccessfulSaleClaimDao {
     return _firstSuccessfulSaleClaimDaoInstance ??=
         _$FirstSuccessfulSaleClaimDao(database, changeListener);
+  }
+
+  @override
+  ActivationOutboxDao get activationOutboxDao {
+    return _activationOutboxDaoInstance ??=
+        _$ActivationOutboxDao(database, changeListener);
   }
 }
 
@@ -3278,6 +3292,41 @@ class _$InvoiceDao extends InvoiceDao {
             _sqliteVariablesForIds +
             ')',
         arguments: [status, ...ids]);
+  }
+
+  @override
+  Future<InvoiceEntity?> getInvoiceByIdempotencyKey(String key) async {
+    return _queryAdapter.query(
+        'SELECT * FROM invoices WHERE idempotency_key = ?1',
+        mapper: (Map<String, Object?> row) => InvoiceEntity(
+            id: row['id'] as String,
+            number: row['invoice_number'] as String,
+            createdAt: row['created_at'] as int,
+            userId: row['user_id'] as String,
+            subtotal: row['subtotal'] as double,
+            totalTax: row['total_tax'] as double,
+            total: row['total'] as double,
+            isCanceled: (row['is_canceled'] as int) != 0,
+            voidReason: row['void_reason'] as String?,
+            syncStatus: row['sync_status'] as String,
+            paymentStatus: row['payment_status'] as String,
+            customerId: row['customer_id'] as String?,
+            globalTaxOverride: (row['global_tax_override'] as int) != 0,
+            type: row['type'] as String,
+            relatedInvoiceId: row['related_invoice_id'] as String?,
+            originInvoiceId: row['origin_invoice_id'] as String?,
+            refundReasonPolicy: row['refund_reason_policy'] as String?,
+            refundReasonCode: row['refund_reason_code'] as String?,
+            authorizedByUserId: row['authorized_by_user_id'] as String?,
+            authorizedByRole: row['authorized_by_role'] as String?,
+            terminalId: row['terminal_id'] as String?,
+            sourceSequence: row['source_sequence'] as int?,
+            idempotencyKey: row['idempotency_key'] as String?,
+            payloadHash: row['payload_hash'] as String?,
+            bcnOfficialRate: row['bcn_official_rate'] as double,
+            commercialRate: row['commercial_rate'] as double,
+            totalUsd: row['total_usd'] as double),
+        arguments: [key]);
   }
 
   @override
@@ -6168,5 +6217,169 @@ class _$FirstSuccessfulSaleClaimDao extends FirstSuccessfulSaleClaimDao {
   Future<int> insertClaim(FirstSuccessfulSaleClaimEntity claim) {
     return _firstSuccessfulSaleClaimEntityInsertionAdapter.insertAndReturnId(
         claim, OnConflictStrategy.ignore);
+  }
+}
+
+class _$ActivationOutboxDao extends ActivationOutboxDao {
+  _$ActivationOutboxDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _activationOutboxEnvelopeEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'activation_outbox_envelopes',
+            (ActivationOutboxEnvelopeEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'tenant_id': item.tenantId,
+                  'activation_attempt_id': item.activationAttemptId,
+                  'event_type': item.eventType,
+                  'idempotency_key': item.idempotencyKey,
+                  'payload_json': item.payloadJson,
+                  'payload_hash': item.payloadHash,
+                  'sync_status': item.syncStatus,
+                  'created_at': item.createdAt,
+                  'synced_at': item.syncedAt,
+                  'last_error': item.lastError
+                }),
+        _activationOutboxEnvelopeEntityUpdateAdapter = UpdateAdapter(
+            database,
+            'activation_outbox_envelopes',
+            ['id'],
+            (ActivationOutboxEnvelopeEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'tenant_id': item.tenantId,
+                  'activation_attempt_id': item.activationAttemptId,
+                  'event_type': item.eventType,
+                  'idempotency_key': item.idempotencyKey,
+                  'payload_json': item.payloadJson,
+                  'payload_hash': item.payloadHash,
+                  'sync_status': item.syncStatus,
+                  'created_at': item.createdAt,
+                  'synced_at': item.syncedAt,
+                  'last_error': item.lastError
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<ActivationOutboxEnvelopeEntity>
+      _activationOutboxEnvelopeEntityInsertionAdapter;
+
+  final UpdateAdapter<ActivationOutboxEnvelopeEntity>
+      _activationOutboxEnvelopeEntityUpdateAdapter;
+
+  @override
+  Future<ActivationOutboxEnvelopeEntity?> getEnvelopeById(String id) async {
+    return _queryAdapter.query(
+        'SELECT * FROM activation_outbox_envelopes WHERE id = ?1',
+        mapper: (Map<String, Object?> row) => ActivationOutboxEnvelopeEntity(
+            id: row['id'] as String,
+            tenantId: row['tenant_id'] as String,
+            activationAttemptId: row['activation_attempt_id'] as String,
+            eventType: row['event_type'] as String,
+            idempotencyKey: row['idempotency_key'] as String,
+            payloadJson: row['payload_json'] as String,
+            payloadHash: row['payload_hash'] as String,
+            syncStatus: row['sync_status'] as String,
+            createdAt: row['created_at'] as String,
+            syncedAt: row['synced_at'] as String?,
+            lastError: row['last_error'] as String?),
+        arguments: [id]);
+  }
+
+  @override
+  Future<ActivationOutboxEnvelopeEntity?> getEnvelopeByIdempotencyKey(
+    String tenantId,
+    String idempotencyKey,
+  ) async {
+    return _queryAdapter.query(
+        'SELECT * FROM activation_outbox_envelopes WHERE tenant_id = ?1 AND idempotency_key = ?2',
+        mapper: (Map<String, Object?> row) => ActivationOutboxEnvelopeEntity(id: row['id'] as String, tenantId: row['tenant_id'] as String, activationAttemptId: row['activation_attempt_id'] as String, eventType: row['event_type'] as String, idempotencyKey: row['idempotency_key'] as String, payloadJson: row['payload_json'] as String, payloadHash: row['payload_hash'] as String, syncStatus: row['sync_status'] as String, createdAt: row['created_at'] as String, syncedAt: row['synced_at'] as String?, lastError: row['last_error'] as String?),
+        arguments: [tenantId, idempotencyKey]);
+  }
+
+  @override
+  Future<List<ActivationOutboxEnvelopeEntity>> getEnvelopesByAttempt(
+    String tenantId,
+    String attemptId,
+  ) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM activation_outbox_envelopes WHERE tenant_id = ?1 AND activation_attempt_id = ?2',
+        mapper: (Map<String, Object?> row) => ActivationOutboxEnvelopeEntity(id: row['id'] as String, tenantId: row['tenant_id'] as String, activationAttemptId: row['activation_attempt_id'] as String, eventType: row['event_type'] as String, idempotencyKey: row['idempotency_key'] as String, payloadJson: row['payload_json'] as String, payloadHash: row['payload_hash'] as String, syncStatus: row['sync_status'] as String, createdAt: row['created_at'] as String, syncedAt: row['synced_at'] as String?, lastError: row['last_error'] as String?),
+        arguments: [tenantId, attemptId]);
+  }
+
+  @override
+  Future<List<ActivationOutboxEnvelopeEntity>> getPendingEnvelopes(
+      String tenantId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM activation_outbox_envelopes WHERE tenant_id = ?1 AND sync_status = \'PENDING\' ORDER BY created_at ASC',
+        mapper: (Map<String, Object?> row) => ActivationOutboxEnvelopeEntity(id: row['id'] as String, tenantId: row['tenant_id'] as String, activationAttemptId: row['activation_attempt_id'] as String, eventType: row['event_type'] as String, idempotencyKey: row['idempotency_key'] as String, payloadJson: row['payload_json'] as String, payloadHash: row['payload_hash'] as String, syncStatus: row['sync_status'] as String, createdAt: row['created_at'] as String, syncedAt: row['synced_at'] as String?, lastError: row['last_error'] as String?),
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<void> deleteByAttempt(
+    String tenantId,
+    String attemptId,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM activation_outbox_envelopes WHERE tenant_id = ?1 AND activation_attempt_id = ?2',
+        arguments: [tenantId, attemptId]);
+  }
+
+  @override
+  Future<List<ActivationOutboxEnvelopeEntity>> getAll() async {
+    return _queryAdapter.queryList('SELECT * FROM activation_outbox_envelopes',
+        mapper: (Map<String, Object?> row) => ActivationOutboxEnvelopeEntity(
+            id: row['id'] as String,
+            tenantId: row['tenant_id'] as String,
+            activationAttemptId: row['activation_attempt_id'] as String,
+            eventType: row['event_type'] as String,
+            idempotencyKey: row['idempotency_key'] as String,
+            payloadJson: row['payload_json'] as String,
+            payloadHash: row['payload_hash'] as String,
+            syncStatus: row['sync_status'] as String,
+            createdAt: row['created_at'] as String,
+            syncedAt: row['synced_at'] as String?,
+            lastError: row['last_error'] as String?));
+  }
+
+  @override
+  Future<void> insertEnvelope(ActivationOutboxEnvelopeEntity envelope) async {
+    await _activationOutboxEnvelopeEntityInsertionAdapter.insert(
+        envelope, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> insertEnvelopes(
+      List<ActivationOutboxEnvelopeEntity> envelopes) async {
+    await _activationOutboxEnvelopeEntityInsertionAdapter.insertList(
+        envelopes, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> updateEnvelope(ActivationOutboxEnvelopeEntity envelope) async {
+    await _activationOutboxEnvelopeEntityUpdateAdapter.update(
+        envelope, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> persistOutboxBatch(
+      List<ActivationOutboxEnvelopeEntity> envelopes) async {
+    if (database is sqflite.Transaction) {
+      await super.persistOutboxBatch(envelopes);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.activationOutboxDao
+            .persistOutboxBatch(envelopes);
+      });
+    }
   }
 }

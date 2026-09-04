@@ -32,4 +32,7 @@ abstract class InvoiceDao {
 
   @Query('UPDATE invoices SET sync_status = :status WHERE id IN (:ids)')
   Future<void> updateSyncStatusForIds(List<String> ids, String status);
+
+  @Query('SELECT * FROM invoices WHERE idempotency_key = :key')
+  Future<InvoiceEntity?> getInvoiceByIdempotencyKey(String key);
 }

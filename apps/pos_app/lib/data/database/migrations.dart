@@ -1872,6 +1872,34 @@ final migration44_45 = Migration(44, 45, (database) async {
   ''');
 });
 
+final migration45_46 = Migration(45, 46, (database) async {
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS activation_outbox_envelopes (
+      id TEXT NOT NULL PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      activation_attempt_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      idempotency_key TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      payload_hash TEXT NOT NULL,
+      sync_status TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      synced_at TEXT,
+      last_error TEXT
+    )
+  ''');
+
+  await database.execute('''
+    CREATE UNIQUE INDEX IF NOT EXISTS index_activation_outbox_envelopes_tenant_id_idempotency_key
+    ON activation_outbox_envelopes (tenant_id, idempotency_key)
+  ''');
+
+  await database.execute('''
+    CREATE INDEX IF NOT EXISTS index_activation_outbox_envelopes_tenant_id_activation_attempt_id
+    ON activation_outbox_envelopes (tenant_id, activation_attempt_id)
+  ''');
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -1908,4 +1936,5 @@ final allMigrations = [
   migration42_43,
   migration43_44,
   migration44_45,
+  migration45_46,
 ];
