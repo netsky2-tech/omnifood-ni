@@ -15,6 +15,9 @@ import { LegacyOnboardingMigrationReceipt } from './entities/legacy-migration-re
 import { ProductImportSession } from './entities/product-import-session.entity';
 import { LegacyImportIntegrityReport } from './entities/legacy-import-integrity-report.entity';
 import { FiscalConfigRevision } from './entities/fiscal-config-revision.entity';
+import { ActivationAttempt } from './entities/activation-attempt.entity';
+import { ActivationCheckResult } from './entities/activation-check-result.entity';
+import { ActivationFollowUp } from './entities/activation-follow-up.entity';
 import { Tenant } from '../tenant/entities/tenant.entity';
 import { User } from '../identity/entities/user.entity';
 import { SystemParametersConfig } from '../inventory/entities/system-parameters-config.entity';
@@ -42,6 +45,8 @@ import { OnboardingIdempotencyCoordinator } from './services/onboarding-idempote
 import { OnboardingSessionController } from './controllers/onboarding-session.controller';
 import { OnboardingCatalogService } from './services/onboarding-catalog.service';
 import { OnboardingCatalogController } from './controllers/onboarding-catalog.controller';
+import { ActivationService } from './services/activation.service';
+import { ActivationController } from './controllers/activation.controller';
 import { IDENTITY_READINESS_PORT } from './ports/identity-readiness.port';
 import { FISCAL_READINESS_PORT } from './ports/fiscal-readiness.port';
 import { CATALOG_READINESS_PORT } from './ports/catalog-readiness.port';
@@ -78,6 +83,9 @@ export const getRequiredOnboardingJwtSecret = (
       ProductImportSession,
       LegacyImportIntegrityReport,
       FiscalConfigRevision,
+      ActivationAttempt,
+      ActivationCheckResult,
+      ActivationFollowUp,
       Tenant,
       User,
       SystemParametersConfig,
@@ -95,6 +103,7 @@ export const getRequiredOnboardingJwtSecret = (
     ImportStagingController,
     OnboardingSessionController,
     OnboardingCatalogController,
+    ActivationController,
   ],
   providers: [
     IndustryTemplateService,
@@ -110,6 +119,7 @@ export const getRequiredOnboardingJwtSecret = (
     OnboardingStateReconciler,
     OnboardingIdempotencyCoordinator,
     OnboardingCatalogService,
+    ActivationService,
     {
       provide: IDENTITY_READINESS_PORT,
       useClass: IdentityReadinessAdapter,
@@ -137,6 +147,7 @@ export const getRequiredOnboardingJwtSecret = (
     OnboardingStateReconciler,
     OnboardingIdempotencyCoordinator,
     OnboardingCatalogService,
+    ActivationService,
     TypeOrmModule,
   ],
 })
