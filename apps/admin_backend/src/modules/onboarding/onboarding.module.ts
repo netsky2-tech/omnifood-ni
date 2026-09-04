@@ -54,6 +54,7 @@ import { IdentityReadinessAdapter } from './adapters/identity-readiness.adapter'
 import { FiscalReadinessAdapter } from './adapters/fiscal-readiness.adapter';
 import { CatalogReadinessAdapter } from './adapters/catalog-readiness.adapter';
 import { IdentityModule } from '../identity/identity.module';
+import { AuditModule } from '../audit/audit.module';
 
 export const getRequiredOnboardingJwtSecret = (
   configService: ConfigService,
@@ -69,6 +70,7 @@ export const getRequiredOnboardingJwtSecret = (
   imports: [
     ConfigModule,
     IdentityModule,
+    AuditModule,
     TypeOrmModule.forFeature([
       IndustryTemplate,
       TemplateInsumo,

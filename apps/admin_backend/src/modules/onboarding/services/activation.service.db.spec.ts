@@ -21,6 +21,9 @@ import {
   ActivationFollowUp,
   ActivationFollowUpStatus,
 } from '../entities/activation-follow-up.entity';
+import { ChangeLog } from '../../audit/entities/change-log.entity';
+import { ChangeLogService } from '../../audit/change-log.service';
+import { SupportOverrideAction } from '../dto/activation.dto';
 import { ActivationService } from './activation.service';
 import { FiscalConfigVersionService } from './fiscal-config-version.service';
 import { OnboardingCatalogService } from './onboarding-catalog.service';
@@ -79,6 +82,7 @@ async function withIsolatedSchema(
         ActivationAttempt,
         ActivationCheckResult,
         ActivationFollowUp,
+        ChangeLog,
       ],
       synchronize: true,
     });
@@ -185,6 +189,10 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
         dummyReconciler,
       );
 
+      const changeLogService = new ChangeLogService(
+        dataSource.getRepository(ChangeLog),
+      );
+
       const activationService = new ActivationService(
         attemptRepo,
         checkRepo,
@@ -194,6 +202,7 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
         catalogService,
         dummyReadiness,
         dataSource,
+        changeLogService,
       );
 
       // 1. Start activation
@@ -420,6 +429,10 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
         dummyReconciler,
       );
 
+      const changeLogService = new ChangeLogService(
+        dataSource.getRepository(ChangeLog),
+      );
+
       const activationService = new ActivationService(
         attemptRepo,
         checkRepo,
@@ -429,6 +442,7 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
         catalogService,
         dummyReadiness,
         dataSource,
+        changeLogService,
       );
 
       // --- Scenario 1: FAIL execution ---
@@ -562,6 +576,272 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
       expect(sessionFinal?.activatedAt?.getTime()).toBe(
         sessionAfterWarn?.activatedAt?.getTime(),
       );
+    });
+  });
+
+  it('ONB1.7D–F: executes background convergence reconciliation, support overrides, and diagnostic audit in real PostgreSQL', async () => {
+    await withIsolatedSchema('onb_act_hardening', async ({ dataSource }) => {
+      const tenantRepo = dataSource.getRepository(Tenant);
+      const paramRepo = dataSource.getRepository(SystemParametersConfig);
+      const revRepo = dataSource.getRepository(FiscalConfigRevision);
+      const prodRepo = dataSource.getRepository(Product);
+      const sessionRepo = dataSource.getRepository(OnboardingSession);
+      const attemptRepo = dataSource.getRepository(ActivationAttempt);
+      const checkRepo = dataSource.getRepository(ActivationCheckResult);
+      const followUpRepo = dataSource.getRepository(ActivationFollowUp);
+      const changeLogRepo = dataSource.getRepository(ChangeLog);
+
+      const tenantId = randomUUID();
+      await tenantRepo.save({
+        id: tenantId,
+        name: 'Restaurante Convergencia Real',
+        ruc: 'J0310000009999',
+        is_active: true,
+      });
+
+      await paramRepo.save([
+        {
+          tenant_id: tenantId,
+          paramKey: 'FISCAL_REGIME',
+          paramValue: 'REGIMEN_GENERAL',
+          isActive: true,
+        },
+      ]);
+
+      const product = await prodRepo.save({
+        tenant_id: tenantId,
+        name: 'Plato Verificacion Hardening',
+        sellPrice: 120,
+        uom: 'UN',
+        product_type: ProductType.SIMPLE,
+        is_active: true,
+        stock: 0,
+        averageCost: 0,
+      });
+
+      const initialSession = await sessionRepo.save({
+        tenantId,
+        lifecycleState: OnboardingLifecycleState.SALE_READY,
+        saleReadyFirstAt: new Date(),
+        measurementEligible: true,
+        legacyBaseline: false,
+        optimisticVersion: 1,
+      });
+
+      const fiscalService = new FiscalConfigVersionService(
+        revRepo,
+        tenantRepo,
+        paramRepo,
+        dataSource,
+      );
+      const dummyReadiness = {
+        evaluate: jest.fn().mockResolvedValue({
+          saleReady: true,
+          blockers: [],
+          warnings: [],
+        }),
+      } as unknown as OnboardingReadinessEvaluator;
+      const dummyReconciler = {
+        reconcile: jest.fn().mockResolvedValue(initialSession),
+      } as unknown as OnboardingStateReconciler;
+      const dummySessionService = {
+        ensureOnboardingStarted: jest.fn().mockResolvedValue(initialSession),
+      } as unknown as OnboardingSessionService;
+
+      const catalogService = new OnboardingCatalogService(
+        prodRepo,
+        dummySessionService,
+        dummyReadiness,
+        dummyReconciler,
+      );
+
+      const changeLogService = new ChangeLogService(changeLogRepo);
+
+      const activationService = new ActivationService(
+        attemptRepo,
+        checkRepo,
+        followUpRepo,
+        sessionRepo,
+        fiscalService,
+        catalogService,
+        dummyReadiness,
+        dataSource,
+        changeLogService,
+      );
+
+      // 1. Start activation and verify ChangeLog in PostgreSQL
+      const attempt = await activationService.startActivation(
+        tenantId,
+        { candidateTerminalId: 'term-hard-01' },
+        'user-operator-1',
+      );
+
+      const startLogs = await changeLogRepo.find({
+        where: {
+          tenant_id: tenantId,
+          action: 'ONBOARDING_ACTIVATION_ATTEMPT_STARTED',
+        },
+      });
+      expect(startLogs.length).toBe(1);
+      expect(startLogs[0].target_id).toBe(attempt.id);
+
+      const devicePrincipal = {
+        tenantId,
+        terminalId: 'term-hard-01',
+      };
+
+      // 2. Ingest first 9 checks as PASS
+      const first9Codes = [
+        ActivationCheckCode.TERMINAL_LINKED,
+        ActivationCheckCode.REQUIRED_CONFIG_LOCAL,
+        ActivationCheckCode.AUTHORIZED_USER_LOCAL,
+        ActivationCheckCode.PRINTER_AVAILABLE,
+        ActivationCheckCode.TEST_PRINT,
+        ActivationCheckCode.SQLITE_DURABILITY,
+        ActivationCheckCode.OFFLINE_SALE_PAID,
+        ActivationCheckCode.SALE_RECEIPT_PATH,
+        ActivationCheckCode.OUTBOX_DURABLE,
+      ];
+
+      for (const code of first9Codes) {
+        await activationService.ingestCheck(
+          attempt.id,
+          { checkCode: code, status: ActivationCheckStatus.PASS },
+          devicePrincipal,
+        );
+      }
+
+      // Ingest POST_RECONNECT_SYNC as WARNING
+      await activationService.ingestCheck(
+        attempt.id,
+        {
+          checkCode: ActivationCheckCode.POST_RECONNECT_SYNC,
+          status: ActivationCheckStatus.WARNING,
+          evidenceRef: 'wifi-signal-degraded-504',
+        },
+        devicePrincipal,
+      );
+
+      // Finalize -> PASS_WITH_WARNING
+      const finalized = await activationService.finalizeActivation(
+        tenantId,
+        attempt.id,
+        'user-operator-1',
+      );
+      expect(finalized.status).toBe(ActivationAttemptStatus.PASS_WITH_WARNING);
+
+      const sessionAfterFinalize = await sessionRepo.findOne({
+        where: { tenantId },
+      });
+      expect(sessionAfterFinalize?.lifecycleState).toBe(
+        OnboardingLifecycleState.ACTIVATED,
+      );
+      const authoritativeActivatedAt = sessionAfterFinalize?.activatedAt;
+      expect(authoritativeActivatedAt).toBeDefined();
+
+      // Open follow-up exists in PostgreSQL
+      const openFollowUps = await followUpRepo.find({
+        where: { tenantId, activationAttemptId: attempt.id },
+      });
+      expect(openFollowUps.length).toBe(1);
+      expect(openFollowUps[0].status).toBe(ActivationFollowUpStatus.OPEN);
+
+      // Verify follow-up opened audit in DB
+      const openedLogs = await changeLogRepo.find({
+        where: {
+          tenant_id: tenantId,
+          action: 'ONBOARDING_ACTIVATION_FOLLOW_UP_OPENED',
+        },
+      });
+      expect(openedLogs.length).toBe(1);
+
+      // 3. Convergence Reconciler in background:
+      // First try: POST_RECONNECT_SYNC is still WARNING, so reconciler leaves it OPEN
+      const preReconcile = await activationService.reconcileFollowUpConvergence(
+        tenantId,
+      );
+      expect(preReconcile.evaluatedCount).toBe(1);
+      expect(preReconcile.closedCount).toBe(0);
+      expect(preReconcile.unresolvedCount).toBe(1);
+
+      // Now terminal reconnects and sync succeeds: update check to PASS in PostgreSQL
+      const checkToUpdate = await checkRepo.findOne({
+        where: {
+          tenantId,
+          activationAttemptId: attempt.id,
+          checkCode: ActivationCheckCode.POST_RECONNECT_SYNC,
+        },
+      });
+      expect(checkToUpdate).toBeDefined();
+      checkToUpdate!.status = ActivationCheckStatus.PASS;
+      checkToUpdate!.evidenceRef = 'SYNC_BATCH_RECONNECTED_OK_999';
+      await checkRepo.save(checkToUpdate!);
+
+      // Run background convergence reconciler
+      const postReconcile = await activationService.reconcileFollowUpConvergence(
+        tenantId,
+      );
+      expect(postReconcile.evaluatedCount).toBe(1);
+      expect(postReconcile.closedCount).toBe(1);
+      expect(postReconcile.closedFollowUpIds).toContain(openFollowUps[0].id);
+
+      // Verify follow-up in PostgreSQL is CLOSED by SYSTEM_RECONCILER
+      const closedFupInDb = await followUpRepo.findOne({
+        where: { id: openFollowUps[0].id },
+      });
+      expect(closedFupInDb?.status).toBe(ActivationFollowUpStatus.CLOSED);
+      expect(closedFupInDb?.closedBy).toBe('SYSTEM_RECONCILER');
+      expect(closedFupInDb?.closedAt).toBeDefined();
+      expect(closedFupInDb?.closureEvidenceRef).toBe(
+        'SYNC_BATCH_RECONNECTED_OK_999',
+      );
+
+      // STRICT INVARIANT: activatedAt on session in PostgreSQL is completely unchanged!
+      const sessionAfterReconciliation = await sessionRepo.findOne({
+        where: { tenantId },
+      });
+      expect(sessionAfterReconciliation?.activatedAt?.getTime()).toBe(
+        authoritativeActivatedAt?.getTime(),
+      );
+
+      // 4. Support Overrides & Diagnostics in PostgreSQL:
+      // Test support override DISMISS_WARNING on an open follow-up or RECORD_DIAGNOSTIC_ASSIST
+      const overrideResult = await activationService.executeSupportOverride(
+        tenantId,
+        attempt.id,
+        {
+          reason: 'Periodic compliance review and diagnostic verification performed by L2 support',
+          overrideAction: SupportOverrideAction.RECORD_DIAGNOSTIC_ASSIST,
+          notes: 'Terminal hardware validated on site',
+        },
+        'user-support-specialist',
+      );
+      expect(overrideResult.attempt.id).toBe(attempt.id);
+
+      const overrideLogs = await changeLogRepo.find({
+        where: {
+          tenant_id: tenantId,
+          action: 'ONBOARDING_ACTIVATION_SUPPORT_OVERRIDE',
+        },
+      });
+      expect(overrideLogs.length).toBe(1);
+
+      // Diagnostics verification in PostgreSQL
+      const diagnostics = await activationService.getActivationDiagnostics(
+        tenantId,
+        attempt.id,
+      );
+      expect(diagnostics.attempt.id).toBe(attempt.id);
+      expect(diagnostics.session.lifecycleState).toBe(
+        OnboardingLifecycleState.ACTIVATED,
+      );
+      expect(diagnostics.checksMatrix.length).toBe(10);
+      expect(diagnostics.missingChecks.length).toBe(0); // All 10 ingested
+      expect(diagnostics.followUps.length).toBe(1);
+      expect(diagnostics.followUps[0].status).toBe(
+        ActivationFollowUpStatus.CLOSED,
+      );
+      expect(diagnostics.auditTrail?.length).toBeGreaterThanOrEqual(1);
     });
   });
 });

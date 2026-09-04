@@ -4,7 +4,10 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
-import { ActivationService } from './activation.service';
+import {
+  ActivationService,
+  V1_REQUIRED_ACTIVATION_CHECKS,
+} from './activation.service';
 import {
   ActivationAttempt,
   ActivationAttemptStatus,
@@ -19,7 +22,12 @@ import {
   ActivationCheckStatus,
 } from '../entities/activation-check-result.entity';
 import { ActivationFollowUp } from '../entities/activation-follow-up.entity';
-import { DevicePrincipal } from '../dto/activation.dto';
+import {
+  CloseActivationFollowUpDto,
+  DevicePrincipal,
+  SupportOverrideAction,
+} from '../dto/activation.dto';
+import { ActivationFollowUpStatus } from '../entities/activation-follow-up.entity';
 
 describe('ActivationService — ONB1.7A StartActivation', () => {
   let service: ActivationService;
@@ -30,6 +38,7 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
   let fiscalConfigVersionService: any;
   let onboardingCatalogService: any;
   let dataSource: any;
+  let changeLogService: any;
 
   const tenantId = 'tenant-founder-01';
   const userId = 'user-owner-01';
@@ -103,6 +112,11 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
       ),
     };
 
+    changeLogService = {
+      log: jest.fn().mockResolvedValue(undefined),
+      findByTarget: jest.fn().mockResolvedValue([]),
+    };
+
     service = new ActivationService(
       attemptRepo,
       checkRepo,
@@ -114,6 +128,7 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
         evaluate: jest.fn().mockResolvedValue({ saleReady: true }),
       } as any,
       dataSource,
+      changeLogService,
     );
   });
 
@@ -672,6 +687,346 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
       expect(result.id).toBe(attemptId);
       expect(checkRepo.find).not.toHaveBeenCalled();
       expect(sessionRepo.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('ActivationService — ONB1.7D–F Convergence Reconciler & Hardening', () => {
+    const attemptId = 'attempt-uuid-conv-1';
+
+    it('records audit log on StartActivation', async () => {
+      const session = {
+        id: 'sess-1',
+        tenantId,
+        lifecycleState: OnboardingLifecycleState.SALE_READY,
+      };
+      sessionRepo.findOne.mockResolvedValueOnce(session);
+
+      await service.startActivation(
+        tenantId,
+        { candidateTerminalId: 'term-conv-1' },
+        userId,
+      );
+
+      expect(changeLogService.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenantId,
+          userId,
+          action: 'ONBOARDING_ACTIVATION_ATTEMPT_STARTED',
+          targetType: 'ActivationAttempt',
+        }),
+      );
+    });
+
+    it('records audit log on check failure ingestion', async () => {
+      const attempt = {
+        id: attemptId,
+        tenantId,
+        candidateTerminalId: 'pos-term-01',
+        status: ActivationAttemptStatus.IN_PROGRESS,
+      };
+      attemptRepo.findOne.mockResolvedValueOnce(attempt);
+      checkRepo.findOne.mockResolvedValueOnce(null);
+
+      const devicePrincipal: DevicePrincipal = {
+        tenantId,
+        terminalId: 'pos-term-01',
+      };
+
+      await service.ingestCheck(
+        attemptId,
+        {
+          checkCode: ActivationCheckCode.TEST_PRINT,
+          status: ActivationCheckStatus.FAIL,
+        },
+        devicePrincipal,
+      );
+
+      expect(changeLogService.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenantId,
+          action: 'ONBOARDING_ACTIVATION_CHECK_FAILED',
+          targetType: 'ActivationCheckResult',
+        }),
+      );
+    });
+
+    it('records audit log on FinalizeActivation (PASS)', async () => {
+      const allChecksPass = V1_REQUIRED_ACTIVATION_CHECKS.map((code) => ({
+        id: `chk-${code}`,
+        checkCode: code,
+        status: ActivationCheckStatus.PASS,
+      }));
+
+      const attempt = {
+        id: attemptId,
+        tenantId,
+        onboardingSessionId: 'sess-1',
+        status: ActivationAttemptStatus.IN_PROGRESS,
+      };
+      const session = {
+        id: 'sess-1',
+        tenantId,
+        lifecycleState: OnboardingLifecycleState.ACTIVATION_IN_PROGRESS,
+        activatedAt: null,
+      };
+
+      attemptRepo.findOne.mockResolvedValueOnce(attempt);
+      sessionRepo.findOne.mockResolvedValueOnce(session);
+      checkRepo.find.mockResolvedValueOnce(allChecksPass);
+
+      await service.finalizeActivation(tenantId, attemptId, userId);
+
+      expect(changeLogService.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenantId,
+          userId,
+          action: 'ONBOARDING_ACTIVATION_FINALIZED',
+          targetType: 'ActivationAttempt',
+          changes: expect.objectContaining({
+            status: ActivationAttemptStatus.PASS,
+          }),
+        }),
+      );
+    });
+
+    it('reconcileFollowUpConvergence auto-closes follow-up when POST_RECONNECT_SYNC converges to PASS without altering activatedAt', async () => {
+      const originalActivatedAt = new Date('2026-09-04T10:00:00Z');
+      const openFollowUp = {
+        id: 'fup-conv-1',
+        tenantId,
+        activationAttemptId: attemptId,
+        warningCode: 'POST_RECONNECT_SYNC_TRANSIENT',
+        status: ActivationFollowUpStatus.OPEN,
+        openedAt: new Date('2026-09-04T10:00:00Z'),
+        closureEvidenceRef: null,
+        closedAt: null,
+        closedBy: null,
+      };
+
+      const convergedCheck = {
+        id: 'chk-sync-pass',
+        tenantId,
+        activationAttemptId: attemptId,
+        checkCode: ActivationCheckCode.POST_RECONNECT_SYNC,
+        status: ActivationCheckStatus.PASS,
+        evidenceRef: 'SYNC_BATCH_ACK_12345',
+      };
+
+      const session = {
+        id: 'sess-1',
+        tenantId,
+        lifecycleState: OnboardingLifecycleState.ACTIVATED,
+        activatedAt: originalActivatedAt,
+      };
+
+      followUpRepo.find.mockResolvedValueOnce([openFollowUp]);
+      checkRepo.findOne.mockResolvedValueOnce(convergedCheck);
+      sessionRepo.findOne.mockResolvedValueOnce(session);
+
+      const result = await service.reconcileFollowUpConvergence(tenantId);
+
+      expect(result.evaluatedCount).toBe(1);
+      expect(result.closedCount).toBe(1);
+      expect(result.closedFollowUpIds).toContain('fup-conv-1');
+
+      // Verify follow up was mutated to CLOSED by SYSTEM_RECONCILER
+      expect(openFollowUp.status).toBe(ActivationFollowUpStatus.CLOSED);
+      expect(openFollowUp.closedBy).toBe('SYSTEM_RECONCILER');
+      expect(openFollowUp.closedAt).toBeInstanceOf(Date);
+      expect(openFollowUp.closureEvidenceRef).toBe('SYNC_BATCH_ACK_12345');
+
+      // Crucial Invariant: activatedAt remains strictly unmodified!
+      expect(session.activatedAt).toEqual(originalActivatedAt);
+      expect(sessionRepo.save).not.toHaveBeenCalled();
+
+      // Audit logged
+      expect(changeLogService.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenantId,
+          userId: 'SYSTEM_RECONCILER',
+          action: 'ONBOARDING_ACTIVATION_FOLLOW_UP_CLOSED',
+          targetType: 'ActivationFollowUp',
+        }),
+      );
+    });
+
+    it('reconcileFollowUpConvergence leaves follow-up OPEN when no convergence evidence is available', async () => {
+      const openFollowUp = {
+        id: 'fup-unresolved',
+        tenantId,
+        activationAttemptId: attemptId,
+        warningCode: 'POST_RECONNECT_SYNC_TRANSIENT',
+        status: ActivationFollowUpStatus.OPEN,
+      };
+
+      // Check is still WARNING (no convergence)
+      const pendingCheck = {
+        id: 'chk-sync-warning',
+        tenantId,
+        activationAttemptId: attemptId,
+        checkCode: ActivationCheckCode.POST_RECONNECT_SYNC,
+        status: ActivationCheckStatus.WARNING,
+      };
+
+      followUpRepo.find.mockResolvedValueOnce([openFollowUp]);
+      checkRepo.findOne.mockResolvedValueOnce(pendingCheck);
+
+      const result = await service.reconcileFollowUpConvergence(tenantId);
+
+      expect(result.evaluatedCount).toBe(1);
+      expect(result.closedCount).toBe(0);
+      expect(result.unresolvedCount).toBe(1);
+      expect(openFollowUp.status).toBe(ActivationFollowUpStatus.OPEN);
+    });
+
+    it('executeSupportOverride rejects when reason is under 10 characters', async () => {
+      await expect(
+        service.executeSupportOverride(
+          tenantId,
+          attemptId,
+          {
+            reason: 'short',
+            overrideAction: SupportOverrideAction.FORCE_FAIL,
+          },
+          userId,
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('executeSupportOverride FORCE_FAIL terminates attempt and reverts session lifecycle', async () => {
+      const attempt = {
+        id: attemptId,
+        tenantId,
+        status: ActivationAttemptStatus.IN_PROGRESS,
+        failureCode: null,
+      };
+      const session = {
+        id: 'sess-1',
+        tenantId,
+        lifecycleState: OnboardingLifecycleState.ACTIVATION_IN_PROGRESS,
+      };
+
+      attemptRepo.findOne.mockResolvedValueOnce(attempt);
+      sessionRepo.findOne.mockResolvedValueOnce(session);
+
+      const result = await service.executeSupportOverride(
+        tenantId,
+        attemptId,
+        {
+          reason: 'Manual support intervention requested due to hardware fault',
+          overrideAction: SupportOverrideAction.FORCE_FAIL,
+        },
+        userId,
+      );
+
+      expect(result.attempt.status).toBe(ActivationAttemptStatus.FAIL);
+      expect(result.attempt.failureCode).toBe('SUPPORT_OVERRIDE_FAIL');
+      expect(session.lifecycleState).toBe(OnboardingLifecycleState.SALE_READY);
+
+      // Audit logged
+      expect(changeLogService.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenantId,
+          userId,
+          action: 'ONBOARDING_ACTIVATION_SUPPORT_OVERRIDE',
+          targetType: 'ActivationAttempt',
+        }),
+      );
+    });
+
+    it('executeSupportOverride DISMISS_WARNING closes open follow-ups and leaves session ACTIVATED', async () => {
+      const attempt = {
+        id: attemptId,
+        tenantId,
+        status: ActivationAttemptStatus.PASS_WITH_WARNING,
+      };
+      const followUp = {
+        id: 'fup-override-1',
+        tenantId,
+        activationAttemptId: attemptId,
+        status: ActivationFollowUpStatus.OPEN,
+      };
+      const session = {
+        id: 'sess-1',
+        tenantId,
+        lifecycleState: OnboardingLifecycleState.ACTIVATED,
+        activatedAt: new Date('2026-09-04T10:00:00Z'),
+      };
+
+      attemptRepo.findOne.mockResolvedValueOnce(attempt);
+      followUpRepo.find.mockResolvedValueOnce([followUp]);
+      sessionRepo.findOne.mockResolvedValueOnce(session);
+
+      const result = await service.executeSupportOverride(
+        tenantId,
+        attemptId,
+        {
+          reason: 'Manual approval of transient sync variance under supervision',
+          overrideAction: SupportOverrideAction.DISMISS_WARNING,
+        },
+        userId,
+      );
+
+      expect(result.closedFollowUpsCount).toBe(1);
+      expect(followUp.status).toBe(ActivationFollowUpStatus.CLOSED);
+      expect(session.lifecycleState).toBe(OnboardingLifecycleState.ACTIVATED);
+    });
+
+    it('getActivationDiagnostics returns full diagnostic view with matrix of 10 checks and audit trail', async () => {
+      const attempt = {
+        id: attemptId,
+        tenantId,
+        candidateTerminalId: 'pos-term-01',
+        trustedTerminalId: 'pos-term-01',
+        status: ActivationAttemptStatus.IN_PROGRESS,
+        requiredFiscalRevision: 1,
+        requiredFiscalFingerprint: 'fiscal-fp-1',
+        verificationProductId: 'prod-1',
+        verificationProductRevision: 1,
+        startedAt: new Date(),
+        warningsCount: 0,
+      };
+
+      const session = {
+        id: 'sess-1',
+        tenantId,
+        lifecycleState: OnboardingLifecycleState.ACTIVATION_IN_PROGRESS,
+        activatedAt: null,
+      };
+
+      const recordedChecks = [
+        {
+          checkCode: ActivationCheckCode.TERMINAL_LINKED,
+          status: ActivationCheckStatus.PASS,
+          required: true,
+          recordedAt: new Date(),
+        },
+      ];
+
+      attemptRepo.findOne.mockResolvedValueOnce(attempt);
+      sessionRepo.findOne.mockResolvedValueOnce(session);
+      checkRepo.find.mockResolvedValueOnce(recordedChecks);
+      followUpRepo.find.mockResolvedValueOnce([]);
+      changeLogService.findByTarget.mockResolvedValueOnce([
+        { action: 'ONBOARDING_ACTIVATION_ATTEMPT_STARTED', user_id: userId },
+      ]);
+
+      const diag = await service.getActivationDiagnostics(tenantId, attemptId);
+
+      expect(diag.attempt.id).toBe(attemptId);
+      expect(diag.session.lifecycleState).toBe(
+        OnboardingLifecycleState.ACTIVATION_IN_PROGRESS,
+      );
+      expect(diag.checksMatrix).toHaveLength(10);
+      // 1 recorded + 9 missing
+      expect(diag.missingChecks).toHaveLength(9);
+      expect(diag.checksMatrix.find((c) => c.checkCode === ActivationCheckCode.TERMINAL_LINKED)?.status).toBe(
+        ActivationCheckStatus.PASS,
+      );
+      expect(diag.checksMatrix.find((c) => c.checkCode === ActivationCheckCode.SQLITE_DURABILITY)?.isMissing).toBe(
+        true,
+      );
+      expect(diag.auditTrail).toHaveLength(1);
     });
   });
 });

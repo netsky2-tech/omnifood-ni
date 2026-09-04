@@ -85,6 +85,99 @@ export class CloseActivationFollowUpDto {
   closureNote?: string;
 }
 
+export enum SupportOverrideAction {
+  FORCE_FAIL = 'FORCE_FAIL',
+  DISMISS_WARNING = 'DISMISS_WARNING',
+  RECORD_DIAGNOSTIC_ASSIST = 'RECORD_DIAGNOSTIC_ASSIST',
+}
+
+export class SupportOverrideDto {
+  @IsNotEmpty({ message: 'reason is required' })
+  @IsString()
+  reason!: string;
+
+  @IsNotEmpty({ message: 'overrideAction is required' })
+  @IsEnum(SupportOverrideAction)
+  overrideAction!: SupportOverrideAction;
+
+  @IsOptional()
+  @IsString()
+  evidenceRef?: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+export class ReconcileConvergenceDto {
+  @IsOptional()
+  @IsString()
+  attemptId?: string;
+}
+
+export interface ActivationCheckDiagnosticItem {
+  checkCode: ActivationCheckCode;
+  status: ActivationCheckStatus | 'MISSING';
+  required: boolean;
+  isMissing: boolean;
+  recordedAt?: Date | null;
+  occurredAt?: Date | null;
+  evidenceType?: string | null;
+  evidenceRef?: string | null;
+  detailsSanitizedJson?: Record<string, unknown> | null;
+}
+
+export interface ActivationDiagnosticsDto {
+  tenantId: string;
+  attempt: {
+    id: string;
+    status: string;
+    candidateTerminalId: string;
+    trustedTerminalId?: string | null;
+    verificationTicketId?: string | null;
+    requiredFiscalRevision: number;
+    requiredFiscalFingerprint: string;
+    verificationProductId: string;
+    verificationProductRevision: number;
+    startedAt: Date;
+    completedAt?: Date | null;
+    failureCode?: string | null;
+    warningsCount: number;
+  };
+  session: {
+    id: string;
+    lifecycleState: string;
+    activatedAt?: Date | null;
+    saleReadyFirstAt?: Date | null;
+  };
+  checksMatrix: ActivationCheckDiagnosticItem[];
+  missingChecks: ActivationCheckCode[];
+  followUps: Array<{
+    id: string;
+    warningCode: string;
+    status: string;
+    openedAt: Date;
+    openedBy: string;
+    closureEvidenceRef?: string | null;
+    closedAt?: Date | null;
+    closedBy?: string | null;
+    closureNote?: string | null;
+  }>;
+  readiness: {
+    saleReady: boolean;
+    blockers?: string[];
+    warnings?: string[];
+  };
+  auditTrail?: Array<{
+    action: string;
+    targetType: string;
+    targetId: string;
+    userId: string;
+    createdAt?: Date;
+    changes?: Record<string, unknown> | null;
+  }>;
+}
+
 export interface DevicePrincipal {
   tenantId: string;
   terminalId: string;

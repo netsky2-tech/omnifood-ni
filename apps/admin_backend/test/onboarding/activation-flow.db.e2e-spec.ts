@@ -35,6 +35,9 @@ import {
   ActivationFollowUp,
   ActivationFollowUpStatus,
 } from '../../src/modules/onboarding/entities/activation-follow-up.entity';
+import { ChangeLog } from '../../src/modules/audit/entities/change-log.entity';
+import { ChangeLogService } from '../../src/modules/audit/change-log.service';
+import { SupportOverrideAction } from '../../src/modules/onboarding/dto/activation.dto';
 import { ActivationController } from '../../src/modules/onboarding/controllers/activation.controller';
 import { ActivationService } from '../../src/modules/onboarding/services/activation.service';
 import { FiscalConfigVersionService } from '../../src/modules/onboarding/services/fiscal-config-version.service';
@@ -69,6 +72,7 @@ describe('ONB1.7A–C Activation Flow (E2E with Real PostgreSQL Persistence)', (
   let cashierUserId: string;
   let ownerToken: string;
   let cashierToken: string;
+  let supportToken: string;
   let candidateTerminalId: string;
 
   beforeAll(async () => {
@@ -97,6 +101,7 @@ describe('ONB1.7A–C Activation Flow (E2E with Real PostgreSQL Persistence)', (
         ActivationAttempt,
         ActivationCheckResult,
         ActivationFollowUp,
+        ChangeLog,
       ],
       synchronize: true,
     });
@@ -254,6 +259,11 @@ describe('ONB1.7A–C Activation Flow (E2E with Real PostgreSQL Persistence)', (
             reconcile: jest.fn(),
           },
         },
+        {
+          provide: 'ChangeLogRepository',
+          useValue: dataSource.getRepository(ChangeLog),
+        },
+        ChangeLogService,
         OnboardingCatalogService,
         ActivationService,
       ],
@@ -284,6 +294,20 @@ describe('ONB1.7A–C Activation Flow (E2E with Real PostgreSQL Persistence)', (
       email: 'cashier@omnifood.ni',
       role: UserRole.CASHIER,
       tenantId,
+      terminalId: candidateTerminalId,
+    });
+
+    supportToken = signIdentityJwtAccessToken(jwtService, {
+      sub: randomUUID(),
+      email: 'support@omnifood.ni',
+      role: UserRole.MANAGER,
+      custom_permissions: [
+        'onboarding:support:assist',
+        'onboarding:activation:manage',
+        'onboarding:read',
+      ],
+      tenantId,
+      tenant_id: tenantId,
       terminalId: candidateTerminalId,
     });
   });
@@ -628,5 +652,225 @@ describe('ONB1.7A–C Activation Flow (E2E with Real PostgreSQL Persistence)', (
       OnboardingLifecycleState.ACTIVATED,
     );
     expect(sessionWarn?.activatedAt).toBeDefined();
+  });
+
+  it('10. ONB1.7D–E Background Convergence Reconciler: POST /api/onboarding/activation/reconcile-convergence auto-closes warning follow-up', async () => {
+    const tenantConvId = randomUUID();
+    const userConvId = randomUUID();
+    const termConvId = 'term-pos-conv-1';
+
+    await dataSource.getRepository(Tenant).save({
+      id: tenantConvId,
+      name: 'Restaurante Reconciler Convergencia',
+      ruc: 'J0310000007777',
+      is_active: true,
+    });
+
+    await dataSource.getRepository(User).save({
+      id: userConvId,
+      tenant_id: tenantConvId,
+      name: 'Conv Owner',
+      email: 'conv@omnifood.ni',
+      password_hash: 'hash',
+      role: UserRole.OWNER,
+      is_active: true,
+      security_version: 1,
+    });
+
+    await dataSource.getRepository(SystemParametersConfig).save({
+      tenant_id: tenantConvId,
+      paramKey: 'FISCAL_REGIME',
+      paramValue: 'REGIMEN_GENERAL',
+      isActive: true,
+    });
+
+    await dataSource.getRepository(Product).save({
+      tenant_id: tenantConvId,
+      name: 'Quesillo Doble Crema',
+      sellPrice: 65,
+      uom: 'UN',
+      product_type: ProductType.SIMPLE,
+      is_active: true,
+      stock: 0,
+      averageCost: 0,
+    });
+
+    await dataSource.getRepository(OnboardingSession).save({
+      tenantId: tenantConvId,
+      lifecycleState: OnboardingLifecycleState.SALE_READY,
+      saleReadyFirstAt: new Date(),
+      measurementEligible: true,
+      legacyBaseline: false,
+      optimisticVersion: 1,
+    });
+
+    const convToken = signIdentityJwtAccessToken(jwtService, {
+      sub: userConvId,
+      email: 'conv@omnifood.ni',
+      role: UserRole.OWNER,
+      tenantId: tenantConvId,
+      terminalId: termConvId,
+    });
+
+    // Start activation
+    const startRes = await request(app.getHttpServer())
+      .post('/api/onboarding/activation/attempts')
+      .set('Authorization', `Bearer ${convToken}`)
+      .send({ candidateTerminalId: termConvId });
+
+    expect(startRes.status).toBe(201);
+    const attemptId = startRes.body.id;
+
+    // Ingest 9 checks as PASS
+    const first9 = [
+      ActivationCheckCode.TERMINAL_LINKED,
+      ActivationCheckCode.REQUIRED_CONFIG_LOCAL,
+      ActivationCheckCode.AUTHORIZED_USER_LOCAL,
+      ActivationCheckCode.PRINTER_AVAILABLE,
+      ActivationCheckCode.TEST_PRINT,
+      ActivationCheckCode.SQLITE_DURABILITY,
+      ActivationCheckCode.OFFLINE_SALE_PAID,
+      ActivationCheckCode.SALE_RECEIPT_PATH,
+      ActivationCheckCode.OUTBOX_DURABLE,
+    ];
+
+    for (const code of first9) {
+      await request(app.getHttpServer())
+        .post(`/api/onboarding/activation/attempts/${attemptId}/checks`)
+        .set('Authorization', `Bearer ${convToken}`)
+        .send({ checkCode: code, status: ActivationCheckStatus.PASS });
+    }
+
+    // Ingest check 10 as WARNING
+    await request(app.getHttpServer())
+      .post(`/api/onboarding/activation/attempts/${attemptId}/checks`)
+      .set('Authorization', `Bearer ${convToken}`)
+      .send({
+        checkCode: ActivationCheckCode.POST_RECONNECT_SYNC,
+        status: ActivationCheckStatus.WARNING,
+        evidenceRef: 'wan-network-flake',
+      });
+
+    // Finalize -> PASS_WITH_WARNING
+    const finRes = await request(app.getHttpServer())
+      .post(`/api/onboarding/activation/attempts/${attemptId}/finalize`)
+      .set('Authorization', `Bearer ${convToken}`)
+      .send();
+
+    expect(finRes.status).toBe(201);
+    expect(finRes.body.status).toBe(ActivationAttemptStatus.PASS_WITH_WARNING);
+
+    const sessionBeforeReconcile = await dataSource
+      .getRepository(OnboardingSession)
+      .findOne({ where: { tenantId: tenantConvId } });
+    const originalActivatedAt = sessionBeforeReconcile?.activatedAt;
+    expect(originalActivatedAt).toBeDefined();
+
+    // Now update POST_RECONNECT_SYNC check to PASS in database (terminal synced evidence)
+    const checkToPass = await dataSource
+      .getRepository(ActivationCheckResult)
+      .findOne({
+        where: {
+          tenantId: tenantConvId,
+          activationAttemptId: attemptId,
+          checkCode: ActivationCheckCode.POST_RECONNECT_SYNC,
+        },
+      });
+    checkToPass!.status = ActivationCheckStatus.PASS;
+    checkToPass!.evidenceRef = 'SYNC_CONVERGED_BATCH_E2E';
+    await dataSource.getRepository(ActivationCheckResult).save(checkToPass!);
+
+    // Call Reconcile Convergence endpoint
+    const reconRes = await request(app.getHttpServer())
+      .post('/api/onboarding/activation/reconcile-convergence')
+      .set('Authorization', `Bearer ${convToken}`)
+      .send({ attemptId });
+
+    expect(reconRes.status).toBe(201);
+    expect(reconRes.body.evaluatedCount).toBe(1);
+    expect(reconRes.body.closedCount).toBe(1);
+
+    // Verify follow-up in DB is CLOSED by SYSTEM_RECONCILER
+    const followUpsInDb = await dataSource
+      .getRepository(ActivationFollowUp)
+      .find({ where: { tenantId: tenantConvId, activationAttemptId: attemptId } });
+    expect(followUpsInDb.length).toBe(1);
+    expect(followUpsInDb[0].status).toBe(ActivationFollowUpStatus.CLOSED);
+    expect(followUpsInDb[0].closedBy).toBe('SYSTEM_RECONCILER');
+    expect(followUpsInDb[0].closureEvidenceRef).toBe('SYNC_CONVERGED_BATCH_E2E');
+
+    // Invariant: activatedAt remains strictly identical
+    const sessionAfterReconcile = await dataSource
+      .getRepository(OnboardingSession)
+      .findOne({ where: { tenantId: tenantConvId } });
+    expect(sessionAfterReconcile?.activatedAt?.getTime()).toBe(
+      originalActivatedAt?.getTime(),
+    );
+  });
+
+  it('11. ONB1.7F Support Overrides: POST /api/onboarding/activation/attempts/:id/support-override enforces RBAC and audit', async () => {
+    // 1. Rejects Cashier token without onboarding.support.assist (403)
+    const unauthorizedRes = await request(app.getHttpServer())
+      .post(`/api/onboarding/activation/attempts/fake-id/support-override`)
+      .set('Authorization', `Bearer ${cashierToken}`)
+      .send({
+        reason: 'Unauthorized cashier override attempt',
+        overrideAction: SupportOverrideAction.RECORD_DIAGNOSTIC_ASSIST,
+      });
+    expect(unauthorizedRes.status).toBe(403);
+
+    // 2. Rejects Support token with short reason < 10 chars (400)
+    const badReasonRes = await request(app.getHttpServer())
+      .post(`/api/onboarding/activation/attempts/fake-id/support-override`)
+      .set('Authorization', `Bearer ${supportToken}`)
+      .send({
+        reason: 'short',
+        overrideAction: SupportOverrideAction.RECORD_DIAGNOSTIC_ASSIST,
+      });
+    expect(badReasonRes.status).toBe(400);
+
+    // 3. Accepts Support token on existing attempt and records audit trail in PostgreSQL
+    const activeAttempt = await dataSource
+      .getRepository(ActivationAttempt)
+      .findOne({ where: { tenantId } });
+
+    const overrideRes = await request(app.getHttpServer())
+      .post(`/api/onboarding/activation/attempts/${activeAttempt?.id}/support-override`)
+      .set('Authorization', `Bearer ${supportToken}`)
+      .send({
+        reason: 'Assisted tenant through support channel with peripheral hardware diagnostics',
+        overrideAction: SupportOverrideAction.RECORD_DIAGNOSTIC_ASSIST,
+        notes: 'Serial printer baudrate adjusted to 9600',
+      });
+
+    expect(overrideRes.status).toBe(201);
+    expect(overrideRes.body.attempt.id).toBe(activeAttempt?.id);
+
+    // Verify ChangeLog in PostgreSQL
+    const auditEntries = await dataSource.getRepository(ChangeLog).find({
+      where: {
+        tenant_id: tenantId,
+        action: 'ONBOARDING_ACTIVATION_SUPPORT_OVERRIDE',
+      },
+    });
+    expect(auditEntries.length).toBeGreaterThanOrEqual(1);
+    expect(auditEntries[0].target_id).toBe(activeAttempt?.id);
+  });
+
+  it('12. ONB1.7F Diagnostic Controls: GET /api/onboarding/activation/attempts/:id/diagnostics returns complete check matrix and audit trail', async () => {
+    const activeAttempt = await dataSource
+      .getRepository(ActivationAttempt)
+      .findOne({ where: { tenantId } });
+
+    const diagRes = await request(app.getHttpServer())
+      .get(`/api/onboarding/activation/attempts/${activeAttempt?.id}/diagnostics`)
+      .set('Authorization', `Bearer ${ownerToken}`);
+
+    expect(diagRes.status).toBe(200);
+    expect(diagRes.body.attempt.id).toBe(activeAttempt?.id);
+    expect(diagRes.body.session).toBeDefined();
+    expect(diagRes.body.checksMatrix).toHaveLength(10);
+    expect(diagRes.body.readiness).toBeDefined();
+    expect(diagRes.body.auditTrail).toBeDefined();
   });
 });

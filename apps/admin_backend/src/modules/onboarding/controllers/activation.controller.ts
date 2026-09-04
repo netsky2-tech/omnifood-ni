@@ -15,7 +15,9 @@ import {
   CloseActivationFollowUpDto,
   DevicePrincipal,
   IngestActivationCheckDto,
+  ReconcileConvergenceDto,
   StartActivationDto,
+  SupportOverrideDto,
 } from '../dto/activation.dto';
 import { TenantInterceptor } from '../../../core/database/rls.interceptor';
 import { AuthGuard } from '../../identity/guards/auth.guard';
@@ -154,5 +156,45 @@ export class ActivationController {
       dto,
       actorUserId,
     );
+  }
+
+  @Post('reconcile-convergence')
+  @RequirePermissions(AppPermission.ONBOARDING_ACTIVATION_MANAGE)
+  async reconcileConvergence(
+    @Req() req: RequestWithUser,
+    @Body() dto?: ReconcileConvergenceDto,
+  ) {
+    const tenantId = this.getEffectiveTenantId(req);
+    return this.activationService.reconcileFollowUpConvergence(
+      tenantId,
+      dto?.attemptId,
+    );
+  }
+
+  @Post('attempts/:id/support-override')
+  @RequirePermissions(AppPermission.ONBOARDING_SUPPORT_ASSIST)
+  async executeSupportOverride(
+    @Req() req: RequestWithUser,
+    @Param('id') attemptId: string,
+    @Body() dto: SupportOverrideDto,
+  ) {
+    const tenantId = this.getEffectiveTenantId(req);
+    const actorUserId = this.getActorUserId(req);
+    return this.activationService.executeSupportOverride(
+      tenantId,
+      attemptId,
+      dto,
+      actorUserId,
+    );
+  }
+
+  @Get('attempts/:id/diagnostics')
+  @RequirePermissions(AppPermission.ONBOARDING_READ)
+  async getActivationDiagnostics(
+    @Req() req: RequestWithUser,
+    @Param('id') attemptId: string,
+  ) {
+    const tenantId = this.getEffectiveTenantId(req);
+    return this.activationService.getActivationDiagnostics(tenantId, attemptId);
   }
 }

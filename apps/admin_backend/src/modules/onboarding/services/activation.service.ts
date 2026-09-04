@@ -27,11 +27,16 @@ import {
 import { FiscalConfigVersionService } from './fiscal-config-version.service';
 import { OnboardingCatalogService } from './onboarding-catalog.service';
 import { OnboardingReadinessEvaluator } from './onboarding-readiness.evaluator';
+import { ChangeLogService } from '../../audit/change-log.service';
 import {
+  ActivationCheckDiagnosticItem,
+  ActivationDiagnosticsDto,
   CloseActivationFollowUpDto,
   DevicePrincipal,
   IngestActivationCheckDto,
   StartActivationDto,
+  SupportOverrideAction,
+  SupportOverrideDto,
 } from '../dto/activation.dto';
 
 export const V1_REQUIRED_ACTIVATION_CHECKS: readonly ActivationCheckCode[] = [
@@ -62,6 +67,7 @@ export class ActivationService {
     private readonly onboardingCatalogService: OnboardingCatalogService,
     private readonly readinessEvaluator: OnboardingReadinessEvaluator,
     private readonly dataSource: DataSource,
+    private readonly changeLogService: ChangeLogService,
   ) {}
 
   /**
@@ -95,7 +101,8 @@ export class ActivationService {
       }
     }
 
-    return this.dataSource.transaction(async (manager: EntityManager) => {
+    const result = await this.dataSource.transaction(
+      async (manager: EntityManager) => {
       const sRepo = manager.getRepository(OnboardingSession);
       const aRepo = manager.getRepository(ActivationAttempt);
 
@@ -202,6 +209,23 @@ export class ActivationService {
 
       return savedAttempt;
     });
+
+    // ONB1.7F: Audit log for attempt started
+    await this.changeLogService.log({
+      tenantId: trimmedTenant,
+      userId: actorUserId || 'SYSTEM',
+      action: 'ONBOARDING_ACTIVATION_ATTEMPT_STARTED',
+      targetType: 'ActivationAttempt',
+      targetId: result.id,
+      changes: {
+        candidateTerminalId: result.candidateTerminalId,
+        requiredFiscalRevision: result.requiredFiscalRevision,
+        verificationProductId: result.verificationProductId,
+        serverTimeAnchorAt: result.serverTimeAnchorAt,
+      },
+    });
+
+    return result;
   }
 
   /**
@@ -342,6 +366,23 @@ export class ActivationService {
       await this.attemptRepo.save(attempt);
     }
 
+    // ONB1.7F: Audit log for check failure
+    if (savedCheck.status === ActivationCheckStatus.FAIL) {
+      await this.changeLogService.log({
+        tenantId: effectiveTenantId,
+        userId: effectiveTerminalId,
+        action: 'ONBOARDING_ACTIVATION_CHECK_FAILED',
+        targetType: 'ActivationCheckResult',
+        targetId: savedCheck.id,
+        changes: {
+          checkCode: savedCheck.checkCode,
+          status: savedCheck.status,
+          evidenceType: savedCheck.evidenceType,
+          evidenceRef: savedCheck.evidenceRef,
+        },
+      });
+    }
+
     return savedCheck;
   }
 
@@ -359,138 +400,173 @@ export class ActivationService {
       throw new BadRequestException('tenantId is required');
     }
 
-    return this.dataSource.transaction(async (manager: EntityManager) => {
-      const aRepo = manager.getRepository(ActivationAttempt);
-      const sRepo = manager.getRepository(OnboardingSession);
-      const cRepo = manager.getRepository(ActivationCheckResult);
-      const fRepo = manager.getRepository(ActivationFollowUp);
+      const result = await this.dataSource.transaction(
+        async (manager: EntityManager) => {
+          const aRepo = manager.getRepository(ActivationAttempt);
+          const sRepo = manager.getRepository(OnboardingSession);
+          const cRepo = manager.getRepository(ActivationCheckResult);
+          const fRepo = manager.getRepository(ActivationFollowUp);
 
-      const attempt = await aRepo.findOne({
-        where: { id: attemptId, tenantId: trimmedTenant },
-      });
+          const attempt = await aRepo.findOne({
+            where: { id: attemptId, tenantId: trimmedTenant },
+          });
 
-      if (!attempt) {
-        throw new NotFoundException(
-          `Activation attempt '${attemptId}' not found for tenant '${trimmedTenant}'`,
-        );
-      }
-
-      // Idempotency: if already terminalized, return as-is
-      if (
-        attempt.status === ActivationAttemptStatus.PASS ||
-        attempt.status === ActivationAttemptStatus.PASS_WITH_WARNING ||
-        attempt.status === ActivationAttemptStatus.FAIL
-      ) {
-        return attempt;
-      }
-
-      const session = await sRepo.findOne({
-        where: { tenantId: trimmedTenant },
-      });
-
-      if (!session) {
-        throw new NotFoundException(
-          `Onboarding session not found for tenant '${trimmedTenant}'`,
-        );
-      }
-
-      const recordedChecks = await cRepo.find({
-        where: { tenantId: trimmedTenant, activationAttemptId: attempt.id },
-      });
-
-      const checkMap = new Map<ActivationCheckCode, ActivationCheckResult>();
-      for (const chk of recordedChecks) {
-        checkMap.set(chk.checkCode, chk);
-      }
-
-      // Evaluate normative truth table against catalog
-      let hasMissingChecks = false;
-      let firstFailedCode: string | null = null;
-      let warningCheck: ActivationCheckResult | null = null;
-
-      for (const requiredCode of V1_REQUIRED_ACTIVATION_CHECKS) {
-        const check = checkMap.get(requiredCode);
-        if (!check) {
-          hasMissingChecks = true;
-          break;
-        }
-
-        if (check.status === ActivationCheckStatus.FAIL) {
-          if (!firstFailedCode) {
-            firstFailedCode = `CHECK_FAILED_${check.checkCode}`;
+          if (!attempt) {
+            throw new NotFoundException(
+              `Activation attempt '${attemptId}' not found for tenant '${trimmedTenant}'`,
+            );
           }
-        } else if (check.status === ActivationCheckStatus.WARNING) {
-          if (check.checkCode === ActivationCheckCode.POST_RECONNECT_SYNC) {
-            warningCheck = check;
-          } else {
-            if (!firstFailedCode) {
-              firstFailedCode = `INVALID_WARNING_${check.checkCode}`;
+
+          // Idempotency: if already terminalized, return as-is
+          if (
+            attempt.status === ActivationAttemptStatus.PASS ||
+            attempt.status === ActivationAttemptStatus.PASS_WITH_WARNING ||
+            attempt.status === ActivationAttemptStatus.FAIL
+          ) {
+            return { savedAttempt: attempt, followUpCreated: null, isReplay: true };
+          }
+
+          const session = await sRepo.findOne({
+            where: { tenantId: trimmedTenant },
+          });
+
+          if (!session) {
+            throw new NotFoundException(
+              `Onboarding session not found for tenant '${trimmedTenant}'`,
+            );
+          }
+
+          const recordedChecks = await cRepo.find({
+            where: { tenantId: trimmedTenant, activationAttemptId: attempt.id },
+          });
+
+          const checkMap = new Map<ActivationCheckCode, ActivationCheckResult>();
+          for (const chk of recordedChecks) {
+            checkMap.set(chk.checkCode, chk);
+          }
+
+          // Evaluate normative truth table against catalog
+          let hasMissingChecks = false;
+          let firstFailedCode: string | null = null;
+          let warningCheck: ActivationCheckResult | null = null;
+
+          for (const requiredCode of V1_REQUIRED_ACTIVATION_CHECKS) {
+            const check = checkMap.get(requiredCode);
+            if (!check) {
+              hasMissingChecks = true;
+              break;
+            }
+
+            if (check.status === ActivationCheckStatus.FAIL) {
+              if (!firstFailedCode) {
+                firstFailedCode = `CHECK_FAILED_${check.checkCode}`;
+              }
+            } else if (check.status === ActivationCheckStatus.WARNING) {
+              if (check.checkCode === ActivationCheckCode.POST_RECONNECT_SYNC) {
+                warningCheck = check;
+              } else {
+                if (!firstFailedCode) {
+                  firstFailedCode = `INVALID_WARNING_${check.checkCode}`;
+                }
+              }
+            } else if (check.status !== ActivationCheckStatus.PASS) {
+              if (!firstFailedCode) {
+                firstFailedCode = `CHECK_NOT_PASSED_${check.checkCode}`;
+              }
             }
           }
-        } else if (check.status !== ActivationCheckStatus.PASS) {
-          if (!firstFailedCode) {
-            firstFailedCode = `CHECK_NOT_PASSED_${check.checkCode}`;
+
+          const now = new Date();
+          let followUpCreated: ActivationFollowUp | null = null;
+
+          if (hasMissingChecks) {
+            attempt.status = ActivationAttemptStatus.FAIL;
+            attempt.failureCode = 'MISSING_REQUIRED_CHECKS';
+          } else if (firstFailedCode) {
+            attempt.status = ActivationAttemptStatus.FAIL;
+            attempt.failureCode = firstFailedCode;
+          } else if (warningCheck) {
+            // PASS_WITH_WARNING: all local required checks = PASS and POST_RECONNECT_SYNC = WARNING
+            attempt.status = ActivationAttemptStatus.PASS_WITH_WARNING;
+            attempt.warningsCount = 1;
+
+            // Persist ActivationFollowUp
+            const followUp = fRepo.create({
+              tenantId: trimmedTenant,
+              activationAttemptId: attempt.id,
+              warningCode: 'POST_RECONNECT_SYNC_TRANSIENT',
+              status: ActivationFollowUpStatus.OPEN,
+              openedAt: now,
+              openedBy: actorUserId || 'SYSTEM_FINALIZER',
+              closureEvidenceRef: warningCheck.evidenceRef || null,
+            });
+            followUpCreated = await fRepo.save(followUp);
+          } else {
+            // PASS: all required checks = PASS
+            attempt.status = ActivationAttemptStatus.PASS;
           }
-        }
-      }
 
-      const now = new Date();
+          attempt.completedAt = now;
+          const savedAttempt = await aRepo.save(attempt);
 
-      if (hasMissingChecks) {
-        attempt.status = ActivationAttemptStatus.FAIL;
-        attempt.failureCode = 'MISSING_REQUIRED_CHECKS';
-      } else if (firstFailedCode) {
-        attempt.status = ActivationAttemptStatus.FAIL;
-        attempt.failureCode = firstFailedCode;
-      } else if (warningCheck) {
-        // PASS_WITH_WARNING: all local required checks = PASS and POST_RECONNECT_SYNC = WARNING
-        attempt.status = ActivationAttemptStatus.PASS_WITH_WARNING;
-        attempt.warningsCount = 1;
+          // Lifecycle update on OnboardingSession
+          if (
+            attempt.status === ActivationAttemptStatus.PASS ||
+            attempt.status === ActivationAttemptStatus.PASS_WITH_WARNING
+          ) {
+            session.lifecycleState = OnboardingLifecycleState.ACTIVATED;
+            session.activatedAt = session.activatedAt ?? attempt.completedAt;
+          } else {
+            // FAIL: liberate active attempt and revert lifecycle based on live readiness
+            const readiness = await this.readinessEvaluator.evaluate(trimmedTenant);
+            if (readiness.saleReady) {
+              session.lifecycleState = OnboardingLifecycleState.SALE_READY;
+            } else {
+              session.lifecycleState = OnboardingLifecycleState.SETUP_IN_PROGRESS;
+            }
+          }
 
-        // Persist ActivationFollowUp
-        const followUp = fRepo.create({
+          session.lastActivityAt = now;
+          session.currentActivationAttemptId = savedAttempt.id;
+          session.optimisticVersion = (session.optimisticVersion ?? 1) + 1;
+          await sRepo.save(session);
+
+          return { savedAttempt, followUpCreated, isReplay: false };
+        },
+      );
+
+      if (!result.isReplay) {
+        await this.changeLogService.log({
           tenantId: trimmedTenant,
-          activationAttemptId: attempt.id,
-          warningCode: 'POST_RECONNECT_SYNC_TRANSIENT',
-          status: ActivationFollowUpStatus.OPEN,
-          openedAt: now,
-          openedBy: actorUserId || 'SYSTEM_FINALIZER',
-          closureEvidenceRef: warningCheck.evidenceRef || null,
+          userId: actorUserId || 'SYSTEM_FINALIZER',
+          action: 'ONBOARDING_ACTIVATION_FINALIZED',
+          targetType: 'ActivationAttempt',
+          targetId: result.savedAttempt.id,
+          changes: {
+            status: result.savedAttempt.status,
+            failureCode: result.savedAttempt.failureCode,
+            warningsCount: result.savedAttempt.warningsCount,
+            completedAt: result.savedAttempt.completedAt,
+          },
         });
-        await fRepo.save(followUp);
-      } else {
-        // PASS: all required checks = PASS
-        attempt.status = ActivationAttemptStatus.PASS;
-      }
 
-      attempt.completedAt = now;
-      const savedAttempt = await aRepo.save(attempt);
-
-      // Lifecycle update on OnboardingSession
-      if (
-        attempt.status === ActivationAttemptStatus.PASS ||
-        attempt.status === ActivationAttemptStatus.PASS_WITH_WARNING
-      ) {
-        session.lifecycleState = OnboardingLifecycleState.ACTIVATED;
-        session.activatedAt = session.activatedAt ?? attempt.completedAt;
-      } else {
-        // FAIL: liberate active attempt and revert lifecycle based on live readiness
-        const readiness = await this.readinessEvaluator.evaluate(trimmedTenant);
-        if (readiness.saleReady) {
-          session.lifecycleState = OnboardingLifecycleState.SALE_READY;
-        } else {
-          session.lifecycleState = OnboardingLifecycleState.SETUP_IN_PROGRESS;
+        if (result.followUpCreated) {
+          await this.changeLogService.log({
+            tenantId: trimmedTenant,
+            userId: actorUserId || 'SYSTEM_FINALIZER',
+            action: 'ONBOARDING_ACTIVATION_FOLLOW_UP_OPENED',
+            targetType: 'ActivationFollowUp',
+            targetId: result.followUpCreated.id,
+            changes: {
+              warningCode: result.followUpCreated.warningCode,
+              closureEvidenceRef: result.followUpCreated.closureEvidenceRef,
+            },
+          });
         }
       }
 
-      session.lastActivityAt = now;
-      session.currentActivationAttemptId = savedAttempt.id;
-      session.optimisticVersion = (session.optimisticVersion ?? 1) + 1;
-      await sRepo.save(session);
-
-      return savedAttempt;
-    });
-  }
+      return result.savedAttempt;
+    }
 
   async getAttempt(
     tenantId: string,
@@ -560,6 +636,373 @@ export class ActivationService {
       followUp.closureNote = dto.closureNote.trim();
     }
 
-    return this.followUpRepo.save(followUp);
+    const savedFollowUp = await this.followUpRepo.save(followUp);
+
+    await this.changeLogService.log({
+      tenantId,
+      userId: actorUserId || 'SYSTEM_RECONCILER',
+      action: 'ONBOARDING_ACTIVATION_FOLLOW_UP_CLOSED',
+      targetType: 'ActivationFollowUp',
+      targetId: savedFollowUp.id,
+      changes: {
+        closedBy: savedFollowUp.closedBy,
+        closureEvidenceRef: savedFollowUp.closureEvidenceRef,
+        closureNote: savedFollowUp.closureNote,
+      },
+    });
+
+    return savedFollowUp;
+  }
+
+  /**
+   * ONB1.7D–E — Background Convergence Reconciler
+   * Scans open follow-ups and automatically closes them when convergence evidence
+   * is corroborated, without mutating session.activatedAt.
+   */
+  async reconcileFollowUpConvergence(
+    tenantId?: string,
+    attemptId?: string,
+  ): Promise<{
+    evaluatedCount: number;
+    closedCount: number;
+    closedFollowUpIds: string[];
+    unresolvedCount: number;
+  }> {
+    const whereClause: any = {
+      status: ActivationFollowUpStatus.OPEN,
+    };
+    if (tenantId?.trim()) {
+      whereClause.tenantId = tenantId.trim();
+    }
+    if (attemptId?.trim()) {
+      whereClause.activationAttemptId = attemptId.trim();
+    }
+
+    const openFollowUps = await this.followUpRepo.find({
+      where: whereClause,
+    });
+
+    const closedFollowUpIds: string[] = [];
+    let unresolvedCount = 0;
+
+    for (const fup of openFollowUps) {
+      // Corroborate convergence: check if POST_RECONNECT_SYNC check has converged to PASS
+      const check = await this.checkRepo.findOne({
+        where: {
+          tenantId: fup.tenantId,
+          activationAttemptId: fup.activationAttemptId,
+          checkCode: ActivationCheckCode.POST_RECONNECT_SYNC,
+        },
+      });
+
+      let converged = false;
+      let evidenceRef = fup.closureEvidenceRef;
+
+      if (check && check.status === ActivationCheckStatus.PASS) {
+        converged = true;
+        evidenceRef = check.evidenceRef || 'POST_RECONNECT_SYNC_PASS_CONVERGED';
+      } else {
+        // Corroborate via verificationTicketId in real sales persistence
+        const attempt = await this.attemptRepo.findOne({
+          where: { id: fup.activationAttemptId, tenantId: fup.tenantId },
+        });
+        if (attempt?.verificationTicketId) {
+          try {
+            const invRepo = this.dataSource.getRepository('invoices');
+            const invoice = await invRepo.findOne({
+              where: {
+                tenant_id: fup.tenantId,
+                id: attempt.verificationTicketId,
+              },
+            });
+            if (invoice) {
+              converged = true;
+              evidenceRef = `VERIFICATION_INVOICE_${invoice.id}`;
+            }
+          } catch {
+            // Table not available or query error; ignore
+          }
+        }
+      }
+
+      if (converged) {
+        fup.status = ActivationFollowUpStatus.CLOSED;
+        fup.closedAt = new Date();
+        fup.closedBy = 'SYSTEM_RECONCILER';
+        fup.closureEvidenceRef = evidenceRef;
+        fup.closureNote =
+          'Automated background convergence completed without operator intervention';
+        await this.followUpRepo.save(fup);
+
+        await this.changeLogService.log({
+          tenantId: fup.tenantId,
+          userId: 'SYSTEM_RECONCILER',
+          action: 'ONBOARDING_ACTIVATION_FOLLOW_UP_CLOSED',
+          targetType: 'ActivationFollowUp',
+          targetId: fup.id,
+          changes: {
+            closedBy: fup.closedBy,
+            closureEvidenceRef: fup.closureEvidenceRef,
+            closureNote: fup.closureNote,
+          },
+        });
+
+        closedFollowUpIds.push(fup.id);
+      } else {
+        unresolvedCount++;
+      }
+    }
+
+    return {
+      evaluatedCount: openFollowUps.length,
+      closedCount: closedFollowUpIds.length,
+      closedFollowUpIds,
+      unresolvedCount,
+    };
+  }
+
+  /**
+   * ONB1.7F — Support Overrides & Manual Interventions
+   */
+  async executeSupportOverride(
+    tenantId: string,
+    attemptId: string,
+    dto: SupportOverrideDto,
+    actorUserId: string,
+  ): Promise<{
+    attempt: ActivationAttempt;
+    closedFollowUpsCount: number;
+  }> {
+    const trimmedTenant = tenantId?.trim();
+    if (!trimmedTenant) {
+      throw new BadRequestException('tenantId is required');
+    }
+
+    const reason = dto.reason?.trim();
+    if (!reason || reason.length < 10) {
+      throw new BadRequestException(
+        'INVALID_OVERRIDE_REASON: A substantive audit reason of at least 10 characters is required for support overrides',
+      );
+    }
+
+    return this.dataSource.transaction(async (manager: EntityManager) => {
+      const aRepo = manager.getRepository(ActivationAttempt);
+      const sRepo = manager.getRepository(OnboardingSession);
+      const fRepo = manager.getRepository(ActivationFollowUp);
+
+      const attempt = await aRepo.findOne({
+        where: { id: attemptId, tenantId: trimmedTenant },
+      });
+
+      if (!attempt) {
+        throw new NotFoundException(
+          `Activation attempt '${attemptId}' not found for tenant '${trimmedTenant}'`,
+        );
+      }
+
+      let closedFollowUpsCount = 0;
+      const now = new Date();
+
+      if (dto.overrideAction === SupportOverrideAction.FORCE_FAIL) {
+        attempt.status = ActivationAttemptStatus.FAIL;
+        attempt.failureCode = 'SUPPORT_OVERRIDE_FAIL';
+        attempt.completedAt = now;
+        await aRepo.save(attempt);
+
+        const session = await sRepo.findOne({
+          where: { tenantId: trimmedTenant },
+        });
+        if (session) {
+          const readiness = await this.readinessEvaluator.evaluate(trimmedTenant);
+          if (readiness.saleReady) {
+            session.lifecycleState = OnboardingLifecycleState.SALE_READY;
+          } else {
+            session.lifecycleState = OnboardingLifecycleState.SETUP_IN_PROGRESS;
+          }
+          session.lastActivityAt = now;
+          session.optimisticVersion = (session.optimisticVersion ?? 1) + 1;
+          await sRepo.save(session);
+        }
+      } else if (dto.overrideAction === SupportOverrideAction.DISMISS_WARNING) {
+        const openFollowUps = await fRepo.find({
+          where: {
+            tenantId: trimmedTenant,
+            activationAttemptId: attempt.id,
+            status: ActivationFollowUpStatus.OPEN,
+          },
+        });
+
+        for (const fup of openFollowUps) {
+          fup.status = ActivationFollowUpStatus.CLOSED;
+          fup.closedAt = now;
+          fup.closedBy = actorUserId || 'SUPPORT_OPERATOR';
+          fup.closureNote = `Support override: ${reason}`;
+          if (dto.evidenceRef) {
+            fup.closureEvidenceRef = dto.evidenceRef.trim();
+          }
+          await fRepo.save(fup);
+          closedFollowUpsCount++;
+        }
+      }
+
+      await this.changeLogService.log({
+        tenantId: trimmedTenant,
+        userId: actorUserId || 'SUPPORT_OPERATOR',
+        action: 'ONBOARDING_ACTIVATION_SUPPORT_OVERRIDE',
+        targetType: 'ActivationAttempt',
+        targetId: attempt.id,
+        changes: {
+          overrideAction: dto.overrideAction,
+          reason,
+          evidenceRef: dto.evidenceRef || null,
+          notes: dto.notes || null,
+        },
+      });
+
+      return {
+        attempt,
+        closedFollowUpsCount,
+      };
+    });
+  }
+
+  /**
+   * ONB1.7F — Activation Diagnostic Controls
+   * Compiles exhaustive diagnostic snapshot for troubleshooting & auditing.
+   */
+  async getActivationDiagnostics(
+    tenantId: string,
+    attemptId: string,
+  ): Promise<ActivationDiagnosticsDto> {
+    const trimmedTenant = tenantId?.trim();
+    if (!trimmedTenant) {
+      throw new BadRequestException('tenantId is required');
+    }
+
+    const attempt = await this.attemptRepo.findOne({
+      where: { id: attemptId, tenantId: trimmedTenant },
+    });
+
+    if (!attempt) {
+      throw new NotFoundException(
+        `Activation attempt '${attemptId}' not found for tenant '${trimmedTenant}'`,
+      );
+    }
+
+    const session = await this.sessionRepo.findOne({
+      where: { tenantId: trimmedTenant },
+    });
+
+    if (!session) {
+      throw new NotFoundException(
+        `Onboarding session not found for tenant '${trimmedTenant}'`,
+      );
+    }
+
+    const recordedChecks = await this.checkRepo.find({
+      where: { tenantId: trimmedTenant, activationAttemptId: attempt.id },
+    });
+
+    const checkMap = new Map<ActivationCheckCode, ActivationCheckResult>();
+    for (const chk of recordedChecks) {
+      checkMap.set(chk.checkCode, chk);
+    }
+
+    const checksMatrix: ActivationCheckDiagnosticItem[] = [];
+    const missingChecks: ActivationCheckCode[] = [];
+
+    for (const requiredCode of V1_REQUIRED_ACTIVATION_CHECKS) {
+      const recorded = checkMap.get(requiredCode);
+      if (recorded) {
+        checksMatrix.push({
+          checkCode: requiredCode,
+          status: recorded.status,
+          required: recorded.required,
+          isMissing: false,
+          recordedAt: recorded.recordedAt,
+          occurredAt: recorded.occurredAt,
+          evidenceType: recorded.evidenceType,
+          evidenceRef: recorded.evidenceRef,
+          detailsSanitizedJson: recorded.detailsSanitizedJson,
+        });
+      } else {
+        missingChecks.push(requiredCode);
+        checksMatrix.push({
+          checkCode: requiredCode,
+          status: 'MISSING',
+          required: true,
+          isMissing: true,
+        });
+      }
+    }
+
+    const followUps = await this.followUpRepo.find({
+      where: { tenantId: trimmedTenant, activationAttemptId: attempt.id },
+      order: { openedAt: 'ASC' },
+    });
+
+    const readiness = await this.readinessEvaluator.evaluate(trimmedTenant);
+
+    let auditTrail: any[] = [];
+    try {
+      auditTrail = await this.changeLogService.findByTarget(
+        trimmedTenant,
+        'ActivationAttempt',
+        attempt.id,
+      );
+    } catch {
+      // Table not present or query error; ignore
+    }
+
+    return {
+      tenantId: trimmedTenant,
+      attempt: {
+        id: attempt.id,
+        status: attempt.status,
+        candidateTerminalId: attempt.candidateTerminalId,
+        trustedTerminalId: attempt.trustedTerminalId,
+        verificationTicketId: attempt.verificationTicketId,
+        requiredFiscalRevision: attempt.requiredFiscalRevision,
+        requiredFiscalFingerprint: attempt.requiredFiscalFingerprint,
+        verificationProductId: attempt.verificationProductId,
+        verificationProductRevision: attempt.verificationProductRevision,
+        startedAt: attempt.startedAt,
+        completedAt: attempt.completedAt,
+        failureCode: attempt.failureCode,
+        warningsCount: attempt.warningsCount,
+      },
+      session: {
+        id: session.id,
+        lifecycleState: session.lifecycleState,
+        activatedAt: session.activatedAt,
+        saleReadyFirstAt: session.saleReadyFirstAt,
+      },
+      checksMatrix,
+      missingChecks,
+      followUps: followUps.map((f) => ({
+        id: f.id,
+        warningCode: f.warningCode,
+        status: f.status,
+        openedAt: f.openedAt,
+        openedBy: f.openedBy,
+        closureEvidenceRef: f.closureEvidenceRef,
+        closedAt: f.closedAt,
+        closedBy: f.closedBy,
+        closureNote: f.closureNote,
+      })),
+      readiness: {
+        saleReady: readiness.saleReady,
+        blockers: readiness.blockers,
+        warnings: readiness.warnings,
+      },
+      auditTrail: auditTrail.map((a) => ({
+        action: a.action,
+        targetType: a.target_type,
+        targetId: a.target_id,
+        userId: a.user_id,
+        createdAt: a.created_at,
+        changes: a.changes,
+      })),
+    };
   }
 }

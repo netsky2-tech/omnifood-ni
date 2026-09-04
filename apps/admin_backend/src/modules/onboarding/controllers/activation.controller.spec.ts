@@ -37,6 +37,15 @@ describe('ActivationController', () => {
       closeFollowUp: jest
         .fn()
         .mockResolvedValue({ id: 'fup-1', status: 'CLOSED' } as any),
+      reconcileFollowUpConvergence: jest
+        .fn()
+        .mockResolvedValue({ evaluatedCount: 1, closedCount: 1 } as any),
+      executeSupportOverride: jest
+        .fn()
+        .mockResolvedValue({ attempt: { id: 'att-1' } } as any),
+      getActivationDiagnostics: jest
+        .fn()
+        .mockResolvedValue({ attempt: { id: 'att-1' } } as any),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -132,6 +141,49 @@ describe('ActivationController', () => {
       'fup-1',
       { closureNote: 'Verified' },
       userId,
+    );
+  });
+
+  it('delegates POST /onboarding/activation/reconcile-convergence', async () => {
+    const req = { user: { tenant_id: tenantId } } as any;
+
+    const result = await controller.reconcileConvergence(req, {
+      attemptId: 'att-1',
+    });
+
+    expect(result).toBeDefined();
+    expect(
+      activationService.reconcileFollowUpConvergence,
+    ).toHaveBeenCalledWith(tenantId, 'att-1');
+  });
+
+  it('delegates POST /onboarding/activation/attempts/:id/support-override', async () => {
+    const req = { user: { id: userId, tenant_id: tenantId } } as any;
+    const dto = {
+      reason: 'Manual assistance for offline printer issue',
+      overrideAction: 'FORCE_FAIL' as any,
+    };
+
+    const result = await controller.executeSupportOverride(req, 'att-1', dto);
+
+    expect(result).toBeDefined();
+    expect(activationService.executeSupportOverride).toHaveBeenCalledWith(
+      tenantId,
+      'att-1',
+      dto,
+      userId,
+    );
+  });
+
+  it('delegates GET /onboarding/activation/attempts/:id/diagnostics', async () => {
+    const req = { user: { tenant_id: tenantId } } as any;
+
+    const result = await controller.getActivationDiagnostics(req, 'att-1');
+
+    expect(result).toBeDefined();
+    expect(activationService.getActivationDiagnostics).toHaveBeenCalledWith(
+      tenantId,
+      'att-1',
     );
   });
 });
