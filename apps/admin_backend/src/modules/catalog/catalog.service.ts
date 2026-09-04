@@ -200,9 +200,18 @@ export class CatalogService {
       }
 
       const changes: Record<string, unknown> = {};
-      if (dto.name !== undefined) { changes.name = { from: row.name, to: dto.name.trim() }; row.name = dto.name.trim(); }
-      if (dto.is_active !== undefined) { changes.is_active = { from: row.is_active, to: dto.is_active }; row.is_active = dto.is_active; }
-      if (dto.sort_order !== undefined) { changes.sort_order = { from: row.sort_order, to: dto.sort_order }; row.sort_order = dto.sort_order; }
+      if (dto.name !== undefined) {
+        changes.name = { from: row.name, to: dto.name.trim() };
+        row.name = dto.name.trim();
+      }
+      if (dto.is_active !== undefined) {
+        changes.is_active = { from: row.is_active, to: dto.is_active };
+        row.is_active = dto.is_active;
+      }
+      if (dto.sort_order !== undefined) {
+        changes.sort_order = { from: row.sort_order, to: dto.sort_order };
+        row.sort_order = dto.sort_order;
+      }
 
       return { saved: await repo.save(row), changes };
     });

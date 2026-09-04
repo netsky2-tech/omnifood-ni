@@ -31,7 +31,9 @@ describe('ImportStagingService (Unit & Triangulation)', () => {
   const tenantId = 'tenant-uuid-1';
   const sessionToken = '11111111-2222-3333-4444-555555555555';
 
-  function createMockStagingRow(partial: Partial<ImportStaging>): ImportStaging {
+  function createMockStagingRow(
+    partial: Partial<ImportStaging>,
+  ): ImportStaging {
     return {
       id: 'staged-' + Math.random().toString(36).substring(7),
       tenant_id: tenantId,
@@ -64,7 +66,7 @@ describe('ImportStagingService (Unit & Triangulation)', () => {
       created_at: new Date(),
       updated_at: new Date(),
       ...partial,
-    } as ImportStaging;
+    };
   }
 
   beforeEach(() => {
@@ -90,7 +92,9 @@ describe('ImportStagingService (Unit & Triangulation)', () => {
     } as unknown as jest.Mocked<Repository<ProductImportSession>>;
 
     receiptRepo = {
-      create: jest.fn((plain: unknown) => plain as LegacyOnboardingMigrationReceipt),
+      create: jest.fn(
+        (plain: unknown) => plain as LegacyOnboardingMigrationReceipt,
+      ),
       save: jest.fn((item: unknown) => Promise.resolve(item)),
     } as unknown as jest.Mocked<Repository<LegacyOnboardingMigrationReceipt>>;
 
@@ -631,7 +635,7 @@ describe('ImportStagingService (Unit & Triangulation)', () => {
       const existingProduct: Product = {
         id: 'prod-dup-1',
         tenant_id: tenantId,
-        tenant: null as never,
+        tenant: null,
         warehouse_id: 'wh-1',
         name: 'Hamburguesa Especial',
         uom: 'UN',

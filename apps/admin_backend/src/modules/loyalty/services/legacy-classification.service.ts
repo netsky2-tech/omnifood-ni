@@ -27,7 +27,10 @@ export class LegacyClassificationService {
 
   async ensureLegacyProgram(tenantId: string): Promise<LoyaltyProgram> {
     const existing = await this.programRepo.findOne({
-      where: { tenant_id: tenantId, name: LegacyClassificationService.LEGACY_PROGRAM_NAME },
+      where: {
+        tenant_id: tenantId,
+        name: LegacyClassificationService.LEGACY_PROGRAM_NAME,
+      },
     });
     if (existing) return existing;
 
@@ -74,13 +77,19 @@ export class LegacyClassificationService {
       .select('COALESCE(SUM(tx.units), 0)', 'total')
       .where('tx.tenant_id = :tenantId', { tenantId })
       .andWhere('tx.customer_id = :customerId', { customerId })
-      .andWhere('tx.loyalty_program_id = :programId', { programId: loyaltyProgramId })
+      .andWhere('tx.loyalty_program_id = :programId', {
+        programId: loyaltyProgramId,
+      })
       .getRawOne();
 
     const totalUnits = Number(result?.total ?? 0);
 
     let projection = await this.projectionRepo.findOne({
-      where: { tenant_id: tenantId, customer_id: customerId, loyalty_program_id: loyaltyProgramId },
+      where: {
+        tenant_id: tenantId,
+        customer_id: customerId,
+        loyalty_program_id: loyaltyProgramId,
+      },
     });
 
     if (projection) {

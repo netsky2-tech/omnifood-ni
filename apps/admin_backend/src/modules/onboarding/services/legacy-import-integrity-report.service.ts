@@ -58,7 +58,8 @@ export class LegacyImportIntegrityReportService {
 
     const rowsWithStockOrCost = legacyCommittedRows.filter(
       (r) =>
-        (r.parsed_stock_inicial !== null && Number(r.parsed_stock_inicial) > 0) ||
+        (r.parsed_stock_inicial !== null &&
+          Number(r.parsed_stock_inicial) > 0) ||
         (r.parsed_costo_insumo !== null && Number(r.parsed_costo_insumo) > 0),
     );
 
@@ -112,7 +113,9 @@ export class LegacyImportIntegrityReportService {
 
           const productStock = Number(matchedProduct.stock) || 0;
           const directCost =
-            row.parsed_costo_insumo !== null ? Number(row.parsed_costo_insumo) : null;
+            row.parsed_costo_insumo !== null
+              ? Number(row.parsed_costo_insumo)
+              : null;
 
           if (productStock > 0 || (directCost !== null && directCost > 0)) {
             observedWrites.push({
@@ -179,7 +182,9 @@ export class LegacyImportIntegrityReportService {
    * Expires and rejects uncommitted legacy staging rows that contain incompatible
    * stock or cost fields, requiring re-upload under the canonical ImportContractVersion.
    */
-  async expireIncompatibleLegacyStaging(tenantId: string): Promise<LegacyScanResult> {
+  async expireIncompatibleLegacyStaging(
+    tenantId: string,
+  ): Promise<LegacyScanResult> {
     const trimmedTenant = tenantId?.trim();
     if (!trimmedTenant) {
       throw new BadRequestException('Tenant ID is required');
@@ -188,7 +193,10 @@ export class LegacyImportIntegrityReportService {
     const pendingRows = await this.stagingRepo.find({
       where: {
         tenant_id: trimmedTenant,
-        estado_fila: In([ImportStagingStatus.PENDIENTE, ImportStagingStatus.VALIDO]),
+        estado_fila: In([
+          ImportStagingStatus.PENDIENTE,
+          ImportStagingStatus.VALIDO,
+        ]),
       },
     });
 
@@ -196,7 +204,8 @@ export class LegacyImportIntegrityReportService {
       (r) =>
         (r.raw_stock_inicial !== null && r.raw_stock_inicial !== '') ||
         (r.raw_costo_insumo !== null && r.raw_costo_insumo !== '') ||
-        (r.parsed_stock_inicial !== null && Number(r.parsed_stock_inicial) > 0) ||
+        (r.parsed_stock_inicial !== null &&
+          Number(r.parsed_stock_inicial) > 0) ||
         (r.parsed_costo_insumo !== null && Number(r.parsed_costo_insumo) > 0),
     );
 

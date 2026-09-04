@@ -13,9 +13,7 @@ describe('SyncBatchController', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [SyncBatchController],
-      providers: [
-        { provide: InvoicesService, useValue: invoicesService },
-      ],
+      providers: [{ provide: InvoicesService, useValue: invoicesService }],
     })
       .overrideGuard(AuthGuard)
       .useValue({ canActivate: jest.fn().mockReturnValue(true) })

@@ -47,7 +47,8 @@ export class Customer {
     default: 0.0,
     transformer: {
       to: (value: number) => value,
-      from: (value: string | number) => (typeof value === 'string' ? parseFloat(value) : value),
+      from: (value: string | number) =>
+        typeof value === 'string' ? parseFloat(value) : value,
     },
   })
   points_balance: number;

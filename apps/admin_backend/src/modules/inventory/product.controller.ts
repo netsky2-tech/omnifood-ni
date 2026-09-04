@@ -16,7 +16,10 @@ import { ProductType } from './entities/product.entity';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { GetTenantId } from '../../core/decorators/tenant.decorator';
-import { CurrentUser, CurrentUserPayload } from '../../core/decorators/current-user.decorator';
+import {
+  CurrentUser,
+  CurrentUserPayload,
+} from '../../core/decorators/current-user.decorator';
 import { TenantInterceptor } from '../../core/database/rls.interceptor';
 import { AuthGuard } from '../identity/guards/auth.guard';
 import { AuthoritativeCurrentUserGuard } from '../identity/guards/authoritative-current-user.guard';
@@ -69,10 +72,7 @@ export class ProductController {
   @Get(':id')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles(UserRole.OWNER, UserRole.MANAGER)
-  async findOne(
-    @Param('id') id: string,
-    @GetTenantId() tenantId?: string,
-  ) {
+  async findOne(@Param('id') id: string, @GetTenantId() tenantId?: string) {
     return this.productService.findOne(id, this.requireTenant(tenantId));
   }
 

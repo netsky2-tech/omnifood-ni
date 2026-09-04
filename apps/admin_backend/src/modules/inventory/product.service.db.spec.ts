@@ -63,7 +63,11 @@ async function withIsolatedSchema(
   }
 }
 
-async function seedTenant(dataSource: DataSource, tenantId: string, name: string): Promise<void> {
+async function seedTenant(
+  dataSource: DataSource,
+  tenantId: string,
+  name: string,
+): Promise<void> {
   await dataSource.query(
     `INSERT INTO tenants (id, name, is_active, created_at, updated_at) VALUES ($1, $2, true, now(), now())`,
     [tenantId, name],
@@ -71,7 +75,9 @@ async function seedTenant(dataSource: DataSource, tenantId: string, name: string
 }
 
 function createService(dataSource: DataSource): ProductService {
-  return new ProductService(dataSource, { log: jest.fn() } as unknown as ChangeLogService);
+  return new ProductService(dataSource, {
+    log: jest.fn(),
+  } as unknown as ChangeLogService);
 }
 
 describe('ProductService — real PostgreSQL', () => {
@@ -114,25 +120,43 @@ describe('ProductService — real PostgreSQL', () => {
     it(
       'lists products filtered by tenant',
       async () => {
-        await withIsolatedSchema('product_list_tenant', async ({ dataSource }) => {
-          const tenantA = randomUUID();
-          const tenantB = randomUUID();
-          const service = createService(dataSource);
-          await seedTenant(dataSource, tenantA, 'Tenant A');
-          await seedTenant(dataSource, tenantB, 'Tenant B');
+        await withIsolatedSchema(
+          'product_list_tenant',
+          async ({ dataSource }) => {
+            const tenantA = randomUUID();
+            const tenantB = randomUUID();
+            const service = createService(dataSource);
+            await seedTenant(dataSource, tenantA, 'Tenant A');
+            await seedTenant(dataSource, tenantB, 'Tenant B');
 
-          await service.create(tenantA, { name: 'Product A1', uom: 'un', product_type: ProductType.SIMPLE });
-          await service.create(tenantA, { name: 'Product A2', uom: 'kg', product_type: ProductType.COMPOUND });
-          await service.create(tenantB, { name: 'Product B1', uom: 'un', product_type: ProductType.SIMPLE });
+            await service.create(tenantA, {
+              name: 'Product A1',
+              uom: 'un',
+              product_type: ProductType.SIMPLE,
+            });
+            await service.create(tenantA, {
+              name: 'Product A2',
+              uom: 'kg',
+              product_type: ProductType.COMPOUND,
+            });
+            await service.create(tenantB, {
+              name: 'Product B1',
+              uom: 'un',
+              product_type: ProductType.SIMPLE,
+            });
 
-          const listA = await service.list(tenantA);
-          const listB = await service.list(tenantB);
+            const listA = await service.list(tenantA);
+            const listB = await service.list(tenantB);
 
-          expect(listA).toHaveLength(2);
-          expect(listA.map((p) => p.name).sort()).toEqual(['Product A1', 'Product A2']);
-          expect(listB).toHaveLength(1);
-          expect(listB[0].name).toBe('Product B1');
-        });
+            expect(listA).toHaveLength(2);
+            expect(listA.map((p) => p.name).sort()).toEqual([
+              'Product A1',
+              'Product A2',
+            ]);
+            expect(listB).toHaveLength(1);
+            expect(listB[0].name).toBe('Product B1');
+          },
+        );
       },
       TEST_TIMEOUT_MS,
     );
@@ -140,26 +164,47 @@ describe('ProductService — real PostgreSQL', () => {
     it(
       'filters list by product_type',
       async () => {
-        await withIsolatedSchema('product_list_type', async ({ dataSource }) => {
-          const tenantId = randomUUID();
-          const service = createService(dataSource);
-          await seedTenant(dataSource, tenantId, 'Tenant Type');
+        await withIsolatedSchema(
+          'product_list_type',
+          async ({ dataSource }) => {
+            const tenantId = randomUUID();
+            const service = createService(dataSource);
+            await seedTenant(dataSource, tenantId, 'Tenant Type');
 
-          await service.create(tenantId, { name: 'Simple', uom: 'un', product_type: ProductType.SIMPLE });
-          await service.create(tenantId, { name: 'Compound', uom: 'un', product_type: ProductType.COMPOUND });
-          await service.create(tenantId, { name: 'Variant', uom: 'un', product_type: ProductType.VARIANT_PARENT });
+            await service.create(tenantId, {
+              name: 'Simple',
+              uom: 'un',
+              product_type: ProductType.SIMPLE,
+            });
+            await service.create(tenantId, {
+              name: 'Compound',
+              uom: 'un',
+              product_type: ProductType.COMPOUND,
+            });
+            await service.create(tenantId, {
+              name: 'Variant',
+              uom: 'un',
+              product_type: ProductType.VARIANT_PARENT,
+            });
 
-          const simples = await service.list(tenantId, ProductType.SIMPLE);
-          const compounds = await service.list(tenantId, ProductType.COMPOUND);
-          const variants = await service.list(tenantId, ProductType.VARIANT_PARENT);
+            const simples = await service.list(tenantId, ProductType.SIMPLE);
+            const compounds = await service.list(
+              tenantId,
+              ProductType.COMPOUND,
+            );
+            const variants = await service.list(
+              tenantId,
+              ProductType.VARIANT_PARENT,
+            );
 
-          expect(simples).toHaveLength(1);
-          expect(simples[0].name).toBe('Simple');
-          expect(compounds).toHaveLength(1);
-          expect(compounds[0].name).toBe('Compound');
-          expect(variants).toHaveLength(1);
-          expect(variants[0].name).toBe('Variant');
-        });
+            expect(simples).toHaveLength(1);
+            expect(simples[0].name).toBe('Simple');
+            expect(compounds).toHaveLength(1);
+            expect(compounds[0].name).toBe('Compound');
+            expect(variants).toHaveLength(1);
+            expect(variants[0].name).toBe('Variant');
+          },
+        );
       },
       TEST_TIMEOUT_MS,
     );
@@ -172,8 +217,16 @@ describe('ProductService — real PostgreSQL', () => {
           const service = createService(dataSource);
           await seedTenant(dataSource, tenantId, 'Tenant Inactive');
 
-          const p1 = await service.create(tenantId, { name: 'Active', uom: 'un', product_type: ProductType.SIMPLE });
-          await service.create(tenantId, { name: 'Also Active', uom: 'un', product_type: ProductType.SIMPLE });
+          const p1 = await service.create(tenantId, {
+            name: 'Active',
+            uom: 'un',
+            product_type: ProductType.SIMPLE,
+          });
+          await service.create(tenantId, {
+            name: 'Also Active',
+            uom: 'un',
+            product_type: ProductType.SIMPLE,
+          });
           await service.deactivate(p1.id, tenantId);
 
           const activeOnly = await service.list(tenantId);
@@ -222,22 +275,25 @@ describe('ProductService — real PostgreSQL', () => {
     it(
       'deactivates product (soft-delete)',
       async () => {
-        await withIsolatedSchema('product_deactivate', async ({ dataSource }) => {
-          const tenantId = randomUUID();
-          const service = createService(dataSource);
-          await seedTenant(dataSource, tenantId, 'Tenant Deactivate');
+        await withIsolatedSchema(
+          'product_deactivate',
+          async ({ dataSource }) => {
+            const tenantId = randomUUID();
+            const service = createService(dataSource);
+            await seedTenant(dataSource, tenantId, 'Tenant Deactivate');
 
-          const created = await service.create(tenantId, {
-            name: 'To Deactivate',
-            uom: 'un',
-            product_type: ProductType.SIMPLE,
-          });
+            const created = await service.create(tenantId, {
+              name: 'To Deactivate',
+              uom: 'un',
+              product_type: ProductType.SIMPLE,
+            });
 
-          await service.deactivate(created.id, tenantId);
+            await service.deactivate(created.id, tenantId);
 
-          const found = await service.findOne(created.id, tenantId);
-          expect(found.is_active).toBe(false);
-        });
+            const found = await service.findOne(created.id, tenantId);
+            expect(found.is_active).toBe(false);
+          },
+        );
       },
       TEST_TIMEOUT_MS,
     );
@@ -250,9 +306,9 @@ describe('ProductService — real PostgreSQL', () => {
           const service = createService(dataSource);
           await seedTenant(dataSource, tenantId, 'Tenant NotFound');
 
-          await expect(
-            service.findOne(randomUUID(), tenantId),
-          ).rejects.toThrow(NotFoundException);
+          await expect(service.findOne(randomUUID(), tenantId)).rejects.toThrow(
+            NotFoundException,
+          );
         });
       },
       TEST_TIMEOUT_MS,
@@ -264,9 +320,15 @@ describe('ProductService — real PostgreSQL', () => {
         await withIsolatedSchema('product_notenant', async ({ dataSource }) => {
           const service = createService(dataSource);
 
-          await expect(service.list('   ')).rejects.toThrow(UnauthorizedException);
+          await expect(service.list('   ')).rejects.toThrow(
+            UnauthorizedException,
+          );
           await expect(
-            service.create('  ', { name: 'X', uom: 'un', product_type: ProductType.SIMPLE }),
+            service.create('  ', {
+              name: 'X',
+              uom: 'un',
+              product_type: ProductType.SIMPLE,
+            }),
           ).rejects.toThrow(UnauthorizedException);
         });
       },
@@ -297,23 +359,26 @@ describe('ProductService — real PostgreSQL', () => {
     it(
       'trims whitespace on update',
       async () => {
-        await withIsolatedSchema('product_trim_update', async ({ dataSource }) => {
-          const tenantId = randomUUID();
-          const service = createService(dataSource);
-          await seedTenant(dataSource, tenantId, 'Tenant Trim Update');
+        await withIsolatedSchema(
+          'product_trim_update',
+          async ({ dataSource }) => {
+            const tenantId = randomUUID();
+            const service = createService(dataSource);
+            await seedTenant(dataSource, tenantId, 'Tenant Trim Update');
 
-          const created = await service.create(tenantId, {
-            name: 'Original',
-            uom: 'un',
-            product_type: ProductType.SIMPLE,
-          });
+            const created = await service.create(tenantId, {
+              name: 'Original',
+              uom: 'un',
+              product_type: ProductType.SIMPLE,
+            });
 
-          const updated = await service.update(created.id, tenantId, {
-            name: '  Trimmed  ',
-          });
+            const updated = await service.update(created.id, tenantId, {
+              name: '  Trimmed  ',
+            });
 
-          expect(updated.name).toBe('Trimmed');
-        });
+            expect(updated.name).toBe('Trimmed');
+          },
+        );
       },
       TEST_TIMEOUT_MS,
     );
@@ -323,28 +388,31 @@ describe('ProductService — real PostgreSQL', () => {
     it(
       'enforces tenant isolation — tenant A cannot see tenant B products via service',
       async () => {
-        await withIsolatedSchema('product_rls_isolation', async ({ dataSource }) => {
-          const tenantA = randomUUID();
-          const tenantB = randomUUID();
-          const service = createService(dataSource);
-          await seedTenant(dataSource, tenantA, 'Tenant A RLS');
-          await seedTenant(dataSource, tenantB, 'Tenant B RLS');
+        await withIsolatedSchema(
+          'product_rls_isolation',
+          async ({ dataSource }) => {
+            const tenantA = randomUUID();
+            const tenantB = randomUUID();
+            const service = createService(dataSource);
+            await seedTenant(dataSource, tenantA, 'Tenant A RLS');
+            await seedTenant(dataSource, tenantB, 'Tenant B RLS');
 
-          const productB = await service.create(tenantB, {
-            name: 'Secret Product B',
-            uom: 'un',
-            product_type: ProductType.SIMPLE,
-          });
+            const productB = await service.create(tenantB, {
+              name: 'Secret Product B',
+              uom: 'un',
+              product_type: ProductType.SIMPLE,
+            });
 
-          // Tenant A queries should not see tenant B's product
-          const listA = await service.list(tenantA);
-          expect(listA).toHaveLength(0);
+            // Tenant A queries should not see tenant B's product
+            const listA = await service.list(tenantA);
+            expect(listA).toHaveLength(0);
 
-          // findOne with tenant A for tenant B's product should throw
-          await expect(
-            service.findOne(productB.id, tenantA),
-          ).rejects.toThrow(NotFoundException);
-        });
+            // findOne with tenant A for tenant B's product should throw
+            await expect(service.findOne(productB.id, tenantA)).rejects.toThrow(
+              NotFoundException,
+            );
+          },
+        );
       },
       TEST_TIMEOUT_MS,
     );
@@ -352,19 +420,22 @@ describe('ProductService — real PostgreSQL', () => {
     it(
       'create uses the provided tenant_id',
       async () => {
-        await withIsolatedSchema('product_create_tenant', async ({ dataSource }) => {
-          const tenantId = randomUUID();
-          const service = createService(dataSource);
-          await seedTenant(dataSource, tenantId, 'Tenant Create');
+        await withIsolatedSchema(
+          'product_create_tenant',
+          async ({ dataSource }) => {
+            const tenantId = randomUUID();
+            const service = createService(dataSource);
+            await seedTenant(dataSource, tenantId, 'Tenant Create');
 
-          const created = await service.create(tenantId, {
-            name: 'Test',
-            uom: 'un',
-            product_type: ProductType.SIMPLE,
-          });
+            const created = await service.create(tenantId, {
+              name: 'Test',
+              uom: 'un',
+              product_type: ProductType.SIMPLE,
+            });
 
-          expect(created.tenant_id).toBe(tenantId);
-        });
+            expect(created.tenant_id).toBe(tenantId);
+          },
+        );
       },
       TEST_TIMEOUT_MS,
     );
@@ -372,23 +443,26 @@ describe('ProductService — real PostgreSQL', () => {
     it(
       'deactivate is idempotent',
       async () => {
-        await withIsolatedSchema('product_deactivate_idempotent', async ({ dataSource }) => {
-          const tenantId = randomUUID();
-          const service = createService(dataSource);
-          await seedTenant(dataSource, tenantId, 'Tenant Idempotent');
+        await withIsolatedSchema(
+          'product_deactivate_idempotent',
+          async ({ dataSource }) => {
+            const tenantId = randomUUID();
+            const service = createService(dataSource);
+            await seedTenant(dataSource, tenantId, 'Tenant Idempotent');
 
-          const created = await service.create(tenantId, {
-            name: 'Idempotent',
-            uom: 'un',
-            product_type: ProductType.SIMPLE,
-          });
+            const created = await service.create(tenantId, {
+              name: 'Idempotent',
+              uom: 'un',
+              product_type: ProductType.SIMPLE,
+            });
 
-          await service.deactivate(created.id, tenantId);
-          await service.deactivate(created.id, tenantId);
+            await service.deactivate(created.id, tenantId);
+            await service.deactivate(created.id, tenantId);
 
-          const found = await service.findOne(created.id, tenantId);
-          expect(found.is_active).toBe(false);
-        });
+            const found = await service.findOne(created.id, tenantId);
+            expect(found.is_active).toBe(false);
+          },
+        );
       },
       TEST_TIMEOUT_MS,
     );
@@ -396,34 +470,37 @@ describe('ProductService — real PostgreSQL', () => {
     it(
       'create with all optional fields',
       async () => {
-        await withIsolatedSchema('product_all_fields', async ({ dataSource }) => {
-          const tenantId = randomUUID();
-          const service = createService(dataSource);
-          await seedTenant(dataSource, tenantId, 'Tenant AllFields');
+        await withIsolatedSchema(
+          'product_all_fields',
+          async ({ dataSource }) => {
+            const tenantId = randomUUID();
+            const service = createService(dataSource);
+            await seedTenant(dataSource, tenantId, 'Tenant AllFields');
 
-          const created = await service.create(tenantId, {
-            name: 'Full Product',
-            uom: 'kg',
-            product_type: ProductType.COMPOUND,
-            category_code: 'CARNES',
-            warehouse_id: randomUUID(),
-            is_perishable: true,
-            stock: 10.5,
-            averageCost: 25.75,
-            sellPrice: 45.0,
-            is_active: true,
-          });
+            const created = await service.create(tenantId, {
+              name: 'Full Product',
+              uom: 'kg',
+              product_type: ProductType.COMPOUND,
+              category_code: 'CARNES',
+              warehouse_id: randomUUID(),
+              is_perishable: true,
+              stock: 10.5,
+              averageCost: 25.75,
+              sellPrice: 45.0,
+              is_active: true,
+            });
 
-          expect(created.name).toBe('Full Product');
-          expect(created.uom).toBe('kg');
-          expect(created.product_type).toBe(ProductType.COMPOUND);
-          expect(created.category_code).toBe('CARNES');
-          expect(created.warehouse_id).toBeDefined();
-          expect(created.is_perishable).toBe(true);
-          expect(Number(created.stock)).toBeCloseTo(10.5, 1);
-          expect(Number(created.averageCost)).toBeCloseTo(25.75, 1);
-          expect(Number(created.sellPrice)).toBeCloseTo(45.0, 1);
-        });
+            expect(created.name).toBe('Full Product');
+            expect(created.uom).toBe('kg');
+            expect(created.product_type).toBe(ProductType.COMPOUND);
+            expect(created.category_code).toBe('CARNES');
+            expect(created.warehouse_id).toBeDefined();
+            expect(created.is_perishable).toBe(true);
+            expect(Number(created.stock)).toBeCloseTo(10.5, 1);
+            expect(Number(created.averageCost)).toBeCloseTo(25.75, 1);
+            expect(Number(created.sellPrice)).toBeCloseTo(45.0, 1);
+          },
+        );
       },
       TEST_TIMEOUT_MS,
     );
@@ -431,26 +508,29 @@ describe('ProductService — real PostgreSQL', () => {
     it(
       'update only touches mentioned fields',
       async () => {
-        await withIsolatedSchema('product_partial_update', async ({ dataSource }) => {
-          const tenantId = randomUUID();
-          const service = createService(dataSource);
-          await seedTenant(dataSource, tenantId, 'Tenant Partial');
+        await withIsolatedSchema(
+          'product_partial_update',
+          async ({ dataSource }) => {
+            const tenantId = randomUUID();
+            const service = createService(dataSource);
+            await seedTenant(dataSource, tenantId, 'Tenant Partial');
 
-          const created = await service.create(tenantId, {
-            name: 'Keep Name',
-            uom: 'kg',
-            product_type: ProductType.SIMPLE,
-            sellPrice: 100,
-          });
+            const created = await service.create(tenantId, {
+              name: 'Keep Name',
+              uom: 'kg',
+              product_type: ProductType.SIMPLE,
+              sellPrice: 100,
+            });
 
-          const updated = await service.update(created.id, tenantId, {
-            sellPrice: 200,
-          });
+            const updated = await service.update(created.id, tenantId, {
+              sellPrice: 200,
+            });
 
-          expect(updated.name).toBe('Keep Name');
-          expect(updated.uom).toBe('kg');
-          expect(Number(updated.sellPrice)).toBe(200);
-        });
+            expect(updated.name).toBe('Keep Name');
+            expect(updated.uom).toBe('kg');
+            expect(Number(updated.sellPrice)).toBe(200);
+          },
+        );
       },
       TEST_TIMEOUT_MS,
     );

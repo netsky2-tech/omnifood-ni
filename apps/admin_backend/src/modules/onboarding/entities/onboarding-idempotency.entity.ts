@@ -57,7 +57,12 @@ export class OnboardingIdempotencyRecord {
   @Column({ name: 'result_ref', type: 'jsonb', nullable: true })
   resultRef!: any;
 
-  @Column({ name: 'last_error_code', type: 'varchar', length: 128, nullable: true })
+  @Column({
+    name: 'last_error_code',
+    type: 'varchar',
+    length: 128,
+    nullable: true,
+  })
   lastErrorCode!: string | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })

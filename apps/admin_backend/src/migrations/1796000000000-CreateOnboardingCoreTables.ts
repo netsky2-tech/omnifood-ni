@@ -1,4 +1,10 @@
-import { MigrationInterface, QueryRunner, Table, TableIndex, TableUnique } from 'typeorm';
+import {
+  MigrationInterface,
+  QueryRunner,
+  Table,
+  TableIndex,
+  TableUnique,
+} from 'typeorm';
 
 export class CreateOnboardingCoreTables1796000000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {

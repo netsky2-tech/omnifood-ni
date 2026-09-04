@@ -28,7 +28,12 @@ describe('OnboardingCatalogController (Unit)', () => {
   };
 
   const mockReadiness = {
-    identity: { tenantExists: true, initialOwnerExists: true, ownerCanAuthenticate: true, tenantContextValid: true },
+    identity: {
+      tenantExists: true,
+      initialOwnerExists: true,
+      ownerCanAuthenticate: true,
+      tenantContextValid: true,
+    },
     fiscal: { minimumConfigurationValid: true, businessName: 'Café Test' },
     catalog: { sellableProductCount: 1, hasSellableProduct: true },
     saleReady: true,
@@ -57,9 +62,9 @@ describe('OnboardingCatalogController (Unit)', () => {
         sellPrice: 45.0,
       };
 
-      await expect(controller.createManualProduct(dto, req, undefined)).rejects.toThrow(
-        UnauthorizedException,
-      );
+      await expect(
+        controller.createManualProduct(dto, req, undefined),
+      ).rejects.toThrow(UnauthorizedException);
     });
 
     it('creates manual product and returns product, session, and readiness', async () => {
@@ -86,18 +91,26 @@ describe('OnboardingCatalogController (Unit)', () => {
 
       service.createManualProduct.mockResolvedValueOnce(expectedResponse);
 
-      const result = await controller.createManualProduct(dto, req, 'tenant-test');
+      const result = await controller.createManualProduct(
+        dto,
+        req,
+        'tenant-test',
+      );
       expect(result).toEqual(expectedResponse);
-      expect(service.createManualProduct).toHaveBeenCalledWith('tenant-test', dto, 'user-1');
+      expect(service.createManualProduct).toHaveBeenCalledWith(
+        'tenant-test',
+        dto,
+        'user-1',
+      );
     });
   });
 
   describe('getCatalogSummary', () => {
     it('throws UnauthorizedException when tenantId is missing', async () => {
       const req: any = { user: {} };
-      await expect(controller.getCatalogSummary(req, undefined)).rejects.toThrow(
-        UnauthorizedException,
-      );
+      await expect(
+        controller.getCatalogSummary(req, undefined),
+      ).rejects.toThrow(UnauthorizedException);
     });
 
     it('returns catalog summary for tenant', async () => {
@@ -144,14 +157,24 @@ describe('OnboardingCatalogController (Unit)', () => {
         tenantId: 'tenant-test',
         isActive: true,
         verificationProductRevision: 1,
-        verificationProductFingerprint: 'abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234',
+        verificationProductFingerprint:
+          'abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234',
       };
 
-      service.getVerificationProductCandidate = jest.fn().mockResolvedValueOnce(expectedCandidate);
+      service.getVerificationProductCandidate = jest
+        .fn()
+        .mockResolvedValueOnce(expectedCandidate);
 
-      const result = await controller.getVerificationProductCandidate(req, 'prod-123', 'tenant-test');
+      const result = await controller.getVerificationProductCandidate(
+        req,
+        'prod-123',
+        'tenant-test',
+      );
       expect(result).toEqual(expectedCandidate);
-      expect(service.getVerificationProductCandidate).toHaveBeenCalledWith('tenant-test', 'prod-123');
+      expect(service.getVerificationProductCandidate).toHaveBeenCalledWith(
+        'tenant-test',
+        'prod-123',
+      );
     });
   });
 });

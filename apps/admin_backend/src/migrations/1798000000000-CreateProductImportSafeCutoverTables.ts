@@ -7,9 +7,7 @@ import {
   TableUnique,
 } from 'typeorm';
 
-export class CreateProductImportSafeCutoverTables1798000000000
-  implements MigrationInterface
-{
+export class CreateProductImportSafeCutoverTables1798000000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     // 1. Create product_import_sessions
     await queryRunner.createTable(
@@ -310,13 +308,31 @@ export class CreateProductImportSafeCutoverTables1798000000000
       'staging_importacion_productos',
       'uq_staging_importacion_tenant_token_ordinal',
     );
-    await queryRunner.dropColumn('staging_importacion_productos', 'unknown_columns');
-    await queryRunner.dropColumn('staging_importacion_productos', 'unsupported_fields');
-    await queryRunner.dropColumn('staging_importacion_productos', 'conflict_reason');
-    await queryRunner.dropColumn('staging_importacion_productos', 'fields_to_change');
-    await queryRunner.dropColumn('staging_importacion_productos', 'target_product_id');
+    await queryRunner.dropColumn(
+      'staging_importacion_productos',
+      'unknown_columns',
+    );
+    await queryRunner.dropColumn(
+      'staging_importacion_productos',
+      'unsupported_fields',
+    );
+    await queryRunner.dropColumn(
+      'staging_importacion_productos',
+      'conflict_reason',
+    );
+    await queryRunner.dropColumn(
+      'staging_importacion_productos',
+      'fields_to_change',
+    );
+    await queryRunner.dropColumn(
+      'staging_importacion_productos',
+      'target_product_id',
+    );
     await queryRunner.dropColumn('staging_importacion_productos', 'matched_by');
-    await queryRunner.dropColumn('staging_importacion_productos', 'row_ordinal');
+    await queryRunner.dropColumn(
+      'staging_importacion_productos',
+      'row_ordinal',
+    );
 
     await queryRunner.dropTable('product_import_sessions', true);
   }

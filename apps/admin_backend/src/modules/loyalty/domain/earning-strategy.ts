@@ -1,13 +1,23 @@
-import { LoyaltyTicketSnapshot, LoyaltyTicketLine, EarningResult } from './loyalty-ticket-snapshot';
+import {
+  LoyaltyTicketSnapshot,
+  LoyaltyTicketLine,
+  EarningResult,
+} from './loyalty-ticket-snapshot';
 import { LoyaltyProgram } from '../entities/loyalty-program.entity';
 
 export interface EarningStrategy {
-  evaluate(snapshot: LoyaltyTicketSnapshot, program: LoyaltyProgram): EarningResult | null;
+  evaluate(
+    snapshot: LoyaltyTicketSnapshot,
+    program: LoyaltyProgram,
+  ): EarningResult | null;
 }
 
 export class SpendPointsStrategy implements EarningStrategy {
-  evaluate(snapshot: LoyaltyTicketSnapshot, program: LoyaltyProgram): EarningResult | null {
-    const rule = program.earning_rule as Record<string, unknown>;
+  evaluate(
+    snapshot: LoyaltyTicketSnapshot,
+    program: LoyaltyProgram,
+  ): EarningResult | null {
+    const rule = program.earning_rule;
     const spendBlockNio = Number(rule.spendBlockNio ?? 10);
     const pointsPerBlock = Number(rule.pointsPerBlock ?? 1);
 
@@ -36,8 +46,11 @@ export class SpendPointsStrategy implements EarningStrategy {
 }
 
 export class ProductStampsStrategy implements EarningStrategy {
-  evaluate(snapshot: LoyaltyTicketSnapshot, program: LoyaltyProgram): EarningResult | null {
-    const rule = program.earning_rule as Record<string, unknown>;
+  evaluate(
+    snapshot: LoyaltyTicketSnapshot,
+    program: LoyaltyProgram,
+  ): EarningResult | null {
+    const rule = program.earning_rule;
     const eligibleProductIds = (rule.eligibleProductIds as string[]) ?? [];
     const eligibleCategoryIds = (rule.eligibleCategoryIds as string[]) ?? [];
     const unitsPerPurchasedUnit = Number(rule.unitsPerPurchasedUnit ?? 1);
@@ -45,8 +58,17 @@ export class ProductStampsStrategy implements EarningStrategy {
     const eligibleLines = snapshot.lines.filter((l) => {
       if (l.source === 'LOYALTY_REWARD') return false;
       if (!Number.isInteger(l.quantity)) return false;
-      if (eligibleProductIds.length > 0 && eligibleProductIds.includes(l.productId)) return true;
-      if (eligibleCategoryIds.length > 0 && l.categoryId && eligibleCategoryIds.includes(l.categoryId)) return true;
+      if (
+        eligibleProductIds.length > 0 &&
+        eligibleProductIds.includes(l.productId)
+      )
+        return true;
+      if (
+        eligibleCategoryIds.length > 0 &&
+        l.categoryId &&
+        eligibleCategoryIds.includes(l.categoryId)
+      )
+        return true;
       return false;
     });
 
@@ -77,8 +99,11 @@ export class ProductStampsStrategy implements EarningStrategy {
 }
 
 export class VisitStampsStrategy implements EarningStrategy {
-  evaluate(snapshot: LoyaltyTicketSnapshot, program: LoyaltyProgram): EarningResult | null {
-    const rule = program.earning_rule as Record<string, unknown>;
+  evaluate(
+    snapshot: LoyaltyTicketSnapshot,
+    program: LoyaltyProgram,
+  ): EarningResult | null {
+    const rule = program.earning_rule;
     const unitsPerVisit = Number(rule.unitsPerVisit ?? 1);
     const minimumSpendNio = Number(rule.minimumSpendNio ?? 0);
 

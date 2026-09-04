@@ -1,8 +1,16 @@
 import { randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
 import { LoyaltyService } from './loyalty.service';
-import { LoyaltyProgram, LoyaltyProgramStatus, LoyaltyProgramType } from '../entities/loyalty-program.entity';
-import { RewardDefinition, RewardStatus, RewardType } from '../entities/reward-definition.entity';
+import {
+  LoyaltyProgram,
+  LoyaltyProgramStatus,
+  LoyaltyProgramType,
+} from '../entities/loyalty-program.entity';
+import {
+  RewardDefinition,
+  RewardStatus,
+  RewardType,
+} from '../entities/reward-definition.entity';
 import { CustomerLoyaltyAccountProjection } from '../entities/customer-loyalty-account-projection.entity';
 import { CustomerPointTransaction } from '../../customers/entities/customer-point-transaction.entity';
 import { Customer } from '../../customers/entities/customer.entity';
@@ -296,7 +304,10 @@ describe('LoyaltyService (db)', () => {
       const program = await harness.service.createProgram('tenant-1', {
         name: 'Free Product Program',
         program_type: LoyaltyProgramType.PRODUCT_STAMPS,
-        earning_rule: { eligibleProductIds: ['prod-1'], unitsPerPurchasedUnit: 1 },
+        earning_rule: {
+          eligibleProductIds: ['prod-1'],
+          unitsPerPurchasedUnit: 1,
+        },
         eligibility_rule: {},
       });
 

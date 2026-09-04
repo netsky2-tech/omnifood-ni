@@ -9,8 +9,14 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { IndustryTemplateService } from '../services/industry-template.service';
-import { TemplatePreviewService, TemplatePreviewOptions } from '../services/template-preview.service';
-import { LegacyTemplateRecipeScanService, ScanOptions } from '../services/legacy-template-recipe-scan.service';
+import {
+  TemplatePreviewService,
+  TemplatePreviewOptions,
+} from '../services/template-preview.service';
+import {
+  LegacyTemplateRecipeScanService,
+  ScanOptions,
+} from '../services/legacy-template-recipe-scan.service';
 import { ApplyTemplateDto } from '../dto/apply-template.dto';
 import { GetTenantId } from '../../../core/decorators/tenant.decorator';
 import { TenantInterceptor } from '../../../core/database/rls.interceptor';

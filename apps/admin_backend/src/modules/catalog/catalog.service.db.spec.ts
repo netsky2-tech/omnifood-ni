@@ -4,7 +4,11 @@ import { Tenant } from '../tenant/entities/tenant.entity';
 import { CatalogValue } from './entities/catalog-value.entity';
 import { CatalogService, DEFAULT_CATALOG_SEED } from './catalog.service';
 import { CATALOG_TYPE, CatalogType } from './catalog-type';
-import { ConflictException, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+  ConflictException,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ChangeLogService } from '../audit/change-log.service';
 
 function getRequiredEnv(name: string): string {
@@ -64,7 +68,11 @@ async function withIsolatedSchema(
   }
 }
 
-async function seedTenant(dataSource: DataSource, tenantId: string, name: string): Promise<void> {
+async function seedTenant(
+  dataSource: DataSource,
+  tenantId: string,
+  name: string,
+): Promise<void> {
   await dataSource.query(
     `INSERT INTO tenants (id, name, is_active, created_at, updated_at) VALUES ($1, $2, true, now(), now())`,
     [tenantId, name],
@@ -72,7 +80,9 @@ async function seedTenant(dataSource: DataSource, tenantId: string, name: string
 }
 
 function createService(dataSource: DataSource): CatalogService {
-  return new CatalogService(dataSource, { log: jest.fn() } as unknown as ChangeLogService);
+  return new CatalogService(dataSource, {
+    log: jest.fn(),
+  } as unknown as ChangeLogService);
 }
 
 describe('CatalogService — real PostgreSQL', () => {
@@ -106,23 +116,38 @@ describe('CatalogService — real PostgreSQL', () => {
     it(
       'lists catalog values filtered by type',
       async () => {
-        await withIsolatedSchema('catalog_list_type', async ({ dataSource }) => {
-          const tenantId = randomUUID();
-          const service = createService(dataSource);
-          await seedTenant(dataSource, tenantId, 'Tenant Type');
+        await withIsolatedSchema(
+          'catalog_list_type',
+          async ({ dataSource }) => {
+            const tenantId = randomUUID();
+            const service = createService(dataSource);
+            await seedTenant(dataSource, tenantId, 'Tenant Type');
 
-          await service.create(CATALOG_TYPE.UOM, tenantId, { code: 'kg', name: 'Kilogramo' });
-          await service.create(CATALOG_TYPE.UOM, tenantId, { code: 'un', name: 'Unidad' });
-          await service.create(CATALOG_TYPE.INVENTORY_CATEGORY, tenantId, { code: 'CARNES', name: 'Carnes' });
+            await service.create(CATALOG_TYPE.UOM, tenantId, {
+              code: 'kg',
+              name: 'Kilogramo',
+            });
+            await service.create(CATALOG_TYPE.UOM, tenantId, {
+              code: 'un',
+              name: 'Unidad',
+            });
+            await service.create(CATALOG_TYPE.INVENTORY_CATEGORY, tenantId, {
+              code: 'CARNES',
+              name: 'Carnes',
+            });
 
-          const uomList = await service.list(CATALOG_TYPE.UOM, tenantId);
-          const catList = await service.list(CATALOG_TYPE.INVENTORY_CATEGORY, tenantId);
+            const uomList = await service.list(CATALOG_TYPE.UOM, tenantId);
+            const catList = await service.list(
+              CATALOG_TYPE.INVENTORY_CATEGORY,
+              tenantId,
+            );
 
-          expect(uomList).toHaveLength(2);
-          expect(uomList.map((v) => v.code).sort()).toEqual(['kg', 'un']);
-          expect(catList).toHaveLength(1);
-          expect(catList[0].code).toBe('CARNES');
-        });
+            expect(uomList).toHaveLength(2);
+            expect(uomList.map((v) => v.code).sort()).toEqual(['kg', 'un']);
+            expect(catList).toHaveLength(1);
+            expect(catList[0].code).toBe('CARNES');
+          },
+        );
       },
       TEST_TIMEOUT_MS,
     );
@@ -135,15 +160,25 @@ describe('CatalogService — real PostgreSQL', () => {
           const service = createService(dataSource);
           await seedTenant(dataSource, tenantId, 'Tenant Inactive');
 
-          const v1 = await service.create(CATALOG_TYPE.UOM, tenantId, { code: 'kg', name: 'Kilogramo' });
-          await service.create(CATALOG_TYPE.UOM, tenantId, { code: 'un', name: 'Unidad' });
+          const v1 = await service.create(CATALOG_TYPE.UOM, tenantId, {
+            code: 'kg',
+            name: 'Kilogramo',
+          });
+          await service.create(CATALOG_TYPE.UOM, tenantId, {
+            code: 'un',
+            name: 'Unidad',
+          });
           await service.deactivate(CATALOG_TYPE.UOM, v1.id, tenantId);
 
           const activeOnly = await service.list(CATALOG_TYPE.UOM, tenantId);
           expect(activeOnly).toHaveLength(1);
           expect(activeOnly[0].code).toBe('un');
 
-          const includeInactive = await service.list(CATALOG_TYPE.UOM, tenantId, true);
+          const includeInactive = await service.list(
+            CATALOG_TYPE.UOM,
+            tenantId,
+            true,
+          );
           expect(includeInactive).toHaveLength(2);
         });
       },
@@ -164,10 +199,15 @@ describe('CatalogService — real PostgreSQL', () => {
             sort_order: 5,
           });
 
-          const updated = await service.update(CATALOG_TYPE.UOM, created.id, tenantId, {
-            name: 'New Name',
-            sort_order: 10,
-          });
+          const updated = await service.update(
+            CATALOG_TYPE.UOM,
+            created.id,
+            tenantId,
+            {
+              name: 'New Name',
+              sort_order: 10,
+            },
+          );
 
           expect(updated.name).toBe('New Name');
           expect(updated.sort_order).toBe(10);
@@ -180,25 +220,28 @@ describe('CatalogService — real PostgreSQL', () => {
     it(
       'deactivates catalog value (soft-delete)',
       async () => {
-        await withIsolatedSchema('catalog_deactivate', async ({ dataSource }) => {
-          const tenantId = randomUUID();
-          const service = createService(dataSource);
-          await seedTenant(dataSource, tenantId, 'Tenant Deactivate');
+        await withIsolatedSchema(
+          'catalog_deactivate',
+          async ({ dataSource }) => {
+            const tenantId = randomUUID();
+            const service = createService(dataSource);
+            await seedTenant(dataSource, tenantId, 'Tenant Deactivate');
 
-          const created = await service.create(CATALOG_TYPE.UOM, tenantId, {
-            code: 'kg',
-            name: 'Kilogramo',
-          });
+            const created = await service.create(CATALOG_TYPE.UOM, tenantId, {
+              code: 'kg',
+              name: 'Kilogramo',
+            });
 
-          await service.deactivate(CATALOG_TYPE.UOM, created.id, tenantId);
+            await service.deactivate(CATALOG_TYPE.UOM, created.id, tenantId);
 
-          const list = await service.list(CATALOG_TYPE.UOM, tenantId);
-          expect(list).toHaveLength(0);
+            const list = await service.list(CATALOG_TYPE.UOM, tenantId);
+            expect(list).toHaveLength(0);
 
-          const all = await service.list(CATALOG_TYPE.UOM, tenantId, true);
-          expect(all).toHaveLength(1);
-          expect(all[0].is_active).toBe(false);
-        });
+            const all = await service.list(CATALOG_TYPE.UOM, tenantId, true);
+            expect(all).toHaveLength(1);
+            expect(all[0].is_active).toBe(false);
+          },
+        );
       },
       TEST_TIMEOUT_MS,
     );
@@ -211,10 +254,16 @@ describe('CatalogService — real PostgreSQL', () => {
           const service = createService(dataSource);
           await seedTenant(dataSource, tenantId, 'Tenant Conflict');
 
-          await service.create(CATALOG_TYPE.UOM, tenantId, { code: 'kg', name: 'Kilogramo' });
+          await service.create(CATALOG_TYPE.UOM, tenantId, {
+            code: 'kg',
+            name: 'Kilogramo',
+          });
 
           await expect(
-            service.create(CATALOG_TYPE.UOM, tenantId, { code: 'kg', name: 'Kilogramo Duplicado' }),
+            service.create(CATALOG_TYPE.UOM, tenantId, {
+              code: 'kg',
+              name: 'Kilogramo Duplicado',
+            }),
           ).rejects.toThrow(ConflictException);
         });
       },
@@ -230,7 +279,9 @@ describe('CatalogService — real PostgreSQL', () => {
           await seedTenant(dataSource, tenantId, 'Tenant NotFound');
 
           await expect(
-            service.update(CATALOG_TYPE.UOM, randomUUID(), tenantId, { name: 'Nope' }),
+            service.update(CATALOG_TYPE.UOM, randomUUID(), tenantId, {
+              name: 'Nope',
+            }),
           ).rejects.toThrow(NotFoundException);
 
           await expect(
@@ -247,7 +298,9 @@ describe('CatalogService — real PostgreSQL', () => {
         await withIsolatedSchema('catalog_notenant', async ({ dataSource }) => {
           const service = createService(dataSource);
 
-          await expect(service.list(CATALOG_TYPE.UOM, '   ')).rejects.toThrow(UnauthorizedException);
+          await expect(service.list(CATALOG_TYPE.UOM, '   ')).rejects.toThrow(
+            UnauthorizedException,
+          );
           await expect(
             service.create(CATALOG_TYPE.UOM, '  ', { code: 'x', name: 'X' }),
           ).rejects.toThrow(UnauthorizedException);
@@ -279,22 +332,30 @@ describe('CatalogService — real PostgreSQL', () => {
     it(
       'trims whitespace on update',
       async () => {
-        await withIsolatedSchema('catalog_trim_update', async ({ dataSource }) => {
-          const tenantId = randomUUID();
-          const service = createService(dataSource);
-          await seedTenant(dataSource, tenantId, 'Tenant Trim Update');
+        await withIsolatedSchema(
+          'catalog_trim_update',
+          async ({ dataSource }) => {
+            const tenantId = randomUUID();
+            const service = createService(dataSource);
+            await seedTenant(dataSource, tenantId, 'Tenant Trim Update');
 
-          const created = await service.create(CATALOG_TYPE.UOM, tenantId, {
-            code: 'kg',
-            name: 'Original',
-          });
+            const created = await service.create(CATALOG_TYPE.UOM, tenantId, {
+              code: 'kg',
+              name: 'Original',
+            });
 
-          const updated = await service.update(CATALOG_TYPE.UOM, created.id, tenantId, {
-            name: '  Trimmed  ',
-          });
+            const updated = await service.update(
+              CATALOG_TYPE.UOM,
+              created.id,
+              tenantId,
+              {
+                name: '  Trimmed  ',
+              },
+            );
 
-          expect(updated.name).toBe('Trimmed');
-        });
+            expect(updated.name).toBe('Trimmed');
+          },
+        );
       },
       TEST_TIMEOUT_MS,
     );
@@ -302,24 +363,31 @@ describe('CatalogService — real PostgreSQL', () => {
     it(
       'creates with all optional fields',
       async () => {
-        await withIsolatedSchema('catalog_all_fields', async ({ dataSource }) => {
-          const tenantId = randomUUID();
-          const service = createService(dataSource);
-          await seedTenant(dataSource, tenantId, 'Tenant AllFields');
+        await withIsolatedSchema(
+          'catalog_all_fields',
+          async ({ dataSource }) => {
+            const tenantId = randomUUID();
+            const service = createService(dataSource);
+            await seedTenant(dataSource, tenantId, 'Tenant AllFields');
 
-          const created = await service.create(CATALOG_TYPE.INVENTORY_CATEGORY, tenantId, {
-            code: 'CARNES',
-            name: 'Carnes',
-            is_active: true,
-            sort_order: 3,
-          });
+            const created = await service.create(
+              CATALOG_TYPE.INVENTORY_CATEGORY,
+              tenantId,
+              {
+                code: 'CARNES',
+                name: 'Carnes',
+                is_active: true,
+                sort_order: 3,
+              },
+            );
 
-          expect(created.code).toBe('CARNES');
-          expect(created.name).toBe('Carnes');
-          expect(created.catalog_type).toBe(CATALOG_TYPE.INVENTORY_CATEGORY);
-          expect(created.is_active).toBe(true);
-          expect(created.sort_order).toBe(3);
-        });
+            expect(created.code).toBe('CARNES');
+            expect(created.name).toBe('Carnes');
+            expect(created.catalog_type).toBe(CATALOG_TYPE.INVENTORY_CATEGORY);
+            expect(created.is_active).toBe(true);
+            expect(created.sort_order).toBe(3);
+          },
+        );
       },
       TEST_TIMEOUT_MS,
     );
@@ -327,25 +395,33 @@ describe('CatalogService — real PostgreSQL', () => {
     it(
       'update only touches mentioned fields',
       async () => {
-        await withIsolatedSchema('catalog_partial_update', async ({ dataSource }) => {
-          const tenantId = randomUUID();
-          const service = createService(dataSource);
-          await seedTenant(dataSource, tenantId, 'Tenant Partial');
+        await withIsolatedSchema(
+          'catalog_partial_update',
+          async ({ dataSource }) => {
+            const tenantId = randomUUID();
+            const service = createService(dataSource);
+            await seedTenant(dataSource, tenantId, 'Tenant Partial');
 
-          const created = await service.create(CATALOG_TYPE.UOM, tenantId, {
-            code: 'kg',
-            name: 'Keep Name',
-            sort_order: 5,
-          });
+            const created = await service.create(CATALOG_TYPE.UOM, tenantId, {
+              code: 'kg',
+              name: 'Keep Name',
+              sort_order: 5,
+            });
 
-          const updated = await service.update(CATALOG_TYPE.UOM, created.id, tenantId, {
-            sort_order: 10,
-          });
+            const updated = await service.update(
+              CATALOG_TYPE.UOM,
+              created.id,
+              tenantId,
+              {
+                sort_order: 10,
+              },
+            );
 
-          expect(updated.name).toBe('Keep Name');
-          expect(updated.code).toBe('kg');
-          expect(updated.sort_order).toBe(10);
-        });
+            expect(updated.name).toBe('Keep Name');
+            expect(updated.code).toBe('kg');
+            expect(updated.sort_order).toBe(10);
+          },
+        );
       },
       TEST_TIMEOUT_MS,
     );
@@ -355,22 +431,28 @@ describe('CatalogService — real PostgreSQL', () => {
     it(
       'enforces tenant isolation — tenant A cannot see tenant B catalog values',
       async () => {
-        await withIsolatedSchema('catalog_rls_isolation', async ({ dataSource }) => {
-          const tenantA = randomUUID();
-          const tenantB = randomUUID();
-          const service = createService(dataSource);
-          await seedTenant(dataSource, tenantA, 'Tenant A RLS');
-          await seedTenant(dataSource, tenantB, 'Tenant B RLS');
+        await withIsolatedSchema(
+          'catalog_rls_isolation',
+          async ({ dataSource }) => {
+            const tenantA = randomUUID();
+            const tenantB = randomUUID();
+            const service = createService(dataSource);
+            await seedTenant(dataSource, tenantA, 'Tenant A RLS');
+            await seedTenant(dataSource, tenantB, 'Tenant B RLS');
 
-          await service.create(CATALOG_TYPE.UOM, tenantB, { code: 'kg', name: 'Secreto' });
+            await service.create(CATALOG_TYPE.UOM, tenantB, {
+              code: 'kg',
+              name: 'Secreto',
+            });
 
-          const listA = await service.list(CATALOG_TYPE.UOM, tenantA);
-          expect(listA).toHaveLength(0);
+            const listA = await service.list(CATALOG_TYPE.UOM, tenantA);
+            expect(listA).toHaveLength(0);
 
-          const listB = await service.list(CATALOG_TYPE.UOM, tenantB);
-          expect(listB).toHaveLength(1);
-          expect(listB[0].code).toBe('kg');
-        });
+            const listB = await service.list(CATALOG_TYPE.UOM, tenantB);
+            expect(listB).toHaveLength(1);
+            expect(listB[0].code).toBe('kg');
+          },
+        );
       },
       TEST_TIMEOUT_MS,
     );
@@ -378,26 +460,35 @@ describe('CatalogService — real PostgreSQL', () => {
     it(
       'same code allowed across different tenants',
       async () => {
-        await withIsolatedSchema('catalog_rls_cross_tenant', async ({ dataSource }) => {
-          const tenantA = randomUUID();
-          const tenantB = randomUUID();
-          const service = createService(dataSource);
-          await seedTenant(dataSource, tenantA, 'Tenant A Cross');
-          await seedTenant(dataSource, tenantB, 'Tenant B Cross');
+        await withIsolatedSchema(
+          'catalog_rls_cross_tenant',
+          async ({ dataSource }) => {
+            const tenantA = randomUUID();
+            const tenantB = randomUUID();
+            const service = createService(dataSource);
+            await seedTenant(dataSource, tenantA, 'Tenant A Cross');
+            await seedTenant(dataSource, tenantB, 'Tenant B Cross');
 
-          const createdA = await service.create(CATALOG_TYPE.UOM, tenantA, { code: 'kg', name: 'Kilogramo A' });
-          const createdB = await service.create(CATALOG_TYPE.UOM, tenantB, { code: 'kg', name: 'Kilogramo B' });
+            const createdA = await service.create(CATALOG_TYPE.UOM, tenantA, {
+              code: 'kg',
+              name: 'Kilogramo A',
+            });
+            const createdB = await service.create(CATALOG_TYPE.UOM, tenantB, {
+              code: 'kg',
+              name: 'Kilogramo B',
+            });
 
-          expect(createdA.tenant_id).toBe(tenantA);
-          expect(createdB.tenant_id).toBe(tenantB);
+            expect(createdA.tenant_id).toBe(tenantA);
+            expect(createdB.tenant_id).toBe(tenantB);
 
-          const listA = await service.list(CATALOG_TYPE.UOM, tenantA);
-          const listB = await service.list(CATALOG_TYPE.UOM, tenantB);
-          expect(listA).toHaveLength(1);
-          expect(listA[0].name).toBe('Kilogramo A');
-          expect(listB).toHaveLength(1);
-          expect(listB[0].name).toBe('Kilogramo B');
-        });
+            const listA = await service.list(CATALOG_TYPE.UOM, tenantA);
+            const listB = await service.list(CATALOG_TYPE.UOM, tenantB);
+            expect(listA).toHaveLength(1);
+            expect(listA[0].name).toBe('Kilogramo A');
+            expect(listB).toHaveLength(1);
+            expect(listB[0].name).toBe('Kilogramo B');
+          },
+        );
       },
       TEST_TIMEOUT_MS,
     );
@@ -405,23 +496,26 @@ describe('CatalogService — real PostgreSQL', () => {
     it(
       'deactivate is idempotent',
       async () => {
-        await withIsolatedSchema('catalog_deactivate_idempotent', async ({ dataSource }) => {
-          const tenantId = randomUUID();
-          const service = createService(dataSource);
-          await seedTenant(dataSource, tenantId, 'Tenant Idempotent');
+        await withIsolatedSchema(
+          'catalog_deactivate_idempotent',
+          async ({ dataSource }) => {
+            const tenantId = randomUUID();
+            const service = createService(dataSource);
+            await seedTenant(dataSource, tenantId, 'Tenant Idempotent');
 
-          const created = await service.create(CATALOG_TYPE.UOM, tenantId, {
-            code: 'kg',
-            name: 'Kilogramo',
-          });
+            const created = await service.create(CATALOG_TYPE.UOM, tenantId, {
+              code: 'kg',
+              name: 'Kilogramo',
+            });
 
-          await service.deactivate(CATALOG_TYPE.UOM, created.id, tenantId);
-          await service.deactivate(CATALOG_TYPE.UOM, created.id, tenantId);
+            await service.deactivate(CATALOG_TYPE.UOM, created.id, tenantId);
+            await service.deactivate(CATALOG_TYPE.UOM, created.id, tenantId);
 
-          const all = await service.list(CATALOG_TYPE.UOM, tenantId, true);
-          expect(all).toHaveLength(1);
-          expect(all[0].is_active).toBe(false);
-        });
+            const all = await service.list(CATALOG_TYPE.UOM, tenantId, true);
+            expect(all).toHaveLength(1);
+            expect(all[0].is_active).toBe(false);
+          },
+        );
       },
       TEST_TIMEOUT_MS,
     );
@@ -429,25 +523,33 @@ describe('CatalogService — real PostgreSQL', () => {
     it(
       'update only touches mentioned fields',
       async () => {
-        await withIsolatedSchema('catalog_rls_partial_update', async ({ dataSource }) => {
-          const tenantId = randomUUID();
-          const service = createService(dataSource);
-          await seedTenant(dataSource, tenantId, 'Tenant Partial RLS');
+        await withIsolatedSchema(
+          'catalog_rls_partial_update',
+          async ({ dataSource }) => {
+            const tenantId = randomUUID();
+            const service = createService(dataSource);
+            await seedTenant(dataSource, tenantId, 'Tenant Partial RLS');
 
-          const created = await service.create(CATALOG_TYPE.UOM, tenantId, {
-            code: 'kg',
-            name: 'Keep Name',
-            sort_order: 5,
-          });
+            const created = await service.create(CATALOG_TYPE.UOM, tenantId, {
+              code: 'kg',
+              name: 'Keep Name',
+              sort_order: 5,
+            });
 
-          const updated = await service.update(CATALOG_TYPE.UOM, created.id, tenantId, {
-            sort_order: 10,
-          });
+            const updated = await service.update(
+              CATALOG_TYPE.UOM,
+              created.id,
+              tenantId,
+              {
+                sort_order: 10,
+              },
+            );
 
-          expect(updated.name).toBe('Keep Name');
-          expect(updated.code).toBe('kg');
-          expect(updated.sort_order).toBe(10);
-        });
+            expect(updated.name).toBe('Keep Name');
+            expect(updated.code).toBe('kg');
+            expect(updated.sort_order).toBe(10);
+          },
+        );
       },
       TEST_TIMEOUT_MS,
     );
@@ -470,7 +572,9 @@ describe('CatalogService — real PostgreSQL', () => {
           );
           expect(inserted).toBe(totalDefaults);
 
-          for (const type of Object.keys(DEFAULT_CATALOG_SEED) as CatalogType[]) {
+          for (const type of Object.keys(
+            DEFAULT_CATALOG_SEED,
+          ) as CatalogType[]) {
             const list = await service.list(type, tenantId);
             expect(list).toHaveLength(DEFAULT_CATALOG_SEED[type].length);
           }
@@ -482,22 +586,27 @@ describe('CatalogService — real PostgreSQL', () => {
     it(
       'seedDefaults is idempotent — second call inserts zero',
       async () => {
-        await withIsolatedSchema('catalog_seed_idempotent', async ({ dataSource }) => {
-          const tenantId = randomUUID();
-          const service = createService(dataSource);
-          await seedTenant(dataSource, tenantId, 'Tenant Seed Idempotent');
+        await withIsolatedSchema(
+          'catalog_seed_idempotent',
+          async ({ dataSource }) => {
+            const tenantId = randomUUID();
+            const service = createService(dataSource);
+            await seedTenant(dataSource, tenantId, 'Tenant Seed Idempotent');
 
-          const first = await service.seedDefaults(tenantId);
-          const second = await service.seedDefaults(tenantId);
+            const first = await service.seedDefaults(tenantId);
+            const second = await service.seedDefaults(tenantId);
 
-          expect(first).toBeGreaterThan(0);
-          expect(second).toBe(0);
+            expect(first).toBeGreaterThan(0);
+            expect(second).toBe(0);
 
-          for (const type of Object.keys(DEFAULT_CATALOG_SEED) as CatalogType[]) {
-            const list = await service.list(type, tenantId);
-            expect(list).toHaveLength(DEFAULT_CATALOG_SEED[type].length);
-          }
-        });
+            for (const type of Object.keys(
+              DEFAULT_CATALOG_SEED,
+            ) as CatalogType[]) {
+              const list = await service.list(type, tenantId);
+              expect(list).toHaveLength(DEFAULT_CATALOG_SEED[type].length);
+            }
+          },
+        );
       },
       TEST_TIMEOUT_MS,
     );
@@ -505,25 +614,30 @@ describe('CatalogService — real PostgreSQL', () => {
     it(
       'seedDefaults preserves tenant edits on re-run',
       async () => {
-        await withIsolatedSchema('catalog_seed_preserve', async ({ dataSource }) => {
-          const tenantId = randomUUID();
-          const service = createService(dataSource);
-          await seedTenant(dataSource, tenantId, 'Tenant Seed Preserve');
+        await withIsolatedSchema(
+          'catalog_seed_preserve',
+          async ({ dataSource }) => {
+            const tenantId = randomUUID();
+            const service = createService(dataSource);
+            await seedTenant(dataSource, tenantId, 'Tenant Seed Preserve');
 
-          await service.seedDefaults(tenantId);
+            await service.seedDefaults(tenantId);
 
-          const uomList = await service.list(CATALOG_TYPE.UOM, tenantId);
-          const kgValue = uomList.find((v) => v.code === 'kg');
-          expect(kgValue).toBeDefined();
-          await service.update(CATALOG_TYPE.UOM, kgValue!.id, tenantId, { name: 'Mi Kilogramo' });
+            const uomList = await service.list(CATALOG_TYPE.UOM, tenantId);
+            const kgValue = uomList.find((v) => v.code === 'kg');
+            expect(kgValue).toBeDefined();
+            await service.update(CATALOG_TYPE.UOM, kgValue.id, tenantId, {
+              name: 'Mi Kilogramo',
+            });
 
-          const secondInsert = await service.seedDefaults(tenantId);
-          expect(secondInsert).toBe(0);
+            const secondInsert = await service.seedDefaults(tenantId);
+            expect(secondInsert).toBe(0);
 
-          const afterRerun = await service.list(CATALOG_TYPE.UOM, tenantId);
-          const kgAfter = afterRerun.find((v) => v.code === 'kg');
-          expect(kgAfter!.name).toBe('Mi Kilogramo');
-        });
+            const afterRerun = await service.list(CATALOG_TYPE.UOM, tenantId);
+            const kgAfter = afterRerun.find((v) => v.code === 'kg');
+            expect(kgAfter.name).toBe('Mi Kilogramo');
+          },
+        );
       },
       TEST_TIMEOUT_MS,
     );
@@ -531,20 +645,23 @@ describe('CatalogService — real PostgreSQL', () => {
     it(
       'seedDefaults only seeds the requested tenant',
       async () => {
-        await withIsolatedSchema('catalog_seed_tenant', async ({ dataSource }) => {
-          const tenantA = randomUUID();
-          const tenantB = randomUUID();
-          const service = createService(dataSource);
-          await seedTenant(dataSource, tenantA, 'Tenant A Seed');
-          await seedTenant(dataSource, tenantB, 'Tenant B Seed');
+        await withIsolatedSchema(
+          'catalog_seed_tenant',
+          async ({ dataSource }) => {
+            const tenantA = randomUUID();
+            const tenantB = randomUUID();
+            const service = createService(dataSource);
+            await seedTenant(dataSource, tenantA, 'Tenant A Seed');
+            await seedTenant(dataSource, tenantB, 'Tenant B Seed');
 
-          await service.seedDefaults(tenantA);
+            await service.seedDefaults(tenantA);
 
-          const listA = await service.list(CATALOG_TYPE.UOM, tenantA);
-          const listB = await service.list(CATALOG_TYPE.UOM, tenantB);
-          expect(listA.length).toBeGreaterThan(0);
-          expect(listB).toHaveLength(0);
-        });
+            const listA = await service.list(CATALOG_TYPE.UOM, tenantA);
+            const listB = await service.list(CATALOG_TYPE.UOM, tenantB);
+            expect(listA.length).toBeGreaterThan(0);
+            expect(listB).toHaveLength(0);
+          },
+        );
       },
       TEST_TIMEOUT_MS,
     );

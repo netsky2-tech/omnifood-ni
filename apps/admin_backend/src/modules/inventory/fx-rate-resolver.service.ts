@@ -119,7 +119,10 @@ export class FxRateResolverService implements FxRateResolver {
     const soapAction = `${BCN_NAMESPACE}RecuperaTC_Mes`;
 
     // Support test mock if fetch is mocked in Jest unit tests
-    if (typeof global.fetch === 'function' && (global.fetch as any)._isMockFunction) {
+    if (
+      typeof global.fetch === 'function' &&
+      (global.fetch as any)._isMockFunction
+    ) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -170,7 +173,10 @@ export class FxRateResolverService implements FxRateResolver {
           timeout: timeoutMs,
         },
         (res) => {
-          if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) {
+          if (
+            res.statusCode &&
+            (res.statusCode < 200 || res.statusCode >= 300)
+          ) {
             reject(new Error(`BCN transport returned HTTP ${res.statusCode}`));
             return;
           }

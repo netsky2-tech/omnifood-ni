@@ -1,7 +1,10 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { RewardDefinition, RewardType } from '../entities/reward-definition.entity';
+import {
+  RewardDefinition,
+  RewardType,
+} from '../entities/reward-definition.entity';
 import { LoyaltyProgram } from '../entities/loyalty-program.entity';
 import {
   CustomerPointTransaction,
@@ -62,18 +65,22 @@ export class LoyaltyProfitAwareService {
     let estimatedCpp: number | null | undefined = null;
 
     if (reward.reward_type === RewardType.FREE_PRODUCT) {
-      const benefit = reward.benefit_config as Record<string, unknown>;
+      const benefit = reward.benefit_config;
       const productId = benefit?.productId as string;
       const variantId = benefit?.variantId as string | undefined;
 
       if (productId) {
-        const costRes = await this.costQueryPort.getCurrentEstimatedCostAndPrice(
-          tenantId,
-          productId,
-          variantId,
-        );
+        const costRes =
+          await this.costQueryPort.getCurrentEstimatedCostAndPrice(
+            tenantId,
+            productId,
+            variantId,
+          );
         canonicalBasePrice = costRes.canonicalBasePriceNio ?? null;
-        estimatedCpp = costRes.status === 'AVAILABLE' ? (costRes.estimatedCppNio ?? null) : null;
+        estimatedCpp =
+          costRes.status === 'AVAILABLE'
+            ? (costRes.estimatedCppNio ?? null)
+            : null;
       }
     }
 
@@ -111,7 +118,7 @@ export class LoyaltyProfitAwareService {
     for (const tx of programTxs) {
       const type = (tx.transaction_type as string)?.toLowerCase();
       if (type === 'earn') {
-        const snapshot = tx.commercial_snapshot as Record<string, unknown> | null;
+        const snapshot = tx.commercial_snapshot;
         const earningBase =
           snapshot?.earningBaseNio != null
             ? Number(snapshot.earningBaseNio)
@@ -130,7 +137,11 @@ export class LoyaltyProfitAwareService {
       }
     }
 
-    const qualifiedSalesNio = calculateQualifiedSales(earnRecords, window, asOfUtc);
+    const qualifiedSalesNio = calculateQualifiedSales(
+      earnRecords,
+      window,
+      asOfUtc,
+    );
 
     // 3. Query reward transactions for incentive cost
     const rewardTxs = await this.txRepo.find({
@@ -144,9 +155,8 @@ export class LoyaltyProfitAwareService {
     for (const tx of rewardTxs) {
       const type = (tx.transaction_type as string)?.toLowerCase();
       if (type === 'redeem') {
-        const snapshot = tx.commercial_snapshot as Record<string, unknown> | null;
-        const rType =
-          (snapshot?.rewardType as string) ?? reward.reward_type;
+        const snapshot = tx.commercial_snapshot;
+        const rType = (snapshot?.rewardType as string) ?? reward.reward_type;
 
         let appliedBenefitNio: number | null = null;
         let estimatedRedemptionCostNio: number | null = null;
@@ -162,10 +172,14 @@ export class LoyaltyProfitAwareService {
         } else {
           // FREE_PRODUCT
           const rewardQty = Number(
-            snapshot?.rewardQuantity ?? (snapshot?.benefitConfig as any)?.quantity ?? 1,
+            snapshot?.rewardQuantity ??
+              (snapshot?.benefitConfig as any)?.quantity ??
+              1,
           );
           if (snapshot?.estimatedRedemptionCostNio != null) {
-            estimatedRedemptionCostNio = Number(snapshot.estimatedRedemptionCostNio);
+            estimatedRedemptionCostNio = Number(
+              snapshot.estimatedRedemptionCostNio,
+            );
           } else if (snapshot?.estimatedUnitCostNioAtRedemption != null) {
             estimatedRedemptionCostNio =
               Number(snapshot.estimatedUnitCostNioAtRedemption) * rewardQty;
@@ -190,11 +204,8 @@ export class LoyaltyProfitAwareService {
       }
     }
 
-    const estimatedIncentiveCostInWindowNio = calculateEstimatedIncentiveCostInWindow(
-      redeemRecords,
-      window,
-      asOfUtc,
-    );
+    const estimatedIncentiveCostInWindowNio =
+      calculateEstimatedIncentiveCostInWindow(redeemRecords, window, asOfUtc);
 
     const effectiveIncentiveRatePct = calculateEffectiveIncentiveRate(
       estimatedIncentiveCostInWindowNio,

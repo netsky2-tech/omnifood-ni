@@ -303,7 +303,10 @@ export class ImportStagingService {
       entity.tenant_id = trimmedTenant;
       entity.token_sesion_importacion = sessionToken;
       entity.row_ordinal = row.rowOrdinal;
-      entity.raw_nombre = row.rawValues['nombre'] || row.rawValues['producto'] || row.normalizedValues.nombre;
+      entity.raw_nombre =
+        row.rawValues['nombre'] ||
+        row.rawValues['producto'] ||
+        row.normalizedValues.nombre;
       entity.raw_sku = row.normalizedValues.sku;
       entity.raw_precio_venta = String(row.normalizedValues.precioVenta);
       entity.raw_costo_insumo = null;
@@ -321,8 +324,12 @@ export class ImportStagingService {
       entity.parsed_uom = row.normalizedValues.uom;
       entity.parsed_stock_inicial = 0;
 
-      entity.unsupported_fields = row.unsupportedFieldsDetected.length > 0 ? row.unsupportedFieldsDetected : null;
-      entity.unknown_columns = row.unknownColumns.length > 0 ? row.unknownColumns : null;
+      entity.unsupported_fields =
+        row.unsupportedFieldsDetected.length > 0
+          ? row.unsupportedFieldsDetected
+          : null;
+      entity.unknown_columns =
+        row.unknownColumns.length > 0 ? row.unknownColumns : null;
 
       if (!row.isValid) {
         entity.estado_fila = ImportStagingStatus.ERROR;
@@ -339,7 +346,9 @@ export class ImportStagingService {
 
         // Duplicate preview matching
         const matchingProduct = existingProducts.find(
-          (p) => p.name.trim().toLowerCase() === row.normalizedValues.nombre.toLowerCase(),
+          (p) =>
+            p.name.trim().toLowerCase() ===
+            row.normalizedValues.nombre.toLowerCase(),
         );
 
         if (matchingProduct) {
@@ -347,7 +356,10 @@ export class ImportStagingService {
           entity.target_product_id = matchingProduct.id;
 
           const fieldsToChange: string[] = [];
-          if (Number(matchingProduct.sellPrice) !== row.normalizedValues.precioVenta) {
+          if (
+            Number(matchingProduct.sellPrice) !==
+            row.normalizedValues.precioVenta
+          ) {
             fieldsToChange.push('sellPrice');
           }
           if (matchingProduct.uom !== row.normalizedValues.uom) {
@@ -464,7 +476,8 @@ export class ImportStagingService {
         rowOrdinal: r.row_ordinal,
         productName: r.parsed_nombre || '',
         sku: r.parsed_sku,
-        matchedBy: (r.matched_by as 'NORMALIZED_NAME' | 'SKU') || 'NORMALIZED_NAME',
+        matchedBy:
+          (r.matched_by as 'NORMALIZED_NAME' | 'SKU') || 'NORMALIZED_NAME',
         targetProductId: r.target_product_id || '',
         targetProductName,
         currentPrice,
@@ -477,8 +490,12 @@ export class ImportStagingService {
       });
     }
 
-    const validRows = stagedRows.filter((r) => r.estado_fila === ImportStagingStatus.VALIDO).length;
-    const errorRows = stagedRows.filter((r) => r.estado_fila === ImportStagingStatus.ERROR).length;
+    const validRows = stagedRows.filter(
+      (r) => r.estado_fila === ImportStagingStatus.VALIDO,
+    ).length;
+    const errorRows = stagedRows.filter(
+      (r) => r.estado_fila === ImportStagingStatus.ERROR,
+    ).length;
     const conflictsCount = duplicates.filter((d) => d.isConflict).length;
 
     return {
@@ -570,9 +587,14 @@ export class ImportStagingService {
       entity.estado_fila = validation.status;
       entity.mensaje_error_detalle = validation.errorMessage;
 
-      if (validation.status === ImportStagingStatus.VALIDO && validation.parsedNombre) {
+      if (
+        validation.status === ImportStagingStatus.VALIDO &&
+        validation.parsedNombre
+      ) {
         const matching = existingProducts.find(
-          (p) => p.name.trim().toLowerCase() === validation.parsedNombre!.trim().toLowerCase(),
+          (p) =>
+            p.name.trim().toLowerCase() ===
+            validation.parsedNombre.trim().toLowerCase(),
         );
         if (matching) {
           entity.matched_by = 'NORMALIZED_NAME';
@@ -640,144 +662,147 @@ export class ImportStagingService {
     const duplicateResolution: DuplicateResolution =
       dto.duplicatePolicy || dto.duplicateResolution || 'REPLACE';
 
-    const result = await this.dataSource.transaction(async (manager: EntityManager) => {
-      const stagedRows = await manager.find(ImportStaging, {
-        where: {
-          tenant_id: trimmedTenant,
-          token_sesion_importacion: dto.sessionToken,
-        },
-        order: { row_ordinal: 'ASC' },
-      });
+    const result = await this.dataSource.transaction(
+      async (manager: EntityManager) => {
+        const stagedRows = await manager.find(ImportStaging, {
+          where: {
+            tenant_id: trimmedTenant,
+            token_sesion_importacion: dto.sessionToken,
+          },
+          order: { row_ordinal: 'ASC' },
+        });
 
-      if (!stagedRows || stagedRows.length === 0) {
-        throw new NotFoundException(
-          `No se encontraron filas en staging para la sesión ${dto.sessionToken}`,
+        if (!stagedRows || stagedRows.length === 0) {
+          throw new NotFoundException(
+            `No se encontraron filas en staging para la sesión ${dto.sessionToken}`,
+          );
+        }
+
+        const hasErrors = stagedRows.some(
+          (r) => r.estado_fila === ImportStagingStatus.ERROR,
         );
-      }
+        if (mode === 'ALL_OR_NOTHING' && hasErrors) {
+          throw new BadRequestException(
+            'El lote de importación contiene errores y el modo es ALL_OR_NOTHING',
+          );
+        }
 
-      const hasErrors = stagedRows.some(
-        (r) => r.estado_fila === ImportStagingStatus.ERROR,
-      );
-      if (mode === 'ALL_OR_NOTHING' && hasErrors) {
-        throw new BadRequestException(
-          'El lote de importación contiene errores y el modo es ALL_OR_NOTHING',
-        );
-      }
-
-      const validRows = stagedRows.filter(
-        (r) => r.estado_fila === ImportStagingStatus.VALIDO,
-      );
-
-      let productsCreated = 0;
-      let productsUpdated = 0;
-      let productsSkipped = 0;
-
-      const existingProducts = await manager.find(Product, {
-        where: { tenant_id: trimmedTenant },
-      });
-
-      for (const row of validRows) {
-        const productName = (row.parsed_nombre || '').trim();
-        const existing = existingProducts.find(
-          (p) => p.name.trim().toLowerCase() === productName.toLowerCase(),
+        const validRows = stagedRows.filter(
+          (r) => r.estado_fila === ImportStagingStatus.VALIDO,
         );
 
-        if (existing) {
-          if (duplicateResolution === 'FAIL') {
-            throw new BadRequestException(
-              `Producto duplicado detectado: '${productName}'`,
-            );
-          } else if (duplicateResolution === 'SKIP') {
-            productsSkipped++;
-            row.estado_fila = ImportStagingStatus.COMMITTED;
-            continue;
+        let productsCreated = 0;
+        let productsUpdated = 0;
+        let productsSkipped = 0;
+
+        const existingProducts = await manager.find(Product, {
+          where: { tenant_id: trimmedTenant },
+        });
+
+        for (const row of validRows) {
+          const productName = (row.parsed_nombre || '').trim();
+          const existing = existingProducts.find(
+            (p) => p.name.trim().toLowerCase() === productName.toLowerCase(),
+          );
+
+          if (existing) {
+            if (duplicateResolution === 'FAIL') {
+              throw new BadRequestException(
+                `Producto duplicado detectado: '${productName}'`,
+              );
+            } else if (duplicateResolution === 'SKIP') {
+              productsSkipped++;
+              row.estado_fila = ImportStagingStatus.COMMITTED;
+              continue;
+            } else {
+              // REPLACE - Update Product Master fields ONLY.
+              // AC-24, AC-52: Denylist: stock, averageCost, Kardex, inventory movements.
+              existing.sellPrice =
+                row.parsed_precio_venta ?? existing.sellPrice;
+              existing.uom = row.parsed_uom || existing.uom;
+              await manager.save(Product, existing);
+              productsUpdated++;
+              row.estado_fila = ImportStagingStatus.COMMITTED;
+            }
           } else {
-            // REPLACE - Update Product Master fields ONLY.
-            // AC-24, AC-52: Denylist: stock, averageCost, Kardex, inventory movements.
-            existing.sellPrice = row.parsed_precio_venta ?? existing.sellPrice;
-            existing.uom = row.parsed_uom || existing.uom;
-            await manager.save(Product, existing);
-            productsUpdated++;
+            // CREATE NEW PRODUCT - Product Master only.
+            // AC-24: stock and averageCost must be 0 outside of Kardex.
+            const newProduct = manager.create(Product, {
+              tenant_id: trimmedTenant,
+              name: productName,
+              sellPrice: row.parsed_precio_venta ?? 0,
+              averageCost: 0,
+              uom: row.parsed_uom || 'UN',
+              stock: 0,
+              is_perishable: false,
+              is_active: true,
+            });
+            const savedProduct = await manager.save(Product, newProduct);
+            existingProducts.push(savedProduct);
+            productsCreated++;
             row.estado_fila = ImportStagingStatus.COMMITTED;
           }
-        } else {
-          // CREATE NEW PRODUCT - Product Master only.
-          // AC-24: stock and averageCost must be 0 outside of Kardex.
-          const newProduct = manager.create(Product, {
-            tenant_id: trimmedTenant,
-            name: productName,
-            sellPrice: row.parsed_precio_venta ?? 0,
-            averageCost: 0,
-            uom: row.parsed_uom || 'UN',
-            stock: 0,
-            is_perishable: false,
-            is_active: true,
+        }
+
+        // Update staging rows status
+        for (let i = 0; i < validRows.length; i += CHUNK_SIZE) {
+          const chunk = validRows.slice(i, i + CHUNK_SIZE);
+          await manager.save(ImportStaging, chunk);
+        }
+
+        // Update session lifecycle if repository available
+        if (this.sessionRepo) {
+          const session = await manager.findOne(ProductImportSession, {
+            where: { tenant_id: trimmedTenant, id: dto.sessionToken },
           });
-          const savedProduct = await manager.save(Product, newProduct);
-          existingProducts.push(savedProduct);
-          productsCreated++;
-          row.estado_fila = ImportStagingStatus.COMMITTED;
+          if (session) {
+            session.status = hasErrors
+              ? ProductImportSessionStatus.PARTIALLY_COMMITTED
+              : ProductImportSessionStatus.COMMITTED;
+            session.commit_mode = mode;
+            session.duplicate_policy = duplicateResolution;
+            session.committed_rows = productsCreated + productsUpdated;
+            session.skipped_rows = productsSkipped;
+            session.committed_at = new Date();
+            await manager.save(ProductImportSession, session);
+          }
         }
-      }
 
-      // Update staging rows status
-      for (let i = 0; i < validRows.length; i += CHUNK_SIZE) {
-        const chunk = validRows.slice(i, i + CHUNK_SIZE);
-        await manager.save(ImportStaging, chunk);
-      }
-
-      // Update session lifecycle if repository available
-      if (this.sessionRepo) {
-        const session = await manager.findOne(ProductImportSession, {
-          where: { tenant_id: trimmedTenant, id: dto.sessionToken },
-        });
-        if (session) {
-          session.status = hasErrors
-            ? ProductImportSessionStatus.PARTIALLY_COMMITTED
-            : ProductImportSessionStatus.COMMITTED;
-          session.commit_mode = mode;
-          session.duplicate_policy = duplicateResolution;
-          session.committed_rows = productsCreated + productsUpdated;
-          session.skipped_rows = productsSkipped;
-          session.committed_at = new Date();
-          await manager.save(ProductImportSession, session);
+        // Emit Audit Trail receipt for material catalog commit (ONB1.4I)
+        if (this.receiptRepo) {
+          const receipt = this.receiptRepo.create({
+            tenant_id: trimmedTenant,
+            receipt_type: 'IMPORT_COMMIT',
+            target_entity_type: 'PRODUCT_IMPORT_SESSION',
+            target_entity_id: dto.sessionToken,
+            decision: LegacyMigrationDecision.IMPORT_COMMITTED,
+            reason: `Import committed with mode ${mode} and duplicate policy ${duplicateResolution}. Created: ${productsCreated}, Updated: ${productsUpdated}, Skipped: ${productsSkipped}.`,
+            evidence_json: {
+              sessionToken: dto.sessionToken,
+              mode,
+              duplicatePolicy: duplicateResolution,
+              productsCreated,
+              productsUpdated,
+              productsSkipped,
+              totalCommitted: productsCreated + productsUpdated,
+              idempotencyKey: dto.idempotencyKey || null,
+            },
+            executed_by: 'SYSTEM',
+          });
+          await manager.save(LegacyOnboardingMigrationReceipt, receipt);
         }
-      }
 
-      // Emit Audit Trail receipt for material catalog commit (ONB1.4I)
-      if (this.receiptRepo) {
-        const receipt = this.receiptRepo.create({
-          tenant_id: trimmedTenant,
-          receipt_type: 'IMPORT_COMMIT',
-          target_entity_type: 'PRODUCT_IMPORT_SESSION',
-          target_entity_id: dto.sessionToken,
-          decision: LegacyMigrationDecision.IMPORT_COMMITTED,
-          reason: `Import committed with mode ${mode} and duplicate policy ${duplicateResolution}. Created: ${productsCreated}, Updated: ${productsUpdated}, Skipped: ${productsSkipped}.`,
-          evidence_json: {
-            sessionToken: dto.sessionToken,
-            mode,
-            duplicatePolicy: duplicateResolution,
-            productsCreated,
-            productsUpdated,
-            productsSkipped,
-            totalCommitted: productsCreated + productsUpdated,
-            idempotencyKey: dto.idempotencyKey || null,
-          },
-          executed_by: 'SYSTEM',
-        });
-        await manager.save(LegacyOnboardingMigrationReceipt, receipt);
-      }
-
-      return {
-        sessionToken: dto.sessionToken,
-        mode,
-        productsCreated,
-        productsUpdated,
-        productsSkipped,
-        totalCommitted: productsCreated + productsUpdated,
-        committedAt: new Date(),
-      };
-    });
+        return {
+          sessionToken: dto.sessionToken,
+          mode,
+          productsCreated,
+          productsUpdated,
+          productsSkipped,
+          totalCommitted: productsCreated + productsUpdated,
+          committedAt: new Date(),
+        };
+      },
+    );
 
     if (this.onboardingSessionService) {
       await this.onboardingSessionService.ensureOnboardingStarted({

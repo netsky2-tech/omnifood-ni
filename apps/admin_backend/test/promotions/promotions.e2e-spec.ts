@@ -8,7 +8,10 @@ import * as request from 'supertest';
 import { App } from 'supertest/types';
 import { PromotionsController } from '../../src/modules/promotions/controllers/promotions.controller';
 import { PromotionsService } from '../../src/modules/promotions/services/promotions.service';
-import { Promotion, PromotionType } from '../../src/modules/promotions/entities/promotion.entity';
+import {
+  Promotion,
+  PromotionType,
+} from '../../src/modules/promotions/entities/promotion.entity';
 import { UserRole } from '../../src/modules/identity/entities/user.entity';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
@@ -23,31 +26,41 @@ describe('Promotions Module (E2E / Integration)', () => {
   let dbPromotions: Promotion[] = [];
 
   const promotionRepo = {
-    find: jest.fn((options: { where: { tenant_id?: string; is_active?: boolean } }) => {
-      const filtered = dbPromotions.filter(
-        (p) =>
-          (!options.where.tenant_id || p.tenant_id === options.where.tenant_id) &&
-          (options.where.is_active === undefined || p.is_active === options.where.is_active),
-      );
-      return Promise.resolve(filtered);
-    }),
-    findOne: jest.fn((options: { where: { id?: string; tenant_id?: string } }) => {
-      const found = dbPromotions.find(
-        (p) =>
-          (!options.where.id || p.id === options.where.id) &&
-          (!options.where.tenant_id || p.tenant_id === options.where.tenant_id),
-      );
-      return Promise.resolve(found || null);
-    }),
-    create: jest.fn((data: Partial<Promotion>) => ({
-      id: `promo-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      created_at: new Date(),
-      updated_at: new Date(),
-      priority: 0,
-      is_stackable: true,
-      is_active: true,
-      ...data,
-    } as Promotion)),
+    find: jest.fn(
+      (options: { where: { tenant_id?: string; is_active?: boolean } }) => {
+        const filtered = dbPromotions.filter(
+          (p) =>
+            (!options.where.tenant_id ||
+              p.tenant_id === options.where.tenant_id) &&
+            (options.where.is_active === undefined ||
+              p.is_active === options.where.is_active),
+        );
+        return Promise.resolve(filtered);
+      },
+    ),
+    findOne: jest.fn(
+      (options: { where: { id?: string; tenant_id?: string } }) => {
+        const found = dbPromotions.find(
+          (p) =>
+            (!options.where.id || p.id === options.where.id) &&
+            (!options.where.tenant_id ||
+              p.tenant_id === options.where.tenant_id),
+        );
+        return Promise.resolve(found || null);
+      },
+    ),
+    create: jest.fn(
+      (data: Partial<Promotion>) =>
+        ({
+          id: `promo-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          created_at: new Date(),
+          updated_at: new Date(),
+          priority: 0,
+          is_stackable: true,
+          is_active: true,
+          ...data,
+        }) as Promotion,
+    ),
     save: jest.fn((entity: Promotion) => {
       const idx = dbPromotions.findIndex((p) => p.id === entity.id);
       if (idx >= 0) {
@@ -90,7 +103,9 @@ describe('Promotions Module (E2E / Integration)', () => {
     }).compile();
 
     app = moduleRef.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+    app.useGlobalPipes(
+      new ValidationPipe({ whitelist: true, transform: true }),
+    );
     jwtService = moduleRef.get<JwtService>(JwtService);
     await app.init();
   });
@@ -106,7 +121,10 @@ describe('Promotions Module (E2E / Integration)', () => {
     jest.clearAllMocks();
   });
 
-  function createToken(tenantId: string, role: UserRole = UserRole.OWNER): string {
+  function createToken(
+    tenantId: string,
+    role: UserRole = UserRole.OWNER,
+  ): string {
     return jwtService.sign(
       {
         sub: 'user-001',

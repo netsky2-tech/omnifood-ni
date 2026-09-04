@@ -10,7 +10,11 @@ import {
 import { Tenant } from '../../tenant/entities/tenant.entity';
 
 @Entity('change_log')
-@Index('IDX_change_log_tenant_target', ['tenant_id', 'target_type', 'target_id'])
+@Index('IDX_change_log_tenant_target', [
+  'tenant_id',
+  'target_type',
+  'target_id',
+])
 @Index('IDX_change_log_tenant_created', ['tenant_id', 'created_at'])
 export class ChangeLog {
   @PrimaryGeneratedColumn('uuid')

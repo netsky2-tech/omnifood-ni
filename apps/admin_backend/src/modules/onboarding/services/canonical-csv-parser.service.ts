@@ -74,7 +74,9 @@ export class CanonicalCsvParserService {
     }
 
     tokens.push(current.trim());
-    return tokens.map((t) => (t.startsWith('"') && t.endsWith('"') ? t.slice(1, -1).trim() : t));
+    return tokens.map((t) =>
+      t.startsWith('"') && t.endsWith('"') ? t.slice(1, -1).trim() : t,
+    );
   }
 
   /**
@@ -115,7 +117,10 @@ export class CanonicalCsvParserService {
 
   public parseRawCsv(rawCsv: string): ParsedCsvResult {
     const trimmed = (rawCsv || '').trim();
-    const sourceHash = crypto.createHash('sha256').update(trimmed).digest('hex');
+    const sourceHash = crypto
+      .createHash('sha256')
+      .update(trimmed)
+      .digest('hex');
 
     if (!trimmed) {
       return {
@@ -206,7 +211,10 @@ export class CanonicalCsvParserService {
           unsupportedFieldsDetected.push(h);
           const reason =
             UNSUPPORTED_COLUMNS_REASONS[
-              h.toLowerCase().trim().replace(/[\s\u0300-\u036f]/g, '')
+              h
+                .toLowerCase()
+                .trim()
+                .replace(/[\s\u0300-\u036f]/g, '')
             ] ||
             UNSUPPORTED_COLUMNS_REASONS[h.toLowerCase().trim()] ||
             `Columna no soportada en V1: ${h}`;
@@ -220,7 +228,8 @@ export class CanonicalCsvParserService {
         if (norm === 'uom' && !rawUom) rawUom = val;
         if (norm === 'sku' && !rawSku) rawSku = val;
         if (norm === 'categoria' && !rawCategoria) rawCategoria = val;
-        if (norm === 'porcentaje_iva' && !rawPorcentajeIva) rawPorcentajeIva = val;
+        if (norm === 'porcentaje_iva' && !rawPorcentajeIva)
+          rawPorcentajeIva = val;
       });
 
       // Validate required nombre
@@ -257,7 +266,8 @@ export class CanonicalCsvParserService {
         rawValues,
         normalizedValues: {
           nombre: rawNombre.trim(),
-          precioVenta: parsedPrecio !== null && parsedPrecio >= 0 ? parsedPrecio : 0,
+          precioVenta:
+            parsedPrecio !== null && parsedPrecio >= 0 ? parsedPrecio : 0,
           uom: rawUom.trim() || 'UN',
           sku: rawSku.trim() || null,
           categoria: rawCategoria.trim() || 'General',

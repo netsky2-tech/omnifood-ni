@@ -341,7 +341,12 @@ export class CreateTemplateSafeCutoverTables1797000000000 implements MigrationIn
       'recipe_versions',
       new TableIndex({
         name: 'idx_recipe_versions_active_published',
-        columnNames: ['tenant_id', 'product_id', 'is_active', 'publication_state'],
+        columnNames: [
+          'tenant_id',
+          'product_id',
+          'is_active',
+          'publication_state',
+        ],
       }),
     );
 

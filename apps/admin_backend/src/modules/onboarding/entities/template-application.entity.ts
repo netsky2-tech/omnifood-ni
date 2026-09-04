@@ -14,10 +14,17 @@ export enum TemplateApplicationStatus {
 }
 
 @Entity('onboarding_template_applications')
-@Index('uq_onboarding_template_applications_tenant_idemp', ['tenant_id', 'idempotency_key'], {
-  unique: true,
-})
-@Index('idx_onboarding_template_applications_tenant_code', ['tenant_id', 'template_code'])
+@Index(
+  'uq_onboarding_template_applications_tenant_idemp',
+  ['tenant_id', 'idempotency_key'],
+  {
+    unique: true,
+  },
+)
+@Index('idx_onboarding_template_applications_tenant_code', [
+  'tenant_id',
+  'template_code',
+])
 export class TemplateApplication {
   @PrimaryGeneratedColumn('uuid')
   id: string;

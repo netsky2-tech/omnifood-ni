@@ -2,7 +2,10 @@ import { BadRequestException } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { OnboardingCatalogService } from './onboarding-catalog.service';
 import { Product, ProductType } from '../../inventory/entities/product.entity';
-import { OnboardingSessionService, OnboardingStartSource } from './onboarding-session.service';
+import {
+  OnboardingSessionService,
+  OnboardingStartSource,
+} from './onboarding-session.service';
 import { OnboardingReadinessEvaluator } from './onboarding-readiness.evaluator';
 import { OnboardingStateReconciler } from './onboarding-state.reconciler';
 import { OnboardingLifecycleState } from '../entities/onboarding-session.entity';
@@ -35,7 +38,12 @@ describe('OnboardingCatalogService (Unit)', () => {
   };
 
   const mockReadiness = {
-    identity: { tenantExists: true, initialOwnerExists: true, ownerCanAuthenticate: true, tenantContextValid: true },
+    identity: {
+      tenantExists: true,
+      initialOwnerExists: true,
+      ownerCanAuthenticate: true,
+      tenantContextValid: true,
+    },
     fiscal: { minimumConfigurationValid: true, businessName: 'Café Test' },
     catalog: { sellableProductCount: 1, hasSellableProduct: true },
     saleReady: true,
@@ -81,12 +89,16 @@ describe('OnboardingCatalogService (Unit)', () => {
   describe('createManualProduct', () => {
     it('throws BadRequestException if tenantId is missing', async () => {
       const dto: CreateManualProductDto = { name: 'Latte', sellPrice: 50 };
-      await expect(service.createManualProduct('', dto)).rejects.toThrow(BadRequestException);
+      await expect(service.createManualProduct('', dto)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('throws BadRequestException if sellPrice <= 0', async () => {
       const dto: CreateManualProductDto = { name: 'Latte', sellPrice: 0 };
-      await expect(service.createManualProduct('tenant-test', dto)).rejects.toThrow(BadRequestException);
+      await expect(
+        service.createManualProduct('tenant-test', dto),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('creates product with stock=0, averageCost=0 and returns costStatus COST_PENDING (AC-06, AC-07, AC-08)', async () => {
@@ -117,7 +129,11 @@ describe('OnboardingCatalogService (Unit)', () => {
       productRepo.create.mockReturnValue(createdProduct);
       productRepo.save.mockResolvedValue(createdProduct);
 
-      const result = await service.createManualProduct('tenant-test', dto, 'owner-user-id');
+      const result = await service.createManualProduct(
+        'tenant-test',
+        dto,
+        'owner-user-id',
+      );
 
       expect(productRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -139,7 +155,10 @@ describe('OnboardingCatalogService (Unit)', () => {
       });
 
       expect(readinessEvaluator.evaluate).toHaveBeenCalledWith('tenant-test');
-      expect(stateReconciler.reconcile).toHaveBeenCalledWith('tenant-test', mockReadiness);
+      expect(stateReconciler.reconcile).toHaveBeenCalledWith(
+        'tenant-test',
+        mockReadiness,
+      );
 
       expect(result.product.costStatus).toBe('COST_PENDING');
       expect(result.session).toBe(mockSession);
@@ -176,8 +195,12 @@ describe('OnboardingCatalogService (Unit)', () => {
 
   describe('getVerificationProductCandidate (ONB1.6D)', () => {
     it('throws BadRequestException if tenantId is missing or empty', async () => {
-      await expect(service.getVerificationProductCandidate('')).rejects.toThrow(BadRequestException);
-      await expect(service.getVerificationProductCandidate('   ')).rejects.toThrow(BadRequestException);
+      await expect(service.getVerificationProductCandidate('')).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(
+        service.getVerificationProductCandidate('   '),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('returns default active sellable candidate when requestedProductId is omitted', async () => {
@@ -193,7 +216,8 @@ describe('OnboardingCatalogService (Unit)', () => {
 
       productRepo.findOne = jest.fn().mockResolvedValue(candidateProduct);
 
-      const result = await service.getVerificationProductCandidate('tenant-test');
+      const result =
+        await service.getVerificationProductCandidate('tenant-test');
 
       expect(result.verificationProductId).toBe('prod-candidate-1');
       expect(result.name).toBe('Café Expreso');
@@ -209,8 +233,12 @@ describe('OnboardingCatalogService (Unit)', () => {
     it('throws BadRequestException if no sellable product exists for tenant', async () => {
       productRepo.findOne = jest.fn().mockResolvedValue(null);
 
-      await expect(service.getVerificationProductCandidate('tenant-empty')).rejects.toThrow(
-        new BadRequestException('No sellable verification product candidate found for tenant'),
+      await expect(
+        service.getVerificationProductCandidate('tenant-empty'),
+      ).rejects.toThrow(
+        new BadRequestException(
+          'No sellable verification product candidate found for tenant',
+        ),
       );
     });
 
@@ -226,7 +254,10 @@ describe('OnboardingCatalogService (Unit)', () => {
 
       productRepo.findOne = jest.fn().mockResolvedValue(requestedProduct);
 
-      const result = await service.getVerificationProductCandidate('tenant-test', 'prod-req-123');
+      const result = await service.getVerificationProductCandidate(
+        'tenant-test',
+        'prod-req-123',
+      );
 
       expect(result.verificationProductId).toBe('prod-req-123');
       expect(result.name).toBe('Panini de Jamón');
@@ -238,9 +269,14 @@ describe('OnboardingCatalogService (Unit)', () => {
       productRepo.findOne = jest.fn().mockResolvedValue(null); // findOne filtered by tenant_id returns null
 
       await expect(
-        service.getVerificationProductCandidate('tenant-A', 'prod-from-tenant-B'),
+        service.getVerificationProductCandidate(
+          'tenant-A',
+          'prod-from-tenant-B',
+        ),
       ).rejects.toThrow(
-        new BadRequestException('Verification product not found or does not belong to tenant'),
+        new BadRequestException(
+          'Verification product not found or does not belong to tenant',
+        ),
       );
     });
 
@@ -259,7 +295,9 @@ describe('OnboardingCatalogService (Unit)', () => {
       await expect(
         service.getVerificationProductCandidate('tenant-test', 'prod-inactive'),
       ).rejects.toThrow(
-        new BadRequestException('Verification product is not active or sellable'),
+        new BadRequestException(
+          'Verification product is not active or sellable',
+        ),
       );
 
       const zeroPriceProduct = {
@@ -276,7 +314,9 @@ describe('OnboardingCatalogService (Unit)', () => {
       await expect(
         service.getVerificationProductCandidate('tenant-test', 'prod-zero'),
       ).rejects.toThrow(
-        new BadRequestException('Verification product is not active or sellable'),
+        new BadRequestException(
+          'Verification product is not active or sellable',
+        ),
       );
     });
   });

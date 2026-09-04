@@ -1,13 +1,32 @@
 import { randomUUID } from 'crypto';
 import { DataSource, Repository } from 'typeorm';
-import { NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
+import {
+  NotFoundException,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { LoyaltyService } from './loyalty.service';
-import { LoyaltyLedgerService, AppendLoyaltyTxDto } from './loyalty-ledger.service';
+import {
+  LoyaltyLedgerService,
+  AppendLoyaltyTxDto,
+} from './loyalty-ledger.service';
 import { RedemptionService } from './redemption.service';
-import { CustomerPointTransaction, PointTransactionType, LoyaltyTransactionOrigin } from '../../customers/entities/customer-point-transaction.entity';
+import {
+  CustomerPointTransaction,
+  PointTransactionType,
+  LoyaltyTransactionOrigin,
+} from '../../customers/entities/customer-point-transaction.entity';
 import { CustomerLoyaltyAccountProjection } from '../entities/customer-loyalty-account-projection.entity';
-import { LoyaltyProgram, LoyaltyProgramStatus, LoyaltyProgramType } from '../entities/loyalty-program.entity';
-import { RewardDefinition, RewardType, RewardStatus } from '../entities/reward-definition.entity';
+import {
+  LoyaltyProgram,
+  LoyaltyProgramStatus,
+  LoyaltyProgramType,
+} from '../entities/loyalty-program.entity';
+import {
+  RewardDefinition,
+  RewardType,
+  RewardStatus,
+} from '../entities/reward-definition.entity';
 import { Customer } from '../../customers/entities/customer.entity';
 import { Tenant } from '../../tenant/entities/tenant.entity';
 
@@ -45,7 +64,10 @@ describe('LV1.7D — Security & Two-Tenant Isolation (Real PostgreSQL)', () => {
 
   beforeAll(async () => {
     schema = `loyalty_security_${randomUUID().replace(/-/g, '')}`;
-    const bootstrap = new DataSource({ type: 'postgres', ...postgresConnection });
+    const bootstrap = new DataSource({
+      type: 'postgres',
+      ...postgresConnection,
+    });
     await bootstrap.initialize();
     await bootstrap.query(`CREATE SCHEMA "${schema}"`);
 
@@ -135,7 +157,12 @@ describe('LV1.7D — Security & Two-Tenant Isolation (Real PostgreSQL)', () => {
     projRepo = dataSource.getRepository(CustomerLoyaltyAccountProjection);
 
     ledgerService = new LoyaltyLedgerService(txRepo, projRepo);
-    loyaltyService = new LoyaltyService(progRepo, rewardRepo, projRepo, custRepo);
+    loyaltyService = new LoyaltyService(
+      progRepo,
+      rewardRepo,
+      projRepo,
+      custRepo,
+    );
     redemptionService = new RedemptionService(
       progRepo,
       rewardRepo,
@@ -249,26 +276,36 @@ describe('LV1.7D — Security & Two-Tenant Isolation (Real PostgreSQL)', () => {
       expect(programsA.some((p) => p.id === programBId)).toBe(false);
       expect(programsA.every((p) => p.tenant_id === tenantA)).toBe(true);
 
-      await expect(loyaltyService.findOneProgram(tenantA, programBId)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        loyaltyService.findOneProgram(tenantA, programBId),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('Tenant B cannot see Tenant A rewards', async () => {
-      const rewardsB = await loyaltyService.findRewardsByProgram(tenantB, programBId);
+      const rewardsB = await loyaltyService.findRewardsByProgram(
+        tenantB,
+        programBId,
+      );
       expect(rewardsB.some((r) => r.id === rewardAId)).toBe(false);
 
-      await expect(loyaltyService.findOneReward(tenantB, rewardAId)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        loyaltyService.findOneReward(tenantB, rewardAId),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('Tenant A cannot access Tenant B customer balance or accounts', async () => {
       // Balance query for customerB using tenantA context returns legacy 0 because customer is not found in tenantA
-      const bal = await loyaltyService.getCustomerBalance(tenantA, customerBId, programBId);
+      const bal = await loyaltyService.getCustomerBalance(
+        tenantA,
+        customerBId,
+        programBId,
+      );
       expect(bal.balanceUnits).toBe(0);
 
-      const accounts = await loyaltyService.getCustomerLoyaltyAccounts(tenantA, customerBId);
+      const accounts = await loyaltyService.getCustomerLoyaltyAccounts(
+        tenantA,
+        customerBId,
+      );
       expect(accounts.length).toBe(0);
     });
 
@@ -297,7 +334,10 @@ describe('LV1.7D — Security & Two-Tenant Isolation (Real PostgreSQL)', () => {
     });
 
     it('Tenant A cannot read Tenant B ledger transactions', async () => {
-      const txsA = await loyaltyService.getCustomerTransactions(tenantA, customerBId);
+      const txsA = await loyaltyService.getCustomerTransactions(
+        tenantA,
+        customerBId,
+      );
       expect(txsA.length).toBe(0);
     });
   });
@@ -308,7 +348,11 @@ describe('LV1.7D — Security & Two-Tenant Isolation (Real PostgreSQL)', () => {
       // Notice customer_id references customers table where customerB belongs to tenantB.
       // A strict projection composite FK enforces that (tenantA, customerB, programA) fails or is blocked
       const projB = await projRepo.findOne({
-        where: { tenant_id: tenantA, customer_id: customerBId, loyalty_program_id: programAId },
+        where: {
+          tenant_id: tenantA,
+          customer_id: customerBId,
+          loyalty_program_id: programAId,
+        },
       });
       expect(projB).toBeNull();
     });
@@ -329,11 +373,11 @@ describe('LV1.7D — Security & Two-Tenant Isolation (Real PostgreSQL)', () => {
   describe('AV-16: Customer Identification is Tenant-Scoped and Free of PII', () => {
     it('customer tax_id / code is tenant-scoped and isolated', async () => {
       const cust = await custRepo.findOne({ where: { id: customerAId } });
-      expect(cust!.tax_id).toBe('ALPHA001');
+      expect(cust.tax_id).toBe('ALPHA001');
       // No email, phone, JWT or card number in identifier
-      expect(cust!.tax_id).not.toContain('@');
-      expect(cust!.tax_id).not.toContain('+');
-      expect(cust!.tax_id).toMatch(/^[A-Z0-9_-]+$/);
+      expect(cust.tax_id).not.toContain('@');
+      expect(cust.tax_id).not.toContain('+');
+      expect(cust.tax_id).toMatch(/^[A-Z0-9_-]+$/);
     });
 
     it('same identifier in two different tenants does not collide or leak across tenants', async () => {
@@ -363,10 +407,10 @@ describe('LV1.7D — Security & Two-Tenant Isolation (Real PostgreSQL)', () => {
         where: { tenant_id: tenantB, tax_id: 'VIP100' },
       });
 
-      expect(foundA!.id).toBe(cA2.id);
-      expect(foundB!.id).toBe(cB2.id);
-      expect(foundA!.name).toBe('VIP Alpha');
-      expect(foundB!.name).toBe('VIP Beta');
+      expect(foundA.id).toBe(cA2.id);
+      expect(foundB.id).toBe(cB2.id);
+      expect(foundA.name).toBe('VIP Alpha');
+      expect(foundB.name).toBe('VIP Beta');
     });
   });
 });

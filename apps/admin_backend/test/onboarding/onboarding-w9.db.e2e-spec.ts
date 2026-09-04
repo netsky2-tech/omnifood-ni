@@ -8,7 +8,10 @@ import * as request from 'supertest';
 import { DataSource } from 'typeorm';
 import { Tenant } from '../../src/modules/tenant/entities/tenant.entity';
 import { SystemParametersConfig } from '../../src/modules/inventory/entities/system-parameters-config.entity';
-import { Product, ProductType } from '../../src/modules/inventory/entities/product.entity';
+import {
+  Product,
+  ProductType,
+} from '../../src/modules/inventory/entities/product.entity';
 import { Insumo } from '../../src/modules/inventory/entities/insumo.entity';
 import { Recipe } from '../../src/modules/inventory/entities/recipe.entity';
 import { RecipeVersion } from '../../src/modules/inventory/entities/recipe-version.entity';
@@ -274,7 +277,9 @@ async function withOnboardingIsolatedSchema(
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
+    app.useGlobalPipes(
+      new ValidationPipe({ transform: true, whitelist: true }),
+    );
     await app.init();
 
     const jwtService = app.get(JwtService);
@@ -317,225 +322,236 @@ async function withOnboardingIsolatedSchema(
 describe('W9 Backend PostgreSQL E2E — ODAV-31..34 Specifications', () => {
   jest.setTimeout(45000);
   it('ODAV-31: Fiscal setup configuration NEVER mutates historical invoices in PostgreSQL', async () => {
-    await withOnboardingIsolatedSchema('odav31', async ({ app, dataSource, tenantAId, ownerTokenA }) => {
-      // 1. Seed historical invoice under baseline regime (0% tax, subtotal 500, total 500)
-      const invoiceId = randomUUID();
-      await dataSource.query(
-        `INSERT INTO invoices (id, tenant_id, invoice_number, user_id, subtotal, total_tax, total, is_canceled, payment_status)
+    await withOnboardingIsolatedSchema(
+      'odav31',
+      async ({ app, dataSource, tenantAId, ownerTokenA }) => {
+        // 1. Seed historical invoice under baseline regime (0% tax, subtotal 500, total 500)
+        const invoiceId = randomUUID();
+        await dataSource.query(
+          `INSERT INTO invoices (id, tenant_id, invoice_number, user_id, subtotal, total_tax, total, is_canceled, payment_status)
          VALUES ($1, $2, 'FAC-HIST-0001', 'usr-001', 500.00, 0.00, 500.00, false, 'paid')`,
-        [invoiceId, tenantAId],
-      );
+          [invoiceId, tenantAId],
+        );
 
-      // Verify baseline invoice in database
-      const [beforeInvoice] = await dataSource.query(
-        `SELECT subtotal, total_tax, total, is_canceled FROM invoices WHERE id = $1`,
-        [invoiceId],
-      );
-      expect(Number(beforeInvoice.subtotal)).toBe(500.0);
-      expect(Number(beforeInvoice.total_tax)).toBe(0.0);
-      expect(Number(beforeInvoice.total)).toBe(500.0);
-      expect(beforeInvoice.is_canceled).toBe(false);
+        // Verify baseline invoice in database
+        const [beforeInvoice] = await dataSource.query(
+          `SELECT subtotal, total_tax, total, is_canceled FROM invoices WHERE id = $1`,
+          [invoiceId],
+        );
+        expect(Number(beforeInvoice.subtotal)).toBe(500.0);
+        expect(Number(beforeInvoice.total_tax)).toBe(0.0);
+        expect(Number(beforeInvoice.total)).toBe(500.0);
+        expect(beforeInvoice.is_canceled).toBe(false);
 
-      // 2. Perform strategic fiscal reconfiguration (CUOTA_FIJA -> REGIMEN_GENERAL 15% IVA, custom FX spread, prices include tax)
-      const res = await request(app.getHttpServer())
-        .post('/onboarding/fiscal-setup')
-        .set('Authorization', `Bearer ${ownerTokenA}`)
-        .send({
-          regime: FiscalRegime.REGIMEN_GENERAL,
-          businessName: 'Café Central Nicaragua S.A.',
-          ruc: 'J0310000055555',
-          commercialFxSpread: 0.75,
-          pricesIncludeTax: true,
-        });
-
-      expect(res.status).toBe(201);
-      expect(res.body.regime).toBe(FiscalRegime.REGIMEN_GENERAL);
-      expect(res.body.taxRateIva).toBe(0.15);
-
-      // 3. ODAV-31 Verification: The historical invoice must remain 100% unmodified!
-      const [afterInvoice] = await dataSource.query(
-        `SELECT subtotal, total_tax, total, is_canceled FROM invoices WHERE id = $1`,
-        [invoiceId],
-      );
-      expect(Number(afterInvoice.subtotal)).toBe(500.0);
-      expect(Number(afterInvoice.total_tax)).toBe(0.0);
-      expect(Number(afterInvoice.total)).toBe(500.0);
-      expect(afterInvoice.is_canceled).toBe(false);
-
-      // Zero extra or mutated invoices in table
-      const countRes = await dataSource.query(
-        `SELECT COUNT(*) as cnt FROM invoices WHERE tenant_id = $1`,
-        [tenantAId],
-      );
-      expect(Number(countRes[0].cnt)).toBe(1);
-    });
-  });
-
-  it('ODAV-32 & ODAV-33: 1,500-row bulk import in chunks <=100, 20 invalid rows rejected, 1,480 valid rows committed, replay idempotent', async () => {
-    await withOnboardingIsolatedSchema('odav32', async ({ app, dataSource, tenantAId, ownerTokenA }) => {
-      const sessionToken = randomUUID();
-
-      // 1. Generate ODAV-32 scenario: 1,500 rows total (20 invalid, 1,480 valid)
-      const allRows = Array.from({ length: 1500 }, (_, i) => {
-        const isInvalid = i < 20;
-        return {
-          nombre: isInvalid ? `Invalid Row #${i + 1}` : `Valid Item #${i + 1}`,
-          sku: `SKU-${String(i + 1).padStart(5, '0')}`,
-          precioVenta: isInvalid ? -5 : 45 + (i % 20),
-          costoInsumo: isInvalid ? -1 : 15,
-          categoria: 'General',
-          uom: 'UN',
-        };
-      });
-
-      // 2. Upload in 15 chunks of 100 rows each (strictly <= 100 rows per chunk)
-      const CHUNK_SIZE = 100;
-      const totalChunks = Math.ceil(allRows.length / CHUNK_SIZE);
-      expect(totalChunks).toBe(15);
-
-      for (let c = 0; c < totalChunks; c++) {
-        const chunk = allRows.slice(c * CHUNK_SIZE, (c + 1) * CHUNK_SIZE);
+        // 2. Perform strategic fiscal reconfiguration (CUOTA_FIJA -> REGIMEN_GENERAL 15% IVA, custom FX spread, prices include tax)
         const res = await request(app.getHttpServer())
-          .post('/onboarding/import/upload')
+          .post('/onboarding/fiscal-setup')
           .set('Authorization', `Bearer ${ownerTokenA}`)
           .send({
-            sessionToken,
-            rows: chunk,
+            regime: FiscalRegime.REGIMEN_GENERAL,
+            businessName: 'Café Central Nicaragua S.A.',
+            ruc: 'J0310000055555',
+            commercialFxSpread: 0.75,
+            pricesIncludeTax: true,
           });
 
         expect(res.status).toBe(201);
-      }
+        expect(res.body.regime).toBe(FiscalRegime.REGIMEN_GENERAL);
+        expect(res.body.taxRateIva).toBe(0.15);
 
-      // 3. ODAV-32 DB Verification: 1,500 rows in staging (1,480 VALIDO, 20 ERROR)
-      const [stagingCounts] = await dataSource.query(
-        `SELECT
+        // 3. ODAV-31 Verification: The historical invoice must remain 100% unmodified!
+        const [afterInvoice] = await dataSource.query(
+          `SELECT subtotal, total_tax, total, is_canceled FROM invoices WHERE id = $1`,
+          [invoiceId],
+        );
+        expect(Number(afterInvoice.subtotal)).toBe(500.0);
+        expect(Number(afterInvoice.total_tax)).toBe(0.0);
+        expect(Number(afterInvoice.total)).toBe(500.0);
+        expect(afterInvoice.is_canceled).toBe(false);
+
+        // Zero extra or mutated invoices in table
+        const countRes = await dataSource.query(
+          `SELECT COUNT(*) as cnt FROM invoices WHERE tenant_id = $1`,
+          [tenantAId],
+        );
+        expect(Number(countRes[0].cnt)).toBe(1);
+      },
+    );
+  });
+
+  it('ODAV-32 & ODAV-33: 1,500-row bulk import in chunks <=100, 20 invalid rows rejected, 1,480 valid rows committed, replay idempotent', async () => {
+    await withOnboardingIsolatedSchema(
+      'odav32',
+      async ({ app, dataSource, tenantAId, ownerTokenA }) => {
+        const sessionToken = randomUUID();
+
+        // 1. Generate ODAV-32 scenario: 1,500 rows total (20 invalid, 1,480 valid)
+        const allRows = Array.from({ length: 1500 }, (_, i) => {
+          const isInvalid = i < 20;
+          return {
+            nombre: isInvalid
+              ? `Invalid Row #${i + 1}`
+              : `Valid Item #${i + 1}`,
+            sku: `SKU-${String(i + 1).padStart(5, '0')}`,
+            precioVenta: isInvalid ? -5 : 45 + (i % 20),
+            costoInsumo: isInvalid ? -1 : 15,
+            categoria: 'General',
+            uom: 'UN',
+          };
+        });
+
+        // 2. Upload in 15 chunks of 100 rows each (strictly <= 100 rows per chunk)
+        const CHUNK_SIZE = 100;
+        const totalChunks = Math.ceil(allRows.length / CHUNK_SIZE);
+        expect(totalChunks).toBe(15);
+
+        for (let c = 0; c < totalChunks; c++) {
+          const chunk = allRows.slice(c * CHUNK_SIZE, (c + 1) * CHUNK_SIZE);
+          const res = await request(app.getHttpServer())
+            .post('/onboarding/import/upload')
+            .set('Authorization', `Bearer ${ownerTokenA}`)
+            .send({
+              sessionToken,
+              rows: chunk,
+            });
+
+          expect(res.status).toBe(201);
+        }
+
+        // 3. ODAV-32 DB Verification: 1,500 rows in staging (1,480 VALIDO, 20 ERROR)
+        const [stagingCounts] = await dataSource.query(
+          `SELECT
            COUNT(*) as total,
            COUNT(*) FILTER (WHERE estado_fila = 'VALIDO') as valid,
            COUNT(*) FILTER (WHERE estado_fila = 'ERROR') as errors
          FROM staging_importacion_productos
          WHERE tenant_id = $1 AND token_sesion_importacion = $2`,
-        [tenantAId, sessionToken],
-      );
+          [tenantAId, sessionToken],
+        );
 
-      expect(Number(stagingCounts.total)).toBe(1500);
-      expect(Number(stagingCounts.valid)).toBe(1480);
-      expect(Number(stagingCounts.errors)).toBe(20);
+        expect(Number(stagingCounts.total)).toBe(1500);
+        expect(Number(stagingCounts.valid)).toBe(1480);
+        expect(Number(stagingCounts.errors)).toBe(20);
 
-      // 4. Commit valid rows only (mode = VALID_ONLY)
-      const commitRes = await request(app.getHttpServer())
-        .post('/onboarding/import/commit')
-        .set('Authorization', `Bearer ${ownerTokenA}`)
-        .send({
-          sessionToken,
-          mode: 'VALID_ONLY',
-          duplicateResolution: 'REPLACE',
-        });
+        // 4. Commit valid rows only (mode = VALID_ONLY)
+        const commitRes = await request(app.getHttpServer())
+          .post('/onboarding/import/commit')
+          .set('Authorization', `Bearer ${ownerTokenA}`)
+          .send({
+            sessionToken,
+            mode: 'VALID_ONLY',
+            duplicateResolution: 'REPLACE',
+          });
 
-      expect(commitRes.status).toBe(201);
-      expect(commitRes.body.totalCommitted).toBe(1480);
-      expect(commitRes.body.productsCreated).toBe(1480);
+        expect(commitRes.status).toBe(201);
+        expect(commitRes.body.totalCommitted).toBe(1480);
+        expect(commitRes.body.productsCreated).toBe(1480);
 
-      // Verify production catalog table has exactly 1,480 products
-      const [prodCount] = await dataSource.query(
-        `SELECT COUNT(*) as cnt FROM products WHERE tenant_id = $1`,
-        [tenantAId],
-      );
-      expect(Number(prodCount.cnt)).toBe(1480);
+        // Verify production catalog table has exactly 1,480 products
+        const [prodCount] = await dataSource.query(
+          `SELECT COUNT(*) as cnt FROM products WHERE tenant_id = $1`,
+          [tenantAId],
+        );
+        expect(Number(prodCount.cnt)).toBe(1480);
 
-      // 5. ODAV-33 Replay Idempotency Verification:
-      // Re-posting commit with the identical session token must succeed and must NOT insert duplicate products
-      const replayRes = await request(app.getHttpServer())
-        .post('/onboarding/import/commit')
-        .set('Authorization', `Bearer ${ownerTokenA}`)
-        .send({
-          sessionToken,
-          mode: 'VALID_ONLY',
-          duplicateResolution: 'REPLACE',
-        });
+        // 5. ODAV-33 Replay Idempotency Verification:
+        // Re-posting commit with the identical session token must succeed and must NOT insert duplicate products
+        const replayRes = await request(app.getHttpServer())
+          .post('/onboarding/import/commit')
+          .set('Authorization', `Bearer ${ownerTokenA}`)
+          .send({
+            sessionToken,
+            mode: 'VALID_ONLY',
+            duplicateResolution: 'REPLACE',
+          });
 
-      expect(replayRes.status).toBe(201);
+        expect(replayRes.status).toBe(201);
 
-      // Catalog remains exactly 1,480 rows (no duplicates)
-      const [prodCountAfterReplay] = await dataSource.query(
-        `SELECT COUNT(*) as cnt FROM products WHERE tenant_id = $1`,
-        [tenantAId],
-      );
-      expect(Number(prodCountAfterReplay.cnt)).toBe(1480);
-    });
+        // Catalog remains exactly 1,480 rows (no duplicates)
+        const [prodCountAfterReplay] = await dataSource.query(
+          `SELECT COUNT(*) as cnt FROM products WHERE tenant_id = $1`,
+          [tenantAId],
+        );
+        expect(Number(prodCountAfterReplay.cnt)).toBe(1480);
+      },
+    );
   });
 
   it('ODAV-34: Industry template application has blast radius = 0 on other tenants in PostgreSQL', async () => {
-    await withOnboardingIsolatedSchema('odav34', async ({ app, dataSource, tenantAId, tenantBId, ownerTokenA }) => {
-      // 1. Seed Tenant B with 3 existing products and 2 insumos
-      const prodRepo = dataSource.getRepository(Product);
-      const insumoRepo = dataSource.getRepository(Insumo);
+    await withOnboardingIsolatedSchema(
+      'odav34',
+      async ({ app, dataSource, tenantAId, tenantBId, ownerTokenA }) => {
+        // 1. Seed Tenant B with 3 existing products and 2 insumos
+        const prodRepo = dataSource.getRepository(Product);
+        const insumoRepo = dataSource.getRepository(Insumo);
 
-      for (let i = 1; i <= 3; i++) {
-        await prodRepo.save(
-          prodRepo.create({
-            id: randomUUID(),
-            tenant_id: tenantBId,
-            name: `Tenant B Exclusive Product #${i}`,
-            uom: 'UN',
-            product_type: ProductType.SIMPLE,
-          }),
+        for (let i = 1; i <= 3; i++) {
+          await prodRepo.save(
+            prodRepo.create({
+              id: randomUUID(),
+              tenant_id: tenantBId,
+              name: `Tenant B Exclusive Product #${i}`,
+              uom: 'UN',
+              product_type: ProductType.SIMPLE,
+            }),
+          );
+        }
+        for (let i = 1; i <= 2; i++) {
+          await insumoRepo.save(
+            insumoRepo.create({
+              id: randomUUID(),
+              tenant_id: tenantBId,
+              name: `Tenant B Exclusive Insumo #${i}`,
+              purchaseUom: 'KG',
+              consumptionUom: 'G',
+            }),
+          );
+        }
+
+        // Snapshot Tenant B database state before Tenant A action
+        const [bProdsBefore] = await dataSource.query(
+          `SELECT COUNT(*) as cnt FROM products WHERE tenant_id = $1`,
+          [tenantBId],
         );
-      }
-      for (let i = 1; i <= 2; i++) {
-        await insumoRepo.save(
-          insumoRepo.create({
-            id: randomUUID(),
-            tenant_id: tenantBId,
-            name: `Tenant B Exclusive Insumo #${i}`,
-            purchaseUom: 'KG',
-            consumptionUom: 'G',
-          }),
+        const [bInsumosBefore] = await dataSource.query(
+          `SELECT COUNT(*) as cnt FROM insumos WHERE tenant_id = $1`,
+          [tenantBId],
         );
-      }
+        expect(Number(bProdsBefore.cnt)).toBe(3);
+        expect(Number(bInsumosBefore.cnt)).toBe(2);
 
-      // Snapshot Tenant B database state before Tenant A action
-      const [bProdsBefore] = await dataSource.query(
-        `SELECT COUNT(*) as cnt FROM products WHERE tenant_id = $1`,
-        [tenantBId],
-      );
-      const [bInsumosBefore] = await dataSource.query(
-        `SELECT COUNT(*) as cnt FROM insumos WHERE tenant_id = $1`,
-        [tenantBId],
-      );
-      expect(Number(bProdsBefore.cnt)).toBe(3);
-      expect(Number(bInsumosBefore.cnt)).toBe(2);
+        // 2. Tenant A applies CAFETERIA template
+        const applyRes = await request(app.getHttpServer())
+          .post('/onboarding/templates/CAFETERIA/apply')
+          .set('Authorization', `Bearer ${ownerTokenA}`)
+          .send({
+            overrideExisting: false,
+            prefixSku: 'CAFE-',
+          });
 
-      // 2. Tenant A applies CAFETERIA template
-      const applyRes = await request(app.getHttpServer())
-        .post('/onboarding/templates/CAFETERIA/apply')
-        .set('Authorization', `Bearer ${ownerTokenA}`)
-        .send({
-          overrideExisting: false,
-          prefixSku: 'CAFE-',
-        });
+        expect(applyRes.status).toBe(201);
+        expect(applyRes.body.productsCreated).toBeGreaterThan(0);
+        expect(applyRes.body.insumosCreated).toBeGreaterThan(0);
 
-      expect(applyRes.status).toBe(201);
-      expect(applyRes.body.productsCreated).toBeGreaterThan(0);
-      expect(applyRes.body.insumosCreated).toBeGreaterThan(0);
+        // 3. ODAV-34 Verification: Tenant B must experience ZERO change (Blast Radius = 0)
+        const [bProdsAfter] = await dataSource.query(
+          `SELECT COUNT(*) as cnt FROM products WHERE tenant_id = $1`,
+          [tenantBId],
+        );
+        const [bInsumosAfter] = await dataSource.query(
+          `SELECT COUNT(*) as cnt FROM insumos WHERE tenant_id = $1`,
+          [tenantBId],
+        );
+        expect(Number(bProdsAfter.cnt)).toBe(3);
+        expect(Number(bInsumosAfter.cnt)).toBe(2);
 
-      // 3. ODAV-34 Verification: Tenant B must experience ZERO change (Blast Radius = 0)
-      const [bProdsAfter] = await dataSource.query(
-        `SELECT COUNT(*) as cnt FROM products WHERE tenant_id = $1`,
-        [tenantBId],
-      );
-      const [bInsumosAfter] = await dataSource.query(
-        `SELECT COUNT(*) as cnt FROM insumos WHERE tenant_id = $1`,
-        [tenantBId],
-      );
-      expect(Number(bProdsAfter.cnt)).toBe(3);
-      expect(Number(bInsumosAfter.cnt)).toBe(2);
-
-      // Ensure no rows in Tenant B have Tenant A references or template items
-      const [crossTenantLeak] = await dataSource.query(
-        `SELECT COUNT(*) as cnt FROM products WHERE tenant_id = $1 AND name LIKE '%Latte%'`,
-        [tenantBId],
-      );
-      expect(Number(crossTenantLeak.cnt)).toBe(0);
-    });
+        // Ensure no rows in Tenant B have Tenant A references or template items
+        const [crossTenantLeak] = await dataSource.query(
+          `SELECT COUNT(*) as cnt FROM products WHERE tenant_id = $1 AND name LIKE '%Latte%'`,
+          [tenantBId],
+        );
+        expect(Number(crossTenantLeak.cnt)).toBe(0);
+      },
+    );
   });
 });

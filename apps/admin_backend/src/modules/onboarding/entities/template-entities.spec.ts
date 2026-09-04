@@ -1,7 +1,22 @@
-import { TemplateApplication, TemplateApplicationStatus } from './template-application.entity';
-import { TemplateSeedLink, TemplateSourceItemType, TemplateTargetEntityType } from './template-seed-link.entity';
-import { LegacyOnboardingMigrationReceipt, LegacyMigrationDecision } from './legacy-migration-receipt.entity';
-import { RecipeVersion, RecipeOrigin, RecipePublicationState, RecipeSuggestionState } from '../../inventory/entities/recipe-version.entity';
+import {
+  TemplateApplication,
+  TemplateApplicationStatus,
+} from './template-application.entity';
+import {
+  TemplateSeedLink,
+  TemplateSourceItemType,
+  TemplateTargetEntityType,
+} from './template-seed-link.entity';
+import {
+  LegacyOnboardingMigrationReceipt,
+  LegacyMigrationDecision,
+} from './legacy-migration-receipt.entity';
+import {
+  RecipeVersion,
+  RecipeOrigin,
+  RecipePublicationState,
+  RecipeSuggestionState,
+} from '../../inventory/entities/recipe-version.entity';
 import { IndustryTemplate } from './industry-template.entity';
 
 describe('Template Safe Cutover Entities', () => {

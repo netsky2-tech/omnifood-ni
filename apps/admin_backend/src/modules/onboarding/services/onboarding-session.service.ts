@@ -63,7 +63,7 @@ export class OnboardingSessionService {
     const updated = await this.sessionRepository.findOne({
       where: { id: session.id },
     });
-    return updated!;
+    return updated;
   }
 
   async ensureOnboardingStarted(

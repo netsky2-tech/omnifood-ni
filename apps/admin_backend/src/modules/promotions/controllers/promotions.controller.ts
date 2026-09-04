@@ -41,10 +41,7 @@ export class PromotionsController {
 
   @Get(':id')
   @Roles(UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER, UserRole.WAITER)
-  async findOne(
-    @Param('id') id: string,
-    @GetTenantId() tenantId?: string,
-  ) {
+  async findOne(@Param('id') id: string, @GetTenantId() tenantId?: string) {
     return this.promotionsService.findOne(this.requireTenant(tenantId), id);
   }
 
@@ -69,10 +66,7 @@ export class PromotionsController {
 
   @Delete(':id')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
-  async remove(
-    @Param('id') id: string,
-    @GetTenantId() tenantId?: string,
-  ) {
+  async remove(@Param('id') id: string, @GetTenantId() tenantId?: string) {
     await this.promotionsService.remove(this.requireTenant(tenantId), id);
     return { success: true };
   }

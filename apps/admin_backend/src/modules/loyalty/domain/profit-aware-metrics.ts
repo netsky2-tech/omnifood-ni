@@ -1,4 +1,5 @@
-export type MetricStatus = 'AVAILABLE' | 'NOT_AVAILABLE' | 'STALE' | 'NOT_APPLICABLE';
+export type MetricStatus =
+  'AVAILABLE' | 'NOT_AVAILABLE' | 'STALE' | 'NOT_APPLICABLE';
 
 export interface ProfitAwareMetric<T> {
   status: MetricStatus;
@@ -170,7 +171,10 @@ export function calculateEstimatedIncentiveCostInWindow(
           redeem.estimatedRedemptionCostNio === undefined ||
           redeem.costStatus === 'NOT_AVAILABLE'
         ) {
-          return metricNotAvailable('INCOMPLETE_REDEMPTION_COST_COVERAGE', asOfUtc.toISOString());
+          return metricNotAvailable(
+            'INCOMPLETE_REDEMPTION_COST_COVERAGE',
+            asOfUtc.toISOString(),
+          );
         }
         sumNio += Number(redeem.estimatedRedemptionCostNio);
       }
@@ -189,8 +193,14 @@ export function calculateEffectiveIncentiveRate(
   qualifiedSales: ProfitAwareMetric<number>,
   asOfUtc: Date,
 ): ProfitAwareMetric<number> {
-  if (qualifiedSales.status !== 'AVAILABLE' && qualifiedSales.status !== 'STALE') {
-    return metricNotAvailable(qualifiedSales.reason ?? 'UNKNOWN_QUALIFIED_SALES', asOfUtc.toISOString());
+  if (
+    qualifiedSales.status !== 'AVAILABLE' &&
+    qualifiedSales.status !== 'STALE'
+  ) {
+    return metricNotAvailable(
+      qualifiedSales.reason ?? 'UNKNOWN_QUALIFIED_SALES',
+      asOfUtc.toISOString(),
+    );
   }
 
   const salesVal = Number(qualifiedSales.value ?? 0);
@@ -198,8 +208,14 @@ export function calculateEffectiveIncentiveRate(
     return metricNotAvailable('NO_QUALIFIED_SALES', asOfUtc.toISOString());
   }
 
-  if (incentiveCost.status !== 'AVAILABLE' && incentiveCost.status !== 'STALE') {
-    return metricNotAvailable('INCOMPLETE_COST_COVERAGE', asOfUtc.toISOString());
+  if (
+    incentiveCost.status !== 'AVAILABLE' &&
+    incentiveCost.status !== 'STALE'
+  ) {
+    return metricNotAvailable(
+      'INCOMPLETE_COST_COVERAGE',
+      asOfUtc.toISOString(),
+    );
   }
 
   const costVal = Number(incentiveCost.value ?? 0);
@@ -252,7 +268,11 @@ export function calculateRewardCostMetrics(input: RewardCostInput): {
   const qty = Number(input.benefitConfig?.quantity ?? 1);
 
   let retailPriceNio: ProfitAwareMetric<number>;
-  if (input.canonicalBasePrice !== null && input.canonicalBasePrice !== undefined && input.canonicalBasePrice > 0) {
+  if (
+    input.canonicalBasePrice !== null &&
+    input.canonicalBasePrice !== undefined &&
+    input.canonicalBasePrice > 0
+  ) {
     retailPriceNio = metricAvailable(Number(input.canonicalBasePrice), asOfStr);
   } else {
     retailPriceNio = metricNotAvailable('NO_CANONICAL_BASE_PRICE', asOfStr);
@@ -261,7 +281,11 @@ export function calculateRewardCostMetrics(input: RewardCostInput): {
   let estimatedCppNio: ProfitAwareMetric<number>;
   let estimatedRewardCostNio: ProfitAwareMetric<number>;
 
-  if (input.estimatedCpp !== null && input.estimatedCpp !== undefined && input.estimatedCpp >= 0) {
+  if (
+    input.estimatedCpp !== null &&
+    input.estimatedCpp !== undefined &&
+    input.estimatedCpp >= 0
+  ) {
     const cpp = Number(input.estimatedCpp);
     estimatedCppNio = metricAvailable(cpp, asOfStr);
     const rewardCost = Math.round(cpp * qty * 10000) / 10000;

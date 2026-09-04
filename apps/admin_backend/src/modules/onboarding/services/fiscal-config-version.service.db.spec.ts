@@ -104,7 +104,12 @@ describe('FiscalConfigVersionService — Real PostgreSQL Persistence', () => {
   it('initializes baseline revision 1 with canonical fingerprint in real database', async () => {
     await withIsolatedSchema('fiscal_rev_init', async ({ dataSource }) => {
       const tenantId = randomUUID();
-      await seedTenant(dataSource, tenantId, 'Tortillería Doña Haydee', 'J0310000000001');
+      await seedTenant(
+        dataSource,
+        tenantId,
+        'Tortillería Doña Haydee',
+        'J0310000000001',
+      );
       await seedFiscalParams(
         dataSource,
         tenantId,
@@ -142,7 +147,12 @@ describe('FiscalConfigVersionService — Real PostgreSQL Persistence', () => {
   it('strictly increments revision only upon material changes, and is idempotent otherwise', async () => {
     await withIsolatedSchema('fiscal_rev_monotonic', async ({ dataSource }) => {
       const tenantId = randomUUID();
-      await seedTenant(dataSource, tenantId, 'Fritanga El Madroño', 'J0310000000002');
+      await seedTenant(
+        dataSource,
+        tenantId,
+        'Fritanga El Madroño',
+        'J0310000000002',
+      );
       await seedFiscalParams(
         dataSource,
         tenantId,
@@ -255,11 +265,35 @@ describe('FiscalConfigVersionService — Real PostgreSQL Persistence', () => {
       const tenantA = randomUUID();
       const tenantB = randomUUID();
 
-      await seedTenant(dataSource, tenantA, 'Tenant A Negocio', 'J031000000000A');
-      await seedTenant(dataSource, tenantB, 'Tenant B Negocio', 'J031000000000B');
+      await seedTenant(
+        dataSource,
+        tenantA,
+        'Tenant A Negocio',
+        'J031000000000A',
+      );
+      await seedTenant(
+        dataSource,
+        tenantB,
+        'Tenant B Negocio',
+        'J031000000000B',
+      );
 
-      await seedFiscalParams(dataSource, tenantA, FiscalRegime.CUOTA_FIJA, 0.0, true, 0.5);
-      await seedFiscalParams(dataSource, tenantB, FiscalRegime.REGIMEN_GENERAL, 0.15, false, 1.0);
+      await seedFiscalParams(
+        dataSource,
+        tenantA,
+        FiscalRegime.CUOTA_FIJA,
+        0.0,
+        true,
+        0.5,
+      );
+      await seedFiscalParams(
+        dataSource,
+        tenantB,
+        FiscalRegime.REGIMEN_GENERAL,
+        0.15,
+        false,
+        1.0,
+      );
 
       const service = new FiscalConfigVersionService(
         dataSource.getRepository(FiscalConfigRevision),
@@ -273,7 +307,9 @@ describe('FiscalConfigVersionService — Real PostgreSQL Persistence', () => {
 
       expect(snapA.tenantId).toBe(tenantA);
       expect(snapB.tenantId).toBe(tenantB);
-      expect(snapA.configVersion.fingerprint).not.toBe(snapB.configVersion.fingerprint);
+      expect(snapA.configVersion.fingerprint).not.toBe(
+        snapB.configVersion.fingerprint,
+      );
 
       const rowsA = await dataSource.query(
         `SELECT * FROM fiscal_config_revisions WHERE tenant_id = $1`,

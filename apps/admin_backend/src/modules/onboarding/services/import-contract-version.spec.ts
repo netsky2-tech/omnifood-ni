@@ -64,7 +64,9 @@ describe('ImportContractVersion (Canonical CSV Authority / AC-16, AC-17, AC-22, 
       expect(isUnsupportedColumn('cpp')).toBe(true);
 
       expect(UNSUPPORTED_COLUMNS_REASONS['barcode']).toContain('Barcode');
-      expect(UNSUPPORTED_COLUMNS_REASONS['stock_inicial']).toContain('BOH Enrichment');
+      expect(UNSUPPORTED_COLUMNS_REASONS['stock_inicial']).toContain(
+        'BOH Enrichment',
+      );
     });
 
     it('identifies unknown/unsupported columns correctly (AC-17)', () => {

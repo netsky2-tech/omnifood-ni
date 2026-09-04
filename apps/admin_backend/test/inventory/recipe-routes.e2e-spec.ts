@@ -6,7 +6,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import * as request from 'supertest';
 import { DataSource } from 'typeorm';
 import { Tenant } from '../../src/modules/tenant/entities/tenant.entity';
-import { Product, ProductType } from '../../src/modules/inventory/entities/product.entity';
+import {
+  Product,
+  ProductType,
+} from '../../src/modules/inventory/entities/product.entity';
 import { Insumo } from '../../src/modules/inventory/entities/insumo.entity';
 import { RecipeVersion } from '../../src/modules/inventory/entities/recipe-version.entity';
 import { RecipeDetail } from '../../src/modules/inventory/entities/recipe-detail.entity';
@@ -63,13 +66,7 @@ async function withIsolatedSchema(
       type: 'postgres',
       ...postgresConnection,
       schema,
-      entities: [
-        Tenant,
-        Product,
-        Insumo,
-        RecipeVersion,
-        RecipeDetail,
-      ],
+      entities: [Tenant, Product, Insumo, RecipeVersion, RecipeDetail],
       synchronize: true,
     });
     await dataSource.initialize();
@@ -87,16 +84,19 @@ async function withIsolatedSchema(
       dataSource.getRepository(Insumo),
       dataSource.getRepository(Product),
       dataSource.getRepository(
-        (await import('../../src/modules/inventory/entities/uom-conversion.entity')).UomConversion,
+        (
+          await import('../../src/modules/inventory/entities/uom-conversion.entity')
+        ).UomConversion,
       ),
-      new (await import('../../src/modules/inventory/uom-conversion-calculator')).UomConversionCalculator(),
+      new (
+        await import('../../src/modules/inventory/uom-conversion-calculator')
+      ).UomConversionCalculator(),
       dataSource,
     );
 
-    const productService = new ProductService(
-      dataSource,
-      { log: jest.fn() } as unknown as ChangeLogService,
-    );
+    const productService = new ProductService(dataSource, {
+      log: jest.fn(),
+    } as unknown as ChangeLogService);
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [RecipeController],
@@ -118,12 +118,21 @@ async function withIsolatedSchema(
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
+    app.useGlobalPipes(
+      new ValidationPipe({ transform: true, whitelist: true }),
+    );
     await app.init();
 
     const jwtService = app.get(JwtService);
 
-    await assertion({ app, dataSource, jwtService, tenantId, recipeService, productService });
+    await assertion({
+      app,
+      dataSource,
+      jwtService,
+      tenantId,
+      recipeService,
+      productService,
+    });
   } finally {
     if (app) await app.close();
     if (dataSource?.isInitialized) await dataSource.destroy();
@@ -158,93 +167,90 @@ describe('RecipeController E2E — real PostgreSQL', () => {
     it(
       'creates a recipe version for a COMPOUND product with insumo components',
       async () => {
-        await withIsolatedSchema('e2e_recipe_create', async ({
-          app,
-          dataSource,
-          jwtService,
-          tenantId,
-          productService,
-        }) => {
-          const token = signToken(jwtService, {
-            role: UserRole.OWNER,
-            tenant_id: tenantId,
-          });
+        await withIsolatedSchema(
+          'e2e_recipe_create',
+          async ({ app, dataSource, jwtService, tenantId, productService }) => {
+            const token = signToken(jwtService, {
+              role: UserRole.OWNER,
+              tenant_id: tenantId,
+            });
 
-          // Create a COMPOUND product
-          const productId = randomUUID();
-          await productService.create(
-            tenantId,
-            {
-              name: 'Gallopinto',
-              uom: 'un',
-              product_type: ProductType.COMPOUND,
-              sellPrice: 50,
-              category_code: 'PLATO_FUERTE',
-            },
-            { userId: 'user-1', userEmail: 'owner@example.com' },
-          );
+            // Create a COMPOUND product
+            const productId = randomUUID();
+            await productService.create(
+              tenantId,
+              {
+                name: 'Gallopinto',
+                uom: 'un',
+                product_type: ProductType.COMPOUND,
+                sellPrice: 50,
+                category_code: 'PLATO_FUERTE',
+              },
+              { userId: 'user-1', userEmail: 'owner@example.com' },
+            );
 
-          // Create insumos
-          const arrozId = randomUUID();
-          await dataSource.query(
-            `INSERT INTO insumos (id, tenant_id, name, consumption_uom, stock, "averageCost", is_active, created_at, updated_at)
+            // Create insumos
+            const arrozId = randomUUID();
+            await dataSource.query(
+              `INSERT INTO insumos (id, tenant_id, name, consumption_uom, stock, "averageCost", is_active, created_at, updated_at)
              VALUES ($1, $2, 'Arroz', 'kg', 100, 15, true, now(), now())`,
-            [arrozId, tenantId],
-          );
+              [arrozId, tenantId],
+            );
 
-          const frijolId = randomUUID();
-          await dataSource.query(
-            `INSERT INTO insumos (id, tenant_id, name, consumption_uom, stock, "averageCost", is_active, created_at, updated_at)
+            const frijolId = randomUUID();
+            await dataSource.query(
+              `INSERT INTO insumos (id, tenant_id, name, consumption_uom, stock, "averageCost", is_active, created_at, updated_at)
              VALUES ($1, $2, 'Frijol', 'kg', 50, 20, true, now(), now())`,
-            [frijolId, tenantId],
-          );
+              [frijolId, tenantId],
+            );
 
-          const res = await request(app.getHttpServer())
-            .post(`/recipes/products/${productId}/versions`)
-            .set('Authorization', `Bearer ${token}`)
-            .send({
-              productId,
-              productName: 'Gallopinto',
-              versionNumber: 1,
-              yieldQuantity: 10,
-              technicalShrinkPct: 5,
-              versionNote: 'Receta original',
-              effectiveAt: new Date().toISOString(),
-              components: [
-                {
-                  ingredientId: arrozId,
-                  ingredientName: 'Arroz',
-                  ingredientType: 'INSUMO',
-                  grossQuantity: 5,
-                  technicalShrinkPct: 2,
-                  componentUom: 'kg',
-                },
-                {
-                  ingredientId: frijolId,
-                  ingredientName: 'Frijol',
-                  ingredientType: 'INSUMO',
-                  grossQuantity: 3,
-                  technicalShrinkPct: 3,
-                  componentUom: 'kg',
-                },
-              ],
-            })
-            .expect(201);
+            const res = await request(app.getHttpServer())
+              .post(`/recipes/products/${productId}/versions`)
+              .set('Authorization', `Bearer ${token}`)
+              .send({
+                productId,
+                productName: 'Gallopinto',
+                versionNumber: 1,
+                yieldQuantity: 10,
+                technicalShrinkPct: 5,
+                versionNote: 'Receta original',
+                effectiveAt: new Date().toISOString(),
+                components: [
+                  {
+                    ingredientId: arrozId,
+                    ingredientName: 'Arroz',
+                    ingredientType: 'INSUMO',
+                    grossQuantity: 5,
+                    technicalShrinkPct: 2,
+                    componentUom: 'kg',
+                  },
+                  {
+                    ingredientId: frijolId,
+                    ingredientName: 'Frijol',
+                    ingredientType: 'INSUMO',
+                    grossQuantity: 3,
+                    technicalShrinkPct: 3,
+                    componentUom: 'kg',
+                  },
+                ],
+              })
+              .expect(201);
 
-          expect(res.body.recipeVersion).toBeDefined();
-          expect(res.body.recipeVersion.id).toBeDefined();
-          expect(res.body.recipeVersion.product_id).toBe(productId);
-          expect(res.body.recipeVersion.version_number).toBe(1);
-          expect(res.body.recipeVersion.is_active).toBe(true);
-          expect(res.body.recipeVersion.yield_quantity).toBe(10);
-          expect(res.body.recipeVersion.technical_shrink_pct).toBe(5);
-          expect(res.body.recipeVersion.version_note).toBe('Receta original');
-          expect(res.body.components).toHaveLength(2);
-          expect(res.body.components[0].insumo_id).toBe(arrozId);
-          expect(res.body.components[0].gross_quantity).toBe(5);
-          expect(res.body.components[1].insumo_id).toBe(frijolId);
-          expect(res.body.components[1].gross_quantity).toBe(3);
-        });
+            expect(res.body.recipeVersion).toBeDefined();
+            expect(res.body.recipeVersion.id).toBeDefined();
+            expect(res.body.recipeVersion.product_id).toBe(productId);
+            expect(res.body.recipeVersion.version_number).toBe(1);
+            expect(res.body.recipeVersion.is_active).toBe(true);
+            expect(res.body.recipeVersion.yield_quantity).toBe(10);
+            expect(res.body.recipeVersion.technical_shrink_pct).toBe(5);
+            expect(res.body.recipeVersion.version_note).toBe('Receta original');
+            expect(res.body.components).toHaveLength(2);
+            expect(res.body.components[0].insumo_id).toBe(arrozId);
+            expect(res.body.components[0].gross_quantity).toBe(5);
+            expect(res.body.components[1].insumo_id).toBe(frijolId);
+            expect(res.body.components[1].gross_quantity).toBe(3);
+          },
+        );
       },
       TEST_TIMEOUT_MS,
     );
@@ -252,22 +258,21 @@ describe('RecipeController E2E — real PostgreSQL', () => {
     it(
       'returns 400 for missing required fields',
       async () => {
-        await withIsolatedSchema('e2e_recipe_create_400', async ({
-          app,
-          jwtService,
-          tenantId,
-        }) => {
-          const token = signToken(jwtService, {
-            role: UserRole.OWNER,
-            tenant_id: tenantId,
-          });
+        await withIsolatedSchema(
+          'e2e_recipe_create_400',
+          async ({ app, jwtService, tenantId }) => {
+            const token = signToken(jwtService, {
+              role: UserRole.OWNER,
+              tenant_id: tenantId,
+            });
 
-          await request(app.getHttpServer())
-            .post(`/recipes/products/${randomUUID()}/versions`)
-            .set('Authorization', `Bearer ${token}`)
-            .send({ productName: 'Test' })
-            .expect(400);
-        });
+            await request(app.getHttpServer())
+              .post(`/recipes/products/${randomUUID()}/versions`)
+              .set('Authorization', `Bearer ${token}`)
+              .send({ productName: 'Test' })
+              .expect(400);
+          },
+        );
       },
       TEST_TIMEOUT_MS,
     );
@@ -275,30 +280,29 @@ describe('RecipeController E2E — real PostgreSQL', () => {
     it(
       'returns 400 when productId in body does not match URL parameter',
       async () => {
-        await withIsolatedSchema('e2e_recipe_create_mismatch', async ({
-          app,
-          jwtService,
-          tenantId,
-        }) => {
-          const token = signToken(jwtService, {
-            role: UserRole.OWNER,
-            tenant_id: tenantId,
-          });
+        await withIsolatedSchema(
+          'e2e_recipe_create_mismatch',
+          async ({ app, jwtService, tenantId }) => {
+            const token = signToken(jwtService, {
+              role: UserRole.OWNER,
+              tenant_id: tenantId,
+            });
 
-          const productId = randomUUID();
-          await request(app.getHttpServer())
-            .post(`/recipes/products/${productId}/versions`)
-            .set('Authorization', `Bearer ${token}`)
-            .send({
-              productId: randomUUID(), // Different ID
-              productName: 'Test',
-              versionNumber: 1,
-              yieldQuantity: 10,
-              technicalShrinkPct: 0,
-              components: [],
-            })
-            .expect(400);
-        });
+            const productId = randomUUID();
+            await request(app.getHttpServer())
+              .post(`/recipes/products/${productId}/versions`)
+              .set('Authorization', `Bearer ${token}`)
+              .send({
+                productId: randomUUID(), // Different ID
+                productName: 'Test',
+                versionNumber: 1,
+                yieldQuantity: 10,
+                technicalShrinkPct: 0,
+                components: [],
+              })
+              .expect(400);
+          },
+        );
       },
       TEST_TIMEOUT_MS,
     );
@@ -306,29 +310,28 @@ describe('RecipeController E2E — real PostgreSQL', () => {
     it(
       'returns 403 for CASHIER role',
       async () => {
-        await withIsolatedSchema('e2e_recipe_create_403', async ({
-          app,
-          jwtService,
-          tenantId,
-        }) => {
-          const token = signToken(jwtService, {
-            role: UserRole.CASHIER,
-            tenant_id: tenantId,
-          });
+        await withIsolatedSchema(
+          'e2e_recipe_create_403',
+          async ({ app, jwtService, tenantId }) => {
+            const token = signToken(jwtService, {
+              role: UserRole.CASHIER,
+              tenant_id: tenantId,
+            });
 
-          await request(app.getHttpServer())
-            .post(`/recipes/products/${randomUUID()}/versions`)
-            .set('Authorization', `Bearer ${token}`)
-            .send({
-              productId: randomUUID(),
-              productName: 'Test',
-              versionNumber: 1,
-              yieldQuantity: 10,
-              technicalShrinkPct: 0,
-              components: [],
-            })
-            .expect(403);
-        });
+            await request(app.getHttpServer())
+              .post(`/recipes/products/${randomUUID()}/versions`)
+              .set('Authorization', `Bearer ${token}`)
+              .send({
+                productId: randomUUID(),
+                productName: 'Test',
+                versionNumber: 1,
+                yieldQuantity: 10,
+                technicalShrinkPct: 0,
+                components: [],
+              })
+              .expect(403);
+          },
+        );
       },
       TEST_TIMEOUT_MS,
     );
@@ -338,86 +341,85 @@ describe('RecipeController E2E — real PostgreSQL', () => {
     it(
       'returns active recipe version for a product',
       async () => {
-        await withIsolatedSchema('e2e_recipe_get_active', async ({
-          app,
-          dataSource,
-          jwtService,
-          tenantId,
-          productService,
-        }) => {
-          const token = signToken(jwtService, {
-            role: UserRole.MANAGER,
-            tenant_id: tenantId,
-          });
+        await withIsolatedSchema(
+          'e2e_recipe_get_active',
+          async ({ app, dataSource, jwtService, tenantId, productService }) => {
+            const token = signToken(jwtService, {
+              role: UserRole.MANAGER,
+              tenant_id: tenantId,
+            });
 
-          // Create a COMPOUND product
-          const productId = randomUUID();
-          await productService.create(
-            tenantId,
-            {
-              name: 'Gallopinto',
-              uom: 'un',
-              product_type: ProductType.COMPOUND,
-              sellPrice: 50,
-            },
-            { userId: 'user-1', userEmail: 'owner@example.com' },
-          );
+            // Create a COMPOUND product
+            const productId = randomUUID();
+            await productService.create(
+              tenantId,
+              {
+                name: 'Gallopinto',
+                uom: 'un',
+                product_type: ProductType.COMPOUND,
+                sellPrice: 50,
+              },
+              { userId: 'user-1', userEmail: 'owner@example.com' },
+            );
 
-          // Create insumo
-          const arrozId = randomUUID();
-          await dataSource.query(
-            `INSERT INTO insumos (id, tenant_id, name, consumption_uom, stock, "averageCost", is_active, created_at, updated_at)
+            // Create insumo
+            const arrozId = randomUUID();
+            await dataSource.query(
+              `INSERT INTO insumos (id, tenant_id, name, consumption_uom, stock, "averageCost", is_active, created_at, updated_at)
              VALUES ($1, $2, 'Arroz', 'kg', 100, 15, true, now(), now())`,
-            [arrozId, tenantId],
-          );
+              [arrozId, tenantId],
+            );
 
-          // Create recipe version directly via service
-          const recipeService = (
-            await import('../../src/modules/inventory/recipe.service')
-          ).RecipeService;
-          // We'll create it via the controller
-          const createToken = signToken(jwtService, {
-            role: UserRole.OWNER,
-            tenant_id: tenantId,
-          });
+            // Create recipe version directly via service
+            const recipeService = (
+              await import('../../src/modules/inventory/recipe.service')
+            ).RecipeService;
+            // We'll create it via the controller
+            const createToken = signToken(jwtService, {
+              role: UserRole.OWNER,
+              tenant_id: tenantId,
+            });
 
-          const createRes = await request(app.getHttpServer())
-            .post(`/recipes/products/${productId}/versions`)
-            .set('Authorization', `Bearer ${createToken}`)
-            .send({
-              productId,
-              productName: 'Gallopinto',
-              versionNumber: 1,
-              yieldQuantity: 10,
-              technicalShrinkPct: 5,
-              versionNote: 'Receta original',
-              components: [
-                {
-                  ingredientId: arrozId,
-                  ingredientName: 'Arroz',
-                  ingredientType: 'INSUMO',
-                  grossQuantity: 5,
-                  technicalShrinkPct: 2,
-                  componentUom: 'kg',
-                },
-              ],
-            })
-            .expect(201);
+            const createRes = await request(app.getHttpServer())
+              .post(`/recipes/products/${productId}/versions`)
+              .set('Authorization', `Bearer ${createToken}`)
+              .send({
+                productId,
+                productName: 'Gallopinto',
+                versionNumber: 1,
+                yieldQuantity: 10,
+                technicalShrinkPct: 5,
+                versionNote: 'Receta original',
+                components: [
+                  {
+                    ingredientId: arrozId,
+                    ingredientName: 'Arroz',
+                    ingredientType: 'INSUMO',
+                    grossQuantity: 5,
+                    technicalShrinkPct: 2,
+                    componentUom: 'kg',
+                  },
+                ],
+              })
+              .expect(201);
 
-          // Now get the active recipe
-          const res = await request(app.getHttpServer())
-            .get(`/recipes/products/${productId}/active`)
-            .set('Authorization', `Bearer ${token}`)
-            .expect(200);
+            // Now get the active recipe
+            const res = await request(app.getHttpServer())
+              .get(`/recipes/products/${productId}/active`)
+              .set('Authorization', `Bearer ${token}`)
+              .expect(200);
 
-          expect(res.body.recipeVersion).toBeDefined();
-          expect(res.body.recipeVersion.id).toBe(createRes.body.recipeVersion.id);
-          expect(res.body.recipeVersion.product_id).toBe(productId);
-          expect(res.body.recipeVersion.version_number).toBe(1);
-          expect(res.body.recipeVersion.is_active).toBe(true);
-          expect(res.body.components).toHaveLength(1);
-          expect(res.body.components[0].insumo_id).toBe(arrozId);
-        });
+            expect(res.body.recipeVersion).toBeDefined();
+            expect(res.body.recipeVersion.id).toBe(
+              createRes.body.recipeVersion.id,
+            );
+            expect(res.body.recipeVersion.product_id).toBe(productId);
+            expect(res.body.recipeVersion.version_number).toBe(1);
+            expect(res.body.recipeVersion.is_active).toBe(true);
+            expect(res.body.components).toHaveLength(1);
+            expect(res.body.components[0].insumo_id).toBe(arrozId);
+          },
+        );
       },
       TEST_TIMEOUT_MS,
     );
@@ -425,41 +427,38 @@ describe('RecipeController E2E — real PostgreSQL', () => {
     it(
       'returns empty recipe when no active version exists',
       async () => {
-        await withIsolatedSchema('e2e_recipe_get_active_empty', async ({
-          app,
-          dataSource,
-          jwtService,
-          tenantId,
-          productService,
-        }) => {
-          const token = signToken(jwtService, {
-            role: UserRole.MANAGER,
-            tenant_id: tenantId,
-          });
+        await withIsolatedSchema(
+          'e2e_recipe_get_active_empty',
+          async ({ app, dataSource, jwtService, tenantId, productService }) => {
+            const token = signToken(jwtService, {
+              role: UserRole.MANAGER,
+              tenant_id: tenantId,
+            });
 
-          const productId = randomUUID();
-          await productService.create(
-            tenantId,
-            {
-              name: 'Gallopinto',
-              uom: 'un',
-              product_type: ProductType.COMPOUND,
-              sellPrice: 50,
-            },
-            { userId: 'user-1', userEmail: 'owner@example.com' },
-          );
+            const productId = randomUUID();
+            await productService.create(
+              tenantId,
+              {
+                name: 'Gallopinto',
+                uom: 'un',
+                product_type: ProductType.COMPOUND,
+                sellPrice: 50,
+              },
+              { userId: 'user-1', userEmail: 'owner@example.com' },
+            );
 
-          const res = await request(app.getHttpServer())
-            .get(`/recipes/products/${productId}/active`)
-            .set('Authorization', `Bearer ${token}`)
-            .expect(200);
+            const res = await request(app.getHttpServer())
+              .get(`/recipes/products/${productId}/active`)
+              .set('Authorization', `Bearer ${token}`)
+              .expect(200);
 
-          expect(res.body.recipeVersion).toBeDefined();
-          expect(res.body.recipeVersion.id).toBe('');
-          expect(res.body.recipeVersion.version_number).toBe(0);
-          expect(res.body.recipeVersion.is_active).toBe(false);
-          expect(res.body.components).toHaveLength(0);
-        });
+            expect(res.body.recipeVersion).toBeDefined();
+            expect(res.body.recipeVersion.id).toBe('');
+            expect(res.body.recipeVersion.version_number).toBe(0);
+            expect(res.body.recipeVersion.is_active).toBe(false);
+            expect(res.body.components).toHaveLength(0);
+          },
+        );
       },
       TEST_TIMEOUT_MS,
     );
@@ -467,13 +466,14 @@ describe('RecipeController E2E — real PostgreSQL', () => {
     it(
       'returns 401 without token',
       async () => {
-        await withIsolatedSchema('e2e_recipe_get_active_401', async ({
-          app,
-        }) => {
-          await request(app.getHttpServer())
-            .get(`/recipes/products/${randomUUID()}/active`)
-            .expect(401);
-        });
+        await withIsolatedSchema(
+          'e2e_recipe_get_active_401',
+          async ({ app }) => {
+            await request(app.getHttpServer())
+              .get(`/recipes/products/${randomUUID()}/active`)
+              .expect(401);
+          },
+        );
       },
       TEST_TIMEOUT_MS,
     );
@@ -483,77 +483,74 @@ describe('RecipeController E2E — real PostgreSQL', () => {
     it(
       'returns recipe version snapshot with components',
       async () => {
-        await withIsolatedSchema('e2e_recipe_snapshot', async ({
-          app,
-          dataSource,
-          jwtService,
-          tenantId,
-          productService,
-        }) => {
-          const token = signToken(jwtService, {
-            role: UserRole.MANAGER,
-            tenant_id: tenantId,
-          });
+        await withIsolatedSchema(
+          'e2e_recipe_snapshot',
+          async ({ app, dataSource, jwtService, tenantId, productService }) => {
+            const token = signToken(jwtService, {
+              role: UserRole.MANAGER,
+              tenant_id: tenantId,
+            });
 
-          const productId = randomUUID();
-          await productService.create(
-            tenantId,
-            {
-              name: 'Gallopinto',
-              uom: 'un',
-              product_type: ProductType.COMPOUND,
-              sellPrice: 50,
-            },
-            { userId: 'user-1', userEmail: 'owner@example.com' },
-          );
+            const productId = randomUUID();
+            await productService.create(
+              tenantId,
+              {
+                name: 'Gallopinto',
+                uom: 'un',
+                product_type: ProductType.COMPOUND,
+                sellPrice: 50,
+              },
+              { userId: 'user-1', userEmail: 'owner@example.com' },
+            );
 
-          const arrozId = randomUUID();
-          await dataSource.query(
-            `INSERT INTO insumos (id, tenant_id, name, consumption_uom, stock, "averageCost", is_active, created_at, updated_at)
+            const arrozId = randomUUID();
+            await dataSource.query(
+              `INSERT INTO insumos (id, tenant_id, name, consumption_uom, stock, "averageCost", is_active, created_at, updated_at)
              VALUES ($1, $2, 'Arroz', 'kg', 100, 15, true, now(), now())`,
-            [arrozId, tenantId],
-          );
+              [arrozId, tenantId],
+            );
 
-          const createToken = signToken(jwtService, {
-            role: UserRole.OWNER,
-            tenant_id: tenantId,
-          });
+            const createToken = signToken(jwtService, {
+              role: UserRole.OWNER,
+              tenant_id: tenantId,
+            });
 
-          const createRes = await request(app.getHttpServer())
-            .post(`/recipes/products/${productId}/versions`)
-            .set('Authorization', `Bearer ${createToken}`)
-            .send({
-              productId,
-              productName: 'Gallopinto',
-              versionNumber: 1,
-              yieldQuantity: 10,
-              technicalShrinkPct: 5,
-              versionNote: 'Receta original',
-              components: [
-                {
-                  ingredientId: arrozId,
-                  ingredientName: 'Arroz',
-                  ingredientType: 'INSUMO',
-                  grossQuantity: 5,
-                  technicalShrinkPct: 2,
-                  componentUom: 'kg',
-                },
-              ],
-            })
-            .expect(201);
+            const createRes = await request(app.getHttpServer())
+              .post(`/recipes/products/${productId}/versions`)
+              .set('Authorization', `Bearer ${createToken}`)
+              .send({
+                productId,
+                productName: 'Gallopinto',
+                versionNumber: 1,
+                yieldQuantity: 10,
+                technicalShrinkPct: 5,
+                versionNote: 'Receta original',
+                components: [
+                  {
+                    ingredientId: arrozId,
+                    ingredientName: 'Arroz',
+                    ingredientType: 'INSUMO',
+                    grossQuantity: 5,
+                    technicalShrinkPct: 2,
+                    componentUom: 'kg',
+                  },
+                ],
+              })
+              .expect(201);
 
-          const recipeVersionId = createRes.body.recipeVersion.id;
+            const recipeVersionId = createRes.body.recipeVersion.id;
 
-          const res = await request(app.getHttpServer())
-            .get(`/recipes/${recipeVersionId}/snapshot`)
-            .set('Authorization', `Bearer ${token}`)
-            .expect(200);
+            const res = await request(app.getHttpServer())
+              .get(`/recipes/${recipeVersionId}/snapshot`)
+              .set('Authorization', `Bearer ${token}`)
+              .expect(200);
 
-          expect(res.body.recipeVersion.id).toBe(recipeVersionId);
-          expect(res.body.recipeVersion.product_id).toBe(productId);
-          expect(res.body.components).toHaveLength(1);
-          expect(res.body.components[0].insumo_id).toBe(arrozId);
-        });
+            expect(res.body.recipeVersion.id).toBe(recipeVersionId);
+            expect(res.body.recipeVersion.product_id).toBe(productId);
+            expect(res.body.components).toHaveLength(1);
+            expect(res.body.components[0].insumo_id).toBe(arrozId);
+          },
+        );
       },
       TEST_TIMEOUT_MS,
     );
@@ -561,21 +558,20 @@ describe('RecipeController E2E — real PostgreSQL', () => {
     it(
       'returns 404 for nonexistent recipe version',
       async () => {
-        await withIsolatedSchema('e2e_recipe_snapshot_404', async ({
-          app,
-          jwtService,
-          tenantId,
-        }) => {
-          const token = signToken(jwtService, {
-            role: UserRole.MANAGER,
-            tenant_id: tenantId,
-          });
+        await withIsolatedSchema(
+          'e2e_recipe_snapshot_404',
+          async ({ app, jwtService, tenantId }) => {
+            const token = signToken(jwtService, {
+              role: UserRole.MANAGER,
+              tenant_id: tenantId,
+            });
 
-          await request(app.getHttpServer())
-            .get(`/recipes/${randomUUID()}/snapshot`)
-            .set('Authorization', `Bearer ${token}`)
-            .expect(404);
-        });
+            await request(app.getHttpServer())
+              .get(`/recipes/${randomUUID()}/snapshot`)
+              .set('Authorization', `Bearer ${token}`)
+              .expect(404);
+          },
+        );
       },
       TEST_TIMEOUT_MS,
     );
@@ -585,61 +581,63 @@ describe('RecipeController E2E — real PostgreSQL', () => {
     it(
       'tenant A cannot see tenant B recipes via HTTP',
       async () => {
-        await withIsolatedSchema('e2e_recipe_tenant_isolation', async ({
-          app,
-          dataSource,
-          jwtService,
-          tenantId,
-          productService,
-        }) => {
-          const otherTenantId = randomUUID();
-          await dataSource.query(
-            `INSERT INTO tenants (id, name, is_active, created_at, updated_at) VALUES ($1, $2, true, now(), now())`,
-            [otherTenantId, 'Other Tenant'],
-          );
+        await withIsolatedSchema(
+          'e2e_recipe_tenant_isolation',
+          async ({ app, dataSource, jwtService, tenantId, productService }) => {
+            const otherTenantId = randomUUID();
+            await dataSource.query(
+              `INSERT INTO tenants (id, name, is_active, created_at, updated_at) VALUES ($1, $2, true, now(), now())`,
+              [otherTenantId, 'Other Tenant'],
+            );
 
-          const tokenA = signToken(jwtService, {
-            role: UserRole.OWNER,
-            tenant_id: tenantId,
-          });
+            const tokenA = signToken(jwtService, {
+              role: UserRole.OWNER,
+              tenant_id: tenantId,
+            });
 
-          // Create product and recipe for other tenant directly in DB
-          const otherProductId = randomUUID();
-          await dataSource.query(
-            `INSERT INTO products (id, tenant_id, name, uom, product_type, stock, "averageCost", "sellPrice", is_active, is_perishable, created_at, updated_at)
+            // Create product and recipe for other tenant directly in DB
+            const otherProductId = randomUUID();
+            await dataSource.query(
+              `INSERT INTO products (id, tenant_id, name, uom, product_type, stock, "averageCost", "sellPrice", is_active, is_perishable, created_at, updated_at)
              VALUES ($1, $2, 'Other Product', 'un', 'COMPOUND', 0, 0, 10, true, false, now(), now())`,
-            [otherProductId, otherTenantId],
-          );
+              [otherProductId, otherTenantId],
+            );
 
-          const otherRecipeVersionId = randomUUID();
-          await dataSource.query(
-            `INSERT INTO recipe_versions (id, tenant_id, product_id, version_number, is_active, "yield_quantity", "technical_shrink_pct", "fecha_inicio_vigencia", created_at)
+            const otherRecipeVersionId = randomUUID();
+            await dataSource.query(
+              `INSERT INTO recipe_versions (id, tenant_id, product_id, version_number, is_active, "yield_quantity", "technical_shrink_pct", "fecha_inicio_vigencia", created_at)
              VALUES ($1, $2, $3, 1, true, 10, 0, now(), now())`,
-            [otherRecipeVersionId, otherTenantId, otherProductId],
-          );
+              [otherRecipeVersionId, otherTenantId, otherProductId],
+            );
 
-          const otherInsumoId = randomUUID();
-          await dataSource.query(
-            `INSERT INTO insumos (id, tenant_id, name, consumption_uom, stock, "averageCost", is_active, created_at, updated_at)
+            const otherInsumoId = randomUUID();
+            await dataSource.query(
+              `INSERT INTO insumos (id, tenant_id, name, consumption_uom, stock, "averageCost", is_active, created_at, updated_at)
              VALUES ($1, $2, 'Other Insumo', 'kg', 100, 15, true, now(), now())`,
-            [otherInsumoId, otherTenantId],
-          );
+              [otherInsumoId, otherTenantId],
+            );
 
-          await dataSource.query(
-            `INSERT INTO recipe_details (id, tenant_id, recipe_version_id, insumo_id, quantity, gross_quantity, "technical_shrink_pct", ingredient_name, ingredient_type, component_uom, reference_version_id)
+            await dataSource.query(
+              `INSERT INTO recipe_details (id, tenant_id, recipe_version_id, insumo_id, quantity, gross_quantity, "technical_shrink_pct", ingredient_name, ingredient_type, component_uom, reference_version_id)
              VALUES ($1, $2, $3, $4, 1, 5, 0, 'Other Insumo', 'INSUMO', 'kg', null)`,
-            [randomUUID(), otherTenantId, otherRecipeVersionId, otherInsumoId],
-          );
+              [
+                randomUUID(),
+                otherTenantId,
+                otherRecipeVersionId,
+                otherInsumoId,
+              ],
+            );
 
-          // Tenant A should see empty recipe
-          const res = await request(app.getHttpServer())
-            .get(`/recipes/products/${otherProductId}/active`)
-            .set('Authorization', `Bearer ${tokenA}`)
-            .expect(200);
+            // Tenant A should see empty recipe
+            const res = await request(app.getHttpServer())
+              .get(`/recipes/products/${otherProductId}/active`)
+              .set('Authorization', `Bearer ${tokenA}`)
+              .expect(200);
 
-          expect(res.body.recipeVersion.version_number).toBe(0);
-          expect(res.body.components).toHaveLength(0);
-        });
+            expect(res.body.recipeVersion.version_number).toBe(0);
+            expect(res.body.components).toHaveLength(0);
+          },
+        );
       },
       TEST_TIMEOUT_MS,
     );
@@ -649,101 +647,102 @@ describe('RecipeController E2E — real PostgreSQL', () => {
     it(
       'deactivates previous version when creating new one',
       async () => {
-        await withIsolatedSchema('e2e_recipe_versioning', async ({
-          app,
-          dataSource,
-          jwtService,
-          tenantId,
-          productService,
-        }) => {
-          const token = signToken(jwtService, {
-            role: UserRole.OWNER,
-            tenant_id: tenantId,
-          });
+        await withIsolatedSchema(
+          'e2e_recipe_versioning',
+          async ({ app, dataSource, jwtService, tenantId, productService }) => {
+            const token = signToken(jwtService, {
+              role: UserRole.OWNER,
+              tenant_id: tenantId,
+            });
 
-          const productId = randomUUID();
-          await productService.create(
-            tenantId,
-            {
-              name: 'Gallopinto',
-              uom: 'un',
-              product_type: ProductType.COMPOUND,
-              sellPrice: 50,
-            },
-            { userId: 'user-1', userEmail: 'owner@example.com' },
-          );
+            const productId = randomUUID();
+            await productService.create(
+              tenantId,
+              {
+                name: 'Gallopinto',
+                uom: 'un',
+                product_type: ProductType.COMPOUND,
+                sellPrice: 50,
+              },
+              { userId: 'user-1', userEmail: 'owner@example.com' },
+            );
 
-          const arrozId = randomUUID();
-          await dataSource.query(
-            `INSERT INTO insumos (id, tenant_id, name, consumption_uom, stock, "averageCost", is_active, created_at, updated_at)
+            const arrozId = randomUUID();
+            await dataSource.query(
+              `INSERT INTO insumos (id, tenant_id, name, consumption_uom, stock, "averageCost", is_active, created_at, updated_at)
              VALUES ($1, $2, 'Arroz', 'kg', 100, 15, true, now(), now())`,
-            [arrozId, tenantId],
-          );
+              [arrozId, tenantId],
+            );
 
-          // Create version 1
-          const v1Res = await request(app.getHttpServer())
-            .post(`/recipes/products/${productId}/versions`)
-            .set('Authorization', `Bearer ${token}`)
-            .send({
-              productId,
-              productName: 'Gallopinto',
-              versionNumber: 1,
-              yieldQuantity: 10,
-              technicalShrinkPct: 5,
-              versionNote: 'Version 1',
-              components: [
-                {
-                  ingredientId: arrozId,
-                  ingredientName: 'Arroz',
-                  ingredientType: 'INSUMO',
-                  grossQuantity: 5,
-                  technicalShrinkPct: 2,
-                  componentUom: 'kg',
-                },
-              ],
-            })
-            .expect(201);
+            // Create version 1
+            const v1Res = await request(app.getHttpServer())
+              .post(`/recipes/products/${productId}/versions`)
+              .set('Authorization', `Bearer ${token}`)
+              .send({
+                productId,
+                productName: 'Gallopinto',
+                versionNumber: 1,
+                yieldQuantity: 10,
+                technicalShrinkPct: 5,
+                versionNote: 'Version 1',
+                components: [
+                  {
+                    ingredientId: arrozId,
+                    ingredientName: 'Arroz',
+                    ingredientType: 'INSUMO',
+                    grossQuantity: 5,
+                    technicalShrinkPct: 2,
+                    componentUom: 'kg',
+                  },
+                ],
+              })
+              .expect(201);
 
-          expect(v1Res.body.recipeVersion.version_number).toBe(1);
-          expect(v1Res.body.recipeVersion.is_active).toBe(true);
+            expect(v1Res.body.recipeVersion.version_number).toBe(1);
+            expect(v1Res.body.recipeVersion.is_active).toBe(true);
 
-          // Create version 2
-          const v2Res = await request(app.getHttpServer())
-            .post(`/recipes/products/${productId}/versions`)
-            .set('Authorization', `Bearer ${token}`)
-            .send({
-              productId,
-              productName: 'Gallopinto',
-              versionNumber: 2,
-              yieldQuantity: 10,
-              technicalShrinkPct: 5,
-              versionNote: 'Version 2 - mejorada',
-              components: [
-                {
-                  ingredientId: arrozId,
-                  ingredientName: 'Arroz',
-                  ingredientType: 'INSUMO',
-                  grossQuantity: 4.5,
-                  technicalShrinkPct: 1.5,
-                  componentUom: 'kg',
-                },
-              ],
-            })
-            .expect(201);
+            // Create version 2
+            const v2Res = await request(app.getHttpServer())
+              .post(`/recipes/products/${productId}/versions`)
+              .set('Authorization', `Bearer ${token}`)
+              .send({
+                productId,
+                productName: 'Gallopinto',
+                versionNumber: 2,
+                yieldQuantity: 10,
+                technicalShrinkPct: 5,
+                versionNote: 'Version 2 - mejorada',
+                components: [
+                  {
+                    ingredientId: arrozId,
+                    ingredientName: 'Arroz',
+                    ingredientType: 'INSUMO',
+                    grossQuantity: 4.5,
+                    technicalShrinkPct: 1.5,
+                    componentUom: 'kg',
+                  },
+                ],
+              })
+              .expect(201);
 
-          expect(v2Res.body.recipeVersion.version_number).toBe(2);
-          expect(v2Res.body.recipeVersion.is_active).toBe(true);
-          expect(v2Res.body.recipeVersion.version_note).toBe('Version 2 - mejorada');
+            expect(v2Res.body.recipeVersion.version_number).toBe(2);
+            expect(v2Res.body.recipeVersion.is_active).toBe(true);
+            expect(v2Res.body.recipeVersion.version_note).toBe(
+              'Version 2 - mejorada',
+            );
 
-          // Verify version 1 is no longer active
-          const activeRes = await request(app.getHttpServer())
-            .get(`/recipes/products/${productId}/active`)
-            .set('Authorization', `Bearer ${token}`)
-            .expect(200);
+            // Verify version 1 is no longer active
+            const activeRes = await request(app.getHttpServer())
+              .get(`/recipes/products/${productId}/active`)
+              .set('Authorization', `Bearer ${token}`)
+              .expect(200);
 
-          expect(activeRes.body.recipeVersion.version_number).toBe(2);
-          expect(activeRes.body.recipeVersion.id).toBe(v2Res.body.recipeVersion.id);
-        });
+            expect(activeRes.body.recipeVersion.version_number).toBe(2);
+            expect(activeRes.body.recipeVersion.id).toBe(
+              v2Res.body.recipeVersion.id,
+            );
+          },
+        );
       },
       TEST_TIMEOUT_MS,
     );

@@ -9,13 +9,13 @@ import { FiscalSetupService } from '../services/fiscal-setup.service';
 export class FiscalReadinessAdapter implements FiscalReadinessPort {
   constructor(private readonly fiscalSetupService: FiscalSetupService) {}
 
-  async evaluateFiscalReadiness(tenantId: string): Promise<FiscalReadinessResult> {
+  async evaluateFiscalReadiness(
+    tenantId: string,
+  ): Promise<FiscalReadinessResult> {
     try {
       const config = await this.fiscalSetupService.getFiscalSetup(tenantId);
       const minimumConfigurationValid = Boolean(
-        config &&
-          config.businessName?.trim() &&
-          config.regime,
+        config && config.businessName?.trim() && config.regime,
       );
 
       return {

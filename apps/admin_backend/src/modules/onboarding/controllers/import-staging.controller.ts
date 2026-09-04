@@ -149,16 +149,26 @@ export class ImportStagingController {
     @GetTenantId() tenantId?: string,
   ) {
     const validTenantId = this.requireTenant(tenantId);
-    const errors = await this.importStagingService.getFailedRows(validTenantId, sessionToken);
+    const errors = await this.importStagingService.getFailedRows(
+      validTenantId,
+      sessionToken,
+    );
 
-    const headers = ['fila', 'nombre_suministrado', 'sku_suministrado', 'motivo_error'];
+    const headers = [
+      'fila',
+      'nombre_suministrado',
+      'sku_suministrado',
+      'motivo_error',
+    ];
     const lines = [headers.join(',')];
 
     for (const err of errors) {
       const escapedNombre = `"${(err.rawNombre || '').replace(/"/g, '""')}"`;
       const escapedSku = `"${(err.rawSku || '').replace(/"/g, '""')}"`;
       const escapedReason = `"${(err.reason || '').replace(/"/g, '""')}"`;
-      lines.push([err.rowNumber, escapedNombre, escapedSku, escapedReason].join(','));
+      lines.push(
+        [err.rowNumber, escapedNombre, escapedSku, escapedReason].join(','),
+      );
     }
 
     const csvOutput = lines.join('\n');
@@ -195,6 +205,8 @@ export class ImportStagingController {
     if (!this.integrityReportService) {
       throw new UnauthorizedException('Integrity report service unavailable');
     }
-    return this.integrityReportService.expireIncompatibleLegacyStaging(validTenantId);
+    return this.integrityReportService.expireIncompatibleLegacyStaging(
+      validTenantId,
+    );
   }
 }

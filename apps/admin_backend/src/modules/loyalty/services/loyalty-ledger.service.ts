@@ -35,20 +35,34 @@ export class LoyaltyLedgerService {
     private readonly projectionRepo: Repository<CustomerLoyaltyAccountProjection>,
   ) {}
 
-  async appendTransaction(dto: AppendLoyaltyTxDto): Promise<CustomerPointTransaction> {
+  async appendTransaction(
+    dto: AppendLoyaltyTxDto,
+  ): Promise<CustomerPointTransaction> {
     if (dto.idempotencyKey) {
       const existing = await this.txRepo.findOne({
         where: { idempotency_key: dto.idempotencyKey, tenant_id: dto.tenantId },
       });
       if (existing) {
-        const matchesCustomer = !dto.customerId || existing.customer_id === dto.customerId;
-        const matchesProgram = !dto.loyaltyProgramId || existing.loyalty_program_id === dto.loyaltyProgramId;
-        const matchesUnits = dto.units === undefined || Number(existing.units) === Number(dto.units);
-        const existingType = (existing.transaction_type ?? existing.type)?.toLowerCase();
+        const matchesCustomer =
+          !dto.customerId || existing.customer_id === dto.customerId;
+        const matchesProgram =
+          !dto.loyaltyProgramId ||
+          existing.loyalty_program_id === dto.loyaltyProgramId;
+        const matchesUnits =
+          dto.units === undefined ||
+          Number(existing.units) === Number(dto.units);
+        const existingType = (
+          existing.transaction_type ?? existing.type
+        )?.toLowerCase();
         const incomingType = dto.transactionType?.toLowerCase();
         const matchesType = !incomingType || existingType === incomingType;
 
-        if (!matchesCustomer || !matchesProgram || !matchesUnits || !matchesType) {
+        if (
+          !matchesCustomer ||
+          !matchesProgram ||
+          !matchesUnits ||
+          !matchesType
+        ) {
           throw new ConflictException(
             `Integrity conflict: idempotency key '${dto.idempotencyKey}' already used with different payload`,
           );
@@ -84,16 +98,16 @@ export class LoyaltyLedgerService {
       legacy_imported: false,
     } as Partial<CustomerPointTransaction>);
 
-    const savedTx = await this.txRepo.save(tx as CustomerPointTransaction);
+    const savedTx = await this.txRepo.save(tx);
 
     await this.updateProjection(
       dto.tenantId,
       dto.customerId,
       dto.loyaltyProgramId,
-      (savedTx as CustomerPointTransaction).id,
+      savedTx.id,
     );
 
-    return savedTx as CustomerPointTransaction;
+    return savedTx;
   }
 
   async rebuildProjection(
@@ -106,13 +120,19 @@ export class LoyaltyLedgerService {
       .select('COALESCE(SUM(tx.units), 0)', 'total')
       .where('tx.tenant_id = :tenantId', { tenantId })
       .andWhere('tx.customer_id = :customerId', { customerId })
-      .andWhere('tx.loyalty_program_id = :programId', { programId: loyaltyProgramId })
+      .andWhere('tx.loyalty_program_id = :programId', {
+        programId: loyaltyProgramId,
+      })
       .getRawOne();
 
     const totalUnits = Number(result?.total ?? 0);
 
     let projection = await this.projectionRepo.findOne({
-      where: { tenant_id: tenantId, customer_id: customerId, loyalty_program_id: loyaltyProgramId },
+      where: {
+        tenant_id: tenantId,
+        customer_id: customerId,
+        loyalty_program_id: loyaltyProgramId,
+      },
     });
 
     if (projection) {
@@ -144,13 +164,19 @@ export class LoyaltyLedgerService {
       .select('COALESCE(SUM(tx.units), 0)', 'total')
       .where('tx.tenant_id = :tenantId', { tenantId })
       .andWhere('tx.customer_id = :customerId', { customerId })
-      .andWhere('tx.loyalty_program_id = :programId', { programId: loyaltyProgramId })
+      .andWhere('tx.loyalty_program_id = :programId', {
+        programId: loyaltyProgramId,
+      })
       .getRawOne();
 
     const totalUnits = Number(result?.total ?? 0);
 
     let projection = await this.projectionRepo.findOne({
-      where: { tenant_id: tenantId, customer_id: customerId, loyalty_program_id: loyaltyProgramId },
+      where: {
+        tenant_id: tenantId,
+        customer_id: customerId,
+        loyalty_program_id: loyaltyProgramId,
+      },
     });
 
     if (projection) {

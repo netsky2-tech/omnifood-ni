@@ -1,9 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
-import { LoyaltyProgram, LoyaltyProgramStatus } from '../entities/loyalty-program.entity';
+import {
+  LoyaltyProgram,
+  LoyaltyProgramStatus,
+} from '../entities/loyalty-program.entity';
 import { Customer } from '../../customers/entities/customer.entity';
-import { LoyaltyTicketSnapshot, EarningResult } from '../domain/loyalty-ticket-snapshot';
+import {
+  LoyaltyTicketSnapshot,
+  EarningResult,
+} from '../domain/loyalty-ticket-snapshot';
 import { createStrategy } from '../domain/earning-strategy';
 import { LoyaltyLedgerService } from './loyalty-ledger.service';
 
@@ -66,14 +72,19 @@ export class TicketPaidHandler {
 
         results.push(result);
       } catch (error) {
-        this.logger.error(`Failed to process EARN for program ${program.id}: ${error}`);
+        this.logger.error(
+          `Failed to process EARN for program ${program.id}: ${error}`,
+        );
       }
     }
 
     return results;
   }
 
-  private isWithinEarningWindow(program: LoyaltyProgram, paidAt: Date): boolean {
+  private isWithinEarningWindow(
+    program: LoyaltyProgram,
+    paidAt: Date,
+  ): boolean {
     if (program.starts_at && paidAt < program.starts_at) return false;
     if (program.ends_at && paidAt >= program.ends_at) return false;
     return true;

@@ -77,10 +77,7 @@ export class ProductService {
     });
   }
 
-  async findOne(
-    id: string,
-    tenantId: string,
-  ): Promise<Product> {
+  async findOne(id: string, tenantId: string): Promise<Product> {
     return this.withTenantContext(tenantId, async (repo) => {
       const row = await repo.findOne({
         where: {
@@ -152,14 +149,47 @@ export class ProductService {
       }
 
       const changes: Record<string, unknown> = {};
-      if (dto.name !== undefined) { changes.name = { from: row.name, to: dto.name.trim() }; row.name = dto.name.trim(); }
-      if (dto.uom !== undefined) { changes.uom = { from: row.uom, to: dto.uom.trim() }; row.uom = dto.uom.trim(); }
-      if (dto.product_type !== undefined) { changes.product_type = { from: row.product_type, to: dto.product_type }; row.product_type = dto.product_type; }
-      if (dto.category_code !== undefined) { changes.category_code = { from: row.category_code, to: dto.category_code?.trim() ?? null }; row.category_code = dto.category_code?.trim() ?? null; }
-      if (dto.warehouse_id !== undefined) { changes.warehouse_id = { from: row.warehouse_id, to: dto.warehouse_id?.trim() ?? null }; row.warehouse_id = dto.warehouse_id?.trim() ?? null; }
-      if (dto.is_perishable !== undefined) { changes.is_perishable = { from: row.is_perishable, to: dto.is_perishable }; row.is_perishable = dto.is_perishable; }
-      if (dto.sellPrice !== undefined) { changes.sellPrice = { from: row.sellPrice, to: dto.sellPrice }; row.sellPrice = dto.sellPrice; }
-      if (dto.is_active !== undefined) { changes.is_active = { from: row.is_active, to: dto.is_active }; row.is_active = dto.is_active; }
+      if (dto.name !== undefined) {
+        changes.name = { from: row.name, to: dto.name.trim() };
+        row.name = dto.name.trim();
+      }
+      if (dto.uom !== undefined) {
+        changes.uom = { from: row.uom, to: dto.uom.trim() };
+        row.uom = dto.uom.trim();
+      }
+      if (dto.product_type !== undefined) {
+        changes.product_type = { from: row.product_type, to: dto.product_type };
+        row.product_type = dto.product_type;
+      }
+      if (dto.category_code !== undefined) {
+        changes.category_code = {
+          from: row.category_code,
+          to: dto.category_code?.trim() ?? null,
+        };
+        row.category_code = dto.category_code?.trim() ?? null;
+      }
+      if (dto.warehouse_id !== undefined) {
+        changes.warehouse_id = {
+          from: row.warehouse_id,
+          to: dto.warehouse_id?.trim() ?? null,
+        };
+        row.warehouse_id = dto.warehouse_id?.trim() ?? null;
+      }
+      if (dto.is_perishable !== undefined) {
+        changes.is_perishable = {
+          from: row.is_perishable,
+          to: dto.is_perishable,
+        };
+        row.is_perishable = dto.is_perishable;
+      }
+      if (dto.sellPrice !== undefined) {
+        changes.sellPrice = { from: row.sellPrice, to: dto.sellPrice };
+        row.sellPrice = dto.sellPrice;
+      }
+      if (dto.is_active !== undefined) {
+        changes.is_active = { from: row.is_active, to: dto.is_active };
+        row.is_active = dto.is_active;
+      }
 
       return { saved: await repo.save(row), changes };
     });
@@ -182,7 +212,11 @@ export class ProductService {
   /**
    * Soft-deactivate (never hard-delete) to preserve historical references.
    */
-  async deactivate(id: string, tenantId: string, user?: AuditUser): Promise<void> {
+  async deactivate(
+    id: string,
+    tenantId: string,
+    user?: AuditUser,
+  ): Promise<void> {
     await this.withTenantContext(tenantId, async (repo) => {
       const row = await repo.findOne({
         where: {

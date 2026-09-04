@@ -37,7 +37,11 @@ export class ChangeLogService {
     targetId: string,
   ): Promise<ChangeLog[]> {
     return this.changeLogRepo.find({
-      where: { tenant_id: tenantId, target_type: targetType, target_id: targetId },
+      where: {
+        tenant_id: tenantId,
+        target_type: targetType,
+        target_id: targetId,
+      },
       order: { created_at: 'ASC' },
     });
   }

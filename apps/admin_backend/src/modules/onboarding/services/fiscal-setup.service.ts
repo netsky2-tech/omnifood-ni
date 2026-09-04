@@ -110,9 +110,15 @@ export class FiscalSetupService {
 
     let configVersion: FiscalConfigVersion | undefined;
     if (this.fiscalConfigVersionService) {
-      const latest = await this.fiscalConfigVersionService.getLatestRevision(trimmedTenantId);
+      const latest =
+        await this.fiscalConfigVersionService.getLatestRevision(
+          trimmedTenantId,
+        );
       if (latest) {
-        configVersion = { revision: latest.revision, fingerprint: latest.fingerprint };
+        configVersion = {
+          revision: latest.revision,
+          fingerprint: latest.fingerprint,
+        };
       }
     }
 
@@ -128,15 +134,21 @@ export class FiscalSetupService {
     };
   }
 
-  async getFiscalConfigSnapshot(tenantId: string): Promise<FiscalConfigSnapshot> {
+  async getFiscalConfigSnapshot(
+    tenantId: string,
+  ): Promise<FiscalConfigSnapshot> {
     const trimmedTenantId = tenantId?.trim();
     if (!trimmedTenantId) {
       throw new BadRequestException('Tenant ID is required');
     }
     if (!this.fiscalConfigVersionService) {
-      throw new BadRequestException('FiscalConfigVersionService is not configured');
+      throw new BadRequestException(
+        'FiscalConfigVersionService is not configured',
+      );
     }
-    return this.fiscalConfigVersionService.getFiscalConfigSnapshot(trimmedTenantId);
+    return this.fiscalConfigVersionService.getFiscalConfigSnapshot(
+      trimmedTenantId,
+    );
   }
 
   async configureFiscalSetup(
@@ -166,7 +178,8 @@ export class FiscalSetupService {
 
     const configuredAt = new Date();
 
-      const result = await this.dataSource.transaction(async (manager: EntityManager) => {
+    const result = await this.dataSource.transaction(
+      async (manager: EntityManager) => {
         // 1. Update Tenant entity
         const tenant = await manager.findOne(Tenant, {
           where: { id: trimmedTenantId },
@@ -246,20 +259,21 @@ export class FiscalSetupService {
           configVersion,
           configuredAt,
         };
+      },
+    );
+
+    if (this.sessionService) {
+      await this.sessionService.ensureOnboardingStarted({
+        tenantId: trimmedTenantId,
+        actorUserId: userId,
+        source: OnboardingStartSource.FISCAL_SETUP,
       });
+    }
+    if (this.stateReconciler) {
+      await this.stateReconciler.reconcile(trimmedTenantId);
+    }
 
-      if (this.sessionService) {
-        await this.sessionService.ensureOnboardingStarted({
-          tenantId: trimmedTenantId,
-          actorUserId: userId,
-          source: OnboardingStartSource.FISCAL_SETUP,
-        });
-      }
-      if (this.stateReconciler) {
-        await this.stateReconciler.reconcile(trimmedTenantId);
-      }
-
-      return result;
+    return result;
   }
 
   private async upsertParameter(

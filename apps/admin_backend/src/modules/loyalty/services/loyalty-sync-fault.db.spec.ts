@@ -1,13 +1,28 @@
 import { randomUUID } from 'crypto';
 import { DataSource, Repository } from 'typeorm';
 import { ConflictException } from '@nestjs/common';
-import { LoyaltyLedgerService, AppendLoyaltyTxDto } from './loyalty-ledger.service';
-import { CustomerPointTransaction, PointTransactionType, LoyaltyTransactionOrigin } from '../../customers/entities/customer-point-transaction.entity';
+import {
+  LoyaltyLedgerService,
+  AppendLoyaltyTxDto,
+} from './loyalty-ledger.service';
+import {
+  CustomerPointTransaction,
+  PointTransactionType,
+  LoyaltyTransactionOrigin,
+} from '../../customers/entities/customer-point-transaction.entity';
 import { CustomerLoyaltyAccountProjection } from '../entities/customer-loyalty-account-projection.entity';
-import { LoyaltyProgram, LoyaltyProgramStatus, LoyaltyProgramType } from '../entities/loyalty-program.entity';
+import {
+  LoyaltyProgram,
+  LoyaltyProgramStatus,
+  LoyaltyProgramType,
+} from '../entities/loyalty-program.entity';
 import { Customer } from '../../customers/entities/customer.entity';
 import { Tenant } from '../../tenant/entities/tenant.entity';
-import { RewardDefinition, RewardType, RewardStatus } from '../entities/reward-definition.entity';
+import {
+  RewardDefinition,
+  RewardType,
+  RewardStatus,
+} from '../entities/reward-definition.entity';
 
 const postgresConnection = {
   host: process.env.DB_HOST ?? '127.0.0.1',
@@ -32,7 +47,10 @@ describe('LV1.7C — Loyalty Sync Fault Suite (Real PostgreSQL)', () => {
 
   beforeAll(async () => {
     schema = `loyalty_sync_fault_${randomUUID().replace(/-/g, '')}`;
-    const bootstrap = new DataSource({ type: 'postgres', ...postgresConnection });
+    const bootstrap = new DataSource({
+      type: 'postgres',
+      ...postgresConnection,
+    });
     await bootstrap.initialize();
     await bootstrap.query(`CREATE SCHEMA "${schema}"`);
 
@@ -131,7 +149,11 @@ describe('LV1.7C — Loyalty Sync Fault Suite (Real PostgreSQL)', () => {
       program_type: LoyaltyProgramType.SPEND_POINTS,
       status: LoyaltyProgramStatus.ACTIVE,
       config_version: 1,
-      earning_rule: { pointsPerUnit: 1, spendPerUnitNio: 10, rounding: 'FLOOR' },
+      earning_rule: {
+        pointsPerUnit: 1,
+        spendPerUnitNio: 10,
+        rounding: 'FLOOR',
+      },
       eligibility_rule: {},
     });
     programId = program.id;
@@ -163,10 +185,14 @@ describe('LV1.7C — Loyalty Sync Fault Suite (Real PostgreSQL)', () => {
       expect(firstTx).toBeDefined();
 
       const projFirst = await projRepo.findOne({
-        where: { tenant_id: tenantId, customer_id: customerId, loyalty_program_id: programId },
+        where: {
+          tenant_id: tenantId,
+          customer_id: customerId,
+          loyalty_program_id: programId,
+        },
       });
-      expect(projFirst!.balance_units).toBe(15);
-      const initialVersion = projFirst!.projection_version;
+      expect(projFirst.balance_units).toBe(15);
+      const initialVersion = projFirst.projection_version;
 
       // Duplicate resend (retry from POS outbox)
       const duplicateTx = await ledgerService.appendTransaction(payload);
@@ -178,10 +204,14 @@ describe('LV1.7C — Loyalty Sync Fault Suite (Real PostgreSQL)', () => {
       expect(count).toBe(1);
 
       const projAfter = await projRepo.findOne({
-        where: { tenant_id: tenantId, customer_id: customerId, loyalty_program_id: programId },
+        where: {
+          tenant_id: tenantId,
+          customer_id: customerId,
+          loyalty_program_id: programId,
+        },
       });
-      expect(projAfter!.balance_units).toBe(15);
-      expect(projAfter!.projection_version).toBe(initialVersion);
+      expect(projAfter.balance_units).toBe(15);
+      expect(projAfter.projection_version).toBe(initialVersion);
     });
   });
 
@@ -216,15 +246,21 @@ describe('LV1.7C — Loyalty Sync Fault Suite (Real PostgreSQL)', () => {
       ).rejects.toThrow(ConflictException);
 
       // Verify original units unchanged in DB
-      const existing = await txRepo.findOne({ where: { idempotency_key: key } });
-      expect(existing!.units).toBe(20);
+      const existing = await txRepo.findOne({
+        where: { idempotency_key: key },
+      });
+      expect(existing.units).toBe(20);
     });
   });
 
   describe('AV-14: Stale config offline preserves historical commercial snapshot', () => {
     it('offline transaction generated with config_version 1 preserves original calculation after program bump', async () => {
       // 1. Program is updated to v2 on cloud
-      await progRepo.increment({ id: programId, tenant_id: tenantId }, 'config_version', 1);
+      await progRepo.increment(
+        { id: programId, tenant_id: tenantId },
+        'config_version',
+        1,
+      );
 
       // 2. Inbound sync from offline terminal arrives with snapshot under v1
       const staleSnapshot = {
@@ -249,7 +285,9 @@ describe('LV1.7C — Loyalty Sync Fault Suite (Real PostgreSQL)', () => {
       });
 
       expect(tx.program_version).toBe(1);
-      expect((tx.commercial_snapshot as any).offlineClientVersion).toBe('1.4.0');
+      expect((tx.commercial_snapshot as any).offlineClientVersion).toBe(
+        '1.4.0',
+      );
       expect((tx.commercial_snapshot as any).appliedSpendNio).toBe(100);
     });
   });
@@ -276,18 +314,30 @@ describe('LV1.7C — Loyalty Sync Fault Suite (Real PostgreSQL)', () => {
 
       // Verify projection updated
       const proj = await projRepo.findOne({
-        where: { tenant_id: tenantId, customer_id: customerId, loyalty_program_id: programId },
+        where: {
+          tenant_id: tenantId,
+          customer_id: customerId,
+          loyalty_program_id: programId,
+        },
       });
       // 15 (test 1) + 20 (test 2) + 10 (test 3) - 5 (adjust) = 40
-      expect(proj!.balance_units).toBe(40);
+      expect(proj.balance_units).toBe(40);
     });
 
     it('distinguishes POS vs CLOUD origin to prevent echo loop', async () => {
       const posTx = await txRepo.find({
-        where: { tenant_id: tenantId, customer_id: customerId, origin: LoyaltyTransactionOrigin.POS },
+        where: {
+          tenant_id: tenantId,
+          customer_id: customerId,
+          origin: LoyaltyTransactionOrigin.POS,
+        },
       });
       const cloudTx = await txRepo.find({
-        where: { tenant_id: tenantId, customer_id: customerId, origin: LoyaltyTransactionOrigin.CLOUD },
+        where: {
+          tenant_id: tenantId,
+          customer_id: customerId,
+          origin: LoyaltyTransactionOrigin.CLOUD,
+        },
       });
 
       expect(posTx.length).toBeGreaterThan(0);
@@ -310,10 +360,14 @@ describe('LV1.7C — Loyalty Sync Fault Suite (Real PostgreSQL)', () => {
       const sumUnits = allTx.reduce((sum, t) => sum + Number(t.units ?? 0), 0);
 
       const proj = await projRepo.findOne({
-        where: { tenant_id: tenantId, customer_id: customerId, loyalty_program_id: programId },
+        where: {
+          tenant_id: tenantId,
+          customer_id: customerId,
+          loyalty_program_id: programId,
+        },
       });
 
-      expect(proj!.balance_units).toBe(sumUnits);
+      expect(proj.balance_units).toBe(sumUnits);
     });
   });
 });

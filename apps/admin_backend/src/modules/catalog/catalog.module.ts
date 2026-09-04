@@ -18,7 +18,11 @@ export const getRequiredCatalogJwtSecret = (
 };
 
 @Module({
-  imports: [IdentityModule, AuditModule, TypeOrmModule.forFeature([CatalogValue])],
+  imports: [
+    IdentityModule,
+    AuditModule,
+    TypeOrmModule.forFeature([CatalogValue]),
+  ],
   controllers: [CatalogController],
   providers: [CatalogService],
   exports: [CatalogService, TypeOrmModule],

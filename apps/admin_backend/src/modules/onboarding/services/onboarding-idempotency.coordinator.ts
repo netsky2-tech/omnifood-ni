@@ -22,7 +22,11 @@ export interface AcquireLeaseParams {
 
 export type IdempotencyExecutionLease =
   | { state: 'ACQUIRED'; record: OnboardingIdempotencyRecord }
-  | { state: 'ALREADY_COMPLETED'; result: any; record: OnboardingIdempotencyRecord };
+  | {
+      state: 'ALREADY_COMPLETED';
+      result: any;
+      record: OnboardingIdempotencyRecord;
+    };
 
 @Injectable()
 export class OnboardingIdempotencyCoordinator {
@@ -34,11 +38,18 @@ export class OnboardingIdempotencyCoordinator {
   ) {}
 
   computePayloadHash(payload: any): string {
-    const canonical = JSON.stringify(payload, Object.keys(payload ?? {}).sort());
-    return createHash('sha256').update(canonical ?? '').digest('hex');
+    const canonical = JSON.stringify(
+      payload,
+      Object.keys(payload ?? {}).sort(),
+    );
+    return createHash('sha256')
+      .update(canonical ?? '')
+      .digest('hex');
   }
 
-  async acquireLease(params: AcquireLeaseParams): Promise<IdempotencyExecutionLease> {
+  async acquireLease(
+    params: AcquireLeaseParams,
+  ): Promise<IdempotencyExecutionLease> {
     const {
       tenantId,
       idempotencyKey,
@@ -127,7 +138,9 @@ export class OnboardingIdempotencyCoordinator {
     result: any,
     manager?: EntityManager,
   ): Promise<void> {
-    const repository = manager ? manager.getRepository(OnboardingIdempotencyRecord) : this.repo;
+    const repository = manager
+      ? manager.getRepository(OnboardingIdempotencyRecord)
+      : this.repo;
     await repository.update(recordId, {
       status: OnboardingIdempotencyStatus.SUCCEEDED,
       resultRef: result,
@@ -140,7 +153,9 @@ export class OnboardingIdempotencyCoordinator {
     error: { message: string; isRetryable: boolean },
     manager?: EntityManager,
   ): Promise<void> {
-    const repository = manager ? manager.getRepository(OnboardingIdempotencyRecord) : this.repo;
+    const repository = manager
+      ? manager.getRepository(OnboardingIdempotencyRecord)
+      : this.repo;
     await repository.update(recordId, {
       status: error.isRetryable
         ? OnboardingIdempotencyStatus.FAILED_RETRYABLE

@@ -56,7 +56,14 @@ describe('ProductService', () => {
       providers: [
         ProductService,
         { provide: DataSource, useFactory: mockDataSource },
-        { provide: ChangeLogService, useValue: { log: jest.fn(), findByTarget: jest.fn(), findByTenant: jest.fn() } },
+        {
+          provide: ChangeLogService,
+          useValue: {
+            log: jest.fn(),
+            findByTarget: jest.fn(),
+            findByTenant: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -178,16 +185,16 @@ describe('ProductService', () => {
 
     it('throws NotFoundException for nonexistent product', async () => {
       repo.findOne.mockResolvedValue(null);
-      await expect(
-        service.findOne('nope', 'tenant-A'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.findOne('nope', 'tenant-A')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('scopes to tenant (different tenant returns not found)', async () => {
       repo.findOne.mockResolvedValue(null);
-      await expect(
-        service.findOne('p1', 'other-tenant'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.findOne('p1', 'other-tenant')).rejects.toThrow(
+        NotFoundException,
+      );
       expect(repo.findOne).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: 'p1', tenant_id: 'other-tenant' },
@@ -202,30 +209,46 @@ describe('ProductService', () => {
     it.each([
       [ProductType.SIMPLE, { uom: 'un', sellPrice: 25 }],
       [ProductType.COMPOUND, { uom: 'ml', sellPrice: 45, is_perishable: true }],
-      [ProductType.VARIANT_PARENT, { uom: 'un', sellPrice: 350, category_code: 'RETAIL' }],
-    ])('creates product with type=%s and correct defaults', async (type, extra) => {
-      const dto = { name: `Product ${type}`, uom: extra.uom, product_type: type, sellPrice: extra.sellPrice, ...extra };
-      const created = makeProduct({ id: `new-${type}`, ...dto });
-      repo.create.mockReturnValue(created);
-      repo.save.mockResolvedValue(created);
-
-      const result = await service.create('tenant-A', dto as any);
-      expect(result.id).toBe(`new-${type}`);
-      expect(repo.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          tenant_id: 'tenant-A',
+      [
+        ProductType.VARIANT_PARENT,
+        { uom: 'un', sellPrice: 350, category_code: 'RETAIL' },
+      ],
+    ])(
+      'creates product with type=%s and correct defaults',
+      async (type, extra) => {
+        const dto = {
           name: `Product ${type}`,
-          product_type: type,
           uom: extra.uom,
-          is_active: true,
-          stock: 0,
-          averageCost: 0,
-        }),
-      );
-    });
+          product_type: type,
+          sellPrice: extra.sellPrice,
+          ...extra,
+        };
+        const created = makeProduct({ id: `new-${type}`, ...dto });
+        repo.create.mockReturnValue(created);
+        repo.save.mockResolvedValue(created);
+
+        const result = await service.create('tenant-A', dto);
+        expect(result.id).toBe(`new-${type}`);
+        expect(repo.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            tenant_id: 'tenant-A',
+            name: `Product ${type}`,
+            product_type: type,
+            uom: extra.uom,
+            is_active: true,
+            stock: 0,
+            averageCost: 0,
+          }),
+        );
+      },
+    );
 
     it('trims whitespace from name and uom', async () => {
-      const dto = { name: '  Capuccino  ', uom: '  un  ', product_type: ProductType.COMPOUND };
+      const dto = {
+        name: '  Capuccino  ',
+        uom: '  un  ',
+        product_type: ProductType.COMPOUND,
+      };
       repo.create.mockReturnValue(makeProduct());
       repo.save.mockResolvedValue(makeProduct());
 
@@ -236,7 +259,12 @@ describe('ProductService', () => {
     });
 
     it('sets category_code when provided', async () => {
-      const dto = { name: 'Test', uom: 'un', product_type: ProductType.SIMPLE, category_code: 'BEBIDAS' };
+      const dto = {
+        name: 'Test',
+        uom: 'un',
+        product_type: ProductType.SIMPLE,
+        category_code: 'BEBIDAS',
+      };
       repo.create.mockReturnValue(makeProduct());
       repo.save.mockResolvedValue(makeProduct());
 
@@ -259,7 +287,11 @@ describe('ProductService', () => {
 
     it('fails closed on empty tenant', async () => {
       await expect(
-        service.create('   ', { name: 'X', uom: 'un', product_type: ProductType.SIMPLE }),
+        service.create('   ', {
+          name: 'X',
+          uom: 'un',
+          product_type: ProductType.SIMPLE,
+        }),
       ).rejects.toThrow(UnauthorizedException);
       expect(repo.create).not.toHaveBeenCalled();
     });
@@ -292,7 +324,9 @@ describe('ProductService', () => {
       repo.findOne.mockResolvedValue(existing);
       repo.save.mockResolvedValue(existing);
 
-      await service.update('p1', 'tenant-A', { product_type: ProductType.COMPOUND });
+      await service.update('p1', 'tenant-A', {
+        product_type: ProductType.COMPOUND,
+      });
       expect(existing.product_type).toBe(ProductType.COMPOUND);
     });
 
@@ -301,7 +335,7 @@ describe('ProductService', () => {
       repo.findOne.mockResolvedValue(existing);
       repo.save.mockResolvedValue(existing);
 
-      await service.update('p1', 'tenant-A', { category_code: null as any });
+      await service.update('p1', 'tenant-A', { category_code: null });
       expect(existing.category_code).toBeNull();
     });
 
@@ -357,9 +391,9 @@ describe('ProductService', () => {
 
     it('throws NotFoundException for nonexistent product', async () => {
       repo.findOne.mockResolvedValue(null);
-      await expect(
-        service.deactivate('nope', 'tenant-A'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.deactivate('nope', 'tenant-A')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('does not touch other fields', async () => {
@@ -437,7 +471,11 @@ describe('ProductService', () => {
       } as unknown as DataSource;
 
       const module = await Test.createTestingModule({
-        providers: [ProductService, { provide: DataSource, useValue: ds }, { provide: ChangeLogService, useValue: { log: jest.fn() } }],
+        providers: [
+          ProductService,
+          { provide: DataSource, useValue: ds },
+          { provide: ChangeLogService, useValue: { log: jest.fn() } },
+        ],
       }).compile();
 
       const svc = module.get(ProductService);
@@ -467,7 +505,11 @@ describe('ProductService', () => {
       } as unknown as DataSource;
 
       const module = await Test.createTestingModule({
-        providers: [ProductService, { provide: DataSource, useValue: ds }, { provide: ChangeLogService, useValue: { log: jest.fn() } }],
+        providers: [
+          ProductService,
+          { provide: DataSource, useValue: ds },
+          { provide: ChangeLogService, useValue: { log: jest.fn() } },
+        ],
       }).compile();
 
       const svc = module.get(ProductService);
@@ -501,7 +543,11 @@ describe('ProductService', () => {
       } as unknown as DataSource;
 
       const module = await Test.createTestingModule({
-        providers: [ProductService, { provide: DataSource, useValue: ds }, { provide: ChangeLogService, useValue: { log: jest.fn() } }],
+        providers: [
+          ProductService,
+          { provide: DataSource, useValue: ds },
+          { provide: ChangeLogService, useValue: { log: jest.fn() } },
+        ],
       }).compile();
 
       const svc = module.get(ProductService);

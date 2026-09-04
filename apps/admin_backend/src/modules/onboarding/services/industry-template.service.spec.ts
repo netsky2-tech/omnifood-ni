@@ -14,12 +14,15 @@ import { RecipeVersion } from '../../inventory/entities/recipe-version.entity';
 import { RecipeDetail } from '../../inventory/entities/recipe-detail.entity';
 import { Recipe } from '../../inventory/entities/recipe.entity';
 import { UomConversion } from '../../inventory/entities/uom-conversion.entity';
-import { RecipeOrigin, RecipePublicationState, RecipeSuggestionState } from '../../inventory/entities/recipe-version.entity';
+import {
+  RecipeOrigin,
+  RecipePublicationState,
+  RecipeSuggestionState,
+} from '../../inventory/entities/recipe-version.entity';
 import { TemplateSeedLink } from '../entities/template-seed-link.entity';
 import { TemplateApplication } from '../entities/template-application.entity';
 import { TemplatePreviewService } from './template-preview.service';
 import { OnboardingIdempotencyCoordinator } from './onboarding-idempotency.coordinator';
-
 
 describe('IndustryTemplateService (Unit & Triangulation)', () => {
   let service: IndustryTemplateService;
@@ -39,7 +42,6 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
   let templateApplicationRepo: jest.Mocked<Repository<TemplateApplication>>;
   let previewService: jest.Mocked<TemplatePreviewService>;
   let idempotencyCoordinator: jest.Mocked<OnboardingIdempotencyCoordinator>;
-
 
   const mockTemplates: IndustryTemplate[] = [
     {
@@ -219,7 +221,12 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
       create: jest.fn(
         (_entityClass: unknown, plain: unknown) => plain as object,
       ),
-      save: jest.fn((_entityClass: unknown, entities: unknown) => { console.log("SAVE CALLED WITH:", (_entityClass as any)?.name || _entityClass, entities);
+      save: jest.fn((_entityClass: unknown, entities: unknown) => {
+        console.log(
+          'SAVE CALLED WITH:',
+          (_entityClass as any)?.name || _entityClass,
+          entities,
+        );
         if (_entityClass === TemplateApplication) {
           return Promise.resolve({ ...(entities as any), id: 'app-uuid-1' });
         }
@@ -245,7 +252,9 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
     } as any;
 
     idempotencyCoordinator = {
-      acquireLease: jest.fn().mockResolvedValue({ state: 'ACQUIRED', record: { id: 'lease-1' } }),
+      acquireLease: jest
+        .fn()
+        .mockResolvedValue({ state: 'ACQUIRED', record: { id: 'lease-1' } }),
       completeSuccess: jest.fn().mockResolvedValue(undefined),
       completeFailure: jest.fn().mockResolvedValue(undefined),
     } as any;

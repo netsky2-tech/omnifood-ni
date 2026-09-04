@@ -86,7 +86,9 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
       findOne: jest.fn(),
       find: jest.fn(),
       create: jest.fn((plain: unknown) => plain as FiscalConfigRevision),
-      save: jest.fn((entity: unknown) => Promise.resolve(entity as FiscalConfigRevision)),
+      save: jest.fn((entity: unknown) =>
+        Promise.resolve(entity as FiscalConfigRevision),
+      ),
     } as unknown as jest.Mocked<Repository<FiscalConfigRevision>>;
 
     tenantRepo = {
@@ -101,11 +103,15 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
       findOne: jest.fn(),
       find: jest.fn(),
       create: jest.fn((_cls: unknown, plain: unknown) => plain as object),
-      save: jest.fn((_cls: unknown, entity: unknown) => Promise.resolve(entity)),
+      save: jest.fn((_cls: unknown, entity: unknown) =>
+        Promise.resolve(entity),
+      ),
     } as unknown as jest.Mocked<EntityManager>;
 
     dataSource = {
-      transaction: jest.fn((cb: (mgr: EntityManager) => Promise<unknown>) => cb(mockManager)),
+      transaction: jest.fn((cb: (mgr: EntityManager) => Promise<unknown>) =>
+        cb(mockManager),
+      ),
     } as unknown as jest.Mocked<DataSource>;
 
     service = new FiscalConfigVersionService(
@@ -137,9 +143,9 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
 
     it('throws NotFoundException if tenant does not exist', async () => {
       tenantRepo.findOne.mockResolvedValueOnce(null);
-      await expect(service.getEffectiveFiscalPayload('non-existent')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.getEffectiveFiscalPayload('non-existent'),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -194,7 +200,7 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
         tenant_id: tenantId,
         revision: 1,
         fingerprint: oldFingerprint,
-        payload: oldPayload as unknown as Record<string, unknown>,
+        payload: oldPayload,
         created_at: new Date('2026-01-01'),
       };
 
@@ -215,7 +221,8 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
         id: 'rev-1-id',
         tenant_id: tenantId,
         revision: 3,
-        fingerprint: 'correct-sha256-hash-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        fingerprint:
+          'correct-sha256-hash-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         payload: {},
         created_at: new Date(),
       };
@@ -243,7 +250,8 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
     });
 
     it('passes integrity validation when revision and fingerprint match exactly', async () => {
-      const fingerprint = 'valid-sha256-hash-cccccccccccccccccccccccccccccccccccccccccccc';
+      const fingerprint =
+        'valid-sha256-hash-cccccccccccccccccccccccccccccccccccccccccccc';
       const existingRevision: FiscalConfigRevision = {
         id: 'rev-1-id',
         tenant_id: tenantId,

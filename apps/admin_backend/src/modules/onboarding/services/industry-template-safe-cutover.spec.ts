@@ -4,11 +4,26 @@ import { IndustryTemplate } from '../entities/industry-template.entity';
 import { TemplateInsumo } from '../entities/template-insumo.entity';
 import { TemplateProduct } from '../entities/template-product.entity';
 import { TemplateRecipeItem } from '../entities/template-recipe-item.entity';
-import { TemplateSeedLink, TemplateSourceItemType, TemplateTargetEntityType } from '../entities/template-seed-link.entity';
-import { TemplateApplication, TemplateApplicationStatus } from '../entities/template-application.entity';
-import { Insumo, NEGATIVE_STOCK_POLICY } from '../../inventory/entities/insumo.entity';
+import {
+  TemplateSeedLink,
+  TemplateSourceItemType,
+  TemplateTargetEntityType,
+} from '../entities/template-seed-link.entity';
+import {
+  TemplateApplication,
+  TemplateApplicationStatus,
+} from '../entities/template-application.entity';
+import {
+  Insumo,
+  NEGATIVE_STOCK_POLICY,
+} from '../../inventory/entities/insumo.entity';
 import { Product } from '../../inventory/entities/product.entity';
-import { RecipeVersion, RecipeOrigin, RecipePublicationState, RecipeSuggestionState } from '../../inventory/entities/recipe-version.entity';
+import {
+  RecipeVersion,
+  RecipeOrigin,
+  RecipePublicationState,
+  RecipeSuggestionState,
+} from '../../inventory/entities/recipe-version.entity';
 import { RecipeDetail } from '../../inventory/entities/recipe-detail.entity';
 import { Recipe } from '../../inventory/entities/recipe.entity';
 import { UomConversion } from '../../inventory/entities/uom-conversion.entity';
@@ -27,7 +42,9 @@ describe('IndustryTemplateService Safe Cutover (TDD / ONB1.3D-F)', () => {
   let recipeRepo: jest.Mocked<Partial<Repository<Recipe>>>;
   let uomConversionRepo: jest.Mocked<Partial<Repository<UomConversion>>>;
   let previewService: jest.Mocked<Partial<TemplatePreviewService>>;
-  let idempotencyCoordinator: jest.Mocked<Partial<OnboardingIdempotencyCoordinator>>;
+  let idempotencyCoordinator: jest.Mocked<
+    Partial<OnboardingIdempotencyCoordinator>
+  >;
   let dataSource: jest.Mocked<Partial<DataSource>>;
   let mockManager: jest.Mocked<Partial<EntityManager>>;
 
@@ -54,7 +71,7 @@ describe('IndustryTemplateService Safe Cutover (TDD / ONB1.3D-F)', () => {
         negative_stock_policy: NEGATIVE_STOCK_POLICY.RESTRICT,
         created_at: new Date(),
         updated_at: new Date(),
-        template: null as any,
+        template: null,
       },
     ],
     templateProducts: [
@@ -72,7 +89,7 @@ describe('IndustryTemplateService Safe Cutover (TDD / ONB1.3D-F)', () => {
           {
             id: 'tri-1',
             template_product_id: 'tp-1',
-            templateProduct: null as any,
+            templateProduct: null,
             template_insumo_name: 'Granos de Café Especial',
             gross_quantity: 18,
             technical_shrink_pct: 0,
@@ -81,7 +98,7 @@ describe('IndustryTemplateService Safe Cutover (TDD / ONB1.3D-F)', () => {
             updated_at: new Date(),
           },
         ],
-        template: null as any,
+        template: null,
       },
     ],
     created_at: new Date(),
@@ -106,18 +123,24 @@ describe('IndustryTemplateService Safe Cutover (TDD / ONB1.3D-F)', () => {
     insumoRepo = {
       find: jest.fn().mockResolvedValue([]),
       create: jest.fn((e: any) => e) as any,
-      save: jest.fn((e: any) => Promise.resolve({ ...e, id: 'saved-insumo-1' })) as any,
+      save: jest.fn((e: any) =>
+        Promise.resolve({ ...e, id: 'saved-insumo-1' }),
+      ) as any,
     };
     productRepo = {
       find: jest.fn().mockResolvedValue([]),
       create: jest.fn((e: any) => e) as any,
-      save: jest.fn((e: any) => Promise.resolve({ ...e, id: 'saved-product-1' })) as any,
+      save: jest.fn((e: any) =>
+        Promise.resolve({ ...e, id: 'saved-product-1' }),
+      ) as any,
     };
     recipeVersionRepo = {
       find: jest.fn().mockResolvedValue([]),
       findOne: jest.fn().mockResolvedValue(null),
       create: jest.fn((e: any) => e) as any,
-      save: jest.fn((e: any) => Promise.resolve({ ...e, id: 'saved-rv-1' })) as any,
+      save: jest.fn((e: any) =>
+        Promise.resolve({ ...e, id: 'saved-rv-1' }),
+      ) as any,
     };
     recipeDetailRepo = {
       create: jest.fn((e: any) => e) as any,
@@ -158,7 +181,9 @@ describe('IndustryTemplateService Safe Cutover (TDD / ONB1.3D-F)', () => {
     };
 
     previewService = {
-      computeFingerprint: jest.fn((obj: any) => 'fp-' + JSON.stringify(obj).length),
+      computeFingerprint: jest.fn(
+        (obj: any) => 'fp-' + JSON.stringify(obj).length,
+      ),
       buildPreview: jest.fn().mockResolvedValue({
         templateCode: 'CAFETERIA',
         templateVersion: 1,
@@ -167,7 +192,9 @@ describe('IndustryTemplateService Safe Cutover (TDD / ONB1.3D-F)', () => {
     };
 
     idempotencyCoordinator = {
-      acquireLease: jest.fn().mockResolvedValue({ status: 'ACQUIRED', record: {} as any }),
+      acquireLease: jest
+        .fn()
+        .mockResolvedValue({ status: 'ACQUIRED', record: {} as any }),
     };
 
     service = new IndustryTemplateService(
@@ -239,7 +266,9 @@ describe('IndustryTemplateService Safe Cutover (TDD / ONB1.3D-F)', () => {
 
     const saveCalls = (mockManager.save as jest.Mock).mock.calls;
     const seedLinkSaves = saveCalls.filter((c) => c[0] === TemplateSeedLink);
-    const applicationSaves = saveCalls.filter((c) => c[0] === TemplateApplication);
+    const applicationSaves = saveCalls.filter(
+      (c) => c[0] === TemplateApplication,
+    );
 
     // 1 insumo + 1 product + 1 recipe_version = 3 seed links
     expect(seedLinkSaves.length).toBe(3);
@@ -248,7 +277,9 @@ describe('IndustryTemplateService Safe Cutover (TDD / ONB1.3D-F)', () => {
     expect(seedLinkSaves[0][1].last_source_fingerprint).toBeDefined();
 
     expect(applicationSaves.length).toBe(1);
-    expect(applicationSaves[0][1].status).toBe(TemplateApplicationStatus.APPLIED);
+    expect(applicationSaves[0][1].status).toBe(
+      TemplateApplicationStatus.APPLIED,
+    );
     expect(applicationSaves[0][1].idempotency_key).toBe('idemp-3');
   });
 
@@ -282,7 +313,8 @@ describe('IndustryTemplateService Safe Cutover (TDD / ONB1.3D-F)', () => {
     };
 
     mockManager.find = jest.fn().mockImplementation((entityClass: any) => {
-      if (entityClass === TemplateSeedLink) return Promise.resolve([existingSeedLink]);
+      if (entityClass === TemplateSeedLink)
+        return Promise.resolve([existingSeedLink]);
       return Promise.resolve([]);
     });
 

@@ -55,7 +55,11 @@ describe('ProfitAwareMetrics Domain (MC-01 .. MC-10)', () => {
         isReversed: false,
       };
 
-      const qualified = calculateQualifiedSales([earnAtStart, earnAtEnd, earnInside], window, asOfUtc);
+      const qualified = calculateQualifiedSales(
+        [earnAtStart, earnAtEnd, earnInside],
+        window,
+        asOfUtc,
+      );
       // earnAtStart (100) + earnInside (300) = 400. earnAtEnd is excluded!
       expect(qualified.status).toBe('AVAILABLE');
       expect(qualified.value).toBe(400);
@@ -171,7 +175,9 @@ describe('ProfitAwareMetrics Domain (MC-01 .. MC-10)', () => {
       expect(resNoCpp.estimatedCppNio.status).toBe('NOT_AVAILABLE');
       expect(resNoCpp.estimatedCppNio.reason).toBe('COST_NOT_RESOLVABLE');
       expect(resNoCpp.estimatedRewardCostNio.status).toBe('NOT_AVAILABLE');
-      expect(resNoCpp.estimatedRewardCostNio.reason).toBe('COST_NOT_RESOLVABLE');
+      expect(resNoCpp.estimatedRewardCostNio.reason).toBe(
+        'COST_NOT_RESOLVABLE',
+      );
     });
   });
 
@@ -189,12 +195,20 @@ describe('ProfitAwareMetrics Domain (MC-01 .. MC-10)', () => {
         },
       ];
 
-      const incentiveCost = calculateEstimatedIncentiveCostInWindow(redeems, window, asOfUtc);
+      const incentiveCost = calculateEstimatedIncentiveCostInWindow(
+        redeems,
+        window,
+        asOfUtc,
+      );
       expect(incentiveCost.status).toBe('AVAILABLE');
       expect(incentiveCost.value).toBe(120);
 
       const qualifiedSales = metricAvailable(20000, asOfUtc.toISOString());
-      const rate = calculateEffectiveIncentiveRate(incentiveCost, qualifiedSales, asOfUtc);
+      const rate = calculateEffectiveIncentiveRate(
+        incentiveCost,
+        qualifiedSales,
+        asOfUtc,
+      );
 
       expect(rate.status).toBe('AVAILABLE');
       expect(rate.value).toBe(0.6); // 0.60%
@@ -203,7 +217,11 @@ describe('ProfitAwareMetrics Domain (MC-01 .. MC-10)', () => {
     it('supports rate exceeding 100% without artificial clamp', () => {
       const incentiveCost = metricAvailable(2500, asOfUtc.toISOString());
       const qualifiedSales = metricAvailable(2000, asOfUtc.toISOString());
-      const rate = calculateEffectiveIncentiveRate(incentiveCost, qualifiedSales, asOfUtc);
+      const rate = calculateEffectiveIncentiveRate(
+        incentiveCost,
+        qualifiedSales,
+        asOfUtc,
+      );
 
       expect(rate.status).toBe('AVAILABLE');
       expect(rate.value).toBe(125.0); // 125%
@@ -215,12 +233,20 @@ describe('ProfitAwareMetrics Domain (MC-01 .. MC-10)', () => {
       const window = computeProfitAwareWindow(asOfUtc);
       const redeems: RedeemTransactionRecord[] = [];
 
-      const incentiveCost = calculateEstimatedIncentiveCostInWindow(redeems, window, asOfUtc);
+      const incentiveCost = calculateEstimatedIncentiveCostInWindow(
+        redeems,
+        window,
+        asOfUtc,
+      );
       expect(incentiveCost.status).toBe('AVAILABLE');
       expect(incentiveCost.value).toBe(0);
 
       const qualifiedSales = metricAvailable(5000, asOfUtc.toISOString());
-      const rate = calculateEffectiveIncentiveRate(incentiveCost, qualifiedSales, asOfUtc);
+      const rate = calculateEffectiveIncentiveRate(
+        incentiveCost,
+        qualifiedSales,
+        asOfUtc,
+      );
 
       expect(rate.status).toBe('AVAILABLE');
       expect(rate.value).toBe(0);
@@ -231,7 +257,11 @@ describe('ProfitAwareMetrics Domain (MC-01 .. MC-10)', () => {
     it('returns NOT_AVAILABLE(NO_QUALIFIED_SALES) when qualified sales is 0', () => {
       const incentiveCost = metricAvailable(100, asOfUtc.toISOString());
       const qualifiedSales = metricAvailable(0, asOfUtc.toISOString());
-      const rate = calculateEffectiveIncentiveRate(incentiveCost, qualifiedSales, asOfUtc);
+      const rate = calculateEffectiveIncentiveRate(
+        incentiveCost,
+        qualifiedSales,
+        asOfUtc,
+      );
 
       expect(rate.status).toBe('NOT_AVAILABLE');
       expect(rate.reason).toBe('NO_QUALIFIED_SALES');
@@ -251,12 +281,20 @@ describe('ProfitAwareMetrics Domain (MC-01 .. MC-10)', () => {
         },
       ];
 
-      const incentiveCost = calculateEstimatedIncentiveCostInWindow(redeems, window, asOfUtc);
+      const incentiveCost = calculateEstimatedIncentiveCostInWindow(
+        redeems,
+        window,
+        asOfUtc,
+      );
       expect(incentiveCost.status).toBe('NOT_AVAILABLE');
       expect(incentiveCost.reason).toBe('INCOMPLETE_REDEMPTION_COST_COVERAGE');
 
       const qualifiedSales = metricAvailable(10000, asOfUtc.toISOString());
-      const rate = calculateEffectiveIncentiveRate(incentiveCost, qualifiedSales, asOfUtc);
+      const rate = calculateEffectiveIncentiveRate(
+        incentiveCost,
+        qualifiedSales,
+        asOfUtc,
+      );
       expect(rate.status).toBe('NOT_AVAILABLE');
       expect(rate.reason).toBe('INCOMPLETE_COST_COVERAGE');
     });
@@ -264,7 +302,12 @@ describe('ProfitAwareMetrics Domain (MC-01 .. MC-10)', () => {
 
   describe('MC-10 — Stale propagation and builders', () => {
     it('propagates STALE state when source is stale', () => {
-      const stale = metricStale(100, asOfUtc.toISOString(), '2026-09-01T00:00:00Z', 'INVENTORY_MIRROR');
+      const stale = metricStale(
+        100,
+        asOfUtc.toISOString(),
+        '2026-09-01T00:00:00Z',
+        'INVENTORY_MIRROR',
+      );
       expect(stale.status).toBe('STALE');
       expect(stale.value).toBe(100);
       expect(stale.lastCompleteSyncAt).toBe('2026-09-01T00:00:00Z');
@@ -289,7 +332,11 @@ describe('ProfitAwareMetrics Domain (MC-01 .. MC-10)', () => {
     it('calculates rate precision with repeating decimals (100 / 300 = 33.3333%)', () => {
       const incentiveCost = metricAvailable(100, asOfUtc.toISOString());
       const qualifiedSales = metricAvailable(300, asOfUtc.toISOString());
-      const rate = calculateEffectiveIncentiveRate(incentiveCost, qualifiedSales, asOfUtc);
+      const rate = calculateEffectiveIncentiveRate(
+        incentiveCost,
+        qualifiedSales,
+        asOfUtc,
+      );
 
       expect(rate.status).toBe('AVAILABLE');
       expect(rate.value).toBe(33.3333);

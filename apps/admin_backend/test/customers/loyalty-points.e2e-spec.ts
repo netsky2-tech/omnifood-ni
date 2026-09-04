@@ -18,7 +18,10 @@ import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
 import { TenantInterceptor } from '../../src/core/database/rls.interceptor';
 import { JWT_TOKEN_TYPES } from '../../src/modules/identity/security/jwt-token.types';
-import { createIdentityJwtConfigProvider, signIdentityJwtAccessToken } from '../support/identity-jwt-test.fixture';
+import {
+  createIdentityJwtConfigProvider,
+  signIdentityJwtAccessToken,
+} from '../support/identity-jwt-test.fixture';
 
 describe('Customer Loyalty Points Module (E2E / Integration)', () => {
   const jwtSecret = 'test-only-jwt-secret-with-at-least-thirty-two-bytes';
@@ -29,14 +32,17 @@ describe('Customer Loyalty Points Module (E2E / Integration)', () => {
   let dbTransactions: CustomerPointTransaction[] = [];
 
   const customerRepo = {
-    findOne: jest.fn((options: { where: { id?: string; tenant_id?: string } }) => {
-      const found = dbCustomers.find(
-        (c) =>
-          (!options.where.id || c.id === options.where.id) &&
-          (!options.where.tenant_id || c.tenant_id === options.where.tenant_id),
-      );
-      return Promise.resolve(found || null);
-    }),
+    findOne: jest.fn(
+      (options: { where: { id?: string; tenant_id?: string } }) => {
+        const found = dbCustomers.find(
+          (c) =>
+            (!options.where.id || c.id === options.where.id) &&
+            (!options.where.tenant_id ||
+              c.tenant_id === options.where.tenant_id),
+        );
+        return Promise.resolve(found || null);
+      },
+    ),
     save: jest.fn((entity: Customer) => {
       const idx = dbCustomers.findIndex((c) => c.id === entity.id);
       if (idx >= 0) {
@@ -49,20 +55,27 @@ describe('Customer Loyalty Points Module (E2E / Integration)', () => {
   };
 
   const pointTxRepo = {
-    find: jest.fn((options: { where: { tenant_id?: string; customer_id?: string } }) => {
-      const filtered = dbTransactions.filter(
-        (t) =>
-          (!options.where.tenant_id || t.tenant_id === options.where.tenant_id) &&
-          (!options.where.customer_id || t.customer_id === options.where.customer_id),
-      );
-      return Promise.resolve(filtered);
-    }),
-    create: jest.fn((data: Partial<CustomerPointTransaction>) => ({
-      id: `pt-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      created_at: new Date(),
-      conversion_rate: 0.1,
-      ...data,
-    } as CustomerPointTransaction)),
+    find: jest.fn(
+      (options: { where: { tenant_id?: string; customer_id?: string } }) => {
+        const filtered = dbTransactions.filter(
+          (t) =>
+            (!options.where.tenant_id ||
+              t.tenant_id === options.where.tenant_id) &&
+            (!options.where.customer_id ||
+              t.customer_id === options.where.customer_id),
+        );
+        return Promise.resolve(filtered);
+      },
+    ),
+    create: jest.fn(
+      (data: Partial<CustomerPointTransaction>) =>
+        ({
+          id: `pt-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          created_at: new Date(),
+          conversion_rate: 0.1,
+          ...data,
+        }) as CustomerPointTransaction,
+    ),
     save: jest.fn((entity: CustomerPointTransaction) => {
       dbTransactions.push({ ...entity });
       return Promise.resolve(entity);
@@ -105,7 +118,9 @@ describe('Customer Loyalty Points Module (E2E / Integration)', () => {
     }).compile();
 
     app = moduleRef.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+    app.useGlobalPipes(
+      new ValidationPipe({ whitelist: true, transform: true }),
+    );
     jwtService = moduleRef.get<JwtService>(JwtService);
     await app.init();
   });
@@ -122,7 +137,10 @@ describe('Customer Loyalty Points Module (E2E / Integration)', () => {
     jest.clearAllMocks();
   });
 
-  function createToken(tenantId: string, role: UserRole = UserRole.OWNER): string {
+  function createToken(
+    tenantId: string,
+    role: UserRole = UserRole.OWNER,
+  ): string {
     return signIdentityJwtAccessToken(jwtService, {
       sub: 'user-001',
       email: 'user@omnifood.ni',

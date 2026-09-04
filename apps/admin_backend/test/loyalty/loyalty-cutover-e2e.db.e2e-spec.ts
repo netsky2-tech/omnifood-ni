@@ -15,10 +15,21 @@ import { LegacyClassificationService } from '../../src/modules/loyalty/services/
 import { LoyaltyProfitAwareService } from '../../src/modules/loyalty/services/loyalty-profit-aware.service';
 import { RedemptionService } from '../../src/modules/loyalty/services/redemption.service';
 import { LoyaltyLedgerService } from '../../src/modules/loyalty/services/loyalty-ledger.service';
-import { LoyaltyProgram, LoyaltyProgramStatus, LoyaltyProgramType } from '../../src/modules/loyalty/entities/loyalty-program.entity';
-import { RewardDefinition, RewardStatus, RewardType } from '../../src/modules/loyalty/entities/reward-definition.entity';
+import {
+  LoyaltyProgram,
+  LoyaltyProgramStatus,
+  LoyaltyProgramType,
+} from '../../src/modules/loyalty/entities/loyalty-program.entity';
+import {
+  RewardDefinition,
+  RewardStatus,
+  RewardType,
+} from '../../src/modules/loyalty/entities/reward-definition.entity';
 import { CustomerLoyaltyAccountProjection } from '../../src/modules/loyalty/entities/customer-loyalty-account-projection.entity';
-import { CustomerPointTransaction, PointTransactionType } from '../../src/modules/customers/entities/customer-point-transaction.entity';
+import {
+  CustomerPointTransaction,
+  PointTransactionType,
+} from '../../src/modules/customers/entities/customer-point-transaction.entity';
 import { Product } from '../../src/modules/inventory/entities/product.entity';
 import { Customer } from '../../src/modules/customers/entities/customer.entity';
 import { Tenant } from '../../src/modules/tenant/entities/tenant.entity';
@@ -66,7 +77,10 @@ describe('Loyalty Cutover & Writers E2E (LV1.7A / M7 & M8 Real PostgreSQL)', () 
     process.env.JWT_ALGORITHM = 'HS256';
 
     schema = `loyalty_cutover_${randomUUID().replace(/-/g, '')}`;
-    const bootstrap = new DataSource({ type: 'postgres', ...postgresConnection });
+    const bootstrap = new DataSource({
+      type: 'postgres',
+      ...postgresConnection,
+    });
     await bootstrap.initialize();
     await bootstrap.query(`CREATE SCHEMA "${schema}"`);
 
@@ -190,8 +204,17 @@ describe('Loyalty Cutover & Writers E2E (LV1.7A / M7 & M8 Real PostgreSQL)', () 
     rewardId = reward.id;
 
     const ledgerService = new LoyaltyLedgerService(txRepo, projRepo);
-    const loyaltyService = new LoyaltyService(progRepo, rewardRepo, projRepo, custRepo);
-    const ticketPaidHandler = new TicketPaidHandler(progRepo, custRepo, ledgerService);
+    const loyaltyService = new LoyaltyService(
+      progRepo,
+      rewardRepo,
+      projRepo,
+      custRepo,
+    );
+    const ticketPaidHandler = new TicketPaidHandler(
+      progRepo,
+      custRepo,
+      ledgerService,
+    );
     const legacyClassificationService = new LegacyClassificationService(
       progRepo,
       txRepo,
@@ -210,7 +233,13 @@ describe('Loyalty Cutover & Writers E2E (LV1.7A / M7 & M8 Real PostgreSQL)', () 
       rewardRepo,
       progRepo,
       txRepo,
-      { getCurrentEstimatedCostAndPrice: jest.fn().mockResolvedValue({ status: 'AVAILABLE', estimatedCppNio: 10, canonicalBasePriceNio: 25 }) },
+      {
+        getCurrentEstimatedCostAndPrice: jest.fn().mockResolvedValue({
+          status: 'AVAILABLE',
+          estimatedCppNio: 10,
+          canonicalBasePriceNio: 25,
+        }),
+      },
     );
     const customersService = new CustomersService(custRepo, txRepo);
 
@@ -236,11 +265,17 @@ describe('Loyalty Cutover & Writers E2E (LV1.7A / M7 & M8 Real PostgreSQL)', () 
         { provide: LoyaltyService, useValue: loyaltyService },
         { provide: LoyaltyProfitAwareService, useValue: profitAwareService },
         { provide: TicketPaidHandler, useValue: ticketPaidHandler },
-        { provide: LegacyClassificationService, useValue: legacyClassificationService },
+        {
+          provide: LegacyClassificationService,
+          useValue: legacyClassificationService,
+        },
         { provide: RedemptionService, useValue: redemptionService },
         { provide: LoyaltyLedgerService, useValue: ledgerService },
         { provide: CustomersService, useValue: customersService },
-        { provide: INVENTORY_COST_QUERY_PORT, useValue: { getProductCostHistory: jest.fn() } },
+        {
+          provide: INVENTORY_COST_QUERY_PORT,
+          useValue: { getProductCostHistory: jest.fn() },
+        },
         AuthGuard,
         RolesGuard,
         Reflector,
@@ -251,7 +286,9 @@ describe('Loyalty Cutover & Writers E2E (LV1.7A / M7 & M8 Real PostgreSQL)', () 
     }).compile();
 
     app = moduleRef.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+    app.useGlobalPipes(
+      new ValidationPipe({ whitelist: true, transform: true }),
+    );
     jwtService = moduleRef.get<JwtService>(JwtService);
     await app.init();
 

@@ -36,14 +36,18 @@ describe('LegacyImportIntegrityReportService (Unit & Triangulation / ONB1.4H)', 
 
     reportRepo = {
       create: jest.fn((plain) => plain as LegacyImportIntegrityReport),
-      save: jest.fn((report) => Promise.resolve({ id: 'report-uuid-1', ...report })),
+      save: jest.fn((report) =>
+        Promise.resolve({ id: 'report-uuid-1', ...report }),
+      ),
       find: jest.fn(),
       findOne: jest.fn(),
     } as unknown as jest.Mocked<Repository<LegacyImportIntegrityReport>>;
 
     receiptRepo = {
       create: jest.fn((plain) => plain as LegacyOnboardingMigrationReceipt),
-      save: jest.fn((receipt) => Promise.resolve({ id: 'receipt-uuid-1', ...receipt })),
+      save: jest.fn((receipt) =>
+        Promise.resolve({ id: 'receipt-uuid-1', ...receipt }),
+      ),
     } as unknown as jest.Mocked<Repository<LegacyOnboardingMigrationReceipt>>;
 
     dataSource = {
@@ -118,7 +122,7 @@ describe('LegacyImportIntegrityReportService (Unit & Triangulation / ONB1.4H)', 
     const existingProduct: Product = {
       id: 'prod-legacy-1',
       tenant_id: tenantId,
-      tenant: null as never,
+      tenant: null,
       warehouse_id: 'wh-1',
       name: 'Producto Legacy',
       uom: 'UN',
@@ -200,7 +204,9 @@ describe('LegacyImportIntegrityReportService (Unit & Triangulation / ONB1.4H)', 
     expect(result.expiredSessions).toContain('session-incompatible-1');
     expect(result.expiredRowsCount).toBe(1);
     expect(pendingLegacyRow.estado_fila).toBe(ImportStagingStatus.ERROR);
-    expect(pendingLegacyRow.mensaje_error_detalle).toContain('Legacy staging incompatible');
+    expect(pendingLegacyRow.mensaje_error_detalle).toContain(
+      'Legacy staging incompatible',
+    );
     expect(stagingRepo.save).toHaveBeenCalled();
     expect(receiptRepo.save).toHaveBeenCalledWith(
       expect.objectContaining({

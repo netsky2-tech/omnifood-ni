@@ -324,8 +324,8 @@ describe('InboundSyncService', () => {
     const response = await service.getInboundDeltas('tenant-abc', {});
 
     expect(response.deltas.fiscalConfig).toBeDefined();
-    expect(response.deltas.fiscalConfig!.businessName).toBe('Café Granada');
-    expect(response.deltas.fiscalConfig!.configVersion.revision).toBe(1);
+    expect(response.deltas.fiscalConfig.businessName).toBe('Café Granada');
+    expect(response.deltas.fiscalConfig.configVersion.revision).toBe(1);
     expect(response.fiscalConfig).toBeDefined();
   });
 

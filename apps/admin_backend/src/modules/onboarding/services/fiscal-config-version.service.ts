@@ -189,8 +189,11 @@ export class FiscalConfigVersionService {
     manager?: EntityManager,
   ): Promise<FiscalConfigSnapshot> {
     const trimmedTenantId = tenantId.trim();
-    const payload = await this.getEffectiveFiscalPayload(trimmedTenantId, manager);
-    let latest = await this.getLatestRevision(trimmedTenantId, manager);
+    const payload = await this.getEffectiveFiscalPayload(
+      trimmedTenantId,
+      manager,
+    );
+    const latest = await this.getLatestRevision(trimmedTenantId, manager);
 
     if (!latest) {
       const version = await this.recordRevisionChange(trimmedTenantId, manager);

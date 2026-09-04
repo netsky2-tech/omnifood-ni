@@ -125,13 +125,13 @@ describe('IndustryTemplateController (Unit)', () => {
 
   describe('scanLegacyRecipes', () => {
     it('throws UnauthorizedException when tenantId is missing or empty', async () => {
-      await expect(
-        controller.scanLegacyRecipes({}, undefined),
-      ).rejects.toThrow(UnauthorizedException);
+      await expect(controller.scanLegacyRecipes({}, undefined)).rejects.toThrow(
+        UnauthorizedException,
+      );
 
-      await expect(
-        controller.scanLegacyRecipes({}, '   '),
-      ).rejects.toThrow(UnauthorizedException);
+      await expect(controller.scanLegacyRecipes({}, '   ')).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
 
     it('delegates to legacyScanService.scanAndRemediate with trimmed tenantId', async () => {

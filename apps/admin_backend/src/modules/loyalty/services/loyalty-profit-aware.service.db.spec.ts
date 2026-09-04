@@ -2,9 +2,20 @@ import { randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
 import { LoyaltyProfitAwareService } from './loyalty-profit-aware.service';
 import { TypeOrmInventoryCostQueryAdapter } from './inventory-cost-query.adapter';
-import { LoyaltyProgram, LoyaltyProgramStatus, LoyaltyProgramType } from '../entities/loyalty-program.entity';
-import { RewardDefinition, RewardStatus, RewardType } from '../entities/reward-definition.entity';
-import { CustomerPointTransaction, PointTransactionType } from '../../customers/entities/customer-point-transaction.entity';
+import {
+  LoyaltyProgram,
+  LoyaltyProgramStatus,
+  LoyaltyProgramType,
+} from '../entities/loyalty-program.entity';
+import {
+  RewardDefinition,
+  RewardStatus,
+  RewardType,
+} from '../entities/reward-definition.entity';
+import {
+  CustomerPointTransaction,
+  PointTransactionType,
+} from '../../customers/entities/customer-point-transaction.entity';
 import { Product, ProductType } from '../../inventory/entities/product.entity';
 import { Tenant } from '../../tenant/entities/tenant.entity';
 import { Customer } from '../../customers/entities/customer.entity';
@@ -27,7 +38,10 @@ describe('LoyaltyProfitAwareService (Real PostgreSQL DB)', () => {
 
   beforeAll(async () => {
     schema = `loyalty_pa_${randomUUID().replace(/-/g, '')}`;
-    const bootstrap = new DataSource({ type: 'postgres', ...postgresConnection });
+    const bootstrap = new DataSource({
+      type: 'postgres',
+      ...postgresConnection,
+    });
     await bootstrap.initialize();
     await bootstrap.query(`CREATE SCHEMA "${schema}"`);
 
@@ -86,15 +100,20 @@ describe('LoyaltyProfitAwareService (Real PostgreSQL DB)', () => {
 
     tenant1Id = 'tenant-pa-1';
     tenant2Id = 'tenant-pa-2';
-    await bootstrap.query(`INSERT INTO "${schema}".tenants (id, name) VALUES ($1, $2)`, [tenant1Id, 'Tenant 1']);
-    await bootstrap.query(`INSERT INTO "${schema}".tenants (id, name) VALUES ($1, $2)`, [tenant2Id, 'Tenant 2']);
+    await bootstrap.query(
+      `INSERT INTO "${schema}".tenants (id, name) VALUES ($1, $2)`,
+      [tenant1Id, 'Tenant 1'],
+    );
+    await bootstrap.query(
+      `INSERT INTO "${schema}".tenants (id, name) VALUES ($1, $2)`,
+      [tenant2Id, 'Tenant 2'],
+    );
 
     customer1Id = randomUUID();
-    await bootstrap.query(`INSERT INTO "${schema}".customers (id, tenant_id, name) VALUES ($1, $2, $3)`, [
-      customer1Id,
-      tenant1Id,
-      'John Doe',
-    ]);
+    await bootstrap.query(
+      `INSERT INTO "${schema}".customers (id, tenant_id, name) VALUES ($1, $2, $3)`,
+      [customer1Id, tenant1Id, 'John Doe'],
+    );
 
     dataSource = new DataSource({
       type: 'postgres',
@@ -113,7 +132,9 @@ describe('LoyaltyProfitAwareService (Real PostgreSQL DB)', () => {
     await dataSource.initialize();
     await bootstrap.destroy();
 
-    const costAdapter = new TypeOrmInventoryCostQueryAdapter(dataSource.getRepository(Product));
+    const costAdapter = new TypeOrmInventoryCostQueryAdapter(
+      dataSource.getRepository(Product),
+    );
     profitAwareService = new LoyaltyProfitAwareService(
       dataSource.getRepository(RewardDefinition),
       dataSource.getRepository(LoyaltyProgram),
@@ -158,11 +179,16 @@ describe('LoyaltyProfitAwareService (Real PostgreSQL DB)', () => {
         status: RewardStatus.ACTIVE,
       });
 
-      const before = await dataSource.getRepository(Product).findOneBy({ id: product.id });
-      expect(Number(before!.stock)).toBe(50.0);
+      const before = await dataSource
+        .getRepository(Product)
+        .findOneBy({ id: product.id });
+      expect(Number(before.stock)).toBe(50.0);
 
       // Call profit-aware metrics service
-      const metrics = await profitAwareService.getRewardProfitAwareMetrics(tenant1Id, reward.id);
+      const metrics = await profitAwareService.getRewardProfitAwareMetrics(
+        tenant1Id,
+        reward.id,
+      );
       expect(metrics).toBeDefined();
       expect(metrics.retailPriceNio.status).toBe('AVAILABLE');
       expect(metrics.retailPriceNio.value).toBe(120.0);
@@ -170,10 +196,12 @@ describe('LoyaltyProfitAwareService (Real PostgreSQL DB)', () => {
       expect(metrics.estimatedCppNio.value).toBe(40.0);
       expect(metrics.estimatedRewardCostNio.value).toBe(40.0);
 
-      const after = await dataSource.getRepository(Product).findOneBy({ id: product.id });
-      expect(Number(after!.stock)).toBe(50.0);
-      expect(Number(after!.averageCost)).toBe(40.0);
-      expect(Number(after!.sellPrice)).toBe(120.0);
+      const after = await dataSource
+        .getRepository(Product)
+        .findOneBy({ id: product.id });
+      expect(Number(after.stock)).toBe(50.0);
+      expect(Number(after.averageCost)).toBe(40.0);
+      expect(Number(after.sellPrice)).toBe(120.0);
     });
   });
 
@@ -197,7 +225,10 @@ describe('LoyaltyProfitAwareService (Real PostgreSQL DB)', () => {
       });
 
       // Tenant 1 can read
-      const t1Metrics = await profitAwareService.getRewardProfitAwareMetrics(tenant1Id, reward.id);
+      const t1Metrics = await profitAwareService.getRewardProfitAwareMetrics(
+        tenant1Id,
+        reward.id,
+      );
       expect(t1Metrics.rewardId).toBe(reward.id);
 
       // Tenant 2 must receive NotFoundException
@@ -230,37 +261,43 @@ describe('LoyaltyProfitAwareService (Real PostgreSQL DB)', () => {
 
       // 1. Insert EARN transactions:
       // Earn 1: 10 days ago -> C$12,000
-      const earn1 = await dataSource.getRepository(CustomerPointTransaction).save({
-        tenant_id: tenant1Id,
-        customer_id: customer1Id,
-        loyalty_program_id: program.id,
-        transaction_type: PointTransactionType.EARN,
-        units: 1200,
-        occurred_at: new Date('2026-08-23T12:00:00Z'),
-        commercial_snapshot: { earningBaseNio: 12000 },
-      });
+      const earn1 = await dataSource
+        .getRepository(CustomerPointTransaction)
+        .save({
+          tenant_id: tenant1Id,
+          customer_id: customer1Id,
+          loyalty_program_id: program.id,
+          transaction_type: PointTransactionType.EARN,
+          units: 1200,
+          occurred_at: new Date('2026-08-23T12:00:00Z'),
+          commercial_snapshot: { earningBaseNio: 12000 },
+        });
 
       // Earn 2: 20 days ago -> C$8,000
-      const earn2 = await dataSource.getRepository(CustomerPointTransaction).save({
-        tenant_id: tenant1Id,
-        customer_id: customer1Id,
-        loyalty_program_id: program.id,
-        transaction_type: PointTransactionType.EARN,
-        units: 800,
-        occurred_at: new Date('2026-08-13T12:00:00Z'),
-        commercial_snapshot: { earningBaseNio: 8000 },
-      });
+      const earn2 = await dataSource
+        .getRepository(CustomerPointTransaction)
+        .save({
+          tenant_id: tenant1Id,
+          customer_id: customer1Id,
+          loyalty_program_id: program.id,
+          transaction_type: PointTransactionType.EARN,
+          units: 800,
+          occurred_at: new Date('2026-08-13T12:00:00Z'),
+          commercial_snapshot: { earningBaseNio: 8000 },
+        });
 
       // Earn 3: 15 days ago -> C$5,000 but reversed!
-      const earn3 = await dataSource.getRepository(CustomerPointTransaction).save({
-        tenant_id: tenant1Id,
-        customer_id: customer1Id,
-        loyalty_program_id: program.id,
-        transaction_type: PointTransactionType.EARN,
-        units: 500,
-        occurred_at: new Date('2026-08-18T12:00:00Z'),
-        commercial_snapshot: { earningBaseNio: 5000 },
-      });
+      const earn3 = await dataSource
+        .getRepository(CustomerPointTransaction)
+        .save({
+          tenant_id: tenant1Id,
+          customer_id: customer1Id,
+          loyalty_program_id: program.id,
+          transaction_type: PointTransactionType.EARN,
+          units: 500,
+          occurred_at: new Date('2026-08-18T12:00:00Z'),
+          commercial_snapshot: { earningBaseNio: 5000 },
+        });
 
       await dataSource.getRepository(CustomerPointTransaction).save({
         tenant_id: tenant1Id,
@@ -313,7 +350,9 @@ describe('LoyaltyProfitAwareService (Real PostgreSQL DB)', () => {
       expect(metrics.qualifiedSalesNio.value).toBe(20000);
 
       // Verify incentive cost
-      expect(metrics.estimatedIncentiveCostInWindowNio.status).toBe('AVAILABLE');
+      expect(metrics.estimatedIncentiveCostInWindowNio.status).toBe(
+        'AVAILABLE',
+      );
       expect(metrics.estimatedIncentiveCostInWindowNio.value).toBe(120);
 
       // Verify rate MC-07: 120 / 20,000 = 0.60%
@@ -391,7 +430,9 @@ describe('LoyaltyProfitAwareService (Real PostgreSQL DB)', () => {
 
       expect(metrics.qualifiedSalesNio.value).toBe(0);
       expect(metrics.effectiveIncentiveRatePct.status).toBe('NOT_AVAILABLE');
-      expect(metrics.effectiveIncentiveRatePct.reason).toBe('NO_QUALIFIED_SALES');
+      expect(metrics.effectiveIncentiveRatePct.reason).toBe(
+        'NO_QUALIFIED_SALES',
+      );
     });
   });
 });

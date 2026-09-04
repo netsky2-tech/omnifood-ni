@@ -2,7 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Product } from '../../inventory/entities/product.entity';
-import { CostQueryResult, InventoryCostQueryPort } from '../domain/inventory-cost-query.port';
+import {
+  CostQueryResult,
+  InventoryCostQueryPort,
+} from '../domain/inventory-cost-query.port';
 
 @Injectable()
 export class TypeOrmInventoryCostQueryAdapter implements InventoryCostQueryPort {

@@ -1,15 +1,29 @@
-import { Injectable, BadRequestException, NotFoundException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { randomUUID } from 'crypto';
-import { LoyaltyProgram, LoyaltyProgramStatus } from '../entities/loyalty-program.entity';
-import { RewardDefinition, RewardStatus } from '../entities/reward-definition.entity';
+import {
+  LoyaltyProgram,
+  LoyaltyProgramStatus,
+} from '../entities/loyalty-program.entity';
+import {
+  RewardDefinition,
+  RewardStatus,
+} from '../entities/reward-definition.entity';
 import { Customer } from '../../customers/entities/customer.entity';
 import { CustomerPointTransaction } from '../../customers/entities/customer-point-transaction.entity';
 import { LoyaltyLedgerService } from './loyalty-ledger.service';
 import { LoyaltyService } from './loyalty.service';
 import { LoyaltyTicketSnapshot } from '../domain/loyalty-ticket-snapshot';
-import { RedemptionIntent, RewardApplication } from '../domain/redemption-intent';
+import {
+  RedemptionIntent,
+  RewardApplication,
+} from '../domain/redemption-intent';
 
 @Injectable()
 export class RedemptionService {
@@ -35,7 +49,8 @@ export class RedemptionService {
     loyaltyProgramId: string;
     rewardId: string;
   }): Promise<RedemptionIntent> {
-    const { tenantId, customerId, ticketId, loyaltyProgramId, rewardId } = params;
+    const { tenantId, customerId, ticketId, loyaltyProgramId, rewardId } =
+      params;
 
     // 1. Customer must exist and be active
     const customer = await this.customerRepo.findOne({
@@ -53,12 +68,18 @@ export class RedemptionService {
       throw new NotFoundException('Loyalty program not found');
     }
     if (program.status !== LoyaltyProgramStatus.ACTIVE) {
-      throw new BadRequestException(`Program is ${program.status.toLowerCase()}, not active`);
+      throw new BadRequestException(
+        `Program is ${program.status.toLowerCase()}, not active`,
+      );
     }
 
     // 3. Reward must be ACTIVE and within its window
     const reward = await this.rewardRepo.findOne({
-      where: { id: rewardId, tenant_id: tenantId, loyalty_program_id: loyaltyProgramId },
+      where: {
+        id: rewardId,
+        tenant_id: tenantId,
+        loyalty_program_id: loyaltyProgramId,
+      },
     });
     if (!reward) {
       throw new NotFoundException('Reward not found');
@@ -69,14 +90,20 @@ export class RedemptionService {
 
     const now = new Date();
     if (reward.starts_at && now < reward.starts_at) {
-      throw new BadRequestException('Reward is not yet available (not within window)');
+      throw new BadRequestException(
+        'Reward is not yet available (not within window)',
+      );
     }
     if (reward.ends_at && now >= reward.ends_at) {
       throw new BadRequestException('Reward has expired');
     }
 
     // 4. Balance must be sufficient
-    const balance = await this.loyaltyService.getCustomerBalance(tenantId, customerId, loyaltyProgramId);
+    const balance = await this.loyaltyService.getCustomerBalance(
+      tenantId,
+      customerId,
+      loyaltyProgramId,
+    );
     if (balance.balanceUnits < reward.cost_units) {
       throw new BadRequestException(
         `Insufficient balance: have ${balance.balanceUnits}, need ${reward.cost_units}`,
@@ -90,14 +117,16 @@ export class RedemptionService {
         intent.ticketId === ticketId &&
         intent.status !== 'VOIDED'
       ) {
-        throw new ConflictException('A redemption intent already exists for this ticket');
+        throw new ConflictException(
+          'A redemption intent already exists for this ticket',
+        );
       }
     }
 
     // 6. Build application
     const application: RewardApplication = {
       rewardId: reward.id,
-      rewardType: reward.reward_type as any,
+      rewardType: reward.reward_type,
       benefitConfig: { ...reward.benefit_config },
       costUnits: reward.cost_units,
     };
@@ -124,14 +153,17 @@ export class RedemptionService {
     tenantId: string,
     intentId: string,
     snapshot: LoyaltyTicketSnapshot,
-  ): Promise<{ redeemTransaction: CustomerPointTransaction; alreadyConsolidated: boolean }> {
+  ): Promise<{
+    redeemTransaction: CustomerPointTransaction;
+    alreadyConsolidated: boolean;
+  }> {
     const intent = this.intents.get(intentId);
     if (!intent || intent.tenantId !== tenantId) {
       throw new NotFoundException('Redemption intent not found');
     }
 
     if (intent.status === 'CONSUMED') {
-      return { redeemTransaction: null as any, alreadyConsolidated: true };
+      return { redeemTransaction: null, alreadyConsolidated: true };
     }
 
     if (intent.status === 'VOIDED') {
@@ -139,7 +171,9 @@ export class RedemptionService {
     }
 
     if (intent.status !== 'PENDING' && intent.status !== 'CONFIRMED') {
-      throw new BadRequestException(`Cannot consolidate intent in status: ${intent.status}`);
+      throw new BadRequestException(
+        `Cannot consolidate intent in status: ${intent.status}`,
+      );
     }
 
     // Find the reward at the time of intent creation (snapshot version)
@@ -150,7 +184,7 @@ export class RedemptionService {
     // Create REDEEM transaction with idempotency key
     const idempotencyKey = `loyalty:redeem:${tenantId}:${intent.ticketId}`;
 
-    const benefitConfig = intent.application.benefitConfig as Record<string, unknown>;
+    const benefitConfig = intent.application.benefitConfig;
     const rewardType = intent.application.rewardType;
     const commercialSnapshot: Record<string, unknown> = {
       rewardType,
@@ -159,7 +193,9 @@ export class RedemptionService {
     };
 
     if (rewardType === 'DISCOUNT_AMOUNT') {
-      commercialSnapshot.appliedBenefitNio = Number(benefitConfig?.amountNio ?? 0);
+      commercialSnapshot.appliedBenefitNio = Number(
+        benefitConfig?.amountNio ?? 0,
+      );
     } else if (rewardType === 'FREE_PRODUCT') {
       commercialSnapshot.rewardProductId = benefitConfig?.productId;
       commercialSnapshot.rewardVariantId = benefitConfig?.variantId;
@@ -205,7 +241,10 @@ export class RedemptionService {
     this.intents.set(intentId, intent);
   }
 
-  async getIntent(tenantId: string, intentId: string): Promise<RedemptionIntent> {
+  async getIntent(
+    tenantId: string,
+    intentId: string,
+  ): Promise<RedemptionIntent> {
     const intent = this.intents.get(intentId);
     if (!intent || intent.tenantId !== tenantId) {
       throw new NotFoundException('Redemption intent not found');
@@ -228,19 +267,17 @@ export class RedemptionService {
     });
 
     // Filter to EARN and REDEEM, exclude already-reversed
-    const reversible = movements.filter(
-      (m) => {
-        const txType = (m.transaction_type as string)?.toLowerCase();
-        return (
-          (txType === 'earn' || txType === 'redeem') &&
-          !movements.some(
-            (r) =>
-              (r.transaction_type as string)?.toLowerCase() === 'reversal' &&
-              r.reversal_of_transaction_id === m.id,
-          )
-        );
-      },
-    );
+    const reversible = movements.filter((m) => {
+      const txType = (m.transaction_type as string)?.toLowerCase();
+      return (
+        (txType === 'earn' || txType === 'redeem') &&
+        !movements.some(
+          (r) =>
+            (r.transaction_type as string)?.toLowerCase() === 'reversal' &&
+            r.reversal_of_transaction_id === m.id,
+        )
+      );
+    });
 
     if (reversible.length === 0) return [];
 
@@ -258,7 +295,7 @@ export class RedemptionService {
       const reversal = await this.ledgerService.appendTransaction({
         tenantId,
         customerId,
-        loyaltyProgramId: movement.loyalty_program_id!,
+        loyaltyProgramId: movement.loyalty_program_id,
         ticketId,
         transactionType: 'REVERSAL',
         units: -Number(movement.units ?? 0),

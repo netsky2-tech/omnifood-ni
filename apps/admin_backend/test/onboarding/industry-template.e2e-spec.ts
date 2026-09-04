@@ -13,7 +13,11 @@ import { TemplatePreviewService } from '../../src/modules/onboarding/services/te
 import { TemplateSeedLink } from '../../src/modules/onboarding/entities/template-seed-link.entity';
 import { LegacyTemplateRecipeScanService } from '../../src/modules/onboarding/services/legacy-template-recipe-scan.service';
 import { OnboardingIdempotencyCoordinator } from '../../src/modules/onboarding/services/onboarding-idempotency.coordinator';
-import { RecipeOrigin, RecipePublicationState, RecipeSuggestionState } from '../../src/modules/inventory/entities/recipe-version.entity';
+import {
+  RecipeOrigin,
+  RecipePublicationState,
+  RecipeSuggestionState,
+} from '../../src/modules/inventory/entities/recipe-version.entity';
 
 import { IndustryTemplate } from '../../src/modules/onboarding/entities/industry-template.entity';
 import {
@@ -176,7 +180,7 @@ describe('IndustryTemplate (Integration & E2E)', () => {
   let dbRecipeVersions: RecipeVersion[] = [];
   let dbRecipeDetails: RecipeDetail[] = [];
   let dbRecipes: Recipe[] = [];
-  let dbSeedLinks: any[] = [];
+  const dbSeedLinks: any[] = [];
   let dbConversions: UomConversion[] = [];
 
   const templateRepo = {
@@ -235,9 +239,7 @@ describe('IndustryTemplate (Integration & E2E)', () => {
         if (entityClass === RecipeVersion) {
           return Promise.resolve(
             dbRecipeVersions.find(
-              (r) =>
-                r.tenant_id === tenantId &&
-                r.product_id === productId,
+              (r) => r.tenant_id === tenantId && r.product_id === productId,
             ) || null,
           );
         }
@@ -268,7 +270,11 @@ describe('IndustryTemplate (Integration & E2E)', () => {
         if (entityClass === RecipeDetail)
           dbRecipeDetails.push(withId as unknown as RecipeDetail);
         if (entityClass === Recipe) dbRecipes.push(withId as unknown as Recipe);
-            if ((entityClass as any)?.name === 'TemplateSeedLink' || (entityClass as any) === TemplateSeedLink) dbSeedLinks.push(withId);
+        if (
+          (entityClass as any)?.name === 'TemplateSeedLink' ||
+          (entityClass as any) === TemplateSeedLink
+        )
+          dbSeedLinks.push(withId);
         if (entityClass === UomConversion)
           dbConversions.push(withId as unknown as UomConversion);
         return withId;

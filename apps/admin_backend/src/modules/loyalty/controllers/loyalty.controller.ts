@@ -16,7 +16,10 @@ import { CreateLoyaltyProgramDto } from '../dto/loyalty-program.dto';
 import { UpdateLoyaltyProgramDto } from '../dto/loyalty-program.dto';
 import { CreateRewardDefinitionDto } from '../dto/reward-definition.dto';
 import { UpdateRewardDefinitionDto } from '../dto/reward-definition.dto';
-import { LoyaltyTicketSnapshotDto, ClassifyLegacyDto } from '../dto/loyalty-ticket.dto';
+import {
+  LoyaltyTicketSnapshotDto,
+  ClassifyLegacyDto,
+} from '../dto/loyalty-ticket.dto';
 import { TicketPaidHandler } from '../services/ticket-paid.handler';
 import { LegacyClassificationService } from '../services/legacy-classification.service';
 import { RedemptionService } from '../services/redemption.service';
@@ -64,10 +67,10 @@ export class LoyaltyController {
     @Query('program_type') programType?: string,
     @GetTenantId() tenantId?: string,
   ) {
-    return this.loyaltyService.findAllPrograms(
-      this.requireTenant(tenantId),
-      { status: status as any, program_type: programType },
-    );
+    return this.loyaltyService.findAllPrograms(this.requireTenant(tenantId), {
+      status: status as any,
+      program_type: programType,
+    });
   }
 
   @Get('programs/:programId')
@@ -88,10 +91,7 @@ export class LoyaltyController {
     @Body() dto: CreateLoyaltyProgramDto,
     @GetTenantId() tenantId?: string,
   ) {
-    return this.loyaltyService.createProgram(
-      this.requireTenant(tenantId),
-      dto,
-    );
+    return this.loyaltyService.createProgram(this.requireTenant(tenantId), dto);
   }
 
   @Patch('programs/:programId')
@@ -277,7 +277,7 @@ export class LoyaltyController {
     @GetTenantId() tenantId?: string,
   ) {
     this.requireTenant(tenantId);
-    const snapshot = { ...dto, tenantId: tenantId! };
+    const snapshot = { ...dto, tenantId: tenantId };
     const results = await this.ticketPaidHandler.handle(snapshot);
     return { processed: results.length, results };
   }
@@ -291,10 +291,11 @@ export class LoyaltyController {
     @GetTenantId() tenantId?: string,
   ) {
     this.requireTenant(tenantId);
-    const result = await this.legacyClassificationService.classifyLegacyTransactions(
-      this.requireTenant(tenantId),
-      dto.batchSize,
-    );
+    const result =
+      await this.legacyClassificationService.classifyLegacyTransactions(
+        this.requireTenant(tenantId),
+        dto.batchSize,
+      );
     return result;
   }
 
@@ -329,7 +330,7 @@ export class LoyaltyController {
     return this.redemptionService.consolidateRedemption(
       validTenant,
       dto.intentId,
-      snapshot as any,
+      snapshot,
     );
   }
 

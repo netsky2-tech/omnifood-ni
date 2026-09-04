@@ -13,7 +13,10 @@ import { CatalogValue } from '../../src/modules/catalog/entities/catalog-value.e
 import { Insumo } from '../../src/modules/inventory/entities/insumo.entity';
 import { Recipe } from '../../src/modules/inventory/entities/recipe.entity';
 import { RecipeVersion } from '../../src/modules/inventory/entities/recipe-version.entity';
-import { User, UserRole } from '../../src/modules/identity/entities/user.entity';
+import {
+  User,
+  UserRole,
+} from '../../src/modules/identity/entities/user.entity';
 import { UomConversion } from '../../src/modules/inventory/entities/uom-conversion.entity';
 import { SecurityProfile } from '../../src/modules/identity/entities/security-profile.entity';
 import { Tenant } from '../../src/modules/tenant/entities/tenant.entity';
@@ -115,7 +118,9 @@ async function withIsolatedSchema(
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
+    app.useGlobalPipes(
+      new ValidationPipe({ transform: true, whitelist: true }),
+    );
     await app.init();
 
     const jwtService = app.get(JwtService);
@@ -273,9 +278,7 @@ describe('InboundSyncController E2E — real PostgreSQL', () => {
             );
 
             // sinceVersion = epoch millis for 2000-01-01T00:00:00Z (between old and new)
-            const sinceVersion = new Date(
-              '2000-01-01T00:00:00Z',
-            ).getTime();
+            const sinceVersion = new Date('2000-01-01T00:00:00Z').getTime();
 
             const res = await request(app.getHttpServer())
               .get(
@@ -392,14 +395,11 @@ describe('InboundSyncController E2E — real PostgreSQL', () => {
     it(
       'returns 401 when no Authorization header is present',
       async () => {
-        await withIsolatedSchema(
-          'e2e_sync_401',
-          async ({ app }) => {
-            await request(app.getHttpServer())
-              .get('/v1/sync/inbound/deltas?types=products')
-              .expect(401);
-          },
-        );
+        await withIsolatedSchema('e2e_sync_401', async ({ app }) => {
+          await request(app.getHttpServer())
+            .get('/v1/sync/inbound/deltas?types=products')
+            .expect(401);
+        });
       },
       TEST_TIMEOUT_MS,
     );

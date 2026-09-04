@@ -7,16 +7,15 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as crypto from 'crypto';
 import { IndustryTemplate } from '../entities/industry-template.entity';
-import { TemplateSeedLink, TemplateTargetEntityType } from '../entities/template-seed-link.entity';
+import {
+  TemplateSeedLink,
+  TemplateTargetEntityType,
+} from '../entities/template-seed-link.entity';
 import { Insumo } from '../../inventory/entities/insumo.entity';
 import { Product } from '../../inventory/entities/product.entity';
 
 export type TemplateDiffStatus =
-  | 'NEW'
-  | 'EXISTING_LINKED'
-  | 'EXISTING_UNLINKED'
-  | 'CONFLICT'
-  | 'UNSUPPORTED';
+  'NEW' | 'EXISTING_LINKED' | 'EXISTING_UNLINKED' | 'CONFLICT' | 'UNSUPPORTED';
 
 export interface TemplateItemDiff {
   itemId: string;
@@ -69,7 +68,11 @@ export class TemplatePreviewService {
 
   public computeFingerprint(payload: Record<string, any>): string {
     const raw = JSON.stringify(payload);
-    return crypto.createHash('sha256').update(raw).digest('hex').substring(0, 32);
+    return crypto
+      .createHash('sha256')
+      .update(raw)
+      .digest('hex')
+      .substring(0, 32);
   }
 
   async buildPreview(
@@ -97,7 +100,9 @@ export class TemplatePreviewService {
     });
 
     if (!template) {
-      throw new NotFoundException(`Industry template '${trimmedCode}' not found`);
+      throw new NotFoundException(
+        `Industry template '${trimmedCode}' not found`,
+      );
     }
 
     const version = template.version ?? 1;
@@ -229,7 +234,9 @@ export class TemplatePreviewService {
           proposedEffect = 'NO_OP';
           existingEntityId = existingLink.target_entity_id;
         } else {
-          const matchByName = productByName.get(tProd.name.trim().toLowerCase());
+          const matchByName = productByName.get(
+            tProd.name.trim().toLowerCase(),
+          );
           if (matchByName) {
             diffStatus = 'EXISTING_UNLINKED';
             proposedEffect = 'LINK_EXISTING';
@@ -265,17 +272,24 @@ export class TemplatePreviewService {
     const summary: TemplatePreviewSummary = {
       totalItems: items.length,
       newCount: items.filter((i) => i.diffStatus === 'NEW').length,
-      existingLinkedCount: items.filter((i) => i.diffStatus === 'EXISTING_LINKED').length,
-      existingUnlinkedCount: items.filter((i) => i.diffStatus === 'EXISTING_UNLINKED').length,
+      existingLinkedCount: items.filter(
+        (i) => i.diffStatus === 'EXISTING_LINKED',
+      ).length,
+      existingUnlinkedCount: items.filter(
+        (i) => i.diffStatus === 'EXISTING_UNLINKED',
+      ).length,
       conflictCount: items.filter((i) => i.diffStatus === 'CONFLICT').length,
-      unsupportedCount: items.filter((i) => i.diffStatus === 'UNSUPPORTED').length,
+      unsupportedCount: items.filter((i) => i.diffStatus === 'UNSUPPORTED')
+        .length,
     };
 
     return {
       templateCode: template.code,
       templateVersion: version,
       templateName: template.name,
-      templateFingerprint: template.source_fingerprint ?? this.computeFingerprint({ code: template.code, version }),
+      templateFingerprint:
+        template.source_fingerprint ??
+        this.computeFingerprint({ code: template.code, version }),
       items,
       summary,
     };

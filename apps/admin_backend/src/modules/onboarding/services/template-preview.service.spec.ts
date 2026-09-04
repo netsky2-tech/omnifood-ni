@@ -4,7 +4,11 @@ import { IndustryTemplate } from '../entities/industry-template.entity';
 import { TemplateInsumo } from '../entities/template-insumo.entity';
 import { TemplateProduct } from '../entities/template-product.entity';
 import { TemplateRecipeItem } from '../entities/template-recipe-item.entity';
-import { TemplateSeedLink, TemplateSourceItemType, TemplateTargetEntityType } from '../entities/template-seed-link.entity';
+import {
+  TemplateSeedLink,
+  TemplateSourceItemType,
+  TemplateTargetEntityType,
+} from '../entities/template-seed-link.entity';
 import { Insumo } from '../../inventory/entities/insumo.entity';
 import { Product } from '../../inventory/entities/product.entity';
 
@@ -35,10 +39,10 @@ describe('TemplatePreviewService (TDD / ONB1.3A-B)', () => {
         par_level: 10000,
         min_stock: 2000,
         is_perishable: false,
-        negative_stock_policy: 'RESTRICT' as any,
+        negative_stock_policy: 'RESTRICT',
         created_at: new Date(),
         updated_at: new Date(),
-        template: null as any,
+        template: null,
       },
       {
         id: 'ins-2',
@@ -50,10 +54,10 @@ describe('TemplatePreviewService (TDD / ONB1.3A-B)', () => {
         par_level: 20000,
         min_stock: 5000,
         is_perishable: true,
-        negative_stock_policy: 'RESTRICT' as any,
+        negative_stock_policy: 'RESTRICT',
         created_at: new Date(),
         updated_at: new Date(),
-        template: null as any,
+        template: null,
       },
     ],
     templateProducts: [
@@ -75,12 +79,12 @@ describe('TemplatePreviewService (TDD / ONB1.3A-B)', () => {
             component_uom: 'G',
             created_at: new Date(),
             updated_at: new Date(),
-            templateProduct: null as any,
+            templateProduct: null,
           },
         ],
         created_at: new Date(),
         updated_at: new Date(),
-        template: null as any,
+        template: null,
       },
     ],
     created_at: new Date(),
@@ -118,17 +122,17 @@ describe('TemplatePreviewService (TDD / ONB1.3A-B)', () => {
 
     const ins1 = preview.items.find((i) => i.itemId === 'ins-1');
     expect(ins1).toBeDefined();
-    expect(ins1!.diffStatus).toBe('NEW');
-    expect(ins1!.itemType).toBe('INGREDIENT');
-    expect(ins1!.proposedEffect).toBe('CREATE_INSUMO');
-    expect(ins1!.sourceFingerprint).toBeDefined();
-    expect(ins1!.selected).toBe(true);
+    expect(ins1.diffStatus).toBe('NEW');
+    expect(ins1.itemType).toBe('INGREDIENT');
+    expect(ins1.proposedEffect).toBe('CREATE_INSUMO');
+    expect(ins1.sourceFingerprint).toBeDefined();
+    expect(ins1.selected).toBe(true);
 
     const prod1 = preview.items.find((i) => i.itemId === 'prod-1');
     expect(prod1).toBeDefined();
-    expect(prod1!.diffStatus).toBe('NEW');
-    expect(prod1!.itemType).toBe('PRODUCT');
-    expect(prod1!.proposedEffect).toBe('CREATE_PRODUCT');
+    expect(prod1.diffStatus).toBe('NEW');
+    expect(prod1.itemType).toBe('PRODUCT');
+    expect(prod1.proposedEffect).toBe('CREATE_PRODUCT');
 
     expect(preview.summary.newCount).toBe(3);
     expect(preview.summary.existingLinkedCount).toBe(0);
@@ -156,9 +160,9 @@ describe('TemplatePreviewService (TDD / ONB1.3A-B)', () => {
     const preview = await service.buildPreview('tenant-1', 'CAFETERIA');
 
     const ins1 = preview.items.find((i) => i.itemId === 'ins-1');
-    expect(ins1!.diffStatus).toBe('EXISTING_LINKED');
-    expect(ins1!.proposedEffect).toBe('NO_OP');
-    expect(ins1!.existingEntityId).toBe('insumo-real-1');
+    expect(ins1.diffStatus).toBe('EXISTING_LINKED');
+    expect(ins1.proposedEffect).toBe('NO_OP');
+    expect(ins1.existingEntityId).toBe('insumo-real-1');
     expect(preview.summary.existingLinkedCount).toBe(1);
     expect(preview.summary.newCount).toBe(2);
   });
@@ -175,9 +179,9 @@ describe('TemplatePreviewService (TDD / ONB1.3A-B)', () => {
     const preview = await service.buildPreview('tenant-1', 'CAFETERIA');
 
     const ins1 = preview.items.find((i) => i.itemId === 'ins-1');
-    expect(ins1!.diffStatus).toBe('EXISTING_UNLINKED');
-    expect(ins1!.proposedEffect).toBe('LINK_EXISTING');
-    expect(ins1!.existingEntityId).toBe('ins-manual-1');
+    expect(ins1.diffStatus).toBe('EXISTING_UNLINKED');
+    expect(ins1.proposedEffect).toBe('LINK_EXISTING');
+    expect(ins1.existingEntityId).toBe('ins-manual-1');
     expect(preview.summary.existingUnlinkedCount).toBe(1);
   });
 
@@ -189,8 +193,8 @@ describe('TemplatePreviewService (TDD / ONB1.3A-B)', () => {
     const prod1 = preview.items.find((i) => i.itemId === 'prod-1');
     const ins1 = preview.items.find((i) => i.itemId === 'ins-1');
 
-    expect(prod1!.selected).toBe(true);
-    expect(ins1!.selected).toBe(false);
+    expect(prod1.selected).toBe(true);
+    expect(ins1.selected).toBe(false);
   });
 
   it('throws NotFoundException when template does not exist', async () => {
@@ -198,7 +202,7 @@ describe('TemplatePreviewService (TDD / ONB1.3A-B)', () => {
 
     await expect(
       service.buildPreview('tenant-1', 'UNKNOWN_TEMPLATE'),
-    ).rejects.toThrow('Industry template \'UNKNOWN_TEMPLATE\' not found');
+    ).rejects.toThrow("Industry template 'UNKNOWN_TEMPLATE' not found");
   });
 
   it('throws BadRequestException when tenantId or templateCode is empty', async () => {

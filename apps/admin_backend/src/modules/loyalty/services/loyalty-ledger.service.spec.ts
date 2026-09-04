@@ -1,9 +1,16 @@
 import { randomUUID } from 'crypto';
 import { DataSource, Repository } from 'typeorm';
-import { LoyaltyLedgerService, AppendLoyaltyTxDto } from './loyalty-ledger.service';
+import {
+  LoyaltyLedgerService,
+  AppendLoyaltyTxDto,
+} from './loyalty-ledger.service';
 import { CustomerPointTransaction } from '../../customers/entities/customer-point-transaction.entity';
 import { CustomerLoyaltyAccountProjection } from '../entities/customer-loyalty-account-projection.entity';
-import { LoyaltyProgram, LoyaltyProgramStatus, LoyaltyProgramType } from '../entities/loyalty-program.entity';
+import {
+  LoyaltyProgram,
+  LoyaltyProgramStatus,
+  LoyaltyProgramType,
+} from '../entities/loyalty-program.entity';
 import { Customer } from '../../customers/entities/customer.entity';
 import { Tenant } from '../../tenant/entities/tenant.entity';
 import { RewardDefinition } from '../entities/reward-definition.entity';
@@ -129,7 +136,7 @@ describe('LoyaltyLedgerService (db)', () => {
     const customer = await harness.customerRepo.findOne({
       where: { tenant_id: 'tenant-1' },
     });
-    customerId = customer!.id;
+    customerId = customer.id;
 
     const program = await harness.programRepo.save(
       harness.programRepo.create({
@@ -180,8 +187,8 @@ describe('LoyaltyLedgerService (db)', () => {
         },
       });
       expect(projection).toBeDefined();
-      expect(projection!.balance_units).toBe(10);
-      expect(projection!.projection_version).toBe(1);
+      expect(projection.balance_units).toBe(10);
+      expect(projection.projection_version).toBe(1);
     });
 
     it('accumulates units across multiple transactions', async () => {
@@ -204,8 +211,8 @@ describe('LoyaltyLedgerService (db)', () => {
           loyalty_program_id: programId,
         },
       });
-      expect(projection!.balance_units).toBe(15);
-      expect(projection!.projection_version).toBe(2);
+      expect(projection.balance_units).toBe(15);
+      expect(projection.projection_version).toBe(2);
     });
 
     it('is idempotent: same idempotency key returns existing transaction', async () => {
@@ -234,12 +241,16 @@ describe('LoyaltyLedgerService (db)', () => {
           loyalty_program_id: programId,
         },
       });
-      expect(projection!.balance_units).toBe(23);
+      expect(projection.balance_units).toBe(23);
     });
 
     it('duplicate insert does not alter balance or increment projection_version', async () => {
       const before = await harness.projectionRepo.findOne({
-        where: { tenant_id: 'tenant-1', customer_id: customerId, loyalty_program_id: programId },
+        where: {
+          tenant_id: 'tenant-1',
+          customer_id: customerId,
+          loyalty_program_id: programId,
+        },
       });
       const dto: AppendLoyaltyTxDto = {
         tenantId: 'tenant-1',
@@ -256,10 +267,14 @@ describe('LoyaltyLedgerService (db)', () => {
       expect(duplicate).toBeDefined();
 
       const after = await harness.projectionRepo.findOne({
-        where: { tenant_id: 'tenant-1', customer_id: customerId, loyalty_program_id: programId },
+        where: {
+          tenant_id: 'tenant-1',
+          customer_id: customerId,
+          loyalty_program_id: programId,
+        },
       });
-      expect(after!.balance_units).toBe(before!.balance_units);
-      expect(after!.projection_version).toBe(before!.projection_version);
+      expect(after.balance_units).toBe(before.balance_units);
+      expect(after.projection_version).toBe(before.projection_version);
     });
 
     it('same idempotencyKey + different payload throws ConflictException (AV-13 integrity conflict)', async () => {
@@ -275,9 +290,9 @@ describe('LoyaltyLedgerService (db)', () => {
         occurredAt: new Date(),
       };
 
-      await expect(harness.ledgerService.appendTransaction(conflictDto)).rejects.toThrow(
-        /Integrity conflict/i,
-      );
+      await expect(
+        harness.ledgerService.appendTransaction(conflictDto),
+      ).rejects.toThrow(/Integrity conflict/i);
     });
 
     it('handles negative units for REVERSAL', async () => {
@@ -300,7 +315,7 @@ describe('LoyaltyLedgerService (db)', () => {
           loyalty_program_id: programId,
         },
       });
-      expect(projection!.balance_units).toBe(18);
+      expect(projection.balance_units).toBe(18);
     });
   });
 

@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class AddAuditLogHashChainingColumns1792000000000
-  implements MigrationInterface
-{
+export class AddAuditLogHashChainingColumns1792000000000 implements MigrationInterface {
   name = 'AddAuditLogHashChainingColumns1792000000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

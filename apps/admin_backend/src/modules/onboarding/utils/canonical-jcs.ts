@@ -18,7 +18,9 @@ export function canonicalizeJcs(value: unknown): string {
 
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) {
-      throw new TypeError('Cannot serialize non-finite numbers in canonical JSON');
+      throw new TypeError(
+        'Cannot serialize non-finite numbers in canonical JSON',
+      );
     }
     // standard JSON string representation
     return JSON.stringify(value);

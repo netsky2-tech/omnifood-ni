@@ -16,7 +16,10 @@ import { CatalogType } from './catalog-type';
 import { CreateCatalogValueDto } from './dto/create-catalog-value.dto';
 import { UpdateCatalogValueDto } from './dto/update-catalog-value.dto';
 import { GetTenantId } from '../../core/decorators/tenant.decorator';
-import { CurrentUser, CurrentUserPayload } from '../../core/decorators/current-user.decorator';
+import {
+  CurrentUser,
+  CurrentUserPayload,
+} from '../../core/decorators/current-user.decorator';
 import { TenantInterceptor } from '../../core/database/rls.interceptor';
 import { AuthGuard } from '../identity/guards/auth.guard';
 import { AuthoritativeCurrentUserGuard } from '../identity/guards/authoritative-current-user.guard';

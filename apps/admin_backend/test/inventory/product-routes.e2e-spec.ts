@@ -71,7 +71,9 @@ describe('ProductController E2E', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
+    app.useGlobalPipes(
+      new ValidationPipe({ transform: true, whitelist: true }),
+    );
     await app.init();
 
     jwtService = app.get(JwtService);
@@ -92,15 +94,16 @@ describe('ProductController E2E', () => {
 
   describe('authentication & authorization', () => {
     it('GET /products returns 401 without token', async () => {
-      await request(app.getHttpServer())
-        .get(PRODUCTS_API)
-        .expect(401);
+      await request(app.getHttpServer()).get(PRODUCTS_API).expect(401);
     });
 
     it('GET /products returns 403 for CASHIER role', async () => {
       await request(app.getHttpServer())
         .get(PRODUCTS_API)
-        .set('Authorization', `Bearer ${signToken({ role: UserRole.CASHIER, tenant_id: 'tenant-e2e' })}`)
+        .set(
+          'Authorization',
+          `Bearer ${signToken({ role: UserRole.CASHIER, tenant_id: 'tenant-e2e' })}`,
+        )
         .expect(403);
     });
 
@@ -114,7 +117,10 @@ describe('ProductController E2E', () => {
     it('POST /products returns 403 for CASHIER role', async () => {
       await request(app.getHttpServer())
         .post(PRODUCTS_API)
-        .set('Authorization', `Bearer ${signToken({ role: UserRole.CASHIER, tenant_id: 'tenant-e2e' })}`)
+        .set(
+          'Authorization',
+          `Bearer ${signToken({ role: UserRole.CASHIER, tenant_id: 'tenant-e2e' })}`,
+        )
         .send({ name: 'Test', uom: 'un', product_type: 'SIMPLE' })
         .expect(403);
     });
@@ -137,17 +143,27 @@ describe('ProductController E2E', () => {
 
   describe('GET /products', () => {
     it('returns product list for OWNER', async () => {
-      const products = [makeProduct(), makeProduct({ id: 'prod-2', name: 'Gaseosa' })];
+      const products = [
+        makeProduct(),
+        makeProduct({ id: 'prod-2', name: 'Gaseosa' }),
+      ];
       productService.list.mockResolvedValue(products as any);
 
       const res = await request(app.getHttpServer())
         .get(PRODUCTS_API)
-        .set('Authorization', `Bearer ${signToken({ role: UserRole.OWNER, tenant_id: 'tenant-e2e' })}`)
+        .set(
+          'Authorization',
+          `Bearer ${signToken({ role: UserRole.OWNER, tenant_id: 'tenant-e2e' })}`,
+        )
         .expect(200);
 
       expect(res.body).toHaveLength(2);
       expect(res.body[0].name).toBe('Taza de Capuccino');
-      expect(productService.list).toHaveBeenCalledWith('tenant-e2e', undefined, false);
+      expect(productService.list).toHaveBeenCalledWith(
+        'tenant-e2e',
+        undefined,
+        false,
+      );
     });
 
     it('forwards productType filter', async () => {
@@ -155,7 +171,10 @@ describe('ProductController E2E', () => {
 
       await request(app.getHttpServer())
         .get(`${PRODUCTS_API}?productType=COMPOUND`)
-        .set('Authorization', `Bearer ${signToken({ role: UserRole.MANAGER, tenant_id: 'tenant-e2e' })}`)
+        .set(
+          'Authorization',
+          `Bearer ${signToken({ role: UserRole.MANAGER, tenant_id: 'tenant-e2e' })}`,
+        )
         .expect(200);
 
       expect(productService.list).toHaveBeenCalledWith(
@@ -170,7 +189,10 @@ describe('ProductController E2E', () => {
 
       await request(app.getHttpServer())
         .get(`${PRODUCTS_API}?includeInactive=true`)
-        .set('Authorization', `Bearer ${signToken({ role: UserRole.MANAGER, tenant_id: 'tenant-e2e' })}`)
+        .set(
+          'Authorization',
+          `Bearer ${signToken({ role: UserRole.MANAGER, tenant_id: 'tenant-e2e' })}`,
+        )
         .expect(200);
 
       expect(productService.list).toHaveBeenCalledWith(
@@ -185,7 +207,10 @@ describe('ProductController E2E', () => {
 
       await request(app.getHttpServer())
         .get(`${PRODUCTS_API}?productType=INVALID`)
-        .set('Authorization', `Bearer ${signToken({ role: UserRole.MANAGER, tenant_id: 'tenant-e2e' })}`)
+        .set(
+          'Authorization',
+          `Bearer ${signToken({ role: UserRole.MANAGER, tenant_id: 'tenant-e2e' })}`,
+        )
         .expect(200);
 
       expect(productService.list).toHaveBeenCalledWith(
@@ -205,11 +230,17 @@ describe('ProductController E2E', () => {
 
       const res = await request(app.getHttpServer())
         .get(`${PRODUCTS_API}/prod-42`)
-        .set('Authorization', `Bearer ${signToken({ role: UserRole.MANAGER, tenant_id: 'tenant-e2e' })}`)
+        .set(
+          'Authorization',
+          `Bearer ${signToken({ role: UserRole.MANAGER, tenant_id: 'tenant-e2e' })}`,
+        )
         .expect(200);
 
       expect(res.body.id).toBe('prod-42');
-      expect(productService.findOne).toHaveBeenCalledWith('prod-42', 'tenant-e2e');
+      expect(productService.findOne).toHaveBeenCalledWith(
+        'prod-42',
+        'tenant-e2e',
+      );
     });
 
     it('returns 404 when product not found', async () => {
@@ -218,7 +249,10 @@ describe('ProductController E2E', () => {
 
       await request(app.getHttpServer())
         .get(`${PRODUCTS_API}/nonexistent`)
-        .set('Authorization', `Bearer ${signToken({ role: UserRole.MANAGER, tenant_id: 'tenant-e2e' })}`)
+        .set(
+          'Authorization',
+          `Bearer ${signToken({ role: UserRole.MANAGER, tenant_id: 'tenant-e2e' })}`,
+        )
         .expect(404);
     });
   });
@@ -232,15 +266,26 @@ describe('ProductController E2E', () => {
 
       const res = await request(app.getHttpServer())
         .post(PRODUCTS_API)
-        .set('Authorization', `Bearer ${signToken({ role: UserRole.OWNER, tenant_id: 'tenant-e2e' })}`)
-        .send({ name: 'Lata de Gaseosa', uom: 'un', product_type: 'SIMPLE', sellPrice: 25 })
+        .set(
+          'Authorization',
+          `Bearer ${signToken({ role: UserRole.OWNER, tenant_id: 'tenant-e2e' })}`,
+        )
+        .send({
+          name: 'Lata de Gaseosa',
+          uom: 'un',
+          product_type: 'SIMPLE',
+          sellPrice: 25,
+        })
         .expect(201);
 
       expect(res.body.name).toBe('Taza de Capuccino');
-      expect(productService.create).toHaveBeenCalledWith('tenant-e2e', expect.objectContaining({
-        name: 'Lata de Gaseosa',
-        product_type: 'SIMPLE',
-      }));
+      expect(productService.create).toHaveBeenCalledWith(
+        'tenant-e2e',
+        expect.objectContaining({
+          name: 'Lata de Gaseosa',
+          product_type: 'SIMPLE',
+        }),
+      );
     });
 
     it('creates a COMPOUND product', async () => {
@@ -249,13 +294,24 @@ describe('ProductController E2E', () => {
 
       await request(app.getHttpServer())
         .post(PRODUCTS_API)
-        .set('Authorization', `Bearer ${signToken({ role: UserRole.OWNER, tenant_id: 'tenant-e2e' })}`)
-        .send({ name: 'Hamburguesa', uom: 'un', product_type: 'COMPOUND', sellPrice: 120 })
+        .set(
+          'Authorization',
+          `Bearer ${signToken({ role: UserRole.OWNER, tenant_id: 'tenant-e2e' })}`,
+        )
+        .send({
+          name: 'Hamburguesa',
+          uom: 'un',
+          product_type: 'COMPOUND',
+          sellPrice: 120,
+        })
         .expect(201);
 
-      expect(productService.create).toHaveBeenCalledWith('tenant-e2e', expect.objectContaining({
-        product_type: 'COMPOUND',
-      }));
+      expect(productService.create).toHaveBeenCalledWith(
+        'tenant-e2e',
+        expect.objectContaining({
+          product_type: 'COMPOUND',
+        }),
+      );
     });
 
     it('creates a VARIANT_PARENT product', async () => {
@@ -264,19 +320,33 @@ describe('ProductController E2E', () => {
 
       await request(app.getHttpServer())
         .post(PRODUCTS_API)
-        .set('Authorization', `Bearer ${signToken({ role: UserRole.OWNER, tenant_id: 'tenant-e2e' })}`)
-        .send({ name: 'Camisa Oxford', uom: 'un', product_type: 'VARIANT_PARENT', sellPrice: 350 })
+        .set(
+          'Authorization',
+          `Bearer ${signToken({ role: UserRole.OWNER, tenant_id: 'tenant-e2e' })}`,
+        )
+        .send({
+          name: 'Camisa Oxford',
+          uom: 'un',
+          product_type: 'VARIANT_PARENT',
+          sellPrice: 350,
+        })
         .expect(201);
 
-      expect(productService.create).toHaveBeenCalledWith('tenant-e2e', expect.objectContaining({
-        product_type: 'VARIANT_PARENT',
-      }));
+      expect(productService.create).toHaveBeenCalledWith(
+        'tenant-e2e',
+        expect.objectContaining({
+          product_type: 'VARIANT_PARENT',
+        }),
+      );
     });
 
     it('returns 400 when name is missing', async () => {
       await request(app.getHttpServer())
         .post(PRODUCTS_API)
-        .set('Authorization', `Bearer ${signToken({ role: UserRole.OWNER, tenant_id: 'tenant-e2e' })}`)
+        .set(
+          'Authorization',
+          `Bearer ${signToken({ role: UserRole.OWNER, tenant_id: 'tenant-e2e' })}`,
+        )
         .send({ uom: 'un', product_type: 'SIMPLE' })
         .expect(400);
     });
@@ -284,7 +354,10 @@ describe('ProductController E2E', () => {
     it('returns 400 when product_type is invalid', async () => {
       await request(app.getHttpServer())
         .post(PRODUCTS_API)
-        .set('Authorization', `Bearer ${signToken({ role: UserRole.OWNER, tenant_id: 'tenant-e2e' })}`)
+        .set(
+          'Authorization',
+          `Bearer ${signToken({ role: UserRole.OWNER, tenant_id: 'tenant-e2e' })}`,
+        )
         .send({ name: 'Test', uom: 'un', product_type: 'INVALID' })
         .expect(400);
     });
@@ -292,7 +365,10 @@ describe('ProductController E2E', () => {
     it('returns 400 when uom is missing', async () => {
       await request(app.getHttpServer())
         .post(PRODUCTS_API)
-        .set('Authorization', `Bearer ${signToken({ role: UserRole.OWNER, tenant_id: 'tenant-e2e' })}`)
+        .set(
+          'Authorization',
+          `Bearer ${signToken({ role: UserRole.OWNER, tenant_id: 'tenant-e2e' })}`,
+        )
         .send({ name: 'Test', product_type: 'SIMPLE' })
         .expect(400);
     });
@@ -307,7 +383,10 @@ describe('ProductController E2E', () => {
 
       const res = await request(app.getHttpServer())
         .patch(`${PRODUCTS_API}/prod-1`)
-        .set('Authorization', `Bearer ${signToken({ role: UserRole.OWNER, tenant_id: 'tenant-e2e' })}`)
+        .set(
+          'Authorization',
+          `Bearer ${signToken({ role: UserRole.OWNER, tenant_id: 'tenant-e2e' })}`,
+        )
         .send({ name: 'Updated Name' })
         .expect(200);
 
@@ -325,7 +404,10 @@ describe('ProductController E2E', () => {
 
       await request(app.getHttpServer())
         .patch(`${PRODUCTS_API}/nonexistent`)
-        .set('Authorization', `Bearer ${signToken({ role: UserRole.OWNER, tenant_id: 'tenant-e2e' })}`)
+        .set(
+          'Authorization',
+          `Bearer ${signToken({ role: UserRole.OWNER, tenant_id: 'tenant-e2e' })}`,
+        )
         .send({ name: 'X' })
         .expect(404);
     });
@@ -339,11 +421,17 @@ describe('ProductController E2E', () => {
 
       const res = await request(app.getHttpServer())
         .delete(`${PRODUCTS_API}/prod-1`)
-        .set('Authorization', `Bearer ${signToken({ role: UserRole.OWNER, tenant_id: 'tenant-e2e' })}`)
+        .set(
+          'Authorization',
+          `Bearer ${signToken({ role: UserRole.OWNER, tenant_id: 'tenant-e2e' })}`,
+        )
         .expect(200);
 
       expect(res.body).toEqual({ id: 'prod-1', deactivated: true });
-      expect(productService.deactivate).toHaveBeenCalledWith('prod-1', 'tenant-e2e');
+      expect(productService.deactivate).toHaveBeenCalledWith(
+        'prod-1',
+        'tenant-e2e',
+      );
     });
 
     it('returns 404 when product not found', async () => {
@@ -352,7 +440,10 @@ describe('ProductController E2E', () => {
 
       await request(app.getHttpServer())
         .delete(`${PRODUCTS_API}/nonexistent`)
-        .set('Authorization', `Bearer ${signToken({ role: UserRole.OWNER, tenant_id: 'tenant-e2e' })}`)
+        .set(
+          'Authorization',
+          `Bearer ${signToken({ role: UserRole.OWNER, tenant_id: 'tenant-e2e' })}`,
+        )
         .expect(404);
     });
   });
@@ -365,10 +456,17 @@ describe('ProductController E2E', () => {
 
       await request(app.getHttpServer())
         .get(PRODUCTS_API)
-        .set('Authorization', `Bearer ${signToken({ role: UserRole.MANAGER, tenant_id: 'tenant-X' })}`)
+        .set(
+          'Authorization',
+          `Bearer ${signToken({ role: UserRole.MANAGER, tenant_id: 'tenant-X' })}`,
+        )
         .expect(200);
 
-      expect(productService.list).toHaveBeenCalledWith('tenant-X', undefined, false);
+      expect(productService.list).toHaveBeenCalledWith(
+        'tenant-X',
+        undefined,
+        false,
+      );
     });
   });
 });

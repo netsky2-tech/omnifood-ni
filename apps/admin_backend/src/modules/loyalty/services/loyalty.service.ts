@@ -51,10 +51,7 @@ export class LoyaltyService {
     });
   }
 
-  async findOneProgram(
-    tenantId: string,
-    id: string,
-  ): Promise<LoyaltyProgram> {
+  async findOneProgram(tenantId: string, id: string): Promise<LoyaltyProgram> {
     const program = await this.programRepository.findOne({
       where: { id, tenant_id: tenantId },
       relations: ['rewards'],
@@ -71,9 +68,7 @@ export class LoyaltyService {
   ): Promise<LoyaltyProgram> {
     if (dto.starts_at && dto.ends_at) {
       if (new Date(dto.starts_at) >= new Date(dto.ends_at)) {
-        throw new BadRequestException(
-          'starts_at must be before ends_at',
-        );
+        throw new BadRequestException('starts_at must be before ends_at');
       }
     }
 
@@ -84,7 +79,10 @@ export class LoyaltyService {
       status: LoyaltyProgramStatus.DRAFT,
       config_version: 1,
       earning_rule: dto.earning_rule as unknown as Record<string, unknown>,
-      eligibility_rule: dto.eligibility_rule as unknown as Record<string, unknown>,
+      eligibility_rule: dto.eligibility_rule as unknown as Record<
+        string,
+        unknown
+      >,
       starts_at: dto.starts_at ? new Date(dto.starts_at) : undefined,
       ends_at: dto.ends_at ? new Date(dto.ends_at) : undefined,
     });
@@ -107,9 +105,7 @@ export class LoyaltyService {
 
     if (dto.starts_at && dto.ends_at) {
       if (new Date(dto.starts_at) >= new Date(dto.ends_at)) {
-        throw new BadRequestException(
-          'starts_at must be before ends_at',
-        );
+        throw new BadRequestException('starts_at must be before ends_at');
       }
     }
 
@@ -122,10 +118,7 @@ export class LoyaltyService {
     return this.programRepository.save(program);
   }
 
-  async activateProgram(
-    tenantId: string,
-    id: string,
-  ): Promise<LoyaltyProgram> {
+  async activateProgram(tenantId: string, id: string): Promise<LoyaltyProgram> {
     const program = await this.findOneProgram(tenantId, id);
     if (program.status === LoyaltyProgramStatus.ACTIVE) {
       throw new ConflictException('Program is already active');
@@ -183,18 +176,14 @@ export class LoyaltyService {
 
     if (
       dto.reward_type === 'DISCOUNT_AMOUNT' &&
-      (!dto.benefit_config?.amountNio ||
-        dto.benefit_config.amountNio <= 0)
+      (!dto.benefit_config?.amountNio || dto.benefit_config.amountNio <= 0)
     ) {
       throw new BadRequestException(
         'DISCOUNT_AMOUNT requires amountNio > 0 in benefit_config',
       );
     }
 
-    if (
-      dto.reward_type === 'FREE_PRODUCT' &&
-      !dto.benefit_config?.productId
-    ) {
+    if (dto.reward_type === 'FREE_PRODUCT' && !dto.benefit_config?.productId) {
       throw new BadRequestException(
         'FREE_PRODUCT requires productId in benefit_config',
       );
@@ -291,7 +280,11 @@ export class LoyaltyService {
     loyaltyProgramId: string,
   ): Promise<{ balanceUnits: number; source: 'projection' | 'legacy' }> {
     const projection = await this.projectionRepository.findOne({
-      where: { tenant_id: tenantId, customer_id: customerId, loyalty_program_id: loyaltyProgramId },
+      where: {
+        tenant_id: tenantId,
+        customer_id: customerId,
+        loyalty_program_id: loyaltyProgramId,
+      },
     });
 
     if (projection && projection.projection_version > 0) {
@@ -306,7 +299,10 @@ export class LoyaltyService {
       return { balanceUnits: 0, source: 'legacy' };
     }
 
-    return { balanceUnits: Math.floor(Number(customer.points_balance)), source: 'legacy' };
+    return {
+      balanceUnits: Math.floor(Number(customer.points_balance)),
+      source: 'legacy',
+    };
   }
 
   async getCustomerLoyaltyAccounts(

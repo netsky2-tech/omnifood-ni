@@ -11,7 +11,10 @@ import { RecipeService } from './recipe.service';
 import { CreateRecipeVersionDto } from './dto/create-recipe-version.dto';
 import { RecipeVersionSnapshotResponseDto } from './dto/recipe-version-response.dto';
 import { GetTenantId } from '../../core/decorators/tenant.decorator';
-import { CurrentUser, CurrentUserPayload } from '../../core/decorators/current-user.decorator';
+import {
+  CurrentUser,
+  CurrentUserPayload,
+} from '../../core/decorators/current-user.decorator';
 import { TenantInterceptor } from '../../core/database/rls.interceptor';
 import { AuthGuard } from '../identity/guards/auth.guard';
 import { AuthoritativeCurrentUserGuard } from '../identity/guards/authoritative-current-user.guard';
@@ -49,7 +52,9 @@ export class RecipeController {
         pos_document_id: snapshot.recipeVersion.pos_document_id,
         product_name: snapshot.recipeVersion.product_name,
         yield_quantity: Number(snapshot.recipeVersion.yield_quantity),
-        technical_shrink_pct: Number(snapshot.recipeVersion.technical_shrink_pct),
+        technical_shrink_pct: Number(
+          snapshot.recipeVersion.technical_shrink_pct,
+        ),
         version_note: snapshot.recipeVersion.version_note,
         pos_created_at: snapshot.recipeVersion.pos_created_at,
         published_at: snapshot.recipeVersion.published_at,

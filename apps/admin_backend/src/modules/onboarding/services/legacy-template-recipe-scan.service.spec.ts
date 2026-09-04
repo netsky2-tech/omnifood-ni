@@ -1,7 +1,15 @@
 import { Repository } from 'typeorm';
 import { LegacyTemplateRecipeScanService } from './legacy-template-recipe-scan.service';
-import { RecipeVersion, RecipeOrigin, RecipePublicationState, RecipeSuggestionState } from '../../inventory/entities/recipe-version.entity';
-import { LegacyOnboardingMigrationReceipt, LegacyMigrationDecision } from '../entities/legacy-migration-receipt.entity';
+import {
+  RecipeVersion,
+  RecipeOrigin,
+  RecipePublicationState,
+  RecipeSuggestionState,
+} from '../../inventory/entities/recipe-version.entity';
+import {
+  LegacyOnboardingMigrationReceipt,
+  LegacyMigrationDecision,
+} from '../entities/legacy-migration-receipt.entity';
 import { OnboardingSession } from '../entities/onboarding-session.entity';
 import { InvoiceItem } from '../../sales/entities/invoice-item.entity';
 import { IndustryTemplate } from '../entities/industry-template.entity';
@@ -9,7 +17,9 @@ import { IndustryTemplate } from '../entities/industry-template.entity';
 describe('LegacyTemplateRecipeScanService (TDD / ONB1.3G)', () => {
   let service: LegacyTemplateRecipeScanService;
   let recipeVersionRepo: jest.Mocked<Partial<Repository<RecipeVersion>>>;
-  let receiptRepo: jest.Mocked<Partial<Repository<LegacyOnboardingMigrationReceipt>>>;
+  let receiptRepo: jest.Mocked<
+    Partial<Repository<LegacyOnboardingMigrationReceipt>>
+  >;
   let sessionRepo: jest.Mocked<Partial<Repository<OnboardingSession>>>;
   let invoiceItemRepo: jest.Mocked<Partial<Repository<InvoiceItem>>>;
   let templateRepo: jest.Mocked<Partial<Repository<IndustryTemplate>>>;
@@ -21,7 +31,9 @@ describe('LegacyTemplateRecipeScanService (TDD / ONB1.3G)', () => {
     };
     receiptRepo = {
       create: jest.fn((e: any) => e) as any,
-      save: jest.fn((e: any) => Promise.resolve({ ...e, id: 'receipt-1' })) as any,
+      save: jest.fn((e: any) =>
+        Promise.resolve({ ...e, id: 'receipt-1' }),
+      ) as any,
     };
     sessionRepo = {
       findOne: jest.fn(),
@@ -62,8 +74,8 @@ describe('LegacyTemplateRecipeScanService (TDD / ONB1.3G)', () => {
       origin: RecipeOrigin.INDUSTRY_TEMPLATE,
       publication_state: RecipePublicationState.PUBLISHED,
       suggestion_state: RecipeSuggestionState.CONFIRMED,
-      product: null as any,
-      tenant: null as any,
+      product: null,
+      tenant: null,
       yield_quantity: 1,
       technical_shrink_pct: 0,
       version_note: null,
@@ -86,7 +98,9 @@ describe('LegacyTemplateRecipeScanService (TDD / ONB1.3G)', () => {
 
     expect(report.scannedCount).toBe(1);
     expect(report.receipts).toHaveLength(1);
-    expect(report.receipts[0].decision).toBe(LegacyMigrationDecision.MOVE_TO_DRAFT);
+    expect(report.receipts[0].decision).toBe(
+      LegacyMigrationDecision.MOVE_TO_DRAFT,
+    );
 
     expect(activeRv.is_active).toBe(false);
     expect(activeRv.publication_state).toBe(RecipePublicationState.DRAFT);
@@ -105,8 +119,8 @@ describe('LegacyTemplateRecipeScanService (TDD / ONB1.3G)', () => {
       origin: RecipeOrigin.INDUSTRY_TEMPLATE,
       publication_state: RecipePublicationState.PUBLISHED,
       suggestion_state: RecipeSuggestionState.CONFIRMED,
-      product: null as any,
-      tenant: null as any,
+      product: null,
+      tenant: null,
       yield_quantity: 1,
       technical_shrink_pct: 0,
       version_note: null,
@@ -128,7 +142,9 @@ describe('LegacyTemplateRecipeScanService (TDD / ONB1.3G)', () => {
     const report = await service.scanAndRemediate('tenant-operational');
 
     expect(report.scannedCount).toBe(1);
-    expect(report.receipts[0].decision).toBe(LegacyMigrationDecision.KEEP_PUBLISHED);
+    expect(report.receipts[0].decision).toBe(
+      LegacyMigrationDecision.KEEP_PUBLISHED,
+    );
     expect(activeRv.is_active).toBe(true); // NOT MUTATED!
     expect(activeRv.publication_state).toBe(RecipePublicationState.PUBLISHED);
     expect(recipeVersionRepo.save).not.toHaveBeenCalled();
@@ -145,8 +161,8 @@ describe('LegacyTemplateRecipeScanService (TDD / ONB1.3G)', () => {
       origin: RecipeOrigin.MANUAL,
       publication_state: RecipePublicationState.PUBLISHED,
       suggestion_state: RecipeSuggestionState.CONFIRMED,
-      product: null as any,
-      tenant: null as any,
+      product: null,
+      tenant: null,
       yield_quantity: 1,
       technical_shrink_pct: 0,
       version_note: null,
@@ -164,7 +180,9 @@ describe('LegacyTemplateRecipeScanService (TDD / ONB1.3G)', () => {
 
     const report = await service.scanAndRemediate('tenant-1');
 
-    expect(report.receipts[0].decision).toBe(LegacyMigrationDecision.UNKNOWN_PROVENANCE);
+    expect(report.receipts[0].decision).toBe(
+      LegacyMigrationDecision.UNKNOWN_PROVENANCE,
+    );
     expect(customRv.is_active).toBe(true);
     expect(recipeVersionRepo.save).not.toHaveBeenCalled();
   });
@@ -180,8 +198,8 @@ describe('LegacyTemplateRecipeScanService (TDD / ONB1.3G)', () => {
       origin: RecipeOrigin.INDUSTRY_TEMPLATE,
       publication_state: RecipePublicationState.PUBLISHED,
       suggestion_state: RecipeSuggestionState.CONFIRMED,
-      product: null as any,
-      tenant: null as any,
+      product: null,
+      tenant: null,
       yield_quantity: 1,
       technical_shrink_pct: 0,
       version_note: null,
@@ -209,7 +227,9 @@ describe('LegacyTemplateRecipeScanService (TDD / ONB1.3G)', () => {
       },
     });
 
-    expect(report.receipts[0].decision).toBe(LegacyMigrationDecision.MOVE_TO_DRAFT);
+    expect(report.receipts[0].decision).toBe(
+      LegacyMigrationDecision.MOVE_TO_DRAFT,
+    );
     expect(activeRv.is_active).toBe(false);
     expect(activeRv.publication_state).toBe(RecipePublicationState.DRAFT);
     expect(receiptRepo.create).toHaveBeenCalledWith(

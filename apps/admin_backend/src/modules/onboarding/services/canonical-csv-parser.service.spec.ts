@@ -70,9 +70,13 @@ describe('CanonicalCsvParserService (Unit & Triangulation / AC-14, AC-15, AC-16,
 
     expect(result.totalRows).toBe(2);
     expect(result.validRows).toBe(2);
-    expect(result.rows[0].normalizedValues.nombre).toBe('Hamburguesa, con queso');
+    expect(result.rows[0].normalizedValues.nombre).toBe(
+      'Hamburguesa, con queso',
+    );
     expect(result.rows[0].normalizedValues.precioVenta).toBe(180.5);
-    expect(result.rows[1].normalizedValues.nombre).toBe('Combo Especial (Papas, Refresco)');
+    expect(result.rows[1].normalizedValues.nombre).toBe(
+      'Combo Especial (Papas, Refresco)',
+    );
     expect(result.rows[1].normalizedValues.precioVenta).toBe(250);
   });
 
@@ -88,7 +92,10 @@ describe('CanonicalCsvParserService (Unit & Triangulation / AC-14, AC-15, AC-16,
       expect.arrayContaining(['columna_misteriosa', 'otra_columna']),
     );
     expect(result.rows[0].isValid).toBe(true);
-    expect(result.rows[0].unknownColumns).toEqual(['columna_misteriosa', 'otra_columna']);
+    expect(result.rows[0].unknownColumns).toEqual([
+      'columna_misteriosa',
+      'otra_columna',
+    ]);
   });
 
   it('strictly isolates Barcode and flags it as unsupported, NEVER copying to SKU (AC-51)', () => {
@@ -104,7 +111,9 @@ describe('CanonicalCsvParserService (Unit & Triangulation / AC-14, AC-15, AC-16,
     expect(result.rows[0].unsupportedFieldsDetected).toContain('codigo_barras');
     expect(result.rows[0].warnings).toEqual(
       expect.arrayContaining([
-        expect.stringContaining('Barcode no soportado en Product Master V1, no se degrada a SKU'),
+        expect.stringContaining(
+          'Barcode no soportado en Product Master V1, no se degrada a SKU',
+        ),
       ]),
     );
   });
@@ -125,7 +134,9 @@ describe('CanonicalCsvParserService (Unit & Triangulation / AC-14, AC-15, AC-16,
     );
     expect(result.rows[0].warnings).toEqual(
       expect.arrayContaining([
-        expect.stringContaining('Stock inicial pertenece a BOH Enrichment y Kardex'),
+        expect.stringContaining(
+          'Stock inicial pertenece a BOH Enrichment y Kardex',
+        ),
       ]),
     );
   });
@@ -145,10 +156,14 @@ describe('CanonicalCsvParserService (Unit & Triangulation / AC-14, AC-15, AC-16,
     expect(result.errorRows).toBe(3);
 
     expect(result.rows[0].isValid).toBe(false);
-    expect(result.rows[0].errors).toContain('El nombre del producto es obligatorio');
+    expect(result.rows[0].errors).toContain(
+      'El nombre del producto es obligatorio',
+    );
 
     expect(result.rows[1].isValid).toBe(false);
-    expect(result.rows[1].errors).toContain('El precio de venta no puede ser negativo');
+    expect(result.rows[1].errors).toContain(
+      'El precio de venta no puede ser negativo',
+    );
 
     expect(result.rows[2].isValid).toBe(false);
     expect(result.rows[2].errors).toEqual(

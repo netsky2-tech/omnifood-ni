@@ -31,7 +31,9 @@ describe('OnboardingStateReconciler (Unit)', () => {
       ],
     }).compile();
 
-    reconciler = module.get<OnboardingStateReconciler>(OnboardingStateReconciler);
+    reconciler = module.get<OnboardingStateReconciler>(
+      OnboardingStateReconciler,
+    );
   });
 
   it('transitions SETUP_IN_PROGRESS -> SALE_READY and sets saleReadyFirstAt write-once when ready', async () => {
@@ -57,7 +59,12 @@ describe('OnboardingStateReconciler (Unit)', () => {
     sessionService.getSession.mockResolvedValue(session);
     evaluator.evaluate.mockResolvedValue({
       saleReady: true,
-      identity: { tenantExists: true, initialOwnerExists: true, ownerCanAuthenticate: true, tenantContextValid: true },
+      identity: {
+        tenantExists: true,
+        initialOwnerExists: true,
+        ownerCanAuthenticate: true,
+        tenantContextValid: true,
+      },
       fiscal: { minimumConfigurationValid: true },
       catalog: { sellableProductCount: 1, hasSellableProduct: true },
       inventoryReady: false,
@@ -101,7 +108,12 @@ describe('OnboardingStateReconciler (Unit)', () => {
     // Evaluator reports catalog now has 0 sellable products
     evaluator.evaluate.mockResolvedValue({
       saleReady: false,
-      identity: { tenantExists: true, initialOwnerExists: true, ownerCanAuthenticate: true, tenantContextValid: true },
+      identity: {
+        tenantExists: true,
+        initialOwnerExists: true,
+        ownerCanAuthenticate: true,
+        tenantContextValid: true,
+      },
       fiscal: { minimumConfigurationValid: true },
       catalog: { sellableProductCount: 0, hasSellableProduct: false },
       inventoryReady: false,
@@ -115,7 +127,9 @@ describe('OnboardingStateReconciler (Unit)', () => {
 
     const reconciled = await reconciler.reconcile('tenant-2');
 
-    expect(reconciled.lifecycleState).toBe(OnboardingLifecycleState.SETUP_IN_PROGRESS);
+    expect(reconciled.lifecycleState).toBe(
+      OnboardingLifecycleState.SETUP_IN_PROGRESS,
+    );
     expect(reconciled.saleReadyFirstAt).toEqual(originalSaleReadyFirstAt); // inmutable!
   });
 
@@ -142,7 +156,12 @@ describe('OnboardingStateReconciler (Unit)', () => {
     sessionService.getSession.mockResolvedValue(session);
     evaluator.evaluate.mockResolvedValue({
       saleReady: false,
-      identity: { tenantExists: true, initialOwnerExists: true, ownerCanAuthenticate: true, tenantContextValid: true },
+      identity: {
+        tenantExists: true,
+        initialOwnerExists: true,
+        ownerCanAuthenticate: true,
+        tenantContextValid: true,
+      },
       fiscal: { minimumConfigurationValid: false },
       catalog: { sellableProductCount: 0, hasSellableProduct: false },
       inventoryReady: false,
@@ -182,7 +201,12 @@ describe('OnboardingStateReconciler (Unit)', () => {
     // Cloud domains still fulfill minimum requirements
     evaluator.evaluate.mockResolvedValue({
       saleReady: true,
-      identity: { tenantExists: true, initialOwnerExists: true, ownerCanAuthenticate: true, tenantContextValid: true },
+      identity: {
+        tenantExists: true,
+        initialOwnerExists: true,
+        ownerCanAuthenticate: true,
+        tenantContextValid: true,
+      },
       fiscal: { minimumConfigurationValid: true },
       catalog: { sellableProductCount: 1, hasSellableProduct: true },
       inventoryReady: false,
@@ -196,6 +220,8 @@ describe('OnboardingStateReconciler (Unit)', () => {
     const reconciled = await reconciler.reconcile('tenant-sale-ready');
 
     expect(reconciled.lifecycleState).toBe(OnboardingLifecycleState.SALE_READY);
-    expect(reconciled.saleReadyFirstAt).toEqual(new Date('2026-09-01T12:00:00Z'));
+    expect(reconciled.saleReadyFirstAt).toEqual(
+      new Date('2026-09-01T12:00:00Z'),
+    );
   });
 });

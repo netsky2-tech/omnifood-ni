@@ -43,7 +43,9 @@ describe('Permissions Matrix & Resolution (Slice 10.1)', () => {
       expect(ownerPerms).toContain(AppPermission.ONBOARDING_START);
       expect(ownerPerms).toContain(AppPermission.ONBOARDING_FISCAL_CONFIGURE);
       expect(ownerPerms).toContain(AppPermission.ONBOARDING_TEMPLATE_APPLY);
-      expect(ownerPerms).toContain(AppPermission.ONBOARDING_PRODUCT_IMPORT_MANAGE);
+      expect(ownerPerms).toContain(
+        AppPermission.ONBOARDING_PRODUCT_IMPORT_MANAGE,
+      );
       expect(ownerPerms).toContain(AppPermission.ONBOARDING_ACTIVATION_MANAGE);
       expect(ownerPerms.length).toBeGreaterThanOrEqual(14);
     });

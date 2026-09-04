@@ -16,10 +16,21 @@ import { RedemptionService } from '../../src/modules/loyalty/services/redemption
 import { LoyaltyLedgerService } from '../../src/modules/loyalty/services/loyalty-ledger.service';
 import { TypeOrmInventoryCostQueryAdapter } from '../../src/modules/loyalty/services/inventory-cost-query.adapter';
 import { INVENTORY_COST_QUERY_PORT } from '../../src/modules/loyalty/domain/inventory-cost-query.port';
-import { LoyaltyProgram, LoyaltyProgramStatus, LoyaltyProgramType } from '../../src/modules/loyalty/entities/loyalty-program.entity';
-import { RewardDefinition, RewardStatus, RewardType } from '../../src/modules/loyalty/entities/reward-definition.entity';
+import {
+  LoyaltyProgram,
+  LoyaltyProgramStatus,
+  LoyaltyProgramType,
+} from '../../src/modules/loyalty/entities/loyalty-program.entity';
+import {
+  RewardDefinition,
+  RewardStatus,
+  RewardType,
+} from '../../src/modules/loyalty/entities/reward-definition.entity';
 import { CustomerLoyaltyAccountProjection } from '../../src/modules/loyalty/entities/customer-loyalty-account-projection.entity';
-import { CustomerPointTransaction, PointTransactionType } from '../../src/modules/customers/entities/customer-point-transaction.entity';
+import {
+  CustomerPointTransaction,
+  PointTransactionType,
+} from '../../src/modules/customers/entities/customer-point-transaction.entity';
 import { Product } from '../../src/modules/inventory/entities/product.entity';
 import { Customer } from '../../src/modules/customers/entities/customer.entity';
 import { Tenant } from '../../src/modules/tenant/entities/tenant.entity';
@@ -61,7 +72,10 @@ describe('LoyaltyProfitAware (Real DB E2E)', () => {
     process.env.JWT_ALGORITHM = 'HS256';
 
     schema = `loyalty_e2e_pa_${randomUUID().replace(/-/g, '')}`;
-    const bootstrap = new DataSource({ type: 'postgres', ...postgresConnection });
+    const bootstrap = new DataSource({
+      type: 'postgres',
+      ...postgresConnection,
+    });
     await bootstrap.initialize();
     await bootstrap.query(`CREATE SCHEMA "${schema}"`);
 
@@ -127,15 +141,20 @@ describe('LoyaltyProfitAware (Real DB E2E)', () => {
 
     tenantAId = 'tenant-e2e-a';
     tenantBId = 'tenant-e2e-b';
-    await bootstrap.query(`INSERT INTO "${schema}".tenants (id, name) VALUES ($1, $2)`, [tenantAId, 'Tenant A']);
-    await bootstrap.query(`INSERT INTO "${schema}".tenants (id, name) VALUES ($1, $2)`, [tenantBId, 'Tenant B']);
+    await bootstrap.query(
+      `INSERT INTO "${schema}".tenants (id, name) VALUES ($1, $2)`,
+      [tenantAId, 'Tenant A'],
+    );
+    await bootstrap.query(
+      `INSERT INTO "${schema}".tenants (id, name) VALUES ($1, $2)`,
+      [tenantBId, 'Tenant B'],
+    );
 
     customerAId = randomUUID();
-    await bootstrap.query(`INSERT INTO "${schema}".customers (id, tenant_id, name) VALUES ($1, $2, $3)`, [
-      customerAId,
-      tenantAId,
-      'Alice',
-    ]);
+    await bootstrap.query(
+      `INSERT INTO "${schema}".customers (id, tenant_id, name) VALUES ($1, $2, $3)`,
+      [customerAId, tenantAId, 'Alice'],
+    );
 
     dataSource = new DataSource({
       type: 'postgres',
@@ -186,9 +205,29 @@ describe('LoyaltyProfitAware (Real DB E2E)', () => {
         { provide: LoyaltyService, useValue: loyaltyService },
         { provide: LoyaltyProfitAwareService, useValue: profitAwareService },
         { provide: TicketPaidHandler, useValue: { handle: jest.fn() } },
-        { provide: LegacyClassificationService, useValue: { ensureLegacyProgram: jest.fn(), classifyLegacyTransactions: jest.fn() } },
-        { provide: RedemptionService, useValue: { createRedemptionIntent: jest.fn(), consolidateRedemption: jest.fn(), voidIntent: jest.fn(), reverseTicketLoyalty: jest.fn() } },
-        { provide: LoyaltyLedgerService, useValue: { appendTransaction: jest.fn(), rebuildProjection: jest.fn() } },
+        {
+          provide: LegacyClassificationService,
+          useValue: {
+            ensureLegacyProgram: jest.fn(),
+            classifyLegacyTransactions: jest.fn(),
+          },
+        },
+        {
+          provide: RedemptionService,
+          useValue: {
+            createRedemptionIntent: jest.fn(),
+            consolidateRedemption: jest.fn(),
+            voidIntent: jest.fn(),
+            reverseTicketLoyalty: jest.fn(),
+          },
+        },
+        {
+          provide: LoyaltyLedgerService,
+          useValue: {
+            appendTransaction: jest.fn(),
+            rebuildProjection: jest.fn(),
+          },
+        },
         { provide: INVENTORY_COST_QUERY_PORT, useValue: costAdapter },
         AuthGuard,
         RolesGuard,
@@ -200,7 +239,9 @@ describe('LoyaltyProfitAware (Real DB E2E)', () => {
     }).compile();
 
     app = moduleRef.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+    app.useGlobalPipes(
+      new ValidationPipe({ whitelist: true, transform: true }),
+    );
     jwtService = moduleRef.get<JwtService>(JwtService);
     await app.init();
   });
@@ -289,7 +330,9 @@ describe('LoyaltyProfitAware (Real DB E2E)', () => {
     // 6. Make HTTP request with Owner token
     const token = createToken(tenantAId, UserRole.OWNER);
     const res = await request(app.getHttpServer())
-      .get(`/loyalty/rewards/${reward.id}/profit-aware?as_of=${asOf.toISOString()}`)
+      .get(
+        `/loyalty/rewards/${reward.id}/profit-aware?as_of=${asOf.toISOString()}`,
+      )
       .set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(200);

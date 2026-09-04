@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class AddLoyaltyV1ColumnsToCustomerPointTransactions1795000000000
-  implements MigrationInterface
-{
+export class AddLoyaltyV1ColumnsToCustomerPointTransactions1795000000000 implements MigrationInterface {
   name = 'AddLoyaltyV1ColumnsToCustomerPointTransactions1795000000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

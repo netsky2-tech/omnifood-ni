@@ -68,22 +68,28 @@ describe('Customers Module (E2E / Integration)', () => {
       };
       return qb;
     }),
-    findOne: jest.fn((options: { where: { id?: string; tenant_id?: string } }) => {
-      const found = dbCustomers.find(
-        (c) =>
-          (!options.where.id || c.id === options.where.id) &&
-          (!options.where.tenant_id || c.tenant_id === options.where.tenant_id),
-      );
-      return Promise.resolve(found || null);
-    }),
-    create: jest.fn((data: Partial<Customer>) => ({
-      id: `cust-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      created_at: new Date(),
-      updated_at: new Date(),
-      points_balance: 0.0,
-      is_active: true,
-      ...data,
-    } as Customer)),
+    findOne: jest.fn(
+      (options: { where: { id?: string; tenant_id?: string } }) => {
+        const found = dbCustomers.find(
+          (c) =>
+            (!options.where.id || c.id === options.where.id) &&
+            (!options.where.tenant_id ||
+              c.tenant_id === options.where.tenant_id),
+        );
+        return Promise.resolve(found || null);
+      },
+    ),
+    create: jest.fn(
+      (data: Partial<Customer>) =>
+        ({
+          id: `cust-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          created_at: new Date(),
+          updated_at: new Date(),
+          points_balance: 0.0,
+          is_active: true,
+          ...data,
+        }) as Customer,
+    ),
     save: jest.fn((entity: Customer) => {
       const idx = dbCustomers.findIndex((c) => c.id === entity.id);
       if (idx >= 0) {
@@ -126,7 +132,9 @@ describe('Customers Module (E2E / Integration)', () => {
     }).compile();
 
     app = moduleRef.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+    app.useGlobalPipes(
+      new ValidationPipe({ whitelist: true, transform: true }),
+    );
     jwtService = moduleRef.get<JwtService>(JwtService);
     await app.init();
   });
@@ -142,7 +150,10 @@ describe('Customers Module (E2E / Integration)', () => {
     jest.clearAllMocks();
   });
 
-  function createToken(tenantId: string, role: UserRole = UserRole.OWNER): string {
+  function createToken(
+    tenantId: string,
+    role: UserRole = UserRole.OWNER,
+  ): string {
     return jwtService.sign(
       {
         sub: 'user-001',
@@ -229,7 +240,9 @@ describe('Customers Module (E2E / Integration)', () => {
       expect(resA.status).toBe(200);
       expect(resA.body.total).toBe(1);
       expect(resA.body.data[0].name).toBe('Cliente de Tenant A');
-      expect(resA.body.data.some((c: Customer) => c.tenant_id === 'tenant-B')).toBe(false);
+      expect(
+        resA.body.data.some((c: Customer) => c.tenant_id === 'tenant-B'),
+      ).toBe(false);
     });
 
     it('búsqueda predictiva con query param ?search=', async () => {

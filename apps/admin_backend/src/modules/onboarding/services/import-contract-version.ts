@@ -12,7 +12,14 @@ export const CANONICAL_IMPORT_CONTRACT_V1: ImportContractDefinition = {
   encodingPolicy: 'UTF-8',
   delimiterPolicy: [',', ';'],
   requiredColumns: ['nombre', 'precio_venta'],
-  supportedColumns: ['nombre', 'precio_venta', 'uom', 'sku', 'categoria', 'porcentaje_iva'],
+  supportedColumns: [
+    'nombre',
+    'precio_venta',
+    'uom',
+    'sku',
+    'categoria',
+    'porcentaje_iva',
+  ],
   unsupportedColumns: [
     'codigo_barras',
     'barcode',
@@ -27,14 +34,22 @@ export const CANONICAL_IMPORT_CONTRACT_V1: ImportContractDefinition = {
 };
 
 export const UNSUPPORTED_COLUMNS_REASONS: Record<string, string> = {
-  codigo_barras: 'Barcode no soportado en Product Master V1, no se degrada a SKU (AC-51)',
-  barcode: 'Barcode no soportado en Product Master V1, no se degrada a SKU (AC-51)',
-  codigobarras: 'Barcode no soportado en Product Master V1, no se degrada a SKU (AC-51)',
-  stock_inicial: 'Stock inicial pertenece a BOH Enrichment y Kardex, no a la importación de catálogo V1 (AC-24)',
-  stock: 'Stock pertenece a BOH Enrichment y Kardex, no a la importación de catálogo V1 (AC-24)',
-  costo_insumo: 'Costo inicial pertenece a BOH Enrichment y Kardex, no a la importación de catálogo V1 (AC-24)',
-  costo_promedio: 'Costo promedio pertenece a BOH Enrichment y Kardex, no a la importación de catálogo V1 (AC-24)',
-  average_cost: 'Average cost pertenece a BOH Enrichment y Kardex, no a la importación de catálogo V1 (AC-24)',
+  codigo_barras:
+    'Barcode no soportado en Product Master V1, no se degrada a SKU (AC-51)',
+  barcode:
+    'Barcode no soportado en Product Master V1, no se degrada a SKU (AC-51)',
+  codigobarras:
+    'Barcode no soportado en Product Master V1, no se degrada a SKU (AC-51)',
+  stock_inicial:
+    'Stock inicial pertenece a BOH Enrichment y Kardex, no a la importación de catálogo V1 (AC-24)',
+  stock:
+    'Stock pertenece a BOH Enrichment y Kardex, no a la importación de catálogo V1 (AC-24)',
+  costo_insumo:
+    'Costo inicial pertenece a BOH Enrichment y Kardex, no a la importación de catálogo V1 (AC-24)',
+  costo_promedio:
+    'Costo promedio pertenece a BOH Enrichment y Kardex, no a la importación de catálogo V1 (AC-24)',
+  average_cost:
+    'Average cost pertenece a BOH Enrichment y Kardex, no a la importación de catálogo V1 (AC-24)',
   cpp: 'CPP pertenece a BOH Enrichment y Kardex, no a la importación de catálogo V1 (AC-24)',
 };
 
@@ -70,7 +85,11 @@ export function normalizeHeaderName(rawHeader: string): string | null {
   }
 
   // UOM / Unidad de venta
-  if (['unidad_venta', 'unidadventa', 'uom', 'unidad', 'unidad_consumo'].includes(cleaned)) {
+  if (
+    ['unidad_venta', 'unidadventa', 'uom', 'unidad', 'unidad_consumo'].includes(
+      cleaned,
+    )
+  ) {
     return 'uom';
   }
 
@@ -108,7 +127,14 @@ export function getCanonicalImportContract(): ImportContractDefinition {
 }
 
 export function generateOfficialProductTemplateCsv(): string {
-  const headers = ['nombre', 'precio_venta', 'unidad_venta', 'sku', 'categoria', 'porcentaje_iva'];
+  const headers = [
+    'nombre',
+    'precio_venta',
+    'unidad_venta',
+    'sku',
+    'categoria',
+    'porcentaje_iva',
+  ];
   const sampleRows = [
     ['Hamburguesa Clásica', '180.00', 'UN', 'HAM-01', 'Comida', '15'],
     ['Gaseosa 500ml', '35.00', 'UN', 'BEB-01', 'Bebidas', '15'],

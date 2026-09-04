@@ -253,7 +253,6 @@ describe('InventoryController', () => {
 
       await controller.previewPurchase(dto, 'tenant-A');
 
-      // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(purchaseService.previewPurchase).toHaveBeenCalledWith(
         expect.objectContaining({
           tenantId: 'tenant-A',
@@ -278,7 +277,7 @@ describe('InventoryController', () => {
         entryTimestamp: '2026-01-10T08:15:00.000Z',
       };
       await controller.recordPurchase(dto, 'tenant-A');
-      // eslint-disable-next-line @typescript-eslint/unbound-method
+
       expect(purchaseService.recordPurchase).toHaveBeenCalledWith(
         expect.objectContaining({
           tenantId: 'tenant-A',
@@ -313,7 +312,6 @@ describe('InventoryController', () => {
 
       await controller.recordPurchase(dto, 'tenant-A');
 
-      // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(purchaseService.recordPurchase).toHaveBeenCalledWith(
         expect.objectContaining({
           lotCode: 'LOT-001',
@@ -330,7 +328,6 @@ describe('InventoryController', () => {
         'tenant-A',
       );
 
-      // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(purchaseService.correctPurchase).toHaveBeenCalledWith({
         tenantId: 'tenant-A',
         purchaseDocumentId: 'purchase-doc-1',
@@ -348,7 +345,7 @@ describe('InventoryController', () => {
         observation: 'Prep loss confirmed',
       };
       await controller.recordShrinkage(dto);
-      // eslint-disable-next-line @typescript-eslint/unbound-method
+
       expect(shrinkageService.recordShrinkage).toHaveBeenCalledWith(
         'ins-123',
         5,
@@ -391,7 +388,6 @@ describe('InventoryController', () => {
 
       await controller.ingestRecipeVersion(dto, 'tenant-A');
 
-      // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(recipeService.ingestPosVersion).toHaveBeenCalledWith({
         tenantId: 'tenant-A',
         dto,
@@ -426,7 +422,6 @@ describe('InventoryController', () => {
 
       await controller.recordCountSession(dto, 'tenant-A');
 
-      // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(countSessionService.replayCountSession).toHaveBeenCalledWith({
         tenantId: 'tenant-A',
         document: dto,

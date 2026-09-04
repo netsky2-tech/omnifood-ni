@@ -24,7 +24,9 @@ export class OnboardingStateReconciler {
   ): Promise<OnboardingSession> {
     const session = await this.sessionService.getSession(tenantId);
     if (!session) {
-      throw new Error(`Cannot reconcile non-existent onboarding session for tenant: ${tenantId}`);
+      throw new Error(
+        `Cannot reconcile non-existent onboarding session for tenant: ${tenantId}`,
+      );
     }
 
     const snapshot =

@@ -1,7 +1,11 @@
 import { randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
 import { LegacyClassificationService } from './legacy-classification.service';
-import { LoyaltyProgram, LoyaltyProgramStatus, LoyaltyProgramType } from '../entities/loyalty-program.entity';
+import {
+  LoyaltyProgram,
+  LoyaltyProgramStatus,
+  LoyaltyProgramType,
+} from '../entities/loyalty-program.entity';
 import { CustomerLoyaltyAccountProjection } from '../entities/customer-loyalty-account-projection.entity';
 import { CustomerPointTransaction } from '../../customers/entities/customer-point-transaction.entity';
 import { Customer } from '../../customers/entities/customer.entity';
@@ -171,7 +175,8 @@ describe('LegacyClassificationService (db)', () => {
   describe('classifyLegacyTransactions', () => {
     it('classifies unclassified transactions to the legacy program', async () => {
       const program = await harness.service.ensureLegacyProgram('tenant-1');
-      const result = await harness.service.classifyLegacyTransactions('tenant-1');
+      const result =
+        await harness.service.classifyLegacyTransactions('tenant-1');
 
       expect(result.classified).toBe(3);
 
@@ -186,7 +191,8 @@ describe('LegacyClassificationService (db)', () => {
     });
 
     it('does not re-classify already classified transactions', async () => {
-      const result = await harness.service.classifyLegacyTransactions('tenant-1');
+      const result =
+        await harness.service.classifyLegacyTransactions('tenant-1');
       expect(result.classified).toBe(0);
     });
   });

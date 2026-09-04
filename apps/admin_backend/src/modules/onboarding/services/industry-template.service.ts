@@ -321,7 +321,10 @@ export class IndustryTemplateService {
           }
 
           // 5. Inject Template Products
-          if (template.templateProducts && template.templateProducts.length > 0) {
+          if (
+            template.templateProducts &&
+            template.templateProducts.length > 0
+          ) {
             for (const tProduct of template.templateProducts) {
               if (selectedSet && !selectedSet.has(tProduct.id)) {
                 continue;
@@ -404,7 +407,11 @@ export class IndustryTemplateService {
               }
 
               // 6. Inject Pre-BOM Recipes as DRAFT / SUGGESTED (Safe cutover: is_active = false)
-              if (tProduct.recipeItems && tProduct.recipeItems.length > 0 && currentProduct) {
+              if (
+                tProduct.recipeItems &&
+                tProduct.recipeItems.length > 0 &&
+                currentProduct
+              ) {
                 const recipeLinkKey = `${tProduct.id}:recipe:${TemplateTargetEntityType.RECIPE_VERSION}`;
                 const existingRecipeLink = seedLinkMap.get(recipeLinkKey);
 

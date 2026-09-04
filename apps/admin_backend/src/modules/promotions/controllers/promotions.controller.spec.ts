@@ -37,7 +37,9 @@ describe('PromotionsController', () => {
       findAll: jest.fn().mockResolvedValue([mockPromotion()]),
       findOne: jest.fn().mockResolvedValue(mockPromotion()),
       create: jest.fn().mockResolvedValue(mockPromotion()),
-      update: jest.fn().mockResolvedValue(mockPromotion({ name: 'Actualizada' })),
+      update: jest
+        .fn()
+        .mockResolvedValue(mockPromotion({ name: 'Actualizada' })),
       remove: jest.fn().mockResolvedValue(undefined),
     };
 

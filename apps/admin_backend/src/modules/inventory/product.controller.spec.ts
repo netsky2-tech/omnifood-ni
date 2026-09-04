@@ -132,11 +132,7 @@ describe('ProductController', () => {
   it('GET /products delegates to service.list with tenant', async () => {
     service.list.mockResolvedValue([]);
     await controller.list(undefined, undefined, 'tenant-A');
-    expect(service.list.mock.calls[0]).toEqual([
-      'tenant-A',
-      undefined,
-      false,
-    ]);
+    expect(service.list.mock.calls[0]).toEqual(['tenant-A', undefined, false]);
   });
 
   it('GET /products?productType=SIMPLE forwards the filter', async () => {
@@ -152,18 +148,14 @@ describe('ProductController', () => {
   it('GET /products?includeInactive=true forwards the flag', async () => {
     service.list.mockResolvedValue([]);
     await controller.list(undefined, 'true', 'tenant-A');
-    expect(service.list.mock.calls[0]).toEqual([
-      'tenant-A',
-      undefined,
-      true,
-    ]);
+    expect(service.list.mock.calls[0]).toEqual(['tenant-A', undefined, true]);
   });
 
   it('GET /products fails closed when tenant context is missing', async () => {
     service.list.mockResolvedValue([]);
-    await expect(controller.list(undefined, undefined, undefined)).rejects.toThrow(
-      UnauthorizedException,
-    );
+    await expect(
+      controller.list(undefined, undefined, undefined),
+    ).rejects.toThrow(UnauthorizedException);
     expect(service.list.mock.calls).toHaveLength(0);
   });
 

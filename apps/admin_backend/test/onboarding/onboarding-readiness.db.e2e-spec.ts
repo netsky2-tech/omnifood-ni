@@ -7,10 +7,16 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import * as request from 'supertest';
 import { DataSource } from 'typeorm';
 import { Tenant } from '../../src/modules/tenant/entities/tenant.entity';
-import { User, UserRole } from '../../src/modules/identity/entities/user.entity';
+import {
+  User,
+  UserRole,
+} from '../../src/modules/identity/entities/user.entity';
 import { SecurityProfile } from '../../src/modules/identity/entities/security-profile.entity';
 import { SystemParametersConfig } from '../../src/modules/inventory/entities/system-parameters-config.entity';
-import { Product, ProductType } from '../../src/modules/inventory/entities/product.entity';
+import {
+  Product,
+  ProductType,
+} from '../../src/modules/inventory/entities/product.entity';
 import { Insumo } from '../../src/modules/inventory/entities/insumo.entity';
 import { Recipe } from '../../src/modules/inventory/entities/recipe.entity';
 import { RecipeVersion } from '../../src/modules/inventory/entities/recipe-version.entity';
@@ -280,156 +286,180 @@ describe('Onboarding Readiness & State Reconciler (Real PostgreSQL DB)', () => {
   jest.setTimeout(30000);
 
   it('runs complete lifecycle: starts SETUP_IN_PROGRESS -> transitions to SALE_READY on product addition -> reverts on product deactivation while preserving saleReadyFirstAt', async () => {
-    await withReadinessIsolatedSchema('onb_readiness_lifecycle', async ({ app, dataSource, tenantAId, ownerTokenA }) => {
-      // 1. Initial POST /onboarding/session/start with 0 products
-      const startRes = await request(app.getHttpServer())
-        .post('/onboarding/session/start')
-        .set('Authorization', `Bearer ${ownerTokenA}`)
-        .send({ source: 'SETUP_CENTER' })
-        .expect(200);
+    await withReadinessIsolatedSchema(
+      'onb_readiness_lifecycle',
+      async ({ app, dataSource, tenantAId, ownerTokenA }) => {
+        // 1. Initial POST /onboarding/session/start with 0 products
+        const startRes = await request(app.getHttpServer())
+          .post('/onboarding/session/start')
+          .set('Authorization', `Bearer ${ownerTokenA}`)
+          .send({ source: 'SETUP_CENTER' })
+          .expect(200);
 
-      expect(startRes.body.session.lifecycleState).toBe(OnboardingLifecycleState.SETUP_IN_PROGRESS);
-      expect(startRes.body.session.onboardingStartedAt).toBeDefined();
-      expect(startRes.body.session.saleReadyFirstAt).toBeNull();
-      expect(startRes.body.readiness.saleReady).toBe(false);
-      expect(startRes.body.readiness.blockers).toContain('CATALOG_NO_SELLABLE_PRODUCTS');
+        expect(startRes.body.session.lifecycleState).toBe(
+          OnboardingLifecycleState.SETUP_IN_PROGRESS,
+        );
+        expect(startRes.body.session.onboardingStartedAt).toBeDefined();
+        expect(startRes.body.session.saleReadyFirstAt).toBeNull();
+        expect(startRes.body.readiness.saleReady).toBe(false);
+        expect(startRes.body.readiness.blockers).toContain(
+          'CATALOG_NO_SELLABLE_PRODUCTS',
+        );
 
-      // 2. Insert a sellable product for Tenant A in PostgreSQL
-      const productRepo = dataSource.getRepository(Product);
-      const prod = await productRepo.save(
-        productRepo.create({
-          id: randomUUID(),
-          tenant_id: tenantAId,
-          name: 'Café Latte Caliente',
-          uom: 'UN',
-          stock: 10,
-          averageCost: 20.0,
-          sellPrice: 65.0,
-          is_active: true,
-          product_type: ProductType.SIMPLE,
-        }),
-      );
+        // 2. Insert a sellable product for Tenant A in PostgreSQL
+        const productRepo = dataSource.getRepository(Product);
+        const prod = await productRepo.save(
+          productRepo.create({
+            id: randomUUID(),
+            tenant_id: tenantAId,
+            name: 'Café Latte Caliente',
+            uom: 'UN',
+            stock: 10,
+            averageCost: 20.0,
+            sellPrice: 65.0,
+            is_active: true,
+            product_type: ProductType.SIMPLE,
+          }),
+        );
 
-      // 3. GET /onboarding/session dynamically detects product, promotes to SALE_READY and sets saleReadyFirstAt
-      const saleReadyRes = await request(app.getHttpServer())
-        .get('/onboarding/session')
-        .set('Authorization', `Bearer ${ownerTokenA}`)
-        .expect(200);
+        // 3. GET /onboarding/session dynamically detects product, promotes to SALE_READY and sets saleReadyFirstAt
+        const saleReadyRes = await request(app.getHttpServer())
+          .get('/onboarding/session')
+          .set('Authorization', `Bearer ${ownerTokenA}`)
+          .expect(200);
 
-      expect(saleReadyRes.body.session.lifecycleState).toBe(OnboardingLifecycleState.SALE_READY);
-      expect(saleReadyRes.body.session.saleReadyFirstAt).toBeDefined();
-      expect(saleReadyRes.body.readiness.saleReady).toBe(true);
-      expect(saleReadyRes.body.readiness.blockers).toEqual([]);
+        expect(saleReadyRes.body.session.lifecycleState).toBe(
+          OnboardingLifecycleState.SALE_READY,
+        );
+        expect(saleReadyRes.body.session.saleReadyFirstAt).toBeDefined();
+        expect(saleReadyRes.body.readiness.saleReady).toBe(true);
+        expect(saleReadyRes.body.readiness.blockers).toEqual([]);
 
-      const originalSaleReadyFirstAt = saleReadyRes.body.session.saleReadyFirstAt;
+        const originalSaleReadyFirstAt =
+          saleReadyRes.body.session.saleReadyFirstAt;
 
-      // 4. Triangulation: deactivating the product returns readiness to false
-      prod.is_active = false;
-      await productRepo.save(prod);
+        // 4. Triangulation: deactivating the product returns readiness to false
+        prod.is_active = false;
+        await productRepo.save(prod);
 
-      const revertedRes = await request(app.getHttpServer())
-        .get('/onboarding/session')
-        .set('Authorization', `Bearer ${ownerTokenA}`)
-        .expect(200);
+        const revertedRes = await request(app.getHttpServer())
+          .get('/onboarding/session')
+          .set('Authorization', `Bearer ${ownerTokenA}`)
+          .expect(200);
 
-      // Lifecycle reverts to SETUP_IN_PROGRESS, but saleReadyFirstAt remains inmutable!
-      expect(revertedRes.body.session.lifecycleState).toBe(OnboardingLifecycleState.SETUP_IN_PROGRESS);
-      expect(revertedRes.body.session.saleReadyFirstAt).toBe(originalSaleReadyFirstAt);
-      expect(revertedRes.body.readiness.saleReady).toBe(false);
-      expect(revertedRes.body.readiness.blockers).toContain('CATALOG_NO_SELLABLE_PRODUCTS');
+        // Lifecycle reverts to SETUP_IN_PROGRESS, but saleReadyFirstAt remains inmutable!
+        expect(revertedRes.body.session.lifecycleState).toBe(
+          OnboardingLifecycleState.SETUP_IN_PROGRESS,
+        );
+        expect(revertedRes.body.session.saleReadyFirstAt).toBe(
+          originalSaleReadyFirstAt,
+        );
+        expect(revertedRes.body.readiness.saleReady).toBe(false);
+        expect(revertedRes.body.readiness.blockers).toContain(
+          'CATALOG_NO_SELLABLE_PRODUCTS',
+        );
 
-      // 5. GET /onboarding/readiness exposes live snapshot
-      const snapshotRes = await request(app.getHttpServer())
-        .get('/onboarding/readiness')
-        .set('Authorization', `Bearer ${ownerTokenA}`)
-        .expect(200);
+        // 5. GET /onboarding/readiness exposes live snapshot
+        const snapshotRes = await request(app.getHttpServer())
+          .get('/onboarding/readiness')
+          .set('Authorization', `Bearer ${ownerTokenA}`)
+          .expect(200);
 
-      expect(snapshotRes.body.saleReady).toBe(false);
-      expect(snapshotRes.body.catalog.sellableProductCount).toBe(0);
-    });
+        expect(snapshotRes.body.saleReady).toBe(false);
+        expect(snapshotRes.body.catalog.sellableProductCount).toBe(0);
+      },
+    );
   });
 
   it('guarantees tenant isolation: Tenant B does not observe Tenant A session or products', async () => {
-    await withReadinessIsolatedSchema('onb_readiness_iso', async ({ app, dataSource, tenantAId, ownerTokenA, ownerTokenB }) => {
-      // Tenant A adds a product and starts session
-      await request(app.getHttpServer())
-        .post('/onboarding/session/start')
-        .set('Authorization', `Bearer ${ownerTokenA}`)
-        .send()
-        .expect(200);
+    await withReadinessIsolatedSchema(
+      'onb_readiness_iso',
+      async ({ app, dataSource, tenantAId, ownerTokenA, ownerTokenB }) => {
+        // Tenant A adds a product and starts session
+        await request(app.getHttpServer())
+          .post('/onboarding/session/start')
+          .set('Authorization', `Bearer ${ownerTokenA}`)
+          .send()
+          .expect(200);
 
-      const productRepo = dataSource.getRepository(Product);
-      await productRepo.save(
-        productRepo.create({
-          id: randomUUID(),
-          tenant_id: tenantAId,
-          name: 'Super Quesillo Especial',
-          uom: 'UN',
-          stock: 5,
-          averageCost: 30.0,
-          sellPrice: 75.0,
-          is_active: true,
-          product_type: ProductType.SIMPLE,
-        }),
-      );
+        const productRepo = dataSource.getRepository(Product);
+        await productRepo.save(
+          productRepo.create({
+            id: randomUUID(),
+            tenant_id: tenantAId,
+            name: 'Super Quesillo Especial',
+            uom: 'UN',
+            stock: 5,
+            averageCost: 30.0,
+            sellPrice: 75.0,
+            is_active: true,
+            product_type: ProductType.SIMPLE,
+          }),
+        );
 
-      // Tenant B queries GET /onboarding/session
-      const bRes = await request(app.getHttpServer())
-        .get('/onboarding/session')
-        .set('Authorization', `Bearer ${ownerTokenB}`)
-        .expect(200);
+        // Tenant B queries GET /onboarding/session
+        const bRes = await request(app.getHttpServer())
+          .get('/onboarding/session')
+          .set('Authorization', `Bearer ${ownerTokenB}`)
+          .expect(200);
 
-      // Tenant B has 0 products and remains in SETUP_IN_PROGRESS
-      expect(bRes.body.session.lifecycleState).toBe(OnboardingLifecycleState.SETUP_IN_PROGRESS);
-      expect(bRes.body.readiness.saleReady).toBe(false);
-      expect(bRes.body.readiness.catalog.sellableProductCount).toBe(0);
-    });
+        // Tenant B has 0 products and remains in SETUP_IN_PROGRESS
+        expect(bRes.body.session.lifecycleState).toBe(
+          OnboardingLifecycleState.SETUP_IN_PROGRESS,
+        );
+        expect(bRes.body.readiness.saleReady).toBe(false);
+        expect(bRes.body.readiness.catalog.sellableProductCount).toBe(0);
+      },
+    );
   });
 
   it('enforces granular RBAC permissions: CASHIER denied, MANAGER can read but cannot start, OWNER full access', async () => {
-    await withReadinessIsolatedSchema('onb_rbac_perms', async ({ app, ownerTokenA, managerTokenA, cashierTokenA }) => {
-      // 1. CASHIER attempting to start session gets 403 Forbidden
-      await request(app.getHttpServer())
-        .post('/onboarding/session/start')
-        .set('Authorization', `Bearer ${cashierTokenA}`)
-        .send({ source: 'SETUP_CENTER' })
-        .expect(403);
+    await withReadinessIsolatedSchema(
+      'onb_rbac_perms',
+      async ({ app, ownerTokenA, managerTokenA, cashierTokenA }) => {
+        // 1. CASHIER attempting to start session gets 403 Forbidden
+        await request(app.getHttpServer())
+          .post('/onboarding/session/start')
+          .set('Authorization', `Bearer ${cashierTokenA}`)
+          .send({ source: 'SETUP_CENTER' })
+          .expect(403);
 
-      // 2. CASHIER attempting to read session gets 403 Forbidden
-      await request(app.getHttpServer())
-        .get('/onboarding/session')
-        .set('Authorization', `Bearer ${cashierTokenA}`)
-        .expect(403);
+        // 2. CASHIER attempting to read session gets 403 Forbidden
+        await request(app.getHttpServer())
+          .get('/onboarding/session')
+          .set('Authorization', `Bearer ${cashierTokenA}`)
+          .expect(403);
 
-      // 3. MANAGER attempting to start session gets 403 Forbidden (lacks onboarding:start)
-      await request(app.getHttpServer())
-        .post('/onboarding/session/start')
-        .set('Authorization', `Bearer ${managerTokenA}`)
-        .send({ source: 'SETUP_CENTER' })
-        .expect(403);
+        // 3. MANAGER attempting to start session gets 403 Forbidden (lacks onboarding:start)
+        await request(app.getHttpServer())
+          .post('/onboarding/session/start')
+          .set('Authorization', `Bearer ${managerTokenA}`)
+          .send({ source: 'SETUP_CENTER' })
+          .expect(403);
 
-      // 4. OWNER starts session successfully (has onboarding:start)
-      await request(app.getHttpServer())
-        .post('/onboarding/session/start')
-        .set('Authorization', `Bearer ${ownerTokenA}`)
-        .send({ source: 'SETUP_CENTER' })
-        .expect(200);
+        // 4. OWNER starts session successfully (has onboarding:start)
+        await request(app.getHttpServer())
+          .post('/onboarding/session/start')
+          .set('Authorization', `Bearer ${ownerTokenA}`)
+          .send({ source: 'SETUP_CENTER' })
+          .expect(200);
 
-      // 5. MANAGER reading session gets 200 OK (has onboarding:read)
-      const mgrGetRes = await request(app.getHttpServer())
-        .get('/onboarding/session')
-        .set('Authorization', `Bearer ${managerTokenA}`)
-        .expect(200);
+        // 5. MANAGER reading session gets 200 OK (has onboarding:read)
+        const mgrGetRes = await request(app.getHttpServer())
+          .get('/onboarding/session')
+          .set('Authorization', `Bearer ${managerTokenA}`)
+          .expect(200);
 
-      expect(mgrGetRes.body.session).toBeDefined();
+        expect(mgrGetRes.body.session).toBeDefined();
 
-      // 6. MANAGER reading readiness gets 200 OK
-      const mgrReadinessRes = await request(app.getHttpServer())
-        .get('/onboarding/readiness')
-        .set('Authorization', `Bearer ${managerTokenA}`)
-        .expect(200);
+        // 6. MANAGER reading readiness gets 200 OK
+        const mgrReadinessRes = await request(app.getHttpServer())
+          .get('/onboarding/readiness')
+          .set('Authorization', `Bearer ${managerTokenA}`)
+          .expect(200);
 
-      expect(mgrReadinessRes.body.saleReady).toBeDefined();
-    });
+        expect(mgrReadinessRes.body.saleReady).toBeDefined();
+      },
+    );
   });
 });

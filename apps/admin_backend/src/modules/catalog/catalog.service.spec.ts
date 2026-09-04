@@ -66,7 +66,14 @@ describe('CatalogService', () => {
             createQueryRunner: jest.fn().mockReturnValue(queryRunner),
           },
         },
-        { provide: ChangeLogService, useValue: { log: jest.fn(), findByTarget: jest.fn(), findByTenant: jest.fn() } },
+        {
+          provide: ChangeLogService,
+          useValue: {
+            log: jest.fn(),
+            findByTarget: jest.fn(),
+            findByTenant: jest.fn(),
+          },
+        },
       ],
     }).compile();
 

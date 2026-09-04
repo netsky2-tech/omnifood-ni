@@ -54,7 +54,9 @@ describe('OnboardingSessionService (Unit)', () => {
 
     expect(session).toBeDefined();
     expect(session.tenantId).toBe(tenantId);
-    expect(session.lifecycleState).toBe(OnboardingLifecycleState.SETUP_IN_PROGRESS);
+    expect(session.lifecycleState).toBe(
+      OnboardingLifecycleState.SETUP_IN_PROGRESS,
+    );
     expect(session.onboardingStartedAt).toBeInstanceOf(Date);
     expect(session.lastActivityAt).toBeInstanceOf(Date);
     expect(session.optimisticVersion).toBe(1);
@@ -93,7 +95,9 @@ describe('OnboardingSessionService (Unit)', () => {
     });
 
     expect(session.onboardingStartedAt).toEqual(initialStartedAt);
-    expect(session.lastActivityAt?.getTime()).toBeGreaterThanOrEqual(initialStartedAt.getTime());
+    expect(session.lastActivityAt?.getTime()).toBeGreaterThanOrEqual(
+      initialStartedAt.getTime(),
+    );
     expect(session.optimisticVersion).toBe(2);
   });
 
@@ -220,7 +224,10 @@ describe('OnboardingSessionService (Unit)', () => {
 
       await expect(
         service.updateSessionWithOptimisticLock(
-          { id: 'session-uuid-conflict', optimisticVersion: 1 } as OnboardingSession,
+          {
+            id: 'session-uuid-conflict',
+            optimisticVersion: 1,
+          } as OnboardingSession,
           1,
           { lifecycleState: OnboardingLifecycleState.SALE_READY },
         ),

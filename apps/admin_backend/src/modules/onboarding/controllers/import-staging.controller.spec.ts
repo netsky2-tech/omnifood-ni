@@ -39,7 +39,9 @@ describe('ImportStagingController (Unit)', () => {
       const template = controller.getOfficialTemplate();
       expect(template.version).toBe('v1.0');
       expect(template.requiredColumns).toEqual(['nombre', 'precio_venta']);
-      expect(template.templateCsv).toContain('nombre,precio_venta,unidad_venta,sku');
+      expect(template.templateCsv).toContain(
+        'nombre,precio_venta,unidad_venta,sku',
+      );
     });
   });
 
@@ -200,7 +202,10 @@ describe('ImportStagingController (Unit)', () => {
 
       const result = await controller.getFailedRows(sessionToken, ' tenant-1 ');
       expect(result).toEqual(mockErrors);
-      expect(service.getFailedRows).toHaveBeenCalledWith('tenant-1', sessionToken);
+      expect(service.getFailedRows).toHaveBeenCalledWith(
+        'tenant-1',
+        sessionToken,
+      );
     });
 
     it('exports failed rows as CSV with status 200 and headers (AC-21)', async () => {
@@ -229,7 +234,9 @@ describe('ImportStagingController (Unit)', () => {
       );
       expect(mockRes.status).toHaveBeenCalledWith(200);
       expect(mockRes.send).toHaveBeenCalledWith(
-        expect.stringContaining('fila,nombre_suministrado,sku_suministrado,motivo_error'),
+        expect.stringContaining(
+          'fila,nombre_suministrado,sku_suministrado,motivo_error',
+        ),
       );
     });
   });
@@ -244,7 +251,9 @@ describe('ImportStagingController (Unit)', () => {
 
       const result = await controller.runIntegrityScan(' tenant-1 ');
       expect(result).toMatchObject({ id: 'report-1', status: 'CLEAN' });
-      expect(integrityService.generateIntegrityReport).toHaveBeenCalledWith('tenant-1');
+      expect(integrityService.generateIntegrityReport).toHaveBeenCalledWith(
+        'tenant-1',
+      );
     });
 
     it('delegates expireLegacyStaging to integrityReportService', async () => {
@@ -254,8 +263,13 @@ describe('ImportStagingController (Unit)', () => {
       });
 
       const result = await controller.expireLegacyStaging(' tenant-1 ');
-      expect(result).toEqual({ expiredSessions: ['session-1'], expiredRowsCount: 3 });
-      expect(integrityService.expireIncompatibleLegacyStaging).toHaveBeenCalledWith('tenant-1');
+      expect(result).toEqual({
+        expiredSessions: ['session-1'],
+        expiredRowsCount: 3,
+      });
+      expect(
+        integrityService.expireIncompatibleLegacyStaging,
+      ).toHaveBeenCalledWith('tenant-1');
     });
   });
 });

@@ -1,7 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-} from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Product, ProductType } from '../../inventory/entities/product.entity';
@@ -44,7 +41,11 @@ export class OnboardingCatalogService {
       throw new BadRequestException('Product name must not be empty');
     }
 
-    if (dto.sellPrice === undefined || dto.sellPrice === null || dto.sellPrice <= 0) {
+    if (
+      dto.sellPrice === undefined ||
+      dto.sellPrice === null ||
+      dto.sellPrice <= 0
+    ) {
       throw new BadRequestException('sellPrice must be greater than 0');
     }
 
@@ -72,7 +73,10 @@ export class OnboardingCatalogService {
     });
 
     const readiness = await this.readinessEvaluator.evaluate(trimmedTenant);
-    const session = await this.stateReconciler.reconcile(trimmedTenant, readiness);
+    const session = await this.stateReconciler.reconcile(
+      trimmedTenant,
+      readiness,
+    );
 
     return {
       product: {
@@ -81,7 +85,8 @@ export class OnboardingCatalogService {
         sellPrice: Number(savedProduct.sellPrice),
         uom: savedProduct.uom,
         category_code: savedProduct.category_code || null,
-        costStatus: savedProduct.averageCost > 0 ? 'CONFIGURED' : 'COST_PENDING',
+        costStatus:
+          savedProduct.averageCost > 0 ? 'CONFIGURED' : 'COST_PENDING',
         is_active: savedProduct.is_active,
       },
       session,
@@ -102,7 +107,7 @@ export class OnboardingCatalogService {
       .where('product.tenant_id = :tenantId', { tenantId: trimmedTenant })
       .andWhere('product.is_active = true')
       .andWhere('product.sellPrice > 0')
-      .andWhere('product.name IS NOT NULL AND TRIM(product.name) != \'\'')
+      .andWhere("product.name IS NOT NULL AND TRIM(product.name) != ''")
       .getCount();
 
     const sampleProducts = await this.productRepository.find({

@@ -70,7 +70,12 @@ describe('OnboardingSessionController (Unit)', () => {
       sessionService.ensureOnboardingStarted.mockResolvedValue(mockSession);
       readinessEvaluator.evaluate.mockResolvedValue({
         saleReady: false,
-        identity: { tenantExists: true, initialOwnerExists: true, ownerCanAuthenticate: true, tenantContextValid: true },
+        identity: {
+          tenantExists: true,
+          initialOwnerExists: true,
+          ownerCanAuthenticate: true,
+          tenantContextValid: true,
+        },
         fiscal: { minimumConfigurationValid: false },
         catalog: { sellableProductCount: 0, hasSellableProduct: false },
         inventoryReady: false,
@@ -105,7 +110,12 @@ describe('OnboardingSessionController (Unit)', () => {
       sessionService.getSession.mockResolvedValue(mockSession);
       readinessEvaluator.evaluate.mockResolvedValue({
         saleReady: true,
-        identity: { tenantExists: true, initialOwnerExists: true, ownerCanAuthenticate: true, tenantContextValid: true },
+        identity: {
+          tenantExists: true,
+          initialOwnerExists: true,
+          ownerCanAuthenticate: true,
+          tenantContextValid: true,
+        },
         fiscal: { minimumConfigurationValid: true },
         catalog: { sellableProductCount: 3, hasSellableProduct: true },
         inventoryReady: false,
@@ -125,7 +135,9 @@ describe('OnboardingSessionController (Unit)', () => {
       const req: any = { user: { tenantId: 'tenant-123', userId: 'owner-1' } };
       const res = await controller.getSession(req, 'tenant-123');
 
-      expect(res.session.lifecycleState).toBe(OnboardingLifecycleState.SALE_READY);
+      expect(res.session.lifecycleState).toBe(
+        OnboardingLifecycleState.SALE_READY,
+      );
       expect(res.readiness.saleReady).toBe(true);
     });
   });
@@ -134,7 +146,12 @@ describe('OnboardingSessionController (Unit)', () => {
     it('returns direct live snapshot without mutating session', async () => {
       readinessEvaluator.evaluate.mockResolvedValue({
         saleReady: true,
-        identity: { tenantExists: true, initialOwnerExists: true, ownerCanAuthenticate: true, tenantContextValid: true },
+        identity: {
+          tenantExists: true,
+          initialOwnerExists: true,
+          ownerCanAuthenticate: true,
+          tenantContextValid: true,
+        },
         fiscal: { minimumConfigurationValid: true },
         catalog: { sellableProductCount: 1, hasSellableProduct: true },
         inventoryReady: false,

@@ -6,7 +6,8 @@ describe('AddLoyaltyV1ColumnsToCustomerPointTransactions1795000000000 Migration'
   let mockQueryRunner: { query: jest.Mock };
 
   beforeEach(() => {
-    migration = new AddLoyaltyV1ColumnsToCustomerPointTransactions1795000000000();
+    migration =
+      new AddLoyaltyV1ColumnsToCustomerPointTransactions1795000000000();
     mockQueryRunner = {
       query: jest.fn().mockResolvedValue(undefined),
     };

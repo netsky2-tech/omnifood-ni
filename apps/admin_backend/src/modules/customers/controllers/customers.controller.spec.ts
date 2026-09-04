@@ -51,13 +51,20 @@ describe('CustomersController', () => {
 
   beforeEach(async () => {
     service = {
-      findAll: jest.fn().mockResolvedValue({ data: [mockCustomer()], total: 1 }),
+      findAll: jest
+        .fn()
+        .mockResolvedValue({ data: [mockCustomer()], total: 1 }),
       findOne: jest.fn().mockResolvedValue(mockCustomer()),
       create: jest.fn().mockResolvedValue(mockCustomer()),
-      update: jest.fn().mockResolvedValue(mockCustomer({ name: 'Actualizado' })),
+      update: jest
+        .fn()
+        .mockResolvedValue(mockCustomer({ name: 'Actualizado' })),
       remove: jest.fn().mockResolvedValue(undefined),
       getPointTransactions: jest.fn().mockResolvedValue([mockTx]),
-      adjustPoints: jest.fn().mockResolvedValue({ customer: mockCustomer({ points_balance: 80 }), transaction: mockTx }),
+      adjustPoints: jest.fn().mockResolvedValue({
+        customer: mockCustomer({ points_balance: 80 }),
+        transaction: mockTx,
+      }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -95,7 +102,10 @@ describe('CustomersController', () => {
   it('should get point transactions history', async () => {
     const res = await controller.getPointTransactions('c-1', 'tenant-1');
     expect(res.length).toBe(1);
-    expect(service.getPointTransactions).toHaveBeenCalledWith('tenant-1', 'c-1');
+    expect(service.getPointTransactions).toHaveBeenCalledWith(
+      'tenant-1',
+      'c-1',
+    );
   });
 
   it('should adjust customer points', async () => {

@@ -1,4 +1,8 @@
-import { INestApplication, ValidationPipe, NotFoundException } from '@nestjs/common';
+import {
+  INestApplication,
+  ValidationPipe,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { Reflector } from '@nestjs/core';
@@ -13,7 +17,10 @@ import { LegacyClassificationService } from '../../src/modules/loyalty/services/
 import { LoyaltyProfitAwareService } from '../../src/modules/loyalty/services/loyalty-profit-aware.service';
 import { RedemptionService } from '../../src/modules/loyalty/services/redemption.service';
 import { LoyaltyLedgerService } from '../../src/modules/loyalty/services/loyalty-ledger.service';
-import { LoyaltyProgram, LoyaltyProgramStatus } from '../../src/modules/loyalty/entities/loyalty-program.entity';
+import {
+  LoyaltyProgram,
+  LoyaltyProgramStatus,
+} from '../../src/modules/loyalty/entities/loyalty-program.entity';
 import { RewardDefinition } from '../../src/modules/loyalty/entities/reward-definition.entity';
 import { CustomerLoyaltyAccountProjection } from '../../src/modules/loyalty/entities/customer-loyalty-account-projection.entity';
 import { Customer } from '../../src/modules/customers/entities/customer.entity';
@@ -22,7 +29,10 @@ import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
 import { TenantInterceptor } from '../../src/core/database/rls.interceptor';
 import { JWT_TOKEN_TYPES } from '../../src/modules/identity/security/jwt-token.types';
-import { createIdentityJwtConfigProvider, signIdentityJwtAccessToken } from '../support/identity-jwt-test.fixture';
+import {
+  createIdentityJwtConfigProvider,
+  signIdentityJwtAccessToken,
+} from '../support/identity-jwt-test.fixture';
 
 describe('Loyalty API (E2E / Integration)', () => {
   const jwtSecret = 'test-only-jwt-secret-with-at-least-thirty-two-bytes';
@@ -55,24 +65,29 @@ describe('Loyalty API (E2E / Integration)', () => {
       }
       return Promise.resolve(results);
     }),
-    findOne: jest.fn((opts: { where: Record<string, unknown>; relations?: string[] }) => {
-      const found = dbPrograms.find((p) =>
-        Object.entries(opts.where).every(([k, v]) => (p as any)[k] === v),
-      );
-      if (found && opts.relations?.includes('rewards')) {
-        (found as any).rewards = dbRewards.filter(
-          (r) => r.loyalty_program_id === found.id,
+    findOne: jest.fn(
+      (opts: { where: Record<string, unknown>; relations?: string[] }) => {
+        const found = dbPrograms.find((p) =>
+          Object.entries(opts.where).every(([k, v]) => (p as any)[k] === v),
         );
-      }
-      return Promise.resolve(found || null);
-    }),
-    create: jest.fn((data: Partial<LoyaltyProgram>) => ({
-      id: `prog-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      config_version: 1,
-      created_at: new Date(),
-      updated_at: new Date(),
-      ...data,
-    } as LoyaltyProgram)),
+        if (found && opts.relations?.includes('rewards')) {
+          (found as any).rewards = dbRewards.filter(
+            (r) => r.loyalty_program_id === found.id,
+          );
+        }
+        return Promise.resolve(found || null);
+      },
+    ),
+    create: jest.fn(
+      (data: Partial<LoyaltyProgram>) =>
+        ({
+          id: `prog-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          config_version: 1,
+          created_at: new Date(),
+          updated_at: new Date(),
+          ...data,
+        }) as LoyaltyProgram,
+    ),
     save: jest.fn((entity: LoyaltyProgram) => {
       const idx = dbPrograms.findIndex((p) => p.id === entity.id);
       if (idx >= 0) dbPrograms[idx] = entity;
@@ -83,31 +98,39 @@ describe('Loyalty API (E2E / Integration)', () => {
   };
 
   const rewardRepo = {
-    find: jest.fn((opts?: { where?: Record<string, unknown>; order?: Record<string, string> }) => {
-      let results = [...dbRewards];
-      if (opts?.where) {
-        results = results.filter((r) =>
-          Object.entries(opts.where).every(([k, v]) => (r as any)[k] === v),
-        );
-      }
-      if (opts?.order?.presentation_order === 'ASC') {
-        results.sort((a, b) => a.presentation_order - b.presentation_order);
-      }
-      return Promise.resolve(results);
-    }),
+    find: jest.fn(
+      (opts?: {
+        where?: Record<string, unknown>;
+        order?: Record<string, string>;
+      }) => {
+        let results = [...dbRewards];
+        if (opts?.where) {
+          results = results.filter((r) =>
+            Object.entries(opts.where).every(([k, v]) => (r as any)[k] === v),
+          );
+        }
+        if (opts?.order?.presentation_order === 'ASC') {
+          results.sort((a, b) => a.presentation_order - b.presentation_order);
+        }
+        return Promise.resolve(results);
+      },
+    ),
     findOne: jest.fn((opts: { where: Record<string, unknown> }) => {
       const found = dbRewards.find((r) =>
         Object.entries(opts.where).every(([k, v]) => (r as any)[k] === v),
       );
       return Promise.resolve(found || null);
     }),
-    create: jest.fn((data: Partial<RewardDefinition>) => ({
-      id: `rw-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      config_version: 1,
-      created_at: new Date(),
-      updated_at: new Date(),
-      ...data,
-    } as RewardDefinition)),
+    create: jest.fn(
+      (data: Partial<RewardDefinition>) =>
+        ({
+          id: `rw-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          config_version: 1,
+          created_at: new Date(),
+          updated_at: new Date(),
+          ...data,
+        }) as RewardDefinition,
+    ),
     save: jest.fn((entity: RewardDefinition) => {
       const idx = dbRewards.findIndex((r) => r.id === entity.id);
       if (idx >= 0) dbRewards[idx] = entity;
@@ -199,33 +222,53 @@ describe('Loyalty API (E2E / Integration)', () => {
         {
           provide: LoyaltyProfitAwareService,
           useValue: {
-            getRewardProfitAwareMetrics: jest.fn().mockImplementation((tenantId: string, rewardId: string, asOf?: string) => {
-              const reward = dbRewards.find((r) => r.id === rewardId && r.tenant_id === tenantId);
-              if (!reward) throw new NotFoundException('Reward not found');
-              return Promise.resolve({
-                rewardId,
-                programId: reward.loyalty_program_id,
-                asOfUtc: asOf ?? '2026-09-02T12:00:00.000Z',
-                window: {
-                  startUtc: '2026-08-03T12:00:00.000Z',
-                  endUtc: '2026-09-02T12:00:00.000Z',
-                  label: 'LAST_30_DAYS',
+            getRewardProfitAwareMetrics: jest
+              .fn()
+              .mockImplementation(
+                (tenantId: string, rewardId: string, asOf?: string) => {
+                  const reward = dbRewards.find(
+                    (r) => r.id === rewardId && r.tenant_id === tenantId,
+                  );
+                  if (!reward) throw new NotFoundException('Reward not found');
+                  return Promise.resolve({
+                    rewardId,
+                    programId: reward.loyalty_program_id,
+                    asOfUtc: asOf ?? '2026-09-02T12:00:00.000Z',
+                    window: {
+                      startUtc: '2026-08-03T12:00:00.000Z',
+                      endUtc: '2026-09-02T12:00:00.000Z',
+                      label: 'LAST_30_DAYS',
+                    },
+                    retailPriceNio: {
+                      status: 'NOT_APPLICABLE',
+                      reason: 'ONLY_FOR_FREE_PRODUCT',
+                    },
+                    estimatedCppNio: {
+                      status: 'NOT_APPLICABLE',
+                      reason: 'ONLY_FOR_FREE_PRODUCT',
+                    },
+                    estimatedRewardCostNio: { status: 'AVAILABLE', value: 50 },
+                    qualifiedSalesNio: { status: 'AVAILABLE', value: 10000 },
+                    estimatedIncentiveCostInWindowNio: {
+                      status: 'AVAILABLE',
+                      value: 100,
+                    },
+                    effectiveIncentiveRatePct: {
+                      status: 'AVAILABLE',
+                      value: 1.0,
+                    },
+                  });
                 },
-                retailPriceNio: { status: 'NOT_APPLICABLE', reason: 'ONLY_FOR_FREE_PRODUCT' },
-                estimatedCppNio: { status: 'NOT_APPLICABLE', reason: 'ONLY_FOR_FREE_PRODUCT' },
-                estimatedRewardCostNio: { status: 'AVAILABLE', value: 50 },
-                qualifiedSalesNio: { status: 'AVAILABLE', value: 10000 },
-                estimatedIncentiveCostInWindowNio: { status: 'AVAILABLE', value: 100 },
-                effectiveIncentiveRatePct: { status: 'AVAILABLE', value: 1.0 },
-              });
-            }),
+              ),
           },
         },
       ],
     }).compile();
 
     app = moduleRef.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+    app.useGlobalPipes(
+      new ValidationPipe({ whitelist: true, transform: true }),
+    );
     jwtService = moduleRef.get<JwtService>(JwtService);
     await app.init();
   });
@@ -280,7 +323,12 @@ describe('Loyalty API (E2E / Integration)', () => {
     it('rejects 401 without auth token', async () => {
       const res = await request(app.getHttpServer())
         .post('/loyalty/programs')
-        .send({ name: 'No Auth', program_type: 'VISIT_STAMPS', earning_rule: {}, eligibility_rule: {} });
+        .send({
+          name: 'No Auth',
+          program_type: 'VISIT_STAMPS',
+          earning_rule: {},
+          eligibility_rule: {},
+        });
 
       expect(res.status).toBe(401);
     });
@@ -684,7 +732,9 @@ describe('Loyalty API (E2E / Integration)', () => {
       } as unknown as RewardDefinition);
 
       const res = await request(app.getHttpServer())
-        .get('/loyalty/rewards/rw-pa-1/profit-aware?as_of=2026-09-02T12:00:00.000Z')
+        .get(
+          '/loyalty/rewards/rw-pa-1/profit-aware?as_of=2026-09-02T12:00:00.000Z',
+        )
         .set('Authorization', `Bearer ${token}`);
 
       expect(res.status).toBe(200);

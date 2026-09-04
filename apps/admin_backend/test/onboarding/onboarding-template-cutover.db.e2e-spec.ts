@@ -241,12 +241,14 @@ async function withTemplateCutoverIsolatedSchema(
         },
         {
           provide: 'OnboardingIdempotencyRecordRepository',
-          useFactory: (ds: DataSource) => ds.getRepository(OnboardingIdempotencyRecord),
+          useFactory: (ds: DataSource) =>
+            ds.getRepository(OnboardingIdempotencyRecord),
           inject: [DataSource],
         },
         {
           provide: 'LegacyOnboardingMigrationReceiptRepository',
-          useFactory: (ds: DataSource) => ds.getRepository(LegacyOnboardingMigrationReceipt),
+          useFactory: (ds: DataSource) =>
+            ds.getRepository(LegacyOnboardingMigrationReceipt),
           inject: [DataSource],
         },
         {
@@ -263,7 +265,9 @@ async function withTemplateCutoverIsolatedSchema(
     }).compile();
 
     app = moduleRef.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+    app.useGlobalPipes(
+      new ValidationPipe({ whitelist: true, transform: true }),
+    );
     await app.init();
 
     const jwtService = moduleRef.get(JwtService);
@@ -305,220 +309,298 @@ async function withTemplateCutoverIsolatedSchema(
 
 describe('ONB1.3 Industry Template Safe Cutover (Real PostgreSQL E2E / Zero Mocks)', () => {
   it('verifies side-effect free preview does NOT write to database', async () => {
-    await withTemplateCutoverIsolatedSchema('onb13_preview', async ({ app, dataSource, ownerTokenA, tenantAId, schema }) => {
-      const res = await request(app.getHttpServer())
-        .post('/onboarding/templates/CAFETERIA/preview')
-        .set('Authorization', `Bearer ${ownerTokenA}`)
-        .send({})
-        .expect(201);
+    await withTemplateCutoverIsolatedSchema(
+      'onb13_preview',
+      async ({ app, dataSource, ownerTokenA, tenantAId, schema }) => {
+        const res = await request(app.getHttpServer())
+          .post('/onboarding/templates/CAFETERIA/preview')
+          .set('Authorization', `Bearer ${ownerTokenA}`)
+          .send({})
+          .expect(201);
 
-      expect(res.body.templateCode).toBe('CAFETERIA');
-      expect(res.body.items).toHaveLength(2); // 1 insumo + 1 product
-      expect(res.body.summary.newCount).toBe(2);
+        expect(res.body.templateCode).toBe('CAFETERIA');
+        expect(res.body.items).toHaveLength(2); // 1 insumo + 1 product
+        expect(res.body.summary.newCount).toBe(2);
 
-      // Verify ZERO writes occurred
-      const [insumos, products, links, apps] = await Promise.all([
-        dataSource.query(`SELECT count(*) FROM "${schema}".insumos WHERE tenant_id = $1`, [tenantAId]),
-        dataSource.query(`SELECT count(*) FROM "${schema}".products WHERE tenant_id = $1`, [tenantAId]),
-        dataSource.query(`SELECT count(*) FROM "${schema}".onboarding_template_seed_links WHERE tenant_id = $1`, [tenantAId]),
-        dataSource.query(`SELECT count(*) FROM "${schema}".onboarding_template_applications WHERE tenant_id = $1`, [tenantAId]),
-      ]);
+        // Verify ZERO writes occurred
+        const [insumos, products, links, apps] = await Promise.all([
+          dataSource.query(
+            `SELECT count(*) FROM "${schema}".insumos WHERE tenant_id = $1`,
+            [tenantAId],
+          ),
+          dataSource.query(
+            `SELECT count(*) FROM "${schema}".products WHERE tenant_id = $1`,
+            [tenantAId],
+          ),
+          dataSource.query(
+            `SELECT count(*) FROM "${schema}".onboarding_template_seed_links WHERE tenant_id = $1`,
+            [tenantAId],
+          ),
+          dataSource.query(
+            `SELECT count(*) FROM "${schema}".onboarding_template_applications WHERE tenant_id = $1`,
+            [tenantAId],
+          ),
+        ]);
 
-      expect(Number(insumos[0].count)).toBe(0);
-      expect(Number(products[0].count)).toBe(0);
-      expect(Number(links[0].count)).toBe(0);
-      expect(Number(apps[0].count)).toBe(0);
-    });
+        expect(Number(insumos[0].count)).toBe(0);
+        expect(Number(products[0].count)).toBe(0);
+        expect(Number(links[0].count)).toBe(0);
+        expect(Number(apps[0].count)).toBe(0);
+      },
+    );
   });
 
   it('verifies safe apply creates RecipeVersion in DRAFT/SUGGESTED without stock/cost side effects and enforces two-tenant isolation', async () => {
-    await withTemplateCutoverIsolatedSchema('onb13_apply', async ({ app, dataSource, ownerTokenA, ownerTokenB, tenantAId, tenantBId, insumoId, productId, schema }) => {
-      // 1. Tenant A applies template with idempotencyKey
-      const resA = await request(app.getHttpServer())
-        .post('/onboarding/templates/CAFETERIA/apply')
-        .set('Authorization', `Bearer ${ownerTokenA}`)
-        .send({ idempotencyKey: 'idemp-tenant-a-1' })
-        .expect(201);
+    await withTemplateCutoverIsolatedSchema(
+      'onb13_apply',
+      async ({
+        app,
+        dataSource,
+        ownerTokenA,
+        ownerTokenB,
+        tenantAId,
+        tenantBId,
+        insumoId,
+        productId,
+        schema,
+      }) => {
+        // 1. Tenant A applies template with idempotencyKey
+        const resA = await request(app.getHttpServer())
+          .post('/onboarding/templates/CAFETERIA/apply')
+          .set('Authorization', `Bearer ${ownerTokenA}`)
+          .send({ idempotencyKey: 'idemp-tenant-a-1' })
+          .expect(201);
 
-      expect(resA.body.tenantId).toBe(tenantAId);
-      expect(resA.body.insumosCreated).toBe(1);
-      expect(resA.body.productsCreated).toBe(1);
-      expect(resA.body.recipesCreated).toBe(1);
-      expect(resA.body.applicationId).toBeDefined();
+        expect(resA.body.tenantId).toBe(tenantAId);
+        expect(resA.body.insumosCreated).toBe(1);
+        expect(resA.body.productsCreated).toBe(1);
+        expect(resA.body.recipesCreated).toBe(1);
+        expect(resA.body.applicationId).toBeDefined();
 
-      // 2. Verify recipe was created as DRAFT / SUGGESTED, is_active=false
-      const recipeRows = await dataSource.query(
-        `SELECT id, is_active, origin, publication_state, suggestion_state, yield_quantity
+        // 2. Verify recipe was created as DRAFT / SUGGESTED, is_active=false
+        const recipeRows = await dataSource.query(
+          `SELECT id, is_active, origin, publication_state, suggestion_state, yield_quantity
          FROM "${schema}".recipe_versions WHERE tenant_id = $1`,
-        [tenantAId],
-      );
-      expect(recipeRows).toHaveLength(1);
-      expect(recipeRows[0].is_active).toBe(false);
-      expect(recipeRows[0].origin).toBe(RecipeOrigin.INDUSTRY_TEMPLATE);
-      expect(recipeRows[0].publication_state).toBe(RecipePublicationState.DRAFT);
-      expect(recipeRows[0].suggestion_state).toBe(RecipeSuggestionState.SUGGESTED);
+          [tenantAId],
+        );
+        expect(recipeRows).toHaveLength(1);
+        expect(recipeRows[0].is_active).toBe(false);
+        expect(recipeRows[0].origin).toBe(RecipeOrigin.INDUSTRY_TEMPLATE);
+        expect(recipeRows[0].publication_state).toBe(
+          RecipePublicationState.DRAFT,
+        );
+        expect(recipeRows[0].suggestion_state).toBe(
+          RecipeSuggestionState.SUGGESTED,
+        );
 
-      // 3. Verify ZERO legacy Recipe rows were created
-      const legacyRecipes = await dataSource.query(
-        `SELECT count(*) FROM "${schema}".recipes WHERE tenant_id = $1`,
-        [tenantAId],
-      );
-      expect(Number(legacyRecipes[0].count)).toBe(0);
+        // 3. Verify ZERO legacy Recipe rows were created
+        const legacyRecipes = await dataSource.query(
+          `SELECT count(*) FROM "${schema}".recipes WHERE tenant_id = $1`,
+          [tenantAId],
+        );
+        expect(Number(legacyRecipes[0].count)).toBe(0);
 
-      // 4. Verify ZERO fictitious stock or cost
-      const insumoRows = await dataSource.query(
-        `SELECT stock, existencia_actual, costo_promedio_nio FROM "${schema}".insumos WHERE tenant_id = $1`,
-        [tenantAId],
-      );
-      expect(Number(insumoRows[0].stock)).toBe(0);
-      expect(Number(insumoRows[0].existencia_actual)).toBe(0);
-      expect(Number(insumoRows[0].costo_promedio_nio)).toBe(0);
+        // 4. Verify ZERO fictitious stock or cost
+        const insumoRows = await dataSource.query(
+          `SELECT stock, existencia_actual, costo_promedio_nio FROM "${schema}".insumos WHERE tenant_id = $1`,
+          [tenantAId],
+        );
+        expect(Number(insumoRows[0].stock)).toBe(0);
+        expect(Number(insumoRows[0].existencia_actual)).toBe(0);
+        expect(Number(insumoRows[0].costo_promedio_nio)).toBe(0);
 
-      const productRows = await dataSource.query(
-        `SELECT stock, "averageCost", "sellPrice" FROM "${schema}".products WHERE tenant_id = $1`,
-        [tenantAId],
-      );
-      expect(Number(productRows[0].stock)).toBe(0);
-      expect(Number(productRows[0].averageCost)).toBe(0);
-      expect(Number(productRows[0].sellPrice)).toBe(65.0);
+        const productRows = await dataSource.query(
+          `SELECT stock, "averageCost", "sellPrice" FROM "${schema}".products WHERE tenant_id = $1`,
+          [tenantAId],
+        );
+        expect(Number(productRows[0].stock)).toBe(0);
+        expect(Number(productRows[0].averageCost)).toBe(0);
+        expect(Number(productRows[0].sellPrice)).toBe(65.0);
 
-      // 5. Verify TemplateSeedLink provenance rows
-      const linksA = await dataSource.query(
-        `SELECT source_item_id, target_entity_type, last_seen_version FROM "${schema}".onboarding_template_seed_links WHERE tenant_id = $1`,
-        [tenantAId],
-      );
-      expect(linksA).toHaveLength(3); // Insumo, Product, Recipe
+        // 5. Verify TemplateSeedLink provenance rows
+        const linksA = await dataSource.query(
+          `SELECT source_item_id, target_entity_type, last_seen_version FROM "${schema}".onboarding_template_seed_links WHERE tenant_id = $1`,
+          [tenantAId],
+        );
+        expect(linksA).toHaveLength(3); // Insumo, Product, Recipe
 
-      // 6. Two-Tenant Isolation (ODAV-34): Tenant B has ZERO rows
-      const [insumosB, productsB, recipesB, linksB] = await Promise.all([
-        dataSource.query(`SELECT count(*) FROM "${schema}".insumos WHERE tenant_id = $1`, [tenantBId]),
-        dataSource.query(`SELECT count(*) FROM "${schema}".products WHERE tenant_id = $1`, [tenantBId]),
-        dataSource.query(`SELECT count(*) FROM "${schema}".recipe_versions WHERE tenant_id = $1`, [tenantBId]),
-        dataSource.query(`SELECT count(*) FROM "${schema}".onboarding_template_seed_links WHERE tenant_id = $1`, [tenantBId]),
-      ]);
-      expect(Number(insumosB[0].count)).toBe(0);
-      expect(Number(productsB[0].count)).toBe(0);
-      expect(Number(recipesB[0].count)).toBe(0);
-      expect(Number(linksB[0].count)).toBe(0);
+        // 6. Two-Tenant Isolation (ODAV-34): Tenant B has ZERO rows
+        const [insumosB, productsB, recipesB, linksB] = await Promise.all([
+          dataSource.query(
+            `SELECT count(*) FROM "${schema}".insumos WHERE tenant_id = $1`,
+            [tenantBId],
+          ),
+          dataSource.query(
+            `SELECT count(*) FROM "${schema}".products WHERE tenant_id = $1`,
+            [tenantBId],
+          ),
+          dataSource.query(
+            `SELECT count(*) FROM "${schema}".recipe_versions WHERE tenant_id = $1`,
+            [tenantBId],
+          ),
+          dataSource.query(
+            `SELECT count(*) FROM "${schema}".onboarding_template_seed_links WHERE tenant_id = $1`,
+            [tenantBId],
+          ),
+        ]);
+        expect(Number(insumosB[0].count)).toBe(0);
+        expect(Number(productsB[0].count)).toBe(0);
+        expect(Number(recipesB[0].count)).toBe(0);
+        expect(Number(linksB[0].count)).toBe(0);
 
-      // 7. Idempotent Reapplication on Tenant A (AC-13 / AC-47)
-      const resReapply = await request(app.getHttpServer())
-        .post('/onboarding/templates/CAFETERIA/apply')
-        .set('Authorization', `Bearer ${ownerTokenA}`)
-        .send({ idempotencyKey: 'idemp-tenant-a-reapply' })
-        .expect(201);
+        // 7. Idempotent Reapplication on Tenant A (AC-13 / AC-47)
+        const resReapply = await request(app.getHttpServer())
+          .post('/onboarding/templates/CAFETERIA/apply')
+          .set('Authorization', `Bearer ${ownerTokenA}`)
+          .send({ idempotencyKey: 'idemp-tenant-a-reapply' })
+          .expect(201);
 
-      expect(resReapply.body.insumosCreated).toBe(0);
-      expect(resReapply.body.insumosSkipped).toBe(1);
-      expect(resReapply.body.productsCreated).toBe(0);
-      expect(resReapply.body.productsSkipped).toBe(1);
-      expect(resReapply.body.recipesCreated).toBe(0);
+        expect(resReapply.body.insumosCreated).toBe(0);
+        expect(resReapply.body.insumosSkipped).toBe(1);
+        expect(resReapply.body.productsCreated).toBe(0);
+        expect(resReapply.body.productsSkipped).toBe(1);
+        expect(resReapply.body.recipesCreated).toBe(0);
 
-      // Ensure counts in DB did not duplicate
-      const productCountAfter = await dataSource.query(`SELECT count(*) FROM "${schema}".products WHERE tenant_id = $1`, [tenantAId]);
-      expect(Number(productCountAfter[0].count)).toBe(1);
-    });
+        // Ensure counts in DB did not duplicate
+        const productCountAfter = await dataSource.query(
+          `SELECT count(*) FROM "${schema}".products WHERE tenant_id = $1`,
+          [tenantAId],
+        );
+        expect(Number(productCountAfter[0].count)).toBe(1);
+      },
+    );
   });
 
   it('verifies partial selection (AC-10) only creates selected items end-to-end', async () => {
-    await withTemplateCutoverIsolatedSchema('onb13_partial', async ({ app, dataSource, ownerTokenA, tenantAId, insumoId, schema }) => {
-      // Only select insumoId, exclude product
-      const res = await request(app.getHttpServer())
-        .post('/onboarding/templates/CAFETERIA/apply')
-        .set('Authorization', `Bearer ${ownerTokenA}`)
-        .send({
-          idempotencyKey: 'idemp-partial-1',
-          selectedItemIds: [insumoId],
-        })
-        .expect(201);
+    await withTemplateCutoverIsolatedSchema(
+      'onb13_partial',
+      async ({ app, dataSource, ownerTokenA, tenantAId, insumoId, schema }) => {
+        // Only select insumoId, exclude product
+        const res = await request(app.getHttpServer())
+          .post('/onboarding/templates/CAFETERIA/apply')
+          .set('Authorization', `Bearer ${ownerTokenA}`)
+          .send({
+            idempotencyKey: 'idemp-partial-1',
+            selectedItemIds: [insumoId],
+          })
+          .expect(201);
 
-      expect(res.body.insumosCreated).toBe(1);
-      expect(res.body.productsCreated).toBe(0);
-      expect(res.body.recipesCreated).toBe(0);
+        expect(res.body.insumosCreated).toBe(1);
+        expect(res.body.productsCreated).toBe(0);
+        expect(res.body.recipesCreated).toBe(0);
 
-      const [insumoCount, productCount] = await Promise.all([
-        dataSource.query(`SELECT count(*) FROM "${schema}".insumos WHERE tenant_id = $1`, [tenantAId]),
-        dataSource.query(`SELECT count(*) FROM "${schema}".products WHERE tenant_id = $1`, [tenantAId]),
-      ]);
-      expect(Number(insumoCount[0].count)).toBe(1);
-      expect(Number(productCount[0].count)).toBe(0);
-    });
+        const [insumoCount, productCount] = await Promise.all([
+          dataSource.query(
+            `SELECT count(*) FROM "${schema}".insumos WHERE tenant_id = $1`,
+            [tenantAId],
+          ),
+          dataSource.query(
+            `SELECT count(*) FROM "${schema}".products WHERE tenant_id = $1`,
+            [tenantAId],
+          ),
+        ]);
+        expect(Number(insumoCount[0].count)).toBe(1);
+        expect(Number(productCount[0].count)).toBe(0);
+      },
+    );
   });
 
   it('verifies LegacyTemplateRecipeScan on real DB produces receipts and protects operational tenants', async () => {
-    await withTemplateCutoverIsolatedSchema('onb13_legacy', async ({ app, dataSource, ownerTokenA, ownerTokenB, tenantAId, tenantBId, productId, schema }) => {
-      // 1. In Tenant A (non-operational, 0 sales), create an active legacy recipe
-      const [prodA] = await dataSource.query(
-        `INSERT INTO "${schema}".products (id, tenant_id, name, uom, "sellPrice", "averageCost", stock, is_active)
+    await withTemplateCutoverIsolatedSchema(
+      'onb13_legacy',
+      async ({
+        app,
+        dataSource,
+        ownerTokenA,
+        ownerTokenB,
+        tenantAId,
+        tenantBId,
+        productId,
+        schema,
+      }) => {
+        // 1. In Tenant A (non-operational, 0 sales), create an active legacy recipe
+        const [prodA] = await dataSource.query(
+          `INSERT INTO "${schema}".products (id, tenant_id, name, uom, "sellPrice", "averageCost", stock, is_active)
          VALUES (gen_random_uuid(), $1, 'Americano 8oz', 'UN', 65.0, 0, 0, true) RETURNING id`,
-        [tenantAId],
-      );
+          [tenantAId],
+        );
 
-      const [rvA] = await dataSource.query(
-        `INSERT INTO "${schema}".recipe_versions (id, tenant_id, product_id, product_name, version_number, is_active, origin, publication_state, suggestion_state)
+        const [rvA] = await dataSource.query(
+          `INSERT INTO "${schema}".recipe_versions (id, tenant_id, product_id, product_name, version_number, is_active, origin, publication_state, suggestion_state)
          VALUES (gen_random_uuid(), $1, $2, 'Americano 8oz', 1, true, 'INDUSTRY_TEMPLATE', 'PUBLISHED', 'CONFIRMED') RETURNING id`,
-        [tenantAId, prodA.id],
-      );
+          [tenantAId, prodA.id],
+        );
 
-      // Run legacy scan on Tenant A -> should safely migrate to DRAFT with MOVE_TO_DRAFT receipt
-      const scanResA = await request(app.getHttpServer())
-        .post('/onboarding/templates/legacy-recipe-scan')
-        .set('Authorization', `Bearer ${ownerTokenA}`)
-        .send({})
-        .expect(201);
+        // Run legacy scan on Tenant A -> should safely migrate to DRAFT with MOVE_TO_DRAFT receipt
+        const scanResA = await request(app.getHttpServer())
+          .post('/onboarding/templates/legacy-recipe-scan')
+          .set('Authorization', `Bearer ${ownerTokenA}`)
+          .send({})
+          .expect(201);
 
-      expect(scanResA.body.scannedCount).toBe(1);
-      expect(scanResA.body.migratedToDraftCount).toBe(1);
-      expect(scanResA.body.receipts[0].decision).toBe(LegacyMigrationDecision.MOVE_TO_DRAFT);
+        expect(scanResA.body.scannedCount).toBe(1);
+        expect(scanResA.body.migratedToDraftCount).toBe(1);
+        expect(scanResA.body.receipts[0].decision).toBe(
+          LegacyMigrationDecision.MOVE_TO_DRAFT,
+        );
 
-      // Check DB: is_active should now be false, publication_state = DRAFT
-      const [rvAfterA] = await dataSource.query(`SELECT is_active, publication_state FROM "${schema}".recipe_versions WHERE id = $1`, [rvA.id]);
-      expect(rvAfterA.is_active).toBe(false);
-      expect(rvAfterA.publication_state).toBe('DRAFT');
+        // Check DB: is_active should now be false, publication_state = DRAFT
+        const [rvAfterA] = await dataSource.query(
+          `SELECT is_active, publication_state FROM "${schema}".recipe_versions WHERE id = $1`,
+          [rvA.id],
+        );
+        expect(rvAfterA.is_active).toBe(false);
+        expect(rvAfterA.publication_state).toBe('DRAFT');
 
-      // Verify receipt was saved in legacy_onboarding_migration_receipts
-      const receiptsA = await dataSource.query(
-        `SELECT decision, target_entity_id, reason FROM "${schema}".legacy_onboarding_migration_receipts WHERE tenant_id = $1`,
-        [tenantAId],
-      );
-      expect(receiptsA).toHaveLength(1);
-      expect(receiptsA[0].decision).toBe('MOVE_TO_DRAFT');
+        // Verify receipt was saved in legacy_onboarding_migration_receipts
+        const receiptsA = await dataSource.query(
+          `SELECT decision, target_entity_id, reason FROM "${schema}".legacy_onboarding_migration_receipts WHERE tenant_id = $1`,
+          [tenantAId],
+        );
+        expect(receiptsA).toHaveLength(1);
+        expect(receiptsA[0].decision).toBe('MOVE_TO_DRAFT');
 
-      // 2. In Tenant B (operational, activated), create an active legacy recipe
-      await dataSource.query(
-        `INSERT INTO "${schema}".onboarding_sessions (id, tenant_id, lifecycle_state, activated_at, first_successful_sale_at)
+        // 2. In Tenant B (operational, activated), create an active legacy recipe
+        await dataSource.query(
+          `INSERT INTO "${schema}".onboarding_sessions (id, tenant_id, lifecycle_state, activated_at, first_successful_sale_at)
          VALUES (gen_random_uuid(), $1, 'ACTIVATED', now(), now())`,
-        [tenantBId],
-      );
+          [tenantBId],
+        );
 
-      const [prodB] = await dataSource.query(
-        `INSERT INTO "${schema}".products (id, tenant_id, name, uom, "sellPrice", "averageCost", stock, is_active)
+        const [prodB] = await dataSource.query(
+          `INSERT INTO "${schema}".products (id, tenant_id, name, uom, "sellPrice", "averageCost", stock, is_active)
          VALUES (gen_random_uuid(), $1, 'Americano 8oz', 'UN', 65.0, 0, 0, true) RETURNING id`,
-        [tenantBId],
-      );
+          [tenantBId],
+        );
 
-      const [rvB] = await dataSource.query(
-        `INSERT INTO "${schema}".recipe_versions (id, tenant_id, product_id, product_name, version_number, is_active, origin, publication_state, suggestion_state)
+        const [rvB] = await dataSource.query(
+          `INSERT INTO "${schema}".recipe_versions (id, tenant_id, product_id, product_name, version_number, is_active, origin, publication_state, suggestion_state)
          VALUES (gen_random_uuid(), $1, $2, 'Americano 8oz', 1, true, 'INDUSTRY_TEMPLATE', 'PUBLISHED', 'CONFIRMED') RETURNING id`,
-        [tenantBId, prodB.id],
-      );
+          [tenantBId, prodB.id],
+        );
 
-      // Run legacy scan on Tenant B -> must NEVER mutate silently, must emit KEEP_PUBLISHED
-      const scanResB = await request(app.getHttpServer())
-        .post('/onboarding/templates/legacy-recipe-scan')
-        .set('Authorization', `Bearer ${ownerTokenB}`)
-        .send({})
-        .expect(201);
+        // Run legacy scan on Tenant B -> must NEVER mutate silently, must emit KEEP_PUBLISHED
+        const scanResB = await request(app.getHttpServer())
+          .post('/onboarding/templates/legacy-recipe-scan')
+          .set('Authorization', `Bearer ${ownerTokenB}`)
+          .send({})
+          .expect(201);
 
-      expect(scanResB.body.scannedCount).toBe(1);
-      expect(scanResB.body.keptPublishedCount).toBe(1);
-      expect(scanResB.body.migratedToDraftCount).toBe(0);
-      expect(scanResB.body.receipts[0].decision).toBe(LegacyMigrationDecision.KEEP_PUBLISHED);
+        expect(scanResB.body.scannedCount).toBe(1);
+        expect(scanResB.body.keptPublishedCount).toBe(1);
+        expect(scanResB.body.migratedToDraftCount).toBe(0);
+        expect(scanResB.body.receipts[0].decision).toBe(
+          LegacyMigrationDecision.KEEP_PUBLISHED,
+        );
 
-      // Check DB: is_active remains true, publication_state = PUBLISHED
-      const [rvAfterB] = await dataSource.query(`SELECT is_active, publication_state FROM "${schema}".recipe_versions WHERE id = $1`, [rvB.id]);
-      expect(rvAfterB.is_active).toBe(true);
-      expect(rvAfterB.publication_state).toBe('PUBLISHED');
-    });
+        // Check DB: is_active remains true, publication_state = PUBLISHED
+        const [rvAfterB] = await dataSource.query(
+          `SELECT is_active, publication_state FROM "${schema}".recipe_versions WHERE id = $1`,
+          [rvB.id],
+        );
+        expect(rvAfterB.is_active).toBe(true);
+        expect(rvAfterB.publication_state).toBe('PUBLISHED');
+      },
+    );
   });
 });

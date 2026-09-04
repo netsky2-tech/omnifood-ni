@@ -3,10 +3,22 @@ import { DataSource, Repository } from 'typeorm';
 import { LoyaltyService } from './loyalty.service';
 import { LoyaltyLedgerService } from './loyalty-ledger.service';
 import { RedemptionService } from './redemption.service';
-import { CustomerPointTransaction, PointTransactionType, LoyaltyTransactionOrigin } from '../../customers/entities/customer-point-transaction.entity';
+import {
+  CustomerPointTransaction,
+  PointTransactionType,
+  LoyaltyTransactionOrigin,
+} from '../../customers/entities/customer-point-transaction.entity';
 import { CustomerLoyaltyAccountProjection } from '../entities/customer-loyalty-account-projection.entity';
-import { LoyaltyProgram, LoyaltyProgramStatus, LoyaltyProgramType } from '../entities/loyalty-program.entity';
-import { RewardDefinition, RewardType, RewardStatus } from '../entities/reward-definition.entity';
+import {
+  LoyaltyProgram,
+  LoyaltyProgramStatus,
+  LoyaltyProgramType,
+} from '../entities/loyalty-program.entity';
+import {
+  RewardDefinition,
+  RewardType,
+  RewardStatus,
+} from '../entities/reward-definition.entity';
 import { Customer } from '../../customers/entities/customer.entity';
 import { Tenant } from '../../tenant/entities/tenant.entity';
 
@@ -39,7 +51,10 @@ describe('LV1.7E — Loyalty Audit & Antifraud Suite (Real PostgreSQL)', () => {
 
   beforeAll(async () => {
     schema = `loyalty_audit_${randomUUID().replace(/-/g, '')}`;
-    const bootstrap = new DataSource({ type: 'postgres', ...postgresConnection });
+    const bootstrap = new DataSource({
+      type: 'postgres',
+      ...postgresConnection,
+    });
     await bootstrap.initialize();
     await bootstrap.query(`CREATE SCHEMA "${schema}"`);
 
@@ -120,7 +135,12 @@ describe('LV1.7E — Loyalty Audit & Antifraud Suite (Real PostgreSQL)', () => {
     projRepo = dataSource.getRepository(CustomerLoyaltyAccountProjection);
 
     ledgerService = new LoyaltyLedgerService(txRepo, projRepo);
-    loyaltyService = new LoyaltyService(progRepo, rewardRepo, projRepo, custRepo);
+    loyaltyService = new LoyaltyService(
+      progRepo,
+      rewardRepo,
+      projRepo,
+      custRepo,
+    );
     redemptionService = new RedemptionService(
       progRepo,
       rewardRepo,
@@ -167,7 +187,10 @@ describe('LV1.7E — Loyalty Audit & Antifraud Suite (Real PostgreSQL)', () => {
       expect(prog.status).toBe(LoyaltyProgramStatus.DRAFT);
 
       // 2. Activate Program (bumps version to 2)
-      const progActive = await loyaltyService.activateProgram(tenantId, programId);
+      const progActive = await loyaltyService.activateProgram(
+        tenantId,
+        programId,
+      );
       expect(progActive.config_version).toBe(2);
       expect(progActive.status).toBe(LoyaltyProgramStatus.ACTIVE);
 
@@ -182,11 +205,17 @@ describe('LV1.7E — Loyalty Audit & Antifraud Suite (Real PostgreSQL)', () => {
       expect(reward.config_version).toBe(1);
       expect(reward.status).toBe(RewardStatus.INACTIVE);
 
-      const progAfterReward = await loyaltyService.findOneProgram(tenantId, programId);
+      const progAfterReward = await loyaltyService.findOneProgram(
+        tenantId,
+        programId,
+      );
       expect(progAfterReward.config_version).toBe(3);
 
       // 4. Activate Reward (bumps reward version to 2)
-      const rewardActive = await loyaltyService.activateReward(tenantId, rewardId);
+      const rewardActive = await loyaltyService.activateReward(
+        tenantId,
+        rewardId,
+      );
       expect(rewardActive.config_version).toBe(2);
       expect(rewardActive.status).toBe(RewardStatus.ACTIVE);
     });
@@ -214,9 +243,13 @@ describe('LV1.7E — Loyalty Audit & Antifraud Suite (Real PostgreSQL)', () => {
 
       // Verify projection is negative -50 (AV-10, AV-41)
       const proj = await projRepo.findOne({
-        where: { tenant_id: tenantId, customer_id: customerId, loyalty_program_id: programId },
+        where: {
+          tenant_id: tenantId,
+          customer_id: customerId,
+          loyalty_program_id: programId,
+        },
       });
-      expect(proj!.balance_units).toBe(-50);
+      expect(proj.balance_units).toBe(-50);
     });
   });
 
@@ -241,15 +274,19 @@ describe('LV1.7E — Loyalty Audit & Antifraud Suite (Real PostgreSQL)', () => {
         rewardId,
       });
 
-      const consolidation = await redemptionService.consolidateRedemption(tenantId, intent.id, {
+      const consolidation = await redemptionService.consolidateRedemption(
         tenantId,
-        branchId: 'main-branch',
-        terminalId: 'term-01',
-        ticketId: 'ticket-audit-001',
-        customerId,
-        paidAt: new Date(),
-        lines: [],
-      });
+        intent.id,
+        {
+          tenantId,
+          branchId: 'main-branch',
+          terminalId: 'term-01',
+          ticketId: 'ticket-audit-001',
+          customerId,
+          paidAt: new Date(),
+          lines: [],
+        },
+      );
 
       const tx = consolidation.redeemTransaction;
       expect(tx).toBeDefined();
@@ -309,12 +346,12 @@ describe('LV1.7E — Loyalty Audit & Antifraud Suite (Real PostgreSQL)', () => {
       const revRedeem = reversals.find((r) => r.units === 15);
 
       expect(revEarn).toBeDefined();
-      expect(revEarn!.reversal_of_transaction_id).toBeDefined();
-      expect(revEarn!.transaction_type).toBe('REVERSAL');
+      expect(revEarn.reversal_of_transaction_id).toBeDefined();
+      expect(revEarn.transaction_type).toBe('REVERSAL');
 
       expect(revRedeem).toBeDefined();
-      expect(revRedeem!.reversal_of_transaction_id).toBeDefined();
-      expect(revRedeem!.transaction_type).toBe('REVERSAL');
+      expect(revRedeem.reversal_of_transaction_id).toBeDefined();
+      expect(revRedeem.transaction_type).toBe('REVERSAL');
 
       // Verify originals were NOT deleted (Strictly append-only ledger!)
       const originals = await txRepo.find({
@@ -333,10 +370,14 @@ describe('LV1.7E — Loyalty Audit & Antifraud Suite (Real PostgreSQL)', () => {
         .getRawOne();
 
       const proj = await projRepo.findOne({
-        where: { tenant_id: tenantId, customer_id: customerId, loyalty_program_id: programId },
+        where: {
+          tenant_id: tenantId,
+          customer_id: customerId,
+          loyalty_program_id: programId,
+        },
       });
 
-      expect(proj!.balance_units).toBe(Number(sumResult.total));
+      expect(proj.balance_units).toBe(Number(sumResult.total));
     });
 
     it('retry of TicketVoided reversal is strictly idempotent (zero duplicates created)', async () => {

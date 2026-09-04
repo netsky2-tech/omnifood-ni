@@ -4,8 +4,16 @@ import { LoyaltyService } from './loyalty.service';
 import { LoyaltyLedgerService } from './loyalty-ledger.service';
 import { TicketPaidHandler } from './ticket-paid.handler';
 import { RedemptionService } from './redemption.service';
-import { LoyaltyProgram, LoyaltyProgramStatus, LoyaltyProgramType } from '../entities/loyalty-program.entity';
-import { RewardDefinition, RewardStatus, RewardType } from '../entities/reward-definition.entity';
+import {
+  LoyaltyProgram,
+  LoyaltyProgramStatus,
+  LoyaltyProgramType,
+} from '../entities/loyalty-program.entity';
+import {
+  RewardDefinition,
+  RewardStatus,
+  RewardType,
+} from '../entities/reward-definition.entity';
 import { CustomerLoyaltyAccountProjection } from '../entities/customer-loyalty-account-projection.entity';
 import { CustomerPointTransaction } from '../../customers/entities/customer-point-transaction.entity';
 import { Customer } from '../../customers/entities/customer.entity';
@@ -144,7 +152,7 @@ async function createTestHarness() {
     dataSource,
     bootstrap,
     schema,
-    customerId: activeCustomer!.id,
+    customerId: activeCustomer.id,
     destroy: async () => {
       await dataSource.destroy();
       await bootstrap.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
@@ -178,11 +186,15 @@ describe('LV1.3 — Redemption & Reversal (db)', () => {
     const program = await h.loyaltyService.createProgram('tenant-1', {
       name: `Program-${randomUUID().slice(0, 8)}`,
       program_type: (overrides?.programType ?? 'SPEND_POINTS') as any,
-      earning_rule: overrides?.earningRule ?? { spendBlockNio: 10, pointsPerBlock: 1 },
+      earning_rule: overrides?.earningRule ?? {
+        spendBlockNio: 10,
+        pointsPerBlock: 1,
+      },
       eligibility_rule: {},
-      starts_at: overrides?.endsAt && overrides.endsAt < new Date('2026-01-01T00:00:00Z')
-        ? '2019-01-01T00:00:00Z'
-        : '2026-01-01T00:00:00Z',
+      starts_at:
+        overrides?.endsAt && overrides.endsAt < new Date('2026-01-01T00:00:00Z')
+          ? '2019-01-01T00:00:00Z'
+          : '2026-01-01T00:00:00Z',
       ends_at: overrides?.endsAt?.toISOString() ?? '2027-12-31T23:59:59Z',
     });
 
@@ -247,7 +259,9 @@ describe('LV1.3 — Redemption & Reversal (db)', () => {
     });
 
     it('rejects redemption when balance is insufficient', async () => {
-      const { program, reward } = await setupProgramWithReward({ costUnits: 200 });
+      const { program, reward } = await setupProgramWithReward({
+        costUnits: 200,
+      });
 
       await expect(
         h.redemptionService.createRedemptionIntent({
@@ -261,7 +275,9 @@ describe('LV1.3 — Redemption & Reversal (db)', () => {
     });
 
     it('rejects redemption for INACTIVE reward', async () => {
-      const { program, reward } = await setupProgramWithReward({ rewardStatus: 'INACTIVE' });
+      const { program, reward } = await setupProgramWithReward({
+        rewardStatus: 'INACTIVE',
+      });
       await earnPoints(h.customerId, program.id, 'ticket-earn-inactive', 100);
 
       await expect(
@@ -276,7 +292,10 @@ describe('LV1.3 — Redemption & Reversal (db)', () => {
     });
 
     it('rejects redemption for DRAFT program', async () => {
-      const { program, reward } = await setupProgramWithReward({ programStatus: 'DRAFT', rewardStatus: 'INACTIVE' });
+      const { program, reward } = await setupProgramWithReward({
+        programStatus: 'DRAFT',
+        rewardStatus: 'INACTIVE',
+      });
       await earnPoints(h.customerId, program.id, 'ticket-earn-draft', 100);
 
       await expect(
@@ -319,13 +338,17 @@ describe('LV1.3 — Redemption & Reversal (db)', () => {
       });
       await h.loyaltyService.activateProgram('tenant-1', program.id);
 
-      const reward = await h.loyaltyService.createReward('tenant-1', program.id, {
-        name: 'Valid Reward',
-        reward_type: 'DISCOUNT_AMOUNT' as any,
-        cost_units: 30,
-        benefit_config: { amountNio: 15 },
-        // reward ends_at is NOT in the past
-      });
+      const reward = await h.loyaltyService.createReward(
+        'tenant-1',
+        program.id,
+        {
+          name: 'Valid Reward',
+          reward_type: 'DISCOUNT_AMOUNT' as any,
+          cost_units: 30,
+          benefit_config: { amountNio: 15 },
+          // reward ends_at is NOT in the past
+        },
+      );
       await h.loyaltyService.activateReward('tenant-1', reward.id);
 
       await earnPoints(h.customerId, program.id, 'ticket-earn-pastprog', 100);
@@ -402,16 +425,23 @@ describe('LV1.3 — Redemption & Reversal (db)', () => {
       const inactiveCustomer = await h.dataSource
         .getRepository(Customer)
         .createQueryBuilder('c')
-        .where('c.tenant_id = :tid AND c.is_active = false', { tid: 'tenant-1' })
+        .where('c.tenant_id = :tid AND c.is_active = false', {
+          tid: 'tenant-1',
+        })
         .getOne();
 
       const { program, reward } = await setupProgramWithReward();
-      await earnPoints(inactiveCustomer!.id, program.id, 'ticket-earn-inactcust', 100);
+      await earnPoints(
+        inactiveCustomer.id,
+        program.id,
+        'ticket-earn-inactcust',
+        100,
+      );
 
       await expect(
         h.redemptionService.createRedemptionIntent({
           tenantId: 'tenant-1',
-          customerId: inactiveCustomer!.id,
+          customerId: inactiveCustomer.id,
           ticketId: 'ticket-inactcust',
           loyaltyProgramId: program.id,
           rewardId: reward.id,
@@ -427,7 +457,12 @@ describe('LV1.3 — Redemption & Reversal (db)', () => {
         costUnits: 50,
         benefitConfig: { amountNio: 25 },
       });
-      await earnPoints(h.customerId, program.id, 'ticket-earn-consolidate', 100);
+      await earnPoints(
+        h.customerId,
+        program.id,
+        'ticket-earn-consolidate',
+        100,
+      );
 
       // Create intent
       const intent = await h.redemptionService.createRedemptionIntent({
@@ -447,7 +482,13 @@ describe('LV1.3 — Redemption & Reversal (db)', () => {
         customerId: h.customerId,
         paidAt: new Date(),
         lines: [
-          { lineId: 'l1', productId: 'p1', quantity: 1, merchandiseNetNioAfterAllBenefits: 150, source: 'NORMAL' },
+          {
+            lineId: 'l1',
+            productId: 'p1',
+            quantity: 1,
+            merchandiseNetNioAfterAllBenefits: 150,
+            source: 'NORMAL',
+          },
         ],
       };
 
@@ -465,7 +506,10 @@ describe('LV1.3 — Redemption & Reversal (db)', () => {
       expect(redeemResult.redeemTransaction.transaction_type).toBe('REDEEM');
       expect(redeemResult.redeemTransaction.units).toBe(-50);
       expect(redeemResult.redeemTransaction.reward_id).toBe(reward.id);
-      expect((redeemResult.redeemTransaction.commercial_snapshot as any)?.appliedBenefitNio).toBe(25);
+      expect(
+        (redeemResult.redeemTransaction.commercial_snapshot as any)
+          ?.appliedBenefitNio,
+      ).toBe(25);
     });
 
     it('is idempotent: consolidating same intent twice returns existing', async () => {
@@ -491,18 +535,34 @@ describe('LV1.3 — Redemption & Reversal (db)', () => {
         customerId: h.customerId,
         paidAt: new Date(),
         lines: [
-          { lineId: 'l1', productId: 'p1', quantity: 1, merchandiseNetNioAfterAllBenefits: 50, source: 'NORMAL' },
+          {
+            lineId: 'l1',
+            productId: 'p1',
+            quantity: 1,
+            merchandiseNetNioAfterAllBenefits: 50,
+            source: 'NORMAL',
+          },
         ],
       };
 
-      await h.redemptionService.consolidateRedemption('tenant-1', intent.id, snapshot);
-      const second = await h.redemptionService.consolidateRedemption('tenant-1', intent.id, snapshot);
+      await h.redemptionService.consolidateRedemption(
+        'tenant-1',
+        intent.id,
+        snapshot,
+      );
+      const second = await h.redemptionService.consolidateRedemption(
+        'tenant-1',
+        intent.id,
+        snapshot,
+      );
 
       expect(second.alreadyConsolidated).toBe(true);
     });
 
     it('failed payment does NOT create REDEEM', async () => {
-      const { program, reward } = await setupProgramWithReward({ costUnits: 40 });
+      const { program, reward } = await setupProgramWithReward({
+        costUnits: 40,
+      });
       await earnPoints(h.customerId, program.id, 'ticket-earn-failedpay', 100);
 
       const intent = await h.redemptionService.createRedemptionIntent({
@@ -517,7 +577,10 @@ describe('LV1.3 — Redemption & Reversal (db)', () => {
       // Instead, void the intent
       await h.redemptionService.voidIntent('tenant-1', intent.id);
 
-      const intentAfter = await h.redemptionService.getIntent('tenant-1', intent.id);
+      const intentAfter = await h.redemptionService.getIntent(
+        'tenant-1',
+        intent.id,
+      );
       expect(intentAfter.status).toBe('VOIDED');
 
       // Verify no REDEEM transaction was created
@@ -529,7 +592,9 @@ describe('LV1.3 — Redemption & Reversal (db)', () => {
     });
 
     it('one-redemption constraint: second reward on same ticket rejected after consolidation', async () => {
-      const { program, reward } = await setupProgramWithReward({ costUnits: 20 });
+      const { program, reward } = await setupProgramWithReward({
+        costUnits: 20,
+      });
       await earnPoints(h.customerId, program.id, 'ticket-earn-oncered', 200);
 
       const intent = await h.redemptionService.createRedemptionIntent({
@@ -541,12 +606,16 @@ describe('LV1.3 — Redemption & Reversal (db)', () => {
       });
 
       // Create a second reward
-      const reward2 = await h.loyaltyService.createReward('tenant-1', program.id, {
-        name: 'Second Reward',
-        reward_type: RewardType.DISCOUNT_AMOUNT,
-        cost_units: 30,
-        benefit_config: { amountNio: 15 },
-      });
+      const reward2 = await h.loyaltyService.createReward(
+        'tenant-1',
+        program.id,
+        {
+          name: 'Second Reward',
+          reward_type: RewardType.DISCOUNT_AMOUNT,
+          cost_units: 30,
+          benefit_config: { amountNio: 15 },
+        },
+      );
       await h.loyaltyService.activateReward('tenant-1', reward2.id);
 
       // Consolidate first
@@ -557,7 +626,15 @@ describe('LV1.3 — Redemption & Reversal (db)', () => {
         ticketId: 'ticket-oncered',
         customerId: h.customerId,
         paidAt: new Date(),
-        lines: [{ lineId: 'l1', productId: 'p1', quantity: 1, merchandiseNetNioAfterAllBenefits: 50, source: 'NORMAL' }],
+        lines: [
+          {
+            lineId: 'l1',
+            productId: 'p1',
+            quantity: 1,
+            merchandiseNetNioAfterAllBenefits: 50,
+            source: 'NORMAL',
+          },
+        ],
       });
 
       // Try second redemption — should fail
@@ -590,15 +667,27 @@ describe('LV1.3 — Redemption & Reversal (db)', () => {
       });
 
       // Consolidate (creates REDEEM)
-      const consolidateResult = await h.redemptionService.consolidateRedemption('tenant-1', intent.id, {
-        tenantId: 'tenant-1',
-        branchId: 'b1',
-        terminalId: 't1',
-        ticketId: 'ticket-void',
-        customerId: h.customerId,
-        paidAt: new Date(),
-        lines: [{ lineId: 'l1', productId: 'p1', quantity: 1, merchandiseNetNioAfterAllBenefits: 50, source: 'NORMAL' }],
-      });
+      const consolidateResult = await h.redemptionService.consolidateRedemption(
+        'tenant-1',
+        intent.id,
+        {
+          tenantId: 'tenant-1',
+          branchId: 'b1',
+          terminalId: 't1',
+          ticketId: 'ticket-void',
+          customerId: h.customerId,
+          paidAt: new Date(),
+          lines: [
+            {
+              lineId: 'l1',
+              productId: 'p1',
+              quantity: 1,
+              merchandiseNetNioAfterAllBenefits: 50,
+              source: 'NORMAL',
+            },
+          ],
+        },
+      );
 
       // Verify REDEEM was created
       expect(consolidateResult.redeemTransaction).toBeDefined();
@@ -621,7 +710,9 @@ describe('LV1.3 — Redemption & Reversal (db)', () => {
 
       // Should create reversals for reversible movements
       expect(reversals.length).toBeGreaterThanOrEqual(1);
-      const txTypes = reversals.map((r) => (r.transaction_type as string)?.toLowerCase());
+      const txTypes = reversals.map((r) =>
+        (r.transaction_type as string)?.toLowerCase(),
+      );
       expect(txTypes).toContain('reversal');
 
       // Each reversal should negate the original movement
@@ -654,11 +745,27 @@ describe('LV1.3 — Redemption & Reversal (db)', () => {
         ticketId: 'ticket-void-idem',
         customerId: h.customerId,
         paidAt: new Date(),
-        lines: [{ lineId: 'l1', productId: 'p1', quantity: 1, merchandiseNetNioAfterAllBenefits: 30, source: 'NORMAL' }],
+        lines: [
+          {
+            lineId: 'l1',
+            productId: 'p1',
+            quantity: 1,
+            merchandiseNetNioAfterAllBenefits: 30,
+            source: 'NORMAL',
+          },
+        ],
       });
 
-      const first = await h.redemptionService.reverseTicketLoyalty('tenant-1', 'ticket-void-idem', h.customerId);
-      const second = await h.redemptionService.reverseTicketLoyalty('tenant-1', 'ticket-void-idem', h.customerId);
+      const first = await h.redemptionService.reverseTicketLoyalty(
+        'tenant-1',
+        'ticket-void-idem',
+        h.customerId,
+      );
+      const second = await h.redemptionService.reverseTicketLoyalty(
+        'tenant-1',
+        'ticket-void-idem',
+        h.customerId,
+      );
 
       expect(second.length).toBe(0); // Already reversed
       // Count all reversals for this ticket
@@ -691,23 +798,41 @@ describe('LV1.3 — Redemption & Reversal (db)', () => {
         ticketId: 'ticket-negbal',
         customerId: h.customerId,
         paidAt: new Date(),
-        lines: [{ lineId: 'l1', productId: 'p1', quantity: 1, merchandiseNetNioAfterAllBenefits: 50, source: 'NORMAL' }],
+        lines: [
+          {
+            lineId: 'l1',
+            productId: 'p1',
+            quantity: 1,
+            merchandiseNetNioAfterAllBenefits: 50,
+            source: 'NORMAL',
+          },
+        ],
       });
 
       // After: balance = 100 (earn) - 80 (redeem) = 20, then +10 (new earn from consolidate) = 30
       // Reversal will undo EARN(-10) and REDEEM(+80), net = +70
       // But the projection may go negative if we reverse the original earn too
-      await h.redemptionService.reverseTicketLoyalty('tenant-1', 'ticket-negbal', h.customerId);
+      await h.redemptionService.reverseTicketLoyalty(
+        'tenant-1',
+        'ticket-negbal',
+        h.customerId,
+      );
 
       // The system should NOT throw — negative balance is allowed per spec
-      const balance = await h.loyaltyService.getCustomerBalance('tenant-1', h.customerId, program.id);
+      const balance = await h.loyaltyService.getCustomerBalance(
+        'tenant-1',
+        h.customerId,
+        program.id,
+      );
       expect(typeof balance.balanceUnits).toBe('number');
     });
   });
 
   describe('LV1.3E — Audit correlation', () => {
     it('REDEEM transaction has correct source_event_id and actor metadata', async () => {
-      const { program, reward } = await setupProgramWithReward({ costUnits: 25 });
+      const { program, reward } = await setupProgramWithReward({
+        costUnits: 25,
+      });
       await earnPoints(h.customerId, program.id, 'ticket-earn-audit', 100);
 
       const intent = await h.redemptionService.createRedemptionIntent({
@@ -725,7 +850,15 @@ describe('LV1.3 — Redemption & Reversal (db)', () => {
         ticketId: 'ticket-audit',
         customerId: h.customerId,
         paidAt: new Date(),
-        lines: [{ lineId: 'l1', productId: 'p1', quantity: 1, merchandiseNetNioAfterAllBenefits: 50, source: 'NORMAL' }],
+        lines: [
+          {
+            lineId: 'l1',
+            productId: 'p1',
+            quantity: 1,
+            merchandiseNetNioAfterAllBenefits: 50,
+            source: 'NORMAL',
+          },
+        ],
       });
 
       const redeemTx = await h.dataSource.query(
@@ -742,7 +875,9 @@ describe('LV1.3 — Redemption & Reversal (db)', () => {
     });
 
     it('REVERSAL transaction references original via reversal_of_transaction_id', async () => {
-      const { program, reward } = await setupProgramWithReward({ costUnits: 15 });
+      const { program, reward } = await setupProgramWithReward({
+        costUnits: 15,
+      });
       await earnPoints(h.customerId, program.id, 'ticket-earn-revref', 50);
 
       const intent = await h.redemptionService.createRedemptionIntent({
@@ -760,10 +895,22 @@ describe('LV1.3 — Redemption & Reversal (db)', () => {
         ticketId: 'ticket-revref',
         customerId: h.customerId,
         paidAt: new Date(),
-        lines: [{ lineId: 'l1', productId: 'p1', quantity: 1, merchandiseNetNioAfterAllBenefits: 30, source: 'NORMAL' }],
+        lines: [
+          {
+            lineId: 'l1',
+            productId: 'p1',
+            quantity: 1,
+            merchandiseNetNioAfterAllBenefits: 30,
+            source: 'NORMAL',
+          },
+        ],
       });
 
-      const reversals = await h.redemptionService.reverseTicketLoyalty('tenant-1', 'ticket-revref', h.customerId);
+      const reversals = await h.redemptionService.reverseTicketLoyalty(
+        'tenant-1',
+        'ticket-revref',
+        h.customerId,
+      );
 
       for (const rev of reversals) {
         expect(rev.reversal_of_transaction_id).toBeDefined();
@@ -790,7 +937,9 @@ describe('LV1.3 — Redemption & Reversal (db)', () => {
       });
 
       expect(intent.application.rewardType).toBe('FREE_PRODUCT');
-      expect((intent.application.benefitConfig as any).productId).toBe('prod-cappuccino');
+      expect((intent.application.benefitConfig as any).productId).toBe(
+        'prod-cappuccino',
+      );
     });
 
     it('DISCOUNT_AMOUNT redemption creates correct application with amountNio', async () => {
@@ -814,7 +963,9 @@ describe('LV1.3 — Redemption & Reversal (db)', () => {
     });
 
     it('historical reward-version preserved via snapshot after reward config changes', async () => {
-      const { program, reward } = await setupProgramWithReward({ costUnits: 30 });
+      const { program, reward } = await setupProgramWithReward({
+        costUnits: 30,
+      });
       await earnPoints(h.customerId, program.id, 'ticket-earn-version', 100);
 
       const intent = await h.redemptionService.createRedemptionIntent({
@@ -832,15 +983,27 @@ describe('LV1.3 — Redemption & Reversal (db)', () => {
       });
 
       // Consolidate — should use the ORIGINAL version captured at intent creation
-      const result = await h.redemptionService.consolidateRedemption('tenant-1', intent.id, {
-        tenantId: 'tenant-1',
-        branchId: 'b1',
-        terminalId: 't1',
-        ticketId: 'ticket-version',
-        customerId: h.customerId,
-        paidAt: new Date(),
-        lines: [{ lineId: 'l1', productId: 'p1', quantity: 1, merchandiseNetNioAfterAllBenefits: 50, source: 'NORMAL' }],
-      });
+      const result = await h.redemptionService.consolidateRedemption(
+        'tenant-1',
+        intent.id,
+        {
+          tenantId: 'tenant-1',
+          branchId: 'b1',
+          terminalId: 't1',
+          ticketId: 'ticket-version',
+          customerId: h.customerId,
+          paidAt: new Date(),
+          lines: [
+            {
+              lineId: 'l1',
+              productId: 'p1',
+              quantity: 1,
+              merchandiseNetNioAfterAllBenefits: 50,
+              source: 'NORMAL',
+            },
+          ],
+        },
+      );
 
       // The redeem should use original cost_units (30), not the updated one (500)
       expect(result.redeemTransaction.units).toBe(-30);
@@ -863,14 +1026,22 @@ describe('LV1.3 — Redemption & Reversal (db)', () => {
         customerId: h.customerId,
         paidAt: new Date('2026-06-01T12:00:00Z'),
         lines: [
-          { lineId: 'l1', productId: 'p1', quantity: 1, merchandiseNetNioAfterAllBenefits: 100, source: 'NORMAL' },
+          {
+            lineId: 'l1',
+            productId: 'p1',
+            quantity: 1,
+            merchandiseNetNioAfterAllBenefits: 100,
+            source: 'NORMAL',
+          },
         ],
       };
 
       const firstResults = await h.ticketPaidHandler.handle(snapshot);
-      const programResult = firstResults.find((r) => r.programId === program.id);
+      const programResult = firstResults.find(
+        (r) => r.programId === program.id,
+      );
       expect(programResult).toBeDefined();
-      expect(programResult!.units).toBe(10);
+      expect(programResult.units).toBe(10);
 
       const firstProj = await h.dataSource.query(
         `SELECT balance_units, projection_version FROM "${h.schema}".customer_loyalty_account_projection WHERE tenant_id = $1 AND customer_id = $2 AND loyalty_program_id = $3`,
@@ -881,9 +1052,11 @@ describe('LV1.3 — Redemption & Reversal (db)', () => {
 
       // Retry the exact same ticket
       const secondResults = await h.ticketPaidHandler.handle(snapshot);
-      const secondProgramResult = secondResults.find((r) => r.programId === program.id);
+      const secondProgramResult = secondResults.find(
+        (r) => r.programId === program.id,
+      );
       expect(secondProgramResult).toBeDefined();
-      expect(secondProgramResult!.units).toBe(10);
+      expect(secondProgramResult.units).toBe(10);
 
       const secondProj = await h.dataSource.query(
         `SELECT balance_units, projection_version FROM "${h.schema}".customer_loyalty_account_projection WHERE tenant_id = $1 AND customer_id = $2 AND loyalty_program_id = $3`,
@@ -916,7 +1089,10 @@ describe('LV1.3 — Redemption & Reversal (db)', () => {
       const progProd = await h.loyaltyService.createProgram('tenant-1', {
         name: `Multi-Prod-${randomUUID().slice(0, 6)}`,
         program_type: 'PRODUCT_STAMPS' as any,
-        earning_rule: { eligibleProductIds: ['prod-burger'], unitsPerPurchasedUnit: 1 },
+        earning_rule: {
+          eligibleProductIds: ['prod-burger'],
+          unitsPerPurchasedUnit: 1,
+        },
         eligibility_rule: {},
         starts_at: '2026-01-01T00:00:00Z',
         ends_at: '2027-12-31T23:59:59Z',
@@ -942,8 +1118,20 @@ describe('LV1.3 — Redemption & Reversal (db)', () => {
         customerId: h.customerId,
         paidAt: new Date('2026-06-01T12:00:00Z'),
         lines: [
-          { lineId: 'l1', productId: 'prod-burger', quantity: 3, merchandiseNetNioAfterAllBenefits: 300, source: 'NORMAL' },
-          { lineId: 'l2', productId: 'prod-free', quantity: 1, merchandiseNetNioAfterAllBenefits: 50, source: 'LOYALTY_REWARD' },
+          {
+            lineId: 'l1',
+            productId: 'prod-burger',
+            quantity: 3,
+            merchandiseNetNioAfterAllBenefits: 300,
+            source: 'NORMAL',
+          },
+          {
+            lineId: 'l2',
+            productId: 'prod-free',
+            quantity: 1,
+            merchandiseNetNioAfterAllBenefits: 50,
+            source: 'LOYALTY_REWARD',
+          },
         ],
       };
 
@@ -954,15 +1142,15 @@ describe('LV1.3 — Redemption & Reversal (db)', () => {
 
       expect(spendRes).toBeDefined();
       // Spend: only NORMAL lines count -> 300 NIO / 20 = 15 blocks * 2 points = 30 units
-      expect(spendRes!.units).toBe(30);
+      expect(spendRes.units).toBe(30);
 
       expect(prodRes).toBeDefined();
       // Product: 3 burgers = 3 stamps (LOYALTY_REWARD line excluded)
-      expect(prodRes!.units).toBe(3);
+      expect(prodRes.units).toBe(3);
 
       expect(visitRes).toBeDefined();
       // Visit: 1 visit stamp
-      expect(visitRes!.units).toBe(1);
+      expect(visitRes.units).toBe(1);
     });
 
     it('INACTIVE program produces no EARN in real DB', async () => {
@@ -984,12 +1172,20 @@ describe('LV1.3 — Redemption & Reversal (db)', () => {
         customerId: h.customerId,
         paidAt: new Date('2026-06-01T12:00:00Z'),
         lines: [
-          { lineId: 'l1', productId: 'p1', quantity: 1, merchandiseNetNioAfterAllBenefits: 100, source: 'NORMAL' },
+          {
+            lineId: 'l1',
+            productId: 'p1',
+            quantity: 1,
+            merchandiseNetNioAfterAllBenefits: 100,
+            source: 'NORMAL',
+          },
         ],
       };
 
       const results = await h.ticketPaidHandler.handle(snapshot);
-      expect(results.find((r) => r.programId === progInactive.id)).toBeUndefined();
+      expect(
+        results.find((r) => r.programId === progInactive.id),
+      ).toBeUndefined();
     });
   });
 });

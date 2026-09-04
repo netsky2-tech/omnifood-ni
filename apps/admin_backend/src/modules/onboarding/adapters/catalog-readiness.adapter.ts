@@ -14,13 +14,15 @@ export class CatalogReadinessAdapter implements CatalogReadinessPort {
     private readonly productRepository: Repository<Product>,
   ) {}
 
-  async evaluateCatalogReadiness(tenantId: string): Promise<CatalogReadinessResult> {
+  async evaluateCatalogReadiness(
+    tenantId: string,
+  ): Promise<CatalogReadinessResult> {
     const sellableCount = await this.productRepository
       .createQueryBuilder('product')
       .where('product.tenant_id = :tenantId', { tenantId })
       .andWhere('product.is_active = true')
       .andWhere('product.sellPrice > 0')
-      .andWhere('product.name IS NOT NULL AND TRIM(product.name) != \'\'')
+      .andWhere("product.name IS NOT NULL AND TRIM(product.name) != ''")
       .getCount();
 
     return {

@@ -1,6 +1,13 @@
 import { TicketPaidHandler } from './ticket-paid.handler';
-import { LoyaltyLedgerService, AppendLoyaltyTxDto } from './loyalty-ledger.service';
-import { LoyaltyProgram, LoyaltyProgramStatus, LoyaltyProgramType } from '../entities/loyalty-program.entity';
+import {
+  LoyaltyLedgerService,
+  AppendLoyaltyTxDto,
+} from './loyalty-ledger.service';
+import {
+  LoyaltyProgram,
+  LoyaltyProgramStatus,
+  LoyaltyProgramType,
+} from '../entities/loyalty-program.entity';
 import { Customer } from '../../customers/entities/customer.entity';
 import { LoyaltyTicketSnapshot } from '../domain/loyalty-ticket-snapshot';
 
@@ -13,7 +20,9 @@ describe('TicketPaidHandler', () => {
   beforeEach(() => {
     mockProgramRepo = { find: jest.fn().mockResolvedValue([]) };
     mockCustomerRepo = { findOne: jest.fn() };
-    mockLedgerService = { appendTransaction: jest.fn().mockResolvedValue({ id: 'tx-1' }) };
+    mockLedgerService = {
+      appendTransaction: jest.fn().mockResolvedValue({ id: 'tx-1' }),
+    };
 
     handler = new TicketPaidHandler(
       mockProgramRepo as any,
@@ -22,7 +31,9 @@ describe('TicketPaidHandler', () => {
     );
   });
 
-  function makeSnapshot(overrides?: Partial<LoyaltyTicketSnapshot>): LoyaltyTicketSnapshot {
+  function makeSnapshot(
+    overrides?: Partial<LoyaltyTicketSnapshot>,
+  ): LoyaltyTicketSnapshot {
     return {
       tenantId: 'tenant-1',
       branchId: 'branch-1',
@@ -31,7 +42,13 @@ describe('TicketPaidHandler', () => {
       customerId: 'cust-1',
       paidAt: new Date('2026-09-01T12:00:00Z'),
       lines: [
-        { lineId: 'l1', productId: 'p1', quantity: 1, merchandiseNetNioAfterAllBenefits: 100, source: 'NORMAL' },
+        {
+          lineId: 'l1',
+          productId: 'p1',
+          quantity: 1,
+          merchandiseNetNioAfterAllBenefits: 100,
+          source: 'NORMAL',
+        },
       ],
       ...overrides,
     };
@@ -56,7 +73,9 @@ describe('TicketPaidHandler', () => {
   }
 
   it('returns empty if no customerId', async () => {
-    const result = await handler.handle(makeSnapshot({ customerId: undefined }));
+    const result = await handler.handle(
+      makeSnapshot({ customerId: undefined }),
+    );
     expect(result).toEqual([]);
   });
 
@@ -67,20 +86,29 @@ describe('TicketPaidHandler', () => {
   });
 
   it('returns empty if customer is inactive', async () => {
-    mockCustomerRepo.findOne.mockResolvedValue({ id: 'cust-1', is_active: false } as Customer);
+    mockCustomerRepo.findOne.mockResolvedValue({
+      id: 'cust-1',
+      is_active: false,
+    });
     const result = await handler.handle(makeSnapshot());
     expect(result).toEqual([]);
   });
 
   it('returns empty if no active programs', async () => {
-    mockCustomerRepo.findOne.mockResolvedValue({ id: 'cust-1', is_active: true } as Customer);
+    mockCustomerRepo.findOne.mockResolvedValue({
+      id: 'cust-1',
+      is_active: true,
+    });
     mockProgramRepo.find.mockResolvedValue([]);
     const result = await handler.handle(makeSnapshot());
     expect(result).toEqual([]);
   });
 
   it('generates EARN for one active SPEND program', async () => {
-    mockCustomerRepo.findOne.mockResolvedValue({ id: 'cust-1', is_active: true } as Customer);
+    mockCustomerRepo.findOne.mockResolvedValue({
+      id: 'cust-1',
+      is_active: true,
+    });
     mockProgramRepo.find.mockResolvedValue([makeProgram()]);
 
     const result = await handler.handle(makeSnapshot());
@@ -93,10 +121,20 @@ describe('TicketPaidHandler', () => {
   });
 
   it('generates EARN for multiple programs', async () => {
-    mockCustomerRepo.findOne.mockResolvedValue({ id: 'cust-1', is_active: true } as Customer);
+    mockCustomerRepo.findOne.mockResolvedValue({
+      id: 'cust-1',
+      is_active: true,
+    });
     mockProgramRepo.find.mockResolvedValue([
-      makeProgram({ id: 'prog-1', program_type: LoyaltyProgramType.SPEND_POINTS }),
-      makeProgram({ id: 'prog-2', program_type: LoyaltyProgramType.VISIT_STAMPS, earning_rule: { unitsPerVisit: 1 } }),
+      makeProgram({
+        id: 'prog-1',
+        program_type: LoyaltyProgramType.SPEND_POINTS,
+      }),
+      makeProgram({
+        id: 'prog-2',
+        program_type: LoyaltyProgramType.VISIT_STAMPS,
+        earning_rule: { unitsPerVisit: 1 },
+      }),
     ]);
 
     const result = await handler.handle(makeSnapshot());
@@ -106,9 +144,15 @@ describe('TicketPaidHandler', () => {
   });
 
   it('skips INACTIVE programs even if returned', async () => {
-    mockCustomerRepo.findOne.mockResolvedValue({ id: 'cust-1', is_active: true } as Customer);
+    mockCustomerRepo.findOne.mockResolvedValue({
+      id: 'cust-1',
+      is_active: true,
+    });
     mockProgramRepo.find.mockResolvedValue([
-      makeProgram({ id: 'prog-inactive', status: LoyaltyProgramStatus.INACTIVE }),
+      makeProgram({
+        id: 'prog-inactive',
+        status: LoyaltyProgramStatus.INACTIVE,
+      }),
     ]);
 
     const result = await handler.handle(makeSnapshot());
@@ -116,37 +160,54 @@ describe('TicketPaidHandler', () => {
   });
 
   it('skips programs outside earning window (before starts_at)', async () => {
-    mockCustomerRepo.findOne.mockResolvedValue({ id: 'cust-1', is_active: true } as Customer);
+    mockCustomerRepo.findOne.mockResolvedValue({
+      id: 'cust-1',
+      is_active: true,
+    });
     mockProgramRepo.find.mockResolvedValue([
       makeProgram({ starts_at: new Date('2026-10-01T00:00:00Z') }),
     ]);
 
-    const result = await handler.handle(makeSnapshot({ paidAt: new Date('2026-09-01T12:00:00Z') }));
+    const result = await handler.handle(
+      makeSnapshot({ paidAt: new Date('2026-09-01T12:00:00Z') }),
+    );
     expect(result).toEqual([]);
   });
 
   it('skips programs outside earning window (after ends_at)', async () => {
-    mockCustomerRepo.findOne.mockResolvedValue({ id: 'cust-1', is_active: true } as Customer);
+    mockCustomerRepo.findOne.mockResolvedValue({
+      id: 'cust-1',
+      is_active: true,
+    });
     mockProgramRepo.find.mockResolvedValue([
       makeProgram({ ends_at: new Date('2026-08-01T00:00:00Z') }),
     ]);
 
-    const result = await handler.handle(makeSnapshot({ paidAt: new Date('2026-09-01T12:00:00Z') }));
+    const result = await handler.handle(
+      makeSnapshot({ paidAt: new Date('2026-09-01T12:00:00Z') }),
+    );
     expect(result).toEqual([]);
   });
 
   it('sends idempotency key with correct format', async () => {
-    mockCustomerRepo.findOne.mockResolvedValue({ id: 'cust-1', is_active: true } as Customer);
+    mockCustomerRepo.findOne.mockResolvedValue({
+      id: 'cust-1',
+      is_active: true,
+    });
     mockProgramRepo.find.mockResolvedValue([makeProgram()]);
 
     await handler.handle(makeSnapshot({ ticketId: 'ticket-42' }));
 
-    const call = mockLedgerService.appendTransaction.mock.calls[0][0] as AppendLoyaltyTxDto;
+    const call = mockLedgerService.appendTransaction.mock
+      .calls[0][0] as AppendLoyaltyTxDto;
     expect(call.idempotencyKey).toBe('loyalty:earn:tenant-1:ticket-42:prog-1');
   });
 
   it('is idempotent: calling twice with same ticket does not duplicate', async () => {
-    mockCustomerRepo.findOne.mockResolvedValue({ id: 'cust-1', is_active: true } as Customer);
+    mockCustomerRepo.findOne.mockResolvedValue({
+      id: 'cust-1',
+      is_active: true,
+    });
     mockProgramRepo.find.mockResolvedValue([makeProgram()]);
 
     await handler.handle(makeSnapshot({ ticketId: 'ticket-idem' }));

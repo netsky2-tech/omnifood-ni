@@ -6,10 +6,7 @@ import { PromotionsController } from './controllers/promotions.controller';
 import { IdentityModule } from '../identity/identity.module';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([Promotion]),
-    IdentityModule,
-  ],
+  imports: [TypeOrmModule.forFeature([Promotion]), IdentityModule],
   controllers: [PromotionsController],
   providers: [PromotionsService],
   exports: [PromotionsService, TypeOrmModule],
