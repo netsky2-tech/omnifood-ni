@@ -327,6 +327,9 @@ void main() {
       expect(summary.checks['PRINTER_AVAILABLE']!.status, equals('PASS'));
       expect(summary.checks['TEST_PRINT']!.status, equals('PASS'));
       expect(summary.checks['SQLITE_DURABILITY']!.status, equals('PASS'));
+      expect(printerAdapter.printHistory, hasLength(1));
+      expect(printerAdapter.lastPrintedText, contains('ONB1.10'));
+      expect(printerAdapter.lastPrintedText, contains(attemptId));
 
       // Verify Floor SQLite persistence: all 6 checks saved
       final persistedChecks = await database.activationCheckResultLocalDao.getChecksForAttempt(
@@ -419,6 +422,30 @@ void main() {
       expect(summary.checks['PRINTER_AVAILABLE']!.status, equals('FAIL'));
       expect(summary.checks['TEST_PRINT']!.status, equals('FAIL'));
       expect(summary.blockers.any((b) => b.contains('PRINTER_AVAILABLE_FAILED')), isTrue);
+      expect(printerAdapter.printHistory, isEmpty);
+    });
+
+    test('fails TEST_PRINT when the ready printer rejects the physical print', () async {
+      printerAdapter.shouldFail = true;
+      printerAdapter.failureMessage = 'Nyx native printText returned code -7';
+
+      final summary = await runner.runPreOfflineChecks(
+        const PreOfflineRunnerParams(
+          attemptId: attemptId,
+          tenantId: tenantId,
+          authorizedUserId: authorizedUserId,
+          authorizedUserPin: validPin,
+        ),
+      );
+
+      expect(summary.isReadyForOffline, isFalse);
+      expect(summary.checks['PRINTER_AVAILABLE']!.status, equals('PASS'));
+      expect(summary.checks['TEST_PRINT']!.status, equals('FAIL'));
+      expect(printerAdapter.printHistory, hasLength(1));
+      expect(
+        summary.blockers,
+        contains('TEST_PRINT_FAILED: Nyx native printText returned code -7'),
+      );
     });
   });
 

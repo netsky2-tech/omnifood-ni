@@ -1636,13 +1636,13 @@ En PostgreSQL real:
 - [x] support requiere tenant grant y justificación sustantiva auditada;
 - [x] device evidence se liga a `DevicePrincipal` con detección estricta de forgery.
 
-### ONB1.10D — Full regression
+### ONB1.10D — Full regression (Cerrado en PR-ONB-25)
 
 La suite final debe cubrir como mínimo los **74 escenarios normativos** de `onboarding_architecture_spec.md` y conservar los W9 tests aún válidos.
 
 Un test legacy reemplazado debe tener mapping explícito al nuevo test, no desaparecer sin receipt.
 
-### ONB1.10E — Feature rollout / cutover order
+### ONB1.10E — Feature rollout / cutover order (Cerrado en PR-ONB-25)
 
 Orden de habilitación recomendado:
 
@@ -1672,7 +1672,7 @@ onboarding.activation_v1
 
 Los flags controlan exposición/cutover; **no** crean dos fuentes de verdad permanentes.
 
-### ONB1.10F — Founder pilot rehearsal
+### ONB1.10F — Founder pilot rehearsal (Automatización parcial; hardware físico pendiente)
 
 Ejecutar con el hardware/fixture fundador:
 
@@ -1689,7 +1689,7 @@ Ejecutar con el hardware/fixture fundador:
 
 **El target TTFSS `<= 15 min` se mide aquí como señal preliminar, pero su aceptación formal pertenece al `onboarding_acceptance_plan.md`.**
 
-### ONB1.10G — Rollback rehearsal
+### ONB1.10G — Rollback rehearsal (Cerrado en PR-ONB-25)
 
 Rollback seguro debe poder deshabilitar la nueva orquestación sin:
 
@@ -1706,59 +1706,59 @@ Rollback seguro debe poder deshabilitar la nueva orquestación sin:
 
 ### Core / lifecycle
 
-- [ ] Session durable y resumable.
-- [ ] `OnboardingSession.optimisticVersion` evita lost updates en PostgreSQL real.
-- [ ] `onboardingStartedAt` write-once.
-- [ ] `saleReadyFirstAt` write-once.
-- [ ] `SALE_READY` state-based y explicable.
-- [ ] Activation FAIL retorna a `SALE_READY` o `SETUP_IN_PROGRESS` según readiness; no deja la sesión atascada.
-- [ ] `ACTIVATED` monotónico e independiente de `Tenant.is_active`.
+- [x] Session durable y resumable.
+- [x] `OnboardingSession.optimisticVersion` evita lost updates en PostgreSQL real.
+- [x] `onboardingStartedAt` write-once.
+- [x] `saleReadyFirstAt` write-once.
+- [x] `SALE_READY` state-based y explicable.
+- [x] Activation FAIL retorna a `SALE_READY` o `SETUP_IN_PROGRESS` según readiness; no deja la sesión atascada.
+- [x] `ACTIVATED` monotónico e independiente de `Tenant.is_active`.
 
 ### Templates / import
 
-- [ ] Template recipe nueva siempre DRAFT/SUGGESTED.
-- [ ] Reapply no duplica ni pisa cambios manuales silenciosamente.
-- [ ] Product CSV no escribe stock/costo/Kardex.
-- [ ] Barcode no se degrada a SKU.
-- [ ] VALID_ONLY / ALL_OR_NOTHING / REPLACE|SKIP|FAIL probados.
-- [ ] Legacy import/template receipts cerrados o explícitamente aceptados.
-- [ ] Import commit y duplicate policy producen Audit Trail material correlacionable sin raw CSV.
+- [x] Template recipe nueva siempre DRAFT/SUGGESTED.
+- [x] Reapply no duplica ni pisa cambios manuales silenciosamente.
+- [x] Product CSV no escribe stock/costo/Kardex.
+- [x] Barcode no se degrada a SKU.
+- [x] VALID_ONLY / ALL_OR_NOTHING / REPLACE|SKIP|FAIL probados.
+- [x] Legacy import/template receipts cerrados o explícitamente aceptados.
+- [x] Import commit y duplicate policy producen Audit Trail material correlacionable sin raw CSV.
 
 ### Required config / POS / Activation
 
-- [ ] Fiscal `{revision,fingerprint}` converge al POS.
-- [ ] Verification Product pinneado existe/coincide localmente antes del tramo offline.
-- [ ] Authorized User dispone del material de autenticación offline soportado por Identity.
-- [ ] Activation usa production checkout real.
-- [ ] Offline PAID + receipt + outbox sobreviven restart.
-- [ ] Cloud finaliza Activation.
-- [ ] Solo sync externo/transitorio puede producir PASS_WITH_WARNING.
-- [ ] Defecto reproducible/integrity conflict = FAIL.
-- [ ] Verification sale nunca se borra destructivamente.
+- [x] Fiscal `{revision,fingerprint}` converge al POS.
+- [x] Verification Product pinneado existe/coincide localmente antes del tramo offline.
+- [x] Authorized User dispone del material de autenticación offline soportado por Identity.
+- [x] Activation usa production checkout real.
+- [ ] Offline PAID + receipt + outbox sobreviven restart en dispositivo físico (la regresión host-side de SQLite está verde).
+- [x] Cloud finaliza Activation.
+- [x] Solo sync externo/transitorio puede producir PASS_WITH_WARNING.
+- [x] Defecto reproducible/integrity conflict = FAIL.
+- [x] Verification sale nunca se borra destructivamente.
 
 ### TTFSS
 
-- [ ] Local first-sale claim es write-once.
-- [ ] Sync order no altera el ganador.
-- [ ] Resend no duplica claim.
-- [ ] Clock confidence queda trazable.
-- [ ] First Customer Sale se observa por separado cuando corresponde.
+- [x] Local first-sale claim es write-once.
+- [x] Sync order no altera el ganador.
+- [x] Resend no duplica claim.
+- [x] Clock confidence queda trazable.
+- [x] First Customer Sale se observa por separado cuando corresponde.
 
 ### Security / audit / telemetry
 
-- [ ] Two-tenant isolation en DB real.
-- [ ] Forged tenant/device inputs no alteran autoridad.
-- [ ] Permission checks server-side con granularidad `read/start/fiscal/template/import/activation/support`.
-- [ ] Support requiere `onboarding.support.assist` + tenant grant auditable.
-- [ ] Audit material y telemetry permanecen separados.
-- [ ] Telemetry no contiene secretos/raw CSV.
+- [x] Two-tenant isolation en DB real.
+- [x] Forged tenant/device inputs no alteran autoridad.
+- [x] Permission checks server-side con granularidad `read/start/fiscal/template/import/activation/support`.
+- [x] Support requiere `onboarding.support.assist` + tenant grant auditable.
+- [x] Audit material y telemetry permanecen separados.
+- [x] Telemetry no contiene secretos/raw CSV.
 
 ### Operations
 
-- [ ] Rollback ensayado.
-- [ ] W9 regressions conservadas o reemplazadas con mapping.
-- [ ] Evidence index actualizado.
-- [ ] Founder pilot completado.
+- [x] Rollback ensayado.
+- [x] W9 regressions conservadas o reemplazadas con mapping.
+- [x] Evidence index actualizado.
+- [ ] Founder pilot completado en Alacrity Q80/iPOS físico y backend fundador real, sin dobles.
 - [ ] Roadmap queda listo para entrar al Acceptance Plan.
 
 ---
@@ -1796,7 +1796,7 @@ Forecast recomendado:
 | 23 | `PR-ONB-22` | ONB1.9A–D | Inventory/Costing/Operations readiness + progressive checklist | ONB1.5 |
 | 24 | `PR-ONB-23` | ONB1.9E–G | telemetry, audit separation, First Customer Sale | ONB1.1–ONB1.8 |
 | 25 | `PR-ONB-24` | ONB1.10A–C | legacy reconciliation + fault/security/isolation hardening | todos previos |
-| 26 | `PR-ONB-25` | ONB1.10D–G | full regression, cutover, founder pilot, rollback rehearsal | PR-ONB-24 |
+| 26 | `PR-ONB-25` | ONB1.10D–G | full regression, cutover, founder pilot, rollback rehearsal | PR-ONB-24 | ⚠️ Parcial — ONB1.10F bloqueado por receipt físico; ver `evidence/ONB1.10_M8_PR25_EVIDENCE.md` |
 
 **Mandatory review rule:** forecast o diff real `>= 400` authored additions + deletions => re-slice antes de merge.
 

@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'package:uuid/uuid.dart';
 import '../database/app_database.dart';
 import '../models/activation/activation_attempt_local_entity.dart';
+import '../models/activation/activation_check_result_local_entity.dart';
 import '../models/activation/activation_outbox_envelope_entity.dart';
 import '../ports/activation_sync_port.dart';
 
@@ -189,7 +191,46 @@ class ActivationReconnectSyncRunner {
     );
     await _database.activationAttemptLocalDao.updateAttempt(attempt);
 
-    // 6. Request Authoritative Finalizer Verdict from Cloud
+    // 6. Record the successful reconnect as required evidence before finalization.
+    // It is sent directly because all durable outbox envelopes have already been ACKed.
+    final reconnectOccurredAt = DateTime.now().toUtc().toIso8601String();
+    final reconnectDelivered = await _syncPort.sendCheck(
+      attemptId: trimmedAttemptId,
+      checkCode: 'POST_RECONNECT_SYNC',
+      status: 'PASS',
+      evidenceType: 'ACTIVATION_OUTBOX_ACK',
+      evidenceRef: 'ALL_ACTIVATION_ENVELOPES_ACKED',
+      occurredAt: reconnectOccurredAt,
+      details: {'syncedEnvelopesCount': syncedCount},
+      tenantId: trimmedTenantId,
+      terminalId: attempt.candidateTerminalId,
+    );
+    if (!reconnectDelivered) {
+      errors.add('POST_RECONNECT_SYNC delivery unacknowledged');
+      return ActivationReconnectSyncResult(
+        isSuccess: false,
+        attemptStatus: attempt.localStatus,
+        syncedEnvelopesCount: syncedCount,
+        pendingEnvelopesCount: 0,
+        errors: errors,
+      );
+    }
+    await _database.activationCheckResultLocalDao.insertOrReplace(
+      ActivationCheckResultLocalEntity(
+        id: const Uuid().v4(),
+        tenantId: trimmedTenantId,
+        activationAttemptId: trimmedAttemptId,
+        checkCode: 'POST_RECONNECT_SYNC',
+        status: 'PASS',
+        evidenceType: 'ACTIVATION_OUTBOX_ACK',
+        evidenceRef: 'ALL_ACTIVATION_ENVELOPES_ACKED',
+        occurredAt: reconnectOccurredAt,
+        recordedAt: reconnectOccurredAt,
+        detailsSanitizedJson: jsonEncode({'syncedEnvelopesCount': syncedCount}),
+      ),
+    );
+
+    // 7. Request Authoritative Finalizer Verdict from Cloud
     final finalizeResult = await _syncPort.finalizeActivation(
       tenantId: trimmedTenantId,
       attemptId: trimmedAttemptId,

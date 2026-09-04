@@ -28,6 +28,7 @@ import {
   SupportOverrideAction,
 } from '../dto/activation.dto';
 import { ActivationFollowUpStatus } from '../entities/activation-follow-up.entity';
+import { Invoice } from '../../sales/entities/invoice.entity';
 
 describe('ActivationService — ONB1.7A StartActivation', () => {
   let service: ActivationService;
@@ -35,6 +36,7 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
   let checkRepo: any;
   let followUpRepo: any;
   let sessionRepo: any;
+  let invoiceRepo: any;
   let fiscalConfigVersionService: any;
   let onboardingCatalogService: any;
   let dataSource: any;
@@ -76,6 +78,14 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
       findOne: jest.fn(),
       save: jest.fn((entity) => Promise.resolve(entity)),
     };
+    invoiceRepo = {
+      findOne: jest.fn().mockResolvedValue({
+        id: 'verification-invoice-1',
+        tenant_id: tenantId,
+        isCanceled: false,
+        paymentStatus: 'paid',
+      }),
+    };
 
     fiscalConfigVersionService = {
       getLatestRevision: jest.fn().mockResolvedValue({
@@ -106,6 +116,7 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
             if (entityClass === OnboardingSession) return sessionRepo;
             if (entityClass === ActivationCheckResult) return checkRepo;
             if (entityClass === ActivationFollowUp) return followUpRepo;
+            if (entityClass === Invoice) return invoiceRepo;
             return null;
           },
         }),
@@ -516,6 +527,7 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
         id: attemptId,
         tenantId,
         onboardingSessionId: 'sess-1',
+        verificationTicketId: 'verification-invoice-1',
         status: ActivationAttemptStatus.IN_PROGRESS,
         completedAt: null,
         warningsCount: 0,
@@ -559,6 +571,7 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
         id: attemptId,
         tenantId,
         onboardingSessionId: 'sess-1',
+        verificationTicketId: 'verification-invoice-1',
         status: ActivationAttemptStatus.IN_PROGRESS,
         completedAt: null,
         warningsCount: 0,
@@ -608,6 +621,7 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
         id: attemptId,
         tenantId,
         onboardingSessionId: 'sess-1',
+        verificationTicketId: 'verification-invoice-1',
         status: ActivationAttemptStatus.IN_PROGRESS,
         completedAt: null,
         failureCode: null,
@@ -642,6 +656,7 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
         id: attemptId,
         tenantId,
         onboardingSessionId: 'sess-1',
+        verificationTicketId: 'verification-invoice-1',
         status: ActivationAttemptStatus.IN_PROGRESS,
         completedAt: null,
       };
@@ -761,6 +776,7 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
         id: attemptId,
         tenantId,
         onboardingSessionId: 'sess-1',
+        verificationTicketId: 'verification-invoice-1',
         status: ActivationAttemptStatus.IN_PROGRESS,
       };
       const session = {

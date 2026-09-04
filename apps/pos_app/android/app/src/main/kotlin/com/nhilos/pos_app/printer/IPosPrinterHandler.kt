@@ -23,6 +23,7 @@ class IPosPrinterHandler(private val context: Context) : MethodChannel.MethodCal
         private const val CHANNEL_NAME = "com.nhilos.pos/ipos_printer"
         private const val SERVICE_PACKAGE = "net.nyx.printerservice"
         private const val SERVICE_ACTION = "net.nyx.printerservice.IPrinterService"
+        private const val NYX_SUCCESS = 0
     }
 
     private var channel: MethodChannel? = null
@@ -100,7 +101,7 @@ class IPosPrinterHandler(private val context: Context) : MethodChannel.MethodCal
         val service = printerService
         if (service == null) {
             Log.w(TAG, "getPrinterStatus: service is NULL (not bound yet).")
-            result.success("OFFLINE")
+            result.error("NOT_CONNECTED", "Nyx printer service is not connected", null)
             return
         }
 
@@ -112,7 +113,7 @@ class IPosPrinterHandler(private val context: Context) : MethodChannel.MethodCal
                 1, 240, 241 -> "OUT_OF_PAPER"
                 2, 242 -> "OVERHEATING"
                 3, 243 -> "BUSY"
-                else -> if (status < 0) "ERROR" else "READY"
+                else -> "ERROR"
             }
             result.success(statusString)
         } catch (e: Exception) {
@@ -144,7 +145,7 @@ class IPosPrinterHandler(private val context: Context) : MethodChannel.MethodCal
             // type: 0 = normal bitmap printing, align: 1 = center align
             val res = service.printBitmap(bitmap, 0, 1)
             Log.i(TAG, "Nyx printBitmap result: $res")
-            result.success(true)
+            returnNativeResult(result, "printBitmap", res)
         } catch (e: Exception) {
             Log.e(TAG, "Error printing bitmap on Nyx: ${e.message}", e)
             result.error("PRINT_ERROR", e.message, null)
@@ -170,11 +171,15 @@ class IPosPrinterHandler(private val context: Context) : MethodChannel.MethodCal
             val format = PrintTextFormat().apply {
                 textSize = 24
             }
-            val res = service.printText(text, format)
-            // Feed sufficient paper (140px ~ 4-5 lines) so "Gracias por su compra" clears the tear-off bar
-            service.paperOut(140)
-            Log.i(TAG, "printRawBytes via printText result: $res")
-            result.success(true)
+            val printCode = service.printText(text, format)
+            Log.i(TAG, "Nyx printRawBytes via printText result: $printCode")
+            if (printCode != NYX_SUCCESS) {
+                returnNativeResult(result, "printRawBytes/printText", printCode)
+                return
+            }
+            val feedCode = service.paperOut(140)
+            Log.i(TAG, "Nyx printRawBytes paperOut result: $feedCode")
+            returnNativeResult(result, "printRawBytes/paperOut", feedCode)
         } catch (e: Exception) {
             Log.e(TAG, "Error printing raw text: ${e.message}", e)
             result.error("PRINT_ERROR", e.message, null)
@@ -199,14 +204,36 @@ class IPosPrinterHandler(private val context: Context) : MethodChannel.MethodCal
             val format = PrintTextFormat().apply {
                 textSize = 24
             }
-            val res = service.printText(text, format)
-            // Feed sufficient paper (140px ~ 4-5 lines) so footer clears the tear-off bar
-            service.paperOut(140)
-            Log.i(TAG, "printText result: $res")
-            result.success(true)
+            val printCode = service.printText(text, format)
+            Log.i(TAG, "Nyx printText result: $printCode")
+            if (printCode != NYX_SUCCESS) {
+                returnNativeResult(result, "printText", printCode)
+                return
+            }
+            val feedCode = service.paperOut(140)
+            Log.i(TAG, "Nyx paperOut result: $feedCode")
+            returnNativeResult(result, "paperOut", feedCode)
         } catch (e: Exception) {
             Log.e(TAG, "Error sending text to Nyx printer: ${e.message}", e)
             result.error("PRINT_ERROR", e.message, null)
+        }
+    }
+
+    private fun returnNativeResult(
+        result: MethodChannel.Result,
+        operation: String,
+        nativeCode: Int,
+    ) {
+        if (nativeCode == NYX_SUCCESS) {
+            result.success(mapOf("operation" to operation, "nativeCode" to nativeCode))
+        } else {
+            val message = "Nyx $operation returned native code $nativeCode"
+            Log.e(TAG, message)
+            result.error(
+                "NYX_NATIVE_ERROR",
+                message,
+                mapOf("operation" to operation, "nativeCode" to nativeCode),
+            )
         }
     }
 

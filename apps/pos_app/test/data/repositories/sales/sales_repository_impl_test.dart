@@ -95,6 +95,7 @@ void main() {
         number: '001',
         createdAt: DateTime.now(),
         userId: 'user1',
+        terminalId: 'device-terminal-1',
         subtotal: 100,
         totalTax: 15,
         total: 115,
@@ -191,6 +192,26 @@ void main() {
     },
   );
 
+  test('rejects a blank terminal identity before DGI sequencing', () async {
+    await expectLater(
+      repository.saveSale(
+        invoice: Invoice(
+          id: 'sale-blank-terminal',
+          number: 'draft',
+          createdAt: DateTime.now(),
+          userId: 'cashier-1',
+          subtotal: 1,
+          totalTax: 0,
+          total: 1,
+        ),
+        items: const [],
+        payments: const [],
+      ),
+      throwsA(isA<StateError>()),
+    );
+    verifyNever(mockNumberingService.isRangeExhausted());
+  });
+
   test(
     'assigns deterministic source metadata when saving regular offline sales',
     () async {
@@ -199,6 +220,7 @@ void main() {
         number: 'draft',
         createdAt: DateTime.parse('2026-07-13T10:00:00Z'),
         userId: 'cashier-1',
+        terminalId: 'device-terminal-7',
         subtotal: 100,
         totalTax: 15,
         total: 115,
@@ -234,7 +256,7 @@ void main() {
         mockProcessInventoryUseCase.execute(any),
       ).thenAnswer((_) async => []);
       when(
-        mockTransactionDao.getNextInvoiceSourceSequence('pos-cashier-1'),
+        mockTransactionDao.getNextInvoiceSourceSequence('device-terminal-7'),
       ).thenAnswer((_) async => 17);
       when(
         mockTransactionDao.executeSaleTransaction(
@@ -271,9 +293,9 @@ void main() {
       ).captured;
       final persisted = captured.single as InvoiceEntity;
       expect(persisted.type, 'regular');
-      expect(persisted.terminalId, 'pos-cashier-1');
+      expect(persisted.terminalId, 'device-terminal-7');
       expect(persisted.sourceSequence, 17);
-      expect(persisted.idempotencyKey, 'sale:pos-cashier-1:sale-offline-1');
+      expect(persisted.idempotencyKey, 'sale:device-terminal-7:sale-offline-1');
       expect(persisted.payloadHash, isNotNull);
       expect(persisted.payloadHash, isNotEmpty);
     },
@@ -288,6 +310,7 @@ void main() {
         number: '002',
         createdAt: DateTime.now(),
         userId: 'user1',
+        terminalId: 'device-terminal-1',
         subtotal: 100,
         totalTax: 15,
         total: 115,
@@ -351,7 +374,11 @@ void main() {
       ).thenAnswer((_) async {});
 
       // Act
-      await repository.saveSale(invoice: invoice, items: items, payments: []);
+      await repository.saveSale(
+        invoice: invoice,
+        items: items,
+        payments: [],
+      );
 
       // Assert — the use case receives items with resolved recipeVersionId
       final captured = verify(
@@ -371,6 +398,7 @@ void main() {
         number: '003',
         createdAt: DateTime.now(),
         userId: 'user1',
+        terminalId: 'device-terminal-1',
         subtotal: 100,
         totalTax: 15,
         total: 115,
@@ -433,7 +461,11 @@ void main() {
       ).thenAnswer((_) async {});
 
       // Act
-      await repository.saveSale(invoice: invoice, items: items, payments: []);
+      await repository.saveSale(
+        invoice: invoice,
+        items: items,
+        payments: [],
+      );
 
       // Assert — existing recipeVersionId is preserved, active version not queried
       verifyNever(mockInventoryRepository.getActiveRecipeVersionId(any));
@@ -453,6 +485,7 @@ void main() {
         number: '004',
         createdAt: DateTime.now(),
         userId: 'user1',
+        terminalId: 'device-terminal-1',
         subtotal: 100,
         totalTax: 15,
         total: 115,
@@ -496,7 +529,11 @@ void main() {
       ).thenAnswer((_) async => null);
 
       await expectLater(
-        repository.saveSale(invoice: invoice, items: items, payments: []),
+        repository.saveSale(
+          invoice: invoice,
+          items: items,
+          payments: [],
+        ),
         throwsA(isA<StateError>()),
       );
       verifyNever(
@@ -823,6 +860,7 @@ void main() {
           number: 'F001-000123',
           createdAt: DateTime.now().millisecondsSinceEpoch,
           userId: 'cashier-1',
+          terminalId: 'device-terminal-7',
           subtotal: 200,
           totalTax: 30,
           total: 230,
@@ -865,7 +903,7 @@ void main() {
           mockNumberingService.getNextNumber(),
         ).thenAnswer((_) async => 'NC-001');
         when(
-          mockTransactionDao.getNextInvoiceSourceSequence('pos-cashier-1'),
+          mockTransactionDao.getNextInvoiceSourceSequence('device-terminal-7'),
         ).thenAnswer((_) async => 7);
         when(
           mockAuditRepository.prepareLog(any, metadata: anyNamed('metadata')),
@@ -1053,6 +1091,7 @@ void main() {
           number: 'F001-000128',
           createdAt: DateTime.now().millisecondsSinceEpoch,
           userId: 'cashier-1',
+          terminalId: 'device-terminal-7',
           subtotal: 100,
           totalTax: 15,
           total: 115,
@@ -1091,7 +1130,7 @@ void main() {
           mockNumberingService.getNextNumber(),
         ).thenAnswer((_) async => 'NC-RESTOCK-1');
         when(
-          mockTransactionDao.getNextInvoiceSourceSequence('pos-cashier-1'),
+          mockTransactionDao.getNextInvoiceSourceSequence('device-terminal-7'),
         ).thenAnswer((_) async => 18);
         when(mockReverseInventoryUseCase.execute(any, any)).thenAnswer(
           (_) async => [

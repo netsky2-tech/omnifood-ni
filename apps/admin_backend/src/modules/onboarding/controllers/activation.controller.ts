@@ -15,6 +15,7 @@ import {
   CloseActivationFollowUpDto,
   DevicePrincipal,
   IngestActivationCheckDto,
+  FirstSuccessfulSaleClaimDto,
   ReconcileConvergenceDto,
   StartActivationDto,
   SupportOverrideDto,
@@ -24,6 +25,7 @@ import { AuthGuard } from '../../identity/guards/auth.guard';
 import { PermissionsGuard } from '../../identity/guards/permissions.guard';
 import { RequirePermissions } from '../../identity/decorators/permissions.decorator';
 import { AppPermission } from '../../identity/security/permissions.enum';
+import { SyncBatchRecordDto } from '../../sales/dto/sync-batch.dto';
 
 interface RequestWithUser extends Request {
   user?: {
@@ -55,6 +57,33 @@ export class ActivationController {
 
   private getActorUserId(req: RequestWithUser): string {
     return req.user?.id || req.user?.sub || 'SYSTEM';
+  }
+
+  private getVerificationSyncDevicePrincipal(
+    req: RequestWithUser,
+  ): DevicePrincipal {
+    const tenantId = this.getEffectiveTenantId(req);
+    const headerTerminalId = req.headers['x-device-terminal-id'];
+    const terminalId =
+      typeof headerTerminalId === 'string' ? headerTerminalId.trim() : '';
+    const jwtTerminalId = req.user?.terminalId || req.user?.terminal_id;
+
+    if (!terminalId) {
+      throw new UnauthorizedException(
+        'DEVICE_PRINCIPAL_MISSING: x-device-terminal-id is required for verification sale sync',
+      );
+    }
+    if (jwtTerminalId?.trim() && jwtTerminalId.trim() !== terminalId) {
+      throw new UnauthorizedException(
+        'DEVICE_PRINCIPAL_FORGERY_DETECTED: Header terminal does not match JWT terminal',
+      );
+    }
+
+    return {
+      tenantId,
+      terminalId,
+      credentialIdentity: req.user?.id || req.user?.sub,
+    };
   }
 
   private getDevicePrincipal(req: RequestWithUser): DevicePrincipal {
@@ -114,6 +143,32 @@ export class ActivationController {
   ) {
     const devicePrincipal = this.getDevicePrincipal(req);
     return this.activationService.ingestCheck(attemptId, dto, devicePrincipal);
+  }
+
+  @Post('attempts/:id/verification-sale')
+  async syncVerificationSale(
+    @Req() req: RequestWithUser,
+    @Param('id') attemptId: string,
+    @Body() dto: SyncBatchRecordDto,
+  ) {
+    return this.activationService.syncVerificationSale(
+      attemptId,
+      dto,
+      this.getVerificationSyncDevicePrincipal(req),
+    );
+  }
+
+  @Post('attempts/:id/first-sale-claim')
+  async claimFirstSuccessfulSale(
+    @Req() req: RequestWithUser,
+    @Param('id') attemptId: string,
+    @Body() dto: FirstSuccessfulSaleClaimDto,
+  ) {
+    return this.activationService.claimFirstSuccessfulSale(
+      attemptId,
+      dto,
+      this.getVerificationSyncDevicePrincipal(req),
+    );
   }
 
   @Post('attempts/:id/finalize')

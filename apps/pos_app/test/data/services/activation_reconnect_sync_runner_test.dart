@@ -222,7 +222,17 @@ void main() {
       expect(result.pendingEnvelopesCount, equals(0));
 
       // Verifies endpoints hit in FakeActivationSyncPort
-      expect(syncPort.sentChecks.length, equals(1));
+      expect(syncPort.sentChecks.length, equals(2));
+      expect(
+        syncPort.sentChecks.map((check) => check['checkCode']),
+        contains('POST_RECONNECT_SYNC'),
+      );
+      final reconnectCheck = await database.activationCheckResultLocalDao.getCheck(
+        tenantId,
+        attemptId,
+        'POST_RECONNECT_SYNC',
+      );
+      expect(reconnectCheck?.status, equals('PASS'));
       expect(syncPort.sentClaims.length, equals(1));
       expect(syncPort.sentSales.length, equals(1));
 

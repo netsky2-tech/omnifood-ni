@@ -5,6 +5,9 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { InvoicesService, SyncBatchResult } from '../../sales/services/invoices.service';
+import { SyncBatchRecordDto } from '../../sales/dto/sync-batch.dto';
+import { Invoice } from '../../sales/entities/invoice.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import {
@@ -34,6 +37,7 @@ import {
   CloseActivationFollowUpDto,
   DevicePrincipal,
   IngestActivationCheckDto,
+  FirstSuccessfulSaleClaimDto,
   StartActivationDto,
   SupportOverrideAction,
   SupportOverrideDto,
@@ -68,7 +72,114 @@ export class ActivationService {
     private readonly readinessEvaluator: OnboardingReadinessEvaluator,
     private readonly dataSource: DataSource,
     private readonly changeLogService: ChangeLogService,
+    private readonly invoicesService?: InvoicesService,
   ) {}
+
+  private assertPrincipalMatchesRecord(
+    record: SyncBatchRecordDto,
+    devicePrincipal: DevicePrincipal,
+  ): void {
+    if (
+      record.documentType !== 'SALE' ||
+      record.flowType !== 'sales' ||
+      !record.invoice ||
+      !record.invoiceId ||
+      record.invoice.id !== record.invoiceId ||
+      record.sourceDeviceId?.trim() !== devicePrincipal.terminalId ||
+      record.terminalId?.trim() !== devicePrincipal.terminalId
+    ) {
+      throw new BadRequestException(
+        'INVALID_VERIFICATION_SALE: A complete SALE/sales record for the authenticated terminal is required',
+      );
+    }
+  }
+
+  async syncVerificationSale(
+    attemptId: string,
+    record: SyncBatchRecordDto,
+    devicePrincipal: DevicePrincipal,
+  ): Promise<SyncBatchResult> {
+    const tenantId = devicePrincipal?.tenantId?.trim();
+    const terminalId = devicePrincipal?.terminalId?.trim();
+    if (!tenantId || !terminalId) {
+      throw new ForbiddenException('DEVICE_PRINCIPAL_MISSING');
+    }
+    this.assertPrincipalMatchesRecord(record, devicePrincipal);
+
+    const attempt = await this.attemptRepo.findOne({
+      where: { id: attemptId, tenantId },
+    });
+    if (!attempt) {
+      throw new NotFoundException(`Activation attempt '${attemptId}' not found for tenant`);
+    }
+    if (attempt.candidateTerminalId.trim() !== terminalId) {
+      throw new ForbiddenException('TERMINAL_MISMATCH');
+    }
+
+    if (!this.invoicesService) {
+      throw new BadRequestException('VERIFICATION_SALE_SYNC_UNAVAILABLE');
+    }
+    return this.invoicesService.syncBatch(tenantId, [record]);
+  }
+
+  async claimFirstSuccessfulSale(
+    attemptId: string,
+    dto: FirstSuccessfulSaleClaimDto,
+    devicePrincipal: DevicePrincipal,
+  ): Promise<{ claimed: boolean; ticketId: string | null }> {
+    const tenantId = devicePrincipal?.tenantId?.trim();
+    const terminalId = devicePrincipal?.terminalId?.trim();
+    if (!tenantId || !terminalId) {
+      throw new ForbiddenException('DEVICE_PRINCIPAL_MISSING');
+    }
+    if (
+      dto.declarativeTenantId.trim() !== tenantId ||
+      dto.declarativeTerminalId.trim() !== terminalId ||
+      dto.activationAttemptId.trim() !== attemptId
+    ) {
+      throw new ForbiddenException('DEVICE_PRINCIPAL_FORGERY_DETECTED');
+    }
+
+    return this.dataSource.transaction(async (manager) => {
+      const aRepo = manager.getRepository(ActivationAttempt);
+      const sRepo = manager.getRepository(OnboardingSession);
+      const attempt = await aRepo.findOne({ where: { id: attemptId, tenantId } });
+      if (!attempt) {
+        throw new NotFoundException(`Activation attempt '${attemptId}' not found for tenant`);
+      }
+      if (attempt.candidateTerminalId.trim() !== terminalId) {
+        throw new ForbiddenException('TERMINAL_MISMATCH');
+      }
+      if (attempt.verificationTicketId) {
+        return { claimed: false, ticketId: attempt.verificationTicketId };
+      }
+
+      const invoice = await manager.getRepository(Invoice).findOne({
+        where: { id: dto.ticketId, tenant_id: tenantId },
+      });
+      if (!invoice || invoice.isCanceled || invoice.paymentStatus !== 'paid') {
+        throw new BadRequestException('VERIFICATION_SALE_NOT_PERSISTED_PAID');
+      }
+
+      const session = await sRepo.findOne({ where: { tenantId } });
+      if (!session) {
+        throw new NotFoundException(`Onboarding session not found for tenant '${tenantId}'`);
+      }
+      if (session.firstSuccessfulSaleAt) {
+        return { claimed: false, ticketId: null };
+      }
+
+      attempt.verificationTicketId = dto.ticketId;
+      await aRepo.save(attempt);
+      session.firstSuccessfulSaleAt = new Date(
+        dto.anchoredOccurredAt || dto.deviceOccurredAt,
+      );
+      session.lastActivityAt = new Date();
+      session.optimisticVersion = (session.optimisticVersion ?? 1) + 1;
+      await sRepo.save(session);
+      return { claimed: true, ticketId: dto.ticketId };
+    });
+  }
 
   /**
    * ONB1.7A — StartActivation Command & Precondiciones
@@ -439,6 +550,19 @@ export class ActivationService {
           const recordedChecks = await cRepo.find({
             where: { tenantId: trimmedTenant, activationAttemptId: attempt.id },
           });
+          const verificationInvoice = attempt.verificationTicketId
+            ? await manager.getRepository(Invoice).findOne({
+                where: {
+                  id: attempt.verificationTicketId,
+                  tenant_id: trimmedTenant,
+                },
+              })
+            : null;
+          const hasPersistedVerificationSale = Boolean(
+            verificationInvoice &&
+              !verificationInvoice.isCanceled &&
+              verificationInvoice.paymentStatus === 'paid',
+          );
 
           const checkMap = new Map<ActivationCheckCode, ActivationCheckResult>();
           for (const chk of recordedChecks) {
@@ -479,7 +603,10 @@ export class ActivationService {
           const now = new Date();
           let followUpCreated: ActivationFollowUp | null = null;
 
-          if (hasMissingChecks) {
+          if (!hasPersistedVerificationSale) {
+            attempt.status = ActivationAttemptStatus.FAIL;
+            attempt.failureCode = 'VERIFICATION_SALE_EVIDENCE_MISSING';
+          } else if (hasMissingChecks) {
             attempt.status = ActivationAttemptStatus.FAIL;
             attempt.failureCode = 'MISSING_REQUIRED_CHECKS';
           } else if (firstFailedCode) {

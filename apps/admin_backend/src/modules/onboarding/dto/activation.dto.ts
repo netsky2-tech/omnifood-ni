@@ -6,6 +6,7 @@ import {
   IsEnum,
   IsBoolean,
   IsObject,
+  IsDateString,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -73,6 +74,48 @@ export class IngestActivationCheckDto {
   @IsOptional()
   @IsString()
   verificationTicketId?: string;
+}
+
+export class FirstSuccessfulSaleClaimDto {
+  @IsNotEmpty()
+  @IsString()
+  ticketId!: string;
+
+  @IsNotEmpty()
+  @IsString()
+  declarativeTenantId!: string;
+
+  @IsNotEmpty()
+  @IsString()
+  declarativeTerminalId!: string;
+
+  @IsNotEmpty()
+  @IsString()
+  activationAttemptId!: string;
+
+  @IsNotEmpty()
+  @IsDateString()
+  deviceOccurredAt!: string;
+
+  @IsOptional()
+  @IsDateString()
+  anchoredOccurredAt?: string;
+
+  @IsNotEmpty()
+  @IsEnum(['ANCHORED', 'DEVICE_VALIDATED', 'DEGRADED'])
+  clockConfidence!: 'ANCHORED' | 'DEVICE_VALIDATED' | 'DEGRADED';
+
+  @IsOptional()
+  @IsString()
+  serverTimeAnchorId?: string;
+
+  @IsOptional()
+  @IsString()
+  posBuild?: string;
+
+  @IsNotEmpty()
+  @IsString()
+  outboxEventId!: string;
 }
 
 export class CloseActivationFollowUpDto {

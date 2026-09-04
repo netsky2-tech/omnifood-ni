@@ -4,6 +4,9 @@ import 'package:uuid/uuid.dart';
 import '../database/app_database.dart';
 import '../models/activation/activation_attempt_local_entity.dart';
 import '../models/activation/activation_check_result_local_entity.dart';
+import '../../domain/models/sales/invoice.dart';
+import '../../domain/models/sales/invoice_item.dart';
+import '../../domain/models/sales/payment.dart';
 import '../../domain/ports/printer_port.dart';
 import 'activation_required_config_adapter.dart';
 import 'terminal_identity_service.dart';
@@ -161,8 +164,52 @@ class ActivationPreOfflineRunner {
     }
 
     // 5. TEST_PRINT
-    // Test print succeeds only if printer is ready
-    final testPrintPass = printerIsReady;
+    PrinterResult? testPrintResult;
+    if (printerIsReady) {
+      final testInvoiceId = 'onb1.10-test-$trimmedAttemptId';
+      final testInvoice = Invoice(
+        id: testInvoiceId,
+        number: 'ONB1.10-$trimmedAttemptId',
+        createdAt: DateTime.parse(now),
+        userId: params.authorizedUserId.trim(),
+        subtotal: 0,
+        totalTax: 0,
+        total: 0,
+        paymentStatus: PaymentStatus.paid,
+      );
+      testPrintResult = await _printer.printInvoice(
+        testInvoice,
+        items: [
+          InvoiceItem(
+            id: '$testInvoiceId-item',
+            invoiceId: testInvoiceId,
+            productId: 'activation-test-print',
+            productName: 'ONB1.10 PRUEBA IMPRESORA',
+            quantity: 1,
+            unitPrice: 0,
+            originalTaxRate: 0,
+            appliedTaxRate: 0,
+            taxAmount: 0,
+            total: 0,
+          ),
+        ],
+        payments: [
+          Payment(
+            id: '$testInvoiceId-payment',
+            invoiceId: testInvoiceId,
+            method: PaymentMethod.cash,
+            amount: 0,
+            amountNio: 0,
+          ),
+        ],
+        businessName: 'ONB1.10 TEST PRINT',
+        cashierName: params.authorizedUserId.trim(),
+        paperWidthMm: 58,
+      );
+    }
+    final testPrintPass = testPrintResult?.isSuccess ?? false;
+    final testPrintFailure = testPrintResult?.message ??
+        'Cannot perform test print with unavailable printer';
     final check5 = ActivationCheckResultLocalEntity(
       id: const Uuid().v4(),
       tenantId: trimmedTenantId,
@@ -170,16 +217,18 @@ class ActivationPreOfflineRunner {
       checkCode: 'TEST_PRINT',
       status: testPrintPass ? 'PASS' : 'FAIL',
       evidenceType: 'RECEIPT_FEED_CORROBORATION',
-      evidenceRef: testPrintPass ? 'PRINT_VERIFIED_OK' : 'PRINT_TEST_FAILED',
+      evidenceRef: testPrintPass ? 'PRINT_COMMAND_ACCEPTED' : 'PRINT_TEST_FAILED',
       recordedAt: now,
       detailsSanitizedJson: jsonEncode({
-        'testPrintExecuted': true,
+        'testPrintExecuted': testPrintResult != null,
         'success': testPrintPass,
+        'printerResultStatus': testPrintResult?.status.name,
+        if (!testPrintPass) 'failure': testPrintFailure,
       }),
     );
     checks['TEST_PRINT'] = check5;
     if (!testPrintPass) {
-      blockers.add('TEST_PRINT_FAILED: Cannot perform test print with unavailable printer');
+      blockers.add('TEST_PRINT_FAILED: $testPrintFailure');
     }
 
     // 6. SQLITE_DURABILITY

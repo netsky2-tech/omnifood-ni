@@ -62,6 +62,7 @@ class SaleViewModel extends ChangeNotifier {
   final CustomerIdentificationService? _identificationService;
   final LoyaltyRewardInteractionService? _rewardInteraction;
   final LoyaltyEvaluationService? _evaluationService;
+  final String _terminalId;
   SyncService? _syncService;
   StreamSubscription<InboundSyncResult>? _syncSubscription;
   Timer? _syncDebounceTimer;
@@ -80,6 +81,7 @@ class SaleViewModel extends ChangeNotifier {
     SyncService? syncService,
     PromotionsEngine? promotionsEngine,
     LoyaltyService? loyaltyService,
+    String terminalId = '',
   ])  : _tableOrderService = tableOrderService ?? TableOrderService(_database),
         _tenantConfigService =
             tenantConfigService ?? TenantConfigService(_database.localConfigDao),
@@ -94,7 +96,8 @@ class SaleViewModel extends ChangeNotifier {
         _postPaidFeedbackService = const PostPaidFeedbackService(),
         _identificationService = null,
         _rewardInteraction = null,
-        _evaluationService = null;
+        _evaluationService = null,
+        _terminalId = terminalId;
 
   /// Extended constructor with loyalty wiring services.
   /// Use this when the caller needs full loyalty evaluation + reward interaction.
@@ -112,6 +115,7 @@ class SaleViewModel extends ChangeNotifier {
     SyncService? syncService,
     PromotionsEngine? promotionsEngine,
     LoyaltyService? loyaltyService,
+    String terminalId = '',
     CustomerIdentificationService? identificationService,
     LoyaltyRewardInteractionService? rewardInteractionService,
     LoyaltyEvaluationService? evaluationService,
@@ -129,7 +133,8 @@ class SaleViewModel extends ChangeNotifier {
         _postPaidFeedbackService = const PostPaidFeedbackService(),
         _identificationService = identificationService,
         _rewardInteraction = rewardInteractionService,
-        _evaluationService = evaluationService {
+        _evaluationService = evaluationService,
+        _terminalId = terminalId {
     _syncService = syncService;
     if (syncService != null) {
       _syncSubscription = syncService.onInboundSync.listen((event) {
@@ -1018,6 +1023,7 @@ class SaleViewModel extends ChangeNotifier {
       bcnOfficialRate: _bcnOfficialRate,
       commercialRate: _commercialRate,
       totalUsd: totalUsd,
+      terminalId: _terminalId,
     );
 
     final payments = customPayments != null && customPayments.isNotEmpty

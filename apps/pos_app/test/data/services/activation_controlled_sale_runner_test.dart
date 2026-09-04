@@ -253,6 +253,7 @@ void main() {
       expect(invoice!.total, equals(50.0));
       expect(invoice.paymentStatus, equals('paid'));
       expect(invoice.syncStatus, equals('pending'));
+      expect(invoice.terminalId, equals('pos-terminal-founder-01'));
       expect(invoice.idempotencyKey, equals('onboarding:activation-sale:$tenantId:$attemptId'));
 
       // 2. Verify invoice items in SQLite
@@ -266,6 +267,25 @@ void main() {
       expect(payments.length, equals(1));
       expect(payments.first.amount, equals(50.0));
       expect(payments.first.method, equals('cash'));
+
+      final envelopes = await database.activationOutboxDao.getEnvelopesByAttempt(
+        tenantId,
+        attemptId,
+      );
+      final verificationEnvelope = envelopes.firstWhere(
+        (envelope) => envelope.eventType == 'VERIFICATION_SALE',
+      );
+      final verificationPayload =
+          jsonDecode(verificationEnvelope.payloadJson) as Map<String, dynamic>;
+      final persistedPayload =
+          verificationPayload['invoice'] as Map<String, dynamic>;
+      expect(verificationPayload['sourceDeviceId'], invoice.terminalId);
+      expect(verificationPayload['terminalId'], invoice.terminalId);
+      expect(verificationPayload['sourceSequence'], invoice.sourceSequence);
+      expect(verificationPayload['idempotencyKey'], invoice.idempotencyKey);
+      expect(persistedPayload['id'], invoice.id);
+      expect(persistedPayload['items'], hasLength(1));
+      expect(persistedPayload['payments'], hasLength(1));
 
       // 4. Verify printer receipt called
       expect(printerAdapter.printHistory.length, equals(1));

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { IndustryTemplate } from './entities/industry-template.entity';
@@ -30,6 +30,7 @@ import { UomConversion } from '../inventory/entities/uom-conversion.entity';
 import { Warehouse } from '../inventory/entities/warehouse.entity';
 import { Supplier } from '../inventory/entities/supplier.entity';
 import { InventoryMovement } from '../inventory/entities/inventory-movement.entity';
+import { InvoiceItem } from '../sales/entities/invoice-item.entity';
 import { IndustryTemplateService } from './services/industry-template.service';
 import { TemplatePreviewService } from './services/template-preview.service';
 import { LegacyTemplateRecipeScanService } from './services/legacy-template-recipe-scan.service';
@@ -52,7 +53,9 @@ import { ActivationService } from './services/activation.service';
 import { ActivationController } from './controllers/activation.controller';
 import { OnboardingTelemetryService } from './telemetry/onboarding-telemetry.service';
 import { OnboardingTelemetryController } from './controllers/onboarding-telemetry.controller';
+import { OnboardingRolloutController } from './controllers/onboarding-rollout.controller';
 import { OnboardingCustomerSaleObserver } from './services/onboarding-customer-sale.observer';
+import { OnboardingFeatureRolloutService } from './services/onboarding-feature-rollout.service';
 import { IDENTITY_READINESS_PORT } from './ports/identity-readiness.port';
 import { FISCAL_READINESS_PORT } from './ports/fiscal-readiness.port';
 import { CATALOG_READINESS_PORT } from './ports/catalog-readiness.port';
@@ -67,6 +70,7 @@ import { CostingReadinessAdapter } from './adapters/costing-readiness.adapter';
 import { OperationsReadinessAdapter } from './adapters/operations-readiness.adapter';
 import { IdentityModule } from '../identity/identity.module';
 import { AuditModule } from '../audit/audit.module';
+import { SalesModule } from '../sales/sales.module';
 
 export const getRequiredOnboardingJwtSecret = (
   configService: ConfigService,
@@ -83,6 +87,7 @@ export const getRequiredOnboardingJwtSecret = (
     ConfigModule,
     IdentityModule,
     AuditModule,
+    forwardRef(() => SalesModule),
     TypeOrmModule.forFeature([
       IndustryTemplate,
       TemplateInsumo,
@@ -113,6 +118,7 @@ export const getRequiredOnboardingJwtSecret = (
       Warehouse,
       Supplier,
       InventoryMovement,
+      InvoiceItem,
     ]),
   ],
   controllers: [
@@ -123,6 +129,7 @@ export const getRequiredOnboardingJwtSecret = (
     OnboardingCatalogController,
     ActivationController,
     OnboardingTelemetryController,
+    OnboardingRolloutController,
   ],
   providers: [
     IndustryTemplateService,
@@ -141,6 +148,7 @@ export const getRequiredOnboardingJwtSecret = (
     ActivationService,
     OnboardingTelemetryService,
     OnboardingCustomerSaleObserver,
+    OnboardingFeatureRolloutService,
     {
       provide: IDENTITY_READINESS_PORT,
       useClass: IdentityReadinessAdapter,
@@ -183,6 +191,7 @@ export const getRequiredOnboardingJwtSecret = (
     ActivationService,
     OnboardingTelemetryService,
     OnboardingCustomerSaleObserver,
+    OnboardingFeatureRolloutService,
     TypeOrmModule,
   ],
 })

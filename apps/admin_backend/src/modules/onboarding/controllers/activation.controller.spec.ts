@@ -1,5 +1,5 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { ActivationController } from './activation.controller';
+import { UnauthorizedException } from '@nestjs/common';
+import { Test, TestingModule } from '@nestjs/testing';import { ActivationController } from './activation.controller';
 import { ActivationService } from '../services/activation.service';
 import { AuthGuard } from '../../identity/guards/auth.guard';
 import { PermissionsGuard } from '../../identity/guards/permissions.guard';
@@ -46,6 +46,14 @@ describe('ActivationController', () => {
       getActivationDiagnostics: jest
         .fn()
         .mockResolvedValue({ attempt: { id: 'att-1' } } as any),
+      syncVerificationSale: jest.fn().mockResolvedValue({
+        received: 1,
+        processed: 1,
+      } as any),
+      claimFirstSuccessfulSale: jest.fn().mockResolvedValue({
+        claimed: true,
+        ticketId: 'invoice-1',
+      } as any),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -111,6 +119,52 @@ describe('ActivationController', () => {
         terminalId,
       }),
     );
+  });
+
+  it('requires the header terminal to match JWT terminal and delegates a full verification sale record', async () => {
+    const req = {
+      user: { id: userId, tenant_id: tenantId, terminal_id: terminalId },
+      headers: { 'x-device-terminal-id': terminalId },
+    } as any;
+    const dto = {
+      idempotencyKey: 'activation-sale-1',
+      sourceDeviceId: terminalId,
+      sourceSequence: 1,
+      flowType: 'sales',
+      documentType: 'SALE',
+      invoiceId: 'invoice-1',
+      terminalId,
+      invoice: { id: 'invoice-1', paymentStatus: 'paid', items: [], payments: [] },
+    };
+
+    await controller.syncVerificationSale(req, 'att-1', dto as any);
+
+    expect(activationService.syncVerificationSale).toHaveBeenCalledWith(
+      'att-1',
+      dto,
+      expect.objectContaining({ tenantId, terminalId }),
+    );
+  });
+
+  it('rejects a missing or forged x-device-terminal-id for verification sync', async () => {
+    await expect(
+      controller.syncVerificationSale(
+        { user: { tenant_id: tenantId, terminal_id: terminalId }, headers: {} } as any,
+        'att-1',
+        {} as any,
+      ),
+    ).rejects.toThrow(UnauthorizedException);
+
+    await expect(
+      controller.syncVerificationSale(
+        {
+          user: { tenant_id: tenantId, terminal_id: terminalId },
+          headers: { 'x-device-terminal-id': 'forged-terminal' },
+        } as any,
+        'att-1',
+        {} as any,
+      ),
+    ).rejects.toThrow(UnauthorizedException);
   });
 
   it('delegates POST /onboarding/activation/attempts/:id/finalize to finalizeActivation without accepting client result', async () => {

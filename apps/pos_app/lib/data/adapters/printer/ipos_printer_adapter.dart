@@ -29,7 +29,7 @@ class IPosPrinterAdapter implements PrinterPort {
     try {
       final dynamic result = await _channel.invokeMethod('getPrinterStatus');
       _isHardwareDetected = true;
-      if (result == null) return PrinterStatus.ready;
+      if (result == null) return PrinterStatus.error;
 
       final code = result.toString().toUpperCase();
       if (code == 'READY' || code == '0') {
@@ -43,12 +43,11 @@ class IPosPrinterAdapter implements PrinterPort {
       } else if (code == 'OFFLINE' || code == '4') {
         return PrinterStatus.offline;
       }
-      return PrinterStatus.ready;
+      return PrinterStatus.error;
     } on MissingPluginException {
-      // Running on a device or platform without iPos hardware service (Desktop, Emulator, Test)
       _isHardwareDetected = false;
-      debugPrint('[IPosPrinterAdapter] iPos service not found on this platform. Fallback active.');
-      return PrinterStatus.ready;
+      debugPrint('[IPosPrinterAdapter] iPos service not found on this platform.');
+      return PrinterStatus.offline;
     } on PlatformException catch (e) {
       debugPrint('[IPosPrinterAdapter] PlatformException checking status: ${e.message}');
       return PrinterStatus.error;
@@ -86,6 +85,11 @@ class IPosPrinterAdapter implements PrinterPort {
         PrinterStatus.overheating,
         'Cabezal térmico sobrecalentado. Espere unos momentos.',
       );
+    } else if (status != PrinterStatus.ready) {
+      return PrinterResult.failure(
+        status,
+        'La impresora iPOS no está lista (estado: ${status.name}).',
+      );
     }
 
     final layoutFormatter = ReceiptLayoutFormatter.fromPaperWidth(paperWidthMm);
@@ -114,8 +118,11 @@ class IPosPrinterAdapter implements PrinterPort {
       await _channel.invokeMethod('printText', {'text': formattedText});
       return PrinterResult.success(text: formattedText);
     } on MissingPluginException {
-      debugPrint('[IPosPrinterAdapter Fallback Print Preview]:\n$formattedText');
-      return PrinterResult.success(text: formattedText);
+      _isHardwareDetected = false;
+      return PrinterResult.failure(
+        PrinterStatus.offline,
+        'Servicio nativo de impresora iPOS no disponible.',
+      );
     } on PlatformException catch (e) {
       debugPrint('[IPosPrinterAdapter] Platform print error: ${e.message}');
       return PrinterResult.failure(
@@ -278,9 +285,11 @@ class IPosPrinterAdapter implements PrinterPort {
       }
       return PrinterResult.success(bytes: rawBytes, text: plainText);
     } on MissingPluginException {
-      // Graceful fallback: on devices without iPos hardware, log preview and return success
-      debugPrint('[IPosPrinterAdapter Fallback Print Preview]:\n${plainText ?? rawBytes.toString()}');
-      return PrinterResult.success(bytes: rawBytes, text: plainText);
+      _isHardwareDetected = false;
+      return PrinterResult.failure(
+        PrinterStatus.offline,
+        'Servicio nativo de impresora iPOS no disponible.',
+      );
     } on PlatformException catch (e) {
       debugPrint('[IPosPrinterAdapter] Platform print error: ${e.message}');
       return PrinterResult.failure(

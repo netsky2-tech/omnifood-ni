@@ -37,6 +37,11 @@ import {
 } from '../../src/modules/onboarding/entities/activation-follow-up.entity';
 import { ChangeLog } from '../../src/modules/audit/entities/change-log.entity';
 import { ChangeLogService } from '../../src/modules/audit/change-log.service';
+import { Invoice } from '../../src/modules/sales/entities/invoice.entity';
+import { InvoiceItem } from '../../src/modules/sales/entities/invoice-item.entity';
+import { InvoiceItemModifier } from '../../src/modules/sales/entities/invoice-item-modifier.entity';
+import { Payment } from '../../src/modules/sales/entities/payment.entity';
+import { InvoicesService } from '../../src/modules/sales/services/invoices.service';
 import { SupportOverrideAction } from '../../src/modules/onboarding/dto/activation.dto';
 import { ActivationController } from '../../src/modules/onboarding/controllers/activation.controller';
 import { ActivationService } from '../../src/modules/onboarding/services/activation.service';
@@ -102,6 +107,10 @@ describe('ONB1.7A–C Activation Flow (E2E with Real PostgreSQL Persistence)', (
         ActivationCheckResult,
         ActivationFollowUp,
         ChangeLog,
+        Invoice,
+        InvoiceItem,
+        InvoiceItemModifier,
+        Payment,
       ],
       synchronize: true,
     });
@@ -264,6 +273,10 @@ describe('ONB1.7A–C Activation Flow (E2E with Real PostgreSQL Persistence)', (
           useValue: dataSource.getRepository(ChangeLog),
         },
         ChangeLogService,
+        {
+          provide: InvoicesService,
+          useValue: { syncBatch: jest.fn() },
+        },
         OnboardingCatalogService,
         ActivationService,
       ],
@@ -312,6 +325,29 @@ describe('ONB1.7A–C Activation Flow (E2E with Real PostgreSQL Persistence)', (
     });
   });
 
+  async function persistVerificationSaleEvidence(
+    attemptId: string,
+    evidenceTenantId = tenantId,
+    evidenceUserId = ownerUserId,
+  ) {
+    const invoiceId = randomUUID();
+    await dataSource.getRepository(Invoice).save({
+      id: invoiceId,
+      tenant_id: evidenceTenantId,
+      number: `VERIFY-${invoiceId}`,
+      created_at: new Date(),
+      userId: evidenceUserId,
+      subtotal: 1,
+      totalTax: 0,
+      total: 1,
+      paymentStatus: 'paid',
+    });
+    await dataSource.getRepository(ActivationAttempt).update(
+      { id: attemptId, tenantId: evidenceTenantId },
+      { verificationTicketId: invoiceId },
+    );
+  }
+
   afterAll(async () => {
     if (app) await app.close();
     if (dataSource?.isInitialized) {
@@ -349,6 +385,7 @@ describe('ONB1.7A–C Activation Flow (E2E with Real PostgreSQL Persistence)', (
     expect(res.body.serverTimeAnchorAt).toBeDefined();
 
     createdAttemptId = res.body.id;
+    await persistVerificationSaleEvidence(createdAttemptId);
 
     // Verify session state in DB
     const session = await dataSource.getRepository(OnboardingSession).findOne({
@@ -453,6 +490,7 @@ describe('ONB1.7A–C Activation Flow (E2E with Real PostgreSQL Persistence)', (
     expect(startRes.status).toBe(201);
     const attempt2Id = startRes.body.id;
     expect(attempt2Id).not.toBe(createdAttemptId);
+    await persistVerificationSaleEvidence(attempt2Id);
 
     // Ingest all 10 checks as PASS
     const catalogCodes = [
@@ -571,6 +609,11 @@ describe('ONB1.7A–C Activation Flow (E2E with Real PostgreSQL Persistence)', (
 
     expect(startRes.status).toBe(201);
     const attemptWarnId = startRes.body.id;
+    await persistVerificationSaleEvidence(
+      attemptWarnId,
+      tenantWarnId,
+      ownerWarnUserId,
+    );
 
     // Ingest 9 checks PASS
     const first9 = [
@@ -720,6 +763,7 @@ describe('ONB1.7A–C Activation Flow (E2E with Real PostgreSQL Persistence)', (
 
     expect(startRes.status).toBe(201);
     const attemptId = startRes.body.id;
+    await persistVerificationSaleEvidence(attemptId, tenantConvId, userConvId);
 
     // Ingest 9 checks as PASS
     const first9 = [

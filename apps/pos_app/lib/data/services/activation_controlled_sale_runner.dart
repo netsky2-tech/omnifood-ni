@@ -8,7 +8,7 @@ import '../../domain/models/sales/payment.dart';
 import '../../domain/ports/printer_port.dart';
 import '../../domain/repositories/sales/sales_repository.dart';
 import '../database/app_database.dart';
-import '../models/activation/activation_attempt_local_entity.dart';
+import '../mappers/sales_mapper.dart';
 import '../models/activation/activation_check_result_local_entity.dart';
 import '../models/activation/activation_outbox_envelope_entity.dart';
 import '../models/activation/first_successful_sale_claim_entity.dart';
@@ -193,6 +193,7 @@ class ActivationControlledSaleRunner {
         syncStatus: SyncStatus.pending,
         paymentStatus: PaymentStatus.paid,
         idempotencyKey: saleIdempotencyKey,
+        terminalId: attempt.candidateTerminalId,
       );
 
       final item = InvoiceItem(
@@ -238,6 +239,38 @@ class ActivationControlledSaleRunner {
       ticketSyncStatus = persistedInvoice.syncStatus;
       isNewSale = true;
     }
+
+    final persistedInvoice = await _database.invoiceDao.getInvoiceById(ticketId);
+    if (persistedInvoice == null ||
+        persistedInvoice.paymentStatus != 'paid' ||
+        persistedInvoice.terminalId?.trim() != attempt.candidateTerminalId.trim() ||
+        persistedInvoice.sourceSequence == null ||
+        persistedInvoice.idempotencyKey?.trim().isEmpty != false) {
+      throw StateError(
+        "Controlled offline sale '$ticketId' is missing authoritative terminal or sync provenance.",
+      );
+    }
+    ticketNumber = persistedInvoice.number;
+    ticketTotal = persistedInvoice.total;
+    ticketSyncStatus = persistedInvoice.syncStatus;
+    final persistedItems = await _database.invoiceItemDao.getItemsByInvoiceId(ticketId);
+    final persistedPayments = await _database.paymentDao.getPaymentsByInvoiceId(ticketId);
+    final persistedInvoicePayload = SalesMapper.toSyncJson(
+      SalesMapper.toInvoiceDomain(persistedInvoice),
+      persistedItems.map(SalesMapper.toItemDomain).toList(growable: false),
+      persistedPayments.map(SalesMapper.toPaymentDomain).toList(growable: false),
+    );
+    final verificationSalePayload = <String, dynamic>{
+      'idempotencyKey': persistedInvoice.idempotencyKey,
+      'sourceDeviceId': persistedInvoice.terminalId,
+      'sourceSequence': persistedInvoice.sourceSequence,
+      'flowType': 'sales',
+      'documentType': 'SALE',
+      'invoiceId': persistedInvoice.id,
+      'terminalId': persistedInvoice.terminalId,
+      'invoice': persistedInvoicePayload,
+      'movements': <dynamic>[],
+    };
 
     // 5. Real Receipt / Printing Path Traversal
     final printerStatus = await _printerPort.checkStatus();
@@ -388,13 +421,7 @@ class ActivationControlledSaleRunner {
     addEnvelope(
       eventType: 'VERIFICATION_SALE',
       idempotencyKey: 'activation:sale:$trimmedTenantId:$trimmedAttemptId:$ticketId',
-      payload: {
-        'invoiceId': ticketId,
-        'invoiceNumber': ticketNumber,
-        'total': ticketTotal,
-        'syncStatus': ticketSyncStatus,
-        'paymentStatus': 'paid',
-      },
+      payload: verificationSalePayload,
     );
 
     // 6.1 TTFSS First Successful Sale Claim (ONB1.8E & ONB1.8F)
@@ -426,8 +453,8 @@ class ActivationControlledSaleRunner {
         idempotencyKey: 'onboarding:first-sale:$trimmedTenantId',
         payload: {
           'ticketId': ticketId,
-          'tenantId': trimmedTenantId,
-          'terminalId': attempt.candidateTerminalId,
+          'declarativeTenantId': trimmedTenantId,
+          'declarativeTerminalId': attempt.candidateTerminalId,
           'activationAttemptId': trimmedAttemptId,
           'deviceOccurredAt': clockRes.deviceOccurredAt,
           'anchoredOccurredAt': clockRes.anchoredOccurredAt,

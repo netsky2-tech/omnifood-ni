@@ -63,9 +63,18 @@ import { OnboardingCatalogController } from '../../src/modules/onboarding/contro
 import { IDENTITY_READINESS_PORT } from '../../src/modules/onboarding/ports/identity-readiness.port';
 import { FISCAL_READINESS_PORT } from '../../src/modules/onboarding/ports/fiscal-readiness.port';
 import { CATALOG_READINESS_PORT } from '../../src/modules/onboarding/ports/catalog-readiness.port';
+import { INVENTORY_READINESS_PORT } from '../../src/modules/onboarding/ports/inventory-readiness.port';
+import { COSTING_READINESS_PORT } from '../../src/modules/onboarding/ports/costing-readiness.port';
+import { OPERATIONS_READINESS_PORT } from '../../src/modules/onboarding/ports/operations-readiness.port';
 import { IdentityReadinessAdapter } from '../../src/modules/onboarding/adapters/identity-readiness.adapter';
 import { FiscalReadinessAdapter } from '../../src/modules/onboarding/adapters/fiscal-readiness.adapter';
 import { CatalogReadinessAdapter } from '../../src/modules/onboarding/adapters/catalog-readiness.adapter';
+import { InventoryReadinessAdapter } from '../../src/modules/onboarding/adapters/inventory-readiness.adapter';
+import { CostingReadinessAdapter } from '../../src/modules/onboarding/adapters/costing-readiness.adapter';
+import { OperationsReadinessAdapter } from '../../src/modules/onboarding/adapters/operations-readiness.adapter';
+import { Warehouse } from '../../src/modules/inventory/entities/warehouse.entity';
+import { Supplier } from '../../src/modules/inventory/entities/supplier.entity';
+import { InventoryMovement } from '../../src/modules/inventory/entities/inventory-movement.entity';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
 import { PermissionsGuard } from '../../src/modules/identity/guards/permissions.guard';
@@ -131,6 +140,9 @@ async function withAcquisitionIsolatedSchema(
         LegacyOnboardingMigrationReceipt,
         OnboardingSession,
         OnboardingIdempotencyRecord,
+        Warehouse,
+        Supplier,
+        InventoryMovement,
       ],
       synchronize: true,
     });
@@ -317,6 +329,18 @@ async function withAcquisitionIsolatedSchema(
           provide: 'InvoiceItemRepository',
           useValue: {},
         },
+        {
+          provide: 'WarehouseRepository',
+          useValue: dataSource.getRepository(Warehouse),
+        },
+        {
+          provide: 'SupplierRepository',
+          useValue: dataSource.getRepository(Supplier),
+        },
+        {
+          provide: 'InventoryMovementRepository',
+          useValue: dataSource.getRepository(InventoryMovement),
+        },
         OnboardingSessionService,
         OnboardingReadinessEvaluator,
         OnboardingStateReconciler,
@@ -340,6 +364,18 @@ async function withAcquisitionIsolatedSchema(
         {
           provide: CATALOG_READINESS_PORT,
           useClass: CatalogReadinessAdapter,
+        },
+        {
+          provide: INVENTORY_READINESS_PORT,
+          useClass: InventoryReadinessAdapter,
+        },
+        {
+          provide: COSTING_READINESS_PORT,
+          useClass: CostingReadinessAdapter,
+        },
+        {
+          provide: OPERATIONS_READINESS_PORT,
+          useClass: OperationsReadinessAdapter,
         },
       ],
     }).compile();

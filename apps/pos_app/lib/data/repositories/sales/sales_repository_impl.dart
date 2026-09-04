@@ -58,14 +58,17 @@ class SalesRepositoryImpl implements SalesRepository {
     required List<InvoiceItem> items,
     required List<Payment> payments,
   }) async {
+    final resolvedTerminalId = invoice.terminalId?.trim() ?? '';
+    if (resolvedTerminalId.isEmpty) {
+      throw StateError('Sale terminal identity must not be blank.');
+    }
     if (await numberingService.isRangeExhausted()) {
       throw Exception('DGI Authorized Numbering Range exhausted.');
     }
 
     final finalNumber = await numberingService.getNextNumber();
-    final terminalId = 'pos-${invoice.userId}';
     final sourceSequence = (await transactionDao.getNextInvoiceSourceSequence(
-      terminalId,
+      resolvedTerminalId,
     )) ?? 1;
     final payloadHash = _buildSalePayloadHash(
       invoice: invoice.copyWith(number: finalNumber),
@@ -74,9 +77,10 @@ class SalesRepositoryImpl implements SalesRepository {
     );
     final updatedInvoice = invoice.copyWith(
       number: finalNumber,
-      terminalId: terminalId,
+      terminalId: resolvedTerminalId,
       sourceSequence: sourceSequence,
-      idempotencyKey: invoice.idempotencyKey ?? 'sale:$terminalId:${invoice.id}',
+      idempotencyKey:
+          invoice.idempotencyKey ?? 'sale:$resolvedTerminalId:${invoice.id}',
       payloadHash: payloadHash,
     );
 
@@ -373,7 +377,10 @@ class SalesRepositoryImpl implements SalesRepository {
     final creditNoteId = const Uuid().v4();
     final creditNoteNumber = await numberingService.getNextNumber();
     final now = DateTime.now();
-    final terminalId = 'pos-${original.userId}';
+    final terminalId = original.terminalId?.trim() ?? '';
+    if (terminalId.isEmpty) {
+      throw StateError('Credit note origin is missing terminal identity.');
+    }
     final sourceSequence = await transactionDao.getNextInvoiceSourceSequence(
       terminalId,
     );
