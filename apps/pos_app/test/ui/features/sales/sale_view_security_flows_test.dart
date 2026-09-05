@@ -90,6 +90,16 @@ void main() {
     );
   }
 
+  testWidgets('consumes a view-model error exactly once outside build', (tester) async {
+    when(mockViewModel.errorMessage).thenReturn('Venta fallida');
+
+    await tester.pumpWidget(buildTestApp());
+    await tester.pump();
+
+    expect(find.text('Venta fallida'), findsOneWidget);
+    verify(mockViewModel.clearError()).called(1);
+  });
+
   testWidgets('presents supervisor override modal before close-box restricted action', (tester) async {
     when(mockAuthRepository.authorizeOverride(
       supervisorId: anyNamed('supervisorId'),

@@ -145,10 +145,17 @@ class SaleView extends StatefulWidget {
   State<SaleView> createState() => _SaleViewState();
 }
 
-class _SaleViewState extends State<SaleView> {
+class _SaleViewState extends State<SaleView> with WidgetsBindingObserver {
+  late final SaleViewModel _viewModel;
+  bool _errorPresentationScheduled = false;
+
   @override
   void initState() {
     super.initState();
+    _viewModel = context.read<SaleViewModel>();
+    _viewModel.addListener(_presentError);
+    _presentError();
+    WidgetsBinding.instance.addObserver(this);
     _checkAuth();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -156,6 +163,52 @@ class _SaleViewState extends State<SaleView> {
         context.read<SaleViewModel>().checkActiveSession();
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _viewModel.removeListener(_presentError);
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  void _presentError() {
+    if (!mounted ||
+        _errorPresentationScheduled ||
+        _viewModel.errorMessage == null) {
+      return;
+    }
+
+    _errorPresentationScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      final errorMessage = _viewModel.errorMessage;
+      if (errorMessage != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            action: SnackBarAction(
+              label: 'OK',
+              textColor: Colors.white,
+              onPressed: _viewModel.clearError,
+            ),
+          ),
+        );
+        _viewModel.clearError();
+      }
+      _errorPresentationScheduled = false;
+    });
+  }
+
+  /// When the app resumes (e.g. after switching from Control de Caja),
+  /// re-read the cashier session from SQLite. One lightweight query.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      context.read<SaleViewModel>().checkActiveSession();
+    }
   }
 
   Future<void> _checkAuth() async {
@@ -172,24 +225,6 @@ class _SaleViewState extends State<SaleView> {
     final colorScheme = Theme.of(context).colorScheme;
     final hasActiveSession = viewModel.activeSession != null;
     final isHandheld = ResponsiveBreakpoints.isHandheld(context);
-
-    // Listener for errors (Visual Feedback)
-    if (viewModel.errorMessage != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(viewModel.errorMessage!),
-            backgroundColor: colorScheme.error,
-            action: SnackBarAction(
-              label: 'OK',
-              textColor: Colors.white,
-              onPressed: () => viewModel.clearError(),
-            ),
-          ),
-        );
-        viewModel.clearError();
-      });
-    }
 
     final productContent = viewModel.isLoading
         ? const Center(child: CircularProgressIndicator())

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/annotations.dart';
@@ -7,6 +9,7 @@ import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.
 import 'package:pos_app/domain/models/sales/payment.dart';
 import 'package:pos_app/domain/models/sales/cart_item.dart';
 import 'package:pos_app/domain/models/inventory/product.dart';
+import 'package:pos_app/domain/models/config/tenant_config.dart';
 import 'package:pos_app/ui/features/sales/widgets/multi_currency_checkout_dialog.dart';
 
 import 'multi_currency_checkout_dialog_test.mocks.dart';
@@ -155,6 +158,58 @@ void main() {
       [PaymentMethod.cash],
       customPayments: anyNamed('customPayments'),
     )).called(1);
+  });
+
+  testWidgets('keeps submit available after buzzer validation fails', (tester) async {
+    when(mockSaleViewModel.supportsBuzzerPager).thenReturn(true);
+    when(mockSaleViewModel.tenantConfig).thenReturn(
+      const TenantConfig(buzzerPagerRequired: true),
+    );
+
+    await tester.pumpWidget(buildTestWidget());
+    await tester.pumpAndSettle();
+
+    final submitButton = find.widgetWithText(FilledButton, 'COBRAR');
+    await tester.tap(submitButton);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('El número de Buzzer/Pager es obligatorio.'),
+      findsOneWidget,
+    );
+    expect(tester.widget<FilledButton>(submitButton).onPressed, isNotNull);
+  });
+
+  testWidgets('only submits one sale while a checkout is in flight', (tester) async {
+    final processing = Completer<void>();
+    when(
+      mockSaleViewModel.processSale(
+        any,
+        customPayments: anyNamed('customPayments'),
+      ),
+    ).thenAnswer((_) => processing.future);
+
+    await tester.pumpWidget(buildTestWidget());
+    await tester.pumpAndSettle();
+
+    final submitButton = find.widgetWithText(FilledButton, 'COBRAR');
+    await tester.tap(submitButton);
+    await tester.pump();
+    // Verify that the submit button is now in processing state (disabled)
+    expect(tester.widget<FilledButton>(find.byType(FilledButton)).onPressed, isNull);
+    await tester.tap(find.byType(FilledButton));
+    await tester.pump();
+
+    verify(
+      mockSaleViewModel.processSale(
+        [PaymentMethod.cash],
+        customPayments: anyNamed('customPayments'),
+      ),
+    ).called(1);
+
+    processing.completeError(StateError('failed'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(submitButton).onPressed, isNotNull);
   });
 
   testWidgets('renders buzzer and customer name inputs when supportsBuzzerPager is true', (tester) async {

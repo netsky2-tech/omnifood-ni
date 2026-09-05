@@ -134,6 +134,22 @@ void main() {
     );
   });
 
+  test('processSale fails when there is no authenticated user', () async {
+    await expectLater(
+      viewModel.processSale([PaymentMethod.cash]),
+      throwsA(isA<StateError>()),
+    );
+
+    expect(viewModel.errorMessage, 'Usuario no autenticado');
+    verifyNever(
+      mockSalesRepo.saveSale(
+        invoice: anyNamed('invoice'),
+        items: anyNamed('items'),
+        payments: anyNamed('payments'),
+      ),
+    );
+  });
+
   test('Initial state should be empty', () {
     expect(viewModel.cart, isEmpty);
     expect(viewModel.total, 0.0);

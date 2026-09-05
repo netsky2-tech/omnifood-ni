@@ -97,7 +97,30 @@ class SaleViewModel extends ChangeNotifier {
         _identificationService = null,
         _rewardInteraction = null,
         _evaluationService = null,
-        _terminalId = terminalId;
+        _terminalId = terminalId {
+      _syncService = syncService;
+      if (syncService != null) {
+        _syncSubscription = syncService.onInboundSync.listen((event) {
+          if (event.productsCount > 0 || event.catalogValuesCount > 0) {
+            loadProducts();
+          }
+        });
+      }
+      if (autoLoad) {
+        loadProducts().then((_) {
+          // If local DB is empty, trigger sync to pull products from backend
+          if (_products.isEmpty && _syncService != null) {
+            _syncService!.triggerManualSync();
+          }
+        });
+        checkActiveSession();
+        loadHoldTickets();
+        loadPromotions();
+        _loadCurrentUserRole();
+        loadExchangeRates();
+        loadTenantConfig();
+      }
+    }
 
   /// Extended constructor with loyalty wiring services.
   /// Use this when the caller needs full loyalty evaluation + reward interaction.
@@ -144,7 +167,11 @@ class SaleViewModel extends ChangeNotifier {
       });
     }
     if (autoLoad) {
-      loadProducts();
+      loadProducts().then((_) {
+        if (_products.isEmpty && _syncService != null) {
+          _syncService!.triggerManualSync();
+        }
+      });
       checkActiveSession();
       loadHoldTickets();
       loadPromotions();
@@ -975,7 +1002,7 @@ class SaleViewModel extends ChangeNotifier {
     if (user == null) {
       _errorMessage = 'Usuario no autenticado';
       notifyListeners();
-      return;
+      throw StateError('Usuario no autenticado');
     }
 
     final invoiceId = const Uuid().v4();
@@ -1257,6 +1284,9 @@ class SaleViewModel extends ChangeNotifier {
       clearCart();
       _consumeOverride();
     } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[SaleViewModel] processSale failed: $e');
+      }
       _errorMessage = 'Error al procesar la venta: $e';
       notifyListeners();
       rethrow;

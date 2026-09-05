@@ -3288,7 +3288,8 @@ class _$InvoiceDao extends InvoiceDao {
 
   @override
   Future<String?> getLastInvoiceNumber() async {
-    return _queryAdapter.query('SELECT MAX(invoice_number) FROM invoices',
+    return _queryAdapter.query(
+        'SELECT COALESCE(MAX(invoice_number), \'\') FROM invoices',
         mapper: (Map<String, Object?> row) => row.values.first as String);
   }
 

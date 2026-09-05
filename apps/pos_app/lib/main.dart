@@ -286,10 +286,12 @@ void main() async {
         ),
         ChangeNotifierProvider(create: (_) => SalesHistoryViewModel(database)),
         ChangeNotifierProvider(
-          create: (_) {
+          create: (ctx) {
+            final saleVm = ctx.read<SaleViewModel>();
             final vm = CashShiftViewModel.fromDatabase(
               database: database,
               currentUserId: 'user-cajero',
+              currentUserRole: saleVm.currentUserRole,
             );
             vm.init();
             return vm;

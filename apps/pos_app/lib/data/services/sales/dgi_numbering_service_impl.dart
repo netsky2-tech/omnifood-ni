@@ -24,7 +24,7 @@ class DgiNumberingServiceImpl implements DgiNumberingService {
 
   Future<int> _resolveNextSequence(int configuredCurrent) async {
     if (_invoiceDao != null) {
-      final lastInvoiceNumber = await _invoiceDao!.getLastInvoiceNumber();
+      final lastInvoiceNumber = await _invoiceDao.getLastInvoiceNumber();
       if (lastInvoiceNumber != null && lastInvoiceNumber.isNotEmpty) {
         final lastSequence = _extractSequenceNumber(lastInvoiceNumber);
         if (lastSequence >= configuredCurrent) {
@@ -39,19 +39,40 @@ class DgiNumberingServiceImpl implements DgiNumberingService {
     return configuredCurrent;
   }
 
+  Future<int> _resolveSequenceAfterAllocation(int configuredCurrent) async {
+    if (_invoiceDao != null) {
+      final lastInvoiceNumber = await _invoiceDao.getLastInvoiceNumber();
+      if (lastInvoiceNumber != null && lastInvoiceNumber.isNotEmpty) {
+        final lastSequence = _extractSequenceNumber(lastInvoiceNumber);
+        return lastSequence >= configuredCurrent
+            ? lastSequence + 1
+            : configuredCurrent + 1;
+      }
+    }
+    return configuredCurrent + 1;
+  }
+
   @override
   Future<void> initializeRange({
     required String prefix,
     required int start,
     required int end,
   }) async {
-    await _configDao.saveConfig(LocalConfigEntity(key: _keyPrefix, value: prefix));
-    await _configDao.saveConfig(LocalConfigEntity(key: _keyStart, value: start.toString()));
-    await _configDao.saveConfig(LocalConfigEntity(key: _keyEnd, value: end.toString()));
-    
+    await _configDao.saveConfig(
+      LocalConfigEntity(key: _keyPrefix, value: prefix),
+    );
+    await _configDao.saveConfig(
+      LocalConfigEntity(key: _keyStart, value: start.toString()),
+    );
+    await _configDao.saveConfig(
+      LocalConfigEntity(key: _keyEnd, value: end.toString()),
+    );
+
     final current = await _configDao.getConfigByKey(_keyCurrent);
     if (current == null) {
-      await _configDao.saveConfig(LocalConfigEntity(key: _keyCurrent, value: start.toString()));
+      await _configDao.saveConfig(
+        LocalConfigEntity(key: _keyCurrent, value: start.toString()),
+      );
     }
   }
 
@@ -77,10 +98,10 @@ class DgiNumberingServiceImpl implements DgiNumberingService {
   Future<void> incrementNumber() async {
     final current = await _configDao.getConfigByKey(_keyCurrent);
     final parsedCurrent = int.tryParse(current?.value ?? '1') ?? 1;
-    final validSequence = await _resolveNextSequence(parsedCurrent);
-
-    final next = validSequence + 1;
-    await _configDao.saveConfig(LocalConfigEntity(key: _keyCurrent, value: next.toString()));
+    final next = await _resolveSequenceAfterAllocation(parsedCurrent);
+    await _configDao.saveConfig(
+      LocalConfigEntity(key: _keyCurrent, value: next.toString()),
+    );
   }
 
   @override
@@ -97,6 +118,8 @@ class DgiNumberingServiceImpl implements DgiNumberingService {
     final validSequence = await _resolveNextSequence(parsedCurrent);
     final parsedEnd = int.tryParse(end.value) ?? 1000000;
 
-    return validSequence >= parsedEnd;
+    // Range is exhausted before allocation only when the next sequence
+    // to be assigned strictly exceeds the authorized end of the range.
+    return validSequence > parsedEnd;
   }
 }

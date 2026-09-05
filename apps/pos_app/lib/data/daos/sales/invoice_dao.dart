@@ -15,10 +15,17 @@ abstract class InvoiceDao {
   @Query('SELECT * FROM invoices WHERE sync_status = :status')
   Future<List<InvoiceEntity>> getInvoicesBySyncStatus(String status);
 
-  @Query('SELECT * FROM invoices WHERE created_at >= :startTime AND created_at <= :endTime')
-  Future<List<InvoiceEntity>> getInvoicesByTimeRange(int startTime, int endTime);
+  @Query(
+    'SELECT * FROM invoices WHERE created_at >= :startTime AND created_at <= :endTime',
+  )
+  Future<List<InvoiceEntity>> getInvoicesByTimeRange(
+    int startTime,
+    int endTime,
+  );
 
-  @Query('SELECT * FROM invoices WHERE user_id = :userId ORDER BY created_at DESC')
+  @Query(
+    'SELECT * FROM invoices WHERE user_id = :userId ORDER BY created_at DESC',
+  )
   Future<List<InvoiceEntity>> getInvoicesByUserId(String userId);
 
   @Insert(onConflict: OnConflictStrategy.abort)
@@ -27,7 +34,7 @@ abstract class InvoiceDao {
   @Update(onConflict: OnConflictStrategy.replace)
   Future<void> updateInvoice(InvoiceEntity invoice);
 
-  @Query('SELECT MAX(invoice_number) FROM invoices')
+  @Query("SELECT COALESCE(MAX(invoice_number), '') FROM invoices")
   Future<String?> getLastInvoiceNumber();
 
   @Query('UPDATE invoices SET sync_status = :status WHERE id IN (:ids)')
