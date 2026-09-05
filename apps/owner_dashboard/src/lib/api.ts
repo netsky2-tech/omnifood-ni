@@ -2,19 +2,26 @@ const API_BASE = "/api";
 
 const STORAGE_KEY_ACCESS = "oc_access_token";
 const STORAGE_KEY_REFRESH = "oc_refresh_token";
+const STORAGE_KEY_USER_ID = "oc_user_id";
 
 export interface TokenPair {
   accessToken: string;
   refreshToken: string;
+  userId?: string;
 }
 
 let accessToken: string | null = sessionStorage.getItem(STORAGE_KEY_ACCESS);
 let refreshToken: string | null = sessionStorage.getItem(STORAGE_KEY_REFRESH);
+let userId: string | null = sessionStorage.getItem(STORAGE_KEY_USER_ID);
 let refreshPromise: Promise<string> | null = null;
 
 export function setTokens(tokens: TokenPair): void {
   accessToken = tokens.accessToken;
   refreshToken = tokens.refreshToken;
+  if (tokens.userId) {
+    userId = tokens.userId;
+    sessionStorage.setItem(STORAGE_KEY_USER_ID, tokens.userId);
+  }
   sessionStorage.setItem(STORAGE_KEY_ACCESS, tokens.accessToken);
   sessionStorage.setItem(STORAGE_KEY_REFRESH, tokens.refreshToken);
 }
@@ -22,8 +29,10 @@ export function setTokens(tokens: TokenPair): void {
 export function clearTokens(): void {
   accessToken = null;
   refreshToken = null;
+  userId = null;
   sessionStorage.removeItem(STORAGE_KEY_ACCESS);
   sessionStorage.removeItem(STORAGE_KEY_REFRESH);
+  sessionStorage.removeItem(STORAGE_KEY_USER_ID);
 }
 
 export function getAccessToken(): string | null {
@@ -36,11 +45,12 @@ export function hasStoredRefreshToken(): boolean {
 
 export async function refreshAccessToken(): Promise<string> {
   if (!refreshToken) throw new Error("No refresh token");
+  if (!userId) throw new Error("No userId for refresh");
 
   const response = await fetch(`${API_BASE}/identity/refresh`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refreshToken }),
+    body: JSON.stringify({ userId, refreshToken }),
   });
 
   if (!response.ok) {

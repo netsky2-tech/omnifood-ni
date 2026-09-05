@@ -23,6 +23,7 @@ export function useLogin() {
       setTokens({
         accessToken: response.accessToken,
         refreshToken: response.refreshToken,
+        userId: response.user.id,
       });
       login(response.user, response.tenant);
       resolveFromLogin(response.tenant);
