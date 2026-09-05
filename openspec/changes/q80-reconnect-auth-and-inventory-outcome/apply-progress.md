@@ -280,3 +280,32 @@ The prior attempt was blocked before code/tests because root `spec.md` was missi
 - Targeted analyzer: clean.
 - `git diff --check` passed.
 - Authored production lines delta: ~254 lines (within 210–290 line budget).
+
+## Slice 3 — Reconnect integration complete
+
+- **Status consumed:** `{change:q80-reconnect-auth-and-inventory-outcome, artifactStore:both, authoritativeStore:openspec, applyState:ready}`; strict TDD active.
+- **Completed persisted tasks:** all three Slice 3 lines are now visibly `[x]` in `tasks.md`.
+- **Files changed/created:**
+  - `apps/pos_app/lib/data/services/sync_service.dart`
+  - `apps/pos_app/test/data/services/sync_service_reconnect_test.dart`
+  - `apps/pos_app/test/data/services/sync_service_test.dart`
+- **Behavior:**
+  - `SyncService` classifies 401/403 responses explicitly as `'Reautenticación requerida con el servidor nube (HTTP 401/403)'` instead of generic domain strings like `Sales; Catálogo`.
+  - Once cloud authentication is detected as invalid during a pass, downstream domain calls are aborted to avoid spamming the backend.
+  - Coalesces rapid sync triggers into sequential non-overlapping executions using `_hasPendingSyncRequest` without race conditions.
+  - Startup displays the local PIN unlock pad immediately without waiting on network or blocking.
+  - On network timeout or unauthenticated error, pending SQLite invoices and movements remain strictly in `pending` status with zero accidental `markAsSynced` calls.
+
+### TDD Cycle Evidence
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|---|---|---|---|---|---|---|---|
+| Reconnect & Auth Error Classification | `test/data/services/sync_service_reconnect_test.dart` | Service Unit | 110 auth/security/sales tests passed | Expected contains 'Reautenticación requerida', Actual: 'Sales; Producción; Kardex' | Implemented classification & coalescing, 3/3 passed | 401 explicit error classification, coalesced rapid triggers, SQLite pending work preservation on timeout | Cleaned up inline diffs without formatting churn |
+
+### Verification
+
+- GREEN: `cd apps/pos_app && flutter test test/data/services/sync_service_test.dart test/data/services/sync_service_reconnect_test.dart` — **53 passed**.
+- Regression: Full security/auth/sales test suites pass without regression.
+- Targeted analyzer: clean (0 errors).
+- `git diff --check` passed.
+- Authored production lines delta: 39 lines (well under 180–260 line budget).

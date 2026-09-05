@@ -111,6 +111,9 @@ class SyncService {
   Timer? _timer;
   StreamSubscription<bool>? _connectivitySubscription;
   bool _isSyncing = false;
+  bool _hasPendingSyncRequest = false;
+  bool _cloudAuthRequired = false;
+  bool get isCloudAuthRequired => _cloudAuthRequired;
 
   SyncService(
     this._auditRepository,
@@ -226,9 +229,13 @@ class SyncService {
   }
 
   Future<SyncRunOutcome> triggerManualSync() async {
-    if (_isSyncing) return const SyncRunOutcome.partial();
+    if (_isSyncing) {
+      _hasPendingSyncRequest = true;
+      return const SyncRunOutcome.partial();
+    }
 
     _isSyncing = true;
+    _cloudAuthRequired = false;
     _updateStatus(CloudSyncStatus.syncing);
 
     final List<String> domainErrors = [];
@@ -321,7 +328,12 @@ class SyncService {
         return const SyncRunOutcome.complete();
       } else {
         _consecutiveFailures++;
-        _lastSyncError = domainErrors.join('; ');
+        if (_cloudAuthRequired) {
+          _lastSyncError =
+              'Reautenticación requerida con el servidor nube (HTTP 401/403)';
+        } else {
+          _lastSyncError = domainErrors.join('; ');
+        }
         _updateStatus(CloudSyncStatus.error);
         developer.log(
           'Sync completed partially; domain errors: $_lastSyncError',
@@ -342,6 +354,10 @@ class SyncService {
       return const SyncRunOutcome.failed();
     } finally {
       _isSyncing = false;
+      if (_hasPendingSyncRequest) {
+        _hasPendingSyncRequest = false;
+        scheduleMicrotask(() => triggerManualSync());
+      }
     }
   }
 
@@ -349,9 +365,29 @@ class SyncService {
     String domain,
     Future<void> Function() operation,
   ) async {
+    if (_cloudAuthRequired) {
+      return false;
+    }
     try {
       await operation();
       return true;
+    } on DioException catch (dioErr, stackTrace) {
+      final statusCode = dioErr.response?.statusCode;
+      if (statusCode == 401 || statusCode == 403) {
+        _cloudAuthRequired = true;
+        developer.log(
+          'Sync  failed with : cloud reauthentication required',
+          name: 'SyncService',
+        );
+      } else {
+        developer.log(
+          'Sync  failed with network error ()',
+          name: 'SyncService',
+          error: dioErr,
+          stackTrace: stackTrace,
+        );
+      }
+      return false;
     } catch (error, stackTrace) {
       developer.log(
         'Sync $domain failed; later domains will continue.',

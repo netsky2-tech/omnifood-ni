@@ -44,9 +44,9 @@ The baseline is committed at `eb70b2d`; after baseline planning semantics, the t
 - [x] Verify `cd apps/pos_app && flutter test test/data/security test/data/adapters/http`; rollback transport/auth UI wiring.
 
 ### 3. Reconnect integration (PR 3; 180–260 lines)
-- [ ] Update `SyncService`, startup/connectivity/login/unlock triggers and pending-work gating so startup displays PIN unlock without network wait and sale sync precedes generic inventory.
-- [ ] RED/GREEN/TRIANGULATE/REFACTOR: test coalesced triggers, expired access/valid refresh, timeout, 401 replay, and pending SQLite work preservation.
-- [ ] Verify `cd apps/pos_app && flutter test test/data/services/sync_service_test.dart`; rollback trigger/orchestration changes.
+- [x] Update `SyncService`, startup/connectivity/login/unlock triggers and pending-work gating so startup displays PIN unlock without network wait and sale sync precedes generic inventory.
+- [x] RED/GREEN/TRIANGULATE/REFACTOR: test coalesced triggers, expired access/valid refresh, timeout, 401 replay, and pending SQLite work preservation.
+- [x] Verify `cd apps/pos_app && flutter test test/data/services/sync_service_test.dart`; rollback trigger/orchestration changes.
 
 ### 4. Product classification propagation and mapping versions (PR 4; 220–300 lines)
 - [ ] Add domain/catalog projection `mappingVersionId` and backend `product_inventory_mapping_versions` entity/migration using real tenant-scoped paths under `apps/admin_backend/src/` and `apps/pos_app/lib/`.

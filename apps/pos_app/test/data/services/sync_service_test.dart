@@ -1294,6 +1294,7 @@ void main() {
           options: OpenDatabaseOptions(
             version: 24,
             onCreate: (database, version) async {
+                  await database.execute('CREATE TABLE IF NOT EXISTS products (id TEXT PRIMARY KEY);');
               await database.execute('''
                 CREATE TABLE purchases (
                   id TEXT NOT NULL PRIMARY KEY,
