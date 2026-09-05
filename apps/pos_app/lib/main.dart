@@ -10,6 +10,9 @@ import 'package:pos_app/data/repositories/inventory/inventory_repository_impl.da
 import 'data/database/app_database.dart';
 import 'data/database/migrations.dart';
 import 'data/database/database_seeder.dart';
+import 'data/network/cloud_auth_interceptor.dart';
+import 'data/security/flutter_secure_cloud_credential_store.dart';
+import 'domain/security/cloud_credential_coordinator.dart';
 import 'data/repositories/auth_repository_impl.dart';
 import 'core/clock/monotonic_clock.dart';
 import 'core/config/production_transport_config.dart';
@@ -108,30 +111,36 @@ void main() async {
   ).resolveDeviceId(buildTimeDeviceId: provisionedDeviceId);
   final dio = Dio(productionTransportOptions(baseUrl));
   final localAuthService = LocalAuthService();
-  final capabilityCache = TenantCapabilityCache(configDao: database.localConfigDao, clock: StopwatchMonotonicClock(), bootSessionId: const Uuid().v4());
+  final capabilityCache = TenantCapabilityCache(
+    configDao: database.localConfigDao,
+    clock: StopwatchMonotonicClock(),
+    bootSessionId: const Uuid().v4(),
+  );
+  final credentialStore = FlutterSecureCloudCredentialStore();
+  final credentialCoordinator = CloudCredentialCoordinator(
+    credentialStore,
+    commitId: () => const Uuid().v4(),
+  );
+  final refreshDio = Dio(productionTransportOptions(baseUrl));
   final authRepository = AuthRepositoryImpl(
     database.userDao,
     database.securityProfileDao,
     localAuthService,
     dio,
     capabilityCache: capabilityCache,
+    credentialCoordinator: credentialCoordinator,
   );
 
-  // Add Auth & Path Normalization Interceptor
+  // Add Cloud Auth, Automatic Refresh & Path Normalization Interceptor
   dio.interceptors.add(
-    InterceptorsWrapper(
-      onRequest: (options, handler) async {
-        if (!options.baseUrl.endsWith('/')) {
-          options.baseUrl = '${options.baseUrl}/';
-        }
-        if (options.path.startsWith('/')) {
-          options.path = options.path.substring(1);
-        }
-        final token = await authRepository.getAccessToken();
-        if (token != null) {
-          options.headers['Authorization'] = 'Bearer $token';
-        }
-        return handler.next(options);
+    CloudAuthInterceptor(
+      coordinator: credentialCoordinator,
+      refreshDio: refreshDio,
+      clientDio: dio,
+      onReauthenticationRequired: () {
+        debugPrint(
+          "[CloudAuth] Reautenticación requerida: sesión cloud expirada o revocada.",
+        );
       },
     ),
   );

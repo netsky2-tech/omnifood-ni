@@ -247,3 +247,36 @@ The prior attempt was blocked before code/tests because root `spec.md` was missi
 - PR boundary: auto-chain/stacked-to-main **Slice 1B only**; no commit was created. Roll back only the coordinator, fake, focused coordinator test, and their four task checkboxes.
 - Remaining tasks are Slice 2+, beginning exactly: `- [ ] Wire login/refresh/clear/import through the coordinator in auth repository, composition root, Dio adapter, and auth state/UI under apps/pos_app/lib/ (discover exact paths).`
 - Risk: Slice 1B intentionally has no auth repository/Dio/publication wiring; that remains Slice 2. The pre-existing `docs/onboarding/onboarding_acceptance_plan_v1.0.md:Zone.Identifier` remains untouched.
+
+## Slice 2 — POS auth repository, Dio interceptor and error classification complete
+
+- **Status consumed:** `{change:q80-reconnect-auth-and-inventory-outcome, artifactStore:both, authoritativeStore:openspec, applyState:ready}`; strict TDD active.
+- **Completed persisted tasks:** all three Slice 2 lines are now visibly `[x]` in `tasks.md`.
+- **Files changed/created:**
+  - `apps/pos_app/lib/data/network/cloud_auth_interceptor.dart`
+  - `apps/pos_app/lib/data/repositories/auth_repository_impl.dart`
+  - `apps/pos_app/lib/main.dart`
+  - `apps/pos_app/lib/data/security/flutter_secure_cloud_credential_store.dart`
+  - `apps/pos_app/test/data/network/cloud_auth_interceptor_test.dart`
+  - `apps/pos_app/test/data/repositories/auth_repository_credential_coordinator_test.dart`
+- **Behavior:**
+  - `CloudAuthInterceptor` handles automatic 401 interception: coalesces concurrent 401s into a single `/identity/refresh` call, rotates tokens through `CloudCredentialCoordinator`, and retries the original request with `retryAttempt = 1`.
+  - Non-retryable 401 (e.g. revoked refresh token) triggers `onReauthenticationRequired` without destroying local SQLite user or session.
+  - Network timeout during refresh leaves local credentials untouched and lets network error bubble up.
+  - `AuthRepositoryImpl` integrates `CloudCredentialCoordinator`: online login saves both access and refresh tokens into the coordinator; logout commits a CLEARED tombstone; `loginOffline` remains 100% offline with zero HTTP or secure store interaction.
+  - `main.dart` wires `FlutterSecureCloudCredentialStore`, `CloudCredentialCoordinator`, and `CloudAuthInterceptor`.
+
+### TDD Cycle Evidence
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|---|---|---|---|---|---|---|---|
+| CloudAuthInterceptor | `test/data/network/cloud_auth_interceptor_test.dart` | Interceptor Unit | 59 checkout/cash tests passed | File did not exist, compilation failed | Implemented interceptor, 7/7 tests passed | Single refresh flight, 401 loop prevention, coalesced concurrent 401s, timeout preservation | Extracted coalesced refresh helper; formatted |
+| AuthRepository Coordinator wiring | `test/data/repositories/auth_repository_credential_coordinator_test.dart` | Repo Unit | 7 interceptor tests passed | Compilation failed: missing coordinator param | Wired coordinator, 3/3 passed | Online login saves tokens, logout clears tombstone, offline login 0 HTTP/store calls | Handled tenantId fallback and SharedPreferences isolation |
+
+### Verification
+
+- GREEN: `cd apps/pos_app && flutter test test/data/network test/data/repositories/auth_repository_credential_coordinator_test.dart test/data/security` — **24 passed**.
+- Regression: Full auth/security suite (51 passed) + full sales/caja suite (59 passed) — **110 passed total**.
+- Targeted analyzer: clean.
+- `git diff --check` passed.
+- Authored production lines delta: ~254 lines (within 210–290 line budget).

@@ -8,6 +8,9 @@ import '../models/user_entity.dart';
 import '../services/local_auth_service.dart';
 import '../mappers/user_mapper.dart';
 import 'tenant_capability_cache.dart';
+import '../../domain/security/cloud_credential_coordinator.dart';
+import '../../domain/security/cloud_credential_record.dart';
+import '../../domain/security/cloud_credentials.dart';
 import '../security/local_totp_seed_cipher.dart';
 import '../security/totp_seed_key_provider.dart';
 import 'package:dio/dio.dart';
@@ -31,6 +34,7 @@ class AuthRepositoryImpl implements AuthRepository {
   final Map<String, DateTime> _pinLockedUntil = <String, DateTime>{};
   final TotpSeedKeyProvider _totpSeedKeyProvider;
   final TenantCapabilityCache? _capabilityCache;
+  final CloudCredentialCoordinator? _credentialCoordinator;
 
   AuthRepositoryImpl(
     this._userDao,
@@ -39,9 +43,11 @@ class AuthRepositoryImpl implements AuthRepository {
     this._dio, {
     TotpSeedKeyProvider? totpSeedKeyProvider,
     TenantCapabilityCache? capabilityCache,
+    CloudCredentialCoordinator? credentialCoordinator,
   }) : _totpSeedKeyProvider =
-            totpSeedKeyProvider ?? DeviceBoundTotpSeedKeyProvider(),
-       _capabilityCache = capabilityCache;
+           totpSeedKeyProvider ?? DeviceBoundTotpSeedKeyProvider(),
+       _capabilityCache = capabilityCache,
+       _credentialCoordinator = credentialCoordinator;
 
   String? _lastAuthError;
 
@@ -60,8 +66,8 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   Future<void> normalizeLegacyPlaintextTotpSeeds() async {
-    final legacyProfiles =
-        await _securityProfileDao.findLegacyPlaintextTotpSeeds();
+    final legacyProfiles = await _securityProfileDao
+        .findLegacyPlaintextTotpSeeds();
     if (legacyProfiles.isEmpty) {
       return;
     }
@@ -76,13 +82,21 @@ class AuthRepositoryImpl implements AuthRepository {
           'Failed to normalize legacy plaintext TOTP seed for user ${profile.userId}',
         );
       }
-      await _securityProfileDao.updateTotpSecretSeed(profile.userId, encryptedSeed);
+      await _securityProfileDao.updateTotpSecretSeed(
+        profile.userId,
+        encryptedSeed,
+      );
     }
   }
 
   Future<void> _saveToken(String token) async {
     _accessToken = token;
     _dio.options.headers['Authorization'] = 'Bearer $token';
+
+    if (_credentialCoordinator != null) {
+      // When coordinator is present, it is the sole secure credential store.
+      return;
+    }
 
     try {
       await _storage.write(key: 'access_token', value: token);
@@ -108,19 +122,39 @@ class AuthRepositoryImpl implements AuthRepository {
 
       final user = User.fromJson(response.data['user']);
       final token = response.data['access_token'];
+      final refreshToken = response.data['refresh_token'] as String?;
 
       _currentUser = user;
       _isPendingSync = false;
       await _saveToken(token);
+      if (_credentialCoordinator != null && refreshToken != null) {
+        final intent = await _credentialCoordinator!.reserveIntent();
+        await _credentialCoordinator!.commit(
+          intent,
+          CloudCredentials(
+            accessToken: token,
+            refreshToken: refreshToken,
+            userId: user.id,
+                tenantId: (user.tenantId != null && user.tenantId!.isNotEmpty)
+                    ? user.tenantId!
+                : 'default-tenant',
+            issuedAtUtc: DateTime.now().toUtc(),
+          ),
+        );
+      }
       await _refreshAuditCapability(user);
 
       await syncStaff();
       return user;
     } on DioException catch (e) {
-      final isUnauthorized = e.response?.statusCode == 401 || e.response?.statusCode == 403;
+      final isUnauthorized =
+          e.response?.statusCode == 401 || e.response?.statusCode == 403;
       if (isUnauthorized) {
-        _lastAuthError = 'Correo o contraseña incorrectos. Verifique sus credenciales.';
-        debugPrint('[AuthRepository] Online login rejected by backend: ${e.response?.statusCode}');
+        _lastAuthError =
+            'Correo o contraseña incorrectos. Verifique sus credenciales.';
+        debugPrint(
+          '[AuthRepository] Online login rejected by backend: ${e.response?.statusCode}',
+        );
         return null;
       }
 
@@ -133,32 +167,45 @@ class AuthRepositoryImpl implements AuthRepository {
 
       if (!isFallbackAllowed) {
         final status = e.response?.statusCode;
-        _lastAuthError = status != null 
+        _lastAuthError = status != null
             ? 'Error del servidor (HTTP $status): ${e.response?.data ?? e.message}'
             : 'Error de red: ${e.message}';
-        debugPrint('[AuthRepository] Online login failed without fallback eligibility: $e');
+        debugPrint(
+          '[AuthRepository] Online login failed without fallback eligibility: $e',
+        );
         return null;
       }
 
       final localUser = await _findLocalUserByIdentifier(email);
       if (localUser == null) {
-        _lastAuthError = 'Sin conexión al servidor y usuario no encontrado localmente.';
-        debugPrint('[AuthRepository] Offline fallback denied: unknown local user');
+        _lastAuthError =
+            'Sin conexión al servidor y usuario no encontrado localmente.';
+        debugPrint(
+          '[AuthRepository] Offline fallback denied: unknown local user',
+        );
         return null;
       }
 
       final profile = await _securityProfileDao.findByUserId(localUser.id);
       final pinHash = profile?.pinHash;
-      if (profile == null || !profile.isPinEnabled || pinHash == null || pinHash.isEmpty) {
-        _lastAuthError = 'Perfil de seguridad local no disponible para este usuario.';
-        debugPrint('[AuthRepository] Offline fallback denied: missing local security profile');
+      if (profile == null ||
+          !profile.isPinEnabled ||
+          pinHash == null ||
+          pinHash.isEmpty) {
+        _lastAuthError =
+            'Perfil de seguridad local no disponible para este usuario.';
+        debugPrint(
+          '[AuthRepository] Offline fallback denied: missing local security profile',
+        );
         return null;
       }
 
       final isPinValid = _localAuth.verifyPin(password, pinHash);
       if (!isPinValid) {
         _lastAuthError = 'Contraseña o PIN local incorrecto.';
-        debugPrint('[AuthRepository] Offline fallback denied: invalid local credentials');
+        debugPrint(
+          '[AuthRepository] Offline fallback denied: invalid local credentials',
+        );
         return null;
       }
 
@@ -296,7 +343,9 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<User?> loginOffline(String userIdOrEmail, String pin) async {
     _capabilityCache?.clear();
-    debugPrint('[AuthRepository] Attempting offline login for user: $userIdOrEmail');
+    debugPrint(
+      '[AuthRepository] Attempting offline login for user: $userIdOrEmail',
+    );
 
     var entity = await _userDao.findUserById(userIdOrEmail);
     entity ??= await _findLocalUserByIdentifier(userIdOrEmail);
@@ -389,6 +438,22 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<String?> getAccessToken() async {
+    if (_credentialCoordinator != null) {
+      try {
+        final recovery = await _credentialCoordinator!.recover();
+        final creds = recovery.record?.credentials;
+        if (creds != null &&
+            recovery.record?.credentialState == CredentialState.active) {
+          _accessToken = creds.accessToken;
+          return _accessToken;
+        }
+        _accessToken = null;
+        return null;
+      } catch (_) {
+        return null;
+      }
+    }
+
     if (_accessToken != null) return _accessToken;
 
     try {
@@ -411,6 +476,13 @@ class AuthRepositoryImpl implements AuthRepository {
     _currentUser = null;
     _accessToken = null;
     _dio.options.headers.remove('Authorization');
+
+    if (_credentialCoordinator != null) {
+      try {
+        await _credentialCoordinator!.clear();
+      } catch (_) {}
+      return;
+    }
 
     try {
       await _storage.delete(key: 'access_token');

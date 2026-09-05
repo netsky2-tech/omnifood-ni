@@ -39,9 +39,9 @@ The baseline is committed at `eb70b2d`; after baseline planning semantics, the t
 - [x] Prove behaviorally that credential persistence uses the single port with no fallback. Verify focused security tests and `flutter analyze`; rollback coordinator/recovery/tests only. Finish at the commit/review boundary.
 
 ### 2. POS auth UI and error classification (PR 2; 210–290 lines)
-- [ ] Wire login/refresh/clear/import through the coordinator in auth repository, composition root, Dio adapter, and auth state/UI under `apps/pos_app/lib/` (discover exact paths).
-- [ ] RED/GREEN/TRIANGULATE/REFACTOR: offline PIN makes zero HTTP/secure-store calls; one refresh flight; one retry with `retryAttempt=1`; distinguish cloud unavailable vs reauthentication-required and preserve local session.
-- [ ] Verify `cd apps/pos_app && flutter test test/data/security test/data/adapters/http`; rollback transport/auth UI wiring.
+- [x] Wire login/refresh/clear/import through the coordinator in auth repository, composition root, Dio adapter, and auth state/UI under `apps/pos_app/lib/` (discover exact paths).
+- [x] RED/GREEN/TRIANGULATE/REFACTOR: offline PIN makes zero HTTP/secure-store calls; one refresh flight; one retry with `retryAttempt=1`; distinguish cloud unavailable vs reauthentication-required and preserve local session.
+- [x] Verify `cd apps/pos_app && flutter test test/data/security test/data/adapters/http`; rollback transport/auth UI wiring.
 
 ### 3. Reconnect integration (PR 3; 180–260 lines)
 - [ ] Update `SyncService`, startup/connectivity/login/unlock triggers and pending-work gating so startup displays PIN unlock without network wait and sale sync precedes generic inventory.

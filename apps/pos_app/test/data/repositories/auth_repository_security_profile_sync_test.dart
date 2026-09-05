@@ -40,6 +40,8 @@ void main() {
 
     when(() => userDao.deleteAllUsers()).thenAnswer((_) async {});
     when(() => userDao.insertUsers(any())).thenAnswer((_) async {});
+    when(() => userDao.findUserByEmail(any())).thenAnswer((_) async => null);
+    when(() => userDao.findAllUsers()).thenAnswer((_) async => <UserEntity>[]);
     when(() => securityProfileDao.deleteAll()).thenAnswer((_) async {});
     when(
       () => securityProfileDao.insertProfiles(any()),

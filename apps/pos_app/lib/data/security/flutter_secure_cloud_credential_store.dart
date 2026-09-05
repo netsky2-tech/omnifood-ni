@@ -3,7 +3,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../domain/security/cloud_credential_store.dart';
 
 class FlutterSecureCloudCredentialStore implements CloudCredentialStore {
-  FlutterSecureCloudCredentialStore(this._storage);
+  FlutterSecureCloudCredentialStore([FlutterSecureStorage? storage])
+      : _storage = storage ?? const FlutterSecureStorage();
   final FlutterSecureStorage _storage;
 
   @override
