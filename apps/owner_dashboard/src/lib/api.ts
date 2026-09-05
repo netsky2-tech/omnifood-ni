@@ -48,9 +48,9 @@ export async function refreshAccessToken(): Promise<string> {
     throw new Error("Refresh failed");
   }
 
-  const data = (await response.json()) as { accessToken: string; refreshToken: string };
-  setTokens(data);
-  return data.accessToken;
+  const raw = (await response.json()) as { access_token: string; refresh_token: string };
+  setTokens({ accessToken: raw.access_token, refreshToken: raw.refresh_token });
+  return raw.access_token;
 }
 
 async function getValidAccessToken(): Promise<string> {
@@ -68,15 +68,16 @@ async function getValidAccessToken(): Promise<string> {
 
 export interface ApiRequestInit extends Omit<RequestInit, "body"> {
   body?: unknown;
+  auth?: boolean;
 }
 
 export async function apiFetch<T>(
   path: string,
   options: ApiRequestInit = {},
 ): Promise<T> {
-  const { body, headers: customHeaders, ...rest } = options;
+  const { body, headers: customHeaders, auth = true, ...rest } = options;
 
-  const token = await getValidAccessToken();
+  const token = auth ? await getValidAccessToken() : null;
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -133,14 +134,16 @@ export async function apiFetch<T>(
 }
 
 export const api = {
-  get: <T>(path: string) => apiFetch<T>(path, { method: "GET" }),
-  post: <T>(path: string, body: unknown) =>
-    apiFetch<T>(path, { method: "POST", body }),
-  put: <T>(path: string, body: unknown) =>
-    apiFetch<T>(path, { method: "PUT", body }),
-  patch: <T>(path: string, body: unknown) =>
-    apiFetch<T>(path, { method: "PATCH", body }),
-  delete: <T>(path: string) => apiFetch<T>(path, { method: "DELETE" }),
+  get: <T>(path: string, opts?: { auth?: boolean }) =>
+    apiFetch<T>(path, { method: "GET", ...opts }),
+  post: <T>(path: string, body: unknown, opts?: { auth?: boolean }) =>
+    apiFetch<T>(path, { method: "POST", body, ...opts }),
+  put: <T>(path: string, body: unknown, opts?: { auth?: boolean }) =>
+    apiFetch<T>(path, { method: "PUT", body, ...opts }),
+  patch: <T>(path: string, body: unknown, opts?: { auth?: boolean }) =>
+    apiFetch<T>(path, { method: "PATCH", body, ...opts }),
+  delete: <T>(path: string, opts?: { auth?: boolean }) =>
+    apiFetch<T>(path, { method: "DELETE", ...opts }),
 };
 
 export function isAuthenticated(): boolean {

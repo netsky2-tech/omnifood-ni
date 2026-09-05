@@ -70,6 +70,14 @@ export interface ApplyTemplateResult {
   recipesCreated: number;
 }
 
+// --- Canonical Product Template CSV ---
+
+export const CANONICAL_PRODUCT_TEMPLATE_CSV = `nombre,precioVenta,uom,categoria
+"Agua natural 600ml",15,"UN","Bebidas"
+"Coca-Cola 500ml",20,"UN","Bebidas"
+"Pizza personal",80,"UN","Comida"
+"Combo almuerzo",120,"UN","Combos";\n`;
+
 // --- Bulk Import (Staging & Validation) ---
 
 export const MAX_IMPORT_CHUNK_SIZE = 100; // ODAV-32 requirement: chunk size <= 100

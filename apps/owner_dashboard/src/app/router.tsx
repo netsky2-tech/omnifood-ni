@@ -3,6 +3,7 @@ import { createBrowserRouter, Navigate } from "react-router-dom";
 import { AppLayout } from "@/app/layout/app-layout";
 import { ProtectedRoute } from "@/app/protected-route";
 import { SuspenseWrapper } from "@/app/layout/page-loader";
+import { ErrorBoundary } from "@/app/error-boundary";
 
 const LoginPage = lazy(() =>
   import("@/features/auth/login-page").then((m) => ({ default: m.LoginPage })),
@@ -51,14 +52,20 @@ export const router = createBrowserRouter([
   {
     path: "/login",
     element: (
-      <SuspenseWrapper>
-        <LoginPage />
-      </SuspenseWrapper>
+      <ErrorBoundary>
+        <SuspenseWrapper>
+          <LoginPage />
+        </SuspenseWrapper>
+      </ErrorBoundary>
     ),
   },
   {
     path: "/",
-    element: <AppLayout />,
+    element: (
+      <ErrorBoundary>
+        <AppLayout />
+      </ErrorBoundary>
+    ),
     children: [
       {
         index: true,
