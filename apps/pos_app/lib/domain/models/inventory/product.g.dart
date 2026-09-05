@@ -23,6 +23,8 @@ _$ProductImpl _$$ProductImplFromJson(Map<String, dynamic> json) =>
       inventoryPolicy: $enumDecodeNullable(
           _$InventoryPolicyEnumMap, json['inventoryPolicy']),
       directStockInsumoId: json['directStockInsumoId'] as String?,
+      taxRate: (json['taxRate'] as num?)?.toDouble() ?? 0.15,
+      isTaxExempt: json['isTaxExempt'] as bool? ?? false,
       variants: (json['variants'] as List<dynamic>?)
               ?.map((e) => ProductVariant.fromJson(e as Map<String, dynamic>))
               .toList() ??
@@ -49,6 +51,8 @@ Map<String, dynamic> _$$ProductImplToJson(_$ProductImpl instance) =>
       'createdAt': instance.createdAt,
       'inventoryPolicy': _$InventoryPolicyEnumMap[instance.inventoryPolicy],
       'directStockInsumoId': instance.directStockInsumoId,
+      'taxRate': instance.taxRate,
+      'isTaxExempt': instance.isTaxExempt,
       'variants': instance.variants,
       'availableModifiers': instance.availableModifiers,
     };

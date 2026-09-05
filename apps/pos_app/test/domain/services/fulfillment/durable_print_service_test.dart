@@ -33,7 +33,7 @@ class _FakePrinterPort implements PrinterPort {
     String? phone,
     String? cashierName,
     List<int>? logoRasterBytes,
-    TaxRegime taxRegime = TaxRegime.regimenGeneral,
+    required TaxRegime taxRegime,
     bool isTaxExempt = false,
     int paperWidthMm = 58,
   }) async {
@@ -157,6 +157,7 @@ void main() {
         final batchResult = await printService.processFulfillmentPrintBatch(
           tenantId: 'tenant-1',
           fulfillmentId: 'f-seq-1',
+          taxRegime: TaxRegime.regimenGeneral,
         );
 
         expect(batchResult.success, isFalse);
@@ -169,6 +170,7 @@ void main() {
         final retryResult = await printService.processFulfillmentPrintBatch(
           tenantId: 'tenant-1',
           fulfillmentId: 'f-seq-1',
+          taxRegime: TaxRegime.regimenGeneral,
         );
 
         expect(retryResult.success, isTrue);
@@ -218,6 +220,7 @@ void main() {
         final result = await printService.processFulfillmentPrintBatch(
           tenantId: 'tenant-1',
           fulfillmentId: 'f-unc-1',
+          taxRegime: TaxRegime.regimenGeneral,
         );
 
         expect(result.receiptState, 'UNCERTAIN');
@@ -227,6 +230,7 @@ void main() {
           tenantId: 'tenant-1',
           jobId: 'job-unc-receipt',
           resolution: UncertaintyResolution.leaveUnresolved,
+          taxRegime: TaxRegime.regimenGeneral,
         );
         var job = (await database.fulfillmentPersistenceDao
             .findPrintJobsByFulfillment('f-unc-1', 'tenant-1'))
@@ -241,6 +245,7 @@ void main() {
           resolution: UncertaintyResolution.retryAsCopy,
           operatorRole: 'MANAGER',
           reason: 'Papel atascado en corte',
+          taxRegime: TaxRegime.regimenGeneral,
         );
 
         final allJobs = await database.fulfillmentPersistenceDao

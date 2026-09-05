@@ -21,12 +21,25 @@ class Product with _$Product {
     String? createdAt,
     InventoryPolicy? inventoryPolicy,
     String? directStockInsumoId,
+    @Default(0.15) double taxRate,
+    @Default(false) bool isTaxExempt,
     @Default([]) List<ProductVariant> variants,
     @Default([]) List<Modifier> availableModifiers,
   }) = _Product;
 
   factory Product.fromJson(Map<String, dynamic> json) =>
       _$ProductFromJson(json);
+}
+
+extension ProductFiscalX on Product {
+  /// Resolves the canonical tax treatment:
+  /// A product is genuinely exempt if [isTaxExempt] is explicitly true OR [taxRate] is 0.0.
+  bool get isGenuinelyExempt => isTaxExempt || taxRate == 0.0;
+
+  /// Canonical effective nominal tax rate for the product under standard regime.
+  /// If the product is exempt ([isGenuinelyExempt] == true), the effective rate is strictly 0.0.
+  /// Resolves contradictory states deterministically (e.g. taxRate: 0.15 + isTaxExempt: true => 0.0).
+  double get effectiveTaxRate => isGenuinelyExempt ? 0.0 : (taxRate < 0.0 ? 0.0 : taxRate);
 }
 
 @freezed

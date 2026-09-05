@@ -33,7 +33,7 @@ mixin _$PrinterConfig {
   String? get headerRuc => throw _privateConstructorUsedError;
   String? get headerAddress => throw _privateConstructorUsedError;
   String? get headerPhone => throw _privateConstructorUsedError;
-  String get taxRegime => throw _privateConstructorUsedError;
+  String? get taxRegime => throw _privateConstructorUsedError;
   String? get logoBase64 => throw _privateConstructorUsedError;
   int? get logoWidth => throw _privateConstructorUsedError;
   int? get logoHeight => throw _privateConstructorUsedError;
@@ -65,7 +65,7 @@ abstract class $PrinterConfigCopyWith<$Res> {
       String? headerRuc,
       String? headerAddress,
       String? headerPhone,
-      String taxRegime,
+      String? taxRegime,
       String? logoBase64,
       int? logoWidth,
       int? logoHeight,
@@ -98,7 +98,7 @@ class _$PrinterConfigCopyWithImpl<$Res, $Val extends PrinterConfig>
     Object? headerRuc = freezed,
     Object? headerAddress = freezed,
     Object? headerPhone = freezed,
-    Object? taxRegime = null,
+    Object? taxRegime = freezed,
     Object? logoBase64 = freezed,
     Object? logoWidth = freezed,
     Object? logoHeight = freezed,
@@ -157,10 +157,10 @@ class _$PrinterConfigCopyWithImpl<$Res, $Val extends PrinterConfig>
           ? _value.headerPhone
           : headerPhone // ignore: cast_nullable_to_non_nullable
               as String?,
-      taxRegime: null == taxRegime
+      taxRegime: freezed == taxRegime
           ? _value.taxRegime
           : taxRegime // ignore: cast_nullable_to_non_nullable
-              as String,
+              as String?,
       logoBase64: freezed == logoBase64
           ? _value.logoBase64
           : logoBase64 // ignore: cast_nullable_to_non_nullable
@@ -203,7 +203,7 @@ abstract class _$$PrinterConfigImplCopyWith<$Res>
       String? headerRuc,
       String? headerAddress,
       String? headerPhone,
-      String taxRegime,
+      String? taxRegime,
       String? logoBase64,
       int? logoWidth,
       int? logoHeight,
@@ -234,7 +234,7 @@ class __$$PrinterConfigImplCopyWithImpl<$Res>
     Object? headerRuc = freezed,
     Object? headerAddress = freezed,
     Object? headerPhone = freezed,
-    Object? taxRegime = null,
+    Object? taxRegime = freezed,
     Object? logoBase64 = freezed,
     Object? logoWidth = freezed,
     Object? logoHeight = freezed,
@@ -293,10 +293,10 @@ class __$$PrinterConfigImplCopyWithImpl<$Res>
           ? _value.headerPhone
           : headerPhone // ignore: cast_nullable_to_non_nullable
               as String?,
-      taxRegime: null == taxRegime
+      taxRegime: freezed == taxRegime
           ? _value.taxRegime
           : taxRegime // ignore: cast_nullable_to_non_nullable
-              as String,
+              as String?,
       logoBase64: freezed == logoBase64
           ? _value.logoBase64
           : logoBase64 // ignore: cast_nullable_to_non_nullable
@@ -334,7 +334,7 @@ class _$PrinterConfigImpl implements _PrinterConfig {
       this.headerRuc,
       this.headerAddress,
       this.headerPhone,
-      this.taxRegime = 'REGIMEN_GENERAL',
+      this.taxRegime,
       this.logoBase64,
       this.logoWidth,
       this.logoHeight,
@@ -378,8 +378,7 @@ class _$PrinterConfigImpl implements _PrinterConfig {
   @override
   final String? headerPhone;
   @override
-  @JsonKey()
-  final String taxRegime;
+  final String? taxRegime;
   @override
   final String? logoBase64;
   @override
@@ -489,7 +488,7 @@ abstract class _PrinterConfig implements PrinterConfig {
       final String? headerRuc,
       final String? headerAddress,
       final String? headerPhone,
-      final String taxRegime,
+      final String? taxRegime,
       final String? logoBase64,
       final int? logoWidth,
       final int? logoHeight,
@@ -525,7 +524,7 @@ abstract class _PrinterConfig implements PrinterConfig {
   @override
   String? get headerPhone;
   @override
-  String get taxRegime;
+  String? get taxRegime;
   @override
   String? get logoBase64;
   @override

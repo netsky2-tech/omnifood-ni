@@ -30,7 +30,7 @@ class PrinterConfig with _$PrinterConfig {
     String? headerRuc,
     String? headerAddress,
     String? headerPhone,
-    @Default('REGIMEN_GENERAL') String taxRegime,
+    String? taxRegime,
     String? logoBase64,
     int? logoWidth,
     int? logoHeight,

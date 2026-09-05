@@ -369,6 +369,7 @@ void main() {
         final batchRes = await printService.processFulfillmentPrintBatch(
           tenantId: 'pilot-tenant',
           fulfillmentId: 'f-pilot-unc',
+          taxRegime: TaxRegime.regimenGeneral,
         );
         expect(batchRes.receiptState, 'UNCERTAIN');
 
@@ -380,6 +381,7 @@ void main() {
           resolution: UncertaintyResolution.retryAsCopy,
           operatorRole: 'MANAGER',
           reason: 'Papel atascado en gaveta',
+          taxRegime: TaxRegime.regimenGeneral,
         );
 
         final allJobs = await database.fulfillmentPersistenceDao

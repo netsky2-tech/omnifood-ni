@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/domain/models/customer/customer.dart';
@@ -172,6 +173,7 @@ void main() {
         KitchenOrderService(database),
         PrinterConfigService(database.localConfigDao),
       );
+      viewModel.setCompanyTaxRegime(TaxRegime.regimenGeneral);
     });
 
     tearDown(() async {

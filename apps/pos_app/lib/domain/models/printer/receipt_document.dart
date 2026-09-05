@@ -9,12 +9,17 @@ class ReceiptLine {
   final double quantity;
   final String description;
   final double unitPrice;
+  final double grossAmount;
   final double discount;
   final double taxableBase;
+  final double exemptBase;
   final double taxRate;
   final double taxAmount;
 
-  /// The pre-tax net line total (taxable base) displayed in the line breakdown column.
+  /// The pre-tax net line base amount displayed in the line breakdown column (unitPrice * qty - discount).
+  final double lineSubtotal;
+
+  /// The line total including taxes (lineSubtotal + taxAmount).
   final double lineTotal;
 
   final List<String> modifiers;
@@ -24,14 +29,17 @@ class ReceiptLine {
     required this.quantity,
     required this.description,
     required this.unitPrice,
+    this.grossAmount = 0.0,
     this.discount = 0.0,
     required this.taxableBase,
+    this.exemptBase = 0.0,
     this.taxRate = 0.0,
     this.taxAmount = 0.0,
+    double? lineSubtotal,
     required this.lineTotal,
     this.modifiers = const [],
     this.notes,
-  });
+  }) : lineSubtotal = lineSubtotal ?? taxableBase;
 
   /// Factory creating a [ReceiptLine] from domain [InvoiceItem].
   factory ReceiptLine.fromInvoiceItem(
@@ -43,21 +51,33 @@ class ReceiptLine {
     final modifiersTotal = item.selectedModifiers.fold(0.0, (sum, m) => sum + m.extraPrice) * qty;
     final gross = (unitPrice * qty) + modifiersTotal;
     final discount = item.discount;
-    final taxableBase = gross - discount > 0 ? gross - discount : 0.0;
+    final lineSubtotal = gross - discount > 0 ? gross - discount : 0.0;
 
     final double effectiveTaxRate;
     final double effectiveTaxAmount;
+    final double effectiveTaxableBase;
+    final double effectiveExemptBase;
 
     if (taxRegime.isCuotaFija) {
       effectiveTaxRate = 0.0;
       effectiveTaxAmount = 0.0;
+      effectiveTaxableBase = 0.0;
+      effectiveExemptBase = 0.0;
     } else {
       effectiveTaxRate = item.appliedTaxRate;
       effectiveTaxAmount = item.taxAmount;
+      if (effectiveTaxRate > 0) {
+        effectiveTaxableBase = lineSubtotal;
+        effectiveExemptBase = 0.0;
+      } else {
+        effectiveTaxableBase = 0.0;
+        effectiveExemptBase = lineSubtotal;
+      }
     }
 
-    // In both Cuota Fija and Régimen General, the line column represents the net pre-tax line total (taxableBase).
-    final lineTotal = taxableBase;
+    final lineTotal = item.total > 0
+        ? item.total
+        : (taxRegime.isCuotaFija ? lineSubtotal : (lineSubtotal + effectiveTaxAmount));
 
     final modifierStrings = item.selectedModifiers.map((m) {
       final priceStr = m.extraPrice > 0 ? ' (+C\$ ${m.extraPrice.toStringAsFixed(2)})' : '';
@@ -68,10 +88,13 @@ class ReceiptLine {
       quantity: qty,
       description: item.productName,
       unitPrice: unitPrice,
+      grossAmount: gross,
       discount: discount,
-      taxableBase: taxableBase,
+      taxableBase: effectiveTaxableBase,
+      exemptBase: effectiveExemptBase,
       taxRate: effectiveTaxRate,
       taxAmount: effectiveTaxAmount,
+      lineSubtotal: lineSubtotal,
       lineTotal: lineTotal,
       modifiers: modifierStrings,
       notes: item.notes,
@@ -237,12 +260,14 @@ class ReceiptDocument {
     double computedTax = 0.0;
 
     for (final line in receiptLines) {
-      computedSubtotal += line.taxableBase;
+      computedSubtotal += line.lineSubtotal;
       computedDiscount += line.discount;
-      if (line.taxRate > 0) {
-        computedTaxable += line.taxableBase;
-      } else {
-        computedExempt += line.taxableBase;
+      if (taxRegime.isRegimenGeneral) {
+        if (line.taxRate > 0) {
+          computedTaxable += line.taxableBase;
+        } else {
+          computedExempt += line.exemptBase;
+        }
       }
       computedTax += line.taxAmount;
     }
@@ -259,7 +284,9 @@ class ReceiptDocument {
       final isExemptEffective = isTaxExempt || invoice.globalTaxOverride;
       effectiveSubtotal = invoice.subtotal > 0 ? invoice.subtotal : computedSubtotal;
       effectiveTotalTax = isExemptEffective ? 0.0 : (invoice.totalTax > 0 ? invoice.totalTax : computedTax);
-      effectiveTotal = isExemptEffective ? effectiveSubtotal : (effectiveSubtotal + effectiveTotalTax);
+      effectiveTotal = invoice.total > 0
+          ? invoice.total
+          : (isExemptEffective ? effectiveSubtotal : (effectiveSubtotal + effectiveTotalTax));
     }
 
     final commRate = invoice.commercialRate > 0
@@ -307,7 +334,8 @@ class ReceiptDocument {
       payments: payments.map(ReceiptPayment.fromPayment).toList(),
       footerMessage: footerMessage,
       logoRasterBytes: logoRasterBytes,
-      isTaxExempt: isTaxExempt,
+      isTaxExempt: taxRegime.isRegimenGeneral &&
+          (isTaxExempt || invoice.globalTaxOverride || (computedExempt > 0 && computedTaxable == 0)),
       globalTaxOverride: invoice.globalTaxOverride,
     );
   }

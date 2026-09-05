@@ -239,10 +239,20 @@ class HardwareSettingsView extends StatelessWidget {
                   icon: const Icon(Icons.preview),
                   label: const Text('PREVIEW Y DIAGNÓSTICO DE TICKET'),
                   onPressed: () {
+                    final taxRegime = TaxRegime.fromString(config.taxRegime);
+                    if (taxRegime == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Empresa sin régimen fiscal DGI configurado. Configure Información de Empresa primero.'),
+                          backgroundColor: Colors.orange,
+                        ),
+                      );
+                      return;
+                    }
                     ReceiptPreviewDialog.show(
                       context,
                       initialPaperWidthMm: config.paperWidthMm,
-                      initialTaxRegime: TaxRegime.fromString(config.taxRegime),
+                      initialTaxRegime: taxRegime,
                       printerPort: viewModel.printerPort,
                     );
                   },

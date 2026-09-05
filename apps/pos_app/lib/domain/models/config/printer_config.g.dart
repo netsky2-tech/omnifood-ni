@@ -24,7 +24,7 @@ _$PrinterConfigImpl _$$PrinterConfigImplFromJson(Map<String, dynamic> json) =>
       headerRuc: json['headerRuc'] as String?,
       headerAddress: json['headerAddress'] as String?,
       headerPhone: json['headerPhone'] as String?,
-      taxRegime: json['taxRegime'] as String? ?? 'REGIMEN_GENERAL',
+      taxRegime: json['taxRegime'] as String?,
       logoBase64: json['logoBase64'] as String?,
       logoWidth: json['logoWidth'] as int?,
       logoHeight: json['logoHeight'] as int?,

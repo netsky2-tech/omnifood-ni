@@ -347,7 +347,7 @@ class ReceiptLayoutFormatter {
         quantity: line.quantity,
         name: line.description,
         unitPrice: line.unitPrice,
-        total: line.lineTotal,
+        total: line.lineSubtotal,
       );
       for (final r in rowLines) {
         buffer.writeln(r);
@@ -591,7 +591,7 @@ class ReceiptLayoutFormatter {
         quantity: line.quantity,
         name: line.description,
         unitPrice: line.unitPrice,
-        total: line.lineTotal,
+        total: line.lineSubtotal,
       );
       for (final r in rowLines) {
         builder.textLine(r);

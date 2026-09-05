@@ -219,6 +219,14 @@ class HardwareSettingsViewModel extends ChangeNotifier {
         } catch (_) {}
       }
 
+      final taxRegime = TaxRegime.fromString(_config.taxRegime);
+      if (taxRegime == null) {
+        _statusMessage = 'Empresa sin régimen fiscal DGI configurado. Configure Información de Empresa antes de probar impresión.';
+        _isTesting = false;
+        notifyListeners();
+        return false;
+      }
+
       final result = await _printerPort.printInvoice(
         sampleInvoice,
         items: sampleItems,
@@ -229,7 +237,7 @@ class HardwareSettingsViewModel extends ChangeNotifier {
         address: _config.headerAddress,
         phone: _config.headerPhone,
         logoRasterBytes: logoRasterBytes,
-        taxRegime: TaxRegime.fromString(_config.taxRegime),
+        taxRegime: taxRegime,
         isTaxExempt: false,
         paperWidthMm: _config.paperWidthMm,
       );

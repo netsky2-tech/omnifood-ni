@@ -361,7 +361,7 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                                   newConfig[key] = controller.text;
                                 });
                                 newConfig['operation_mode'] = viewModel.operationMode.code;
-                                newConfig['tax_regime'] = viewModel.taxRegime.code;
+                                newConfig['tax_regime'] = viewModel.taxRegime?.code ?? _controllers['tax_regime']?.text ?? '';
                                 await viewModel.saveConfig(newConfig);
                                 if (mounted && context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(

@@ -1,4 +1,5 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
+import '../../models/config/tax_regime.dart';
 import '../../models/sales/cart_item.dart';
 import 'tip_engine.dart';
 
@@ -147,6 +148,7 @@ class SplitBillEngine {
   static SplitBillResult splitByItems({
     required List<ItemizedShareInput> shares,
     required double commercialRate,
+    TaxRegime? taxRegime,
   }) {
     if (shares.isEmpty) {
       throw ArgumentError.value(shares, 'shares', 'Debe haber al menos un comensal configurado.');
@@ -161,7 +163,9 @@ class SplitBillEngine {
 
       for (final item in input.items) {
         shareSubtotal += item.subtotal + item.modifiersTotal;
-        shareTax += item.taxAmount;
+        if (taxRegime?.isCuotaFija != true) {
+          shareTax += (item.subtotal + item.modifiersTotal) * item.taxRate;
+        }
       }
 
       shareSubtotal = double.parse(shareSubtotal.toStringAsFixed(2));

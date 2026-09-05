@@ -32,7 +32,7 @@ class BusinessProfileViewModel extends ChangeNotifier {
   };
   Map<String, String> get config => _config;
 
-  TaxRegime get taxRegime => TaxRegime.fromString(_config['tax_regime']);
+  TaxRegime? get taxRegime => TaxRegime.fromString(_config['tax_regime']);
 
   void setTaxRegime(TaxRegime regime) {
     _config['tax_regime'] = regime.code;

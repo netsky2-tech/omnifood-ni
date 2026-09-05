@@ -2,6 +2,31 @@ import '../../models/config/tax_regime.dart';
 import '../../models/printer/receipt_document.dart';
 import '../../models/sales/cart_item.dart';
 
+/// Exception thrown when attempting to finalize a sale or print a receipt
+/// without a valid DGI tax regime configured.
+class FiscalConfigurationException implements Exception {
+  final String message;
+  const FiscalConfigurationException(this.message);
+
+  @override
+  String toString() => 'FiscalConfigurationException: $message';
+}
+
+/// Helper model for deterministic discount remainder apportionment (Largest Remainder method).
+class _DiscountRemainder {
+  final int index;
+  final double remainder;
+  final double gross;
+  final int maxCents;
+
+  const _DiscountRemainder({
+    required this.index,
+    required this.remainder,
+    required this.gross,
+    required this.maxCents,
+  });
+}
+
 /// Calculation result for an individual sale line.
 class FiscalLineCalculation {
   final String productId;
@@ -12,11 +37,15 @@ class FiscalLineCalculation {
   final double grossAmount;
   final double discount;
   final double taxableBase;
+  final double exemptBase;
   final double nominalTaxRate;
   final double appliedTaxRate;
   final double taxAmount;
 
-  /// Net pre-tax line total (taxableBase) for item detail display.
+  /// Net pre-tax line base amount (grossAmount - discount).
+  final double lineSubtotal;
+
+  /// Total line amount including taxes (lineSubtotal + taxAmount).
   final double lineTotal;
 
   const FiscalLineCalculation({
@@ -28,16 +57,18 @@ class FiscalLineCalculation {
     required this.grossAmount,
     required this.discount,
     required this.taxableBase,
+    this.exemptBase = 0.0,
     required this.nominalTaxRate,
     required this.appliedTaxRate,
     required this.taxAmount,
+    required this.lineSubtotal,
     required this.lineTotal,
   });
 }
 
 /// Comprehensive result of a fiscal sale calculation.
 class FiscalCalculationResult {
-  final TaxRegime taxRegime;
+  final TaxRegime? taxRegime;
   final List<FiscalLineCalculation> lines;
   final double grossSubtotal;
   final double totalDiscount;
@@ -64,6 +95,9 @@ class FiscalCalculationResult {
     required this.bcnOfficialRate,
     required this.totalUsd,
   });
+
+  /// True if a valid DGI tax regime was provided during calculation.
+  bool get isFiscalPolicyConfigured => taxRegime != null;
 }
 
 /// Domain service responsible for computing sales taxes and line subtotals according
@@ -81,21 +115,87 @@ class FiscalCalculationResult {
 class InvoiceFiscalCalculator {
   const InvoiceFiscalCalculator();
 
+  /// Monetary rounding policy (Nicaragua C$ NIO & USD):
+  /// Uses standard 2-decimal half-up rounding with an epsilon of 1e-9
+  /// to eliminate IEEE-754 binary floating point precision artifacts.
+  static double _round(double value) {
+    if (value.isNaN || value.isInfinite) return 0.0;
+    const epsilon = 1e-9;
+    final adjusted = value + (value >= 0 ? epsilon : -epsilon);
+    return ((adjusted * 100.0).roundToDouble()) / 100.0;
+  }
+
   FiscalCalculationResult calculate({
     required List<CartItem> cart,
-    required TaxRegime taxRegime,
+    TaxRegime? taxRegime,
     bool isGlobalTaxExempt = false,
     double totalDiscounts = 0.0,
     double commercialRate = 36.50,
     double bcnOfficialRate = 36.6241,
   }) {
+    // 1. Calculate line gross amounts
+    final lineGrosses = <double>[];
     double rawGrossTotal = 0.0;
     for (final item in cart) {
-      final lineGross = (item.unitPrice * item.quantity) + item.modifiersTotal;
-      rawGrossTotal += lineGross;
+      final gross = _round((item.unitPrice * item.quantity) + item.modifiersTotal);
+      lineGrosses.add(gross);
+      rawGrossTotal += gross;
     }
+    rawGrossTotal = _round(rawGrossTotal);
 
-    final effectiveDiscountTotal = totalDiscounts > rawGrossTotal ? rawGrossTotal : totalDiscounts;
+    final effectiveDiscountTotal = _round(
+      totalDiscounts > rawGrossTotal ? rawGrossTotal : (totalDiscounts < 0.0 ? 0.0 : totalDiscounts),
+    );
+
+    // 2. Deterministic discount apportionment (Largest Remainder / Hare-Niemeyer method).
+    // Invariant: SUM(lineDiscount) == effectiveDiscountTotal down to the exact cent.
+    final lineDiscounts = List<double>.filled(cart.length, 0.0);
+    if (rawGrossTotal > 0.0 && effectiveDiscountTotal > 0.0) {
+      final targetCents = (effectiveDiscountTotal * 100.0).round();
+      final baseCentsList = <int>[];
+      final remainders = <_DiscountRemainder>[];
+      var allocatedCents = 0;
+
+      for (var i = 0; i < cart.length; i++) {
+        final gross = lineGrosses[i];
+        final exactLineCents = targetCents * (gross / rawGrossTotal);
+        final baseCents = exactLineCents.floor();
+        final maxLineCents = (gross * 100.0).round();
+        final clampedBaseCents = baseCents > maxLineCents ? maxLineCents : baseCents;
+
+        baseCentsList.add(clampedBaseCents);
+        allocatedCents += clampedBaseCents;
+        remainders.add(_DiscountRemainder(
+          index: i,
+          remainder: exactLineCents - baseCents,
+          gross: gross,
+          maxCents: maxLineCents,
+        ));
+      }
+
+      var centsToDistribute = targetCents - allocatedCents;
+      if (centsToDistribute > 0) {
+        remainders.sort((a, b) {
+          final remCmp = b.remainder.compareTo(a.remainder);
+          if (remCmp != 0) return remCmp;
+          final grossCmp = b.gross.compareTo(a.gross);
+          if (grossCmp != 0) return grossCmp;
+          return a.index.compareTo(b.index);
+        });
+
+        for (final r in remainders) {
+          if (centsToDistribute <= 0) break;
+          if (baseCentsList[r.index] < r.maxCents) {
+            baseCentsList[r.index] += 1;
+            centsToDistribute -= 1;
+          }
+        }
+      }
+
+      for (var i = 0; i < cart.length; i++) {
+        lineDiscounts[i] = _round(baseCentsList[i] / 100.0);
+      }
+    }
 
     final lines = <FiscalLineCalculation>[];
     double subtotalAccum = 0.0;
@@ -103,26 +203,50 @@ class InvoiceFiscalCalculator {
     double exemptAccum = 0.0;
     double taxAccum = 0.0;
 
-    for (final item in cart) {
-      final lineGross = (item.unitPrice * item.quantity) + item.modifiersTotal;
-      final lineDiscount = rawGrossTotal > 0
-          ? (effectiveDiscountTotal * (lineGross / rawGrossTotal))
-          : 0.0;
-      final taxableBase = lineGross - lineDiscount > 0 ? lineGross - lineDiscount : 0.0;
+    for (var i = 0; i < cart.length; i++) {
+      final item = cart[i];
+      final lineGross = lineGrosses[i];
+      final lineDiscount = lineDiscounts[i];
+      final netBase = _round(lineGross - lineDiscount > 0 ? lineGross - lineDiscount : 0.0);
 
       final double appliedRate;
       final double lineTax;
+      final double lineTaxableBase;
+      final double lineExemptBase;
 
-      if (taxRegime.isCuotaFija || isGlobalTaxExempt) {
+      if (taxRegime == null) {
+        // Unconfigured regime: safe non-assumptive baseline (0% tax, no synthetic exemption)
         appliedRate = 0.0;
         lineTax = 0.0;
+        lineTaxableBase = 0.0;
+        lineExemptBase = 0.0;
+      } else if (taxRegime.isCuotaFija) {
+        // Cuota Fija (Art. 244 Ley 822):
+        // La empresa NO recauda IVA al consumidor.
+        // NUNCA se cataloga como "venta exenta" ni se agrega IVA.
+        appliedRate = 0.0;
+        lineTax = 0.0;
+        lineTaxableBase = 0.0;
+        lineExemptBase = 0.0;
       } else {
-        appliedRate = item.taxRate;
-        lineTax = taxableBase * appliedRate;
+        // Régimen General:
+        if (isGlobalTaxExempt || item.taxRate == 0.0) {
+          // Producto exento o política temporal de exención general
+          appliedRate = 0.0;
+          lineTax = 0.0;
+          lineTaxableBase = 0.0;
+          lineExemptBase = netBase;
+        } else {
+          // Producto gravado
+          appliedRate = item.taxRate;
+          lineTaxableBase = netBase;
+          lineExemptBase = 0.0;
+          lineTax = _round(lineTaxableBase * appliedRate);
+        }
       }
 
-      // The line column value in receipt item tables represents the net pre-tax base.
-      final lineTotal = taxableBase;
+      final lineSubtotal = netBase;
+      final lineTotal = _round(netBase + lineTax);
 
       lines.add(FiscalLineCalculation(
         productId: item.productId,
@@ -132,35 +256,42 @@ class InvoiceFiscalCalculator {
         modifiersTotal: item.modifiersTotal,
         grossAmount: lineGross,
         discount: lineDiscount,
-        taxableBase: taxableBase,
+        taxableBase: lineTaxableBase,
+        exemptBase: lineExemptBase,
         nominalTaxRate: item.taxRate,
         appliedTaxRate: appliedRate,
         taxAmount: lineTax,
+        lineSubtotal: lineSubtotal,
         lineTotal: lineTotal,
       ));
 
-      subtotalAccum += taxableBase;
-      if (appliedRate > 0) {
-        taxableAccum += taxableBase;
-        taxAccum += lineTax;
-      } else {
-        exemptAccum += taxableBase;
+      subtotalAccum += lineSubtotal;
+      if (taxRegime?.isRegimenGeneral == true) {
+        if (appliedRate > 0) {
+          taxableAccum += lineTaxableBase;
+          taxAccum += lineTax;
+        } else {
+          exemptAccum += lineExemptBase;
+        }
       }
     }
 
-    final finalTotalTax = taxRegime.isCuotaFija ? 0.0 : taxAccum;
-    final finalTotal = subtotalAccum + finalTotalTax;
+    final finalSubtotal = _round(subtotalAccum);
+    final finalTaxable = _round(taxableAccum);
+    final finalExempt = _round(exemptAccum);
+    final finalTotalTax = (taxRegime?.isRegimenGeneral == true) ? _round(taxAccum) : 0.0;
+    final finalTotal = _round(finalSubtotal + finalTotalTax);
     final commRate = commercialRate > 0 ? commercialRate : 36.50;
-    final totalUsd = ((finalTotal / commRate) * 100).round() / 100;
+    final totalUsd = _round(finalTotal / commRate);
 
     return FiscalCalculationResult(
       taxRegime: taxRegime,
       lines: lines,
       grossSubtotal: rawGrossTotal,
       totalDiscount: effectiveDiscountTotal,
-      subtotal: subtotalAccum,
-      taxableSubtotal: taxableAccum,
-      exemptSubtotal: exemptAccum,
+      subtotal: finalSubtotal,
+      taxableSubtotal: finalTaxable,
+      exemptSubtotal: finalExempt,
       totalTax: finalTotalTax,
       total: finalTotal,
       commercialRate: commRate,
@@ -192,7 +323,9 @@ class InvoiceFiscalCalculator {
     if (payments != null && payments.isNotEmpty) {
       effectivePayments.addAll(payments);
     } else if (cashGivenNio != null && cashGivenNio > 0) {
-      final change = cashGivenNio - calculation.total > 0 ? cashGivenNio - calculation.total : 0.0;
+      final change = cashGivenNio - calculation.total > 0
+          ? _round(cashGivenNio - calculation.total)
+          : 0.0;
       effectivePayments.add(ReceiptPayment(
         methodLabel: 'Efectivo C\$',
         currency: 'NIO',
@@ -206,22 +339,34 @@ class InvoiceFiscalCalculator {
         quantity: l.quantity,
         description: l.productName,
         unitPrice: l.unitPrice,
+        grossAmount: l.grossAmount,
         discount: l.discount,
         taxableBase: l.taxableBase,
+        exemptBase: l.exemptBase,
         taxRate: l.appliedTaxRate,
         taxAmount: l.taxAmount,
+        lineSubtotal: l.lineSubtotal,
         lineTotal: l.lineTotal,
       );
     }).toList();
+
+    if (calculation.taxRegime == null) {
+      throw const FiscalConfigurationException(
+        'No se puede emitir un comprobante fiscal sin un régimen fiscal DGI configurado.',
+      );
+    }
+
+    final isDocTaxExempt = calculation.taxRegime!.isRegimenGeneral &&
+        (calculation.exemptSubtotal > 0 && calculation.taxableSubtotal == 0);
 
     return ReceiptDocument(
       businessName: businessName?.trim().isNotEmpty == true ? businessName!.trim() : 'OMNIFOOD NI',
       legalName: legalName,
       ruc: businessRuc,
-      taxRegime: calculation.taxRegime,
+      taxRegime: calculation.taxRegime!,
       address: businessAddress,
       phone: businessPhone,
-      documentTitle: calculation.taxRegime.defaultReceiptTitle,
+      documentTitle: calculation.taxRegime!.defaultReceiptTitle,
       documentNumber: invoiceNumber,
       date: date ?? DateTime.now(),
       cashierName: cashierName,
@@ -240,7 +385,7 @@ class InvoiceFiscalCalculator {
       payments: effectivePayments,
       footerMessage: footerMessage,
       logoRasterBytes: logoRasterBytes,
-      isTaxExempt: calculation.exemptSubtotal > 0 && calculation.taxableSubtotal == 0,
+      isTaxExempt: isDocTaxExempt,
     );
   }
 }

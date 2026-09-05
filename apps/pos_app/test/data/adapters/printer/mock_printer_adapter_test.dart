@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_app/data/adapters/printer/mock_printer_adapter.dart';
+import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'package:pos_app/domain/models/sales/cashier_session.dart';
 import 'package:pos_app/domain/models/sales/invoice.dart';
 import 'package:pos_app/domain/models/sales/invoice_item.dart';
@@ -54,6 +55,7 @@ void main() {
         items: testItems,
         payments: testPayments,
         businessName: 'NHILOS POS Test',
+        taxRegime: TaxRegime.regimenGeneral,
       );
 
       expect(result.isSuccess, isTrue);
@@ -70,6 +72,7 @@ void main() {
         testInvoice,
         items: testItems,
         payments: testPayments,
+        taxRegime: TaxRegime.regimenGeneral,
       );
 
       expect(result.isSuccess, isFalse);

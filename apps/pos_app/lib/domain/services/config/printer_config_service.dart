@@ -96,7 +96,7 @@ class PrinterConfigService {
       headerRuc: rucEntity?.value,
       headerAddress: addressEntity?.value,
       headerPhone: phoneEntity?.value,
-      taxRegime: taxRegimeEntity?.value ?? 'REGIMEN_GENERAL',
+      taxRegime: taxRegimeEntity?.value,
       logoBase64: logoBase64Entity?.value,
       logoWidth: logoWidth,
       logoHeight: logoHeight,

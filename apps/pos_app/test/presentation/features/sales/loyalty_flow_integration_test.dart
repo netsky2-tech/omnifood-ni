@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/models/customer/customer_entity.dart';
@@ -85,6 +86,9 @@ void main() {
 
   setUp(() async {
     database = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
+    await database.localConfigDao.saveConfig(
+      LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'),
+    );
     salesRepo = FakeSalesRepository();
     inventoryRepo = FakeInventoryRepository();
     authRepo = FakeAuthRepository();

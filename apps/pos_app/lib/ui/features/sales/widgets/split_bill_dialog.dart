@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../domain/models/config/tax_regime.dart';
 import '../../../../domain/models/sales/cart_item.dart';
 import '../../../../domain/services/sales/split_bill_engine.dart';
 import '../../../../domain/services/sales/tip_engine.dart';
@@ -7,12 +8,14 @@ import '../../../../domain/services/sales/tip_engine.dart';
 class SplitBillDialog extends StatefulWidget {
   final List<CartItem> cart;
   final double commercialRate;
+  final TaxRegime? taxRegime;
   final void Function(SplitBillShare share)? onPayShare;
 
   const SplitBillDialog({
     super.key,
     required this.cart,
     this.commercialRate = 36.50,
+    this.taxRegime,
     this.onPayShare,
   });
 
@@ -36,10 +39,12 @@ class _SplitBillDialogState extends State<SplitBillDialog> {
         (sum, item) => sum + item.subtotal + item.modifiersTotal,
       );
 
-  double get _cartTax => widget.cart.fold(
-        0.0,
-        (sum, item) => sum + item.taxAmount,
-      );
+  double get _cartTax => (widget.taxRegime?.isCuotaFija == true)
+      ? 0.0
+      : widget.cart.fold(
+          0.0,
+          (sum, item) => sum + ((item.subtotal + item.modifiersTotal) * item.taxRate),
+        );
 
   TipCalculation get _tipCalculation => TipEngine.calculate(
         subtotalNio: _cartSubtotal,
@@ -86,6 +91,7 @@ class _SplitBillDialogState extends State<SplitBillDialog> {
     return SplitBillEngine.splitByItems(
       shares: shareInputs,
       commercialRate: widget.commercialRate,
+      taxRegime: widget.taxRegime,
     );
   }
 

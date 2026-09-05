@@ -45,7 +45,7 @@ class MockPrinterAdapter implements PrinterPort {
     String? phone,
     String? cashierName,
     List<int>? logoRasterBytes,
-    TaxRegime taxRegime = TaxRegime.regimenGeneral,
+    required TaxRegime taxRegime,
     bool isTaxExempt = false,
     int paperWidthMm = 58,
   }) async {

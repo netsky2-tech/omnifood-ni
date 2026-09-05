@@ -30,6 +30,7 @@ import '../../../../domain/services/config/printer_config_service.dart';
 import '../../../../domain/services/printer/printer_resolver.dart';
 import '../../../../domain/services/printer/thermal_logo_processor.dart';
 import 'dart:async';
+import '../../../../domain/services/sales/invoice_fiscal_calculator.dart';
 import '../../../../domain/ports/printer_port.dart';
 import '../../../../domain/services/kitchen/kitchen_order_service.dart';
 import '../../../../data/services/sync_service.dart';
@@ -229,10 +230,10 @@ class SaleViewModel extends ChangeNotifier {
     }
   }
 
-  TaxRegime _companyTaxRegime = TaxRegime.regimenGeneral;
-  TaxRegime get companyTaxRegime => _companyTaxRegime;
+  TaxRegime? _companyTaxRegime;
+  TaxRegime? get companyTaxRegime => _companyTaxRegime;
 
-  void setCompanyTaxRegime(TaxRegime regime) {
+  void setCompanyTaxRegime(TaxRegime? regime) {
     _companyTaxRegime = regime;
     notifyListeners();
   }
@@ -240,10 +241,12 @@ class SaleViewModel extends ChangeNotifier {
   Future<void> loadCompanyTaxRegime() async {
     try {
       final entity = await _database.localConfigDao.getConfigByKey('tax_regime');
-      if (entity != null) {
+      if (entity != null && entity.value.trim().isNotEmpty) {
         _companyTaxRegime = TaxRegime.fromString(entity.value);
-        notifyListeners();
+      } else {
+        _companyTaxRegime = null;
       }
+      notifyListeners();
     } catch (_) {
       // Non-blocking fallback
     }
@@ -372,34 +375,30 @@ class SaleViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  double get subtotal {
-    final rawSubtotal = _cart.fold(
-      0.0,
-      (sum, item) => sum + item.subtotal + item.modifiersTotal,
-    );
-    final totalWithPromos = rawSubtotal - _totalDiscounts;
-    final afterLoyalty = totalWithPromos - loyaltyDiscount;
-    return afterLoyalty < 0.0 ? 0.0 : afterLoyalty;
+  static const _fiscalCalculator = InvoiceFiscalCalculator();
+
+  FiscalCalculationResult get currentFiscalCalculation => _fiscalCalculator.calculate(
+        cart: _cart,
+        taxRegime: _companyTaxRegime,
+        isGlobalTaxExempt: _isGlobalTaxExempt,
+        totalDiscounts: totalDiscounts,
+        commercialRate: _commercialRate,
+        bcnOfficialRate: _bcnOfficialRate,
+      );
+
+  double get subtotal => currentFiscalCalculation.subtotal;
+  double get grossSubtotal => currentFiscalCalculation.grossSubtotal;
+  double get totalTax => currentFiscalCalculation.totalTax;
+  double get total => currentFiscalCalculation.total;
+  double get taxableSubtotal => currentFiscalCalculation.taxableSubtotal;
+  double get exemptSubtotal => currentFiscalCalculation.exemptSubtotal;
+
+  double getCartItemLineAmount(CartItem item) {
+    return item.grossAmount;
   }
 
   double _totalDiscounts = 0.0;
   double get totalDiscounts => _totalDiscounts + loyaltyDiscount;
-
-  double get totalTax {
-    if (_companyTaxRegime.isCuotaFija || _isGlobalTaxExempt) return 0.0;
-    // Recalculate tax based on subtotal after discounts
-    return _cart.fold(0.0, (sum, item) {
-      final itemBase = item.subtotal + item.modifiersTotal;
-      // Simple proportional discount application for tax calculation
-      final totalBase = subtotal + _totalDiscounts;
-      final itemDiscount = totalBase == 0
-          ? 0.0
-          : (_totalDiscounts * (itemBase / totalBase));
-      return sum + ((itemBase - itemDiscount) * item.taxRate);
-    });
-  }
-
-  double get total => subtotal + totalTax;
 
   TipType _tipType = TipType.none;
   double _customTipPercentage = 0.0;
@@ -591,6 +590,7 @@ class SaleViewModel extends ChangeNotifier {
   }
 
   Future<void> checkActiveSession() async {
+    await loadCompanyTaxRegime();
     final sessionEntity = await _database.cashierSessionDao.getActiveSession();
     if (sessionEntity != null) {
       _activeSession = SalesMapper.toSessionDomain(sessionEntity);
@@ -696,13 +696,14 @@ class SaleViewModel extends ChangeNotifier {
         } catch (_) {}
       }
 
+      final itemTaxRate = product.effectiveTaxRate;
       _cart.add(
         CartItem(
           productId: product.id,
           productName: productName,
           quantity: quantity,
           unitPrice: unitPrice,
-          taxRate: 0.15,
+          taxRate: itemTaxRate,
           category: product.category,
           variantId: variantId,
           selectedModifiers: modifiers,
@@ -780,6 +781,17 @@ class SaleViewModel extends ChangeNotifier {
       return;
     }
 
+    if (_companyTaxRegime == null) {
+      await loadCompanyTaxRegime();
+    }
+    if (_companyTaxRegime == null) {
+      _errorMessage = 'Empresa sin régimen fiscal DGI configurado. Configure la Información de Empresa en Configuración antes de facturar.';
+      notifyListeners();
+      throw const FiscalConfigurationException(
+        'Empresa sin régimen fiscal DGI configurado. Debe seleccionar Cuota Fija o Régimen General en Información de Empresa.',
+      );
+    }
+
     final invoiceId = const Uuid().v4();
     final totalUsd = _commercialRate > 0
         ? ((total / _commercialRate) * 100).round() / 100
@@ -793,28 +805,28 @@ class SaleViewModel extends ChangeNotifier {
             ? customerName.trim()
             : _customerName;
 
-    final isExempt = _companyTaxRegime.isCuotaFija || _isGlobalTaxExempt;
-    final items = _cart.map((cartItem) {
-      final appliedTaxRate = isExempt ? 0.0 : cartItem.taxRate;
-      final lineSubtotal = cartItem.subtotal + cartItem.modifiersTotal;
-      final itemTax = isExempt ? 0.0 : (lineSubtotal * appliedTaxRate);
-      final itemTotal = _companyTaxRegime.isCuotaFija ? lineSubtotal : (lineSubtotal + itemTax);
-      return InvoiceItem(
+    final calc = currentFiscalCalculation;
+    final items = <InvoiceItem>[];
+    for (var i = 0; i < _cart.length; i++) {
+      final cartItem = _cart[i];
+      final l = calc.lines[i];
+      items.add(InvoiceItem(
         id: const Uuid().v4(),
         invoiceId: invoiceId,
-        productId: cartItem.productId,
-        productName: cartItem.productName,
-        quantity: cartItem.quantity,
-        unitPrice: cartItem.unitPrice,
-        originalTaxRate: cartItem.taxRate,
-        appliedTaxRate: appliedTaxRate,
-        taxAmount: itemTax,
-        total: itemTotal,
+        productId: l.productId,
+        productName: l.productName,
+        quantity: l.quantity,
+        unitPrice: l.unitPrice,
+        originalTaxRate: l.nominalTaxRate,
+        appliedTaxRate: l.appliedTaxRate,
+        taxAmount: l.taxAmount,
+        total: l.lineTotal,
+        discount: l.discount,
         variantId: cartItem.variantId,
         notes: cartItem.notes,
         selectedModifiers: cartItem.selectedModifiers,
-      );
-    }).toList();
+      ));
+    }
 
     final invoice = Invoice(
       id: invoiceId,
@@ -822,13 +834,13 @@ class SaleViewModel extends ChangeNotifier {
       createdAt: DateTime.now(),
       userId: user.id,
       customerId: _selectedCustomer?.id,
-      subtotal: subtotal,
-      totalTax: totalTax,
-      total: total,
+      subtotal: calc.subtotal,
+      totalTax: calc.totalTax,
+      total: calc.total,
       globalTaxOverride: _isGlobalTaxExempt,
-      bcnOfficialRate: _bcnOfficialRate,
-      commercialRate: _commercialRate,
-      totalUsd: totalUsd,
+      bcnOfficialRate: calc.bcnOfficialRate,
+      commercialRate: calc.commercialRate,
+      totalUsd: calc.totalUsd,
     );
 
     final payments = customPayments != null && customPayments.isNotEmpty
@@ -1002,7 +1014,7 @@ class SaleViewModel extends ChangeNotifier {
             phone: printerConfig.headerPhone,
             cashierName: user.name,
             logoRasterBytes: logoRasterBytes,
-            taxRegime: _companyTaxRegime,
+            taxRegime: _companyTaxRegime!,
             isTaxExempt: _isGlobalTaxExempt,
             paperWidthMm: printerConfig.paperWidthMm,
           );
@@ -1106,6 +1118,12 @@ class SaleViewModel extends ChangeNotifier {
           ? _printerPort
           : PrinterResolver.resolve(config);
 
+      if (_companyTaxRegime == null) {
+        _lastPrintError = 'Empresa sin régimen fiscal DGI configurado. No se puede reimprimir.';
+        notifyListeners();
+        return false;
+      }
+
       final res = await activePrinterPort.printInvoice(
         _lastProcessedInvoice!,
         items: domainItems,
@@ -1116,7 +1134,7 @@ class SaleViewModel extends ChangeNotifier {
         address: config.headerAddress,
         phone: config.headerPhone,
         logoRasterBytes: logoRasterBytes,
-        taxRegime: _companyTaxRegime,
+        taxRegime: _companyTaxRegime!,
         isTaxExempt: _lastProcessedInvoice?.globalTaxOverride ?? _isGlobalTaxExempt,
         paperWidthMm: config.paperWidthMm,
       );

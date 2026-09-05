@@ -1,6 +1,7 @@
 import 'dart:convert';
 import '../../../data/database/app_database.dart';
 import '../../../data/models/fulfillment/fulfillment_persistence_entities.dart';
+import '../../models/config/tax_regime.dart';
 import '../../models/sales/invoice.dart';
 import '../../ports/printer_port.dart';
 import '../../repositories/audit_repository.dart';
@@ -47,6 +48,7 @@ class DurablePrintService {
   Future<PrintBatchResult> processFulfillmentPrintBatch({
     required String tenantId,
     required String fulfillmentId,
+    required TaxRegime taxRegime,
   }) async {
     final jobs = await _database.fulfillmentPersistenceDao
         .findPrintJobsByFulfillment(fulfillmentId, tenantId);
@@ -88,6 +90,7 @@ class DurablePrintService {
         invoice,
         items: const [],
         payments: const [],
+        taxRegime: taxRegime,
       );
 
       if (result.isSuccess) {
@@ -213,6 +216,7 @@ class DurablePrintService {
     required UncertaintyResolution resolution,
     String? operatorRole,
     String? reason,
+    required TaxRegime taxRegime,
   }) async {
     switch (resolution) {
       case UncertaintyResolution.confirmPrinted:
@@ -263,6 +267,7 @@ class DurablePrintService {
             invoice,
             items: const [],
             payments: const [],
+            taxRegime: taxRegime,
           );
         } else {
           final payload = _parseJson(copyJob.payload);

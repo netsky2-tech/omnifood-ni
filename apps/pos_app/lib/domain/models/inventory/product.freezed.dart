@@ -34,6 +34,8 @@ mixin _$Product {
   String? get createdAt => throw _privateConstructorUsedError;
   InventoryPolicy? get inventoryPolicy => throw _privateConstructorUsedError;
   String? get directStockInsumoId => throw _privateConstructorUsedError;
+  double get taxRate => throw _privateConstructorUsedError;
+  bool get isTaxExempt => throw _privateConstructorUsedError;
   List<ProductVariant> get variants => throw _privateConstructorUsedError;
   List<Modifier> get availableModifiers => throw _privateConstructorUsedError;
 
@@ -62,6 +64,8 @@ abstract class $ProductCopyWith<$Res> {
       String? createdAt,
       InventoryPolicy? inventoryPolicy,
       String? directStockInsumoId,
+      double taxRate,
+      bool isTaxExempt,
       List<ProductVariant> variants,
       List<Modifier> availableModifiers});
 }
@@ -93,6 +97,8 @@ class _$ProductCopyWithImpl<$Res, $Val extends Product>
     Object? createdAt = freezed,
     Object? inventoryPolicy = freezed,
     Object? directStockInsumoId = freezed,
+    Object? taxRate = null,
+    Object? isTaxExempt = null,
     Object? variants = null,
     Object? availableModifiers = null,
   }) {
@@ -153,6 +159,14 @@ class _$ProductCopyWithImpl<$Res, $Val extends Product>
           ? _value.directStockInsumoId
           : directStockInsumoId // ignore: cast_nullable_to_non_nullable
               as String?,
+      taxRate: null == taxRate
+          ? _value.taxRate
+          : taxRate // ignore: cast_nullable_to_non_nullable
+              as double,
+      isTaxExempt: null == isTaxExempt
+          ? _value.isTaxExempt
+          : isTaxExempt // ignore: cast_nullable_to_non_nullable
+              as bool,
       variants: null == variants
           ? _value.variants
           : variants // ignore: cast_nullable_to_non_nullable
@@ -187,6 +201,8 @@ abstract class _$$ProductImplCopyWith<$Res> implements $ProductCopyWith<$Res> {
       String? createdAt,
       InventoryPolicy? inventoryPolicy,
       String? directStockInsumoId,
+      double taxRate,
+      bool isTaxExempt,
       List<ProductVariant> variants,
       List<Modifier> availableModifiers});
 }
@@ -216,6 +232,8 @@ class __$$ProductImplCopyWithImpl<$Res>
     Object? createdAt = freezed,
     Object? inventoryPolicy = freezed,
     Object? directStockInsumoId = freezed,
+    Object? taxRate = null,
+    Object? isTaxExempt = null,
     Object? variants = null,
     Object? availableModifiers = null,
   }) {
@@ -276,6 +294,14 @@ class __$$ProductImplCopyWithImpl<$Res>
           ? _value.directStockInsumoId
           : directStockInsumoId // ignore: cast_nullable_to_non_nullable
               as String?,
+      taxRate: null == taxRate
+          ? _value.taxRate
+          : taxRate // ignore: cast_nullable_to_non_nullable
+              as double,
+      isTaxExempt: null == isTaxExempt
+          ? _value.isTaxExempt
+          : isTaxExempt // ignore: cast_nullable_to_non_nullable
+              as bool,
       variants: null == variants
           ? _value._variants
           : variants // ignore: cast_nullable_to_non_nullable
@@ -306,6 +332,8 @@ class _$ProductImpl implements _Product {
       this.createdAt,
       this.inventoryPolicy,
       this.directStockInsumoId,
+      this.taxRate = 0.15,
+      this.isTaxExempt = false,
       final List<ProductVariant> variants = const [],
       final List<Modifier> availableModifiers = const []})
       : _variants = variants,
@@ -344,6 +372,12 @@ class _$ProductImpl implements _Product {
   final InventoryPolicy? inventoryPolicy;
   @override
   final String? directStockInsumoId;
+  @override
+  @JsonKey()
+  final double taxRate;
+  @override
+  @JsonKey()
+  final bool isTaxExempt;
   final List<ProductVariant> _variants;
   @override
   @JsonKey()
@@ -365,7 +399,7 @@ class _$ProductImpl implements _Product {
 
   @override
   String toString() {
-    return 'Product(id: $id, name: $name, uom: $uom, stock: $stock, averageCost: $averageCost, sellPrice: $sellPrice, isActive: $isActive, sku: $sku, barcode: $barcode, category: $category, isPrepared: $isPrepared, createdAt: $createdAt, inventoryPolicy: $inventoryPolicy, directStockInsumoId: $directStockInsumoId, variants: $variants, availableModifiers: $availableModifiers)';
+    return 'Product(id: $id, name: $name, uom: $uom, stock: $stock, averageCost: $averageCost, sellPrice: $sellPrice, isActive: $isActive, sku: $sku, barcode: $barcode, category: $category, isPrepared: $isPrepared, createdAt: $createdAt, inventoryPolicy: $inventoryPolicy, directStockInsumoId: $directStockInsumoId, taxRate: $taxRate, isTaxExempt: $isTaxExempt, variants: $variants, availableModifiers: $availableModifiers)';
   }
 
   @override
@@ -395,6 +429,9 @@ class _$ProductImpl implements _Product {
                 other.inventoryPolicy == inventoryPolicy) &&
             (identical(other.directStockInsumoId, directStockInsumoId) ||
                 other.directStockInsumoId == directStockInsumoId) &&
+            (identical(other.taxRate, taxRate) || other.taxRate == taxRate) &&
+            (identical(other.isTaxExempt, isTaxExempt) ||
+                other.isTaxExempt == isTaxExempt) &&
             const DeepCollectionEquality().equals(other._variants, _variants) &&
             const DeepCollectionEquality()
                 .equals(other._availableModifiers, _availableModifiers));
@@ -418,6 +455,8 @@ class _$ProductImpl implements _Product {
       createdAt,
       inventoryPolicy,
       directStockInsumoId,
+      taxRate,
+      isTaxExempt,
       const DeepCollectionEquality().hash(_variants),
       const DeepCollectionEquality().hash(_availableModifiers));
 
@@ -451,6 +490,8 @@ abstract class _Product implements Product {
       final String? createdAt,
       final InventoryPolicy? inventoryPolicy,
       final String? directStockInsumoId,
+      final double taxRate,
+      final bool isTaxExempt,
       final List<ProductVariant> variants,
       final List<Modifier> availableModifiers}) = _$ProductImpl;
 
@@ -484,6 +525,10 @@ abstract class _Product implements Product {
   InventoryPolicy? get inventoryPolicy;
   @override
   String? get directStockInsumoId;
+  @override
+  double get taxRate;
+  @override
+  bool get isTaxExempt;
   @override
   List<ProductVariant> get variants;
   @override

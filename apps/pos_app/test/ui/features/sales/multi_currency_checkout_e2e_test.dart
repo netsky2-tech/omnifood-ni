@@ -55,12 +55,15 @@ void main() {
   setUp(() async {
     database = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
 
-    // 1. Seed Initial Exchange Rates in SQLite
+    // 1. Seed Initial Exchange Rates and Fiscal Regime in SQLite
     await database.localConfigDao.saveConfig(
       LocalConfigEntity(key: 'commercial_exchange_rate', value: '36.50'),
     );
     await database.localConfigDao.saveConfig(
       LocalConfigEntity(key: 'bcn_official_exchange_rate', value: '36.6241'),
+    );
+    await database.localConfigDao.saveConfig(
+      LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'),
     );
 
     mockAuditRepo = MockAuditRepository();

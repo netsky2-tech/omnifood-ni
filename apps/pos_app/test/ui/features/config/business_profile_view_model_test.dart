@@ -65,7 +65,7 @@ void main() {
       expect(viewModel.config['operation_mode'], 'FOODPARK_QSR');
       expect(viewModel.config['dgi_current_number'], '550');
       expect(viewModel.config['tax_regime'], 'CUOTA_FIJA');
-      expect(viewModel.taxRegime.name, 'cuotaFija');
+      expect(viewModel.taxRegime?.name, 'cuotaFija');
       expect(viewModel.operationMode, TenantOperationMode.foodparkQsr);
       expect(viewModel.commercialRate, 36.50);
       expect(viewModel.bcnOfficialRate, 36.6241);
@@ -99,7 +99,7 @@ void main() {
       expect(viewModel.config['operation_mode'], 'RESTAURANT');
       expect(viewModel.config['dgi_current_number'], '550');
       expect(viewModel.config['tax_regime'], 'REGIMEN_GENERAL');
-      expect(viewModel.taxRegime.name, 'regimenGeneral');
+      expect(viewModel.taxRegime?.name, 'regimenGeneral');
       expect(viewModel.operationMode, TenantOperationMode.restaurant);
       expect(viewModel.commercialRate, 36.80);
       verify(() => mockConfigDao.saveConfig(any())).called(15);
