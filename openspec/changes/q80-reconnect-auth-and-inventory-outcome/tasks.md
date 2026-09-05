@@ -26,11 +26,11 @@ The baseline is committed at `eb70b2d`; after baseline planning semantics, the t
 - [ ] Finish boundary: Q80 files are disjoint and the pre-existing fix remains uncommitted/unchanged. Rollback only the Q80 slice.
 
 ### 1A. Credential record/codec and secure store adapter (PR 1A; ≤700 authored source+test lines)
-- [ ] Define immutable credentials, exact ACTIVE/CLEARED record schema, hint schema, canonical checksum, and uint64/UUID/date/conditional-key validation in discovered POS auth paths under `apps/pos_app/lib/`.
-- [ ] Define the domain storage port plus typed errors/statuses distinguishing absent, invalid, prepared, committed, and read failure.
-- [ ] Implement the `flutter_secure_storage`-only adapter; never use SharedPreferences or logging for secrets.
-- [ ] RED/GREEN/TRIANGULATE/REFACTOR: test schema, corruption, exact key sets, generation relationships, hints, and adapter failure propagation.
-- [ ] No coordinator/CAS/recovery orchestration yet. Verify focused security tests and `flutter analyze`; rollback only the record/codec, port, adapter, and tests. Finish at the commit/review boundary.
+- [x] Define immutable credentials, exact ACTIVE/CLEARED record schema, hint schema, canonical checksum, and uint64/UUID/date/conditional-key validation in discovered POS auth paths under `apps/pos_app/lib/`.
+- [x] Define the domain storage port plus typed errors/statuses distinguishing absent, invalid, prepared, committed, and read failure.
+- [x] Implement the `flutter_secure_storage`-only adapter; never use SharedPreferences or logging for secrets.
+- [x] RED/GREEN/TRIANGULATE/REFACTOR: test schema, corruption, exact key sets, generation relationships, hints, and adapter failure propagation.
+- [x] No coordinator/CAS/recovery orchestration yet. Verify focused security tests and `flutter analyze`; rollback only the record/codec, port, adapter, and tests. Finish at the commit/review boundary.
 
 ### 1B. Credential coordinator, recovery/CAS and crash matrix (PR 1B; ≤600 authored source+test lines)
 - [ ] Implement `CloudCredentialCoordinator` and two-slot commit/recovery orchestration using the Slice 1A port under `apps/pos_app/lib/`.
