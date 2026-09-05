@@ -157,11 +157,11 @@ void main() {
       expect(receipt, contains('OMNIFOOD NICARAGUA S.A.'));
       expect(receipt, contains('RUC: J0310000000001'));
       expect(receipt, contains('001-001-01-00004521'));
-      expect(receipt, contains('Tipo de Cambio:'));
+      expect(receipt, contains('T/C USD:'));
       expect(receipt, contains('SUBTOTAL:'));
       expect(receipt, contains('IVA (15%):'));
       expect(receipt, contains('TOTAL CORDOBAS:'));
-      expect(receipt, contains('TOTAL DOLARES:'));
+      expect(receipt, contains('TOTAL USD:'));
       expect(receipt, contains('Efectivo USD:'));
       expect(receipt, contains('VISA (BAC):'));
       expect(receipt, contains('AUTH9876'));

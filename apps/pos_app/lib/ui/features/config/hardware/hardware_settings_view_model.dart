@@ -34,6 +34,7 @@ class HardwareSettingsViewModel extends ChangeNotifier {
 
   PrinterConfig get config => _config;
   PrinterStatus get printerStatus => _printerStatus;
+  PrinterPort get printerPort => _printerPort;
   bool get isLoading => _isLoading;
   bool get isTesting => _isTesting;
   String? get statusMessage => _statusMessage;

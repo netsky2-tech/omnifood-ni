@@ -51,6 +51,8 @@ void main() {
           .thenAnswer((_) async => LocalConfigEntity(key: 'dgi_current_number', value: '550'));
       when(() => mockConfigDao.getConfigByKey('dgi_authorization_code'))
           .thenAnswer((_) async => LocalConfigEntity(key: 'dgi_authorization_code', value: 'AUT-2026'));
+      when(() => mockConfigDao.getConfigByKey('tax_regime'))
+          .thenAnswer((_) async => LocalConfigEntity(key: 'tax_regime', value: 'CUOTA_FIJA'));
 
       await viewModel.loadConfig();
 
@@ -62,6 +64,8 @@ void main() {
       expect(viewModel.activeCheckoutRate, 36.50);
       expect(viewModel.config['operation_mode'], 'FOODPARK_QSR');
       expect(viewModel.config['dgi_current_number'], '550');
+      expect(viewModel.config['tax_regime'], 'CUOTA_FIJA');
+      expect(viewModel.taxRegime.name, 'cuotaFija');
       expect(viewModel.operationMode, TenantOperationMode.foodparkQsr);
       expect(viewModel.commercialRate, 36.50);
       expect(viewModel.bcnOfficialRate, 36.6241);
@@ -86,6 +90,7 @@ void main() {
         'dgi_range_end': '10000',
         'dgi_current_number': '550',
         'dgi_authorization_code': 'AUT-2026',
+        'tax_regime': 'REGIMEN_GENERAL',
       });
 
       expect(viewModel.config['commercial_exchange_rate'], '36.80');
@@ -93,9 +98,11 @@ void main() {
       expect(viewModel.activeCheckoutRate, 36.6241);
       expect(viewModel.config['operation_mode'], 'RESTAURANT');
       expect(viewModel.config['dgi_current_number'], '550');
+      expect(viewModel.config['tax_regime'], 'REGIMEN_GENERAL');
+      expect(viewModel.taxRegime.name, 'regimenGeneral');
       expect(viewModel.operationMode, TenantOperationMode.restaurant);
       expect(viewModel.commercialRate, 36.80);
-      verify(() => mockConfigDao.saveConfig(any())).called(14);
+      verify(() => mockConfigDao.saveConfig(any())).called(15);
     });
 
     test('fetchOfficialBcnRate updates bcn_official_exchange_rate and persists it', () async {

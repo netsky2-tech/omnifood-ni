@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../../../domain/models/config/printer_config.dart';
+import '../../../../domain/models/config/tax_regime.dart';
 import '../../../../domain/ports/printer_port.dart';
+import '../../../widgets/receipt_preview_dialog.dart';
 import 'hardware_settings_view_model.dart';
 
 class HardwareSettingsView extends StatelessWidget {
@@ -230,6 +232,20 @@ class HardwareSettingsView extends StatelessWidget {
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  key: const Key('preview_receipt_button'),
+                  icon: const Icon(Icons.preview),
+                  label: const Text('PREVIEW Y DIAGNÓSTICO DE TICKET'),
+                  onPressed: () {
+                    ReceiptPreviewDialog.show(
+                      context,
+                      initialPaperWidthMm: config.paperWidthMm,
+                      initialTaxRegime: TaxRegime.fromString(config.taxRegime),
+                      printerPort: viewModel.printerPort,
+                    );
+                  },
                 ),
                 if (viewModel.statusMessage != null) ...[
                   const SizedBox(height: 12),

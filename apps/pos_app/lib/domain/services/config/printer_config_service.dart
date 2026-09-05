@@ -81,6 +81,7 @@ class PrinterConfigService {
     final logoWidth = int.tryParse(logoWidthEntity?.value ?? '');
     final logoHeight = int.tryParse(logoHeightEntity?.value ?? '');
     final isLogoEnabled = isLogoEnabledEntity?.value.trim().toLowerCase() == 'true';
+    final taxRegimeEntity = await _configDao.getConfigByKey('tax_regime');
 
     return PrinterConfig(
       driverType: driverType,
@@ -95,6 +96,7 @@ class PrinterConfigService {
       headerRuc: rucEntity?.value,
       headerAddress: addressEntity?.value,
       headerPhone: phoneEntity?.value,
+      taxRegime: taxRegimeEntity?.value ?? 'REGIMEN_GENERAL',
       logoBase64: logoBase64Entity?.value,
       logoWidth: logoWidth,
       logoHeight: logoHeight,

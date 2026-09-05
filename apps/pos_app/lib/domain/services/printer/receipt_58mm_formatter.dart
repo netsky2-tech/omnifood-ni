@@ -10,7 +10,8 @@ import 'receipt_layout_formatter.dart';
 /// Formatter and Layout Engine for 58mm Thermal Printers.
 /// Adheres strictly to DGI Disposición Técnica 09-2007, Ley 822, and Food Park QSR needs.
 class Receipt58mmFormatter {
-  static const int lineWidth = 38;
+  /// Usable monospaced character columns on 58mm thermal paper (384 dots @ 203 DPI = 32 cols).
+  static const int lineWidth = 32;
   static final ReceiptLayoutFormatter _formatter = ReceiptLayoutFormatter.format58mm();
 
   // ==========================================

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../../domain/models/config/tax_regime.dart';
 import '../../../../domain/models/config/tenant_operation_mode.dart';
 import 'business_profile_view_model.dart';
 
@@ -78,6 +79,29 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                           return 'Formato de RUC inválido (Letra + 13 dígitos)';
                         }
                         return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<TaxRegime>(
+                      key: const Key('tax_regime_dropdown'),
+                      isExpanded: true,
+                      value: viewModel.taxRegime,
+                      decoration: const InputDecoration(
+                        labelText: 'Clasificación / Régimen DGI del Negocio',
+                        prefixIcon: Icon(Icons.account_balance),
+                        helperText: 'Define el tratamiento del IVA: Régimen General (recauda IVA 15%) o Cuota Fija (sin IVA).',
+                      ),
+                      items: TaxRegime.values.map((regime) {
+                        return DropdownMenuItem(
+                          value: regime,
+                          child: Text(regime.displayName, overflow: TextOverflow.ellipsis),
+                        );
+                      }).toList(),
+                      onChanged: (regime) {
+                        if (regime != null) {
+                          viewModel.setTaxRegime(regime);
+                          _controllers['tax_regime']?.text = regime.code;
+                        }
                       },
                     ),
                     const SizedBox(height: 16),
@@ -337,6 +361,7 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                                   newConfig[key] = controller.text;
                                 });
                                 newConfig['operation_mode'] = viewModel.operationMode.code;
+                                newConfig['tax_regime'] = viewModel.taxRegime.code;
                                 await viewModel.saveConfig(newConfig);
                                 if (mounted && context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(

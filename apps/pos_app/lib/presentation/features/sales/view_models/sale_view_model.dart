@@ -96,6 +96,7 @@ class SaleViewModel extends ChangeNotifier {
       _loadCurrentUserRole();
       loadExchangeRates();
       loadTenantConfig();
+      loadCompanyTaxRegime();
     }
   }
 
@@ -223,6 +224,26 @@ class SaleViewModel extends ChangeNotifier {
     try {
       _tenantConfig = await _tenantConfigService.getTenantConfig();
       notifyListeners();
+    } catch (_) {
+      // Non-blocking fallback
+    }
+  }
+
+  TaxRegime _companyTaxRegime = TaxRegime.regimenGeneral;
+  TaxRegime get companyTaxRegime => _companyTaxRegime;
+
+  void setCompanyTaxRegime(TaxRegime regime) {
+    _companyTaxRegime = regime;
+    notifyListeners();
+  }
+
+  Future<void> loadCompanyTaxRegime() async {
+    try {
+      final entity = await _database.localConfigDao.getConfigByKey('tax_regime');
+      if (entity != null) {
+        _companyTaxRegime = TaxRegime.fromString(entity.value);
+        notifyListeners();
+      }
     } catch (_) {
       // Non-blocking fallback
     }
@@ -365,7 +386,7 @@ class SaleViewModel extends ChangeNotifier {
   double get totalDiscounts => _totalDiscounts + loyaltyDiscount;
 
   double get totalTax {
-    if (_isGlobalTaxExempt) return 0.0;
+    if (_companyTaxRegime.isCuotaFija || _isGlobalTaxExempt) return 0.0;
     // Recalculate tax based on subtotal after discounts
     return _cart.fold(0.0, (sum, item) {
       final itemBase = item.subtotal + item.modifiersTotal;
@@ -772,8 +793,12 @@ class SaleViewModel extends ChangeNotifier {
             ? customerName.trim()
             : _customerName;
 
+    final isExempt = _companyTaxRegime.isCuotaFija || _isGlobalTaxExempt;
     final items = _cart.map((cartItem) {
-      final appliedTaxRate = _isGlobalTaxExempt ? 0.0 : cartItem.taxRate;
+      final appliedTaxRate = isExempt ? 0.0 : cartItem.taxRate;
+      final lineSubtotal = cartItem.subtotal + cartItem.modifiersTotal;
+      final itemTax = isExempt ? 0.0 : (lineSubtotal * appliedTaxRate);
+      final itemTotal = _companyTaxRegime.isCuotaFija ? lineSubtotal : (lineSubtotal + itemTax);
       return InvoiceItem(
         id: const Uuid().v4(),
         invoiceId: invoiceId,
@@ -783,8 +808,8 @@ class SaleViewModel extends ChangeNotifier {
         unitPrice: cartItem.unitPrice,
         originalTaxRate: cartItem.taxRate,
         appliedTaxRate: appliedTaxRate,
-        taxAmount: cartItem.taxAmount,
-        total: cartItem.total,
+        taxAmount: itemTax,
+        total: itemTotal,
         variantId: cartItem.variantId,
         notes: cartItem.notes,
         selectedModifiers: cartItem.selectedModifiers,
@@ -977,7 +1002,7 @@ class SaleViewModel extends ChangeNotifier {
             phone: printerConfig.headerPhone,
             cashierName: user.name,
             logoRasterBytes: logoRasterBytes,
-            taxRegime: TaxRegime.fromString(printerConfig.taxRegime),
+            taxRegime: _companyTaxRegime,
             isTaxExempt: _isGlobalTaxExempt,
             paperWidthMm: printerConfig.paperWidthMm,
           );
@@ -1091,7 +1116,7 @@ class SaleViewModel extends ChangeNotifier {
         address: config.headerAddress,
         phone: config.headerPhone,
         logoRasterBytes: logoRasterBytes,
-        taxRegime: TaxRegime.fromString(config.taxRegime),
+        taxRegime: _companyTaxRegime,
         isTaxExempt: _lastProcessedInvoice?.globalTaxOverride ?? _isGlobalTaxExempt,
         paperWidthMm: config.paperWidthMm,
       );

@@ -22,6 +22,12 @@ enum TaxRegime {
   /// Returns the legal title of the sales receipt according to the regime.
   String get defaultReceiptTitle => isCuotaFija ? 'COMPROBANTE DE VENTA' : 'FACTURA DE VENTA';
 
+  /// Regime header line for receipt display.
+  String get receiptRegimeHeader => isCuotaFija ? 'REGIMEN: CUOTA FIJA' : 'REGIMEN: GENERAL';
+
+  /// Notice displayed at receipt footer for simplified regime.
+  String? get fiscalNotice => isCuotaFija ? 'CONTRIBUYENTE DE CUOTA FIJA\nNO RECAUDA IVA' : null;
+
   /// Safe parsing with fallback to regimenGeneral.
   static TaxRegime fromString(
     String? raw, {

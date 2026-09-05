@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import '../../../../../data/daos/local_config_dao.dart';
 import '../../../../../data/models/local_config_entity.dart';
 
+import '../../../../domain/models/config/tax_regime.dart';
 import '../../../../domain/models/config/tenant_operation_mode.dart';
 
 import '../../../../domain/repositories/inventory/inventory_repository.dart';
@@ -27,8 +28,16 @@ class BusinessProfileViewModel extends ChangeNotifier {
     'dgi_range_end': '10000',
     'dgi_current_number': '1',
     'dgi_authorization_code': '',
+    'tax_regime': 'REGIMEN_GENERAL',
   };
   Map<String, String> get config => _config;
+
+  TaxRegime get taxRegime => TaxRegime.fromString(_config['tax_regime']);
+
+  void setTaxRegime(TaxRegime regime) {
+    _config['tax_regime'] = regime.code;
+    notifyListeners();
+  }
 
   TenantOperationMode get operationMode =>
       TenantOperationMode.fromString(_config['operation_mode']);
