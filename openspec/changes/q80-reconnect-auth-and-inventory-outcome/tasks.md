@@ -33,10 +33,10 @@ The baseline is committed at `eb70b2d`; after baseline planning semantics, the t
 - [x] No coordinator/CAS/recovery orchestration yet. Verify focused security tests and `flutter analyze`; rollback only the record/codec, port, adapter, and tests. Finish at the commit/review boundary.
 
 ### 1B. Credential coordinator, recovery/CAS and crash matrix (PR 1B; ≤600 authored source+test lines)
-- [ ] Implement `CloudCredentialCoordinator` and two-slot commit/recovery orchestration using the Slice 1A port under `apps/pos_app/lib/`.
-- [ ] Add two-slot commit/recovery, monotonic intents/mutex/CAS, clear tombstone, stale response rejection, and authoritative slots versus optional hint semantics.
-- [ ] RED/GREEN/TRIANGULATE/REFACTOR: test the stage-aware fault matrix for prepared/committed/hint write and read-back, mutate-then-throw/substitution, restart recovery, and stale intents.
-- [ ] Prove behaviorally that credential persistence uses the single port with no fallback. Verify focused security tests and `flutter analyze`; rollback coordinator/recovery/tests only. Finish at the commit/review boundary.
+- [x] Implement `CloudCredentialCoordinator` and two-slot commit/recovery orchestration using the Slice 1A port under `apps/pos_app/lib/`.
+- [x] Add two-slot commit/recovery, monotonic intents/mutex/CAS, clear tombstone, stale response rejection, and authoritative slots versus optional hint semantics.
+- [x] RED/GREEN/TRIANGULATE/REFACTOR: test the stage-aware fault matrix for prepared/committed/hint write and read-back, mutate-then-throw/substitution, restart recovery, and stale intents.
+- [x] Prove behaviorally that credential persistence uses the single port with no fallback. Verify focused security tests and `flutter analyze`; rollback coordinator/recovery/tests only. Finish at the commit/review boundary.
 
 ### 2. POS auth UI and error classification (PR 2; 210–290 lines)
 - [ ] Wire login/refresh/clear/import through the coordinator in auth repository, composition root, Dio adapter, and auth state/UI under `apps/pos_app/lib/` (discover exact paths).

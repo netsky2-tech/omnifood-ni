@@ -219,3 +219,31 @@ The prior attempt was blocked before code/tests because root `spec.md` was missi
 - **Verification:** `dart format` on all six files; focused two files: **7 passed**; targeted analyzer: **No issues found**; `wc -l` six source/test files: **693** (within the authorized 700); `git diff --check`: passed. Runtime harness: N/A, pure codec/adapter boundary.
 - **Persisted task reconciliation:** re-read `tasks.md`; all five Slice 1A lines remain visibly `[x]` after green. No 1B+ checkbox changed.
 - **Workload / rollback:** PR boundary remains auto-chain/stacked-to-main Slice 1A only. Roll back only the six Slice 1A files and their existing Slice 1A checkboxes. Remaining exact unchecked task: `- [ ] Implement CloudCredentialCoordinator and two-slot commit/recovery orchestration using the Slice 1A port under apps/pos_app/lib/`.
+
+## Slice 1B — coordinator, recovery/CAS, and fault matrix complete
+
+- **Status consumed:** `{change:q80-reconnect-auth-and-inventory-outcome, artifactStore:both, authoritativeStore:openspec, applyState:ready, actionContext:{mode:repo-local, allowedEditRoots:parent-supplied}}`; strict TDD and `auto-chain`/stacked-to-main Slice 1B delivery were active. No action-context warning; all writes are in the supplied paths.
+- **Completed persisted tasks:** all four Slice 1B lines are now visibly `[x]` in `tasks.md` after GREEN. No Slice 2+ checkbox changed.
+- **Files changed:** `apps/pos_app/lib/domain/security/cloud_credential_coordinator.dart`, `apps/pos_app/test/data/security/cloud_credential_coordinator_test.dart`, `apps/pos_app/test/data/security/support/fake_cloud_credential_store.dart`, plus this progress artifact and Slice 1B task checkboxes.
+- **Behavior:** one serialized coordinator maintains a recovered monotonic `BigInt` writer epoch, intent/base-generation CAS, and a generation-advancing CLEARED tombstone. It writes only the inactive Slice 1A slot through PREPARED/read-back then COMMITTED/read-back and publishes only verified committed records. Slot scanning fails closed for actual read errors, invalid-only state, and divergent equal generations; valid committed peers win over corrupt/PREPARED data. Hint writes/read-back are warning-only after committed verification. No network, UI, Dio, repository, or fallback store was introduced.
+- **Fault matrix:** the stage-aware fake identifies PREPARED versus COMMITTED by decoding the actual record phase. It injects fail-before and mutate-then-throw writes, read substitution, read errors, and hint write/read faults; restart assertions select only exact durable committed bytes. Tests cover empty/ACTIVE restart, rotation, clear/stale pre-clear intent, reservation ordering, corrupt peer, corrupt-only, read failure, concurrency, single-port calls, and redacted errors.
+
+### TDD Cycle Evidence
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|---|---|---|---|---|---|---|---|
+| 1B coordinator/recovery/CAS | `test/data/security/cloud_credential_coordinator_test.dart` | Unit | 7 Slice 1A-focused tests passed before the new test was introduced | New test failed to compile because coordinator/fake imports and types did not exist | New coordinator suite: 7 passed | empty/ACTIVE, rotation/CLEARED/stale, newer intent, corrupt/read failure, both write stages/fault types, substitution, hint failures, concurrency | Extracted serialized lock/recovery/persist helpers; formatted and analyzer green |
+
+### Verification
+
+- RED: `cd apps/pos_app && flutter test test/data/security/cloud_credential_coordinator_test.dart` failed as expected on missing coordinator/fake imports and types.
+- GREEN/refactor: `cd apps/pos_app && flutter test test/data/security` — **14 passed** (includes all Slice 1A tests).
+- Targeted analyzer: `cd apps/pos_app && flutter analyze lib/domain/security/cloud_credential_coordinator.dart test/data/security/cloud_credential_coordinator_test.dart test/data/security/support/fake_cloud_credential_store.dart` — **No issues found**.
+- `dart format` ran only on the three new Slice 1B files. `git diff --check` passed. Runtime harness: N/A; pure domain/store orchestration with no UI/network boundary.
+- Physical authored source+test lines: **530**, within the approved Slice 1B `<=600` budget.
+
+### Workload, remaining work, and risks
+
+- PR boundary: auto-chain/stacked-to-main **Slice 1B only**; no commit was created. Roll back only the coordinator, fake, focused coordinator test, and their four task checkboxes.
+- Remaining tasks are Slice 2+, beginning exactly: `- [ ] Wire login/refresh/clear/import through the coordinator in auth repository, composition root, Dio adapter, and auth state/UI under apps/pos_app/lib/ (discover exact paths).`
+- Risk: Slice 1B intentionally has no auth repository/Dio/publication wiring; that remains Slice 2. The pre-existing `docs/onboarding/onboarding_acceptance_plan_v1.0.md:Zone.Identifier` remains untouched.
