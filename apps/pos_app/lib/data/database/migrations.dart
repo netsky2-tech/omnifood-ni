@@ -1961,4 +1961,24 @@ final allMigrations = [
   migration44_45,
   migration45_46,
   migration46_47,
+  migration47_48,
 ];
+
+/// Catalog mapping identity is additive: historical products remain usable.
+final migration47_48 = Migration(47, 48, (database) async {
+  final columns = await database.rawQuery('PRAGMA table_info(products)');
+  final names = columns.map((column) => column['name'] as String).toSet();
+  if (!names.contains('product_type')) {
+    await database.execute(
+      "ALTER TABLE products ADD COLUMN product_type TEXT NOT NULL DEFAULT 'SIMPLE'",
+    );
+  }
+  if (!names.contains('mapping_version_id')) {
+    await database.execute(
+      'ALTER TABLE products ADD COLUMN mapping_version_id TEXT',
+    );
+  }
+  if (!names.contains('insumo_id')) {
+    await database.execute('ALTER TABLE products ADD COLUMN insumo_id TEXT');
+  }
+});

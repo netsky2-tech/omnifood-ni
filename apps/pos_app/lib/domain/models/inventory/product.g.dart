@@ -19,6 +19,9 @@ _$ProductImpl _$$ProductImplFromJson(Map<String, dynamic> json) =>
       barcode: json['barcode'] as String?,
       category: json['category'] as String?,
       isPrepared: json['isPrepared'] as bool? ?? false,
+      productType: json['productType'] as String? ?? 'SIMPLE',
+      mappingVersionId: json['mappingVersionId'] as String?,
+      insumoId: json['insumoId'] as String?,
       createdAt: json['createdAt'] as String?,
       variants: (json['variants'] as List<dynamic>?)
               ?.map((e) => ProductVariant.fromJson(e as Map<String, dynamic>))
@@ -43,6 +46,9 @@ Map<String, dynamic> _$$ProductImplToJson(_$ProductImpl instance) =>
       'barcode': instance.barcode,
       'category': instance.category,
       'isPrepared': instance.isPrepared,
+      'productType': instance.productType,
+      'mappingVersionId': instance.mappingVersionId,
+      'insumoId': instance.insumoId,
       'createdAt': instance.createdAt,
       'variants': instance.variants,
       'availableModifiers': instance.availableModifiers,

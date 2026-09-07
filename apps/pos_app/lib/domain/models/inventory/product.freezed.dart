@@ -31,6 +31,9 @@ mixin _$Product {
   String? get barcode => throw _privateConstructorUsedError;
   String? get category => throw _privateConstructorUsedError;
   bool get isPrepared => throw _privateConstructorUsedError;
+  String get productType => throw _privateConstructorUsedError;
+  String? get mappingVersionId => throw _privateConstructorUsedError;
+  String? get insumoId => throw _privateConstructorUsedError;
   String? get createdAt => throw _privateConstructorUsedError;
   List<ProductVariant> get variants => throw _privateConstructorUsedError;
   List<Modifier> get availableModifiers => throw _privateConstructorUsedError;
@@ -57,6 +60,9 @@ abstract class $ProductCopyWith<$Res> {
       String? barcode,
       String? category,
       bool isPrepared,
+      String productType,
+      String? mappingVersionId,
+      String? insumoId,
       String? createdAt,
       List<ProductVariant> variants,
       List<Modifier> availableModifiers});
@@ -86,6 +92,9 @@ class _$ProductCopyWithImpl<$Res, $Val extends Product>
     Object? barcode = freezed,
     Object? category = freezed,
     Object? isPrepared = null,
+    Object? productType = null,
+    Object? mappingVersionId = freezed,
+    Object? insumoId = freezed,
     Object? createdAt = freezed,
     Object? variants = null,
     Object? availableModifiers = null,
@@ -135,6 +144,18 @@ class _$ProductCopyWithImpl<$Res, $Val extends Product>
           ? _value.isPrepared
           : isPrepared // ignore: cast_nullable_to_non_nullable
               as bool,
+      productType: null == productType
+          ? _value.productType
+          : productType // ignore: cast_nullable_to_non_nullable
+              as String,
+      mappingVersionId: freezed == mappingVersionId
+          ? _value.mappingVersionId
+          : mappingVersionId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      insumoId: freezed == insumoId
+          ? _value.insumoId
+          : insumoId // ignore: cast_nullable_to_non_nullable
+              as String?,
       createdAt: freezed == createdAt
           ? _value.createdAt
           : createdAt // ignore: cast_nullable_to_non_nullable
@@ -170,6 +191,9 @@ abstract class _$$ProductImplCopyWith<$Res> implements $ProductCopyWith<$Res> {
       String? barcode,
       String? category,
       bool isPrepared,
+      String productType,
+      String? mappingVersionId,
+      String? insumoId,
       String? createdAt,
       List<ProductVariant> variants,
       List<Modifier> availableModifiers});
@@ -197,6 +221,9 @@ class __$$ProductImplCopyWithImpl<$Res>
     Object? barcode = freezed,
     Object? category = freezed,
     Object? isPrepared = null,
+    Object? productType = null,
+    Object? mappingVersionId = freezed,
+    Object? insumoId = freezed,
     Object? createdAt = freezed,
     Object? variants = null,
     Object? availableModifiers = null,
@@ -246,6 +273,18 @@ class __$$ProductImplCopyWithImpl<$Res>
           ? _value.isPrepared
           : isPrepared // ignore: cast_nullable_to_non_nullable
               as bool,
+      productType: null == productType
+          ? _value.productType
+          : productType // ignore: cast_nullable_to_non_nullable
+              as String,
+      mappingVersionId: freezed == mappingVersionId
+          ? _value.mappingVersionId
+          : mappingVersionId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      insumoId: freezed == insumoId
+          ? _value.insumoId
+          : insumoId // ignore: cast_nullable_to_non_nullable
+              as String?,
       createdAt: freezed == createdAt
           ? _value.createdAt
           : createdAt // ignore: cast_nullable_to_non_nullable
@@ -277,6 +316,9 @@ class _$ProductImpl implements _Product {
       this.barcode,
       this.category,
       this.isPrepared = false,
+      this.productType = 'SIMPLE',
+      this.mappingVersionId,
+      this.insumoId,
       this.createdAt,
       final List<ProductVariant> variants = const [],
       final List<Modifier> availableModifiers = const []})
@@ -311,6 +353,13 @@ class _$ProductImpl implements _Product {
   @JsonKey()
   final bool isPrepared;
   @override
+  @JsonKey()
+  final String productType;
+  @override
+  final String? mappingVersionId;
+  @override
+  final String? insumoId;
+  @override
   final String? createdAt;
   final List<ProductVariant> _variants;
   @override
@@ -333,7 +382,7 @@ class _$ProductImpl implements _Product {
 
   @override
   String toString() {
-    return 'Product(id: $id, name: $name, uom: $uom, stock: $stock, averageCost: $averageCost, sellPrice: $sellPrice, isActive: $isActive, sku: $sku, barcode: $barcode, category: $category, isPrepared: $isPrepared, createdAt: $createdAt, variants: $variants, availableModifiers: $availableModifiers)';
+    return 'Product(id: $id, name: $name, uom: $uom, stock: $stock, averageCost: $averageCost, sellPrice: $sellPrice, isActive: $isActive, sku: $sku, barcode: $barcode, category: $category, isPrepared: $isPrepared, productType: $productType, mappingVersionId: $mappingVersionId, insumoId: $insumoId, createdAt: $createdAt, variants: $variants, availableModifiers: $availableModifiers)';
   }
 
   @override
@@ -357,6 +406,12 @@ class _$ProductImpl implements _Product {
                 other.category == category) &&
             (identical(other.isPrepared, isPrepared) ||
                 other.isPrepared == isPrepared) &&
+            (identical(other.productType, productType) ||
+                other.productType == productType) &&
+            (identical(other.mappingVersionId, mappingVersionId) ||
+                other.mappingVersionId == mappingVersionId) &&
+            (identical(other.insumoId, insumoId) ||
+                other.insumoId == insumoId) &&
             (identical(other.createdAt, createdAt) ||
                 other.createdAt == createdAt) &&
             const DeepCollectionEquality().equals(other._variants, _variants) &&
@@ -379,6 +434,9 @@ class _$ProductImpl implements _Product {
       barcode,
       category,
       isPrepared,
+      productType,
+      mappingVersionId,
+      insumoId,
       createdAt,
       const DeepCollectionEquality().hash(_variants),
       const DeepCollectionEquality().hash(_availableModifiers));
@@ -410,6 +468,9 @@ abstract class _Product implements Product {
       final String? barcode,
       final String? category,
       final bool isPrepared,
+      final String productType,
+      final String? mappingVersionId,
+      final String? insumoId,
       final String? createdAt,
       final List<ProductVariant> variants,
       final List<Modifier> availableModifiers}) = _$ProductImpl;
@@ -438,6 +499,12 @@ abstract class _Product implements Product {
   String? get category;
   @override
   bool get isPrepared;
+  @override
+  String get productType;
+  @override
+  String? get mappingVersionId;
+  @override
+  String? get insumoId;
   @override
   String? get createdAt;
   @override

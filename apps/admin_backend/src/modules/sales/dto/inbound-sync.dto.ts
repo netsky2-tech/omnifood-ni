@@ -46,6 +46,9 @@ export interface InboundSyncProductDto {
   isActive: boolean;
   isPerishable: boolean;
   warehouseId?: string | null;
+  productType?: string;
+  mappingVersionId?: string | null;
+  insumoId?: string | null;
   createdAt: Date;
   updatedAt: Date;
   tenantId?: string;

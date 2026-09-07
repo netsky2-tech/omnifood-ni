@@ -12,6 +12,7 @@ import { Tenant } from '../../tenant/entities/tenant.entity';
 export enum ProductType {
   SIMPLE = 'SIMPLE',
   COMPOUND = 'COMPOUND',
+  PREPARED = 'PREPARED',
   VARIANT_PARENT = 'VARIANT_PARENT',
 }
 

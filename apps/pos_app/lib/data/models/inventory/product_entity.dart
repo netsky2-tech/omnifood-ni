@@ -19,6 +19,12 @@ class ProductEntity {
   final String? category;
   @ColumnInfo(name: 'is_prepared')
   final bool isPrepared;
+  @ColumnInfo(name: 'product_type')
+  final String productType;
+  @ColumnInfo(name: 'mapping_version_id')
+  final String? mappingVersionId;
+  @ColumnInfo(name: 'insumo_id')
+  final String? insumoId;
   @ColumnInfo(name: 'created_at')
   final String? createdAt;
   @ColumnInfo(name: 'tenant_id')
@@ -36,6 +42,9 @@ class ProductEntity {
     this.barcode,
     this.category,
     this.isPrepared = false,
+    this.productType = 'SIMPLE',
+    this.mappingVersionId,
+    this.insumoId,
     this.createdAt,
     this.tenantId,
   });

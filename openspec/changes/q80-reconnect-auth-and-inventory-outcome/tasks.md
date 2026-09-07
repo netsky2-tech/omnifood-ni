@@ -49,9 +49,9 @@ The baseline is committed at `eb70b2d`; after baseline planning semantics, the t
 - [x] Verify `cd apps/pos_app && flutter test test/data/services/sync_service_test.dart`; rollback trigger/orchestration changes.
 
 ### 4. Product classification propagation and mapping versions (PR 4; 220–300 lines)
-- [ ] Add domain/catalog projection `mappingVersionId` and backend `product_inventory_mapping_versions` entity/migration using real tenant-scoped paths under `apps/admin_backend/src/` and `apps/pos_app/lib/`.
-- [ ] RED/GREEN/TRIANGULATE/REFACTOR: test SIMPLE/PREPARED/COMPOUND classification, effective mapping lookup, no product-ID equality fallback, tenant ownership, and unchanged historical rows.
-- [ ] Verify backend unit/DB tests; rollback mapping entity/migration/projection. Do not invent a products direct-insumo column.
+- [x] Add domain/catalog projection `mappingVersionId` and backend `product_inventory_mapping_versions` entity/migration using real tenant-scoped paths under `apps/admin_backend/src/` and `apps/pos_app/lib/`.
+- [x] RED/GREEN/TRIANGULATE/REFACTOR: test SIMPLE/PREPARED/COMPOUND classification, effective mapping lookup, no product-ID equality fallback, tenant ownership, and unchanged historical rows.
+- [x] Verify backend unit/DB tests; rollback mapping entity/migration/projection. Do not invent a products direct-insumo column.
 
 ### 5. Immutable sale snapshot (PR 5; 230–300 lines plus generated output)
 - [ ] Add invoice/item snapshot models, Floor entities/DAOs/mappers, next release SQLite migration, and regenerate checked-in Floor output only via repository codegen.

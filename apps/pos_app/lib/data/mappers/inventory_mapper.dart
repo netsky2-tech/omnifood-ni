@@ -18,7 +18,9 @@ class InventoryMapper {
     return Insumo(
       id: entity.id,
       name: entity.name.isNotEmpty ? entity.name : 'Insumo',
-      consumptionUom: (entity.consumptionUom.isNotEmpty) ? entity.consumptionUom : 'UND',
+      consumptionUom: (entity.consumptionUom.isNotEmpty)
+          ? entity.consumptionUom
+          : 'UND',
       stock: entity.stock,
       averageCost: entity.averageCost,
       parLevel: entity.parLevel,
@@ -247,6 +249,9 @@ class InventoryMapper {
       barcode: entity.barcode,
       category: entity.category,
       isPrepared: entity.isPrepared,
+      productType: entity.productType,
+      mappingVersionId: entity.mappingVersionId,
+      insumoId: entity.insumoId,
       createdAt: entity.createdAt,
       variants: variants,
       availableModifiers: modifiers,
@@ -266,6 +271,9 @@ class InventoryMapper {
       barcode: domain.barcode,
       category: domain.category,
       isPrepared: domain.isPrepared,
+      productType: domain.productType,
+      mappingVersionId: domain.mappingVersionId,
+      insumoId: domain.insumoId,
       createdAt: domain.createdAt,
     );
   }
@@ -278,7 +286,10 @@ class InventoryMapper {
     );
   }
 
-  static ProductVariantEntity toVariantEntity(String productId, ProductVariant domain) {
+  static ProductVariantEntity toVariantEntity(
+    String productId,
+    ProductVariant domain,
+  ) {
     return ProductVariantEntity(
       id: domain.id,
       productId: productId,
@@ -295,7 +306,10 @@ class InventoryMapper {
     );
   }
 
-  static ProductModifierEntity toModifierEntity(String productId, Modifier domain) {
+  static ProductModifierEntity toModifierEntity(
+    String productId,
+    Modifier domain,
+  ) {
     return ProductModifierEntity(
       id: domain.id,
       productId: productId,

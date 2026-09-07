@@ -24,6 +24,7 @@ import { SyncCreditNoteAuthGuard } from './guards/sync-credit-note-auth.guard';
 import { CashShiftSession } from './entities/cash-shift.entity';
 import { CashMovement } from './entities/cash-movement.entity';
 import { DatafonoEquipo } from './entities/datafono-equipo.entity';
+import { ProductInventoryMappingVersion } from '../inventory/entities/product-inventory-mapping-version.entity';
 import { CashShiftService } from './services/cash-shift.service';
 import { CashShiftController } from './controllers/cash-shift.controller';
 import { SalesReportsService } from './services/sales-reports.service';
@@ -55,6 +56,7 @@ import { forwardRef } from '@nestjs/common';
       CashShiftSession,
       CashMovement,
       DatafonoEquipo,
+          ProductInventoryMappingVersion,
     ]),
   ],
   controllers: [

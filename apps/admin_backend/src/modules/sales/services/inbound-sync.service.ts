@@ -7,7 +7,8 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, IsNull } from 'typeorm';
+import { ProductInventoryMappingVersion } from '../../inventory/entities/product-inventory-mapping-version.entity';
 import { Product } from '../../inventory/entities/product.entity';
 import { CatalogValue } from '../../catalog/entities/catalog-value.entity';
 import { Insumo } from '../../inventory/entities/insumo.entity';
@@ -49,6 +50,9 @@ export class InboundSyncService {
     @Optional()
     @Inject(forwardRef(() => FiscalConfigVersionService))
     private readonly fiscalConfigVersionService?: FiscalConfigVersionService,
+    @Optional()
+    @InjectRepository(ProductInventoryMappingVersion)
+    private readonly mappingVersionRepository?: Repository<ProductInventoryMappingVersion>,
   ) {}
 
   async getInboundDeltas(
@@ -197,24 +201,55 @@ export class InboundSyncService {
       .where('product.tenant_id = :tenantId', { tenantId });
 
     if (sinceDate) {
-      qb.andWhere('product.updated_at > :sinceDate', { sinceDate });
+      // Mapping supersession is a catalog change even when the product row is untouched.
+      qb.andWhere(`(product.updated_at > :sinceDate OR EXISTS (
+        SELECT 1 FROM product_inventory_mapping_versions mapping_cursor
+        WHERE mapping_cursor.tenant_id = product.tenant_id
+          AND mapping_cursor.product_id = product.id
+          AND (mapping_cursor.created_at > :sinceDate OR mapping_cursor.effective_at > :sinceDate OR mapping_cursor.superseded_at > :sinceDate)
+      ))`, { sinceDate });
     }
 
     const items = await qb.getMany();
-    return items.map((p) => ({
-      id: p.id,
-      name: p.name,
-      uom: p.uom,
-      stock: Number(p.stock),
-      averageCost: Number(p.averageCost),
-      sellPrice: Number(p.sellPrice),
-      isActive: p.is_active,
-      isPerishable: p.is_perishable,
-      warehouseId: p.warehouse_id ?? null,
-      createdAt: p.created_at,
-      updatedAt: p.updated_at,
-      tenantId: p.tenant_id,
-    }));
+    const now = new Date();
+    if (this.mappingVersionRepository?.manager) {
+      try {
+        await this.mappingVersionRepository.manager.query(
+          "SELECT set_config('app.tenant_id', $1, true)",
+          [tenantId],
+        );
+      } catch (_) {}
+    }
+    const mappings = this.mappingVersionRepository
+      ? await this.mappingVersionRepository.createQueryBuilder('m')
+          .where('m.tenant_id = :tenantId', { tenantId })
+          .andWhere('m.effective_at <= :now', { now })
+          .andWhere('(m.superseded_at IS NULL OR m.superseded_at > :now)', { now })
+          .orderBy('m.effective_at', 'DESC')
+          .getMany()
+      : [];
+    const mappingByProductId = new Map(mappings.map((m) => [m.product_id, m]));
+
+    return items.map((p) => {
+      const mapping = mappingByProductId.get(p.id);
+      return {
+        id: p.id,
+        name: p.name,
+        uom: p.uom,
+        stock: Number(p.stock),
+        averageCost: Number(p.averageCost),
+        sellPrice: Number(p.sellPrice),
+        isActive: p.is_active,
+        isPerishable: p.is_perishable,
+        warehouseId: p.warehouse_id ?? null,
+        productType: p.product_type,
+        mappingVersionId: mapping ? mapping.id : null,
+        insumoId: mapping ? mapping.insumo_id : null,
+        createdAt: p.created_at,
+        updatedAt: p.updated_at,
+        tenantId: p.tenant_id,
+      };
+    });
   }
 
   private async fetchCatalogValueDeltas(

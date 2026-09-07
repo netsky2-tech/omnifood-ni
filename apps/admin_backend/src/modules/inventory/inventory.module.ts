@@ -22,6 +22,8 @@ import { BcnFxRate } from './entities/bcn-fx-rate.entity';
 import { SystemParametersConfig } from './entities/system-parameters-config.entity';
 import { KardexRecalculateQueue } from './entities/kardex-recalculate-queue.entity';
 import { KardexCorrection } from './entities/kardex-correction.entity';
+import { ProductInventoryMappingVersion } from './entities/product-inventory-mapping-version.entity';
+import { ProductInventoryMappingService } from './services/product-inventory-mapping.service';
 import { InventoryService } from './inventory.service';
 import { PurchaseService } from './purchase.service';
 import { ShrinkageService } from './shrinkage.service';
@@ -83,6 +85,7 @@ import { AuditModule } from '../audit/audit.module';
       SystemParametersConfig,
       KardexRecalculateQueue,
       KardexCorrection,
+          ProductInventoryMappingVersion,
     ]),
   ],
   controllers: [
@@ -113,6 +116,7 @@ import { AuditModule } from '../audit/audit.module';
     UomConversionCalculator,
     FxRateResolverService,
     ProductService,
+    ProductInventoryMappingService,
     {
       provide: FORENSIC_ALERT_DISPATCHER,
       useValue: {
@@ -143,6 +147,7 @@ import { AuditModule } from '../audit/audit.module';
     KardexRegularizationService,
     UomConversionCalculator,
     ProductService,
+    ProductInventoryMappingService,
   ],
 })
 export class InventoryModule {}

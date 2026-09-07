@@ -1406,21 +1406,34 @@ class SyncService {
         // 1. Products
         final rawProducts =
             rawDeltas['products'] as List<dynamic>? ?? const [];
-        final productEntities = rawProducts.map((p) {
+        final productEntities = <ProductEntity>[];
+        for (final p in rawProducts) {
           final map = Map<String, dynamic>.from(p as Map);
-          return ProductEntity(
-            id: map['id'] as String,
+          final id = map['id'] as String;
+          final existing = await _database!.productDao.findProductById(id);
+          final rawType = map['productType'] as String?;
+          final pType = (rawType == 'COMPOUND' || rawType == 'PREPARED')
+              ? rawType!
+              : 'SIMPLE';
+          productEntities.add(ProductEntity(
+            id: id,
             name: map['name'] as String,
             uom: map['uom'] as String? ?? 'UND',
             stock: (map['stock'] as num?)?.toDouble() ?? 0.0,
             averageCost: (map['averageCost'] as num?)?.toDouble() ?? 0.0,
             sellPrice: (map['sellPrice'] as num?)?.toDouble() ?? 0.0,
             isActive: map['isActive'] as bool? ?? true,
-            isPrepared: false,
-            createdAt: map['createdAt']?.toString(),
-            tenantId: map['tenantId'] as String?,
-          );
-        }).toList(growable: false);
+            sku: map['sku'] as String? ?? existing?.sku,
+            barcode: map['barcode'] as String? ?? existing?.barcode,
+            category: map['category'] as String? ?? existing?.category,
+            isPrepared: pType == 'PREPARED' || pType == 'COMPOUND',
+            productType: pType,
+            mappingVersionId: map['mappingVersionId'] as String?,
+            insumoId: map['insumoId'] as String?,
+            createdAt: map['createdAt']?.toString() ?? existing?.createdAt,
+            tenantId: map['tenantId'] as String? ?? existing?.tenantId,
+          ));
+        }
 
         if (productEntities.isNotEmpty) {
           await _database!.productDao.insertProducts(productEntities);

@@ -17,12 +17,16 @@ class Product with _$Product {
     String? barcode,
     String? category,
     @Default(false) bool isPrepared,
+    @Default('SIMPLE') String productType,
+    String? mappingVersionId,
+    String? insumoId,
     String? createdAt,
     @Default([]) List<ProductVariant> variants,
     @Default([]) List<Modifier> availableModifiers,
   }) = _Product;
 
-  factory Product.fromJson(Map<String, dynamic> json) => _$ProductFromJson(json);
+  factory Product.fromJson(Map<String, dynamic> json) =>
+      _$ProductFromJson(json);
 }
 
 @freezed

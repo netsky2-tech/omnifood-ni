@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { InboundSyncService } from './inbound-sync.service';
-import { Product } from '../../inventory/entities/product.entity';
+import { Product, ProductType } from '../../inventory/entities/product.entity';
 import { CatalogValue } from '../../catalog/entities/catalog-value.entity';
 import { Insumo } from '../../inventory/entities/insumo.entity';
 import { Recipe } from '../../inventory/entities/recipe.entity';
@@ -153,6 +153,7 @@ describe('InboundSyncService', () => {
         is_active: true,
         is_perishable: true,
         warehouse_id: 'wh-1',
+            product_type: ProductType.SIMPLE,
         tenant_id: 'tenant-abc',
         created_at: new Date('2026-08-01T00:00:00Z'),
         updated_at: new Date('2026-08-02T00:00:00Z'),
@@ -208,6 +209,9 @@ describe('InboundSyncService', () => {
       isActive: true,
       isPerishable: true,
       warehouseId: 'wh-1',
+          productType: ProductType.SIMPLE,
+          mappingVersionId: null,
+          insumoId: null,
       tenantId: 'tenant-abc',
       createdAt: expect.any(Date) as Date,
       updatedAt: expect.any(Date) as Date,
@@ -265,7 +269,7 @@ describe('InboundSyncService', () => {
     await service.getInboundDeltas('tenant-abc', { since: sinceIso });
 
     expect(productQb.andWhere).toHaveBeenCalledWith(
-      'product.updated_at > :sinceDate',
+      expect.stringContaining('mapping_cursor'),
       { sinceDate: new Date(sinceIso) },
     );
     expect(catalogQb.andWhere).toHaveBeenCalledWith(
@@ -297,7 +301,7 @@ describe('InboundSyncService', () => {
     });
 
     expect(productQb.andWhere).toHaveBeenCalledWith(
-      'product.updated_at > :sinceDate',
+      expect.stringContaining('mapping_cursor'),
       { sinceDate: new Date(1787745600000) },
     );
   });
