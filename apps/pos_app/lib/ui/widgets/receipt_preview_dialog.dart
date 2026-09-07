@@ -14,7 +14,7 @@ import '../../domain/services/sales/invoice_fiscal_calculator.dart';
 ///
 /// Features:
 /// - Monospace visual fidelity to the printed ticket
-/// - Dynamic toggle between 58mm (32 cols) and 80mm (48 cols)
+/// - Dynamic toggle between 58mm (32 cols) and 80mm (44 cols)
 /// - Dynamic toggle between Régimen General and Cuota Fija
 /// - Sample fiscal sale or custom [Invoice] preview
 /// - Direct print action via [PrinterPort] (optional)
@@ -211,7 +211,7 @@ class _ReceiptPreviewDialogState extends State<ReceiptPreviewDialog> {
                       ),
                       ButtonSegment(
                         value: 80,
-                        label: Text('80 mm (48 col)'),
+                        label: Text('80 mm (44 col)'),
                       ),
                     ],
                     selected: {_paperWidthMm},

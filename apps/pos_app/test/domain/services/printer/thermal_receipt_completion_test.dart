@@ -54,15 +54,19 @@ void main() {
       for (final amount in amounts) {
         final money = ReceiptLayoutFormatter.formatMoney(amount);
         final normal = formatter.formatItemRow(quantity: 1, name: 'Producto normal', unitPrice: amount, total: amount);
-        expect(normal.first.lastIndexOf(money) + money.length, 48);
+        expect(normal.every((line) => line.length <= 44), isTrue);
+        expect(normal.join('\n'), contains(money));
+        if (normal.length == 1) {
+          expect(normal.single.lastIndexOf(money) + money.length, 44);
+        }
         for (final quantity in quantities) {
           final rows = formatter.formatItemRow(quantity: quantity, name: 'Descripción larga con varios modificadores', unitPrice: amount, total: amount);
-          expect(rows.every((line) => line.length <= 48), isTrue);
+          expect(rows.every((line) => line.length <= 44), isTrue);
           expect(rows.join('\n'), contains(money));
         }
       }
       final fallback = formatter.formatItemRow(quantity: 1000000000, name: 'Descripción extraordinariamente larga para fallback', unitPrice: 999999999999999.99, total: 999999999999999.99);
-      expect(fallback.every((line) => line.length <= 48), isTrue);
+      expect(fallback.every((line) => line.length <= 44), isTrue);
       expect(fallback.join('\n'), contains('1000000000'));
       expect(fallback.join('\n'), contains('C\$ 1,000,000,000,000,000.00'));
     });

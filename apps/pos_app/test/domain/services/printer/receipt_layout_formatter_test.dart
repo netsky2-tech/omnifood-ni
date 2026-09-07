@@ -51,9 +51,9 @@ void main() {
       expect(formatter.maxImageHeight, 160);
     });
 
-    test('80mm mode sets maxCols to 48 and maxImageWidth to 576', () {
+    test('80mm mode sets maxCols to the verified 44-column limit and maxImageWidth to 576', () {
       final formatter = ReceiptLayoutFormatter.format80mm();
-      expect(formatter.maxCols, 48);
+      expect(formatter.maxCols, 44);
       expect(formatter.maxImageWidth, 576);
       expect(formatter.maxImageHeight, 160);
     });
@@ -64,8 +64,8 @@ void main() {
       expect(f58.drawLine('-').length, 32);
 
       final f80 = ReceiptLayoutFormatter.format80mm();
-      expect(f80.drawLine('=').length, 48);
-      expect(f80.drawLine('-').length, 48);
+      expect(f80.drawLine('=').length, 44);
+      expect(f80.drawLine('-').length, 44);
     });
 
     test('normalizes decomposed Spanish, web punctuation, and unsupported glyphs before width calculations', () {
@@ -98,7 +98,7 @@ void main() {
       expect(rows[1].endsWith('C\$ 150.00'), isTrue);
     });
 
-    test('formatItemRow() 80mm formats single grid row with 48 columns', () {
+    test('formatItemRow() 80mm formats a single 44-column grid row', () {
       final f80 = ReceiptLayoutFormatter.format80mm();
       final rows = f80.formatItemRow(
         quantity: 1,
@@ -107,7 +107,7 @@ void main() {
         total: 200.0,
       );
       expect(rows.length, 1);
-      expect(rows[0].length, 48);
+      expect(rows[0].length, 44);
       expect(rows[0].endsWith('C\$ 200.00'), isTrue);
     });
   });
@@ -233,7 +233,7 @@ void main() {
     test('long cashier name fits on a single line on 80mm', () {
       final lines = f80.formatKeyValue('Atendido por:', 'Founder Pilot Owner');
       expect(lines.length, 1);
-      expect(lines[0].length, 48);
+      expect(lines[0].length, 44);
       expect(lines[0].endsWith('Founder Pilot Owner'), isTrue);
     });
   });
@@ -281,7 +281,7 @@ void main() {
       expect(rows.last.endsWith('C\$ 2,790.00'), isTrue);
     });
 
-    test('80mm: 4-column tabular grid with CANT(5), DESCRIPCION(22), P.UNIT(10), TOTAL(11)', () {
+    test('80mm: 4-column tabular grid with CANT(5), DESCRIPCION(18), P.UNIT(10), TOTAL(11)', () {
       final rows = f80.formatItemRow(
         quantity: 2,
         name: 'Croissant',
@@ -289,7 +289,7 @@ void main() {
         total: 130.0,
       );
       expect(rows.length, 1);
-      expect(rows[0].length, 48);
+      expect(rows[0].length, 44);
       expect(rows[0].startsWith('2    Croissant'), isTrue);
       expect(rows[0].endsWith('C\$ 130.00'), isTrue);
     });
@@ -303,7 +303,7 @@ void main() {
       );
       expect(rows.length, greaterThan(1));
       for (final r in rows) {
-        expect(r.length, 48);
+        expect(r.length, 44);
       }
       // First line has quantity, first chunk of name, unit price and total
       expect(rows[0].endsWith('C\$ 380.00'), isTrue);
@@ -311,14 +311,14 @@ void main() {
       expect(rows[1].startsWith('    '), isTrue);
     });
 
-    test('80mm: Amounts in thousands (e.g. C\$ 1,234.50) format without breaking 48 columns', () {
+    test('80mm: Amounts in thousands (e.g. C\$ 1,234.50) format without breaking 44 columns', () {
       final rows = f80.formatItemRow(
         quantity: 10,
         name: 'Banquete Corporativo',
         unitPrice: 1250.0,
         total: 12500.0,
       );
-      expect(rows[0].length, 48);
+      expect(rows[0].length, 44);
       expect(rows[0].endsWith('C\$ 12,500.00'), isTrue);
     });
 
@@ -331,7 +331,7 @@ void main() {
       );
 
       expect(rows, isNotEmpty);
-      expect(rows.every((row) => row.length <= 48), isTrue);
+      expect(rows.every((row) => row.length <= 44), isTrue);
       expect(rows.join('\n'), contains('C\$ 1,000,000,000,000,000.00'));
       expect(rows.last.endsWith('C\$ 1,000,000,000,000,000.00'), isTrue);
     });
@@ -361,9 +361,9 @@ void main() {
         total: amount,
       );
 
-      expect(rows.every((line) => line.length <= 48), isTrue);
+      expect(rows.every((line) => line.length <= 44), isTrue);
       expect(rows.join().replaceAll('\n', ''), contains(expected.substring(3)));
-      expect(rows.join('\n').split('\n').every((line) => line.length <= 48), isTrue);
+      expect(rows.join('\n').split('\n').every((line) => line.length <= 44), isTrue);
     });
 
     test('item columns sanitize control characters into deterministic inline whitespace', () {
@@ -501,7 +501,7 @@ void main() {
       expect(ticket, contains('*** GRACIAS POR SU COMPRA ***'));
     });
 
-    test('80mm full ticket: every line is strictly <= 48 characters and exploits 4-column layout', () {
+    test('80mm full ticket: every line is strictly <= 44 characters and exploits 4-column layout', () {
       final f80 = ReceiptLayoutFormatter.format80mm();
       final ticket = f80.formatInvoiceText(
         sampleInvoice,
@@ -524,8 +524,8 @@ void main() {
         final clean = line.replaceAll('\r', '');
         expect(
           clean.length,
-          lessThanOrEqualTo(48),
-          reason: 'Line exceeds 48 chars in 80mm: "$clean" (len: ${clean.length})',
+          lessThanOrEqualTo(44),
+          reason: 'Line exceeds 44 chars in 80mm: "$clean" (len: ${clean.length})',
         );
       }
 
@@ -572,6 +572,76 @@ void main() {
         payments: samplePayments,
       );
       expect(ticketWithoutDiscount, isNot(contains('DESCUENTO:')));
+    });
+
+    test('discount presentation uses the authoritative gross, discount, and net values', () {
+      final document = ReceiptDocument(
+        businessName: 'Prueba',
+        taxRegime: TaxRegime.regimenGeneral,
+        documentTitle: 'FACTURA',
+        documentNumber: '1',
+        date: DateTime(2026),
+        lines: const [
+          ReceiptLine(
+            quantity: 1,
+            description: 'Producto con descuento',
+            unitPrice: 200,
+            grossAmount: 200,
+            discount: 20,
+            taxableBase: 180,
+            lineSubtotal: 180,
+            taxAmount: 27,
+            lineTotal: 207,
+          ),
+        ],
+        grossSubtotal: 200,
+        subtotal: 180,
+        discountTotal: 20,
+        totalTax: 27,
+        total: 207,
+        totalUsd: 0,
+      );
+
+      final ticket = ReceiptLayoutFormatter.format80mm().formatReceiptDocumentText(document);
+
+      expect(ticket, contains('C\$ 200.00'));
+      expect(ticket, contains('- Descuento:'));
+      expect(ticket, contains('Neto:'));
+      expect(ticket, contains('SUBTOTAL BRUTO:'));
+      expect(ticket, contains('DESCUENTO:'));
+      expect(ticket, contains('SUBTOTAL NETO:'));
+      expect(ticket, contains('C\$ 180.00'));
+      expect(ticket, contains('C\$ 207.00'));
+      expect(ticket.split('\n').every((line) => line.length <= 44), isTrue);
+    });
+
+    test('card payments omit pending placeholders and retain real references', () {
+      final pending = ReceiptPayment.fromPayment(const Payment(
+        id: 'pending',
+        invoiceId: '1',
+        method: PaymentMethod.card,
+        amount: 10,
+        voucherCode: 'PENDIENTE',
+      ));
+      final lastFour = ReceiptPayment.fromPayment(const Payment(
+        id: 'last-four',
+        invoiceId: '1',
+        method: PaymentMethod.card,
+        amount: 10,
+        last4: '1234',
+      ));
+      final real = ReceiptPayment.fromPayment(const Payment(
+        id: 'real',
+        invoiceId: '1',
+        method: PaymentMethod.card,
+        amount: 10,
+        voucherCode: ' AUTH-42 ',
+        last4: '9876',
+      ));
+
+      expect(pending.reference, isNull);
+      expect(lastFour.reference, '****1234');
+      expect(real.reference, 'AUTH-42 (****9876)');
     });
 
     test('USD FX section is omitted when commercialRate is 0', () {

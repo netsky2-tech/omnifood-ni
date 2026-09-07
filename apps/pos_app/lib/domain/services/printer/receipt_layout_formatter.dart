@@ -4,7 +4,7 @@ import 'esc_pos_builder.dart';
 import 'receipt_layout_metrics.dart';
 import 'printable_text_codec.dart';
 
-/// Highly modular, robust layout engine and ticket generator for 58mm (32 cols) and 80mm (48 cols)
+/// Highly modular, robust layout engine and ticket generator for 58mm (32 cols) and 80mm (44 cols)
 /// thermal printers. Strictly adheres to Nicaraguan tax laws (DGI Disposición Técnica 09-2007 & Ley 822).
 ///
 /// Principles:
@@ -28,7 +28,7 @@ class ReceiptLayoutFormatter {
         ReceiptLayoutMetrics.mm58(),
       );
 
-  /// 80mm Thermal Printer Mode (48 columns, max 576px image width)
+  /// 80mm Thermal Printer Mode (44 columns, max 576px image width)
   factory ReceiptLayoutFormatter.format80mm() => ReceiptLayoutFormatter(
         ReceiptLayoutMetrics.mm80(),
       );
@@ -133,8 +133,8 @@ class ReceiptLayoutFormatter {
   /// - 58mm Mode (32 cols):
   ///   Line 1: "$qty x $name" (wrapped with 4-space hanging indent if long)
   ///   Line 2: "  @ C$ $unitPrice" (left) ... "C$ $total" (right)
-  /// - 80mm Mode (48 cols):
-  ///   Tabular grid: CANT (4) | DESCRIPCION (flexible) | P.UNIT (>=10) | TOTAL (>=11) = 48 cols
+  /// - 80mm Mode (44 cols):
+  ///   Tabular grid: CANT (5) | DESCRIPCION (18) | P.UNIT (10) | TOTAL (11) = 44 cols
   List<String> formatItemRow({
     required double quantity,
     required String name,
@@ -164,8 +164,8 @@ class ReceiptLayoutFormatter {
       return lines;
     } else {
       // ==========================================
-      // 80mm Mode (48 cols) - 4-column tabular grid
-      // CANT (4) + DESCRIPCION (flexible) + P.UNIT (>=10) + TOTAL (>=11) = 48 cols
+      // 80mm Mode (44 cols) - 4-column tabular grid
+      // CANT (5) + DESCRIPCION (18) + P.UNIT (10) + TOTAL (11) = 44 cols
       // ==========================================
       final actualQtyWidth = qtyStr.length > metrics.qtyWidth
           ? qtyStr.length + 1
@@ -362,11 +362,15 @@ class ReceiptLayoutFormatter {
 
     // 4. ITEMS BREAKDOWN
     for (final line in doc.lines) {
+      final hasLineDiscount = line.discount > 0;
+      final displayLineTotal = hasLineDiscount && line.grossAmount > 0
+          ? line.grossAmount
+          : line.lineSubtotal;
       final rowLines = formatItemRow(
         quantity: line.quantity,
         name: line.description,
         unitPrice: line.unitPrice,
-        total: line.lineSubtotal,
+        total: displayLineTotal,
       );
       for (final r in rowLines) {
         buffer.writeln(r);
@@ -380,8 +384,9 @@ class ReceiptLayoutFormatter {
           buffer.writeln(mLine);
         }
       }
-      if (line.discount > 0) {
-        buffer.writeln('  - Desc: ${formatMoney(line.discount)}');
+      if (hasLineDiscount) {
+        buffer.writeln(formatTwoColumns('  - Descuento:', formatMoney(line.discount)));
+        buffer.writeln(formatTwoColumns('  Neto:', formatMoney(line.lineSubtotal)));
       }
       if (line.notes != null && line.notes!.isNotEmpty) {
         for (final noteLine in wrap('  * ${line.notes!}', metrics.contentWidth, '    ')) {
@@ -393,11 +398,19 @@ class ReceiptLayoutFormatter {
     buffer.writeln(divider('-'));
 
     // 5. TOTALS & TAX COMPLIANCE (Ley 822 / DGI)
+    final hasDiscount = doc.discountTotal > 0;
+    final displayGrossSubtotal = hasDiscount && doc.grossSubtotal > 0
+        ? doc.grossSubtotal
+        : (hasDiscount ? (doc.subtotal + doc.discountTotal) : doc.subtotal);
+
     if (doc.taxRegime.isCuotaFija) {
       // Cuota Fija: Subtotal & Total. Never print IVA (15%): C$ 0.00 or VENTA EXENTA.
-      buffer.writeln(formatTwoColumns('SUBTOTAL:', formatMoney(doc.subtotal)));
-      if (doc.discountTotal > 0) {
+      if (hasDiscount) {
+        buffer.writeln(formatTwoColumns('SUBTOTAL BRUTO:', formatMoney(displayGrossSubtotal)));
         buffer.writeln(formatTwoColumns('DESCUENTO:', formatMoney(doc.discountTotal)));
+        buffer.writeln(formatTwoColumns('SUBTOTAL NETO:', formatMoney(doc.subtotal)));
+      } else {
+        buffer.writeln(formatTwoColumns('SUBTOTAL:', formatMoney(doc.subtotal)));
       }
       buffer.writeln(doubleDivider());
       buffer.writeln(formatTwoColumns('TOTAL CORDOBAS:', formatMoney(doc.total)));
@@ -405,7 +418,13 @@ class ReceiptLayoutFormatter {
     } else {
       // Régimen General: Disclose Subtotal, applicable exemptions, IVA, and Total
       if (doc.isTaxExempt || doc.globalTaxOverride) {
-        buffer.writeln(formatTwoColumns('SUBTOTAL:', formatMoney(doc.subtotal)));
+        if (hasDiscount) {
+          buffer.writeln(formatTwoColumns('SUBTOTAL BRUTO:', formatMoney(displayGrossSubtotal)));
+          buffer.writeln(formatTwoColumns('DESCUENTO:', formatMoney(doc.discountTotal)));
+          buffer.writeln(formatTwoColumns('SUBTOTAL NETO:', formatMoney(doc.subtotal)));
+        } else {
+          buffer.writeln(formatTwoColumns('SUBTOTAL:', formatMoney(doc.subtotal)));
+        }
         buffer.writeln(formatTwoColumns('VENTA EXENTA (IVA 0%):', formatMoney(0.00)));
         buffer.writeln(doubleDivider());
         buffer.writeln(formatTwoColumns('TOTAL CORDOBAS:', formatMoney(doc.total)));
@@ -414,9 +433,12 @@ class ReceiptLayoutFormatter {
           buffer.writeln(line);
         }
       } else {
-        buffer.writeln(formatTwoColumns('SUBTOTAL:', formatMoney(doc.subtotal)));
-        if (doc.discountTotal > 0) {
+        if (hasDiscount) {
+          buffer.writeln(formatTwoColumns('SUBTOTAL BRUTO:', formatMoney(displayGrossSubtotal)));
           buffer.writeln(formatTwoColumns('DESCUENTO:', formatMoney(doc.discountTotal)));
+          buffer.writeln(formatTwoColumns('SUBTOTAL NETO:', formatMoney(doc.subtotal)));
+        } else {
+          buffer.writeln(formatTwoColumns('SUBTOTAL:', formatMoney(doc.subtotal)));
         }
         if (doc.exemptSubtotal > 0) {
           buffer.writeln(formatTwoColumns('VENTA EXENTA:', formatMoney(doc.exemptSubtotal)));
@@ -574,11 +596,15 @@ class ReceiptLayoutFormatter {
 
     // Items Body
     for (final line in doc.lines) {
+      final hasLineDiscount = line.discount > 0;
+      final displayLineTotal = hasLineDiscount && line.grossAmount > 0
+          ? line.grossAmount
+          : line.lineSubtotal;
       final rowLines = formatItemRow(
         quantity: line.quantity,
         name: line.description,
         unitPrice: line.unitPrice,
-        total: line.lineSubtotal,
+        total: displayLineTotal,
       );
       for (final r in rowLines) {
         builder.textLine(r);
@@ -592,8 +618,9 @@ class ReceiptLayoutFormatter {
           builder.textLine(mLine);
         }
       }
-      if (line.discount > 0) {
-        builder.textLine('  - Desc: ${formatMoney(line.discount)}');
+      if (hasLineDiscount) {
+        builder.textLine(formatTwoColumns('  - Descuento:', formatMoney(line.discount)));
+        builder.textLine(formatTwoColumns('  Neto:', formatMoney(line.lineSubtotal)));
       }
       if (line.notes != null && line.notes!.isNotEmpty) {
         for (final noteLine in wrap('  * ${line.notes!}', metrics.contentWidth, '    ')) {
@@ -605,10 +632,18 @@ class ReceiptLayoutFormatter {
     builder.textLine(divider('-'));
 
     // 5. Totals & Tax Compliance (Ley 822 / DGI)
+    final hasDiscountEsc = doc.discountTotal > 0;
+    final displayGrossSubtotalEsc = hasDiscountEsc && doc.grossSubtotal > 0
+        ? doc.grossSubtotal
+        : (hasDiscountEsc ? (doc.subtotal + doc.discountTotal) : doc.subtotal);
+
     if (doc.taxRegime.isCuotaFija) {
-      builder.textLine(formatTwoColumns('SUBTOTAL:', formatMoney(doc.subtotal)));
-      if (doc.discountTotal > 0) {
+      if (hasDiscountEsc) {
+        builder.textLine(formatTwoColumns('SUBTOTAL BRUTO:', formatMoney(displayGrossSubtotalEsc)));
         builder.textLine(formatTwoColumns('DESCUENTO:', formatMoney(doc.discountTotal)));
+        builder.textLine(formatTwoColumns('SUBTOTAL NETO:', formatMoney(doc.subtotal)));
+      } else {
+        builder.textLine(formatTwoColumns('SUBTOTAL:', formatMoney(doc.subtotal)));
       }
       builder
           .textLine(doubleDivider())
@@ -618,8 +653,14 @@ class ReceiptLayoutFormatter {
           .textLine(doubleDivider());
     } else {
       if (doc.isTaxExempt || doc.globalTaxOverride) {
+        if (hasDiscountEsc) {
+          builder.textLine(formatTwoColumns('SUBTOTAL BRUTO:', formatMoney(displayGrossSubtotalEsc)));
+          builder.textLine(formatTwoColumns('DESCUENTO:', formatMoney(doc.discountTotal)));
+          builder.textLine(formatTwoColumns('SUBTOTAL NETO:', formatMoney(doc.subtotal)));
+        } else {
+          builder.textLine(formatTwoColumns('SUBTOTAL:', formatMoney(doc.subtotal)));
+        }
         builder
-            .textLine(formatTwoColumns('SUBTOTAL:', formatMoney(doc.subtotal)))
             .textLine(formatTwoColumns('VENTA EXENTA (IVA 0%):', formatMoney(0.00)))
             .textLine(doubleDivider())
             .bold(true)
@@ -632,9 +673,12 @@ class ReceiptLayoutFormatter {
         }
         builder.align(EscPosAlign.left);
       } else {
-        builder.textLine(formatTwoColumns('SUBTOTAL:', formatMoney(doc.subtotal)));
-        if (doc.discountTotal > 0) {
+        if (hasDiscountEsc) {
+          builder.textLine(formatTwoColumns('SUBTOTAL BRUTO:', formatMoney(displayGrossSubtotalEsc)));
           builder.textLine(formatTwoColumns('DESCUENTO:', formatMoney(doc.discountTotal)));
+          builder.textLine(formatTwoColumns('SUBTOTAL NETO:', formatMoney(doc.subtotal)));
+        } else {
+          builder.textLine(formatTwoColumns('SUBTOTAL:', formatMoney(doc.subtotal)));
         }
         if (doc.exemptSubtotal > 0) {
           builder.textLine(formatTwoColumns('VENTA EXENTA:', formatMoney(doc.exemptSubtotal)));

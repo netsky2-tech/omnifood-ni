@@ -164,7 +164,7 @@ class HardwareSettingsView extends StatelessWidget {
                             ),
                             ButtonSegment(
                               value: 80,
-                              label: Text('80 mm (48 columnas)'),
+                              label: Text('80 mm (44 columnas)'),
                             ),
                           ],
                           selected: {config.paperWidthMm},

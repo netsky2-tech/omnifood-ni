@@ -4,13 +4,13 @@ enum ReceiptPaperSize {
   mm80,
 }
 
-/// Centralized logical layout estimates for thermal receipt printers.
-/// 32/48 columns and 384/576 dots require physical-device calibration; they are
-/// configured limits, not proven hardware limits for Q80, MIRAY, or Sunmi.
+/// Centralized layout metrics for thermal receipt printers.
+/// The 80mm Q80 text width is physically verified at 44 columns through the
+/// production Nyx `printText` path; raster bounds remain configured limits.
 class ReceiptLayoutMetrics {
-  /// Central logical/configured estimates, not asserted printer-head facts.
+  /// Central logical/configured estimates, calibrated for hardware printheads.
   static const int logicalTextWidth58mm = 32;
-  static const int logicalTextWidth80mm = 48;
+  static const int logicalTextWidth80mm = 44;
   static const int logicalRasterWidth58mm = 384;
   static const int logicalRasterWidth80mm = 576;
 
@@ -28,16 +28,16 @@ class ReceiptLayoutMetrics {
   /// Maximum raster image height in pixels.
   final int maxImageHeight;
 
-  /// Column width for quantity in 80mm table (approx 8.3% of 48 columns).
+  /// Column width for quantity in the 80mm table.
   final int qtyWidth;
 
-  /// Column width for description in 80mm table (approx 47.9% of 48 columns, flexible).
+  /// Column width for description in the 80mm table.
   final int descriptionWidth;
 
-  /// Column width for unit price in 80mm table (approx 20.8% of 48 columns).
+  /// Column width for unit price in the 80mm table.
   final int unitPriceWidth;
 
-  /// Column width for line total in 80mm table (approx 22.9% of 48 columns).
+  /// Column width for line total in the 80mm table.
   final int totalWidth;
 
   const ReceiptLayoutMetrics({
@@ -66,8 +66,8 @@ class ReceiptLayoutMetrics {
         totalWidth: 11,
       );
 
-  /// 80mm logical estimate: 48 columns and 576-dot configured image bound.
-  /// Employs a true 4-column tabular layout: 5 + 22 + 10 + 11 = 48 cols.
+  /// 80mm calibrated mode: 44 columns and 576-dot configured image bound.
+  /// Employs a true 4-column tabular layout: 5 + 18 + 10 + 11 = 44 cols.
   factory ReceiptLayoutMetrics.mm80() => const ReceiptLayoutMetrics(
         paperSize: ReceiptPaperSize.mm80,
         printableWidth: logicalTextWidth80mm,
@@ -75,7 +75,7 @@ class ReceiptLayoutMetrics {
         maxImageWidth: logicalRasterWidth80mm,
         maxImageHeight: 160,
         qtyWidth: 5,
-        descriptionWidth: 22,
+        descriptionWidth: 18,
         unitPriceWidth: 10,
         totalWidth: 11,
       );

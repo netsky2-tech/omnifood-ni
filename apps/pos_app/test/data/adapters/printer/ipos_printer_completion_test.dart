@@ -60,7 +60,7 @@ void main() {
     final wide = await adapter.printInvoice(invoice, items: [item], payments: const <Payment>[], taxRegime: TaxRegime.regimenGeneral, paperWidthMm: 80);
     final narrowAgain = await adapter.printInvoice(invoice, items: [item], payments: const <Payment>[], taxRegime: TaxRegime.regimenGeneral, paperWidthMm: 79);
     expect(narrow.printedText!.split('\n').every((line) => line.length <= 32), isTrue);
-    expect(wide.printedText!.split('\n').every((line) => line.length <= 48), isTrue);
+    expect(wide.printedText!.split('\n').every((line) => line.length <= 44), isTrue);
     expect(narrowAgain.printedText!.split('\n').every((line) => line.length <= 32), isTrue);
     final printWidths = calls
         .where((call) => call.method == 'printText')

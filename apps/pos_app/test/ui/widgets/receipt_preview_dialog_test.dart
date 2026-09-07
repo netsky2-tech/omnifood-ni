@@ -97,10 +97,10 @@ void main() {
       expect(find.textContaining('58 mm (32 columnas)'), findsOneWidget);
 
       // Switch to 80mm
-      await tester.tap(find.text('80 mm (48 col)'));
+      await tester.tap(find.text('80 mm (44 col)'));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('80 mm (48 columnas)'), findsOneWidget);
+      expect(find.textContaining('80 mm (44 columnas)'), findsOneWidget);
     });
 
     testWidgets('toggling regime switches between Cuota Fija and Régimen General', (tester) async {

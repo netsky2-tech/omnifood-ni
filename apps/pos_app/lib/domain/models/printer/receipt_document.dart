@@ -149,9 +149,19 @@ class ReceiptPayment {
         final brand = p.cardBrand ?? 'TARJETA';
         final bank = p.bankPos != null ? ' (${p.bankPos})' : '';
         label = '$brand$bank';
-        final voucher = p.voucherCode ?? 'PENDIENTE';
-        final last4 = p.last4 != null ? ' (****${p.last4})' : '';
-        ref = '$voucher$last4';
+        final hasVoucher = p.voucherCode != null &&
+            p.voucherCode!.trim().isNotEmpty &&
+            p.voucherCode!.trim().toUpperCase() != 'PENDIENTE';
+        final hasLast4 = p.last4 != null && p.last4!.trim().isNotEmpty;
+        if (hasVoucher && hasLast4) {
+          ref = '${p.voucherCode!.trim()} (****${p.last4!.trim()})';
+        } else if (hasVoucher) {
+          ref = p.voucherCode!.trim();
+        } else if (hasLast4) {
+          ref = '****${p.last4!.trim()}';
+        } else {
+          ref = null;
+        }
         break;
       case PaymentMethod.qr:
         label = 'Transferencia / QR';
@@ -193,6 +203,7 @@ class ReceiptDocument {
 
   final List<ReceiptLine> lines;
 
+  final double grossSubtotal;
   final double subtotal;
   final double discountTotal;
   final double exemptSubtotal;
@@ -226,6 +237,7 @@ class ReceiptDocument {
     this.customerRuc,
     this.originInvoiceId,
     required this.lines,
+    double? grossSubtotal,
     required this.subtotal,
     this.discountTotal = 0.0,
     this.exemptSubtotal = 0.0,
@@ -240,7 +252,7 @@ class ReceiptDocument {
     this.logoRasterBytes,
     this.isTaxExempt = false,
     this.globalTaxOverride = false,
-  });
+  }) : grossSubtotal = grossSubtotal ?? (discountTotal > 0 ? (subtotal + discountTotal) : subtotal);
 
   bool get isCuotaFija => taxRegime.isCuotaFija;
   bool get isGlobalTaxExempt => isTaxExempt || globalTaxOverride;
@@ -262,6 +274,7 @@ class ReceiptDocument {
         customerRuc: customerRuc,
         originInvoiceId: originInvoiceId,
         lines: lines,
+        grossSubtotal: grossSubtotal,
         subtotal: subtotal,
         discountTotal: discountTotal,
         exemptSubtotal: exemptSubtotal,
@@ -303,6 +316,7 @@ class ReceiptDocument {
         .map((item) => ReceiptLine.fromInvoiceItem(item, taxRegime: taxRegime))
         .toList();
 
+    double computedGross = 0.0;
     double computedSubtotal = 0.0;
     double computedDiscount = 0.0;
     double computedExempt = 0.0;
@@ -310,6 +324,7 @@ class ReceiptDocument {
     double computedTax = 0.0;
 
     for (final line in receiptLines) {
+      computedGross += line.grossAmount;
       computedSubtotal += line.lineSubtotal;
       computedDiscount += line.discount;
       if (taxRegime.isRegimenGeneral) {
@@ -372,6 +387,7 @@ class ReceiptDocument {
           : null,
       originInvoiceId: invoice.originInvoiceId,
       lines: receiptLines,
+      grossSubtotal: computedGross > 0 ? computedGross : (effectiveSubtotal + computedDiscount),
       subtotal: effectiveSubtotal,
       discountTotal: computedDiscount,
       exemptSubtotal: computedExempt,

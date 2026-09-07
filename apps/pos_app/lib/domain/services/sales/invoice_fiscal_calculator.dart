@@ -384,6 +384,7 @@ class InvoiceFiscalCalculator {
       customerName: customerName,
       customerRuc: customerRuc,
       lines: receiptLines,
+      grossSubtotal: calculation.grossSubtotal,
       subtotal: calculation.subtotal,
       discountTotal: calculation.totalDiscount,
       exemptSubtotal: calculation.exemptSubtotal,

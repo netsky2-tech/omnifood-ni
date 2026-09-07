@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:pos_app/domain/models/config/printer_config.dart';
+import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'package:pos_app/domain/ports/printer_port.dart';
 import 'package:pos_app/domain/services/config/printer_config_service.dart';
 import 'package:pos_app/ui/features/config/hardware/hardware_settings_view.dart';
@@ -31,6 +32,7 @@ void main() {
         openDrawerOnCash: true,
         paperWidthMm: 58,
         headerBusinessName: 'NHILOS POS HW Test',
+        taxRegime: 'REGIMEN_GENERAL',
       ),
     );
 
@@ -39,6 +41,7 @@ void main() {
       any,
       items: anyNamed('items'),
       payments: anyNamed('payments'),
+      taxRegime: TaxRegime.regimenGeneral,
       businessName: anyNamed('businessName'),
       ruc: anyNamed('ruc'),
     )).thenAnswer((_) async => PrinterResult.success());
@@ -91,6 +94,7 @@ void main() {
         any,
         items: anyNamed('items'),
         payments: anyNamed('payments'),
+        taxRegime: TaxRegime.regimenGeneral,
         businessName: anyNamed('businessName'),
         ruc: anyNamed('ruc'),
       )).called(1);
