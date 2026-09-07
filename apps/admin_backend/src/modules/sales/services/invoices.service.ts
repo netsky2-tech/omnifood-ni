@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { createHash, randomUUID } from 'crypto';
@@ -1475,11 +1475,21 @@ export class InvoicesService {
     for (const item of invoice.items ?? []) {
       const recipeVersionId = item.recipeVersionId ?? recordRecipeVersionId;
       if (!recipeVersionId) continue;
-      await this.recipeService.getSnapshot(
-        recipeVersionId,
-        tenantId,
-        item.productId,
-      );
+      try {
+        await this.recipeService.getSnapshot(
+          recipeVersionId,
+          tenantId,
+          item.productId,
+        );
+      } catch (error) {
+        if (error instanceof NotFoundException) {
+          this.logger.warn(
+            `[RECIPE-SKIP] recipeVersionId=${recipeVersionId} productId=${item.productId} — not found in backend; sale will sync without BOM validation`,
+          );
+          continue;
+        }
+        throw error;
+      }
     }
   }
 
