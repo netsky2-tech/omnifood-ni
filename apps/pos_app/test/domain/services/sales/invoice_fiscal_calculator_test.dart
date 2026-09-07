@@ -123,6 +123,32 @@ void main() {
       expect(doc.changeGiven, equals(2.50));
     });
 
+    test('buildReceiptDocument carries authoritative cart modifier presentation without changing fiscal totals', () {
+      final cart = [
+        const CartItem(
+          productId: 'mod-1',
+          productName: 'Hamburguesa',
+          quantity: 2,
+          unitPrice: 100,
+          taxRate: 0.15,
+          selectedModifiers: [Modifier(id: 'cheese', name: 'Queso extra', extraPrice: 15)],
+        ),
+      ];
+      final calculation = calculator.calculate(cart: cart, taxRegime: TaxRegime.regimenGeneral);
+      final document = calculator.buildReceiptDocument(
+        calculation: calculation,
+        sourceCart: cart,
+        invoiceNumber: '001-001-01-00000102',
+      );
+      final text = ReceiptLayoutFormatter.format80mm().formatReceiptDocumentText(document);
+
+      expect(document.lines.single.lineSubtotal, 230); // (100 + 15) x 2
+      expect(document.lines.single.modifierDisplays.single.printableText, 'Queso extra (por unidad: C\$ 15.00)');
+      expect(text, contains('Queso extra (por unidad: C\$ 15.00)'));
+      expect(document.subtotal, calculation.subtotal);
+      expect(document.total, calculation.total);
+    });
+
     // -------------------------------------------------------------------------
     // CAMBIO DINÁMICO DE CLASIFICACIÓN DGI: 115.00 -> 100.00
     // -------------------------------------------------------------------------

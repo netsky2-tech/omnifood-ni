@@ -8,6 +8,40 @@ import 'package:pos_app/domain/models/sales/payment.dart';
 import 'package:pos_app/domain/services/printer/receipt_layout_formatter.dart';
 import 'package:pos_app/domain/services/printer/receipt_layout_metrics.dart';
 
+extension ReceiptLayoutFormatterInvoiceTestAdapter on ReceiptLayoutFormatter {
+  String formatInvoiceText(
+    Invoice invoice, {
+    required List<InvoiceItem> items,
+    required List<Payment> payments,
+    String? businessName,
+    String? legalName,
+    String? ruc,
+    String? address,
+    String? phone,
+    String? cashierName,
+    String? customerName,
+    String? customerRuc,
+    TaxRegime taxRegime = TaxRegime.regimenGeneral,
+    bool isTaxExempt = false,
+    String? footerMessage,
+  }) => formatReceiptDocumentText(ReceiptDocument.fromInvoice(
+        invoice,
+        items: items,
+        payments: payments,
+        businessName: businessName,
+        legalName: legalName,
+        ruc: ruc,
+        address: address,
+        phone: phone,
+        cashierName: cashierName,
+        customerName: customerName,
+        customerRuc: customerRuc,
+        taxRegime: taxRegime,
+        isTaxExempt: isTaxExempt,
+        footerMessage: footerMessage,
+      ));
+}
+
 void main() {
   group('ReceiptLayoutFormatter Helpers & Dimensions', () {
     test('58mm mode sets maxCols to 32 and maxImageWidth to 384', () {
@@ -32,6 +66,14 @@ void main() {
       final f80 = ReceiptLayoutFormatter.format80mm();
       expect(f80.drawLine('=').length, 48);
       expect(f80.drawLine('-').length, 48);
+    });
+
+    test('normalizes decomposed Spanish, web punctuation, and unsupported glyphs before width calculations', () {
+      final f58 = ReceiptLayoutFormatter.format58mm();
+      final normalized = f58.normalizePrintableText('Cafe\u0301 — “menu” 😀 中文');
+      expect(normalized, 'Café - "menu" ? ??');
+      expect(normalized.codeUnits.every((unit) => unit <= 0xFF), isTrue);
+      expect(f58.wrap(normalized).every((line) => line.length <= 32), isTrue);
     });
 
     test('formatTwoColumns() aligns amounts strictly to the right', () {
@@ -79,6 +121,61 @@ void main() {
       expect(ReceiptLayoutFormatter.formatMoney(99999.99), 'C\$ 99,999.99');
       expect(ReceiptLayoutFormatter.formatMoney(3.01, symbol: '\$'), '\$ 3.01');
       expect(ReceiptLayoutFormatter.formatMoney(150, includeSymbol: false), '150.00');
+    });
+  });
+
+  group('Canonical receipt-document fidelity and width matrix', () {
+    test('prints supplied authoritative line and summary values without deriving them', () {
+      final document = ReceiptDocument(
+        businessName: 'Prueba',
+        taxRegime: TaxRegime.regimenGeneral,
+        documentTitle: 'FACTURA',
+        documentNumber: '1',
+        date: DateTime(2026),
+        lines: const [ReceiptLine(
+          quantity: 2,
+          description: 'Valor autorizado',
+          unitPrice: 10,
+          taxableBase: 999.99,
+          lineSubtotal: 777.77,
+          lineTotal: 888.88,
+        )],
+        subtotal: 333.33,
+        totalTax: 44.44,
+        total: 555.55,
+        totalUsd: 0,
+      );
+      final output = ReceiptLayoutFormatter.format80mm().formatReceiptDocumentText(document);
+      expect(output, contains('C\$ 777.77'));
+      expect(output, contains('C\$ 333.33'));
+      expect(output, contains('C\$ 44.44'));
+      expect(output, contains('C\$ 555.55'));
+    });
+
+    test('58/80 matrix preserves values and never overflows printable width', () {
+      const amounts = [0.01, 9.99, 999.99, 9999.99, 99999.99, 999999.99, 9999999.99];
+      const quantities = [1.0, 9.0, 10.0, 99.0, 100.0, 999.0, 1000.0, 0.5, 1.25, 12.50, 999.99];
+      const descriptions = [
+        'Exactamente treinta y dos letras',
+        'Descripción muy larga con modificadores múltiples y acentos ñ á é í ó ú ü',
+        'Supercalifragilisticoespialidoso',
+      ];
+      for (final formatter in [ReceiptLayoutFormatter.format58mm(), ReceiptLayoutFormatter.format80mm()]) {
+        for (final amount in amounts) {
+          for (final quantity in quantities) {
+            for (final description in descriptions) {
+              final rows = formatter.formatItemRow(
+                quantity: quantity,
+                name: description,
+                unitPrice: amount,
+                total: amount,
+              );
+              expect(rows.every((row) => row.length <= formatter.maxCols), isTrue);
+              expect(rows.join('\n'), contains(ReceiptLayoutFormatter.formatMoney(amount)));
+            }
+          }
+        }
+      }
     });
   });
 
@@ -223,6 +320,64 @@ void main() {
       );
       expect(rows[0].length, 48);
       expect(rows[0].endsWith('C\$ 12,500.00'), isTrue);
+    });
+
+    test('80mm: extreme monetary columns use a single-column fallback without overflow', () {
+      final rows = f80.formatItemRow(
+        quantity: 999999999,
+        name: 'Producto extraordinariamente largo para una venta corporativa',
+        unitPrice: 999999999999999.99,
+        total: 999999999999999.99,
+      );
+
+      expect(rows, isNotEmpty);
+      expect(rows.every((row) => row.length <= 48), isTrue);
+      expect(rows.join('\n'), contains('C\$ 1,000,000,000,000,000.00'));
+      expect(rows.last.endsWith('C\$ 1,000,000,000,000,000.00'), isTrue);
+    });
+
+    test('58mm losslessly wraps an oversized monetary total without dropping digits', () {
+      final amount = 999999999999999999999999999999.99;
+      final expected = ReceiptLayoutFormatter.formatMoney(amount);
+      final rows = f58.formatItemRow(
+        quantity: 1,
+        name: 'Producto',
+        unitPrice: amount,
+        total: amount,
+      );
+      final physicalLines = rows.expand((row) => row.split('\n'));
+
+      expect(physicalLines.every((line) => line.length <= 32), isTrue);
+      expect(rows.join().replaceAll('\n', ''), contains(expected.substring(3)));
+    });
+
+    test('80mm losslessly falls back when quantity and monetary columns cannot fit', () {
+      final amount = 999999999999999999999999999999.99;
+      final expected = ReceiptLayoutFormatter.formatMoney(amount);
+      final rows = f80.formatItemRow(
+        quantity: 999999999999999999.0,
+        name: 'Producto corporativo extraordinario',
+        unitPrice: amount,
+        total: amount,
+      );
+
+      expect(rows.every((line) => line.length <= 48), isTrue);
+      expect(rows.join().replaceAll('\n', ''), contains(expected.substring(3)));
+      expect(rows.join('\n').split('\n').every((line) => line.length <= 48), isTrue);
+    });
+
+    test('item columns sanitize control characters into deterministic inline whitespace', () {
+      final rows = f80.formatItemRow(
+        quantity: 1,
+        name: 'Cafe\n\tEspecial\u001b[31m',
+        unitPrice: 10,
+        total: 10,
+      );
+
+      expect(rows.join(' '), contains('Cafe'));
+      expect(rows.join(' '), contains('Especial [31m'));
+      expect(rows.join(''), isNot(contains('\n')));
+      expect(rows.join(''), isNot(contains('\u001b')));
     });
   });
 

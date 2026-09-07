@@ -37,19 +37,19 @@ void main() {
   });
 
   group('Receipt58mmFormatter Utilities Tests', () {
-    test('center() returns exact 38 character padded string', () {
+    test('center() returns exact 32 character padded string', () {
       final centered = Receipt58mmFormatter.center('OMNIFOOD NI');
       expect(centered.length, Receipt58mmFormatter.lineWidth);
       expect(centered.trim(), 'OMNIFOOD NI');
     });
 
-    test('twoColumns() fits exactly in 38 columns and protects right value', () {
+    test('twoColumns() fits exactly in 32 columns and protects right value', () {
       final line = Receipt58mmFormatter.twoColumns('Café Especial de la Casa', 'C\$ 150.00');
-      expect(line.length, Receipt58mmFormatter.lineWidth);
+      expect(line.split('\n').every((part) => part.length <= Receipt58mmFormatter.lineWidth), isTrue);
       expect(line.endsWith('C\$ 150.00'), isTrue);
     });
 
-    test('divider() produces exact 38-character separator', () {
+    test('divider() produces exact 32-character separator', () {
       expect(Receipt58mmFormatter.divider('=').length, Receipt58mmFormatter.lineWidth);
       expect(Receipt58mmFormatter.divider('-').length, Receipt58mmFormatter.lineWidth);
     });

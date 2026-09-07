@@ -1,12 +1,8 @@
 import 'package:intl/intl.dart';
-import '../../models/config/tax_regime.dart';
 import '../../models/printer/receipt_document.dart';
-import '../../models/sales/cashier_session.dart';
-import '../../models/sales/invoice.dart';
-import '../../models/sales/invoice_item.dart';
-import '../../models/sales/payment.dart';
 import 'esc_pos_builder.dart';
 import 'receipt_layout_metrics.dart';
+import 'printable_text_codec.dart';
 
 /// Highly modular, robust layout engine and ticket generator for 58mm (32 cols) and 80mm (48 cols)
 /// thermal printers. Strictly adheres to Nicaraguan tax laws (DGI Disposición Técnica 09-2007 & Ley 822).
@@ -27,12 +23,12 @@ class ReceiptLayoutFormatter {
   int get maxImageWidth => metrics.maxImageWidth;
   int get maxImageHeight => metrics.maxImageHeight;
 
-  /// 58mm Thermal Printer Mode (32 Columns, max 384px image width)
+  /// 58mm Thermal Printer Mode (32 columns, max 384px image width)
   factory ReceiptLayoutFormatter.format58mm() => ReceiptLayoutFormatter(
         ReceiptLayoutMetrics.mm58(),
       );
 
-  /// 80mm Thermal Printer Mode (48 Columns, max 576px image width)
+  /// 80mm Thermal Printer Mode (48 columns, max 576px image width)
   factory ReceiptLayoutFormatter.format80mm() => ReceiptLayoutFormatter(
         ReceiptLayoutMetrics.mm80(),
       );
@@ -56,7 +52,7 @@ class ReceiptLayoutFormatter {
   /// Centers [text] within [width] characters (defaults to printable width).
   String center(String text, [int? width]) {
     final effectiveWidth = width ?? metrics.contentWidth;
-    final clean = text.trim();
+    final clean = sanitizeInlineText(text);
     if (clean.length >= effectiveWidth) {
       return clean.length > effectiveWidth ? clean.substring(0, effectiveWidth) : clean;
     }
@@ -90,11 +86,12 @@ class ReceiptLayoutFormatter {
   /// and [rightText] strictly aligned to the right, strictly fitting in [width] columns.
   String formatTwoColumns(String leftText, String rightText, [int? width]) {
     final effectiveWidth = width ?? metrics.contentWidth;
-    final cleanLeft = leftText.trim();
-    final cleanRight = rightText.trim();
+    final cleanLeft = sanitizeInlineText(leftText);
+    final cleanRight = sanitizeInlineText(rightText);
 
     if (cleanRight.length >= effectiveWidth) {
-      return cleanRight.substring(0, effectiveWidth);
+      // Preserve oversized monetary/reference values in a lossless vertical form.
+      return formatKeyValue(cleanLeft, cleanRight, effectiveWidth).join('\n');
     }
 
     final maxLeftLen = effectiveWidth - cleanRight.length - 1;
@@ -112,8 +109,8 @@ class ReceiptLayoutFormatter {
   /// completely avoiding premature truncation of cashier names or long customer records.
   List<String> formatKeyValue(String label, String value, [int? width]) {
     final effectiveWidth = width ?? metrics.contentWidth;
-    final cleanLabel = label.trim();
-    final cleanVal = value.trim();
+    final cleanLabel = sanitizeInlineText(label);
+    final cleanVal = sanitizeInlineText(value);
 
     if (cleanVal.isEmpty) return [];
 
@@ -123,7 +120,7 @@ class ReceiptLayoutFormatter {
     }
 
     // Two-tier fallback: label on first line, value wrapped with 2-space indentation
-    final lines = <String>[cleanLabel];
+    final lines = <String>[...wrap(cleanLabel, effectiveWidth)];
     final wrappedVal = wrap(cleanVal, effectiveWidth - 2);
     for (final vl in wrappedVal) {
       lines.add('  $vl');
@@ -156,7 +153,7 @@ class ReceiptLayoutFormatter {
       // 58mm Mode (32 cols) - 2-tier composition
       // ==========================================
       final lines = <String>[];
-      final itemTitle = '$qtyStr x ${name.trim()}';
+      final itemTitle = '$qtyStr x ${sanitizeInlineText(name)}';
 
       // Line 1+: Title with 4-space hanging indent on continuation lines
       final wrappedTitle = wrap(itemTitle, metrics.contentWidth, '    ');
@@ -170,7 +167,9 @@ class ReceiptLayoutFormatter {
       // 80mm Mode (48 cols) - 4-column tabular grid
       // CANT (4) + DESCRIPCION (flexible) + P.UNIT (>=10) + TOTAL (>=11) = 48 cols
       // ==========================================
-      final colQtyWidth = metrics.qtyWidth; // 4
+      final actualQtyWidth = qtyStr.length > metrics.qtyWidth
+          ? qtyStr.length + 1
+          : metrics.qtyWidth;
       final actualUnitPriceWidth = unitPriceStr.length > metrics.unitPriceWidth
           ? unitPriceStr.length + 1
           : metrics.unitPriceWidth;
@@ -178,14 +177,22 @@ class ReceiptLayoutFormatter {
           ? totalStr.length + 1
           : metrics.totalWidth;
 
-      // Description receives flexible space dynamically so row ALWAYS sums to contentWidth
-      final colDescWidth = metrics.contentWidth - colQtyWidth - actualUnitPriceWidth - actualTotalWidth;
+      // Keep the tabular layout only while it retains a readable description.
+      // Extreme quantities or monetary values use a lossless multi-line fallback.
+      final colDescWidth = metrics.contentWidth - actualQtyWidth - actualUnitPriceWidth - actualTotalWidth;
+      final cleanName = sanitizeInlineText(name);
+      if (colDescWidth < 8) {
+        final lines = wrap('$qtyStr x $cleanName', metrics.contentWidth, '    ');
+        lines.addAll(wrap('  @ $unitPriceStr', metrics.contentWidth, '    '));
+        lines.addAll(wrap('TOTAL: $totalStr', metrics.contentWidth, '  '));
+        return lines;
+      }
 
-      final colQty = qtyStr.padRight(colQtyWidth);
+      final colQty = qtyStr.padRight(actualQtyWidth);
       final colUnitPrice = unitPriceStr.padLeft(actualUnitPriceWidth);
       final colTotal = totalStr.padLeft(actualTotalWidth);
 
-      final wrappedNames = wrap(name.trim(), colDescWidth > 8 ? colDescWidth : 8);
+      final wrappedNames = wrap(cleanName, colDescWidth);
       final lines = <String>[];
 
       for (int i = 0; i < wrappedNames.length; i++) {
@@ -193,12 +200,21 @@ class ReceiptLayoutFormatter {
         if (i == 0) {
           lines.add('$colQty$nameChunk$colUnitPrice$colTotal');
         } else {
-          lines.add('${' ' * colQtyWidth}$nameChunk${' ' * (actualUnitPriceWidth + actualTotalWidth)}');
+          lines.add('${' ' * actualQtyWidth}$nameChunk${' ' * (actualUnitPriceWidth + actualTotalWidth)}');
         }
       }
       return lines;
     }
   }
+
+  /// Normalizes text to the deterministic single-column Latin-1 receipt codec.
+  String normalizePrintableText(String text) => const PrintableTextCodec().normalize(text);
+
+  /// Removes printer controls and normalizes inline whitespace before measuring.
+  String sanitizeInlineText(String text) => normalizePrintableText(text)
+      .replaceAll(RegExp(r'[\u0000-\u001F\u007F]'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
 
   /// Robust word-wrapping engine.
   /// Preserves whole words when possible, breaks words longer than line width,
@@ -206,7 +222,10 @@ class ReceiptLayoutFormatter {
   List<String> wrap(String text, [int? width, String indent = '']) {
     final effectiveWidth = width ?? metrics.contentWidth;
     if (effectiveWidth <= 0) return [text];
-    final clean = text.trim();
+    // Newlines remain supported for authored footer copy; other controls are removed.
+    final clean = normalizePrintableText(text)
+        .replaceAll(RegExp(r'[\u0000-\u0009\u000B-\u001F\u007F]'), ' ')
+        .trim();
     if (clean.isEmpty) return [];
 
     final rawLines = clean.split(RegExp(r'\r?\n'));
@@ -353,7 +372,10 @@ class ReceiptLayoutFormatter {
         buffer.writeln(r);
       }
 
-      for (final mod in line.modifiers) {
+      final modifiers = line.modifierDisplays.isNotEmpty
+          ? line.modifierDisplays.map((modifier) => modifier.printableText)
+          : line.modifiers;
+      for (final mod in modifiers) {
         for (final mLine in wrap('  + $mod', metrics.contentWidth, '    ')) {
           buffer.writeln(mLine);
         }
@@ -461,42 +483,6 @@ class ReceiptLayoutFormatter {
     return buffer.toString();
   }
 
-  /// Formats the complete customer sales receipt in plain text from domain [Invoice].
-  String formatInvoiceText(
-    Invoice invoice, {
-    required List<InvoiceItem> items,
-    required List<Payment> payments,
-    String? businessName,
-    String? legalName,
-    String? ruc,
-    String? address,
-    String? phone,
-    String? cashierName,
-    String? customerName,
-    String? customerRuc,
-    TaxRegime taxRegime = TaxRegime.regimenGeneral,
-    bool isTaxExempt = false,
-    String? footerMessage,
-  }) {
-    final doc = ReceiptDocument.fromInvoice(
-      invoice,
-      items: items,
-      payments: payments,
-      businessName: businessName,
-      legalName: legalName,
-      ruc: ruc,
-      address: address,
-      phone: phone,
-      cashierName: cashierName,
-      customerName: customerName,
-      customerRuc: customerRuc,
-      taxRegime: taxRegime,
-      isTaxExempt: isTaxExempt,
-      footerMessage: footerMessage,
-    );
-    return formatReceiptDocumentText(doc);
-  }
-
   // ==========================================
   // 3. ESC/POS Bytecode Formatting
   // ==========================================
@@ -506,8 +492,9 @@ class ReceiptLayoutFormatter {
     final builder = EscPosBuilder();
     final dateFormat = DateFormat('dd/MM/yyyy HH:mm');
 
-    // 1. Logo (if provided as 1-bit raster)
-    if (doc.logoRasterBytes != null && doc.logoRasterBytes!.isNotEmpty) {
+    // 1. Only a validated ESC/POS raster command belongs in this byte stream.
+    // PNG bitmap payloads are sent through native bitmap operations by adapters.
+    if (doc.logoRasterBytes != null && _isEscPosRaster(doc.logoRasterBytes!)) {
       builder.rasterImage(doc.logoRasterBytes!).feedLines(1);
     }
 
@@ -597,7 +584,10 @@ class ReceiptLayoutFormatter {
         builder.textLine(r);
       }
 
-      for (final mod in line.modifiers) {
+      final modifiers = line.modifierDisplays.isNotEmpty
+          ? line.modifierDisplays.map((modifier) => modifier.printableText)
+          : line.modifiers;
+      for (final mod in modifiers) {
         for (final mLine in wrap('  + $mod', metrics.contentWidth, '    ')) {
           builder.textLine(mLine);
         }
@@ -719,43 +709,9 @@ class ReceiptLayoutFormatter {
     return builder.toBytes();
   }
 
-  /// Formats the complete sales receipt into ESC/POS bytecode from domain [Invoice].
-  List<int> formatInvoiceEscPos(
-    Invoice invoice, {
-    required List<InvoiceItem> items,
-    required List<Payment> payments,
-    String? businessName,
-    String? legalName,
-    String? ruc,
-    String? address,
-    String? phone,
-    String? cashierName,
-    String? customerName,
-    String? customerRuc,
-    TaxRegime taxRegime = TaxRegime.regimenGeneral,
-    bool isTaxExempt = false,
-    List<int>? logoRasterBytes,
-    String? footerMessage,
-  }) {
-    final doc = ReceiptDocument.fromInvoice(
-      invoice,
-      items: items,
-      payments: payments,
-      businessName: businessName,
-      legalName: legalName,
-      ruc: ruc,
-      address: address,
-      phone: phone,
-      cashierName: cashierName,
-      customerName: customerName,
-      customerRuc: customerRuc,
-      taxRegime: taxRegime,
-      isTaxExempt: isTaxExempt,
-      footerMessage: footerMessage,
-      logoRasterBytes: logoRasterBytes,
-    );
-    return formatReceiptDocumentEscPos(doc);
-  }
+  bool _isEscPosRaster(List<int> bytes) => bytes.length >= 8 &&
+      bytes[0] == 0x1B && bytes[1] == 0x61 && bytes[3] == 0x1D &&
+      bytes[4] == 0x76 && bytes[5] == 0x30;
 
   /// Backwards-compatibility helper for tests.
   String drawLine([String char = '-']) => divider(char);

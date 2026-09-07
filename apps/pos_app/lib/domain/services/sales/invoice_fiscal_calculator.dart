@@ -318,6 +318,7 @@ class InvoiceFiscalCalculator {
     String? footerMessage,
     List<ReceiptPayment>? payments,
     List<int>? logoRasterBytes,
+    List<CartItem>? sourceCart,
   }) {
     final effectivePayments = <ReceiptPayment>[];
     if (payments != null && payments.isNotEmpty) {
@@ -334,7 +335,15 @@ class InvoiceFiscalCalculator {
       ));
     }
 
-    final receiptLines = calculation.lines.map((l) {
+    final receiptLines = calculation.lines.asMap().entries.map((entry) {
+      final index = entry.key;
+      final l = entry.value;
+      final sourceItem = sourceCart != null && index < sourceCart.length ? sourceCart[index] : null;
+      final modifierDisplays = sourceItem?.selectedModifiers.map((modifier) => ReceiptModifierDisplay(
+            name: modifier.name,
+            displayAmount: modifier.extraPrice == 0 ? null : 'C\$ ${modifier.extraPrice.toStringAsFixed(2)}',
+            scope: 'por unidad',
+          )).toList() ?? const <ReceiptModifierDisplay>[];
       return ReceiptLine(
         quantity: l.quantity,
         description: l.productName,
@@ -347,6 +356,8 @@ class InvoiceFiscalCalculator {
         taxAmount: l.taxAmount,
         lineSubtotal: l.lineSubtotal,
         lineTotal: l.lineTotal,
+        modifierDisplays: modifierDisplays,
+        notes: sourceItem?.notes,
       );
     }).toList();
 

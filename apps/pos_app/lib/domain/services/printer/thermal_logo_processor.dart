@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'receipt_layout_metrics.dart';
+
 class LogoProcessingResult {
   final bool isValid;
   final String? errorMessage;
@@ -49,9 +51,10 @@ class LogoProcessingResult {
 /// Specialized Image Processing service for 58mm/80mm Thermal Receipt Printers.
 /// Implements pure 1-bit Floyd-Steinberg error diffusion and ESC/POS raster byte generation.
 class ThermalLogoProcessor {
-  static const int maxThermalWidth58mm = 384; // 384 dots max on 58mm 203dpi head
-  static const int maxThermalWidth80mm = 576; // 576 dots max on 80mm 203dpi head
-  static const int maxSafetyHeight = 160;     // 160 dots max height to prevent paper waste
+  /// Logical/configured raster bounds; physical heads require device calibration.
+  static int get maxThermalWidth58mm => ReceiptLayoutMetrics.logicalRasterWidth58mm;
+  static int get maxThermalWidth80mm => ReceiptLayoutMetrics.logicalRasterWidth80mm;
+  static const int maxSafetyHeight = 160;
 
   /// Validates PNG magic header [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A].
   static bool isPng(Uint8List bytes) {
@@ -70,10 +73,11 @@ class ThermalLogoProcessor {
   /// Automatically resizes keeping aspect ratio to fit within [maxWidth] and [maxHeight].
   static Future<LogoProcessingResult> processPngBytes(
     Uint8List pngBytes, {
-    int maxWidth = maxThermalWidth58mm,
+    int? maxWidth,
     int maxHeight = maxSafetyHeight,
     bool applyDithering = true,
   }) async {
+    final effectiveMaxWidth = maxWidth ?? ReceiptLayoutMetrics.mm58().maxImageWidth;
     if (!isPng(pngBytes)) {
       return LogoProcessingResult.failure(
         'El archivo seleccionado no tiene un formato PNG válido.',
@@ -89,7 +93,7 @@ class ThermalLogoProcessor {
       int targetHeight = originalImage.height;
 
       // Calculate aspect ratio scaling if image exceeds maxWidth or maxHeight
-      final double widthScale = maxWidth / targetWidth;
+      final double widthScale = effectiveMaxWidth / targetWidth;
       final double heightScale = maxHeight / targetHeight;
       final double scale = [widthScale, heightScale, 1.0].reduce((a, b) => a < b ? a : b);
 

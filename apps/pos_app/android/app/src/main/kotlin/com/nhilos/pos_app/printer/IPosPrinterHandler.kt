@@ -23,6 +23,8 @@ class IPosPrinterHandler(private val context: Context) : MethodChannel.MethodCal
         private const val CHANNEL_NAME = "com.nhilos.pos/ipos_printer"
         private const val SERVICE_PACKAGE = "net.nyx.printerservice"
         private const val SERVICE_ACTION = "net.nyx.printerservice.IPrinterService"
+        private const val MAX_BITMAP_BYTES = 1024 * 1024
+        private const val MAX_RAW_BYTES = 256 * 1024
     }
 
     private var channel: MethodChannel? = null
@@ -127,6 +129,10 @@ class IPosPrinterHandler(private val context: Context) : MethodChannel.MethodCal
             result.error("INVALID_ARGS", "Bytes array is empty or null", null)
             return
         }
+        if (bytes.size > MAX_BITMAP_BYTES) {
+            result.error("PAYLOAD_TOO_LARGE", "Logo bitmap exceeds $MAX_BITMAP_BYTES bytes", null)
+            return
+        }
 
         val service = printerService
         if (service == null) {
@@ -165,20 +171,18 @@ class IPosPrinterHandler(private val context: Context) : MethodChannel.MethodCal
             return
         }
 
-        try {
-            val text = String(bytes, Charsets.ISO_8859_1)
-            val format = PrintTextFormat().apply {
-                textSize = 24
-            }
-            val res = service.printText(text, format)
-            // Feed sufficient paper (140px ~ 4-5 lines) so "Gracias por su compra" clears the tear-off bar
-            service.paperOut(140)
-            Log.i(TAG, "printRawBytes via printText result: $res")
-            result.success(true)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error printing raw text: ${e.message}", e)
-            result.error("PRINT_ERROR", e.message, null)
+        if (bytes.size > MAX_RAW_BYTES) {
+            result.error("PAYLOAD_TOO_LARGE", "Raw payload exceeds $MAX_RAW_BYTES bytes", null)
+            return
         }
+
+        // Nyx IPrinterService has no raw ESC/POS API. Passing command bytes to
+        // printText renders control/raster data as garbage, so reject it clearly.
+        result.error(
+            "RAW_ESC_POS_UNSUPPORTED",
+            "Nyx no admite ESC/POS crudo; envíe texto o bitmap procesado.",
+            null,
+        )
     }
 
     private fun handlePrintText(call: MethodCall, result: MethodChannel.Result) {
@@ -200,7 +204,7 @@ class IPosPrinterHandler(private val context: Context) : MethodChannel.MethodCal
                 textSize = 24
             }
             val res = service.printText(text, format)
-            // Feed sufficient paper (140px ~ 4-5 lines) so footer clears the tear-off bar
+            // Current Nyx driver feed value. Its physical distance requires device measurement.
             service.paperOut(140)
             Log.i(TAG, "printText result: $res")
             result.success(true)

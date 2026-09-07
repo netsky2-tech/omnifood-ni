@@ -4,10 +4,16 @@ enum ReceiptPaperSize {
   mm80,
 }
 
-/// Centralized metrics and dimensions for thermal printer receipt layouts.
-/// Calibrated for 58mm (32 columns, 384px) and 80mm (48 columns, 576px) thermal printers,
-/// including Alacrity Q80 / MIRAY TPM4G_E9863 and Sunmi V2s.
+/// Centralized logical layout estimates for thermal receipt printers.
+/// 32/48 columns and 384/576 dots require physical-device calibration; they are
+/// configured limits, not proven hardware limits for Q80, MIRAY, or Sunmi.
 class ReceiptLayoutMetrics {
+  /// Central logical/configured estimates, not asserted printer-head facts.
+  static const int logicalTextWidth58mm = 32;
+  static const int logicalTextWidth80mm = 48;
+  static const int logicalRasterWidth58mm = 384;
+  static const int logicalRasterWidth80mm = 576;
+
   final ReceiptPaperSize paperSize;
 
   /// Printable width in monospaced character columns.
@@ -46,13 +52,13 @@ class ReceiptLayoutMetrics {
     this.totalWidth = 11,
   });
 
-  /// 58mm thermal paper: 32 columns, 384 dots width.
+  /// 58mm logical estimate: 32 columns and 384-dot configured image bound.
   /// Employs 2-tier vertical item composition rather than a cramped table.
   factory ReceiptLayoutMetrics.mm58() => const ReceiptLayoutMetrics(
         paperSize: ReceiptPaperSize.mm58,
-        printableWidth: 32,
+        printableWidth: logicalTextWidth58mm,
         horizontalPadding: 0,
-        maxImageWidth: 384,
+        maxImageWidth: logicalRasterWidth58mm,
         maxImageHeight: 160,
         qtyWidth: 4,
         descriptionWidth: 32,
@@ -60,13 +66,13 @@ class ReceiptLayoutMetrics {
         totalWidth: 11,
       );
 
-  /// 80mm thermal paper: 48 columns, 576 dots width.
+  /// 80mm logical estimate: 48 columns and 576-dot configured image bound.
   /// Employs a true 4-column tabular layout: 5 + 22 + 10 + 11 = 48 cols.
   factory ReceiptLayoutMetrics.mm80() => const ReceiptLayoutMetrics(
         paperSize: ReceiptPaperSize.mm80,
-        printableWidth: 48,
+        printableWidth: logicalTextWidth80mm,
         horizontalPadding: 0,
-        maxImageWidth: 576,
+        maxImageWidth: logicalRasterWidth80mm,
         maxImageHeight: 160,
         qtyWidth: 5,
         descriptionWidth: 22,

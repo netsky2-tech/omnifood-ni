@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import '../../../domain/models/config/tax_regime.dart';
+import '../../../domain/models/printer/receipt_document.dart';
 import '../../../domain/models/sales/cashier_session.dart';
 import '../../../domain/models/sales/invoice.dart';
 import '../../../domain/models/sales/invoice_item.dart';
@@ -8,10 +9,14 @@ import '../../../domain/models/sales/payment.dart';
 import '../../../domain/ports/printer_port.dart';
 import '../../../domain/services/printer/receipt_58mm_formatter.dart';
 import '../../../domain/services/printer/receipt_layout_formatter.dart';
+import '../../../domain/services/printer/thermal_logo_processor.dart';
 
 /// Hardware Driver Adapter for Alacrity Q80 and iPos-compatible thermal printers.
 /// Communicates via Android Platform Channel with fallback resilience for non-Q80 environments.
 class IPosPrinterAdapter implements PrinterPort {
+  /// Keeps platform-channel bitmap payloads bounded before Nyx decodes them.
+  static const int maxLogoBytes = 1024 * 1024;
+
   static const MethodChannel _defaultChannel =
       MethodChannel('com.nhilos.pos/ipos_printer');
 
@@ -86,8 +91,7 @@ class IPosPrinterAdapter implements PrinterPort {
       );
     }
 
-    final layoutFormatter = ReceiptLayoutFormatter.fromPaperWidth(paperWidthMm);
-    final formattedText = layoutFormatter.formatInvoiceText(
+    final document = ReceiptDocument.fromInvoice(
       invoice,
       items: items,
       payments: payments,
@@ -99,20 +103,29 @@ class IPosPrinterAdapter implements PrinterPort {
       cashierName: cashierName,
       taxRegime: taxRegime,
       isTaxExempt: isTaxExempt,
+      logoRasterBytes: logoRasterBytes,
     );
+    final formattedText = ReceiptLayoutFormatter.fromPaperWidth(paperWidthMm)
+        .formatReceiptDocumentText(document);
 
     try {
       // 1. If logo is provided, print it using native Nyx bitmap printing
-      if (logoRasterBytes != null && logoRasterBytes.isNotEmpty) {
+      if (logoRasterBytes != null && logoRasterBytes.isNotEmpty && logoRasterBytes.length <= maxLogoBytes &&
+              ThermalLogoProcessor.isPng(Uint8List.fromList(logoRasterBytes))) {
         await _channel.invokeMethod('printBitmap', {'bytes': Uint8List.fromList(logoRasterBytes)});
+      } else if (logoRasterBytes != null && logoRasterBytes.isNotEmpty) {
+        debugPrint('[IPosPrinterAdapter] Skipped invalid/unsupported bitmap; text receipt continues.');
       }
 
       // 2. Print formatted invoice text cleanly
       await _channel.invokeMethod('printText', {'text': formattedText});
       return PrinterResult.success(text: formattedText);
     } on MissingPluginException {
-      debugPrint('[IPosPrinterAdapter Fallback Print Preview]:\n$formattedText');
-      return PrinterResult.success(text: formattedText);
+      debugPrint('[IPosPrinterAdapter] iPos print service unavailable.');
+      return PrinterResult.failure(
+        PrinterStatus.error,
+        'Servicio de impresión iPos no disponible.',
+      );
     } on PlatformException catch (e) {
       debugPrint('[IPosPrinterAdapter] Platform print error: ${e.message}');
       return PrinterResult.failure(
@@ -121,6 +134,35 @@ class IPosPrinterAdapter implements PrinterPort {
       );
     } catch (e) {
       debugPrint('[IPosPrinterAdapter] General print error: $e');
+      return PrinterResult.failure(PrinterStatus.error, e.toString());
+    }
+  }
+
+  @override
+  Future<PrinterResult> printReceiptDocument(
+    ReceiptDocument document, {
+    int paperWidthMm = 58,
+  }) async {
+    final text = ReceiptLayoutFormatter.fromPaperWidth(paperWidthMm)
+        .formatReceiptDocumentText(document);
+    try {
+      final logo = document.logoRasterBytes;
+      if (logo != null && logo.isNotEmpty && logo.length <= maxLogoBytes &&
+          ThermalLogoProcessor.isPng(Uint8List.fromList(logo))) {
+        await _channel.invokeMethod('printBitmap', {'bytes': Uint8List.fromList(logo)});
+      } else if (logo != null && logo.isNotEmpty) {
+        debugPrint('[IPosPrinterAdapter] Skipped invalid/unsupported bitmap; text receipt continues.');
+      }
+      await _channel.invokeMethod('printText', {'text': text});
+      return PrinterResult.success(text: text);
+    } on MissingPluginException {
+      return PrinterResult.failure(
+        PrinterStatus.error,
+        'Servicio de impresión iPos no disponible.',
+      );
+    } on PlatformException catch (e) {
+      return PrinterResult.failure(PrinterStatus.error, e.message ?? 'Error en servicio de impresión iPos');
+    } catch (e) {
       return PrinterResult.failure(PrinterStatus.error, e.toString());
     }
   }
@@ -268,16 +310,21 @@ class IPosPrinterAdapter implements PrinterPort {
     String? plainText,
   }) async {
     try {
-      if (rawBytes != null && rawBytes.isNotEmpty) {
-        await _channel.invokeMethod('printRawBytes', {'bytes': Uint8List.fromList(rawBytes)});
-      } else if (plainText != null && plainText.isNotEmpty) {
+      // Nyx exposes text and bitmap APIs, not a raw ESC/POS transport. Prefer
+      // the already-rendered text whenever both representations are available.
+      if (plainText != null && plainText.isNotEmpty) {
         await _channel.invokeMethod('printText', {'text': plainText});
+      } else if (rawBytes != null && rawBytes.isNotEmpty) {
+        await _channel.invokeMethod('printRawBytes', {'bytes': Uint8List.fromList(rawBytes)});
       }
       return PrinterResult.success(bytes: rawBytes, text: plainText);
     } on MissingPluginException {
-      // Graceful fallback: on devices without iPos hardware, log preview and return success
-      debugPrint('[IPosPrinterAdapter Fallback Print Preview]:\n${plainText ?? rawBytes.toString()}');
-      return PrinterResult.success(bytes: rawBytes, text: plainText);
+      // A missing plugin cannot confirm a physical print
+      debugPrint('[IPosPrinterAdapter] iPos print service unavailable.');
+      return PrinterResult.failure(
+        PrinterStatus.error,
+        'Servicio de impresión iPos no disponible.',
+      );
     } on PlatformException catch (e) {
       debugPrint('[IPosPrinterAdapter] Platform print error: ${e.message}');
       return PrinterResult.failure(

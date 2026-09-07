@@ -1,4 +1,5 @@
 import '../models/config/tax_regime.dart';
+import '../models/printer/receipt_document.dart';
 import '../models/sales/cashier_session.dart';
 import '../models/sales/invoice.dart';
 import '../models/sales/invoice_item.dart';
@@ -51,7 +52,18 @@ abstract class PrinterPort {
   /// Checks whether the hardware printer is reachable, online, and has paper.
   Future<PrinterStatus> checkStatus();
 
-  /// Prints a fiscal or standard customer receipt in 58mm (32 cols) or 80mm format.
+  /// Prints the canonical, precomputed receipt document. Renderers must not map
+  /// or recalculate invoice values on this path.
+  Future<PrinterResult> printReceiptDocument(
+    ReceiptDocument document, {
+    int paperWidthMm = 58,
+  }) async => PrinterResult.failure(
+        PrinterStatus.error,
+        'Este controlador no admite ReceiptDocument canónico.',
+      );
+
+  /// Legacy Invoice adapter entry point. Build a [ReceiptDocument] at the
+  /// application boundary before calling [printReceiptDocument].
   Future<PrinterResult> printInvoice(
     Invoice invoice, {
     required List<InvoiceItem> items,

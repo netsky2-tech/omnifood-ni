@@ -4,6 +4,20 @@ import '../sales/invoice.dart';
 import '../sales/invoice_item.dart';
 import '../sales/payment.dart';
 
+/// A modifier's precomputed, display-ready amount and scope. The renderer prints
+/// [displayAmount] verbatim and never multiplies it by line quantity.
+class ReceiptModifierDisplay {
+  final String name;
+  final String? displayAmount;
+  final String scope;
+
+  const ReceiptModifierDisplay({required this.name, this.displayAmount, this.scope = 'unit'});
+
+  String get printableText => displayAmount == null || displayAmount!.isEmpty
+      ? name
+      : '$name ($scope: $displayAmount)';
+}
+
 /// Single item line in a printed or previewed receipt, already fiscally calculated.
 class ReceiptLine {
   final double quantity;
@@ -23,6 +37,7 @@ class ReceiptLine {
   final double lineTotal;
 
   final List<String> modifiers;
+  final List<ReceiptModifierDisplay> modifierDisplays;
   final String? notes;
 
   const ReceiptLine({
@@ -38,6 +53,7 @@ class ReceiptLine {
     double? lineSubtotal,
     required this.lineTotal,
     this.modifiers = const [],
+    this.modifierDisplays = const [],
     this.notes,
   }) : lineSubtotal = lineSubtotal ?? taxableBase;
 
@@ -79,10 +95,11 @@ class ReceiptLine {
         ? item.total
         : (taxRegime.isCuotaFija ? lineSubtotal : (lineSubtotal + effectiveTaxAmount));
 
-    final modifierStrings = item.selectedModifiers.map((m) {
-      final priceStr = m.extraPrice > 0 ? ' (+C\$ ${m.extraPrice.toStringAsFixed(2)})' : '';
-      return '${m.name}$priceStr';
-    }).toList();
+    final modifierDisplays = item.selectedModifiers.map((m) => ReceiptModifierDisplay(
+          name: m.name,
+          displayAmount: m.extraPrice > 0 ? 'C\$ ${m.extraPrice.toStringAsFixed(2)}' : null,
+          scope: 'por unidad',
+        )).toList();
 
     return ReceiptLine(
       quantity: qty,
@@ -96,7 +113,7 @@ class ReceiptLine {
       taxAmount: effectiveTaxAmount,
       lineSubtotal: lineSubtotal,
       lineTotal: lineTotal,
-      modifiers: modifierStrings,
+      modifierDisplays: modifierDisplays,
       notes: item.notes,
     );
   }
@@ -227,6 +244,39 @@ class ReceiptDocument {
 
   bool get isCuotaFija => taxRegime.isCuotaFija;
   bool get isGlobalTaxExempt => isTaxExempt || globalTaxOverride;
+
+  /// Replaces only printer transport artwork; all fiscal presentation remains intact.
+  ReceiptDocument withLogoRasterBytes(List<int>? logoBytes) => ReceiptDocument(
+        businessName: businessName,
+        legalName: legalName,
+        ruc: ruc,
+        taxRegime: taxRegime,
+        address: address,
+        phone: phone,
+        terminalId: terminalId,
+        documentTitle: documentTitle,
+        documentNumber: documentNumber,
+        date: date,
+        cashierName: cashierName,
+        customerName: customerName,
+        customerRuc: customerRuc,
+        originInvoiceId: originInvoiceId,
+        lines: lines,
+        subtotal: subtotal,
+        discountTotal: discountTotal,
+        exemptSubtotal: exemptSubtotal,
+        taxableSubtotal: taxableSubtotal,
+        totalTax: totalTax,
+        total: total,
+        commercialRate: commercialRate,
+        bcnOfficialRate: bcnOfficialRate,
+        totalUsd: totalUsd,
+        payments: payments,
+        footerMessage: footerMessage,
+        logoRasterBytes: logoBytes,
+        isTaxExempt: isTaxExempt,
+        globalTaxOverride: globalTaxOverride,
+      );
   String get regimeHeader => taxRegime.receiptRegimeHeader;
   String? get fiscalNotice => taxRegime.fiscalNotice;
   double get changeGiven => payments.fold(0.0, (sum, p) => sum + p.changeGiven);

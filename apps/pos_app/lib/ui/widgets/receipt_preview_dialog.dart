@@ -170,6 +170,12 @@ class _ReceiptPreviewDialogState extends State<ReceiptPreviewDialog> {
                               ),
                         ),
                         Text(
+                          'Vista lógica: el mismo documento enviado a impresión',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
+                        ),
+                        Text(
                           '${metrics.is80mm ? 80 : 58} mm (${metrics.printableWidth} columnas) • ${metrics.maxImageWidth} dots',
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                 color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -306,13 +312,17 @@ class _ReceiptPreviewDialogState extends State<ReceiptPreviewDialog> {
                               setState(() => _isPrinting = true);
                               try {
                                 final port = widget.printerPort!;
-                                final escpos = ReceiptLayoutFormatter.fromPaperWidth(_paperWidthMm)
-                                    .formatReceiptDocumentEscPos(doc);
-                                await port.printRawEscPos(escpos);
+                                final result = await port.printReceiptDocument(
+                                  doc,
+                                  paperWidthMm: _paperWidthMm,
+                                );
+                                if (!result.isSuccess) {
+                                  throw StateError(result.message ?? 'La impresora rechazó el ticket.');
+                                }
                                 if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
-                                      content: Text('Ticket enviado a la impresora términa.'),
+                                      content: Text('Ticket enviado a la impresora térmica.'),
                                       backgroundColor: Colors.green,
                                     ),
                                   );

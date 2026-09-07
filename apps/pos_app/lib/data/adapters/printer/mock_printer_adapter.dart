@@ -1,5 +1,6 @@
 import '../../../domain/models/config/tax_regime.dart';
 import '../../../domain/models/sales/cashier_session.dart';
+import '../../../domain/models/printer/receipt_document.dart';
 import '../../../domain/models/sales/invoice.dart';
 import '../../../domain/models/sales/invoice_item.dart';
 import '../../../domain/models/sales/payment.dart';
@@ -64,22 +65,7 @@ class MockPrinterAdapter implements PrinterPort {
       return res;
     }
 
-    final layoutFormatter = ReceiptLayoutFormatter.fromPaperWidth(paperWidthMm);
-    final text = layoutFormatter.formatInvoiceText(
-      invoice,
-      items: items,
-      payments: payments,
-      businessName: businessName,
-      legalName: legalName,
-      ruc: ruc,
-      address: address,
-      phone: phone,
-      cashierName: cashierName,
-      taxRegime: taxRegime,
-      isTaxExempt: isTaxExempt,
-    );
-
-    final bytes = layoutFormatter.formatInvoiceEscPos(
+    final document = ReceiptDocument.fromInvoice(
       invoice,
       items: items,
       payments: payments,
@@ -93,6 +79,9 @@ class MockPrinterAdapter implements PrinterPort {
       isTaxExempt: isTaxExempt,
       logoRasterBytes: logoRasterBytes,
     );
+    final layoutFormatter = ReceiptLayoutFormatter.fromPaperWidth(paperWidthMm);
+    final text = layoutFormatter.formatReceiptDocumentText(document);
+    final bytes = layoutFormatter.formatReceiptDocumentEscPos(document);
 
     lastPrintedText = text;
     lastPrintedBytes = bytes;
@@ -100,6 +89,29 @@ class MockPrinterAdapter implements PrinterPort {
     final res = PrinterResult.success(text: text, bytes: bytes);
     printHistory.add(res);
     return res;
+  }
+
+  @override
+  Future<PrinterResult> printReceiptDocument(
+    ReceiptDocument document, {
+    int paperWidthMm = 58,
+  }) async {
+    if (shouldFail || currentStatus != PrinterStatus.ready) {
+      final result = PrinterResult.failure(
+        currentStatus == PrinterStatus.ready ? PrinterStatus.error : currentStatus,
+        failureMessage ?? 'Error de impresión en hardware simulado',
+      );
+      printHistory.add(result);
+      return result;
+    }
+    final formatter = ReceiptLayoutFormatter.fromPaperWidth(paperWidthMm);
+    final text = formatter.formatReceiptDocumentText(document);
+    final bytes = formatter.formatReceiptDocumentEscPos(document);
+    lastPrintedText = text;
+    lastPrintedBytes = bytes;
+    final result = PrinterResult.success(text: text, bytes: bytes);
+    printHistory.add(result);
+    return result;
   }
 
   @override

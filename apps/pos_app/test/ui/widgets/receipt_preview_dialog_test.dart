@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pos_app/data/adapters/printer/mock_printer_adapter.dart';
+import 'package:pos_app/domain/ports/printer_port.dart';
 import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'package:pos_app/ui/widgets/receipt_preview_dialog.dart';
 
@@ -7,7 +9,8 @@ void main() {
   Widget buildTestWidget({
     TaxRegime initialTaxRegime = TaxRegime.cuotaFija,
     int initialPaperWidthMm = 58,
-  }) {
+        PrinterPort? printerPort,
+    }) {
     return MaterialApp(
       home: Scaffold(
         body: Builder(
@@ -16,6 +19,7 @@ void main() {
               context,
               initialTaxRegime: initialTaxRegime,
               initialPaperWidthMm: initialPaperWidthMm,
+                  printerPort: printerPort,
             ),
             child: const Text('Open Preview'),
           ),
@@ -33,6 +37,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Preview de Comprobante Térmico'), findsOneWidget);
+      expect(find.text('Vista lógica: el mismo documento enviado a impresión'), findsOneWidget);
       expect(find.textContaining('58 mm (32 columnas)'), findsOneWidget);
 
       // Verify Cuota Fija texts are visible in preview
@@ -48,7 +53,42 @@ void main() {
       expect(textWidget.style?.fontFamily, 'monospace');
     });
 
-    testWidgets('toggling between 58mm and 80mm updates header and columns', (tester) async {
+    testWidgets('shows a success snackbar when printing succeeds', (tester) async {
+      final printer = MockPrinterAdapter();
+      await tester.pumpWidget(buildTestWidget(printerPort: printer));
+
+      await tester.tap(find.text('Open Preview'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('IMPRIMIR ESTE TICKET'));
+      await tester.pumpAndSettle();
+
+      expect(printer.printHistory.single.isSuccess, isTrue);
+      expect(find.text('Ticket enviado a la impresora térmica.'), findsOneWidget);
+      expect(find.textContaining('Error al imprimir:'), findsNothing);
+      expect(
+        tester.widget<SnackBar>(find.byType(SnackBar)).backgroundColor,
+        Colors.green,
+      );
+    });
+
+    testWidgets('shows a failure snackbar instead of success when printing fails', (tester) async {
+        final printer = MockPrinterAdapter()..shouldFail = true;
+        await tester.pumpWidget(buildTestWidget(printerPort: printer));
+
+        await tester.tap(find.text('Open Preview'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('IMPRIMIR ESTE TICKET'));
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('Error al imprimir:'), findsOneWidget);
+        expect(find.text('Ticket enviado a la impresora térmica.'), findsNothing);
+        expect(
+          tester.widget<SnackBar>(find.byType(SnackBar)).backgroundColor,
+          Colors.red,
+        );
+      });
+
+      testWidgets('toggling between 58mm and 80mm updates header and columns', (tester) async {
       await tester.pumpWidget(buildTestWidget(initialPaperWidthMm: 58));
 
       await tester.tap(find.text('Open Preview'));
