@@ -201,8 +201,10 @@ class IPosPrinterHandler(private val context: Context) : MethodChannel.MethodCal
 
         val paperWidthMm = call.argument<Int>("paperWidthMm") ?: 58
         try {
-            val format = PrintTextFormat().apply {
-                textSize = 24
+            val format = if (paperWidthMm == 80) {
+                NyxPrintProfile.receipt80mm.createFormat()
+            } else {
+                PrintTextFormat().apply { textSize = 24 }
             }
             // This controls per-job layout/render width only; it does not change the
             // persistent physical/default paper setting in net.nyx.printerservice.SETTINGS.

@@ -17,14 +17,15 @@ class IPosPrinterAdapter implements PrinterPort {
   /// Keeps platform-channel bitmap payloads bounded before Nyx decodes them.
   static const int maxLogoBytes = 1024 * 1024;
 
-  static const MethodChannel _defaultChannel =
-      MethodChannel('com.nhilos.pos/ipos_printer');
+  static const MethodChannel _defaultChannel = MethodChannel(
+    'com.nhilos.pos/ipos_printer',
+  );
 
   final MethodChannel _channel;
   bool _isHardwareDetected = false;
 
   IPosPrinterAdapter({MethodChannel? channel})
-      : _channel = channel ?? _defaultChannel;
+    : _channel = channel ?? _defaultChannel;
 
   bool get isHardwareDetected => _isHardwareDetected;
 
@@ -51,10 +52,14 @@ class IPosPrinterAdapter implements PrinterPort {
     } on MissingPluginException {
       // Running on a device or platform without iPos hardware service (Desktop, Emulator, Test)
       _isHardwareDetected = false;
-      debugPrint('[IPosPrinterAdapter] iPos service not found on this platform. Fallback active.');
+      debugPrint(
+        '[IPosPrinterAdapter] iPos service not found on this platform. Fallback active.',
+      );
       return PrinterStatus.ready;
     } on PlatformException catch (e) {
-      debugPrint('[IPosPrinterAdapter] PlatformException checking status: ${e.message}');
+      debugPrint(
+        '[IPosPrinterAdapter] PlatformException checking status: ${e.message}',
+      );
       return PrinterStatus.error;
     } catch (e) {
       debugPrint('[IPosPrinterAdapter] Unexpected error: $e');
@@ -106,16 +111,23 @@ class IPosPrinterAdapter implements PrinterPort {
       logoRasterBytes: logoRasterBytes,
     );
     final normalizedPaperWidthMm = _normalizedPaperWidthMm(paperWidthMm);
-    final formattedText = ReceiptLayoutFormatter.fromPaperWidth(normalizedPaperWidthMm)
-        .formatReceiptDocumentText(document);
+    final formattedText = ReceiptLayoutFormatter.fromPaperWidth(
+      normalizedPaperWidthMm,
+    ).formatReceiptDocumentText(document);
 
     try {
       // 1. If logo is provided, print it using native Nyx bitmap printing
-      if (logoRasterBytes != null && logoRasterBytes.isNotEmpty && logoRasterBytes.length <= maxLogoBytes &&
-              ThermalLogoProcessor.isPng(Uint8List.fromList(logoRasterBytes))) {
-        await _channel.invokeMethod('printBitmap', {'bytes': Uint8List.fromList(logoRasterBytes)});
+      if (logoRasterBytes != null &&
+          logoRasterBytes.isNotEmpty &&
+          logoRasterBytes.length <= maxLogoBytes &&
+          ThermalLogoProcessor.isPng(Uint8List.fromList(logoRasterBytes))) {
+        await _channel.invokeMethod('printBitmap', {
+          'bytes': Uint8List.fromList(logoRasterBytes),
+        });
       } else if (logoRasterBytes != null && logoRasterBytes.isNotEmpty) {
-        debugPrint('[IPosPrinterAdapter] Skipped invalid/unsupported bitmap; text receipt continues.');
+        debugPrint(
+          '[IPosPrinterAdapter] Skipped invalid/unsupported bitmap; text receipt continues.',
+        );
       }
 
       // This selects per-job layout/render width only; it does not change the
@@ -149,15 +161,22 @@ class IPosPrinterAdapter implements PrinterPort {
     int paperWidthMm = 58,
   }) async {
     final normalizedPaperWidthMm = _normalizedPaperWidthMm(paperWidthMm);
-    final text = ReceiptLayoutFormatter.fromPaperWidth(normalizedPaperWidthMm)
-        .formatReceiptDocumentText(document);
+    final text = ReceiptLayoutFormatter.fromPaperWidth(
+      normalizedPaperWidthMm,
+    ).formatReceiptDocumentText(document);
     try {
       final logo = document.logoRasterBytes;
-      if (logo != null && logo.isNotEmpty && logo.length <= maxLogoBytes &&
+      if (logo != null &&
+          logo.isNotEmpty &&
+          logo.length <= maxLogoBytes &&
           ThermalLogoProcessor.isPng(Uint8List.fromList(logo))) {
-        await _channel.invokeMethod('printBitmap', {'bytes': Uint8List.fromList(logo)});
+        await _channel.invokeMethod('printBitmap', {
+          'bytes': Uint8List.fromList(logo),
+        });
       } else if (logo != null && logo.isNotEmpty) {
-        debugPrint('[IPosPrinterAdapter] Skipped invalid/unsupported bitmap; text receipt continues.');
+        debugPrint(
+          '[IPosPrinterAdapter] Skipped invalid/unsupported bitmap; text receipt continues.',
+        );
       }
       // This selects per-job layout/render width only; it does not change the
       // persistent physical/default paper setting in net.nyx.printerservice.SETTINGS.
@@ -172,7 +191,10 @@ class IPosPrinterAdapter implements PrinterPort {
         'Servicio de impresión iPos no disponible.',
       );
     } on PlatformException catch (e) {
-      return PrinterResult.failure(PrinterStatus.error, e.message ?? 'Error en servicio de impresión iPos');
+      return PrinterResult.failure(
+        PrinterStatus.error,
+        e.message ?? 'Error en servicio de impresión iPos',
+      );
     } catch (e) {
       return PrinterResult.failure(PrinterStatus.error, e.toString());
     }
@@ -309,8 +331,13 @@ class IPosPrinterAdapter implements PrinterPort {
       debugPrint('[IPosPrinterAdapter] openDrawer fallback simulation.');
       return PrinterResult.success();
     } on PlatformException catch (e) {
-      debugPrint('[IPosPrinterAdapter] Error opening cash drawer: ${e.message}');
-      return PrinterResult.failure(PrinterStatus.error, e.message ?? 'Error de gaveta');
+      debugPrint(
+        '[IPosPrinterAdapter] Error opening cash drawer: ${e.message}',
+      );
+      return PrinterResult.failure(
+        PrinterStatus.error,
+        e.message ?? 'Error de gaveta',
+      );
     } catch (e) {
       return PrinterResult.failure(PrinterStatus.error, e.toString());
     }
@@ -332,7 +359,9 @@ class IPosPrinterAdapter implements PrinterPort {
           'paperWidthMm': _normalizedPaperWidthMm(paperWidthMm),
         });
       } else if (rawBytes != null && rawBytes.isNotEmpty) {
-        await _channel.invokeMethod('printRawBytes', {'bytes': Uint8List.fromList(rawBytes)});
+        await _channel.invokeMethod('printRawBytes', {
+          'bytes': Uint8List.fromList(rawBytes),
+        });
       }
       return PrinterResult.success(bytes: rawBytes, text: plainText);
     } on MissingPluginException {

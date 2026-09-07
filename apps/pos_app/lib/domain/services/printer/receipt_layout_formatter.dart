@@ -19,24 +19,22 @@ class ReceiptLayoutFormatter {
 
   ReceiptLayoutFormatter(this.metrics);
 
-  int get maxCols => metrics.printableWidth;
+  /// Maximum content width in monospaced character columns.
+  int get maxCols => metrics.contentWidth;
   int get maxImageWidth => metrics.maxImageWidth;
   int get maxImageHeight => metrics.maxImageHeight;
 
   /// 58mm Thermal Printer Mode (32 columns, max 384px image width)
-  factory ReceiptLayoutFormatter.format58mm() => ReceiptLayoutFormatter(
-        ReceiptLayoutMetrics.mm58(),
-      );
+  factory ReceiptLayoutFormatter.format58mm() =>
+      ReceiptLayoutFormatter(ReceiptLayoutMetrics.mm58());
 
-  /// 80mm Thermal Printer Mode (44 columns, max 576px image width)
-  factory ReceiptLayoutFormatter.format80mm() => ReceiptLayoutFormatter(
-        ReceiptLayoutMetrics.mm80(),
-      );
+  /// 80mm Nyx TLMono mode (40 logical columns, max 576px image width)
+  factory ReceiptLayoutFormatter.format80mm() =>
+      ReceiptLayoutFormatter(ReceiptLayoutMetrics.mm80());
 
   /// Resolves formatter dynamically based on configured paper width in millimeters.
-  factory ReceiptLayoutFormatter.fromPaperWidth(int paperWidthMm) => ReceiptLayoutFormatter(
-        ReceiptLayoutMetrics.fromPaperWidth(paperWidthMm),
-      );
+  factory ReceiptLayoutFormatter.fromPaperWidth(int paperWidthMm) =>
+      ReceiptLayoutFormatter(ReceiptLayoutMetrics.fromPaperWidth(paperWidthMm));
 
   // ==========================================
   // 1. Column Formatting & Text Helpers
@@ -44,7 +42,11 @@ class ReceiptLayoutFormatter {
 
   /// Formats monetary amount with thousands separator and two decimal places.
   /// Example: C$ 1,234.50 or $ 3.01
-  static String formatMoney(num value, {String symbol = 'C\$', bool includeSymbol = true}) {
+  static String formatMoney(
+    num value, {
+    String symbol = 'C\$',
+    bool includeSymbol = true,
+  }) {
     final formatted = NumberFormat('#,##0.00', 'en_US').format(value);
     return includeSymbol ? '$symbol $formatted' : formatted;
   }
@@ -54,7 +56,9 @@ class ReceiptLayoutFormatter {
     final effectiveWidth = width ?? metrics.contentWidth;
     final clean = sanitizeInlineText(text);
     if (clean.length >= effectiveWidth) {
-      return clean.length > effectiveWidth ? clean.substring(0, effectiveWidth) : clean;
+      return clean.length > effectiveWidth
+          ? clean.substring(0, effectiveWidth)
+          : clean;
     }
     final leftPadding = (effectiveWidth - clean.length) ~/ 2;
     final rightPadding = effectiveWidth - clean.length - leftPadding;
@@ -80,7 +84,8 @@ class ReceiptLayoutFormatter {
 
   /// Formats a centered section header enclosed with filler characters spanning full width.
   /// Example (32 cols): `------- DETALLE DE PAGO --------`
-  String sectionHeader(String title, [String char = '-']) => metrics.sectionHeader(title, char);
+  String sectionHeader(String title, [String char = '-']) =>
+      metrics.sectionHeader(title, char);
 
   /// Formats two strings on the same line, with [leftText] aligned to the left
   /// and [rightText] strictly aligned to the right, strictly fitting in [width] columns.
@@ -133,8 +138,8 @@ class ReceiptLayoutFormatter {
   /// - 58mm Mode (32 cols):
   ///   Line 1: "$qty x $name" (wrapped with 4-space hanging indent if long)
   ///   Line 2: "  @ C$ $unitPrice" (left) ... "C$ $total" (right)
-  /// - 80mm Mode (44 cols):
-  ///   Tabular grid: CANT (5) | DESCRIPCION (18) | P.UNIT (10) | TOTAL (11) = 44 cols
+  /// - 80mm Mode:
+  ///   Tabular grid: CANT(4) + gutter(1) + DESCRIPCION(14) + gutter(1) + P.UNIT(8) + gutter(1) + TOTAL(11) = 40 cols
   List<String> formatItemRow({
     required double quantity,
     required String name,
@@ -148,7 +153,7 @@ class ReceiptLayoutFormatter {
     final unitPriceStr = formatMoney(unitPrice, symbol: currencySymbol);
     final totalStr = formatMoney(total, symbol: currencySymbol);
 
-    if (metrics.printableWidth <= 38) {
+    if (metrics.contentColumns <= 38) {
       // ==========================================
       // 58mm Mode (32 cols) - 2-tier composition
       // ==========================================
@@ -160,37 +165,64 @@ class ReceiptLayoutFormatter {
       lines.addAll(wrappedTitle);
 
       // Line 2: Unit price left-aligned with indent, total strictly right-aligned
-      lines.add(formatTwoColumns('  @ $unitPriceStr', totalStr, metrics.contentWidth));
+      lines.add(
+        formatTwoColumns('  @ $unitPriceStr', totalStr, metrics.contentWidth),
+      );
       return lines;
     } else {
       // ==========================================
-      // 80mm Mode (44 cols) - 4-column tabular grid
-      // CANT (5) + DESCRIPCION (18) + P.UNIT (10) + TOTAL (11) = 44 cols
+      // 80mm Mode (40 cols) - Master Grid
+      // CANT(4) + gutter(1) + DESCRIPCION(14) + gutter(1) + P.UNIT(8) + gutter(1) + TOTAL(11) = 40 cols
+      // Currency symbol omitted from cells — header provides context.
       // ==========================================
-      final actualQtyWidth = qtyStr.length > metrics.qtyWidth
-          ? qtyStr.length + 1
-          : metrics.qtyWidth;
-      final actualUnitPriceWidth = unitPriceStr.length > metrics.unitPriceWidth
-          ? unitPriceStr.length + 1
-          : metrics.unitPriceWidth;
-      final actualTotalWidth = totalStr.length > metrics.totalWidth
-          ? totalStr.length + 1
-          : metrics.totalWidth;
+      final rawUnitPrice = NumberFormat('#,##0.00', 'en_US').format(unitPrice);
+      final rawTotal = NumberFormat('#,##0.00', 'en_US').format(total);
 
-      // Keep the tabular layout only while it retains a readable description.
-      // Extreme quantities or monetary values use a lossless multi-line fallback.
-      final colDescWidth = metrics.contentWidth - actualQtyWidth - actualUnitPriceWidth - actualTotalWidth;
-      final cleanName = sanitizeInlineText(name);
-      if (colDescWidth < 8) {
-        final lines = wrap('$qtyStr x $cleanName', metrics.contentWidth, '    ');
-        lines.addAll(wrap('  @ $unitPriceStr', metrics.contentWidth, '    '));
-        lines.addAll(wrap('TOTAL: $totalStr', metrics.contentWidth, '  '));
+      // Enforce strict column widths — overflow triggers multi-line fallback
+      if (qtyStr.length > metrics.qtyWidth ||
+          rawUnitPrice.length > metrics.unitPriceWidth ||
+          rawTotal.length > metrics.totalWidth) {
+        final lines = wrap(
+          '$qtyStr x ${sanitizeInlineText(name)}',
+          metrics.contentWidth,
+          '    ',
+        );
+        lines.addAll(
+          wrap('  @ ${formatMoney(unitPrice)}', metrics.contentWidth, '    '),
+        );
+        lines.addAll(
+          wrap('TOTAL: ${formatMoney(total)}', metrics.contentWidth, '  '),
+        );
         return lines;
       }
 
-      final colQty = qtyStr.padRight(actualQtyWidth);
-      final colUnitPrice = unitPriceStr.padLeft(actualUnitPriceWidth);
-      final colTotal = totalStr.padLeft(actualTotalWidth);
+      final cleanName = sanitizeInlineText(name);
+      final colDescWidth =
+          metrics.contentWidth -
+          metrics.qtyWidth -
+          metrics.unitPriceWidth -
+          metrics.totalWidth -
+          metrics.columnGutters;
+      if (colDescWidth < 8) {
+        final lines = wrap(
+          '$qtyStr x $cleanName',
+          metrics.contentWidth,
+          '    ',
+        );
+        lines.addAll(
+          wrap('  @ ${formatMoney(unitPrice)}', metrics.contentWidth, '    '),
+        );
+        lines.addAll(
+          wrap('TOTAL: ${formatMoney(total)}', metrics.contentWidth, '  '),
+        );
+        return lines;
+      }
+
+      final colQty = qtyStr.padRight(metrics.qtyWidth);
+      final colDesc = cleanName.padRight(colDescWidth);
+      final colUnitPrice = rawUnitPrice.padLeft(metrics.unitPriceWidth);
+      final colTotal = rawTotal.padLeft(metrics.totalWidth);
+      final gutter = ' ';
 
       final wrappedNames = wrap(cleanName, colDescWidth);
       final lines = <String>[];
@@ -198,23 +230,56 @@ class ReceiptLayoutFormatter {
       for (int i = 0; i < wrappedNames.length; i++) {
         final nameChunk = wrappedNames[i].padRight(colDescWidth);
         if (i == 0) {
-          lines.add('$colQty$nameChunk$colUnitPrice$colTotal');
+          lines.add(
+            '$colQty$gutter$nameChunk$gutter$colUnitPrice$gutter$colTotal',
+          );
         } else {
-          lines.add('${' ' * actualQtyWidth}$nameChunk${' ' * (actualUnitPriceWidth + actualTotalWidth)}');
+          // Continuation: qty spaces + gutter + name chunk + gutter + unitPrice spaces + gutter + total spaces
+          lines.add(
+            '${' ' * metrics.qtyWidth}$gutter$nameChunk$gutter${' ' * metrics.unitPriceWidth}$gutter${' ' * metrics.totalWidth}',
+          );
         }
       }
       return lines;
     }
   }
 
+  /// Formats a raw numeric amount for the 80mm items table, right-aligned to
+  /// [metrics.totalWidth] columns. No currency symbol — the table header provides context.
+  /// Example: `     120.00` (12 chars)
+  String amount80(num value) {
+    final formatted = NumberFormat('#,##0.00', 'en_US').format(value);
+    return formatted.padLeft(metrics.totalWidth);
+  }
+
+  /// Formats a numeric amount for the 80mm summary/payment sections with the `C$` prefix.
+  /// Returns a single string; `formatTwoColumns` handles overflow naturally
+  /// by breaking the amount onto the next line when it exceeds column width.
+  /// Example: `C$ 120.00` (12 chars)
+  String summaryAmount80(num value) {
+    final formatted = NumberFormat('#,##0.00', 'en_US').format(value);
+    return 'C\$ $formatted';
+  }
+
   /// Normalizes text to the deterministic single-column Latin-1 receipt codec.
-  String normalizePrintableText(String text) => const PrintableTextCodec().normalize(text);
+  String normalizePrintableText(String text) =>
+      const PrintableTextCodec().normalize(text);
 
   /// Removes printer controls and normalizes inline whitespace before measuring.
   String sanitizeInlineText(String text) => normalizePrintableText(text)
       .replaceAll(RegExp(r'[\u0000-\u001F\u007F]'), ' ')
       .replaceAll(RegExp(r'\s+'), ' ')
       .trim();
+
+  /// Text layout never represents a printer's physical margin as characters.
+  String marginLine(String content) {
+    return content;
+  }
+
+  /// Writes one logical line to the ESC/POS builder.
+  EscPosBuilder marginTextLine(EscPosBuilder builder, String line) {
+    return builder.textLine(marginLine(line));
+  }
 
   /// Robust word-wrapping engine.
   /// Preserves whole words when possible, breaks words longer than line width,
@@ -223,9 +288,9 @@ class ReceiptLayoutFormatter {
     final effectiveWidth = width ?? metrics.contentWidth;
     if (effectiveWidth <= 0) return [text];
     // Newlines remain supported for authored footer copy; other controls are removed.
-    final clean = normalizePrintableText(text)
-        .replaceAll(RegExp(r'[\u0000-\u0009\u000B-\u001F\u007F]'), ' ')
-        .trim();
+    final clean = normalizePrintableText(
+      text,
+    ).replaceAll(RegExp(r'[\u0000-\u0009\u000B-\u001F\u007F]'), ' ').trim();
     if (clean.isEmpty) return [];
 
     final rawLines = clean.split(RegExp(r'\r?\n'));
@@ -330,12 +395,16 @@ class ReceiptLayoutFormatter {
     }
 
     // Only display customer fields if actual data exists (never print "Cliente: N/A")
-    if (doc.customerName != null && doc.customerName!.isNotEmpty && doc.customerName != 'N/A') {
+    if (doc.customerName != null &&
+        doc.customerName!.isNotEmpty &&
+        doc.customerName != 'N/A') {
       for (final l in formatKeyValue('Cliente:', doc.customerName!)) {
         buffer.writeln(l);
       }
     }
-    if (doc.customerRuc != null && doc.customerRuc!.isNotEmpty && doc.customerRuc != 'N/A') {
+    if (doc.customerRuc != null &&
+        doc.customerRuc!.isNotEmpty &&
+        doc.customerRuc != 'N/A') {
       for (final l in formatKeyValue('RUC/Cedula:', doc.customerRuc!)) {
         buffer.writeln(l);
       }
@@ -349,14 +418,16 @@ class ReceiptLayoutFormatter {
     buffer.writeln(divider('-'));
 
     // 3. ITEMS TABLE HEADER
-    if (metrics.printableWidth <= 38) {
+    if (metrics.contentColumns <= 38) {
       buffer.writeln(formatTwoColumns('CANT DESCRIPCION', 'TOTAL'));
     } else {
+      // 80mm: CANT(4) + gutter(1) + DESCRIPCION(14) + gutter(1) + P.UNIT(8) + gutter(1) + TOTAL(11) = 40
       final hQty = 'CANT'.padRight(metrics.qtyWidth);
       final hDesc = 'DESCRIPCION'.padRight(metrics.descriptionWidth);
       final hUnitPrice = 'P.UNIT'.padLeft(metrics.unitPriceWidth);
       final hTotal = 'TOTAL'.padLeft(metrics.totalWidth);
-      buffer.writeln('$hQty$hDesc$hUnitPrice$hTotal');
+      final gutter = ' ';
+      buffer.writeln('$hQty$gutter$hDesc$gutter$hUnitPrice$gutter$hTotal');
     }
     buffer.writeln(divider('-'));
 
@@ -385,11 +456,26 @@ class ReceiptLayoutFormatter {
         }
       }
       if (hasLineDiscount) {
-        buffer.writeln(formatTwoColumns('  - Descuento:', formatMoney(line.discount)));
-        buffer.writeln(formatTwoColumns('  Neto:', formatMoney(line.lineSubtotal)));
+        if (metrics.is80mm) {
+          buffer.writeln(
+            formatTwoColumns('Descuento', amount80(line.discount)),
+          );
+          buffer.writeln(formatTwoColumns('Neto', amount80(line.lineSubtotal)));
+        } else {
+          buffer.writeln(
+            formatTwoColumns('  - Descuento:', formatMoney(line.discount)),
+          );
+          buffer.writeln(
+            formatTwoColumns('  Neto:', formatMoney(line.lineSubtotal)),
+          );
+        }
       }
       if (line.notes != null && line.notes!.isNotEmpty) {
-        for (final noteLine in wrap('  * ${line.notes!}', metrics.contentWidth, '    ')) {
+        for (final noteLine in wrap(
+          '  * ${line.notes!}',
+          metrics.contentWidth,
+          '    ',
+        )) {
           buffer.writeln(noteLine);
         }
       }
@@ -406,56 +492,188 @@ class ReceiptLayoutFormatter {
     if (doc.taxRegime.isCuotaFija) {
       // Cuota Fija: Subtotal & Total. Never print IVA (15%): C$ 0.00 or VENTA EXENTA.
       if (hasDiscount) {
-        buffer.writeln(formatTwoColumns('SUBTOTAL BRUTO:', formatMoney(displayGrossSubtotal)));
-        buffer.writeln(formatTwoColumns('DESCUENTO:', formatMoney(doc.discountTotal)));
-        buffer.writeln(formatTwoColumns('SUBTOTAL NETO:', formatMoney(doc.subtotal)));
+        if (metrics.is80mm) {
+          buffer.writeln(
+            formatTwoColumns(
+              'SUBTOTAL BRUTO:',
+              summaryAmount80(displayGrossSubtotal),
+            ),
+          );
+          buffer.writeln(
+            formatTwoColumns('DESCUENTO:', summaryAmount80(doc.discountTotal)),
+          );
+          buffer.writeln(
+            formatTwoColumns('SUBTOTAL NETO:', summaryAmount80(doc.subtotal)),
+          );
+        } else {
+          buffer.writeln(
+            formatTwoColumns(
+              'SUBTOTAL BRUTO:',
+              formatMoney(displayGrossSubtotal),
+            ),
+          );
+          buffer.writeln(
+            formatTwoColumns('DESCUENTO:', formatMoney(doc.discountTotal)),
+          );
+          buffer.writeln(
+            formatTwoColumns('SUBTOTAL NETO:', formatMoney(doc.subtotal)),
+          );
+        }
       } else {
-        buffer.writeln(formatTwoColumns('SUBTOTAL:', formatMoney(doc.subtotal)));
+        buffer.writeln(
+          metrics.is80mm
+              ? formatTwoColumns('SUBTOTAL:', summaryAmount80(doc.subtotal))
+              : formatTwoColumns('SUBTOTAL:', formatMoney(doc.subtotal)),
+        );
       }
       buffer.writeln(doubleDivider());
-      buffer.writeln(formatTwoColumns('TOTAL CORDOBAS:', formatMoney(doc.total)));
+      buffer.writeln(
+        metrics.is80mm
+            ? formatTwoColumns('TOTAL CORDOBAS:', summaryAmount80(doc.total))
+            : formatTwoColumns('TOTAL CORDOBAS:', formatMoney(doc.total)),
+      );
       buffer.writeln(doubleDivider());
     } else {
       // Régimen General: Disclose Subtotal, applicable exemptions, IVA, and Total
       if (doc.isTaxExempt || doc.globalTaxOverride) {
         if (hasDiscount) {
-          buffer.writeln(formatTwoColumns('SUBTOTAL BRUTO:', formatMoney(displayGrossSubtotal)));
-          buffer.writeln(formatTwoColumns('DESCUENTO:', formatMoney(doc.discountTotal)));
-          buffer.writeln(formatTwoColumns('SUBTOTAL NETO:', formatMoney(doc.subtotal)));
+          if (metrics.is80mm) {
+            buffer.writeln(
+              formatTwoColumns(
+                'SUBTOTAL BRUTO:',
+                summaryAmount80(displayGrossSubtotal),
+              ),
+            );
+            buffer.writeln(
+              formatTwoColumns(
+                'DESCUENTO:',
+                summaryAmount80(doc.discountTotal),
+              ),
+            );
+            buffer.writeln(
+              formatTwoColumns('SUBTOTAL NETO:', summaryAmount80(doc.subtotal)),
+            );
+          } else {
+            buffer.writeln(
+              formatTwoColumns(
+                'SUBTOTAL BRUTO:',
+                formatMoney(displayGrossSubtotal),
+              ),
+            );
+            buffer.writeln(
+              formatTwoColumns('DESCUENTO:', formatMoney(doc.discountTotal)),
+            );
+            buffer.writeln(
+              formatTwoColumns('SUBTOTAL NETO:', formatMoney(doc.subtotal)),
+            );
+          }
         } else {
-          buffer.writeln(formatTwoColumns('SUBTOTAL:', formatMoney(doc.subtotal)));
+          buffer.writeln(
+            metrics.is80mm
+                ? formatTwoColumns('SUBTOTAL:', summaryAmount80(doc.subtotal))
+                : formatTwoColumns('SUBTOTAL:', formatMoney(doc.subtotal)),
+          );
         }
-        buffer.writeln(formatTwoColumns('VENTA EXENTA (IVA 0%):', formatMoney(0.00)));
+        buffer.writeln(
+          formatTwoColumns('VENTA EXENTA (IVA 0%):', formatMoney(0.00)),
+        );
         buffer.writeln(doubleDivider());
-        buffer.writeln(formatTwoColumns('TOTAL CORDOBAS:', formatMoney(doc.total)));
+        buffer.writeln(
+          metrics.is80mm
+              ? formatTwoColumns('TOTAL CORDOBAS:', summaryAmount80(doc.total))
+              : formatTwoColumns('TOTAL CORDOBAS:', formatMoney(doc.total)),
+        );
         buffer.writeln(doubleDivider());
-        for (final line in centerLines('** VENTA EXENTA DE IVA - POLITICA TEMPORAL **')) {
+        for (final line in centerLines(
+          '** VENTA EXENTA DE IVA - POLITICA TEMPORAL **',
+        )) {
           buffer.writeln(line);
         }
       } else {
         if (hasDiscount) {
-          buffer.writeln(formatTwoColumns('SUBTOTAL BRUTO:', formatMoney(displayGrossSubtotal)));
-          buffer.writeln(formatTwoColumns('DESCUENTO:', formatMoney(doc.discountTotal)));
-          buffer.writeln(formatTwoColumns('SUBTOTAL NETO:', formatMoney(doc.subtotal)));
+          if (metrics.is80mm) {
+            buffer.writeln(
+              formatTwoColumns(
+                'SUBTOTAL BRUTO:',
+                summaryAmount80(displayGrossSubtotal),
+              ),
+            );
+            buffer.writeln(
+              formatTwoColumns(
+                'DESCUENTO:',
+                summaryAmount80(doc.discountTotal),
+              ),
+            );
+            buffer.writeln(
+              formatTwoColumns('SUBTOTAL NETO:', summaryAmount80(doc.subtotal)),
+            );
+          } else {
+            buffer.writeln(
+              formatTwoColumns(
+                'SUBTOTAL BRUTO:',
+                formatMoney(displayGrossSubtotal),
+              ),
+            );
+            buffer.writeln(
+              formatTwoColumns('DESCUENTO:', formatMoney(doc.discountTotal)),
+            );
+            buffer.writeln(
+              formatTwoColumns('SUBTOTAL NETO:', formatMoney(doc.subtotal)),
+            );
+          }
         } else {
-          buffer.writeln(formatTwoColumns('SUBTOTAL:', formatMoney(doc.subtotal)));
+          buffer.writeln(
+            metrics.is80mm
+                ? formatTwoColumns('SUBTOTAL:', summaryAmount80(doc.subtotal))
+                : formatTwoColumns('SUBTOTAL:', formatMoney(doc.subtotal)),
+          );
         }
         if (doc.exemptSubtotal > 0) {
-          buffer.writeln(formatTwoColumns('VENTA EXENTA:', formatMoney(doc.exemptSubtotal)));
+          buffer.writeln(
+            formatTwoColumns('VENTA EXENTA:', formatMoney(doc.exemptSubtotal)),
+          );
         }
         if (doc.totalTax > 0) {
-          buffer.writeln(formatTwoColumns('IVA (15%):', formatMoney(doc.totalTax)));
+          buffer.writeln(
+            formatTwoColumns('IVA (15%):', formatMoney(doc.totalTax)),
+          );
         }
         buffer.writeln(doubleDivider());
-        buffer.writeln(formatTwoColumns('TOTAL CORDOBAS:', formatMoney(doc.total)));
+        buffer.writeln(
+          metrics.is80mm
+              ? formatTwoColumns('TOTAL CORDOBAS:', summaryAmount80(doc.total))
+              : formatTwoColumns('TOTAL CORDOBAS:', formatMoney(doc.total)),
+        );
         buffer.writeln(doubleDivider());
       }
     }
 
     // 6. SECONDARY FX EQUIVALENT (USD)
     if (doc.commercialRate > 0) {
-      buffer.writeln(formatTwoColumns('T/C USD:', formatMoney(doc.commercialRate)));
-      buffer.writeln(formatTwoColumns('TOTAL USD:', formatMoney(doc.totalUsd, symbol: '\$')));
+      if (metrics.is80mm) {
+        buffer.writeln(
+          formatTwoColumns(
+            'T/C USD:',
+            formatMoney(doc.commercialRate, includeSymbol: false),
+          ),
+        );
+        buffer.writeln(
+          formatTwoColumns(
+            'TOTAL USD:',
+            formatMoney(doc.totalUsd, symbol: '\$', includeSymbol: true),
+          ),
+        );
+      } else {
+        buffer.writeln(
+          formatTwoColumns('T/C USD:', formatMoney(doc.commercialRate)),
+        );
+        buffer.writeln(
+          formatTwoColumns(
+            'TOTAL USD:',
+            formatMoney(doc.totalUsd, symbol: '\$'),
+          ),
+        );
+      }
     }
 
     // 7. PAYMENT BREAKDOWN
@@ -466,17 +684,33 @@ class ReceiptLayoutFormatter {
       buffer.writeln(formatTwoColumns('Condicion:', 'Contado'));
     } else {
       for (final p in doc.payments) {
-        final amountFormatted = p.currency == 'USD'
-            ? '\$ ${p.amount.toStringAsFixed(2)}'
-            : formatMoney(p.amount);
+        final String amountFormatted;
+        if (metrics.is80mm) {
+          amountFormatted = p.currency == 'USD'
+              ? '\$ ${p.amount.toStringAsFixed(2)}'
+              : summaryAmount80(p.amount);
+        } else {
+          amountFormatted = p.currency == 'USD'
+              ? '\$ ${p.amount.toStringAsFixed(2)}'
+              : formatMoney(p.amount);
+        }
         buffer.writeln(formatTwoColumns('${p.methodLabel}:', amountFormatted));
 
         if (p.changeGiven > 0) {
           final changeCurr = p.changeCurrency ?? 'NIO';
-          final changeFormatted = changeCurr == 'USD'
-              ? '\$ ${p.changeGiven.toStringAsFixed(2)}'
-              : formatMoney(p.changeGiven);
-          buffer.writeln(formatTwoColumns('Cambio ($changeCurr):', changeFormatted));
+          final String changeFormatted;
+          if (metrics.is80mm) {
+            changeFormatted = changeCurr == 'USD'
+                ? '\$ ${p.changeGiven.toStringAsFixed(2)}'
+                : summaryAmount80(p.changeGiven);
+          } else {
+            changeFormatted = changeCurr == 'USD'
+                ? '\$ ${p.changeGiven.toStringAsFixed(2)}'
+                : formatMoney(p.changeGiven);
+          }
+          buffer.writeln(
+            formatTwoColumns('Cambio ($changeCurr):', changeFormatted),
+          );
         }
         if (p.reference != null && p.reference!.isNotEmpty) {
           for (final refLine in formatKeyValue('  Auth/Ref:', p.reference!)) {
@@ -502,7 +736,8 @@ class ReceiptLayoutFormatter {
     }
     buffer.write(metrics.footerGap());
 
-    return buffer.toString();
+    final raw = buffer.toString();
+    return raw;
   }
 
   // ==========================================
@@ -525,74 +760,86 @@ class ReceiptLayoutFormatter {
         .align(EscPosAlign.center)
         .bold(true)
         .fontSize(EscPosFontSize.doubleWidth)
-        .textLine(doc.businessName)
+        .textLine(marginLine(doc.businessName))
         .fontSize(EscPosFontSize.normal)
         .bold(false);
 
     if (doc.legalName != null && doc.legalName!.isNotEmpty) {
-      builder.textLine(doc.legalName!);
+      marginTextLine(builder, doc.legalName!);
     }
     if (doc.ruc != null && doc.ruc!.isNotEmpty) {
-      builder.textLine('RUC: ${doc.ruc!}');
+      marginTextLine(builder, 'RUC: ${doc.ruc!}');
     }
 
-    builder.bold(true).textLine(doc.taxRegime.receiptRegimeHeader).bold(false);
+    builder
+        .bold(true)
+        .textLine(marginLine(doc.taxRegime.receiptRegimeHeader))
+        .bold(false);
 
     if (doc.address != null && doc.address!.isNotEmpty) {
       for (final line in wrap(doc.address!)) {
-        builder.textLine(line);
+        marginTextLine(builder, line);
       }
     }
     if (doc.phone != null && doc.phone!.isNotEmpty) {
-      builder.textLine('Tel: ${doc.phone!}');
+      marginTextLine(builder, 'Tel: ${doc.phone!}');
     }
 
     // 3. Document Info Block
     builder
-        .textLine(doubleDivider())
+        .textLine(marginLine(doubleDivider()))
         .bold(true)
-        .textLine(doc.documentTitle)
-        .textLine('No. ${doc.documentNumber}')
+        .textLine(marginLine(doc.documentTitle))
+        .textLine(marginLine('No. ${doc.documentNumber}'))
         .bold(false)
         .align(EscPosAlign.left);
 
     for (final l in formatKeyValue('Fecha:', dateFormat.format(doc.date))) {
-      builder.textLine(l);
+      marginTextLine(builder, l);
     }
     if (doc.cashierName != null && doc.cashierName!.isNotEmpty) {
       for (final l in formatKeyValue('Atendido por:', doc.cashierName!)) {
-        builder.textLine(l);
+        marginTextLine(builder, l);
       }
     }
-    if (doc.customerName != null && doc.customerName!.isNotEmpty && doc.customerName != 'N/A') {
+    if (doc.customerName != null &&
+        doc.customerName!.isNotEmpty &&
+        doc.customerName != 'N/A') {
       for (final l in formatKeyValue('Cliente:', doc.customerName!)) {
-        builder.textLine(l);
+        marginTextLine(builder, l);
       }
     }
-    if (doc.customerRuc != null && doc.customerRuc!.isNotEmpty && doc.customerRuc != 'N/A') {
+    if (doc.customerRuc != null &&
+        doc.customerRuc!.isNotEmpty &&
+        doc.customerRuc != 'N/A') {
       for (final l in formatKeyValue('RUC/Cedula:', doc.customerRuc!)) {
-        builder.textLine(l);
+        marginTextLine(builder, l);
       }
     }
     if (doc.originInvoiceId != null && doc.originInvoiceId!.isNotEmpty) {
       for (final l in formatKeyValue('Doc. Origen:', doc.originInvoiceId!)) {
-        builder.textLine(l);
+        marginTextLine(builder, l);
       }
     }
 
-    builder.textLine(divider('-'));
+    marginTextLine(builder, divider('-'));
 
     // 4. Items Header
-    if (metrics.printableWidth <= 38) {
-      builder.textLine(formatTwoColumns('CANT DESCRIPCION', 'TOTAL'));
+    if (metrics.contentColumns <= 38) {
+      marginTextLine(builder, formatTwoColumns('CANT DESCRIPCION', 'TOTAL'));
     } else {
+      // 80mm: CANT(4) + gutter(1) + DESCRIPCION(14) + gutter(1) + P.UNIT(8) + gutter(1) + TOTAL(11) = 40
       final hQty = 'CANT'.padRight(metrics.qtyWidth);
       final hDesc = 'DESCRIPCION'.padRight(metrics.descriptionWidth);
       final hUnitPrice = 'P.UNIT'.padLeft(metrics.unitPriceWidth);
       final hTotal = 'TOTAL'.padLeft(metrics.totalWidth);
-      builder.textLine('$hQty$hDesc$hUnitPrice$hTotal');
+      final gutter = ' ';
+      marginTextLine(
+        builder,
+        '$hQty$gutter$hDesc$gutter$hUnitPrice$gutter$hTotal',
+      );
     }
-    builder.textLine(divider('-'));
+    marginTextLine(builder, divider('-'));
 
     // Items Body
     for (final line in doc.lines) {
@@ -607,7 +854,7 @@ class ReceiptLayoutFormatter {
         total: displayLineTotal,
       );
       for (final r in rowLines) {
-        builder.textLine(r);
+        marginTextLine(builder, r);
       }
 
       final modifiers = line.modifierDisplays.isNotEmpty
@@ -615,21 +862,42 @@ class ReceiptLayoutFormatter {
           : line.modifiers;
       for (final mod in modifiers) {
         for (final mLine in wrap('  + $mod', metrics.contentWidth, '    ')) {
-          builder.textLine(mLine);
+          marginTextLine(builder, mLine);
         }
       }
       if (hasLineDiscount) {
-        builder.textLine(formatTwoColumns('  - Descuento:', formatMoney(line.discount)));
-        builder.textLine(formatTwoColumns('  Neto:', formatMoney(line.lineSubtotal)));
+        if (metrics.is80mm) {
+          marginTextLine(
+            builder,
+            formatTwoColumns('Descuento', amount80(line.discount)),
+          );
+          marginTextLine(
+            builder,
+            formatTwoColumns('Neto', amount80(line.lineSubtotal)),
+          );
+        } else {
+          marginTextLine(
+            builder,
+            formatTwoColumns('  - Descuento:', formatMoney(line.discount)),
+          );
+          marginTextLine(
+            builder,
+            formatTwoColumns('  Neto:', formatMoney(line.lineSubtotal)),
+          );
+        }
       }
       if (line.notes != null && line.notes!.isNotEmpty) {
-        for (final noteLine in wrap('  * ${line.notes!}', metrics.contentWidth, '    ')) {
-          builder.textLine(noteLine);
+        for (final noteLine in wrap(
+          '  * ${line.notes!}',
+          metrics.contentWidth,
+          '    ',
+        )) {
+          marginTextLine(builder, noteLine);
         }
       }
     }
 
-    builder.textLine(divider('-'));
+    marginTextLine(builder, divider('-'));
 
     // 5. Totals & Tax Compliance (Ley 822 / DGI)
     final hasDiscountEsc = doc.discountTotal > 0;
@@ -639,123 +907,334 @@ class ReceiptLayoutFormatter {
 
     if (doc.taxRegime.isCuotaFija) {
       if (hasDiscountEsc) {
-        builder.textLine(formatTwoColumns('SUBTOTAL BRUTO:', formatMoney(displayGrossSubtotalEsc)));
-        builder.textLine(formatTwoColumns('DESCUENTO:', formatMoney(doc.discountTotal)));
-        builder.textLine(formatTwoColumns('SUBTOTAL NETO:', formatMoney(doc.subtotal)));
+        if (metrics.is80mm) {
+          marginTextLine(
+            builder,
+            formatTwoColumns(
+              'SUBTOTAL BRUTO:',
+              summaryAmount80(displayGrossSubtotalEsc),
+            ),
+          );
+          marginTextLine(
+            builder,
+            formatTwoColumns('DESCUENTO:', summaryAmount80(doc.discountTotal)),
+          );
+          marginTextLine(
+            builder,
+            formatTwoColumns('SUBTOTAL NETO:', summaryAmount80(doc.subtotal)),
+          );
+        } else {
+          marginTextLine(
+            builder,
+            formatTwoColumns(
+              'SUBTOTAL BRUTO:',
+              formatMoney(displayGrossSubtotalEsc),
+            ),
+          );
+          marginTextLine(
+            builder,
+            formatTwoColumns('DESCUENTO:', formatMoney(doc.discountTotal)),
+          );
+          marginTextLine(
+            builder,
+            formatTwoColumns('SUBTOTAL NETO:', formatMoney(doc.subtotal)),
+          );
+        }
       } else {
-        builder.textLine(formatTwoColumns('SUBTOTAL:', formatMoney(doc.subtotal)));
+        marginTextLine(
+          builder,
+          metrics.is80mm
+              ? formatTwoColumns('SUBTOTAL:', summaryAmount80(doc.subtotal))
+              : formatTwoColumns('SUBTOTAL:', formatMoney(doc.subtotal)),
+        );
       }
       builder
-          .textLine(doubleDivider())
+          .textLine(marginLine(doubleDivider()))
           .bold(true)
-          .textLine(formatTwoColumns('TOTAL CORDOBAS:', formatMoney(doc.total)))
+          .textLine(
+            marginLine(
+              metrics.is80mm
+                  ? formatTwoColumns(
+                      'TOTAL CORDOBAS:',
+                      summaryAmount80(doc.total),
+                    )
+                  : formatTwoColumns('TOTAL CORDOBAS:', formatMoney(doc.total)),
+            ),
+          )
           .bold(false)
-          .textLine(doubleDivider());
+          .textLine(marginLine(doubleDivider()));
     } else {
       if (doc.isTaxExempt || doc.globalTaxOverride) {
         if (hasDiscountEsc) {
-          builder.textLine(formatTwoColumns('SUBTOTAL BRUTO:', formatMoney(displayGrossSubtotalEsc)));
-          builder.textLine(formatTwoColumns('DESCUENTO:', formatMoney(doc.discountTotal)));
-          builder.textLine(formatTwoColumns('SUBTOTAL NETO:', formatMoney(doc.subtotal)));
+          if (metrics.is80mm) {
+            marginTextLine(
+              builder,
+              formatTwoColumns(
+                'SUBTOTAL BRUTO:',
+                summaryAmount80(displayGrossSubtotalEsc),
+              ),
+            );
+            marginTextLine(
+              builder,
+              formatTwoColumns(
+                'DESCUENTO:',
+                summaryAmount80(doc.discountTotal),
+              ),
+            );
+            marginTextLine(
+              builder,
+              formatTwoColumns('SUBTOTAL NETO:', summaryAmount80(doc.subtotal)),
+            );
+          } else {
+            marginTextLine(
+              builder,
+              formatTwoColumns(
+                'SUBTOTAL BRUTO:',
+                formatMoney(displayGrossSubtotalEsc),
+              ),
+            );
+            marginTextLine(
+              builder,
+              formatTwoColumns('DESCUENTO:', formatMoney(doc.discountTotal)),
+            );
+            marginTextLine(
+              builder,
+              formatTwoColumns('SUBTOTAL NETO:', formatMoney(doc.subtotal)),
+            );
+          }
         } else {
-          builder.textLine(formatTwoColumns('SUBTOTAL:', formatMoney(doc.subtotal)));
+          marginTextLine(
+            builder,
+            metrics.is80mm
+                ? formatTwoColumns('SUBTOTAL:', summaryAmount80(doc.subtotal))
+                : formatTwoColumns('SUBTOTAL:', formatMoney(doc.subtotal)),
+          );
         }
         builder
-            .textLine(formatTwoColumns('VENTA EXENTA (IVA 0%):', formatMoney(0.00)))
-            .textLine(doubleDivider())
+            .textLine(
+              marginLine(
+                formatTwoColumns('VENTA EXENTA (IVA 0%):', formatMoney(0.00)),
+              ),
+            )
+            .textLine(marginLine(doubleDivider()))
             .bold(true)
-            .textLine(formatTwoColumns('TOTAL CORDOBAS:', formatMoney(doc.total)))
+            .textLine(
+              marginLine(
+                metrics.is80mm
+                    ? formatTwoColumns(
+                        'TOTAL CORDOBAS:',
+                        summaryAmount80(doc.total),
+                      )
+                    : formatTwoColumns(
+                        'TOTAL CORDOBAS:',
+                        formatMoney(doc.total),
+                      ),
+              ),
+            )
             .bold(false)
-            .textLine(doubleDivider())
+            .textLine(marginLine(doubleDivider()))
             .align(EscPosAlign.center);
-        for (final line in centerLines('** VENTA EXENTA DE IVA - POLITICA TEMPORAL **')) {
-          builder.textLine(line);
+        for (final line in centerLines(
+          '** VENTA EXENTA DE IVA - POLITICA TEMPORAL **',
+        )) {
+          marginTextLine(builder, line);
         }
         builder.align(EscPosAlign.left);
       } else {
         if (hasDiscountEsc) {
-          builder.textLine(formatTwoColumns('SUBTOTAL BRUTO:', formatMoney(displayGrossSubtotalEsc)));
-          builder.textLine(formatTwoColumns('DESCUENTO:', formatMoney(doc.discountTotal)));
-          builder.textLine(formatTwoColumns('SUBTOTAL NETO:', formatMoney(doc.subtotal)));
+          if (metrics.is80mm) {
+            marginTextLine(
+              builder,
+              formatTwoColumns(
+                'SUBTOTAL BRUTO:',
+                summaryAmount80(displayGrossSubtotalEsc),
+              ),
+            );
+            marginTextLine(
+              builder,
+              formatTwoColumns(
+                'DESCUENTO:',
+                summaryAmount80(doc.discountTotal),
+              ),
+            );
+            marginTextLine(
+              builder,
+              formatTwoColumns('SUBTOTAL NETO:', summaryAmount80(doc.subtotal)),
+            );
+          } else {
+            marginTextLine(
+              builder,
+              formatTwoColumns(
+                'SUBTOTAL BRUTO:',
+                formatMoney(displayGrossSubtotalEsc),
+              ),
+            );
+            marginTextLine(
+              builder,
+              formatTwoColumns('DESCUENTO:', formatMoney(doc.discountTotal)),
+            );
+            marginTextLine(
+              builder,
+              formatTwoColumns('SUBTOTAL NETO:', formatMoney(doc.subtotal)),
+            );
+          }
         } else {
-          builder.textLine(formatTwoColumns('SUBTOTAL:', formatMoney(doc.subtotal)));
+          marginTextLine(
+            builder,
+            metrics.is80mm
+                ? formatTwoColumns('SUBTOTAL:', summaryAmount80(doc.subtotal))
+                : formatTwoColumns('SUBTOTAL:', formatMoney(doc.subtotal)),
+          );
         }
         if (doc.exemptSubtotal > 0) {
-          builder.textLine(formatTwoColumns('VENTA EXENTA:', formatMoney(doc.exemptSubtotal)));
+          marginTextLine(
+            builder,
+            formatTwoColumns('VENTA EXENTA:', formatMoney(doc.exemptSubtotal)),
+          );
         }
         if (doc.totalTax > 0) {
-          builder.textLine(formatTwoColumns('IVA (15%):', formatMoney(doc.totalTax)));
+          marginTextLine(
+            builder,
+            formatTwoColumns('IVA (15%):', formatMoney(doc.totalTax)),
+          );
         }
         builder
-            .textLine(doubleDivider())
+            .textLine(marginLine(doubleDivider()))
             .bold(true)
-            .textLine(formatTwoColumns('TOTAL CORDOBAS:', formatMoney(doc.total)))
+            .textLine(
+              marginLine(
+                metrics.is80mm
+                    ? formatTwoColumns(
+                        'TOTAL CORDOBAS:',
+                        summaryAmount80(doc.total),
+                      )
+                    : formatTwoColumns(
+                        'TOTAL CORDOBAS:',
+                        formatMoney(doc.total),
+                      ),
+              ),
+            )
             .bold(false)
-            .textLine(doubleDivider());
+            .textLine(marginLine(doubleDivider()));
       }
     }
 
     // 6. Secondary USD Total
     if (doc.commercialRate > 0) {
-      builder
-          .textLine(formatTwoColumns('T/C USD:', formatMoney(doc.commercialRate)))
-          .textLine(formatTwoColumns('TOTAL USD:', formatMoney(doc.totalUsd, symbol: '\$')));
+      if (metrics.is80mm) {
+        builder
+            .textLine(
+              marginLine(
+                formatTwoColumns(
+                  'T/C USD:',
+                  formatMoney(doc.commercialRate, includeSymbol: false),
+                ),
+              ),
+            )
+            .textLine(
+              marginLine(
+                formatTwoColumns(
+                  'TOTAL USD:',
+                  formatMoney(doc.totalUsd, symbol: '\$'),
+                ),
+              ),
+            );
+      } else {
+        builder
+            .textLine(
+              marginLine(
+                formatTwoColumns('T/C USD:', formatMoney(doc.commercialRate)),
+              ),
+            )
+            .textLine(
+              marginLine(
+                formatTwoColumns(
+                  'TOTAL USD:',
+                  formatMoney(doc.totalUsd, symbol: '\$'),
+                ),
+              ),
+            );
+      }
     }
 
     // 7. Payments
     builder
-        .textLine(divider('-'))
+        .textLine(marginLine(divider('-')))
         .align(EscPosAlign.center)
-        .textLine(sectionHeader('DETALLE DE PAGO'))
+        .textLine(marginLine(sectionHeader('DETALLE DE PAGO')))
         .align(EscPosAlign.left);
 
     if (doc.payments.isEmpty) {
-      builder.textLine(formatTwoColumns('Condicion:', 'Contado'));
+      marginTextLine(builder, formatTwoColumns('Condicion:', 'Contado'));
     } else {
       for (final p in doc.payments) {
-        final amountFormatted = p.currency == 'USD'
-            ? '\$ ${p.amount.toStringAsFixed(2)}'
-            : formatMoney(p.amount);
-        builder.textLine(formatTwoColumns('${p.methodLabel}:', amountFormatted));
+        final String amountFormatted;
+        if (metrics.is80mm) {
+          amountFormatted = p.currency == 'USD'
+              ? '\$ ${p.amount.toStringAsFixed(2)}'
+              : summaryAmount80(p.amount);
+        } else {
+          amountFormatted = p.currency == 'USD'
+              ? '\$ ${p.amount.toStringAsFixed(2)}'
+              : formatMoney(p.amount);
+        }
+        marginTextLine(
+          builder,
+          formatTwoColumns('${p.methodLabel}:', amountFormatted),
+        );
 
         if (p.changeGiven > 0) {
           final changeCurr = p.changeCurrency ?? 'NIO';
-          final changeFormatted = changeCurr == 'USD'
-              ? '\$ ${p.changeGiven.toStringAsFixed(2)}'
-              : formatMoney(p.changeGiven);
-          builder.textLine(formatTwoColumns('Cambio ($changeCurr):', changeFormatted));
+          final String changeFormatted;
+          if (metrics.is80mm) {
+            changeFormatted = changeCurr == 'USD'
+                ? '\$ ${p.changeGiven.toStringAsFixed(2)}'
+                : summaryAmount80(p.changeGiven);
+          } else {
+            changeFormatted = changeCurr == 'USD'
+                ? '\$ ${p.changeGiven.toStringAsFixed(2)}'
+                : formatMoney(p.changeGiven);
+          }
+          marginTextLine(
+            builder,
+            formatTwoColumns('Cambio ($changeCurr):', changeFormatted),
+          );
         }
         if (p.reference != null && p.reference!.isNotEmpty) {
           for (final refLine in formatKeyValue('  Auth/Ref:', p.reference!)) {
-            builder.textLine(refLine);
+            marginTextLine(builder, refLine);
           }
         }
       }
     }
 
     // 8. Footer
-    builder.textLine(doubleDivider()).align(EscPosAlign.center);
+    marginTextLine(builder, doubleDivider()).align(EscPosAlign.center);
 
     if (doc.taxRegime.isCuotaFija) {
-      builder.textLine('CONTRIBUYENTE DE CUOTA FIJA').textLine('NO RECAUDA IVA').feedLines(1);
+      marginTextLine(
+        builder,
+        'CONTRIBUYENTE DE CUOTA FIJA',
+      ).textLine(marginLine('NO RECAUDA IVA')).feedLines(1);
     }
 
     final footerMsg = doc.footerMessage ?? '*** GRACIAS POR SU COMPRA ***';
     builder.bold(true);
     for (final line in wrap(footerMsg)) {
-      builder.textLine(line);
+      marginTextLine(builder, line);
     }
-    builder
-        .bold(false)
-        .feedLines(3)
-        .cut();
+    builder.bold(false).feedLines(3).cut();
 
     return builder.toBytes();
   }
 
-  bool _isEscPosRaster(List<int> bytes) => bytes.length >= 8 &&
-      bytes[0] == 0x1B && bytes[1] == 0x61 && bytes[3] == 0x1D &&
-      bytes[4] == 0x76 && bytes[5] == 0x30;
+  bool _isEscPosRaster(List<int> bytes) =>
+      bytes.length >= 8 &&
+      bytes[0] == 0x1B &&
+      bytes[1] == 0x61 &&
+      bytes[3] == 0x1D &&
+      bytes[4] == 0x76 &&
+      bytes[5] == 0x30;
 
   /// Backwards-compatibility helper for tests.
   String drawLine([String char = '-']) => divider(char);

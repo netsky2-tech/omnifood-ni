@@ -142,10 +142,7 @@ class _ReceiptPreviewDialogState extends State<ReceiptPreviewDialog> {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(
-          maxWidth: 600,
-          maxHeight: 780,
-        ),
+        constraints: const BoxConstraints(maxWidth: 600, maxHeight: 780),
         child: Column(
           children: [
             // Header Bar
@@ -153,7 +150,9 @@ class _ReceiptPreviewDialogState extends State<ReceiptPreviewDialog> {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(16),
+                ),
               ),
               child: Row(
                 children: [
@@ -165,20 +164,25 @@ class _ReceiptPreviewDialogState extends State<ReceiptPreviewDialog> {
                       children: [
                         Text(
                           'Preview de Comprobante Térmico',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
                         ),
                         Text(
                           'Vista lógica: el mismo documento enviado a impresión',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
                               ),
                         ),
                         Text(
-                          '${metrics.is80mm ? 80 : 58} mm (${metrics.printableWidth} columnas) • ${metrics.maxImageWidth} dots',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          '${metrics.is80mm ? 80 : 58} mm (${metrics.contentColumns} columnas) • ${metrics.maxImageWidth} dots',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
                               ),
                         ),
                       ],
@@ -205,14 +209,8 @@ class _ReceiptPreviewDialogState extends State<ReceiptPreviewDialog> {
                   // Width Toggle
                   SegmentedButton<int>(
                     segments: const [
-                      ButtonSegment(
-                        value: 58,
-                        label: Text('58 mm (32 col)'),
-                      ),
-                      ButtonSegment(
-                        value: 80,
-                        label: Text('80 mm (44 col)'),
-                      ),
+                      ButtonSegment(value: 58, label: Text('58 mm (32 col)')),
+                      ButtonSegment(value: 80, label: Text('80 mm (44 col)')),
                     ],
                     selected: {_paperWidthMm},
                     onSelectionChanged: (set) {
@@ -264,7 +262,10 @@ class _ReceiptPreviewDialogState extends State<ReceiptPreviewDialog> {
                           ),
                         ],
                       ),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 20),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 20,
+                      ),
                       child: Text(
                         receiptText,
                         style: const TextStyle(
@@ -286,7 +287,9 @@ class _ReceiptPreviewDialogState extends State<ReceiptPreviewDialog> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.surface,
-                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
+                borderRadius: const BorderRadius.vertical(
+                  bottom: Radius.circular(16),
+                ),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
@@ -302,7 +305,10 @@ class _ReceiptPreviewDialogState extends State<ReceiptPreviewDialog> {
                           ? const SizedBox(
                               width: 16,
                               height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
                             )
                           : const Icon(Icons.print, size: 18),
                       label: const Text('IMPRIMIR ESTE TICKET'),
@@ -317,12 +323,17 @@ class _ReceiptPreviewDialogState extends State<ReceiptPreviewDialog> {
                                   paperWidthMm: _paperWidthMm,
                                 );
                                 if (!result.isSuccess) {
-                                  throw StateError(result.message ?? 'La impresora rechazó el ticket.');
+                                  throw StateError(
+                                    result.message ??
+                                        'La impresora rechazó el ticket.',
+                                  );
                                 }
                                 if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
-                                      content: Text('Ticket enviado a la impresora térmica.'),
+                                      content: Text(
+                                        'Ticket enviado a la impresora térmica.',
+                                      ),
                                       backgroundColor: Colors.green,
                                     ),
                                   );

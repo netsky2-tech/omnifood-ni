@@ -5,14 +5,7 @@ import '../models/sales/invoice.dart';
 import '../models/sales/invoice_item.dart';
 import '../models/sales/payment.dart';
 
-enum PrinterStatus {
-  ready,
-  outOfPaper,
-  overheating,
-  offline,
-  error,
-  busy,
-}
+enum PrinterStatus { ready, outOfPaper, overheating, offline, error, busy }
 
 class PrinterResult {
   final bool isSuccess;
@@ -39,11 +32,7 @@ class PrinterResult {
   }
 
   factory PrinterResult.failure(PrinterStatus status, String message) {
-    return PrinterResult(
-      isSuccess: false,
-      status: status,
-      message: message,
-    );
+    return PrinterResult(isSuccess: false, status: status, message: message);
   }
 }
 
@@ -58,9 +47,9 @@ abstract class PrinterPort {
     ReceiptDocument document, {
     int paperWidthMm = 58,
   }) async => PrinterResult.failure(
-        PrinterStatus.error,
-        'Este controlador no admite ReceiptDocument canónico.',
-      );
+    PrinterStatus.error,
+    'Este controlador no admite ReceiptDocument canónico.',
+  );
 
   /// Legacy Invoice adapter entry point. Build a [ReceiptDocument] at the
   /// application boundary before calling [printReceiptDocument].

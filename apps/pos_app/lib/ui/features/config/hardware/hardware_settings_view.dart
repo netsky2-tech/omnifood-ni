@@ -20,7 +20,8 @@ class HardwareSettingsView extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () => context.read<HardwareSettingsViewModel>().loadConfig(),
+            onPressed: () =>
+                context.read<HardwareSettingsViewModel>().loadConfig(),
             tooltip: 'Refrescar Estado',
           ),
         ],
@@ -52,9 +53,8 @@ class HardwareSettingsView extends StatelessWidget {
                       children: [
                         Text(
                           'Controlador de Impresión (Driver)',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 8),
                         Text(
@@ -107,30 +107,40 @@ class HardwareSettingsView extends StatelessWidget {
                       children: [
                         Text(
                           'Reglas de Impresión Automática',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 8),
                         SwitchListTile(
                           title: const Text('Impresión automática de Factura'),
-                          subtitle: const Text('Emite el ticket fiscal DGI al finalizar el cobro.'),
+                          subtitle: const Text(
+                            'Emite el ticket fiscal DGI al finalizar el cobro.',
+                          ),
                           value: config.autoPrintInvoice,
-                          onChanged: (val) => viewModel.toggleAutoPrintInvoice(val),
+                          onChanged: (val) =>
+                              viewModel.toggleAutoPrintInvoice(val),
                         ),
                         const Divider(),
                         SwitchListTile(
                           title: const Text('Impresión automática a Cocina'),
-                          subtitle: const Text('Emite la comanda física al registrar la orden.'),
+                          subtitle: const Text(
+                            'Emite la comanda física al registrar la orden.',
+                          ),
                           value: config.autoPrintKitchen,
-                          onChanged: (val) => viewModel.toggleAutoPrintKitchen(val),
+                          onChanged: (val) =>
+                              viewModel.toggleAutoPrintKitchen(val),
                         ),
                         const Divider(),
                         SwitchListTile(
-                          title: const Text('Apertura de gaveta en pagos en efectivo'),
-                          subtitle: const Text('Envía pulso a la gaveta de dinero al cobrar.'),
+                          title: const Text(
+                            'Apertura de gaveta en pagos en efectivo',
+                          ),
+                          subtitle: const Text(
+                            'Envía pulso a la gaveta de dinero al cobrar.',
+                          ),
                           value: config.openDrawerOnCash,
-                          onChanged: (val) => viewModel.toggleOpenDrawerOnCash(val),
+                          onChanged: (val) =>
+                              viewModel.toggleOpenDrawerOnCash(val),
                         ),
                       ],
                     ),
@@ -151,9 +161,8 @@ class HardwareSettingsView extends StatelessWidget {
                       children: [
                         Text(
                           'Ancho de Papel Térmico',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 8),
                         SegmentedButton<int>(
@@ -183,9 +192,9 @@ class HardwareSettingsView extends StatelessWidget {
                 // Hardware Test Actions
                 Text(
                   'Pruebas y Diagnóstico de Hardware',
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
                 Row(
@@ -202,8 +211,15 @@ class HardwareSettingsView extends StatelessWidget {
                                 if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                      content: Text(viewModel.statusMessage ?? (ok ? 'Impresión enviada' : 'Error')),
-                                      backgroundColor: ok ? Colors.green : Colors.red,
+                                      content: Text(
+                                        viewModel.statusMessage ??
+                                            (ok
+                                                ? 'Impresión enviada'
+                                                : 'Error'),
+                                      ),
+                                      backgroundColor: ok
+                                          ? Colors.green
+                                          : Colors.red,
                                     ),
                                   );
                                 }
@@ -223,8 +239,13 @@ class HardwareSettingsView extends StatelessWidget {
                                 if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                      content: Text(viewModel.statusMessage ?? (ok ? 'Gaveta abierta' : 'Error')),
-                                      backgroundColor: ok ? Colors.green : Colors.red,
+                                      content: Text(
+                                        viewModel.statusMessage ??
+                                            (ok ? 'Gaveta abierta' : 'Error'),
+                                      ),
+                                      backgroundColor: ok
+                                          ? Colors.green
+                                          : Colors.red,
                                     ),
                                   );
                                 }
@@ -243,7 +264,9 @@ class HardwareSettingsView extends StatelessWidget {
                     if (taxRegime == null) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text('Empresa sin régimen fiscal DGI configurado. Configure Información de Empresa primero.'),
+                          content: Text(
+                            'Empresa sin régimen fiscal DGI configurado. Configure Información de Empresa primero.',
+                          ),
                           backgroundColor: Colors.orange,
                         ),
                       );
@@ -291,19 +314,22 @@ class HardwareSettingsView extends StatelessWidget {
       case PrinterStatus.ready:
         statusColor = Colors.green;
         statusTitle = 'Impresora Conectada y Lista';
-        statusDescription = 'El cabezal térmico está disponible y cuenta con papel.';
+        statusDescription =
+            'El cabezal térmico está disponible y cuenta con papel.';
         statusIcon = Icons.check_circle;
         break;
       case PrinterStatus.outOfPaper:
         statusColor = Colors.red;
         statusTitle = 'Sin Papel';
-        statusDescription = 'La impresora no detecta papel. Inserte un rollo de 58mm.';
+        statusDescription =
+            'La impresora no detecta papel. Inserte un rollo de 58mm.';
         statusIcon = Icons.warning;
         break;
       case PrinterStatus.overheating:
         statusColor = Colors.orange;
         statusTitle = 'Cabezal Sobrecalentado';
-        statusDescription = 'Temperatura alta en cabezal térmico. Espere unos segundos.';
+        statusDescription =
+            'Temperatura alta en cabezal térmico. Espere unos segundos.';
         statusIcon = Icons.thermostat;
         break;
       case PrinterStatus.busy:
@@ -316,7 +342,8 @@ class HardwareSettingsView extends StatelessWidget {
       case PrinterStatus.error:
         statusColor = Colors.blueGrey;
         statusTitle = 'Impresora No Detectada (Modo Simulado Activo)';
-        statusDescription = 'El terminal operará en modo simulado para no interrumpir ventas.';
+        statusDescription =
+            'El terminal operará en modo simulado para no interrumpir ventas.';
         statusIcon = Icons.info;
         break;
     }
@@ -347,10 +374,7 @@ class HardwareSettingsView extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   statusDescription,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade800,
-                  ),
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
                 ),
               ],
             ),
@@ -379,12 +403,16 @@ class HardwareSettingsView extends StatelessWidget {
                 Text(
                   'Logo de la Empresa (Factura Térmica)',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 if (hasLogo)
                   Chip(
-                    avatar: const Icon(Icons.check, size: 14, color: Colors.green),
+                    avatar: const Icon(
+                      Icons.check,
+                      size: 14,
+                      color: Colors.green,
+                    ),
                     label: Text(
                       '${config.logoWidth ?? 384}x${config.logoHeight ?? 0} px (1-bit)',
                       style: const TextStyle(fontSize: 11),
@@ -398,13 +426,17 @@ class HardwareSettingsView extends StatelessWidget {
               '• Ancho máximo: 384 px (ancho exacto del cabezal de 58 mm)\n'
               '• Formato: PNG monocromático (1-bit / Black & White)\n'
               '• Fondo: Blanco o transparente (con dithering Floyd-Steinberg)',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey.shade700),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: Colors.grey.shade700),
             ),
             const SizedBox(height: 12),
             if (hasLogo) ...[
               SwitchListTile(
                 title: const Text('Imprimir Logo en Cabecera'),
-                subtitle: const Text('Inserta el gráfico en el encabezado de las facturas DGI.'),
+                subtitle: const Text(
+                  'Inserta el gráfico en el encabezado de las facturas DGI.',
+                ),
                 value: config.isLogoEnabled,
                 onChanged: (val) => viewModel.toggleLogoEnabled(val),
               ),
@@ -419,7 +451,10 @@ class HardwareSettingsView extends StatelessWidget {
                   const SizedBox(width: 12),
                   TextButton.icon(
                     icon: const Icon(Icons.delete_outline, color: Colors.red),
-                    label: const Text('Eliminar Logo', style: TextStyle(color: Colors.red)),
+                    label: const Text(
+                      'Eliminar Logo',
+                      style: TextStyle(color: Colors.red),
+                    ),
                     onPressed: () => viewModel.removeLogo(),
                   ),
                 ],
@@ -438,7 +473,11 @@ class HardwareSettingsView extends StatelessWidget {
     );
   }
 
-  Future<void> _pickImageFromDevice(BuildContext context, HardwareSettingsViewModel viewModel, ImageSource source) async {
+  Future<void> _pickImageFromDevice(
+    BuildContext context,
+    HardwareSettingsViewModel viewModel,
+    ImageSource source,
+  ) async {
     try {
       final picker = ImagePicker();
       final pickedFile = await picker.pickImage(
@@ -459,20 +498,29 @@ class HardwareSettingsView extends StatelessWidget {
           );
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Logo cargado y optimizado correctamente.'), backgroundColor: Colors.green),
+            const SnackBar(
+              content: Text('Logo cargado y optimizado correctamente.'),
+              backgroundColor: Colors.green,
+            ),
           );
         }
       }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al seleccionar imagen: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Error al seleccionar imagen: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
   }
 
-  void _showUploadLogoDialog(BuildContext context, HardwareSettingsViewModel viewModel) {
+  void _showUploadLogoDialog(
+    BuildContext context,
+    HardwareSettingsViewModel viewModel,
+  ) {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -499,31 +547,29 @@ class HardwareSettingsView extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               ListTile(
-                leading: const CircleAvatar(
-                  child: Icon(Icons.photo_library),
-                ),
+                leading: const CircleAvatar(child: Icon(Icons.photo_library)),
                 title: const Text('Galería de Imágenes / Archivos'),
-                subtitle: const Text('Seleccionar imagen PNG/JPEG desde el almacenamiento del dispositivo'),
+                subtitle: const Text(
+                  'Seleccionar imagen PNG/JPEG desde el almacenamiento del dispositivo',
+                ),
                 onTap: () {
                   Navigator.pop(sheetCtx);
                   _pickImageFromDevice(context, viewModel, ImageSource.gallery);
                 },
               ),
               ListTile(
-                leading: const CircleAvatar(
-                  child: Icon(Icons.camera_alt),
-                ),
+                leading: const CircleAvatar(child: Icon(Icons.camera_alt)),
                 title: const Text('Tomar Foto con Cámara'),
-                subtitle: const Text('Capturar imagen directamente con la cámara del POS'),
+                subtitle: const Text(
+                  'Capturar imagen directamente con la cámara del POS',
+                ),
                 onTap: () {
                   Navigator.pop(sheetCtx);
                   _pickImageFromDevice(context, viewModel, ImageSource.camera);
                 },
               ),
               ListTile(
-                leading: const CircleAvatar(
-                  child: Icon(Icons.code),
-                ),
+                leading: const CircleAvatar(child: Icon(Icons.code)),
                 title: const Text('Pegar Texto Base64'),
                 subtitle: const Text('Introducir código Base64 manualmente'),
                 onTap: () {
@@ -538,7 +584,10 @@ class HardwareSettingsView extends StatelessWidget {
     );
   }
 
-  void _showBase64InputDialog(BuildContext context, HardwareSettingsViewModel viewModel) {
+  void _showBase64InputDialog(
+    BuildContext context,
+    HardwareSettingsViewModel viewModel,
+  ) {
     final textController = TextEditingController();
     showDialog(
       context: context,
@@ -577,7 +626,9 @@ class HardwareSettingsView extends StatelessWidget {
               if (text.isEmpty) return;
               try {
                 final bytes = base64Decode(text);
-                final error = await viewModel.uploadAndProcessLogo(Uint8List.fromList(bytes));
+                final error = await viewModel.uploadAndProcessLogo(
+                  Uint8List.fromList(bytes),
+                );
                 if (dialogCtx.mounted) {
                   Navigator.of(dialogCtx).pop();
                 }
@@ -587,13 +638,19 @@ class HardwareSettingsView extends StatelessWidget {
                   );
                 } else if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Logo validado y guardado correctamente.'), backgroundColor: Colors.green),
+                    const SnackBar(
+                      content: Text('Logo validado y guardado correctamente.'),
+                      backgroundColor: Colors.green,
+                    ),
                   );
                 }
               } catch (e) {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error al decodificar Base64: $e'), backgroundColor: Colors.red),
+                    SnackBar(
+                      content: Text('Error al decodificar Base64: $e'),
+                      backgroundColor: Colors.red,
+                    ),
                   );
                 }
               }
@@ -605,6 +662,8 @@ class HardwareSettingsView extends StatelessWidget {
     );
   }
 }
+
 extension on Color {
-  Color get shade900 => this is MaterialColor ? (this as MaterialColor).shade900 : this;
+  Color get shade900 =>
+      this is MaterialColor ? (this as MaterialColor).shade900 : this;
 }

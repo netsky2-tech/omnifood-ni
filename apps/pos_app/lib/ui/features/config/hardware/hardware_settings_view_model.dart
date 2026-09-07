@@ -26,9 +26,10 @@ class HardwareSettingsViewModel extends ChangeNotifier {
   HardwareSettingsViewModel({
     required PrinterConfigService configService,
     PrinterPort? printerPort,
-  })  : _configService = configService,
-        _injectedPrinterPort = printerPort,
-        _printerPort = printerPort ?? PrinterResolver.resolve(const PrinterConfig()) {
+  }) : _configService = configService,
+       _injectedPrinterPort = printerPort,
+       _printerPort =
+           printerPort ?? PrinterResolver.resolve(const PrinterConfig()) {
     loadConfig();
   }
 
@@ -123,7 +124,8 @@ class HardwareSettingsViewModel extends ChangeNotifier {
         return result.errorMessage;
       }
 
-      final base64String = result.base64Png ?? base64Encode(result.raw1BitBitmap!);
+      final base64String =
+          result.base64Png ?? base64Encode(result.raw1BitBitmap!);
 
       _config = _config.copyWith(
         logoBase64: base64String,
@@ -133,7 +135,8 @@ class HardwareSettingsViewModel extends ChangeNotifier {
       );
 
       await _configService.savePrinterConfig(_config);
-      _statusMessage = 'Logo procesado (${result.width}x${result.height} px) guardado correctamente.';
+      _statusMessage =
+          'Logo procesado (${result.width}x${result.height} px) guardado correctamente.';
       return null;
     } catch (e) {
       _statusMessage = 'Error al procesar logo: $e';
@@ -201,8 +204,7 @@ class HardwareSettingsViewModel extends ChangeNotifier {
       ];
 
       List<int>? logoRasterBytes;
-      if (_config.isLogoEnabled &&
-          _config.logoBase64 != null) {
+      if (_config.isLogoEnabled && _config.logoBase64 != null) {
         try {
           final rawBytes = base64Decode(_config.logoBase64!);
           if (ThermalLogoProcessor.isPng(rawBytes)) {
@@ -221,7 +223,8 @@ class HardwareSettingsViewModel extends ChangeNotifier {
 
       final taxRegime = TaxRegime.fromString(_config.taxRegime);
       if (taxRegime == null) {
-        _statusMessage = 'Empresa sin régimen fiscal DGI configurado. Configure Información de Empresa antes de probar impresión.';
+        _statusMessage =
+            'Empresa sin régimen fiscal DGI configurado. Configure Información de Empresa antes de probar impresión.';
         _isTesting = false;
         notifyListeners();
         return false;
@@ -285,4 +288,5 @@ class HardwareSettingsViewModel extends ChangeNotifier {
       return false;
     }
   }
+
 }
