@@ -49,8 +49,9 @@ void main() {
     () async {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (call) async {
-            if (call.method == 'printRawBytes')
+            if (call.method == 'printRawBytes') {
               throw PlatformException(code: 'REJECTED', message: 'no raw');
+            }
             return 'READY';
           });
       final result = await adapter.printRawEscPos([0x1b, 0x40]);
