@@ -1046,7 +1046,8 @@ class SaleViewModel extends ChangeNotifier {
       _errorMessage = null;
       clearCart();
       _consumeOverride();
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('[SaleViewModel] Error al procesar la venta: $e\n$stackTrace');
       _errorMessage = 'Error al procesar la venta: $e';
       notifyListeners();
       rethrow;

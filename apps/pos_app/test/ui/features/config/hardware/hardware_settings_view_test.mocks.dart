@@ -7,11 +7,12 @@ import 'dart:async' as _i5;
 
 import 'package:mockito/mockito.dart' as _i1;
 import 'package:pos_app/domain/models/config/printer_config.dart' as _i2;
-import 'package:pos_app/domain/models/config/tax_regime.dart' as _i9;
-import 'package:pos_app/domain/models/sales/cashier_session.dart' as _i10;
-import 'package:pos_app/domain/models/sales/invoice.dart' as _i6;
-import 'package:pos_app/domain/models/sales/invoice_item.dart' as _i7;
-import 'package:pos_app/domain/models/sales/payment.dart' as _i8;
+import 'package:pos_app/domain/models/config/tax_regime.dart' as _i10;
+import 'package:pos_app/domain/models/printer/receipt_document.dart' as _i6;
+import 'package:pos_app/domain/models/sales/cashier_session.dart' as _i11;
+import 'package:pos_app/domain/models/sales/invoice.dart' as _i7;
+import 'package:pos_app/domain/models/sales/invoice_item.dart' as _i8;
+import 'package:pos_app/domain/models/sales/payment.dart' as _i9;
 import 'package:pos_app/domain/ports/printer_port.dart' as _i3;
 import 'package:pos_app/domain/services/config/printer_config_service.dart'
     as _i4;
@@ -122,10 +123,40 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
       ) as _i5.Future<_i3.PrinterStatus>);
 
   @override
+  _i5.Future<_i3.PrinterResult> printReceiptDocument(
+    _i6.ReceiptDocument? document, {
+    int? paperWidthMm = 58,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #printReceiptDocument,
+          [document],
+          {#paperWidthMm: paperWidthMm},
+        ),
+        returnValue: _i5.Future<_i3.PrinterResult>.value(_FakePrinterResult_1(
+          this,
+          Invocation.method(
+            #printReceiptDocument,
+            [document],
+            {#paperWidthMm: paperWidthMm},
+          ),
+        )),
+        returnValueForMissingStub:
+            _i5.Future<_i3.PrinterResult>.value(_FakePrinterResult_1(
+          this,
+          Invocation.method(
+            #printReceiptDocument,
+            [document],
+            {#paperWidthMm: paperWidthMm},
+          ),
+        )),
+      ) as _i5.Future<_i3.PrinterResult>);
+
+  @override
   _i5.Future<_i3.PrinterResult> printInvoice(
-    _i6.Invoice? invoice, {
-    required List<_i7.InvoiceItem>? items,
-    required List<_i8.Payment>? payments,
+    _i7.Invoice? invoice, {
+    required List<_i8.InvoiceItem>? items,
+    required List<_i9.Payment>? payments,
     String? businessName,
     String? legalName,
     String? ruc,
@@ -133,7 +164,7 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
     String? phone,
     String? cashierName,
     List<int>? logoRasterBytes,
-    _i9.TaxRegime? taxRegime = _i9.TaxRegime.regimenGeneral,
+    required _i10.TaxRegime? taxRegime,
     bool? isTaxExempt = false,
     int? paperWidthMm = 58,
   }) =>
@@ -207,7 +238,7 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
     required String? orderTitle,
     required String? cashierName,
     required DateTime? timestamp,
-    required List<_i7.InvoiceItem>? items,
+    required List<_i8.InvoiceItem>? items,
     String? notes,
     int? buzzerNumber,
     String? tableName,
@@ -266,9 +297,9 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
 
   @override
   _i5.Future<_i3.PrinterResult> printCorteX(
-    _i10.CashierSession? session, {
+    _i11.CashierSession? session, {
     required String? cashierName,
-    required Map<_i8.PaymentMethod, double>? totalsByMethod,
+    required Map<_i9.PaymentMethod, double>? totalsByMethod,
     double? totalExpected,
   }) =>
       (super.noSuchMethod(
@@ -310,9 +341,9 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
 
   @override
   _i5.Future<_i3.PrinterResult> printCorteZ(
-    _i10.CashierSession? session, {
+    _i11.CashierSession? session, {
     required String? cashierName,
-    required Map<_i8.PaymentMethod, double>? totalsByMethod,
+    required Map<_i9.PaymentMethod, double>? totalsByMethod,
     int? zSequence,
     double? totalExpected,
     double? totalCounted,

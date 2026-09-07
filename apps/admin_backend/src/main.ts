@@ -26,6 +26,11 @@ class AllExceptionsFilter implements ExceptionFilter {
     if (exception instanceof HttpException) {
       status = exception.getStatus();
       message = exception.getResponse();
+    } else if (exception instanceof Error) {
+      this.logger.error(
+        `[${request.method}] ${request.url} unhandled error: ${exception.message}`,
+        exception.stack,
+      );
     }
 
     this.logger.error(

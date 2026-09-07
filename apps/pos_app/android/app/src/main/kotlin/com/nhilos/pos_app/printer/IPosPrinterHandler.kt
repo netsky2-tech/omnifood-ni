@@ -199,11 +199,25 @@ class IPosPrinterHandler(private val context: Context) : MethodChannel.MethodCal
             return
         }
 
+        val paperWidthMm = call.argument<Int>("paperWidthMm") ?: 58
         try {
             val format = PrintTextFormat().apply {
                 textSize = 24
             }
-            val res = service.printText(text, format)
+            // This controls per-job layout/render width only; it does not change the
+            // persistent physical/default paper setting in net.nyx.printerservice.SETTINGS.
+            val res = when (paperWidthMm) {
+                58 -> service.printText2(text, format, 384, 0)
+                80 -> service.printText(text, format)
+                else -> {
+                    result.error(
+                        "INVALID_PAPER_WIDTH",
+                        "Unsupported paper width: $paperWidthMm. Use 58 or 80.",
+                        null,
+                    )
+                    return
+                }
+            }
             // Current Nyx driver feed value. Its physical distance requires device measurement.
             service.paperOut(140)
             Log.i(TAG, "printText result: $res")

@@ -23,8 +23,14 @@ Future<void> _createInventoryMovementAppendOnlyTriggers(
 
 Future<void> _createTopologyPersistenceTriggers(sqflite.DatabaseExecutor database) async {
   for (final table in ['topology_snapshots', 'emergency_topology_audits']) {
-    await database.execute("CREATE TRIGGER IF NOT EXISTS ${table}_block_update BEFORE UPDATE ON $table BEGIN SELECT RAISE(ABORT, '$table is immutable'); END");
-    await database.execute("CREATE TRIGGER IF NOT EXISTS ${table}_block_delete BEFORE DELETE ON $table BEGIN SELECT RAISE(ABORT, '$table is append-only'); END");
+    final tableExists = await database.rawQuery(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+      [table],
+    );
+    if (tableExists.isNotEmpty) {
+      await database.execute("CREATE TRIGGER IF NOT EXISTS ${table}_block_update BEFORE UPDATE ON $table BEGIN SELECT RAISE(ABORT, '$table is immutable'); END");
+      await database.execute("CREATE TRIGGER IF NOT EXISTS ${table}_block_delete BEFORE DELETE ON $table BEGIN SELECT RAISE(ABORT, '$table is append-only'); END");
+    }
   }
 }
 

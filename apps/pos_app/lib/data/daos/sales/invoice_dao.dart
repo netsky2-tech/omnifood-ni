@@ -27,8 +27,8 @@ abstract class InvoiceDao {
   @Update(onConflict: OnConflictStrategy.replace)
   Future<void> updateInvoice(InvoiceEntity invoice);
 
-  @Query('SELECT MAX(invoice_number) FROM invoices')
-  Future<String?> getLastInvoiceNumber();
+  @Query('SELECT * FROM invoices ORDER BY created_at DESC LIMIT 1')
+  Future<InvoiceEntity?> getLastInvoice();
 
   @Query('UPDATE invoices SET sync_status = :status WHERE id IN (:ids)')
   Future<void> updateSyncStatusForIds(List<String> ids, String status);

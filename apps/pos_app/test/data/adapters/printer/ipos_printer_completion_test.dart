@@ -47,17 +47,25 @@ void main() {
     expect(calls.any((call) => call.method == 'printText'), isTrue);
     calls.clear();
     final validDoc = ReceiptDocument(businessName: 'Prueba', taxRegime: TaxRegime.regimenGeneral, documentTitle: 'FACTURA', documentNumber: '1', date: DateTime(2026), lines: const [], subtotal: 0, totalTax: 0, total: 0, totalUsd: 0, logoRasterBytes: const [137, 80, 78, 71, 13, 10, 26, 10]);
-    await adapter.printReceiptDocument(validDoc);
+    await adapter.printReceiptDocument(validDoc, paperWidthMm: 80);
     expect(calls.any((call) => call.method == 'printBitmap'), isTrue);
+    final textCall = calls.lastWhere((call) => call.method == 'printText');
+    expect(textCall.arguments['paperWidthMm'], 80);
   });
 
-  test('paper width selects logical 32/48 layout without hardware width call', () async {
+  test('paper width selects logical layout and native per-job render width', () async {
     final invoice = Invoice(id: 'i', number: '1', createdAt: DateTime(2026), userId: 'u', subtotal: 1, totalTax: 0, total: 1);
     final item = InvoiceItem(id: 'x', invoiceId: 'i', productId: 'p', productName: 'Café', quantity: 1, unitPrice: 1, originalTaxRate: 0, appliedTaxRate: 0, taxAmount: 0, total: 1);
-    final narrow = await adapter.printInvoice(invoice, items: [item], payments: const <Payment>[], taxRegime: TaxRegime.regimenGeneral, paperWidthMm: 58);
+    final narrow = await adapter.printInvoice(invoice, items: [item], payments: const <Payment>[], taxRegime: TaxRegime.regimenGeneral, paperWidthMm: 57);
     final wide = await adapter.printInvoice(invoice, items: [item], payments: const <Payment>[], taxRegime: TaxRegime.regimenGeneral, paperWidthMm: 80);
+    final narrowAgain = await adapter.printInvoice(invoice, items: [item], payments: const <Payment>[], taxRegime: TaxRegime.regimenGeneral, paperWidthMm: 79);
     expect(narrow.printedText!.split('\n').every((line) => line.length <= 32), isTrue);
     expect(wide.printedText!.split('\n').every((line) => line.length <= 48), isTrue);
-    expect(calls.any((call) => call.method.toLowerCase().contains('paperwidth')), isFalse);
+    expect(narrowAgain.printedText!.split('\n').every((line) => line.length <= 32), isTrue);
+    final printWidths = calls
+        .where((call) => call.method == 'printText')
+        .map((call) => call.arguments['paperWidthMm'])
+        .toList();
+    expect(printWidths, [58, 80, 58]);
   });
 }

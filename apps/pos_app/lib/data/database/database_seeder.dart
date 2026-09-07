@@ -341,9 +341,9 @@ class DatabaseSeeder {
           versionNote: 'Receta estándar 12oz con grano Matagalpa',
           componentsJson: jsonEncode([
             {'ingredient_id': 'c1000000-0000-4000-8000-000000000001', 'ingredient_name': 'Café en Grano Matagalpa', 'ingredient_type': 'INSUMO', 'gross_quantity': 0.018, 'net_quantity': 0.0176, 'technical_shrink_pct': 2.0, 'unit_cost_nio': 180.0, 'component_uom': 'kg'},
-            {'ingredient_id': '10000000-0000-4000-8000-000000000008', 'ingredient_name': 'Vaso Térmico 12oz', 'ingredient_type': 'INSUMO', 'gross_quantity': 1.0, 'net_quantity': 1.0, 'technical_shrink_pct': 0.0, 'unit_cost_nio': 3.50, 'component_uom': 'UND'},
+            {'ingredient_id': 'c1000000-0000-4000-8000-000000000008', 'ingredient_name': 'Vaso Térmico 12oz', 'ingredient_type': 'INSUMO', 'gross_quantity': 1.0, 'net_quantity': 1.0, 'technical_shrink_pct': 0.0, 'unit_cost_nio': 3.50, 'component_uom': 'UND'},
           ]),
-          isSynced: false,
+          isSynced: true,
         ),
         RecipeVersionDocumentEntity(
           id: 'd2000000-0000-4000-8000-000000000002',
@@ -357,10 +357,10 @@ class DatabaseSeeder {
           versionNote: 'Doble shot y leche texturizada',
           componentsJson: jsonEncode([
             {'ingredient_id': 'c1000000-0000-4000-8000-000000000001', 'ingredient_name': 'Café en Grano Matagalpa', 'ingredient_type': 'INSUMO', 'gross_quantity': 0.018, 'net_quantity': 0.0175, 'technical_shrink_pct': 3.0, 'unit_cost_nio': 180.0, 'component_uom': 'kg'},
-            {'ingredient_id': '10000000-0000-4000-8000-000000000002', 'ingredient_name': 'Leche Entera La Perfecta', 'ingredient_type': 'INSUMO', 'gross_quantity': 0.20, 'net_quantity': 0.194, 'technical_shrink_pct': 3.0, 'unit_cost_nio': 38.00, 'component_uom': 'L'},
-            {'ingredient_id': '10000000-0000-4000-8000-000000000008', 'ingredient_name': 'Vaso Térmico 12oz', 'ingredient_type': 'INSUMO', 'gross_quantity': 1.0, 'net_quantity': 1.0, 'technical_shrink_pct': 0.0, 'unit_cost_nio': 3.50, 'component_uom': 'UND'},
+            {'ingredient_id': 'c1000000-0000-4000-8000-000000000002', 'ingredient_name': 'Leche Entera La Perfecta', 'ingredient_type': 'INSUMO', 'gross_quantity': 0.20, 'net_quantity': 0.194, 'technical_shrink_pct': 3.0, 'unit_cost_nio': 38.00, 'component_uom': 'L'},
+            {'ingredient_id': 'c1000000-0000-4000-8000-000000000008', 'ingredient_name': 'Vaso Térmico 12oz', 'ingredient_type': 'INSUMO', 'gross_quantity': 1.0, 'net_quantity': 1.0, 'technical_shrink_pct': 0.0, 'unit_cost_nio': 3.50, 'component_uom': 'UND'},
           ]),
-          isSynced: false,
+          isSynced: true,
         ),
       ];
       for (final doc in recipeDocs) {
@@ -514,8 +514,9 @@ class DatabaseSeeder {
     }
 
     // 11. Sales Invoices & Payments (History & DGI Report)
+    // Disabled dummy seed invoices to avoid collision with real DGI sequences (001-001-01-00000001)
     final existingInvoices = await database.invoiceDao.getAllInvoices();
-    if (force || existingInvoices.isEmpty) {
+    if (false && (force || existingInvoices.isEmpty)) {
       final invoices = <InvoiceEntity>[
         InvoiceEntity(
           id: 'c3000000-0000-4000-8000-000000000001',

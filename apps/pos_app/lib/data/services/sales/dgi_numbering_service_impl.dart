@@ -24,9 +24,9 @@ class DgiNumberingServiceImpl implements DgiNumberingService {
 
   Future<int> _resolveNextSequence(int configuredCurrent) async {
     if (_invoiceDao != null) {
-      final lastInvoiceNumber = await _invoiceDao.getLastInvoiceNumber();
-      if (lastInvoiceNumber != null && lastInvoiceNumber.isNotEmpty) {
-        final lastSequence = _extractSequenceNumber(lastInvoiceNumber);
+      final lastInvoice = await _invoiceDao.getLastInvoice();
+      if (lastInvoice != null && lastInvoice.number.isNotEmpty) {
+        final lastSequence = _extractSequenceNumber(lastInvoice.number);
         if (lastSequence >= configuredCurrent) {
           return lastSequence + 1;
         }

@@ -105,7 +105,8 @@ class IPosPrinterAdapter implements PrinterPort {
       isTaxExempt: isTaxExempt,
       logoRasterBytes: logoRasterBytes,
     );
-    final formattedText = ReceiptLayoutFormatter.fromPaperWidth(paperWidthMm)
+    final normalizedPaperWidthMm = _normalizedPaperWidthMm(paperWidthMm);
+    final formattedText = ReceiptLayoutFormatter.fromPaperWidth(normalizedPaperWidthMm)
         .formatReceiptDocumentText(document);
 
     try {
@@ -117,8 +118,12 @@ class IPosPrinterAdapter implements PrinterPort {
         debugPrint('[IPosPrinterAdapter] Skipped invalid/unsupported bitmap; text receipt continues.');
       }
 
-      // 2. Print formatted invoice text cleanly
-      await _channel.invokeMethod('printText', {'text': formattedText});
+      // This selects per-job layout/render width only; it does not change the
+      // persistent physical/default paper setting in net.nyx.printerservice.SETTINGS.
+      await _channel.invokeMethod('printText', {
+        'text': formattedText,
+        'paperWidthMm': normalizedPaperWidthMm,
+      });
       return PrinterResult.success(text: formattedText);
     } on MissingPluginException {
       debugPrint('[IPosPrinterAdapter] iPos print service unavailable.');
@@ -143,7 +148,8 @@ class IPosPrinterAdapter implements PrinterPort {
     ReceiptDocument document, {
     int paperWidthMm = 58,
   }) async {
-    final text = ReceiptLayoutFormatter.fromPaperWidth(paperWidthMm)
+    final normalizedPaperWidthMm = _normalizedPaperWidthMm(paperWidthMm);
+    final text = ReceiptLayoutFormatter.fromPaperWidth(normalizedPaperWidthMm)
         .formatReceiptDocumentText(document);
     try {
       final logo = document.logoRasterBytes;
@@ -153,7 +159,12 @@ class IPosPrinterAdapter implements PrinterPort {
       } else if (logo != null && logo.isNotEmpty) {
         debugPrint('[IPosPrinterAdapter] Skipped invalid/unsupported bitmap; text receipt continues.');
       }
-      await _channel.invokeMethod('printText', {'text': text});
+      // This selects per-job layout/render width only; it does not change the
+      // persistent physical/default paper setting in net.nyx.printerservice.SETTINGS.
+      await _channel.invokeMethod('printText', {
+        'text': text,
+        'paperWidthMm': normalizedPaperWidthMm,
+      });
       return PrinterResult.success(text: text);
     } on MissingPluginException {
       return PrinterResult.failure(
@@ -305,15 +316,21 @@ class IPosPrinterAdapter implements PrinterPort {
     }
   }
 
+  int _normalizedPaperWidthMm(int paperWidthMm) => paperWidthMm < 80 ? 58 : 80;
+
   Future<PrinterResult> _sendToHardware({
     List<int>? rawBytes,
     String? plainText,
+    int paperWidthMm = 58,
   }) async {
     try {
       // Nyx exposes text and bitmap APIs, not a raw ESC/POS transport. Prefer
       // the already-rendered text whenever both representations are available.
       if (plainText != null && plainText.isNotEmpty) {
-        await _channel.invokeMethod('printText', {'text': plainText});
+        await _channel.invokeMethod('printText', {
+          'text': plainText,
+          'paperWidthMm': _normalizedPaperWidthMm(paperWidthMm),
+        });
       } else if (rawBytes != null && rawBytes.isNotEmpty) {
         await _channel.invokeMethod('printRawBytes', {'bytes': Uint8List.fromList(rawBytes)});
       }

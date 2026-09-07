@@ -1127,13 +1127,13 @@ class MockInvoiceDao extends _i1.Mock implements _i25.InvoiceDao {
       ) as _i41.Future<void>);
 
   @override
-  _i41.Future<String?> getLastInvoiceNumber() => (super.noSuchMethod(
+  _i41.Future<_i46.InvoiceEntity?> getLastInvoice() => (super.noSuchMethod(
         Invocation.method(
-          #getLastInvoiceNumber,
+          #getLastInvoice,
           [],
         ),
-        returnValue: _i41.Future<String?>.value(),
-      ) as _i41.Future<String?>);
+        returnValue: _i41.Future<_i46.InvoiceEntity?>.value(),
+      ) as _i41.Future<_i46.InvoiceEntity?>);
 
   @override
   _i41.Future<void> updateSyncStatusForIds(
