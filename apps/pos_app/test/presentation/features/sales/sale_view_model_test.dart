@@ -594,6 +594,7 @@ void main() {
           null,
           fakeSyncService,
         );
+        vm.setCompanyTaxRegime(TaxRegime.regimenGeneral);
 
         expect(vm.products, isEmpty);
 

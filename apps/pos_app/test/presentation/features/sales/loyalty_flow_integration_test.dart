@@ -19,6 +19,7 @@ import 'package:pos_app/domain/models/inventory/product.dart';
 import 'package:pos_app/domain/models/sales/payment.dart';
 import 'package:pos_app/domain/models/sales/invoice.dart';
 import 'package:pos_app/domain/models/sales/invoice_item.dart';
+import 'package:pos_app/domain/models/config/tax_regime.dart';
 
 class FakeSalesRepository implements SalesRepository {
   Invoice? lastSavedInvoice;
@@ -112,6 +113,7 @@ void main() {
         minPointsToRedeem: 10.0,
       ),
     );
+    viewModel.setCompanyTaxRegime(TaxRegime.regimenGeneral);
   });
 
   tearDown(() async {

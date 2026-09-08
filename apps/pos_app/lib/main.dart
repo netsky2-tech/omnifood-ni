@@ -13,6 +13,7 @@ import 'data/database/database_seeder.dart';
 import 'data/repositories/auth_repository_impl.dart';
 import 'core/clock/monotonic_clock.dart';
 import 'core/config/production_transport_config.dart';
+import 'core/navigation/route_observer.dart';
 import 'data/repositories/tenant_capability_cache.dart';
 import 'domain/repositories/auth_repository.dart';
 import 'data/repositories/audit_repository_impl.dart';
@@ -353,6 +354,7 @@ class MyApp extends StatelessWidget {
       alertService: alertService,
       child: MaterialApp(
         title: 'NHILOS POS',
+        navigatorObservers: [appRouteObserver],
         theme: ThemeData(
           useMaterial3: true,
           colorScheme: const ColorScheme(

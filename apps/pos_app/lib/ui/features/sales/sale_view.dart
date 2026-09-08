@@ -10,6 +10,7 @@ import '../../../domain/models/user.dart';
 import '../../../domain/repositories/auth_repository.dart';
 import '../../../domain/repositories/audit_repository.dart';
 import '../../../data/database/app_database.dart';
+import '../../../core/navigation/route_observer.dart';
 import '../../widgets/app_drawer.dart';
 import '../../features/identity/supervisor_override_modal.dart';
 import '../../design_system/design_system.dart';
@@ -142,8 +143,8 @@ class SaleView extends StatefulWidget {
   State<SaleView> createState() => _SaleViewState();
 }
 
-class _SaleViewState extends State<SaleView> {
-  bool _taxRegimeReloadScheduled = false;
+class _SaleViewState extends State<SaleView> with RouteAware {
+  ModalRoute<void>? _modalRoute;
 
   @override
   void initState() {
@@ -160,6 +161,23 @@ class _SaleViewState extends State<SaleView> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route != null && route != _modalRoute) {
+      appRouteObserver.unsubscribe(this);
+      _modalRoute = route;
+      appRouteObserver.subscribe(this, route);
+    }
+  }
+
+  @override
+  void dispose() {
+    appRouteObserver.unsubscribe(this);
+    super.dispose();
+  }
+
+  @override
+  void didPopNext() {
+    if (!mounted) return;
     context.read<SaleViewModel>().loadCompanyTaxRegime();
   }
 
@@ -177,19 +195,6 @@ class _SaleViewState extends State<SaleView> {
     final colorScheme = Theme.of(context).colorScheme;
     final hasActiveSession = viewModel.activeSession != null;
     final isHandheld = ResponsiveBreakpoints.isHandheld(context);
-
-    // Guaranteed tax regime hot-swap: schedule a re-read after this frame.
-    // Fires after every build (including route pop returns), ensuring the
-    // fiscal regime is always fresh. Idempotent: only notifies on change.
-    if (!_taxRegimeReloadScheduled) {
-      _taxRegimeReloadScheduled = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _taxRegimeReloadScheduled = false;
-        if (mounted) {
-          context.read<SaleViewModel>().loadCompanyTaxRegime();
-        }
-      });
-    }
 
     // Listener for errors (Visual Feedback)
     if (viewModel.errorMessage != null) {

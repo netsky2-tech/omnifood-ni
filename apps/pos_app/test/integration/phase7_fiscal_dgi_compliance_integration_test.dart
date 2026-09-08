@@ -270,23 +270,9 @@ void main() {
         const CartItem(productId: 'c1', productName: 'Item A', quantity: 1, unitPrice: 100.00, taxRate: 0.15),
       ];
 
-      final res = calculator.calculate(
-        cart: cart,
-        taxRegime: null,
-      );
-
-      // Does NOT default to Régimen General
-      expect(res.taxRegime, isNull);
-      expect(res.isFiscalPolicyConfigured, isFalse);
-      expect(res.totalTax, equals(0.00));
-      expect(res.total, equals(100.00));
-
-      // Block receipt emission
+      // calculate() with null regime MUST throw — no silent IVA default
       expect(
-        () => calculator.buildReceiptDocument(
-          calculation: res,
-          invoiceNumber: '001-001-01-00000024',
-        ),
+        () => calculator.calculate(cart: cart, taxRegime: null),
         throwsA(isA<FiscalConfigurationException>()),
       );
     });

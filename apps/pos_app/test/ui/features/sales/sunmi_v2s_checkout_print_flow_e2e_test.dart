@@ -19,6 +19,7 @@ import 'package:pos_app/domain/repositories/auth_repository.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
 import 'package:pos_app/domain/repositories/sales/sales_repository.dart';
 import 'package:pos_app/domain/services/config/printer_config_service.dart';
+import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
 import 'package:pos_app/ui/features/sales/sale_view.dart';
 import 'package:provider/provider.dart';
@@ -125,6 +126,7 @@ void main() {
       mockConfigService,
       mockPrinter,
     );
+    viewModel.setCompanyTaxRegime(TaxRegime.regimenGeneral);
   });
 
   tearDown(() {
