@@ -170,7 +170,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 48,
+      version: 49,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -234,9 +234,9 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `catalog_values` (`id` TEXT NOT NULL, `catalog_type` TEXT NOT NULL, `code` TEXT NOT NULL, `name` TEXT NOT NULL, `is_active` INTEGER NOT NULL, `sort_order` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `invoices` (`id` TEXT NOT NULL, `invoice_number` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `user_id` TEXT NOT NULL, `subtotal` REAL NOT NULL, `total_tax` REAL NOT NULL, `total` REAL NOT NULL, `is_canceled` INTEGER NOT NULL, `void_reason` TEXT, `sync_status` TEXT NOT NULL, `payment_status` TEXT NOT NULL, `customer_id` TEXT, `global_tax_override` INTEGER NOT NULL, `type` TEXT NOT NULL, `related_invoice_id` TEXT, `origin_invoice_id` TEXT, `refund_reason_policy` TEXT, `refund_reason_code` TEXT, `authorized_by_user_id` TEXT, `authorized_by_role` TEXT, `terminal_id` TEXT, `source_sequence` INTEGER, `idempotency_key` TEXT, `payload_hash` TEXT, `bcn_official_rate` REAL NOT NULL, `commercial_rate` REAL NOT NULL, `total_usd` REAL NOT NULL, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `invoices` (`id` TEXT NOT NULL, `invoice_number` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `user_id` TEXT NOT NULL, `subtotal` REAL NOT NULL, `total_tax` REAL NOT NULL, `total` REAL NOT NULL, `is_canceled` INTEGER NOT NULL, `void_reason` TEXT, `sync_status` TEXT NOT NULL, `payment_status` TEXT NOT NULL, `customer_id` TEXT, `global_tax_override` INTEGER NOT NULL, `type` TEXT NOT NULL, `related_invoice_id` TEXT, `origin_invoice_id` TEXT, `refund_reason_policy` TEXT, `refund_reason_code` TEXT, `authorized_by_user_id` TEXT, `authorized_by_role` TEXT, `terminal_id` TEXT, `source_sequence` INTEGER, `idempotency_key` TEXT, `payload_hash` TEXT, `inventory_policy_version` TEXT, `inventory_outcome` TEXT, `inventory_outcome_reason` TEXT, `bcn_official_rate` REAL NOT NULL, `commercial_rate` REAL NOT NULL, `total_usd` REAL NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `invoice_items` (`id` TEXT NOT NULL, `invoice_id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `product_name` TEXT NOT NULL, `quantity` REAL NOT NULL, `unit_price` REAL NOT NULL, `original_tax_rate` REAL NOT NULL, `applied_tax_rate` REAL NOT NULL, `tax_amount` REAL NOT NULL, `total` REAL NOT NULL, `discount` REAL NOT NULL, `variant_id` TEXT, `notes` TEXT, `recipe_version_id` TEXT, `origin_invoice_item_id` TEXT, FOREIGN KEY (`invoice_id`) REFERENCES `invoices` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `invoice_items` (`id` TEXT NOT NULL, `invoice_id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `product_name` TEXT NOT NULL, `quantity` REAL NOT NULL, `unit_price` REAL NOT NULL, `original_tax_rate` REAL NOT NULL, `applied_tax_rate` REAL NOT NULL, `tax_amount` REAL NOT NULL, `total` REAL NOT NULL, `discount` REAL NOT NULL, `variant_id` TEXT, `notes` TEXT, `recipe_version_id` TEXT, `inventory_snapshot_json` TEXT, `inventory_snapshot_version` TEXT, `origin_invoice_item_id` TEXT, FOREIGN KEY (`invoice_id`) REFERENCES `invoices` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `invoice_item_modifiers` (`id` TEXT NOT NULL, `invoice_item_id` TEXT NOT NULL, `name` TEXT NOT NULL, `extra_price` REAL NOT NULL, FOREIGN KEY (`invoice_item_id`) REFERENCES `invoice_items` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
@@ -3042,6 +3042,9 @@ class _$InvoiceDao extends InvoiceDao {
                   'source_sequence': item.sourceSequence,
                   'idempotency_key': item.idempotencyKey,
                   'payload_hash': item.payloadHash,
+                  'inventory_policy_version': item.inventoryPolicyVersion,
+                  'inventory_outcome': item.inventoryOutcome,
+                  'inventory_outcome_reason': item.inventoryOutcomeReason,
                   'bcn_official_rate': item.bcnOfficialRate,
                   'commercial_rate': item.commercialRate,
                   'total_usd': item.totalUsd
@@ -3075,6 +3078,9 @@ class _$InvoiceDao extends InvoiceDao {
                   'source_sequence': item.sourceSequence,
                   'idempotency_key': item.idempotencyKey,
                   'payload_hash': item.payloadHash,
+                  'inventory_policy_version': item.inventoryPolicyVersion,
+                  'inventory_outcome': item.inventoryOutcome,
+                  'inventory_outcome_reason': item.inventoryOutcomeReason,
                   'bcn_official_rate': item.bcnOfficialRate,
                   'commercial_rate': item.commercialRate,
                   'total_usd': item.totalUsd
@@ -3118,6 +3124,9 @@ class _$InvoiceDao extends InvoiceDao {
             sourceSequence: row['source_sequence'] as int?,
             idempotencyKey: row['idempotency_key'] as String?,
             payloadHash: row['payload_hash'] as String?,
+            inventoryPolicyVersion: row['inventory_policy_version'] as String?,
+            inventoryOutcome: row['inventory_outcome'] as String?,
+            inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double),
@@ -3153,6 +3162,9 @@ class _$InvoiceDao extends InvoiceDao {
             sourceSequence: row['source_sequence'] as int?,
             idempotencyKey: row['idempotency_key'] as String?,
             payloadHash: row['payload_hash'] as String?,
+            inventoryPolicyVersion: row['inventory_policy_version'] as String?,
+            inventoryOutcome: row['inventory_outcome'] as String?,
+            inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double),
@@ -3188,6 +3200,9 @@ class _$InvoiceDao extends InvoiceDao {
             sourceSequence: row['source_sequence'] as int?,
             idempotencyKey: row['idempotency_key'] as String?,
             payloadHash: row['payload_hash'] as String?,
+            inventoryPolicyVersion: row['inventory_policy_version'] as String?,
+            inventoryOutcome: row['inventory_outcome'] as String?,
+            inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double));
@@ -3222,6 +3237,9 @@ class _$InvoiceDao extends InvoiceDao {
             sourceSequence: row['source_sequence'] as int?,
             idempotencyKey: row['idempotency_key'] as String?,
             payloadHash: row['payload_hash'] as String?,
+            inventoryPolicyVersion: row['inventory_policy_version'] as String?,
+            inventoryOutcome: row['inventory_outcome'] as String?,
+            inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double),
@@ -3260,6 +3278,9 @@ class _$InvoiceDao extends InvoiceDao {
             sourceSequence: row['source_sequence'] as int?,
             idempotencyKey: row['idempotency_key'] as String?,
             payloadHash: row['payload_hash'] as String?,
+            inventoryPolicyVersion: row['inventory_policy_version'] as String?,
+            inventoryOutcome: row['inventory_outcome'] as String?,
+            inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double),
@@ -3295,6 +3316,9 @@ class _$InvoiceDao extends InvoiceDao {
             sourceSequence: row['source_sequence'] as int?,
             idempotencyKey: row['idempotency_key'] as String?,
             payloadHash: row['payload_hash'] as String?,
+            inventoryPolicyVersion: row['inventory_policy_version'] as String?,
+            inventoryOutcome: row['inventory_outcome'] as String?,
+            inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double),
@@ -3353,6 +3377,9 @@ class _$InvoiceDao extends InvoiceDao {
             sourceSequence: row['source_sequence'] as int?,
             idempotencyKey: row['idempotency_key'] as String?,
             payloadHash: row['payload_hash'] as String?,
+            inventoryPolicyVersion: row['inventory_policy_version'] as String?,
+            inventoryOutcome: row['inventory_outcome'] as String?,
+            inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double),
@@ -3395,6 +3422,8 @@ class _$InvoiceItemDao extends InvoiceItemDao {
                   'variant_id': item.variantId,
                   'notes': item.notes,
                   'recipe_version_id': item.recipeVersionId,
+                  'inventory_snapshot_json': item.inventorySnapshotJson,
+                  'inventory_snapshot_version': item.inventorySnapshotVersion,
                   'origin_invoice_item_id': item.originInvoiceItemId
                 });
 
@@ -3425,6 +3454,9 @@ class _$InvoiceItemDao extends InvoiceItemDao {
             variantId: row['variant_id'] as String?,
             notes: row['notes'] as String?,
             recipeVersionId: row['recipe_version_id'] as String?,
+            inventorySnapshotJson: row['inventory_snapshot_json'] as String?,
+            inventorySnapshotVersion:
+                row['inventory_snapshot_version'] as String?,
             originInvoiceItemId: row['origin_invoice_item_id'] as String?),
         arguments: [invoiceId]);
   }
@@ -3691,6 +3723,9 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'source_sequence': item.sourceSequence,
                   'idempotency_key': item.idempotencyKey,
                   'payload_hash': item.payloadHash,
+                  'inventory_policy_version': item.inventoryPolicyVersion,
+                  'inventory_outcome': item.inventoryOutcome,
+                  'inventory_outcome_reason': item.inventoryOutcomeReason,
                   'bcn_official_rate': item.bcnOfficialRate,
                   'commercial_rate': item.commercialRate,
                   'total_usd': item.totalUsd
@@ -3713,6 +3748,8 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'variant_id': item.variantId,
                   'notes': item.notes,
                   'recipe_version_id': item.recipeVersionId,
+                  'inventory_snapshot_json': item.inventorySnapshotJson,
+                  'inventory_snapshot_version': item.inventorySnapshotVersion,
                   'origin_invoice_item_id': item.originInvoiceItemId
                 }),
         _invoiceItemModifierEntityInsertionAdapter = InsertionAdapter(
@@ -3830,6 +3867,9 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'source_sequence': item.sourceSequence,
                   'idempotency_key': item.idempotencyKey,
                   'payload_hash': item.payloadHash,
+                  'inventory_policy_version': item.inventoryPolicyVersion,
+                  'inventory_outcome': item.inventoryOutcome,
+                  'inventory_outcome_reason': item.inventoryOutcomeReason,
                   'bcn_official_rate': item.bcnOfficialRate,
                   'commercial_rate': item.commercialRate,
                   'total_usd': item.totalUsd
@@ -3921,6 +3961,9 @@ class _$SalesTransactionDao extends SalesTransactionDao {
             sourceSequence: row['source_sequence'] as int?,
             idempotencyKey: row['idempotency_key'] as String?,
             payloadHash: row['payload_hash'] as String?,
+            inventoryPolicyVersion: row['inventory_policy_version'] as String?,
+            inventoryOutcome: row['inventory_outcome'] as String?,
+            inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double),
@@ -3957,6 +4000,9 @@ class _$SalesTransactionDao extends SalesTransactionDao {
             sourceSequence: row['source_sequence'] as int?,
             idempotencyKey: row['idempotency_key'] as String?,
             payloadHash: row['payload_hash'] as String?,
+            inventoryPolicyVersion: row['inventory_policy_version'] as String?,
+            inventoryOutcome: row['inventory_outcome'] as String?,
+            inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double),

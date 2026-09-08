@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:uuid/uuid.dart';
 import '../../domain/models/sales/invoice.dart';
 import '../../domain/models/sales/invoice_item.dart';
+import '../../domain/models/sales/sale_time_inventory_snapshot.dart';
 import '../../domain/models/sales/payment.dart';
 import '../../domain/models/sales/promotion.dart';
 import '../models/sales/invoice_entity.dart';
@@ -298,6 +299,9 @@ class SalesMapper {
       sourceSequence: entity.sourceSequence,
       idempotencyKey: entity.idempotencyKey,
       payloadHash: entity.payloadHash,
+      inventoryPolicyVersion: entity.inventoryPolicyVersion,
+      inventoryOutcome: entity.inventoryOutcome,
+      inventoryOutcomeReason: entity.inventoryOutcomeReason,
       bcnOfficialRate: entity.bcnOfficialRate,
       commercialRate: entity.commercialRate,
       totalUsd: entity.totalUsd,
@@ -330,6 +334,9 @@ class SalesMapper {
       sourceSequence: domain.sourceSequence,
       idempotencyKey: domain.idempotencyKey,
       payloadHash: domain.payloadHash,
+      inventoryPolicyVersion: domain.inventoryPolicyVersion,
+      inventoryOutcome: domain.inventoryOutcome,
+      inventoryOutcomeReason: domain.inventoryOutcomeReason,
       bcnOfficialRate: domain.bcnOfficialRate,
       commercialRate: domain.commercialRate,
       totalUsd: domain.totalUsd,
@@ -353,6 +360,8 @@ class SalesMapper {
       variantId: entity.variantId,
       notes: entity.notes,
       recipeVersionId: entity.recipeVersionId,
+      inventorySnapshot: _snapshotFromEntity(entity),
+      inventorySnapshotVersion: entity.inventorySnapshotVersion,
       originInvoiceItemId: entity.originInvoiceItemId,
       selectedModifiers: modifiers,
     );
@@ -374,8 +383,30 @@ class SalesMapper {
       variantId: domain.variantId,
       notes: domain.notes,
       recipeVersionId: domain.recipeVersionId,
+      inventorySnapshotJson: domain.inventorySnapshot == null ? null : jsonEncode(domain.inventorySnapshot!.toJson()),
+      inventorySnapshotVersion: _snapshotVersion(domain.inventorySnapshot, domain.inventorySnapshotVersion),
       originInvoiceItemId: domain.originInvoiceItemId,
     );
+  }
+
+  static SaleTimeInventorySnapshot? _snapshotFromEntity(InvoiceItemEntity entity) {
+    if (entity.inventorySnapshotJson == null) {
+      _snapshotVersion(null, entity.inventorySnapshotVersion);
+      return null;
+    }
+    final snapshot = SaleTimeInventorySnapshot.fromJson(
+      Map<String, dynamic>.from(jsonDecode(entity.inventorySnapshotJson!) as Map),
+    );
+    _snapshotVersion(snapshot, entity.inventorySnapshotVersion);
+    return snapshot;
+  }
+
+  static String? _snapshotVersion(SaleTimeInventorySnapshot? snapshot, String? version) {
+    if (snapshot == null && version == null) return null;
+    if (snapshot == null || version != 'SALE_TIME_V1') {
+      throw ArgumentError('Contradictory sale-time inventory snapshot version');
+    }
+    return version;
   }
 
   static List<InvoiceItemModifierEntity> toItemModifierEntities(InvoiceItem domain) {
@@ -452,6 +483,9 @@ class SalesMapper {
     List<InvoiceItem> items,
     List<Payment> payments,
   ) {
+    for (final item in items) {
+      _snapshotVersion(item.inventorySnapshot, item.inventorySnapshotVersion);
+    }
     return {
       'id': invoice.id,
       'number': invoice.number,
@@ -480,6 +514,9 @@ class SalesMapper {
           ? invoice.idempotencyKey
           : 'sale:${invoice.terminalId ?? 'term-main'}:${invoice.id}',
       'payloadHash': invoice.payloadHash,
+      if (invoice.inventoryPolicyVersion != null) 'inventoryPolicyVersion': invoice.inventoryPolicyVersion,
+      if (invoice.inventoryOutcome != null) 'inventoryOutcome': invoice.inventoryOutcome,
+      if (invoice.inventoryOutcomeReason != null) 'inventoryOutcomeReason': invoice.inventoryOutcomeReason,
       'items': items.map((item) => {
         'id': item.id,
         'productId': item.productId,
@@ -494,6 +531,8 @@ class SalesMapper {
         'variantId': item.variantId,
         'notes': item.notes,
         'recipeVersionId': item.recipeVersionId,
+        if (item.inventorySnapshot != null) 'inventorySnapshotVersion': _snapshotVersion(item.inventorySnapshot, item.inventorySnapshotVersion),
+        if (item.inventorySnapshot != null) 'inventorySnapshot': item.inventorySnapshot!.toJson(),
         'originInvoiceItemId': item.originInvoiceItemId,
         'modifiers': item.selectedModifiers.map((m) => ({
           'name': m.name,

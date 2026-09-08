@@ -423,3 +423,70 @@ The prior attempt was blocked before code/tests because root `spec.md` was missi
   - POS analyzer: `cd apps/pos_app && flutter analyze lib/domain/models/inventory/product.dart lib/data/models/inventory/product_entity.dart lib/data/mappers/inventory_mapper.dart lib/data/database/migrations.dart test/domain/models/inventory/product_mapping_test.dart` — **No issues found!**.
   - Tracked diff: 326 additions / 36 deletions; untracked files are strictly the new Slice 4 implementation and test artifacts.
   - Untracked `docs/onboarding/onboarding_acceptance_plan_v1.0.md:Zone.Identifier` remains untouched.
+
+## Slice 5A — immutable snapshot persistence complete
+
+- **Status:** parent-supplied authoritative OpenSpec/hybrid `ready`; repo-local workspace, head `952be60`, strict TDD, `auto-chain`, and approved 5A→5B split (hard 300 authored source+test lines). All writes are within the workspace; `docs/onboarding/onboarding_acceptance_plan_v1.0.md:Zone.Identifier` remains untouched.
+- **Completed/persisted tasks:** `tasks.md` was minimally split into 5A and dependent 5B. Re-read confirms the 5A implementation and 5A verification lines are `[x]`; 5B and 5B verification remain `[ ]`.
+- **Implementation:** immutable `SALE_TIME_V1` snapshot contract with exact `SIMPLE|PREPARED|COMPOUND` and `DIRECT|RECIPE|NO_IMPACT|PENDING_RECIPE` values, nullable reason/mapping/recipe identifiers, catalog revision, and unmodifiable canonically ordered bindings. Domain/codec rejects malformed enums and negative/non-finite quantities. Invoice item JSON/version and invoice policy/outcome/reason persistence are nullable; mapper round-trips and sends the frozen snapshot without catalog lookup. AppDatabase is 49 with additive nullable 48→49 migration. No Slice 5B checkout, classification, hash, DGI, transaction, movement, backend, or ACK behavior was touched.
+- **Generated outputs:** ran exactly `cd apps/pos_app && flutter pub run build_runner build --delete-conflicting-outputs` (succeeded; 19 outputs); retained Floor/Freezed output and restored an unrelated generated Mockito mock.
+
+### TDD Cycle Evidence
+
+| Task | Test File | Safety Net | RED | GREEN / triangulation / refactor |
+|---|---|---|---|---|
+| Contract/codec | `test/domain/models/sales/sale_time_inventory_snapshot_test.dart` | N/A new | missing file/types failed | 2 passed: immutable canonical round-trip plus noncanonical/non-finite/negative/malformed-enum cases; pure codec retained clean |
+| Mapper/payload | `test/data/mappers/sales_mapper_test.dart` | 24 existing mapper/migration tests passed | missing fields failed | entity→domain→payload round-trip preserves binding without lookup |
+| Migration | `test/data/database/identity_sales_migrations_test.dart` | 24 existing mapper/migration tests passed | missing `migration48_49` failed | old invoice/item rows retain null new fields |
+
+### Verification, boundary, and rollback
+
+- RED: `cd apps/pos_app && flutter test test/domain/models/sales/sale_time_inventory_snapshot_test.dart` failed as expected before the contract existed; mapper/migration RED failed on missing fields/migration.
+- GREEN/refactor: `cd apps/pos_app && flutter test test/domain/models/sales/sale_time_inventory_snapshot_test.dart test/data/mappers/sales_mapper_test.dart test/data/database/identity_sales_migrations_test.dart` — **28 passed**.
+- Targeted `flutter analyze` across all touched authored models/entities/mapper/database/tests — **No issues found**. `git diff --check` passed.
+- Authored source+test count: **186** (generated Floor/Freezed excluded), below 300. Runtime harness: N/A, pure persistence/codec unit. PR boundary is auto-chain/stacked-to-main **Slice 5A only**; no commit.
+- Roll back only the snapshot contract, invoice/item fields, mapper, 48→49 migration, focused tests, and matching generated outputs; production rollback retains additive nullable data. Remaining exact unchecked line: `- [ ] **5B — depends on 5A:** implement checkout classification/policy, arithmetic, deterministic sorted correlation IDs, payload-hash inclusion, DGI sequencing, atomic invoice/items/local effects, and invoice-atomic pending/no-impact behavior; RED/GREEN/TRIANGULATE/REFACTOR focused repository/use-case tests. Preserve frozen bindings, exact correlation ordering, and pending/no-impact acceptance semantics.`
+
+## Slice 5A — R3 fresh-context reliability correction complete
+
+- **Status consumed/produced:** authoritative OpenSpec hybrid status: active `q80-reconnect-auth-and-inventory-outcome`, `applyState=ready`, repo-local workspace, strict TDD, `auto-chain` Slice 5A correction, and approved 300-line budget. No action-context warning; `Zone.Identifier` was untouched.
+- **R3 closure:** immutable bindings now defensively copy source lists; the codec has D3 exact snapshot shape (no nested version), disposition-specific invariants, positive finite quantities, known reasons, and stable contiguous ordinals. Mapper requires item-level `SALE_TIME_V1` consistency, rejects contradictory persisted values, and omits every new 5A key from a fully legacy payload. Migration coverage checks all five columns and idempotent rerun.
+- **Verification:** safety net before RED: 28 passed. RED: new contract/mapper assertions failed (nested snapshot version, invalid disposition combinations, null legacy keys, and contradictory versions). GREEN/refactor: `cd apps/pos_app && flutter test test/domain/models/sales/sale_time_inventory_snapshot_test.dart test/data/mappers/sales_mapper_test.dart test/data/database/identity_sales_migrations_test.dart` — **29 passed**; targeted analyzer — **No issues found**; `flutter pub run build_runner build --delete-conflicting-outputs` — **succeeded (13 outputs)**; `git diff --check` — passed.
+- **TDD Cycle Evidence:**
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|---|---|---|---|---|---|---|---|
+| R3 immutable D3 contract | `sale_time_inventory_snapshot_test.dart` | Unit | 28 passed | failing exact-shape/invariant assertions | passed | source alias, direct/recipe/no-impact/pending, bad reason/quantity/key cases | copied immutable list and centralized contract validation |
+| R3 mapper/legacy boundary | `sales_mapper_test.dart` | Unit | 28 passed | failing null-key/version assertions | passed | new + legacy payloads and contradictory persistence | centralized version boundary helper |
+| R3 migration evidence | `identity_sales_migrations_test.dart` | SQLite unit | 28 passed | migration assertions added first | passed | five columns plus rerun | minimal idempotent schema assertions |
+
+- **Persisted task reconciliation:** re-read `tasks.md`; 5A implementation and verification lines remain visibly `[x]`; 5B lines remain `[ ]`.
+- **Workload / rollback:** auto-chain stacked-to-main Slice 5A only; authored source+test delta is approximately 200 lines excluding generated output, within 300. Roll back only 5A contract/persistence/mapper/migration/tests/generated files. No commit.
+- **Remaining task:** `- [ ] **5B — depends on 5A:** implement checkout classification/policy, arithmetic, deterministic sorted correlation IDs, payload-hash inclusion, DGI sequencing, atomic invoice/items/local effects, and invoice-atomic pending/no-impact behavior; RED/GREEN/TRIANGULATE/REFACTOR focused repository/use-case tests. Preserve frozen bindings, exact correlation ordering, and pending/no-impact acceptance semantics.`
+
+## Slice 5A — second bounded correction pass (R3-003/R3-004/R3-005)
+
+- **Structured status consumed/produced:** `{schemaName: spec-driven, changeName: q80-reconnect-auth-and-inventory-outcome, artifactStore: both, authoritativeStore: openspec, applyState: ready, actionContext: {mode: repo-local, workspaceRoot: /home/octavio_morales/omnifood-ni-worktrees/backoffice-spa, allowedEditRoots: [workspace]}}`. Strict TDD and the user-authorized `auto-chain` Slice 5A correction path were active. No action-context warning; the unrelated `docs/onboarding/onboarding_acceptance_plan_v1.0.md:Zone.Identifier` remains untouched.
+- **R3-003:** `toSyncJson` pre-validates each item with `_snapshotVersion`; a version-only item now throws instead of silently omitting the pair and downgrading to legacy.
+- **R3-004:** DIRECT accepts exactly one null-component binding; RECIPE requires non-empty component IDs for every binding. Existing ordinal validation preserves the supplied sequence and rejects non-contiguous or tuple-unsorted inputs.
+- **R3-005:** invoice policy/outcome/reason fields now map in both invoice directions. The mapper test uses the real domain → `InvoiceEntity` → domain → payload route, not `copyWith`, and asserts all three persisted values on the serialized payload.
+- **Generated output:** `cd apps/pos_app && flutter pub run build_runner build --delete-conflicting-outputs` succeeded with **13 outputs**. An unrelated generated Mockito mock changed by codegen was restored to HEAD.
+
+### TDD Cycle Evidence
+
+| Finding | Safety net | RED | GREEN | TRIANGULATE | REFACTOR |
+|---|---|---|---|---|---|
+| R3-003 | 29 focused snapshot/mapper/migration tests passed | Version-only outbound item returned a legacy-shaped payload | Added pre-serialization version validation; focused mapper test passed | Existing snapshot-present/version-missing rejection plus new inverse case cover both mismatch directions | Reused `_snapshotVersion` at the boundary; no payload sorting or broad change |
+| R3-004 | 29 focused tests passed | DIRECT with a component ID was accepted | Added disposition-specific binding identity checks | Missing/empty recipe component, non-contiguous and unsorted ordinals, and infinite quantity all reject | Retained immutable supplied-list semantics and existing ordinal check |
+| R3-005 | 29 focused tests passed | Domain → entity → domain lost all three invoice fields | Added both mapper directions; round-trip passed | Payload assertions prove persistence mapping and wire parity together | Kept nullable legacy omission behavior unchanged |
+
+### Verification and boundary
+
+- RED: `cd apps/pos_app && flutter test test/domain/models/sales/sale_time_inventory_snapshot_test.dart test/data/mappers/sales_mapper_test.dart` — failed as expected: invalid DIRECT binding and version-only payload were accepted; invoice fields were null after entity round-trip.
+- GREEN/triangulation: `cd apps/pos_app && flutter test test/domain/models/sales/sale_time_inventory_snapshot_test.dart test/data/mappers/sales_mapper_test.dart test/data/database/identity_sales_migrations_test.dart` — **32 passed**.
+- Targeted analyzer across the 5A contract, invoice/item models/entities, mapper, database/migration, and focused tests — **No issues found**.
+- `git diff --check` — passed.
+- Authored 5A source+test count: tracked non-generated delta **123** plus **93** untracked snapshot contract/test physical lines = **216**, within the user-authorized **300** line limit (generated output excluded).
+- Persisted task reconciliation: re-read `tasks.md`; the 5A implementation and verification lines remain visibly `- [x]`; all 5B lines remain `- [ ]`.
+- PR boundary/rollback: auto-chain, stacked-to-main **Slice 5A only**. Roll back only 5A snapshot contracts, invoice/item persistence mapping, migration, focused tests, and matching generated output. No commit was created.
+- Remaining exact unchecked implementation task: `- [ ] **5B — depends on 5A:** implement checkout classification/policy, arithmetic, deterministic sorted correlation IDs, payload-hash inclusion, DGI sequencing, atomic invoice/items/local effects, and invoice-atomic pending/no-impact behavior; RED/GREEN/TRIANGULATE/REFACTOR focused repository/use-case tests. Preserve frozen bindings, exact correlation ordering, and pending/no-impact acceptance semantics.`

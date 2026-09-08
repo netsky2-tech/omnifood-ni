@@ -31,3 +31,25 @@
 | R3-005 | reliability | DI registration | CRITICAL | closed | Deduplicated with R4-006. |
 | R3-006 | reliability | PostgreSQL enum migration | CRITICAL | closed | Deduplicated with R1-006. |
 | R3-007 | reliability | Migration PostgreSQL DB spec | BLOCKER | closed | Added `1802000000000-CreateProductInventoryMappingVersions.db.spec.ts` running real PostgreSQL tests (PASS). |
+
+## Slice 5A — fresh-context reliability corrective rerun
+
+| ID | Severity | Status | Resolution / Evidence |
+|---|---|---|---|
+| R3-001 | BLOCKER | closed | Snapshot constructor copies caller bindings before `UnmodifiableListView`; focused test mutates the source list and proves frozen JSON/bindings retain the original value. |
+| R3-002 | BLOCKER | closed | Sync mapper omits snapshot/version and invoice policy/outcome/reason keys for legacy payloads; exact legacy-key test passes. |
+| R3-003 | CRITICAL | closed | Removed nested `snapshotVersion`; item-level `inventorySnapshotVersion` is required to equal `SALE_TIME_V1` at mapper boundaries. Exact D3 JSON shape and contradictory persisted values are tested. |
+| R3-004 | CRITICAL | closed | Immutable contract enforces positive finite quantities, D3 disposition/classification/ID/reason/binding combinations, recognized reasons, and stable contiguous binding ordinals without reassignment. |
+| R3-005 | WARNING | closed | Focused tests cover five additive columns and idempotent migration, snapshot/version/outcome mapper parity, quantity preservation, legacy omission, and build-runner schema generation. |
+
+## Slice 5A — second bounded corrective pass (user-authorized)
+
+| ID | Severity | Status | Resolution / Evidence |
+|---|---|---|---|
+| R3-003 | CRITICAL | closed | `SalesMapper.toSyncJson` now validates every item before serialization, so a non-null `inventorySnapshotVersion` without an `inventorySnapshot` throws rather than omitting both keys and emitting a legacy payload. Focused outbound test passes. |
+| R3-004 | CRITICAL | closed | D3 now requires DIRECT's sole binding to have null `recipeComponentId`, and every RECIPE binding to carry a non-empty component ID. Tests reject direct-with-component, recipe missing/empty component, non-contiguous and unsorted ordinals, and non-finite quantity; no ordinal sorting/reassignment occurs. |
+| R3-005 | CRITICAL | closed | `toInvoiceEntity` and `toInvoiceDomain` now map `inventoryPolicyVersion`, `inventoryOutcome`, and `inventoryOutcomeReason`. A domain → entity → domain → wire payload round-trip proves all three survive the Floor mapper boundary and serialization. |
+
+### Final scoped re-review
+
+**PASS — zero remaining findings.** Fresh-context reliability re-review confirmed R3-003, R3-004, and R3-005 closed with no same-boundary regression.

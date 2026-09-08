@@ -22,6 +22,11 @@ _$InvoiceItemImpl _$$InvoiceItemImplFromJson(Map<String, dynamic> json) =>
       variantId: json['variantId'] as String?,
       notes: json['notes'] as String?,
       recipeVersionId: json['recipeVersionId'] as String?,
+      inventorySnapshot: json['inventorySnapshot'] == null
+          ? null
+          : SaleTimeInventorySnapshot.fromJson(
+              json['inventorySnapshot'] as Map<String, dynamic>),
+      inventorySnapshotVersion: json['inventorySnapshotVersion'] as String?,
       originInvoiceItemId: json['originInvoiceItemId'] as String?,
       selectedModifiers: (json['selectedModifiers'] as List<dynamic>?)
               ?.map((e) => Modifier.fromJson(e as Map<String, dynamic>))
@@ -45,6 +50,8 @@ Map<String, dynamic> _$$InvoiceItemImplToJson(_$InvoiceItemImpl instance) =>
       'variantId': instance.variantId,
       'notes': instance.notes,
       'recipeVersionId': instance.recipeVersionId,
+      'inventorySnapshot': instance.inventorySnapshot,
+      'inventorySnapshotVersion': instance.inventorySnapshotVersion,
       'originInvoiceItemId': instance.originInvoiceItemId,
       'selectedModifiers': instance.selectedModifiers,
     };

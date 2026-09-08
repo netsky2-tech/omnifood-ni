@@ -1962,6 +1962,7 @@ final allMigrations = [
   migration45_46,
   migration46_47,
   migration47_48,
+  migration48_49,
 ];
 
 /// Catalog mapping identity is additive: historical products remain usable.
@@ -1981,4 +1982,18 @@ final migration47_48 = Migration(47, 48, (database) async {
   if (!names.contains('insumo_id')) {
     await database.execute('ALTER TABLE products ADD COLUMN insumo_id TEXT');
   }
+});
+
+final migration48_49 = Migration(48, 49, (database) async {
+  Future<void> add(String table, String column) async {
+    final columns = await database.rawQuery('PRAGMA table_info($table)');
+    if (columns.isNotEmpty && !columns.any((row) => row['name'] == column.split(' ').first)) {
+      await database.execute('ALTER TABLE $table ADD COLUMN $column');
+    }
+  }
+  await add('invoices', 'inventory_policy_version TEXT');
+  await add('invoices', 'inventory_outcome TEXT');
+  await add('invoices', 'inventory_outcome_reason TEXT');
+  await add('invoice_items', 'inventory_snapshot_version TEXT');
+  await add('invoice_items', 'inventory_snapshot_json TEXT');
 });

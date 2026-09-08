@@ -53,10 +53,11 @@ The baseline is committed at `eb70b2d`; after baseline planning semantics, the t
 - [x] RED/GREEN/TRIANGULATE/REFACTOR: test SIMPLE/PREPARED/COMPOUND classification, effective mapping lookup, no product-ID equality fallback, tenant ownership, and unchanged historical rows.
 - [x] Verify backend unit/DB tests; rollback mapping entity/migration/projection. Do not invent a products direct-insumo column.
 
-### 5. Immutable sale snapshot (PR 5; 230–300 lines plus generated output)
-- [ ] Add invoice/item snapshot models, Floor entities/DAOs/mappers, next release SQLite migration, and regenerate checked-in Floor output only via repository codegen.
-- [ ] RED/GREEN/TRIANGULATE/REFACTOR: test frozen bindings, arithmetic, deterministic sorted correlation IDs, DGI sequencing, atomic invoice/items/local effects, and invoice-atomic pending/no-impact outcomes.
-- [ ] Verify `cd apps/pos_app && flutter test test/domain/usecases/inventory test/data/repositories/sales` then `flutter pub run build_runner build --delete-conflicting-outputs`; rollback migration/entities/generated files together.
+### 5. Immutable sale snapshot (PR 5; split into 5A → 5B; each ≤300 authored lines plus generated output)
+- [x] **5A — immutable snapshot contracts and persistence:** add immutable sale-time snapshot contracts; invoice/item persistence and mappers; SQLite 48→49 additive migration; checked-in codegen only via `flutter pub run build_runner build --delete-conflicting-outputs`; RED/GREEN/TRIANGULATE/REFACTOR focused contract, migration, old-row compatibility, and mapper/JSON round-trip tests. Preserve immutable frozen bindings and sale-time snapshot semantics. Roll back migration/entities/generated files together.
+- [ ] **5B — depends on 5A:** implement checkout classification/policy, arithmetic, deterministic sorted correlation IDs, payload-hash inclusion, DGI sequencing, atomic invoice/items/local effects, and invoice-atomic pending/no-impact behavior; RED/GREEN/TRIANGULATE/REFACTOR focused repository/use-case tests. Preserve frozen bindings, exact correlation ordering, and pending/no-impact acceptance semantics.
+- [x] **5A verification:** `cd apps/pos_app && flutter test <focused snapshot/model/mapper/migration tests>`; targeted `flutter analyze`; `flutter pub run build_runner build --delete-conflicting-outputs`; rollback only 5A contracts/persistence/migration/generated files.
+- [ ] **5B verification:** `cd apps/pos_app && flutter test test/domain/usecases/inventory test/data/repositories/sales`; rollback only 5B checkout/policy/transaction behavior.
 
 ### 6. Backend outcome/persistence (PR 6; 220–300 lines)
 - [ ] Add sale DTO/result contract, invoice/item/receipt fields, immutable snapshot validator and transaction service under `apps/admin_backend/src/modules/sales` and inventory modules.

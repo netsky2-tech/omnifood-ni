@@ -1,5 +1,6 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 import '../inventory/product.dart'; // For Modifier
+import 'sale_time_inventory_snapshot.dart';
 
 part 'invoice_item.freezed.dart';
 part 'invoice_item.g.dart';
@@ -21,6 +22,8 @@ class InvoiceItem with _$InvoiceItem {
     String? variantId,
     String? notes,
     String? recipeVersionId,
+    SaleTimeInventorySnapshot? inventorySnapshot,
+    String? inventorySnapshotVersion,
     String? originInvoiceItemId,
     @Default([]) List<Modifier> selectedModifiers,
   }) = _InvoiceItem;

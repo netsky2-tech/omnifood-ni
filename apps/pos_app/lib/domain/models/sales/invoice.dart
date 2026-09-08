@@ -5,7 +5,9 @@ part 'invoice.freezed.dart';
 part 'invoice.g.dart';
 
 enum PaymentStatus { pending, partial, paid }
+
 enum SyncStatus { pending, synced, error }
+
 enum InvoiceType { regular, creditNote }
 
 @freezed
@@ -35,10 +37,14 @@ class Invoice with _$Invoice {
     int? sourceSequence,
     String? idempotencyKey,
     String? payloadHash,
+    String? inventoryPolicyVersion,
+    String? inventoryOutcome,
+    String? inventoryOutcomeReason,
     @Default(36.6241) double bcnOfficialRate,
     @Default(36.50) double commercialRate,
     @Default(0.0) double totalUsd,
   }) = _Invoice;
 
-  factory Invoice.fromJson(Map<String, dynamic> json) => _$InvoiceFromJson(json);
+  factory Invoice.fromJson(Map<String, dynamic> json) =>
+      _$InvoiceFromJson(json);
 }

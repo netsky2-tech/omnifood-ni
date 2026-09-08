@@ -96,7 +96,7 @@ import 'package:pos_app/data/models/kitchen/kitchen_order_item_entity.dart';
 part 'app_database.g.dart'; // generated code
 
 @Database(
-  version: 48,
+  version: 49,
   entities: [
     UserEntity,
     SecurityProfileEntity,

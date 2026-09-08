@@ -46,6 +46,9 @@ mixin _$Invoice {
   int? get sourceSequence => throw _privateConstructorUsedError;
   String? get idempotencyKey => throw _privateConstructorUsedError;
   String? get payloadHash => throw _privateConstructorUsedError;
+  String? get inventoryPolicyVersion => throw _privateConstructorUsedError;
+  String? get inventoryOutcome => throw _privateConstructorUsedError;
+  String? get inventoryOutcomeReason => throw _privateConstructorUsedError;
   double get bcnOfficialRate => throw _privateConstructorUsedError;
   double get commercialRate => throw _privateConstructorUsedError;
   double get totalUsd => throw _privateConstructorUsedError;
@@ -85,6 +88,9 @@ abstract class $InvoiceCopyWith<$Res> {
       int? sourceSequence,
       String? idempotencyKey,
       String? payloadHash,
+      String? inventoryPolicyVersion,
+      String? inventoryOutcome,
+      String? inventoryOutcomeReason,
       double bcnOfficialRate,
       double commercialRate,
       double totalUsd});
@@ -127,6 +133,9 @@ class _$InvoiceCopyWithImpl<$Res, $Val extends Invoice>
     Object? sourceSequence = freezed,
     Object? idempotencyKey = freezed,
     Object? payloadHash = freezed,
+    Object? inventoryPolicyVersion = freezed,
+    Object? inventoryOutcome = freezed,
+    Object? inventoryOutcomeReason = freezed,
     Object? bcnOfficialRate = null,
     Object? commercialRate = null,
     Object? totalUsd = null,
@@ -228,6 +237,18 @@ class _$InvoiceCopyWithImpl<$Res, $Val extends Invoice>
           ? _value.payloadHash
           : payloadHash // ignore: cast_nullable_to_non_nullable
               as String?,
+      inventoryPolicyVersion: freezed == inventoryPolicyVersion
+          ? _value.inventoryPolicyVersion
+          : inventoryPolicyVersion // ignore: cast_nullable_to_non_nullable
+              as String?,
+      inventoryOutcome: freezed == inventoryOutcome
+          ? _value.inventoryOutcome
+          : inventoryOutcome // ignore: cast_nullable_to_non_nullable
+              as String?,
+      inventoryOutcomeReason: freezed == inventoryOutcomeReason
+          ? _value.inventoryOutcomeReason
+          : inventoryOutcomeReason // ignore: cast_nullable_to_non_nullable
+              as String?,
       bcnOfficialRate: null == bcnOfficialRate
           ? _value.bcnOfficialRate
           : bcnOfficialRate // ignore: cast_nullable_to_non_nullable
@@ -276,6 +297,9 @@ abstract class _$$InvoiceImplCopyWith<$Res> implements $InvoiceCopyWith<$Res> {
       int? sourceSequence,
       String? idempotencyKey,
       String? payloadHash,
+      String? inventoryPolicyVersion,
+      String? inventoryOutcome,
+      String? inventoryOutcomeReason,
       double bcnOfficialRate,
       double commercialRate,
       double totalUsd});
@@ -316,6 +340,9 @@ class __$$InvoiceImplCopyWithImpl<$Res>
     Object? sourceSequence = freezed,
     Object? idempotencyKey = freezed,
     Object? payloadHash = freezed,
+    Object? inventoryPolicyVersion = freezed,
+    Object? inventoryOutcome = freezed,
+    Object? inventoryOutcomeReason = freezed,
     Object? bcnOfficialRate = null,
     Object? commercialRate = null,
     Object? totalUsd = null,
@@ -417,6 +444,18 @@ class __$$InvoiceImplCopyWithImpl<$Res>
           ? _value.payloadHash
           : payloadHash // ignore: cast_nullable_to_non_nullable
               as String?,
+      inventoryPolicyVersion: freezed == inventoryPolicyVersion
+          ? _value.inventoryPolicyVersion
+          : inventoryPolicyVersion // ignore: cast_nullable_to_non_nullable
+              as String?,
+      inventoryOutcome: freezed == inventoryOutcome
+          ? _value.inventoryOutcome
+          : inventoryOutcome // ignore: cast_nullable_to_non_nullable
+              as String?,
+      inventoryOutcomeReason: freezed == inventoryOutcomeReason
+          ? _value.inventoryOutcomeReason
+          : inventoryOutcomeReason // ignore: cast_nullable_to_non_nullable
+              as String?,
       bcnOfficialRate: null == bcnOfficialRate
           ? _value.bcnOfficialRate
           : bcnOfficialRate // ignore: cast_nullable_to_non_nullable
@@ -461,6 +500,9 @@ class _$InvoiceImpl implements _Invoice {
       this.sourceSequence,
       this.idempotencyKey,
       this.payloadHash,
+      this.inventoryPolicyVersion,
+      this.inventoryOutcome,
+      this.inventoryOutcomeReason,
       this.bcnOfficialRate = 36.6241,
       this.commercialRate = 36.50,
       this.totalUsd = 0.0});
@@ -525,6 +567,12 @@ class _$InvoiceImpl implements _Invoice {
   @override
   final String? payloadHash;
   @override
+  final String? inventoryPolicyVersion;
+  @override
+  final String? inventoryOutcome;
+  @override
+  final String? inventoryOutcomeReason;
+  @override
   @JsonKey()
   final double bcnOfficialRate;
   @override
@@ -536,7 +584,7 @@ class _$InvoiceImpl implements _Invoice {
 
   @override
   String toString() {
-    return 'Invoice(id: $id, number: $number, createdAt: $createdAt, userId: $userId, subtotal: $subtotal, totalTax: $totalTax, total: $total, isCanceled: $isCanceled, voidReason: $voidReason, syncStatus: $syncStatus, paymentStatus: $paymentStatus, type: $type, customerId: $customerId, globalTaxOverride: $globalTaxOverride, relatedInvoiceId: $relatedInvoiceId, originInvoiceId: $originInvoiceId, refundReasonPolicy: $refundReasonPolicy, refundReasonCode: $refundReasonCode, authorizedByUserId: $authorizedByUserId, authorizedByRole: $authorizedByRole, terminalId: $terminalId, sourceSequence: $sourceSequence, idempotencyKey: $idempotencyKey, payloadHash: $payloadHash, bcnOfficialRate: $bcnOfficialRate, commercialRate: $commercialRate, totalUsd: $totalUsd)';
+    return 'Invoice(id: $id, number: $number, createdAt: $createdAt, userId: $userId, subtotal: $subtotal, totalTax: $totalTax, total: $total, isCanceled: $isCanceled, voidReason: $voidReason, syncStatus: $syncStatus, paymentStatus: $paymentStatus, type: $type, customerId: $customerId, globalTaxOverride: $globalTaxOverride, relatedInvoiceId: $relatedInvoiceId, originInvoiceId: $originInvoiceId, refundReasonPolicy: $refundReasonPolicy, refundReasonCode: $refundReasonCode, authorizedByUserId: $authorizedByUserId, authorizedByRole: $authorizedByRole, terminalId: $terminalId, sourceSequence: $sourceSequence, idempotencyKey: $idempotencyKey, payloadHash: $payloadHash, inventoryPolicyVersion: $inventoryPolicyVersion, inventoryOutcome: $inventoryOutcome, inventoryOutcomeReason: $inventoryOutcomeReason, bcnOfficialRate: $bcnOfficialRate, commercialRate: $commercialRate, totalUsd: $totalUsd)';
   }
 
   @override
@@ -587,6 +635,12 @@ class _$InvoiceImpl implements _Invoice {
                 other.idempotencyKey == idempotencyKey) &&
             (identical(other.payloadHash, payloadHash) ||
                 other.payloadHash == payloadHash) &&
+            (identical(other.inventoryPolicyVersion, inventoryPolicyVersion) ||
+                other.inventoryPolicyVersion == inventoryPolicyVersion) &&
+            (identical(other.inventoryOutcome, inventoryOutcome) ||
+                other.inventoryOutcome == inventoryOutcome) &&
+            (identical(other.inventoryOutcomeReason, inventoryOutcomeReason) ||
+                other.inventoryOutcomeReason == inventoryOutcomeReason) &&
             (identical(other.bcnOfficialRate, bcnOfficialRate) ||
                 other.bcnOfficialRate == bcnOfficialRate) &&
             (identical(other.commercialRate, commercialRate) ||
@@ -623,6 +677,9 @@ class _$InvoiceImpl implements _Invoice {
         sourceSequence,
         idempotencyKey,
         payloadHash,
+        inventoryPolicyVersion,
+        inventoryOutcome,
+        inventoryOutcomeReason,
         bcnOfficialRate,
         commercialRate,
         totalUsd
@@ -668,6 +725,9 @@ abstract class _Invoice implements Invoice {
       final int? sourceSequence,
       final String? idempotencyKey,
       final String? payloadHash,
+      final String? inventoryPolicyVersion,
+      final String? inventoryOutcome,
+      final String? inventoryOutcomeReason,
       final double bcnOfficialRate,
       final double commercialRate,
       final double totalUsd}) = _$InvoiceImpl;
@@ -722,6 +782,12 @@ abstract class _Invoice implements Invoice {
   String? get idempotencyKey;
   @override
   String? get payloadHash;
+  @override
+  String? get inventoryPolicyVersion;
+  @override
+  String? get inventoryOutcome;
+  @override
+  String? get inventoryOutcomeReason;
   @override
   double get bcnOfficialRate;
   @override
