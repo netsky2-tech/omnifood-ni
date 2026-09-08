@@ -524,7 +524,7 @@ void main() {
         expect(TaxRegime.fromString('regimen_general'), equals(TaxRegime.regimenGeneral));
       });
 
-      test('InvoiceFiscalCalculator with taxRegime == null does NOT assume Régimen General, produces zero tax', () {
+      test('InvoiceFiscalCalculator with taxRegime == null throws FiscalConfigurationException', () {
         final cart = [
           const CartItem(
             productId: 'p-unconfigured',
@@ -535,22 +535,13 @@ void main() {
           ),
         ];
 
-        final result = calculator.calculate(
-          cart: cart,
-          taxRegime: null,
+        expect(
+          () => calculator.calculate(
+            cart: cart,
+            taxRegime: null,
+          ),
+          throwsA(isA<FiscalConfigurationException>()),
         );
-
-        expect(result.taxRegime, isNull);
-        expect(result.isFiscalPolicyConfigured, isFalse);
-        expect(result.subtotal, equals(100.00));
-        expect(result.taxableSubtotal, equals(0.00));
-        expect(result.exemptSubtotal, equals(0.00)); // No false exemption invented
-        expect(result.totalTax, equals(0.00));       // No IVA silently added
-        expect(result.total, equals(100.00));
-        expect(result.lines.first.appliedTaxRate, equals(0.00));
-        expect(result.lines.first.taxAmount, equals(0.00));
-        expect(result.lines.first.lineSubtotal, equals(100.00));
-        expect(result.lines.first.lineTotal, equals(100.00));
       });
 
       test('buildReceiptDocument throws FiscalConfigurationException if taxRegime is null', () {
@@ -564,15 +555,10 @@ void main() {
           ),
         ];
 
-        final result = calculator.calculate(
-          cart: cart,
-          taxRegime: null,
-        );
-
         expect(
-          () => calculator.buildReceiptDocument(
-            calculation: result,
-            invoiceNumber: '001-001-01-00000999',
+          () => calculator.calculate(
+            cart: cart,
+            taxRegime: null,
           ),
           throwsA(isA<FiscalConfigurationException>()),
         );
@@ -714,7 +700,12 @@ void main() {
 
         final product = Product.fromJson(legacyJson);
 
-        // Under Nicaraguan tax law (Ley 822 Art. 114), standard retail goods have 15% IVA default
+        // Business migration policy: legacy products without explicit fiscal fields
+        // default to taxRate=0.15. This is NOT a legal mandate (Ley 822 Art. 114
+        // does not require all retail goods to be taxed at 15%). It is a conservative
+        // migration assumption to avoid breaking existing catalogs during sync.
+        // Risk: catalogs with genuinely exempt products (e.g. medicine, basic food)
+        // will incorrectly show 15% until explicitly marked as exempt.
         expect(product.taxRate, equals(0.15));
         expect(product.isTaxExempt, isFalse);
         expect(product.isGenuinelyExempt, isFalse);
@@ -1212,15 +1203,13 @@ void main() {
     // SECCIÓN 6: Tests de configuración ausente
     // -------------------------------------------------------------------------
     group('Missing configuration tests (Section 6)', () {
-      test('tax_regime = null => no IVA calculated, no silent assumption', () {
+      test('tax_regime = null => calculate() throws FiscalConfigurationException', () {
         final cart = [const CartItem(productId: 'p1', productName: 'Item', quantity: 1, unitPrice: 100.0, taxRate: 0.15)];
 
-        final result = calculator.calculate(cart: cart, taxRegime: null);
-
-        expect(result.taxRegime, isNull);
-        expect(result.totalTax, equals(0.0));
-        expect(result.total, equals(100.0));
-        expect(result.lines.first.appliedTaxRate, equals(0.0));
+        expect(
+          () => calculator.calculate(cart: cart, taxRegime: null),
+          throwsA(isA<FiscalConfigurationException>()),
+        );
       });
 
       test('Empty string regime => TaxRegime.fromString returns null', () {
@@ -1234,12 +1223,11 @@ void main() {
         expect(TaxRegime.fromString('RANDOM_LEGACY_VALUE'), isNull);
       });
 
-      test('buildReceiptDocument throws for null regime', () {
+      test('buildReceiptDocument throws for null regime (calculate also throws)', () {
         final cart = [const CartItem(productId: 'p1', productName: 'Item', quantity: 1, unitPrice: 100.0, taxRate: 0.15)];
-        final result = calculator.calculate(cart: cart, taxRegime: null);
 
         expect(
-          () => calculator.buildReceiptDocument(calculation: result, invoiceNumber: 'TEST'),
+          () => calculator.calculate(cart: cart, taxRegime: null),
           throwsA(isA<FiscalConfigurationException>()),
         );
       });

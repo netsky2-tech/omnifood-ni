@@ -334,6 +334,8 @@ describe('ImportStagingService (Unit & Triangulation)', () => {
         stock: 5,
         is_perishable: false,
         is_active: true,
+        tax_rate: 0.15,
+        is_tax_exempt: false,
         created_at: new Date(),
         updated_at: new Date(),
       };
@@ -405,6 +407,8 @@ describe('ImportStagingService (Unit & Triangulation)', () => {
         stock: 5,
         is_perishable: false,
         is_active: true,
+        tax_rate: 0.15,
+        is_tax_exempt: false,
         created_at: new Date(),
         updated_at: new Date(),
       };

@@ -143,6 +143,8 @@ class SaleView extends StatefulWidget {
 }
 
 class _SaleViewState extends State<SaleView> {
+  bool _taxRegimeReloadScheduled = false;
+
   @override
   void initState() {
     super.initState();
@@ -158,9 +160,6 @@ class _SaleViewState extends State<SaleView> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Reload company tax regime on every rebuild to detect hot-swap from config.
-    // This is idempotent: loadCompanyTaxRegime() only calls notifyListeners()
-    // when the value actually changes.
     context.read<SaleViewModel>().loadCompanyTaxRegime();
   }
 
@@ -178,6 +177,19 @@ class _SaleViewState extends State<SaleView> {
     final colorScheme = Theme.of(context).colorScheme;
     final hasActiveSession = viewModel.activeSession != null;
     final isHandheld = ResponsiveBreakpoints.isHandheld(context);
+
+    // Guaranteed tax regime hot-swap: schedule a re-read after this frame.
+    // Fires after every build (including route pop returns), ensuring the
+    // fiscal regime is always fresh. Idempotent: only notifies on change.
+    if (!_taxRegimeReloadScheduled) {
+      _taxRegimeReloadScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _taxRegimeReloadScheduled = false;
+        if (mounted) {
+          context.read<SaleViewModel>().loadCompanyTaxRegime();
+        }
+      });
+    }
 
     // Listener for errors (Visual Feedback)
     if (viewModel.errorMessage != null) {

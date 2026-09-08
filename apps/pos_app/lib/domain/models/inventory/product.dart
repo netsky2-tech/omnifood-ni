@@ -21,6 +21,12 @@ class Product with _$Product {
     String? createdAt,
     InventoryPolicy? inventoryPolicy,
     String? directStockInsumoId,
+    /// Business migration default: 0.15 (15% IVA).
+    /// This is NOT a legal requirement (Ley 822 Art. 114 does not mandate 15%
+    /// for all retail goods). It is a conservative migration assumption for
+    /// legacy products that predate the fiscal field addition.
+    /// Risk: genuinely exempt catalogs (medicine, basic food) will show 15%
+    /// until explicitly marked isTaxExempt=true or taxRate=0.0.
     @Default(0.15) double taxRate,
     @Default(false) bool isTaxExempt,
     @Default([]) List<ProductVariant> variants,

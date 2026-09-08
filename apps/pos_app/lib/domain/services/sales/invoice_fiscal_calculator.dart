@@ -156,6 +156,12 @@ class InvoiceFiscalCalculator {
     double commercialRate = 36.50,
     double bcnOfficialRate = 36.6241,
   }) {
+    if (taxRegime == null) {
+      throw const FiscalConfigurationException(
+        'No se puede calcular una venta fiscal sin un régimen fiscal DGI configurado.',
+      );
+    }
+
     // 1. Calculate line gross amounts
     final lineGrosses = <double>[];
     double rawGrossTotal = 0.0;

@@ -45,6 +45,7 @@ export class Product {
   @Column({ default: true })
   is_active: boolean;
 
+  /** Business migration default (not a legal requirement — see Product.taxRate docs). */
   @Column('decimal', { precision: 5, scale: 4, default: 0.15 })
   tax_rate: number;
 

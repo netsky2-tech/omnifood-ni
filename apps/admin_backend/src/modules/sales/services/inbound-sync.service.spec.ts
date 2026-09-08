@@ -128,6 +128,8 @@ describe('InboundSyncService', () => {
         is_active: true,
         is_perishable: true,
         warehouse_id: 'wh-1',
+        tax_rate: 0.15,
+        is_tax_exempt: false,
         created_at: new Date('2026-08-01T00:00:00Z'),
         updated_at: new Date('2026-08-02T00:00:00Z'),
       } as unknown as Product,
@@ -182,6 +184,8 @@ describe('InboundSyncService', () => {
       isActive: true,
       isPerishable: true,
       warehouseId: 'wh-1',
+      taxRate: 0.15,
+      isTaxExempt: false,
       createdAt: expect.any(Date) as Date,
       updatedAt: expect.any(Date) as Date,
     });
@@ -231,6 +235,61 @@ describe('InboundSyncService', () => {
     // No sinceDate filtering
     expect(productQb.andWhere).not.toHaveBeenCalled();
     expect(catalogQb.andWhere).not.toHaveBeenCalled();
+  });
+
+  it('preserves taxRate and isTaxExempt through inbound sync (POS → backend → POS round-trip)', async () => {
+    // Scenario: POS device syncs a product with explicit fiscal fields.
+    // The backend must preserve tax_rate and is_tax_exempt exactly.
+    const mockProducts = [
+      {
+        id: 'prod-taxable',
+        name: 'Café Americano',
+        uom: 'CUP',
+        stock: 10.5,
+        averageCost: 15.0,
+        sellPrice: 45.0,
+        is_active: true,
+        is_perishable: true,
+        warehouse_id: 'wh-1',
+        tax_rate: 0.15,
+        is_tax_exempt: false,
+        created_at: new Date('2026-08-01T00:00:00Z'),
+        updated_at: new Date('2026-08-02T00:00:00Z'),
+      } as unknown as Product,
+      {
+        id: 'prod-exempt',
+        name: 'Pan Casero',
+        uom: 'UN',
+        stock: 50.0,
+        averageCost: 8.0,
+        sellPrice: 25.0,
+        is_active: true,
+        is_perishable: false,
+        warehouse_id: null,
+        tax_rate: 0.0,
+        is_tax_exempt: true,
+        created_at: new Date('2026-08-01T00:00:00Z'),
+        updated_at: new Date('2026-08-03T00:00:00Z'),
+      } as unknown as Product,
+    ];
+
+    productQb.getMany.mockResolvedValue(mockProducts);
+
+    const response = await service.getInboundDeltas('tenant-abc', {});
+
+    expect(response.deltas.products).toHaveLength(2);
+
+    // Taxable product: taxRate=0.15, isTaxExempt=false
+    const taxable = response.deltas.products.find((p) => p.id === 'prod-taxable');
+    expect(taxable).toBeDefined();
+    expect(taxable!.taxRate).toBe(0.15);
+    expect(taxable!.isTaxExempt).toBe(false);
+
+    // Exempt product: taxRate=0.0, isTaxExempt=true
+    const exempt = response.deltas.products.find((p) => p.id === 'prod-exempt');
+    expect(exempt).toBeDefined();
+    expect(exempt!.taxRate).toBe(0.0);
+    expect(exempt!.isTaxExempt).toBe(true);
   });
 
   it('filters deltas by ISO timestamp since string', async () => {
