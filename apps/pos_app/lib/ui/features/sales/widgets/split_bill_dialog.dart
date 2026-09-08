@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../domain/models/config/tax_regime.dart';
 import '../../../../domain/models/sales/cart_item.dart';
+import '../../../../domain/services/sales/invoice_fiscal_calculator.dart';
 import '../../../../domain/services/sales/split_bill_engine.dart';
 import '../../../../domain/services/sales/tip_engine.dart';
 
@@ -39,12 +40,18 @@ class _SplitBillDialogState extends State<SplitBillDialog> {
         (sum, item) => sum + item.subtotal + item.modifiersTotal,
       );
 
-  double get _cartTax => (widget.taxRegime?.isCuotaFija == true)
-      ? 0.0
-      : widget.cart.fold(
-          0.0,
-          (sum, item) => sum + ((item.subtotal + item.modifiersTotal) * item.taxRate),
-        );
+  double get _cartTax {
+    if (widget.taxRegime?.isCuotaFija == true) return 0.0;
+    return widget.cart.fold(0.0, (sum, item) {
+      final lineBase = item.subtotal + item.modifiersTotal;
+      final lineTax = InvoiceFiscalCalculator.computeLineTax(
+        taxRegime: widget.taxRegime,
+        netBase: lineBase,
+        itemTaxRate: item.taxRate,
+      );
+      return sum + lineTax.taxAmount;
+    });
+  }
 
   TipCalculation get _tipCalculation => TipEngine.calculate(
         subtotalNio: _cartSubtotal,
@@ -434,7 +441,7 @@ class _SplitBillDialogState extends State<SplitBillDialog> {
             const SizedBox(height: 3),
             Row(
               children: [
-                const Expanded(child: Text('IVA (15%):', style: TextStyle(fontSize: 12))),
+                const Expanded(child: Text('IVA:', style: TextStyle(fontSize: 12))),
                 Text('C\$ ${_cartTax.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12)),
               ],
             ),

@@ -253,6 +253,8 @@ class InventoryMapper {
       createdAt: entity.createdAt,
       inventoryPolicy: _parseInventoryPolicy(entity.inventoryPolicy),
       directStockInsumoId: entity.directStockInsumoId,
+      taxRate: entity.taxRate,
+      isTaxExempt: entity.isTaxExempt,
       variants: variants,
       availableModifiers: modifiers,
     );
@@ -274,6 +276,8 @@ class InventoryMapper {
       createdAt: domain.createdAt,
       inventoryPolicy: domain.inventoryPolicy?.name,
       directStockInsumoId: domain.directStockInsumoId,
+      taxRate: domain.effectiveTaxRate,
+      isTaxExempt: domain.isGenuinelyExempt,
     );
   }
 

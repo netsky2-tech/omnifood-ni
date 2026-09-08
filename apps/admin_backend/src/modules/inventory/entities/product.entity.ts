@@ -45,6 +45,12 @@ export class Product {
   @Column({ default: true })
   is_active: boolean;
 
+  @Column('decimal', { precision: 5, scale: 4, default: 0.15 })
+  tax_rate: number;
+
+  @Column({ default: false })
+  is_tax_exempt: boolean;
+
   @CreateDateColumn()
   created_at: Date;
 

@@ -115,6 +115,29 @@ class FiscalCalculationResult {
 class InvoiceFiscalCalculator {
   const InvoiceFiscalCalculator();
 
+  /// Canonical single-line tax computation. Used by split-bill and any other
+  /// subsystem that needs per-item tax without a full cart calculation.
+  ///
+  /// Returns `{taxAmount, appliedRate}` where:
+  /// - `taxAmount`: the IVA amount for this line (0.0 under Cuota Fija or exempt items)
+  /// - `appliedRate`: the effective rate used (0.0 for exempt / Cuota Fija)
+  static ({double taxAmount, double appliedRate}) computeLineTax({
+    required TaxRegime? taxRegime,
+    required double netBase,
+    required double itemTaxRate,
+    bool isGlobalTaxExempt = false,
+  }) {
+    if (taxRegime == null || taxRegime.isCuotaFija) {
+      return (taxAmount: 0.0, appliedRate: 0.0);
+    }
+    // Régimen General
+    if (isGlobalTaxExempt || itemTaxRate == 0.0) {
+      return (taxAmount: 0.0, appliedRate: 0.0);
+    }
+    final rate = itemTaxRate;
+    return (taxAmount: _round(netBase * rate), appliedRate: rate);
+  }
+
   /// Monetary rounding policy (Nicaragua C$ NIO & USD):
   /// Uses standard 2-decimal half-up rounding with an epsilon of 1e-9
   /// to eliminate IEEE-754 binary floating point precision artifacts.

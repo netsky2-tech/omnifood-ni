@@ -1,6 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 import '../../models/config/tax_regime.dart';
 import '../../models/sales/cart_item.dart';
+import 'invoice_fiscal_calculator.dart';
 import 'tip_engine.dart';
 
 part 'split_bill_engine.freezed.dart';
@@ -162,10 +163,14 @@ class SplitBillEngine {
       double shareTax = 0.0;
 
       for (final item in input.items) {
-        shareSubtotal += item.subtotal + item.modifiersTotal;
-        if (taxRegime?.isCuotaFija != true) {
-          shareTax += (item.subtotal + item.modifiersTotal) * item.taxRate;
-        }
+        final lineBase = item.subtotal + item.modifiersTotal;
+        shareSubtotal += lineBase;
+        final lineTax = InvoiceFiscalCalculator.computeLineTax(
+          taxRegime: taxRegime,
+          netBase: lineBase,
+          itemTaxRate: item.taxRate,
+        );
+        shareTax += lineTax.taxAmount;
       }
 
       shareSubtotal = double.parse(shareSubtotal.toStringAsFixed(2));

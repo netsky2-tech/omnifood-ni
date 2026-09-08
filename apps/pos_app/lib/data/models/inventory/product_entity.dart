@@ -25,6 +25,10 @@ class ProductEntity {
   final String? inventoryPolicy;
   @ColumnInfo(name: 'direct_stock_insumo_id')
   final String? directStockInsumoId;
+  @ColumnInfo(name: 'tax_rate')
+  final double taxRate;
+  @ColumnInfo(name: 'is_tax_exempt')
+  final bool isTaxExempt;
 
   ProductEntity({
     required this.id,
@@ -41,6 +45,8 @@ class ProductEntity {
     this.createdAt,
     this.inventoryPolicy,
     this.directStockInsumoId,
+    this.taxRate = 0.15,
+    this.isTaxExempt = false,
   });
 }
 

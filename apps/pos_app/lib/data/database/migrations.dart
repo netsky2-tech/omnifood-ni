@@ -1729,6 +1729,19 @@ final migration42_43 = Migration(42, 43, (database) async {
   await database.execute('CREATE UNIQUE INDEX index_fulfillment_outbox_events_tenant_id_idempotency_key ON fulfillment_outbox_events (tenant_id, idempotency_key)');
 });
 
+final migration43_44 = Migration(43, 44, (database) async {
+  final productsTable = await database.rawQuery(
+    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'products'",
+  );
+  if (productsTable.isEmpty) return;
+  await database.execute(
+    "ALTER TABLE `products` ADD COLUMN `tax_rate` REAL NOT NULL DEFAULT 0.15",
+  );
+  await database.execute(
+    "ALTER TABLE `products` ADD COLUMN `is_tax_exempt` INTEGER NOT NULL DEFAULT 0",
+  );
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -1763,4 +1776,5 @@ final allMigrations = [
   migration40_41,
   migration41_42,
   migration42_43,
+  migration43_44,
 ];

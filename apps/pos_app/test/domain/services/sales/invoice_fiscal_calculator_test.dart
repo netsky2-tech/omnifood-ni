@@ -879,5 +879,582 @@ void main() {
         expect(docB.lines.first.taxAmount, equals(0.00));
       });
     });
+
+    // -------------------------------------------------------------------------
+    // SECCIÓN 12: InvoiceItem.total SEMÁNTICA ÚNICA
+    // -------------------------------------------------------------------------
+    group('InvoiceItem.total semantic (Section 12)', () {
+      test('InvoiceItem.total equals lineTotal (final amount including tax)', () {
+        final cart = [
+          const CartItem(productId: 'p1', productName: 'Item A', quantity: 2, unitPrice: 50.0, taxRate: 0.15),
+        ];
+
+        final calc = calculator.calculate(
+          cart: cart,
+          taxRegime: TaxRegime.regimenGeneral,
+        );
+
+        final invoiceItem = InvoiceItem(
+          id: 'item-1',
+          invoiceId: 'inv-1',
+          productId: 'p1',
+          productName: 'Item A',
+          quantity: 2,
+          unitPrice: 50.0,
+          originalTaxRate: 0.15,
+          appliedTaxRate: calc.lines.first.appliedTaxRate,
+          taxAmount: calc.lines.first.taxAmount,
+          total: calc.lines.first.lineTotal,
+          discount: calc.lines.first.discount,
+        );
+
+        // InvoiceItem.total MUST equal lineTotal = base + tax
+        expect(invoiceItem.total, equals(calc.lines.first.lineTotal));
+        expect(invoiceItem.total, equals(115.00)); // 100 base + 15 tax
+        // InvoiceItem.total MUST NOT equal lineSubtotal (base only)
+        expect(invoiceItem.total, isNot(equals(calc.lines.first.lineSubtotal)));
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // SECCIÓN 22: CUOTA FIJA SEMÁNTICA DE BASES
+    // -------------------------------------------------------------------------
+    group('Cuota Fija base semantics (Section 22)', () {
+      test('Cuota Fija: taxableBase=0, exemptBase=0, lineSubtotal carries the economic amount', () {
+        final cart = [
+          const CartItem(productId: 'p1', productName: 'Item CF', quantity: 1, unitPrice: 110.0, taxRate: 0.15),
+        ];
+
+        final result = calculator.calculate(
+          cart: cart,
+          taxRegime: TaxRegime.cuotaFija,
+        );
+
+        expect(result.lines.first.taxableBase, equals(0.0));
+        expect(result.lines.first.exemptBase, equals(0.0));
+        expect(result.lines.first.lineSubtotal, equals(110.0));
+        expect(result.lines.first.lineTotal, equals(110.0));
+        expect(result.taxableSubtotal, equals(0.0));
+        expect(result.exemptSubtotal, equals(0.0));
+        expect(result.subtotal, equals(110.0));
+        expect(result.totalTax, equals(0.0));
+        expect(result.total, equals(110.0));
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // SECCIÓN 23: INVARIANTES SEGÚN RÉGIMEN
+    // -------------------------------------------------------------------------
+    group('Regime invariants (Section 23)', () {
+      test('Régimen General: subtotal == taxableSubtotal + exemptSubtotal', () {
+        final cart = [
+          const CartItem(productId: 't1', productName: 'Gravado', quantity: 1, unitPrice: 60.0, taxRate: 0.15),
+          const CartItem(productId: 'e1', productName: 'Exento', quantity: 1, unitPrice: 40.0, taxRate: 0.0),
+        ];
+
+        final result = calculator.calculate(
+          cart: cart,
+          taxRegime: TaxRegime.regimenGeneral,
+        );
+
+        expect(result.subtotal, equals(result.taxableSubtotal + result.exemptSubtotal));
+        expect(result.total, equals(result.subtotal + result.totalTax));
+      });
+
+      test('Cuota Fija: totalTax == 0, total == subtotal', () {
+        final cart = [
+          const CartItem(productId: 'p1', productName: 'Item', quantity: 1, unitPrice: 100.0, taxRate: 0.15),
+        ];
+
+        final result = calculator.calculate(
+          cart: cart,
+          taxRegime: TaxRegime.cuotaFija,
+        );
+
+        expect(result.totalTax, equals(0.0));
+        expect(result.total, equals(result.subtotal));
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // SECCIÓN 24: PRODUCTO EXENTO BAJO RÉGIMEN GENERAL
+    // -------------------------------------------------------------------------
+    group('Genuinely exempt product under Régimen General (Section 24)', () {
+      test('Exempt product: exemptBase = 100, taxableBase = 0, taxAmount = 0', () {
+        final cart = [
+          const CartItem(productId: 'exempt-1', productName: 'Pan', quantity: 1, unitPrice: 100.0, taxRate: 0.0),
+        ];
+
+        final result = calculator.calculate(
+          cart: cart,
+          taxRegime: TaxRegime.regimenGeneral,
+        );
+
+        expect(result.lines.first.lineSubtotal, equals(100.0));
+        expect(result.lines.first.taxableBase, equals(0.0));
+        expect(result.lines.first.exemptBase, equals(100.0));
+        expect(result.lines.first.taxAmount, equals(0.0));
+        expect(result.lines.first.lineTotal, equals(100.0));
+        expect(result.exemptSubtotal, equals(100.0));
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // SECCIÓN 25: MISMO PRODUCTO EXENTO BAJO CUOTA FIJA
+    // -------------------------------------------------------------------------
+    group('Same exempt product under Cuota Fija (Section 25)', () {
+      test('Exempt product under CF: taxAmount=0, but NOT classified as "venta exenta"', () {
+        final cart = [
+          const CartItem(productId: 'exempt-1', productName: 'Pan', quantity: 1, unitPrice: 100.0, taxRate: 0.0),
+        ];
+
+        final result = calculator.calculate(
+          cart: cart,
+          taxRegime: TaxRegime.cuotaFija,
+        );
+
+        expect(result.lines.first.taxAmount, equals(0.0));
+        expect(result.lines.first.taxableBase, equals(0.0));
+        expect(result.lines.first.exemptBase, equals(0.0)); // NOT classified as exempt
+        expect(result.exemptSubtotal, equals(0.0)); // CF does not produce exempt classification
+
+        final doc = calculator.buildReceiptDocument(
+          calculation: result,
+          invoiceNumber: '001-001-01-00000900',
+        );
+        expect(doc.isTaxExempt, isFalse); // Must NOT be "venta exenta"
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // SECCIÓN 31: MISMA VENTA / CAMBIO DE RÉGIMEN
+    // -------------------------------------------------------------------------
+    group('Same sale under regime switch (Section 31)', () {
+      test('100.00 product: RG => total=115.00, CF => total=100.00', () {
+        final cart = [
+          const CartItem(productId: 'p1', productName: 'Almuerzo', quantity: 1, unitPrice: 100.0, taxRate: 0.15),
+        ];
+
+        final rgResult = calculator.calculate(cart: cart, taxRegime: TaxRegime.regimenGeneral);
+        expect(rgResult.subtotal, equals(100.0));
+        expect(rgResult.totalTax, equals(15.0));
+        expect(rgResult.total, equals(115.0));
+
+        final cfResult = calculator.calculate(cart: cart, taxRegime: TaxRegime.cuotaFija);
+        expect(cfResult.subtotal, equals(100.0));
+        expect(cfResult.totalTax, equals(0.0));
+        expect(cfResult.total, equals(100.0));
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // SECCIÓN 35: ESTADOS FISCALES CONTRADICTORIOS
+    // -------------------------------------------------------------------------
+    group('Contradictory product fiscal states (Section 35)', () {
+      test('taxRate=0.15 + isTaxExempt=true => effectiveTaxRate resolves to 0.0', () {
+        const product = Product(
+          id: 'p-contradictory',
+          name: 'Contradictorio',
+          uom: 'UND',
+          stock: 10,
+          averageCost: 5,
+          sellPrice: 100,
+          taxRate: 0.15,
+          isTaxExempt: true,
+        );
+
+        expect(product.effectiveTaxRate, equals(0.0));
+        expect(product.isGenuinelyExempt, isTrue);
+      });
+
+      test('taxRate=0.0 + isTaxExempt=false => effectiveTaxRate resolves to 0.0', () {
+        const product = Product(
+          id: 'p-zero-rate',
+          name: 'Tasa Cero',
+          uom: 'UND',
+          stock: 10,
+          averageCost: 5,
+          sellPrice: 100,
+          taxRate: 0.0,
+          isTaxExempt: false,
+        );
+
+        expect(product.effectiveTaxRate, equals(0.0));
+        expect(product.isGenuinelyExempt, isTrue);
+      });
+
+      test('taxRate=-0.05 + isTaxExempt=false => effectiveTaxRate resolves to 0.0 (negative clamped)', () {
+        const product = Product(
+          id: 'p-negative',
+          name: 'Negativo',
+          uom: 'UND',
+          stock: 10,
+          averageCost: 5,
+          sellPrice: 100,
+          taxRate: -0.05,
+          isTaxExempt: false,
+        );
+
+        expect(product.effectiveTaxRate, equals(0.0));
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // SECCIÓN 37: RENDERER NO CALCULA IMPUESTOS
+    // -------------------------------------------------------------------------
+    group('Renderer contains no tax formulas (Section 37)', () {
+      test('ReceiptLayoutFormatter accepts arbitrary ReceiptDocument without needing taxRate or formula', () {
+        // Build a document with completely custom values
+        final doc = ReceiptDocument(
+          businessName: 'TEST',
+          taxRegime: TaxRegime.regimenGeneral,
+          documentTitle: 'FACTURA DE VENTA',
+          documentNumber: '001-001-01-99999998',
+          date: DateTime(2026, 9, 8),
+          lines: [
+            const ReceiptLine(
+              quantity: 3,
+              description: 'Arbitrary Product',
+              unitPrice: 33.33,
+              grossAmount: 99.99,
+              taxableBase: 86.95,
+              lineSubtotal: 86.95,
+              taxAmount: 13.04,
+              lineTotal: 99.99,
+              taxRate: 0.15,
+            ),
+          ],
+          subtotal: 86.95,
+          taxableSubtotal: 86.95,
+          totalTax: 13.04,
+          total: 99.99,
+          totalUsd: 2.74,
+        );
+
+        final text = ReceiptLayoutFormatter.format80mm().formatReceiptDocumentText(doc);
+        expect(text, contains('C\$ 86.95'));
+        expect(text, contains('C\$ 13.04'));
+        expect(text, contains('C\$ 99.99'));
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // SECCIÓN 36: INTEGRACIÓN ReceiptDocument
+    // -------------------------------------------------------------------------
+    group('ReceiptDocument integration (Section 36)', () {
+      test('buildReceiptDocument and fromInvoice produce identical financial values for mixed cart', () {
+        final cart = [
+          const CartItem(productId: 'taxable', productName: 'Café', quantity: 2, unitPrice: 60.0, taxRate: 0.15),
+          const CartItem(productId: 'exempt', productName: 'Pan', quantity: 1, unitPrice: 40.0, taxRate: 0.0),
+        ];
+
+        final calc = calculator.calculate(
+          cart: cart,
+          taxRegime: TaxRegime.regimenGeneral,
+          totalDiscounts: 10.0,
+        );
+
+        // Path A: buildReceiptDocument
+        final docA = calculator.buildReceiptDocument(
+          calculation: calc,
+          invoiceNumber: '001-001-01-00000910',
+        );
+
+        // Build Invoice + InvoiceItems
+        final invoice = Invoice(
+          id: 'inv-910',
+          number: '001-001-01-00000910',
+          createdAt: docA.date,
+          userId: 'u1',
+          subtotal: calc.subtotal,
+          totalTax: calc.totalTax,
+          total: calc.total,
+          commercialRate: calc.commercialRate,
+          bcnOfficialRate: calc.bcnOfficialRate,
+          totalUsd: calc.totalUsd,
+        );
+
+        final invoiceItems = [
+          for (final l in calc.lines)
+            InvoiceItem(
+              id: 'item-${l.productId}',
+              invoiceId: invoice.id,
+              productId: l.productId,
+              productName: l.productName,
+              quantity: l.quantity,
+              unitPrice: l.unitPrice,
+              originalTaxRate: l.nominalTaxRate,
+              appliedTaxRate: l.appliedTaxRate,
+              taxAmount: l.taxAmount,
+              total: l.lineTotal,
+              discount: l.discount,
+            ),
+        ];
+
+        // Path B: fromInvoice
+        final docB = ReceiptDocument.fromInvoice(
+          invoice,
+          items: invoiceItems,
+          payments: const [],
+          taxRegime: TaxRegime.regimenGeneral,
+        );
+
+        expect(docB.subtotal, equals(docA.subtotal));
+        expect(docB.totalTax, equals(docA.totalTax));
+        expect(docB.total, equals(docA.total));
+        expect(docB.taxableSubtotal, equals(docA.taxableSubtotal));
+        expect(docB.exemptSubtotal, equals(docA.exemptSubtotal));
+        expect(docB.discountTotal, equals(docA.discountTotal));
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // SECCIÓN 6: Tests de configuración ausente
+    // -------------------------------------------------------------------------
+    group('Missing configuration tests (Section 6)', () {
+      test('tax_regime = null => no IVA calculated, no silent assumption', () {
+        final cart = [const CartItem(productId: 'p1', productName: 'Item', quantity: 1, unitPrice: 100.0, taxRate: 0.15)];
+
+        final result = calculator.calculate(cart: cart, taxRegime: null);
+
+        expect(result.taxRegime, isNull);
+        expect(result.totalTax, equals(0.0));
+        expect(result.total, equals(100.0));
+        expect(result.lines.first.appliedTaxRate, equals(0.0));
+      });
+
+      test('Empty string regime => TaxRegime.fromString returns null', () {
+        expect(TaxRegime.fromString(''), isNull);
+        expect(TaxRegime.fromString('   '), isNull);
+      });
+
+      test('Invalid regime string => TaxRegime.fromString returns null', () {
+        expect(TaxRegime.fromString('INVALID'), isNull);
+        expect(TaxRegime.fromString('REGIMEN_INVENTADO'), isNull);
+        expect(TaxRegime.fromString('RANDOM_LEGACY_VALUE'), isNull);
+      });
+
+      test('buildReceiptDocument throws for null regime', () {
+        final cart = [const CartItem(productId: 'p1', productName: 'Item', quantity: 1, unitPrice: 100.0, taxRate: 0.15)];
+        final result = calculator.calculate(cart: cart, taxRegime: null);
+
+        expect(
+          () => calculator.buildReceiptDocument(calculation: result, invoiceNumber: 'TEST'),
+          throwsA(isA<FiscalConfigurationException>()),
+        );
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // computeLineTax helper tests
+    // -------------------------------------------------------------------------
+    group('InvoiceFiscalCalculator.computeLineTax', () {
+      test('null regime => taxAmount=0, appliedRate=0', () {
+        final result = InvoiceFiscalCalculator.computeLineTax(
+          taxRegime: null,
+          netBase: 100.0,
+          itemTaxRate: 0.15,
+        );
+        expect(result.taxAmount, equals(0.0));
+        expect(result.appliedRate, equals(0.0));
+      });
+
+      test('cuotaFija => taxAmount=0, appliedRate=0', () {
+        final result = InvoiceFiscalCalculator.computeLineTax(
+          taxRegime: TaxRegime.cuotaFija,
+          netBase: 100.0,
+          itemTaxRate: 0.15,
+        );
+        expect(result.taxAmount, equals(0.0));
+        expect(result.appliedRate, equals(0.0));
+      });
+
+      test('regimenGeneral + taxable => taxAmount=15.00, appliedRate=0.15', () {
+        final result = InvoiceFiscalCalculator.computeLineTax(
+          taxRegime: TaxRegime.regimenGeneral,
+          netBase: 100.0,
+          itemTaxRate: 0.15,
+        );
+        expect(result.taxAmount, equals(15.00));
+        expect(result.appliedRate, equals(0.15));
+      });
+
+      test('regimenGeneral + exempt (taxRate=0) => taxAmount=0, appliedRate=0', () {
+        final result = InvoiceFiscalCalculator.computeLineTax(
+          taxRegime: TaxRegime.regimenGeneral,
+          netBase: 100.0,
+          itemTaxRate: 0.0,
+        );
+        expect(result.taxAmount, equals(0.0));
+        expect(result.appliedRate, equals(0.0));
+      });
+
+      test('regimenGeneral + globalTaxExempt => taxAmount=0, appliedRate=0', () {
+        final result = InvoiceFiscalCalculator.computeLineTax(
+          taxRegime: TaxRegime.regimenGeneral,
+          netBase: 100.0,
+          itemTaxRate: 0.15,
+          isGlobalTaxExempt: true,
+        );
+        expect(result.taxAmount, equals(0.0));
+        expect(result.appliedRate, equals(0.0));
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // SECCIÓN 18-20: DISCOUNT ROUNDING INVARIANTS
+    // -------------------------------------------------------------------------
+    group('Discount rounding invariants - exhaustive (Sections 18-20)', () {
+      test('SUM(lineDiscount) == effectiveDiscountTotal for discount=0.01 with 3 lines', () {
+        final cart = [
+          const CartItem(productId: 'a', productName: 'A', quantity: 1, unitPrice: 100.0, taxRate: 0.15),
+          const CartItem(productId: 'b', productName: 'B', quantity: 1, unitPrice: 100.0, taxRate: 0.15),
+          const CartItem(productId: 'c', productName: 'C', quantity: 1, unitPrice: 100.0, taxRate: 0.15),
+        ];
+
+        final result = calculator.calculate(
+          cart: cart,
+          taxRegime: TaxRegime.regimenGeneral,
+          totalDiscounts: 0.01,
+        );
+
+        final sumDiscounts = result.lines.fold(0.0, (acc, l) => acc + l.discount);
+        expect(double.parse(sumDiscounts.toStringAsFixed(2)), equals(0.01));
+        expect(result.totalDiscount, equals(0.01));
+        expect(result.subtotal, equals(double.parse((300.0 - 0.01).toStringAsFixed(2))));
+      });
+
+      test('SUM(lineDiscount) == effectiveDiscountTotal for discount=0.05 with 3 lines', () {
+        final cart = [
+          const CartItem(productId: 'a', productName: 'A', quantity: 1, unitPrice: 100.0, taxRate: 0.15),
+          const CartItem(productId: 'b', productName: 'B', quantity: 1, unitPrice: 100.0, taxRate: 0.15),
+          const CartItem(productId: 'c', productName: 'C', quantity: 1, unitPrice: 100.0, taxRate: 0.15),
+        ];
+
+        final result = calculator.calculate(
+          cart: cart,
+          taxRegime: TaxRegime.regimenGeneral,
+          totalDiscounts: 0.05,
+        );
+
+        final sumDiscounts = result.lines.fold(0.0, (acc, l) => acc + l.discount);
+        expect(double.parse(sumDiscounts.toStringAsFixed(2)), equals(0.05));
+        expect(result.totalDiscount, equals(0.05));
+      });
+
+      test('SUM(lineDiscount) == effectiveDiscountTotal for discount=10.00 with 3 lines', () {
+        final cart = [
+          const CartItem(productId: 'a', productName: 'A', quantity: 1, unitPrice: 100.0, taxRate: 0.15),
+          const CartItem(productId: 'b', productName: 'B', quantity: 1, unitPrice: 100.0, taxRate: 0.15),
+          const CartItem(productId: 'c', productName: 'C', quantity: 1, unitPrice: 100.0, taxRate: 0.15),
+        ];
+
+        final result = calculator.calculate(
+          cart: cart,
+          taxRegime: TaxRegime.regimenGeneral,
+          totalDiscounts: 10.00,
+        );
+
+        final sumDiscounts = result.lines.fold(0.0, (acc, l) => acc + l.discount);
+        expect(double.parse(sumDiscounts.toStringAsFixed(2)), equals(10.00));
+        expect(result.totalDiscount, equals(10.00));
+        expect(result.subtotal, equals(290.00));
+      });
+
+      test('Unequal lines: SUM(lineDiscount) == effectiveDiscountTotal', () {
+        final cart = [
+          const CartItem(productId: 'a', productName: 'A', quantity: 1, unitPrice: 30.0, taxRate: 0.15),
+          const CartItem(productId: 'b', productName: 'B', quantity: 1, unitPrice: 70.0, taxRate: 0.15),
+        ];
+
+        final result = calculator.calculate(
+          cart: cart,
+          taxRegime: TaxRegime.regimenGeneral,
+          totalDiscounts: 5.00,
+        );
+
+        final sumDiscounts = result.lines.fold(0.0, (acc, l) => acc + l.discount);
+        expect(double.parse(sumDiscounts.toStringAsFixed(2)), equals(5.00));
+        expect(result.totalDiscount, equals(5.00));
+        expect(result.subtotal, equals(95.00));
+      });
+
+      test('Discount exceeds gross: clamped to grossSubtotal', () {
+        final cart = [
+          const CartItem(productId: 'a', productName: 'A', quantity: 1, unitPrice: 50.0, taxRate: 0.15),
+        ];
+
+        final result = calculator.calculate(
+          cart: cart,
+          taxRegime: TaxRegime.regimenGeneral,
+          totalDiscounts: 100.00, // exceeds gross
+        );
+
+        expect(result.totalDiscount, equals(50.00));
+        expect(result.subtotal, equals(0.0));
+        expect(result.total, equals(0.0));
+      });
+
+      test('Negative discount: treated as zero', () {
+        final cart = [
+          const CartItem(productId: 'a', productName: 'A', quantity: 1, unitPrice: 50.0, taxRate: 0.15),
+        ];
+
+        final result = calculator.calculate(
+          cart: cart,
+          taxRegime: TaxRegime.regimenGeneral,
+          totalDiscounts: -10.00,
+        );
+
+        expect(result.totalDiscount, equals(0.0));
+        expect(result.subtotal, equals(50.0));
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // SECCIÓN 29: TEST DE REGRESIÓN PRINCIPAL — CUOTA FIJA
+    // -------------------------------------------------------------------------
+    group('Main regression: Cuota Fija 110.00 (Section 29)', () {
+      test('1 item @ 110.00 under CF: total=110.00, never 126.50', () {
+        final cart = [
+          const CartItem(productId: 'latte', productName: 'Café Latte', quantity: 1, unitPrice: 110.00, taxRate: 0.15),
+        ];
+
+        final result = calculator.calculate(cart: cart, taxRegime: TaxRegime.cuotaFija);
+
+        expect(result.lines.first.grossAmount, equals(110.00));
+        expect(result.lines.first.discount, equals(0.00));
+        expect(result.lines.first.lineSubtotal, equals(110.00));
+        expect(result.lines.first.taxAmount, equals(0.00));
+        expect(result.lines.first.lineTotal, equals(110.00));
+        expect(result.subtotal, equals(110.00));
+        expect(result.totalTax, equals(0.00));
+        expect(result.total, equals(110.00));
+        // CRITICAL: 126.50 must NEVER appear
+        expect(result.total, isNot(equals(126.50)));
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // SECCIÓN 30: TEST DE REGRESIÓN PRINCIPAL — RÉGIMEN GENERAL
+    // -------------------------------------------------------------------------
+    group('Main regression: Régimen General 50.00 (Section 30)', () {
+      test('1 item @ 50.00 under RG: base=50.00, IVA=7.50, total=57.50', () {
+        final cart = [
+          const CartItem(productId: 'esp', productName: 'Espresso', quantity: 1, unitPrice: 50.00, taxRate: 0.15),
+        ];
+
+        final result = calculator.calculate(cart: cart, taxRegime: TaxRegime.regimenGeneral);
+
+        expect(result.grossSubtotal, equals(50.00));
+        expect(result.subtotal, equals(50.00));
+        expect(result.lines.first.taxableBase, equals(50.00));
+        expect(result.lines.first.taxAmount, equals(7.50));
+        expect(result.lines.first.lineSubtotal, equals(50.00));
+        expect(result.lines.first.lineTotal, equals(57.50));
+        expect(result.totalTax, equals(7.50));
+        expect(result.total, equals(57.50));
+      });
+    });
   });
 }

@@ -146,6 +146,8 @@ export class InboundSyncService {
       isActive: p.is_active,
       isPerishable: p.is_perishable,
       warehouseId: p.warehouse_id ?? null,
+      taxRate: Number(p.tax_rate),
+      isTaxExempt: p.is_tax_exempt,
       createdAt: p.created_at,
       updatedAt: p.updated_at,
     }));

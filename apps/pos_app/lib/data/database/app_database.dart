@@ -84,7 +84,7 @@ import 'package:pos_app/data/models/fulfillment/fulfillment_persistence_entities
 part 'app_database.g.dart'; // generated code
 
 @Database(
-  version: 43,
+  version: 44,
   entities: [
     UserEntity,
     SecurityProfileEntity,

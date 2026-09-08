@@ -1093,7 +1093,9 @@ class _$ProductDao extends ProductDao {
                   'is_prepared': item.isPrepared ? 1 : 0,
                   'created_at': item.createdAt,
                   'inventory_policy': item.inventoryPolicy,
-                  'direct_stock_insumo_id': item.directStockInsumoId
+                  'direct_stock_insumo_id': item.directStockInsumoId,
+                  'tax_rate': item.taxRate,
+                  'is_tax_exempt': item.isTaxExempt ? 1 : 0
                 }),
         _productVariantEntityInsertionAdapter = InsertionAdapter(
             database,
@@ -1145,7 +1147,9 @@ class _$ProductDao extends ProductDao {
             isPrepared: (row['is_prepared'] as int) != 0,
             createdAt: row['created_at'] as String?,
             inventoryPolicy: row['inventory_policy'] as String?,
-            directStockInsumoId: row['direct_stock_insumo_id'] as String?));
+            directStockInsumoId: row['direct_stock_insumo_id'] as String?,
+            taxRate: (row['tax_rate'] as num?)?.toDouble() ?? 0.15,
+            isTaxExempt: (row['is_tax_exempt'] as int?) != 0));
   }
 
   @override
@@ -1165,7 +1169,9 @@ class _$ProductDao extends ProductDao {
             isPrepared: (row['is_prepared'] as int) != 0,
             createdAt: row['created_at'] as String?,
             inventoryPolicy: row['inventory_policy'] as String?,
-            directStockInsumoId: row['direct_stock_insumo_id'] as String?),
+            directStockInsumoId: row['direct_stock_insumo_id'] as String?,
+            taxRate: (row['tax_rate'] as num?)?.toDouble() ?? 0.15,
+            isTaxExempt: (row['is_tax_exempt'] as int?) != 0),
         arguments: [id]);
   }
 
@@ -1216,7 +1222,9 @@ class _$ProductDao extends ProductDao {
             isPrepared: (row['is_prepared'] as int) != 0,
             createdAt: row['created_at'] as String?,
             inventoryPolicy: row['inventory_policy'] as String?,
-            directStockInsumoId: row['direct_stock_insumo_id'] as String?),
+            directStockInsumoId: row['direct_stock_insumo_id'] as String?,
+            taxRate: (row['tax_rate'] as num?)?.toDouble() ?? 0.15,
+            isTaxExempt: (row['is_tax_exempt'] as int?) != 0),
         arguments: [sku, barcode]);
   }
 

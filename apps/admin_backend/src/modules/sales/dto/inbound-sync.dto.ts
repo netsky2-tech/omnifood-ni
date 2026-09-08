@@ -45,6 +45,8 @@ export interface InboundSyncProductDto {
   isActive: boolean;
   isPerishable: boolean;
   warehouseId?: string | null;
+  taxRate: number;
+  isTaxExempt: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

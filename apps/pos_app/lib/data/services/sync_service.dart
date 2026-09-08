@@ -1459,6 +1459,8 @@ class SyncService {
             isActive: map['isActive'] as bool? ?? true,
             isPrepared: false,
             createdAt: map['createdAt']?.toString(),
+            taxRate: (map['taxRate'] as num?)?.toDouble() ?? 0.15,
+            isTaxExempt: map['isTaxExempt'] as bool? ?? false,
           );
         }).toList(growable: false);
 

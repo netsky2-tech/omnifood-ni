@@ -155,6 +155,15 @@ class _SaleViewState extends State<SaleView> {
     });
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Reload company tax regime on every rebuild to detect hot-swap from config.
+    // This is idempotent: loadCompanyTaxRegime() only calls notifyListeners()
+    // when the value actually changes.
+    context.read<SaleViewModel>().loadCompanyTaxRegime();
+  }
+
   Future<void> _checkAuth() async {
     final authRepo = context.read<AuthRepository>();
     final user = await authRepo.getCurrentUser();
