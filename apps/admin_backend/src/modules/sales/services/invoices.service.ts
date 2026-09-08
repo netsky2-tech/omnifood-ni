@@ -1440,15 +1440,25 @@ export class InvoicesService {
       recipeVersionId,
     );
     if (!resolvedRecipeVersionId) return new Map([[productId, orderQuantity]]);
-    const snapshot = await this.recipeService.getSnapshot(
-      resolvedRecipeVersionId,
-      tenantId,
-      productId,
-    );
-    return this.bomExplosionService.explode({
-      snapshotComponents: snapshot.components,
-      orderQuantity,
-    });
+    try {
+      const snapshot = await this.recipeService.getSnapshot(
+        resolvedRecipeVersionId,
+        tenantId,
+        productId,
+      );
+      return this.bomExplosionService.explode({
+        snapshotComponents: snapshot.components,
+        orderQuantity,
+      });
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        this.logger.warn(
+          `[BOM-SKIP] recipeVersionId=${resolvedRecipeVersionId} productId=${productId} — not found; falling back to direct product movement`,
+        );
+        return new Map([[productId, orderQuantity]]);
+      }
+      throw error;
+    }
   }
 
   private async resolveRecipeVersionId(
