@@ -1,6 +1,8 @@
 import { QueryRunner } from 'typeorm';
 
-export async function ensurePublicAuthTables(runner: QueryRunner): Promise<void> {
+export async function ensurePublicAuthTables(
+  runner: QueryRunner,
+): Promise<void> {
   await runner.query(`
     CREATE TABLE IF NOT EXISTS public.tenants (
       id varchar(64) PRIMARY KEY,

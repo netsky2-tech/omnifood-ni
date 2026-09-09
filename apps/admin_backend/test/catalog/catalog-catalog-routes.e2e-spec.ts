@@ -120,7 +120,7 @@ describe('CatalogController E2E (real DB)', () => {
         JwtModule.register({
           secret: jwtEnvironment.JWT_SECRET,
           signOptions: {
-            algorithm: jwtEnvironment.JWT_ALGORITHM as 'HS256',
+            algorithm: jwtEnvironment.JWT_ALGORITHM,
             issuer: jwtEnvironment.JWT_ISSUER,
             audience: jwtEnvironment.JWT_AUDIENCE,
           },
@@ -171,8 +171,7 @@ describe('CatalogController E2E (real DB)', () => {
       ...overrides,
     });
 
-  const http = (): ReturnType<typeof request> =>
-    request(app.getHttpServer());
+  const http = (): ReturnType<typeof request> => request(app.getHttpServer());
 
   // ─── Auth ───────────────────────────────────────────────
 
@@ -385,7 +384,10 @@ describe('CatalogController E2E (real DB)', () => {
     it('seeds default values and returns count', async () => {
       const res = await http()
         .post('/catalogs/seed-defaults')
-        .set('Authorization', `Bearer ${signToken({ tenant_id: 'seed-e2e-tenant' })}`)
+        .set(
+          'Authorization',
+          `Bearer ${signToken({ tenant_id: 'seed-e2e-tenant' })}`,
+        )
         .expect(201);
 
       expect(res.body.inserted).toBeGreaterThan(0);

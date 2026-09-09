@@ -20,7 +20,7 @@ const fail = (code: AuditV3ErrorCode, offset: number): never => {
 };
 
 function decode(raw: Buffer): string {
-  for (let i = 0; i < raw.length; ) {
+  for (let i = 0; i < raw.length;) {
     const lead = raw[i];
     if (lead < 0x80) {
       i++;
@@ -72,7 +72,7 @@ export function scanNumberFreeJson(rawUtf8: Buffer): Result<AuditV3Value> {
     if (rawUtf8.length > MAX) fail(CODE.LIMIT_EXCEEDED, MAX);
     const source = decode(rawUtf8);
     const byteOffsets = new Uint32Array(source.length + 1);
-    for (let i = 0, bytes = 0; i < source.length; ) {
+    for (let i = 0, bytes = 0; i < source.length;) {
       const width = source.codePointAt(i) > 0xffff ? 2 : 1;
       byteOffsets[i] = bytes;
       if (width === 2) byteOffsets[i + 1] = bytes;

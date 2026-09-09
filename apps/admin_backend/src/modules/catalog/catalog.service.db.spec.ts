@@ -1,5 +1,9 @@
 import { randomUUID } from 'crypto';
-import { ConflictException, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+  ConflictException,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { CatalogService, DEFAULT_CATALOG_SEED } from './catalog.service';
 import { CatalogValue } from './entities/catalog-value.entity';
@@ -97,7 +101,7 @@ describe('CatalogService — DB integration', () => {
 
       const list = await service.list(CATALOG_TYPE.UOM, 'tenant-db-1');
       expect(list).toHaveLength(1);
-      expect(list[0]!.code).toBe('kg');
+      expect(list[0].code).toBe('kg');
     });
 
     it('creates with optional fields', async () => {
@@ -219,11 +223,11 @@ describe('CatalogService — DB integration', () => {
 
       const uom = await service.list(CATALOG_TYPE.UOM, t);
       expect(uom).toHaveLength(1);
-      expect(uom[0]!.code).toBe('kg');
+      expect(uom[0].code).toBe('kg');
 
       const cat = await service.list(CATALOG_TYPE.INVENTORY_CATEGORY, t);
       expect(cat).toHaveLength(1);
-      expect(cat[0]!.code).toBe('LACTEOS');
+      expect(cat[0].code).toBe('LACTEOS');
     });
   });
 
@@ -304,7 +308,7 @@ describe('CatalogService — DB integration', () => {
 
       const list = await service.list(CATALOG_TYPE.UOM, t, true);
       expect(list).toHaveLength(1);
-      expect(list[0]!.is_active).toBe(false);
+      expect(list[0].is_active).toBe(false);
 
       // Gone from active-only list
       const activeList = await service.list(CATALOG_TYPE.UOM, t, false);
@@ -383,7 +387,8 @@ describe('CatalogService — DB integration', () => {
 
       // Should insert all defaults minus the 1 existing 'kg'
       const expectedCount =
-        (DEFAULT_CATALOG_SEED.UOM.length - 1) +
+        DEFAULT_CATALOG_SEED.UOM.length -
+        1 +
         DEFAULT_CATALOG_SEED.INVENTORY_CATEGORY.length +
         DEFAULT_CATALOG_SEED.INVENTORY_TYPE.length +
         DEFAULT_CATALOG_SEED.SALES_PRODUCT_CATEGORY.length +
@@ -428,11 +433,11 @@ describe('CatalogService — DB integration', () => {
 
       const listA = await service.list(CATALOG_TYPE.UOM, 'tenant-rls-a');
       expect(listA).toHaveLength(1);
-      expect(listA[0]!.name).toBe('Kilogramo A');
+      expect(listA[0].name).toBe('Kilogramo A');
 
       const listB = await service.list(CATALOG_TYPE.UOM, 'tenant-rls-b');
       expect(listB).toHaveLength(1);
-      expect(listB[0]!.name).toBe('Kilogramo B');
+      expect(listB[0].name).toBe('Kilogramo B');
     });
   });
 
@@ -446,9 +451,9 @@ describe('CatalogService — DB integration', () => {
 
     it('throws UnauthorizedException when tenant is undefined-ish', async () => {
       const { service } = harness;
-      await expect(
-        service.list(CATALOG_TYPE.UOM, ''),
-      ).rejects.toThrow(UnauthorizedException);
+      await expect(service.list(CATALOG_TYPE.UOM, '')).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
   });
 });

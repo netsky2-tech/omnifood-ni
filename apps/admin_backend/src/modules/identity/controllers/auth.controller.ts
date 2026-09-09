@@ -53,9 +53,7 @@ export class AuthController {
   @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)
   @UseInterceptors(TenantInterceptor)
   @Get('me')
-  async getMe(
-    @Req() req: { user?: { sub?: string } },
-  ) {
+  async getMe(@Req() req: { user?: { sub?: string } }) {
     return this.authService.getMe(req.user?.sub || '');
   }
 
