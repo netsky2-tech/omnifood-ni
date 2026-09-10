@@ -57,6 +57,9 @@ export class InventorySyncReceipt {
   @Column({ name: 'acknowledged_correlation_ids', type: 'jsonb', nullable: true })
   acknowledgedCorrelationIds?: string[] | null;
 
+  @Column({ name: 'accepted_at', type: 'timestamptz', nullable: true })
+  acceptedAt?: Date | null;
+
   @CreateDateColumn()
   created_at: Date;
 }

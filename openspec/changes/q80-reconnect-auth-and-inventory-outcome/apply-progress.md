@@ -756,3 +756,16 @@ Post-HEAD work previously recorded in this workspace completed 5B1a1, 5B1a2, 5B1
   - Revert `apps/admin_backend/src/migrations/1804000000000-AddSaleCorrelationIdToInventoryKardex*` and `apps/admin_backend/src/modules/inventory/entities/inventory-movement.entity*`.
 - Task state:
   - Slice 7A is `[x]`. Slice 7B is `[ ]` (pending and unblocked).
+
+## Slice 7B — Backend ACK/Idempotency and Legacy Classification Complete
+
+- **Completed tasks**: all Slice 7B tasks marked `[x]` in `tasks.md`.
+- **R3-002 resolved**: sorted by `(insumoId, recipeComponentId-or-empty)` with `RecipeDetail.id` tie-break; verified by reversed-input determinism test.
+- **R3-003 resolved**: frozen exact transaction-selected `acceptedAt` into generated snapshots and `inventory_sync_receipts.accepted_at` via migration 1805.
+- **TDD cycle**:
+  - RED: `sale-ack-idempotency.spec.ts` failed 11/13 tests; `1805...spec.ts` failed (missing module).
+  - GREEN: focused Slice 7B + migration run passed 15/15 tests.
+  - TRIANGULATE: full sales suite passed 15 suites / 181 tests; migration suite passed 30 suites / 71 tests (3 suites / 7 tests skipped).
+  - REFACTOR: `replayDuplicate` extracted and test timestamps fixed to remove payload-hash flakiness; exact authored delta relative to `8156c7c` is **375 lines**.
+- **Verification**: full sales suite, migration suite, backend build, and `git diff --check` passed after provider-interruption recovery; fresh Slice 7B re-review remains pending.
+- **Rollback boundary**: revert `apps/admin_backend/src/migrations/1805*` and ACK/classifier logic in `invoices.service.ts`, `sale-inventory-outcome.service.ts`, `sync-invoice.dto.ts`, `inventory-sync-receipt.entity.ts`.

@@ -90,10 +90,10 @@ The baseline is committed at `eb70b2d`; after baseline planning semantics, the t
 - [x] Verify migration unit tests and isolated DB tests (`npm run test:db`); rollback only migration and entity mapping.
 
 ### 7B. Backend ACK/idempotency and legacy classification (PR 7B; ≤400 authored source+test lines; depends on 7A)
-- [ ] Wire sales sync ACKs, duplicate receipt replay with stored outcome/reason/ACK enrichment, payload hash mismatch (`IDEMPOTENCY_MISMATCH`), and legacy `LEGACY_SYNC_TIME_V1` first-acceptance classifier.
-- [ ] Enforce deterministic component order `(insumoId, recipeComponentId-or-empty)` on legacy recipe expansion, freeze transaction-selected `acceptedAt` in snapshots/evidence, and reject mixed legacy/V1 snapshots fail-closed.
-- [ ] RED/GREEN/TRIANGULATE/REFACTOR: test same-key replay, different-hash mismatch, effective mapping interval, legacy no-mapping SIMPLE/PREPARED, deterministic component order, Kardex duplicate correlation fail-closed, and backwards compatible ACK serialization.
-- [ ] Verify `cd apps/admin_backend && npm test -- --runInBand src/modules/sales`; rollback ACK/classifier service logic only.
+- [x] Wire sales sync ACKs, duplicate receipt replay with stored outcome/reason/ACK enrichment, payload hash mismatch (`IDEMPOTENCY_MISMATCH`), and legacy `LEGACY_SYNC_TIME_V1` first-acceptance classifier.
+- [x] Enforce deterministic component order `(insumoId, recipeComponentId-or-empty)` on legacy recipe expansion, freeze transaction-selected `acceptedAt` in snapshots/evidence, and reject mixed legacy/V1 snapshots fail-closed.
+- [x] RED/GREEN/TRIANGULATE/REFACTOR: test same-key replay, different-hash mismatch, effective mapping interval, legacy no-mapping SIMPLE/PREPARED, deterministic component order, Kardex duplicate correlation fail-closed, and backwards compatible ACK serialization.
+- [x] Verify `cd apps/admin_backend && npm test -- --runInBand src/modules/sales`; rollback ACK/classifier service logic only.
 
 ### 8. POS movement ownership and ACK (PR 8; 200–280 lines)
 - [ ] Add movement owner/state/sale linkage migration, migration classification/quarantine, positive generic-outbox allow-list, and exact ACK transaction in `SalesRepositoryImpl`/`SyncService`.

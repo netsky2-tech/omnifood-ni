@@ -142,3 +142,7 @@ User decision: `Dividir 7A/7B`. Do not take a size exception.
 ### Slice 7A scoped reliability re-review
 
 **PASS — zero findings and zero warnings.** R3-001 is resolved: the additive migration and entity are deployable with `synchronize: false`, PostgreSQL enforces tenant-scoped partial uniqueness while accepting historical nulls, and the guarded down migration protects non-null correlation evidence. Unit tests passed 4/4, isolated PostgreSQL tests passed 2/2, backend build passed, and the authored source+test delta is 285 lines.
+
+### Slice 7B scoped reliability re-review
+
+**PASS — zero findings and zero warnings.** Fresh-context reliability review independently validated the exact 375-line diff, 15 focused tests, 15 sales suites / 181 tests, 30 migration suites / 71 tests, backend build, and `git diff --check`. R3-002 is closed by canonical `(insumoId, recipeComponentId-or-empty)` ordering with reversed-input coverage. R3-003 is closed by one transaction-selected `acceptedAt` used for effective-time classification and frozen into generated legacy snapshots plus guarded receipt evidence. Same-hash replay, mismatch rejection, unknown outcomes, old-client compatibility, database uniqueness races, tenant isolation, and DGI immutability were verified.

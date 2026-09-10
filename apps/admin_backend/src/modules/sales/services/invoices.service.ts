@@ -404,12 +404,7 @@ export class InvoicesService {
           continue;
         }
         duplicates += 1;
-        results.push(
-          this.buildResult(record, SYNC_RESULT_STATUS.DUPLICATE, {
-            code: 'DUPLICATE_REPLAY',
-            retryable: false,
-          }),
-        );
+        results.push(this.replayDuplicate(existingByKey, record, 'DUPLICATE_REPLAY'));
         continue;
       }
       const existingBySequence = await this.withTenantBoundTransaction(
@@ -435,12 +430,7 @@ export class InvoicesService {
           continue;
         }
         duplicates += 1;
-        results.push(
-          this.buildResult(record, SYNC_RESULT_STATUS.DUPLICATE, {
-            code: 'DUPLICATE_SEQUENCE_REPLAY',
-            retryable: false,
-          }),
-        );
+        results.push(this.replayDuplicate(existingBySequence, record, 'DUPLICATE_SEQUENCE_REPLAY'));
         continue;
       }
 
@@ -674,6 +664,13 @@ export class InvoicesService {
     };
   }
 
+  private replayDuplicate(r: InventorySyncReceipt, rec: SyncBatchRecordDto, defCode: string): SyncBatchResultItem {
+    return this.buildResult(rec, SYNC_RESULT_STATUS.DUPLICATE, {
+      code: r.inventoryOutcome ?? defCode, retryable: false, inventoryOutcome: r.inventoryOutcome ?? undefined,
+      inventoryOutcomeReason: r.inventoryOutcomeReason ?? undefined, acknowledgedMovementCorrelationIds: r.acknowledgedCorrelationIds ?? (r.inventoryOutcome ? [] : undefined), policyVersion: r.inventoryPolicyVersion ?? undefined,
+    });
+  }
+
   private buildStreamKey(key: SyncStreamKey): string {
     return `${key.tenantId}:${key.sourceDeviceId}:${key.flowType}`;
   }
@@ -875,6 +872,7 @@ export class InvoicesService {
         await this.bindTenantContext(manager, tenantId);
         this.assertRecordCreditNoteBoundary(record);
         this.assertSupportedCreditNoteStockBehavior(record);
+        const acceptedAt = new Date();
         if (record.invoice) {
           v1Outcome = await this.outcomeService.validateSaleTimeSnapshot(
             tenantId,
@@ -882,11 +880,16 @@ export class InvoicesService {
             manager,
           );
 
-          if (v1Outcome) {
-            record.invoice.inventoryPolicyVersion = v1Outcome.policyVersion;
-            record.invoice.inventoryOutcome = v1Outcome.outcome;
-            record.invoice.inventoryOutcomeReason = v1Outcome.reason;
-          } else {
+          if (!v1Outcome && record.documentType !== 'CREDIT_NOTE') {
+            v1Outcome = await this.outcomeService.classifyLegacySyncTime(tenantId, record, manager, acceptedAt);
+          }
+
+          const invoiceToSync: SyncInvoiceDto = {
+            ...record.invoice,
+            ...(v1Outcome ? { inventoryPolicyVersion: v1Outcome.policyVersion, inventoryOutcome: v1Outcome.outcome, inventoryOutcomeReason: v1Outcome.reason } : {}),
+          };
+
+          if (!v1Outcome) {
             await this.validateInvoiceRecipeVersions(
               tenantId,
               record.invoice,
@@ -894,7 +897,7 @@ export class InvoicesService {
             );
           }
 
-          await this.syncInvoices(tenantId, [record.invoice], manager, {
+          await this.syncInvoices(tenantId, [invoiceToSync], manager, {
             allowCreditNotes: record.documentType === 'CREDIT_NOTE',
           });
         }
@@ -925,6 +928,7 @@ export class InvoicesService {
             acknowledgedCorrelationIds: v1Outcome
               ? v1Outcome.acknowledgedMovementCorrelationIds
               : null,
+            acceptedAt: v1Outcome ? acceptedAt : null,
           }),
         );
         await this.clearAcceptedHeldCreditNoteRecord(
@@ -952,6 +956,20 @@ export class InvoicesService {
       console.error('[APPLY-RECORD] CAUGHT ERROR:', message);
       if (stack)
         console.error('[APPLY-RECORD] STACK:', stack.substring(0, 500));
+      const dbErr = error as { code?: string; constraint?: string };
+      if (
+        (dbErr?.code === '23505' && (dbErr?.constraint === 'uq_inventory_kardex_sale_correlation' || message.includes('uq_inventory_kardex_sale_correlation'))) ||
+        message.includes('Duplicate sale correlation ID')
+      ) {
+        return {
+          accepted: false,
+          result: this.buildResult(record, SYNC_RESULT_STATUS.REJECTED, {
+            code: 'DUPLICATE_SALE_CORRELATION',
+            retryable: false,
+            message: `Duplicate sale correlation ID: ${message}`,
+          }),
+        };
+      }
       if (this.isCrossTenantItemCollisionError(error, message)) {
         return {
           accepted: false,
@@ -1567,6 +1585,15 @@ export class InvoicesService {
     );
     const unitCostNio = round4(Number(insumo.averageCost ?? 0));
     const averageCostAfterNio = round4(Number(insumo.averageCost ?? 0));
+
+    if (binding.saleCorrelationId) {
+      const movRepo = manager.getRepository?.(InventoryMovement);
+      const existing = await movRepo?.findOne?.({ where: { tenant_id: tenantId, saleCorrelationId: binding.saleCorrelationId } });
+      if (existing) {
+        throw new BadRequestException(`Duplicate sale correlation ID '${binding.saleCorrelationId}' in Kardex for tenant '${tenantId}'`);
+      }
+    }
+
     insumo.stock = newStock;
     insumo.existenciaActual = newStock;
     await manager.save(Insumo, insumo);
@@ -1585,6 +1612,7 @@ export class InvoicesService {
           (Math.abs(normalizedQuantity) * unitCostNio).toFixed(4),
         ),
         idempotencyKey: binding.saleCorrelationId,
+        saleCorrelationId: binding.saleCorrelationId,
         sourceDeviceId: record.sourceDeviceId,
         sourceSequence: String(record.sourceSequence),
         sourceDocumentId: `${INVOICE_SOURCE_DOCUMENT_PREFIX}${invoice.id}`,

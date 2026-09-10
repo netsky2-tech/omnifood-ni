@@ -53,6 +53,10 @@ export class InventorySnapshotDto {
   @IsOptional()
   recipeVersionId?: string | null;
 
+  @IsString()
+  @IsOptional()
+  acceptedAt?: string;
+
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => InventorySnapshotBindingDto)

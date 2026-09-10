@@ -1,10 +1,13 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { EntityManager } from 'typeorm';
 import { SyncInvoiceDto, CreateInvoiceItemDto, InventorySnapshotBindingDto } from '../dto/sync-invoice.dto';
+import { SyncBatchRecordDto } from '../dto/sync-batch.dto';
 import { ProductInventoryMappingVersion } from '../../inventory/entities/product-inventory-mapping-version.entity';
 import { RecipeVersion, RecipePublicationState } from '../../inventory/entities/recipe-version.entity';
 import { RecipeDetail } from '../../inventory/entities/recipe-detail.entity';
 import { Insumo } from '../../inventory/entities/insumo.entity';
+import { Product, ProductType } from '../../inventory/entities/product.entity';
 
 export interface ValidatedBindingToApply {
   item: CreateInvoiceItemDto;
@@ -13,7 +16,7 @@ export interface ValidatedBindingToApply {
 }
 
 export interface SaleTimeSnapshotValidationResult {
-  policyVersion: 'SALE_TIME_V1';
+  policyVersion: 'SALE_TIME_V1' | 'LEGACY_SYNC_TIME_V1';
   outcome: 'APPLIED' | 'APPLIED_NO_INVENTORY_IMPACT' | 'APPLIED_INVENTORY_PENDING';
   reason: { code: string; lines: string[] } | null;
   acknowledgedMovementCorrelationIds: string[];
@@ -316,5 +319,82 @@ export class SaleInventoryOutcomeService {
       acknowledgedMovementCorrelationIds: finalAckIds,
       bindingsToApply: finalBindings,
     };
+  }
+
+  /**
+   * First-acceptance legacy classifier for sales payloads per Section D3.
+   * Resolves R3-002 deterministic component sorting and R3-003 frozen acceptedAt.
+   */
+  async classifyLegacySyncTime(tenantId: string, record: SyncBatchRecordDto, manager: EntityManager, acceptedAt: Date = new Date()): Promise<SaleTimeSnapshotValidationResult | null> {
+    const invoice = record.invoice;
+    if (!invoice?.items?.length) return { policyVersion: 'LEGACY_SYNC_TIME_V1', outcome: 'APPLIED_NO_INVENTORY_IMPACT', reason: null, acknowledgedMovementCorrelationIds: [], bindingsToApply: [] };
+    if (invoice.items.some((it) => it.inventorySnapshotVersion && it.inventorySnapshotVersion !== 'LEGACY_SYNC_TIME_V1')) throw new BadRequestException('Mixed legacy and SALE_TIME_V1 snapshots are rejected');
+    const mappingRepo = manager.getRepository?.(ProductInventoryMappingVersion), insumoRepo = manager.getRepository?.(Insumo), productRepo = manager.getRepository?.(Product), recipeVerRepo = manager.getRepository?.(RecipeVersion), recipeDetailRepo = manager.getRepository?.(RecipeDetail);
+    if (!mappingRepo && !productRepo) return null;
+
+    const pendingLines: string[] = [], noImpactLines: string[] = [], bindingsToApply: ValidatedBindingToApply[] = [], allCorrelationIds: string[] = [];
+    const isCancel = record.documentType === 'SALE_CANCEL', acceptedAtIso = acceptedAt.toISOString();
+
+    for (const item of invoice.items) {
+      const corrId = (idx: number, insumo: string) => createHash('sha256').update(`sale-movement:v1|${tenantId}|${record.sourceDeviceId}|${invoice.id}|${item.id}|${idx}|${insumo}|${isCancel ? 'SALE_CANCEL' : 'SALE'}`).digest('hex');
+
+      const mapping = mappingRepo?.createQueryBuilder ? await mappingRepo.createQueryBuilder('m')
+        .where('m.tenant_id = :tenantId AND m.product_id = :productId AND m.effective_at <= :acceptedAt AND (m.superseded_at IS NULL OR m.superseded_at > :acceptedAt)', { tenantId, productId: item.productId, acceptedAt })
+        .orderBy('m.effective_at', 'DESC').getOne() : null;
+
+      if (mapping) {
+        if (!(await insumoRepo?.findOne({ where: { id: mapping.insumo_id, tenant_id: tenantId } }))) throw new BadRequestException(`insumoId '${mapping.insumo_id}' from mapping version '${mapping.id}' not found or does not belong to tenant '${tenantId}'`);
+        const cId = corrId(0, mapping.insumo_id), binding: InventorySnapshotBindingDto = { bindingOrdinal: 0, insumoId: mapping.insumo_id, quantityPerSaleUnit: 1, saleCorrelationId: cId };
+        item.inventorySnapshotVersion = 'LEGACY_SYNC_TIME_V1';
+        item.inventorySnapshot = { classification: 'SIMPLE', disposition: 'DIRECT', catalogRevision: 'legacy-sync-time', mappingVersionId: mapping.id, acceptedAt: acceptedAtIso, bindings: [binding] };
+        bindingsToApply.push({ item, binding, explodedQuantity: Math.abs(Number(item.quantity)) });
+        allCorrelationIds.push(cId);
+        continue;
+      }
+
+      if (!productRepo || typeof productRepo.findOne !== 'function') return null;
+      const product = await productRepo.findOne({ where: { id: item.productId, tenant_id: tenantId } });
+      if (!product) throw new BadRequestException(`Product '${item.productId}' not found for tenant '${tenantId}'`);
+
+      if (product.product_type === ProductType.SIMPLE) {
+        item.inventorySnapshotVersion = 'LEGACY_SYNC_TIME_V1';
+        item.inventorySnapshot = { classification: 'SIMPLE', disposition: 'NO_IMPACT', reasonCode: 'NO_EXPLICIT_INSUMO_MAPPING', catalogRevision: 'legacy-sync-time', acceptedAt: acceptedAtIso, bindings: [] };
+        noImpactLines.push(item.id);
+        continue;
+      }
+
+      if (product.product_type === ProductType.PREPARED || product.product_type === ProductType.COMPOUND) {
+        const recipeVer = recipeVerRepo?.createQueryBuilder ? await recipeVerRepo.createQueryBuilder('rv')
+          .where('rv.tenant_id = :tenantId AND rv.product_id = :productId AND rv.publication_state = :pubState AND (rv.fecha_inicio_vigencia IS NULL OR rv.fecha_inicio_vigencia <= :acceptedAt) AND (rv.fecha_fin_vigencia IS NULL OR rv.fecha_fin_vigencia > :acceptedAt)', { tenantId, productId: item.productId, pubState: RecipePublicationState.PUBLISHED, acceptedAt })
+          .orderBy('rv.fecha_inicio_vigencia', 'DESC', 'NULLS LAST').addOrderBy('rv.version_number', 'DESC').getOne() : null;
+
+        if (recipeVer) {
+          const details = ((await recipeDetailRepo?.find({ where: { recipe_version_id: recipeVer.id, tenant_id: tenantId } })) ?? []).sort((a, b) => a.insumo_id.localeCompare(b.insumo_id) || (a.id ?? '').localeCompare(b.id ?? ''));
+          const itemBindings: InventorySnapshotBindingDto[] = [];
+          for (let i = 0; i < details.length; i++) {
+            const d = details[i];
+            if (!(await insumoRepo?.findOne({ where: { id: d.insumo_id, tenant_id: tenantId } }))) throw new BadRequestException(`insumoId '${d.insumo_id}' in recipe '${recipeVer.id}' not found for tenant '${tenantId}'`);
+            const cId = corrId(i, d.insumo_id), qty = Number(d.quantity), b: InventorySnapshotBindingDto = { bindingOrdinal: i, insumoId: d.insumo_id, recipeComponentId: d.id, quantityPerSaleUnit: qty, saleCorrelationId: cId };
+            itemBindings.push(b); allCorrelationIds.push(cId);
+            bindingsToApply.push({ item, binding: b, explodedQuantity: Number((Math.abs(Number(item.quantity)) * qty).toFixed(4)) });
+          }
+          item.inventorySnapshotVersion = 'LEGACY_SYNC_TIME_V1';
+          item.inventorySnapshot = { classification: product.product_type, disposition: 'RECIPE', catalogRevision: 'legacy-sync-time', recipeVersionId: recipeVer.id, acceptedAt: acceptedAtIso, bindings: itemBindings };
+          continue;
+        }
+
+        item.inventorySnapshotVersion = 'LEGACY_SYNC_TIME_V1';
+        item.inventorySnapshot = { classification: product.product_type, disposition: 'PENDING_RECIPE', reasonCode: 'MISSING_PUBLISHED_RECIPE', catalogRevision: 'legacy-sync-time', acceptedAt: acceptedAtIso, bindings: [] };
+        pendingLines.push(item.id);
+        continue;
+      }
+      throw new BadRequestException(`Unsupported or missing product type '${product.product_type}' for product '${item.productId}'`);
+    }
+
+    const outcome = pendingLines.length > 0 ? 'APPLIED_INVENTORY_PENDING' : bindingsToApply.length > 0 ? 'APPLIED' : 'APPLIED_NO_INVENTORY_IMPACT';
+    const reason = pendingLines.length > 0 ? { code: 'MISSING_PUBLISHED_RECIPE', lines: pendingLines } : outcome === 'APPLIED_NO_INVENTORY_IMPACT' ? { code: 'NO_EXPLICIT_INSUMO_MAPPING', lines: noImpactLines } : null;
+    if (invoice.inventoryOutcome && invoice.inventoryOutcome !== outcome) throw new BadRequestException(`Snapshot outcome mismatch: client sent '${invoice.inventoryOutcome}', calculated '${outcome}'`);
+
+    return { policyVersion: 'LEGACY_SYNC_TIME_V1', outcome, reason, acknowledgedMovementCorrelationIds: outcome === 'APPLIED' ? allCorrelationIds : [], bindingsToApply: outcome === 'APPLIED' ? bindingsToApply : [] };
   }
 }
