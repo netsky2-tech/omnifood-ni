@@ -51,6 +51,30 @@ abstract class SalesTransactionDao {
   )
   Future<int?> getNextInvoiceSourceSequence(String terminalId);
 
+  @Query('UPDATE invoices SET sync_status = :status WHERE id = :id')
+  Future<void> updateInvoiceSyncStatus(String id, String status);
+
+  @Query(
+    'UPDATE inventory_movements SET delivery_state = :state WHERE sale_id = :saleId',
+  )
+  Future<void> updateMovementsDeliveryStateBySaleId(
+    String saleId,
+    String state,
+  );
+
+  @Query('SELECT * FROM inventory_movements WHERE sale_id = :saleId')
+  Future<List<MovementEntity>> getMovementsBySaleId(String saleId);
+
+  @transaction
+  Future<void> executeAckTransaction(
+    String invoiceId,
+    String syncStatus,
+    String deliveryState,
+  ) async {
+    await updateInvoiceSyncStatus(invoiceId, syncStatus);
+    await updateMovementsDeliveryStateBySaleId(invoiceId, deliveryState);
+  }
+
   @transaction
   Future<void> executeSaleTransaction(
     InvoiceEntity invoice,

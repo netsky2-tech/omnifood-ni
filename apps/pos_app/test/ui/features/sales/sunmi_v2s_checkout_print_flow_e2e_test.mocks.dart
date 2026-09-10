@@ -742,6 +742,26 @@ class MockSalesRepository extends _i1.Mock implements _i52.SalesRepository {
       ) as _i49.Future<void>);
 
   @override
+  _i49.Future<void> acknowledgeSaleSync({
+    required String? invoiceId,
+    required String? outcome,
+    required List<String>? acknowledgedCorrelationIds,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #acknowledgeSaleSync,
+          [],
+          {
+            #invoiceId: invoiceId,
+            #outcome: outcome,
+            #acknowledgedCorrelationIds: acknowledgedCorrelationIds,
+          },
+        ),
+        returnValue: _i49.Future<void>.value(),
+        returnValueForMissingStub: _i49.Future<void>.value(),
+      ) as _i49.Future<void>);
+
+  @override
   _i49.Future<void> voidInvoice(
     String? invoiceId,
     String? reason,

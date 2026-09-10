@@ -31,6 +31,10 @@ _$InventoryMovementImpl _$$InventoryMovementImplFromJson(
       bloqueoMotivo: json['bloqueoMotivo'] as String?,
       autorizadoPorUsuarioId: json['autorizadoPorUsuarioId'] as String?,
       fechaAutorizacion: json['fechaAutorizacion'] as String?,
+      deliveryOwner: json['deliveryOwner'] as String? ?? 'GENERIC_INVENTORY',
+      deliveryState: json['deliveryState'] as String? ?? 'LOCAL_APPLIED',
+      saleId: json['saleId'] as String?,
+      saleCorrelationId: json['saleCorrelationId'] as String?,
     );
 
 Map<String, dynamic> _$$InventoryMovementImplToJson(
@@ -57,6 +61,10 @@ Map<String, dynamic> _$$InventoryMovementImplToJson(
       'bloqueoMotivo': instance.bloqueoMotivo,
       'autorizadoPorUsuarioId': instance.autorizadoPorUsuarioId,
       'fechaAutorizacion': instance.fechaAutorizacion,
+      'deliveryOwner': instance.deliveryOwner,
+      'deliveryState': instance.deliveryState,
+      'saleId': instance.saleId,
+      'saleCorrelationId': instance.saleCorrelationId,
     };
 
 const _$MovementTypeEnumMap = {

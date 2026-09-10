@@ -769,3 +769,27 @@ Post-HEAD work previously recorded in this workspace completed 5B1a1, 5B1a2, 5B1
   - REFACTOR: `replayDuplicate` extracted and test timestamps fixed to remove payload-hash flakiness; exact authored delta relative to `8156c7c` is **375 lines**.
 - **Verification**: full sales suite, migration suite, backend build, and `git diff --check` passed after provider-interruption recovery; fresh Slice 7B re-review remains pending.
 - **Rollback boundary**: revert `apps/admin_backend/src/migrations/1805*` and ACK/classifier logic in `invoices.service.ts`, `sale-inventory-outcome.service.ts`, `sync-invoice.dto.ts`, `inventory-sync-receipt.entity.ts`.
+
+## Slice 8 — POS Movement Ownership and ACK Complete
+
+- **Completed tasks**: all Slice 8 tasks marked `[x]` in `tasks.md`.
+- **Migration & Schema**:
+  - Authoring `migration50_51` bumping database version from 50 to 51.
+  - Adds additive columns `delivery_owner`, `delivery_state`, `sale_id`, `sale_correlation_id` and indexes.
+  - Classifies historical rows into `SALE_SYNC` and `QUARANTINED` for contradictory/ambiguous provenance.
+  - Updates `_createInventoryMovementAppendOnlyTriggers` so core fields (`id`, `insumo_id`, `type`, `quantity`, `stocks`, `timestamp`, `sale_correlation_id`, `sale_id`, `delivery_owner`) and `DELETE` remain strictly append-only, while permitting `delivery_state` transitions.
+- **Generic Outbox Positive Allow-List**:
+  - `SyncService._syncInventoryOutbox` filtered strictly on `delivery_owner == 'GENERIC_INVENTORY'`.
+  - Defensively excludes `SALE`, `SALE_CANCEL`, and `QUARANTINED`/`CLOUD_ACKNOWLEDGED` movements.
+- **Exact ACK Transaction**:
+  - `SalesRepositoryImpl.acknowledgeSaleSync`: validates exact match of expected vs received `acknowledgedMovementCorrelationIds` for `APPLIED`, or empty set for `APPLIED_NO_INVENTORY_IMPACT`/`APPLIED_INVENTORY_PENDING`.
+  - Atomically marks invoice `synced` and local correlated movements `CLOUD_ACKNOWLEDGED` in one `@transaction executeAckTransaction`.
+  - Fails closed on missing or extra ACK correlation IDs.
+  - Idempotent on duplicate sale replay.
+- **TDD Cycle**:
+  - RED: `movement_ownership_migration_test.dart` proved missing migration; `sales_movement_ownership_and_ack_test.dart` failed with 7 failures (`UnimplementedError` and missing ownership fields); `sync_service_test.dart` proved generic outbox was sending 4 movements instead of 1.
+  - GREEN: All 87 focused and integration tests passed in `test/data/repositories/sales` and `test/data/services/sync_service_test.dart`.
+  - TRIANGULATE / REFACTOR: Cleaned unused imports, formatted with `dart format`, passed `git diff --check` cleanly.
+- **Verification**: `flutter test test/data/database/movement_ownership_migration_test.dart test/data/repositories/sales test/data/services/sync_service_test.dart` passed (87 passed).
+- **Rollback boundary**: revert changes in `apps/pos_app/lib/data/` (migrations, DAOs, models, repository, service) and test files.
+

@@ -1568,6 +1568,70 @@ class MockSalesTransactionDao extends _i1.Mock
       ) as _i48.Future<int?>);
 
   @override
+  _i48.Future<void> updateInvoiceSyncStatus(
+    String? id,
+    String? status,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #updateInvoiceSyncStatus,
+          [
+            id,
+            status,
+          ],
+        ),
+        returnValue: _i48.Future<void>.value(),
+        returnValueForMissingStub: _i48.Future<void>.value(),
+      ) as _i48.Future<void>);
+
+  @override
+  _i48.Future<void> updateMovementsDeliveryStateBySaleId(
+    String? saleId,
+    String? state,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #updateMovementsDeliveryStateBySaleId,
+          [
+            saleId,
+            state,
+          ],
+        ),
+        returnValue: _i48.Future<void>.value(),
+        returnValueForMissingStub: _i48.Future<void>.value(),
+      ) as _i48.Future<void>);
+
+  @override
+  _i48.Future<List<_i58.MovementEntity>> getMovementsBySaleId(String? saleId) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getMovementsBySaleId,
+          [saleId],
+        ),
+        returnValue: _i48.Future<List<_i58.MovementEntity>>.value(
+            <_i58.MovementEntity>[]),
+      ) as _i48.Future<List<_i58.MovementEntity>>);
+
+  @override
+  _i48.Future<void> executeAckTransaction(
+    String? invoiceId,
+    String? syncStatus,
+    String? deliveryState,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #executeAckTransaction,
+          [
+            invoiceId,
+            syncStatus,
+            deliveryState,
+          ],
+        ),
+        returnValue: _i48.Future<void>.value(),
+        returnValueForMissingStub: _i48.Future<void>.value(),
+      ) as _i48.Future<void>);
+
+  @override
   _i48.Future<void> executeSaleTransaction(
     _i53.InvoiceEntity? invoice,
     List<_i54.InvoiceItemEntity>? items,

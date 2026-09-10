@@ -463,12 +463,51 @@ class SyncService {
         name: 'SyncService',
       );
       if (response.statusCode == 200 || response.statusCode == 201) {
-        final acceptedInvoiceIds = _acceptedSalesInvoiceIds(
-          sentRecords,
-          response.data,
-        );
-        if (acceptedInvoiceIds.isEmpty) return;
-        await _salesRepository.markAsSynced(acceptedInvoiceIds);
+        final resultsByKey = _parseSyncResults(response.data);
+        final legacyAcceptedIds = <String>[];
+
+        for (final record in sentRecords) {
+          final invoiceId = record['invoiceId'] as String?;
+          final idempotencyKey = record['idempotencyKey'] as String?;
+          if (invoiceId == null || idempotencyKey == null) continue;
+
+          final result = resultsByKey[idempotencyKey];
+          if (result != null && result.shouldMarkSalesSynced(record)) {
+            if (result.acknowledgedMovementCorrelationIds != null ||
+                result.inventoryOutcome != null) {
+              try {
+                await _salesRepository.acknowledgeSaleSync(
+                  invoiceId: invoiceId,
+                  outcome: result.inventoryOutcome,
+                  acknowledgedCorrelationIds:
+                      result.acknowledgedMovementCorrelationIds ??
+                      const <String>[],
+                );
+              } catch (e, st) {
+                developer.log(
+                  'Sales sync integrity failure for $invoiceId: $e',
+                  name: 'SyncService',
+                  error: e,
+                  stackTrace: st,
+                );
+              }
+            } else {
+              legacyAcceptedIds.add(invoiceId);
+            }
+          }
+        }
+
+        if (legacyAcceptedIds.isNotEmpty) {
+          await _salesRepository.markAsSynced(legacyAcceptedIds);
+        } else if (resultsByKey.isEmpty) {
+          final acceptedInvoiceIds = _acceptedSalesInvoiceIds(
+            sentRecords,
+            response.data,
+          );
+          if (acceptedInvoiceIds.isNotEmpty) {
+            await _salesRepository.markAsSynced(acceptedInvoiceIds);
+          }
+        }
       }
     } catch (e, st) {
       developer.log(
@@ -557,8 +596,15 @@ class SyncService {
       final unsynced = allUnsynced
           .where(
             (movement) =>
+                movement.deliveryOwner == 'GENERIC_INVENTORY' &&
+                movement.deliveryState != 'QUARANTINED' &&
+                movement.deliveryState != 'CLOUD_ACKNOWLEDGED' &&
+                movement.type != MovementType.sale &&
+                movement.sourceDocumentType != 'SALE' &&
+                movement.sourceDocumentType != 'SALE_CANCEL' &&
                 movement.type != MovementType.purchase &&
                 !(movement.reason?.startsWith('COUNT_SESSION:') ?? false) &&
+                !(movement.reason?.startsWith('Anulación Factura:') ?? false) &&
                 !_isProductionLinkedMovement(movement) &&
                 !_isCreditNoteRestockMovement(movement) &&
                 !blockedMovementIds.contains(movement.id),
@@ -1736,6 +1782,8 @@ class _SyncBatchResultItem {
     required this.status,
     this.code,
     this.message,
+    this.inventoryOutcome,
+    this.acknowledgedMovementCorrelationIds,
   });
 
   final String idempotencyKey;
@@ -1745,6 +1793,8 @@ class _SyncBatchResultItem {
   final String status;
   final String? code;
   final String? message;
+  final String? inventoryOutcome;
+  final List<String>? acknowledgedMovementCorrelationIds;
 
   static _SyncBatchResultItem? tryFromJson(Map<String, dynamic> json) {
     final idempotencyKey = json['idempotencyKey'];
@@ -1766,6 +1816,14 @@ class _SyncBatchResultItem {
       return null;
     }
 
+    final inventoryOutcome = json['inventoryOutcome'] as String?;
+    final rawAckIds =
+        json['acknowledgedMovementCorrelationIds'] ??
+        json['acknowledgedCorrelationIds'];
+    final acknowledgedMovementCorrelationIds = (rawAckIds is List)
+        ? rawAckIds.map((e) => e.toString()).toList(growable: false)
+        : null;
+
     return _SyncBatchResultItem(
       idempotencyKey: idempotencyKey,
       terminalId: terminalId,
@@ -1774,6 +1832,8 @@ class _SyncBatchResultItem {
       status: status,
       code: code,
       message: message,
+      inventoryOutcome: inventoryOutcome,
+      acknowledgedMovementCorrelationIds: acknowledgedMovementCorrelationIds,
     );
   }
 

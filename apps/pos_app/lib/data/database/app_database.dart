@@ -98,7 +98,7 @@ import 'package:pos_app/data/daos/inventory/authority_projection_dao.dart';
 part 'app_database.g.dart'; // generated code
 
 @Database(
-  version: 50,
+  version: 51,
   entities: [
     UserEntity,
     SecurityProfileEntity,

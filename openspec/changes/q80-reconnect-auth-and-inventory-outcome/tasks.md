@@ -96,9 +96,9 @@ The baseline is committed at `eb70b2d`; after baseline planning semantics, the t
 - [x] Verify `cd apps/admin_backend && npm test -- --runInBand src/modules/sales`; rollback ACK/classifier service logic only.
 
 ### 8. POS movement ownership and ACK (PR 8; 200–280 lines)
-- [ ] Add movement owner/state/sale linkage migration, migration classification/quarantine, positive generic-outbox allow-list, and exact ACK transaction in `SalesRepositoryImpl`/`SyncService`.
-- [ ] RED/GREEN/TRIANGULATE/REFACTOR: test sale-owned exclusion, ambiguous legacy quarantine, missing/extra ACK integrity failure, replay after lost response, cancellation correlations, and no duplicate cloud movement.
-- [ ] Verify `cd apps/pos_app && flutter test test/data/repositories/sales test/data/services/sync_service_test.dart`; rollback ownership/ACK changes.
+- [x] Add movement owner/state/sale linkage migration, migration classification/quarantine, positive generic-outbox allow-list, and exact ACK transaction in `SalesRepositoryImpl`/`SyncService`.
+- [x] RED/GREEN/TRIANGULATE/REFACTOR: test sale-owned exclusion, ambiguous legacy quarantine, missing/extra ACK integrity failure, replay after lost response, cancellation correlations, and no duplicate cloud movement.
+- [x] Verify `cd apps/pos_app && flutter test test/data/repositories/sales test/data/services/sync_service_test.dart`; rollback ownership/ACK changes.
 
 ### 9. Remediation schema/security (PR 9; 220–300 lines)
 - [ ] Add `inventory_remediation_receipts` migration/entity, tenant composite links, RLS SELECT/INSERT policies, append-only trigger, Kardex correlation constraints, and guarded up/down migration logic.

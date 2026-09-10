@@ -133,10 +133,13 @@ class SalesRepositoryImpl implements SalesRepository {
           )
         : null;
 
-    final effectiveAuditLog = auditLog ??
+    final effectiveAuditLog =
+        auditLog ??
         (isFrozenSale &&
-                (updatedInvoice.idempotencyKey?.contains('activation-sale:') == true ||
-                    updatedInvoice.idempotencyKey?.startsWith('onboarding:') == true)
+                (updatedInvoice.idempotencyKey?.contains('activation-sale:') ==
+                        true ||
+                    updatedInvoice.idempotencyKey?.startsWith('onboarding:') ==
+                        true)
             ? AuditLog(
                 userId: updatedInvoice.userId,
                 action: 'SALE_CREATED',
@@ -151,7 +154,8 @@ class SalesRepositoryImpl implements SalesRepository {
                   'number': updatedInvoice.number,
                   'payloadHash': updatedInvoice.payloadHash,
                   'inventoryOutcome': updatedInvoice.inventoryOutcome,
-                  'inventoryOutcomeReason': updatedInvoice.inventoryOutcomeReason,
+                  'inventoryOutcomeReason':
+                      updatedInvoice.inventoryOutcomeReason,
                 }),
               )
             : null);
@@ -166,7 +170,9 @@ class SalesRepositoryImpl implements SalesRepository {
       [],
       paymentEntities,
       movementEntities,
-      effectiveAuditLog == null ? null : AuditMapper.toEntity(effectiveAuditLog),
+      effectiveAuditLog == null
+          ? null
+          : AuditMapper.toEntity(effectiveAuditLog),
       false,
     );
     if (!isFrozenSale) {
@@ -249,6 +255,10 @@ class SalesRepositoryImpl implements SalesRepository {
             sourceDocumentType: 'SALE',
             sourceDocumentId: invoice.id,
             originInvoiceItemId: movement.invoiceItemId,
+            deliveryOwner: MovementDeliveryOwner.saleSync,
+            deliveryState: MovementDeliveryState.localApplied,
+            saleId: invoice.id,
+            saleCorrelationId: movement.saleCorrelationId,
           ),
         )
         .toList(growable: false);
@@ -262,7 +272,12 @@ class SalesRepositoryImpl implements SalesRepository {
     return movements
         .map(
           (movement) => InventoryMapper.toMovementEntity(
-            movement.copyWith(userId: invoice.userId),
+            movement.copyWith(
+              userId: invoice.userId,
+              deliveryOwner: MovementDeliveryOwner.saleSync,
+              deliveryState: MovementDeliveryState.localApplied,
+              saleId: invoice.id,
+            ),
           ),
         )
         .toList(growable: false);
@@ -351,6 +366,50 @@ class SalesRepositoryImpl implements SalesRepository {
     await invoiceDao.updateSyncStatusForIds(invoiceIds, 'synced');
   }
 
+  @override
+  Future<void> acknowledgeSaleSync({
+    required String invoiceId,
+    required String? outcome,
+    required List<String> acknowledgedCorrelationIds,
+  }) async {
+    final invoice = await invoiceDao.getInvoiceById(invoiceId);
+    if (invoice == null) {
+      throw StateError('Invoice not found for ACK reconciliation: $invoiceId');
+    }
+
+    final localMovements = await transactionDao.getMovementsBySaleId(invoiceId);
+    final expectedCorrelations = localMovements
+        .map((m) => m.saleCorrelationId ?? m.id)
+        .where((id) => id.isNotEmpty)
+        .toSet();
+
+    final ackSet = acknowledgedCorrelationIds.toSet();
+    final effectiveOutcome = outcome ?? invoice.inventoryOutcome;
+
+    if (effectiveOutcome == 'APPLIED_NO_INVENTORY_IMPACT' ||
+        effectiveOutcome == 'APPLIED_INVENTORY_PENDING') {
+      if (ackSet.isNotEmpty) {
+        throw StateError(
+          'Integrity failure: Non-empty ACK set for invoice $invoiceId with outcome $effectiveOutcome: $ackSet',
+        );
+      }
+    } else {
+      if (ackSet.length != expectedCorrelations.length ||
+          !ackSet.containsAll(expectedCorrelations)) {
+        throw StateError(
+          'Integrity failure: ACK correlation IDs do not match local expected set for invoice $invoiceId. '
+          'Expected: $expectedCorrelations, Received: $ackSet',
+        );
+      }
+    }
+
+    await transactionDao.executeAckTransaction(
+      invoiceId,
+      'synced',
+      MovementDeliveryState.cloudAcknowledged,
+    );
+  }
+
   Future<void> markAsFailed(String invoiceId) async {
     final entity = await invoiceDao.getInvoiceById(invoiceId);
     if (entity != null) {
@@ -405,7 +464,12 @@ class SalesRepositoryImpl implements SalesRepository {
     final movementEntities = movements
         .map(
           (m) => InventoryMapper.toMovementEntity(
-            m.copyWith(userId: entity.userId),
+            m.copyWith(
+              userId: entity.userId,
+              deliveryOwner: MovementDeliveryOwner.saleSync,
+              deliveryState: MovementDeliveryState.localApplied,
+              saleId: invoiceId,
+            ),
           ),
         )
         .toList();

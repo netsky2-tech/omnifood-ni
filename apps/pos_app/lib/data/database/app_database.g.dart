@@ -172,7 +172,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 50,
+      version: 51,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -220,7 +220,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `forensic_alerts` (`id` TEXT NOT NULL, `alert_type` TEXT NOT NULL, `severity` TEXT NOT NULL, `message` TEXT NOT NULL, `created_at` TEXT NOT NULL, `status` TEXT NOT NULL, `note` TEXT, `actor_label` TEXT, `acted_at` TEXT, `source_movement_id` TEXT, `source_document_id` TEXT, `source_document_type` TEXT, `metadata_json` TEXT, `is_synced` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `inventory_movements` (`id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `type` TEXT NOT NULL, `quantity` REAL NOT NULL, `previous_stock` REAL NOT NULL, `new_stock` REAL NOT NULL, `timestamp` TEXT NOT NULL, `reason` TEXT, `user_id` TEXT, `unit_cost_nio` REAL, `source_document_type` TEXT, `source_document_id` TEXT, `origin_movement_id` TEXT, `origin_invoice_item_id` TEXT, `batch_deductions` TEXT, `estado_costeo` INTEGER NOT NULL, `intentos_count` INTEGER NOT NULL, `bloqueo_motivo` TEXT, `autorizado_por_usuario_id` TEXT, `fecha_autorizacion` TEXT, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `inventory_movements` (`id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `type` TEXT NOT NULL, `quantity` REAL NOT NULL, `previous_stock` REAL NOT NULL, `new_stock` REAL NOT NULL, `timestamp` TEXT NOT NULL, `reason` TEXT, `user_id` TEXT, `unit_cost_nio` REAL, `source_document_type` TEXT, `source_document_id` TEXT, `origin_movement_id` TEXT, `origin_invoice_item_id` TEXT, `batch_deductions` TEXT, `estado_costeo` INTEGER NOT NULL, `intentos_count` INTEGER NOT NULL, `bloqueo_motivo` TEXT, `autorizado_por_usuario_id` TEXT, `fecha_autorizacion` TEXT, `delivery_owner` TEXT NOT NULL, `delivery_state` TEXT NOT NULL, `sale_id` TEXT, `sale_correlation_id` TEXT, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `inventory_movement_sync_state` (`movement_id` TEXT NOT NULL, `sync_status` TEXT NOT NULL, `last_attempted_at` TEXT, `synced_at` TEXT, `last_error` TEXT, `terminal_id` TEXT, `flow_type` TEXT, `local_sequence` INTEGER, `idempotency_key` TEXT, `last_result_code` TEXT, FOREIGN KEY (`movement_id`) REFERENCES `inventory_movements` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE, PRIMARY KEY (`movement_id`))');
         await database.execute(
@@ -1832,7 +1832,11 @@ class _$MovementDao extends MovementDao {
                   'intentos_count': item.intentosCount,
                   'bloqueo_motivo': item.bloqueoMotivo,
                   'autorizado_por_usuario_id': item.autorizadoPorUsuarioId,
-                  'fecha_autorizacion': item.fechaAutorizacion
+                  'fecha_autorizacion': item.fechaAutorizacion,
+                  'delivery_owner': item.deliveryOwner,
+                  'delivery_state': item.deliveryState,
+                  'sale_id': item.saleId,
+                  'sale_correlation_id': item.saleCorrelationId
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -1867,7 +1871,11 @@ class _$MovementDao extends MovementDao {
             intentosCount: row['intentos_count'] as int,
             bloqueoMotivo: row['bloqueo_motivo'] as String?,
             autorizadoPorUsuarioId: row['autorizado_por_usuario_id'] as String?,
-            fechaAutorizacion: row['fecha_autorizacion'] as String?));
+            fechaAutorizacion: row['fecha_autorizacion'] as String?,
+            deliveryOwner: row['delivery_owner'] as String,
+            deliveryState: row['delivery_state'] as String,
+            saleId: row['sale_id'] as String?,
+            saleCorrelationId: row['sale_correlation_id'] as String?));
   }
 
   @override
@@ -1894,7 +1902,11 @@ class _$MovementDao extends MovementDao {
             intentosCount: row['intentos_count'] as int,
             bloqueoMotivo: row['bloqueo_motivo'] as String?,
             autorizadoPorUsuarioId: row['autorizado_por_usuario_id'] as String?,
-            fechaAutorizacion: row['fecha_autorizacion'] as String?));
+            fechaAutorizacion: row['fecha_autorizacion'] as String?,
+            deliveryOwner: row['delivery_owner'] as String,
+            deliveryState: row['delivery_state'] as String,
+            saleId: row['sale_id'] as String?,
+            saleCorrelationId: row['sale_correlation_id'] as String?));
   }
 
   @override
@@ -1904,7 +1916,7 @@ class _$MovementDao extends MovementDao {
   ) async {
     return _queryAdapter.queryList(
         'SELECT * FROM inventory_movements WHERE type = ?1 ORDER BY timestamp DESC LIMIT ?2',
-        mapper: (Map<String, Object?> row) => MovementEntity(id: row['id'] as String, insumoId: row['insumo_id'] as String, type: row['type'] as String, quantity: row['quantity'] as double, previousStock: row['previous_stock'] as double, newStock: row['new_stock'] as double, timestamp: row['timestamp'] as String, reason: row['reason'] as String?, userId: row['user_id'] as String?, unitCostNio: row['unit_cost_nio'] as double?, sourceDocumentType: row['source_document_type'] as String?, sourceDocumentId: row['source_document_id'] as String?, originMovementId: row['origin_movement_id'] as String?, originInvoiceItemId: row['origin_invoice_item_id'] as String?, batch_deductions: row['batch_deductions'] as String?, estadoCosteo: row['estado_costeo'] as int, intentosCount: row['intentos_count'] as int, bloqueoMotivo: row['bloqueo_motivo'] as String?, autorizadoPorUsuarioId: row['autorizado_por_usuario_id'] as String?, fechaAutorizacion: row['fecha_autorizacion'] as String?),
+        mapper: (Map<String, Object?> row) => MovementEntity(id: row['id'] as String, insumoId: row['insumo_id'] as String, type: row['type'] as String, quantity: row['quantity'] as double, previousStock: row['previous_stock'] as double, newStock: row['new_stock'] as double, timestamp: row['timestamp'] as String, reason: row['reason'] as String?, userId: row['user_id'] as String?, unitCostNio: row['unit_cost_nio'] as double?, sourceDocumentType: row['source_document_type'] as String?, sourceDocumentId: row['source_document_id'] as String?, originMovementId: row['origin_movement_id'] as String?, originInvoiceItemId: row['origin_invoice_item_id'] as String?, batch_deductions: row['batch_deductions'] as String?, estadoCosteo: row['estado_costeo'] as int, intentosCount: row['intentos_count'] as int, bloqueoMotivo: row['bloqueo_motivo'] as String?, autorizadoPorUsuarioId: row['autorizado_por_usuario_id'] as String?, fechaAutorizacion: row['fecha_autorizacion'] as String?, deliveryOwner: row['delivery_owner'] as String, deliveryState: row['delivery_state'] as String, saleId: row['sale_id'] as String?, saleCorrelationId: row['sale_correlation_id'] as String?),
         arguments: [type, limit]);
   }
 
@@ -2283,7 +2295,11 @@ class _$InventoryDao extends InventoryDao {
                   'intentos_count': item.intentosCount,
                   'bloqueo_motivo': item.bloqueoMotivo,
                   'autorizado_por_usuario_id': item.autorizadoPorUsuarioId,
-                  'fecha_autorizacion': item.fechaAutorizacion
+                  'fecha_autorizacion': item.fechaAutorizacion,
+                  'delivery_owner': item.deliveryOwner,
+                  'delivery_state': item.deliveryState,
+                  'sale_id': item.saleId,
+                  'sale_correlation_id': item.saleCorrelationId
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -2739,7 +2755,11 @@ class _$ProductionTransactionDao extends ProductionTransactionDao {
                   'intentos_count': item.intentosCount,
                   'bloqueo_motivo': item.bloqueoMotivo,
                   'autorizado_por_usuario_id': item.autorizadoPorUsuarioId,
-                  'fecha_autorizacion': item.fechaAutorizacion
+                  'fecha_autorizacion': item.fechaAutorizacion,
+                  'delivery_owner': item.deliveryOwner,
+                  'delivery_state': item.deliveryState,
+                  'sale_id': item.saleId,
+                  'sale_correlation_id': item.saleCorrelationId
                 }),
         _productionOrderDocumentEntityInsertionAdapter = InsertionAdapter(
             database,
@@ -3824,7 +3844,11 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'intentos_count': item.intentosCount,
                   'bloqueo_motivo': item.bloqueoMotivo,
                   'autorizado_por_usuario_id': item.autorizadoPorUsuarioId,
-                  'fecha_autorizacion': item.fechaAutorizacion
+                  'fecha_autorizacion': item.fechaAutorizacion,
+                  'delivery_owner': item.deliveryOwner,
+                  'delivery_state': item.deliveryState,
+                  'sale_id': item.saleId,
+                  'sale_correlation_id': item.saleCorrelationId
                 }),
         _auditLogEntityInsertionAdapter = InsertionAdapter(
             database,
@@ -4034,6 +4058,58 @@ class _$SalesTransactionDao extends SalesTransactionDao {
   }
 
   @override
+  Future<void> updateInvoiceSyncStatus(
+    String id,
+    String status,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE invoices SET sync_status = ?2 WHERE id = ?1',
+        arguments: [id, status]);
+  }
+
+  @override
+  Future<void> updateMovementsDeliveryStateBySaleId(
+    String saleId,
+    String state,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE inventory_movements SET delivery_state = ?2 WHERE sale_id = ?1',
+        arguments: [saleId, state]);
+  }
+
+  @override
+  Future<List<MovementEntity>> getMovementsBySaleId(String saleId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM inventory_movements WHERE sale_id = ?1',
+        mapper: (Map<String, Object?> row) => MovementEntity(
+            id: row['id'] as String,
+            insumoId: row['insumo_id'] as String,
+            type: row['type'] as String,
+            quantity: row['quantity'] as double,
+            previousStock: row['previous_stock'] as double,
+            newStock: row['new_stock'] as double,
+            timestamp: row['timestamp'] as String,
+            reason: row['reason'] as String?,
+            userId: row['user_id'] as String?,
+            unitCostNio: row['unit_cost_nio'] as double?,
+            sourceDocumentType: row['source_document_type'] as String?,
+            sourceDocumentId: row['source_document_id'] as String?,
+            originMovementId: row['origin_movement_id'] as String?,
+            originInvoiceItemId: row['origin_invoice_item_id'] as String?,
+            batch_deductions: row['batch_deductions'] as String?,
+            estadoCosteo: row['estado_costeo'] as int,
+            intentosCount: row['intentos_count'] as int,
+            bloqueoMotivo: row['bloqueo_motivo'] as String?,
+            autorizadoPorUsuarioId: row['autorizado_por_usuario_id'] as String?,
+            fechaAutorizacion: row['fecha_autorizacion'] as String?,
+            deliveryOwner: row['delivery_owner'] as String,
+            deliveryState: row['delivery_state'] as String,
+            saleId: row['sale_id'] as String?,
+            saleCorrelationId: row['sale_correlation_id'] as String?),
+        arguments: [saleId]);
+  }
+
+  @override
   Future<void> insertInvoice(InvoiceEntity invoice) async {
     await _invoiceEntityInsertionAdapter.insert(
         invoice, OnConflictStrategy.abort);
@@ -4079,6 +4155,25 @@ class _$SalesTransactionDao extends SalesTransactionDao {
   @override
   Future<void> updateInsumo(InsumoEntity insumo) async {
     await _insumoEntityUpdateAdapter.update(insumo, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> executeAckTransaction(
+    String invoiceId,
+    String syncStatus,
+    String deliveryState,
+  ) async {
+    if (database is sqflite.Transaction) {
+      await super.executeAckTransaction(invoiceId, syncStatus, deliveryState);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.salesTransactionDao
+            .executeAckTransaction(invoiceId, syncStatus, deliveryState);
+      });
+    }
   }
 
   @override

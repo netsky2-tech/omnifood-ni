@@ -41,6 +41,10 @@ mixin _$InventoryMovement {
   String? get bloqueoMotivo => throw _privateConstructorUsedError;
   String? get autorizadoPorUsuarioId => throw _privateConstructorUsedError;
   String? get fechaAutorizacion => throw _privateConstructorUsedError;
+  String get deliveryOwner => throw _privateConstructorUsedError;
+  String get deliveryState => throw _privateConstructorUsedError;
+  String? get saleId => throw _privateConstructorUsedError;
+  String? get saleCorrelationId => throw _privateConstructorUsedError;
 
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
   @JsonKey(ignore: true)
@@ -74,7 +78,11 @@ abstract class $InventoryMovementCopyWith<$Res> {
       int? intentosCount,
       String? bloqueoMotivo,
       String? autorizadoPorUsuarioId,
-      String? fechaAutorizacion});
+      String? fechaAutorizacion,
+      String deliveryOwner,
+      String deliveryState,
+      String? saleId,
+      String? saleCorrelationId});
 }
 
 /// @nodoc
@@ -110,6 +118,10 @@ class _$InventoryMovementCopyWithImpl<$Res, $Val extends InventoryMovement>
     Object? bloqueoMotivo = freezed,
     Object? autorizadoPorUsuarioId = freezed,
     Object? fechaAutorizacion = freezed,
+    Object? deliveryOwner = null,
+    Object? deliveryState = null,
+    Object? saleId = freezed,
+    Object? saleCorrelationId = freezed,
   }) {
     return _then(_value.copyWith(
       id: null == id
@@ -192,6 +204,22 @@ class _$InventoryMovementCopyWithImpl<$Res, $Val extends InventoryMovement>
           ? _value.fechaAutorizacion
           : fechaAutorizacion // ignore: cast_nullable_to_non_nullable
               as String?,
+      deliveryOwner: null == deliveryOwner
+          ? _value.deliveryOwner
+          : deliveryOwner // ignore: cast_nullable_to_non_nullable
+              as String,
+      deliveryState: null == deliveryState
+          ? _value.deliveryState
+          : deliveryState // ignore: cast_nullable_to_non_nullable
+              as String,
+      saleId: freezed == saleId
+          ? _value.saleId
+          : saleId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      saleCorrelationId: freezed == saleCorrelationId
+          ? _value.saleCorrelationId
+          : saleCorrelationId // ignore: cast_nullable_to_non_nullable
+              as String?,
     ) as $Val);
   }
 }
@@ -224,7 +252,11 @@ abstract class _$$InventoryMovementImplCopyWith<$Res>
       int? intentosCount,
       String? bloqueoMotivo,
       String? autorizadoPorUsuarioId,
-      String? fechaAutorizacion});
+      String? fechaAutorizacion,
+      String deliveryOwner,
+      String deliveryState,
+      String? saleId,
+      String? saleCorrelationId});
 }
 
 /// @nodoc
@@ -258,6 +290,10 @@ class __$$InventoryMovementImplCopyWithImpl<$Res>
     Object? bloqueoMotivo = freezed,
     Object? autorizadoPorUsuarioId = freezed,
     Object? fechaAutorizacion = freezed,
+    Object? deliveryOwner = null,
+    Object? deliveryState = null,
+    Object? saleId = freezed,
+    Object? saleCorrelationId = freezed,
   }) {
     return _then(_$InventoryMovementImpl(
       id: null == id
@@ -340,6 +376,22 @@ class __$$InventoryMovementImplCopyWithImpl<$Res>
           ? _value.fechaAutorizacion
           : fechaAutorizacion // ignore: cast_nullable_to_non_nullable
               as String?,
+      deliveryOwner: null == deliveryOwner
+          ? _value.deliveryOwner
+          : deliveryOwner // ignore: cast_nullable_to_non_nullable
+              as String,
+      deliveryState: null == deliveryState
+          ? _value.deliveryState
+          : deliveryState // ignore: cast_nullable_to_non_nullable
+              as String,
+      saleId: freezed == saleId
+          ? _value.saleId
+          : saleId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      saleCorrelationId: freezed == saleCorrelationId
+          ? _value.saleCorrelationId
+          : saleCorrelationId // ignore: cast_nullable_to_non_nullable
+              as String?,
     ));
   }
 }
@@ -368,7 +420,11 @@ class _$InventoryMovementImpl implements _InventoryMovement {
       this.intentosCount,
       this.bloqueoMotivo,
       this.autorizadoPorUsuarioId,
-      this.fechaAutorizacion})
+      this.fechaAutorizacion,
+      this.deliveryOwner = 'GENERIC_INVENTORY',
+      this.deliveryState = 'LOCAL_APPLIED',
+      this.saleId,
+      this.saleCorrelationId})
       : _batchDeductions = batchDeductions;
 
   factory _$InventoryMovementImpl.fromJson(Map<String, dynamic> json) =>
@@ -422,10 +478,20 @@ class _$InventoryMovementImpl implements _InventoryMovement {
   final String? autorizadoPorUsuarioId;
   @override
   final String? fechaAutorizacion;
+  @override
+  @JsonKey()
+  final String deliveryOwner;
+  @override
+  @JsonKey()
+  final String deliveryState;
+  @override
+  final String? saleId;
+  @override
+  final String? saleCorrelationId;
 
   @override
   String toString() {
-    return 'InventoryMovement(id: $id, insumoId: $insumoId, type: $type, quantity: $quantity, previousStock: $previousStock, newStock: $newStock, timestamp: $timestamp, reason: $reason, userId: $userId, unitCostNio: $unitCostNio, sourceDocumentType: $sourceDocumentType, sourceDocumentId: $sourceDocumentId, originMovementId: $originMovementId, originInvoiceItemId: $originInvoiceItemId, batchDeductions: $batchDeductions, estadoCosteo: $estadoCosteo, intentosCount: $intentosCount, bloqueoMotivo: $bloqueoMotivo, autorizadoPorUsuarioId: $autorizadoPorUsuarioId, fechaAutorizacion: $fechaAutorizacion)';
+    return 'InventoryMovement(id: $id, insumoId: $insumoId, type: $type, quantity: $quantity, previousStock: $previousStock, newStock: $newStock, timestamp: $timestamp, reason: $reason, userId: $userId, unitCostNio: $unitCostNio, sourceDocumentType: $sourceDocumentType, sourceDocumentId: $sourceDocumentId, originMovementId: $originMovementId, originInvoiceItemId: $originInvoiceItemId, batchDeductions: $batchDeductions, estadoCosteo: $estadoCosteo, intentosCount: $intentosCount, bloqueoMotivo: $bloqueoMotivo, autorizadoPorUsuarioId: $autorizadoPorUsuarioId, fechaAutorizacion: $fechaAutorizacion, deliveryOwner: $deliveryOwner, deliveryState: $deliveryState, saleId: $saleId, saleCorrelationId: $saleCorrelationId)';
   }
 
   @override
@@ -468,7 +534,14 @@ class _$InventoryMovementImpl implements _InventoryMovement {
             (identical(other.autorizadoPorUsuarioId, autorizadoPorUsuarioId) ||
                 other.autorizadoPorUsuarioId == autorizadoPorUsuarioId) &&
             (identical(other.fechaAutorizacion, fechaAutorizacion) ||
-                other.fechaAutorizacion == fechaAutorizacion));
+                other.fechaAutorizacion == fechaAutorizacion) &&
+            (identical(other.deliveryOwner, deliveryOwner) ||
+                other.deliveryOwner == deliveryOwner) &&
+            (identical(other.deliveryState, deliveryState) ||
+                other.deliveryState == deliveryState) &&
+            (identical(other.saleId, saleId) || other.saleId == saleId) &&
+            (identical(other.saleCorrelationId, saleCorrelationId) ||
+                other.saleCorrelationId == saleCorrelationId));
   }
 
   @JsonKey(ignore: true)
@@ -494,7 +567,11 @@ class _$InventoryMovementImpl implements _InventoryMovement {
         intentosCount,
         bloqueoMotivo,
         autorizadoPorUsuarioId,
-        fechaAutorizacion
+        fechaAutorizacion,
+        deliveryOwner,
+        deliveryState,
+        saleId,
+        saleCorrelationId
       ]);
 
   @JsonKey(ignore: true)
@@ -533,7 +610,11 @@ abstract class _InventoryMovement implements InventoryMovement {
       final int? intentosCount,
       final String? bloqueoMotivo,
       final String? autorizadoPorUsuarioId,
-      final String? fechaAutorizacion}) = _$InventoryMovementImpl;
+      final String? fechaAutorizacion,
+      final String deliveryOwner,
+      final String deliveryState,
+      final String? saleId,
+      final String? saleCorrelationId}) = _$InventoryMovementImpl;
 
   factory _InventoryMovement.fromJson(Map<String, dynamic> json) =
       _$InventoryMovementImpl.fromJson;
@@ -578,6 +659,14 @@ abstract class _InventoryMovement implements InventoryMovement {
   String? get autorizadoPorUsuarioId;
   @override
   String? get fechaAutorizacion;
+  @override
+  String get deliveryOwner;
+  @override
+  String get deliveryState;
+  @override
+  String? get saleId;
+  @override
+  String? get saleCorrelationId;
   @override
   @JsonKey(ignore: true)
   _$$InventoryMovementImplCopyWith<_$InventoryMovementImpl> get copyWith =>

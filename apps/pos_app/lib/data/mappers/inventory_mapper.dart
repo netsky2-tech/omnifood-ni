@@ -197,6 +197,10 @@ class InventoryMapper {
       bloqueoMotivo: entity.bloqueoMotivo,
       autorizadoPorUsuarioId: entity.autorizadoPorUsuarioId,
       fechaAutorizacion: entity.fechaAutorizacion,
+      deliveryOwner: entity.deliveryOwner,
+      deliveryState: entity.deliveryState,
+      saleId: entity.saleId,
+      saleCorrelationId: entity.saleCorrelationId,
     );
   }
 
@@ -229,6 +233,10 @@ class InventoryMapper {
       bloqueoMotivo: domain.bloqueoMotivo,
       autorizadoPorUsuarioId: domain.autorizadoPorUsuarioId,
       fechaAutorizacion: domain.fechaAutorizacion,
+      deliveryOwner: domain.deliveryOwner,
+      deliveryState: domain.deliveryState,
+      saleId: domain.saleId,
+      saleCorrelationId: domain.saleCorrelationId,
     );
   }
 
