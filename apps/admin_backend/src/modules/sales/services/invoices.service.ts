@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { createHash, randomUUID } from 'crypto';
@@ -22,6 +22,11 @@ import {
   type NegativeStockPolicy,
 } from '../../inventory/entities/insumo.entity';
 import { User, UserRole } from '../../identity/entities/user.entity';
+import {
+  SaleInventoryOutcomeService,
+  ValidatedBindingToApply,
+  SaleTimeSnapshotValidationResult,
+} from './sale-inventory-outcome.service';
 
 const SCALE_4 = 4;
 const SET_LOCAL_TENANT_SQL = "SELECT set_config('app.tenant_id', $1, true)";
@@ -88,6 +93,10 @@ export interface SyncBatchResultItem {
   retryable: boolean;
   code?: string;
   message?: string;
+  inventoryOutcome?: string;
+  inventoryOutcomeReason?: Record<string, any> | string | null;
+  acknowledgedMovementCorrelationIds?: string[];
+  policyVersion?: string;
 }
 
 export interface SyncBatchResult {
@@ -138,6 +147,8 @@ export const calculateSyncPayloadHash = (record: SyncBatchRecordDto): string =>
 export class InvoicesService {
   private readonly logger = new Logger(InvoicesService.name);
 
+  private readonly outcomeService: SaleInventoryOutcomeService;
+
   constructor(
     private readonly dataSource: DataSource,
     @InjectRepository(Invoice)
@@ -156,7 +167,12 @@ export class InvoicesService {
     private readonly outboxRepository: Repository<InventorySyncOutbox>,
     private readonly recipeService: RecipeService,
     private readonly bomExplosionService: BomExplosionService,
-  ) {}
+    @Optional()
+    private readonly saleInventoryOutcomeService?: SaleInventoryOutcomeService,
+  ) {
+    this.outcomeService =
+      this.saleInventoryOutcomeService ?? new SaleInventoryOutcomeService();
+  }
 
   async syncInvoices(
     tenantId: string,
@@ -224,7 +240,7 @@ export class InvoicesService {
         JSON.stringify((invoicePayload as any).number),
       );
 
-      await this.invoiceRepoFor(manager).upsert(invoicePayload, ['id']);
+      await this.invoiceRepoFor(manager).upsert(invoicePayload as any, ['id']);
       if (persistenceDto.items?.length) {
         const itemPayloads = persistenceDto.items.map((item) => ({
           ...item,
@@ -244,7 +260,7 @@ export class InvoicesService {
             JSON.stringify(ip.variantId),
           );
         }
-        await this.itemRepoFor(manager).upsert(itemPayloads, ['id']);
+        await this.itemRepoFor(manager).upsert(itemPayloads as any, ['id']);
       }
       if (dto.payments?.length) {
         const paymentPayloads = dto.payments.map((payment) => ({
@@ -631,7 +647,15 @@ export class InvoicesService {
   private buildResult(
     record: SyncBatchRecordDto,
     status: SyncResultStatus,
-    options: { retryable: boolean; code?: string; message?: string },
+    options: {
+      retryable: boolean;
+      code?: string;
+      message?: string;
+      inventoryOutcome?: string;
+      inventoryOutcomeReason?: Record<string, any> | string | null;
+      acknowledgedMovementCorrelationIds?: string[];
+      policyVersion?: string;
+    },
   ): SyncBatchResultItem {
     return {
       idempotencyKey: record.idempotencyKey,
@@ -642,6 +666,11 @@ export class InvoicesService {
       retryable: options.retryable,
       code: options.code,
       message: options.message,
+      inventoryOutcome: options.inventoryOutcome,
+      inventoryOutcomeReason: options.inventoryOutcomeReason,
+      acknowledgedMovementCorrelationIds:
+        options.acknowledgedMovementCorrelationIds,
+      policyVersion: options.policyVersion,
     };
   }
 
@@ -841,67 +870,45 @@ export class InvoicesService {
     payloadHash: string,
   ): Promise<{ accepted: boolean; result: SyncBatchResultItem }> {
     try {
+      let v1Outcome: SaleTimeSnapshotValidationResult | null = null;
       await this.dataSource.transaction('SERIALIZABLE', async (manager) => {
         await this.bindTenantContext(manager, tenantId);
         this.assertRecordCreditNoteBoundary(record);
         this.assertSupportedCreditNoteStockBehavior(record);
         if (record.invoice) {
-          console.log(
-            '[APPLY-RECORD] record.documentType:',
-            record.documentType,
-            'record.flowType:',
-            record.flowType,
-          );
-          console.log(
-            '[APPLY-RECORD] invoice.id:',
-            record.invoice.id,
-            'userId:',
-            record.invoice.userId,
-            'number:',
-            record.invoice.number,
-          );
-          console.log(
-            '[APPLY-RECORD] invoice.items count:',
-            record.invoice.items?.length,
-            'payments count:',
-            record.invoice.payments?.length,
-          );
-          if (record.invoice.items?.length) {
-            for (const item of record.invoice.items) {
-              console.log(
-                '[APPLY-RECORD]   item:',
-                item.id,
-                'productId:',
-                item.productId,
-                'recipeVersionId:',
-                item.recipeVersionId,
-                'variantId:',
-                item.variantId,
-              );
-            }
-          }
-          if (record.invoice.payments?.length) {
-            for (const payment of record.invoice.payments) {
-              console.log(
-                '[APPLY-RECORD]   payment:',
-                payment.id,
-                'method:',
-                payment.method,
-                'reconciledByUserId:',
-                payment.reconciledByUserId,
-              );
-            }
-          }
-          await this.validateInvoiceRecipeVersions(
+          v1Outcome = await this.outcomeService.validateSaleTimeSnapshot(
             tenantId,
             record.invoice,
-            record.recipeVersionId,
+            manager,
           );
+
+          if (v1Outcome) {
+            record.invoice.inventoryPolicyVersion = v1Outcome.policyVersion;
+            record.invoice.inventoryOutcome = v1Outcome.outcome;
+            record.invoice.inventoryOutcomeReason = v1Outcome.reason;
+          } else {
+            await this.validateInvoiceRecipeVersions(
+              tenantId,
+              record.invoice,
+              record.recipeVersionId,
+            );
+          }
+
           await this.syncInvoices(tenantId, [record.invoice], manager, {
             allowCreditNotes: record.documentType === 'CREDIT_NOTE',
           });
         }
-        await this.appendInventoryDeltas(tenantId, record, manager);
+
+        if (v1Outcome) {
+          if (v1Outcome.outcome === 'APPLIED') {
+            for (const b of v1Outcome.bindingsToApply) {
+              await this.appendV1Movement(tenantId, record, b, manager);
+            }
+          }
+        } else {
+          await this.appendInventoryDeltas(tenantId, record, manager);
+        }
+
         await manager.save(
           this.receiptRepository.create({
             tenant_id: tenantId,
@@ -911,7 +918,13 @@ export class InvoicesService {
             source_sequence: String(record.sourceSequence),
             payload_hash: payloadHash,
             result_status: SYNC_RESULT_STATUS.ACCEPTED,
-            result_code: 'APPLIED',
+            result_code: v1Outcome ? v1Outcome.outcome : 'APPLIED',
+            inventoryPolicyVersion: v1Outcome ? v1Outcome.policyVersion : null,
+            inventoryOutcome: v1Outcome ? v1Outcome.outcome : null,
+            inventoryOutcomeReason: v1Outcome ? v1Outcome.reason : null,
+            acknowledgedCorrelationIds: v1Outcome
+              ? v1Outcome.acknowledgedMovementCorrelationIds
+              : null,
           }),
         );
         await this.clearAcceptedHeldCreditNoteRecord(
@@ -924,8 +937,13 @@ export class InvoicesService {
       return {
         accepted: true,
         result: this.buildResult(record, SYNC_RESULT_STATUS.ACCEPTED, {
-          code: 'APPLIED',
+          code: v1Outcome ? (v1Outcome as any).outcome : 'APPLIED',
           retryable: false,
+          inventoryOutcome: (v1Outcome as any)?.outcome,
+          inventoryOutcomeReason: (v1Outcome as any)?.reason,
+          acknowledgedMovementCorrelationIds:
+            (v1Outcome as any)?.acknowledgedMovementCorrelationIds,
+          policyVersion: (v1Outcome as any)?.policyVersion,
         }),
       };
     } catch (error: unknown) {
@@ -1497,6 +1515,7 @@ export class InvoicesService {
     recordRecipeVersionId?: string,
   ): Promise<void> {
     for (const item of invoice.items ?? []) {
+      if (item.inventorySnapshotVersion === 'SALE_TIME_V1') continue;
       const recipeVersionId = item.recipeVersionId ?? recordRecipeVersionId;
       if (!recipeVersionId) continue;
       await this.recipeService.getSnapshot(
@@ -1505,6 +1524,76 @@ export class InvoicesService {
         item.productId,
       );
     }
+  }
+
+  private async appendV1Movement(
+    tenantId: string,
+    record: SyncBatchRecordDto,
+    validatedBinding: ValidatedBindingToApply,
+    manager: EntityManager,
+  ): Promise<void> {
+    const { item, binding, explodedQuantity } = validatedBinding;
+    const invoice = record.invoice!;
+    const movementType =
+      record.documentType === 'SALE_CANCEL'
+        ? MovementType.SALE_CANCEL
+        : MovementType.SALE;
+
+    const insumo = await manager
+      .createQueryBuilder(Insumo, 'insumo')
+      .setLock('pessimistic_write')
+      .where('insumo.id = :insumoId', { insumoId: binding.insumoId })
+      .andWhere('insumo.tenant_id = :tenantId', { tenantId })
+      .getOne();
+
+    if (!insumo) {
+      this.logger.warn(
+        `Skipping V1 movement due to unresolved insumo ${binding.insumoId}`,
+      );
+      return;
+    }
+
+    const normalizedQuantity =
+      movementType === MovementType.SALE_CANCEL
+        ? Math.abs(explodedQuantity)
+        : -Math.abs(explodedQuantity);
+    const previousStock = Number(insumo.stock);
+    const newStock = Number((previousStock + normalizedQuantity).toFixed(4));
+    this.assertNegativeStockPolicy(
+      insumo.negativeStockPolicy,
+      newStock,
+      binding.insumoId,
+      movementType,
+    );
+    const unitCostNio = round4(Number(insumo.averageCost ?? 0));
+    const averageCostAfterNio = round4(Number(insumo.averageCost ?? 0));
+    insumo.stock = newStock;
+    insumo.existenciaActual = newStock;
+    await manager.save(Insumo, insumo);
+
+    await manager.save(
+      this.movementRepository.create({
+        tenant_id: tenantId,
+        insumoId: binding.insumoId,
+        type: movementType,
+        quantity: normalizedQuantity,
+        previousStock,
+        newStock,
+        averageCostAfterNio,
+        unitCostNio,
+        totalCostNio: Number(
+          (Math.abs(normalizedQuantity) * unitCostNio).toFixed(4),
+        ),
+        idempotencyKey: binding.saleCorrelationId,
+        sourceDeviceId: record.sourceDeviceId,
+        sourceSequence: String(record.sourceSequence),
+        sourceDocumentId: `${INVOICE_SOURCE_DOCUMENT_PREFIX}${invoice.id}`,
+        sourceDocumentType: movementType,
+        originInvoiceItemId:
+          movementType === MovementType.SALE ? item.id : null,
+        user_id: invoice.userId,
+      }),
+    );
   }
 
   /// Resolves the Invoice repository bound to [manager] when running

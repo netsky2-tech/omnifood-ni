@@ -68,6 +68,7 @@ export interface InboundSyncCatalogValueDto {
 
 export interface InboundSyncInsumoDto {
   id: string;
+  tenantId: string;
   name: string;
   purchaseUom: string;
   consumptionUom: string;
@@ -83,6 +84,7 @@ export interface InboundSyncInsumoDto {
 
 export interface InboundSyncRecipeDto {
   id: string;
+  tenantId: string;
   productId: string;
   ingredientId: string;
   ingredientType: string;
@@ -91,16 +93,46 @@ export interface InboundSyncRecipeDto {
   updatedAt: Date;
 }
 
-export interface InboundSyncRecipeVersionDto {
+export interface InboundSyncRecipeVersionComponentDto {
   id: string;
+  tenantId: string;
+  /** Immutable parent link; consumers must not resolve through mutable recipes. */
+  recipeVersionId: string;
+  componentOrdinal: number;
+  insumoId: string;
+  quantityPerSaleUnit: number;
+  grossQuantity: number;
+  technicalShrinkPct: number;
+  ingredientName: string | null;
+  ingredientType: string;
+  /** Null means the published component did not declare a UOM. */
+  componentUom: string | null;
+  referenceVersionId: string | null;
+}
+
+export interface InboundSyncRecipeVersionDto {
+  /** The immutable version identity, repeated explicitly for safe linkage. */
+  id: string;
+  recipeVersionId: string;
+  tenantId: string;
   productId: string;
+  /** Immutable POS document identity when the version originated from POS. */
+  recipeDocumentId: string | null;
+  productName: string | null;
   versionNumber: number;
   isActive: boolean;
+  publicationState: 'PUBLISHED';
+  effectiveAt: Date;
+  effectiveUntil: Date | null;
   yieldQuantity: number;
   technicalShrinkPct: number;
-  versionNote?: string | null;
-  publishedAt?: Date | null;
+  versionNote: string | null;
+  publishedAt: Date | null;
+  posCreatedAt: Date | null;
+  origin: string;
+  suggestionState: string;
   createdAt: Date;
+  components: InboundSyncRecipeVersionComponentDto[];
 }
 
 export interface InboundSyncDeltasDto {

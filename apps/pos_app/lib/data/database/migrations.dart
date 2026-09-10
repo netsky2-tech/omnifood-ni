@@ -21,12 +21,50 @@ Future<void> _createInventoryMovementAppendOnlyTriggers(
   ''');
 }
 
+Future<void> _createAuthorityImmutabilityTriggers(
+  sqflite.DatabaseExecutor database,
+) async {
+  await database.execute('''
+    CREATE TRIGGER IF NOT EXISTS authority_recipe_versions_block_update
+    BEFORE UPDATE ON authority_recipe_versions
+    BEGIN
+      SELECT RAISE(ABORT, 'Authority facts are immutable');
+    END;
+  ''');
+
+  await database.execute('''
+    CREATE TRIGGER IF NOT EXISTS authority_recipe_versions_block_delete
+    BEFORE DELETE ON authority_recipe_versions
+    BEGIN
+      SELECT RAISE(ABORT, 'Authority facts cannot be deleted');
+    END;
+  ''');
+
+  await database.execute('''
+    CREATE TRIGGER IF NOT EXISTS authority_components_block_update
+    BEFORE UPDATE ON authority_recipe_version_components
+    BEGIN
+      SELECT RAISE(ABORT, 'Authority facts are immutable');
+    END;
+  ''');
+
+  await database.execute('''
+    CREATE TRIGGER IF NOT EXISTS authority_components_block_delete
+    BEFORE DELETE ON authority_recipe_version_components
+    BEGIN
+      SELECT RAISE(ABORT, 'Authority facts cannot be deleted');
+    END;
+  ''');
+}
+
 final inventoryMovementAppendOnlyCallback = Callback(
   onCreate: (database, _) async {
     await _createInventoryMovementAppendOnlyTriggers(database);
+    await _createAuthorityImmutabilityTriggers(database);
   },
   onOpen: (database) async {
     await _createInventoryMovementAppendOnlyTriggers(database);
+    await _createAuthorityImmutabilityTriggers(database);
   },
 );
 
@@ -1963,6 +2001,7 @@ final allMigrations = [
   migration46_47,
   migration47_48,
   migration48_49,
+  migration49_50,
 ];
 
 /// Catalog mapping identity is additive: historical products remain usable.
@@ -1996,4 +2035,61 @@ final migration48_49 = Migration(48, 49, (database) async {
   await add('invoices', 'inventory_outcome_reason TEXT');
   await add('invoice_items', 'inventory_snapshot_version TEXT');
   await add('invoice_items', 'inventory_snapshot_json TEXT');
+});
+
+final migration49_50 = Migration(49, 50, (database) async {
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS authority_insumos (
+      tenant_id TEXT NOT NULL,
+      id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      uom TEXT NOT NULL,
+      PRIMARY KEY (tenant_id, id)
+    )
+  ''');
+
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS authority_recipe_versions (
+      tenant_id TEXT NOT NULL,
+      id TEXT NOT NULL,
+      product_id TEXT NOT NULL,
+      version_number INTEGER NOT NULL,
+      is_active INTEGER NOT NULL,
+      publication_state TEXT NOT NULL,
+      effective_from TEXT NOT NULL,
+      effective_until TEXT,
+      yield_quantity REAL NOT NULL,
+      technical_shrink_pct REAL NOT NULL,
+      published_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (tenant_id, id)
+    )
+  ''');
+
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS authority_recipe_version_components (
+      tenant_id TEXT NOT NULL,
+      id TEXT NOT NULL,
+      version_id TEXT NOT NULL,
+      ordinal INTEGER NOT NULL,
+      insumo_id TEXT NOT NULL,
+      gross_quantity REAL NOT NULL,
+      technical_shrink_pct REAL NOT NULL,
+      ingredient_type TEXT NOT NULL,
+      component_name TEXT NOT NULL,
+      component_uom TEXT,
+      reference_version_id TEXT,
+      PRIMARY KEY (tenant_id, id),
+      FOREIGN KEY (tenant_id, version_id) REFERENCES authority_recipe_versions (tenant_id, id) ON DELETE CASCADE,
+      FOREIGN KEY (tenant_id, insumo_id) REFERENCES authority_insumos (tenant_id, id) ON DELETE RESTRICT
+    )
+  ''');
+
+  await database.execute('''
+    CREATE UNIQUE INDEX IF NOT EXISTS index_authority_recipe_version_components_tenant_id_version_id_ordinal
+    ON authority_recipe_version_components (tenant_id, version_id, ordinal)
+  ''');
+
+  await _createAuthorityImmutabilityTriggers(database);
 });

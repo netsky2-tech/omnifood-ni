@@ -281,6 +281,33 @@ describe('RecipeService', () => {
       expect(savedPrior).toMatchObject({ is_active: false });
     });
 
+    it('rejects a repost that would mutate a published effective version', async () => {
+      productRepo.findOne.mockResolvedValue({ id: buildDto().productId });
+      insumoRepo.findOne.mockResolvedValue({
+        tenant_id: 'tenant-A',
+        name: 'Arroz',
+        consumptionUom: 'kg',
+      });
+      manager.findOne.mockResolvedValue({
+        id: 'v-published',
+        tenant_id: 'tenant-A',
+        pos_document_id: buildDto().id,
+        product_id: buildDto().productId,
+        publication_state: 'PUBLISHED',
+        is_active: true,
+        fecha_inicio_vigencia: new Date('2026-01-01T00:00:00.000Z'),
+      });
+
+      await expect(
+        service.ingestPosVersion({
+          tenantId: 'tenant-A',
+          dto: buildDto({ productName: 'Attempted rewrite' }),
+        }),
+      ).rejects.toThrow('published or effective');
+      expect(manager.save).not.toHaveBeenCalled();
+      expect(manager.delete).not.toHaveBeenCalled();
+    });
+
     it('idempotently replaces details when the same pos_document_id is reposted', async () => {
       productRepo.findOne.mockResolvedValue({ id: buildDto().productId });
       insumoRepo.findOne.mockResolvedValue({
@@ -297,6 +324,9 @@ describe('RecipeService', () => {
         version_number: 1,
         yield_quantity: 1,
         technical_shrink_pct: 0,
+        publication_state: 'DRAFT',
+        published_at: null,
+        is_active: false,
         fecha_inicio_vigencia: new Date('2026-01-01T00:00:00.000Z'),
       };
       manager.findOne.mockResolvedValue(existing);
@@ -352,6 +382,9 @@ describe('RecipeService', () => {
         version_number: 1,
         yield_quantity: 10,
         technical_shrink_pct: 0,
+        publication_state: 'DRAFT',
+        published_at: null,
+        is_active: false,
         fecha_inicio_vigencia: new Date('2026-06-26T12:00:00.000Z'),
       };
       const driverError = Object.assign(

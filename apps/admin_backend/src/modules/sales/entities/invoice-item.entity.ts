@@ -76,6 +76,12 @@ export class InvoiceItem {
   @Index()
   originInvoiceItemId: string;
 
+  @Column({ name: 'inventory_snapshot_version', nullable: true })
+  inventorySnapshotVersion?: string | null;
+
+  @Column({ name: 'inventory_snapshot', type: 'jsonb', nullable: true })
+  inventorySnapshot?: any | null;
+
   @OneToMany(() => InvoiceItemModifier, (modifier) => modifier.item, {
     cascade: true,
   })

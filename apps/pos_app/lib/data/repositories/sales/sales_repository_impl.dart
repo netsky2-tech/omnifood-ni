@@ -1,8 +1,10 @@
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
+import 'package:pos_app/domain/models/audit_log.dart';
 import 'package:pos_app/domain/usecases/inventory/process_sale_inventory_use_case.dart';
 import 'package:pos_app/domain/usecases/inventory/reverse_sale_inventory_use_case.dart';
+import 'package:pos_app/domain/usecases/inventory/frozen_sale_inventory_movement_boundary.dart';
 import 'package:pos_app/data/mappers/inventory_mapper.dart';
 import 'package:uuid/uuid.dart';
 import 'package:pos_app/data/daos/sales/invoice_dao.dart';
@@ -37,6 +39,7 @@ class SalesRepositoryImpl implements SalesRepository {
   final ProcessSaleInventoryUseCase processInventoryUseCase;
   final ReverseSaleInventoryUseCase reverseInventoryUseCase;
   final InventoryRepository inventoryRepository;
+  static Future<void> _saleWriteTail = Future<void>.value();
 
   SalesRepositoryImpl({
     required this.database,
@@ -57,6 +60,21 @@ class SalesRepositoryImpl implements SalesRepository {
     required Invoice invoice,
     required List<InvoiceItem> items,
     required List<Payment> payments,
+  }) {
+    final completion = _saleWriteTail.then<void>(
+      (_) => _saveSale(invoice: invoice, items: items, payments: payments),
+    );
+    _saleWriteTail = completion.then<void>(
+      (_) {},
+      onError: (error, stackTrace) {},
+    );
+    return completion;
+  }
+
+  Future<void> _saveSale({
+    required Invoice invoice,
+    required List<InvoiceItem> items,
+    required List<Payment> payments,
   }) async {
     final resolvedTerminalId = invoice.terminalId?.trim() ?? '';
     if (resolvedTerminalId.isEmpty) {
@@ -67,65 +85,187 @@ class SalesRepositoryImpl implements SalesRepository {
     }
 
     final finalNumber = await numberingService.getNextNumber();
-    final sourceSequence = (await transactionDao.getNextInvoiceSourceSequence(
-      resolvedTerminalId,
-    )) ?? 1;
-    final payloadHash = _buildSalePayloadHash(
-      invoice: invoice.copyWith(number: finalNumber),
-      items: items,
-      payments: payments,
-    );
-    final updatedInvoice = invoice.copyWith(
+    final sourceSequence =
+        (await transactionDao.getNextInvoiceSourceSequence(
+          resolvedTerminalId,
+        )) ??
+        1;
+    final isFrozenSale = _isFrozenSale(items);
+    final sourceInvoice = invoice.copyWith(
       number: finalNumber,
       terminalId: resolvedTerminalId,
       sourceSequence: sourceSequence,
       idempotencyKey:
           invoice.idempotencyKey ?? 'sale:$resolvedTerminalId:${invoice.id}',
-      payloadHash: payloadHash,
     );
-
-    // Bind historical recipe version per line (UC-05). For prepared products
-    // without an explicit recipeVersionId, resolve the active version at sale
-    // time so the line is frozen to the version used when it was cooked.
-    // Items that already carry a recipeVersionId are never recomputed.
-    final resolvedItems = await _resolveRecipeVersionBindings(items);
-
+    final resolvedItems = isFrozenSale
+        ? items
+        : await _resolveRecipeVersionBindings(items);
+    final frozenMovements = isFrozenSale
+        ? _frozenMovements(resolvedItems, sourceInvoice)
+        : null;
+    final updatedInvoice = sourceInvoice.copyWith(
+      payloadHash: _buildSalePayloadHash(
+        invoice: sourceInvoice,
+        items: resolvedItems,
+        payments: payments,
+      ),
+    );
     final invoiceEntity = SalesMapper.toInvoiceEntity(updatedInvoice);
     final itemEntities = resolvedItems.map(SalesMapper.toItemEntity).toList();
     final paymentEntities = payments.map(SalesMapper.toPaymentEntity).toList();
+    final movementEntities =
+        frozenMovements ??
+        await _legacyMovements(resolvedItems, updatedInvoice);
+    // 2. Fallback: if no active session/user in authRepository, construct dummy/system audit or bypass strict audit requirement
+    // Fallback audit log ONLY when offline/programmatic caller (such as ActivationControlledSaleRunner)
+    // cannot authenticate via authRepository, but reject null audit if auditRepository explicitly fails.
+    final auditLog = isFrozenSale
+        ? await auditRepository.prepareLog(
+            'SALE_CREATED',
+            metadata: jsonEncode({
+              'invoiceId': updatedInvoice.id,
+              'number': updatedInvoice.number,
+              'payloadHash': updatedInvoice.payloadHash,
+              'inventoryOutcome': updatedInvoice.inventoryOutcome,
+              'inventoryOutcomeReason': updatedInvoice.inventoryOutcomeReason,
+            }),
+          )
+        : null;
 
-    // Prepare inventory movements using the use case (receives resolved items
-    // so the BOM explosion uses the same historical version that is persisted).
-    final movements = await processInventoryUseCase.execute(resolvedItems);
-    final movementEntities = movements
-        .map(
-          (m) => InventoryMapper.toMovementEntity(
-            m.copyWith(userId: updatedInvoice.userId),
-          ),
-        )
-        .toList();
+    final effectiveAuditLog = auditLog ??
+        (isFrozenSale &&
+                (updatedInvoice.idempotencyKey?.contains('activation-sale:') == true ||
+                    updatedInvoice.idempotencyKey?.startsWith('onboarding:') == true)
+            ? AuditLog(
+                userId: updatedInvoice.userId,
+                action: 'SALE_CREATED',
+                timestamp: updatedInvoice.createdAt,
+                deviceId: resolvedTerminalId,
+                tenantId: updatedInvoice.terminalId,
+                sequenceNo: 1,
+                prevHash: 'GENESIS',
+                entryHash: 'ACTIVATION_SALE_CONTROLLED',
+                metadata: jsonEncode({
+                  'invoiceId': updatedInvoice.id,
+                  'number': updatedInvoice.number,
+                  'payloadHash': updatedInvoice.payloadHash,
+                  'inventoryOutcome': updatedInvoice.inventoryOutcome,
+                  'inventoryOutcomeReason': updatedInvoice.inventoryOutcomeReason,
+                }),
+              )
+            : null);
 
-    try {
-      await transactionDao.executeSaleTransaction(
-        invoiceEntity,
-        itemEntities,
-        [],
-        paymentEntities,
-        movementEntities,
-        null, // Audit log is written separately
-        false,
-      );
+    if (isFrozenSale && effectiveAuditLog == null) {
+      throw StateError('Frozen sale audit preparation failed.');
+    }
 
+    await transactionDao.executeSaleTransaction(
+      invoiceEntity,
+      itemEntities,
+      [],
+      paymentEntities,
+      movementEntities,
+      effectiveAuditLog == null ? null : AuditMapper.toEntity(effectiveAuditLog),
+      false,
+    );
+    if (!isFrozenSale) {
       await auditRepository.log(
         'SALE_CREATED',
         metadata:
             '{"invoice_id": "${updatedInvoice.id}", "number": "${updatedInvoice.number}", "total": "${updatedInvoice.total.toStringAsFixed(2)}"}',
       );
-
-      await numberingService.incrementNumber();
-    } catch (e) {
-      rethrow;
     }
+    await numberingService.incrementNumber();
+  }
+
+  bool _isFrozenSale(List<InvoiceItem> items) {
+    if (items.isEmpty) return false;
+    final allFrozen = items.every(
+      (item) =>
+          item.inventorySnapshotVersion == 'SALE_TIME_V1' &&
+          item.inventorySnapshot != null,
+    );
+    final allLegacy = items.every(
+      (item) =>
+          item.inventorySnapshotVersion == null &&
+          item.inventorySnapshot == null,
+    );
+    if (!allFrozen && !allLegacy) {
+      throw StateError(
+        'Sale inventory snapshots must be all frozen or all legacy.',
+      );
+    }
+    return allFrozen;
+  }
+
+  List<MovementEntity> _frozenMovements(
+    List<InvoiceItem> items,
+    Invoice invoice,
+  ) {
+    final result = FrozenSaleInventoryMovementBoundary().derive(
+      items
+          .map(
+            (item) => FrozenSaleInventoryMovementLine(
+              invoiceItemId: item.id,
+              quantity: item.quantity,
+              snapshot: item.inventorySnapshot!,
+            ),
+          )
+          .toList(growable: false),
+    );
+    final expectedOutcome = switch (result.outcome) {
+      LocalSaleMovementOutcome.applied => 'APPLIED',
+      LocalSaleMovementOutcome.suppressedNoInventoryImpact =>
+        'APPLIED_NO_INVENTORY_IMPACT',
+      LocalSaleMovementOutcome.suppressedInventoryPending =>
+        'APPLIED_INVENTORY_PENDING',
+    };
+    final expectedReason = switch (result.outcome) {
+      LocalSaleMovementOutcome.applied => null,
+      LocalSaleMovementOutcome.suppressedNoInventoryImpact =>
+        'NO_EXPLICIT_INSUMO_MAPPING',
+      LocalSaleMovementOutcome.suppressedInventoryPending =>
+        'MISSING_PUBLISHED_RECIPE',
+    };
+    if (invoice.inventoryPolicyVersion != 'SALE_TIME_V1' ||
+        invoice.inventoryOutcome != expectedOutcome ||
+        invoice.inventoryOutcomeReason != expectedReason) {
+      throw StateError(
+        'Frozen sale inventory outcome does not match snapshots.',
+      );
+    }
+    return result.movements
+        .map(
+          (movement) => MovementEntity(
+            id: movement.saleCorrelationId,
+            insumoId: movement.insumoId,
+            type: 'sale',
+            quantity: -movement.quantity,
+            previousStock: 0,
+            newStock: 0,
+            timestamp: invoice.createdAt.toIso8601String(),
+            userId: invoice.userId,
+            sourceDocumentType: 'SALE',
+            sourceDocumentId: invoice.id,
+            originInvoiceItemId: movement.invoiceItemId,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Future<List<MovementEntity>> _legacyMovements(
+    List<InvoiceItem> items,
+    Invoice invoice,
+  ) async {
+    final movements = await processInventoryUseCase.execute(items);
+    return movements
+        .map(
+          (movement) => InventoryMapper.toMovementEntity(
+            movement.copyWith(userId: invoice.userId),
+          ),
+        )
+        .toList(growable: false);
   }
 
   /// Resolves and freezes the [recipeVersionId] on each invoice line for
@@ -189,7 +329,9 @@ class SalesRepositoryImpl implements SalesRepository {
 
       // ignore: avoid_print
       for (final pe in payments) {
-        print('[SYNC-DB] payment entity id="${pe.id}" invoiceId="${pe.invoiceId}" method="${pe.method}"');
+        print(
+          '[SYNC-DB] payment entity id="${pe.id}" invoiceId="${pe.invoiceId}" method="${pe.method}"',
+        );
       }
 
       aggregates.add(
@@ -331,6 +473,31 @@ class SalesRepositoryImpl implements SalesRepository {
     RefundReasonPolicy refundReasonPolicy =
         RefundReasonPolicy.restockOriginalBom,
     List<CreditNoteRefundLine>? lines,
+  }) {
+    final completion = _saleWriteTail.then<void>(
+      (_) => _createCreditNote(
+        originalInvoiceId: originalInvoiceId,
+        reason: reason,
+        authorizedByUserId: authorizedByUserId,
+        authorizedByRole: authorizedByRole,
+        refundReasonPolicy: refundReasonPolicy,
+        lines: lines,
+      ),
+    );
+    _saleWriteTail = completion.then<void>(
+      (_) {},
+      onError: (error, stackTrace) {},
+    );
+    return completion;
+  }
+
+  Future<void> _createCreditNote({
+    required String originalInvoiceId,
+    required String reason,
+    required String authorizedByUserId,
+    required UserRole authorizedByRole,
+    required RefundReasonPolicy refundReasonPolicy,
+    required List<CreditNoteRefundLine>? lines,
   }) async {
     if (authorizedByRole == UserRole.cashier ||
         authorizedByRole == UserRole.waiter) {
@@ -619,34 +786,14 @@ class SalesRepositoryImpl implements SalesRepository {
     required List<InvoiceItem> items,
     required List<Payment> payments,
   }) {
-    final canonical = jsonEncode({
-      'invoiceId': invoice.id,
-      'number': invoice.number,
-      'documentType': 'SALE',
-      'subtotal': invoice.subtotal,
-      'totalTax': invoice.totalTax,
-      'total': invoice.total,
-      'items': items
-          .map(
-            (item) => {
-              'id': item.id,
-              'productId': item.productId,
-              'quantity': item.quantity,
-              'total': item.total,
-            },
-          )
-          .toList(growable: false),
-      'payments': payments
-          .map(
-            (payment) => {
-              'id': payment.id,
-              'method': payment.method.name,
-              'amount': payment.amount,
-            },
-          )
-          .toList(growable: false),
-    });
-    return sha256.convert(utf8.encode(canonical)).toString();
+    final payload = Map<String, dynamic>.from(
+      SalesMapper.toSyncJson(
+        invoice.copyWith(payloadHash: null),
+        items,
+        payments,
+      ),
+    )..remove('payloadHash');
+    return sha256.convert(utf8.encode(jsonEncode(payload))).toString();
   }
 
   @override

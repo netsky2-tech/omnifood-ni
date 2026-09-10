@@ -145,7 +145,92 @@ Legacy access-only tokens are imported once as explicit access-only state and ca
 
 The normal Dio adapter retries an eligible original request once after successful recovery, marks `retryAttempt=1`, and never intercepts the bare refresh client. Missing/revoked/malformed/mismatched or uncommittable credentials emit one reauthentication event per generation. Network timeout during refresh is cloud-unavailable, not reauthentication. Both leave SQLite work pending.
 
-### D6. Remediation is authorized, tenant-isolated, and append-only
+### D7. POS local authority projection schema and integrity invariants (5B4A1a)
+
+To allow offline checkout to validate and freeze `SALE_TIME_V1` snapshots deterministically without runtime mutable catalog/recipe resolution or tenant fallback inference, POS Floor persistence must model explicit tenant-owned authority facts aligned with the reviewed `5B4A0c` backend sync contract:
+
+1. **Contract and Linkage Parity with 5B4A0c**:
+   - `authority_recipe_versions` does NOT contain an inferred or mandatory foreign `recipe_id` column. The authoritative backend DTO (`inbound-sync.dto.ts`) exposes immutable `id` (the `recipeVersionId`) and `productId`. The version is linked directly to the product by `(tenant_id, product_id)`. Components link directly to their parent version by `(tenant_id, version_id)`.
+   - Columns and nullability on `authority_recipe_versions`:
+     - `id` TEXT NOT NULL (UUID of recipe version)
+     - `tenant_id` TEXT NOT NULL
+     - `product_id` TEXT NOT NULL
+     - `version_number` INTEGER NOT NULL
+     - `is_active` INTEGER NOT NULL (0 or 1)
+     - `publication_state` TEXT NOT NULL ('DRAFT', 'PUBLISHED', 'ARCHIVED')
+     - `effective_from` TEXT NOT NULL (ISO-8601 UTC)
+     - `effective_until` TEXT NULL (ISO-8601 UTC)
+     - `yield_quantity` REAL NOT NULL
+     - `technical_shrink_pct` REAL NOT NULL
+     - `published_at` TEXT NULL
+     - `created_at` TEXT NOT NULL
+     - `updated_at` TEXT NOT NULL
+     - PRIMARY KEY: `(tenant_id, id)`
+   - Columns and nullability on `authority_recipe_version_components`:
+     - `id` TEXT NOT NULL (UUID of component)
+     - `tenant_id` TEXT NOT NULL
+     - `version_id` TEXT NOT NULL (UUID of parent recipe version)
+     - `ordinal` INTEGER NOT NULL
+     - `insumo_id` TEXT NOT NULL
+     - `gross_quantity` REAL NOT NULL
+     - `technical_shrink_pct` REAL NOT NULL
+     - `ingredient_type` TEXT NOT NULL
+     - `component_name` TEXT NOT NULL
+     - `component_uom` TEXT NULL
+     - `reference_version_id` TEXT NULL (UUID of sub-recipe version if COMPOUND)
+     - PRIMARY KEY: `(tenant_id, id)`
+   - Columns and nullability on `authority_insumos`:
+     - `id` TEXT NOT NULL (UUID of insumo)
+     - `tenant_id` TEXT NOT NULL
+     - `name` TEXT NOT NULL
+     - `uom` TEXT NOT NULL
+     - PRIMARY KEY: `(tenant_id, id)`
+
+2. **Tenant Isolation and Graph Integrity (SQLite Constraints)**:
+   - All authority entities declare composite primary keys: `@Entity(primaryKeys: ['tenant_id', 'id'])`.
+   - Composite foreign keys are declared in Floor `@Entity` annotations so they are natively generated into `CREATE TABLE` DDL (`app_database.g.dart`) as well as in `migration49_50`:
+     - On `authority_recipe_version_components`:
+       - `ForeignKey(childColumns: ['tenant_id', 'version_id'], parentColumns: ['tenant_id', 'id'], entity: AuthorityRecipeVersionEntity, onDelete: ForeignKeyAction.cascade)`
+       - `ForeignKey(childColumns: ['tenant_id', 'insumo_id'], parentColumns: ['tenant_id', 'id'], entity: AuthorityInsumoEntity, onDelete: ForeignKeyAction.restrict)`
+       - Optional nullable FK: `ForeignKey(childColumns: ['tenant_id', 'reference_version_id'], parentColumns: ['tenant_id', 'id'], entity: AuthorityRecipeVersionEntity, onDelete: ForeignKeyAction.restrict)`
+   - Unique Index:
+     - On `authority_recipe_version_components`: UNIQUE `(tenant_id, version_id, ordinal)` to guarantee deterministic, collision-free BOM explosion ordering.
+
+3. **Immutability and `INSERT OR REPLACE` Prevention**:
+   - Authority facts are immutable: once published and hydrated, they can never be modified or rewritten under the same identity.
+   - Because SQLite's `INSERT OR REPLACE` translates to a DELETE + INSERT that bypasses delete triggers when `recursive_triggers=0`, the DAO must explicitly use `OnConflictStrategy.abort` for all authority inserts.
+   - Add SQLite triggers on `authority_recipe_versions` and `authority_recipe_version_components`:
+     - `BEFORE UPDATE`: Always raises `RAISE(ABORT, 'Authority facts are immutable')`.
+     - `BEFORE DELETE`: Raises `RAISE(ABORT, 'Authority facts cannot be deleted')` (or restricted to deliberate purge procedures).
+   - Replay validation: If an incoming record with the same `(tenant_id, id)` is received during sync, hydration checks whether existing fields match identically. If identical, it is a no-op; if any field differs, it fails closed with an immutable conflict error.
+
+4. **Fresh-Create vs Migration DDL Parity**:
+   - `AppDatabase` Floor annotations define the exact tables, composite primary keys, and composite foreign keys.
+   - `migration49_50` creates identical DDL: `CREATE TABLE IF NOT EXISTS authority_insumos (...)`, `CREATE TABLE IF NOT EXISTS authority_recipe_versions (...)`, `CREATE TABLE IF NOT EXISTS authority_recipe_version_components (...)`, plus the matching unique indexes and update-prevention triggers.
+   - Any custom triggers are registered both in `migration49_50` and in the database initialization callback (`Callback.onCreate`), guaranteeing that fresh installations and upgraded databases have 100% identical constraints.
+
+5. **Operational Upgrade & Recovery**:
+   - Migration `49 -> 50` is strictly additive (creates new tables/indexes/triggers only). It does not alter existing `invoices`, `invoice_items`, `products`, or `inventory_movements` tables.
+   - Offline transactions and uncommitted local sales created under v49 remain fully intact and operational across the upgrade.
+   - If startup encounters a migration error (e.g., storage exhaustion), standard app initialization surfaces an explicit error dialog. Downgrading the APK to v49 after SQLite has stepped to v50 is handled via forward-fix, since v50 tables are harmlessly additive.
+
+6. **Deterministic Effective-at Version Selection**:
+   - When `SaleViewModel.processSale` or the authority use case resolves the published recipe for a `(tenant_id, product_id)` at `saleTime`:
+     ```sql
+     SELECT * FROM authority_recipe_versions
+     WHERE tenant_id = :tenantId
+       AND product_id = :productId
+       AND publication_state = 'PUBLISHED'
+       AND is_active = 1
+       AND effective_from <= :saleTime
+       AND (effective_until IS NULL OR effective_until > :saleTime)
+     ORDER BY effective_from DESC, version_number DESC
+     ```
+   - If exactly one row matches, its components are resolved by `(tenant_id, version_id) ORDER BY ordinal ASC`.
+   - If zero rows match, the line is classified as `PENDING_RECIPE` with reason `MISSING_PUBLISHED_RECIPE`.
+   - If multiple active rows have overlapping validity intervals that do not resolve deterministically, the query fails closed and flags an ambiguity integrity error rather than guessing.
+
+### D8. Remediation is authorized, tenant-isolated, and append-only
 
 `POST /inventory/remediations/sale-inventory` accepts only `{idempotencyKey, invoiceId, recipeVersionId, reason}`. Actor identity and role come exclusively from the authenticated JWT/request principal; an actor field in the body is rejected by validation. The endpoint requires RBAC permission `inventory.remediation.execute`, granted initially to owner and manager only, in addition to tenant guard/RLS.
 

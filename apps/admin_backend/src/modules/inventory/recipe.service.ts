@@ -372,6 +372,19 @@ export class RecipeService {
       );
     }
 
+    // A POS document ID becomes immutable authority once it is published or
+    // effective. Legacy/ambiguous state is rejected rather than guessed as a
+    // draft; only an explicitly unpublished, inactive draft may be edited.
+    if (
+      existing.publication_state !== RecipePublicationState.DRAFT ||
+      existing.published_at !== null ||
+      existing.is_active === true
+    ) {
+      throw new BadRequestException(
+        `Recipe version document ${input.dto.id} is published or effective and cannot be replaced`,
+      );
+    }
+
     existing.product_name = input.dto.productName;
     existing.version_number = input.dto.versionNumber;
     existing.yield_quantity = input.yieldQuantity;

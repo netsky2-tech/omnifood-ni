@@ -23,78 +23,33 @@ void main() {
   });
 
   group('SalesTransactionDao Integrity', () {
-    test('executeSaleTransaction should insert audit log inside transaction', () async {
-      final invoice = InvoiceEntity(
-        id: 'inv1',
-        number: '001',
-        createdAt: DateTime.now().millisecondsSinceEpoch,
-        userId: 'u1',
-        subtotal: 100,
-        totalTax: 15,
-        total: 115,
-        type: 'regular',
-      );
+    test(
+      'executeSaleTransaction should insert audit log inside transaction',
+      () async {
+        final invoice = InvoiceEntity(
+          id: 'inv1',
+          number: '001',
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+          userId: 'u1',
+          subtotal: 100,
+          totalTax: 15,
+          total: 115,
+          type: 'regular',
+        );
 
-      final auditLog = AuditLogEntity(
-        remoteRefUuid: '11111111-1111-4111-8111-111111111111',
-        userId: 'u-1',
-        action: 'SALE_CREATED',
-        timestamp: DateTime.now().toIso8601String(),
-        deviceId: 'device-1',
-        metadata: '{"invoice_id": "${invoice.id}"}',
-        sequenceNo: 1,
-        prevHash: 'none',
-        entryHash: 'hash',
-      );
+        final auditLog = AuditLogEntity(
+          remoteRefUuid: '11111111-1111-4111-8111-111111111111',
+          userId: 'u-1',
+          action: 'SALE_CREATED',
+          timestamp: DateTime.now().toIso8601String(),
+          deviceId: 'device-1',
+          metadata: '{"invoice_id": "${invoice.id}"}',
+          sequenceNo: 1,
+          prevHash: 'none',
+          entryHash: 'hash',
+        );
 
-      // This will fail to compile initially because auditLog parameter doesn't exist
-      await database.salesTransactionDao.executeSaleTransaction(
-        invoice,
-        [],
-        [],
-        [],
-        [],
-        auditLog,
-        false, // shouldFail
-      );
-
-      final savedInvoice = await database.invoiceDao.getInvoiceById('inv1');
-      final logs = await database.auditDao.findAllLogs();
-
-      expect(savedInvoice, isNotNull);
-      expect(logs, hasLength(1));
-      expect(logs.first.action, 'SALE_CREATED');
-      expect(logs.first.metadata, contains('inv1'));
-    });
-
-    test('executeSaleTransaction should rollback audit log if transaction fails', () async {
-      final invoice = InvoiceEntity(
-        id: 'inv1',
-        number: '001',
-        createdAt: DateTime.now().millisecondsSinceEpoch,
-        userId: 'u1',
-        subtotal: 100,
-        totalTax: 15,
-        total: 115,
-        type: 'regular',
-      );
-
-      final auditLog = AuditLogEntity(
-        remoteRefUuid: '22222222-2222-4222-8222-222222222222',
-        userId: 'u-1',
-        action: 'SALE_CREATED',
-        timestamp: DateTime.now().toIso8601String(),
-        deviceId: 'device-1',
-        metadata: '{"invoice_id": "${invoice.id}"}',
-        sequenceNo: 1,
-        prevHash: 'none',
-        entryHash: 'hash',
-      );
-
-      // Force failure by inserting duplicate invoice afterwards in the same transaction
-      // Wait, Floor transactions are atomic. If I throw inside the method, it should rollback.
-      
-      try {
+        // This will fail to compile initially because auditLog parameter doesn't exist
         await database.salesTransactionDao.executeSaleTransaction(
           invoice,
           [],
@@ -102,42 +57,140 @@ void main() {
           [],
           [],
           auditLog,
-          true, // shouldFail
+          false, // shouldFail
         );
-      } catch (_) {}
 
-      final logs = await database.auditDao.findAllLogs();
-      expect(logs, isEmpty);
-    });
+        final savedInvoice = await database.invoiceDao.getInvoiceById('inv1');
+        final logs = await database.auditDao.findAllLogs();
 
-    test('executeSaleTransaction should throw exception if credit note exceeds original total', () async {
-      final original = InvoiceEntity(
-        id: 'inv1',
-        number: '001',
-        createdAt: DateTime.now().millisecondsSinceEpoch,
-        userId: 'u1',
-        subtotal: 100,
-        totalTax: 0,
-        total: 100,
-        type: 'regular',
-      );
+        expect(savedInvoice, isNotNull);
+        expect(logs, hasLength(1));
+        expect(logs.first.action, 'SALE_CREATED');
+        expect(logs.first.metadata, contains('inv1'));
+      },
+    );
 
-      await database.invoiceDao.insertInvoice(original);
+    test(
+      'executeSaleTransaction should rollback audit log if transaction fails',
+      () async {
+        final invoice = InvoiceEntity(
+          id: 'inv1',
+          number: '001',
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+          userId: 'u1',
+          subtotal: 100,
+          totalTax: 15,
+          total: 115,
+          type: 'regular',
+        );
 
-      final creditNote = InvoiceEntity(
-        id: 'cn1',
-        number: 'CN001',
-        createdAt: DateTime.now().millisecondsSinceEpoch,
-        userId: 'u1',
-        subtotal: 110, // Exceeds original
-        totalTax: 0,
-        total: 110,
-        type: 'creditNote',
-        relatedInvoiceId: 'inv1',
-      );
+        final auditLog = AuditLogEntity(
+          remoteRefUuid: '22222222-2222-4222-8222-222222222222',
+          userId: 'u-1',
+          action: 'SALE_CREATED',
+          timestamp: DateTime.now().toIso8601String(),
+          deviceId: 'device-1',
+          metadata: '{"invoice_id": "${invoice.id}"}',
+          sequenceNo: 1,
+          prevHash: 'none',
+          entryHash: 'hash',
+        );
 
-      expect(
-        () => database.salesTransactionDao.executeSaleTransaction(
+        // Force failure by inserting duplicate invoice afterwards in the same transaction
+        // Wait, Floor transactions are atomic. If I throw inside the method, it should rollback.
+
+        try {
+          await database.salesTransactionDao.executeSaleTransaction(
+            invoice,
+            [],
+            [],
+            [],
+            [],
+            auditLog,
+            true, // shouldFail
+          );
+        } catch (_) {}
+
+        final logs = await database.auditDao.findAllLogs();
+        expect(logs, isEmpty);
+      },
+    );
+
+    test(
+      'executeSaleTransaction should throw exception if credit note exceeds original total',
+      () async {
+        final original = InvoiceEntity(
+          id: 'inv1',
+          number: '001',
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+          userId: 'u1',
+          subtotal: 100,
+          totalTax: 0,
+          total: 100,
+          type: 'regular',
+        );
+
+        await database.invoiceDao.insertInvoice(original);
+
+        final creditNote = InvoiceEntity(
+          id: 'cn1',
+          number: 'CN001',
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+          userId: 'u1',
+          subtotal: 110, // Exceeds original
+          totalTax: 0,
+          total: 110,
+          type: 'creditNote',
+          relatedInvoiceId: 'inv1',
+        );
+
+        expect(
+          () => database.salesTransactionDao.executeSaleTransaction(
+            creditNote,
+            [],
+            [],
+            [],
+            [],
+            null,
+            false,
+          ),
+          throwsA(isA<Exception>()),
+        );
+
+        final savedCN = await database.invoiceDao.getInvoiceById('cn1');
+        expect(savedCN, isNull);
+      },
+    );
+
+    test(
+      'executeSaleTransaction should allow credit note if within original total',
+      () async {
+        final original = InvoiceEntity(
+          id: 'inv1',
+          number: '001',
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+          userId: 'u1',
+          subtotal: 100,
+          totalTax: 0,
+          total: 100,
+          type: 'regular',
+        );
+
+        await database.invoiceDao.insertInvoice(original);
+
+        final creditNote = InvoiceEntity(
+          id: 'cn1',
+          number: 'CN001',
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+          userId: 'u1',
+          subtotal: 40,
+          totalTax: 0,
+          total: 40,
+          type: 'creditNote',
+          relatedInvoiceId: 'inv1',
+        );
+
+        await database.salesTransactionDao.executeSaleTransaction(
           creditNote,
           [],
           [],
@@ -145,53 +198,114 @@ void main() {
           [],
           null,
           false,
+        );
+
+        final savedCN = await database.invoiceDao.getInvoiceById('cn1');
+        expect(savedCN, isNotNull);
+      },
+    );
+  });
+
+  test(
+    'rejects duplicate frozen movement correlation without replacing prior evidence',
+    () async {
+      await database.insumoDao.insertInsumos([
+        InsumoEntity(
+          id: 'insumo-correlation',
+          name: 'Flour',
+          consumptionUom: 'g',
+          stock: 10,
+          averageCost: 1,
         ),
-        throwsA(isA<Exception>()),
-      );
-
-      final savedCN = await database.invoiceDao.getInvoiceById('cn1');
-      expect(savedCN, isNull);
-    });
-
-    test('executeSaleTransaction should allow credit note if within original total', () async {
-      final original = InvoiceEntity(
-        id: 'inv1',
-        number: '001',
+      ]);
+      InvoiceEntity sale(String id, String number) => InvoiceEntity(
+        id: id,
+        number: number,
         createdAt: DateTime.now().millisecondsSinceEpoch,
         userId: 'u1',
-        subtotal: 100,
+        subtotal: 1,
         totalTax: 0,
-        total: 100,
+        total: 1,
         type: 'regular',
       );
-
-      await database.invoiceDao.insertInvoice(original);
-
-      final creditNote = InvoiceEntity(
-        id: 'cn1',
-        number: 'CN001',
-        createdAt: DateTime.now().millisecondsSinceEpoch,
-        userId: 'u1',
-        subtotal: 40,
-        totalTax: 0,
-        total: 40,
-        type: 'creditNote',
-        relatedInvoiceId: 'inv1',
+      MovementEntity movement(String invoiceId) => MovementEntity(
+        id: 'same-sale-correlation',
+        insumoId: 'insumo-correlation',
+        type: 'sale',
+        quantity: -1,
+        previousStock: 10,
+        newStock: 9,
+        timestamp: DateTime.now().toIso8601String(),
+        sourceDocumentType: 'SALE',
+        sourceDocumentId: invoiceId,
       );
-
       await database.salesTransactionDao.executeSaleTransaction(
-        creditNote,
+        sale('sale-first', 'DGI-1'),
         [],
         [],
         [],
-        [],
+        [movement('sale-first')],
         null,
         false,
       );
+      await expectLater(
+        database.salesTransactionDao.executeSaleTransaction(
+          sale('sale-second', 'DGI-2'),
+          [],
+          [],
+          [],
+          [movement('sale-second')],
+          null,
+          false,
+        ),
+        throwsA(isA<Object>()),
+      );
+      expect(await database.invoiceDao.getInvoiceById('sale-second'), isNull);
+      expect(
+        (await database.movementDao.findAllMovements()).single.sourceDocumentId,
+        'sale-first',
+      );
+      expect(
+        (await database.insumoDao.findInsumoById('insumo-correlation'))!.stock,
+        9,
+      );
+    },
+  );
 
-      final savedCN = await database.invoiceDao.getInvoiceById('cn1');
-      expect(savedCN, isNotNull);
-    });
+  test('rolls back when a movement insumo is absent', () async {
+    final invoice = InvoiceEntity(
+      id: 'missing-insumo-sale',
+      number: '002',
+      createdAt: DateTime.now().millisecondsSinceEpoch,
+      userId: 'u1',
+      subtotal: 10,
+      totalTax: 0,
+      total: 10,
+      type: 'regular',
+    );
+    final movement = MovementEntity(
+      id: 'missing-movement',
+      insumoId: 'missing-insumo',
+      type: 'sale',
+      quantity: -1,
+      previousStock: 0,
+      newStock: -1,
+      timestamp: DateTime.now().toIso8601String(),
+    );
+    await expectLater(
+      database.salesTransactionDao.executeSaleTransaction(
+        invoice,
+        [],
+        [],
+        [],
+        [movement],
+        null,
+        false,
+      ),
+      throwsA(isA<StateError>()),
+    );
+    expect(await database.invoiceDao.getInvoiceById(invoice.id), isNull);
+    expect(await database.movementDao.findAllMovements(), isEmpty);
   });
 
   group('executeVoidTransaction atomicity', () {
@@ -215,20 +329,20 @@ void main() {
       required String insumoId,
       required double previousStock,
       required double newStock,
-}) =>
-        MovementEntity(
-          id: id,
-          insumoId: insumoId,
-          type: 'sale',
-          quantity: newStock - previousStock, // positive reversal
-          previousStock: previousStock,
-          newStock: newStock,
-          timestamp: DateTime.now().toIso8601String(),
-          reason: 'Anulacion Factura: 001',
-          userId: 'u1',
-        );
+    }) => MovementEntity(
+      id: id,
+      insumoId: insumoId,
+      type: 'sale',
+      quantity: newStock - previousStock, // positive reversal
+      previousStock: previousStock,
+      newStock: newStock,
+      timestamp: DateTime.now().toIso8601String(),
+      reason: 'Anulacion Factura: 001',
+      userId: 'u1',
+    );
 
-    AuditLogEntity buildAudit(String action, int seq, String uuid) => AuditLogEntity(
+    AuditLogEntity buildAudit(String action, int seq, String uuid) =>
+        AuditLogEntity(
           remoteRefUuid: uuid,
           userId: 'u1',
           action: action,
@@ -252,10 +366,19 @@ void main() {
             averageCost: 10,
           ),
         ]);
-        await database.invoiceDao.insertInvoice(buildInvoice(id: 'inv-void', canceled: false));
+        await database.invoiceDao.insertInvoice(
+          buildInvoice(id: 'inv-void', canceled: false),
+        );
 
         await database.salesTransactionDao.executeVoidTransaction(
-          [buildMovement(id: 'mov-1', insumoId: 'ins-1', previousStock: 8, newStock: 9)],
+          [
+            buildMovement(
+              id: 'mov-1',
+              insumoId: 'ins-1',
+              previousStock: 8,
+              newStock: 9,
+            ),
+          ],
           buildInvoice(id: 'inv-void', canceled: true),
           buildAudit('SALE_VOIDED', 1, '11111111-1111-4111-8111-111111111111'),
           false, // shouldFail
@@ -295,11 +418,23 @@ void main() {
             averageCost: 2,
           ),
         ]);
-        await database.invoiceDao.insertInvoice(buildInvoice(id: 'inv-void', canceled: false));
+        await database.invoiceDao.insertInvoice(
+          buildInvoice(id: 'inv-void', canceled: false),
+        );
 
         final movements = [
-          buildMovement(id: 'mov-1', insumoId: 'ins-1', previousStock: 8, newStock: 9),
-          buildMovement(id: 'mov-2', insumoId: 'ins-2', previousStock: 5, newStock: 6),
+          buildMovement(
+            id: 'mov-1',
+            insumoId: 'ins-1',
+            previousStock: 8,
+            newStock: 9,
+          ),
+          buildMovement(
+            id: 'mov-2',
+            insumoId: 'ins-2',
+            previousStock: 5,
+            newStock: 6,
+          ),
         ];
 
         // shouldFail = true throws AFTER all inner writes have run
@@ -313,14 +448,19 @@ void main() {
           database.salesTransactionDao.executeVoidTransaction(
             movements,
             buildInvoice(id: 'inv-void', canceled: true),
-            buildAudit('SALE_VOIDED', 1, '22222222-2222-4222-8222-222222222222'),
+            buildAudit(
+              'SALE_VOIDED',
+              1,
+              '22222222-2222-4222-8222-222222222222',
+            ),
             true, // shouldFail: force failure after every inner write
           ),
           throwsA(isA<Object>()),
         );
 
         // No partial reversal state committed.
-        final persistedMovements = await database.movementDao.findAllMovements();
+        final persistedMovements = await database.movementDao
+            .findAllMovements();
         expect(persistedMovements, isEmpty); // both movements rolled back
         final ins1 = await database.insumoDao.findInsumoById('ins-1');
         expect(ins1!.stock, 8); // stock NOT mutated by the rolled-back write
@@ -328,7 +468,10 @@ void main() {
         expect(ins2!.stock, 5); // stock NOT mutated by the rolled-back write
         // No partial cancellation committed: the invoice is still active.
         final invoice = await database.invoiceDao.getInvoiceById('inv-void');
-        expect(invoice!.isCanceled, isFalse); // DGI: never left canceled without reversal
+        expect(
+          invoice!.isCanceled,
+          isFalse,
+        ); // DGI: never left canceled without reversal
         // No partial audit committed.
         final logs = await database.auditDao.findAllLogs();
         expect(logs, isEmpty);

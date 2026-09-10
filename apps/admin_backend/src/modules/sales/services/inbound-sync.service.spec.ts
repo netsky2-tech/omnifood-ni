@@ -7,6 +7,7 @@ import { CatalogValue } from '../../catalog/entities/catalog-value.entity';
 import { Insumo } from '../../inventory/entities/insumo.entity';
 import { Recipe } from '../../inventory/entities/recipe.entity';
 import { RecipeVersion } from '../../inventory/entities/recipe-version.entity';
+import { RecipeDetail } from '../../inventory/entities/recipe-detail.entity';
 import { User, UserRole } from '../../identity/entities/user.entity';
 import { CatalogType } from '../../catalog/catalog-type';
 import { FiscalConfigVersionService } from '../../onboarding/services/fiscal-config-version.service';
@@ -39,6 +40,7 @@ describe('InboundSyncService', () => {
   let insumoQb: MockQueryBuilder<Insumo>;
   let recipeQb: MockQueryBuilder<Recipe>;
   let recipeVersionQb: MockQueryBuilder<RecipeVersion>;
+  let recipeDetailQb: MockQueryBuilder<RecipeDetail>;
   let userQb: MockQueryBuilder<User>;
 
   let mockProductRepo: { createQueryBuilder: jest.Mock };
@@ -46,6 +48,7 @@ describe('InboundSyncService', () => {
   let mockInsumoRepo: { createQueryBuilder: jest.Mock };
   let mockRecipeRepo: { createQueryBuilder: jest.Mock };
   let mockRecipeVersionRepo: { createQueryBuilder: jest.Mock };
+  let mockRecipeDetailRepo: { createQueryBuilder: jest.Mock };
   let mockUserRepo: { createQueryBuilder: jest.Mock };
 
   beforeEach(async () => {
@@ -54,6 +57,7 @@ describe('InboundSyncService', () => {
     insumoQb = createMockQueryBuilder<Insumo>([]);
     recipeQb = createMockQueryBuilder<Recipe>([]);
     recipeVersionQb = createMockQueryBuilder<RecipeVersion>([]);
+    recipeDetailQb = createMockQueryBuilder<RecipeDetail>([]);
     userQb = createMockQueryBuilder<User>([]);
 
     mockProductRepo = {
@@ -70,6 +74,9 @@ describe('InboundSyncService', () => {
     };
     mockRecipeVersionRepo = {
       createQueryBuilder: jest.fn().mockReturnValue(recipeVersionQb),
+    };
+    mockRecipeDetailRepo = {
+      createQueryBuilder: jest.fn().mockReturnValue(recipeDetailQb),
     };
     mockUserRepo = {
       createQueryBuilder: jest.fn().mockReturnValue(userQb),
@@ -122,6 +129,10 @@ describe('InboundSyncService', () => {
           useValue: mockRecipeVersionRepo,
         },
         {
+          provide: getRepositoryToken(RecipeDetail),
+          useValue: mockRecipeDetailRepo,
+        },
+        {
           provide: getRepositoryToken(User),
           useValue: mockUserRepo,
         },
@@ -153,7 +164,7 @@ describe('InboundSyncService', () => {
         is_active: true,
         is_perishable: true,
         warehouse_id: 'wh-1',
-            product_type: ProductType.SIMPLE,
+        product_type: ProductType.SIMPLE,
         tenant_id: 'tenant-abc',
         created_at: new Date('2026-08-01T00:00:00Z'),
         updated_at: new Date('2026-08-02T00:00:00Z'),
@@ -209,9 +220,9 @@ describe('InboundSyncService', () => {
       isActive: true,
       isPerishable: true,
       warehouseId: 'wh-1',
-          productType: ProductType.SIMPLE,
-          mappingVersionId: null,
-          insumoId: null,
+      productType: ProductType.SIMPLE,
+      mappingVersionId: null,
+      insumoId: null,
       tenantId: 'tenant-abc',
       createdAt: expect.any(Date) as Date,
       updatedAt: expect.any(Date) as Date,
@@ -285,7 +296,7 @@ describe('InboundSyncService', () => {
       { sinceDate: new Date(sinceIso) },
     );
     expect(recipeVersionQb.andWhere).toHaveBeenCalledWith(
-      'rv.created_at > :sinceDate',
+      '(rv.created_at > :sinceDate OR rv.published_at > :sinceDate OR rv.fecha_inicio_vigencia > :sinceDate)',
       { sinceDate: new Date(sinceIso) },
     );
     expect(userQb.andWhere).toHaveBeenCalledWith(
@@ -322,6 +333,319 @@ describe('InboundSyncService', () => {
     expect(response.deltas.insumos).toEqual([]);
     expect(response.deltas.recipes).toEqual([]);
     expect(response.deltas.recipeVersions).toEqual([]);
+  });
+
+  it('projects only tenant-owned published recipe-version component facts', async () => {
+    const version = {
+      id: 'version-1',
+      tenant_id: 'tenant-abc',
+      product_id: 'product-1',
+      version_number: 2,
+      is_active: true,
+      publication_state: 'PUBLISHED',
+      fecha_inicio_vigencia: new Date('2026-08-01T00:00:00Z'),
+      fecha_fin_vigencia: null,
+      yield_quantity: 4,
+      technical_shrink_pct: 2.5,
+      version_note: 'published batch',
+      published_at: new Date('2026-08-01T00:00:00Z'),
+      created_at: new Date('2026-08-01T00:00:00Z'),
+    } as unknown as RecipeVersion;
+    const component = {
+      id: 'component-1',
+      tenant_id: 'tenant-abc',
+      recipe_version_id: 'version-1',
+      insumo_id: 'insumo-1',
+      quantity: 1.25,
+      gross_quantity: 1.5,
+      technical_shrink_pct: 2.5,
+      ingredient_type: 'INSUMO',
+      component_uom: 'g',
+    } as unknown as RecipeDetail;
+    insumoQb.getMany.mockResolvedValue([
+      {
+        id: 'insumo-1',
+        tenant_id: 'tenant-abc',
+        name: 'Coffee',
+        purchaseUom: 'kg',
+        consumptionUom: 'g',
+        conversionFactor: 1000,
+        stock: 10,
+        averageCost: 4,
+        is_active: true,
+        is_perishable: false,
+        negativeStockPolicy: 'RESTRICT',
+        created_at: new Date('2026-08-01T00:00:00Z'),
+        updated_at: new Date('2026-08-01T00:00:00Z'),
+      } as unknown as Insumo,
+    ]);
+    recipeQb.getMany.mockResolvedValue([
+      {
+        id: 'legacy-recipe-1',
+        tenant_id: 'tenant-abc',
+        productId: 'product-1',
+        ingredientId: 'mutable-insumo',
+        ingredientType: 'INSUMO',
+        quantity: 99,
+        created_at: new Date('2026-08-01T00:00:00Z'),
+        updated_at: new Date('2026-08-01T00:00:00Z'),
+      } as unknown as Recipe,
+    ]);
+    recipeVersionQb.getMany.mockResolvedValue([version]);
+    recipeDetailQb.getMany.mockResolvedValue([component]);
+
+    const response = await service.getInboundDeltas('tenant-abc', {
+      types: 'insumos,recipes,recipe_versions',
+    });
+
+    expect(response.deltas.insumos[0].tenantId).toBe('tenant-abc');
+    expect(response.deltas.recipes[0]).toMatchObject({
+      tenantId: 'tenant-abc',
+      id: 'legacy-recipe-1',
+    });
+    expect(response.deltas.recipeVersions).toEqual([
+      expect.objectContaining({
+        id: 'version-1',
+        tenantId: 'tenant-abc',
+        productId: 'product-1',
+        publicationState: 'PUBLISHED',
+        effectiveAt: version.fecha_inicio_vigencia,
+        components: [
+          {
+            id: 'component-1',
+            tenantId: 'tenant-abc',
+            recipeVersionId: 'version-1',
+            componentOrdinal: 0,
+            insumoId: 'insumo-1',
+            quantityPerSaleUnit: 1.25,
+            grossQuantity: 1.5,
+            technicalShrinkPct: 2.5,
+            ingredientName: null,
+            ingredientType: 'INSUMO',
+            componentUom: 'g',
+            referenceVersionId: null,
+          },
+        ],
+      }),
+    ]);
+    expect(recipeDetailQb.where).toHaveBeenCalledWith(
+      'detail.recipe_version_id IN (:...versionIds)',
+      { versionIds: ['version-1'] },
+    );
+  });
+
+  it('projects the complete immutable version contract with direct version linkage', async () => {
+    const version = {
+      id: 'version-immutable-1',
+      tenant_id: 'tenant-abc',
+      product_id: 'product-1',
+      version_number: 7,
+      is_active: true,
+      publication_state: 'PUBLISHED',
+      fecha_inicio_vigencia: new Date('2026-08-01T00:00:00Z'),
+      fecha_fin_vigencia: null,
+      pos_document_id: 'recipe-document-immutable-1',
+      product_name: 'Frozen product name',
+      yield_quantity: 4,
+      technical_shrink_pct: 2.5,
+      version_note: 'published batch',
+      published_at: new Date('2026-08-01T00:00:00Z'),
+      pos_created_at: new Date('2026-07-31T00:00:00Z'),
+      origin: 'MANUAL',
+      suggestion_state: 'CONFIRMED',
+      created_at: new Date('2026-08-01T00:00:00Z'),
+    } as unknown as RecipeVersion;
+    recipeVersionQb.getMany.mockResolvedValue([version]);
+    recipeDetailQb.getMany.mockResolvedValue([
+      {
+        id: 'component-null-uom',
+        tenant_id: 'tenant-abc',
+        recipe_version_id: version.id,
+        insumo_id: 'insumo-1',
+        quantity: 1.25,
+        gross_quantity: 1.5,
+        technical_shrink_pct: 2.5,
+        ingredient_name: 'Frozen insumo name',
+        ingredient_type: 'INSUMO',
+        component_uom: null,
+        reference_version_id: null,
+      },
+    ] as RecipeDetail[]);
+    insumoQb.getMany.mockResolvedValue([
+      { id: 'insumo-1', tenant_id: 'tenant-abc' },
+    ] as Insumo[]);
+
+    const response = await service.getInboundDeltas('tenant-abc', {
+      types: 'recipe_versions',
+    });
+
+    expect(response.deltas.recipeVersions).toEqual([
+      expect.objectContaining({
+        id: 'version-immutable-1',
+        recipeVersionId: 'version-immutable-1',
+        recipeDocumentId: 'recipe-document-immutable-1',
+        productName: 'Frozen product name',
+        posCreatedAt: new Date('2026-07-31T00:00:00Z'),
+        origin: 'MANUAL',
+        suggestionState: 'CONFIRMED',
+        components: [
+          expect.objectContaining({
+            recipeVersionId: 'version-immutable-1',
+            ingredientName: 'Frozen insumo name',
+            componentUom: null,
+            referenceVersionId: null,
+          }),
+        ],
+      }),
+    ]);
+  });
+
+  it('uses immutable component identity order to assign stable ordinals', async () => {
+    recipeVersionQb.getMany.mockResolvedValue([
+      {
+        id: 'version-ordered',
+        tenant_id: 'tenant-abc',
+        product_id: 'product-1',
+      },
+    ] as RecipeVersion[]);
+    recipeDetailQb.getMany.mockResolvedValue([
+      {
+        id: 'component-z',
+        tenant_id: 'tenant-abc',
+        recipe_version_id: 'version-ordered',
+        insumo_id: 'insumo-1',
+      },
+      {
+        id: 'component-a',
+        tenant_id: 'tenant-abc',
+        recipe_version_id: 'version-ordered',
+        insumo_id: 'insumo-2',
+      },
+    ] as RecipeDetail[]);
+    insumoQb.getMany.mockResolvedValue([
+      { id: 'insumo-1', tenant_id: 'tenant-abc' },
+      { id: 'insumo-2', tenant_id: 'tenant-abc' },
+    ] as Insumo[]);
+
+    const response = await service.getInboundDeltas('tenant-abc', {
+      types: 'recipe_versions',
+    });
+
+    expect(response.deltas.recipeVersions[0].components).toMatchObject([
+      { id: 'component-a', componentOrdinal: 0 },
+      { id: 'component-z', componentOrdinal: 1 },
+    ]);
+  });
+
+  it('includes a version that became effective after the incremental cursor', async () => {
+    const since = '2026-08-10T00:00:00.000Z';
+    const version = {
+      id: 'version-became-effective',
+      tenant_id: 'tenant-abc',
+      product_id: 'product-1',
+      version_number: 2,
+      is_active: true,
+      publication_state: 'PUBLISHED',
+      fecha_inicio_vigencia: new Date('2026-08-11T00:00:00Z'),
+      fecha_fin_vigencia: null,
+      yield_quantity: 1,
+      technical_shrink_pct: 0,
+      published_at: new Date('2026-08-01T00:00:00Z'),
+      created_at: new Date('2026-08-01T00:00:00Z'),
+    } as unknown as RecipeVersion;
+    recipeVersionQb.getMany.mockResolvedValue([version]);
+
+    const response = await service.getInboundDeltas('tenant-abc', {
+      types: 'recipe_versions',
+      since,
+    });
+
+    expect(response.deltas.recipeVersions).toHaveLength(1);
+    expect(response.deltas.recipeVersions[0].id).toBe(
+      'version-became-effective',
+    );
+    expect(recipeVersionQb.andWhere).toHaveBeenCalledWith(
+      '(rv.created_at > :sinceDate OR rv.published_at > :sinceDate OR rv.fecha_inicio_vigencia > :sinceDate)',
+      { sinceDate: new Date(since) },
+    );
+  });
+
+  it('fails closed when a version component references a missing or foreign insumo', async () => {
+    recipeVersionQb.getMany.mockResolvedValue([
+      {
+        id: 'version-1',
+        tenant_id: 'tenant-abc',
+        product_id: 'product-1',
+      },
+    ] as RecipeVersion[]);
+    recipeDetailQb.getMany.mockResolvedValue([
+      {
+        id: 'missing-insumo-component',
+        tenant_id: 'tenant-abc',
+        recipe_version_id: 'version-1',
+        insumo_id: 'insumo-missing',
+      },
+    ] as RecipeDetail[]);
+
+    await expect(
+      service.getInboundDeltas('tenant-abc', { types: 'recipe_versions' }),
+    ).rejects.toThrow(BadRequestException);
+
+    recipeDetailQb.getMany.mockResolvedValue([
+      {
+        id: 'foreign-insumo-component',
+        tenant_id: 'tenant-abc',
+        recipe_version_id: 'version-1',
+        insumo_id: 'insumo-foreign',
+      },
+    ] as RecipeDetail[]);
+    insumoQb.getMany.mockResolvedValue([
+      {
+        id: 'insumo-foreign',
+        tenant_id: 'tenant-foreign',
+      },
+    ] as Insumo[]);
+
+    await expect(
+      service.getInboundDeltas('tenant-abc', { types: 'recipe_versions' }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('rejects ambiguous effective versions and foreign version components', async () => {
+    recipeVersionQb.getMany.mockResolvedValue([
+      { id: 'version-1', tenant_id: 'tenant-abc', product_id: 'product-1' },
+      { id: 'version-2', tenant_id: 'tenant-abc', product_id: 'product-1' },
+    ] as RecipeVersion[]);
+
+    await expect(
+      service.getInboundDeltas('tenant-abc', { types: 'recipe_versions' }),
+    ).rejects.toThrow(BadRequestException);
+
+    recipeVersionQb.getMany.mockResolvedValue([
+      { id: 'version-1', tenant_id: 'tenant-abc', product_id: 'product-1' },
+    ] as RecipeVersion[]);
+    recipeDetailQb.getMany.mockResolvedValue([
+      {
+        id: 'foreign-component',
+        tenant_id: 'tenant-foreign',
+        recipe_version_id: 'version-1',
+        insumo_id: 'insumo-foreign',
+      },
+    ] as RecipeDetail[]);
+
+    await expect(
+      service.getInboundDeltas('tenant-abc', { types: 'recipe_versions' }),
+    ).rejects.toThrow(BadRequestException);
+    // This deliberately returns the foreign row so the service must validate it;
+    // a tenant predicate here would hide a corrupt cross-tenant component link.
+    expect(recipeDetailQb.where).toHaveBeenCalledWith(
+      'detail.recipe_version_id IN (:...versionIds)',
+      { versionIds: ['version-1'] },
+    );
+    expect(recipeDetailQb.where).not.toHaveBeenCalledWith(
+      'detail.tenant_id = :tenantId',
+      { tenantId: 'tenant-abc' },
+    );
   });
 
   it('includes FiscalConfigSnapshot in outbound deltas when requested or default', async () => {

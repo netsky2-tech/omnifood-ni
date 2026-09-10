@@ -11,6 +11,54 @@ import {
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 
+export class InventorySnapshotBindingDto {
+  @IsNumber()
+  bindingOrdinal: number;
+
+  @IsString()
+  insumoId: string;
+
+  @IsString()
+  @IsOptional()
+  recipeComponentId?: string;
+
+  @IsNumber()
+  quantityPerSaleUnit: number;
+
+  @IsString()
+  saleCorrelationId: string;
+}
+
+export class InventorySnapshotDto {
+  [key: string]: any;
+
+  @IsString()
+  classification: string;
+
+  @IsString()
+  disposition: string;
+
+  @IsString()
+  @IsOptional()
+  reasonCode?: string | null;
+
+  @IsString()
+  catalogRevision: string;
+
+  @IsString()
+  @IsOptional()
+  mappingVersionId?: string | null;
+
+  @IsString()
+  @IsOptional()
+  recipeVersionId?: string | null;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => InventorySnapshotBindingDto)
+  bindings: InventorySnapshotBindingDto[];
+}
+
 export class CreateInvoiceItemDto {
   @IsString()
   id: string;
@@ -65,6 +113,15 @@ export class CreateInvoiceItemDto {
   @ValidateNested({ each: true })
   @Type(() => CreateModifierDto)
   modifiers?: CreateModifierDto[];
+
+  @IsString()
+  @IsOptional()
+  inventorySnapshotVersion?: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => InventorySnapshotDto)
+  inventorySnapshot?: InventorySnapshotDto;
 }
 
 export const REFUND_REASON_POLICY = {
@@ -294,4 +351,15 @@ export class SyncInvoiceDto {
   @ValidateNested({ each: true })
   @Type(() => CreatePaymentDto)
   payments: CreatePaymentDto[];
+
+  @IsString()
+  @IsOptional()
+  inventoryPolicyVersion?: string;
+
+  @IsString()
+  @IsOptional()
+  inventoryOutcome?: string;
+
+  @IsOptional()
+  inventoryOutcomeReason?: Record<string, any> | string;
 }

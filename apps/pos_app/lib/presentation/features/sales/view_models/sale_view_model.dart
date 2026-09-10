@@ -1,3 +1,4 @@
+import 'package:pos_app/domain/usecases/inventory/checkout_inventory_preparation_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../domain/models/config/tax_regime.dart';
@@ -1074,10 +1075,22 @@ class SaleViewModel extends ChangeNotifier {
             )
             .toList();
 
+    final effectiveTerminalId =
+        _terminalId.trim().isNotEmpty ? _terminalId.trim() : 'TERM-01';
+
     try {
-      await _salesRepository.saveSale(
-        invoice: invoice,
+      final prepService = CheckoutInventoryPreparationService(_database);
+      final prepResult = await prepService.prepare(
+        invoice: invoice.copyWith(terminalId: effectiveTerminalId),
         items: items,
+        offlineUserId: user.id,
+        tenantId: user.tenantId ?? '',
+        terminalId: effectiveTerminalId,
+      );
+
+      await _salesRepository.saveSale(
+        invoice: prepResult.invoice,
+        items: prepResult.items,
         payments: payments,
       );
 

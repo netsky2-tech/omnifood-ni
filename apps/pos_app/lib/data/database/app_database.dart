@@ -92,17 +92,22 @@ import 'package:pos_app/data/models/sales/restaurant_area_entity.dart';
 import 'package:pos_app/data/models/sales/restaurant_table_entity.dart';
 import 'package:pos_app/data/models/kitchen/kitchen_order_entity.dart';
 import 'package:pos_app/data/models/kitchen/kitchen_order_item_entity.dart';
+import 'package:pos_app/data/models/inventory/authority_projection_entities.dart';
+import 'package:pos_app/data/daos/inventory/authority_projection_dao.dart';
 
 part 'app_database.g.dart'; // generated code
 
 @Database(
-  version: 49,
+  version: 50,
   entities: [
     UserEntity,
     SecurityProfileEntity,
     AuditLogEntity,
     LocalConfigEntity,
     InsumoEntity,
+    AuthorityInsumoEntity,
+    AuthorityRecipeVersionEntity,
+    AuthorityRecipeVersionComponentEntity,
     ProductEntity,
     ProductVariantEntity,
     ProductModifierEntity,
@@ -195,4 +200,5 @@ abstract class AppDatabase extends FloorDatabase {
   FirstSuccessfulSaleClaimDao get firstSuccessfulSaleClaimDao;
   FirstCustomerSaleObservationDao get firstCustomerSaleObservationDao;
   ActivationOutboxDao get activationOutboxDao;
+  AuthorityProjectionDao get authorityProjectionDao;
 }

@@ -20,6 +20,7 @@ import { CatalogValue } from '../catalog/entities/catalog-value.entity';
 import { Insumo } from '../inventory/entities/insumo.entity';
 import { Recipe } from '../inventory/entities/recipe.entity';
 import { RecipeVersion } from '../inventory/entities/recipe-version.entity';
+import { RecipeDetail } from '../inventory/entities/recipe-detail.entity';
 import { SyncCreditNoteAuthGuard } from './guards/sync-credit-note-auth.guard';
 import { CashShiftSession } from './entities/cash-shift.entity';
 import { CashMovement } from './entities/cash-movement.entity';
@@ -30,6 +31,7 @@ import { CashShiftController } from './controllers/cash-shift.controller';
 import { SalesReportsService } from './services/sales-reports.service';
 import { FiscalReportsService } from './services/fiscal-reports.service';
 import { SalesExportService } from './services/sales-export.service';
+import { SaleInventoryOutcomeService } from './services/sale-inventory-outcome.service';
 import { IdentityModule } from '../identity/identity.module';
 import { OnboardingModule } from '../onboarding/onboarding.module';
 import { forwardRef } from '@nestjs/common';
@@ -53,6 +55,7 @@ import { forwardRef } from '@nestjs/common';
       Insumo,
       Recipe,
       RecipeVersion,
+      RecipeDetail,
       CashShiftSession,
       CashMovement,
       DatafonoEquipo,
@@ -68,6 +71,7 @@ import { forwardRef } from '@nestjs/common';
   ],
   providers: [
     InvoicesService,
+    SaleInventoryOutcomeService,
     InboundSyncService,
     CashShiftService,
     SalesReportsService,
@@ -77,6 +81,7 @@ import { forwardRef } from '@nestjs/common';
   ],
   exports: [
     InvoicesService,
+    SaleInventoryOutcomeService,
     InboundSyncService,
     CashShiftService,
     SalesReportsService,

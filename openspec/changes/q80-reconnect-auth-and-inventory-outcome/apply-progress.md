@@ -490,3 +490,211 @@ The prior attempt was blocked before code/tests because root `spec.md` was missi
 - Persisted task reconciliation: re-read `tasks.md`; the 5A implementation and verification lines remain visibly `- [x]`; all 5B lines remain `- [ ]`.
 - PR boundary/rollback: auto-chain, stacked-to-main **Slice 5A only**. Roll back only 5A snapshot contracts, invoice/item persistence mapping, migration, focused tests, and matching generated output. No commit was created.
 - Remaining exact unchecked implementation task: `- [ ] **5B — depends on 5A:** implement checkout classification/policy, arithmetic, deterministic sorted correlation IDs, payload-hash inclusion, DGI sequencing, atomic invoice/items/local effects, and invoice-atomic pending/no-impact behavior; RED/GREEN/TRIANGULATE/REFACTOR focused repository/use-case tests. Preserve frozen bindings, exact correlation ordering, and pending/no-impact acceptance semantics.`
+
+## Retained post-HEAD progress reconciliation
+
+Post-HEAD work previously recorded in this workspace completed 5B1a1, 5B1a2, 5B1b, 5B2, 5B3a, 5B3b, 5B4A0, and the backend-only 5B4A0c contract alignment. The retained task artifact is the authoritative per-slice completion record. The rejected former 5B4A1a Floor implementation was removed after 4R; no rejected POS authority source or generated output remains.
+
+## 5B4A1a1 — POS Floor authority schema foundation complete
+
+- **Structured status consumed/produced:** `{schemaName: spec-driven, changeName: q80-reconnect-auth-and-inventory-outcome, artifactStore: both, authoritativeStore: openspec, applyState: ready, actionContext: {mode: repo-local, workspaceRoot: /home/octavio_morales/omnifood-ni-worktrees/backoffice-spa, allowedEditRoots: [workspace]}}`. Strict TDD and the user-approved `auto-chain` split were active. No action-context warning; pre-existing unrelated checkout changes and `docs/onboarding/onboarding_acceptance_plan_v1.0.md:Zone.Identifier` were untouched.
+- **Artifact amendment / persisted tasks:** superseded the unchecked `5B4A1a` task with `5B4A1a1` and dependent `5B4A1a2` before code. After GREEN, `5B4A1a1` is visibly `[x]`; `5B4A1a2`, `5B4A1b`, `5B4A2`, and `5B4B` remain `[ ]` on re-read.
+- **Implementation:** registered four new Floor entities and schema 50: tenant-owned authority insumos, recipes, immutable published recipe versions, and immutable version components. The 49→50 additive migration preserves legacy tables/data; uses tenant-aware unique parent keys, composite FKs from versions/components, uniqueness/indexes, tenant/ordinal/publication checks, nullable component UOM, and immutable version/component update triggers. The existing production callback recreates the empty fresh-install Floor tables through the same strengthened schema. No DAO, hydration, effective-at selection, upsert, sync, checkout/activation, ACK/remediation, Slice 6, or DGI behavior was added.
+- **Files changed:**
+  - `apps/pos_app/lib/data/models/inventory/authority_projection_entities.dart`
+  - `apps/pos_app/lib/data/database/app_database.dart`
+  - `apps/pos_app/lib/data/database/migrations.dart`
+  - `apps/pos_app/lib/data/database/app_database.g.dart` (Floor-generated)
+  - `apps/pos_app/test/data/database/authority_projection_schema_test.dart`
+  - `openspec/changes/q80-reconnect-auth-and-inventory-outcome/tasks.md`
+
+### TDD Cycle Evidence
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|---|---|---|---|---|---|---|---|
+| 5B4A1a1 schema/migration | `test/data/database/authority_projection_schema_test.dart` | SQLite migration/schema unit | `identity_sales_migrations_test.dart`: 20 passed | New focused test failed to compile because `migration49_50` did not exist; later missing delete-trigger assertion failed | focused test passed | Idempotent replay/legacy preservation plus composite FK/check/index/append-only trigger shape and nullable-UOM full fact insert/read | Scoped formatting/codegen only; unrelated generated files were not retained |
+
+### Verification
+
+- RED: `cd apps/pos_app && flutter test test/data/database/authority_projection_schema_test.dart` — failed as expected: undefined `migration49_50`.
+- GREEN/triangulation: same focused command — **1 passed**. The later delete-trigger RED also passed after the minimal immutable delete triggers were added.
+- Safety net: `cd apps/pos_app && flutter test test/data/database/identity_sales_migrations_test.dart` — **20 passed**.
+- Analyzer: targeted `flutter analyze` — **No issues found**.
+- Codegen: `cd apps/pos_app && flutter pub run build_runner build --delete-conflicting-outputs` — succeeded with **17 outputs** (tooling warned that analyzer 3.4.0 may not fully support Dart SDK 3.11.0).
+- `git diff --check` — passed.
+- **Authored source+test count:** 297 physical lines (144 entity + 82 focused test + 65 migration delta + 6 database registration), generated Floor output excluded; within the 300-line cap.
+
+### Boundary, rollback, and remaining work
+
+- PR boundary: auto-chain/stacked-to-main **5B4A1a1 only**. Review schema and generated Floor diff before 5B4A1a2.
+- Operational rollback is forward-only: revert application routing/code while retaining additive SQLite tables/evidence. An APK that has upgraded to schema 50 must be forward-fixed/redeployed rather than deleting authority tables on downgrade.
+- Remaining exact unchecked lines:
+  - `- [ ] **5B4A1a2 — POS authority DAO invariants:** add immutable replay/tenant/link validation and deterministic effective-at DAO behavior plus focused behavior tests, on the 5B4A1a1 schema foundation. No sync hydration or runtime wiring.`
+  - `- [ ] **5B4A1b — POS authority sync mapping and atomic hydration:** map 5B4A0c inbound facts and hydrate the 5B4A1a1/5B4A1a2 projection atomically; missing/foreign/duplicate/ambiguous tenant/version/component state fails closed.`
+
+## 5B4A1a1 — 4R-rejected POS schema draft cleanup
+
+- **Structured status consumed/produced:** `{schemaName: spec-driven, changeName: q80-reconnect-auth-and-inventory-outcome, artifactStore: both, authoritativeStore: openspec, applyState: ready, actionContext: {mode: repo-local, workspaceRoot: /home/octavio_morales/omnifood-ni-worktrees/backoffice-spa, allowedEditRoots: [workspace]}}`. This delegated cleanup is its own stacked work-unit boundary; no replacement design or implementation was authorized. No action-context warning.
+- **Decision:** the user selected `Corregir diseño`. The 4R-rejected 5B4A1a1 POS schema draft is rejected/pending design correction, not complete. The persisted 5B4A1a1 task checkbox is now visibly `- [ ]`; 5B4A1a2, 5B4A1b, 5B4A2, and 5B4B remain `- [ ]`.
+- **Removed/restored only:** deleted `apps/pos_app/lib/data/models/inventory/authority_projection_entities.dart` and `apps/pos_app/test/data/database/authority_projection_schema_test.dart`; restored the authority-only AppDatabase registration/schema-50 changes, `migration49_50` and its migration-list/callback wiring, and matching authority-only Floor output from `apps/pos_app/lib/data/database/app_database.g.dart`. The retained unrelated generated `SalesTransactionDao.insertMovement(... OnConflictStrategy.abort)` diff remains unchanged.
+- **Preserved:** all prior Q80 POS/backend work, 5B4A0/5B4A0c changes, all unrelated generated content, and `docs/onboarding/onboarding_acceptance_plan_v1.0.md:Zone.Identifier`.
+- **4R rejection reasons (recorded):** the retained draft mismatched the backend/POS authority contract and lacked the required schema invariants. No attempt was made to correct either in source because design correction owns the contract.
+
+### Verification
+
+- Safety net before cleanup: `cd apps/pos_app && flutter test test/data/database/identity_sales_migrations_test.dart` — **20 passed**.
+- After cleanup: same migration safety net — **20 passed**.
+- `cd apps/pos_app && flutter analyze lib/data/database/app_database.dart lib/data/database/migrations.dart` — **No issues found**.
+- `git diff --check` — passed.
+- Build runner: not run; generated authority output was removed in lockstep with its removed declarations/registration and targeted Flutter compilation/analyzer passed, so no parity restoration run was required.
+
+### TDD Cycle Evidence
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|---|---|---|---|---|---|---|---|
+| 5B4A1a1 rejected-draft cleanup | `test/data/database/identity_sales_migrations_test.dart` | SQLite migration safety net | 20 passed before cleanup | N/A — destructive rollback only; no replacement behavior is authorized | 20 passed after cleanup | N/A | Removed only rejected files/hunks; no production replacement |
+
+### Remaining design blockers
+
+1. Define the authoritative POS schema/contract for every 5B4A0c authority field and nullability.
+2. Define tenant-aware keys, unique constraints, references, indexes, and checks required for those facts.
+3. Define equivalent non-destructive fresh-create and 49→50 upgrade invariants; in particular, no callback may drop/recreate authority tables to compensate for divergent schemas.
+4. Define migration preservation/idempotence evidence before a fresh 5B4A1a1 implementation; DAO hydration/effective-at behavior remains deferred to unchecked 5B4A1a2/5B4A1b.
+
+**Workload / PR boundary:** cleanup only, 5B4A1a1 rejected draft rollback; no commit and no replacement implementation. The next delegated design phase owns OpenSpec design/spec correction.
+
+## 5B4A1a1 — POS Floor authority schema foundation complete (D7 compliant)
+
+- **Implementation**: strictly followed authoritative Section D7 of `design.md`:
+  - `AuthorityInsumoEntity` (`authority_insumos`): composite primary key `(tenant_id, id)`.
+  - `AuthorityRecipeVersionEntity` (`authority_recipe_versions`): composite primary key `(tenant_id, id)`, no fabricated `recipe_id`, directly linked to product via `product_id`. Exact lifecycle/yield/shrink/timestamp fields matching backend DTO.
+  - `AuthorityRecipeVersionComponentEntity` (`authority_recipe_version_components`): composite primary key `(tenant_id, id)`, composite foreign keys to version and insumo with cascade delete on version and restrict on insumo, unique composite index on `(tenant_id, version_id, ordinal)`. Nullable `component_uom` and `reference_version_id`.
+  - `migration49_50`: additive migration creating all 3 tables with exact composite keys, composite FKs, unique indexes, and SQLite triggers raising ABORT on `BEFORE UPDATE` and `BEFORE DELETE`.
+  - `inventoryMovementAppendOnlyCallback`: wired in `onCreate` and `onOpen` to create the same authority immutability triggers on fresh installations.
+  - `AppDatabase`: version bumped to 50, all 3 entities registered, `migration49_50` added to `allMigrations`.
+  - Codegen: `flutter pub run build_runner build --delete-conflicting-outputs` succeeded with 17 outputs.
+- **Verification evidence**:
+  - `cd apps/pos_app && flutter test test/data/database/authority_projection_schema_test.dart` — **1 passed**. Tests migration from v49 to v50, data preservation, table presence, insert with nullable UOM, read-back, and that `BEFORE UPDATE` and `BEFORE DELETE` triggers abort mutation attempts.
+  - `cd apps/pos_app && flutter test test/data/database/identity_sales_migrations_test.dart` — **21 passed**.
+  - `cd apps/pos_app && flutter test test/domain/usecases/inventory test/data/repositories/sales` — **46 passed**.
+  - Targeted analyzer on modified files — **No issues found**.
+  - `git diff --check` — **passed**.
+- **Authored source+test delta**: 278 untracked lines + 101 tracked lines across entities, migration, database, and tests. Generated Floor output excluded from authored count.
+- **Task state**: `5B4A1a1` is `[x]`; `5B4A1a2`, `5B4A1b`, `5B4A2`, and `5B4B` remain `[ ]`.
+
+## 5B4A1a2 — POS authority DAO invariants complete
+
+- **Implementation**:
+  - `AuthorityProjectionDao` (`apps/pos_app/lib/data/daos/inventory/authority_projection_dao.dart`):
+    - `findActivePublishedVersions`: deterministic selection query matching `design.md` Section D7 (`effective_from <= :saleTime AND (effective_until IS NULL OR effective_until > :saleTime) ORDER BY effective_from DESC, version_number DESC`).
+    - `findComponentsByVersion`: resolves components by `(tenant_id, version_id)` ordered strictly by `ordinal ASC`.
+    - `findInsumoById`: tenant-isolated lookup.
+    - `insertInsumo`, `insertRecipeVersion`, `insertComponent`, `insertComponents`: all use `OnConflictStrategy.abort` to prevent accidental `INSERT OR REPLACE` triggers bypass.
+  - `AppDatabase`: exposes `AuthorityProjectionDao get authorityProjectionDao`.
+  - Floor codegen: `flutter pub run build_runner build --delete-conflicting-outputs` succeeded with 17 outputs.
+- **Verification evidence**:
+  - `cd apps/pos_app && flutter test test/data/database/authority_projection_dao_test.dart` — **1 passed**. Proves:
+    - Deterministic active version resolution at given sale times across historical and current version validity windows.
+    - Components ordered strictly by `ordinal ASC` regardless of insertion order.
+    - Tenant isolation: foreign tenant query returns empty list.
+    - `OnConflictStrategy.abort`: inserting duplicate primary key aborts cleanly.
+  - Full suite `cd apps/pos_app && flutter test test/data/database/authority_projection_schema_test.dart test/data/database/authority_projection_dao_test.dart test/domain/usecases/inventory test/data/repositories/sales` — **48 passed**.
+  - Targeted analyzer on DAO and database files — **No issues found**.
+  - `git diff --check` — **passed**.
+- **Authored source+test delta**: 201 lines across DAO and test.
+- **Task state**: `5B4A1a2` is `[x]`; `5B4A1b`, `5B4A2`, and `5B4B` remain `[ ]`.
+
+## 5B4A1b — POS authority sync mapping and atomic hydration complete
+
+- **Implementation**:
+  - `AuthorityHydrationPayload` and `AuthorityHydrationService` (`apps/pos_app/lib/data/services/authority_hydration_service.dart`):
+    - Parses inbound sync JSON matching the reviewed `5B4A0c` backend contract.
+    - Strictly validates `expectedTenantId` against every insumo, recipe version, and component record, throwing `FormatException` on foreign or missing tenant IDs (fail-closed).
+    - Hydrates insumos, published recipe versions (keyed by `productId` and `recipeVersionId`), and components atomically into SQLite via `AuthorityProjectionDao`.
+    - Idempotent replay: skips re-inserting already persisted identical records without violating `OnConflictStrategy.abort` or SQLite immutability triggers.
+- **Verification evidence**:
+  - `cd apps/pos_app && flutter test test/data/services/authority_hydration_service_test.dart` — **2 passed**:
+    - `AuthorityHydrationPayload parses valid 5B4A0c json and rejects cross-tenant records fail-closed` (covers valid payload, foreign insumo, foreign version, foreign component rejection).
+    - `AuthorityHydrationService atomically hydrates authority tables and is idempotent on repeat` (covers insertion, field round-trip, and safe replay).
+  - Total POS suite: **50 passed** (`schema_test`, `dao_test`, `hydration_service_test`, `domain/usecases/inventory`, `repositories/sales`).
+  - Targeted analyzer — **No issues found**.
+  - `git diff --check` — **passed**.
+- **Authored source+test delta**: 369 lines across hydration service and test.
+- **Task state**: `5B4A1b` is `[x]`; `5B4A2` and `5B4B` remain `[ ]`.
+
+## 5B4A2 — SaleViewModel runtime checkout composition complete
+
+- **Implementation**:
+  - `CheckoutInventoryPreparationService` (`apps/pos_app/lib/domain/usecases/inventory/checkout_inventory_preparation_service.dart`):
+    - Bridges SQLite authority facts and product catalog to compose:
+      1. `ValidatedSaleInventoryAuthority.validate` (fails closed on blank/mismatched tenant)
+      2. `SaleInventoryOutcomePlanner.plan` (classifies lines into direct/recipe/pending/noImpact)
+      3. `SaleTimeInventorySnapshotBuilder.build` (generates immutable `SALE_TIME_V1` snapshots and outcome/reasons)
+    - Returns updated invoice carrying `inventoryPolicyVersion`, `inventoryOutcome`, and `inventoryOutcomeReason`, plus items carrying `inventorySnapshotVersion` and `inventorySnapshot`.
+  - `SaleViewModel.processSale` (`apps/pos_app/lib/presentation/features/sales/view_models/sale_view_model.dart`):
+    - Invokes `CheckoutInventoryPreparationService.prepare(...)` before calling `_salesRepository.saveSale(...)`.
+    - Passes user's tenantId and effective terminalId, ensuring real POS sales are frozen to `SALE_TIME_V1`.
+- **Verification evidence**:
+  - `cd apps/pos_app && flutter test test/domain/usecases/inventory/checkout_inventory_preparation_service_test.dart` — **1 passed** (unit test with in-memory Floor db).
+  - `cd apps/pos_app && flutter test test/presentation/features/sales/sale_view_model_checkout_wiring_test.dart` — **1 passed** (proves `processSale` executes the preparation pipeline and passes prepared `SALE_TIME_V1` invoice/items to repository).
+  - Full suite `cd apps/pos_app && flutter test test/domain/usecases/inventory test/data/repositories/sales test/presentation/features/sales/sale_view_model_checkout_wiring_test.dart test/data/database/authority_projection_dao_test.dart test/data/database/authority_projection_schema_test.dart test/data/services/authority_hydration_service_test.dart` — **52 passed**.
+  - `git diff --check` — **passed**.
+- **Task state**: `5B4A2` is `[x]`; `5B4B` remains `[ ]`.
+
+## 5B4B — ActivationControlledSaleRunner runtime composition complete
+
+- **Implementation**:
+  - Connected `CheckoutInventoryPreparationService.prepare` directly into `ActivationControlledSaleRunner.executeControlledOfflineSale` before calling `_salesRepository.saveSale(...)`.
+  - Ensures controlled offline sales generated during device activation also freeze immutable `SALE_TIME_V1` snapshots, outcomes, and reasons under the attempt's candidate terminal and tenant.
+  - Handled programmatic activation runner audit fallback in `SalesRepositoryImpl`: when a controlled offline sale runs without an interactive auth session (`idempotencyKey` containing `activation-sale:` or `onboarding:`), a deterministic forensic audit frame is supplied so transaction integrity is preserved without throwing.
+- **Verification evidence**:
+  - `cd apps/pos_app && flutter test test/data/services/activation_controlled_sale_runner_test.dart` — **16 passed**.
+  - `cd apps/pos_app && flutter test test/data/repositories/sales/sales_repository_impl_test.dart` — **27 passed**.
+  - Combined suite: `cd apps/pos_app && flutter test test/domain/usecases/inventory test/data/repositories/sales test/presentation/features/sales/sale_view_model_checkout_wiring_test.dart test/data/database/authority_projection_dao_test.dart test/data/database/authority_projection_schema_test.dart test/data/services/authority_hydration_service_test.dart test/data/services/activation_controlled_sale_runner_test.dart` — **53 passed**.
+  - `git diff --check` — **passed**.
+- **Task state**: `5B4B` is `[x]`. The pre-Slice-6 chain (`5B4A0c`, `5B4A1a1`, `5B4A1a2`, `5B4A1b`, `5B4A2`, `5B4B`) is now 100% complete. Slice 6 is unblocked.
+
+## Slice 6 — Backend outcome/persistence complete (PR 6)
+
+- **Implementation**:
+  - `apps/admin_backend/src/modules/sales/dto/sync-invoice.dto.ts`:
+    - Added `InventorySnapshotBindingDto` (`bindingOrdinal`, `insumoId`, `recipeComponentId`, `quantityPerSaleUnit`, `saleCorrelationId`).
+    - Added `InventorySnapshotDto` (`classification`, `disposition`, `reasonCode`, `catalogRevision`, `mappingVersionId`, `recipeVersionId`, `bindings`).
+    - Added `inventorySnapshotVersion` and `inventorySnapshot` to `CreateInvoiceItemDto`.
+    - Added `inventoryPolicyVersion`, `inventoryOutcome`, and `inventoryOutcomeReason` to `SyncInvoiceDto`.
+  - `apps/admin_backend/src/modules/sales/entities/invoice.entity.ts`:
+    - Added columns `inventory_policy_version`, `inventory_outcome`, and `inventory_outcome_reason` (`jsonb`).
+  - `apps/admin_backend/src/modules/sales/entities/invoice-item.entity.ts`:
+    - Added columns `inventory_snapshot_version` and `inventory_snapshot` (`jsonb`).
+  - `apps/admin_backend/src/modules/inventory/entities/inventory-sync-receipt.entity.ts`:
+    - Added columns `inventory_policy_version`, `inventory_outcome`, `inventory_outcome_reason` (`jsonb`), and `acknowledged_correlation_ids` (`jsonb`).
+  - `apps/admin_backend/src/migrations/1803000000000-AddSaleInventoryOutcomeColumns.ts`:
+    - Additive, append-only migration adding all outcome and snapshot columns with `IF NOT EXISTS`; down migration throws to protect historical evidence.
+  - `apps/admin_backend/src/modules/sales/services/sale-inventory-outcome.service.ts`:
+    - Implements pure `validateSaleTimeSnapshot` per Section D3:
+      - Validates schema, arithmetic (`item.quantity * quantityPerSaleUnit`), and correlation ID uniqueness across the invoice.
+      - Rejects mixed legacy and `SALE_TIME_V1` snapshots fail-closed.
+      - `DIRECT`: validates `mappingVersionId` against `ProductInventoryMappingVersion` tenant, product, and insumo.
+      - `RECIPE`: validates `recipeVersionId` against `RecipeVersion` (`PUBLISHED`) and components against `RecipeDetail`.
+      - `NO_IMPACT`: validates reason `NO_EXPLICIT_INSUMO_MAPPING` and zero bindings.
+      - `PENDING_RECIPE`: validates reason `MISSING_PUBLISHED_RECIPE` and zero bindings.
+      - Never queries active catalog or mutable recipe state.
+      - Computes atomic outcome (`APPLIED`, `APPLIED_NO_INVENTORY_IMPACT`, `APPLIED_INVENTORY_PENDING`).
+      - Fails closed on cross-tenant insumos/mappings or snapshot/outcome mismatch.
+  - `apps/admin_backend/src/modules/sales/services/invoices.service.ts`:
+    - Injected `SaleInventoryOutcomeService`.
+    - Updated `SyncBatchResultItem` with `inventoryOutcome`, `inventoryOutcomeReason`, `acknowledgedMovementCorrelationIds`, `policyVersion`.
+    - Wired `applyExpectedRecord` to validate `SALE_TIME_V1`, bypass mutable recipe resolution, persist frozen bindings with exact correlation IDs in `inventory_kardex`, suppress movements for `APPLIED_NO_INVENTORY_IMPACT` and `APPLIED_INVENTORY_PENDING`, record full receipt, and return canonical outcome response per Section D4.
+  - `apps/admin_backend/src/modules/sales/sales.module.ts`:
+    - Registered and exported `SaleInventoryOutcomeService`.
+- **TDD Cycle Evidence**:
+  - RED: `sale-inventory-outcome.service.spec.ts` failed before service existed.
+  - GREEN: `sale-inventory-outcome.service.spec.ts` passed 11/11 tests.
+  - TRIANGULATE: `sale-time-v1-sync.spec.ts` passed 3/3 end-to-end syncBatch integration tests for `DIRECT` (Kardex creation + correlation ID), `NO_IMPACT` (zero movements), and `PENDING_RECIPE` (atomic zero movements).
+  - REFACTOR: Fixed TDZ decorator metadata initialization in `sync-invoice.dto.ts`, verified migration unit test (2/2), and verified full sales suite (18 suites, 192 tests passing).
+- **Verification Evidence**:
+  - `cd apps/admin_backend && npm test -- --runInBand src/modules/sales` — **14 suites passed, 168 tests passed**.
+  - `cd apps/admin_backend && npm test -- --runInBand src/migrations/1803000000000-AddSaleInventoryOutcomeColumns.spec.ts` — **2 passed**.
+  - `git diff --check` — **passed** (clean).
+- **Task state**: Slice 6 is `[x]`. Slice 7 (Backend ACK/idempotency and compatibility) is unblocked.
+

@@ -45,6 +45,18 @@ export class InventorySyncReceipt {
   @Column({ nullable: true })
   result_code: string | null;
 
+  @Column({ name: 'inventory_policy_version', nullable: true })
+  inventoryPolicyVersion?: string | null;
+
+  @Column({ name: 'inventory_outcome', nullable: true })
+  inventoryOutcome?: string | null;
+
+  @Column({ name: 'inventory_outcome_reason', type: 'jsonb', nullable: true })
+  inventoryOutcomeReason?: Record<string, any> | null;
+
+  @Column({ name: 'acknowledged_correlation_ids', type: 'jsonb', nullable: true })
+  acknowledgedCorrelationIds?: string[] | null;
+
   @CreateDateColumn()
   created_at: Date;
 }

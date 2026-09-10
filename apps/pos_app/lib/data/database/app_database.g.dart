@@ -164,13 +164,15 @@ class _$AppDatabase extends AppDatabase {
 
   ActivationOutboxDao? _activationOutboxDaoInstance;
 
+  AuthorityProjectionDao? _authorityProjectionDaoInstance;
+
   Future<sqflite.Database> open(
     String path,
     List<Migration> migrations, [
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 49,
+      version: 50,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -195,6 +197,12 @@ class _$AppDatabase extends AppDatabase {
             'CREATE TABLE IF NOT EXISTS `local_configs` (`key` TEXT NOT NULL, `value` TEXT NOT NULL, `description` TEXT, PRIMARY KEY (`key`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `insumos` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `consumption_uom` TEXT NOT NULL, `warehouse_id` TEXT, `is_perishable` INTEGER NOT NULL, `stock` REAL NOT NULL, `average_cost` REAL NOT NULL, `par_level` REAL, `stock_min` REAL, `stock_max` REAL, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `authority_insumos` (`tenant_id` TEXT NOT NULL, `id` TEXT NOT NULL, `name` TEXT NOT NULL, `uom` TEXT NOT NULL, PRIMARY KEY (`tenant_id`, `id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `authority_recipe_versions` (`tenant_id` TEXT NOT NULL, `id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `version_number` INTEGER NOT NULL, `is_active` INTEGER NOT NULL, `publication_state` TEXT NOT NULL, `effective_from` TEXT NOT NULL, `effective_until` TEXT, `yield_quantity` REAL NOT NULL, `technical_shrink_pct` REAL NOT NULL, `published_at` TEXT, `created_at` TEXT NOT NULL, `updated_at` TEXT NOT NULL, PRIMARY KEY (`tenant_id`, `id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `authority_recipe_version_components` (`tenant_id` TEXT NOT NULL, `id` TEXT NOT NULL, `version_id` TEXT NOT NULL, `ordinal` INTEGER NOT NULL, `insumo_id` TEXT NOT NULL, `gross_quantity` REAL NOT NULL, `technical_shrink_pct` REAL NOT NULL, `ingredient_type` TEXT NOT NULL, `component_name` TEXT NOT NULL, `component_uom` TEXT, `reference_version_id` TEXT, FOREIGN KEY (`tenant_id`, `version_id`) REFERENCES `authority_recipe_versions` (`tenant_id`, `id`) ON UPDATE NO ACTION ON DELETE CASCADE, FOREIGN KEY (`tenant_id`, `insumo_id`) REFERENCES `authority_insumos` (`tenant_id`, `id`) ON UPDATE NO ACTION ON DELETE RESTRICT, PRIMARY KEY (`tenant_id`, `id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `products` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `uom` TEXT NOT NULL, `stock` REAL NOT NULL, `average_cost` REAL NOT NULL, `sell_price` REAL NOT NULL, `is_active` INTEGER NOT NULL, `sku` TEXT, `barcode` TEXT, `category` TEXT, `is_prepared` INTEGER NOT NULL, `product_type` TEXT NOT NULL, `mapping_version_id` TEXT, `insumo_id` TEXT, `created_at` TEXT, `tenant_id` TEXT, PRIMARY KEY (`id`))');
         await database.execute(
@@ -283,6 +291,8 @@ class _$AppDatabase extends AppDatabase {
             'CREATE TABLE IF NOT EXISTS `activation_outbox_envelopes` (`id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `activation_attempt_id` TEXT NOT NULL, `event_type` TEXT NOT NULL, `idempotency_key` TEXT NOT NULL, `payload_json` TEXT NOT NULL, `payload_hash` TEXT NOT NULL, `sync_status` TEXT NOT NULL, `created_at` TEXT NOT NULL, `synced_at` TEXT, `last_error` TEXT, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE UNIQUE INDEX `index_audit_logs_tenant_id_device_id_user_id_sequence_no` ON `audit_logs` (`tenant_id`, `device_id`, `user_id`, `sequence_no`)');
+        await database.execute(
+            'CREATE UNIQUE INDEX `index_authority_recipe_version_components_tenant_id_version_id_ordinal` ON `authority_recipe_version_components` (`tenant_id`, `version_id`, `ordinal`)');
         await database.execute(
             'CREATE UNIQUE INDEX `idx_movement_sync_state_stream_sequence` ON `inventory_movement_sync_state` (`terminal_id`, `flow_type`, `local_sequence`)');
         await database.execute(
@@ -610,6 +620,12 @@ class _$AppDatabase extends AppDatabase {
   ActivationOutboxDao get activationOutboxDao {
     return _activationOutboxDaoInstance ??=
         _$ActivationOutboxDao(database, changeListener);
+  }
+
+  @override
+  AuthorityProjectionDao get authorityProjectionDao {
+    return _authorityProjectionDaoInstance ??=
+        _$AuthorityProjectionDao(database, changeListener);
   }
 }
 
@@ -4045,7 +4061,7 @@ class _$SalesTransactionDao extends SalesTransactionDao {
   @override
   Future<void> insertMovement(MovementEntity movement) async {
     await _movementEntityInsertionAdapter.insert(
-        movement, OnConflictStrategy.replace);
+        movement, OnConflictStrategy.abort);
   }
 
   @override
@@ -6529,5 +6545,136 @@ class _$ActivationOutboxDao extends ActivationOutboxDao {
             .persistOutboxBatch(envelopes);
       });
     }
+  }
+}
+
+class _$AuthorityProjectionDao extends AuthorityProjectionDao {
+  _$AuthorityProjectionDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _authorityInsumoEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'authority_insumos',
+            (AuthorityInsumoEntity item) => <String, Object?>{
+                  'tenant_id': item.tenantId,
+                  'id': item.id,
+                  'name': item.name,
+                  'uom': item.uom
+                }),
+        _authorityRecipeVersionEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'authority_recipe_versions',
+            (AuthorityRecipeVersionEntity item) => <String, Object?>{
+                  'tenant_id': item.tenantId,
+                  'id': item.id,
+                  'product_id': item.productId,
+                  'version_number': item.versionNumber,
+                  'is_active': item.isActive ? 1 : 0,
+                  'publication_state': item.publicationState,
+                  'effective_from': item.effectiveFrom,
+                  'effective_until': item.effectiveUntil,
+                  'yield_quantity': item.yieldQuantity,
+                  'technical_shrink_pct': item.technicalShrinkPct,
+                  'published_at': item.publishedAt,
+                  'created_at': item.createdAt,
+                  'updated_at': item.updatedAt
+                }),
+        _authorityRecipeVersionComponentEntityInsertionAdapter =
+            InsertionAdapter(
+                database,
+                'authority_recipe_version_components',
+                (AuthorityRecipeVersionComponentEntity item) =>
+                    <String, Object?>{
+                      'tenant_id': item.tenantId,
+                      'id': item.id,
+                      'version_id': item.versionId,
+                      'ordinal': item.ordinal,
+                      'insumo_id': item.insumoId,
+                      'gross_quantity': item.grossQuantity,
+                      'technical_shrink_pct': item.technicalShrinkPct,
+                      'ingredient_type': item.ingredientType,
+                      'component_name': item.componentName,
+                      'component_uom': item.componentUom,
+                      'reference_version_id': item.referenceVersionId
+                    });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<AuthorityInsumoEntity>
+      _authorityInsumoEntityInsertionAdapter;
+
+  final InsertionAdapter<AuthorityRecipeVersionEntity>
+      _authorityRecipeVersionEntityInsertionAdapter;
+
+  final InsertionAdapter<AuthorityRecipeVersionComponentEntity>
+      _authorityRecipeVersionComponentEntityInsertionAdapter;
+
+  @override
+  Future<List<AuthorityRecipeVersionEntity>> findActivePublishedVersions(
+    String tenantId,
+    String productId,
+    String saleTime,
+  ) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM authority_recipe_versions WHERE tenant_id = ?1 AND product_id = ?2 AND publication_state = \'PUBLISHED\' AND is_active = 1 AND effective_from <= ?3 AND (effective_until IS NULL OR effective_until > ?3) ORDER BY effective_from DESC, version_number DESC',
+        mapper: (Map<String, Object?> row) => AuthorityRecipeVersionEntity(tenantId: row['tenant_id'] as String, id: row['id'] as String, productId: row['product_id'] as String, versionNumber: row['version_number'] as int, isActive: (row['is_active'] as int) != 0, publicationState: row['publication_state'] as String, effectiveFrom: row['effective_from'] as String, effectiveUntil: row['effective_until'] as String?, yieldQuantity: row['yield_quantity'] as double, technicalShrinkPct: row['technical_shrink_pct'] as double, publishedAt: row['published_at'] as String?, createdAt: row['created_at'] as String, updatedAt: row['updated_at'] as String),
+        arguments: [tenantId, productId, saleTime]);
+  }
+
+  @override
+  Future<List<AuthorityRecipeVersionComponentEntity>> findComponentsByVersion(
+    String tenantId,
+    String versionId,
+  ) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM authority_recipe_version_components WHERE tenant_id = ?1 AND version_id = ?2 ORDER BY ordinal ASC',
+        mapper: (Map<String, Object?> row) => AuthorityRecipeVersionComponentEntity(tenantId: row['tenant_id'] as String, id: row['id'] as String, versionId: row['version_id'] as String, ordinal: row['ordinal'] as int, insumoId: row['insumo_id'] as String, grossQuantity: row['gross_quantity'] as double, technicalShrinkPct: row['technical_shrink_pct'] as double, ingredientType: row['ingredient_type'] as String, componentName: row['component_name'] as String, componentUom: row['component_uom'] as String?, referenceVersionId: row['reference_version_id'] as String?),
+        arguments: [tenantId, versionId]);
+  }
+
+  @override
+  Future<AuthorityInsumoEntity?> findInsumoById(
+    String tenantId,
+    String id,
+  ) async {
+    return _queryAdapter.query(
+        'SELECT * FROM authority_insumos WHERE tenant_id = ?1 AND id = ?2',
+        mapper: (Map<String, Object?> row) => AuthorityInsumoEntity(
+            tenantId: row['tenant_id'] as String,
+            id: row['id'] as String,
+            name: row['name'] as String,
+            uom: row['uom'] as String),
+        arguments: [tenantId, id]);
+  }
+
+  @override
+  Future<void> insertInsumo(AuthorityInsumoEntity insumo) async {
+    await _authorityInsumoEntityInsertionAdapter.insert(
+        insumo, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> insertRecipeVersion(AuthorityRecipeVersionEntity version) async {
+    await _authorityRecipeVersionEntityInsertionAdapter.insert(
+        version, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> insertComponent(
+      AuthorityRecipeVersionComponentEntity component) async {
+    await _authorityRecipeVersionComponentEntityInsertionAdapter.insert(
+        component, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> insertComponents(
+      List<AuthorityRecipeVersionComponentEntity> components) async {
+    await _authorityRecipeVersionComponentEntityInsertionAdapter.insertList(
+        components, OnConflictStrategy.abort);
   }
 }

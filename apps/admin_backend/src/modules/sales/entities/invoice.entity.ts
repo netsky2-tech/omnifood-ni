@@ -112,6 +112,15 @@ export class Invoice {
   })
   totalUsd: number;
 
+  @Column({ name: 'inventory_policy_version', nullable: true })
+  inventoryPolicyVersion?: string | null;
+
+  @Column({ name: 'inventory_outcome', nullable: true })
+  inventoryOutcome?: string | null;
+
+  @Column({ name: 'inventory_outcome_reason', type: 'jsonb', nullable: true })
+  inventoryOutcomeReason?: Record<string, any> | string | null;
+
   @UpdateDateColumn()
   updated_at: Date;
 }

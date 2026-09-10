@@ -13,7 +13,13 @@ import { Product } from '../../inventory/entities/product.entity';
 import { CatalogValue } from '../../catalog/entities/catalog-value.entity';
 import { Insumo } from '../../inventory/entities/insumo.entity';
 import { Recipe } from '../../inventory/entities/recipe.entity';
-import { RecipeVersion } from '../../inventory/entities/recipe-version.entity';
+import {
+  RecipeOrigin,
+  RecipePublicationState,
+  RecipeSuggestionState,
+  RecipeVersion,
+} from '../../inventory/entities/recipe-version.entity';
+import { RecipeDetail } from '../../inventory/entities/recipe-detail.entity';
 import { User } from '../../identity/entities/user.entity';
 import {
   InboundSyncQueryDto,
@@ -45,6 +51,8 @@ export class InboundSyncService {
     private readonly recipeRepository: Repository<Recipe>,
     @InjectRepository(RecipeVersion)
     private readonly recipeVersionRepository: Repository<RecipeVersion>,
+    @InjectRepository(RecipeDetail)
+    private readonly recipeDetailRepository: Repository<RecipeDetail>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     @Optional()
@@ -104,7 +112,7 @@ export class InboundSyncService {
       recipeVersions:
         requestedTypes.has('recipeversions') ||
         requestedTypes.has('recipe_versions')
-          ? await this.fetchRecipeVersionDeltas(tenantId, sinceDate)
+          ? await this.fetchRecipeVersionDeltas(tenantId, sinceDate, now)
           : [],
       users: requestedTypes.has('users')
         ? await this.fetchUserDeltas(tenantId, sinceDate)
@@ -202,12 +210,15 @@ export class InboundSyncService {
 
     if (sinceDate) {
       // Mapping supersession is a catalog change even when the product row is untouched.
-      qb.andWhere(`(product.updated_at > :sinceDate OR EXISTS (
+      qb.andWhere(
+        `(product.updated_at > :sinceDate OR EXISTS (
         SELECT 1 FROM product_inventory_mapping_versions mapping_cursor
         WHERE mapping_cursor.tenant_id = product.tenant_id
           AND mapping_cursor.product_id = product.id
           AND (mapping_cursor.created_at > :sinceDate OR mapping_cursor.effective_at > :sinceDate OR mapping_cursor.superseded_at > :sinceDate)
-      ))`, { sinceDate });
+      ))`,
+        { sinceDate },
+      );
     }
 
     const items = await qb.getMany();
@@ -221,10 +232,13 @@ export class InboundSyncService {
       } catch (_) {}
     }
     const mappings = this.mappingVersionRepository
-      ? await this.mappingVersionRepository.createQueryBuilder('m')
+      ? await this.mappingVersionRepository
+          .createQueryBuilder('m')
           .where('m.tenant_id = :tenantId', { tenantId })
           .andWhere('m.effective_at <= :now', { now })
-          .andWhere('(m.superseded_at IS NULL OR m.superseded_at > :now)', { now })
+          .andWhere('(m.superseded_at IS NULL OR m.superseded_at > :now)', {
+            now,
+          })
           .orderBy('m.effective_at', 'DESC')
           .getMany()
       : [];
@@ -302,6 +316,7 @@ export class InboundSyncService {
       isActive: i.is_active,
       isPerishable: i.is_perishable,
       negativeStockPolicy: i.negativeStockPolicy,
+      tenantId: i.tenant_id,
       createdAt: i.created_at,
       updatedAt: i.updated_at,
     }));
@@ -326,6 +341,7 @@ export class InboundSyncService {
       ingredientId: r.ingredientId,
       ingredientType: r.ingredientType,
       quantity: Number(r.quantity),
+      tenantId: r.tenant_id,
       createdAt: r.created_at,
       updatedAt: r.updated_at,
     }));
@@ -334,26 +350,127 @@ export class InboundSyncService {
   private async fetchRecipeVersionDeltas(
     tenantId: string,
     sinceDate: Date | null,
+    now: Date,
   ): Promise<InboundSyncRecipeVersionDto[]> {
     const qb = this.recipeVersionRepository
       .createQueryBuilder('rv')
-      .where('rv.tenant_id = :tenantId', { tenantId });
+      .where('rv.tenant_id = :tenantId', { tenantId })
+      .andWhere('rv.is_active = true')
+      .andWhere('rv.publication_state = :publicationState', {
+        publicationState: RecipePublicationState.PUBLISHED,
+      })
+      .andWhere('rv.fecha_inicio_vigencia <= :now', { now })
+      .andWhere(
+        '(rv.fecha_fin_vigencia IS NULL OR rv.fecha_fin_vigencia > :now)',
+        {
+          now,
+        },
+      );
 
     if (sinceDate) {
-      qb.andWhere('rv.created_at > :sinceDate', { sinceDate });
+      qb.andWhere(
+        '(rv.created_at > :sinceDate OR rv.published_at > :sinceDate OR rv.fecha_inicio_vigencia > :sinceDate)',
+        { sinceDate },
+      );
     }
 
     const items = await qb.getMany();
+    const productIds = new Set<string>();
+    for (const version of items) {
+      if (productIds.has(version.product_id)) {
+        throw new BadRequestException(
+          'Ambiguous effective recipe versions are not eligible for inbound sync',
+        );
+      }
+      productIds.add(version.product_id);
+    }
+
+    const versionIds = items.map((rv) => rv.id);
+    const versionIdSet = new Set(versionIds);
+    const components = versionIds.length
+      ? await this.recipeDetailRepository
+          .createQueryBuilder('detail')
+          .where('detail.recipe_version_id IN (:...versionIds)', {
+            versionIds,
+          })
+          .getMany()
+      : [];
+    const componentsByVersionId = new Map<string, RecipeDetail[]>();
+    for (const component of components) {
+      if (
+        component.tenant_id !== tenantId ||
+        !versionIdSet.has(component.recipe_version_id)
+      ) {
+        throw new BadRequestException(
+          'Foreign recipe version component is not eligible for inbound sync',
+        );
+      }
+      const matching =
+        componentsByVersionId.get(component.recipe_version_id) ?? [];
+      matching.push(component);
+      componentsByVersionId.set(component.recipe_version_id, matching);
+    }
+
+    const componentInsumoIds = [
+      ...new Set(components.map((component) => component.insumo_id)),
+    ];
+    if (componentInsumoIds.length) {
+      const componentInsumos = await this.insumoRepository
+        .createQueryBuilder('componentInsumo')
+        .where('componentInsumo.tenant_id = :tenantId', { tenantId })
+        .andWhere('componentInsumo.id IN (:...componentInsumoIds)', {
+          componentInsumoIds,
+        })
+        .getMany();
+      const eligibleInsumoIds = new Set(
+        componentInsumos
+          .filter((insumo) => insumo.tenant_id === tenantId)
+          .map((insumo) => insumo.id),
+      );
+      if (componentInsumoIds.some((id) => !eligibleInsumoIds.has(id))) {
+        throw new BadRequestException(
+          'Recipe version component insumo is not eligible for inbound sync',
+        );
+      }
+    }
+
     return items.map((rv) => ({
       id: rv.id,
+      // Components link to this immutable identity, never to a mutable Recipe row.
+      recipeVersionId: rv.id,
+      tenantId: rv.tenant_id,
       productId: rv.product_id,
+      recipeDocumentId: rv.pos_document_id ?? null,
+      productName: rv.product_name ?? null,
       versionNumber: rv.version_number,
       isActive: rv.is_active,
+      publicationState: RecipePublicationState.PUBLISHED,
+      effectiveAt: rv.fecha_inicio_vigencia,
+      effectiveUntil: rv.fecha_fin_vigencia ?? null,
       yieldQuantity: Number(rv.yield_quantity),
       technicalShrinkPct: Number(rv.technical_shrink_pct),
       versionNote: rv.version_note ?? null,
       publishedAt: rv.published_at ?? null,
+      posCreatedAt: rv.pos_created_at ?? null,
+      origin: rv.origin ?? RecipeOrigin.MANUAL,
+      suggestionState: rv.suggestion_state ?? RecipeSuggestionState.CONFIRMED,
       createdAt: rv.created_at,
+      components: (componentsByVersionId.get(rv.id) ?? [])
+        .sort((left, right) => left.id.localeCompare(right.id))
+        .map((detail, componentOrdinal) => ({
+          id: detail.id,
+          tenantId: detail.tenant_id,
+          recipeVersionId: detail.recipe_version_id,
+          componentOrdinal,
+          insumoId: detail.insumo_id,
+          quantityPerSaleUnit: Number(detail.quantity),
+          grossQuantity: Number(detail.gross_quantity),
+          technicalShrinkPct: Number(detail.technical_shrink_pct),
+          ingredientName: detail.ingredient_name ?? null,
+          ingredientType: detail.ingredient_type,
+          componentUom: detail.component_uom ?? null,
+          referenceVersionId: detail.reference_version_id ?? null,
+        })),
     }));
   }
 

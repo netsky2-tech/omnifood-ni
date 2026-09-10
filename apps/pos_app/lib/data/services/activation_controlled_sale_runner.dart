@@ -14,6 +14,7 @@ import '../models/activation/activation_outbox_envelope_entity.dart';
 import '../models/activation/first_successful_sale_claim_entity.dart';
 import '../models/sales/invoice_entity.dart';
 import 'activation_clock_manager.dart';
+import '../../domain/usecases/inventory/checkout_inventory_preparation_service.dart';
 
 class ControlledSaleParams {
   final String tenantId;
@@ -221,9 +222,18 @@ class ActivationControlledSaleRunner {
         createdAt: now,
       );
 
-      await _salesRepository.saveSale(
+      final prepService = CheckoutInventoryPreparationService(_database);
+      final prepResult = await prepService.prepare(
         invoice: invoice,
         items: [item],
+        offlineUserId: trimmedCashierId,
+        tenantId: trimmedTenantId,
+        terminalId: attempt.candidateTerminalId,
+      );
+
+      await _salesRepository.saveSale(
+        invoice: prepResult.invoice,
+        items: prepResult.items,
         payments: [payment],
       );
 

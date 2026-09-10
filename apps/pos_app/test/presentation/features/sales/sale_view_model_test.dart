@@ -163,6 +163,7 @@ void main() {
         name: 'Cashier',
         role: UserRole.cashier,
         isActive: true,
+        tenantId: 'tenant-test',
       ),
     );
     when(mockSessionDao.insertSession(any)).thenAnswer((_) async {});
@@ -204,6 +205,7 @@ void main() {
         name: 'Cashier',
         role: UserRole.cashier,
         isActive: true,
+        tenantId: 'tenant-test',
       ),
     );
     when(mockSessionDao.insertSession(any)).thenAnswer((_) async {});
@@ -251,6 +253,7 @@ void main() {
           name: 'Cashier',
           role: UserRole.cashier,
           isActive: true,
+          tenantId: 'tenant-test',
         ),
       );
       when(mockSessionDao.insertSession(any)).thenAnswer((_) async {});
@@ -292,6 +295,7 @@ void main() {
         name: 'Cashier',
         role: UserRole.cashier,
         isActive: true,
+        tenantId: 'tenant-test',
       ),
     );
 
@@ -369,6 +373,7 @@ void main() {
         name: 'Cashier',
         role: UserRole.cashier,
         isActive: true,
+        tenantId: 'tenant-test',
       ),
     );
 
@@ -453,6 +458,7 @@ void main() {
           name: 'Cashier',
           role: UserRole.cashier,
           isActive: true,
+          tenantId: 'tenant-test',
         ),
       );
 
@@ -477,6 +483,7 @@ void main() {
           name: 'Cashier',
           role: UserRole.cashier,
           isActive: true,
+          tenantId: 'tenant-test',
         ),
       );
 

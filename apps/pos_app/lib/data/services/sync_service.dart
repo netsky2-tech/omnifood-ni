@@ -32,13 +32,7 @@ const Map<String, String> syncRole = {
 
 typedef SyncRole = String;
 
-enum CloudSyncStatus {
-  idle,
-  syncing,
-  offline,
-  error,
-  success,
-}
+enum CloudSyncStatus { idle, syncing, offline, error, success }
 
 class InboundSyncResult {
   final int productsCount;
@@ -124,11 +118,12 @@ class SyncService {
     AppDatabase? database,
     NetworkConnectivityService? connectivityService,
     FiscalInboxHandler? fiscalInboxHandler,
-  })  : _role = role,
-        _database = database,
-        _connectivityService = connectivityService,
-        _fiscalInboxHandler = fiscalInboxHandler ??
-            (database != null ? FiscalInboxHandler(database) : null);
+  }) : _role = role,
+       _database = database,
+       _connectivityService = connectivityService,
+       _fiscalInboxHandler =
+           fiscalInboxHandler ??
+           (database != null ? FiscalInboxHandler(database) : null);
 
   void _updateStatus(CloudSyncStatus newStatus) {
     if (_status != newStatus) {
@@ -143,18 +138,18 @@ class SyncService {
     // Listen to network transitions for immediate auto-sync
     _connectivitySubscription?.cancel();
     if (_connectivityService != null) {
-      _connectivitySubscription =
-          _connectivityService!.onConnectivityChanged.listen((isOnline) {
-        if (isOnline) {
-          developer.log(
-            'Network recovered! Triggering automatic sync...',
-            name: 'SyncService',
-          );
-          triggerManualSync();
-        } else {
-          _updateStatus(CloudSyncStatus.offline);
-        }
-      });
+      _connectivitySubscription = _connectivityService!.onConnectivityChanged
+          .listen((isOnline) {
+            if (isOnline) {
+              developer.log(
+                'Network recovered! Triggering automatic sync...',
+                name: 'SyncService',
+              );
+              triggerManualSync();
+            } else {
+              _updateStatus(CloudSyncStatus.offline);
+            }
+          });
     }
 
     // Sync every 5 minutes
@@ -198,20 +193,19 @@ class SyncService {
     } catch (_) {}
 
     try {
-      final counts =
-          await _inventoryRepository.getUnsyncedCountSessionDocuments();
+      final counts = await _inventoryRepository
+          .getUnsyncedCountSessionDocuments();
       count += counts.length;
     } catch (_) {}
 
     try {
-      final recipes =
-          await _inventoryRepository.getUnsyncedRecipeVersionDocuments();
+      final recipes = await _inventoryRepository
+          .getUnsyncedRecipeVersionDocuments();
       count += recipes.length;
     } catch (_) {}
 
     try {
-      final orders =
-          await _inventoryRepository.getUnsyncedProductionOrders();
+      final orders = await _inventoryRepository.getUnsyncedProductionOrders();
       count += orders.length;
     } catch (_) {}
 
@@ -241,7 +235,10 @@ class SyncService {
     final List<String> domainErrors = [];
 
     try {
-      developer.log('Starting sync pass with fault isolation...', name: 'SyncService');
+      developer.log(
+        'Starting sync pass with fault isolation...',
+        name: 'SyncService',
+      );
 
       var auditOutcome = const AuditSyncOutcome.retryable(failedStreams: 1);
       var hasFailure = !await _runDomain('audit', () async {
@@ -252,7 +249,10 @@ class SyncService {
 
       // 1a. Sync recipe versions first so backend has recipe data
       // before sales validation runs (validateInvoiceRecipeVersions).
-      final recipeSuccess = await _runDomain('recipe', _syncRecipeVersionDocuments);
+      final recipeSuccess = await _runDomain(
+        'recipe',
+        _syncRecipeVersionDocuments,
+      );
       if (!recipeSuccess) {
         hasFailure = true;
         domainErrors.add('Recetas');
@@ -268,7 +268,10 @@ class SyncService {
 
       // 2. Sync inventory outbox deltas
       var productionLinkedMovementIds = const <String>{};
-      final purchaseSuccess = await _runDomain('purchase', _syncPurchaseDocuments);
+      final purchaseSuccess = await _runDomain(
+        'purchase',
+        _syncPurchaseDocuments,
+      );
       if (!purchaseSuccess) {
         hasFailure = true;
         domainErrors.add('Compras');
@@ -280,17 +283,26 @@ class SyncService {
         hasFailure = true;
         domainErrors.add('Producción');
       }
-      final countSuccess = await _runDomain('count', _syncCountSessionDocuments);
+      final countSuccess = await _runDomain(
+        'count',
+        _syncCountSessionDocuments,
+      );
       if (!countSuccess) {
         hasFailure = true;
         domainErrors.add('Conteos físicos');
       }
-      final alertLifeSuccess = await _runDomain('alert lifecycle', _syncAlertLifecycleDocuments);
+      final alertLifeSuccess = await _runDomain(
+        'alert lifecycle',
+        _syncAlertLifecycleDocuments,
+      );
       if (!alertLifeSuccess) {
         hasFailure = true;
         domainErrors.add('Alertas');
       }
-      final kardexSuccess = await _runDomain('kardex corrections', _syncKardexCorrections);
+      final kardexSuccess = await _runDomain(
+        'kardex corrections',
+        _syncKardexCorrections,
+      );
       if (!kardexSuccess) {
         hasFailure = true;
         domainErrors.add('Kardex');
@@ -305,14 +317,20 @@ class SyncService {
         hasFailure = true;
         domainErrors.add('Movimientos de stock');
       }
-      final alertInboxSuccess = await _runDomain('alert inbox', _refreshAlertInbox);
+      final alertInboxSuccess = await _runDomain(
+        'alert inbox',
+        _refreshAlertInbox,
+      );
       if (!alertInboxSuccess) {
         hasFailure = true;
         domainErrors.add('Bandeja de alertas');
       }
 
       // 3. Pull Master Catalog & Security Inbound Deltas
-      final inboundSuccess = await _runDomain('inbound deltas', _pullInboundDeltas);
+      final inboundSuccess = await _runDomain(
+        'inbound deltas',
+        _pullInboundDeltas,
+      );
       if (!inboundSuccess) {
         hasFailure = true;
         domainErrors.add('Catálogo');
@@ -401,15 +419,25 @@ class SyncService {
 
   Future<void> _syncSalesDocuments() async {
     try {
-      developer.log('Sales sync: fetching unsynced aggregates...', name: 'SyncService');
+      developer.log(
+        'Sales sync: fetching unsynced aggregates...',
+        name: 'SyncService',
+      );
       final aggregates = await _salesRepository.getUnsyncedAggregates();
-      developer.log('Sales sync: found ${aggregates.length} unsynced aggregates', name: 'SyncService');
+      developer.log(
+        'Sales sync: found ${aggregates.length} unsynced aggregates',
+        name: 'SyncService',
+      );
       if (aggregates.isEmpty) return;
 
       final records = aggregates.map(_buildSalesRecord).toList(growable: false)
         ..sort((a, b) {
-          final seqA = (a['sourceSequence'] is int) ? a['sourceSequence'] as int : 1;
-          final seqB = (b['sourceSequence'] is int) ? b['sourceSequence'] as int : 1;
+          final seqA = (a['sourceSequence'] is int)
+              ? a['sourceSequence'] as int
+              : 1;
+          final seqB = (b['sourceSequence'] is int)
+              ? b['sourceSequence'] as int
+              : 1;
           final bySequence = seqA.compareTo(seqB);
           if (bySequence != 0) return bySequence;
           final keyA = (a['idempotencyKey'] as String?) ?? '';
@@ -419,7 +447,10 @@ class SyncService {
       final sentRecords = records
           .take(_batchEnvelopeLimit)
           .toList(growable: false);
-      developer.log('Sales sync: posting ${sentRecords.length} records to /v1/sync/batch', name: 'SyncService');
+      developer.log(
+        'Sales sync: posting ${sentRecords.length} records to /v1/sync/batch',
+        name: 'SyncService',
+      );
       final response = await _dio.post(
         '/v1/sync/batch',
         data: {'records': sentRecords},
@@ -427,19 +458,25 @@ class SyncService {
           headers: {HttpHeaders.contentTypeHeader: 'application/json'},
         ),
       );
-      developer.log('Sales sync: response status=${response.statusCode}', name: 'SyncService');
+      developer.log(
+        'Sales sync: response status=${response.statusCode}',
+        name: 'SyncService',
+      );
       if (response.statusCode == 200 || response.statusCode == 201) {
         final acceptedInvoiceIds = _acceptedSalesInvoiceIds(
           sentRecords,
           response.data,
         );
         if (acceptedInvoiceIds.isEmpty) return;
-        await _salesRepository.markAsSynced(
-          acceptedInvoiceIds,
-        );
+        await _salesRepository.markAsSynced(acceptedInvoiceIds);
       }
     } catch (e, st) {
-      developer.log('Sales sync: EXCEPTION', name: 'SyncService', error: e, stackTrace: st);
+      developer.log(
+        'Sales sync: EXCEPTION',
+        name: 'SyncService',
+        error: e,
+        stackTrace: st,
+      );
       rethrow;
     }
   }
@@ -476,13 +513,19 @@ class SyncService {
   }
 
   Map<String, Object?> _buildSalesRecord(Map<String, dynamic> aggregate) {
-    final invoiceId = aggregate['id']?.toString() ?? '00000000-0000-0000-0000-000000000000';
+    final invoiceId =
+        aggregate['id']?.toString() ?? '00000000-0000-0000-0000-000000000000';
     final documentType = aggregate['documentType']?.toString() ?? 'SALE';
-    final terminalId = aggregate['terminalId']?.toString() ?? _auditRepository.deviceId;
-    final sourceSequence = (aggregate['sourceSequence'] is int && (aggregate['sourceSequence'] as int) > 0)
+    final terminalId =
+        aggregate['terminalId']?.toString() ?? _auditRepository.deviceId;
+    final sourceSequence =
+        (aggregate['sourceSequence'] is int &&
+            (aggregate['sourceSequence'] as int) > 0)
         ? aggregate['sourceSequence'] as int
         : 1;
-    final idempotencyKey = (aggregate['idempotencyKey'] is String && (aggregate['idempotencyKey'] as String).isNotEmpty)
+    final idempotencyKey =
+        (aggregate['idempotencyKey'] is String &&
+            (aggregate['idempotencyKey'] as String).isNotEmpty)
         ? aggregate['idempotencyKey'] as String
         : 'sale:$terminalId:$invoiceId';
 
@@ -502,9 +545,15 @@ class SyncService {
     Set<String> blockedMovementIds = const <String>{},
   }) async {
     try {
-      developer.log('Inventory outbox: fetching unsynced movements...', name: 'SyncService');
+      developer.log(
+        'Inventory outbox: fetching unsynced movements...',
+        name: 'SyncService',
+      );
       final allUnsynced = await _inventoryRepository.getUnsyncedMovements();
-      developer.log('Inventory outbox: found ${allUnsynced.length} total unsynced movements', name: 'SyncService');
+      developer.log(
+        'Inventory outbox: found ${allUnsynced.length} total unsynced movements',
+        name: 'SyncService',
+      );
       final unsynced = allUnsynced
           .where(
             (movement) =>
@@ -515,14 +564,20 @@ class SyncService {
                 !blockedMovementIds.contains(movement.id),
           )
           .toList(growable: false);
-      developer.log('Inventory outbox: ${unsynced.length} movements after filtering', name: 'SyncService');
+      developer.log(
+        'Inventory outbox: ${unsynced.length} movements after filtering',
+        name: 'SyncService',
+      );
       if (unsynced.isEmpty) return;
 
       final replayCandidates = _orderByReplaySemantics(unsynced);
       final candidatesForSend = replayCandidates
           .take(_batchEnvelopeLimit)
           .toList(growable: false);
-      developer.log('Inventory outbox: reserving metadata for ${candidatesForSend.length} candidates', name: 'SyncService');
+      developer.log(
+        'Inventory outbox: reserving metadata for ${candidatesForSend.length} candidates',
+        name: 'SyncService',
+      );
       final metadata = await _reserveMovementSyncMetadata(candidatesForSend);
       final metadataByMovementId = {
         for (final item in metadata) item.movementId: item,
@@ -531,13 +586,19 @@ class SyncService {
         candidatesForSend,
         metadataByMovementId,
       );
-      developer.log('Inventory outbox: posting ${orderedBatch.length} records', name: 'SyncService');
+      developer.log(
+        'Inventory outbox: posting ${orderedBatch.length} records',
+        name: 'SyncService',
+      );
 
       try {
         final response = _role == syncRole['EDGE_SERVER']
             ? await _postBatchEnvelope(orderedBatch, metadataByMovementId)
             : await _postStandaloneDeltas(orderedBatch, metadataByMovementId);
-        developer.log('Inventory outbox: response status=${response.statusCode}', name: 'SyncService');
+        developer.log(
+          'Inventory outbox: response status=${response.statusCode}',
+          name: 'SyncService',
+        );
         if (response.statusCode == 200 || response.statusCode == 201) {
           developer.log(
             'Synced ${orderedBatch.length} inventory deltas to cloud',
@@ -550,7 +611,11 @@ class SyncService {
           );
         }
       } on DioException catch (e) {
-        developer.log('Inventory outbox: DioException: ${e.type} - ${e.message}', name: 'SyncService', error: e);
+        developer.log(
+          'Inventory outbox: DioException: ${e.type} - ${e.message}',
+          name: 'SyncService',
+          error: e,
+        );
         await _markMovementsAsFailed(orderedBatch, error: e.message);
         rethrow;
       } catch (e, stackTrace) {
@@ -564,7 +629,12 @@ class SyncService {
         rethrow;
       }
     } catch (e, st) {
-      developer.log('Inventory outbox: TOP-LEVEL EXCEPTION', name: 'SyncService', error: e, stackTrace: st);
+      developer.log(
+        'Inventory outbox: TOP-LEVEL EXCEPTION',
+        name: 'SyncService',
+        error: e,
+        stackTrace: st,
+      );
       rethrow;
     }
   }
@@ -796,8 +866,8 @@ class SyncService {
       final alertsPayload = payload is Map<String, dynamic>
           ? payload['alerts'] as List<dynamic>? ?? const <dynamic>[]
           : payload is List<dynamic>
-              ? payload
-              : const <dynamic>[];
+          ? payload
+          : const <dynamic>[];
 
       for (final row in alertsPayload) {
         if (row is! Map) continue;
@@ -807,11 +877,13 @@ class SyncService {
         await _inventoryRepository.saveForensicAlert(
           ForensicAlert(
             id: id,
-            alertType: (map['alertType'] ?? map['alert_type'] ?? 'SYSTEM_ALERT').toString(),
+            alertType: (map['alertType'] ?? map['alert_type'] ?? 'SYSTEM_ALERT')
+                .toString(),
             severity: (map['severity'] ?? 'MEDIUM').toString(),
             message: (map['message'] ?? '').toString(),
             createdAt: map['createdAt'] != null
-                ? DateTime.tryParse(map['createdAt'].toString()) ?? DateTime.now()
+                ? DateTime.tryParse(map['createdAt'].toString()) ??
+                      DateTime.now()
                 : DateTime.now(),
             status: (map['status'] ?? 'active').toString(),
             note: map['note']?.toString(),
@@ -850,12 +922,11 @@ class SyncService {
 
     if (purchase.fiscalAuthorizationCode != null &&
         purchase.fiscalAuthorizationCode!.trim().isNotEmpty) {
-      payload['fiscalAuthorizationCode'] =
-          purchase.fiscalAuthorizationCode!.trim();
+      payload['fiscalAuthorizationCode'] = purchase.fiscalAuthorizationCode!
+          .trim();
     }
 
-    if (purchase.fxRateMode != null &&
-        purchase.fxRateMode!.trim().isNotEmpty) {
+    if (purchase.fxRateMode != null && purchase.fxRateMode!.trim().isNotEmpty) {
       payload['fxRateMode'] = purchase.fxRateMode!.trim();
     }
 
@@ -1223,7 +1294,8 @@ class SyncService {
     dynamic responseData,
   ) async {
     final resultsByKey = _parseSyncResults(responseData);
-    final isImplicitSuccess = resultsByKey.isEmpty &&
+    final isImplicitSuccess =
+        resultsByKey.isEmpty &&
         responseData is Map &&
         (responseData['status'] == 'success' ||
             (responseData['processed'] != null &&
@@ -1336,22 +1408,24 @@ class SyncService {
 
     final payload = {
       'corrections': corrections
-          .map((c) => {
-                'id': c.id,
-                'insumoId': c.insumoId,
-                'originMovementId': c.originMovementId,
-                'triggerMovementId': c.triggerMovementId,
-                'previousUnitCostNio': c.previousUnitCostNio,
-                'recalculatedUnitCostNio': c.recalculatedUnitCostNio,
-                'deltaUnitCostNio': c.deltaUnitCostNio,
-                'totalDeltaCostNio': c.totalDeltaCostNio,
-                'affectedQuantity': c.affectedQuantity,
-                'lineageHash': c.lineageHash,
-                'authorizedByUserId': c.authorizedByUserId,
-                'authorizedByRole': c.authorizedByRole,
-                'authorizationMethod': c.authorizationMethod,
-                'createdAt': c.createdAt,
-              })
+          .map(
+            (c) => {
+              'id': c.id,
+              'insumoId': c.insumoId,
+              'originMovementId': c.originMovementId,
+              'triggerMovementId': c.triggerMovementId,
+              'previousUnitCostNio': c.previousUnitCostNio,
+              'recalculatedUnitCostNio': c.recalculatedUnitCostNio,
+              'deltaUnitCostNio': c.deltaUnitCostNio,
+              'totalDeltaCostNio': c.totalDeltaCostNio,
+              'affectedQuantity': c.affectedQuantity,
+              'lineageHash': c.lineageHash,
+              'authorizedByUserId': c.authorizedByUserId,
+              'authorizedByRole': c.authorizedByRole,
+              'authorizationMethod': c.authorizationMethod,
+              'createdAt': c.createdAt,
+            },
+          )
           .toList(growable: false),
     };
 
@@ -1404,8 +1478,7 @@ class SyncService {
         if (rawDeltas is! Map) return null;
 
         // 1. Products
-        final rawProducts =
-            rawDeltas['products'] as List<dynamic>? ?? const [];
+        final rawProducts = rawDeltas['products'] as List<dynamic>? ?? const [];
         final productEntities = <ProductEntity>[];
         for (final p in rawProducts) {
           final map = Map<String, dynamic>.from(p as Map);
@@ -1415,24 +1488,26 @@ class SyncService {
           final pType = (rawType == 'COMPOUND' || rawType == 'PREPARED')
               ? rawType!
               : 'SIMPLE';
-          productEntities.add(ProductEntity(
-            id: id,
-            name: map['name'] as String,
-            uom: map['uom'] as String? ?? 'UND',
-            stock: (map['stock'] as num?)?.toDouble() ?? 0.0,
-            averageCost: (map['averageCost'] as num?)?.toDouble() ?? 0.0,
-            sellPrice: (map['sellPrice'] as num?)?.toDouble() ?? 0.0,
-            isActive: map['isActive'] as bool? ?? true,
-            sku: map['sku'] as String? ?? existing?.sku,
-            barcode: map['barcode'] as String? ?? existing?.barcode,
-            category: map['category'] as String? ?? existing?.category,
-            isPrepared: pType == 'PREPARED' || pType == 'COMPOUND',
-            productType: pType,
-            mappingVersionId: map['mappingVersionId'] as String?,
-            insumoId: map['insumoId'] as String?,
-            createdAt: map['createdAt']?.toString() ?? existing?.createdAt,
-            tenantId: map['tenantId'] as String? ?? existing?.tenantId,
-          ));
+          productEntities.add(
+            ProductEntity(
+              id: id,
+              name: map['name'] as String,
+              uom: map['uom'] as String? ?? 'UND',
+              stock: (map['stock'] as num?)?.toDouble() ?? 0.0,
+              averageCost: (map['averageCost'] as num?)?.toDouble() ?? 0.0,
+              sellPrice: (map['sellPrice'] as num?)?.toDouble() ?? 0.0,
+              isActive: map['isActive'] as bool? ?? true,
+              sku: map['sku'] as String? ?? existing?.sku,
+              barcode: map['barcode'] as String? ?? existing?.barcode,
+              category: map['category'] as String? ?? existing?.category,
+              isPrepared: pType == 'PREPARED' || pType == 'COMPOUND',
+              productType: pType,
+              mappingVersionId: map['mappingVersionId'] as String?,
+              insumoId: map['insumoId'] as String?,
+              createdAt: map['createdAt']?.toString() ?? existing?.createdAt,
+              tenantId: map['tenantId'] as String? ?? existing?.tenantId,
+            ),
+          );
         }
 
         if (productEntities.isNotEmpty) {
@@ -1442,17 +1517,19 @@ class SyncService {
         // 2. Catalog Values
         final rawCatalogValues =
             rawDeltas['catalogValues'] as List<dynamic>? ?? const [];
-        final catalogEntities = rawCatalogValues.map((c) {
-          final map = Map<String, dynamic>.from(c as Map);
-          return CatalogValueEntity(
-            id: map['id'] as String,
-            catalogType: map['catalogType'] as String,
-            code: map['code'] as String,
-            name: map['name'] as String,
-            isActive: map['isActive'] as bool? ?? true,
-            sortOrder: (map['sortOrder'] as num?)?.toInt() ?? 0,
-          );
-        }).toList(growable: false);
+        final catalogEntities = rawCatalogValues
+            .map((c) {
+              final map = Map<String, dynamic>.from(c as Map);
+              return CatalogValueEntity(
+                id: map['id'] as String,
+                catalogType: map['catalogType'] as String,
+                code: map['code'] as String,
+                name: map['name'] as String,
+                isActive: map['isActive'] as bool? ?? true,
+                sortOrder: (map['sortOrder'] as num?)?.toInt() ?? 0,
+              );
+            })
+            .toList(growable: false);
 
         if (catalogEntities.isNotEmpty) {
           await _database!.catalogValueDao.insertCatalogValues(catalogEntities);
@@ -1460,18 +1537,22 @@ class SyncService {
 
         // 3. Insumos
         final rawInsumos = rawDeltas['insumos'] as List<dynamic>? ?? const [];
-        final insumoEntities = rawInsumos.map<InsumoEntity>((i) {
-          final map = Map<String, dynamic>.from(i as Map);
-          return InsumoEntity(
-            id: map['id'] as String,
-            name: map['name'] as String,
-            consumptionUom: (map['consumptionUom'] ?? map['purchaseUom']) as String? ?? 'UND',
-            stock: (map['stock'] as num?)?.toDouble() ?? 0.0,
-            averageCost: (map['averageCost'] as num?)?.toDouble() ?? 0.0,
-            isActive: map['isActive'] as bool? ?? true,
-            isPerishable: map['isPerishable'] as bool? ?? false,
-          );
-        }).toList(growable: false);
+        final insumoEntities = rawInsumos
+            .map<InsumoEntity>((i) {
+              final map = Map<String, dynamic>.from(i as Map);
+              return InsumoEntity(
+                id: map['id'] as String,
+                name: map['name'] as String,
+                consumptionUom:
+                    (map['consumptionUom'] ?? map['purchaseUom']) as String? ??
+                    'UND',
+                stock: (map['stock'] as num?)?.toDouble() ?? 0.0,
+                averageCost: (map['averageCost'] as num?)?.toDouble() ?? 0.0,
+                isActive: map['isActive'] as bool? ?? true,
+                isPerishable: map['isPerishable'] as bool? ?? false,
+              );
+            })
+            .toList(growable: false);
 
         if (insumoEntities.isNotEmpty) {
           await _database!.insumoDao.insertInsumos(insumoEntities);
@@ -1479,16 +1560,18 @@ class SyncService {
 
         // 4. Recipes
         final rawRecipes = rawDeltas['recipes'] as List<dynamic>? ?? const [];
-        final recipeEntities = rawRecipes.map((r) {
-          final map = Map<String, dynamic>.from(r as Map);
-          return RecipeEntity(
-            id: map['id'] as String,
-            productId: map['productId'] as String,
-            ingredientId: map['ingredientId'] as String,
-            ingredientType: map['ingredientType'] as String? ?? 'INSUMO',
-            quantity: (map['quantity'] as num?)?.toDouble() ?? 0.0,
-          );
-        }).toList(growable: false);
+        final recipeEntities = rawRecipes
+            .map((r) {
+              final map = Map<String, dynamic>.from(r as Map);
+              return RecipeEntity(
+                id: map['id'] as String,
+                productId: map['productId'] as String,
+                ingredientId: map['ingredientId'] as String,
+                ingredientType: map['ingredientType'] as String? ?? 'INSUMO',
+                quantity: (map['quantity'] as num?)?.toDouble() ?? 0.0,
+              );
+            })
+            .toList(growable: false);
 
         if (recipeEntities.isNotEmpty) {
           await _database!.recipeDao.insertRecipes(recipeEntities);
