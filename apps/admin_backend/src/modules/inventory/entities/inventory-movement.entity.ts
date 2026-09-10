@@ -75,6 +75,9 @@ export class InventoryMovement {
   })
   totalCostNio: number;
 
+  @Column({ name: 'sale_correlation_id', type: 'varchar', nullable: true })
+  saleCorrelationId?: string | null;
+
   idempotencyKey?: string;
 
   @Column({ nullable: true, name: 'source_device_id' })

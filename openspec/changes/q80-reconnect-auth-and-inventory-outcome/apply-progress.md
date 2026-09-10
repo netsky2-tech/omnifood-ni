@@ -698,3 +698,61 @@ Post-HEAD work previously recorded in this workspace completed 5B1a1, 5B1a2, 5B1
   - `git diff --check` — **passed** (clean).
 - **Task state**: Slice 6 is `[x]`. Slice 7 (Backend ACK/idempotency and compatibility) is unblocked.
 
+## Slice 7 — Restructuring and Slice 7A Foundation Complete
+
+### 1. Work-unit restructuring decision (Correction Round 1)
+- User decision: `Dividir 7A/7B`. Do not take a size exception.
+- Slice 7 was restructured into two sequential bounded work units:
+  - **Slice 7A (PR 7A; ≤400 lines):** Deployable Kardex sale-correlation schema foundation (entity + additive migration + DB/migration tests). Resolves **R3-001**.
+  - **Slice 7B (PR 7B; ≤400 lines; depends on 7A):** ACK/idempotency + LEGACY_SYNC_TIME_V1 classifier, deterministic component order, exact acceptedAt evidence, focused tests. Resolves **R3-002** and **R3-003**.
+- Complete green Slice 7 behavior draft was preserved losslessly outside the repository working tree prior to reset:
+  - `/tmp/slice7-backup/sale-ack-idempotency.spec.ts` (SHA-256: `1927cc7912dc9371c81989151ce49f1b5fbd9654b408c11c8c23bd7da3ded201`)
+  - `/tmp/slice7-backup/slice7-all-tracked.patch` (SHA-256: `d65d0998ab9019a720ad64441f53fe0e9ff01b5d134ee990907efd6c2d9df94e`)
+  - `/tmp/slice7-backup/slice7-backend-tracked.patch` (SHA-256: `4f63b4176a61a61fc259537834f5a79e6910a1cf12d7050669f8a81bbbf094fc`)
+- Repository working tree was restored to HEAD `22024df` before implementing ONLY Slice 7A under Strict TDD.
+
+### 2. Slice 7A — Kardex sale-correlation schema foundation
+- **Status consumed:** authoritative OpenSpec hybrid store, change `q80-reconnect-auth-and-inventory-outcome`, strict TDD active, allowed edit roots repo-local.
+- **Completed persisted tasks:** all four Slice 7A task lines marked `[x]` in `tasks.md`. Slice 7B remains `[ ]`.
+- **Files changed / created:**
+  - `apps/admin_backend/src/modules/inventory/entities/inventory-movement.entity.ts` (mapped `sale_correlation_id`)
+  - `apps/admin_backend/src/modules/inventory/entities/inventory-movement.entity.spec.ts` (entity test)
+  - `apps/admin_backend/src/migrations/1804000000000-AddSaleCorrelationIdToInventoryKardex.ts` (additive migration)
+  - `apps/admin_backend/src/migrations/1804000000000-AddSaleCorrelationIdToInventoryKardex.spec.ts` (migration SQL unit test)
+  - `apps/admin_backend/src/migrations/1804000000000-AddSaleCorrelationIdToInventoryKardex.db.spec.ts` (isolated PostgreSQL integration test)
+- **Behavior & invariants:**
+  - Additive column `sale_correlation_id varchar` on `inventory_kardex` with `ADD COLUMN IF NOT EXISTS`.
+  - Database-level partial unique index `uq_inventory_kardex_sale_correlation` on `(tenant_id, sale_correlation_id) WHERE sale_correlation_id IS NOT NULL`.
+  - Historical rows remain valid and null; multiple nulls do not collide.
+  - Rollback guard in down migration checks `IF EXISTS (SELECT 1 FROM inventory_kardex WHERE sale_correlation_id IS NOT NULL LIMIT 1)` and raises exception `'down migration forbidden: historical sale correlation evidence exists'`, protecting append-only Kardex evidence from silent data loss. Clean down migration drops column and index when no correlation evidence exists.
+  - Entity `InventoryMovement` aligns `saleCorrelationId` with column `sale_correlation_id`.
+
+### TDD Cycle Evidence — Slice 7A
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|---|---|---|---|---|---|---|---|
+| Migration SQL & entity property | `src/migrations/1804000000000-AddSaleCorrelationIdToInventoryKardex.spec.ts`, `src/modules/inventory/entities/inventory-movement.entity.spec.ts` | Unit | Existing migration and entity tests: 2 passed | Missing migration import (TS2307) and missing `saleCorrelationId` property (TS2339) failed | Implemented migration and entity property: 4 passed | SQL fragments for additive column, partial unique index, and down guard verified; entity property verified | Clean exports; typed query runner mocks |
+| DB partial unique index & rollback guard | `src/migrations/1804000000000-AddSaleCorrelationIdToInventoryKardex.db.spec.ts` | DB (Postgres) | 1775 average cost snapshot DB test: 1 passed | Missing migration import failed | Implemented DB test suite with isolated schemas: 2 passed | Verified column creation, index condition, duplicate rejection within tenant, cross-tenant acceptance, multiple null rows accepted, non-null down guard throw, and clean down migration | Clean isolated schema teardown with CASCADE drop |
+
+### Verification
+- RED:
+  - `npm test -- --runInBand src/migrations/1804000000000-AddSaleCorrelationIdToInventoryKardex.spec.ts src/modules/inventory/entities/inventory-movement.entity.spec.ts` -> Failed as expected (missing module and property).
+- GREEN:
+  - `npm test -- --runInBand src/migrations/1804000000000-AddSaleCorrelationIdToInventoryKardex.spec.ts src/modules/inventory/entities/inventory-movement.entity.spec.ts` -> **4 passed**.
+  - `DB_PASSWORD=postgres npm run test:db -- --runInBand src/migrations/1804000000000-AddSaleCorrelationIdToInventoryKardex.db.spec.ts` -> **2 passed**.
+- Regressions & suites:
+  - `npm test -- --runInBand src/modules/inventory/inventory-movement.service.spec.ts src/modules/inventory/inventory.service.spec.ts src/modules/inventory/entities/inventory-movement.entity.spec.ts src/migrations/1804000000000-AddSaleCorrelationIdToInventoryKardex.spec.ts src/migrations/1803000000000-AddSaleInventoryOutcomeColumns.spec.ts` -> **23 passed**.
+  - `npm test -- --runInBand src/modules/sales` -> **14 suites passed, 168 tests passed**.
+  - `npm run build` -> nest build passed cleanly.
+  - `git diff --check` -> clean (0 issues).
+- Authored source+test line count:
+  - `inventory-movement.entity.ts`: +3 lines
+  - `inventory-movement.entity.spec.ts`: +2 lines
+  - `1804000000000-AddSaleCorrelationIdToInventoryKardex.ts`: 29 lines
+  - `1804000000000-AddSaleCorrelationIdToInventoryKardex.spec.ts`: 46 lines
+  - `1804000000000-AddSaleCorrelationIdToInventoryKardex.db.spec.ts`: 205 lines
+  - Total authored additions+deletions = **285 lines**, well within the ≤400 line budget.
+- Rollback boundary:
+  - Revert `apps/admin_backend/src/migrations/1804000000000-AddSaleCorrelationIdToInventoryKardex*` and `apps/admin_backend/src/modules/inventory/entities/inventory-movement.entity*`.
+- Task state:
+  - Slice 7A is `[x]`. Slice 7B is `[ ]` (pending and unblocked).

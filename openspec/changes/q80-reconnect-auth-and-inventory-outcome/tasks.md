@@ -7,7 +7,7 @@
 | Estimated changed lines | 2,500–3,400 authored lines (generated Floor output excluded from authored count) |
 | 400-line budget risk | High |
 | Chained PRs recommended | Yes |
-| Suggested split | PR 1A → PR 1B → PR 2 → PR 3 → PR 4 → PR 5 → PR 6 → PR 7 → PR 8 → PR 9 → PR 10 → PR 11 → PR 12 |
+| Suggested split | PR 1A → PR 1B → PR 2 → PR 3 → PR 4 → PR 5 → PR 6 → PR 7A → PR 7B → PR 8 → PR 9 → PR 10 → PR 11 → PR 12 |
 | Delivery strategy | auto-chain |
 | Chain strategy | stacked-to-main |
 
@@ -16,7 +16,7 @@ Chained PRs recommended: Yes
 Chain strategy: stacked-to-main
 400-line budget risk: High
 
-The baseline is committed at `eb70b2d`; after baseline planning semantics, the total chain is now 13 implementation PR/work units: Slice 1A, Slice 1B, and later Slices 2–12. Slice 1A may use up to 700 authored source+test lines under the user-approved corrective budget; Slice 1B may use up to 600; later slices retain their stated budgets. Keep the existing uncommitted checkout fix untouched and stop/rebase on overlap; never absorb, overwrite, or assume it is committed.
+The baseline is committed at `eb70b2d`; after baseline planning semantics, the total chain is now 14 implementation PR/work units: Slice 1A, Slice 1B, Slices 2–6, Slice 7A, Slice 7B, and later Slices 8–12. Slice 1A may use up to 700 authored source+test lines under the user-approved corrective budget; Slice 1B may use up to 600; later slices retain their stated budgets. Keep the existing uncommitted checkout fix untouched and stop/rebase on overlap; never absorb, overwrite, or assume it is committed.
 
 ## Ordered implementation slices
 
@@ -83,10 +83,17 @@ The baseline is committed at `eb70b2d`; after baseline planning semantics, the t
 - [x] RED/GREEN/TRIANGULATE/REFACTOR: validate SALE_TIME_V1 without current recipe lookup, mapping/recipe/component tenant checks, stable outcomes/reasons, zero movements for pending/no-impact, SERIALIZABLE persistence.
 - [x] Verify `cd apps/admin_backend && npm test -- --runInBand src/modules/sales src/modules/inventory`; rollback service/entities/DTO changes.
 
-### 7. Backend ACK/idempotency and compatibility (PR 7; 200–280 lines)
-- [ ] Wire sales sync ACKs, Kardex correlation uniqueness, duplicate receipt replay, payload hash mismatch, and legacy `LEGACY_SYNC_TIME_V1` first-acceptance classification.
-- [ ] RED/GREEN/TRIANGULATE/REFACTOR: test same-key replay, different-hash `IDEMPOTENCY_MISMATCH`, mapping effective interval, legacy no-mapping outcomes, mixed snapshot rejection, old-client response compatibility, and unknown raw outcomes.
-- [ ] Verify `cd apps/admin_backend && npm test -- --runInBand src/modules/sales`; rollback compatibility/orchestration only.
+### 7A. Kardex sale-correlation schema foundation (PR 7A; ≤400 authored source+test lines)
+- [x] Add nullable `inventory_kardex.sale_correlation_id` via an additive TypeORM migration with tenant-scoped partial unique index `(tenant_id, sale_correlation_id)` WHERE sale_correlation_id IS NOT NULL, compatible with production `synchronize:false`.
+- [x] Align `InventoryMovement` entity mapping with the migrated `sale_correlation_id` column.
+- [x] RED/GREEN/TRIANGULATE/REFACTOR: add migration and DB tests proving column/index creation, duplicate correlation rejected within tenant, same correlation accepted across tenants, multiple null legacy rows accepted, and rollback guard behavior.
+- [x] Verify migration unit tests and isolated DB tests (`npm run test:db`); rollback only migration and entity mapping.
+
+### 7B. Backend ACK/idempotency and legacy classification (PR 7B; ≤400 authored source+test lines; depends on 7A)
+- [ ] Wire sales sync ACKs, duplicate receipt replay with stored outcome/reason/ACK enrichment, payload hash mismatch (`IDEMPOTENCY_MISMATCH`), and legacy `LEGACY_SYNC_TIME_V1` first-acceptance classifier.
+- [ ] Enforce deterministic component order `(insumoId, recipeComponentId-or-empty)` on legacy recipe expansion, freeze transaction-selected `acceptedAt` in snapshots/evidence, and reject mixed legacy/V1 snapshots fail-closed.
+- [ ] RED/GREEN/TRIANGULATE/REFACTOR: test same-key replay, different-hash mismatch, effective mapping interval, legacy no-mapping SIMPLE/PREPARED, deterministic component order, Kardex duplicate correlation fail-closed, and backwards compatible ACK serialization.
+- [ ] Verify `cd apps/admin_backend && npm test -- --runInBand src/modules/sales`; rollback ACK/classifier service logic only.
 
 ### 8. POS movement ownership and ACK (PR 8; 200–280 lines)
 - [ ] Add movement owner/state/sale linkage migration, migration classification/quarantine, positive generic-outbox allow-list, and exact ACK transaction in `SalesRepositoryImpl`/`SyncService`.

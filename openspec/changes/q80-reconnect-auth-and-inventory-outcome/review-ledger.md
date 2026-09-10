@@ -113,3 +113,32 @@ Persisted task state: 5B4A1a1 is unchecked/rejected pending design correction; 5
 |---|---|---|
 | Activation runner wiring | closed | `ActivationControlledSaleRunner.executeControlledOfflineSale` invokes `CheckoutInventoryPreparationService.prepare` before `saveSale`. Verified in `activation_controlled_sale_runner_test.dart` (16 passed). |
 | Pre-Slice-6 chain completion | closed | All pre-Slice-6 tasks (5B4A0c, 5B4A1a1, 5B4A1a2, 5B4A1b, 5B4A2, 5B4B) are complete with passing tests. Slice 6 backend outcome/persistence is ready to begin. |
+
+## Slice 7 — Reliability review
+
+| ID | Severity | Status | Resolution / evidence |
+|---|---|---|---|
+| R3-001 | BLOCKER | confirmed — correction required | No retained migration creates `sale_correlation_id`; production uses `synchronize: false`. The first correlated movement lookup/write would fail. Correction requires an additive nullable column plus tenant-scoped partial unique index and migration/DB coverage. |
+| R3-002 | CRITICAL | confirmed — correction required | D2 requires `(insumoId, recipeComponentId-or-empty)` ordering, but legacy classification sorts only by `insumo_id`. Correction requires the `RecipeDetail.id` tie-break and a reversed-input same-insumo determinism test. |
+| R3-003 | WARNING | confirmed — correction required | D3 requires freezing the exact transaction-selected `acceptedAt` in generated legacy snapshots and canonical receipt evidence; current DTO/entity/persistence omits it. Do not substitute receipt `created_at`. |
+
+Review scope: standard single `review-reliability` lens because the corrected Slice 7 authored delta is 372 lines. Independent refutation confirmed all three findings at high confidence. Correction requires a workload decision because migration and DB coverage cannot fit safely inside the remaining 28-line budget.
+
+### Slice 7 Work-Unit Restructuring Decision (Correction Round 1)
+
+User decision: `Dividir 7A/7B`. Do not take a size exception.
+
+- **Sequential bounded work units:**
+  - **Slice 7A (PR 7A; ≤400 lines):** Deployable Kardex sale-correlation schema foundation (entity + additive migration + DB/migration tests). Owns and resolves **R3-001**.
+  - **Slice 7B (PR 7B; ≤400 lines; depends on 7A):** ACK/idempotency + LEGACY_SYNC_TIME_V1 classifier, deterministic component order, exact acceptedAt evidence, focused tests. Owns and resolves **R3-002** and **R3-003**.
+- **Ownership mapping:**
+  - R3-001 (BLOCKER - Missing schema migration for Kardex sale correlation): Owned and resolved by Slice 7A.
+  - R3-002 (CRITICAL - Deterministic component ordering tie-break): Owned by Slice 7B.
+  - R3-003 (WARNING - Freezing transaction-selected acceptedAt): Owned by Slice 7B.
+- **Preserved evidence:**
+  - Complete Slice 7 green behavior implementation and test suite backed up losslessly outside worktree to `/tmp/slice7-backup/` (checksums recorded in apply-progress.md).
+  - Slice 7B remains pending implementation on top of Slice 7A.
+
+### Slice 7A scoped reliability re-review
+
+**PASS — zero findings and zero warnings.** R3-001 is resolved: the additive migration and entity are deployable with `synchronize: false`, PostgreSQL enforces tenant-scoped partial uniqueness while accepting historical nulls, and the guarded down migration protects non-null correlation evidence. Unit tests passed 4/4, isolated PostgreSQL tests passed 2/2, backend build passed, and the authored source+test delta is 285 lines.
