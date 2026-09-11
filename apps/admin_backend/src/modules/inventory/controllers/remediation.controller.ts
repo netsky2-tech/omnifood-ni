@@ -28,6 +28,14 @@ interface AuthenticatedUserRequest extends Request {
   };
 }
 
+interface ProhibitedActorFields {
+  actor?: unknown;
+  actor_user_id?: unknown;
+  actor_role?: unknown;
+  userId?: unknown;
+  role?: unknown;
+}
+
 @Controller('inventory/remediations')
 @UseGuards(AuthGuard, RolesGuard, PermissionsGuard)
 @UseInterceptors(TenantInterceptor)
@@ -44,12 +52,13 @@ export class RemediationController {
     @Body() dto: SaleInventoryRemediationDto,
     @Req() request: AuthenticatedUserRequest,
   ) {
+    const probe = dto as unknown as ProhibitedActorFields;
     if (
-      (dto as any).actor ||
-      (dto as any).actor_user_id ||
-      (dto as any).actor_role ||
-      (dto as any).userId ||
-      (dto as any).role
+      probe.actor ||
+      probe.actor_user_id ||
+      probe.actor_role ||
+      probe.userId ||
+      probe.role
     ) {
       throw new BadRequestException(
         'Actor fields in body are strictly rejected; identity is derived only from JWT principal',
@@ -60,7 +69,9 @@ export class RemediationController {
     const role = request.user?.role;
 
     if (!userId || !role) {
-      throw new BadRequestException('Authenticated actor principal is required');
+      throw new BadRequestException(
+        'Authenticated actor principal is required',
+      );
     }
 
     return this.remediationService.remediateSaleInventory(tenantId, dto, {

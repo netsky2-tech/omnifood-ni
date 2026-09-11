@@ -10,11 +10,9 @@ import {
 import { RecipeService } from './recipe.service';
 import { CreateRecipeVersionDto } from './dto/create-recipe-version.dto';
 import { RecipeVersionSnapshotResponseDto } from './dto/recipe-version-response.dto';
+import { RecipeVersion } from './entities/recipe-version.entity';
+import { RecipeDetail } from './entities/recipe-detail.entity';
 import { GetTenantId } from '../../core/decorators/tenant.decorator';
-import {
-  CurrentUser,
-  CurrentUserPayload,
-} from '../../core/decorators/current-user.decorator';
 import { TenantInterceptor } from '../../core/database/rls.interceptor';
 import { AuthGuard } from '../identity/guards/auth.guard';
 import { AuthoritativeCurrentUserGuard } from '../identity/guards/authoritative-current-user.guard';
@@ -37,8 +35,8 @@ export class RecipeController {
   }
 
   private mapSnapshotToResponse(snapshot: {
-    recipeVersion: any;
-    components: any[];
+    recipeVersion: RecipeVersion;
+    components: RecipeDetail[];
   }): RecipeVersionSnapshotResponseDto {
     return {
       recipeVersion: {
@@ -140,7 +138,6 @@ export class RecipeController {
     @Param('productId') productId: string,
     @Body() dto: CreateRecipeVersionDto,
     @GetTenantId() tenantId?: string,
-    @CurrentUser() user?: CurrentUserPayload,
   ): Promise<RecipeVersionSnapshotResponseDto> {
     const normalizedTenantId = this.requireTenant(tenantId);
 

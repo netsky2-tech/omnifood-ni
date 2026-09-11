@@ -13,8 +13,19 @@ import { InventorySyncReceipt } from '../entities/inventory-sync-receipt.entity'
 import { RecipeVersion } from '../entities/recipe-version.entity';
 import { RecipeDetail } from '../entities/recipe-detail.entity';
 import { Insumo } from '../entities/insumo.entity';
-import { InventoryMovement, MovementType } from '../entities/inventory-movement.entity';
+import {
+  InventoryMovement,
+  MovementType,
+} from '../entities/inventory-movement.entity';
 import { AuditLog } from '../../identity/entities/audit-log.entity';
+
+interface ProhibitedActorFields {
+  actor?: unknown;
+  actor_user_id?: unknown;
+  actor_role?: unknown;
+  userId?: unknown;
+  role?: unknown;
+}
 
 @Injectable()
 export class SaleInventoryRemediationService {
@@ -35,12 +46,13 @@ export class SaleInventoryRemediationService {
     dto: SaleInventoryRemediationDto,
     actor: { userId: string; role: string },
   ): Promise<InventoryRemediationReceipt> {
+    const probe = dto as unknown as ProhibitedActorFields;
     if (
-      (dto as any).actor ||
-      (dto as any).actor_user_id ||
-      (dto as any).actor_role ||
-      (dto as any).userId ||
-      (dto as any).role
+      probe.actor ||
+      probe.actor_user_id ||
+      probe.actor_role ||
+      probe.userId ||
+      probe.role
     ) {
       throw new BadRequestException(
         'Actor fields in body are strictly rejected; identity is derived only from JWT principal',
@@ -92,14 +104,18 @@ export class SaleInventoryRemediationService {
     }
 
     return this.dataSource.transaction('SERIALIZABLE', async (manager) => {
-      const concurrentByKey = await manager.findOne(InventoryRemediationReceipt, {
-        where: {
-          tenant_id: tenantId,
-          idempotency_key: dto.idempotencyKey,
+      const concurrentByKey = await manager.findOne(
+        InventoryRemediationReceipt,
+        {
+          where: {
+            tenant_id: tenantId,
+            idempotency_key: dto.idempotencyKey,
+          },
         },
-      });
+      );
       if (concurrentByKey) {
-        if (concurrentByKey.request_hash === requestHash) return concurrentByKey;
+        if (concurrentByKey.request_hash === requestHash)
+          return concurrentByKey;
         throw new ConflictException({ code: 'IDEMPOTENCY_MISMATCH' });
       }
 
