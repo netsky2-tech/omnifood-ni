@@ -793,3 +793,23 @@ Post-HEAD work previously recorded in this workspace completed 5B1a1, 5B1a2, 5B1
 - **Verification**: `flutter test test/data/database/movement_ownership_migration_test.dart test/data/repositories/sales test/data/services/sync_service_test.dart` passed (87 passed).
 - **Rollback boundary**: revert changes in `apps/pos_app/lib/data/` (migrations, DAOs, models, repository, service) and test files.
 
+## Slice 9 — Remediation Schema and Security Complete
+
+- **Completed tasks**: all Slice 9 tasks marked `[x]` in `tasks.md`.
+- **Migration & Security (`1806000000000-CreateInventoryRemediationReceipts.ts`)**:
+  - Creates table `inventory_remediation_receipts` with immutable audit, linkage, and outcome columns.
+  - Unique constraints: `(tenant_id, idempotency_key)` and `(tenant_id, source_invoice_id, command_type)`.
+  - Indexes: tenant created, source receipt, and recipe version.
+  - RLS: enabled and forced with tenant-scoped SELECT and INSERT policies (`tenant_id = current_setting('app.tenant_id', true)`). No UPDATE or DELETE policies created.
+  - Immutability trigger: `trg_guard_remediation_receipt_immutability` and statement trigger `trg_guard_remediation_receipt_immutability_stmt` unconditionally raise exception `'inventory_remediation_receipts is append-only'` on any UPDATE or DELETE attempt.
+  - Guarded down migration: checks if historical remediation receipts exist and raises exception before dropping.
+- **Entity Mapping (`inventory-remediation-receipt.entity.ts`)**:
+  - Managed entity registered in `inventory.module.ts`.
+- **TDD Cycle**:
+  - RED: `1806000000000-CreateInventoryRemediationReceipts.spec.ts` failed due to missing migration module.
+  - GREEN: Unit tests passed (4 passed); PostgreSQL isolated DB test `1806000000000-CreateInventoryRemediationReceipts.db.spec.ts` passed (RLS isolation, cross-tenant denial, trigger denial on UPDATE/DELETE, unique constraints, and down evidence guard verified).
+  - TRIANGULATE / REFACTOR: Zero TypeScript build errors (`npm run build`), `git diff --check` passed cleanly.
+- **Verification**: `npm test -- --runInBand src/migrations/1806*` passed; `npm run test:db -- --runInBand 1806*` passed.
+- **Rollback boundary**: revert `apps/admin_backend/src/migrations/1806*` and `inventory-remediation-receipt.entity.ts`.
+
+

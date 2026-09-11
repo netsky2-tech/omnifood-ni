@@ -23,6 +23,7 @@ import { SystemParametersConfig } from './entities/system-parameters-config.enti
 import { KardexRecalculateQueue } from './entities/kardex-recalculate-queue.entity';
 import { KardexCorrection } from './entities/kardex-correction.entity';
 import { ProductInventoryMappingVersion } from './entities/product-inventory-mapping-version.entity';
+import { InventoryRemediationReceipt } from './entities/inventory-remediation-receipt.entity';
 import { ProductInventoryMappingService } from './services/product-inventory-mapping.service';
 import { InventoryService } from './inventory.service';
 import { PurchaseService } from './purchase.service';
@@ -85,7 +86,8 @@ import { AuditModule } from '../audit/audit.module';
       SystemParametersConfig,
       KardexRecalculateQueue,
       KardexCorrection,
-          ProductInventoryMappingVersion,
+      ProductInventoryMappingVersion,
+      InventoryRemediationReceipt,
     ]),
   ],
   controllers: [

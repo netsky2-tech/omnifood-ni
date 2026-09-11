@@ -101,9 +101,9 @@ The baseline is committed at `eb70b2d`; after baseline planning semantics, the t
 - [x] Verify `cd apps/pos_app && flutter test test/data/repositories/sales test/data/services/sync_service_test.dart`; rollback ownership/ACK changes.
 
 ### 9. Remediation schema/security (PR 9; 220–300 lines)
-- [ ] Add `inventory_remediation_receipts` migration/entity, tenant composite links, RLS SELECT/INSERT policies, append-only trigger, Kardex correlation constraints, and guarded up/down migration logic.
-- [ ] RED/GREEN/TRIANGULATE/REFACTOR: run migration up/down guard tests, RLS/tenant cross-access denial, trigger denial for UPDATE/DELETE, additive-history/no-ID-inference checks, and rollback-evidence checks.
-- [ ] Verify `cd apps/admin_backend && npm run test:db -- --runInBand`; rollback only unused additive schema.
+- [x] Add `inventory_remediation_receipts` migration/entity, tenant composite links, RLS SELECT/INSERT policies, append-only trigger, Kardex correlation constraints, and guarded up/down migration logic.
+- [x] RED/GREEN/TRIANGULATE/REFACTOR: run migration up/down guard tests, RLS/tenant cross-access denial, trigger denial for UPDATE/DELETE, additive-history/no-ID-inference checks, and rollback-evidence checks.
+- [x] Verify `cd apps/admin_backend && npm run test:db -- --runInBand`; rollback only unused additive schema.
 
 ### 10. Remediation application/API (PR 10; 220–300 lines)
 - [ ] Implement DTO/controller/permission guard/service/module registration for `POST /inventory/remediations/sale-inventory`; actor comes only from JWT principal and owner/manager permission.
