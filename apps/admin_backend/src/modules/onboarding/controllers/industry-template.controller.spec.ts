@@ -1,4 +1,9 @@
 import { UnauthorizedException } from '@nestjs/common';
+import { GUARDS_METADATA } from '@nestjs/common/constants';
+import { AuthoritativeCurrentUserGuard } from '../../identity/guards/authoritative-current-user.guard';
+import { AuthGuard } from '../../identity/guards/auth.guard';
+import { PermissionsGuard } from '../../identity/guards/permissions.guard';
+import { RolesGuard } from '../../identity/guards/roles.guard';
 import { IndustryTemplateController } from './industry-template.controller';
 import { IndustryTemplateService } from '../services/industry-template.service';
 import { TemplatePreviewService } from '../services/template-preview.service';
@@ -31,6 +36,23 @@ describe('IndustryTemplateController (Unit)', () => {
       previewService,
       legacyScanService,
     );
+  });
+
+  it('adds authoritative authorization only to the catalog-mutating apply handler', () => {
+    const applyTemplate: unknown = Object.getOwnPropertyDescriptor(
+      IndustryTemplateController.prototype,
+      'applyTemplate',
+    )?.value;
+    if (typeof applyTemplate !== 'function') {
+      throw new Error('Missing applyTemplate handler');
+    }
+
+    expect(
+      Reflect.getMetadata(GUARDS_METADATA, IndustryTemplateController),
+    ).toEqual([AuthGuard, RolesGuard, PermissionsGuard]);
+    expect(Reflect.getMetadata(GUARDS_METADATA, applyTemplate)).toEqual([
+      AuthoritativeCurrentUserGuard,
+    ]);
   });
 
   describe('listTemplates', () => {
@@ -186,6 +208,7 @@ describe('IndustryTemplateController (Unit)', () => {
         'CAFETERIA',
         dto,
         ' tenant-1 ',
+        'user-1',
       );
 
       expect(result).toEqual(mockApplyResult);
@@ -193,6 +216,7 @@ describe('IndustryTemplateController (Unit)', () => {
         'tenant-1',
         'CAFETERIA',
         dto,
+        'user-1',
       );
     });
   });

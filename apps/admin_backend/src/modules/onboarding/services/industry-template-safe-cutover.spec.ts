@@ -1,6 +1,7 @@
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { IndustryTemplateService } from './industry-template.service';
 import { IndustryTemplate } from '../entities/industry-template.entity';
+import { TemplateApplication } from '../entities/template-application.entity';
 import { TemplateSeedLink } from '../entities/template-seed-link.entity';
 import {
   Insumo,
@@ -161,7 +162,7 @@ describe('IndustryTemplateService Safe Cutover (TDD / ONB1.3D-F)', () => {
     );
   });
 
-  it('creates active recipe versions with legacy Recipe compatibility rows', async () => {
+  it('creates persisted provenance and an inactive template recipe draft', async () => {
     const result = await service.applyTemplate('tenant-1', 'CAFETERIA', {
       idempotencyKey: 'idemp-1',
     });
@@ -173,10 +174,16 @@ describe('IndustryTemplateService Safe Cutover (TDD / ONB1.3D-F)', () => {
     const saveCalls = (mockManager.save as jest.Mock).mock.calls;
     const rvSaves = saveCalls.filter((c) => c[0] === RecipeVersion);
     expect(rvSaves).toHaveLength(1);
-    expect(rvSaves[0][1].is_active).toBe(true);
-
-    const legacyRecipeSaves = saveCalls.filter((c) => c[0] === Recipe);
-    expect(legacyRecipeSaves).toHaveLength(1);
+    expect(rvSaves[0][1]).toMatchObject({
+      is_active: false,
+      origin: 'INDUSTRY_TEMPLATE',
+      publication_state: 'DRAFT',
+      suggestion_state: 'SUGGESTED',
+    });
+    expect(saveCalls.filter((c) => c[0] === TemplateApplication)).toHaveLength(
+      2,
+    );
+    expect(saveCalls.filter((c) => c[0] === TemplateSeedLink)).toHaveLength(3);
   });
 
   it('ensures Insumos and Products have stock=0 and averageCost=0 (no fictitious stock/cost)', async () => {
@@ -212,15 +219,15 @@ describe('IndustryTemplateService Safe Cutover (TDD / ONB1.3D-F)', () => {
     });
   });
 
-  it('applies all template items when options are supplied', async () => {
+  it('honors selectedItemIds by excluding unselected products and recipes', async () => {
     const result = await service.applyTemplate('tenant-1', 'CAFETERIA', {
       idempotencyKey: 'idemp-4',
       selectedItemIds: ['ti-1'],
     });
 
     expect(result.insumosCreated).toBe(1);
-    expect(result.productsCreated).toBe(1);
-    expect(result.recipesCreated).toBe(1);
+    expect(result.productsCreated).toBe(0);
+    expect(result.recipesCreated).toBe(0);
   });
 
   it('skips existing items matched by name', async () => {
@@ -238,9 +245,12 @@ describe('IndustryTemplateService Safe Cutover (TDD / ONB1.3D-F)', () => {
       return Promise.resolve([]);
     });
 
-    mockManager.findOne = jest
-      .fn()
-      .mockResolvedValue({ id: 'existing-version' });
+    mockManager.findOne = jest.fn().mockImplementation((entityClass: any) => {
+      if (entityClass === RecipeVersion) {
+        return Promise.resolve({ id: 'existing-version' });
+      }
+      return Promise.resolve(null);
+    });
 
     const result = await service.applyTemplate('tenant-1', 'CAFETERIA');
 

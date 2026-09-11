@@ -368,7 +368,7 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
 
       const result = await service.applyTemplate(tenantId, 'CAFETERIA');
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         tenantId,
         templateCode: 'CAFETERIA',
         insumosCreated: 2,
@@ -379,6 +379,47 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
       });
 
       expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('includes every recipe ingredient when only its product is selected', async () => {
+      templateRepo.findOne.mockResolvedValueOnce(mockTemplates[0]);
+      mockManager.find.mockResolvedValue([]);
+      mockManager.save.mockImplementation(
+        (entityClass: unknown, item: unknown) => {
+          if (entityClass === Insumo)
+            return Promise.resolve({
+              ...(item as Insumo),
+              id: `ins-${(item as Insumo).name}`,
+            });
+          if (entityClass === Product)
+            return Promise.resolve({ ...(item as Product), id: 'product-1' });
+          if (entityClass === RecipeVersion)
+            return Promise.resolve({
+              ...(item as RecipeVersion),
+              id: 'version-1',
+            });
+          if (entityClass === TemplateApplication)
+            return Promise.resolve({
+              ...(item as TemplateApplication),
+              id: 'application-1',
+            });
+          return Promise.resolve(item);
+        },
+      );
+
+      const result = await service.applyTemplate(tenantId, 'CAFETERIA', {
+        selectedItemIds: ['tp-1'],
+      });
+
+      expect(result.insumosCreated).toBe(2);
+      expect(mockManager.save).toHaveBeenCalledWith(
+        Insumo,
+        expect.objectContaining({ name: 'Granos de Café Especial' }),
+      );
+      expect(mockManager.save).toHaveBeenCalledWith(
+        Insumo,
+        expect.objectContaining({ name: 'Leche Entera' }),
+      );
     });
 
     it('is strictly idempotent: skips already existing insumos and products and avoids duplicate recipes', async () => {
@@ -485,7 +526,7 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
 
       const result = await service.applyTemplate(tenantId, 'CAFETERIA');
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         tenantId,
         templateCode: 'CAFETERIA',
         insumosCreated: 1,
@@ -546,7 +587,7 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
 
       const result = await service.applyTemplate(tenantId, 'RETAIL_MINIMARKET');
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         tenantId,
         templateCode: 'RETAIL_MINIMARKET',
         insumosCreated: 0,

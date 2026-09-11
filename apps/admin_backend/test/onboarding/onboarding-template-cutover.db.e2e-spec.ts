@@ -1,5 +1,10 @@
 import { randomUUID } from 'crypto';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import {
+  INestApplication,
+  UnauthorizedException,
+  ValidationPipe,
+} from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import * as request from 'supertest';
@@ -42,6 +47,15 @@ import { OnboardingIdempotencyCoordinator } from '../../src/modules/onboarding/s
 import { RecipeService } from '../../src/modules/inventory/recipe.service';
 import { UomConversionCalculator } from '../../src/modules/inventory/uom-conversion-calculator';
 import { UserRole } from '../../src/modules/identity/entities/user.entity';
+import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
+import { AuthoritativeCurrentUserGuard } from '../../src/modules/identity/guards/authoritative-current-user.guard';
+import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
+import { PermissionsGuard } from '../../src/modules/identity/guards/permissions.guard';
+import {
+  AuthoritativeCurrentUser,
+  CurrentUserAuthorizationService,
+} from '../../src/modules/identity/services/current-user-authorization.service';
+import { JwtAccessPayload } from '../../src/modules/identity/security/jwt-token.types';
 import {
   createIdentityJwtConfigProvider,
   createIdentityJwtTestConfigProvider,
@@ -70,6 +84,12 @@ async function withTemplateCutoverIsolatedSchema(
     insumoId: string;
     productId: string;
     schema: string;
+    currentUserAuthorization: {
+      authorize: jest.Mock<
+        Promise<AuthoritativeCurrentUser>,
+        [JwtAccessPayload]
+      >;
+    };
   }) => Promise<void>,
 ): Promise<void> {
   const bootstrap = new DataSource({ type: 'postgres', ...postgresConnection });
@@ -156,6 +176,33 @@ async function withTemplateCutoverIsolatedSchema(
       [recipeItemId, productId],
     );
 
+    const currentUserAuthorization = {
+      authorize: jest.fn(
+        async (token: JwtAccessPayload): Promise<AuthoritativeCurrentUser> => {
+          if (
+            !token ||
+            !token.sub ||
+            typeof token.sub !== 'string' ||
+            !token.tenant_id ||
+            typeof token.tenant_id !== 'string' ||
+            !token.tenant_id.trim() ||
+            token.is_active === false
+          ) {
+            throw new UnauthorizedException(
+              'Authoritative user validation failed',
+            );
+          }
+          return {
+            email: token.email,
+            tenant_id: token.tenant_id,
+            role: token.role as UserRole,
+            is_active: true,
+            security_version: token.security_version ?? 1,
+          };
+        },
+      ),
+    };
+
     const moduleRef: TestingModule = await Test.createTestingModule({
       providers: [
         createIdentityJwtConfigProvider(),
@@ -167,6 +214,15 @@ async function withTemplateCutoverIsolatedSchema(
         OnboardingIdempotencyCoordinator,
         RecipeService,
         UomConversionCalculator,
+        Reflector,
+        AuthGuard,
+        AuthoritativeCurrentUserGuard,
+        RolesGuard,
+        PermissionsGuard,
+        {
+          provide: CurrentUserAuthorizationService,
+          useValue: currentUserAuthorization,
+        },
         {
           provide: 'IndustryTemplateRepository',
           useFactory: (ds: DataSource) => ds.getRepository(IndustryTemplate),
@@ -289,6 +345,7 @@ async function withTemplateCutoverIsolatedSchema(
       insumoId,
       productId,
       schema,
+      currentUserAuthorization,
     });
   } finally {
     if (app) await app.close();
@@ -589,6 +646,46 @@ describe('ONB1.3 Industry Template Safe Cutover (Real PostgreSQL E2E / Zero Mock
         );
         expect(rvAfterB.is_active).toBe(true);
         expect(rvAfterB.publication_state).toBe('PUBLISHED');
+      },
+    );
+  });
+
+  it('verifies authoritative rejection blocks apply before handler execution on real DB', async () => {
+    await withTemplateCutoverIsolatedSchema(
+      'onb13_auth_reject',
+      async ({
+        app,
+        dataSource,
+        ownerTokenA,
+        tenantAId,
+        schema,
+        currentUserAuthorization,
+      }) => {
+        currentUserAuthorization.authorize.mockRejectedValueOnce(
+          new UnauthorizedException('Authoritative user validation rejected'),
+        );
+
+        await request(app.getHttpServer())
+          .post('/onboarding/templates/CAFETERIA/apply')
+          .set('Authorization', `Bearer ${ownerTokenA}`)
+          .send({ idempotencyKey: 'idemp-rejected-1' })
+          .expect(401);
+
+        expect(currentUserAuthorization.authorize).toHaveBeenCalled();
+
+        // Verify ZERO writes occurred on real DB
+        const [insumos, applications] = await Promise.all([
+          dataSource.query(
+            `SELECT count(*) FROM "${schema}".insumos WHERE tenant_id = $1`,
+            [tenantAId],
+          ),
+          dataSource.query(
+            `SELECT count(*) FROM "${schema}".onboarding_template_applications WHERE tenant_id = $1`,
+            [tenantAId],
+          ),
+        ]);
+        expect(Number(insumos[0].count)).toBe(0);
+        expect(Number(applications[0].count)).toBe(0);
       },
     );
   });

@@ -1,4 +1,8 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import {
+  INestApplication,
+  UnauthorizedException,
+  ValidationPipe,
+} from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
@@ -26,9 +30,17 @@ import { Recipe } from '../../src/modules/inventory/entities/recipe.entity';
 import { UomConversion } from '../../src/modules/inventory/entities/uom-conversion.entity';
 import { UserRole } from '../../src/modules/identity/entities/user.entity';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
+import { AuthoritativeCurrentUserGuard } from '../../src/modules/identity/guards/authoritative-current-user.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
 import { PermissionsGuard } from '../../src/modules/identity/guards/permissions.guard';
-import { JWT_TOKEN_TYPES } from '../../src/modules/identity/security/jwt-token.types';
+import {
+  AuthoritativeCurrentUser,
+  CurrentUserAuthorizationService,
+} from '../../src/modules/identity/services/current-user-authorization.service';
+import {
+  JWT_TOKEN_TYPES,
+  JwtAccessPayload,
+} from '../../src/modules/identity/security/jwt-token.types';
 import { createIdentityJwtConfigProvider } from '../support/identity-jwt-test.fixture';
 
 const API_PREFIX = '/api/onboarding/templates';
@@ -54,6 +66,37 @@ type TemplateDetailResponseBody = IndustryTemplate;
 describe('IndustryTemplate (Integration & E2E)', () => {
   let app: INestApplication<App>;
   let jwtService: JwtService;
+
+  const defaultAuthorize = async (
+    token: JwtAccessPayload,
+  ): Promise<AuthoritativeCurrentUser> => {
+    if (
+      !token ||
+      !token.sub ||
+      typeof token.sub !== 'string' ||
+      !token.tenant_id ||
+      typeof token.tenant_id !== 'string' ||
+      !token.tenant_id.trim() ||
+      token.is_active === false
+    ) {
+      throw new UnauthorizedException('Authoritative user validation failed');
+    }
+    return {
+      email: token.email,
+      tenant_id: token.tenant_id,
+      role: token.role as UserRole,
+      is_active: true,
+      security_version: token.security_version ?? 1,
+    };
+  };
+
+  const authorizeMock = jest.fn(defaultAuthorize);
+  const currentUserAuthorizationServiceMock: Pick<
+    CurrentUserAuthorizationService,
+    'authorize'
+  > = {
+    authorize: authorizeMock,
+  };
 
   const mockTemplates: IndustryTemplate[] = [
     {
@@ -393,10 +436,15 @@ describe('IndustryTemplate (Integration & E2E)', () => {
         },
         TenantInterceptor,
         AuthGuard,
+        AuthoritativeCurrentUserGuard,
         RolesGuard,
         PermissionsGuard,
         Reflector,
         JwtService,
+        {
+          provide: CurrentUserAuthorizationService,
+          useValue: currentUserAuthorizationServiceMock,
+        },
         createIdentityJwtConfigProvider(),
       ],
     }).compile();
@@ -417,6 +465,7 @@ describe('IndustryTemplate (Integration & E2E)', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    authorizeMock.mockImplementation(defaultAuthorize);
     dbInsumos = [];
     dbProducts = [];
     dbRecipeVersions = [];
@@ -472,6 +521,24 @@ describe('IndustryTemplate (Integration & E2E)', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({})
       .expect(401);
+  });
+
+  it('blocks apply before handler when authoritative user authorization fails', async () => {
+    authorizeMock.mockRejectedValueOnce(
+      new UnauthorizedException('Authoritative user is inactive or revoked'),
+    );
+    const token = signToken({ tenant_id: 'tenant-A' });
+
+    await request(app.getHttpServer())
+      .post(`${API_PREFIX}/CAFETERIA/apply`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({})
+      .expect(401);
+
+    expect(authorizeMock).toHaveBeenCalled();
+    expect(dbInsumos).toHaveLength(0);
+    expect(dbProducts).toHaveLength(0);
+    expect(dbRecipeVersions).toHaveLength(0);
   });
 
   it('returns 403 when user has CASHIER role', async () => {
