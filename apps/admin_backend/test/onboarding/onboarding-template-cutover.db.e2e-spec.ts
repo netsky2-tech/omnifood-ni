@@ -1,6 +1,5 @@
 import { randomUUID } from 'crypto';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import * as request from 'supertest';
@@ -26,11 +25,7 @@ import { ImportStaging } from '../../src/modules/onboarding/entities/import-stag
 import { OnboardingSession } from '../../src/modules/onboarding/entities/onboarding-session.entity';
 import { OnboardingIdempotencyRecord } from '../../src/modules/onboarding/entities/onboarding-idempotency.entity';
 import { TemplateApplication } from '../../src/modules/onboarding/entities/template-application.entity';
-import {
-  TemplateSeedLink,
-  TemplateSourceItemType,
-  TemplateTargetEntityType,
-} from '../../src/modules/onboarding/entities/template-seed-link.entity';
+import { TemplateSeedLink } from '../../src/modules/onboarding/entities/template-seed-link.entity';
 import {
   LegacyMigrationDecision,
   LegacyOnboardingMigrationReceipt,
@@ -47,8 +42,6 @@ import { OnboardingIdempotencyCoordinator } from '../../src/modules/onboarding/s
 import { RecipeService } from '../../src/modules/inventory/recipe.service';
 import { UomConversionCalculator } from '../../src/modules/inventory/uom-conversion-calculator';
 import { UserRole } from '../../src/modules/identity/entities/user.entity';
-import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
-import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
 import {
   createIdentityJwtConfigProvider,
   createIdentityJwtTestConfigProvider,
@@ -357,11 +350,8 @@ describe('ONB1.3 Industry Template Safe Cutover (Real PostgreSQL E2E / Zero Mock
         app,
         dataSource,
         ownerTokenA,
-        ownerTokenB,
         tenantAId,
         tenantBId,
-        insumoId,
-        productId,
         schema,
       }) => {
         // 1. Tenant A applies template with idempotencyKey
@@ -515,7 +505,6 @@ describe('ONB1.3 Industry Template Safe Cutover (Real PostgreSQL E2E / Zero Mock
         ownerTokenB,
         tenantAId,
         tenantBId,
-        productId,
         schema,
       }) => {
         // 1. In Tenant A (non-operational, 0 sales), create an active legacy recipe

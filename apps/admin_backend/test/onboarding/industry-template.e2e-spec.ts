@@ -13,11 +13,6 @@ import { TemplatePreviewService } from '../../src/modules/onboarding/services/te
 import { TemplateSeedLink } from '../../src/modules/onboarding/entities/template-seed-link.entity';
 import { LegacyTemplateRecipeScanService } from '../../src/modules/onboarding/services/legacy-template-recipe-scan.service';
 import { OnboardingIdempotencyCoordinator } from '../../src/modules/onboarding/services/onboarding-idempotency.coordinator';
-import {
-  RecipeOrigin,
-  RecipePublicationState,
-  RecipeSuggestionState,
-} from '../../src/modules/inventory/entities/recipe-version.entity';
 
 import { IndustryTemplate } from '../../src/modules/onboarding/entities/industry-template.entity';
 import {
@@ -33,7 +28,6 @@ import { UserRole } from '../../src/modules/identity/entities/user.entity';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
 import { PermissionsGuard } from '../../src/modules/identity/guards/permissions.guard';
-import { AppPermission } from '../../src/modules/identity/security/permissions.enum';
 import { JWT_TOKEN_TYPES } from '../../src/modules/identity/security/jwt-token.types';
 import { createIdentityJwtConfigProvider } from '../support/identity-jwt-test.fixture';
 

@@ -19,10 +19,7 @@ import {
   RecipePublicationState,
   RecipeSuggestionState,
 } from '../../inventory/entities/recipe-version.entity';
-import { TemplateSeedLink } from '../entities/template-seed-link.entity';
 import { TemplateApplication } from '../entities/template-application.entity';
-import { TemplatePreviewService } from './template-preview.service';
-import { OnboardingIdempotencyCoordinator } from './onboarding-idempotency.coordinator';
 
 describe('IndustryTemplateService (Unit & Triangulation)', () => {
   let service: IndustryTemplateService;
@@ -38,10 +35,6 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
   let uomConversionRepo: jest.Mocked<Repository<UomConversion>>;
   let dataSource: jest.Mocked<DataSource>;
   let mockManager: jest.Mocked<EntityManager>;
-  let seedLinkRepo: jest.Mocked<Repository<TemplateSeedLink>>;
-  let templateApplicationRepo: jest.Mocked<Repository<TemplateApplication>>;
-  let previewService: jest.Mocked<TemplatePreviewService>;
-  let idempotencyCoordinator: jest.Mocked<OnboardingIdempotencyCoordinator>;
 
   const mockTemplates: IndustryTemplate[] = [
     {
@@ -233,31 +226,6 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
         return Promise.resolve(entities);
       }),
     } as unknown as jest.Mocked<EntityManager>;
-
-    seedLinkRepo = {
-      find: jest.fn().mockResolvedValue([]),
-      findOne: jest.fn().mockResolvedValue(null),
-      create: jest.fn((e: any) => e),
-      save: jest.fn((e: any) => Promise.resolve(e)),
-    } as any;
-
-    templateApplicationRepo = {
-      create: jest.fn((e: any) => e),
-      save: jest.fn((e: any) => Promise.resolve({ ...e, id: 'app-uuid-1' })),
-    } as any;
-
-    previewService = {
-      computeFingerprint: jest.fn((o: any) => 'fp-' + JSON.stringify(o).length),
-      buildPreview: jest.fn().mockResolvedValue({} as any),
-    } as any;
-
-    idempotencyCoordinator = {
-      acquireLease: jest
-        .fn()
-        .mockResolvedValue({ state: 'ACQUIRED', record: { id: 'lease-1' } }),
-      completeSuccess: jest.fn().mockResolvedValue(undefined),
-      completeFailure: jest.fn().mockResolvedValue(undefined),
-    } as any;
 
     dataSource = {
       transaction: jest.fn((cb: (mgr: EntityManager) => Promise<unknown>) =>

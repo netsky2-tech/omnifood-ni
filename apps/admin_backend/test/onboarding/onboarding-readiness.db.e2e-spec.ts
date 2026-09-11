@@ -179,10 +179,7 @@ async function withReadinessIsolatedSchema(
     ]);
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
-      controllers: [
-        OnboardingSessionController,
-        OnboardingTelemetryController,
-      ],
+      controllers: [OnboardingSessionController, OnboardingTelemetryController],
       providers: [
         Reflector,
         AuthGuard,
@@ -296,28 +293,28 @@ async function withReadinessIsolatedSchema(
     await app.init();
 
     const jwtService = moduleFixture.get<JwtService>(JwtService);
-    const ownerTokenA = await signIdentityJwtAccessToken(jwtService, {
+    const ownerTokenA = signIdentityJwtAccessToken(jwtService, {
       userId: ownerAId,
       sub: ownerAId,
       tenantId: tenantAId,
       tenant_id: tenantAId,
       role: UserRole.OWNER,
     });
-    const ownerTokenB = await signIdentityJwtAccessToken(jwtService, {
+    const ownerTokenB = signIdentityJwtAccessToken(jwtService, {
       userId: ownerBId,
       sub: ownerBId,
       tenantId: tenantBId,
       tenant_id: tenantBId,
       role: UserRole.OWNER,
     });
-    const managerTokenA = await signIdentityJwtAccessToken(jwtService, {
+    const managerTokenA = signIdentityJwtAccessToken(jwtService, {
       userId: randomUUID(),
       sub: randomUUID(),
       tenantId: tenantAId,
       tenant_id: tenantAId,
       role: UserRole.MANAGER,
     });
-    const cashierTokenA = await signIdentityJwtAccessToken(jwtService, {
+    const cashierTokenA = signIdentityJwtAccessToken(jwtService, {
       userId: randomUUID(),
       sub: randomUUID(),
       tenantId: tenantAId,
@@ -325,9 +322,10 @@ async function withReadinessIsolatedSchema(
       role: UserRole.CASHIER,
     });
 
-    const customerSaleObserver = moduleFixture.get<OnboardingCustomerSaleObserver>(
-      OnboardingCustomerSaleObserver,
-    );
+    const customerSaleObserver =
+      moduleFixture.get<OnboardingCustomerSaleObserver>(
+        OnboardingCustomerSaleObserver,
+      );
     const telemetryService = moduleFixture.get<OnboardingTelemetryService>(
       OnboardingTelemetryService,
     );
@@ -654,7 +652,13 @@ describe('Onboarding Readiness & State Reconciler (Real PostgreSQL DB)', () => {
   it('demonstrates ONB1.9E–G: Canonical Product Telemetry, Zero Secrets Guardrail, and Decoupled First Customer Sale Observation (AC-07, AC-08, AC-40, AC-41)', async () => {
     await withReadinessIsolatedSchema(
       'onb_telemetry_cust_sale',
-      async ({ app, dataSource, tenantAId, ownerTokenA, customerSaleObserver, telemetryService }) => {
+      async ({
+        app,
+        dataSource,
+        tenantAId,
+        ownerTokenA,
+        customerSaleObserver,
+      }) => {
         // 1. Start session
         await request(app.getHttpServer())
           .post('/onboarding/session/start')
@@ -700,7 +704,8 @@ describe('Onboarding Readiness & State Reconciler (Real PostgreSQL DB)', () => {
         expect(skipRes.body.accepted).toBe(true);
 
         // d) Zero Secrets Guardrail: Post telemetry containing JWT, password, card, and raw CSV
-        const rawCsv = 'barcode,name,price\n743001,Soda,30.0\n743002,Juice,25.0';
+        const rawCsv =
+          'barcode,name,price\n743001,Soda,30.0\n743002,Juice,25.0';
         await request(app.getHttpServer())
           .post('/onboarding/telemetry/events')
           .set('Authorization', `Bearer ${ownerTokenA}`)
@@ -708,7 +713,8 @@ describe('Onboarding Readiness & State Reconciler (Real PostgreSQL DB)', () => {
             eventName: 'IMPORT_VALIDATED',
             properties: {
               admin_password: 'superSecretPassword123!',
-              token_jwt: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIn0.sig',
+              token_jwt:
+                'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIn0.sig',
               card_number: '4532015012345678',
               raw_csv: rawCsv,
               legitimateCounter: 42,
@@ -717,13 +723,15 @@ describe('Onboarding Readiness & State Reconciler (Real PostgreSQL DB)', () => {
           .expect(200);
 
         // Query real PostgreSQL database table to verify zero secrets stored physically
-        const telemetryRepo = dataSource.getRepository(OnboardingTelemetryEvent);
+        const telemetryRepo = dataSource.getRepository(
+          OnboardingTelemetryEvent,
+        );
         const importEvent = await telemetryRepo.findOne({
           where: { tenantId: tenantAId, eventName: 'IMPORT_VALIDATED' as any },
         });
 
         expect(importEvent).toBeDefined();
-        const storedProps = importEvent!.propertiesSanitizedJson!;
+        const storedProps = importEvent.propertiesSanitizedJson;
         expect(storedProps.admin_password).toBe('[REDACTED_SECRET]');
         expect(storedProps.token_jwt).toContain('[REDACTED_JWT]');
         expect(storedProps.card_number).toBe('[REDACTED_CARD]');
@@ -773,27 +781,30 @@ describe('Onboarding Readiness & State Reconciler (Real PostgreSQL DB)', () => {
         });
 
         expect(sessionInDb).toBeDefined();
-        expect(sessionInDb!.firstCustomerSaleAt?.toISOString()).toBe(
+        expect(sessionInDb.firstCustomerSaleAt?.toISOString()).toBe(
           firstCustomerSaleTime.toISOString(),
         );
-        expect(sessionInDb!.firstSuccessfulSaleAt?.toISOString()).toBe(
+        expect(sessionInDb.firstSuccessfulSaleAt?.toISOString()).toBe(
           historicalTtfss.toISOString(),
         );
-        expect(sessionInDb!.activatedAt?.toISOString()).toBe(
+        expect(sessionInDb.activatedAt?.toISOString()).toBe(
           historicalActivatedAt.toISOString(),
         );
 
         // Verify that FIRST_CUSTOMER_SALE telemetry event was persisted in DB
         const custSaleTelemetry = await telemetryRepo.findOne({
-          where: { tenantId: tenantAId, eventName: 'FIRST_CUSTOMER_SALE' as any },
+          where: {
+            tenantId: tenantAId,
+            eventName: 'FIRST_CUSTOMER_SALE' as any,
+          },
         });
         expect(custSaleTelemetry).toBeDefined();
-        expect(custSaleTelemetry!.propertiesSanitizedJson!.ticketId).toBe(
+        expect(custSaleTelemetry.propertiesSanitizedJson.ticketId).toBe(
           'ticket-commercial-final-001',
         );
-        expect(custSaleTelemetry!.propertiesSanitizedJson!.historicalTtfssPreserved).toBe(
-          true,
-        );
+        expect(
+          custSaleTelemetry.propertiesSanitizedJson.historicalTtfssPreserved,
+        ).toBe(true);
 
         // Subsequent commercial sale (ticket 002) at 16:00 does NOT overwrite firstCustomerSaleAt
         const secondSaleTime = new Date('2026-09-04T16:00:00.000Z');
@@ -810,10 +821,10 @@ describe('Onboarding Readiness & State Reconciler (Real PostgreSQL DB)', () => {
         const sessionAfterSecond = await sessionRepo.findOne({
           where: { tenantId: tenantAId },
         });
-        expect(sessionAfterSecond!.firstCustomerSaleAt?.toISOString()).toBe(
+        expect(sessionAfterSecond.firstCustomerSaleAt?.toISOString()).toBe(
           firstCustomerSaleTime.toISOString(),
         );
-        expect(sessionAfterSecond!.firstSuccessfulSaleAt?.toISOString()).toBe(
+        expect(sessionAfterSecond.firstSuccessfulSaleAt?.toISOString()).toBe(
           historicalTtfss.toISOString(),
         );
       },

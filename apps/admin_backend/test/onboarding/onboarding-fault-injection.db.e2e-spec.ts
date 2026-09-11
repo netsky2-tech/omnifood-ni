@@ -1,10 +1,7 @@
 import { randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
-import { ConflictException, BadRequestException } from '@nestjs/common';
-import {
-  OnboardingSession,
-  OnboardingLifecycleState,
-} from '../../src/modules/onboarding/entities/onboarding-session.entity';
+import { ConflictException } from '@nestjs/common';
+import { OnboardingSession } from '../../src/modules/onboarding/entities/onboarding-session.entity';
 import {
   OnboardingIdempotencyRecord,
   OnboardingIdempotencyStatus,
@@ -12,10 +9,7 @@ import {
 import { OnboardingIdempotencyCoordinator } from '../../src/modules/onboarding/services/onboarding-idempotency.coordinator';
 import { Product } from '../../src/modules/inventory/entities/product.entity';
 import { Tenant } from '../../src/modules/tenant/entities/tenant.entity';
-import {
-  ImportStaging,
-  ImportStagingStatus,
-} from '../../src/modules/onboarding/entities/import-staging.entity';
+import { ImportStaging } from '../../src/modules/onboarding/entities/import-staging.entity';
 import { ProductImportSession } from '../../src/modules/onboarding/entities/product-import-session.entity';
 import { LegacyOnboardingMigrationReceipt } from '../../src/modules/onboarding/entities/legacy-migration-receipt.entity';
 import { ImportStagingService } from '../../src/modules/onboarding/services/import-staging.service';
@@ -69,7 +63,9 @@ async function withFaultInjectionIsolatedSchema(
     const stagingRepo = dataSource.getRepository(ImportStaging);
     const productRepo = dataSource.getRepository(Product);
     const sessionRepo = dataSource.getRepository(ProductImportSession);
-    const receiptRepo = dataSource.getRepository(LegacyOnboardingMigrationReceipt);
+    const receiptRepo = dataSource.getRepository(
+      LegacyOnboardingMigrationReceipt,
+    );
 
     const coordinator = new OnboardingIdempotencyCoordinator(recordRepo);
     const parser = new CanonicalCsvParserService();
@@ -173,7 +169,9 @@ describe('ONB1.10B: Fault Injection Suite (Real PostgreSQL DB)', () => {
           expect(retryLease.result).toEqual(executionResult);
         }
 
-        const totalProducts = await productRepo.count({ where: { tenant_id: tenantId } });
+        const totalProducts = await productRepo.count({
+          where: { tenant_id: tenantId },
+        });
         expect(totalProducts).toBe(1); // No duplicates!
       },
     );
@@ -185,7 +183,10 @@ describe('ONB1.10B: Fault Injection Suite (Real PostgreSQL DB)', () => {
       async ({ coordinator, tenantId }) => {
         const idempotencyKey = `idem-concurrency-${randomUUID()}`;
         const commandType = 'CommitImport';
-        const originalPayload = { sessionToken: randomUUID(), mode: 'VALID_ONLY' };
+        const originalPayload = {
+          sessionToken: randomUUID(),
+          mode: 'VALID_ONLY',
+        };
 
         // Step 1: Worker 1 acquires lease
         const lease1 = await coordinator.acquireLease({
@@ -210,7 +211,10 @@ describe('ONB1.10B: Fault Injection Suite (Real PostgreSQL DB)', () => {
         ).rejects.toThrow(ConflictException);
 
         // Step 3: Malicious or corrupted retry with SAME idempotency key but ALTERED payload
-        const tamperedPayload = { sessionToken: randomUUID(), mode: 'ALL_OR_NOTHING' };
+        const tamperedPayload = {
+          sessionToken: randomUUID(),
+          mode: 'ALL_OR_NOTHING',
+        };
         await expect(
           coordinator.acquireLease({
             tenantId,
@@ -258,9 +262,13 @@ describe('ONB1.10B: Fault Injection Suite (Real PostgreSQL DB)', () => {
 
         expect(takeoverLease.state).toBe('ACQUIRED');
         if (takeoverLease.state === 'ACQUIRED') {
-          expect(takeoverLease.record.leaseOwner).toBe('recovery-worker-process');
+          expect(takeoverLease.record.leaseOwner).toBe(
+            'recovery-worker-process',
+          );
           expect(takeoverLease.record.attemptCount).toBe(2); // Successfully incremented!
-          expect(takeoverLease.record.status).toBe(OnboardingIdempotencyStatus.IN_PROGRESS);
+          expect(takeoverLease.record.status).toBe(
+            OnboardingIdempotencyStatus.IN_PROGRESS,
+          );
 
           // Recovery worker completes successfully
           await coordinator.completeSuccess(takeoverLease.record.id, {
@@ -321,8 +329,10 @@ describe('ONB1.10B: Fault Injection Suite (Real PostgreSQL DB)', () => {
           );
 
           // SIMULATE SUDDEN FAULT before commit (e.g. disk full, constraint violation, unhandled exception)
-          throw new Error('SIMULATED_CRASH_BEFORE_COMMIT: Database constraint or disk error');
-        } catch (err: any) {
+          throw new Error(
+            'SIMULATED_CRASH_BEFORE_COMMIT: Database constraint or disk error',
+          );
+        } catch {
           await queryRunner.rollbackTransaction();
           rollbackExecuted = true;
           // Mark lease retryable after failure
@@ -338,7 +348,9 @@ describe('ONB1.10B: Fault Injection Suite (Real PostgreSQL DB)', () => {
 
         // Verification: Zero products exist in DB because transaction was rolled back!
         const productRepo = dataSource.getRepository(Product);
-        const count = await productRepo.count({ where: { tenant_id: tenantId } });
+        const count = await productRepo.count({
+          where: { tenant_id: tenantId },
+        });
         expect(count).toBe(0);
 
         // Retry now succeeds cleanly
@@ -435,7 +447,10 @@ describe('ONB1.10B: Fault Injection Suite (Real PostgreSQL DB)', () => {
         // Verify staging rows count in DB
         const stagingRepo = dataSource.getRepository(ImportStaging);
         const initialRows = await stagingRepo.find({
-          where: { tenant_id: tenantId, token_sesion_importacion: sessionToken },
+          where: {
+            tenant_id: tenantId,
+            token_sesion_importacion: sessionToken,
+          },
           order: { row_ordinal: 'ASC' },
         });
         expect(initialRows).toHaveLength(2);
@@ -467,7 +482,10 @@ describe('ONB1.10B: Fault Injection Suite (Real PostgreSQL DB)', () => {
 
         // All rows in staging remain correctly sequenced without duplicate ordinal conflicts
         const allRows = await stagingRepo.find({
-          where: { tenant_id: tenantId, token_sesion_importacion: sessionToken },
+          where: {
+            tenant_id: tenantId,
+            token_sesion_importacion: sessionToken,
+          },
           order: { row_ordinal: 'ASC' },
         });
         expect(allRows.length).toBeGreaterThanOrEqual(3);

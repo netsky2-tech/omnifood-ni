@@ -13,18 +13,10 @@ import {
 } from '../../src/modules/identity/entities/user.entity';
 import { SecurityProfile } from '../../src/modules/identity/entities/security-profile.entity';
 import { SystemParametersConfig } from '../../src/modules/inventory/entities/system-parameters-config.entity';
-import {
-  Product,
-  ProductType,
-} from '../../src/modules/inventory/entities/product.entity';
+import { Product } from '../../src/modules/inventory/entities/product.entity';
 import { Insumo } from '../../src/modules/inventory/entities/insumo.entity';
 import { Recipe } from '../../src/modules/inventory/entities/recipe.entity';
-import {
-  RecipeVersion,
-  RecipePublicationState,
-  RecipeOrigin,
-  RecipeSuggestionState,
-} from '../../src/modules/inventory/entities/recipe-version.entity';
+import { RecipeVersion } from '../../src/modules/inventory/entities/recipe-version.entity';
 import { RecipeDetail } from '../../src/modules/inventory/entities/recipe-detail.entity';
 import { UomConversion } from '../../src/modules/inventory/entities/uom-conversion.entity';
 import { IndustryTemplate } from '../../src/modules/onboarding/entities/industry-template.entity';

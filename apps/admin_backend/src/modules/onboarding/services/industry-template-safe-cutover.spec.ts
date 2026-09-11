@@ -1,50 +1,26 @@
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { IndustryTemplateService } from './industry-template.service';
 import { IndustryTemplate } from '../entities/industry-template.entity';
-import { TemplateInsumo } from '../entities/template-insumo.entity';
-import { TemplateProduct } from '../entities/template-product.entity';
-import { TemplateRecipeItem } from '../entities/template-recipe-item.entity';
-import {
-  TemplateSeedLink,
-  TemplateSourceItemType,
-  TemplateTargetEntityType,
-} from '../entities/template-seed-link.entity';
-import {
-  TemplateApplication,
-  TemplateApplicationStatus,
-} from '../entities/template-application.entity';
+import { TemplateSeedLink } from '../entities/template-seed-link.entity';
 import {
   Insumo,
   NEGATIVE_STOCK_POLICY,
 } from '../../inventory/entities/insumo.entity';
 import { Product } from '../../inventory/entities/product.entity';
-import {
-  RecipeVersion,
-  RecipeOrigin,
-  RecipePublicationState,
-  RecipeSuggestionState,
-} from '../../inventory/entities/recipe-version.entity';
+import { RecipeVersion } from '../../inventory/entities/recipe-version.entity';
 import { RecipeDetail } from '../../inventory/entities/recipe-detail.entity';
 import { Recipe } from '../../inventory/entities/recipe.entity';
 import { UomConversion } from '../../inventory/entities/uom-conversion.entity';
-import { TemplatePreviewService } from './template-preview.service';
-import { OnboardingIdempotencyCoordinator } from './onboarding-idempotency.coordinator';
 
 describe('IndustryTemplateService Safe Cutover (TDD / ONB1.3D-F)', () => {
   let service: IndustryTemplateService;
   let templateRepo: jest.Mocked<Partial<Repository<IndustryTemplate>>>;
-  let seedLinkRepo: jest.Mocked<Partial<Repository<TemplateSeedLink>>>;
-  let applicationRepo: jest.Mocked<Partial<Repository<TemplateApplication>>>;
   let insumoRepo: jest.Mocked<Partial<Repository<Insumo>>>;
   let productRepo: jest.Mocked<Partial<Repository<Product>>>;
   let recipeVersionRepo: jest.Mocked<Partial<Repository<RecipeVersion>>>;
   let recipeDetailRepo: jest.Mocked<Partial<Repository<RecipeDetail>>>;
   let recipeRepo: jest.Mocked<Partial<Repository<Recipe>>>;
   let uomConversionRepo: jest.Mocked<Partial<Repository<UomConversion>>>;
-  let previewService: jest.Mocked<Partial<TemplatePreviewService>>;
-  let idempotencyCoordinator: jest.Mocked<
-    Partial<OnboardingIdempotencyCoordinator>
-  >;
   let dataSource: jest.Mocked<Partial<DataSource>>;
   let mockManager: jest.Mocked<Partial<EntityManager>>;
 
@@ -110,16 +86,6 @@ describe('IndustryTemplateService Safe Cutover (TDD / ONB1.3D-F)', () => {
       findOne: jest.fn().mockResolvedValue(sampleTemplate),
       find: jest.fn().mockResolvedValue([sampleTemplate]),
     };
-    seedLinkRepo = {
-      find: jest.fn().mockResolvedValue([]),
-      findOne: jest.fn().mockResolvedValue(null),
-      create: jest.fn((e: any) => e) as any,
-      save: jest.fn((e: any) => Promise.resolve(e)) as any,
-    };
-    applicationRepo = {
-      create: jest.fn((e: any) => e) as any,
-      save: jest.fn((e: any) => Promise.resolve(e)) as any,
-    };
     insumoRepo = {
       find: jest.fn().mockResolvedValue([]),
       create: jest.fn((e: any) => e) as any,
@@ -178,23 +144,6 @@ describe('IndustryTemplateService Safe Cutover (TDD / ONB1.3D-F)', () => {
 
     dataSource = {
       transaction: jest.fn((cb: any) => cb(mockManager)) as any,
-    };
-
-    previewService = {
-      computeFingerprint: jest.fn(
-        (obj: any) => 'fp-' + JSON.stringify(obj).length,
-      ),
-      buildPreview: jest.fn().mockResolvedValue({
-        templateCode: 'CAFETERIA',
-        templateVersion: 1,
-        items: [],
-      } as any),
-    };
-
-    idempotencyCoordinator = {
-      acquireLease: jest
-        .fn()
-        .mockResolvedValue({ status: 'ACQUIRED', record: {} as any }),
     };
 
     service = new IndustryTemplateService(
@@ -277,15 +226,21 @@ describe('IndustryTemplateService Safe Cutover (TDD / ONB1.3D-F)', () => {
   it('skips existing items matched by name', async () => {
     mockManager.find = jest.fn().mockImplementation((entityClass: any) => {
       if (entityClass === Insumo)
-        return Promise.resolve([{ id: 'existing-insumo', name: 'Granos de Café Especial' }]);
+        return Promise.resolve([
+          { id: 'existing-insumo', name: 'Granos de Café Especial' },
+        ]);
       if (entityClass === Product)
-        return Promise.resolve([{ id: 'existing-product', name: 'Capuchino 8oz' }]);
+        return Promise.resolve([
+          { id: 'existing-product', name: 'Capuchino 8oz' },
+        ]);
       if (entityClass === RecipeVersion)
         return Promise.resolve([{ id: 'existing-version' }]);
       return Promise.resolve([]);
     });
 
-    mockManager.findOne = jest.fn().mockResolvedValue({ id: 'existing-version' });
+    mockManager.findOne = jest
+      .fn()
+      .mockResolvedValue({ id: 'existing-version' });
 
     const result = await service.applyTemplate('tenant-1', 'CAFETERIA');
 
