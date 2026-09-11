@@ -1,5 +1,9 @@
 import { randomUUID } from 'crypto';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import {
+  INestApplication,
+  UnauthorizedException,
+  ValidationPipe,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -110,8 +114,14 @@ import { CostingReadinessAdapter } from '../../src/modules/onboarding/adapters/c
 import { OperationsReadinessAdapter } from '../../src/modules/onboarding/adapters/operations-readiness.adapter';
 
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
+import { AuthoritativeCurrentUserGuard } from '../../src/modules/identity/guards/authoritative-current-user.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
 import { PermissionsGuard } from '../../src/modules/identity/guards/permissions.guard';
+import {
+  AuthoritativeCurrentUser,
+  CurrentUserAuthorizationService,
+} from '../../src/modules/identity/services/current-user-authorization.service';
+import { JwtAccessPayload } from '../../src/modules/identity/security/jwt-token.types';
 import { FiscalRegime } from '../../src/modules/onboarding/dto/fiscal-setup.dto';
 
 import {
@@ -140,6 +150,28 @@ async function with74ScenariosIsolatedSchema(
     ownerTokenB: string;
     managerTokenA: string;
     cashierTokenA: string;
+    ownerAId: string;
+    managerAId: string;
+    cashierAId: string;
+    ownerBId: string;
+    registerAuthoritativeUser: (user: {
+      id: string;
+      tenant_id: string;
+      email: string;
+      role: UserRole;
+      is_active: boolean;
+      security_version: number;
+    }) => {
+      id: string;
+      tenant_id: string;
+      email: string;
+      role: UserRole;
+      is_active: boolean;
+      security_version: number;
+    };
+    currentUserAuthorization: {
+      authorize: (token: JwtAccessPayload) => Promise<AuthoritativeCurrentUser>;
+    };
     rolloutService: OnboardingFeatureRolloutService;
     activationService: ActivationService;
     telemetryService: OnboardingTelemetryService;
@@ -287,6 +319,100 @@ async function with74ScenariosIsolatedSchema(
       }),
     ]);
 
+    interface AuthoritativeUserStoreRecord {
+      id: string;
+      tenant_id: string;
+      email: string;
+      role: UserRole;
+      is_active: boolean;
+      security_version: number;
+    }
+
+    const authoritativeUsers = new Map<string, AuthoritativeUserStoreRecord>();
+    const authoritativeUserStoreKey = (sub: string, tenantId: string): string =>
+      `${sub}:${tenantId}`;
+    const registerAuthoritativeUser = (
+      user: AuthoritativeUserStoreRecord,
+    ): AuthoritativeUserStoreRecord => {
+      authoritativeUsers.set(
+        authoritativeUserStoreKey(user.id, user.tenant_id),
+        { ...user },
+      );
+      return user;
+    };
+
+    registerAuthoritativeUser({
+      id: ownerAId,
+      tenant_id: tenantAId,
+      email: 'ownerA@omnifood.ni',
+      role: UserRole.OWNER,
+      is_active: true,
+      security_version: 1,
+    });
+    registerAuthoritativeUser({
+      id: managerAId,
+      tenant_id: tenantAId,
+      email: 'managerA@omnifood.ni',
+      role: UserRole.MANAGER,
+      is_active: true,
+      security_version: 1,
+    });
+    registerAuthoritativeUser({
+      id: cashierAId,
+      tenant_id: tenantAId,
+      email: 'cashierA@omnifood.ni',
+      role: UserRole.CASHIER,
+      is_active: true,
+      security_version: 1,
+    });
+    registerAuthoritativeUser({
+      id: ownerBId,
+      tenant_id: tenantBId,
+      email: 'ownerB@omnifood.ni',
+      role: UserRole.OWNER,
+      is_active: true,
+      security_version: 1,
+    });
+
+    const currentUserAuthorization = {
+      authorize: jest.fn(
+        async (token: JwtAccessPayload): Promise<AuthoritativeCurrentUser> => {
+          if (
+            !token ||
+            typeof token.sub !== 'string' ||
+            !token.sub.trim() ||
+            typeof token.tenant_id !== 'string' ||
+            !token.tenant_id.trim()
+          ) {
+            throw new UnauthorizedException(
+              'Authoritative user validation failed',
+            );
+          }
+          const user = authoritativeUsers.get(
+            authoritativeUserStoreKey(token.sub, token.tenant_id),
+          );
+          if (
+            !user ||
+            !user.is_active ||
+            user.tenant_id !== token.tenant_id ||
+            String(user.role) !== token.role ||
+            user.security_version !== token.security_version
+          ) {
+            throw new UnauthorizedException(
+              'Authoritative user validation failed',
+            );
+          }
+          return {
+            email: user.email,
+            tenant_id: user.tenant_id,
+            role: user.role,
+            is_active: user.is_active,
+            security_version: user.security_version,
+          };
+        },
+      ),
+    };
+
     const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [
         OnboardingSessionController,
@@ -303,8 +429,13 @@ async function with74ScenariosIsolatedSchema(
         JwtService,
         Reflector,
         AuthGuard,
+        AuthoritativeCurrentUserGuard,
         RolesGuard,
         PermissionsGuard,
+        {
+          provide: CurrentUserAuthorizationService,
+          useValue: currentUserAuthorization,
+        },
         { provide: DataSource, useValue: dataSource },
         { provide: EventEmitter2, useValue: { emit: jest.fn() } },
         {
@@ -496,24 +627,28 @@ async function with74ScenariosIsolatedSchema(
       email: 'ownerA@omnifood.ni',
       role: UserRole.OWNER,
       tenant_id: tenantAId,
+      security_version: 1,
     });
     const managerTokenA = signIdentityJwtAccessToken(jwtService, {
       sub: managerAId,
       email: 'managerA@omnifood.ni',
       role: UserRole.MANAGER,
       tenant_id: tenantAId,
+      security_version: 1,
     });
     const cashierTokenA = signIdentityJwtAccessToken(jwtService, {
       sub: cashierAId,
       email: 'cashierA@omnifood.ni',
       role: UserRole.CASHIER,
       tenant_id: tenantAId,
+      security_version: 1,
     });
     const ownerTokenB = signIdentityJwtAccessToken(jwtService, {
       sub: ownerBId,
       email: 'ownerB@omnifood.ni',
       role: UserRole.OWNER,
       tenant_id: tenantBId,
+      security_version: 1,
     });
 
     await assertion({
@@ -526,6 +661,12 @@ async function with74ScenariosIsolatedSchema(
       ownerTokenB,
       managerTokenA,
       cashierTokenA,
+      ownerAId,
+      managerAId,
+      cashierAId,
+      ownerBId,
+      registerAuthoritativeUser,
+      currentUserAuthorization,
       rolloutService,
       activationService,
       telemetryService,
@@ -1063,11 +1204,15 @@ describe('ONB1.10D: Full Regression of the 74 Normative Architecture Scenarios (
       async ({
         app,
         dataSource,
+        jwtService,
         tenantAId,
         tenantBId,
         ownerTokenA,
         ownerTokenB,
         cashierTokenA,
+        ownerAId,
+        registerAuthoritativeUser,
+        currentUserAuthorization,
         telemetryService,
       }) => {
         // 61. Tenant A no lee/escribe session de B en PostgreSQL real
@@ -1093,6 +1238,101 @@ describe('ONB1.10D: Full Regression of the 74 Normative Architecture Scenarios (
           .set('Authorization', `Bearer ${cashierTokenA}`)
           .send();
         expect(cashierDeny.status).toBe(403);
+
+        // 65. Authoritative user store rejects forged tenant, stale role, inactive user, and version mismatch
+        const unknownToken = signIdentityJwtAccessToken(jwtService, {
+          sub: randomUUID(),
+          email: 'unknown@omnifood.ni',
+          role: UserRole.OWNER,
+          tenant_id: tenantAId,
+          security_version: 1,
+        });
+        await request(app.getHttpServer())
+          .post('/onboarding/templates/CAFETERIA/apply')
+          .set('Authorization', `Bearer ${unknownToken}`)
+          .send({})
+          .expect(401);
+
+        const forgedTenantToken = signIdentityJwtAccessToken(jwtService, {
+          sub: ownerAId,
+          email: 'ownerA@omnifood.ni',
+          role: UserRole.OWNER,
+          tenant_id: tenantBId,
+          security_version: 1,
+        });
+        await request(app.getHttpServer())
+          .post('/onboarding/templates/CAFETERIA/apply')
+          .set('Authorization', `Bearer ${forgedTenantToken}`)
+          .send({})
+          .expect(401);
+
+        const demotedUserId = randomUUID();
+        registerAuthoritativeUser({
+          id: demotedUserId,
+          tenant_id: tenantAId,
+          email: 'demoted-norm74@omnifood.ni',
+          role: UserRole.MANAGER,
+          is_active: true,
+          security_version: 1,
+        });
+        const staleRoleToken = signIdentityJwtAccessToken(jwtService, {
+          sub: demotedUserId,
+          email: 'demoted-norm74@omnifood.ni',
+          role: UserRole.OWNER,
+          tenant_id: tenantAId,
+          security_version: 1,
+        });
+        await request(app.getHttpServer())
+          .post('/onboarding/templates/CAFETERIA/apply')
+          .set('Authorization', `Bearer ${staleRoleToken}`)
+          .send({})
+          .expect(401);
+
+        const inactiveUserId = randomUUID();
+        registerAuthoritativeUser({
+          id: inactiveUserId,
+          tenant_id: tenantAId,
+          email: 'inactive-norm74@omnifood.ni',
+          role: UserRole.OWNER,
+          is_active: false,
+          security_version: 1,
+        });
+        const inactiveToken = signIdentityJwtAccessToken(jwtService, {
+          sub: inactiveUserId,
+          email: 'inactive-norm74@omnifood.ni',
+          role: UserRole.OWNER,
+          tenant_id: tenantAId,
+          security_version: 1,
+        });
+        await request(app.getHttpServer())
+          .post('/onboarding/templates/CAFETERIA/apply')
+          .set('Authorization', `Bearer ${inactiveToken}`)
+          .send({})
+          .expect(401);
+
+        const staleVersionToken = signIdentityJwtAccessToken(jwtService, {
+          sub: ownerAId,
+          email: 'ownerA@omnifood.ni',
+          role: UserRole.OWNER,
+          tenant_id: tenantAId,
+          security_version: 2,
+        });
+        await request(app.getHttpServer())
+          .post('/onboarding/templates/CAFETERIA/apply')
+          .set('Authorization', `Bearer ${staleVersionToken}`)
+          .send({})
+          .expect(401);
+
+        const decoded = jwtService.decode<JwtAccessPayload>(ownerTokenA);
+        const authoritativeRecord =
+          await currentUserAuthorization.authorize(decoded);
+        expect(authoritativeRecord).toEqual({
+          email: 'ownerA@omnifood.ni',
+          tenant_id: tenantAId,
+          role: UserRole.OWNER,
+          is_active: true,
+          security_version: 1,
+        });
 
         // 66. telemetry no contiene secretos/raw CSV
         await telemetryService.recordEvent({
