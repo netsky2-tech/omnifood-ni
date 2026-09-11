@@ -88,8 +88,16 @@ export class RecipeService {
     tenantId: string;
     productId: string;
     components: RecipeComponentInput[];
+    yieldQuantity: number;
+    technicalShrinkPct: number;
+    versionNote?: string | null;
     effectiveAt?: Date;
   }): Promise<RecipeVersion> {
+    const yieldQuantity = round4(input.yieldQuantity);
+    if (!Number.isFinite(yieldQuantity) || yieldQuantity <= 0) {
+      throw new BadRequestException('yieldQuantity must be > 0 after rounding');
+    }
+
     const activeVersion = await this.recipeVersionRepo.findOne({
       where: {
         tenant_id: input.tenantId,
@@ -115,13 +123,18 @@ export class RecipeService {
       version_number: nextVersionNumber,
       is_active: true,
       fecha_inicio_vigencia: input.effectiveAt ?? new Date(),
+      yield_quantity: yieldQuantity,
+      technical_shrink_pct: round4(input.technicalShrinkPct),
+      version_note: input.versionNote ?? null,
     });
 
     const savedVersion = await this.recipeVersionRepo.save(version);
 
     const details = input.components.map((component) => {
+      // RecipeDetail.quantity is consumption for one sold unit, not one batch.
       const netUsableQuantity = round4(
-        component.grossQuantity * (1 - component.technicalShrinkPct / 100),
+        (component.grossQuantity * (1 - component.technicalShrinkPct / 100)) /
+          yieldQuantity,
       );
 
       return this.recipeDetailRepo.create({
@@ -259,8 +272,12 @@ export class RecipeService {
   ): Promise<IngestPosVersionResult> {
     const { tenantId, dto } = input;
 
-    if (!Number.isFinite(dto.yieldQuantity) || dto.yieldQuantity <= 0) {
-      throw new BadRequestException('yieldQuantity must be > 0');
+    const normalizedYieldQuantity = round4(dto.yieldQuantity);
+    if (
+      !Number.isFinite(normalizedYieldQuantity) ||
+      normalizedYieldQuantity <= 0
+    ) {
+      throw new BadRequestException('yieldQuantity must be > 0 after rounding');
     }
 
     this.assertVersionShrink(dto.technicalShrinkPct, 'version');
@@ -283,7 +300,7 @@ export class RecipeService {
       tenantId,
       dto,
       resolvedComponents,
-      yieldQuantity: round4(dto.yieldQuantity),
+      yieldQuantity: normalizedYieldQuantity,
       publishedAt: this.parseDate(dto.publishedAt),
       posCreatedAt: this.parseDate(dto.createdAt),
     };

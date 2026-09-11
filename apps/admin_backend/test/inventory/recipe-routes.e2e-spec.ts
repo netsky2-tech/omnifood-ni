@@ -13,6 +13,7 @@ import {
 import { Insumo } from '../../src/modules/inventory/entities/insumo.entity';
 import { RecipeVersion } from '../../src/modules/inventory/entities/recipe-version.entity';
 import { RecipeDetail } from '../../src/modules/inventory/entities/recipe-detail.entity';
+import { UomConversion } from '../../src/modules/inventory/entities/uom-conversion.entity';
 import { RecipeService } from '../../src/modules/inventory/recipe.service';
 import { ProductService } from '../../src/modules/inventory/product.service';
 import { ChangeLogService } from '../../src/modules/audit/change-log.service';
@@ -66,7 +67,14 @@ async function withIsolatedSchema(
       type: 'postgres',
       ...postgresConnection,
       schema,
-      entities: [Tenant, Product, Insumo, RecipeVersion, RecipeDetail],
+      entities: [
+        Tenant,
+        Product,
+        Insumo,
+        RecipeVersion,
+        RecipeDetail,
+        UomConversion,
+      ],
       synchronize: true,
     });
     await dataSource.initialize();
@@ -83,11 +91,7 @@ async function withIsolatedSchema(
       dataSource.getRepository(RecipeDetail),
       dataSource.getRepository(Insumo),
       dataSource.getRepository(Product),
-      dataSource.getRepository(
-        (
-          await import('../../src/modules/inventory/entities/uom-conversion.entity')
-        ).UomConversion,
-      ),
+      dataSource.getRepository(UomConversion),
       new (
         await import('../../src/modules/inventory/uom-conversion-calculator')
       ).UomConversionCalculator(),
@@ -176,31 +180,32 @@ describe('RecipeController E2E — real PostgreSQL', () => {
             });
 
             // Create a COMPOUND product
-            const productId = randomUUID();
-            await productService.create(
-              tenantId,
-              {
-                name: 'Gallopinto',
-                uom: 'un',
-                product_type: ProductType.COMPOUND,
-                sellPrice: 50,
-                category_code: 'PLATO_FUERTE',
-              },
-              { userId: 'user-1', userEmail: 'owner@example.com' },
-            );
+            const productId = (
+              await productService.create(
+                tenantId,
+                {
+                  name: 'Gallopinto',
+                  uom: 'un',
+                  product_type: ProductType.COMPOUND,
+                  sellPrice: 50,
+                  category_code: 'PLATO_FUERTE',
+                },
+                { userId: 'user-1', userEmail: 'owner@example.com' },
+              )
+            ).id;
 
             // Create insumos
             const arrozId = randomUUID();
             await dataSource.query(
-              `INSERT INTO insumos (id, tenant_id, name, consumption_uom, stock, "averageCost", is_active, created_at, updated_at)
-             VALUES ($1, $2, 'Arroz', 'kg', 100, 15, true, now(), now())`,
+              `INSERT INTO insumos (id, tenant_id, name, "consumptionUom", "purchaseUom", "conversionFactor", stock, costo_promedio_nio, is_active, created_at, updated_at)
+             VALUES ($1, $2, 'Arroz', 'kg', 'kg', 1, 100, 15, true, now(), now())`,
               [arrozId, tenantId],
             );
 
             const frijolId = randomUUID();
             await dataSource.query(
-              `INSERT INTO insumos (id, tenant_id, name, consumption_uom, stock, "averageCost", is_active, created_at, updated_at)
-             VALUES ($1, $2, 'Frijol', 'kg', 50, 20, true, now(), now())`,
+              `INSERT INTO insumos (id, tenant_id, name, "consumptionUom", "purchaseUom", "conversionFactor", stock, costo_promedio_nio, is_active, created_at, updated_at)
+             VALUES ($1, $2, 'Frijol', 'kg', 'kg', 1, 50, 20, true, now(), now())`,
               [frijolId, tenantId],
             );
 
@@ -245,10 +250,18 @@ describe('RecipeController E2E — real PostgreSQL', () => {
             expect(res.body.recipeVersion.technical_shrink_pct).toBe(5);
             expect(res.body.recipeVersion.version_note).toBe('Receta original');
             expect(res.body.components).toHaveLength(2);
-            expect(res.body.components[0].insumo_id).toBe(arrozId);
-            expect(res.body.components[0].gross_quantity).toBe(5);
-            expect(res.body.components[1].insumo_id).toBe(frijolId);
-            expect(res.body.components[1].gross_quantity).toBe(3);
+            expect(res.body.components).toEqual(
+              expect.arrayContaining([
+                expect.objectContaining({
+                  insumo_id: arrozId,
+                  gross_quantity: 5,
+                }),
+                expect.objectContaining({
+                  insumo_id: frijolId,
+                  gross_quantity: 3,
+                }),
+              ]),
+            );
           },
         );
       },
@@ -350,23 +363,24 @@ describe('RecipeController E2E — real PostgreSQL', () => {
             });
 
             // Create a COMPOUND product
-            const productId = randomUUID();
-            await productService.create(
-              tenantId,
-              {
-                name: 'Gallopinto',
-                uom: 'un',
-                product_type: ProductType.COMPOUND,
-                sellPrice: 50,
-              },
-              { userId: 'user-1', userEmail: 'owner@example.com' },
-            );
+            const productId = (
+              await productService.create(
+                tenantId,
+                {
+                  name: 'Gallopinto',
+                  uom: 'un',
+                  product_type: ProductType.COMPOUND,
+                  sellPrice: 50,
+                },
+                { userId: 'user-1', userEmail: 'owner@example.com' },
+              )
+            ).id;
 
             // Create insumo
             const arrozId = randomUUID();
             await dataSource.query(
-              `INSERT INTO insumos (id, tenant_id, name, consumption_uom, stock, "averageCost", is_active, created_at, updated_at)
-             VALUES ($1, $2, 'Arroz', 'kg', 100, 15, true, now(), now())`,
+              `INSERT INTO insumos (id, tenant_id, name, "consumptionUom", "purchaseUom", "conversionFactor", stock, costo_promedio_nio, is_active, created_at, updated_at)
+             VALUES ($1, $2, 'Arroz', 'kg', 'kg', 1, 100, 15, true, now(), now())`,
               [arrozId, tenantId],
             );
 
@@ -431,17 +445,18 @@ describe('RecipeController E2E — real PostgreSQL', () => {
               tenant_id: tenantId,
             });
 
-            const productId = randomUUID();
-            await productService.create(
-              tenantId,
-              {
-                name: 'Gallopinto',
-                uom: 'un',
-                product_type: ProductType.COMPOUND,
-                sellPrice: 50,
-              },
-              { userId: 'user-1', userEmail: 'owner@example.com' },
-            );
+            const productId = (
+              await productService.create(
+                tenantId,
+                {
+                  name: 'Gallopinto',
+                  uom: 'un',
+                  product_type: ProductType.COMPOUND,
+                  sellPrice: 50,
+                },
+                { userId: 'user-1', userEmail: 'owner@example.com' },
+              )
+            ).id;
 
             const res = await request(app.getHttpServer())
               .get(`/recipes/products/${productId}/active`)
@@ -487,22 +502,23 @@ describe('RecipeController E2E — real PostgreSQL', () => {
               tenant_id: tenantId,
             });
 
-            const productId = randomUUID();
-            await productService.create(
-              tenantId,
-              {
-                name: 'Gallopinto',
-                uom: 'un',
-                product_type: ProductType.COMPOUND,
-                sellPrice: 50,
-              },
-              { userId: 'user-1', userEmail: 'owner@example.com' },
-            );
+            const productId = (
+              await productService.create(
+                tenantId,
+                {
+                  name: 'Gallopinto',
+                  uom: 'un',
+                  product_type: ProductType.COMPOUND,
+                  sellPrice: 50,
+                },
+                { userId: 'user-1', userEmail: 'owner@example.com' },
+              )
+            ).id;
 
             const arrozId = randomUUID();
             await dataSource.query(
-              `INSERT INTO insumos (id, tenant_id, name, consumption_uom, stock, "averageCost", is_active, created_at, updated_at)
-             VALUES ($1, $2, 'Arroz', 'kg', 100, 15, true, now(), now())`,
+              `INSERT INTO insumos (id, tenant_id, name, "consumptionUom", "purchaseUom", "conversionFactor", stock, costo_promedio_nio, is_active, created_at, updated_at)
+             VALUES ($1, $2, 'Arroz', 'kg', 'kg', 1, 100, 15, true, now(), now())`,
               [arrozId, tenantId],
             );
 
@@ -608,8 +624,8 @@ describe('RecipeController E2E — real PostgreSQL', () => {
 
             const otherInsumoId = randomUUID();
             await dataSource.query(
-              `INSERT INTO insumos (id, tenant_id, name, consumption_uom, stock, "averageCost", is_active, created_at, updated_at)
-             VALUES ($1, $2, 'Other Insumo', 'kg', 100, 15, true, now(), now())`,
+              `INSERT INTO insumos (id, tenant_id, name, "consumptionUom", "purchaseUom", "conversionFactor", stock, costo_promedio_nio, is_active, created_at, updated_at)
+             VALUES ($1, $2, 'Other Insumo', 'kg', 'kg', 1, 100, 15, true, now(), now())`,
               [otherInsumoId, otherTenantId],
             );
 
@@ -651,22 +667,23 @@ describe('RecipeController E2E — real PostgreSQL', () => {
               tenant_id: tenantId,
             });
 
-            const productId = randomUUID();
-            await productService.create(
-              tenantId,
-              {
-                name: 'Gallopinto',
-                uom: 'un',
-                product_type: ProductType.COMPOUND,
-                sellPrice: 50,
-              },
-              { userId: 'user-1', userEmail: 'owner@example.com' },
-            );
+            const productId = (
+              await productService.create(
+                tenantId,
+                {
+                  name: 'Gallopinto',
+                  uom: 'un',
+                  product_type: ProductType.COMPOUND,
+                  sellPrice: 50,
+                },
+                { userId: 'user-1', userEmail: 'owner@example.com' },
+              )
+            ).id;
 
             const arrozId = randomUUID();
             await dataSource.query(
-              `INSERT INTO insumos (id, tenant_id, name, consumption_uom, stock, "averageCost", is_active, created_at, updated_at)
-             VALUES ($1, $2, 'Arroz', 'kg', 100, 15, true, now(), now())`,
+              `INSERT INTO insumos (id, tenant_id, name, "consumptionUom", "purchaseUom", "conversionFactor", stock, costo_promedio_nio, is_active, created_at, updated_at)
+             VALUES ($1, $2, 'Arroz', 'kg', 'kg', 1, 100, 15, true, now(), now())`,
               [arrozId, tenantId],
             );
 

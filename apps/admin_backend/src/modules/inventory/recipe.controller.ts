@@ -153,6 +153,9 @@ export class RecipeController {
         grossQuantity: c.grossQuantity,
         technicalShrinkPct: c.technicalShrinkPct,
       })),
+      yieldQuantity: dto.yieldQuantity,
+      technicalShrinkPct: dto.technicalShrinkPct,
+      versionNote: dto.versionNote,
       effectiveAt: dto.effectiveAt ? new Date(dto.effectiveAt) : undefined,
     });
 

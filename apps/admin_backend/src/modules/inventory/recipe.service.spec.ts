@@ -168,6 +168,9 @@ describe('RecipeService', () => {
       components: [
         { insumoId: 'ins-1', grossQuantity: 1, technicalShrinkPct: 15 },
       ],
+      yieldQuantity: 10.00006,
+      technicalShrinkPct: 12.34567,
+      versionNote: 'Ten servings',
     });
 
     expect(recipeVersionRepo.save).toHaveBeenNthCalledWith(
@@ -175,15 +178,33 @@ describe('RecipeService', () => {
       expect.objectContaining({ is_active: false }),
     );
     expect(recipeVersionRepo.create).toHaveBeenCalledWith(
-      expect.objectContaining({ version_number: 8, is_active: true }),
+      expect.objectContaining({
+        version_number: 8,
+        is_active: true,
+        yield_quantity: 10.0001,
+        technical_shrink_pct: 12.3457,
+        version_note: 'Ten servings',
+      }),
     );
     expect(recipeDetailRepo.create).toHaveBeenCalledWith(
       expect.objectContaining({
         gross_quantity: 1,
         technical_shrink_pct: 15,
-        quantity: 0.85,
+        quantity: 0.085,
       }),
     );
+  });
+
+  it('rejects a yield that becomes nonpositive at persistence precision', async () => {
+    await expect(
+      service.createNewVersion({
+        tenantId: 'tenant-A',
+        productId: 'prod-1',
+        components: [],
+        yieldQuantity: 0.00004,
+        technicalShrinkPct: 0,
+      }),
+    ).rejects.toThrow('yieldQuantity must be > 0 after rounding');
   });
 
   it('returns deterministic ordered snapshot by insumo id', async () => {
