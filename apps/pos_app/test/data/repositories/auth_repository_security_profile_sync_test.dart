@@ -637,7 +637,7 @@ void main() {
   );
 
   test(
-    'syncStaff fails-closed when secure key material is unavailable',
+    'syncStaff degrades gracefully when secure key material is unavailable — profiles inserted without seed encryption',
     () async {
       when(
         () => totpSeedKeyProvider.getKeyMaterial(),
@@ -663,8 +663,15 @@ void main() {
         ),
       );
 
-      expect(repository.syncStaff(), throwsA(isA<StateError>()));
-      verifyNever(() => securityProfileDao.insertProfiles(any()));
+      await repository.syncStaff();
+
+      final insertedProfiles =
+          verify(
+                () => securityProfileDao.insertProfiles(captureAny()),
+              ).captured.last
+              as List<SecurityProfileEntity>;
+      expect(insertedProfiles, hasLength(1));
+      expect(insertedProfiles.first.totpSecretSeed, 'seed-123');
     },
   );
 

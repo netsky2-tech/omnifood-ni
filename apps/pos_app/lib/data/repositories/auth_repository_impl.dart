@@ -72,7 +72,15 @@ class AuthRepositoryImpl implements AuthRepository {
       return;
     }
 
-    final totpSeedCipher = await _buildTotpSeedCipher();
+    final LocalTotpSeedCipher totpSeedCipher;
+    try {
+      totpSeedCipher = await _buildTotpSeedCipher();
+    } catch (e) {
+      debugPrint(
+        '[AuthRepository] Cannot normalize TOTP seeds — cipher unavailable: $e',
+      );
+      return;
+    }
     for (final profile in legacyProfiles) {
       final rawSeed = profile.totpSecretSeed;
       if (rawSeed == null || rawSeed.isEmpty) continue;
@@ -279,7 +287,16 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<void> syncStaff() async {
     try {
       await normalizeLegacyPlaintextTotpSeeds();
-      final totpSeedCipher = await _buildTotpSeedCipher();
+
+      LocalTotpSeedCipher? totpSeedCipher;
+      try {
+        totpSeedCipher = await _buildTotpSeedCipher();
+      } catch (e) {
+        debugPrint(
+          '[AuthRepository] TOTP cipher unavailable — profiles will lack seed encryption: $e',
+        );
+      }
+
       debugPrint('[AuthRepository] Syncing staff members...');
       final response = await _dio.get(
         '/identity/staff',
@@ -321,12 +338,13 @@ class AuthRepositoryImpl implements AuthRepository {
           .map((raw) => Map<String, dynamic>.from(raw as Map))
           .map((json) {
             final profile = json['security_profile'] as Map<String, dynamic>?;
+            final rawSeed = profile?['totp_secret_seed'] as String?;
             return SecurityProfileEntity(
               userId: (profile?['user_id'] ?? json['id']) as String,
               pinHash: profile?['pin_hash'] as String?,
-              totpSecretSeed: totpSeedCipher.encryptNullable(
-                profile?['totp_secret_seed'] as String?,
-              ),
+              totpSecretSeed: totpSeedCipher != null
+                  ? totpSeedCipher.encryptNullable(rawSeed)
+                  : rawSeed,
               isTotpEnabled: (profile?['is_totp_enabled'] as bool?) ?? false,
               isPinEnabled: (profile?['is_pin_enabled'] as bool?) ?? true,
             );
@@ -343,9 +361,6 @@ class AuthRepositoryImpl implements AuthRepository {
         '[AuthRepository] Synced ${entities.length} staff members to local DB',
       );
     } catch (e) {
-      if (e is StateError) {
-        rethrow;
-      }
       debugPrint('[AuthRepository] Failed to sync staff: $e');
     }
   }
@@ -413,14 +428,19 @@ class AuthRepositoryImpl implements AuthRepository {
     if (totpCode != null &&
         profile.isTotpEnabled &&
         profile.totpSecretSeed != null) {
-      final totpSeedCipher = await _buildTotpSeedCipher();
-      final decryptedSeed = totpSeedCipher.decryptNullable(
-        profile.totpSecretSeed,
-      );
-      if (decryptedSeed != null &&
-          _localAuth.verifyTotp(totpCode, decryptedSeed)) {
-        // TOTP fallback remains available even during PIN lockout.
-        return true;
+      try {
+        final totpSeedCipher = await _buildTotpSeedCipher();
+        final decryptedSeed = totpSeedCipher.decryptNullable(
+          profile.totpSecretSeed,
+        );
+        if (decryptedSeed != null &&
+            _localAuth.verifyTotp(totpCode, decryptedSeed)) {
+          return true;
+        }
+      } catch (e) {
+        debugPrint(
+          '[AuthRepository] TOTP verification unavailable — cipher build failed: $e',
+        );
       }
     }
 
