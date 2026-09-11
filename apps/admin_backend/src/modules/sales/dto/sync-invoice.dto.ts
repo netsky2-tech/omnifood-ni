@@ -6,7 +6,6 @@ import {
   IsDateString,
   IsOptional,
   IsArray,
-  IsNotEmpty,
   ValidateNested,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
@@ -300,21 +299,21 @@ export class SyncInvoiceDto {
   @IsOptional()
   type?: string;
 
-  @Transform(({ value }) =>
+  @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' && value.trim() === '' ? undefined : value,
   )
   @IsString()
   @IsOptional()
   relatedInvoiceId?: string;
 
-  @Transform(({ value }) =>
+  @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' && value.trim() === '' ? undefined : value,
   )
   @IsString()
   @IsOptional()
   originInvoiceId?: string;
 
-  @Transform(({ value }) =>
+  @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' && value.trim() === '' ? undefined : value,
   )
   @IsString()
@@ -323,21 +322,21 @@ export class SyncInvoiceDto {
   // refund reason policy is formalized in product requirements.
   refundReasonCode?: string;
 
-  @Transform(({ value }) =>
+  @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' && value.trim() === '' ? undefined : value,
   )
   @IsEnum(REFUND_REASON_POLICY)
   @IsOptional()
   refundReasonPolicy?: RefundReasonPolicy;
 
-  @Transform(({ value }) =>
+  @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' && value.trim() === '' ? undefined : value,
   )
   @IsString()
   @IsOptional()
   authorizedByUserId?: string;
 
-  @Transform(({ value }) =>
+  @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' && value.trim() === '' ? undefined : value,
   )
   @IsEnum(CREDIT_NOTE_AUTH_ROLE)

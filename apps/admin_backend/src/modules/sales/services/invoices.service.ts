@@ -240,7 +240,7 @@ export class InvoicesService {
         created_at: new Date(dto.createdAt),
       };
 
-      await this.invoiceRepoFor(manager).upsert(invoicePayload as any, ['id']);
+      await this.invoiceRepoFor(manager).upsert(invoicePayload, ['id']);
       if (persistenceDto.items?.length) {
         const itemPayloads = persistenceDto.items.map((item) => ({
           ...item,
@@ -260,7 +260,7 @@ export class InvoicesService {
             JSON.stringify(ip.variantId),
           );
         }
-        await this.itemRepoFor(manager).upsert(itemPayloads as any, ['id']);
+        await this.itemRepoFor(manager).upsert(itemPayloads, ['id']);
       }
       if (dto.payments?.length) {
         const paymentPayloads = dto.payments.map((payment) => ({
@@ -404,10 +404,13 @@ export class InvoicesService {
           continue;
         }
         duplicates += 1;
-        results.push(this.replayDuplicate(existingByKey, record, 'DUPLICATE_REPLAY'));
+        results.push(
+          this.replayDuplicate(existingByKey, record, 'DUPLICATE_REPLAY'),
+        );
         this.logger.log(
           `[SYNC-DUPLICATE] tenant=${tenantId} device=${record.sourceDeviceId} flow=${flowType} seq=${record.sourceSequence} idempotencyKey=${record.idempotencyKey} code=DUPLICATE_REPLAY`,
-        );        continue;
+        );
+        continue;
       }
       const existingBySequence = await this.withTenantBoundTransaction(
         tenantId,
@@ -432,10 +435,17 @@ export class InvoicesService {
           continue;
         }
         duplicates += 1;
-        results.push(this.replayDuplicate(existingBySequence, record, 'DUPLICATE_SEQUENCE_REPLAY'));
+        results.push(
+          this.replayDuplicate(
+            existingBySequence,
+            record,
+            'DUPLICATE_SEQUENCE_REPLAY',
+          ),
+        );
         this.logger.log(
           `[SYNC-DUPLICATE] tenant=${tenantId} device=${record.sourceDeviceId} flow=${flowType} seq=${record.sourceSequence} idempotencyKey=${record.idempotencyKey} code=DUPLICATE_SEQUENCE_REPLAY`,
-        );        continue;
+        );
+        continue;
       }
 
       if (blockedStreams.has(streamKey)) {
@@ -677,10 +687,19 @@ export class InvoicesService {
     };
   }
 
-  private replayDuplicate(r: InventorySyncReceipt, rec: SyncBatchRecordDto, defCode: string): SyncBatchResultItem {
+  private replayDuplicate(
+    r: InventorySyncReceipt,
+    rec: SyncBatchRecordDto,
+    defCode: string,
+  ): SyncBatchResultItem {
     return this.buildResult(rec, SYNC_RESULT_STATUS.DUPLICATE, {
-      code: r.inventoryOutcome ?? defCode, retryable: false, inventoryOutcome: r.inventoryOutcome ?? undefined,
-      inventoryOutcomeReason: r.inventoryOutcomeReason ?? undefined, acknowledgedMovementCorrelationIds: r.acknowledgedCorrelationIds ?? (r.inventoryOutcome ? [] : undefined), policyVersion: r.inventoryPolicyVersion ?? undefined,
+      code: r.inventoryOutcome ?? defCode,
+      retryable: false,
+      inventoryOutcome: r.inventoryOutcome ?? undefined,
+      inventoryOutcomeReason: r.inventoryOutcomeReason ?? undefined,
+      acknowledgedMovementCorrelationIds:
+        r.acknowledgedCorrelationIds ?? (r.inventoryOutcome ? [] : undefined),
+      policyVersion: r.inventoryPolicyVersion ?? undefined,
     });
   }
 
@@ -887,18 +906,30 @@ export class InvoicesService {
         this.assertSupportedCreditNoteStockBehavior(record);
         const acceptedAt = new Date();
         if (record.invoice) {
-          v1Outcome = await this.outcomeService.validateSaleTimeSnapshot(            tenantId,
+          v1Outcome = await this.outcomeService.validateSaleTimeSnapshot(
+            tenantId,
             record.invoice,
             manager,
           );
 
           if (!v1Outcome && record.documentType !== 'CREDIT_NOTE') {
-            v1Outcome = await this.outcomeService.classifyLegacySyncTime(tenantId, record, manager, acceptedAt);
+            v1Outcome = await this.outcomeService.classifyLegacySyncTime(
+              tenantId,
+              record,
+              manager,
+              acceptedAt,
+            );
           }
 
           const invoiceToSync: SyncInvoiceDto = {
             ...record.invoice,
-            ...(v1Outcome ? { inventoryPolicyVersion: v1Outcome.policyVersion, inventoryOutcome: v1Outcome.outcome, inventoryOutcomeReason: v1Outcome.reason } : {}),
+            ...(v1Outcome
+              ? {
+                  inventoryPolicyVersion: v1Outcome.policyVersion,
+                  inventoryOutcome: v1Outcome.outcome,
+                  inventoryOutcomeReason: v1Outcome.reason,
+                }
+              : {}),
           };
 
           if (!v1Outcome) {
@@ -981,20 +1012,22 @@ export class InvoicesService {
       return {
         accepted: true,
         result: this.buildResult(record, SYNC_RESULT_STATUS.ACCEPTED, {
-          code: v1Outcome ? (v1Outcome as any).outcome : 'APPLIED',
+          code: v1Outcome ? v1Outcome.outcome : 'APPLIED',
           retryable: false,
-          inventoryOutcome: (v1Outcome as any)?.outcome,
-          inventoryOutcomeReason: (v1Outcome as any)?.reason,
+          inventoryOutcome: v1Outcome?.outcome,
+          inventoryOutcomeReason: v1Outcome?.reason,
           acknowledgedMovementCorrelationIds:
-            (v1Outcome as any)?.acknowledgedMovementCorrelationIds,
-          policyVersion: (v1Outcome as any)?.policyVersion,
+            v1Outcome?.acknowledgedMovementCorrelationIds,
+          policyVersion: v1Outcome?.policyVersion,
         }),
       };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Sync failed';
       const dbErr = error as { code?: string; constraint?: string };
       if (
-        (dbErr?.code === '23505' && (dbErr?.constraint === 'uq_inventory_kardex_sale_correlation' || message.includes('uq_inventory_kardex_sale_correlation'))) ||
+        (dbErr?.code === '23505' &&
+          (dbErr?.constraint === 'uq_inventory_kardex_sale_correlation' ||
+            message.includes('uq_inventory_kardex_sale_correlation'))) ||
         message.includes('Duplicate sale correlation ID')
       ) {
         return {
@@ -1607,7 +1640,7 @@ export class InvoicesService {
     manager: EntityManager,
   ): Promise<void> {
     const { item, binding, explodedQuantity } = validatedBinding;
-    const invoice = record.invoice!;
+    const invoice = record.invoice;
     const movementType =
       record.documentType === 'SALE_CANCEL'
         ? MovementType.SALE_CANCEL
@@ -1644,9 +1677,16 @@ export class InvoicesService {
 
     if (binding.saleCorrelationId) {
       const movRepo = manager.getRepository?.(InventoryMovement);
-      const existing = await movRepo?.findOne?.({ where: { tenant_id: tenantId, saleCorrelationId: binding.saleCorrelationId } });
+      const existing = await movRepo?.findOne?.({
+        where: {
+          tenant_id: tenantId,
+          saleCorrelationId: binding.saleCorrelationId,
+        },
+      });
       if (existing) {
-        throw new BadRequestException(`Duplicate sale correlation ID '${binding.saleCorrelationId}' in Kardex for tenant '${tenantId}'`);
+        throw new BadRequestException(
+          `Duplicate sale correlation ID '${binding.saleCorrelationId}' in Kardex for tenant '${tenantId}'`,
+        );
       }
     }
 

@@ -2,12 +2,13 @@ import {
   BadRequestException,
   Inject,
   Injectable,
+  Logger,
   Optional,
   UnauthorizedException,
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, IsNull } from 'typeorm';
+import { Repository } from 'typeorm';
 import { ProductInventoryMappingVersion } from '../../inventory/entities/product-inventory-mapping-version.entity';
 import { Product } from '../../inventory/entities/product.entity';
 import { CatalogValue } from '../../catalog/entities/catalog-value.entity';
@@ -40,6 +41,8 @@ import { FiscalConfigVersionService } from '../../onboarding/services/fiscal-con
 
 @Injectable()
 export class InboundSyncService {
+  private readonly logger = new Logger(InboundSyncService.name);
+
   constructor(
     @InjectRepository(Product)
     private readonly productRepository: Repository<Product>,
@@ -88,7 +91,10 @@ export class InboundSyncService {
           await this.fiscalConfigVersionService.getFiscalConfigSnapshot(
             tenantId,
           );
-      } catch (_err) {
+      } catch (error) {
+        this.logger.warn(
+          `Failed to fetch fiscal config snapshot for tenant ${tenantId}: ${error instanceof Error ? error.message : String(error)}`,
+        );
         fiscalConfig = null;
       }
     }
@@ -229,7 +235,11 @@ export class InboundSyncService {
           "SELECT set_config('app.tenant_id', $1, true)",
           [tenantId],
         );
-      } catch (_) {}
+      } catch (error) {
+        this.logger.debug(
+          `Could not set tenant session config for mapping versions: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }
     const mappings = this.mappingVersionRepository
       ? await this.mappingVersionRepository
