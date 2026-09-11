@@ -30,7 +30,7 @@ class DioActivationSyncPort implements ActivationSyncPort {
           if (evidenceType?.trim().isNotEmpty ?? false) 'evidenceType': evidenceType,
           if (evidenceRef?.trim().isNotEmpty ?? false) 'evidenceRef': evidenceRef,
           if (occurredAt?.trim().isNotEmpty ?? false) 'occurredAt': occurredAt,
-          if (details != null) 'detailsSanitizedJson': details,
+          'detailsSanitizedJson': ?details,
           if (tenantId?.trim().isNotEmpty ?? false)
             'declarativeTenantId': tenantId,
           'declarativeTerminalId': resolvedTerminalId,

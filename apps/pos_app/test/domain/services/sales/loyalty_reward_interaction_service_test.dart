@@ -16,7 +16,7 @@ void main() {
     interactionService = LoyaltyRewardInteractionService(evalService);
   });
 
-  LoyaltyProgramLocal _makeProgram({
+  LoyaltyProgramLocal makeProgram({
     String id = 'prog-1',
     LoyaltyProgramType type = LoyaltyProgramType.spendPoints,
   }) {
@@ -35,7 +35,7 @@ void main() {
     );
   }
 
-  RewardDefinitionLocal _makeReward({
+  RewardDefinitionLocal makeReward({
     String id = 'rw-1',
     String programId = 'prog-1',
     int costUnits = 100,
@@ -54,7 +54,7 @@ void main() {
     );
   }
 
-  LoyaltyTicketSnapshot _makeSnapshot({
+  LoyaltyTicketSnapshot makeSnapshot({
     String? customerId = 'cust-1',
     double totalNet = 150,
   }) {
@@ -79,10 +79,10 @@ void main() {
 
   group('LV1.4C — Reward interaction', () {
     test('selectReward sets selectedRewardId when reward is eligible', () {
-      final programs = [_makeProgram()];
-      final rewards = [_makeReward()];
+      final programs = [makeProgram()];
+      final rewards = [makeReward()];
       final balanceMap = {'prog-1': 150};
-      final snapshot = _makeSnapshot();
+      final snapshot = makeSnapshot();
 
       final evaluation = evalService.evaluate(
         snapshot: snapshot,
@@ -96,10 +96,10 @@ void main() {
     });
 
     test('selectReward rejects when reward is not in eligibleRewards', () {
-      final programs = [_makeProgram()];
-      final rewards = [_makeReward(costUnits: 100)];
+      final programs = [makeProgram()];
+      final rewards = [makeReward(costUnits: 100)];
       final balanceMap = {'prog-1': 50}; // Balance too low
-      final snapshot = _makeSnapshot();
+      final snapshot = makeSnapshot();
 
       final evaluation = evalService.evaluate(
         snapshot: snapshot,
@@ -113,10 +113,10 @@ void main() {
     });
 
     test('clearSelection removes selectedRewardId', () {
-      final programs = [_makeProgram()];
-      final rewards = [_makeReward()];
+      final programs = [makeProgram()];
+      final rewards = [makeReward()];
       final balanceMap = {'prog-1': 150};
-      final snapshot = _makeSnapshot();
+      final snapshot = makeSnapshot();
 
       final evaluation = evalService.evaluate(
         snapshot: snapshot,
@@ -133,10 +133,10 @@ void main() {
     });
 
     test('validateAfterCartChange keeps selection if still eligible', () {
-      final programs = [_makeProgram()];
-      final rewards = [_makeReward(costUnits: 100)];
+      final programs = [makeProgram()];
+      final rewards = [makeReward(costUnits: 100)];
       final balanceMap = {'prog-1': 150};
-      final snapshot = _makeSnapshot();
+      final snapshot = makeSnapshot();
 
       final evaluation = evalService.evaluate(
         snapshot: snapshot,
@@ -148,7 +148,7 @@ void main() {
       interactionService.selectReward(evaluation!, 'rw-1');
 
       // Cart changes but still eligible
-      final newSnapshot = _makeSnapshot(totalNet: 130);
+      final newSnapshot = makeSnapshot(totalNet: 130);
       final newEvaluation = evalService.evaluate(
         snapshot: newSnapshot,
         programs: programs,
@@ -162,10 +162,10 @@ void main() {
     });
 
     test('validateAfterCartChange invalidates if no longer eligible', () {
-      final programs = [_makeProgram()];
-      final rewards = [_makeReward(costUnits: 100)];
+      final programs = [makeProgram()];
+      final rewards = [makeReward(costUnits: 100)];
       final balanceMap = {'prog-1': 50}; // Balance too low
-      final snapshot = _makeSnapshot();
+      final snapshot = makeSnapshot();
 
       final evaluation = evalService.evaluate(
         snapshot: snapshot,
@@ -182,12 +182,12 @@ void main() {
     });
 
     test('validateAfterCartChange invalidates when customer changes', () {
-      final programs = [_makeProgram()];
-      final rewards = [_makeReward(costUnits: 100)];
+      final programs = [makeProgram()];
+      final rewards = [makeReward(costUnits: 100)];
       final balanceMap = {'prog-1': 150};
 
       // First customer has balance
-      final snapshot1 = _makeSnapshot(customerId: 'cust-1');
+      final snapshot1 = makeSnapshot(customerId: 'cust-1');
       final evaluation1 = evalService.evaluate(
         snapshot: snapshot1,
         programs: programs,
@@ -199,7 +199,7 @@ void main() {
       expect(interactionService.selectedRewardId, equals('rw-1'));
 
       // Customer changes — new evaluation with no balance for new customer
-      final snapshot2 = _makeSnapshot(customerId: 'cust-2');
+      final snapshot2 = makeSnapshot(customerId: 'cust-2');
       final evaluation2 = evalService.evaluate(
         snapshot: snapshot2,
         programs: programs,
@@ -213,12 +213,12 @@ void main() {
     });
 
     test('canShowCta returns true only when there are eligible rewards', () {
-      final programs = [_makeProgram()];
-      final rewards = [_makeReward(costUnits: 100)];
+      final programs = [makeProgram()];
+      final rewards = [makeReward(costUnits: 100)];
 
       // No balance — no eligible rewards
       final balanceMapLow = {'prog-1': 50};
-      final snapshot = _makeSnapshot();
+      final snapshot = makeSnapshot();
       final evalLow = evalService.evaluate(
         snapshot: snapshot,
         programs: programs,
@@ -241,10 +241,10 @@ void main() {
     });
 
     test('getSelectedReward returns reward definition when selected', () {
-      final programs = [_makeProgram()];
-      final rewards = [_makeReward(costUnits: 100)];
+      final programs = [makeProgram()];
+      final rewards = [makeReward(costUnits: 100)];
       final balanceMap = {'prog-1': 150};
-      final snapshot = _makeSnapshot();
+      final snapshot = makeSnapshot();
 
       final evaluation = evalService.evaluate(
         snapshot: snapshot,
@@ -260,7 +260,7 @@ void main() {
     });
 
     test('getSelectedReward returns null when nothing selected', () {
-      final rewards = [_makeReward()];
+      final rewards = [makeReward()];
       expect(interactionService.getSelectedReward(rewards), isNull);
     });
   });

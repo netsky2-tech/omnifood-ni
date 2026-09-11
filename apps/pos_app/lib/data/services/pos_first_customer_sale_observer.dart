@@ -27,15 +27,13 @@ class PosFirstCustomerSaleObserver {
     this._telemetryService,
   );
 
-  /**
-   * Observes a commercial customer checkout sale.
-   *
-   * Normative Invariants (ONB1.9G):
-   * 1. If firstSuccessfulSaleAt was a controlled technical sale during Activation (Hito M6),
-   *    records in a decoupled manner the timestamp of the first commercial ticket emitted to a final customer.
-   * 2. Invariant: The subsequent first customer sale NEVER modifies the historical TTFSS claim (first_successful_sale_claims).
-   * 3. Write-once: Multiple subsequent commercial customer sales do not overwrite or duplicate the initial observation.
-   */
+  /// Observes a commercial customer checkout sale.
+  ///
+  /// Normative Invariants (ONB1.9G):
+  /// 1. If firstSuccessfulSaleAt was a controlled technical sale during Activation (Hito M6),
+  ///    records in a decoupled manner the timestamp of the first commercial ticket emitted to a final customer.
+  /// 2. Invariant: The subsequent first customer sale NEVER modifies the historical TTFSS claim (first_successful_sale_claims).
+  /// 3. Write-once: Multiple subsequent commercial customer sales do not overwrite or duplicate the initial observation.
   Future<ObserveCustomerSaleResult> observeCustomerSale({
     required String tenantId,
     required String terminalId,
@@ -116,7 +114,7 @@ class PosFirstCustomerSaleObserver {
 
     // 6. Emit telemetry event
     await _telemetryService.recordEvent(
-      eventName: PosTelemetryEventName.FIRST_CUSTOMER_SALE,
+      eventName: PosTelemetryEventName.firstCustomerSale,
       tenantId: trimmedTenantId,
       terminalId: terminalId.trim(),
       ticketId: trimmedTicketId,

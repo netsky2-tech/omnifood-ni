@@ -1,25 +1,28 @@
 import 'pos_zero_secrets_sanitizer.dart';
 
 enum PosTelemetryEventName {
-  ONBOARDING_STARTED,
-  SESSION_RESUMED,
-  STEP_VIEWED,
-  STEP_COMPLETED_OBSERVED,
-  STEP_SKIPPED,
-  TEMPLATE_PREVIEWED,
-  TEMPLATE_APPLY_RESULT,
-  IMPORT_STARTED,
-  IMPORT_VALIDATED,
-  IMPORT_COMMIT_RESULT,
-  IMPORT_FAILED,
-  SALE_READY_REACHED,
-  ACTIVATION_STARTED,
-  ACTIVATION_CHECK_FAILED,
-  ACTIVATION_WARNING,
-  ACTIVATION_RESULT,
-  FIRST_SUCCESSFUL_SALE,
-  FIRST_CUSTOMER_SALE,
-  BOH_READINESS_CHANGED,
+  onboardingStarted('ONBOARDING_STARTED'),
+  sessionResumed('SESSION_RESUMED'),
+  stepViewed('STEP_VIEWED'),
+  stepCompletedObserved('STEP_COMPLETED_OBSERVED'),
+  stepSkipped('STEP_SKIPPED'),
+  templatePreviewed('TEMPLATE_PREVIEWED'),
+  templateApplyResult('TEMPLATE_APPLY_RESULT'),
+  importStarted('IMPORT_STARTED'),
+  importValidated('IMPORT_VALIDATED'),
+  importCommitResult('IMPORT_COMMIT_RESULT'),
+  importFailed('IMPORT_FAILED'),
+  saleReadyReached('SALE_READY_REACHED'),
+  activationStarted('ACTIVATION_STARTED'),
+  activationCheckFailed('ACTIVATION_CHECK_FAILED'),
+  activationWarning('ACTIVATION_WARNING'),
+  activationResult('ACTIVATION_RESULT'),
+  firstSuccessfulSale('FIRST_SUCCESSFUL_SALE'),
+  firstCustomerSale('FIRST_CUSTOMER_SALE'),
+  bohReadinessChanged('BOH_READINESS_CHANGED');
+
+  final String wireName;
+  const PosTelemetryEventName(this.wireName);
 }
 
 class PosTelemetryEvent {
@@ -67,7 +70,7 @@ class PosProductTelemetryService {
         : null;
 
     final event = PosTelemetryEvent(
-      eventName: eventName.name,
+      eventName: eventName.wireName,
       tenantId: tenantId.trim(),
       terminalId: terminalId?.trim(),
       ticketId: ticketId?.trim(),

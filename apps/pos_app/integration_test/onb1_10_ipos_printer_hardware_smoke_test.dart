@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:pos_app/data/adapters/printer/ipos_printer_adapter.dart';
+import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'package:pos_app/domain/models/sales/invoice.dart';
 import 'package:pos_app/domain/models/sales/invoice_item.dart';
 import 'package:pos_app/domain/models/sales/payment.dart';
@@ -66,6 +67,7 @@ void main() {
       ],
       businessName: 'OMNIFOOD ONB1.10 HARDWARE SMOKE',
       cashierName: 'ATTACHED DEVICE TEST',
+      taxRegime: TaxRegime.regimenGeneral,
       paperWidthMm: 58,
     );
 
@@ -76,6 +78,8 @@ void main() {
     );
     expect(result.printedText, contains(marker));
     // ignore: avoid_print
-    print('ONB1.10_HARDWARE_PRINT_ACCEPTED marker=$marker status=${result.status.name}');
+    print(
+      'ONB1.10_HARDWARE_PRINT_ACCEPTED marker=$marker status=${result.status.name}',
+    );
   });
 }

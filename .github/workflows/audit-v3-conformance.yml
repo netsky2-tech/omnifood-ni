@@ -38,7 +38,7 @@ jobs:
         working-directory: apps/pos_app
         run: flutter pub get
       - name: Run real Node/Dart parity gate
-        run: AUDIT_V3_REAL_RUNTIME=1 node node_modules/jest/bin/jest.js --runInBand --testPathPatterns=conformance.spec.ts
+        run: AUDIT_V3_REAL_RUNTIME=1 node node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/core/audit/v3/conformance.spec.ts
       - name: Verify deterministic receipt
         working-directory: .
         run: git diff --exit-code -- fixtures/audit/v3/conformance-receipt.json
