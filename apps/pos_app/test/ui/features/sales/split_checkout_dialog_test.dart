@@ -16,6 +16,7 @@ import 'package:pos_app/domain/services/kitchen/kitchen_order_service.dart';
 import 'package:pos_app/domain/services/config/tenant_config_service.dart';
 import 'package:pos_app/domain/models/config/printer_config.dart';
 import 'package:pos_app/domain/services/config/printer_config_service.dart';
+import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
 import 'package:pos_app/ui/features/sales/widgets/multi_currency_checkout_dialog.dart';
 import 'package:provider/provider.dart';
@@ -117,6 +118,7 @@ void main() {
       fakePrinterConfigService,
       MockPrinterAdapter(),
     );
+    saleViewModel.setCompanyTaxRegime(TaxRegime.regimenGeneral);
 
     // Set 1000 NIO total (tax exempt for clean rounding in test)
     saleViewModel.toggleGlobalTaxExempt();

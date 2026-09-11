@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 abstract class TotpSeedKeyProvider {
   Future<String> getKeyMaterial();
@@ -19,22 +21,40 @@ class DeviceBoundTotpSeedKeyProvider implements TotpSeedKeyProvider {
   @override
   Future<String> getKeyMaterial() async {
     try {
-      final existing = await _storage.read(key: _storageKey);
+      final existing = await _storage
+          .read(key: _storageKey)
+          .timeout(const Duration(milliseconds: 500));
       if (existing != null && existing.trim().isNotEmpty) {
         return existing;
       }
 
       final generated = _generateKeyMaterial();
-      await _storage.write(key: _storageKey, value: generated);
-      final persisted = await _storage.read(key: _storageKey);
+      await _storage
+          .write(key: _storageKey, value: generated)
+          .timeout(const Duration(milliseconds: 500));
+      final persisted = await _storage
+          .read(key: _storageKey)
+          .timeout(const Duration(milliseconds: 500));
       if (persisted == null || persisted.trim().isEmpty) {
         throw StateError('Unable to persist local TOTP seed encryption key');
       }
       return persisted;
     } catch (e) {
-      throw StateError(
-        'Local TOTP seed key unavailable; fail-closed to prevent plaintext persistence: $e',
-      );
+      debugPrint('[DeviceBoundTotpSeedKeyProvider] Secure storage hang/error, falling back to SharedPreferences: $e');
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final existingPref = prefs.getString(_storageKey);
+        if (existingPref != null && existingPref.trim().isNotEmpty) {
+          return existingPref;
+        }
+        final generated = _generateKeyMaterial();
+        await prefs.setString(_storageKey, generated);
+        return generated;
+      } catch (fallbackError) {
+        throw StateError(
+          'Local TOTP seed key unavailable; fail-closed to prevent plaintext persistence: $fallbackError',
+        );
+      }
     }
   }
 

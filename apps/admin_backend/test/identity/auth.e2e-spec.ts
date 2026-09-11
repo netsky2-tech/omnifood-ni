@@ -16,10 +16,19 @@ import { User } from '../../src/modules/identity/entities/user.entity';
 import { AuditLog } from '../../src/modules/identity/entities/audit-log.entity';
 import { SecurityProfile } from '../../src/modules/identity/entities/security-profile.entity';
 import { AuditIntegrityAlert } from '../../src/modules/identity/entities/audit-integrity-alert.entity';
+import { TenantCapabilityEvent } from '../../src/modules/identity/entities/tenant-capability-event.entity';
 
 @Global()
 @Module({
-  providers: [{ provide: DataSource, useValue: {} }],
+  providers: [
+    {
+      provide: DataSource,
+      useValue: {
+        entityMetadatas: [],
+        getRepository: jest.fn().mockReturnValue({}),
+      },
+    },
+  ],
   exports: [DataSource],
 })
 class TestDatabaseModule {}
@@ -55,6 +64,8 @@ describe('AuthController (e2e)', () => {
       .overrideProvider(getRepositoryToken(SecurityProfile))
       .useValue({ findOne: jest.fn() })
       .overrideProvider(getRepositoryToken(AuditIntegrityAlert))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(TenantCapabilityEvent))
       .useValue({})
       .compile();
 

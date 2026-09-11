@@ -1,4 +1,10 @@
-import { BadRequestException, Injectable, Logger, Optional } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { createHash, randomUUID } from 'crypto';
@@ -27,6 +33,7 @@ import {
   ValidatedBindingToApply,
   SaleTimeSnapshotValidationResult,
 } from './sale-inventory-outcome.service';
+import { TenantFulfillmentRecord } from '../../fulfillment/entities/tenant-fulfillment-record.entity';
 
 const SCALE_4 = 4;
 const SET_LOCAL_TENANT_SQL = "SELECT set_config('app.tenant_id', $1, true)";
@@ -134,11 +141,16 @@ export const calculateSyncPayloadHash = (record: SyncBatchRecordDto): string =>
   createHash('sha256')
     .update(
       stableStringify({
+        aggregateId: record.aggregateId,
+        aggregateType: record.aggregateType,
         documentType: record.documentType,
+        eventId: record.eventId,
         flowType: record.flowType,
+        fulfillment: record.fulfillment,
         invoice: record.invoice,
         movements: record.movements,
         recipeVersionId: record.recipeVersionId,
+        topologyRevision: record.topologyRevision,
       }),
     )
     .digest('hex');
@@ -227,18 +239,6 @@ export class InvoicesService {
         tenant_id: tenantId,
         created_at: new Date(dto.createdAt),
       };
-      console.log(
-        '[SYNC-INVOICES] invoice upsert payload keys:',
-        Object.keys(invoicePayload),
-      );
-      console.log(
-        '[SYNC-INVOICES] invoice id:',
-        JSON.stringify(invoicePayload.id),
-        'userId:',
-        JSON.stringify((invoicePayload as any).userId),
-        'number:',
-        JSON.stringify((invoicePayload as any).number),
-      );
 
       await this.invoiceRepoFor(manager).upsert(invoicePayload as any, ['id']);
       if (persistenceDto.items?.length) {
@@ -405,7 +405,9 @@ export class InvoicesService {
         }
         duplicates += 1;
         results.push(this.replayDuplicate(existingByKey, record, 'DUPLICATE_REPLAY'));
-        continue;
+        this.logger.log(
+          `[SYNC-DUPLICATE] tenant=${tenantId} device=${record.sourceDeviceId} flow=${flowType} seq=${record.sourceSequence} idempotencyKey=${record.idempotencyKey} code=DUPLICATE_REPLAY`,
+        );        continue;
       }
       const existingBySequence = await this.withTenantBoundTransaction(
         tenantId,
@@ -431,7 +433,9 @@ export class InvoicesService {
         }
         duplicates += 1;
         results.push(this.replayDuplicate(existingBySequence, record, 'DUPLICATE_SEQUENCE_REPLAY'));
-        continue;
+        this.logger.log(
+          `[SYNC-DUPLICATE] tenant=${tenantId} device=${record.sourceDeviceId} flow=${flowType} seq=${record.sourceSequence} idempotencyKey=${record.idempotencyKey} code=DUPLICATE_SEQUENCE_REPLAY`,
+        );        continue;
       }
 
       if (blockedStreams.has(streamKey)) {
@@ -455,6 +459,10 @@ export class InvoicesService {
       );
 
       if (record.sourceSequence > expectedSequence) {
+        const lag = record.sourceSequence - expectedSequence;
+        this.logger.warn(
+          `[SYNC-LAG] tenant=${tenantId} device=${record.sourceDeviceId} flow=${flowType} expected=${expectedSequence} received=${record.sourceSequence} lag=${lag}`,
+        );
         const stagedConflict = await this.stageFutureRecord(
           tenantId,
           record,
@@ -500,6 +508,11 @@ export class InvoicesService {
         flowType,
         record.sourceSequence + 1,
       );
+      if (drained.length > 0) {
+        this.logger.log(
+          `[SYNC-DRAIN] tenant=${tenantId} device=${record.sourceDeviceId} flow=${flowType} drainedCount=${drained.length}`,
+        );
+      }
       processed += drained.filter(
         (item) => item.status === SYNC_RESULT_STATUS.ACCEPTED,
       ).length;
@@ -874,8 +887,7 @@ export class InvoicesService {
         this.assertSupportedCreditNoteStockBehavior(record);
         const acceptedAt = new Date();
         if (record.invoice) {
-          v1Outcome = await this.outcomeService.validateSaleTimeSnapshot(
-            tenantId,
+          v1Outcome = await this.outcomeService.validateSaleTimeSnapshot(            tenantId,
             record.invoice,
             manager,
           );
@@ -901,7 +913,6 @@ export class InvoicesService {
             allowCreditNotes: record.documentType === 'CREDIT_NOTE',
           });
         }
-
         if (v1Outcome) {
           if (v1Outcome.outcome === 'APPLIED') {
             for (const b of v1Outcome.bindingsToApply) {
@@ -912,6 +923,35 @@ export class InvoicesService {
           await this.appendInventoryDeltas(tenantId, record, manager);
         }
 
+        if (
+          record.fulfillment &&
+          manager.connection.hasMetadata(TenantFulfillmentRecord)
+        ) {
+          const parsedLines: Record<string, unknown>[] =
+            record.fulfillment.linesPayload != null
+              ? typeof record.fulfillment.linesPayload === 'string'
+                ? (JSON.parse(record.fulfillment.linesPayload) as Record<
+                    string,
+                    unknown
+                  >[])
+                : (record.fulfillment.linesPayload as Record<string, unknown>[])
+              : (record.fulfillment.lines ?? []);
+          await manager.getRepository(TenantFulfillmentRecord).upsert(
+            {
+              id: record.fulfillment.id,
+              tenant_id: tenantId,
+              sale_id: record.fulfillment.saleId ?? record.aggregateId,
+              topology_snapshot_id: record.fulfillment.topologySnapshotId,
+              topology_revision: record.fulfillment.topologyRevision,
+              channel: record.fulfillment.channel,
+              route_state: record.fulfillment.routeState,
+              delivery_state: record.fulfillment.deliveryState ?? 'PENDING',
+              lines_payload: parsedLines,
+              synced_at: new Date(),
+            },
+            ['id'],
+          );
+        }
         await manager.save(
           this.receiptRepository.create({
             tenant_id: tenantId,
@@ -952,10 +992,6 @@ export class InvoicesService {
       };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Sync failed';
-      const stack = error instanceof Error ? error.stack : undefined;
-      console.error('[APPLY-RECORD] CAUGHT ERROR:', message);
-      if (stack)
-        console.error('[APPLY-RECORD] STACK:', stack.substring(0, 500));
       const dbErr = error as { code?: string; constraint?: string };
       if (
         (dbErr?.code === '23505' && (dbErr?.constraint === 'uq_inventory_kardex_sale_correlation' || message.includes('uq_inventory_kardex_sale_correlation'))) ||
@@ -1489,15 +1525,25 @@ export class InvoicesService {
       recipeVersionId,
     );
     if (!resolvedRecipeVersionId) return new Map([[productId, orderQuantity]]);
-    const snapshot = await this.recipeService.getSnapshot(
-      resolvedRecipeVersionId,
-      tenantId,
-      productId,
-    );
-    return this.bomExplosionService.explode({
-      snapshotComponents: snapshot.components,
-      orderQuantity,
-    });
+    try {
+      const snapshot = await this.recipeService.getSnapshot(
+        resolvedRecipeVersionId,
+        tenantId,
+        productId,
+      );
+      return this.bomExplosionService.explode({
+        snapshotComponents: snapshot.components,
+        orderQuantity,
+      });
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        this.logger.warn(
+          `[BOM-SKIP] recipeVersionId=${resolvedRecipeVersionId} productId=${productId} — not found; falling back to direct product movement`,
+        );
+        return new Map([[productId, orderQuantity]]);
+      }
+      throw error;
+    }
   }
 
   private async resolveRecipeVersionId(
@@ -1536,11 +1582,21 @@ export class InvoicesService {
       if (item.inventorySnapshotVersion === 'SALE_TIME_V1') continue;
       const recipeVersionId = item.recipeVersionId ?? recordRecipeVersionId;
       if (!recipeVersionId) continue;
-      await this.recipeService.getSnapshot(
-        recipeVersionId,
-        tenantId,
-        item.productId,
-      );
+      try {
+        await this.recipeService.getSnapshot(
+          recipeVersionId,
+          tenantId,
+          item.productId,
+        );
+      } catch (error) {
+        if (error instanceof NotFoundException) {
+          this.logger.warn(
+            `[RECIPE-SKIP] recipeVersionId=${recipeVersionId} productId=${item.productId} — not found in backend; sale will sync without BOM validation`,
+          );
+          continue;
+        }
+        throw error;
+      }
     }
   }
 

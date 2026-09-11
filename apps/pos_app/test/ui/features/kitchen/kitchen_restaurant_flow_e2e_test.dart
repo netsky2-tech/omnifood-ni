@@ -16,6 +16,7 @@ import 'package:pos_app/domain/models/sales/payment.dart';
 import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/domain/services/kitchen/kitchen_order_service.dart';
 import 'package:pos_app/domain/services/sales/table_order_service.dart';
+import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
 import 'package:pos_app/ui/features/kitchen/kitchen_display_view_model.dart';
 
@@ -101,7 +102,7 @@ void main() {
         .thenAnswer((_) async => seq);
 
     // Execute real SQLite persistence in transaction mock
-    when(mockTransactionDao.executeSaleTransaction(any, any, any, any, any, any, any))
+    when(mockTransactionDao.executeSaleWithDgiTransaction(any, any, any, any, any, any, any, any))
         .thenAnswer((invocation) async {
       final inv = invocation.positionalArguments[0] as InvoiceEntity;
       final items = invocation.positionalArguments[1] as List<InvoiceItemEntity>;
@@ -145,6 +146,7 @@ void main() {
       tableOrderService,
       false,
     );
+    saleViewModel.setCompanyTaxRegime(TaxRegime.regimenGeneral);
 
     kitchenViewModel = KitchenDisplayViewModel(
       kitchenOrderService: kitchenOrderService,

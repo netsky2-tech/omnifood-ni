@@ -1,17 +1,19 @@
 import 'package:intl/intl.dart';
 import '../../models/config/tax_regime.dart';
 import '../../models/sales/cashier_session.dart';
+import '../../models/printer/receipt_document.dart';
 import '../../models/sales/invoice.dart';
 import '../../models/sales/invoice_item.dart';
 import '../../models/sales/payment.dart';
-import '../sales/post_paid_feedback_service.dart';
 import 'esc_pos_builder.dart';
 import 'receipt_layout_formatter.dart';
+import 'receipt_layout_metrics.dart';
 
 /// Formatter and Layout Engine for 58mm Thermal Printers.
 /// Adheres strictly to DGI Disposición Técnica 09-2007, Ley 822, and Food Park QSR needs.
 class Receipt58mmFormatter {
-  static const int lineWidth = 32;
+  /// Logical/configured 58mm character width; physical output requires calibration.
+  static const int lineWidth = ReceiptLayoutMetrics.logicalTextWidth58mm;
   static final ReceiptLayoutFormatter _formatter = ReceiptLayoutFormatter.format58mm();
 
   // ==========================================
@@ -21,7 +23,7 @@ class Receipt58mmFormatter {
   /// Centers [text] within [width] characters.
   static String center(String text, [int width = lineWidth]) {
     final clean = text.trim();
-    if (clean.length >= width) return clean.substring(0, width);
+    if (clean.length >= width) return _formatter.centerLines(clean, width).join('\n');
     final leftPadding = (width - clean.length) ~/ 2;
     final rightPadding = width - clean.length - leftPadding;
     return '${' ' * leftPadding}$clean${' ' * rightPadding}';
@@ -32,6 +34,9 @@ class Receipt58mmFormatter {
   static String twoColumns(String left, String right, [int width = lineWidth]) {
     final cleanLeft = left.trim();
     final cleanRight = right.trim();
+        if (cleanLeft.length + cleanRight.length + 1 > width) {
+          return _formatter.formatKeyValue(cleanLeft, cleanRight, width).join('\n');
+        }
 
     if (cleanRight.length >= width) {
       return cleanRight.substring(0, width);
@@ -140,9 +145,8 @@ class Receipt58mmFormatter {
     String? cashierName,
     TaxRegime taxRegime = TaxRegime.regimenGeneral,
     bool isTaxExempt = false,
-    PostPaidFeedback? loyaltyFeedback,
   }) {
-    return _formatter.formatInvoiceText(
+    final document = ReceiptDocument.fromInvoice(
       invoice,
       items: items,
       payments: payments,
@@ -154,8 +158,8 @@ class Receipt58mmFormatter {
       cashierName: cashierName,
       taxRegime: taxRegime,
       isTaxExempt: isTaxExempt,
-      loyaltyFeedback: loyaltyFeedback,
     );
+    return _formatter.formatReceiptDocumentText(document);
   }
 
   /// Formats a complete DGI invoice into ESC/POS bytecode.
@@ -172,9 +176,8 @@ class Receipt58mmFormatter {
     TaxRegime taxRegime = TaxRegime.regimenGeneral,
     bool isTaxExempt = false,
     List<int>? logoRasterBytes,
-    PostPaidFeedback? loyaltyFeedback,
   }) {
-    return _formatter.formatInvoiceEscPos(
+    final document = ReceiptDocument.fromInvoice(
       invoice,
       items: items,
       payments: payments,
@@ -187,8 +190,8 @@ class Receipt58mmFormatter {
       taxRegime: taxRegime,
       isTaxExempt: isTaxExempt,
       logoRasterBytes: logoRasterBytes,
-      loyaltyFeedback: loyaltyFeedback,
     );
+    return _formatter.formatReceiptDocumentEscPos(document);
   }
 
   // ==========================================
@@ -213,13 +216,13 @@ class Receipt58mmFormatter {
     buffer.writeln(divider('='));
 
     if (buzzerNumber != null && buzzerNumber > 0) {
-      buffer.writeln(center('================================'));
+      buffer.writeln(divider('='));
       buffer.writeln(center('>>> BUZZER / PAGER #$buzzerNumber <<<'));
-      buffer.writeln(center('================================'));
+      buffer.writeln(divider('='));
     } else if (tableName != null && tableName.isNotEmpty) {
-      buffer.writeln(center('================================'));
+      buffer.writeln(divider('='));
       buffer.writeln(center('>>> MESA: $tableName <<<'));
-      buffer.writeln(center('================================'));
+      buffer.writeln(divider('='));
     } else {
       buffer.writeln(center('>>> PARA LLEVAR <<<'));
     }

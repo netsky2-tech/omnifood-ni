@@ -4,10 +4,7 @@ import 'package:floor/floor.dart';
   tableName: 'invoices',
   indices: [
     Index(value: ['invoice_number'], unique: true),
-    Index(
-      value: ['origin_invoice_id'],
-      name: 'idx_invoices_origin_invoice_id',
-    ),
+    Index(value: ['origin_invoice_id'], name: 'idx_invoices_origin_invoice_id'),
     Index(
       value: ['terminal_id', 'source_sequence'],
       name: 'idx_invoices_terminal_source_sequence',
@@ -24,7 +21,7 @@ class InvoiceEntity {
   @primaryKey
   final String id;
   @ColumnInfo(name: 'invoice_number')
-  final String number;
+  String number;
   @ColumnInfo(name: 'created_at')
   final int createdAt; // Store as timestamp
   @ColumnInfo(name: 'user_id')

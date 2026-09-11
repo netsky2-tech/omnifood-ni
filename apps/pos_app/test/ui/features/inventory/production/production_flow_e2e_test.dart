@@ -215,11 +215,11 @@ void main() {
     await tester.tap(printButton);
     await tester.pumpAndSettle();
 
-    expect(printerAdapter.lastPrintedText, contains('ETIQUETA DE PRE-ELABORACION'));
-    expect(printerAdapter.lastPrintedText, contains('BOH - ROTACION FIFO'));
+    expect(printerAdapter.lastPrintedText, contains('ETIQUETA DE PRODUCCION'));
+    expect(printerAdapter.lastPrintedText, contains('CONTROL FIFO / INOCUIDAD'));
     expect(printerAdapter.lastPrintedText, contains('Jarabe Simple de la Casa'));
     expect(printerAdapter.lastPrintedText, contains('LOTE-20260827-001'));
-    expect(printerAdapter.lastPrintedText, contains('10 lt'));
+    expect(printerAdapter.lastPrintedText, contains('10.00 lt'));
     expect(printerAdapter.lastPrintedBytes, isNotNull);
     expect(find.text('Viñeta de producción enviada a impresora'), findsOneWidget);
   });

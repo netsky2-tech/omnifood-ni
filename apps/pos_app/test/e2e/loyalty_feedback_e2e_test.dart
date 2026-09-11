@@ -86,6 +86,7 @@ void main() {
         payments: payments,
         businessName: 'OMNIFOOD NI',
         ruc: 'J0010000012345',
+        taxRegime: TaxRegime.regimenGeneral,
         loyaltyFeedback: feedback,
       );
 
@@ -106,77 +107,81 @@ void main() {
       expect(loyaltyIdx, lessThan(graciasIdx));
     });
 
-    test('PRODUCT_STAMPS: complete flow from stamp earning to printed receipt', () async {
-      // 1. Simulate: customer earned 2 stamps, now has 8/10
-      final evaluation = LoyaltyEvaluation(
-        customerId: 'cust-002',
-        ticketId: 'ticket-002',
-        programs: [
-          const ProgramEvaluation(
-            programId: 'prog-smash',
-            programName: 'Smash Burger Club',
-            programType: LoyaltyProgramType.productStamps,
-            balanceUnits: 8,
-            earningPreviewUnits: 2,
+    test(
+      'PRODUCT_STAMPS: complete flow from stamp earning to printed receipt',
+      () async {
+        // 1. Simulate: customer earned 2 stamps, now has 8/10
+        final evaluation = LoyaltyEvaluation(
+          customerId: 'cust-002',
+          ticketId: 'ticket-002',
+          programs: [
+            const ProgramEvaluation(
+              programId: 'prog-smash',
+              programName: 'Smash Burger Club',
+              programType: LoyaltyProgramType.productStamps,
+              balanceUnits: 8,
+              earningPreviewUnits: 2,
+            ),
+          ],
+        );
+
+        // 2. Compute feedback
+        final feedback = feedbackService.compute(
+          evaluation: evaluation,
+          postCommitBalances: {'prog-smash': 8},
+          earnedUnits: {'prog-smash': 2},
+          redeemedUnits: {'prog-smash': 0},
+        );
+
+        // 3. Print receipt
+        final invoice = Invoice(
+          id: 'inv-e2e-002',
+          number: '001-001-01-00000002',
+          createdAt: DateTime(2026, 9, 1, 15, 0),
+          userId: 'user-01',
+          subtotal: 250.00,
+          totalTax: 37.50,
+          total: 287.50,
+        );
+        final items = [
+          InvoiceItem(
+            id: 'item-e2e-2',
+            invoiceId: 'inv-e2e-002',
+            productId: 'prod-2',
+            productName: 'Smash Burger',
+            quantity: 1,
+            unitPrice: 250.0,
+            originalTaxRate: 0.15,
+            appliedTaxRate: 0.15,
+            taxAmount: 37.5,
+            total: 287.5,
           ),
-        ],
-      );
+        ];
+        final payments = [
+          const Payment(
+            id: 'pay-e2e-2',
+            invoiceId: 'inv-e2e-002',
+            method: PaymentMethod.cash,
+            amount: 287.50,
+          ),
+        ];
 
-      // 2. Compute feedback
-      final feedback = feedbackService.compute(
-        evaluation: evaluation,
-        postCommitBalances: {'prog-smash': 8},
-        earnedUnits: {'prog-smash': 2},
-        redeemedUnits: {'prog-smash': 0},
-      );
+        final result = await printer.printInvoice(
+          invoice,
+          items: items,
+          payments: payments,
+          businessName: 'OMNIFOOD NI',
+          ruc: 'J0010000012345',
+          taxRegime: TaxRegime.regimenGeneral,
+          loyaltyFeedback: feedback,
+        );
 
-      // 3. Print receipt
-      final invoice = Invoice(
-        id: 'inv-e2e-002',
-        number: '001-001-01-00000002',
-        createdAt: DateTime(2026, 9, 1, 15, 0),
-        userId: 'user-01',
-        subtotal: 250.00,
-        totalTax: 37.50,
-        total: 287.50,
-      );
-      final items = [
-        InvoiceItem(
-          id: 'item-e2e-2',
-          invoiceId: 'inv-e2e-002',
-          productId: 'prod-2',
-          productName: 'Smash Burger',
-          quantity: 1,
-          unitPrice: 250.0,
-          originalTaxRate: 0.15,
-          appliedTaxRate: 0.15,
-          taxAmount: 37.5,
-          total: 287.5,
-        ),
-      ];
-      final payments = [
-        const Payment(
-          id: 'pay-e2e-2',
-          invoiceId: 'inv-e2e-002',
-          method: PaymentMethod.cash,
-          amount: 287.50,
-        ),
-      ];
-
-      final result = await printer.printInvoice(
-        invoice,
-        items: items,
-        payments: payments,
-        businessName: 'OMNIFOOD NI',
-        ruc: 'J0010000012345',
-        loyaltyFeedback: feedback,
-      );
-
-      expect(result.isSuccess, isTrue);
-      final printedText = result.printedText!;
-      expect(printedText, contains('LEALTAD'));
-      expect(printedText, contains('+2'));
-    });
+        expect(result.isSuccess, isTrue);
+        final printedText = result.printedText!;
+        expect(printedText, contains('LEALTAD'));
+        expect(printedText, contains('+2'));
+      },
+    );
 
     test('redemption + earning: complete flow with points redeemed', () async {
       // 1. Simulate: customer redeemed 100 points, earned 25 new, balance 75
@@ -245,6 +250,7 @@ void main() {
         payments: payments,
         businessName: 'OMNIFOOD NI',
         ruc: 'J0010000012345',
+        taxRegime: TaxRegime.regimenGeneral,
         loyaltyFeedback: feedback,
       );
 
@@ -257,88 +263,92 @@ void main() {
       expect(printedText, contains('75'));
     });
 
-    test('reward available: complete flow when balance reaches reward cost', () async {
-      // 1. Simulate: customer reached 10 stamps, reward available
-      final evaluation = LoyaltyEvaluation(
-        customerId: 'cust-002',
-        ticketId: 'ticket-004',
-        programs: [
-          const ProgramEvaluation(
-            programId: 'prog-smash',
-            programName: 'Smash Burger Club',
-            programType: LoyaltyProgramType.productStamps,
-            balanceUnits: 10,
-            earningPreviewUnits: 2,
-            eligibleRewards: [
-              EligibleReward(
-                rewardId: 'rw-1',
-                name: 'Smash Burger Gratis',
-                rewardType: RewardType.freeProduct,
-                costUnits: 10,
-              ),
-            ],
+    test(
+      'reward available: complete flow when balance reaches reward cost',
+      () async {
+        // 1. Simulate: customer reached 10 stamps, reward available
+        final evaluation = LoyaltyEvaluation(
+          customerId: 'cust-002',
+          ticketId: 'ticket-004',
+          programs: [
+            const ProgramEvaluation(
+              programId: 'prog-smash',
+              programName: 'Smash Burger Club',
+              programType: LoyaltyProgramType.productStamps,
+              balanceUnits: 10,
+              earningPreviewUnits: 2,
+              eligibleRewards: [
+                EligibleReward(
+                  rewardId: 'rw-1',
+                  name: 'Smash Burger Gratis',
+                  rewardType: RewardType.freeProduct,
+                  costUnits: 10,
+                ),
+              ],
+            ),
+          ],
+        );
+
+        // 2. Compute feedback
+        final feedback = feedbackService.compute(
+          evaluation: evaluation,
+          postCommitBalances: {'prog-smash': 10},
+          earnedUnits: {'prog-smash': 2},
+          redeemedUnits: {'prog-smash': 0},
+        );
+
+        expect(feedback.programs.first.rewardAvailable, isTrue);
+
+        // 3. Print receipt
+        final invoice = Invoice(
+          id: 'inv-e2e-004',
+          number: '001-001-01-00000004',
+          createdAt: DateTime(2026, 9, 1, 16, 0),
+          userId: 'user-01',
+          subtotal: 150.00,
+          totalTax: 22.50,
+          total: 172.50,
+        );
+        final items = [
+          InvoiceItem(
+            id: 'item-e2e-4',
+            invoiceId: 'inv-e2e-004',
+            productId: 'prod-4',
+            productName: 'Papas Fritas',
+            quantity: 3,
+            unitPrice: 50.0,
+            originalTaxRate: 0.15,
+            appliedTaxRate: 0.15,
+            taxAmount: 22.5,
+            total: 172.5,
           ),
-        ],
-      );
+        ];
+        final payments = [
+          const Payment(
+            id: 'pay-e2e-4',
+            invoiceId: 'inv-e2e-004',
+            method: PaymentMethod.cash,
+            amount: 172.50,
+          ),
+        ];
 
-      // 2. Compute feedback
-      final feedback = feedbackService.compute(
-        evaluation: evaluation,
-        postCommitBalances: {'prog-smash': 10},
-        earnedUnits: {'prog-smash': 2},
-        redeemedUnits: {'prog-smash': 0},
-      );
+        final result = await printer.printInvoice(
+          invoice,
+          items: items,
+          payments: payments,
+          businessName: 'OMNIFOOD NI',
+          ruc: 'J0010000012345',
+          taxRegime: TaxRegime.regimenGeneral,
+          loyaltyFeedback: feedback,
+        );
 
-      expect(feedback.programs.first.rewardAvailable, isTrue);
-
-      // 3. Print receipt
-      final invoice = Invoice(
-        id: 'inv-e2e-004',
-        number: '001-001-01-00000004',
-        createdAt: DateTime(2026, 9, 1, 16, 0),
-        userId: 'user-01',
-        subtotal: 150.00,
-        totalTax: 22.50,
-        total: 172.50,
-      );
-      final items = [
-        InvoiceItem(
-          id: 'item-e2e-4',
-          invoiceId: 'inv-e2e-004',
-          productId: 'prod-4',
-          productName: 'Papas Fritas',
-          quantity: 3,
-          unitPrice: 50.0,
-          originalTaxRate: 0.15,
-          appliedTaxRate: 0.15,
-          taxAmount: 22.5,
-          total: 172.5,
-        ),
-      ];
-      final payments = [
-        const Payment(
-          id: 'pay-e2e-4',
-          invoiceId: 'inv-e2e-004',
-          method: PaymentMethod.cash,
-          amount: 172.50,
-        ),
-      ];
-
-      final result = await printer.printInvoice(
-        invoice,
-        items: items,
-        payments: payments,
-        businessName: 'OMNIFOOD NI',
-        ruc: 'J0010000012345',
-        loyaltyFeedback: feedback,
-      );
-
-      expect(result.isSuccess, isTrue);
-      final printedText = result.printedText!;
-      expect(printedText, contains('LEALTAD'));
-      expect(printedText, contains('Recompensa'));
-      expect(printedText, contains('Smash Burger Gratis'));
-    });
+        expect(result.isSuccess, isTrue);
+        final printedText = result.printedText!;
+        expect(printedText, contains('LEALTAD'));
+        expect(printedText, contains('Recompensa'));
+        expect(printedText, contains('Smash Burger Gratis'));
+      },
+    );
 
     test('no loyalty: receipt prints normally without loyalty block', () async {
       // 1. No customer selected → empty feedback
@@ -396,6 +406,7 @@ void main() {
         payments: payments,
         businessName: 'OMNIFOOD NI',
         ruc: 'J0010000012345',
+        taxRegime: TaxRegime.regimenGeneral,
         loyaltyFeedback: feedback,
       );
 
@@ -476,6 +487,7 @@ void main() {
         payments: payments,
         businessName: 'OMNIFOOD NI',
         ruc: 'J0010000012345',
+        taxRegime: TaxRegime.regimenGeneral,
         loyaltyFeedback: feedback,
       );
 

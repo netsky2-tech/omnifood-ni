@@ -6,6 +6,7 @@ import 'package:pos_app/data/daos/sales/invoice_dao.dart';
 import 'package:pos_app/data/daos/sales/invoice_item_dao.dart';
 import 'package:pos_app/data/daos/sales/payment_dao.dart';
 import 'package:pos_app/data/daos/sales/sales_transaction_dao.dart';
+import 'package:pos_app/data/daos/fulfillment/fulfillment_topology_dao.dart';
 import 'package:pos_app/domain/services/sales/dgi_numbering_service.dart';
 import 'package:pos_app/domain/services/inventory/movement_engine.dart';
 import 'package:pos_app/domain/repositories/audit_repository.dart';
@@ -20,14 +21,73 @@ import 'package:pos_app/domain/models/inventory/inventory_movement.dart';
 import 'package:pos_app/domain/models/inventory/product.dart';
 import 'package:pos_app/data/models/sales/invoice_entity.dart';
 import 'package:pos_app/data/models/sales/invoice_item_entity.dart';
+import 'package:pos_app/data/models/sales/invoice_item_modifier_entity.dart';
+import 'package:pos_app/data/models/sales/payment_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
 import 'package:pos_app/data/models/audit_log_entity.dart';
+import 'package:pos_app/data/models/fulfillment/fulfillment_persistence_entities.dart';
+import 'package:pos_app/data/models/fulfillment/topology_persistence_entities.dart';
 import 'package:pos_app/domain/models/audit_log.dart';
 import 'package:pos_app/domain/repositories/sales/sales_repository.dart';
 import 'package:pos_app/domain/models/user.dart';
-import 'package:pos_app/domain/models/sales/sale_time_inventory_snapshot.dart';
+import 'package:pos_app/domain/models/fulfillment/fulfillment_checkout_context.dart';
 
 import 'sales_repository_impl_test.mocks.dart';
+
+class _StubFulfillmentTopologyDao implements FulfillmentTopologyDao {
+  _StubFulfillmentTopologyDao(this.snapshot);
+  final TopologySnapshotEntity snapshot;
+  @override
+  Future<TopologySnapshotEntity?> findSnapshot(
+    String id,
+    String tenantId,
+  ) async =>
+      id == snapshot.id && tenantId == snapshot.tenantId ? snapshot : null;
+  @override
+  Future<void> insertSnapshot(TopologySnapshotEntity snapshot) async =>
+      throw UnsupportedError('Not used by this test');
+  @override
+  Future<void> bindShift(ShiftTopologyBindingEntity binding) async =>
+      throw UnsupportedError('Not used by this test');
+  @override
+  Future<void> insertEmergencyAudit(EmergencyTopologyAuditEntity audit) async =>
+      throw UnsupportedError('Not used by this test');
+  @override
+  Future<ShiftTopologyBindingEntity?> findBinding(
+    String shiftId,
+    String tenantId,
+  ) async => null;
+  @override
+  Future<List<EmergencyTopologyAuditEntity>> findEmergencyAudits(
+    String tenantId,
+  ) async => [];
+}
+
+class _FulfillmentAppDatabase extends Fake implements AppDatabase {
+  _FulfillmentAppDatabase(this.fulfillmentTopologyDao);
+  @override
+  final FulfillmentTopologyDao fulfillmentTopologyDao;
+}
+
+class _FulfillmentSalesTransactionDao extends Fake
+    implements SalesTransactionDao {
+  int fulfillmentTransactionCalls = 0;
+  @override
+  Future<int?> getNextInvoiceSourceSequence(String terminalId) async => 1;
+  @override
+  Future<void> executeFulfillmentSaleTransaction(
+    InvoiceEntity invoice,
+    List<InvoiceItemEntity> items,
+    List<InvoiceItemModifierEntity> modifiers,
+    List<PaymentEntity> payments,
+    List<MovementEntity> movements,
+    AuditLogEntity? auditLog,
+    FulfillmentRecordEntity fulfillment,
+    List<PrintJobEntity> printJobs,
+    OutboxEventEntity outbox,
+    bool shouldFail,
+  ) async => fulfillmentTransactionCalls++;
+}
 
 @GenerateMocks([
   AppDatabase,
@@ -85,6 +145,7 @@ void main() {
     when(
       mockTransactionDao.getNextInvoiceSourceSequence(any),
     ).thenAnswer((_) async => 1);
+    when(mockInvoiceDao.getInvoiceById(any)).thenAnswer((_) async => null);
   });
 
   test(
@@ -96,7 +157,6 @@ void main() {
         number: '001',
         createdAt: DateTime.now(),
         userId: 'user1',
-        terminalId: 'device-terminal-1',
         subtotal: 100,
         totalTax: 15,
         total: 115,
@@ -155,7 +215,8 @@ void main() {
         mockProcessInventoryUseCase.execute(any),
       ).thenAnswer((_) async => movements);
       when(
-        mockTransactionDao.executeSaleTransaction(
+        mockTransactionDao.executeSaleWithDgiTransaction(
+          any,
           any,
           any,
           any,
@@ -180,7 +241,8 @@ void main() {
       // Assert
       verify(mockProcessInventoryUseCase.execute(any)).called(1);
       verify(
-        mockTransactionDao.executeSaleTransaction(
+        mockTransactionDao.executeSaleWithDgiTransaction(
+          any,
           any,
           any,
           any,
@@ -193,25 +255,104 @@ void main() {
     },
   );
 
-  test('rejects a blank terminal identity before DGI sequencing', () async {
-    await expectLater(
-      repository.saveSale(
-        invoice: Invoice(
-          id: 'sale-blank-terminal',
-          number: 'draft',
-          createdAt: DateTime.now(),
-          userId: 'cashier-1',
-          subtotal: 1,
-          totalTax: 0,
-          total: 1,
+  test(
+    'forwards the exact immutable fulfillment context to the checkout callback',
+    () async {
+      final checkoutContexts = <FulfillmentCheckoutContext>[];
+      final topologyDao = _StubFulfillmentTopologyDao(
+        TopologySnapshotEntity(
+          id: 'tenant-1-r3',
+          tenantId: 'tenant-1',
+          revision: 3,
+          hash: 'snapshot-hash',
+          payload: '{}',
+          receivedAt: '2026-08-31T10:00:00Z',
         ),
-        items: const [],
+      );
+      final transactionDao = _FulfillmentSalesTransactionDao();
+      repository = SalesRepositoryImpl(
+        database: _FulfillmentAppDatabase(topologyDao),
+        invoiceDao: mockInvoiceDao,
+        itemDao: mockItemDao,
+        paymentDao: mockPaymentDao,
+        transactionDao: transactionDao,
+        numberingService: mockNumberingService,
+        movementEngine: mockMovementEngine,
+        auditRepository: mockAuditRepository,
+        processInventoryUseCase: mockProcessInventoryUseCase,
+        reverseInventoryUseCase: mockReverseInventoryUseCase,
+        inventoryRepository: mockInventoryRepository,
+        onFulfillmentCheckoutContextReady: checkoutContexts.add,
+      );
+      const context = FulfillmentCheckoutContext(
+        tenantId: 'tenant-1',
+        topologySnapshotId: 'tenant-1-r3',
+        topologyRevision: 3,
+        topologyHash: 'snapshot-hash',
+        channel: 'KDS_AND_PRINT',
+      );
+      final invoice = Invoice(
+        id: 'context-sale',
+        number: 'draft',
+        createdAt: DateTime.parse('2026-08-31T10:00:00Z'),
+        userId: 'cashier-1',
+        subtotal: 100,
+        totalTax: 15,
+        total: 115,
+        paymentStatus: PaymentStatus.paid,
+        syncStatus: SyncStatus.pending,
+        type: InvoiceType.regular,
+      );
+      when(
+        mockNumberingService.isRangeExhausted(),
+      ).thenAnswer((_) async => false);
+      when(
+        mockNumberingService.getNextNumber(),
+      ).thenAnswer((_) async => 'F001-000127');
+      when(
+        mockInventoryRepository.getProductById('prod-1'),
+      ).thenAnswer((_) async => null);
+      when(
+        mockProcessInventoryUseCase.execute(any),
+      ).thenAnswer((_) async => []);
+      when(
+        mockAuditRepository.log(any, metadata: anyNamed('metadata')),
+      ).thenAnswer((_) async {});
+      await repository.saveSale(
+        invoice: invoice,
+        items: const [
+          InvoiceItem(
+            id: 'context-line',
+            invoiceId: 'context-sale',
+            productId: 'prod-1',
+            productName: 'Product 1',
+            quantity: 1,
+            unitPrice: 100,
+            taxAmount: 15,
+            total: 115,
+            originalTaxRate: 15,
+            appliedTaxRate: 15,
+          ),
+        ],
         payments: const [],
-      ),
-      throwsA(isA<StateError>()),
-    );
-    verifyNever(mockNumberingService.isRangeExhausted());
-  });
+        fulfillmentContext: context,
+      );
+      final forwarded = checkoutContexts.single;
+      expect(checkoutContexts, hasLength(1));
+      expect(identical(forwarded, context), isTrue);
+      expect(
+        (
+          forwarded.tenantId,
+          forwarded.topologySnapshotId,
+          forwarded.topologyRevision,
+          forwarded.topologyHash,
+          forwarded.channel,
+        ),
+        ('tenant-1', 'tenant-1-r3', 3, 'snapshot-hash', 'KDS_AND_PRINT'),
+      );
+      expect(transactionDao.fulfillmentTransactionCalls, 1);
+    },
+  );
 
   test(
     'assigns deterministic source metadata when saving regular offline sales',
@@ -221,7 +362,6 @@ void main() {
         number: 'draft',
         createdAt: DateTime.parse('2026-07-13T10:00:00Z'),
         userId: 'cashier-1',
-        terminalId: 'device-terminal-7',
         subtotal: 100,
         totalTax: 15,
         total: 115,
@@ -257,10 +397,11 @@ void main() {
         mockProcessInventoryUseCase.execute(any),
       ).thenAnswer((_) async => []);
       when(
-        mockTransactionDao.getNextInvoiceSourceSequence('device-terminal-7'),
+        mockTransactionDao.getNextInvoiceSourceSequence('pos-cashier-1'),
       ).thenAnswer((_) async => 17);
       when(
-        mockTransactionDao.executeSaleTransaction(
+        mockTransactionDao.executeSaleWithDgiTransaction(
+          any,
           any,
           any,
           any,
@@ -282,8 +423,9 @@ void main() {
       );
 
       final captured = verify(
-        mockTransactionDao.executeSaleTransaction(
+        mockTransactionDao.executeSaleWithDgiTransaction(
           captureAny,
+          any,
           any,
           any,
           any,
@@ -294,11 +436,104 @@ void main() {
       ).captured;
       final persisted = captured.single as InvoiceEntity;
       expect(persisted.type, 'regular');
-      expect(persisted.terminalId, 'device-terminal-7');
+      expect(persisted.terminalId, 'pos-cashier-1');
       expect(persisted.sourceSequence, 17);
-      expect(persisted.idempotencyKey, 'sale:device-terminal-7:sale-offline-1');
+      expect(persisted.idempotencyKey, 'sale:pos-cashier-1:sale-offline-1');
       expect(persisted.payloadHash, isNotNull);
       expect(persisted.payloadHash, isNotEmpty);
+    },
+  );
+
+  test(
+    'keeps legacy checkout on the existing transaction when context is absent',
+    () async {
+      final contexts = <FulfillmentCheckoutContext>[];
+      repository = SalesRepositoryImpl(
+        database: mockDatabase,
+        invoiceDao: mockInvoiceDao,
+        itemDao: mockItemDao,
+        paymentDao: mockPaymentDao,
+        transactionDao: mockTransactionDao,
+        numberingService: mockNumberingService,
+        movementEngine: mockMovementEngine,
+        auditRepository: mockAuditRepository,
+        processInventoryUseCase: mockProcessInventoryUseCase,
+        reverseInventoryUseCase: mockReverseInventoryUseCase,
+        inventoryRepository: mockInventoryRepository,
+        onFulfillmentCheckoutContextReady: contexts.add,
+      );
+      final invoice = Invoice(
+        id: 'legacy-context-sale',
+        number: 'draft',
+        createdAt: DateTime.parse('2026-08-31T11:00:00Z'),
+        userId: 'cashier-1',
+        subtotal: 100,
+        totalTax: 15,
+        total: 115,
+        paymentStatus: PaymentStatus.paid,
+        syncStatus: SyncStatus.pending,
+        type: InvoiceType.regular,
+      );
+      when(
+        mockNumberingService.isRangeExhausted(),
+      ).thenAnswer((_) async => false);
+      when(
+        mockNumberingService.getNextNumber(),
+      ).thenAnswer((_) async => 'F001-000128');
+      when(
+        mockInventoryRepository.getProductById('prod-2'),
+      ).thenAnswer((_) async => null);
+      when(
+        mockProcessInventoryUseCase.execute(any),
+      ).thenAnswer((_) async => []);
+      when(
+        mockTransactionDao.executeSaleWithDgiTransaction(
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+        ),
+      ).thenAnswer((_) async {});
+      when(
+        mockAuditRepository.log(any, metadata: anyNamed('metadata')),
+      ).thenAnswer((_) async {});
+
+      await repository.saveSale(
+        invoice: invoice,
+        items: const [
+          InvoiceItem(
+            id: 'legacy-context-line',
+            invoiceId: 'legacy-context-sale',
+            productId: 'prod-2',
+            productName: 'Product 2',
+            quantity: 1,
+            unitPrice: 100,
+            taxAmount: 15,
+            total: 115,
+            originalTaxRate: 15,
+            appliedTaxRate: 15,
+          ),
+        ],
+        payments: const [],
+      );
+
+      expect(contexts, isEmpty);
+      verify(
+        mockTransactionDao.executeSaleWithDgiTransaction(
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+        ),
+      ).called(1);
     },
   );
 
@@ -311,7 +546,6 @@ void main() {
         number: '002',
         createdAt: DateTime.now(),
         userId: 'user1',
-        terminalId: 'device-terminal-1',
         subtotal: 100,
         totalTax: 15,
         total: 115,
@@ -395,7 +629,6 @@ void main() {
         number: '003',
         createdAt: DateTime.now(),
         userId: 'user1',
-        terminalId: 'device-terminal-1',
         subtotal: 100,
         totalTax: 15,
         total: 115,
@@ -478,7 +711,6 @@ void main() {
         number: '004',
         createdAt: DateTime.now(),
         userId: 'user1',
-        terminalId: 'device-terminal-1',
         subtotal: 100,
         totalTax: 15,
         total: 115,
@@ -849,7 +1081,6 @@ void main() {
           number: 'F001-000123',
           createdAt: DateTime.now().millisecondsSinceEpoch,
           userId: 'cashier-1',
-          terminalId: 'device-terminal-7',
           subtotal: 200,
           totalTax: 30,
           total: 230,
@@ -892,7 +1123,7 @@ void main() {
           mockNumberingService.getNextNumber(),
         ).thenAnswer((_) async => 'NC-001');
         when(
-          mockTransactionDao.getNextInvoiceSourceSequence('device-terminal-7'),
+          mockTransactionDao.getNextInvoiceSourceSequence('pos-cashier-1'),
         ).thenAnswer((_) async => 7);
         when(
           mockAuditRepository.prepareLog(any, metadata: anyNamed('metadata')),
@@ -1080,7 +1311,6 @@ void main() {
           number: 'F001-000128',
           createdAt: DateTime.now().millisecondsSinceEpoch,
           userId: 'cashier-1',
-          terminalId: 'device-terminal-7',
           subtotal: 100,
           totalTax: 15,
           total: 115,
@@ -1119,7 +1349,7 @@ void main() {
           mockNumberingService.getNextNumber(),
         ).thenAnswer((_) async => 'NC-RESTOCK-1');
         when(
-          mockTransactionDao.getNextInvoiceSourceSequence('device-terminal-7'),
+          mockTransactionDao.getNextInvoiceSourceSequence('pos-cashier-1'),
         ).thenAnswer((_) async => 18);
         when(mockReverseInventoryUseCase.execute(any, any)).thenAnswer(
           (_) async => [
@@ -1440,478 +1670,5 @@ void main() {
         );
       },
     );
-    group('frozen SALE_TIME_V1 persistence', () {
-      Invoice invoice(String outcome, {String? reason}) => Invoice(
-        id: 'sale-frozen',
-        number: 'draft',
-        createdAt: DateTime.parse('2026-08-01T10:00:00Z'),
-        userId: 'cashier-1',
-        terminalId: 'terminal-1',
-        subtotal: 10,
-        totalTax: 1.5,
-        total: 11.5,
-        inventoryPolicyVersion: 'SALE_TIME_V1',
-        inventoryOutcome: outcome,
-        inventoryOutcomeReason: reason,
-      );
-      InvoiceItem item(SaleTimeInventorySnapshot snapshot) => InvoiceItem(
-        id: 'line-1',
-        invoiceId: 'sale-frozen',
-        productId: 'product-1',
-        productName: 'Frozen product',
-        quantity: 2,
-        unitPrice: 5,
-        originalTaxRate: 15,
-        appliedTaxRate: 15,
-        taxAmount: 1.5,
-        total: 11.5,
-        inventorySnapshotVersion: 'SALE_TIME_V1',
-        inventorySnapshot: snapshot,
-      );
-      void ready() {
-        when(
-          mockNumberingService.isRangeExhausted(),
-        ).thenAnswer((_) async => false);
-        when(
-          mockNumberingService.getNextNumber(),
-        ).thenAnswer((_) async => 'DGI-1');
-        when(
-          mockTransactionDao.getNextInvoiceSourceSequence('terminal-1'),
-        ).thenAnswer((_) async => 9);
-        when(
-          mockTransactionDao.executeSaleTransaction(
-            any,
-            any,
-            any,
-            any,
-            any,
-            any,
-            any,
-          ),
-        ).thenAnswer((_) async {});
-        when(
-          mockAuditRepository.prepareLog(any, metadata: anyNamed('metadata')),
-        ).thenAnswer(
-          (_) async => AuditLog(
-            userId: 'cashier-1',
-            action: 'SALE_CREATED',
-            timestamp: DateTime.parse('2026-08-01T10:00:00Z'),
-            deviceId: 'device-1',
-            metadata: '{}',
-            sequenceNo: 1,
-            prevHash: 'GENESIS',
-            entryHash: 'audit-hash',
-          ),
-        );
-        when(mockNumberingService.incrementNumber()).thenAnswer((_) async {});
-      }
-
-      SaleTimeInventorySnapshot direct(String correlation) =>
-          SaleTimeInventorySnapshot(
-            classification: SaleInventoryClassification.simple,
-            disposition: SaleInventoryDisposition.direct,
-            catalogRevision: 'catalog-1',
-            mappingVersionId: 'mapping-1',
-            bindings: [
-              SaleTimeInventoryBinding(
-                bindingOrdinal: 0,
-                insumoId: 'insumo-1',
-                quantityPerSaleUnit: 1.5,
-                saleCorrelationId: correlation,
-              ),
-            ],
-          );
-
-      test(
-        'persists frozen effects and prepared audit in the sale transaction without mutable lookup',
-        () async {
-          ready();
-          await repository.saveSale(
-            invoice: invoice('APPLIED'),
-            items: [item(direct('corr-a'))],
-            payments: const [],
-          );
-          final captured = verify(
-            mockTransactionDao.executeSaleTransaction(
-              captureAny,
-              any,
-              any,
-              any,
-              captureAny,
-              captureAny,
-              any,
-            ),
-          ).captured;
-          final persisted = captured[0] as InvoiceEntity;
-          final movements = captured[1] as List<MovementEntity>;
-          expect(persisted.sourceSequence, 9);
-          expect(persisted.payloadHash, matches(RegExp(r'^[a-f0-9]{64}$')));
-          expect(movements.single.id, 'corr-a');
-          expect(movements.single.quantity, -3);
-          expect((captured[2] as AuditLogEntity).action, 'SALE_CREATED');
-          expect(
-            verify(
-              mockAuditRepository.prepareLog(
-                any,
-                metadata: captureAnyNamed('metadata'),
-              ),
-            ).captured.single,
-            contains('inventoryOutcome'),
-          );
-          verifyNever(mockInventoryRepository.getProductById(any));
-          verifyNever(mockProcessInventoryUseCase.execute(any));
-          verifyNever(
-            mockAuditRepository.log(any, metadata: anyNamed('metadata')),
-          );
-        },
-      );
-
-      test('hash covers item and payment sync fields', () async {
-        ready();
-        final payment = Payment(
-          id: 'pay-1',
-          invoiceId: 'sale-frozen',
-          method: PaymentMethod.card,
-          amount: 11.5,
-          voucherCode: 'a',
-        );
-        await repository.saveSale(
-          invoice: invoice('APPLIED'),
-          items: [item(direct('corr-a'))],
-          payments: [payment],
-        );
-        final first =
-            (verify(
-                      mockTransactionDao.executeSaleTransaction(
-                        captureAny,
-                        any,
-                        any,
-                        any,
-                        any,
-                        any,
-                        any,
-                      ),
-                    ).captured.single
-                    as InvoiceEntity)
-                .payloadHash;
-        await repository.saveSale(
-          invoice: invoice('APPLIED'),
-          items: [item(direct('corr-b')).copyWith(unitPrice: 6)],
-          payments: [payment.copyWith(voucherCode: 'b')],
-        );
-        expect(
-          (verify(
-                    mockTransactionDao.executeSaleTransaction(
-                      captureAny,
-                      any,
-                      any,
-                      any,
-                      any,
-                      any,
-                      any,
-                    ),
-                  ).captured.single
-                  as InvoiceEntity)
-              .payloadHash,
-          isNot(first),
-        );
-      });
-      test('rejects mixed or mismatched frozen snapshots', () async {
-        ready();
-        final frozen = item(direct('corr-a'));
-        for (final invalid in [
-          frozen.copyWith(inventorySnapshotVersion: null),
-          frozen.copyWith(inventorySnapshot: null),
-          frozen.copyWith(inventorySnapshotVersion: 'OTHER'),
-        ]) {
-          await expectLater(
-            repository.saveSale(
-              invoice: invoice('APPLIED'),
-              items: [frozen, invalid],
-              payments: const [],
-            ),
-            throwsA(isA<StateError>()),
-          );
-        }
-      });
-      test('rejects wrong frozen reason and missing audit', () async {
-        ready();
-        final noImpact = SaleTimeInventorySnapshot(
-          classification: SaleInventoryClassification.simple,
-          disposition: SaleInventoryDisposition.noImpact,
-          catalogRevision: 'catalog-1',
-          reasonCode: 'NO_EXPLICIT_INSUMO_MAPPING',
-        );
-        await expectLater(
-          repository.saveSale(
-            invoice: invoice(
-              'APPLIED_NO_INVENTORY_IMPACT',
-              reason: 'MISSING_PUBLISHED_RECIPE',
-            ),
-            items: [item(noImpact)],
-            payments: const [],
-          ),
-          throwsA(isA<StateError>()),
-        );
-        when(
-          mockAuditRepository.prepareLog(any, metadata: anyNamed('metadata')),
-        ).thenAnswer((_) async => null);
-        await expectLater(
-          repository.saveSale(
-            invoice: invoice('APPLIED'),
-            items: [item(direct('corr-a'))],
-            payments: const [],
-          ),
-          throwsA(isA<StateError>()),
-        );
-      });
-
-      test(
-        'serializes concurrent frozen sales so DGI invoice numbers stay unique',
-        () async {
-          var nextSequence = 1;
-          ready();
-          when(mockNumberingService.getNextNumber()).thenAnswer((_) async {
-            final allocated = nextSequence;
-            await Future<void>.delayed(Duration.zero);
-            return 'DGI-$allocated';
-          });
-          when(mockNumberingService.incrementNumber()).thenAnswer((_) async {
-            nextSequence++;
-          });
-
-          final firstInvoice = invoice('APPLIED').copyWith(id: 'sale-frozen-1');
-          final secondInvoice = invoice(
-            'APPLIED',
-          ).copyWith(id: 'sale-frozen-2');
-          final frozenItem = item(direct('corr-a'));
-          await Future.wait([
-            repository.saveSale(
-              invoice: firstInvoice,
-              items: [frozenItem.copyWith(invoiceId: firstInvoice.id)],
-              payments: const [],
-            ),
-            repository.saveSale(
-              invoice: secondInvoice,
-              items: [frozenItem.copyWith(invoiceId: secondInvoice.id)],
-              payments: const [],
-            ),
-          ]);
-
-          final persisted = verify(
-            mockTransactionDao.executeSaleTransaction(
-              captureAny,
-              any,
-              any,
-              any,
-              any,
-              any,
-              any,
-            ),
-          ).captured.cast<InvoiceEntity>();
-          expect(persisted.map((value) => value.number).toSet(), {
-            'DGI-1',
-            'DGI-2',
-          });
-        },
-      );
-
-      test(
-        'does not advance DGI after a failed frozen sale transaction',
-        () async {
-          ready();
-          when(
-            mockTransactionDao.executeSaleTransaction(
-              any,
-              any,
-              any,
-              any,
-              any,
-              any,
-              any,
-            ),
-          ).thenThrow(StateError('transaction failed'));
-
-          await expectLater(
-            repository.saveSale(
-              invoice: invoice('APPLIED'),
-              items: [item(direct('corr-a'))],
-              payments: const [],
-            ),
-            throwsA(isA<StateError>()),
-          );
-
-          verifyNever(mockNumberingService.incrementNumber());
-        },
-      );
-
-      test(
-        'does not advance DGI when frozen validation rejects a sale',
-        () async {
-          ready();
-
-          await expectLater(
-            repository.saveSale(
-              invoice: invoice(
-                'APPLIED_NO_INVENTORY_IMPACT',
-                reason: 'MISSING_PUBLISHED_RECIPE',
-              ),
-              items: [
-                item(
-                  SaleTimeInventorySnapshot(
-                    classification: SaleInventoryClassification.simple,
-                    disposition: SaleInventoryDisposition.noImpact,
-                    catalogRevision: 'catalog-1',
-                    reasonCode: 'NO_EXPLICIT_INSUMO_MAPPING',
-                  ),
-                ),
-              ],
-              payments: const [],
-            ),
-            throwsA(isA<StateError>()),
-          );
-
-          verifyNever(
-            mockTransactionDao.executeSaleTransaction(
-              any,
-              any,
-              any,
-              any,
-              any,
-              any,
-              any,
-            ),
-          );
-          verifyNever(mockNumberingService.incrementNumber());
-        },
-      );
-
-      test(
-        'persists pending frozen sales atomically with audit and no local effect',
-        () async {
-          ready();
-          final pending = SaleTimeInventorySnapshot(
-            classification: SaleInventoryClassification.prepared,
-            disposition: SaleInventoryDisposition.pendingRecipe,
-            catalogRevision: 'catalog-1',
-            reasonCode: 'MISSING_PUBLISHED_RECIPE',
-          );
-          await repository.saveSale(
-            invoice: invoice(
-              'APPLIED_INVENTORY_PENDING',
-              reason: 'MISSING_PUBLISHED_RECIPE',
-            ),
-            items: [item(pending)],
-            payments: const [],
-          );
-          final captured = verify(
-            mockTransactionDao.executeSaleTransaction(
-              captureAny,
-              any,
-              any,
-              any,
-              captureAny,
-              captureAny,
-              any,
-            ),
-          ).captured;
-          expect(
-            (captured[0] as InvoiceEntity).inventoryOutcome,
-            'APPLIED_INVENTORY_PENDING',
-          );
-          expect(captured[1] as List<MovementEntity>, isEmpty);
-          expect(captured[2], isA<AuditLogEntity>());
-          verifyNever(mockInventoryRepository.getProductById(any));
-        },
-      );
-      test(
-        'serializes a frozen sale and credit note through one DGI allocation lane',
-        () async {
-          var nextSequence = 1;
-          ready();
-          final original = InvoiceEntity(
-            id: 'credit-origin',
-            number: 'DGI-ORIGINAL',
-            createdAt: 1,
-            userId: 'cashier-1',
-            terminalId: 'terminal-1',
-            subtotal: 10,
-            totalTax: 1.5,
-            total: 11.5,
-            syncStatus: 'synced',
-            paymentStatus: 'paid',
-            type: 'regular',
-          );
-          final originalItem = InvoiceItemEntity(
-            id: 'credit-origin-line',
-            invoiceId: original.id,
-            productId: 'product-1',
-            productName: 'Product',
-            quantity: 1,
-            unitPrice: 10,
-            originalTaxRate: 15,
-            appliedTaxRate: 15,
-            taxAmount: 1.5,
-            total: 11.5,
-          );
-          when(mockNumberingService.getNextNumber()).thenAnswer((_) async {
-            final allocated = nextSequence;
-            await Future<void>.delayed(Duration.zero);
-            return 'DGI-$allocated';
-          });
-          when(mockNumberingService.incrementNumber()).thenAnswer((_) async {
-            nextSequence++;
-          });
-          when(
-            mockInvoiceDao.getInvoiceById(original.id),
-          ).thenAnswer((_) async => original);
-          when(
-            mockItemDao.getItemsByInvoiceId(original.id),
-          ).thenAnswer((_) async => [originalItem]);
-          when(
-            mockTransactionDao.getCreditNotesByRelatedId(original.id),
-          ).thenAnswer((_) async => []);
-          when(
-            mockAuditRepository.prepareLog(
-              'CREDIT_NOTE_CREATED',
-              metadata: anyNamed('metadata'),
-            ),
-          ).thenAnswer((_) async => null);
-          await Future.wait([
-            repository.saveSale(
-              invoice: invoice('APPLIED').copyWith(id: 'sale-parallel'),
-              items: [
-                item(
-                  direct('sale-correlation'),
-                ).copyWith(invoiceId: 'sale-parallel'),
-              ],
-              payments: const [],
-            ),
-            repository.createCreditNote(
-              originalInvoiceId: original.id,
-              reason: 'Return',
-              authorizedByUserId: 'manager-1',
-              authorizedByRole: UserRole.manager,
-              refundReasonPolicy: RefundReasonPolicy.financialOnly,
-            ),
-          ]);
-          final persisted = verify(
-            mockTransactionDao.executeSaleTransaction(
-              captureAny,
-              any,
-              any,
-              any,
-              any,
-              any,
-              any,
-            ),
-          ).captured.cast<InvoiceEntity>();
-          expect(persisted.map((value) => value.number).toSet(), {
-            'DGI-1',
-            'DGI-2',
-          });
-        },
-      );
-    });
   });
 }

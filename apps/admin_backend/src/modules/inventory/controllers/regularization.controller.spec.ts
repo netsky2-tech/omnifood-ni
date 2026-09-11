@@ -1,5 +1,4 @@
 import { GUARDS_METADATA } from '@nestjs/common/constants';
-import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -17,7 +16,6 @@ import {
 
 describe('RegularizationController', () => {
   let controller: RegularizationController;
-  let regularizationService: KardexRegularizationService;
 
   const regularizationServiceMock = {
     getPendingQueue: jest.fn(),
@@ -67,9 +65,6 @@ describe('RegularizationController', () => {
     }).compile();
 
     controller = module.get<RegularizationController>(RegularizationController);
-    regularizationService = module.get<KardexRegularizationService>(
-      KardexRegularizationService,
-    );
   });
 
   it('should be defined and guarded with AuthGuard and RolesGuard', () => {

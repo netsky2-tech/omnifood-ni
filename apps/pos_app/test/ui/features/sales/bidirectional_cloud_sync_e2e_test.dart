@@ -15,6 +15,7 @@ import 'package:pos_app/domain/models/inventory/product.dart';
 import 'package:pos_app/domain/models/sales/payment.dart';
 import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/domain/repositories/audit_repository.dart';
+import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
 
 import 'multi_currency_checkout_e2e_test.mocks.dart';
@@ -120,7 +121,7 @@ void main() {
         .thenAnswer((_) async => seq);
 
     // Transaction DAO executes and persists real entities in SQLite
-    when(mockTransactionDao.executeSaleTransaction(any, any, any, any, any, any, any))
+    when(mockTransactionDao.executeSaleWithDgiTransaction(any, any, any, any, any, any, any, any))
         .thenAnswer((invocation) async {
       final inv = invocation.positionalArguments[0] as InvoiceEntity;
       final items = invocation.positionalArguments[1] as List<InvoiceItemEntity>;
@@ -177,6 +178,7 @@ void main() {
       null,
       syncService,
     );
+    saleViewModel.setCompanyTaxRegime(TaxRegime.regimenGeneral);
   });
 
   tearDown(() async {

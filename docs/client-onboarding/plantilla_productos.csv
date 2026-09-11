@@ -1,0 +1,32 @@
+nombre,precio_venta,unidad_venta,es_preparado,categoria,sku,tiene_variantes
+Espresso Sencillo,30.00,unidad,true,Bebidas Calientes,ESS01,false
+Espresso Doble,40.00,unidad,true,Bebidas Calientes,ESD01,false
+Americano 12oz,35.00,unidad,true,Bebidas Calientes,AME12,false
+Americano 16oz,40.00,unidad,true,Bebidas Calientes,AME16,false
+Cappuccino 12oz,45.00,unidad,true,Bebidas Calientes,CAP12,true
+Cappuccino 16oz,50.00,unidad,true,Bebidas Calientes,CAP16,true
+Latte 12oz,45.00,unidad,true,Bebidas Calientes,LAT12,true
+Latte 16oz,50.00,unidad,true,Bebidas Calientes,LAT16,true
+Flat White 12oz,50.00,unidad,true,Bebidas Calientes,FLW12,false
+Latte Vainilla 12oz,55.00,unidad,true,Bebidas Calientes,LAV12,true
+Latte Vainilla 16oz,60.00,unidad,true,Bebidas Calientes,LAV16,true
+Latte Caramelo 12oz,55.00,unidad,true,Bebidas Calientes,LAC12,true
+Latte Caramelo 16oz,60.00,unidad,true,Bebidas Calientes,LAC16,true
+Latte Avellana 12oz,55.00,unidad,true,Bebidas Calientes,LAH12,true
+Latte Avellana 16oz,60.00,unidad,true,Bebidas Calientes,LAH16,true
+Mocha 12oz,55.00,unidad,true,Bebidas Calientes,MOC12,true
+Mocha 16oz,60.00,unidad,true,Bebidas Calientes,MOC16,true
+Cold Brew 12oz,40.00,unidad,true,Bebidas Frías,CBW12,false
+Cold Brew 16oz,45.00,unidad,true,Bebidas Frías,CBW16,false
+Té Chai Latte 12oz,50.00,unidad,true,Bebidas Calientes,CHA12,false
+Té Chai Latte 16oz,55.00,unidad,true,Bebidas Calientes,CHA16,false
+Chocolate Caliente 12oz,50.00,unidad,true,Bebidas Calientes,CHC12,false
+Chocolate Caliente 16oz,55.00,unidad,true,Bebidas Calientes,CHC16,false
+Croissant Mantequilla,30.00,unidad,false,Panadería,CRO01,false
+Croissant Almendra,35.00,unidad,false,Panadería,CRO02,false
+Pain au Chocolat,35.00,unidad,false,Panadería,PAC01,false
+Muffin Arándanos,30.00,unidad,false,Panadería,MUF01,false
+Galleta Chispas Chocolate,25.00,unidad,false,Panadería,GAL01,false
+Agua Mineral 500ml,20.00,unidad,false,Bebidas Frías,AGU500,false
+Agua Mineral 1L,30.00,unidad,false,Bebidas Frías,AGU1L,false
+Jugo Naranja 300ml,35.00,unidad,false,Bebidas Frías,JUG300,false

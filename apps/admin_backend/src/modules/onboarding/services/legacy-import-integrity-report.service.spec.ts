@@ -147,6 +147,8 @@ describe('LegacyImportIntegrityReportService (Unit & Triangulation / ONB1.4H)', 
       stock: 50,
       is_perishable: false,
       is_active: true,
+      tax_rate: 0.15,
+      is_tax_exempt: false,
       created_at: new Date('2026-01-01'),
       updated_at: new Date('2026-01-01'),
     };

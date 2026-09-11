@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/domain/models/customer/customer.dart';
@@ -13,6 +14,7 @@ import 'package:pos_app/domain/services/config/tenant_config_service.dart';
 import 'package:pos_app/domain/services/kitchen/kitchen_order_service.dart';
 import 'package:pos_app/domain/services/config/printer_config_service.dart';
 import 'package:pos_app/domain/models/user.dart';
+import 'package:pos_app/domain/models/fulfillment/fulfillment_checkout_context.dart';
 import 'package:pos_app/domain/models/inventory/product.dart';
 import 'package:pos_app/domain/models/sales/payment.dart';
 import 'package:pos_app/domain/models/sales/invoice.dart';
@@ -25,6 +27,7 @@ class FakeSalesRepository implements SalesRepository {
 
   @override
   Future<void> saveSale({
+    FulfillmentCheckoutContext? fulfillmentContext,
     required Invoice invoice,
     required List<InvoiceItem> items,
     required List<Payment> payments,
@@ -170,6 +173,7 @@ void main() {
         KitchenOrderService(database),
         PrinterConfigService(database.localConfigDao),
       );
+      viewModel.setCompanyTaxRegime(TaxRegime.regimenGeneral);
     });
 
     tearDown(() async {

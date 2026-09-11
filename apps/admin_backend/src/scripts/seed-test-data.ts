@@ -596,10 +596,19 @@ async function seed() {
       console.log('🗑️  Cleared existing kardex entries');
 
       // Read actual insumo.stock from DB (POS-origin insumos may differ from INSUMOS array)
-      const allInsumos = await manager.query(
+      interface InsumoRow {
+        id: string;
+        name: string;
+        stock: string;
+        costo_promedio_nio: string;
+      }
+      const rawInsumos: unknown = await manager.query(
         `SELECT id, name, stock, costo_promedio_nio FROM insumos WHERE tenant_id = $1`,
         [TENANT_ID],
       );
+      const allInsumos = (
+        Array.isArray(rawInsumos) ? rawInsumos : []
+      ) as InsumoRow[];
       for (const dbInsumo of allInsumos) {
         const stock = Number(dbInsumo.stock);
         const avgCost = Number(dbInsumo.costo_promedio_nio);

@@ -4,6 +4,7 @@ import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/models/sales/invoice_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
 import 'package:pos_app/data/models/inventory/insumo_entity.dart';
+import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/data/repositories/sales/sales_repository_impl.dart';
 import 'package:pos_app/domain/models/sales/invoice.dart';
 import 'package:pos_app/domain/models/sales/invoice_item.dart';
@@ -31,6 +32,12 @@ void main() {
 
   setUp(() async {
     database = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
+    await database.localConfigDao.saveConfig(
+      LocalConfigEntity(key: 'dgi_current_number', value: '1'),
+    );
+    await database.localConfigDao.saveConfig(
+      LocalConfigEntity(key: 'dgi_prefix', value: '001-001-01-'),
+    );
 
     mockNumberingService = MockDgiNumberingService();
     mockMovementEngine = MockMovementEngine();

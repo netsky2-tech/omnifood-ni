@@ -50,7 +50,7 @@ class TableLayoutViewModel extends ChangeNotifier {
   double getTableTotal(String tableId) {
     final ticket = _ticketsByTableId[tableId];
     if (ticket == null) return 0.0;
-    return ticket.items.fold(0.0, (sum, item) => sum + item.total);
+    return ticket.items.fold(0.0, (sum, item) => sum + item.grossAmount);
   }
 
   void selectArea(String? areaId) {

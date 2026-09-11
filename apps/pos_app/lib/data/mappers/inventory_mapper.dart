@@ -6,6 +6,7 @@ import '../../domain/models/inventory/batch_deduction.dart';
 import '../../domain/models/inventory/supplier.dart';
 import '../../domain/models/inventory/warehouse.dart';
 import '../../domain/models/inventory/product.dart';
+import '../../domain/models/fulfillment/fulfillment_contracts.dart';
 import '../models/inventory/insumo_entity.dart';
 import '../models/inventory/recipe_entity.dart';
 import '../models/inventory/movement_entity.dart';
@@ -261,6 +262,10 @@ class InventoryMapper {
       mappingVersionId: entity.mappingVersionId,
       insumoId: entity.insumoId,
       createdAt: entity.createdAt,
+      inventoryPolicy: _parseInventoryPolicy(entity.inventoryPolicy),
+      directStockInsumoId: entity.directStockInsumoId,
+      taxRate: entity.taxRate,
+      isTaxExempt: entity.isTaxExempt,
       variants: variants,
       availableModifiers: modifiers,
     );
@@ -283,7 +288,20 @@ class InventoryMapper {
       mappingVersionId: domain.mappingVersionId,
       insumoId: domain.insumoId,
       createdAt: domain.createdAt,
+      inventoryPolicy: domain.inventoryPolicy?.name,
+      directStockInsumoId: domain.directStockInsumoId,
+      taxRate: domain.effectiveTaxRate,
+      isTaxExempt: domain.isGenuinelyExempt,
     );
+  }
+
+  static InventoryPolicy? _parseInventoryPolicy(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return null;
+    try {
+      return InventoryPolicy.values.byName(raw);
+    } catch (_) {
+      return null;
+    }
   }
 
   static ProductVariant toVariantDomain(ProductVariantEntity entity) {

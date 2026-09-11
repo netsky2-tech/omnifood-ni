@@ -40,6 +40,7 @@ import '../../../../domain/services/config/printer_config_service.dart';
 import '../../../../domain/services/printer/printer_resolver.dart';
 import '../../../../domain/services/printer/thermal_logo_processor.dart';
 import 'dart:async';
+import '../../../../domain/services/sales/invoice_fiscal_calculator.dart';
 import '../../../../domain/ports/printer_port.dart';
 import '../../../../domain/services/kitchen/kitchen_order_service.dart';
 import '../../../../data/services/sync_service.dart';
@@ -64,6 +65,7 @@ class SaleViewModel extends ChangeNotifier {
   final LoyaltyRewardInteractionService? _rewardInteraction;
   final LoyaltyEvaluationService? _evaluationService;
   final String _terminalId;
+  final bool _hasCustomPrinterPort;
   SyncService? _syncService;
   StreamSubscription<InboundSyncResult>? _syncSubscription;
   Timer? _syncDebounceTimer;
@@ -83,45 +85,47 @@ class SaleViewModel extends ChangeNotifier {
     PromotionsEngine? promotionsEngine,
     LoyaltyService? loyaltyService,
     String terminalId = '',
-  ])  : _tableOrderService = tableOrderService ?? TableOrderService(_database),
-        _tenantConfigService =
-            tenantConfigService ?? TenantConfigService(_database.localConfigDao),
-        _kitchenOrderService =
-            kitchenOrderService ?? KitchenOrderService(_database),
-        _printerConfigService =
-            printerConfigService ?? PrinterConfigService(_database.localConfigDao),
-        _printerPort =
-            printerPort ?? PrinterResolver.resolve(const PrinterConfig()),
-        _promotionsEngine = promotionsEngine ?? const PromotionsEngine(),
-        _loyaltyService = loyaltyService ?? const LoyaltyService(),
-        _postPaidFeedbackService = const PostPaidFeedbackService(),
-        _identificationService = null,
-        _rewardInteraction = null,
-        _evaluationService = null,
-        _terminalId = terminalId {
-      _syncService = syncService;
-      if (syncService != null) {
-        _syncSubscription = syncService.onInboundSync.listen((event) {
-          if (event.productsCount > 0 || event.catalogValuesCount > 0) {
-            loadProducts();
-          }
-        });
-      }
-      if (autoLoad) {
-        loadProducts().then((_) {
-          // If local DB is empty, trigger sync to pull products from backend
-          if (_products.isEmpty && _syncService != null) {
-            _syncService!.triggerManualSync();
-          }
-        });
-        checkActiveSession();
-        loadHoldTickets();
-        loadPromotions();
-        _loadCurrentUserRole();
-        loadExchangeRates();
-        loadTenantConfig();
-      }
+  ]) : _tableOrderService = tableOrderService ?? TableOrderService(_database),
+       _tenantConfigService =
+           tenantConfigService ?? TenantConfigService(_database.localConfigDao),
+       _kitchenOrderService =
+           kitchenOrderService ?? KitchenOrderService(_database),
+       _printerConfigService =
+           printerConfigService ??
+           PrinterConfigService(_database.localConfigDao),
+       _hasCustomPrinterPort = printerPort != null,
+       _printerPort =
+           printerPort ?? PrinterResolver.resolve(const PrinterConfig()),
+       _promotionsEngine = promotionsEngine ?? const PromotionsEngine(),
+       _loyaltyService = loyaltyService ?? const LoyaltyService(),
+       _postPaidFeedbackService = const PostPaidFeedbackService(),
+       _identificationService = null,
+       _rewardInteraction = null,
+       _evaluationService = null,
+       _terminalId = terminalId {
+    _syncService = syncService;
+    if (syncService != null) {
+      _syncSubscription = syncService.onInboundSync.listen((event) {
+        if (event.productsCount > 0 || event.catalogValuesCount > 0) {
+          loadProducts();
+        }
+      });
     }
+    if (autoLoad) {
+      loadProducts().then((_) {
+        // If local DB is empty, trigger sync to pull products from backend
+        if (_products.isEmpty && _syncService != null) {
+          _syncService!.triggerManualSync();
+        }
+      });
+      checkActiveSession();
+      loadHoldTickets();
+      loadPromotions();
+      _loadCurrentUserRole();
+      loadExchangeRates();
+      loadTenantConfig();
+    }
+  }
 
   /// Extended constructor with loyalty wiring services.
   /// Use this when the caller needs full loyalty evaluation + reward interaction.
@@ -143,22 +147,24 @@ class SaleViewModel extends ChangeNotifier {
     CustomerIdentificationService? identificationService,
     LoyaltyRewardInteractionService? rewardInteractionService,
     LoyaltyEvaluationService? evaluationService,
-  })  : _tableOrderService = tableOrderService ?? TableOrderService(_database),
-        _tenantConfigService =
-            tenantConfigService ?? TenantConfigService(_database.localConfigDao),
-        _kitchenOrderService =
-            kitchenOrderService ?? KitchenOrderService(_database),
-        _printerConfigService =
-            printerConfigService ?? PrinterConfigService(_database.localConfigDao),
-        _printerPort =
-            printerPort ?? PrinterResolver.resolve(const PrinterConfig()),
-        _promotionsEngine = promotionsEngine ?? const PromotionsEngine(),
-        _loyaltyService = loyaltyService ?? const LoyaltyService(),
-        _postPaidFeedbackService = const PostPaidFeedbackService(),
-        _identificationService = identificationService,
-        _rewardInteraction = rewardInteractionService,
-        _evaluationService = evaluationService,
-        _terminalId = terminalId {
+  }) : _tableOrderService = tableOrderService ?? TableOrderService(_database),
+       _tenantConfigService =
+           tenantConfigService ?? TenantConfigService(_database.localConfigDao),
+       _kitchenOrderService =
+           kitchenOrderService ?? KitchenOrderService(_database),
+       _printerConfigService =
+           printerConfigService ??
+           PrinterConfigService(_database.localConfigDao),
+       _hasCustomPrinterPort = printerPort != null,
+       _printerPort =
+           printerPort ?? PrinterResolver.resolve(const PrinterConfig()),
+       _promotionsEngine = promotionsEngine ?? const PromotionsEngine(),
+       _loyaltyService = loyaltyService ?? const LoyaltyService(),
+       _postPaidFeedbackService = const PostPaidFeedbackService(),
+       _identificationService = identificationService,
+       _rewardInteraction = rewardInteractionService,
+       _evaluationService = evaluationService,
+       _terminalId = terminalId {
     _syncService = syncService;
     if (syncService != null) {
       _syncSubscription = syncService.onInboundSync.listen((event) {
@@ -179,6 +185,7 @@ class SaleViewModel extends ChangeNotifier {
       _loadCurrentUserRole();
       loadExchangeRates();
       loadTenantConfig();
+      loadCompanyTaxRegime();
     }
   }
 
@@ -236,9 +243,14 @@ class SaleViewModel extends ChangeNotifier {
     }
 
     try {
-      final tenantId = _selectedCustomer!.id; // tenant scoping comes from config
-      final programs = await _database.loyaltyProgramDao.getActivePrograms(tenantId);
-      final rewards = await _database.loyaltyRewardDao.getActiveRewards(tenantId);
+      final tenantId =
+          _selectedCustomer!.id; // tenant scoping comes from config
+      final programs = await _database.loyaltyProgramDao.getActivePrograms(
+        tenantId,
+      );
+      final rewards = await _database.loyaltyRewardDao.getActiveRewards(
+        tenantId,
+      );
 
       // Build balance map from program IDs
       final balanceMap = <String, int>{};
@@ -249,45 +261,61 @@ class SaleViewModel extends ChangeNotifier {
       // Build snapshot from current cart
       final snapshot = _buildTicketSnapshot();
 
-      final domainPrograms = programs.map((e) => LoyaltyProgramLocal(
-        id: e.id,
-        tenantId: e.tenantId,
-        name: e.name,
-        programType: LoyaltyProgramType.values.firstWhere(
-          (t) => t.name == e.programType,
-          orElse: () => LoyaltyProgramType.spendPoints,
-        ),
-        status: LoyaltyProgramStatus.values.firstWhere(
-          (s) => s.name.toLowerCase() == e.status.toLowerCase(),
-          orElse: () => LoyaltyProgramStatus.active,
-        ),
-        startsAt: e.startsAt != null ? DateTime.fromMillisecondsSinceEpoch(e.startsAt!) : null,
-        endsAt: e.endsAt != null ? DateTime.fromMillisecondsSinceEpoch(e.endsAt!) : null,
-        earningRuleJson: e.earningRuleJson,
-        eligibilityRuleJson: e.eligibilityRuleJson,
-        configVersion: e.configVersion,
-      )).toList();
+      final domainPrograms = programs
+          .map(
+            (e) => LoyaltyProgramLocal(
+              id: e.id,
+              tenantId: e.tenantId,
+              name: e.name,
+              programType: LoyaltyProgramType.values.firstWhere(
+                (t) => t.name == e.programType,
+                orElse: () => LoyaltyProgramType.spendPoints,
+              ),
+              status: LoyaltyProgramStatus.values.firstWhere(
+                (s) => s.name.toLowerCase() == e.status.toLowerCase(),
+                orElse: () => LoyaltyProgramStatus.active,
+              ),
+              startsAt: e.startsAt != null
+                  ? DateTime.fromMillisecondsSinceEpoch(e.startsAt!)
+                  : null,
+              endsAt: e.endsAt != null
+                  ? DateTime.fromMillisecondsSinceEpoch(e.endsAt!)
+                  : null,
+              earningRuleJson: e.earningRuleJson,
+              eligibilityRuleJson: e.eligibilityRuleJson,
+              configVersion: e.configVersion,
+            ),
+          )
+          .toList();
 
-      final domainRewards = rewards.map((e) => RewardDefinitionLocal(
-        id: e.id,
-        tenantId: e.tenantId,
-        loyaltyProgramId: e.loyaltyProgramId,
-        name: e.name,
-        rewardType: RewardType.values.firstWhere(
-          (t) => t.name == e.rewardType,
-          orElse: () => RewardType.discountAmount,
-        ),
-        costUnits: e.costUnits,
-        benefitConfigJson: e.benefitConfigJson,
-        status: RewardStatus.values.firstWhere(
-          (s) => s.name.toLowerCase() == e.status.toLowerCase(),
-          orElse: () => RewardStatus.active,
-        ),
-        configVersion: e.configVersion,
-        presentationOrder: e.presentationOrder,
-        startsAt: e.startsAt != null ? DateTime.fromMillisecondsSinceEpoch(e.startsAt!) : null,
-        endsAt: e.endsAt != null ? DateTime.fromMillisecondsSinceEpoch(e.endsAt!) : null,
-      )).toList();
+      final domainRewards = rewards
+          .map(
+            (e) => RewardDefinitionLocal(
+              id: e.id,
+              tenantId: e.tenantId,
+              loyaltyProgramId: e.loyaltyProgramId,
+              name: e.name,
+              rewardType: RewardType.values.firstWhere(
+                (t) => t.name == e.rewardType,
+                orElse: () => RewardType.discountAmount,
+              ),
+              costUnits: e.costUnits,
+              benefitConfigJson: e.benefitConfigJson,
+              status: RewardStatus.values.firstWhere(
+                (s) => s.name.toLowerCase() == e.status.toLowerCase(),
+                orElse: () => RewardStatus.active,
+              ),
+              configVersion: e.configVersion,
+              presentationOrder: e.presentationOrder,
+              startsAt: e.startsAt != null
+                  ? DateTime.fromMillisecondsSinceEpoch(e.startsAt!)
+                  : null,
+              endsAt: e.endsAt != null
+                  ? DateTime.fromMillisecondsSinceEpoch(e.endsAt!)
+                  : null,
+            ),
+          )
+          .toList();
 
       _currentEvaluation = _evaluationService!.evaluate(
         snapshot: snapshot,
@@ -300,7 +328,8 @@ class SaleViewModel extends ChangeNotifier {
       _cachedRewards = domainRewards;
 
       // Validate current reward selection is still eligible
-      if (_rewardInteraction != null && _rewardInteraction!.selectedRewardId != null) {
+      if (_rewardInteraction != null &&
+          _rewardInteraction!.selectedRewardId != null) {
         _rewardInteraction!.validateAfterCartChange(_currentEvaluation!);
         _selectedReward = _resolveSelectedReward();
       }
@@ -310,13 +339,17 @@ class SaleViewModel extends ChangeNotifier {
   }
 
   LoyaltyTicketSnapshot _buildTicketSnapshot() {
-    final lines = _cart.map((item) => TicketLineSnapshot(
-      lineId: item.productId,
-      productId: item.productId,
-      quantity: item.quantity.toInt(),
-      netAmount: item.subtotal,
-      source: TicketLineSource.normal,
-    )).toList();
+    final lines = _cart
+        .map(
+          (item) => TicketLineSnapshot(
+            lineId: item.productId,
+            productId: item.productId,
+            quantity: item.quantity.toInt(),
+            netAmount: item.subtotal,
+            source: TicketLineSource.normal,
+          ),
+        )
+        .toList();
 
     return LoyaltyTicketSnapshot(
       tenantId: _selectedCustomer?.id ?? '',
@@ -352,8 +385,9 @@ class SaleViewModel extends ChangeNotifier {
   String? get buzzerNumber => _buzzerNumber;
 
   void setBuzzerNumber(String? number) {
-    _buzzerNumber =
-        (number != null && number.trim().isNotEmpty) ? number.trim() : null;
+    _buzzerNumber = (number != null && number.trim().isNotEmpty)
+        ? number.trim()
+        : null;
     notifyListeners();
   }
 
@@ -385,7 +419,8 @@ class SaleViewModel extends ChangeNotifier {
 
   double _pointsToRedeem = 0.0;
   double get pointsToRedeem => _pointsToRedeem;
-  double get loyaltyDiscount => _loyaltyService.calculateDiscountFromPoints(_pointsToRedeem);
+  double get loyaltyDiscount =>
+      _loyaltyService.calculateDiscountFromPoints(_pointsToRedeem);
   double get promoDiscounts => _totalDiscounts;
 
   RedemptionValidationResult applyLoyaltyPoints(double points) {
@@ -417,8 +452,9 @@ class SaleViewModel extends ChangeNotifier {
   }
 
   void setCustomerName(String? name) {
-    _customerName =
-        (name != null && name.trim().isNotEmpty) ? name.trim() : null;
+    _customerName = (name != null && name.trim().isNotEmpty)
+        ? name.trim()
+        : null;
     notifyListeners();
   }
 
@@ -427,7 +463,10 @@ class SaleViewModel extends ChangeNotifier {
       final entities = await _database.customerDao.getAllCustomers();
       return entities.map(CustomerMapper.toDomain).toList();
     }
-    final entities = await _database.customerDao.searchCustomers(query.trim(), 20);
+    final entities = await _database.customerDao.searchCustomers(
+      query.trim(),
+      20,
+    );
     return entities.map(CustomerMapper.toDomain).toList();
   }
 
@@ -443,10 +482,14 @@ class SaleViewModel extends ChangeNotifier {
     final entity = CustomerEntity(
       id: id,
       name: name.trim(),
-      taxId: (taxId != null && taxId.trim().isNotEmpty) ? taxId.trim().toUpperCase() : null,
+      taxId: (taxId != null && taxId.trim().isNotEmpty)
+          ? taxId.trim().toUpperCase()
+          : null,
       phone: (phone != null && phone.trim().isNotEmpty) ? phone.trim() : null,
       email: (email != null && email.trim().isNotEmpty) ? email.trim() : null,
-      address: (address != null && address.trim().isNotEmpty) ? address.trim() : null,
+      address: (address != null && address.trim().isNotEmpty)
+          ? address.trim()
+          : null,
       pointsBalance: 0.0,
       isActive: true,
       createdAt: now,
@@ -462,6 +505,34 @@ class SaleViewModel extends ChangeNotifier {
   Future<void> loadTenantConfig() async {
     try {
       _tenantConfig = await _tenantConfigService.getTenantConfig();
+      notifyListeners();
+    } catch (_) {
+      // Non-blocking fallback
+    }
+  }
+
+  TaxRegime? _companyTaxRegime;
+  TaxRegime? get companyTaxRegime => _companyTaxRegime;
+
+  bool _taxRegimeOverrideActive = false;
+
+  void setCompanyTaxRegime(TaxRegime? regime) {
+    _taxRegimeOverrideActive = true;
+    _companyTaxRegime = regime;
+    notifyListeners();
+  }
+
+  Future<void> loadCompanyTaxRegime() async {
+    if (_taxRegimeOverrideActive) return;
+    try {
+      final entity = await _database.localConfigDao.getConfigByKey(
+        'tax_regime',
+      );
+      if (entity != null && entity.value.trim().isNotEmpty) {
+        _companyTaxRegime = TaxRegime.fromString(entity.value);
+      } else {
+        _companyTaxRegime = null;
+      }
       notifyListeners();
     } catch (_) {
       // Non-blocking fallback
@@ -486,15 +557,21 @@ class SaleViewModel extends ChangeNotifier {
 
   Future<void> loadExchangeRates() async {
     try {
-      final commVal = await _database.localConfigDao.getConfigByKey('commercial_exchange_rate');
+      final commVal = await _database.localConfigDao.getConfigByKey(
+        'commercial_exchange_rate',
+      );
       if (commVal != null) {
         _commercialRate = double.tryParse(commVal.value) ?? 36.50;
       }
-      final bcnVal = await _database.localConfigDao.getConfigByKey('bcn_official_exchange_rate');
+      final bcnVal = await _database.localConfigDao.getConfigByKey(
+        'bcn_official_exchange_rate',
+      );
       if (bcnVal != null) {
         _bcnOfficialRate = double.tryParse(bcnVal.value) ?? 36.6241;
       }
-      final modeVal = await _database.localConfigDao.getConfigByKey('checkout_fx_mode');
+      final modeVal = await _database.localConfigDao.getConfigByKey(
+        'checkout_fx_mode',
+      );
       if (modeVal != null && modeVal.value.isNotEmpty) {
         _checkoutFxMode = modeVal.value;
       }
@@ -591,34 +668,81 @@ class SaleViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  double get subtotal {
-    final rawSubtotal = _cart.fold(
-      0.0,
-      (sum, item) => sum + item.subtotal + item.modifiersTotal,
-    );
-    final totalWithPromos = rawSubtotal - _totalDiscounts;
-    final afterLoyalty = totalWithPromos - loyaltyDiscount;
-    return afterLoyalty < 0.0 ? 0.0 : afterLoyalty;
+  static const _fiscalCalculator = InvoiceFiscalCalculator();
+
+  FiscalCalculationResult get currentFiscalCalculation {
+    try {
+      return _fiscalCalculator.calculate(
+        cart: _cart,
+        taxRegime: _companyTaxRegime,
+        isGlobalTaxExempt: _isGlobalTaxExempt,
+        totalDiscounts: totalDiscounts,
+        commercialRate: _commercialRate,
+        bcnOfficialRate: _bcnOfficialRate,
+      );
+    } on FiscalConfigurationException {
+      // Cart browsing must remain usable before the business configures
+      // its DGI regime. Finalization still fails closed in processSale.
+      final grossSubtotal = _cart.fold<double>(
+        0.0,
+        (sum, item) => sum + item.grossAmount,
+      );
+      final totalDiscount = totalDiscounts.clamp(0.0, grossSubtotal);
+      final lines = _cart
+          .map((item) {
+            final proportion = grossSubtotal > 0
+                ? item.grossAmount / grossSubtotal
+                : 0.0;
+            final discount = totalDiscount * proportion;
+            final lineSubtotal = item.grossAmount - discount;
+            return FiscalLineCalculation(
+              productId: item.productId,
+              productName: item.productName,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              modifiersTotal: item.modifiersTotal,
+              grossAmount: item.grossAmount,
+              discount: discount,
+              taxableBase: 0.0,
+              nominalTaxRate: item.taxRate,
+              appliedTaxRate: 0.0,
+              taxAmount: 0.0,
+              lineSubtotal: lineSubtotal,
+              lineTotal: lineSubtotal,
+            );
+          })
+          .toList(growable: false);
+      final subtotal = grossSubtotal - totalDiscount;
+      return FiscalCalculationResult(
+        taxRegime: null,
+        lines: lines,
+        grossSubtotal: grossSubtotal,
+        totalDiscount: totalDiscount,
+        subtotal: subtotal,
+        taxableSubtotal: 0.0,
+        exemptSubtotal: subtotal,
+        totalTax: 0.0,
+        total: subtotal,
+        commercialRate: _commercialRate,
+        bcnOfficialRate: _bcnOfficialRate,
+        totalUsd: _commercialRate > 0 ? subtotal / _commercialRate : 0.0,
+      );
+    }
+  }
+
+  double get subtotal => currentFiscalCalculation.subtotal;
+  double get grossSubtotal => currentFiscalCalculation.grossSubtotal;
+  double get totalTax => currentFiscalCalculation.totalTax;
+  double get total => currentFiscalCalculation.total;
+  double get taxableSubtotal => currentFiscalCalculation.taxableSubtotal;
+  double get exemptSubtotal => currentFiscalCalculation.exemptSubtotal;
+
+  double getCartItemLineAmount(CartItem item) {
+    return item.grossAmount;
   }
 
   double _totalDiscounts = 0.0;
   double get totalDiscounts => _totalDiscounts + loyaltyDiscount;
-
-  double get totalTax {
-    if (_isGlobalTaxExempt) return 0.0;
-    // Recalculate tax based on subtotal after discounts
-    return _cart.fold(0.0, (sum, item) {
-      final itemBase = item.subtotal + item.modifiersTotal;
-      // Simple proportional discount application for tax calculation
-      final totalBase = subtotal + _totalDiscounts;
-      final itemDiscount = totalBase == 0
-          ? 0.0
-          : (_totalDiscounts * (itemBase / totalBase));
-      return sum + ((itemBase - itemDiscount) * item.taxRate);
-    });
-  }
-
-  double get total => subtotal + totalTax;
 
   TipType _tipType = TipType.none;
   double _customTipPercentage = 0.0;
@@ -632,14 +756,14 @@ class SaleViewModel extends ChangeNotifier {
       BusinessModeEvaluator(_tenantConfig ?? const TenantConfig());
 
   TipCalculation get tipCalculation => TipEngine.calculate(
-        subtotalNio: subtotal,
-        taxNio: totalTax,
-        discountNio: 0.0,
-        tipType: _tipType,
-        customPercentage: _customTipPercentage,
-        fixedAmount: _fixedTipAmount,
-        commercialRate: _commercialRate,
-      );
+    subtotalNio: subtotal,
+    taxNio: totalTax,
+    discountNio: 0.0,
+    tipType: _tipType,
+    customPercentage: _customTipPercentage,
+    fixedAmount: _fixedTipAmount,
+    commercialRate: _commercialRate,
+  );
 
   double get tipAmount => tipCalculation.tipAmountNio;
   double get grandTotalWithTip => total + tipAmount;
@@ -810,6 +934,7 @@ class SaleViewModel extends ChangeNotifier {
   }
 
   Future<void> checkActiveSession() async {
+    await loadCompanyTaxRegime();
     final sessionEntity = await _database.cashierSessionDao.getActiveSession();
     if (sessionEntity != null) {
       _activeSession = SalesMapper.toSessionDomain(sessionEntity);
@@ -915,13 +1040,14 @@ class SaleViewModel extends ChangeNotifier {
         } catch (_) {}
       }
 
+      final itemTaxRate = product.effectiveTaxRate;
       _cart.add(
         CartItem(
           productId: product.id,
           productName: productName,
           quantity: quantity,
           unitPrice: unitPrice,
-          taxRate: 0.15,
+          taxRate: itemTaxRate,
           category: product.category,
           variantId: variantId,
           selectedModifiers: modifiers,
@@ -930,7 +1056,8 @@ class SaleViewModel extends ChangeNotifier {
     }
     _applyPromotions();
     // Re-evaluate loyalty when cart changes (fire-and-forget async)
-    if (_selectedCustomer != null && _rewardInteraction?.selectedRewardId != null) {
+    if (_selectedCustomer != null &&
+        _rewardInteraction?.selectedRewardId != null) {
       _reEvaluateLoyalty();
     }
     notifyListeners();
@@ -991,7 +1118,8 @@ class SaleViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> finalizeSale(List<PaymentMethod> methods) => processSale(methods);
+  Future<void> finalizeSale(List<PaymentMethod> methods) =>
+      processSale(methods);
 
   Future<void> processSale(
     List<PaymentMethod> methods, {
@@ -1006,37 +1134,56 @@ class SaleViewModel extends ChangeNotifier {
       throw StateError('Usuario no autenticado');
     }
 
+    if (_companyTaxRegime == null) {
+      await loadCompanyTaxRegime();
+    }
+    if (_companyTaxRegime == null) {
+      _errorMessage =
+          'Empresa sin régimen fiscal DGI configurado. Configure la Información de Empresa en Configuración antes de facturar.';
+      notifyListeners();
+      throw const FiscalConfigurationException(
+        'Empresa sin régimen fiscal DGI configurado. Debe seleccionar Cuota Fija o Régimen General en Información de Empresa.',
+      );
+    }
+
     final invoiceId = const Uuid().v4();
     final totalUsd = _commercialRate > 0
         ? ((total / _commercialRate) * 100).round() / 100
         : 0.0;
 
-    final effectiveBuzzer = (buzzerNumber != null && buzzerNumber.trim().isNotEmpty)
+    final effectiveBuzzer =
+        (buzzerNumber != null && buzzerNumber.trim().isNotEmpty)
         ? buzzerNumber.trim()
         : _buzzerNumber;
     final effectiveCustomerName =
         (customerName != null && customerName.trim().isNotEmpty)
-            ? customerName.trim()
-            : _customerName;
+        ? customerName.trim()
+        : _customerName;
 
-    final items = _cart.map((cartItem) {
-      final appliedTaxRate = _isGlobalTaxExempt ? 0.0 : cartItem.taxRate;
-      return InvoiceItem(
-        id: const Uuid().v4(),
-        invoiceId: invoiceId,
-        productId: cartItem.productId,
-        productName: cartItem.productName,
-        quantity: cartItem.quantity,
-        unitPrice: cartItem.unitPrice,
-        originalTaxRate: cartItem.taxRate,
-        appliedTaxRate: appliedTaxRate,
-        taxAmount: cartItem.taxAmount,
-        total: cartItem.total,
-        variantId: cartItem.variantId,
-        notes: cartItem.notes,
-        selectedModifiers: cartItem.selectedModifiers,
+    final calc = currentFiscalCalculation;
+    final items = <InvoiceItem>[];
+    for (var i = 0; i < _cart.length; i++) {
+      final cartItem = _cart[i];
+      final l = calc.lines[i];
+      items.add(
+        InvoiceItem(
+          id: const Uuid().v4(),
+          invoiceId: invoiceId,
+          productId: l.productId,
+          productName: l.productName,
+          quantity: l.quantity,
+          unitPrice: l.unitPrice,
+          originalTaxRate: l.nominalTaxRate,
+          appliedTaxRate: l.appliedTaxRate,
+          taxAmount: l.taxAmount,
+          total: l.lineTotal,
+          discount: l.discount,
+          variantId: cartItem.variantId,
+          notes: cartItem.notes,
+          selectedModifiers: cartItem.selectedModifiers,
+        ),
       );
-    }).toList();
+    }
 
     final invoice = Invoice(
       id: invoiceId,
@@ -1044,39 +1191,44 @@ class SaleViewModel extends ChangeNotifier {
       createdAt: DateTime.now(),
       userId: user.id,
       customerId: _selectedCustomer?.id,
-      subtotal: subtotal,
-      totalTax: totalTax,
-      total: total,
+      subtotal: calc.subtotal,
+      totalTax: calc.totalTax,
+      total: calc.total,
       globalTaxOverride: _isGlobalTaxExempt,
-      bcnOfficialRate: _bcnOfficialRate,
-      commercialRate: _commercialRate,
-      totalUsd: totalUsd,
+      bcnOfficialRate: calc.bcnOfficialRate,
+      commercialRate: calc.commercialRate,
+      totalUsd: calc.totalUsd,
       terminalId: _terminalId,
     );
 
     final payments = customPayments != null && customPayments.isNotEmpty
-        ? customPayments.map((p) => p.copyWith(
-              invoiceId: invoiceId,
-              id: p.id.isEmpty ? const Uuid().v4() : p.id,
-            )).toList()
+        ? customPayments
+              .map(
+                (p) => p.copyWith(
+                  invoiceId: invoiceId,
+                  id: p.id.isEmpty ? const Uuid().v4() : p.id,
+                ),
+              )
+              .toList()
         : methods
-            .map(
-              (m) => Payment(
-                id: const Uuid().v4(),
-                invoiceId: invoiceId,
-                method: m,
-                amount: total / methods.length,
-                currency: 'NIO',
-                exchangeRate: _commercialRate,
-                amountNio: total / methods.length,
-                changeGiven: 0.0,
-                changeCurrency: 'NIO',
-              ),
-            )
-            .toList();
+              .map(
+                (m) => Payment(
+                  id: const Uuid().v4(),
+                  invoiceId: invoiceId,
+                  method: m,
+                  amount: total / methods.length,
+                  currency: 'NIO',
+                  exchangeRate: _commercialRate,
+                  amountNio: total / methods.length,
+                  changeGiven: 0.0,
+                  changeCurrency: 'NIO',
+                ),
+              )
+              .toList();
 
-    final effectiveTerminalId =
-        _terminalId.trim().isNotEmpty ? _terminalId.trim() : 'TERM-01';
+    final effectiveTerminalId = _terminalId.trim().isNotEmpty
+        ? _terminalId.trim()
+        : 'TERM-01';
 
     try {
       final prepService = CheckoutInventoryPreparationService(_database);
@@ -1096,35 +1248,43 @@ class SaleViewModel extends ChangeNotifier {
 
       // Fire-and-forget: trigger cloud sync after 3s debounce
       // (batches rapid consecutive sales into one sync pass)
-      _syncDebounceTimer?.cancel();
-      _syncDebounceTimer = Timer(const Duration(seconds: 3), () {
-        _syncService?.triggerManualSync();
-      });
+      if (_syncService != null) {
+        _syncDebounceTimer?.cancel();
+        _syncDebounceTimer = Timer(const Duration(seconds: 3), () {
+          _syncService?.triggerManualSync();
+        });
+      }
 
       // Process Customer Loyalty (single write path via LoyaltyRewardInteractionService)
       if (_selectedCustomer != null) {
         final now = DateTime.now().millisecondsSinceEpoch;
 
-        // 1. Process REDEEM if a reward was selected (single path — no _pointsToRedeem writer)
-        if (_rewardInteraction?.selectedRewardId != null && _selectedReward != null) {
-          final redeemUnits = _selectedReward!.costUnits;
+        // 1. Process REDEEM from the selected reward or legacy points flow.
+        final redeemUnits =
+            (_rewardInteraction?.selectedRewardId != null &&
+                _selectedReward != null)
+            ? _selectedReward!.costUnits.toDouble()
+            : _pointsToRedeem;
+        if (redeemUnits > 0) {
           final currentBalance = _selectedCustomer!.pointsBalance;
           final newBalance = currentBalance - redeemUnits;
           final redeemTx = _loyaltyService.createRedeemTransaction(
             customerId: _selectedCustomer!.id,
             currentBalance: currentBalance,
-            pointsToRedeem: redeemUnits.toDouble(),
+            pointsToRedeem: redeemUnits,
             invoiceId: invoiceId,
           );
           try {
             await _database.customerPointTransactionDao
                 .recordPointTransactionAndUpdateBalance(
-              CustomerMapper.toPointTransactionEntity(redeemTx),
-              _selectedCustomer!.id,
-              newBalance,
-              now,
+                  CustomerMapper.toPointTransactionEntity(redeemTx),
+                  _selectedCustomer!.id,
+                  newBalance,
+                  now,
+                );
+            _selectedCustomer = _selectedCustomer!.copyWith(
+              pointsBalance: newBalance,
             );
-            _selectedCustomer = _selectedCustomer!.copyWith(pointsBalance: newBalance);
           } catch (_) {}
         }
 
@@ -1141,34 +1301,36 @@ class SaleViewModel extends ChangeNotifier {
           try {
             await _database.customerPointTransactionDao
                 .recordPointTransactionAndUpdateBalance(
-              CustomerMapper.toPointTransactionEntity(earnTx),
-              _selectedCustomer!.id,
-              earnTx.balanceAfter,
-              now,
+                  CustomerMapper.toPointTransactionEntity(earnTx),
+                  _selectedCustomer!.id,
+                  earnTx.balanceAfter,
+                  now,
+                );
+            _selectedCustomer = _selectedCustomer!.copyWith(
+              pointsBalance: earnTx.balanceAfter,
             );
-            _selectedCustomer = _selectedCustomer!.copyWith(pointsBalance: earnTx.balanceAfter);
           } catch (_) {}
         }
 
         // 3. Compute PostPaidFeedback using real LoyaltyEvaluation (not hardcoded)
-        final redeemPts = (_rewardInteraction?.selectedRewardId != null && _selectedReward != null)
-            ? _selectedReward!.costUnits
-            : 0;
+        final redeemPts = redeemUnits.toInt();
         final earnedPts = pointsEarned.toInt();
         final newBalance = _selectedCustomer!.pointsBalance.toInt();
-        final feedbackEvaluation = _currentEvaluation ?? LoyaltyEvaluation(
-          customerId: _selectedCustomer!.id,
-          ticketId: invoiceId,
-          programs: [
-            ProgramEvaluation(
-              programId: 'loyalty-default',
-              programName: 'Puntos',
-              programType: LoyaltyProgramType.spendPoints,
-              balanceUnits: newBalance,
-              earningPreviewUnits: earnedPts,
-            ),
-          ],
-        );
+        final feedbackEvaluation =
+            _currentEvaluation ??
+            LoyaltyEvaluation(
+              customerId: _selectedCustomer!.id,
+              ticketId: invoiceId,
+              programs: [
+                ProgramEvaluation(
+                  programId: 'loyalty-default',
+                  programName: 'Puntos',
+                  programType: LoyaltyProgramType.spendPoints,
+                  balanceUnits: newBalance,
+                  earningPreviewUnits: earnedPts,
+                ),
+              ],
+            );
         _lastPostPaidFeedback = _postPaidFeedbackService.compute(
           evaluation: feedbackEvaluation,
           postCommitBalances: {'loyalty-default': newBalance},
@@ -1183,7 +1345,8 @@ class SaleViewModel extends ChangeNotifier {
             p.method != PaymentMethod.cash) {
           continue;
         }
-        final effectiveCashNio = (p.method == PaymentMethod.cash && p.amountNio > 0)
+        final effectiveCashNio =
+            (p.method == PaymentMethod.cash && p.amountNio > 0)
             ? (p.amountNio - p.changeGiven)
             : p.amount;
         _sessionExpected[p.method] =
@@ -1224,22 +1387,26 @@ class SaleViewModel extends ChangeNotifier {
 
       try {
         final printerConfig = await _printerConfigService.getPrinterConfig();
-        final hasCashPayment = payments.any((p) => p.method == PaymentMethod.cash);
+        final hasCashPayment = payments.any(
+          (p) => p.method == PaymentMethod.cash,
+        );
 
-        final activePrinterPort = PrinterResolver.resolve(printerConfig);
+        final activePrinterPort = _hasCustomPrinterPort
+            ? _printerPort
+            : PrinterResolver.resolve(printerConfig);
 
         if (printerConfig.openDrawerOnCash && hasCashPayment) {
           await activePrinterPort.openCashDrawer();
         }
 
         List<int>? logoRasterBytes;
-        if (printerConfig.isLogoEnabled &&
-            printerConfig.logoBase64 != null) {
+        if (printerConfig.isLogoEnabled && printerConfig.logoBase64 != null) {
           try {
             final rawBytes = base64Decode(printerConfig.logoBase64!);
             if (ThermalLogoProcessor.isPng(rawBytes)) {
               logoRasterBytes = rawBytes;
-            } else if (printerConfig.logoWidth != null && printerConfig.logoHeight != null) {
+            } else if (printerConfig.logoWidth != null &&
+                printerConfig.logoHeight != null) {
               logoRasterBytes = ThermalLogoProcessor.buildEscPosRasterFrom1Bit(
                 raw1BitBitmap: rawBytes,
                 width: printerConfig.logoWidth!,
@@ -1263,20 +1430,23 @@ class SaleViewModel extends ChangeNotifier {
             phone: printerConfig.headerPhone,
             cashierName: user.name,
             logoRasterBytes: logoRasterBytes,
-            taxRegime: TaxRegime.fromString(printerConfig.taxRegime),
+            taxRegime: _companyTaxRegime!,
             isTaxExempt: _isGlobalTaxExempt,
             paperWidthMm: printerConfig.paperWidthMm,
             loyaltyFeedback: _lastPostPaidFeedback,
           );
 
           if (!printResult.isSuccess) {
-            _lastPrintError = printResult.message ?? 'Error de impresión en hardware';
+            _lastPrintError =
+                printResult.message ?? 'Error de impresión en hardware';
           }
         }
 
         if (printerConfig.autoPrintKitchen && items.isNotEmpty) {
           await activePrinterPort.printKitchenOrder(
-            ticketId: invoiceToPrint.id.length > 8 ? invoiceToPrint.id.substring(0, 8) : invoiceToPrint.id,
+            ticketId: invoiceToPrint.id.length > 8
+                ? invoiceToPrint.id.substring(0, 8)
+                : invoiceToPrint.id,
             orderTitle: 'Orden #${invoiceToPrint.number}',
             cashierName: user.name,
             timestamp: DateTime.now(),
@@ -1296,10 +1466,8 @@ class SaleViewModel extends ChangeNotifier {
       _errorMessage = null;
       clearCart();
       _consumeOverride();
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[SaleViewModel] processSale failed: $e');
-      }
+    } catch (e, stackTrace) {
+      debugPrint('[SaleViewModel] Error al procesar la venta: $e\n$stackTrace');
       _errorMessage = 'Error al procesar la venta: $e';
       notifyListeners();
       rethrow;
@@ -1311,46 +1479,57 @@ class SaleViewModel extends ChangeNotifier {
     if (_lastProcessedInvoice == null) return false;
     try {
       final config = await _printerConfigService.getPrinterConfig();
-      final items = await _database.invoiceItemDao.getItemsByInvoiceId(_lastProcessedInvoice!.id);
-      final domainItems = items.map((e) => InvoiceItem(
-        id: e.id,
-        invoiceId: e.invoiceId,
-        productId: e.productId,
-        productName: e.productName,
-        quantity: e.quantity,
-        unitPrice: e.unitPrice,
-        originalTaxRate: e.originalTaxRate,
-        appliedTaxRate: e.appliedTaxRate,
-        taxAmount: e.taxAmount,
-        total: e.total,
-        discount: e.discount,
-        variantId: e.variantId,
-        notes: e.notes,
-      )).toList();
+      final items = await _database.invoiceItemDao.getItemsByInvoiceId(
+        _lastProcessedInvoice!.id,
+      );
+      final domainItems = items
+          .map(
+            (e) => InvoiceItem(
+              id: e.id,
+              invoiceId: e.invoiceId,
+              productId: e.productId,
+              productName: e.productName,
+              quantity: e.quantity,
+              unitPrice: e.unitPrice,
+              originalTaxRate: e.originalTaxRate,
+              appliedTaxRate: e.appliedTaxRate,
+              taxAmount: e.taxAmount,
+              total: e.total,
+              discount: e.discount,
+              variantId: e.variantId,
+              notes: e.notes,
+            ),
+          )
+          .toList();
 
-      final payments = await _database.paymentDao.getPaymentsByInvoiceId(_lastProcessedInvoice!.id);
-      final domainPayments = payments.map((e) => Payment(
-        id: e.id,
-        invoiceId: e.invoiceId,
-        method: PaymentMethod.values.firstWhere(
-          (m) => m.name == e.method,
-          orElse: () => PaymentMethod.cash,
-        ),
-        amount: e.amount,
-        currency: e.currency,
-        exchangeRate: e.exchangeRate,
-        amountNio: e.amountNio,
-        changeGiven: e.changeGiven,
-        changeCurrency: e.changeCurrency,
-        voucherCode: e.voucherCode,
-        cardBrand: e.cardBrand,
-        bankPos: e.bankPos,
-        last4: e.last4,
-      )).toList();
+      final payments = await _database.paymentDao.getPaymentsByInvoiceId(
+        _lastProcessedInvoice!.id,
+      );
+      final domainPayments = payments
+          .map(
+            (e) => Payment(
+              id: e.id,
+              invoiceId: e.invoiceId,
+              method: PaymentMethod.values.firstWhere(
+                (m) => m.name == e.method,
+                orElse: () => PaymentMethod.cash,
+              ),
+              amount: e.amount,
+              currency: e.currency,
+              exchangeRate: e.exchangeRate,
+              amountNio: e.amountNio,
+              changeGiven: e.changeGiven,
+              changeCurrency: e.changeCurrency,
+              voucherCode: e.voucherCode,
+              cardBrand: e.cardBrand,
+              bankPos: e.bankPos,
+              last4: e.last4,
+            ),
+          )
+          .toList();
 
       List<int>? logoRasterBytes;
-      if (config.isLogoEnabled &&
-          config.logoBase64 != null) {
+      if (config.isLogoEnabled && config.logoBase64 != null) {
         try {
           final rawBytes = base64Decode(config.logoBase64!);
           if (ThermalLogoProcessor.isPng(rawBytes)) {
@@ -1367,7 +1546,16 @@ class SaleViewModel extends ChangeNotifier {
         } catch (_) {}
       }
 
-      final activePrinterPort = PrinterResolver.resolve(config);
+      final activePrinterPort = _hasCustomPrinterPort
+          ? _printerPort
+          : PrinterResolver.resolve(config);
+
+      if (_companyTaxRegime == null) {
+        _lastPrintError =
+            'Empresa sin régimen fiscal DGI configurado. No se puede reimprimir.';
+        notifyListeners();
+        return false;
+      }
 
       final res = await activePrinterPort.printInvoice(
         _lastProcessedInvoice!,
@@ -1379,8 +1567,9 @@ class SaleViewModel extends ChangeNotifier {
         address: config.headerAddress,
         phone: config.headerPhone,
         logoRasterBytes: logoRasterBytes,
-        taxRegime: TaxRegime.fromString(config.taxRegime),
-        isTaxExempt: _lastProcessedInvoice?.globalTaxOverride ?? _isGlobalTaxExempt,
+        taxRegime: _companyTaxRegime!,
+        isTaxExempt:
+            _lastProcessedInvoice?.globalTaxOverride ?? _isGlobalTaxExempt,
         paperWidthMm: config.paperWidthMm,
       );
 

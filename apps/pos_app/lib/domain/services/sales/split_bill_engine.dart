@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
+import '../../models/config/tax_regime.dart';
 import '../../models/sales/cart_item.dart';
+import 'invoice_fiscal_calculator.dart';
 import 'tip_engine.dart';
 
 part 'split_bill_engine.freezed.dart';
@@ -73,11 +75,17 @@ class SplitBillEngine {
     required double commercialRate,
   }) {
     if (coverCount <= 0) {
-      throw ArgumentError.value(coverCount, 'coverCount', 'El número de comensales debe ser mayor a cero.');
+      throw ArgumentError.value(
+        coverCount,
+        'coverCount',
+        'El número de comensales debe ser mayor a cero.',
+      );
     }
 
     final rate = commercialRate > 0 ? commercialRate : 36.50;
-    final totalNio = double.parse(((subtotalNio - discountNio) + taxNio + tipNio).toStringAsFixed(2));
+    final totalNio = double.parse(
+      ((subtotalNio - discountNio) + taxNio + tipNio).toStringAsFixed(2),
+    );
 
     // Distribute centavos evenly
     final totalCents = (totalNio * 100).round();
@@ -104,10 +112,12 @@ class SplitBillEngine {
 
     for (int i = 0; i < coverCount; i++) {
       final shareTotalCents = baseShareCents + (i < remainderCents ? 1 : 0);
-      final shareSubtotalCents = baseSubtotalCents + (i < remainderSubtotalCents ? 1 : 0);
+      final shareSubtotalCents =
+          baseSubtotalCents + (i < remainderSubtotalCents ? 1 : 0);
       final shareTaxCents = baseTaxCents + (i < remainderTaxCents ? 1 : 0);
       final shareTipCents = baseTipCents + (i < remainderTipCents ? 1 : 0);
-      final shareDiscountCents = baseDiscountCents + (i < remainderDiscountCents ? 1 : 0);
+      final shareDiscountCents =
+          baseDiscountCents + (i < remainderDiscountCents ? 1 : 0);
 
       final shareTotalNio = shareTotalCents / 100.0;
       final shareSubtotalNio = shareSubtotalCents / 100.0;
@@ -115,7 +125,9 @@ class SplitBillEngine {
       final shareTipNio = shareTipCents / 100.0;
       final shareDiscountNio = shareDiscountCents / 100.0;
 
-      final shareTotalUsd = double.parse((shareTotalNio / rate).toStringAsFixed(2));
+      final shareTotalUsd = double.parse(
+        (shareTotalNio / rate).toStringAsFixed(2),
+      );
 
       shares.add(
         SplitBillShare(
@@ -132,8 +144,13 @@ class SplitBillEngine {
       );
     }
 
-    final totalDistributed = shares.fold<double>(0.0, (sum, s) => sum + s.totalNio);
-    final totalDistributedUsd = double.parse((totalDistributed / rate).toStringAsFixed(2));
+    final totalDistributed = shares.fold<double>(
+      0.0,
+      (sum, s) => sum + s.totalNio,
+    );
+    final totalDistributedUsd = double.parse(
+      (totalDistributed / rate).toStringAsFixed(2),
+    );
 
     return SplitBillResult(
       shares: shares,
@@ -147,9 +164,14 @@ class SplitBillEngine {
   static SplitBillResult splitByItems({
     required List<ItemizedShareInput> shares,
     required double commercialRate,
+    TaxRegime? taxRegime,
   }) {
     if (shares.isEmpty) {
-      throw ArgumentError.value(shares, 'shares', 'Debe haber al menos un comensal configurado.');
+      throw ArgumentError.value(
+        shares,
+        'shares',
+        'Debe haber al menos un comensal configurado.',
+      );
     }
 
     final rate = commercialRate > 0 ? commercialRate : 36.50;
@@ -160,8 +182,18 @@ class SplitBillEngine {
       double shareTax = 0.0;
 
       for (final item in input.items) {
-        shareSubtotal += item.subtotal + item.modifiersTotal;
-        shareTax += item.taxAmount;
+        final lineBase = item.subtotal + item.modifiersTotal;
+        shareSubtotal += lineBase;
+        // Preserve legacy cart tax when no fiscal regime is supplied;
+        // explicit regimes recalculate from the authoritative rate.
+        final lineTax = taxRegime == null
+            ? item.taxAmount
+            : InvoiceFiscalCalculator.computeLineTax(
+                taxRegime: taxRegime,
+                netBase: lineBase,
+                itemTaxRate: item.taxRate,
+              ).taxAmount;
+        shareTax += lineTax;
       }
 
       shareSubtotal = double.parse(shareSubtotal.toStringAsFixed(2));
@@ -195,8 +227,13 @@ class SplitBillEngine {
       );
     }
 
-    final totalDistributed = outputShares.fold<double>(0.0, (sum, s) => sum + s.totalNio);
-    final totalDistributedUsd = double.parse((totalDistributed / rate).toStringAsFixed(2));
+    final totalDistributed = outputShares.fold<double>(
+      0.0,
+      (sum, s) => sum + s.totalNio,
+    );
+    final totalDistributedUsd = double.parse(
+      (totalDistributed / rate).toStringAsFixed(2),
+    );
 
     return SplitBillResult(
       shares: outputShares,

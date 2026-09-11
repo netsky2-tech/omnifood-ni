@@ -1,0 +1,20 @@
+subreceta_nombre,insumo_o_subreceta,tipo,cantidad_bruta,merma_tecnica_pct,unidad_componente
+Jarabe Vainilla Casa,Azúcar Refinada,insumo,1000,0,g
+Jarabe Vainilla Casa,Agua Purificada,insumo,1000,0,ml
+Jarabe Vainilla Casa,Esencia Vainilla,insumo,50,0,ml
+Jarabe Caramelo Casa,Azúcar Morena,insumo,1000,0,g
+Jarabe Caramelo Casa,Agua Purificada,insumo,1000,0,ml
+Jarabe Caramelo Casa,Esencia Caramelo,insumo,50,0,ml
+Jarabe Avellana Casa,Azúcar Refinada,insumo,1000,0,g
+Jarabe Avellana Casa,Agua Purificada,insumo,1000,0,ml
+Jarabe Avellana Casa,Esencia Avellana,insumo,50,0,ml
+Jarabe Chai Casa,Azúcar Morena,insumo,800,0,g
+Jarabe Chai Casa,Agua Purificada,insumo,1000,0,ml
+Jarabe Chai Casa,Té Negro,insumo,50,0,g
+Jarabe Chai Casa,Canela en Polvo,insumo,10,0,g
+Jarabe Chai Casa,Cardamomo,insumo,5,0,g
+Jarabe Chai Casa,Jengibre Fresco,insumo,30,0,g
+Cold Brew Concentrate,Café Grano Arábica,insumo,200,0,g
+Cold Brew Concentrate,Agua Purificada,insumo,1000,0,ml
+Leche Evaporada Casa,Leche Entera,insumo,1000,0,ml
+Leche Evaporada Casa,Azúcar Refinada,insumo,200,0,g

@@ -21,13 +21,22 @@ import {
 import { AuditLog } from '../../src/modules/identity/entities/audit-log.entity';
 import { SecurityProfile } from '../../src/modules/identity/entities/security-profile.entity';
 import { AuditIntegrityAlert } from '../../src/modules/identity/entities/audit-integrity-alert.entity';
+import { TenantCapabilityEvent } from '../../src/modules/identity/entities/tenant-capability-event.entity';
 import { AppPermission } from '../../src/modules/identity/security/permissions.enum';
 import { generateTotp } from '../../src/modules/identity/security/totp.util';
 import { JWT_TOKEN_TYPES } from '../../src/modules/identity/security/jwt-token.types';
 
 @Global()
 @Module({
-  providers: [{ provide: DataSource, useValue: {} }],
+  providers: [
+    {
+      provide: DataSource,
+      useValue: {
+        entityMetadatas: [],
+        getRepository: jest.fn().mockReturnValue({}),
+      },
+    },
+  ],
   exports: [DataSource],
 })
 class TestDatabaseModule {}
@@ -46,6 +55,44 @@ describe('Dual-Channel Supervisor Override (e2e) (Slice 10.2)', () => {
   const supervisorManagerId = '33333333-3333-3333-3333-333333333333';
   const supervisorOwnerId = '44444444-4444-4444-4444-444444444444';
   const testTotpSeed = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';
+
+  const defaultFindOneImpl = async (args?: { where?: { id?: string } }) => {
+    const id = args?.where?.id;
+    if (id === cashierUserId) {
+      return {
+        id: cashierUserId,
+        name: 'Ana Cashier',
+        email: 'cashier@omnifood.ni',
+        role: UserRole.CASHIER,
+        tenant_id: testTenantId,
+        is_active: true,
+        security_version: 1,
+      };
+    }
+    if (id === supervisorManagerId) {
+      return {
+        id: supervisorManagerId,
+        name: 'Carlos Manager',
+        email: 'manager@omnifood.ni',
+        role: UserRole.MANAGER,
+        tenant_id: testTenantId,
+        is_active: true,
+        security_version: 1,
+      };
+    }
+    if (id === supervisorOwnerId) {
+      return {
+        id: supervisorOwnerId,
+        name: 'Ana Owner',
+        email: 'owner@omnifood.ni',
+        role: UserRole.OWNER,
+        tenant_id: testTenantId,
+        is_active: true,
+        security_version: 1,
+      };
+    }
+    return null;
+  };
 
   const jwtEnvironment: Record<string, string> = {
     NODE_ENV: 'test',
@@ -86,7 +133,7 @@ describe('Dual-Channel Supervisor Override (e2e) (Slice 10.2)', () => {
     Object.assign(process.env, jwtEnvironment);
 
     userRepository = {
-      findOne: jest.fn(),
+      findOne: jest.fn().mockImplementation(defaultFindOneImpl),
       find: jest.fn(),
       save: jest.fn(),
       update: jest.fn(),
@@ -118,6 +165,8 @@ describe('Dual-Channel Supervisor Override (e2e) (Slice 10.2)', () => {
       .useValue(securityProfileRepository)
       .overrideProvider(getRepositoryToken(AuditIntegrityAlert))
       .useValue({})
+      .overrideProvider(getRepositoryToken(TenantCapabilityEvent))
+      .useValue({})
       .compile();
 
     app = moduleFixture.createNestApplication();
@@ -131,6 +180,10 @@ describe('Dual-Channel Supervisor Override (e2e) (Slice 10.2)', () => {
     await app.init();
 
     jwtService = moduleFixture.get<JwtService>(JwtService);
+  });
+
+  beforeEach(() => {
+    userRepository.findOne.mockReset().mockImplementation(defaultFindOneImpl);
   });
 
   describe('POST /identity/auth/supervisor-override', () => {
@@ -149,14 +202,6 @@ describe('Dual-Channel Supervisor Override (e2e) (Slice 10.2)', () => {
     it('successfully authorizes with in-person PIN and generates 60s ephemeral token', async () => {
       const cashierToken = generateTestToken(cashierUserId, UserRole.CASHIER);
       const pinHash = await bcrypt.hash('123456', 10);
-
-      userRepository.findOne.mockResolvedValue({
-        id: supervisorManagerId,
-        name: 'Carlos Manager',
-        role: UserRole.MANAGER,
-        tenant_id: testTenantId,
-        is_active: true,
-      });
 
       securityProfileRepository.findOne.mockResolvedValue({
         user_id: supervisorManagerId,
@@ -211,14 +256,6 @@ describe('Dual-Channel Supervisor Override (e2e) (Slice 10.2)', () => {
       const cashierToken = generateTestToken(cashierUserId, UserRole.CASHIER);
       const pinHash = await bcrypt.hash('123456', 10);
 
-      userRepository.findOne.mockResolvedValue({
-        id: supervisorManagerId,
-        name: 'Carlos Manager',
-        role: UserRole.MANAGER,
-        tenant_id: testTenantId,
-        is_active: true,
-      });
-
       securityProfileRepository.findOne.mockResolvedValue({
         user_id: supervisorManagerId,
         pin_hash: pinHash,
@@ -249,14 +286,6 @@ describe('Dual-Channel Supervisor Override (e2e) (Slice 10.2)', () => {
     it('successfully authorizes with remote RFC 6238 TOTP token', async () => {
       const cashierToken = generateTestToken(cashierUserId, UserRole.CASHIER);
       const validTotpCode = generateTotp(testTotpSeed, Date.now());
-
-      userRepository.findOne.mockResolvedValue({
-        id: supervisorOwnerId,
-        name: 'Ana Owner',
-        role: UserRole.OWNER,
-        tenant_id: testTenantId,
-        is_active: true,
-      });
 
       securityProfileRepository.findOne.mockResolvedValue({
         user_id: supervisorOwnerId,
@@ -302,14 +331,6 @@ describe('Dual-Channel Supervisor Override (e2e) (Slice 10.2)', () => {
     it('returns 401 when invalid TOTP token is provided', async () => {
       const cashierToken = generateTestToken(cashierUserId, UserRole.CASHIER);
 
-      userRepository.findOne.mockResolvedValue({
-        id: supervisorOwnerId,
-        name: 'Ana Owner',
-        role: UserRole.OWNER,
-        tenant_id: testTenantId,
-        is_active: true,
-      });
-
       securityProfileRepository.findOne.mockResolvedValue({
         user_id: supervisorOwnerId,
         totp_secret_seed: testTotpSeed,
@@ -334,14 +355,6 @@ describe('Dual-Channel Supervisor Override (e2e) (Slice 10.2)', () => {
       const cashierToken = generateTestToken(cashierUserId, UserRole.CASHIER);
       const pinHash = await bcrypt.hash('123456', 10);
 
-      userRepository.findOne.mockResolvedValue({
-        id: supervisorManagerId,
-        name: 'Carlos Manager',
-        role: UserRole.MANAGER, // MANAGER does not have INVENTORY_RECIPE_EDIT
-        tenant_id: testTenantId,
-        is_active: true,
-      });
-
       securityProfileRepository.findOne.mockResolvedValue({
         user_id: supervisorManagerId,
         pin_hash: pinHash,
@@ -365,7 +378,6 @@ describe('Dual-Channel Supervisor Override (e2e) (Slice 10.2)', () => {
     it('returns 404 when supervisor is not found in the tenant', async () => {
       const cashierToken = generateTestToken(cashierUserId, UserRole.CASHIER);
 
-      userRepository.findOne.mockResolvedValue(null);
       auditRepository.save.mockResolvedValue({ id: 'audit-6' });
 
       await request(app.getHttpServer())

@@ -1,6 +1,7 @@
 import '../../models/inventory/batch_deduction.dart';
 import '../../models/inventory/insumo.dart';
 import '../../models/inventory/inventory_movement.dart';
+import '../../models/fulfillment/fulfillment_contracts.dart';
 import '../../models/inventory/recipe.dart';
 import '../../models/inventory/recipe_version_document.dart';
 import '../../models/inventory/uom_conversion.dart';
@@ -366,7 +367,8 @@ class MovementEngineImpl implements MovementEngine {
           'Recipe component ${item.ingredientId} is missing locally',
         );
       }
-      final consumedQuantity = customIngredientConsumptions != null &&
+      final consumedQuantity =
+          customIngredientConsumptions != null &&
               customIngredientConsumptions.containsKey(item.ingredientId)
           ? customIngredientConsumptions[item.ingredientId]!
           : item.quantity;
@@ -543,6 +545,20 @@ class MovementEngineImpl implements MovementEngine {
     double quantity, {
     String? recipeVersionId,
   }) async {
+    final product = await repository.getProductById(productId);
+    switch (product?.inventoryPolicy) {
+      case InventoryPolicy.directStock:
+        return _getDirectStockMovements(
+          productId,
+          product?.directStockInsumoId,
+          quantity,
+        );
+      case InventoryPolicy.notTracked:
+        return [];
+      case InventoryPolicy.recipeBom:
+      case null:
+        break;
+    }
     return await _generateMovements(
       productId,
       quantity,
@@ -550,6 +566,41 @@ class MovementEngineImpl implements MovementEngine {
       0,
       recipeVersionId: recipeVersionId,
     );
+  }
+
+  Future<List<InventoryMovement>> _getDirectStockMovements(
+    String productId,
+    String? insumoId,
+    double quantity,
+  ) async {
+    if (insumoId == null || insumoId.trim().isEmpty) {
+      throw StateError(
+        'DIRECT_STOCK product $productId requires an insumo link',
+      );
+    }
+    final insumos = await repository.getInsumosByIds([insumoId]);
+    if (insumos.isEmpty) {
+      throw StateError('DIRECT_STOCK insumo $insumoId is missing locally');
+    }
+    final insumo = insumos.single;
+    final batchDeductions = insumo.isPerishable
+        ? await getBatchesForConsumption(insumo.id, quantity)
+        : null;
+    return [
+      InventoryMovement(
+        id: '${DateTime.now().microsecondsSinceEpoch}-${insumo.id}',
+        insumoId: insumo.id,
+        type: MovementType.sale,
+        quantity: -quantity,
+        previousStock: insumo.stock,
+        newStock: insumo.stock - quantity,
+        timestamp: DateTime.now(),
+        unitCostNio: insumo.averageCost,
+        sourceDocumentType: 'PRODUCT_SALE',
+        sourceDocumentId: productId,
+        batchDeductions: batchDeductions,
+      ),
+    ];
   }
 
   @override

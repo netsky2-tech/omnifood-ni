@@ -230,6 +230,7 @@ describe('IdentityModule strict typed access-token ownership', () => {
       'login',
       'refresh',
       'auth/supervisor-override',
+      'me',
       'staff',
     ]);
     expect(routes).not.toContain('logout');

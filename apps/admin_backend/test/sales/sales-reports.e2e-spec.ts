@@ -22,7 +22,14 @@ import {
   UserRole,
 } from '../../src/modules/identity/entities/user.entity';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
+import { AuthoritativeCurrentUserGuard } from '../../src/modules/identity/guards/authoritative-current-user.guard';
+import { CurrentUserAuthorizationService } from '../../src/modules/identity/services/current-user-authorization.service';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
+import {
+  createIdentityJwtConfigProvider,
+  IDENTITY_JWT_TEST_CONFIG,
+  signIdentityJwtAccessToken,
+} from '../support/identity-jwt-test.fixture';
 import {
   SalesDashboardReportDto,
   HourlySalesReportDto,
@@ -40,7 +47,7 @@ import {
 } from '../../src/modules/sales/dto/sales-export.dto';
 
 describe('Sales & Fiscal Reports & Exports E2E Integration', () => {
-  const jwtSecret = 'e2e-test-secret-key-that-is-at-least-32-characters-long';
+  const jwtSecret = IDENTITY_JWT_TEST_CONFIG.secret;
   const tenantId = 'tenant-e2e-retail';
 
   let app: INestApplication<App>;
@@ -239,6 +246,12 @@ describe('Sales & Fiscal Reports & Exports E2E Integration', () => {
         Reflector,
         RolesGuard,
         AuthGuard,
+        AuthoritativeCurrentUserGuard,
+        {
+          provide: CurrentUserAuthorizationService,
+          useValue: { authorize: jest.fn((token: unknown) => token) },
+        },
+        createIdentityJwtConfigProvider(),
         SalesReportsService,
         FiscalReportsService,
         SalesExportService,
@@ -295,23 +308,14 @@ describe('Sales & Fiscal Reports & Exports E2E Integration', () => {
   });
 
   const getAuthToken = (role: UserRole) =>
-    jwtService.sign(
-      {
-        sub: 'user-manager-1',
-        email: 'manager@omnifood.ni',
-        tenant_id: tenantId,
-        role,
-        is_active: true,
-        token_type: 'access',
-        security_version: 1,
-      },
-      {
-        issuer: 'omnifood-admin',
-        audience: 'omnifood-pos',
-        expiresIn: 3600,
-        algorithm: 'HS256',
-      },
-    );
+    signIdentityJwtAccessToken(jwtService, {
+      sub: 'user-manager-1',
+      email: `${role.toLowerCase()}@omnifood.ni`,
+      tenant_id: tenantId,
+      role,
+      is_active: true,
+      security_version: 1,
+    });
 
   describe('Security & RBAC Controls', () => {
     it('rejects unauthenticated requests with 401', async () => {

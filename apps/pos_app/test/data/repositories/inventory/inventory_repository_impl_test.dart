@@ -24,6 +24,8 @@ import 'package:pos_app/data/models/inventory/recipe_version_document_entity.dar
 import 'package:pos_app/domain/models/inventory/inventory_movement.dart';
 import 'package:pos_app/domain/models/inventory/production_order_document.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
+import 'package:pos_app/data/daos/local_config_dao.dart';
+import 'package:pos_app/data/models/local_config_entity.dart';
 
 import 'inventory_repository_impl_test.mocks.dart';
 
@@ -43,6 +45,14 @@ import 'inventory_repository_impl_test.mocks.dart';
   Dio,
   AppDatabase,
 ])
+class FakeLocalConfigDao extends Fake implements LocalConfigDao {
+  @override
+  Future<void> saveConfig(LocalConfigEntity config) async {}
+
+  @override
+  Future<LocalConfigEntity?> getConfigByKey(String key) async => null;
+}
+
 void main() {
   late InventoryRepositoryImpl repository;
   late MockDio mockDio;
@@ -57,6 +67,8 @@ void main() {
     mockMovementSyncStateDao = MockMovementSyncStateDao();
     mockInsumoDao = MockInsumoDao();
     mockRecipeVersionDocumentDao = MockRecipeVersionDocumentDao();
+    final mockDb = MockAppDatabase();
+    when(mockDb.localConfigDao).thenReturn(FakeLocalConfigDao());
     repository = InventoryRepositoryImpl(
       insumoDao: mockInsumoDao,
       recipeDao: MockRecipeDao(),
@@ -71,7 +83,7 @@ void main() {
       purchaseDao: MockPurchaseDao(),
       forensicAlertDao: MockForensicAlertDao(),
       dio: mockDio,
-      database: MockAppDatabase(),
+      database: mockDb,
     );
   });
 

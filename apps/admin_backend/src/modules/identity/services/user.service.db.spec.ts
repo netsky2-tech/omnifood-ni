@@ -176,7 +176,7 @@ describe('UserService atomic mutations (db)', () => {
           `CREATE TABLE "${schema}".users (id uuid PRIMARY KEY, tenant_id text NOT NULL, name text NOT NULL, email text, password_hash text, role text NOT NULL, is_active boolean NOT NULL DEFAULT true, hashed_refresh_token text, security_version integer NOT NULL DEFAULT 1, refresh_token_family_id uuid, refresh_token_revoked_at timestamptz, created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now())`,
         );
         await bootstrap.query(
-          `CREATE TABLE "${schema}".security_profiles (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id text UNIQUE NOT NULL, pin_hash text, totp_secret_seed text, is_totp_enabled boolean DEFAULT false, is_pin_enabled boolean DEFAULT true, created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now())`,
+          `CREATE TABLE "${schema}".security_profiles (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id text UNIQUE NOT NULL, pin_hash text, totp_secret_seed text, is_totp_enabled boolean DEFAULT false, is_pin_enabled boolean DEFAULT true, custom_permissions jsonb DEFAULT '[]'::jsonb, created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now())`,
         );
         await bootstrap.query(
           `CREATE TABLE "${schema}".audit_logs (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id text, user_id text, action text, target_type text, target_id text, device_id text, timestamp timestamptz, metadata jsonb, sequence_no integer DEFAULT 1, prev_hash text DEFAULT 'GENESIS', entry_hash text DEFAULT 'test', metodo_autorizacion text, usuario_autorizador_id text, forensic_status text DEFAULT 'ACTIVE', hash_version varchar)`,

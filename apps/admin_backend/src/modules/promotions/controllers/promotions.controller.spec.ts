@@ -1,6 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { JwtModule } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { PromotionsController } from './promotions.controller';
 import { PromotionsService } from '../services/promotions.service';

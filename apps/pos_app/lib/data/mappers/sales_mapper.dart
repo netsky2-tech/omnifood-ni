@@ -70,7 +70,9 @@ class SalesMapper {
       getQuantity: domain.getQuantity,
       discountValue: domain.discountValue,
       minOrderAmount: domain.minOrderAmount,
-      daysOfWeek: domain.daysOfWeek.isNotEmpty ? domain.daysOfWeek.join(',') : null,
+      daysOfWeek: domain.daysOfWeek.isNotEmpty
+          ? domain.daysOfWeek.join(',')
+          : null,
       startTime: domain.startTime,
       endTime: domain.endTime,
       startDate: domain.startDate,
@@ -130,7 +132,10 @@ class SalesMapper {
   }
 
   // --- Hold Ticket ---
-  static HoldTicket toHoldTicketDomain(HoldTicketEntity entity, List<HoldTicketItemEntity> itemEntities) {
+  static HoldTicket toHoldTicketDomain(
+    HoldTicketEntity entity,
+    List<HoldTicketItemEntity> itemEntities,
+  ) {
     return HoldTicket(
       id: entity.id,
       name: entity.name,
@@ -150,7 +155,9 @@ class SalesMapper {
         if (e.modifiersJson != null && e.modifiersJson!.isNotEmpty) {
           try {
             final decoded = jsonDecode(e.modifiersJson!) as List;
-            modifiers = decoded.map((m) => Modifier.fromJson(m as Map<String, dynamic>)).toList();
+            modifiers = decoded
+                .map((m) => Modifier.fromJson(m as Map<String, dynamic>))
+                .toList();
           } catch (_) {}
         }
         return CartItem(
@@ -183,11 +190,15 @@ class SalesMapper {
     );
   }
 
-  static List<HoldTicketItemEntity> toHoldTicketItemEntities(HoldTicket domain) {
+  static List<HoldTicketItemEntity> toHoldTicketItemEntities(
+    HoldTicket domain,
+  ) {
     return domain.items.map((item) {
       String? modJson;
       if (item.selectedModifiers.isNotEmpty) {
-        modJson = jsonEncode(item.selectedModifiers.map((m) => m.toJson()).toList());
+        modJson = jsonEncode(
+          item.selectedModifiers.map((m) => m.toJson()).toList(),
+        );
       }
       return HoldTicketItemEntity(
         id: const Uuid().v4(),
@@ -247,11 +258,15 @@ class SalesMapper {
           ? 'CARTERA_MESERO'
           : 'CAJA_CENTRAL',
       closedAt: domain.closedAt?.millisecondsSinceEpoch,
-      openingBalanceNio: domain.openingBalanceNio > 0 ? domain.openingBalanceNio : domain.openingBalance,
+      openingBalanceNio: domain.openingBalanceNio > 0
+          ? domain.openingBalanceNio
+          : domain.openingBalance,
       openingBalanceUsd: domain.openingBalanceUsd,
       closingCountedNio: domain.closingCountedNio ?? domain.closingBalance,
       closingCountedUsd: domain.closingCountedUsd,
-      expectedNio: domain.expectedNio > 0 ? domain.expectedNio : domain.totalExpected,
+      expectedNio: domain.expectedNio > 0
+          ? domain.expectedNio
+          : domain.totalExpected,
       expectedUsd: domain.expectedUsd,
       differenceNio: domain.differenceNio,
       differenceUsd: domain.differenceUsd,
@@ -344,7 +359,10 @@ class SalesMapper {
   }
 
   // --- Invoice Item ---
-  static InvoiceItem toItemDomain(InvoiceItemEntity entity, {List<Modifier> modifiers = const []}) {
+  static InvoiceItem toItemDomain(
+    InvoiceItemEntity entity, {
+    List<Modifier> modifiers = const [],
+  }) {
     return InvoiceItem(
       id: entity.id,
       invoiceId: entity.invoiceId,
@@ -383,25 +401,37 @@ class SalesMapper {
       variantId: domain.variantId,
       notes: domain.notes,
       recipeVersionId: domain.recipeVersionId,
-      inventorySnapshotJson: domain.inventorySnapshot == null ? null : jsonEncode(domain.inventorySnapshot!.toJson()),
-      inventorySnapshotVersion: _snapshotVersion(domain.inventorySnapshot, domain.inventorySnapshotVersion),
+      inventorySnapshotJson: domain.inventorySnapshot == null
+          ? null
+          : jsonEncode(domain.inventorySnapshot!.toJson()),
+      inventorySnapshotVersion: _snapshotVersion(
+        domain.inventorySnapshot,
+        domain.inventorySnapshotVersion,
+      ),
       originInvoiceItemId: domain.originInvoiceItemId,
     );
   }
 
-  static SaleTimeInventorySnapshot? _snapshotFromEntity(InvoiceItemEntity entity) {
+  static SaleTimeInventorySnapshot? _snapshotFromEntity(
+    InvoiceItemEntity entity,
+  ) {
     if (entity.inventorySnapshotJson == null) {
       _snapshotVersion(null, entity.inventorySnapshotVersion);
       return null;
     }
     final snapshot = SaleTimeInventorySnapshot.fromJson(
-      Map<String, dynamic>.from(jsonDecode(entity.inventorySnapshotJson!) as Map),
+      Map<String, dynamic>.from(
+        jsonDecode(entity.inventorySnapshotJson!) as Map,
+      ),
     );
     _snapshotVersion(snapshot, entity.inventorySnapshotVersion);
     return snapshot;
   }
 
-  static String? _snapshotVersion(SaleTimeInventorySnapshot? snapshot, String? version) {
+  static String? _snapshotVersion(
+    SaleTimeInventorySnapshot? snapshot,
+    String? version,
+  ) {
     if (snapshot == null && version == null) return null;
     if (snapshot == null || version != 'SALE_TIME_V1') {
       throw ArgumentError('Contradictory sale-time inventory snapshot version');
@@ -409,19 +439,23 @@ class SalesMapper {
     return version;
   }
 
-  static List<InvoiceItemModifierEntity> toItemModifierEntities(InvoiceItem domain) {
-    return domain.selectedModifiers.map((m) => InvoiceItemModifierEntity(
-      id: const Uuid().v4(),
-      invoiceItemId: domain.id,
-      name: m.name,
-      extraPrice: m.extraPrice,
-    )).toList();
+  static List<InvoiceItemModifierEntity> toItemModifierEntities(
+    InvoiceItem domain,
+  ) {
+    return domain.selectedModifiers
+        .map(
+          (m) => InvoiceItemModifierEntity(
+            id: const Uuid().v4(),
+            invoiceItemId: domain.id,
+            name: m.name,
+            extraPrice: m.extraPrice,
+          ),
+        )
+        .toList();
   }
 
   // --- Payment ---
   static Payment toPaymentDomain(PaymentEntity entity) {
-    // ignore: avoid_print
-    print('[SYNC-DEBUG] toPaymentDomain: entity.id="${entity.id}" method="${entity.method}"');
     return Payment(
       id: entity.id,
       invoiceId: entity.invoiceId,
@@ -453,8 +487,6 @@ class SalesMapper {
   }
 
   static PaymentEntity toPaymentEntity(Payment domain) {
-    // ignore: avoid_print
-    print('[SYNC-DEBUG] toPaymentEntity: domain.id="${domain.id}" method=${domain.method.name}');
     return PaymentEntity(
       id: domain.id,
       invoiceId: domain.invoiceId,
@@ -502,46 +534,62 @@ class SalesMapper {
       'customerId': invoice.customerId,
       'globalTaxOverride': invoice.globalTaxOverride,
       'relatedInvoiceId': invoice.relatedInvoiceId,
-      if (invoice.originInvoiceId?.isNotEmpty ?? false) 'originInvoiceId': invoice.originInvoiceId,
-      if (invoice.refundReasonPolicy?.isNotEmpty ?? false) 'refundReasonPolicy': invoice.refundReasonPolicy,
-      if (invoice.refundReasonCode?.isNotEmpty ?? false) 'refundReasonCode': invoice.refundReasonCode,
-      if (invoice.authorizedByUserId?.isNotEmpty ?? false) 'authorizedByUserId': invoice.authorizedByUserId,
-      if (invoice.authorizedByRole?.isNotEmpty ?? false) 'authorizedByRole': invoice.authorizedByRole,
+      if (invoice.originInvoiceId?.isNotEmpty ?? false)
+        'originInvoiceId': invoice.originInvoiceId,
+      if (invoice.refundReasonPolicy?.isNotEmpty ?? false)
+        'refundReasonPolicy': invoice.refundReasonPolicy,
+      if (invoice.refundReasonCode?.isNotEmpty ?? false)
+        'refundReasonCode': invoice.refundReasonCode,
+      if (invoice.authorizedByUserId?.isNotEmpty ?? false)
+        'authorizedByUserId': invoice.authorizedByUserId,
+      if (invoice.authorizedByRole?.isNotEmpty ?? false)
+        'authorizedByRole': invoice.authorizedByRole,
       'terminalId': invoice.terminalId ?? 'term-main',
-      'documentType': invoice.type == InvoiceType.creditNote ? 'CREDIT_NOTE' : 'SALE',
+      'documentType': invoice.type == InvoiceType.creditNote
+          ? 'CREDIT_NOTE'
+          : 'SALE',
       'sourceSequence': invoice.sourceSequence ?? 1,
       'idempotencyKey': (invoice.idempotencyKey?.isNotEmpty ?? false)
           ? invoice.idempotencyKey
           : 'sale:${invoice.terminalId ?? 'term-main'}:${invoice.id}',
       'payloadHash': invoice.payloadHash,
-      if (invoice.inventoryPolicyVersion != null) 'inventoryPolicyVersion': invoice.inventoryPolicyVersion,
-      if (invoice.inventoryOutcome != null) 'inventoryOutcome': invoice.inventoryOutcome,
-      if (invoice.inventoryOutcomeReason != null) 'inventoryOutcomeReason': invoice.inventoryOutcomeReason,
-      'items': items.map((item) => {
-        'id': item.id,
-        'productId': item.productId,
-        'productName': item.productName,
-        'quantity': item.quantity,
-        'unitPrice': item.unitPrice,
-        'originalTaxRate': item.originalTaxRate,
-        'appliedTaxRate': item.appliedTaxRate,
-        'taxAmount': item.taxAmount,
-        'total': item.total,
-        'discount': item.discount,
-        'variantId': item.variantId,
-        'notes': item.notes,
-        'recipeVersionId': item.recipeVersionId,
-        if (item.inventorySnapshot != null) 'inventorySnapshotVersion': _snapshotVersion(item.inventorySnapshot, item.inventorySnapshotVersion),
-        if (item.inventorySnapshot != null) 'inventorySnapshot': item.inventorySnapshot!.toJson(),
-        'originInvoiceItemId': item.originInvoiceItemId,
-        'modifiers': item.selectedModifiers.map((m) => ({
-          'name': m.name,
-          'extraPrice': m.extraPrice,
-        })).toList(),
-      }).toList(),
+      if (invoice.inventoryPolicyVersion != null)
+        'inventoryPolicyVersion': invoice.inventoryPolicyVersion,
+      if (invoice.inventoryOutcome != null)
+        'inventoryOutcome': invoice.inventoryOutcome,
+      if (invoice.inventoryOutcomeReason != null)
+        'inventoryOutcomeReason': invoice.inventoryOutcomeReason,
+      'items': items
+          .map(
+            (item) => {
+              'id': item.id,
+              'productId': item.productId,
+              'productName': item.productName,
+              'quantity': item.quantity,
+              'unitPrice': item.unitPrice,
+              'originalTaxRate': item.originalTaxRate,
+              'appliedTaxRate': item.appliedTaxRate,
+              'taxAmount': item.taxAmount,
+              'total': item.total,
+              'discount': item.discount,
+              'variantId': item.variantId,
+              'notes': item.notes,
+              'recipeVersionId': item.recipeVersionId,
+              if (item.inventorySnapshot != null)
+                'inventorySnapshotVersion': _snapshotVersion(
+                  item.inventorySnapshot,
+                  item.inventorySnapshotVersion,
+                ),
+              if (item.inventorySnapshot != null)
+                'inventorySnapshot': item.inventorySnapshot!.toJson(),
+              'originInvoiceItemId': item.originInvoiceItemId,
+              'modifiers': item.selectedModifiers
+                  .map((m) => ({'name': m.name, 'extraPrice': m.extraPrice}))
+                  .toList(),
+            },
+          )
+          .toList(),
       'payments': payments.map((payment) {
-        // ignore: avoid_print
-        if (payment.id.isEmpty) print('[SYNC-DEBUG] EMPTY PAYMENT ID! invoiceId=${invoice.id} method=${payment.method.name}');
         return {
           'id': payment.id,
           'method': payment.method.name,

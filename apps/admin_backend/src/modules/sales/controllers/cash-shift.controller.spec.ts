@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { CashShiftController } from './cash-shift.controller';
 import { CashShiftService } from '../services/cash-shift.service';
 import { JwtModule } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import {
   CashShiftSession,

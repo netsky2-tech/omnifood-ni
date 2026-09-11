@@ -1,3 +1,4 @@
+import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:uuid/uuid.dart';
@@ -328,7 +329,8 @@ class ActivationControlledSaleRunner {
         items: [receiptItem],
         payments: [receiptPayment],
         cashierName: trimmedCashierId,
-      );
+            taxRegime: TaxRegime.regimenGeneral,
+          );
       receiptPrintedSuccess = printResult.isSuccess;
     }
 

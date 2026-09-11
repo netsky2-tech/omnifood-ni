@@ -1,3 +1,7 @@
+import "package:pos_app/data/daos/fulfillment/fulfillment_topology_dao.dart";
+import "package:pos_app/data/daos/fulfillment/fulfillment_persistence_dao.dart";
+import "package:pos_app/data/models/fulfillment/topology_persistence_entities.dart";
+import "package:pos_app/data/models/fulfillment/fulfillment_persistence_entities.dart";
 import 'dart:async';
 import 'package:floor/floor.dart';
 import 'package:sqflite/sqflite.dart' as sqflite;
@@ -98,7 +102,7 @@ import 'package:pos_app/data/daos/inventory/authority_projection_dao.dart';
 part 'app_database.g.dart'; // generated code
 
 @Database(
-  version: 51,
+  version: 52,
   entities: [
     UserEntity,
     SecurityProfileEntity,
@@ -108,6 +112,12 @@ part 'app_database.g.dart'; // generated code
     AuthorityInsumoEntity,
     AuthorityRecipeVersionEntity,
     AuthorityRecipeVersionComponentEntity,
+    TopologySnapshotEntity,
+    ShiftTopologyBindingEntity,
+    EmergencyTopologyAuditEntity,
+    FulfillmentRecordEntity,
+    PrintJobEntity,
+    OutboxEventEntity,
     ProductEntity,
     ProductVariantEntity,
     ProductModifierEntity,
@@ -201,4 +211,6 @@ abstract class AppDatabase extends FloorDatabase {
   FirstCustomerSaleObservationDao get firstCustomerSaleObservationDao;
   ActivationOutboxDao get activationOutboxDao;
   AuthorityProjectionDao get authorityProjectionDao;
+  FulfillmentTopologyDao get fulfillmentTopologyDao;
+  FulfillmentPersistenceDao get fulfillmentPersistenceDao;
 }

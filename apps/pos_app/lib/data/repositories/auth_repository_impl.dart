@@ -99,10 +99,12 @@ class AuthRepositoryImpl implements AuthRepository {
     }
 
     try {
-      await _storage.write(key: 'access_token', value: token);
+      await _storage
+          .write(key: 'access_token', value: token)
+          .timeout(const Duration(milliseconds: 500));
     } catch (e) {
       debugPrint(
-        '[AuthRepository] Secure storage falló, usando SharedPreferences: $e',
+        '[AuthRepository] Secure storage falló o timeout, usando SharedPreferences: $e',
       );
       _prefs ??= await SharedPreferences.getInstance();
       await _prefs?.setString('access_token', token);
@@ -126,6 +128,7 @@ class AuthRepositoryImpl implements AuthRepository {
 
       _currentUser = user;
       _isPendingSync = false;
+      debugPrint('[AuthRepository] Saving token...');
       await _saveToken(token);
       if (_credentialCoordinator != null && refreshToken != null) {
         final intent = await _credentialCoordinator!.reserveIntent();
@@ -142,9 +145,16 @@ class AuthRepositoryImpl implements AuthRepository {
           ),
         );
       }
-      await _refreshAuditCapability(user);
 
-      await syncStaff();
+            debugPrint('[AuthRepository] Refreshing audit capability...');
+      await _refreshAuditCapability(user);
+      debugPrint('[AuthRepository] Syncing staff...');
+      try {
+        await syncStaff();
+      } catch (e) {
+        debugPrint('[AuthRepository] syncStaff failed but continuing: $e');
+      }
+      debugPrint('[AuthRepository] Online login successful for ${user.email}');
       return user;
     } on DioException catch (e) {
       final isUnauthorized =

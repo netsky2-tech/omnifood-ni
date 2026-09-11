@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { DataSource } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Reflector } from '@nestjs/core';
@@ -16,12 +16,7 @@ import { RolesGuard } from '../identity/guards/roles.guard';
 
 describe('Batch 6b Backend E2E Integration: Complete Retrocalculation Lifecycle', () => {
   let controller: RegularizationController;
-  let service: KardexRegularizationService;
   let governanceService: GovernanceApprovalService;
-  let queueRepo: Repository<KardexRecalculateQueue>;
-  let correctionRepo: Repository<KardexCorrection>;
-  let movementRepo: Repository<InventoryMovement>;
-  let configRepo: Repository<SystemParametersConfig>;
 
   const mockQueueRepo = {
     find: jest.fn(),
@@ -112,23 +107,8 @@ describe('Batch 6b Backend E2E Integration: Complete Retrocalculation Lifecycle'
       .compile();
 
     controller = module.get<RegularizationController>(RegularizationController);
-    service = module.get<KardexRegularizationService>(
-      KardexRegularizationService,
-    );
     governanceService = module.get<GovernanceApprovalService>(
       GovernanceApprovalService,
-    );
-    queueRepo = module.get<Repository<KardexRecalculateQueue>>(
-      getRepositoryToken(KardexRecalculateQueue),
-    );
-    correctionRepo = module.get<Repository<KardexCorrection>>(
-      getRepositoryToken(KardexCorrection),
-    );
-    movementRepo = module.get<Repository<InventoryMovement>>(
-      getRepositoryToken(InventoryMovement),
-    );
-    configRepo = module.get<Repository<SystemParametersConfig>>(
-      getRepositoryToken(SystemParametersConfig),
     );
   });
 

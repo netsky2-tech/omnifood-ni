@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'package:mockito/mockito.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:pos_app/data/database/app_database.dart';
@@ -104,7 +105,7 @@ void main() {
         .thenAnswer((_) async => seq);
 
     // Execute real SQLite persistence in transaction mock
-    when(mockTransactionDao.executeSaleTransaction(any, any, any, any, any, any, any))
+    when(mockTransactionDao.executeSaleWithDgiTransaction(any, any, any, any, any, any, any, any))
         .thenAnswer((invocation) async {
       final inv = invocation.positionalArguments[0] as InvoiceEntity;
       final items = invocation.positionalArguments[1] as List<InvoiceItemEntity>;
@@ -147,6 +148,7 @@ void main() {
       tableOrderService,
       false,
     );
+    saleViewModel.setCompanyTaxRegime(TaxRegime.regimenGeneral);
 
     tableLayoutViewModel = TableLayoutViewModel(
       database: database,

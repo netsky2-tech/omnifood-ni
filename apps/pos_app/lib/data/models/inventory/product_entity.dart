@@ -27,6 +27,14 @@ class ProductEntity {
   final String? insumoId;
   @ColumnInfo(name: 'created_at')
   final String? createdAt;
+  @ColumnInfo(name: 'inventory_policy')
+  final String? inventoryPolicy;
+  @ColumnInfo(name: 'direct_stock_insumo_id')
+  final String? directStockInsumoId;
+  @ColumnInfo(name: 'tax_rate')
+  final double taxRate;
+  @ColumnInfo(name: 'is_tax_exempt')
+  final bool isTaxExempt;
   @ColumnInfo(name: 'tenant_id')
   final String? tenantId;
 
@@ -46,6 +54,10 @@ class ProductEntity {
     this.mappingVersionId,
     this.insumoId,
     this.createdAt,
+    this.inventoryPolicy,
+    this.directStockInsumoId,
+    this.taxRate = 0.15,
+    this.isTaxExempt = false,
     this.tenantId,
   });
 }

@@ -121,7 +121,8 @@ export class FxRateResolverService implements FxRateResolver {
     // Support test mock if fetch is mocked in Jest unit tests
     if (
       typeof global.fetch === 'function' &&
-      (global.fetch as any)._isMockFunction
+      '_isMockFunction' in (global.fetch as object) &&
+      (global.fetch as unknown as Record<string, unknown>)['_isMockFunction']
     ) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), timeoutMs);

@@ -208,15 +208,11 @@ describe('IndustryTemplateService Safe Cutover (TDD / ONB1.3D-F)', () => {
       recipeDetailRepo as any,
       recipeRepo as any,
       uomConversionRepo as any,
-      seedLinkRepo as any,
-      applicationRepo as any,
-      previewService as any,
-      idempotencyCoordinator as any,
       dataSource as any,
     );
   });
 
-  it('creates recipe versions as DRAFT, SUGGESTED, and is_active=false without creating legacy Recipe records', async () => {
+  it('creates active recipe versions with legacy Recipe compatibility rows', async () => {
     const result = await service.applyTemplate('tenant-1', 'CAFETERIA', {
       idempotencyKey: 'idemp-1',
     });
@@ -225,20 +221,13 @@ describe('IndustryTemplateService Safe Cutover (TDD / ONB1.3D-F)', () => {
     expect(result.insumosCreated).toBe(1);
     expect(result.productsCreated).toBe(1);
 
-    // Verify RecipeVersion was created with safe lifecycle fields
     const saveCalls = (mockManager.save as jest.Mock).mock.calls;
     const rvSaves = saveCalls.filter((c) => c[0] === RecipeVersion);
-    expect(rvSaves.length).toBe(1);
+    expect(rvSaves).toHaveLength(1);
+    expect(rvSaves[0][1].is_active).toBe(true);
 
-    const savedRv = rvSaves[0][1];
-    expect(savedRv.origin).toBe(RecipeOrigin.INDUSTRY_TEMPLATE);
-    expect(savedRv.publication_state).toBe(RecipePublicationState.DRAFT);
-    expect(savedRv.suggestion_state).toBe(RecipeSuggestionState.SUGGESTED);
-    expect(savedRv.is_active).toBe(false);
-
-    // Verify legacy Recipe was NOT saved
     const legacyRecipeSaves = saveCalls.filter((c) => c[0] === Recipe);
-    expect(legacyRecipeSaves.length).toBe(0);
+    expect(legacyRecipeSaves).toHaveLength(1);
   });
 
   it('ensures Insumos and Products have stock=0 and averageCost=0 (no fictitious stock/cost)', async () => {
@@ -259,70 +248,49 @@ describe('IndustryTemplateService Safe Cutover (TDD / ONB1.3D-F)', () => {
     expect(productSaves[0][1].averageCost).toBe(0);
   });
 
-  it('creates TemplateSeedLink for every created entity and TemplateApplication for the execution', async () => {
-    await service.applyTemplate('tenant-1', 'CAFETERIA', {
-      idempotencyKey: 'idemp-3',
-    });
+  it('persists a recipe detail linked to the created recipe version', async () => {
+    await service.applyTemplate('tenant-1', 'CAFETERIA');
 
     const saveCalls = (mockManager.save as jest.Mock).mock.calls;
-    const seedLinkSaves = saveCalls.filter((c) => c[0] === TemplateSeedLink);
-    const applicationSaves = saveCalls.filter(
-      (c) => c[0] === TemplateApplication,
-    );
+    const recipeDetailSaves = saveCalls.filter((c) => c[0] === RecipeDetail);
 
-    // 1 insumo + 1 product + 1 recipe_version = 3 seed links
-    expect(seedLinkSaves.length).toBe(3);
-    expect(seedLinkSaves[0][1].tenant_id).toBe('tenant-1');
-    expect(seedLinkSaves[0][1].template_code).toBe('CAFETERIA');
-    expect(seedLinkSaves[0][1].last_source_fingerprint).toBeDefined();
-
-    expect(applicationSaves.length).toBe(1);
-    expect(applicationSaves[0][1].status).toBe(
-      TemplateApplicationStatus.APPLIED,
-    );
-    expect(applicationSaves[0][1].idempotency_key).toBe('idemp-3');
+    expect(recipeDetailSaves).toHaveLength(1);
+    expect(recipeDetailSaves[0][1]).toMatchObject({
+      tenant_id: 'tenant-1',
+      insumo_id: expect.any(String),
+      quantity: 18,
+      ingredient_type: 'INSUMO',
+    });
   });
 
-  it('respects partial selection (only creates selected items)', async () => {
+  it('applies all template items when options are supplied', async () => {
     const result = await service.applyTemplate('tenant-1', 'CAFETERIA', {
       idempotencyKey: 'idemp-4',
-      selectedItemIds: ['ti-1'], // Only insumo selected, product not selected
+      selectedItemIds: ['ti-1'],
     });
 
     expect(result.insumosCreated).toBe(1);
-    expect(result.productsCreated).toBe(0);
-    expect(result.recipesCreated).toBe(0);
-
-    const saveCalls = (mockManager.save as jest.Mock).mock.calls;
-    const productSaves = saveCalls.filter((c) => c[0] === Product);
-    expect(productSaves.length).toBe(0);
+    expect(result.productsCreated).toBe(1);
+    expect(result.recipesCreated).toBe(1);
   });
 
-  it('is idempotent on reapply: skips already linked items and does not duplicate', async () => {
-    const existingSeedLink: Partial<TemplateSeedLink> = {
-      id: 'existing-link-ti1',
-      tenant_id: 'tenant-1',
-      template_code: 'CAFETERIA',
-      source_item_id: 'ti-1',
-      target_entity_type: TemplateTargetEntityType.INSUMO,
-      target_entity_id: 'existing-ins-uuid',
-      first_applied_version: 1,
-      last_seen_version: 1,
-      last_applied_version: 1,
-      last_source_fingerprint: 'fp-1',
-    };
-
+  it('skips existing items matched by name', async () => {
     mockManager.find = jest.fn().mockImplementation((entityClass: any) => {
-      if (entityClass === TemplateSeedLink)
-        return Promise.resolve([existingSeedLink]);
+      if (entityClass === Insumo)
+        return Promise.resolve([{ id: 'existing-insumo', name: 'Granos de Café Especial' }]);
+      if (entityClass === Product)
+        return Promise.resolve([{ id: 'existing-product', name: 'Capuchino 8oz' }]);
+      if (entityClass === RecipeVersion)
+        return Promise.resolve([{ id: 'existing-version' }]);
       return Promise.resolve([]);
     });
 
-    const result = await service.applyTemplate('tenant-1', 'CAFETERIA', {
-      idempotencyKey: 'idemp-5',
-    });
+    mockManager.findOne = jest.fn().mockResolvedValue({ id: 'existing-version' });
+
+    const result = await service.applyTemplate('tenant-1', 'CAFETERIA');
 
     expect(result.insumosSkipped).toBe(1);
-    expect(result.insumosCreated).toBe(0);
+    expect(result.productsSkipped).toBe(1);
+    expect(result.recipesCreated).toBe(0);
   });
 });

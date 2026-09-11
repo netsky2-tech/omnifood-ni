@@ -403,6 +403,7 @@ describe('IndustryTemplate (Integration & E2E)', () => {
         PermissionsGuard,
         Reflector,
         JwtService,
+        createIdentityJwtConfigProvider(),
       ],
     }).compile();
 

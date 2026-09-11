@@ -1,3 +1,4 @@
+import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'dart:convert';
 import 'package:uuid/uuid.dart';
 
@@ -205,6 +206,7 @@ class ActivationPreOfflineRunner {
         businessName: 'ONB1.10 TEST PRINT',
         cashierName: params.authorizedUserId.trim(),
         paperWidthMm: 58,
+            taxRegime: TaxRegime.regimenGeneral,
       );
     }
     final testPrintPass = testPrintResult?.isSuccess ?? false;

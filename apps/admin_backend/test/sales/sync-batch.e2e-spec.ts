@@ -125,7 +125,7 @@ describe('Sync batch route (e2e)', () => {
   let app: INestApplication<App>;
   let jwtService: JwtService;
   const syncBatch = jest.fn();
-  const signToken = (payload: Record<string, unknown>): string =>
+  const signToken = (payload: Record<string, unknown> = {}): string =>
     signIdentityJwtAccessToken(jwtService, payload);
 
   beforeAll(async () => {
@@ -248,6 +248,7 @@ describe('Sync batch route (e2e)', () => {
 
     const response = await request(app.getHttpServer())
       .post('/v1/sync/batch')
+      .set('Authorization', `Bearer ${signToken()}`)
       .send({ records })
       .expect(201);
 
@@ -296,6 +297,7 @@ describe('Sync batch route (e2e)', () => {
   it('rejects absolute stock snapshots before the sync service can persist them', async () => {
     const response = await request(app.getHttpServer())
       .post('/v1/sync/batch')
+      .set('Authorization', `Bearer ${signToken()}`)
       .send({
         records: [
           buildPurchaseRecord(1, {

@@ -1,669 +1,459 @@
 import { randomUUID } from 'crypto';
-import { DataSource } from 'typeorm';
-import { Tenant } from '../tenant/entities/tenant.entity';
-import { CatalogValue } from './entities/catalog-value.entity';
-import { CatalogService, DEFAULT_CATALOG_SEED } from './catalog.service';
-import { CATALOG_TYPE, CatalogType } from './catalog-type';
 import {
   ConflictException,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { ChangeLogService } from '../audit/change-log.service';
-
-function getRequiredEnv(name: string): string {
-  const value = process.env[name]?.trim();
-  if (!value) {
-    throw new Error(`${name} is required for DB-backed service tests`);
-  }
-  return value;
-}
-
-function readPostgresPort(): number {
-  const value = process.env.DB_PORT?.trim() ?? '5432';
-  const port = Number(value);
-  if (!Number.isInteger(port)) {
-    throw new Error('DB_PORT must be a valid integer');
-  }
-  return port;
-}
+import { DataSource } from 'typeorm';
+import { CatalogService, DEFAULT_CATALOG_SEED } from './catalog.service';
+import { CatalogValue } from './entities/catalog-value.entity';
+import { Tenant } from '../tenant/entities/tenant.entity';
+import { CATALOG_TYPE, type CatalogType } from './catalog-type';
 
 const postgresConnection = {
-  host: process.env.DB_HOST?.trim() ?? '127.0.0.1',
-  port: readPostgresPort(),
-  username: process.env.DB_USERNAME?.trim() ?? 'postgres',
-  password: getRequiredEnv('DB_PASSWORD'),
-  database: process.env.DB_DATABASE?.trim() ?? 'omnifood',
+  host: process.env.DB_HOST ?? '127.0.0.1',
+  port: Number(process.env.DB_PORT ?? '5432'),
+  username: process.env.DB_USERNAME ?? 'postgres',
+  password: process.env.DB_PASSWORD ?? 'postgres',
+  database: process.env.DB_DATABASE ?? 'omnifood',
 };
 
-async function withIsolatedSchema(
-  schemaPrefix: string,
-  assertion: (ctx: { dataSource: DataSource; schema: string }) => Promise<void>,
-): Promise<void> {
+async function createTestHarness() {
+  const schema = `catalog_test_${randomUUID().replace(/-/g, '')}`;
   const bootstrap = new DataSource({ type: 'postgres', ...postgresConnection });
-  const schema = `${schemaPrefix}_${randomUUID().replace(/-/g, '')}`;
-  let dataSource: DataSource | null = null;
+  await bootstrap.initialize();
+  await bootstrap.query(`CREATE SCHEMA "${schema}"`);
+  await bootstrap.query(`
+    CREATE TABLE "${schema}".tenants (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      name text NOT NULL UNIQUE,
+      ruc varchar,
+      is_active boolean NOT NULL DEFAULT true,
+      created_at timestamptz DEFAULT now(),
+      updated_at timestamptz DEFAULT now()
+    )
+  `);
+  await bootstrap.query(`
+    CREATE TABLE "${schema}".catalog_values (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id text NOT NULL,
+      catalog_type varchar NOT NULL,
+      code varchar NOT NULL,
+      label varchar NOT NULL,
+      description varchar,
+      is_active boolean NOT NULL DEFAULT true,
+      sort_order int NOT NULL DEFAULT 0,
+      created_at timestamptz DEFAULT now(),
+      updated_at timestamptz DEFAULT now(),
+      UNIQUE (tenant_id, catalog_type, code)
+    )
+  `);
 
-  try {
-    await bootstrap.initialize();
-    await bootstrap.query(`CREATE SCHEMA "${schema}"`);
+  const clientDs = new DataSource({
+    type: 'postgres',
+    ...postgresConnection,
+    schema,
+    entities: [CatalogValue, Tenant],
+    extra: { max: 2 },
+  });
+  await clientDs.initialize();
 
-    dataSource = new DataSource({
-      type: 'postgres',
-      ...postgresConnection,
-      schema,
-      entities: [Tenant, CatalogValue],
-      synchronize: true,
-    });
-    await dataSource.initialize();
-    await dataSource.query(`SET search_path TO "${schema}"`);
+  const service = new CatalogService(clientDs);
 
-    await assertion({ dataSource, schema });
-  } finally {
-    if (dataSource?.isInitialized) await dataSource.destroy();
-    if (bootstrap.isInitialized) {
+  return {
+    service,
+    clientDs,
+    bootstrap,
+    schema,
+    destroy: async () => {
+      await clientDs.destroy();
       await bootstrap.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
       await bootstrap.destroy();
-    }
-  }
+    },
+  };
 }
 
-async function seedTenant(
-  dataSource: DataSource,
-  tenantId: string,
-  name: string,
-): Promise<void> {
-  await dataSource.query(
-    `INSERT INTO tenants (id, name, is_active, created_at, updated_at) VALUES ($1, $2, true, now(), now())`,
-    [tenantId, name],
-  );
-}
+describe('CatalogService — DB integration', () => {
+  let harness: Awaited<ReturnType<typeof createTestHarness>>;
 
-function createService(dataSource: DataSource): CatalogService {
-  return new CatalogService(dataSource, {
-    log: jest.fn(),
-  } as unknown as ChangeLogService);
-}
-
-describe('CatalogService — real PostgreSQL', () => {
-  const TEST_TIMEOUT_MS = 30000;
-
-  describe('CRUD operations', () => {
-    it(
-      'creates and retrieves a catalog value by id',
-      async () => {
-        await withIsolatedSchema('catalog_crud', async ({ dataSource }) => {
-          const tenantId = randomUUID();
-          const service = createService(dataSource);
-          await seedTenant(dataSource, tenantId, 'Tenant CRUD');
-
-          const created = await service.create(CATALOG_TYPE.UOM, tenantId, {
-            code: 'kg',
-            name: 'Kilogramo',
-          });
-
-          expect(created.id).toBeDefined();
-          expect(created.code).toBe('kg');
-          expect(created.name).toBe('Kilogramo');
-          expect(created.catalog_type).toBe(CATALOG_TYPE.UOM);
-          expect(created.is_active).toBe(true);
-          expect(created.sort_order).toBe(0);
-        });
-      },
-      TEST_TIMEOUT_MS,
-    );
-
-    it(
-      'lists catalog values filtered by type',
-      async () => {
-        await withIsolatedSchema(
-          'catalog_list_type',
-          async ({ dataSource }) => {
-            const tenantId = randomUUID();
-            const service = createService(dataSource);
-            await seedTenant(dataSource, tenantId, 'Tenant Type');
-
-            await service.create(CATALOG_TYPE.UOM, tenantId, {
-              code: 'kg',
-              name: 'Kilogramo',
-            });
-            await service.create(CATALOG_TYPE.UOM, tenantId, {
-              code: 'un',
-              name: 'Unidad',
-            });
-            await service.create(CATALOG_TYPE.INVENTORY_CATEGORY, tenantId, {
-              code: 'CARNES',
-              name: 'Carnes',
-            });
-
-            const uomList = await service.list(CATALOG_TYPE.UOM, tenantId);
-            const catList = await service.list(
-              CATALOG_TYPE.INVENTORY_CATEGORY,
-              tenantId,
-            );
-
-            expect(uomList).toHaveLength(2);
-            expect(uomList.map((v) => v.code).sort()).toEqual(['kg', 'un']);
-            expect(catList).toHaveLength(1);
-            expect(catList[0].code).toBe('CARNES');
-          },
-        );
-      },
-      TEST_TIMEOUT_MS,
-    );
-
-    it(
-      'excludes inactive catalog values by default, includes with includeInactive=true',
-      async () => {
-        await withIsolatedSchema('catalog_inactive', async ({ dataSource }) => {
-          const tenantId = randomUUID();
-          const service = createService(dataSource);
-          await seedTenant(dataSource, tenantId, 'Tenant Inactive');
-
-          const v1 = await service.create(CATALOG_TYPE.UOM, tenantId, {
-            code: 'kg',
-            name: 'Kilogramo',
-          });
-          await service.create(CATALOG_TYPE.UOM, tenantId, {
-            code: 'un',
-            name: 'Unidad',
-          });
-          await service.deactivate(CATALOG_TYPE.UOM, v1.id, tenantId);
-
-          const activeOnly = await service.list(CATALOG_TYPE.UOM, tenantId);
-          expect(activeOnly).toHaveLength(1);
-          expect(activeOnly[0].code).toBe('un');
-
-          const includeInactive = await service.list(
-            CATALOG_TYPE.UOM,
-            tenantId,
-            true,
-          );
-          expect(includeInactive).toHaveLength(2);
-        });
-      },
-      TEST_TIMEOUT_MS,
-    );
-
-    it(
-      'updates catalog value fields',
-      async () => {
-        await withIsolatedSchema('catalog_update', async ({ dataSource }) => {
-          const tenantId = randomUUID();
-          const service = createService(dataSource);
-          await seedTenant(dataSource, tenantId, 'Tenant Update');
-
-          const created = await service.create(CATALOG_TYPE.UOM, tenantId, {
-            code: 'kg',
-            name: 'Old Name',
-            sort_order: 5,
-          });
-
-          const updated = await service.update(
-            CATALOG_TYPE.UOM,
-            created.id,
-            tenantId,
-            {
-              name: 'New Name',
-              sort_order: 10,
-            },
-          );
-
-          expect(updated.name).toBe('New Name');
-          expect(updated.sort_order).toBe(10);
-          expect(updated.code).toBe('kg');
-        });
-      },
-      TEST_TIMEOUT_MS,
-    );
-
-    it(
-      'deactivates catalog value (soft-delete)',
-      async () => {
-        await withIsolatedSchema(
-          'catalog_deactivate',
-          async ({ dataSource }) => {
-            const tenantId = randomUUID();
-            const service = createService(dataSource);
-            await seedTenant(dataSource, tenantId, 'Tenant Deactivate');
-
-            const created = await service.create(CATALOG_TYPE.UOM, tenantId, {
-              code: 'kg',
-              name: 'Kilogramo',
-            });
-
-            await service.deactivate(CATALOG_TYPE.UOM, created.id, tenantId);
-
-            const list = await service.list(CATALOG_TYPE.UOM, tenantId);
-            expect(list).toHaveLength(0);
-
-            const all = await service.list(CATALOG_TYPE.UOM, tenantId, true);
-            expect(all).toHaveLength(1);
-            expect(all[0].is_active).toBe(false);
-          },
-        );
-      },
-      TEST_TIMEOUT_MS,
-    );
-
-    it(
-      'throws ConflictException on duplicate code for same type and tenant',
-      async () => {
-        await withIsolatedSchema('catalog_conflict', async ({ dataSource }) => {
-          const tenantId = randomUUID();
-          const service = createService(dataSource);
-          await seedTenant(dataSource, tenantId, 'Tenant Conflict');
-
-          await service.create(CATALOG_TYPE.UOM, tenantId, {
-            code: 'kg',
-            name: 'Kilogramo',
-          });
-
-          await expect(
-            service.create(CATALOG_TYPE.UOM, tenantId, {
-              code: 'kg',
-              name: 'Kilogramo Duplicado',
-            }),
-          ).rejects.toThrow(ConflictException);
-        });
-      },
-      TEST_TIMEOUT_MS,
-    );
-
-    it(
-      'throws NotFoundException for nonexistent catalog value',
-      async () => {
-        await withIsolatedSchema('catalog_notfound', async ({ dataSource }) => {
-          const tenantId = randomUUID();
-          const service = createService(dataSource);
-          await seedTenant(dataSource, tenantId, 'Tenant NotFound');
-
-          await expect(
-            service.update(CATALOG_TYPE.UOM, randomUUID(), tenantId, {
-              name: 'Nope',
-            }),
-          ).rejects.toThrow(NotFoundException);
-
-          await expect(
-            service.deactivate(CATALOG_TYPE.UOM, randomUUID(), tenantId),
-          ).rejects.toThrow(NotFoundException);
-        });
-      },
-      TEST_TIMEOUT_MS,
-    );
-
-    it(
-      'throws UnauthorizedException for empty tenant',
-      async () => {
-        await withIsolatedSchema('catalog_notenant', async ({ dataSource }) => {
-          const service = createService(dataSource);
-
-          await expect(service.list(CATALOG_TYPE.UOM, '   ')).rejects.toThrow(
-            UnauthorizedException,
-          );
-          await expect(
-            service.create(CATALOG_TYPE.UOM, '  ', { code: 'x', name: 'X' }),
-          ).rejects.toThrow(UnauthorizedException);
-        });
-      },
-      TEST_TIMEOUT_MS,
-    );
-
-    it(
-      'trims whitespace from code and name on create',
-      async () => {
-        await withIsolatedSchema('catalog_trim', async ({ dataSource }) => {
-          const tenantId = randomUUID();
-          const service = createService(dataSource);
-          await seedTenant(dataSource, tenantId, 'Tenant Trim');
-
-          const created = await service.create(CATALOG_TYPE.UOM, tenantId, {
-            code: '  kg  ',
-            name: '  Kilogramo  ',
-          });
-
-          expect(created.code).toBe('kg');
-          expect(created.name).toBe('Kilogramo');
-        });
-      },
-      TEST_TIMEOUT_MS,
-    );
-
-    it(
-      'trims whitespace on update',
-      async () => {
-        await withIsolatedSchema(
-          'catalog_trim_update',
-          async ({ dataSource }) => {
-            const tenantId = randomUUID();
-            const service = createService(dataSource);
-            await seedTenant(dataSource, tenantId, 'Tenant Trim Update');
-
-            const created = await service.create(CATALOG_TYPE.UOM, tenantId, {
-              code: 'kg',
-              name: 'Original',
-            });
-
-            const updated = await service.update(
-              CATALOG_TYPE.UOM,
-              created.id,
-              tenantId,
-              {
-                name: '  Trimmed  ',
-              },
-            );
-
-            expect(updated.name).toBe('Trimmed');
-          },
-        );
-      },
-      TEST_TIMEOUT_MS,
-    );
-
-    it(
-      'creates with all optional fields',
-      async () => {
-        await withIsolatedSchema(
-          'catalog_all_fields',
-          async ({ dataSource }) => {
-            const tenantId = randomUUID();
-            const service = createService(dataSource);
-            await seedTenant(dataSource, tenantId, 'Tenant AllFields');
-
-            const created = await service.create(
-              CATALOG_TYPE.INVENTORY_CATEGORY,
-              tenantId,
-              {
-                code: 'CARNES',
-                name: 'Carnes',
-                is_active: true,
-                sort_order: 3,
-              },
-            );
-
-            expect(created.code).toBe('CARNES');
-            expect(created.name).toBe('Carnes');
-            expect(created.catalog_type).toBe(CATALOG_TYPE.INVENTORY_CATEGORY);
-            expect(created.is_active).toBe(true);
-            expect(created.sort_order).toBe(3);
-          },
-        );
-      },
-      TEST_TIMEOUT_MS,
-    );
-
-    it(
-      'update only touches mentioned fields',
-      async () => {
-        await withIsolatedSchema(
-          'catalog_partial_update',
-          async ({ dataSource }) => {
-            const tenantId = randomUUID();
-            const service = createService(dataSource);
-            await seedTenant(dataSource, tenantId, 'Tenant Partial');
-
-            const created = await service.create(CATALOG_TYPE.UOM, tenantId, {
-              code: 'kg',
-              name: 'Keep Name',
-              sort_order: 5,
-            });
-
-            const updated = await service.update(
-              CATALOG_TYPE.UOM,
-              created.id,
-              tenantId,
-              {
-                sort_order: 10,
-              },
-            );
-
-            expect(updated.name).toBe('Keep Name');
-            expect(updated.code).toBe('kg');
-            expect(updated.sort_order).toBe(10);
-          },
-        );
-      },
-      TEST_TIMEOUT_MS,
-    );
+  beforeAll(async () => {
+    harness = await createTestHarness();
   });
 
-  describe('RLS / tenant isolation', () => {
-    it(
-      'enforces tenant isolation — tenant A cannot see tenant B catalog values',
-      async () => {
-        await withIsolatedSchema(
-          'catalog_rls_isolation',
-          async ({ dataSource }) => {
-            const tenantA = randomUUID();
-            const tenantB = randomUUID();
-            const service = createService(dataSource);
-            await seedTenant(dataSource, tenantA, 'Tenant A RLS');
-            await seedTenant(dataSource, tenantB, 'Tenant B RLS');
+  afterAll(async () => {
+    await harness?.destroy();
+  });
 
-            await service.create(CATALOG_TYPE.UOM, tenantB, {
-              code: 'kg',
-              name: 'Secreto',
-            });
+  describe('create + list', () => {
+    it('creates a catalog value and retrieves it', async () => {
+      const { service } = harness;
 
-            const listA = await service.list(CATALOG_TYPE.UOM, tenantA);
-            expect(listA).toHaveLength(0);
+      const created = await service.create(CATALOG_TYPE.UOM, 'tenant-db-1', {
+        code: 'kg',
+        name: 'Kilogramo',
+      });
 
-            const listB = await service.list(CATALOG_TYPE.UOM, tenantB);
-            expect(listB).toHaveLength(1);
-            expect(listB[0].code).toBe('kg');
-          },
-        );
-      },
-      TEST_TIMEOUT_MS,
-    );
+      expect(created.id).toBeDefined();
+      expect(created.code).toBe('kg');
+      expect(created.name).toBe('Kilogramo');
+      expect(created.tenant_id).toBe('tenant-db-1');
+      expect(created.is_active).toBe(true);
 
-    it(
-      'same code allowed across different tenants',
-      async () => {
-        await withIsolatedSchema(
-          'catalog_rls_cross_tenant',
-          async ({ dataSource }) => {
-            const tenantA = randomUUID();
-            const tenantB = randomUUID();
-            const service = createService(dataSource);
-            await seedTenant(dataSource, tenantA, 'Tenant A Cross');
-            await seedTenant(dataSource, tenantB, 'Tenant B Cross');
+      const list = await service.list(CATALOG_TYPE.UOM, 'tenant-db-1');
+      expect(list).toHaveLength(1);
+      expect(list[0].code).toBe('kg');
+    });
 
-            const createdA = await service.create(CATALOG_TYPE.UOM, tenantA, {
-              code: 'kg',
-              name: 'Kilogramo A',
-            });
-            const createdB = await service.create(CATALOG_TYPE.UOM, tenantB, {
-              code: 'kg',
-              name: 'Kilogramo B',
-            });
+    it('creates with optional fields', async () => {
+      const { service } = harness;
 
-            expect(createdA.tenant_id).toBe(tenantA);
-            expect(createdB.tenant_id).toBe(tenantB);
+      const created = await service.create(CATALOG_TYPE.UOM, 'tenant-db-opts', {
+        code: 'lb',
+        name: 'Libra',
+        is_active: false,
+        sort_order: 5,
+      });
 
-            const listA = await service.list(CATALOG_TYPE.UOM, tenantA);
-            const listB = await service.list(CATALOG_TYPE.UOM, tenantB);
-            expect(listA).toHaveLength(1);
-            expect(listA[0].name).toBe('Kilogramo A');
-            expect(listB).toHaveLength(1);
-            expect(listB[0].name).toBe('Kilogramo B');
-          },
-        );
-      },
-      TEST_TIMEOUT_MS,
-    );
+      expect(created.is_active).toBe(false);
+      expect(created.sort_order).toBe(5);
+    });
 
-    it(
-      'deactivate is idempotent',
-      async () => {
-        await withIsolatedSchema(
-          'catalog_deactivate_idempotent',
-          async ({ dataSource }) => {
-            const tenantId = randomUUID();
-            const service = createService(dataSource);
-            await seedTenant(dataSource, tenantId, 'Tenant Idempotent');
+    it('throws ConflictException on duplicate (tenant, type, code)', async () => {
+      const { service } = harness;
 
-            const created = await service.create(CATALOG_TYPE.UOM, tenantId, {
-              code: 'kg',
-              name: 'Kilogramo',
-            });
+      await expect(
+        service.create(CATALOG_TYPE.UOM, 'tenant-db-dup', {
+          code: 'un',
+          name: 'Unidad',
+        }),
+      ).resolves.toBeDefined();
 
-            await service.deactivate(CATALOG_TYPE.UOM, created.id, tenantId);
-            await service.deactivate(CATALOG_TYPE.UOM, created.id, tenantId);
+      await expect(
+        service.create(CATALOG_TYPE.UOM, 'tenant-db-dup', {
+          code: 'un',
+          name: 'Unidad duplicada',
+        }),
+      ).rejects.toThrow(ConflictException);
+    });
 
-            const all = await service.list(CATALOG_TYPE.UOM, tenantId, true);
-            expect(all).toHaveLength(1);
-            expect(all[0].is_active).toBe(false);
-          },
-        );
-      },
-      TEST_TIMEOUT_MS,
-    );
+    it('different tenants can share the same code', async () => {
+      const { service } = harness;
 
-    it(
-      'update only touches mentioned fields',
-      async () => {
-        await withIsolatedSchema(
-          'catalog_rls_partial_update',
-          async ({ dataSource }) => {
-            const tenantId = randomUUID();
-            const service = createService(dataSource);
-            await seedTenant(dataSource, tenantId, 'Tenant Partial RLS');
+      await service.create(CATALOG_TYPE.UOM, 'tenant-shared-a', {
+        code: 'gal',
+        name: 'Galón A',
+      });
+      const b = await service.create(CATALOG_TYPE.UOM, 'tenant-shared-b', {
+        code: 'gal',
+        name: 'Galón B',
+      });
 
-            const created = await service.create(CATALOG_TYPE.UOM, tenantId, {
-              code: 'kg',
-              name: 'Keep Name',
-              sort_order: 5,
-            });
+      expect(b.tenant_id).toBe('tenant-shared-b');
 
-            const updated = await service.update(
-              CATALOG_TYPE.UOM,
-              created.id,
-              tenantId,
-              {
-                sort_order: 10,
-              },
-            );
+      const listA = await service.list(CATALOG_TYPE.UOM, 'tenant-shared-a');
+      expect(listA).toHaveLength(1);
 
-            expect(updated.name).toBe('Keep Name');
-            expect(updated.code).toBe('kg');
-            expect(updated.sort_order).toBe(10);
-          },
-        );
-      },
-      TEST_TIMEOUT_MS,
-    );
+      const listB = await service.list(CATALOG_TYPE.UOM, 'tenant-shared-b');
+      expect(listB).toHaveLength(1);
+    });
+  });
+
+  describe('list', () => {
+    it('returns only active values by default', async () => {
+      const { service } = harness;
+      const t = 'tenant-db-list';
+
+      await service.create(CATALOG_TYPE.INVENTORY_CATEGORY, t, {
+        code: 'ACTIVE',
+        name: 'Active',
+      });
+      const inactive = await service.create(
+        CATALOG_TYPE.INVENTORY_CATEGORY,
+        t,
+        { code: 'INACTIVE', name: 'Inactive', is_active: false },
+      );
+
+      const activeOnly = await service.list(CATALOG_TYPE.INVENTORY_CATEGORY, t);
+      expect(activeOnly.every((v) => v.is_active)).toBe(true);
+      expect(activeOnly).toHaveLength(1);
+
+      const all = await service.list(CATALOG_TYPE.INVENTORY_CATEGORY, t, true);
+      expect(all).toHaveLength(2);
+    });
+
+    it('returns empty array for tenant with no values', async () => {
+      const { service } = harness;
+      const list = await service.list(CATALOG_TYPE.UOM, 'tenant-empty');
+      expect(list).toEqual([]);
+    });
+
+    it('orders by sort_order ASC then name ASC', async () => {
+      const { service } = harness;
+      const t = 'tenant-db-order';
+
+      await service.create(CATALOG_TYPE.UOM, t, {
+        code: 'z',
+        name: 'Zebra',
+        sort_order: 2,
+      });
+      await service.create(CATALOG_TYPE.UOM, t, {
+        code: 'a',
+        name: 'Alpha',
+        sort_order: 1,
+      });
+      await service.create(CATALOG_TYPE.UOM, t, {
+        code: 'm',
+        name: 'Middle',
+        sort_order: 1,
+      });
+
+      const list = await service.list(CATALOG_TYPE.UOM, t);
+      expect(list.map((v) => v.code)).toEqual(['a', 'm', 'z']);
+    });
+
+    it('isolates by catalog_type', async () => {
+      const { service } = harness;
+      const t = 'tenant-db-type';
+
+      await service.create(CATALOG_TYPE.UOM, t, { code: 'kg', name: 'Kg' });
+      await service.create(CATALOG_TYPE.INVENTORY_CATEGORY, t, {
+        code: 'LACTEOS',
+        name: 'Lácteos',
+      });
+
+      const uom = await service.list(CATALOG_TYPE.UOM, t);
+      expect(uom).toHaveLength(1);
+      expect(uom[0].code).toBe('kg');
+
+      const cat = await service.list(CATALOG_TYPE.INVENTORY_CATEGORY, t);
+      expect(cat).toHaveLength(1);
+      expect(cat[0].code).toBe('LACTEOS');
+    });
+  });
+
+  describe('update', () => {
+    it('updates name, is_active, and sort_order', async () => {
+      const { service } = harness;
+      const t = 'tenant-db-update';
+
+      const created = await service.create(CATALOG_TYPE.UOM, t, {
+        code: 'oz',
+        name: 'Onza',
+      });
+
+      const updated = await service.update(CATALOG_TYPE.UOM, created.id, t, {
+        name: 'Onzas',
+        is_active: false,
+        sort_order: 10,
+      });
+
+      expect(updated.name).toBe('Onzas');
+      expect(updated.is_active).toBe(false);
+      expect(updated.sort_order).toBe(10);
+      expect(updated.code).toBe('oz'); // code never changes
+    });
+
+    it('does not allow changing the code', async () => {
+      const { service } = harness;
+      const t = 'tenant-db-nocode';
+
+      const created = await service.create(CATALOG_TYPE.UOM, t, {
+        code: 'lb',
+        name: 'Libra',
+      });
+
+      const updated = await service.update(CATALOG_TYPE.UOM, created.id, t, {
+        name: 'Libras actualizado',
+      });
+
+      expect(updated.code).toBe('lb');
+    });
+
+    it('throws NotFoundException for nonexistent id', async () => {
+      const { service } = harness;
+      await expect(
+        service.update(CATALOG_TYPE.UOM, randomUUID(), 'tenant-x', {
+          name: 'Nope',
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('cannot update values from a different tenant', async () => {
+      const { service } = harness;
+
+      const created = await service.create(CATALOG_TYPE.UOM, 'tenant-iso-a', {
+        code: 'ml',
+        name: 'Mililitro',
+      });
+
+      await expect(
+        service.update(CATALOG_TYPE.UOM, created.id, 'tenant-iso-b', {
+          name: 'Hacked',
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('deactivate', () => {
+    it('soft-deactivates instead of hard-deleting', async () => {
+      const { service } = harness;
+      const t = 'tenant-db-deact';
+
+      const created = await service.create(CATALOG_TYPE.UOM, t, {
+        code: 'gal',
+        name: 'Galón',
+      });
+
+      await service.deactivate(CATALOG_TYPE.UOM, created.id, t);
+
+      const list = await service.list(CATALOG_TYPE.UOM, t, true);
+      expect(list).toHaveLength(1);
+      expect(list[0].is_active).toBe(false);
+
+      // Gone from active-only list
+      const activeList = await service.list(CATALOG_TYPE.UOM, t, false);
+      expect(activeList).toHaveLength(0);
+    });
+
+    it('throws NotFoundException for nonexistent id', async () => {
+      const { service } = harness;
+      await expect(
+        service.deactivate(CATALOG_TYPE.UOM, randomUUID(), 'tenant-x'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('cannot deactivate values from a different tenant', async () => {
+      const { service } = harness;
+
+      const created = await service.create(CATALOG_TYPE.UOM, 'tenant-deact-a', {
+        code: 'doc',
+        name: 'Docena',
+      });
+
+      await expect(
+        service.deactivate(CATALOG_TYPE.UOM, created.id, 'tenant-deact-b'),
+      ).rejects.toThrow(NotFoundException);
+    });
   });
 
   describe('seedDefaults', () => {
-    it(
-      'seeds all default catalog values for a tenant',
-      async () => {
-        await withIsolatedSchema('catalog_seed', async ({ dataSource }) => {
-          const tenantId = randomUUID();
-          const service = createService(dataSource);
-          await seedTenant(dataSource, tenantId, 'Tenant Seed');
+    it('inserts all default catalog values for a fresh tenant', async () => {
+      const { service } = harness;
+      const t = 'tenant-db-seed-fresh';
 
-          const inserted = await service.seedDefaults(tenantId);
+      const inserted = await service.seedDefaults(t);
 
-          const totalDefaults = Object.values(DEFAULT_CATALOG_SEED).reduce(
-            (sum, arr) => sum + arr.length,
-            0,
-          );
-          expect(inserted).toBe(totalDefaults);
+      const expectedCount =
+        DEFAULT_CATALOG_SEED.UOM.length +
+        DEFAULT_CATALOG_SEED.INVENTORY_CATEGORY.length +
+        DEFAULT_CATALOG_SEED.INVENTORY_TYPE.length +
+        DEFAULT_CATALOG_SEED.SALES_PRODUCT_CATEGORY.length +
+        DEFAULT_CATALOG_SEED.SALES_PRODUCT_TYPE.length;
 
-          for (const type of Object.keys(
-            DEFAULT_CATALOG_SEED,
-          ) as CatalogType[]) {
-            const list = await service.list(type, tenantId);
-            expect(list).toHaveLength(DEFAULT_CATALOG_SEED[type].length);
-          }
-        });
-      },
-      TEST_TIMEOUT_MS,
-    );
+      expect(inserted).toBe(expectedCount);
 
-    it(
-      'seedDefaults is idempotent — second call inserts zero',
-      async () => {
-        await withIsolatedSchema(
-          'catalog_seed_idempotent',
-          async ({ dataSource }) => {
-            const tenantId = randomUUID();
-            const service = createService(dataSource);
-            await seedTenant(dataSource, tenantId, 'Tenant Seed Idempotent');
+      // Verify each catalog type has the right count
+      for (const type of Object.keys(DEFAULT_CATALOG_SEED) as CatalogType[]) {
+        const list = await service.list(type, t);
+        expect(list).toHaveLength(DEFAULT_CATALOG_SEED[type].length);
+      }
+    });
 
-            const first = await service.seedDefaults(tenantId);
-            const second = await service.seedDefaults(tenantId);
+    it('is idempotent — re-seeding inserts nothing', async () => {
+      const { service } = harness;
+      const t = 'tenant-db-seed-idempotent';
 
-            expect(first).toBeGreaterThan(0);
-            expect(second).toBe(0);
+      const first = await service.seedDefaults(t);
+      const second = await service.seedDefaults(t);
 
-            for (const type of Object.keys(
-              DEFAULT_CATALOG_SEED,
-            ) as CatalogType[]) {
-              const list = await service.list(type, tenantId);
-              expect(list).toHaveLength(DEFAULT_CATALOG_SEED[type].length);
-            }
-          },
-        );
-      },
-      TEST_TIMEOUT_MS,
-    );
+      expect(second).toBe(0);
 
-    it(
-      'seedDefaults preserves tenant edits on re-run',
-      async () => {
-        await withIsolatedSchema(
-          'catalog_seed_preserve',
-          async ({ dataSource }) => {
-            const tenantId = randomUUID();
-            const service = createService(dataSource);
-            await seedTenant(dataSource, tenantId, 'Tenant Seed Preserve');
+      // Still has the original count
+      const uomList = await service.list(CATALOG_TYPE.UOM, t);
+      expect(uomList).toHaveLength(DEFAULT_CATALOG_SEED.UOM.length);
+    });
 
-            await service.seedDefaults(tenantId);
+    it('skips existing codes but inserts new ones', async () => {
+      const { service } = harness;
+      const t = 'tenant-db-seed-partial';
 
-            const uomList = await service.list(CATALOG_TYPE.UOM, tenantId);
-            const kgValue = uomList.find((v) => v.code === 'kg');
-            expect(kgValue).toBeDefined();
-            await service.update(CATALOG_TYPE.UOM, kgValue.id, tenantId, {
-              name: 'Mi Kilogramo',
-            });
+      // Pre-create one UOM value
+      await service.create(CATALOG_TYPE.UOM, t, {
+        code: 'kg',
+        name: 'Kilogramo custom',
+      });
 
-            const secondInsert = await service.seedDefaults(tenantId);
-            expect(secondInsert).toBe(0);
+      const inserted = await service.seedDefaults(t);
 
-            const afterRerun = await service.list(CATALOG_TYPE.UOM, tenantId);
-            const kgAfter = afterRerun.find((v) => v.code === 'kg');
-            expect(kgAfter.name).toBe('Mi Kilogramo');
-          },
-        );
-      },
-      TEST_TIMEOUT_MS,
-    );
+      // Should insert all defaults minus the 1 existing 'kg'
+      const expectedCount =
+        DEFAULT_CATALOG_SEED.UOM.length -
+        1 +
+        DEFAULT_CATALOG_SEED.INVENTORY_CATEGORY.length +
+        DEFAULT_CATALOG_SEED.INVENTORY_TYPE.length +
+        DEFAULT_CATALOG_SEED.SALES_PRODUCT_CATEGORY.length +
+        DEFAULT_CATALOG_SEED.SALES_PRODUCT_TYPE.length;
 
-    it(
-      'seedDefaults only seeds the requested tenant',
-      async () => {
-        await withIsolatedSchema(
-          'catalog_seed_tenant',
-          async ({ dataSource }) => {
-            const tenantA = randomUUID();
-            const tenantB = randomUUID();
-            const service = createService(dataSource);
-            await seedTenant(dataSource, tenantA, 'Tenant A Seed');
-            await seedTenant(dataSource, tenantB, 'Tenant B Seed');
+      expect(inserted).toBe(expectedCount);
 
-            await service.seedDefaults(tenantA);
+      // 'kg' still has the custom name (not overwritten)
+      const uomList = await service.list(CATALOG_TYPE.UOM, t, true);
+      const kg = uomList.find((v) => v.code === 'kg');
+      expect(kg?.name).toBe('Kilogramo custom');
+    });
+  });
 
-            const listA = await service.list(CATALOG_TYPE.UOM, tenantA);
-            const listB = await service.list(CATALOG_TYPE.UOM, tenantB);
-            expect(listA.length).toBeGreaterThan(0);
-            expect(listB).toHaveLength(0);
-          },
-        );
-      },
-      TEST_TIMEOUT_MS,
-    );
+  describe('resolveType', () => {
+    it('returns the type for a known catalog type', () => {
+      expect(CatalogService.resolveType('UOM')).toBe(CATALOG_TYPE.UOM);
+      expect(CatalogService.resolveType('INVENTORY_CATEGORY')).toBe(
+        CATALOG_TYPE.INVENTORY_CATEGORY,
+      );
+    });
+
+    it('throws NotFoundException for an unknown type', () => {
+      expect(() => CatalogService.resolveType('NOPE')).toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('tenant isolation (RLS-level)', () => {
+    it('each tenant sees only their own values', async () => {
+      const { service } = harness;
+
+      await service.create(CATALOG_TYPE.UOM, 'tenant-rls-a', {
+        code: 'kg',
+        name: 'Kilogramo A',
+      });
+      await service.create(CATALOG_TYPE.UOM, 'tenant-rls-b', {
+        code: 'kg',
+        name: 'Kilogramo B',
+      });
+
+      const listA = await service.list(CATALOG_TYPE.UOM, 'tenant-rls-a');
+      expect(listA).toHaveLength(1);
+      expect(listA[0].name).toBe('Kilogramo A');
+
+      const listB = await service.list(CATALOG_TYPE.UOM, 'tenant-rls-b');
+      expect(listB).toHaveLength(1);
+      expect(listB[0].name).toBe('Kilogramo B');
+    });
+  });
+
+  describe('error handling', () => {
+    it('throws UnauthorizedException when tenant is empty', async () => {
+      const { service } = harness;
+      await expect(
+        service.create(CATALOG_TYPE.UOM, '  ', { code: 'x', name: 'X' }),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('throws UnauthorizedException when tenant is undefined-ish', async () => {
+      const { service } = harness;
+      await expect(service.list(CATALOG_TYPE.UOM, '')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
   });
 });

@@ -23,7 +23,8 @@ class IPosPrinterHandler(private val context: Context) : MethodChannel.MethodCal
         private const val CHANNEL_NAME = "com.nhilos.pos/ipos_printer"
         private const val SERVICE_PACKAGE = "net.nyx.printerservice"
         private const val SERVICE_ACTION = "net.nyx.printerservice.IPrinterService"
-        private const val NYX_SUCCESS = 0
+        private const val MAX_BITMAP_BYTES = 1024 * 1024
+        private const val MAX_RAW_BYTES = 256 * 1024
     }
 
     private var channel: MethodChannel? = null
@@ -101,7 +102,7 @@ class IPosPrinterHandler(private val context: Context) : MethodChannel.MethodCal
         val service = printerService
         if (service == null) {
             Log.w(TAG, "getPrinterStatus: service is NULL (not bound yet).")
-            result.error("NOT_CONNECTED", "Nyx printer service is not connected", null)
+            result.success("OFFLINE")
             return
         }
 
@@ -113,7 +114,7 @@ class IPosPrinterHandler(private val context: Context) : MethodChannel.MethodCal
                 1, 240, 241 -> "OUT_OF_PAPER"
                 2, 242 -> "OVERHEATING"
                 3, 243 -> "BUSY"
-                else -> "ERROR"
+                else -> if (status < 0) "ERROR" else "READY"
             }
             result.success(statusString)
         } catch (e: Exception) {
@@ -126,6 +127,10 @@ class IPosPrinterHandler(private val context: Context) : MethodChannel.MethodCal
         val bytes = call.argument<ByteArray>("bytes")
         if (bytes == null || bytes.isEmpty()) {
             result.error("INVALID_ARGS", "Bytes array is empty or null", null)
+            return
+        }
+        if (bytes.size > MAX_BITMAP_BYTES) {
+            result.error("PAYLOAD_TOO_LARGE", "Logo bitmap exceeds $MAX_BITMAP_BYTES bytes", null)
             return
         }
 
@@ -145,7 +150,7 @@ class IPosPrinterHandler(private val context: Context) : MethodChannel.MethodCal
             // type: 0 = normal bitmap printing, align: 1 = center align
             val res = service.printBitmap(bitmap, 0, 1)
             Log.i(TAG, "Nyx printBitmap result: $res")
-            returnNativeResult(result, "printBitmap", res)
+            result.success(true)
         } catch (e: Exception) {
             Log.e(TAG, "Error printing bitmap on Nyx: ${e.message}", e)
             result.error("PRINT_ERROR", e.message, null)
@@ -166,24 +171,18 @@ class IPosPrinterHandler(private val context: Context) : MethodChannel.MethodCal
             return
         }
 
-        try {
-            val text = String(bytes, Charsets.ISO_8859_1)
-            val format = PrintTextFormat().apply {
-                textSize = 24
-            }
-            val printCode = service.printText(text, format)
-            Log.i(TAG, "Nyx printRawBytes via printText result: $printCode")
-            if (printCode != NYX_SUCCESS) {
-                returnNativeResult(result, "printRawBytes/printText", printCode)
-                return
-            }
-            val feedCode = service.paperOut(140)
-            Log.i(TAG, "Nyx printRawBytes paperOut result: $feedCode")
-            returnNativeResult(result, "printRawBytes/paperOut", feedCode)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error printing raw text: ${e.message}", e)
-            result.error("PRINT_ERROR", e.message, null)
+        if (bytes.size > MAX_RAW_BYTES) {
+            result.error("PAYLOAD_TOO_LARGE", "Raw payload exceeds $MAX_RAW_BYTES bytes", null)
+            return
         }
+
+        // Nyx IPrinterService has no raw ESC/POS API. Passing command bytes to
+        // printText renders control/raster data as garbage, so reject it clearly.
+        result.error(
+            "RAW_ESC_POS_UNSUPPORTED",
+            "Nyx no admite ESC/POS crudo; envíe texto o bitmap procesado.",
+            null,
+        )
     }
 
     private fun handlePrintText(call: MethodCall, result: MethodChannel.Result) {
@@ -200,40 +199,34 @@ class IPosPrinterHandler(private val context: Context) : MethodChannel.MethodCal
             return
         }
 
+        val paperWidthMm = call.argument<Int>("paperWidthMm") ?: 58
         try {
-            val format = PrintTextFormat().apply {
-                textSize = 24
+            val format = if (paperWidthMm == 80) {
+                NyxPrintProfile.receipt80mm.createFormat()
+            } else {
+                PrintTextFormat().apply { textSize = 24 }
             }
-            val printCode = service.printText(text, format)
-            Log.i(TAG, "Nyx printText result: $printCode")
-            if (printCode != NYX_SUCCESS) {
-                returnNativeResult(result, "printText", printCode)
-                return
+            // This controls per-job layout/render width only; it does not change the
+            // persistent physical/default paper setting in net.nyx.printerservice.SETTINGS.
+            val res = when (paperWidthMm) {
+                58 -> service.printText2(text, format, 384, 0)
+                80 -> service.printText(text, format)
+                else -> {
+                    result.error(
+                        "INVALID_PAPER_WIDTH",
+                        "Unsupported paper width: $paperWidthMm. Use 58 or 80.",
+                        null,
+                    )
+                    return
+                }
             }
-            val feedCode = service.paperOut(140)
-            Log.i(TAG, "Nyx paperOut result: $feedCode")
-            returnNativeResult(result, "paperOut", feedCode)
+            // Current Nyx driver feed value. Its physical distance requires device measurement.
+            service.paperOut(140)
+            Log.i(TAG, "printText result: $res")
+            result.success(true)
         } catch (e: Exception) {
             Log.e(TAG, "Error sending text to Nyx printer: ${e.message}", e)
             result.error("PRINT_ERROR", e.message, null)
-        }
-    }
-
-    private fun returnNativeResult(
-        result: MethodChannel.Result,
-        operation: String,
-        nativeCode: Int,
-    ) {
-        if (nativeCode == NYX_SUCCESS) {
-            result.success(mapOf("operation" to operation, "nativeCode" to nativeCode))
-        } else {
-            val message = "Nyx $operation returned native code $nativeCode"
-            Log.e(TAG, message)
-            result.error(
-                "NYX_NATIVE_ERROR",
-                message,
-                mapOf("operation" to operation, "nativeCode" to nativeCode),
-            )
         }
     }
 

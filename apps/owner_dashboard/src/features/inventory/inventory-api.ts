@@ -7,8 +7,8 @@ import type {
   KardexFilters,
 } from "./types";
 
-function toQueryParams(params: Record<string, string | number | undefined> | object): string {
-  const entries = Object.entries(params as Record<string, string | number | undefined>).filter(
+function toQueryParams(params: Record<string, string | number | undefined>): string {
+  const entries = Object.entries(params).filter(
     ([, v]) => v !== undefined && v !== "",
   );
   if (entries.length === 0) return "";

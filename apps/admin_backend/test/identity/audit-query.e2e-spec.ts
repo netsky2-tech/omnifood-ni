@@ -20,12 +20,21 @@ import {
 import { AuditLog } from '../../src/modules/identity/entities/audit-log.entity';
 import { SecurityProfile } from '../../src/modules/identity/entities/security-profile.entity';
 import { AuditIntegrityAlert } from '../../src/modules/identity/entities/audit-integrity-alert.entity';
+import { TenantCapabilityEvent } from '../../src/modules/identity/entities/tenant-capability-event.entity';
 import { AppPermission } from '../../src/modules/identity/security/permissions.enum';
 import { JWT_TOKEN_TYPES } from '../../src/modules/identity/security/jwt-token.types';
 
 @Global()
 @Module({
-  providers: [{ provide: DataSource, useValue: {} }],
+  providers: [
+    {
+      provide: DataSource,
+      useValue: {
+        entityMetadatas: [],
+        getRepository: jest.fn().mockReturnValue({}),
+      },
+    },
+  ],
   exports: [DataSource],
 })
 class TestDatabaseModule {}
@@ -125,6 +134,8 @@ describe('Forensic Audit Queries & Drawer Logs (e2e) (Slice 10.3)', () => {
       .overrideProvider(getRepositoryToken(SecurityProfile))
       .useValue({ findOne: jest.fn() })
       .overrideProvider(getRepositoryToken(AuditIntegrityAlert))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(TenantCapabilityEvent))
       .useValue({})
       .compile();
 

@@ -12,16 +12,29 @@ Future<void> _createInventoryMovementAppendOnlyTriggers(
     BEFORE UPDATE ON inventory_movements
     FOR EACH ROW
     WHEN (
-      OLD.id != NEW.id OR
-      OLD.insumo_id != NEW.insumo_id OR
-      OLD.type != NEW.type OR
-      OLD.quantity != NEW.quantity OR
-      OLD.previous_stock != NEW.previous_stock OR
-      OLD.new_stock != NEW.new_stock OR
-      OLD.timestamp != NEW.timestamp OR
-      (OLD.sale_correlation_id IS NOT NULL AND OLD.sale_correlation_id != NEW.sale_correlation_id) OR
-      (OLD.sale_id IS NOT NULL AND OLD.sale_id != NEW.sale_id) OR
-      (OLD.delivery_owner IS NOT NULL AND OLD.delivery_owner != NEW.delivery_owner)
+      OLD.id IS NOT NEW.id OR
+      OLD.insumo_id IS NOT NEW.insumo_id OR
+      OLD.type IS NOT NEW.type OR
+      OLD.quantity IS NOT NEW.quantity OR
+      OLD.previous_stock IS NOT NEW.previous_stock OR
+      OLD.new_stock IS NOT NEW.new_stock OR
+      OLD.timestamp IS NOT NEW.timestamp OR
+      OLD.reason IS NOT NEW.reason OR
+      OLD.user_id IS NOT NEW.user_id OR
+      OLD.unit_cost_nio IS NOT NEW.unit_cost_nio OR
+      OLD.source_document_type IS NOT NEW.source_document_type OR
+      OLD.source_document_id IS NOT NEW.source_document_id OR
+      OLD.origin_movement_id IS NOT NEW.origin_movement_id OR
+      OLD.origin_invoice_item_id IS NOT NEW.origin_invoice_item_id OR
+      OLD.batch_deductions IS NOT NEW.batch_deductions OR
+      OLD.estado_costeo IS NOT NEW.estado_costeo OR
+      OLD.intentos_count IS NOT NEW.intentos_count OR
+      OLD.bloqueo_motivo IS NOT NEW.bloqueo_motivo OR
+      OLD.autorizado_por_usuario_id IS NOT NEW.autorizado_por_usuario_id OR
+      OLD.fecha_autorizacion IS NOT NEW.fecha_autorizacion OR
+      OLD.delivery_owner IS NOT NEW.delivery_owner OR
+      OLD.sale_id IS NOT NEW.sale_id OR
+      OLD.sale_correlation_id IS NOT NEW.sale_correlation_id
     )
     BEGIN
       SELECT RAISE(ABORT, 'inventory_movements core fields are append-only');
@@ -35,6 +48,25 @@ Future<void> _createInventoryMovementAppendOnlyTriggers(
       SELECT RAISE(ABORT, 'inventory_movements is append-only');
     END;
   ''');
+}
+
+Future<void> _createTopologyPersistenceTriggers(
+  sqflite.DatabaseExecutor database,
+) async {
+  for (final table in ['topology_snapshots', 'emergency_topology_audits']) {
+    final tableExists = await database.rawQuery(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+      [table],
+    );
+    if (tableExists.isNotEmpty) {
+      await database.execute(
+        "CREATE TRIGGER IF NOT EXISTS ${table}_block_update BEFORE UPDATE ON $table BEGIN SELECT RAISE(ABORT, '$table is immutable'); END",
+      );
+      await database.execute(
+        "CREATE TRIGGER IF NOT EXISTS ${table}_block_delete BEFORE DELETE ON $table BEGIN SELECT RAISE(ABORT, '$table is append-only'); END",
+      );
+    }
+  }
 }
 
 Future<void> _createAuthorityImmutabilityTriggers(
@@ -77,6 +109,8 @@ final inventoryMovementAppendOnlyCallback = Callback(
   onCreate: (database, _) async {
     await _createInventoryMovementAppendOnlyTriggers(database);
     await _createAuthorityImmutabilityTriggers(database);
+    await _createTopologyPersistenceTriggers(database);
+    await _createTopologyPersistenceTriggers(database);
   },
   onOpen: (database) async {
     await _createInventoryMovementAppendOnlyTriggers(database);
@@ -2164,6 +2198,65 @@ final migration46_47 = Migration(46, 47, (database) async {
   ''');
 });
 
+final migration51_52 = Migration(51, 52, (database) async {
+  final productsTable = await database.rawQuery(
+    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'products'",
+  );
+  if (productsTable.isNotEmpty) {
+    final cols = await database.rawQuery("PRAGMA table_info(products)");
+    final colNames = cols.map((row) => row['name'] as String).toSet();
+    if (!colNames.contains('inventory_policy')) {
+      await database.execute(
+        "ALTER TABLE `products` ADD COLUMN `inventory_policy` TEXT",
+      );
+    }
+    if (!colNames.contains('direct_stock_insumo_id')) {
+      await database.execute(
+        "ALTER TABLE `products` ADD COLUMN `direct_stock_insumo_id` TEXT",
+      );
+    }
+    if (!colNames.contains('tax_rate')) {
+      await database.execute(
+        "ALTER TABLE `products` ADD COLUMN `tax_rate` REAL NOT NULL DEFAULT 0.15",
+      );
+    }
+    if (!colNames.contains('is_tax_exempt')) {
+      await database.execute(
+        "ALTER TABLE `products` ADD COLUMN `is_tax_exempt` INTEGER NOT NULL DEFAULT 0",
+      );
+    }
+  }
+
+  // Topology tables
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS topology_snapshots (id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, revision INTEGER NOT NULL, hash TEXT NOT NULL, payload TEXT NOT NULL, received_at TEXT NOT NULL)',
+  );
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS shift_topology_bindings (shift_id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, snapshot_id TEXT NOT NULL, bound_at TEXT NOT NULL)',
+  );
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS emergency_topology_audits (id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, shift_id TEXT NOT NULL, snapshot_id TEXT NOT NULL, actor_id TEXT NOT NULL, actor_role TEXT NOT NULL, device_id TEXT NOT NULL, reason TEXT NOT NULL, occurred_at TEXT NOT NULL)',
+  );
+  await _createTopologyPersistenceTriggers(database);
+
+  // Fulfillment tables
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS fulfillment_records (id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, sale_id TEXT NOT NULL, topology_snapshot_id TEXT NOT NULL, topology_revision INTEGER NOT NULL, channel TEXT NOT NULL, route_state TEXT NOT NULL, delivery_state TEXT NOT NULL, lines_payload TEXT NOT NULL)',
+  );
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS print_jobs (id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, fulfillment_id TEXT NOT NULL, document_kind TEXT NOT NULL, sequence INTEGER NOT NULL, payload TEXT NOT NULL, state TEXT NOT NULL, retry_count INTEGER NOT NULL, idempotency_key TEXT NOT NULL)',
+  );
+  await database.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS index_print_jobs_tenant_id_idempotency_key ON print_jobs (tenant_id, idempotency_key)',
+  );
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS fulfillment_outbox_events (event_id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, device_id TEXT NOT NULL, source_sequence INTEGER NOT NULL, aggregate_type TEXT NOT NULL, aggregate_id TEXT NOT NULL, idempotency_key TEXT NOT NULL, payload_hash TEXT NOT NULL, topology_revision INTEGER NOT NULL, state TEXT NOT NULL, attempts INTEGER NOT NULL)',
+  );
+  await database.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS index_fulfillment_outbox_events_tenant_id_idempotency_key ON fulfillment_outbox_events (tenant_id, idempotency_key)',
+  );
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -2206,6 +2299,7 @@ final allMigrations = [
   migration48_49,
   migration49_50,
   migration50_51,
+  migration51_52,
 ];
 
 /// Catalog mapping identity is additive: historical products remain usable.

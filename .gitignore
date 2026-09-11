@@ -4,6 +4,7 @@
 *.swp
 *.swo
 .DS_Store
+*:Zone.Identifier
 
 # SDD Artifacts (handled by hybrid mode, but we want the audit trail in git)
 # We keep openspec/ in git for the team

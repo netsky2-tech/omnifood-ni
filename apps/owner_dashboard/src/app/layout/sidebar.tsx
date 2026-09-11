@@ -10,9 +10,7 @@ import {
   FlaskConical,
   Users,
   Settings,
-  Store,
   UserCircle,
-  Star,
   ChevronLeft,
   ChevronRight,
   LogOut,
@@ -32,7 +30,6 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: "Dashboard", path: "/", icon: LayoutDashboard, section: "Principal" },
-  { label: "Setup Center", path: "/onboarding", icon: Store, section: "Principal", requiredRoles: ["OWNER", "MANAGER"] },
   { label: "Ventas", path: "/sales", icon: ShoppingCart, section: "Principal" },
   { label: "Inventario", path: "/inventory", icon: Package, section: "Principal" },
   { label: "Fiscal", path: "/fiscal", icon: FileText, section: "Principal" },
@@ -42,7 +39,6 @@ const navItems: NavItem[] = [
   { label: "Recetas", path: "/recipes", icon: FlaskConical, section: "Gestión" },
   { label: "Usuarios", path: "/users", icon: Users, section: "Administración", requiredRoles: ["OWNER"] },
   { label: "Clientes", path: "/customers", icon: UserCircle, section: "Administración" },
-  { label: "Fidelización", path: "/loyalty", icon: Star, section: "Administración" },
   { label: "Configuración", path: "/settings", icon: Settings, section: "Administración" },
 ];
 

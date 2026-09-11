@@ -13,6 +13,7 @@ import 'package:pos_app/domain/services/config/tenant_config_service.dart';
 import 'package:pos_app/domain/services/sales/split_bill_engine.dart';
 import 'package:pos_app/domain/services/sales/table_order_service.dart';
 import 'package:pos_app/domain/services/sales/tip_engine.dart';
+import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
 
 import 'multi_currency_checkout_e2e_test.mocks.dart';
@@ -134,6 +135,7 @@ void main() {
         false, // autoLoad
         fakeTenantConfigService,
       );
+      saleViewModel.setCompanyTaxRegime(TaxRegime.regimenGeneral);
 
       await saleViewModel.loadTenantConfig();
 
@@ -162,6 +164,7 @@ void main() {
         false,
         fakeTenantConfigService,
       );
+      saleViewModel.setCompanyTaxRegime(TaxRegime.regimenGeneral);
 
       await saleViewModel.loadTenantConfig();
 
@@ -232,6 +235,7 @@ void main() {
         false,
         fakeTenantConfigService,
       );
+      saleViewModel.setCompanyTaxRegime(TaxRegime.regimenGeneral);
 
       await saleViewModel.loadTenantConfig();
 

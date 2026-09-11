@@ -17,39 +17,22 @@ class DgiNumberingServiceImpl implements DgiNumberingService {
   int _extractSequenceNumber(String invoiceNumber) {
     final match = RegExp(r'(\d+)$').firstMatch(invoiceNumber.trim());
     if (match != null) {
-      return int.tryParse(match.group(1)!) ?? 0;
+      return int.tryParse(match.group(1) ?? '') ?? 0;
     }
     return 0;
   }
 
   Future<int> _resolveNextSequence(int configuredCurrent) async {
     if (_invoiceDao != null) {
-      final lastInvoiceNumber = await _invoiceDao.getLastInvoiceNumber();
-      if (lastInvoiceNumber != null && lastInvoiceNumber.isNotEmpty) {
-        final lastSequence = _extractSequenceNumber(lastInvoiceNumber);
+      final lastInvoice = await _invoiceDao.getLastInvoice();
+      if (lastInvoice != null && lastInvoice.number.isNotEmpty) {
+        final lastSequence = _extractSequenceNumber(lastInvoice.number);
         if (lastSequence >= configuredCurrent) {
-          final synchronized = lastSequence + 1;
-          await _configDao.saveConfig(
-            LocalConfigEntity(key: _keyCurrent, value: synchronized.toString()),
-          );
-          return synchronized;
+          return lastSequence + 1;
         }
       }
     }
     return configuredCurrent;
-  }
-
-  Future<int> _resolveSequenceAfterAllocation(int configuredCurrent) async {
-    if (_invoiceDao != null) {
-      final lastInvoiceNumber = await _invoiceDao.getLastInvoiceNumber();
-      if (lastInvoiceNumber != null && lastInvoiceNumber.isNotEmpty) {
-        final lastSequence = _extractSequenceNumber(lastInvoiceNumber);
-        return lastSequence >= configuredCurrent
-            ? lastSequence + 1
-            : configuredCurrent + 1;
-      }
-    }
-    return configuredCurrent + 1;
   }
 
   @override
@@ -98,7 +81,15 @@ class DgiNumberingServiceImpl implements DgiNumberingService {
   Future<void> incrementNumber() async {
     final current = await _configDao.getConfigByKey(_keyCurrent);
     final parsedCurrent = int.tryParse(current?.value ?? '1') ?? 1;
-    final next = await _resolveSequenceAfterAllocation(parsedCurrent);
+    final validSequence = await _resolveNextSequence(parsedCurrent);
+
+    // `_resolveNextSequence` already advances past a persisted invoice.
+    // Do not advance twice when the configured cursor still points at that
+    // invoice; only increment the cursor when no persisted invoice forced
+    // the next sequence forward.
+    final next = validSequence == parsedCurrent
+        ? validSequence + 1
+        : validSequence;
     await _configDao.saveConfig(
       LocalConfigEntity(key: _keyCurrent, value: next.toString()),
     );
@@ -118,8 +109,6 @@ class DgiNumberingServiceImpl implements DgiNumberingService {
     final validSequence = await _resolveNextSequence(parsedCurrent);
     final parsedEnd = int.tryParse(end.value) ?? 1000000;
 
-    // Range is exhausted before allocation only when the next sequence
-    // to be assigned strictly exceeds the authorized end of the range.
     return validSequence > parsedEnd;
   }
 }

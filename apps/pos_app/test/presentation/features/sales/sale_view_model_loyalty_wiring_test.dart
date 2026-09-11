@@ -31,6 +31,7 @@ import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/domain/models/kitchen/kitchen_order.dart';
 import 'package:pos_app/domain/models/config/tenant_config.dart';
 import 'package:pos_app/domain/models/config/tenant_operation_mode.dart';
+import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'package:pos_app/domain/services/config/tenant_config_service.dart';
 import 'package:pos_app/domain/services/kitchen/kitchen_order_service.dart';
 import 'package:pos_app/domain/services/sales/customer_identification_service.dart';
@@ -80,7 +81,8 @@ class FakeTenantConfigService extends TenantConfigService {
   Future<TenantConfig> getTenantConfig() async => const TenantConfig();
 
   @override
-  Stream<TenantOperationMode> get onOperationModeChanged => const Stream.empty();
+  Stream<TenantOperationMode> get onOperationModeChanged =>
+      const Stream.empty();
 }
 
 class FakeSyncService extends Mock implements SyncService {
@@ -129,7 +131,8 @@ void main() {
   late SaleViewModel viewModel;
 
   // Test fixtures
-  const tenantId = 'cust-1'; // Must match testCustomer.id (_reEvaluateLoyalty uses _selectedCustomer.id)
+  const tenantId =
+      'cust-1'; // Must match testCustomer.id (_reEvaluateLoyalty uses _selectedCustomer.id)
   const customerId = 'cust-1';
   const programId = 'prog-smash';
   const rewardId = 'rw-smash-burger';
@@ -148,7 +151,8 @@ void main() {
     name: 'Smash Burger Club',
     programType: LoyaltyProgramType.productStamps,
     status: LoyaltyProgramStatus.active,
-    earningRuleJson: '{"eligibleProductIds":["prod-1"],"unitsPerPurchasedUnit":1}',
+    earningRuleJson:
+        '{"eligibleProductIds":["prod-1"],"unitsPerPurchasedUnit":1}',
     eligibilityRuleJson: '{}',
     configVersion: 1,
   );
@@ -172,7 +176,8 @@ void main() {
     name: 'Smash Burger Club',
     programType: 'productStamps',
     status: 'ACTIVE',
-    earningRuleJson: '{"eligibleProductIds":["prod-1"],"unitsPerPurchasedUnit":1}',
+    earningRuleJson:
+        '{"eligibleProductIds":["prod-1"],"unitsPerPurchasedUnit":1}',
     eligibilityRuleJson: '{}',
     configVersion: 1,
     createdAt: DateTime.now().millisecondsSinceEpoch,
@@ -233,14 +238,13 @@ void main() {
     when(mockPromoDao.getAllPromotions()).thenAnswer((_) async => []);
 
     // Default loyalty DAO responses (empty)
-    when(mockProgramDao.getActivePrograms(tenantId))
-        .thenAnswer((_) async => []);
-    when(mockRewardDao.getActiveRewards(tenantId))
-        .thenAnswer((_) async => []);
+    when(
+      mockProgramDao.getActivePrograms(tenantId),
+    ).thenAnswer((_) async => []);
+    when(mockRewardDao.getActiveRewards(tenantId)).thenAnswer((_) async => []);
 
     // Default identification service
-    when(mockIdentificationService.identify(any))
-        .thenAnswer((_) async => null);
+    when(mockIdentificationService.identify(any)).thenAnswer((_) async => null);
 
     // Default reward interaction
     when(mockRewardInteraction.selectedRewardId).thenReturn(null);
@@ -249,16 +253,20 @@ void main() {
     when(mockRewardInteraction.getSelectedReward(any)).thenReturn(null);
 
     // Default evaluation service
-    when(mockEvaluationService.evaluate(
-      snapshot: anyNamed('snapshot'),
-      programs: anyNamed('programs'),
-      rewards: anyNamed('rewards'),
-      balanceMap: anyNamed('balanceMap'),
-    )).thenAnswer((_) => const LoyaltyEvaluation(
-          customerId: customerId,
-          ticketId: 'ticket-1',
-          programs: [],
-        ));
+    when(
+      mockEvaluationService.evaluate(
+        snapshot: anyNamed('snapshot'),
+        programs: anyNamed('programs'),
+        rewards: anyNamed('rewards'),
+        balanceMap: anyNamed('balanceMap'),
+      ),
+    ).thenAnswer(
+      (_) => const LoyaltyEvaluation(
+        customerId: customerId,
+        ticketId: 'ticket-1',
+        programs: [],
+      ),
+    );
 
     viewModel = SaleViewModel.withLoyalty(
       mockSalesRepo,
@@ -272,27 +280,29 @@ void main() {
       rewardInteractionService: mockRewardInteraction,
       evaluationService: mockEvaluationService,
     );
+    viewModel.setCompanyTaxRegime(TaxRegime.cuotaFija);
   });
 
   group('identifyCustomer', () {
     test('delegates to CustomerIdentificationService', () async {
-      when(mockIdentificationService.identify('NHL1:DEF456ABC123'))
-          .thenAnswer((_) async => CustomerIdentificationResult(
-                customer: testCustomer,
-                method: IdentificationMethod.qr,
-              ));
+      when(mockIdentificationService.identify('NHL1:DEF456ABC123')).thenAnswer(
+        (_) async => CustomerIdentificationResult(
+          customer: testCustomer,
+          method: IdentificationMethod.qr,
+        ),
+      );
 
       final result = await viewModel.identifyCustomer('NHL1:DEF456ABC123');
 
       expect(result, isNotNull);
       expect(result!.id, customerId);
-      verify(mockIdentificationService.identify('NHL1:DEF456ABC123'))
-          .called(1);
+      verify(mockIdentificationService.identify('NHL1:DEF456ABC123')).called(1);
     });
 
     test('returns null when identification fails', () async {
-      when(mockIdentificationService.identify('unknown'))
-          .thenAnswer((_) async => null);
+      when(
+        mockIdentificationService.identify('unknown'),
+      ).thenAnswer((_) async => null);
 
       final result = await viewModel.identifyCustomer('unknown');
 
@@ -300,11 +310,12 @@ void main() {
     });
 
     test('sets selectedCustomer on successful identification', () async {
-      when(mockIdentificationService.identify('DEF456ABC123'))
-          .thenAnswer((_) async => CustomerIdentificationResult(
-                customer: testCustomer,
-                method: IdentificationMethod.customerCode,
-              ));
+      when(mockIdentificationService.identify('DEF456ABC123')).thenAnswer(
+        (_) async => CustomerIdentificationResult(
+          customer: testCustomer,
+          method: IdentificationMethod.customerCode,
+        ),
+      );
 
       await viewModel.identifyCustomer('DEF456ABC123');
 
@@ -314,42 +325,48 @@ void main() {
   });
 
   group('selectCustomer triggers re-evaluation', () {
-    test('calls LoyaltyEvaluationService.evaluate when customer selected with programs',
-        () async {
-      // Arrange: DAOs return programs
-      when(mockProgramDao.getActivePrograms(tenantId))
-          .thenAnswer((_) async => [testProgramEntity]);
-      when(mockRewardDao.getActiveRewards(tenantId))
-          .thenAnswer((_) async => [testRewardEntity]);
+    test(
+      'calls LoyaltyEvaluationService.evaluate when customer selected with programs',
+      () async {
+        // Arrange: DAOs return programs
+        when(
+          mockProgramDao.getActivePrograms(tenantId),
+        ).thenAnswer((_) async => [testProgramEntity]);
+        when(
+          mockRewardDao.getActiveRewards(tenantId),
+        ).thenAnswer((_) async => [testRewardEntity]);
 
-      // Arrange: evaluation returns a real evaluation
-      final evaluation = LoyaltyEvaluation(
-        customerId: customerId,
-        ticketId: '',
-        programs: [
-          const ProgramEvaluation(
-            programId: programId,
-            programName: 'Smash Burger Club',
-            programType: LoyaltyProgramType.productStamps,
-            balanceUnits: 6,
+        // Arrange: evaluation returns a real evaluation
+        final evaluation = LoyaltyEvaluation(
+          customerId: customerId,
+          ticketId: '',
+          programs: [
+            const ProgramEvaluation(
+              programId: programId,
+              programName: 'Smash Burger Club',
+              programType: LoyaltyProgramType.productStamps,
+              balanceUnits: 6,
+            ),
+          ],
+        );
+        when(
+          mockEvaluationService.evaluate(
+            snapshot: anyNamed('snapshot'),
+            programs: anyNamed('programs'),
+            rewards: anyNamed('rewards'),
+            balanceMap: anyNamed('balanceMap'),
           ),
-        ],
-      );
-      when(mockEvaluationService.evaluate(
-        snapshot: anyNamed('snapshot'),
-        programs: anyNamed('programs'),
-        rewards: anyNamed('rewards'),
-        balanceMap: anyNamed('balanceMap'),
-      )).thenReturn(evaluation);
+        ).thenReturn(evaluation);
 
-      // Act
-      await viewModel.selectCustomer(testCustomer);
+        // Act
+        await viewModel.selectCustomer(testCustomer);
 
-      // Assert: evaluation is set
-      expect(viewModel.currentEvaluation, isNotNull);
-      expect(viewModel.currentEvaluation!.programs.length, 1);
-      expect(viewModel.currentEvaluation!.programs.first.balanceUnits, 6);
-    });
+        // Assert: evaluation is set
+        expect(viewModel.currentEvaluation, isNotNull);
+        expect(viewModel.currentEvaluation!.programs.length, 1);
+        expect(viewModel.currentEvaluation!.programs.first.balanceUnits, 6);
+      },
+    );
 
     test('clears evaluation when customer is null', () async {
       await viewModel.selectCustomer(testCustomer);
@@ -378,18 +395,22 @@ void main() {
           ),
         ],
       );
-      when(mockEvaluationService.evaluate(
-        snapshot: anyNamed('snapshot'),
-        programs: anyNamed('programs'),
-        rewards: anyNamed('rewards'),
-        balanceMap: anyNamed('balanceMap'),
-      )).thenReturn(evaluation);
+      when(
+        mockEvaluationService.evaluate(
+          snapshot: anyNamed('snapshot'),
+          programs: anyNamed('programs'),
+          rewards: anyNamed('rewards'),
+          balanceMap: anyNamed('balanceMap'),
+        ),
+      ).thenReturn(evaluation);
       when(mockRewardInteraction.canShowCta(evaluation)).thenReturn(true);
 
       await viewModel.selectCustomer(testCustomer);
       viewModel.selectReward(rewardId);
 
-      verify(mockRewardInteraction.selectReward(evaluation, rewardId)).called(1);
+      verify(
+        mockRewardInteraction.selectReward(evaluation, rewardId),
+      ).called(1);
     });
 
     test('clearReward resets selection', () {
@@ -399,235 +420,281 @@ void main() {
   });
 
   group('cart change re-evaluates and invalidates stale reward', () {
-    test('validateAfterCartChange called when cart mutates with active selection',
-        () async {
-      // Arrange: evaluation returns valid result
-      final evaluation = LoyaltyEvaluation(
-        customerId: customerId,
-        ticketId: '',
-        programs: [
-          const ProgramEvaluation(
-            programId: programId,
-            programName: 'Smash Burger Club',
-            programType: LoyaltyProgramType.productStamps,
-            balanceUnits: 10,
+    test(
+      'validateAfterCartChange called when cart mutates with active selection',
+      () async {
+        // Arrange: evaluation returns valid result
+        final evaluation = LoyaltyEvaluation(
+          customerId: customerId,
+          ticketId: '',
+          programs: [
+            const ProgramEvaluation(
+              programId: programId,
+              programName: 'Smash Burger Club',
+              programType: LoyaltyProgramType.productStamps,
+              balanceUnits: 10,
+            ),
+          ],
+        );
+        when(
+          mockEvaluationService.evaluate(
+            snapshot: anyNamed('snapshot'),
+            programs: anyNamed('programs'),
+            rewards: anyNamed('rewards'),
+            balanceMap: anyNamed('balanceMap'),
           ),
-        ],
-      );
-      when(mockEvaluationService.evaluate(
-        snapshot: anyNamed('snapshot'),
-        programs: anyNamed('programs'),
-        rewards: anyNamed('rewards'),
-        balanceMap: anyNamed('balanceMap'),
-      )).thenReturn(evaluation);
+        ).thenReturn(evaluation);
 
-      // Select customer first (this calls clearReward internally)
-      await viewModel.selectCustomer(testCustomer);
+        // Select customer first (this calls clearReward internally)
+        await viewModel.selectCustomer(testCustomer);
 
-      // NOW set the reward selection stub AFTER clearReward has run
-      when(mockRewardInteraction.selectedRewardId).thenReturn(rewardId);
+        // NOW set the reward selection stub AFTER clearReward has run
+        when(mockRewardInteraction.selectedRewardId).thenReturn(rewardId);
 
-      // Act: add item to cart triggers re-evaluation (fire-and-forget async)
-      viewModel.addToCart(const Product(
-        id: 'prod-1',
-        name: 'Smash Burger',
-        uom: 'UN',
-        stock: 100,
-        averageCost: 60.0,
-        sellPrice: 120.0,
-        category: 'Food',
-      ));
+        // Act: add item to cart triggers re-evaluation (fire-and-forget async)
+        viewModel.addToCart(
+          const Product(
+            id: 'prod-1',
+            name: 'Smash Burger',
+            uom: 'UN',
+            stock: 100,
+            averageCost: 60.0,
+            sellPrice: 120.0,
+            category: 'Food',
+          ),
+        );
 
-      // Allow async re-evaluation to complete
-      await Future.delayed(const Duration(milliseconds: 100));
+        // Allow async re-evaluation to complete
+        await Future.delayed(const Duration(milliseconds: 100));
 
-      // Assert: re-evaluation happened (evaluate called again from addToCart)
-      verify(mockEvaluationService.evaluate(
-        snapshot: anyNamed('snapshot'),
-        programs: anyNamed('programs'),
-        rewards: anyNamed('rewards'),
-        balanceMap: anyNamed('balanceMap'),
-      )).called(greaterThanOrEqualTo(2)); // Once from selectCustomer, once from addToCart
-    });
+        // Assert: re-evaluation happened (evaluate called again from addToCart)
+        verify(
+          mockEvaluationService.evaluate(
+            snapshot: anyNamed('snapshot'),
+            programs: anyNamed('programs'),
+            rewards: anyNamed('rewards'),
+            balanceMap: anyNamed('balanceMap'),
+          ),
+        ).called(
+          greaterThanOrEqualTo(2),
+        ); // Once from selectCustomer, once from addToCart
+      },
+    );
   });
 
   group('processSale uses selectedRewardId for REDEEM', () {
-    test('REDEEM created from selectedRewardId, not from _pointsToRedeem', () async {
-      // Arrange
-      when(mockAuthRepo.getCurrentUser()).thenAnswer((_) async => const User(
+    test(
+      'REDEEM created from selectedRewardId, not from _pointsToRedeem',
+      () async {
+        // Arrange
+        when(mockAuthRepo.getCurrentUser()).thenAnswer(
+          (_) async => const User(
             id: 'user-1',
             name: 'Cashier',
             role: UserRole.cashier,
             isActive: true,
-          ));
-      when(mockSalesRepo.saveSale(
-        invoice: anyNamed('invoice'),
-        items: anyNamed('items'),
-        payments: anyNamed('payments'),
-      )).thenAnswer((_) async {});
-
-      // Arrange: reward interaction has a selection
-      when(mockRewardInteraction.selectedRewardId).thenReturn(rewardId);
-      when(mockRewardInteraction.getSelectedReward(any)).thenReturn(testReward);
-
-      // Arrange: DAOs return programs and rewards for _reEvaluateLoyalty
-      when(mockProgramDao.getActivePrograms(tenantId))
-          .thenAnswer((_) async => [testProgramEntity]);
-      when(mockRewardDao.getActiveRewards(tenantId))
-          .thenAnswer((_) async => [testRewardEntity]);
-
-      // Arrange: evaluation shows eligible
-      final evaluation = LoyaltyEvaluation(
-        customerId: customerId,
-        ticketId: '',
-        programs: [
-          ProgramEvaluation(
-            programId: programId,
-            programName: 'Smash Burger Club',
-            programType: LoyaltyProgramType.productStamps,
-            balanceUnits: 10,
-            eligibleRewards: [testReward.toEligibleReward()],
           ),
-        ],
-      );
-      when(mockEvaluationService.evaluate(
-        snapshot: anyNamed('snapshot'),
-        programs: anyNamed('programs'),
-        rewards: anyNamed('rewards'),
-        balanceMap: anyNamed('balanceMap'),
-      )).thenReturn(evaluation);
-
-      // Arrange: cart has items
-      viewModel.addToCart(const Product(
-        id: 'prod-1',
-        name: 'Smash Burger',
-        uom: 'UN',
-        stock: 100,
-        averageCost: 60.0,
-        sellPrice: 120.0,
-        category: 'Food',
-      ));
-      await viewModel.selectCustomer(testCustomer);
-      viewModel.selectReward(rewardId);
-
-      // Act
-      await viewModel.processSale(
-        [PaymentMethod.cash],
-        customPayments: [
-          const Payment(
-            id: 'pay-1',
-            invoiceId: '',
-            method: PaymentMethod.cash,
-            amount: 138.0,
+        );
+        when(
+          mockSalesRepo.saveSale(
+            invoice: anyNamed('invoice'),
+            items: anyNamed('items'),
+            payments: anyNamed('payments'),
           ),
-        ],
-      );
+        ).thenAnswer((_) async {});
 
-      // Assert: REDEEM + EARN transactions were created
-      // REDEEM: deducts reward costUnits from balance
-      // EARN: accrues points on the subtotal (even after redeem)
-      verify(mockPointTxDao.recordPointTransactionAndUpdateBalance(
-        any,
-        customerId,
-        any,
-        any,
-      )).called(2); // 1 REDEEM + 1 EARN
+        // Arrange: reward interaction has a selection
+        when(mockRewardInteraction.selectedRewardId).thenReturn(rewardId);
+        when(
+          mockRewardInteraction.getSelectedReward(any),
+        ).thenReturn(testReward);
 
-      // Assert: reward interaction was queried
-      verify(mockRewardInteraction.selectedRewardId).called(greaterThanOrEqualTo(1));
-    });
+        // Arrange: DAOs return programs and rewards for _reEvaluateLoyalty
+        when(
+          mockProgramDao.getActivePrograms(tenantId),
+        ).thenAnswer((_) async => [testProgramEntity]);
+        when(
+          mockRewardDao.getActiveRewards(tenantId),
+        ).thenAnswer((_) async => [testRewardEntity]);
+
+        // Arrange: evaluation shows eligible
+        final evaluation = LoyaltyEvaluation(
+          customerId: customerId,
+          ticketId: '',
+          programs: [
+            ProgramEvaluation(
+              programId: programId,
+              programName: 'Smash Burger Club',
+              programType: LoyaltyProgramType.productStamps,
+              balanceUnits: 10,
+              eligibleRewards: [testReward.toEligibleReward()],
+            ),
+          ],
+        );
+        when(
+          mockEvaluationService.evaluate(
+            snapshot: anyNamed('snapshot'),
+            programs: anyNamed('programs'),
+            rewards: anyNamed('rewards'),
+            balanceMap: anyNamed('balanceMap'),
+          ),
+        ).thenReturn(evaluation);
+
+        // Arrange: cart has items
+        viewModel.addToCart(
+          const Product(
+            id: 'prod-1',
+            name: 'Smash Burger',
+            uom: 'UN',
+            stock: 100,
+            averageCost: 60.0,
+            sellPrice: 120.0,
+            category: 'Food',
+          ),
+        );
+        await viewModel.selectCustomer(testCustomer);
+        viewModel.selectReward(rewardId);
+
+        // Act
+        await viewModel.processSale(
+          [PaymentMethod.cash],
+          customPayments: [
+            const Payment(
+              id: 'pay-1',
+              invoiceId: '',
+              method: PaymentMethod.cash,
+              amount: 138.0,
+            ),
+          ],
+        );
+
+        // Assert: REDEEM + EARN transactions were created
+        // REDEEM: deducts reward costUnits from balance
+        // EARN: accrues points on the subtotal (even after redeem)
+        verify(
+          mockPointTxDao.recordPointTransactionAndUpdateBalance(
+            any,
+            customerId,
+            any,
+            any,
+          ),
+        ).called(2); // 1 REDEEM + 1 EARN
+
+        // Assert: reward interaction was queried
+        verify(
+          mockRewardInteraction.selectedRewardId,
+        ).called(greaterThanOrEqualTo(1));
+      },
+    );
   });
 
   group('processSale builds real LoyaltyEvaluation', () {
-    test('uses LoyaltyEvaluationService.evaluate instead of hardcoded evaluation',
-        () async {
-      // Arrange
-      when(mockAuthRepo.getCurrentUser()).thenAnswer((_) async => const User(
+    test(
+      'uses LoyaltyEvaluationService.evaluate instead of hardcoded evaluation',
+      () async {
+        // Arrange
+        when(mockAuthRepo.getCurrentUser()).thenAnswer(
+          (_) async => const User(
             id: 'user-1',
             name: 'Cashier',
             role: UserRole.cashier,
             isActive: true,
-          ));
-      when(mockSalesRepo.saveSale(
-        invoice: anyNamed('invoice'),
-        items: anyNamed('items'),
-        payments: anyNamed('payments'),
-      )).thenAnswer((_) async {});
-
-      // Arrange: evaluation with programs
-      final evaluation = LoyaltyEvaluation(
-        customerId: customerId,
-        ticketId: '',
-        programs: [
-          const ProgramEvaluation(
-            programId: programId,
-            programName: 'Smash Burger Club',
-            programType: LoyaltyProgramType.productStamps,
-            balanceUnits: 7,
-            earningPreviewUnits: 1,
           ),
-        ],
-      );
-      when(mockEvaluationService.evaluate(
-        snapshot: anyNamed('snapshot'),
-        programs: anyNamed('programs'),
-        rewards: anyNamed('rewards'),
-        balanceMap: anyNamed('balanceMap'),
-      )).thenReturn(evaluation);
-
-      // Arrange: DAOs return programs and rewards for _reEvaluateLoyalty
-      when(mockProgramDao.getActivePrograms(tenantId))
-          .thenAnswer((_) async => [testProgramEntity]);
-      when(mockRewardDao.getActiveRewards(tenantId))
-          .thenAnswer((_) async => [testRewardEntity]);
-
-      // Arrange: cart + customer
-      viewModel.addToCart(const Product(
-        id: 'prod-1',
-        name: 'Smash Burger',
-        uom: 'UN',
-        stock: 100,
-        averageCost: 60.0,
-        sellPrice: 120.0,
-        category: 'Food',
-      ));
-      await viewModel.selectCustomer(testCustomer);
-
-      // Act
-      await viewModel.processSale(
-        [PaymentMethod.cash],
-        customPayments: [
-          const Payment(
-            id: 'pay-1',
-            invoiceId: '',
-            method: PaymentMethod.cash,
-            amount: 138.0,
+        );
+        when(
+          mockSalesRepo.saveSale(
+            invoice: anyNamed('invoice'),
+            items: anyNamed('items'),
+            payments: anyNamed('payments'),
           ),
-        ],
-      );
+        ).thenAnswer((_) async {});
 
-      // Assert: evaluation service was called (not hardcoded)
-      verify(mockEvaluationService.evaluate(
-        snapshot: anyNamed('snapshot'),
-        programs: anyNamed('programs'),
-        rewards: anyNamed('rewards'),
-        balanceMap: anyNamed('balanceMap'),
-      )).called(greaterThanOrEqualTo(1));
+        // Arrange: evaluation with programs
+        final evaluation = LoyaltyEvaluation(
+          customerId: customerId,
+          ticketId: '',
+          programs: [
+            const ProgramEvaluation(
+              programId: programId,
+              programName: 'Smash Burger Club',
+              programType: LoyaltyProgramType.productStamps,
+              balanceUnits: 7,
+              earningPreviewUnits: 1,
+            ),
+          ],
+        );
+        when(
+          mockEvaluationService.evaluate(
+            snapshot: anyNamed('snapshot'),
+            programs: anyNamed('programs'),
+            rewards: anyNamed('rewards'),
+            balanceMap: anyNamed('balanceMap'),
+          ),
+        ).thenReturn(evaluation);
 
-      // Note: lastPostPaidFeedback is cleared by clearCart() at end of processSale.
-      // The key assertion is that evaluate() was called with real data, not hardcoded.
-      // A secondary check: _currentEvaluation was set before processSale cleared it.
-      expect(viewModel.currentEvaluation, isNull); // cleared by clearCart → processSale end
-    });
+        // Arrange: DAOs return programs and rewards for _reEvaluateLoyalty
+        when(
+          mockProgramDao.getActivePrograms(tenantId),
+        ).thenAnswer((_) async => [testProgramEntity]);
+        when(
+          mockRewardDao.getActiveRewards(tenantId),
+        ).thenAnswer((_) async => [testRewardEntity]);
+
+        // Arrange: cart + customer
+        viewModel.addToCart(
+          const Product(
+            id: 'prod-1',
+            name: 'Smash Burger',
+            uom: 'UN',
+            stock: 100,
+            averageCost: 60.0,
+            sellPrice: 120.0,
+            category: 'Food',
+          ),
+        );
+        await viewModel.selectCustomer(testCustomer);
+
+        // Act
+        await viewModel.processSale(
+          [PaymentMethod.cash],
+          customPayments: [
+            const Payment(
+              id: 'pay-1',
+              invoiceId: '',
+              method: PaymentMethod.cash,
+              amount: 138.0,
+            ),
+          ],
+        );
+
+        // Assert: evaluation service was called (not hardcoded)
+        verify(
+          mockEvaluationService.evaluate(
+            snapshot: anyNamed('snapshot'),
+            programs: anyNamed('programs'),
+            rewards: anyNamed('rewards'),
+            balanceMap: anyNamed('balanceMap'),
+          ),
+        ).called(greaterThanOrEqualTo(1));
+
+        // Note: lastPostPaidFeedback is cleared by clearCart() at end of processSale.
+        // The key assertion is that evaluate() was called with real data, not hardcoded.
+        // A secondary check: _currentEvaluation was set before processSale cleared it.
+        expect(
+          viewModel.currentEvaluation,
+          isNull,
+        ); // cleared by clearCart → processSale end
+      },
+    );
   });
 }
 
 // Helper extension to convert domain model for test assertions
 extension RewardDefinitionLocalTestExt on RewardDefinitionLocal {
   EligibleReward toEligibleReward() => EligibleReward(
-        rewardId: id,
-        name: name,
-        rewardType: rewardType,
-        costUnits: costUnits,
-      );
+    rewardId: id,
+    name: name,
+    rewardType: rewardType,
+    costUnits: costUnits,
+  );
 }

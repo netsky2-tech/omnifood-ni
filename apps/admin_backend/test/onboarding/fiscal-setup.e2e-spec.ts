@@ -189,6 +189,7 @@ describe('FiscalSetup (Integration & E2E)', () => {
         PermissionsGuard,
         Reflector,
         JwtService,
+        createIdentityJwtConfigProvider(),
       ],
     }).compile();
 

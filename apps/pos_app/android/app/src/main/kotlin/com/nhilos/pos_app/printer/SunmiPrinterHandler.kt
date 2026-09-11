@@ -94,9 +94,8 @@ class SunmiPrinterHandler(private val context: Context) : MethodChannel.MethodCa
     private fun handleGetPrinterStatus(result: MethodChannel.Result) {
         val service = woyouService
         if (service == null) {
-            // Non-Sunmi device (e.g. Samsung S23/S24 Ultra, emulator) - return READY for simulation fallback
-            Log.d(TAG, "getPrinterStatus called without active Sunmi service. Returning READY fallback.")
-            result.success("READY")
+            Log.w(TAG, "getPrinterStatus called without active Sunmi service.")
+            result.success("OFFLINE")
             return
         }
 
@@ -128,8 +127,8 @@ class SunmiPrinterHandler(private val context: Context) : MethodChannel.MethodCa
 
         val service = woyouService
         if (service == null) {
-            Log.d(TAG, "printRawBytes (${bytes.size} bytes) simulated on non-Sunmi device.")
-            result.success(true)
+            Log.w(TAG, "printRawBytes rejected without active Sunmi service.")
+            result.error("NOT_CONNECTED", "Servicio de impresora Sunmi no conectado", null)
             return
         }
 
@@ -151,8 +150,8 @@ class SunmiPrinterHandler(private val context: Context) : MethodChannel.MethodCa
 
         val service = woyouService
         if (service == null) {
-            Log.d(TAG, "printText simulated on non-Sunmi device: $text")
-            result.success(true)
+            Log.w(TAG, "printText rejected without active Sunmi service.")
+            result.error("NOT_CONNECTED", "Servicio de impresora Sunmi no conectado", null)
             return
         }
 

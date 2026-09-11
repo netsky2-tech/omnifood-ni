@@ -9,11 +9,13 @@ import { App } from 'supertest/types';
 import { CustomersController } from '../../src/modules/customers/controllers/customers.controller';
 import { CustomersService } from '../../src/modules/customers/services/customers.service';
 import { Customer } from '../../src/modules/customers/entities/customer.entity';
+import { CustomerPointTransaction } from '../../src/modules/customers/entities/customer-point-transaction.entity';
 import { UserRole } from '../../src/modules/identity/entities/user.entity';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
 import { TenantInterceptor } from '../../src/core/database/rls.interceptor';
 import { JWT_TOKEN_TYPES } from '../../src/modules/identity/security/jwt-token.types';
+import { createIdentityJwtConfigProvider } from '../support/identity-jwt-test.fixture';
 
 describe('Customers Module (E2E / Integration)', () => {
   const jwtSecret = 'test-only-jwt-secret-with-at-least-thirty-two-bytes';
@@ -123,10 +125,15 @@ describe('Customers Module (E2E / Integration)', () => {
         RolesGuard,
         Reflector,
         JwtService,
+        createIdentityJwtConfigProvider(),
         TenantInterceptor,
         {
           provide: getRepositoryToken(Customer),
           useValue: customerRepo,
+        },
+        {
+          provide: getRepositoryToken(CustomerPointTransaction),
+          useValue: { find: jest.fn(), save: jest.fn() },
         },
       ],
     }).compile();

@@ -22,11 +22,24 @@ class CartItem with _$CartItem {
 }
 
 extension CartItemX on CartItem {
+  /// Base price multiplied by quantity (excluding modifiers).
   double get subtotal => quantity * unitPrice;
   
+  /// Total extra price of selected modifiers multiplied by quantity.
   double get modifiersTotal => selectedModifiers.fold(0.0, (sum, m) => sum + m.extraPrice) * quantity;
+
+  /// Total pre-tax gross amount (subtotal + modifiersTotal).
+  double get grossAmount => subtotal + modifiersTotal;
   
+  /// Pre-fiscal estimation of tax amount.
+  /// Deprecated: CartItem does not have company fiscal regime context.
+  /// All tax computations must be performed by [InvoiceFiscalCalculator].
+  @Deprecated('Use InvoiceFiscalCalculator. CartItem does not know company TaxRegime.')
   double get taxAmount => (subtotal + modifiersTotal) * taxRate;
   
+  /// Pre-fiscal estimation of line total.
+  /// Deprecated: CartItem does not have company fiscal regime context.
+  /// All final line totals must be resolved via [InvoiceFiscalCalculator] or [grossAmount].
+  @Deprecated('Use InvoiceFiscalCalculator or grossAmount. CartItem does not know company TaxRegime.')
   double get total => subtotal + modifiersTotal + taxAmount;
 }

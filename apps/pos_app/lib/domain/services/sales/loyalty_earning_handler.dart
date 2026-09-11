@@ -1,8 +1,8 @@
 import 'package:uuid/uuid.dart';
-import 'package:omnifood/data/daos/customer/customer_point_transaction_dao.dart';
-import 'package:omnifood/data/daos/customer/customer_dao.dart';
-import 'package:omnifood/data/mappers/customer_mapper.dart';
-import 'package:omnifood/domain/services/sales/loyalty_service.dart';
+import 'package:pos_app/data/daos/customer/customer_point_transaction_dao.dart';
+import 'package:pos_app/data/daos/customer/customer_dao.dart';
+import 'package:pos_app/data/mappers/customer_mapper.dart';
+import 'package:pos_app/domain/services/sales/loyalty_service.dart';
 
 class LoyaltyEarningHandler {
   final CustomerPointTransactionDao _txDao;
@@ -45,8 +45,8 @@ class LoyaltyEarningHandler {
     final tx = _service.createEarnTransaction(
       customerId: customerId,
       invoiceId: ticketId,
-      points: pointsEarned,
-      reason: 'Ticket $ticketId earning',
+      currentBalance: 0.0,
+      netAmount: totalSpend,
     );
 
     final v1Tx = tx.copyWith(

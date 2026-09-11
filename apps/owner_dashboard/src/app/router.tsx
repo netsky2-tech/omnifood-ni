@@ -3,7 +3,6 @@ import { createBrowserRouter, Navigate } from "react-router-dom";
 import { AppLayout } from "@/app/layout/app-layout";
 import { ProtectedRoute } from "@/app/protected-route";
 import { SuspenseWrapper } from "@/app/layout/page-loader";
-import { ErrorBoundary } from "@/app/error-boundary";
 
 const LoginPage = lazy(() =>
   import("@/features/auth/login-page").then((m) => ({ default: m.LoginPage })),
@@ -38,34 +37,22 @@ const UsersPage = lazy(() =>
 const SettingsPage = lazy(() =>
   import("@/features/settings/settings-page").then((m) => ({ default: m.SettingsPage })),
 );
-const OnboardingPage = lazy(() =>
-  import("@/features/onboarding").then((m) => ({ default: m.OnboardingPage })),
-);
 const CustomersPage = lazy(() =>
   import("@/features/customers/customers-page").then((m) => ({ default: m.CustomersPage })),
-);
-const LoyaltyPage = lazy(() =>
-  import("@/features/loyalty").then((m) => ({ default: m.LoyaltyPage })),
 );
 
 export const router = createBrowserRouter([
   {
     path: "/login",
     element: (
-      <ErrorBoundary>
-        <SuspenseWrapper>
-          <LoginPage />
-        </SuspenseWrapper>
-      </ErrorBoundary>
+      <SuspenseWrapper>
+        <LoginPage />
+      </SuspenseWrapper>
     ),
   },
   {
     path: "/",
-    element: (
-      <ErrorBoundary>
-        <AppLayout />
-      </ErrorBoundary>
-    ),
+    element: <AppLayout />,
     children: [
       {
         index: true,
@@ -150,26 +137,10 @@ export const router = createBrowserRouter([
         ),
       },
       {
-        path: "loyalty",
-        element: (
-          <SuspenseWrapper>
-            <LoyaltyPage />
-          </SuspenseWrapper>
-        ),
-      },
-      {
         path: "settings",
         element: (
           <SuspenseWrapper>
             <SettingsPage />
-          </SuspenseWrapper>
-        ),
-      },
-      {
-        path: "onboarding",
-        element: (
-          <SuspenseWrapper>
-            <OnboardingPage />
           </SuspenseWrapper>
         ),
       },

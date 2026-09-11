@@ -2,6 +2,7 @@ import '../../models/sales/invoice.dart';
 import '../../models/sales/invoice_item.dart';
 import '../../models/sales/payment.dart';
 import '../../models/user.dart';
+import '../../models/fulfillment/fulfillment_checkout_context.dart';
 
 enum RefundReasonPolicy {
   restockOriginalBom,
@@ -40,6 +41,7 @@ abstract class SalesRepository {
     required Invoice invoice,
     required List<InvoiceItem> items,
     required List<Payment> payments,
+    FulfillmentCheckoutContext? fulfillmentContext,
   });
 
   Future<Invoice?> getInvoiceById(String id);

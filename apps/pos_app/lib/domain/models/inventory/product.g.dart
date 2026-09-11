@@ -23,6 +23,11 @@ _$ProductImpl _$$ProductImplFromJson(Map<String, dynamic> json) =>
       mappingVersionId: json['mappingVersionId'] as String?,
       insumoId: json['insumoId'] as String?,
       createdAt: json['createdAt'] as String?,
+      inventoryPolicy: $enumDecodeNullable(
+          _$InventoryPolicyEnumMap, json['inventoryPolicy']),
+      directStockInsumoId: json['directStockInsumoId'] as String?,
+      taxRate: (json['taxRate'] as num?)?.toDouble() ?? 0.15,
+      isTaxExempt: json['isTaxExempt'] as bool? ?? false,
       variants: (json['variants'] as List<dynamic>?)
               ?.map((e) => ProductVariant.fromJson(e as Map<String, dynamic>))
               .toList() ??
@@ -50,9 +55,19 @@ Map<String, dynamic> _$$ProductImplToJson(_$ProductImpl instance) =>
       'mappingVersionId': instance.mappingVersionId,
       'insumoId': instance.insumoId,
       'createdAt': instance.createdAt,
+      'inventoryPolicy': _$InventoryPolicyEnumMap[instance.inventoryPolicy],
+      'directStockInsumoId': instance.directStockInsumoId,
+      'taxRate': instance.taxRate,
+      'isTaxExempt': instance.isTaxExempt,
       'variants': instance.variants,
       'availableModifiers': instance.availableModifiers,
     };
+
+const _$InventoryPolicyEnumMap = {
+  InventoryPolicy.recipeBom: 'recipeBom',
+  InventoryPolicy.directStock: 'directStock',
+  InventoryPolicy.notTracked: 'notTracked',
+};
 
 _$ProductVariantImpl _$$ProductVariantImplFromJson(Map<String, dynamic> json) =>
     _$ProductVariantImpl(

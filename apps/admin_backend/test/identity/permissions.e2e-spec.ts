@@ -20,12 +20,21 @@ import {
 import { AuditLog } from '../../src/modules/identity/entities/audit-log.entity';
 import { SecurityProfile } from '../../src/modules/identity/entities/security-profile.entity';
 import { AuditIntegrityAlert } from '../../src/modules/identity/entities/audit-integrity-alert.entity';
+import { TenantCapabilityEvent } from '../../src/modules/identity/entities/tenant-capability-event.entity';
 import { AppPermission } from '../../src/modules/identity/security/permissions.enum';
 import { JWT_TOKEN_TYPES } from '../../src/modules/identity/security/jwt-token.types';
 
 @Global()
 @Module({
-  providers: [{ provide: DataSource, useValue: {} }],
+  providers: [
+    {
+      provide: DataSource,
+      useValue: {
+        entityMetadatas: [],
+        getRepository: jest.fn().mockReturnValue({}),
+      },
+    },
+  ],
   exports: [DataSource],
 })
 class TestDatabaseModule {}
@@ -83,8 +92,42 @@ describe('Permissions & Fine-Grained RBAC (e2e) (Slice 10.1)', () => {
   beforeAll(async () => {
     Object.assign(process.env, jwtEnvironment);
 
+    const defaultFindOne = jest
+      .fn()
+      .mockImplementation(async (args?: { where?: { id?: string } }) => {
+        const id = args?.where?.id;
+        if (id === ownerUserId) {
+          return {
+            id: ownerUserId,
+            email: 'owner@omnifood.ni',
+            role: UserRole.OWNER,
+            tenant_id: testTenantId,
+            is_active: true,
+            security_version: 1,
+          };
+        }
+        if (id === waiterUserId) {
+          return {
+            id: waiterUserId,
+            email: 'waiter@omnifood.ni',
+            role: UserRole.WAITER,
+            tenant_id: testTenantId,
+            is_active: true,
+            security_version: 1,
+          };
+        }
+        return {
+          id: cashierUserId,
+          email: 'cashier@omnifood.ni',
+          role: UserRole.CASHIER,
+          tenant_id: testTenantId,
+          is_active: true,
+          security_version: 1,
+        };
+      });
+
     userRepository = {
-      findOne: jest.fn(),
+      findOne: defaultFindOne,
       find: jest.fn(),
       save: jest.fn(),
       update: jest.fn(),
@@ -115,6 +158,8 @@ describe('Permissions & Fine-Grained RBAC (e2e) (Slice 10.1)', () => {
       .overrideProvider(getRepositoryToken(SecurityProfile))
       .useValue(securityProfileRepository)
       .overrideProvider(getRepositoryToken(AuditIntegrityAlert))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(TenantCapabilityEvent))
       .useValue({})
       .compile();
 
@@ -195,13 +240,6 @@ describe('Permissions & Fine-Grained RBAC (e2e) (Slice 10.1)', () => {
     it('returns effective permissions for a user', async () => {
       const token = generateTestToken(ownerUserId, UserRole.OWNER);
 
-      userRepository.findOne.mockResolvedValue({
-        id: cashierUserId,
-        role: UserRole.CASHIER,
-        tenant_id: testTenantId,
-        is_active: true,
-      });
-
       securityProfileRepository.findOne.mockResolvedValue({
         user_id: cashierUserId,
         custom_permissions: [AppPermission.SALES_VOID_INVOICE],
@@ -234,13 +272,6 @@ describe('Permissions & Fine-Grained RBAC (e2e) (Slice 10.1)', () => {
   describe('PUT /identity/users/:id/permissions validation & authorization', () => {
     it('updates custom permissions when executed by OWNER', async () => {
       const token = generateTestToken(ownerUserId, UserRole.OWNER);
-
-      userRepository.findOne.mockResolvedValue({
-        id: cashierUserId,
-        role: UserRole.CASHIER,
-        tenant_id: testTenantId,
-        is_active: true,
-      });
 
       const profile = {
         user_id: cashierUserId,

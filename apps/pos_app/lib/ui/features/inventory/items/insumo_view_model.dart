@@ -223,6 +223,8 @@ class InsumoViewModel with ChangeNotifier {
     required double stock,
     required double averageCost,
     required double sellPrice,
+    double taxRate = 0.15,
+    bool isTaxExempt = false,
   }) async {
     _isLoading = true;
     notifyListeners();
@@ -240,6 +242,8 @@ class InsumoViewModel with ChangeNotifier {
         category: category,
         isPrepared: isPrepared,
         createdAt: now.toIso8601String(),
+        taxRate: taxRate,
+        isTaxExempt: isTaxExempt,
       );
       await repository.saveProduct(product);
       await loadInitialData();

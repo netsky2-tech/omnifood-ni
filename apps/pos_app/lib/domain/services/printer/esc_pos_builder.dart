@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'printable_text_codec.dart';
 
 enum EscPosAlign { left, center, right }
 
@@ -69,13 +70,9 @@ class EscPosBuilder {
     return this;
   }
 
-  /// Appends raw text encoded in Latin1 / UTF-8.
+  /// Appends normalized text encoded strictly as Latin-1.
   EscPosBuilder text(String text) {
-    try {
-      _bytes.addAll(latin1.encode(text));
-    } catch (_) {
-      _bytes.addAll(utf8.encode(text));
-    }
+    _bytes.addAll(latin1.encode(const PrintableTextCodec().normalize(text)));
     return this;
   }
 

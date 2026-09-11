@@ -1,10 +1,10 @@
+import 'package:pos_app/domain/models/audit_log.dart';
+import 'package:pos_app/domain/usecases/inventory/frozen_sale_inventory_movement_boundary.dart';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
-import 'package:pos_app/domain/models/audit_log.dart';
 import 'package:pos_app/domain/usecases/inventory/process_sale_inventory_use_case.dart';
 import 'package:pos_app/domain/usecases/inventory/reverse_sale_inventory_use_case.dart';
-import 'package:pos_app/domain/usecases/inventory/frozen_sale_inventory_movement_boundary.dart';
 import 'package:pos_app/data/mappers/inventory_mapper.dart';
 import 'package:uuid/uuid.dart';
 import 'package:pos_app/data/daos/sales/invoice_dao.dart';
@@ -24,10 +24,62 @@ import 'package:pos_app/domain/services/sales/dgi_numbering_service.dart';
 import 'package:pos_app/data/models/sales/invoice_entity.dart';
 import 'package:pos_app/data/models/sales/invoice_item_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
+import 'package:pos_app/data/models/fulfillment/fulfillment_persistence_entities.dart';
 import 'package:pos_app/data/mappers/audit_mapper.dart';
 import 'package:pos_app/domain/models/user.dart';
+import 'package:pos_app/domain/models/fulfillment/fulfillment_checkout_context.dart';
 
 class SalesRepositoryImpl implements SalesRepository {
+  @override
+  Future<void> acknowledgeSaleSync({
+    required String invoiceId,
+    required String? outcome,
+    required List<String> acknowledgedCorrelationIds,
+  }) async {
+    final invoice = await invoiceDao.getInvoiceById(invoiceId);
+    if (invoice == null) {
+      throw StateError('Invoice not found for ACK reconciliation: $invoiceId');
+    }
+
+    final localMovements = await transactionDao.getMovementsBySaleId(invoiceId);
+    final expectedCorrelations = localMovements
+        .map((m) => m.saleCorrelationId ?? m.id)
+        .where((id) => id.isNotEmpty)
+        .toSet();
+
+    final ackSet = acknowledgedCorrelationIds.toSet();
+    final effectiveOutcome = outcome ?? invoice.inventoryOutcome;
+
+    if (effectiveOutcome == 'APPLIED_NO_INVENTORY_IMPACT' ||
+        effectiveOutcome == 'APPLIED_INVENTORY_PENDING') {
+      if (ackSet.isNotEmpty) {
+        throw StateError(
+          'Integrity failure: Non-empty ACK set for invoice $invoiceId with outcome $effectiveOutcome: $ackSet',
+        );
+      }
+    } else {
+      if (ackSet.length != expectedCorrelations.length ||
+          !ackSet.containsAll(expectedCorrelations)) {
+        throw StateError(
+          'Integrity failure: ACK correlation IDs do not match local expected set for invoice $invoiceId. '
+          'Expected: $expectedCorrelations, Received: $ackSet',
+        );
+      }
+    }
+
+    await transactionDao.executeAckTransaction(
+      invoiceId,
+      'synced',
+      MovementDeliveryState.cloudAcknowledged,
+    );
+  }
+
+  @override
+  Future<int> getInventoryEnrichmentPendingCount() async {
+    final count = await invoiceDao.getInventoryEnrichmentPendingCount();
+    return count ?? 0;
+  }
+
   final AppDatabase database;
   final InvoiceDao invoiceDao;
   final InvoiceItemDao itemDao;
@@ -39,7 +91,8 @@ class SalesRepositoryImpl implements SalesRepository {
   final ProcessSaleInventoryUseCase processInventoryUseCase;
   final ReverseSaleInventoryUseCase reverseInventoryUseCase;
   final InventoryRepository inventoryRepository;
-  static Future<void> _saleWriteTail = Future<void>.value();
+  final void Function(FulfillmentCheckoutContext)?
+  onFulfillmentCheckoutContextReady;
 
   SalesRepositoryImpl({
     required this.database,
@@ -53,6 +106,7 @@ class SalesRepositoryImpl implements SalesRepository {
     required this.processInventoryUseCase,
     required this.reverseInventoryUseCase,
     required this.inventoryRepository,
+    this.onFulfillmentCheckoutContextReady,
   });
 
   @override
@@ -60,50 +114,40 @@ class SalesRepositoryImpl implements SalesRepository {
     required Invoice invoice,
     required List<InvoiceItem> items,
     required List<Payment> payments,
-  }) {
-    final completion = _saleWriteTail.then<void>(
-      (_) => _saveSale(invoice: invoice, items: items, payments: payments),
-    );
-    _saleWriteTail = completion.then<void>(
-      (_) {},
-      onError: (error, stackTrace) {},
-    );
-    return completion;
-  }
-
-  Future<void> _saveSale({
-    required Invoice invoice,
-    required List<InvoiceItem> items,
-    required List<Payment> payments,
+    FulfillmentCheckoutContext? fulfillmentContext,
   }) async {
-    final resolvedTerminalId = invoice.terminalId?.trim() ?? '';
-    if (resolvedTerminalId.isEmpty) {
-      throw StateError('Sale terminal identity must not be blank.');
+    if (fulfillmentContext != null) {
+      await _validateFulfillmentContext(fulfillmentContext);
     }
     if (await numberingService.isRangeExhausted()) {
       throw Exception('DGI Authorized Numbering Range exhausted.');
     }
 
     final finalNumber = await numberingService.getNextNumber();
+    final nextDgiSequence = _nextDgiSequence(finalNumber);
+    final existingInvoice = await invoiceDao.getInvoiceById(invoice.id);
+    final terminalId =
+        existingInvoice?.terminalId ??
+        invoice.terminalId ??
+        'pos-${invoice.userId}';
     final sourceSequence =
-        (await transactionDao.getNextInvoiceSourceSequence(
-          resolvedTerminalId,
-        )) ??
+        existingInvoice?.sourceSequence ??
+        (await transactionDao.getNextInvoiceSourceSequence(terminalId)) ??
         1;
     final isFrozenSale = _isFrozenSale(items);
     final sourceInvoice = invoice.copyWith(
       number: finalNumber,
-      terminalId: resolvedTerminalId,
+      terminalId: terminalId,
       sourceSequence: sourceSequence,
       idempotencyKey:
-          invoice.idempotencyKey ?? 'sale:$resolvedTerminalId:${invoice.id}',
+          invoice.idempotencyKey ?? 'sale:$terminalId:${invoice.id}',
     );
+
+    // Frozen SALE_TIME_V1 lines are already bound to immutable sale-time facts.
+    // Legacy lines still resolve their active recipe version before persistence.
     final resolvedItems = isFrozenSale
         ? items
         : await _resolveRecipeVersionBindings(items);
-    final frozenMovements = isFrozenSale
-        ? _frozenMovements(resolvedItems, sourceInvoice)
-        : null;
     final updatedInvoice = sourceInvoice.copyWith(
       payloadHash: _buildSalePayloadHash(
         invoice: sourceInvoice,
@@ -111,78 +155,142 @@ class SalesRepositoryImpl implements SalesRepository {
         payments: payments,
       ),
     );
+
     final invoiceEntity = SalesMapper.toInvoiceEntity(updatedInvoice);
     final itemEntities = resolvedItems.map(SalesMapper.toItemEntity).toList();
     final paymentEntities = payments.map(SalesMapper.toPaymentEntity).toList();
-    final movementEntities =
-        frozenMovements ??
-        await _legacyMovements(resolvedItems, updatedInvoice);
-    // 2. Fallback: if no active session/user in authRepository, construct dummy/system audit or bypass strict audit requirement
-    // Fallback audit log ONLY when offline/programmatic caller (such as ActivationControlledSaleRunner)
-    // cannot authenticate via authRepository, but reject null audit if auditRepository explicitly fails.
-    final auditLog = isFrozenSale
-        ? await auditRepository.prepareLog(
-            'SALE_CREATED',
-            metadata: jsonEncode({
-              'invoiceId': updatedInvoice.id,
-              'number': updatedInvoice.number,
-              'payloadHash': updatedInvoice.payloadHash,
-              'inventoryOutcome': updatedInvoice.inventoryOutcome,
-              'inventoryOutcomeReason': updatedInvoice.inventoryOutcomeReason,
-            }),
-          )
-        : null;
+    final movementEntities = isFrozenSale
+        ? _frozenMovements(resolvedItems, updatedInvoice)
+        : await _legacyMovements(resolvedItems, updatedInvoice);
 
-    final effectiveAuditLog =
-        auditLog ??
-        (isFrozenSale &&
-                (updatedInvoice.idempotencyKey?.contains('activation-sale:') ==
-                        true ||
-                    updatedInvoice.idempotencyKey?.startsWith('onboarding:') ==
-                        true)
-            ? AuditLog(
-                userId: updatedInvoice.userId,
-                action: 'SALE_CREATED',
-                timestamp: updatedInvoice.createdAt,
-                deviceId: resolvedTerminalId,
-                tenantId: updatedInvoice.terminalId,
-                sequenceNo: 1,
-                prevHash: 'GENESIS',
-                entryHash: 'ACTIVATION_SALE_CONTROLLED',
-                metadata: jsonEncode({
-                  'invoiceId': updatedInvoice.id,
-                  'number': updatedInvoice.number,
-                  'payloadHash': updatedInvoice.payloadHash,
-                  'inventoryOutcome': updatedInvoice.inventoryOutcome,
-                  'inventoryOutcomeReason':
-                      updatedInvoice.inventoryOutcomeReason,
-                }),
-              )
-            : null);
+    try {
+      if (fulfillmentContext != null) {
+        onFulfillmentCheckoutContextReady?.call(fulfillmentContext);
+        await transactionDao.executeFulfillmentSaleTransaction(
+          invoiceEntity,
+          itemEntities,
+          [],
+          paymentEntities,
+          movementEntities,
+          null,
+          _fulfillment(updatedInvoice, fulfillmentContext, resolvedItems),
+          _printJobs(updatedInvoice, fulfillmentContext, resolvedItems),
+          _outbox(updatedInvoice, fulfillmentContext),
+          false,
+        );
+      } else {
+        await transactionDao.executeSaleWithDgiTransaction(
+          invoiceEntity,
+          itemEntities,
+          [],
+          paymentEntities,
+          movementEntities,
+          null, // Audit log is written separately
+          nextDgiSequence,
+          false,
+        );
+      }
 
-    if (isFrozenSale && effectiveAuditLog == null) {
-      throw StateError('Frozen sale audit preparation failed.');
-    }
-
-    await transactionDao.executeSaleTransaction(
-      invoiceEntity,
-      itemEntities,
-      [],
-      paymentEntities,
-      movementEntities,
-      effectiveAuditLog == null
-          ? null
-          : AuditMapper.toEntity(effectiveAuditLog),
-      false,
-    );
-    if (!isFrozenSale) {
       await auditRepository.log(
         'SALE_CREATED',
         metadata:
             '{"invoice_id": "${updatedInvoice.id}", "number": "${updatedInvoice.number}", "total": "${updatedInvoice.total.toStringAsFixed(2)}"}',
       );
+    } catch (e) {
+      rethrow;
     }
-    await numberingService.incrementNumber();
+  }
+
+  Future<void> _validateFulfillmentContext(
+    FulfillmentCheckoutContext context,
+  ) async {
+    final snapshot = await database.fulfillmentTopologyDao.findSnapshot(
+      context.topologySnapshotId,
+      context.tenantId,
+    );
+    if (snapshot == null ||
+        snapshot.revision != context.topologyRevision ||
+        snapshot.hash != context.topologyHash) {
+      throw StateError('Fulfillment checkout topology snapshot is invalid.');
+    }
+  }
+
+  FulfillmentRecordEntity _fulfillment(
+    Invoice invoice,
+    FulfillmentCheckoutContext context,
+    List<InvoiceItem> items,
+  ) => FulfillmentRecordEntity(
+    id: 'fulfillment-${invoice.id}',
+    tenantId: context.tenantId,
+    saleId: invoice.id,
+    topologySnapshotId: context.topologySnapshotId,
+    topologyRevision: context.topologyRevision,
+    channel: context.channel,
+    routeState: 'ROUTED',
+    deliveryState: 'PENDING',
+    linesPayload: _linesPayload(items),
+  );
+
+  List<PrintJobEntity> _printJobs(
+    Invoice invoice,
+    FulfillmentCheckoutContext context,
+    List<InvoiceItem> items,
+  ) {
+    if (!context.channel.contains('PRINT')) return const [];
+    final fulfillmentId = 'fulfillment-${invoice.id}';
+    return [
+      PrintJobEntity(
+        id: 'print-${invoice.id}',
+        tenantId: context.tenantId,
+        fulfillmentId: fulfillmentId,
+        documentKind: 'TICKET',
+        sequence: 0,
+        payload: _linesPayload(items),
+        state: 'PENDING',
+        retryCount: 0,
+        idempotencyKey: 'print:$fulfillmentId:ticket:0',
+      ),
+    ];
+  }
+
+  OutboxEventEntity _outbox(
+    Invoice invoice,
+    FulfillmentCheckoutContext context,
+  ) {
+    final fulfillmentId = 'fulfillment-${invoice.id}';
+    return OutboxEventEntity(
+      eventId: 'event:$fulfillmentId',
+      tenantId: context.tenantId,
+      deviceId: invoice.terminalId ?? 'pos-${invoice.userId}',
+      sourceSequence: invoice.sourceSequence ?? 1,
+      aggregateType: 'fulfillment',
+      aggregateId: fulfillmentId,
+      idempotencyKey: 'outbox:${context.tenantId}:$fulfillmentId',
+      payloadHash: 'pending',
+      topologyRevision: context.topologyRevision,
+      state: 'PENDING',
+      attempts: 0,
+    );
+  }
+
+  String _linesPayload(List<InvoiceItem> items) => jsonEncode(
+    items
+        .map(
+          (item) => {
+            'lineId': item.id,
+            'productId': item.productId,
+            'quantity': item.quantity,
+          },
+        )
+        .toList(growable: false),
+  );
+
+  String _nextDgiSequence(String invoiceNumber) {
+    final match = RegExp(r'(\d+)$').firstMatch(invoiceNumber.trim());
+    if (match == null) {
+      throw FormatException('DGI invoice number does not end in a sequence.');
+    }
+    return (int.parse(match.group(1)!) + 1).toString();
   }
 
   bool _isFrozenSale(List<InvoiceItem> items) {
@@ -274,6 +382,8 @@ class SalesRepositoryImpl implements SalesRepository {
           (movement) => InventoryMapper.toMovementEntity(
             movement.copyWith(
               userId: invoice.userId,
+              sourceDocumentType: 'invoice',
+              sourceDocumentId: invoice.id,
               deliveryOwner: MovementDeliveryOwner.saleSync,
               deliveryState: MovementDeliveryState.localApplied,
               saleId: invoice.id,
@@ -342,13 +452,6 @@ class SalesRepositoryImpl implements SalesRepository {
       final items = await itemDao.getItemsByInvoiceId(invoice.id);
       final payments = await paymentDao.getPaymentsByInvoiceId(invoice.id);
 
-      // ignore: avoid_print
-      for (final pe in payments) {
-        print(
-          '[SYNC-DB] payment entity id="${pe.id}" invoiceId="${pe.invoiceId}" method="${pe.method}"',
-        );
-      }
-
       aggregates.add(
         SalesMapper.toSyncJson(
           invoice,
@@ -364,56 +467,6 @@ class SalesRepositoryImpl implements SalesRepository {
   Future<void> markAsSynced(List<String> invoiceIds) async {
     if (invoiceIds.isEmpty) return;
     await invoiceDao.updateSyncStatusForIds(invoiceIds, 'synced');
-  }
-
-  @override
-  Future<void> acknowledgeSaleSync({
-    required String invoiceId,
-    required String? outcome,
-    required List<String> acknowledgedCorrelationIds,
-  }) async {
-    final invoice = await invoiceDao.getInvoiceById(invoiceId);
-    if (invoice == null) {
-      throw StateError('Invoice not found for ACK reconciliation: $invoiceId');
-    }
-
-    final localMovements = await transactionDao.getMovementsBySaleId(invoiceId);
-    final expectedCorrelations = localMovements
-        .map((m) => m.saleCorrelationId ?? m.id)
-        .where((id) => id.isNotEmpty)
-        .toSet();
-
-    final ackSet = acknowledgedCorrelationIds.toSet();
-    final effectiveOutcome = outcome ?? invoice.inventoryOutcome;
-
-    if (effectiveOutcome == 'APPLIED_NO_INVENTORY_IMPACT' ||
-        effectiveOutcome == 'APPLIED_INVENTORY_PENDING') {
-      if (ackSet.isNotEmpty) {
-        throw StateError(
-          'Integrity failure: Non-empty ACK set for invoice $invoiceId with outcome $effectiveOutcome: $ackSet',
-        );
-      }
-    } else {
-      if (ackSet.length != expectedCorrelations.length ||
-          !ackSet.containsAll(expectedCorrelations)) {
-        throw StateError(
-          'Integrity failure: ACK correlation IDs do not match local expected set for invoice $invoiceId. '
-          'Expected: $expectedCorrelations, Received: $ackSet',
-        );
-      }
-    }
-
-    await transactionDao.executeAckTransaction(
-      invoiceId,
-      'synced',
-      MovementDeliveryState.cloudAcknowledged,
-    );
-  }
-
-  @override
-  Future<int> getInventoryEnrichmentPendingCount() async {
-    final count = await invoiceDao.getInventoryEnrichmentPendingCount();
-    return count ?? 0;
   }
 
   Future<void> markAsFailed(String invoiceId) async {
@@ -472,9 +525,8 @@ class SalesRepositoryImpl implements SalesRepository {
           (m) => InventoryMapper.toMovementEntity(
             m.copyWith(
               userId: entity.userId,
-              deliveryOwner: MovementDeliveryOwner.saleSync,
-              deliveryState: MovementDeliveryState.localApplied,
-              saleId: invoiceId,
+              sourceDocumentType: 'invoice',
+              sourceDocumentId: entity.id,
             ),
           ),
         )
@@ -543,31 +595,6 @@ class SalesRepositoryImpl implements SalesRepository {
     RefundReasonPolicy refundReasonPolicy =
         RefundReasonPolicy.restockOriginalBom,
     List<CreditNoteRefundLine>? lines,
-  }) {
-    final completion = _saleWriteTail.then<void>(
-      (_) => _createCreditNote(
-        originalInvoiceId: originalInvoiceId,
-        reason: reason,
-        authorizedByUserId: authorizedByUserId,
-        authorizedByRole: authorizedByRole,
-        refundReasonPolicy: refundReasonPolicy,
-        lines: lines,
-      ),
-    );
-    _saleWriteTail = completion.then<void>(
-      (_) {},
-      onError: (error, stackTrace) {},
-    );
-    return completion;
-  }
-
-  Future<void> _createCreditNote({
-    required String originalInvoiceId,
-    required String reason,
-    required String authorizedByUserId,
-    required UserRole authorizedByRole,
-    required RefundReasonPolicy refundReasonPolicy,
-    required List<CreditNoteRefundLine>? lines,
   }) async {
     if (authorizedByRole == UserRole.cashier ||
         authorizedByRole == UserRole.waiter) {
@@ -614,10 +641,7 @@ class SalesRepositoryImpl implements SalesRepository {
     final creditNoteId = const Uuid().v4();
     final creditNoteNumber = await numberingService.getNextNumber();
     final now = DateTime.now();
-    final terminalId = original.terminalId?.trim() ?? '';
-    if (terminalId.isEmpty) {
-      throw StateError('Credit note origin is missing terminal identity.');
-    }
+    final terminalId = 'pos-${original.userId}';
     final sourceSequence = await transactionDao.getNextInvoiceSourceSequence(
       terminalId,
     );
@@ -856,14 +880,34 @@ class SalesRepositoryImpl implements SalesRepository {
     required List<InvoiceItem> items,
     required List<Payment> payments,
   }) {
-    final payload = Map<String, dynamic>.from(
-      SalesMapper.toSyncJson(
-        invoice.copyWith(payloadHash: null),
-        items,
-        payments,
-      ),
-    )..remove('payloadHash');
-    return sha256.convert(utf8.encode(jsonEncode(payload))).toString();
+    final canonical = jsonEncode({
+      'invoiceId': invoice.id,
+      'number': invoice.number,
+      'documentType': 'SALE',
+      'subtotal': invoice.subtotal,
+      'totalTax': invoice.totalTax,
+      'total': invoice.total,
+      'items': items
+          .map(
+            (item) => {
+              'id': item.id,
+              'productId': item.productId,
+              'quantity': item.quantity,
+              'total': item.total,
+            },
+          )
+          .toList(growable: false),
+      'payments': payments
+          .map(
+            (payment) => {
+              'id': payment.id,
+              'method': payment.method.name,
+              'amount': payment.amount,
+            },
+          )
+          .toList(growable: false),
+    });
+    return sha256.convert(utf8.encode(canonical)).toString();
   }
 
   @override

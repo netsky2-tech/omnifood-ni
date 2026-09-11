@@ -10,6 +10,7 @@ import '../../../domain/models/user.dart';
 import '../../../domain/repositories/auth_repository.dart';
 import '../../../domain/repositories/audit_repository.dart';
 import '../../../data/database/app_database.dart';
+import '../../../core/navigation/route_observer.dart';
 import '../../widgets/app_drawer.dart';
 import '../../features/identity/supervisor_override_modal.dart';
 import '../../design_system/design_system.dart';
@@ -145,9 +146,10 @@ class SaleView extends StatefulWidget {
   State<SaleView> createState() => _SaleViewState();
 }
 
-class _SaleViewState extends State<SaleView> with WidgetsBindingObserver {
+class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteAware {
   late final SaleViewModel _viewModel;
   bool _errorPresentationScheduled = false;
+  ModalRoute<void>? _modalRoute;
 
   @override
   void initState() {
@@ -166,10 +168,28 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route != null && route != _modalRoute) {
+      appRouteObserver.unsubscribe(this);
+      _modalRoute = route;
+      appRouteObserver.subscribe(this, route);
+    }
+  }
+
+  @override
   void dispose() {
+    appRouteObserver.unsubscribe(this);
     _viewModel.removeListener(_presentError);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  @override
+  void didPopNext() {
+    if (!mounted) return;
+    context.read<SaleViewModel>().loadCompanyTaxRegime();
   }
 
   void _presentError() {
@@ -202,8 +222,6 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver {
     });
   }
 
-  /// When the app resumes (e.g. after switching from Control de Caja),
-  /// re-read the cashier session from SQLite. One lightweight query.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && mounted) {
@@ -819,7 +837,7 @@ class RecallTicketsDialog extends StatelessWidget {
                 return ListTile(
                   title: Text(ticket.name),
                   subtitle: Text('${ticket.items.length} productos'),
-                  trailing: Text('C\$ ${ticket.items.fold(0.0, (sum, i) => sum + i.total).toStringAsFixed(2)}'),
+                  trailing: Text('C\$ ${ticket.items.fold(0.0, (sum, i) => sum + i.grossAmount).toStringAsFixed(2)}'),
                   onTap: () {
                     viewModel.recallTicket(ticket);
                     Navigator.pop(context);
@@ -1296,7 +1314,7 @@ class CartSidebar extends StatelessWidget {
                         ),
                       ],
                     ),
-                    trailing: Text('C\$ ${item.total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                    trailing: Text('C\$ ${(item.subtotal + item.modifiersTotal).toStringAsFixed(2)}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
                     onLongPress: () => viewModel.removeFromCart(
                       item.productId,
                       variantId: item.variantId,
@@ -1346,13 +1364,14 @@ class CartSummary extends StatelessWidget {
               Text('-C\$ ${(viewModel.totalDiscounts).toStringAsFixed(2)}', style: const TextStyle(color: Colors.green)),
             ],
           ),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text('IVA (15%)'),
-            Text('C\$ ${(viewModel.totalTax).toStringAsFixed(2)}'),
-          ],
-        ),
+        if (viewModel.totalTax > 0 || viewModel.companyTaxRegime?.isRegimenGeneral == true)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('IVA (15%)'),
+              Text('C\$ ${(viewModel.totalTax).toStringAsFixed(2)}'),
+            ],
+          ),
         const Divider(),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1373,17 +1392,19 @@ class CartSummary extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            const Text('Exento General', style: TextStyle(fontWeight: FontWeight.bold)),
-            const Spacer(),
-            Switch(
-              value: viewModel.isGlobalTaxExempt,
-              onChanged: (_) => viewModel.toggleGlobalTaxExempt(),
-            ),
-          ],
-        ),
+        if (viewModel.totalTax > 0 || viewModel.companyTaxRegime?.isRegimenGeneral == true) ...[
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const Text('Exento General', style: TextStyle(fontWeight: FontWeight.bold)),
+              const Spacer(),
+              Switch(
+                value: viewModel.isGlobalTaxExempt,
+                onChanged: (_) => viewModel.toggleGlobalTaxExempt(),
+              ),
+            ],
+          ),
+        ],
         const SizedBox(height: 8),
         SizedBox(
           width: double.infinity,
@@ -1504,6 +1525,7 @@ class CartSummary extends StatelessWidget {
       builder: (context) => SplitBillDialog(
         cart: vm.cart,
         commercialRate: vm.commercialRate,
+        taxRegime: vm.companyTaxRegime,
         onPayShare: (share) {
           Navigator.of(context).pop();
           _showCheckoutDialog(context);

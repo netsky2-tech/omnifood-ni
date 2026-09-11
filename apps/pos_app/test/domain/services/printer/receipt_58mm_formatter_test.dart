@@ -39,19 +39,19 @@ void main() {
   group('Receipt58mmFormatter Utilities Tests', () {
     test('center() returns exact 32 character padded string', () {
       final centered = Receipt58mmFormatter.center('OMNIFOOD NI');
-      expect(centered.length, 32);
+      expect(centered.length, Receipt58mmFormatter.lineWidth);
       expect(centered.trim(), 'OMNIFOOD NI');
     });
 
     test('twoColumns() fits exactly in 32 columns and protects right value', () {
       final line = Receipt58mmFormatter.twoColumns('Café Especial de la Casa', 'C\$ 150.00');
-      expect(line.length, 32);
+      expect(line.split('\n').every((part) => part.length <= Receipt58mmFormatter.lineWidth), isTrue);
       expect(line.endsWith('C\$ 150.00'), isTrue);
     });
 
     test('divider() produces exact 32-character separator', () {
-      expect(Receipt58mmFormatter.divider('=').length, 32);
-      expect(Receipt58mmFormatter.divider('-').length, 32);
+      expect(Receipt58mmFormatter.divider('=').length, Receipt58mmFormatter.lineWidth);
+      expect(Receipt58mmFormatter.divider('-').length, Receipt58mmFormatter.lineWidth);
     });
 
     test('wrap() breaks long text into chunks of <= 32 characters', () {
@@ -149,23 +149,23 @@ void main() {
         final cleanLine = line.replaceAll('\r', '');
         expect(
           cleanLine.length,
-          lessThanOrEqualTo(32),
-          reason: 'Line exceeds 32 chars: "$cleanLine" (length ${cleanLine.length})',
+          lessThanOrEqualTo(Receipt58mmFormatter.lineWidth),
+          reason: 'Line exceeds ${Receipt58mmFormatter.lineWidth} chars: "$cleanLine" (length ${cleanLine.length})',
         );
       }
 
       expect(receipt, contains('OMNIFOOD NICARAGUA S.A.'));
       expect(receipt, contains('RUC: J0310000000001'));
-      expect(receipt, contains('No. 001-001-01-00004521'));
-      expect(receipt, contains('Tipo de Cambio:'));
-      expect(receipt, contains('36.50'));
+      expect(receipt, contains('001-001-01-00004521'));
+      expect(receipt, contains('T/C USD:'));
       expect(receipt, contains('SUBTOTAL:'));
       expect(receipt, contains('IVA (15%):'));
       expect(receipt, contains('TOTAL CORDOBAS:'));
-      expect(receipt, contains('TOTAL DOLARES:'));
+      expect(receipt, contains('TOTAL USD:'));
       expect(receipt, contains('Efectivo USD:'));
       expect(receipt, contains('VISA (BAC):'));
       expect(receipt, contains('AUTH9876'));
+      expect(receipt, contains('REGIMEN: GENERAL'));
     });
 
     test('formatInvoiceEscPos generates non-empty ESC/POS bytecode', () {
@@ -219,8 +219,8 @@ void main() {
         final cleanLine = line.replaceAll('\r', '');
         expect(
           cleanLine.length,
-          lessThanOrEqualTo(32),
-          reason: 'Line exceeds 32 chars: "$cleanLine"',
+          lessThanOrEqualTo(Receipt58mmFormatter.lineWidth),
+          reason: 'Line exceeds ${Receipt58mmFormatter.lineWidth} chars: "$cleanLine"',
         );
       }
 
@@ -276,13 +276,13 @@ void main() {
       final lines = corteX.split('\n');
       for (final line in lines) {
         final cleanLine = line.replaceAll('\r', '');
-        expect(cleanLine.length, lessThanOrEqualTo(32));
+        expect(cleanLine.length, lessThanOrEqualTo(Receipt58mmFormatter.lineWidth));
       }
 
       expect(corteX, contains('CORTE X (PARCIAL)'));
       expect(corteX, contains('FONDO APERTURA NIO:'));
       expect(corteX, contains('TOTAL VENTAS:'));
-      expect(corteX, contains('NO FISCAL'));
+      expect(corteX, contains('AUDITORIA INTERNA - NO FISCAL'));
     });
 
     test('formatCorteZText generates end of shift audit with variance and all lines <= 32 cols', () {
@@ -291,20 +291,18 @@ void main() {
         cashierName: 'Pedro Gomez',
         totalsByMethod: totalsByMethod,
         zSequence: 12,
-        totalExpected: 6500.0,
-        totalCounted: 6550.0,
-        difference: 50.0,
       );
 
       final lines = corteZ.split('\n');
       for (final line in lines) {
         final cleanLine = line.replaceAll('\r', '');
-        expect(cleanLine.length, lessThanOrEqualTo(32));
+        expect(cleanLine.length, lessThanOrEqualTo(Receipt58mmFormatter.lineWidth));
       }
 
+      expect(corteZ, contains('CORTE Z'));
+      expect(corteZ, contains('#12'));
+      expect(corteZ, contains('TOTAL VENTAS:'));
       expect(corteZ, contains('CIERRE DE TURNO DEFINITIVO'));
-      expect(corteZ, contains('SECUENCIA Z: #12'));
-      expect(corteZ, contains('Total Esperado:'));
     });
   });
 
@@ -324,11 +322,11 @@ void main() {
       final lines = labelText.split('\n');
       for (final line in lines) {
         final cleanLine = line.replaceAll('\r', '');
-        expect(cleanLine.length, lessThanOrEqualTo(32), reason: 'Line too long: "$cleanLine"');
+        expect(cleanLine.length, lessThanOrEqualTo(Receipt58mmFormatter.lineWidth), reason: 'Line too long: "$cleanLine"');
       }
 
       expect(labelText, contains('ETIQUETA DE PRODUCCION'));
-      expect(labelText, contains('CONTROL FIFO'));
+      expect(labelText, contains('CONTROL FIFO / INOCUIDAD'));
       expect(labelText, contains('Lote:'));
       expect(labelText, contains('LOTE-20260827-001'));
       expect(labelText, contains('4.50 kg'));

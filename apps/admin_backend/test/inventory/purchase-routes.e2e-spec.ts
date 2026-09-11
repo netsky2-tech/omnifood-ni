@@ -29,6 +29,7 @@ import { InventoryService } from '../../src/modules/inventory/inventory.service'
 import { ProductionService } from '../../src/modules/inventory/production.service';
 import { RecipeService } from '../../src/modules/inventory/recipe.service';
 import { ShrinkageService } from '../../src/modules/inventory/shrinkage.service';
+import { InventoryReportsService } from '../../src/modules/inventory/services/inventory-reports.service';
 import { UserRole } from '../../src/modules/identity/entities/user.entity';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { AuthoritativeCurrentUserGuard } from '../../src/modules/identity/guards/authoritative-current-user.guard';
@@ -227,6 +228,12 @@ describe('Inventory purchase routes (integration)', () => {
           provide: ProductionService,
           useValue: {
             replayProductionClose: jest.fn(),
+          },
+        },
+        {
+          provide: InventoryReportsService,
+          useValue: {
+            getAlertsSummaryReport: jest.fn(),
           },
         },
         TenantInterceptor,

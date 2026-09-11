@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_app/data/adapters/printer/mock_printer_adapter.dart';
+import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'package:pos_app/domain/models/sales/cashier_session.dart';
 import 'package:pos_app/domain/models/sales/invoice.dart';
 import 'package:pos_app/domain/models/sales/invoice_item.dart';
@@ -54,6 +55,7 @@ void main() {
         items: testItems,
         payments: testPayments,
         businessName: 'NHILOS POS Test',
+        taxRegime: TaxRegime.regimenGeneral,
       );
 
       expect(result.isSuccess, isTrue);
@@ -70,6 +72,7 @@ void main() {
         testInvoice,
         items: testItems,
         payments: testPayments,
+        taxRegime: TaxRegime.regimenGeneral,
       );
 
       expect(result.isSuccess, isFalse);
@@ -114,7 +117,7 @@ void main() {
         zSequence: 1,
       );
       expect(corteZResult.isSuccess, isTrue);
-      expect(adapter.lastPrintedText, contains('CIERRE DE TURNO DEFINITIVO'));
+      expect(adapter.lastPrintedText, contains('CORTE Z'));
     });
 
     test('openCashDrawer triggers pulse and increments counter', () async {

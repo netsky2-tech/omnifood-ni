@@ -70,7 +70,12 @@ class AnalyticsReportsE2EController {
     @Query('tenantId') tenantId: string,
     @Query('startDate') startDate: string,
     @Query('endDate') endDate: string,
-  ): { items: ShrinkageAuditItem[]; totalShrinkageNio: number } {
+  ): {
+    items: ShrinkageAuditItem[];
+    totalShrinkageNio: number;
+    tenantId: string;
+    period: string;
+  } {
     const items: ShrinkageAuditItem[] = [
       {
         movementId: 'mov-shrink-001',
@@ -90,6 +95,8 @@ class AnalyticsReportsE2EController {
     return {
       items,
       totalShrinkageNio: total,
+      tenantId,
+      period: `${startDate}/${endDate}`,
     };
   }
 }

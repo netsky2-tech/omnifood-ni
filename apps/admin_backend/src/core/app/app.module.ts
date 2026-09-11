@@ -20,6 +20,9 @@ import { AuditModule } from '../../modules/audit/audit.module';
 import { ChangeLog } from '../../modules/audit/entities/change-log.entity';
 import { PromotionsModule } from '../../modules/promotions/promotions.module';
 import { Promotion as CloudPromotion } from '../../modules/promotions/entities/promotion.entity';
+import { FulfillmentModule } from '../../modules/fulfillment/fulfillment.module';
+import { TenantTopologyRevision } from '../../modules/fulfillment/entities/tenant-topology-revision.entity';
+import { TenantFulfillmentRecord } from '../../modules/fulfillment/entities/tenant-fulfillment-record.entity';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
 import { Tenant } from '../../modules/tenant/entities/tenant.entity';
@@ -69,6 +72,8 @@ import { TemplateSeedLink } from '../../modules/onboarding/entities/template-see
 import { LegacyOnboardingMigrationReceipt } from '../../modules/onboarding/entities/legacy-migration-receipt.entity';
 import { FiscalConfigRevision } from '../../modules/onboarding/entities/fiscal-config-revision.entity';
 
+import { InventoryRemediationReceipt } from '../../modules/inventory/entities/inventory-remediation-receipt.entity';
+import { ProductInventoryMappingVersion } from '../../modules/inventory/entities/product-inventory-mapping-version.entity';
 export const getRequiredConfigValue = (
   configService: ConfigService,
   key: string,
@@ -141,6 +146,10 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
     LoyaltyProgram,
     RewardDefinition,
     CustomerLoyaltyAccountProjection,
+    TenantTopologyRevision,
+    TenantFulfillmentRecord,
+    ProductInventoryMappingVersion,
+    InventoryRemediationReceipt,
   ],
   synchronize: false,
 });
@@ -168,6 +177,7 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
     LoyaltyModule,
     PromotionsModule,
     AuditModule,
+    FulfillmentModule,
   ],
   controllers: [AppController],
   providers: [AppService],

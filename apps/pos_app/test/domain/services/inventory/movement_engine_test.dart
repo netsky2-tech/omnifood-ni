@@ -2,10 +2,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:pos_app/domain/models/inventory/insumo.dart';
+import 'package:pos_app/domain/models/inventory/product.dart';
 import 'package:pos_app/domain/models/inventory/recipe.dart';
 import 'package:pos_app/domain/models/inventory/recipe_version_document.dart';
 import 'package:pos_app/domain/models/inventory/inventory_movement.dart';
 import 'package:pos_app/domain/models/inventory/uom_conversion.dart';
+import 'package:pos_app/domain/models/fulfillment/fulfillment_contracts.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
 import 'package:pos_app/domain/services/alerts/alert_service.dart';
 import 'package:pos_app/domain/services/inventory/movement_engine_impl.dart';
@@ -29,6 +31,23 @@ Insumo createInsumo({
   );
 }
 
+Product createProduct({
+  required String id,
+  InventoryPolicy? inventoryPolicy,
+  String? directStockInsumoId,
+}) {
+  return Product(
+    id: id,
+    name: 'Product $id',
+    uom: 'unit',
+    stock: 0,
+    averageCost: 0,
+    sellPrice: 1,
+    inventoryPolicy: inventoryPolicy,
+    directStockInsumoId: directStockInsumoId,
+  );
+}
+
 @GenerateMocks([InventoryRepository, AlertService])
 void main() {
   late MockInventoryRepository mockRepo;
@@ -39,6 +58,7 @@ void main() {
     mockRepo = MockInventoryRepository();
     mockAlerts = MockAlertService();
     engine = MovementEngineImpl(mockRepo, mockAlerts);
+    when(mockRepo.getProductById(any)).thenAnswer((_) async => null);
   });
 
   group('MovementEngine - recordSale', () {
@@ -83,6 +103,136 @@ void main() {
         ),
       ).called(1);
     });
+  });
+
+  group('MovementEngine - inventory policy Kardex planning', () {
+    test('uses the linked insumo for DIRECT_STOCK without a BOM', () async {
+      const productId = 'resale-soda';
+      const stockInsumoId = 'stock-soda';
+      when(mockRepo.getProductById(productId)).thenAnswer(
+        (_) async => createProduct(
+          id: productId,
+          inventoryPolicy: InventoryPolicy.directStock,
+          directStockInsumoId: stockInsumoId,
+        ),
+      );
+      when(mockRepo.getInsumosByIds([stockInsumoId])).thenAnswer(
+        (_) async => const [
+          Insumo(
+            id: stockInsumoId,
+            name: 'Soda stock',
+            consumptionUom: 'unit',
+            stock: 12,
+            averageCost: 8,
+          ),
+        ],
+      );
+
+      final movements = await engine.getSaleMovements(productId, 2);
+
+      expect(movements, hasLength(1));
+      expect(movements.single.insumoId, stockInsumoId);
+      expect(movements.single.quantity, -2);
+      expect(movements.single.newStock, 10);
+      expect(movements.single.sourceDocumentType, 'PRODUCT_SALE');
+      expect(movements.single.sourceDocumentId, productId);
+      verifyNever(mockRepo.getRecipeByProductId(productId));
+    });
+
+    test('uses component Kardex consumption for RECIPE_BOM products', () async {
+      const productId = 'prepared-coffee';
+      when(mockRepo.getProductById(productId)).thenAnswer(
+        (_) async => createProduct(
+          id: productId,
+          inventoryPolicy: InventoryPolicy.recipeBom,
+        ),
+      );
+      when(mockRepo.getRecipeByProductId(productId)).thenAnswer(
+        (_) async => const [
+          Recipe(
+            id: 'coffee-recipe',
+            productId: productId,
+            ingredientId: 'coffee-beans',
+            ingredientType: IngredientType.insumo,
+            quantity: 18,
+          ),
+        ],
+      );
+      when(mockRepo.getInsumosByIds(['coffee-beans'])).thenAnswer(
+        (_) async => const [
+          Insumo(
+            id: 'coffee-beans',
+            name: 'Coffee beans',
+            consumptionUom: 'g',
+            stock: 100,
+            averageCost: 1,
+          ),
+        ],
+      );
+
+      final movements = await engine.getSaleMovements(productId, 1);
+
+      expect(movements, hasLength(1));
+      expect(movements.single.insumoId, 'coffee-beans');
+      expect(movements.single.quantity, -18);
+    });
+
+    test(
+      'does not create a Kardex movement for NOT_TRACKED products',
+      () async {
+        const productId = 'service-fee';
+        when(mockRepo.getProductById(productId)).thenAnswer(
+          (_) async => createProduct(
+            id: productId,
+            inventoryPolicy: InventoryPolicy.notTracked,
+          ),
+        );
+
+        final movements = await engine.getSaleMovements(productId, 1);
+
+        expect(movements, isEmpty);
+        verifyNever(mockRepo.getRecipeByProductId(productId));
+        verifyNever(mockRepo.getInsumosByIds(any));
+      },
+    );
+
+    test(
+      'keeps the legacy recipe path for products without a policy',
+      () async {
+        const productId = 'legacy-coffee';
+        when(
+          mockRepo.getProductById(productId),
+        ).thenAnswer((_) async => createProduct(id: productId));
+        when(mockRepo.getRecipeByProductId(productId)).thenAnswer(
+          (_) async => const [
+            Recipe(
+              id: 'legacy-recipe',
+              productId: productId,
+              ingredientId: 'legacy-beans',
+              ingredientType: IngredientType.insumo,
+              quantity: 10,
+            ),
+          ],
+        );
+        when(mockRepo.getInsumosByIds(['legacy-beans'])).thenAnswer(
+          (_) async => const [
+            Insumo(
+              id: 'legacy-beans',
+              name: 'Legacy beans',
+              consumptionUom: 'g',
+              stock: 50,
+              averageCost: 1,
+            ),
+          ],
+        );
+
+        final movements = await engine.getSaleMovements(productId, 1);
+
+        expect(movements, hasLength(1));
+        expect(movements.single.insumoId, 'legacy-beans');
+        expect(movements.single.quantity, -10);
+      },
+    );
   });
 
   group('MovementEngine - recordProductionClose', () {
@@ -489,10 +639,7 @@ void main() {
           actualQuantity: 5,
           outcome: 'COMPLETED',
           reason: 'PRODUCTION_CLOSE:po-custom-consumption',
-          customIngredientConsumptions: {
-            'tomato': 12.0,
-            'salt': 0.6,
-          },
+          customIngredientConsumptions: {'tomato': 12.0, 'salt': 0.6},
         );
 
         // Consumed cost: 12 * 18 + 0.6 * 10 = 216 + 6 = 222 NIO
@@ -501,9 +648,15 @@ void main() {
         expect(result.producedUnitCostNio, 44.4);
         expect(result.movements, hasLength(3));
 
-        verify(mockRepo.updateInsumoStock('tomato', 18)).called(1); // 30 - 12 = 18
-        verify(mockRepo.updateInsumoStock('salt', 4.4)).called(1);   // 5 - 0.6 = 4.4
-        verify(mockRepo.updateInsumoStock(producedInsumoId, 5)).called(1); // 0 + 5 = 5
+        verify(
+          mockRepo.updateInsumoStock('tomato', 18),
+        ).called(1); // 30 - 12 = 18
+        verify(
+          mockRepo.updateInsumoStock('salt', 4.4),
+        ).called(1); // 5 - 0.6 = 4.4
+        verify(
+          mockRepo.updateInsumoStock(producedInsumoId, 5),
+        ).called(1); // 0 + 5 = 5
       },
     );
   });

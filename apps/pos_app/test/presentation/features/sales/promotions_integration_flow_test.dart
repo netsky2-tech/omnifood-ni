@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pos_app/data/models/local_config_entity.dart';
+import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/models/sales/promotion_entity.dart';
@@ -12,6 +14,7 @@ import 'package:pos_app/domain/services/kitchen/kitchen_order_service.dart';
 import 'package:pos_app/domain/services/config/printer_config_service.dart';
 import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/domain/models/inventory/product.dart';
+import 'package:pos_app/domain/models/fulfillment/fulfillment_checkout_context.dart';
 import 'package:pos_app/domain/models/sales/payment.dart';
 import 'package:pos_app/domain/models/sales/invoice.dart';
 import 'package:pos_app/domain/models/sales/invoice_item.dart';
@@ -23,6 +26,7 @@ class FakeSalesRepository implements SalesRepository {
 
   @override
   Future<void> saveSale({
+    FulfillmentCheckoutContext? fulfillmentContext,
     required Invoice invoice,
     required List<InvoiceItem> items,
     required List<Payment> payments,
@@ -95,6 +99,9 @@ void main() {
 
   setUp(() async {
     database = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
+    await database.localConfigDao.saveConfig(
+      LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'),
+    );
     salesRepo = FakeSalesRepository();
     inventoryRepo = FakeInventoryRepository();
     authRepo = FakeAuthRepository();
@@ -110,6 +117,7 @@ void main() {
       KitchenOrderService(database),
       PrinterConfigService(database.localConfigDao),
     );
+    viewModel.setCompanyTaxRegime(TaxRegime.regimenGeneral);
   });
 
   tearDown(() async {

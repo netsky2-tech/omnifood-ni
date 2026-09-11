@@ -27,8 +27,14 @@ class CheckoutInventoryPreparationService {
     required String tenantId,
     required String terminalId,
   }) async {
-    if (tenantId.trim().isEmpty || offlineUserId.trim().isEmpty) {
+    if (offlineUserId.trim().isEmpty || terminalId.trim().isEmpty) {
       throw const CheckoutAuthorityException();
+    }
+    if (tenantId.trim().isEmpty) {
+      // Legacy local users created before tenant-scoped inventory authority was
+      // introduced must remain able to sell offline. Their sales stay on the
+      // repository's legacy inventory path and never claim SALE_TIME_V1.
+      return PreparedSaleInventoryResult(invoice: invoice, items: items);
     }
 
     final authorityDao = _database.authorityProjectionDao;
@@ -42,7 +48,9 @@ class CheckoutInventoryPreparationService {
 
     for (final item in items) {
       // 1. Product & mapping
-      final productEntity = await _database.productDao.findProductById(item.productId);
+      final productEntity = await _database.productDao.findProductById(
+        item.productId,
+      );
       final productType = productEntity?.productType ?? 'SIMPLE';
       final kind = switch (productType) {
         'PREPARED' => AuthorityInventoryKind.prepared,
@@ -50,19 +58,24 @@ class CheckoutInventoryPreparationService {
         _ => AuthorityInventoryKind.simple,
       };
 
-      authorityProducts.add(AuthorityProduct(
-        id: item.productId,
-        tenantId: tenantId,
-        inventoryKind: kind,
-      ));
-
-      if (productEntity?.mappingVersionId != null && productEntity?.insumoId != null) {
-        authorityMappings.add(AuthorityMapping(
-          id: productEntity!.mappingVersionId!,
+      authorityProducts.add(
+        AuthorityProduct(
+          id: item.productId,
           tenantId: tenantId,
-          productId: item.productId,
-          insumoId: productEntity.insumoId!,
-        ));
+          inventoryKind: kind,
+        ),
+      );
+
+      if (productEntity?.mappingVersionId != null &&
+          productEntity?.insumoId != null) {
+        authorityMappings.add(
+          AuthorityMapping(
+            id: productEntity!.mappingVersionId!,
+            tenantId: tenantId,
+            productId: item.productId,
+            insumoId: productEntity.insumoId!,
+          ),
+        );
       }
 
       // 2. Active published recipe version
@@ -74,12 +87,14 @@ class CheckoutInventoryPreparationService {
 
       if (activeVersions.isNotEmpty) {
         final active = activeVersions.first;
-        authorityRecipes.add(AuthorityRecipe(
-          id: active.id,
-          tenantId: tenantId,
-          productId: item.productId,
-          isPublished: active.publicationState == 'PUBLISHED',
-        ));
+        authorityRecipes.add(
+          AuthorityRecipe(
+            id: active.id,
+            tenantId: tenantId,
+            productId: item.productId,
+            isPublished: active.publicationState == 'PUBLISHED',
+          ),
+        );
 
         // 3. Components
         final components = await authorityDao.findComponentsByVersion(
@@ -88,20 +103,24 @@ class CheckoutInventoryPreparationService {
         );
 
         for (final c in components) {
-          authorityComponents.add(AuthorityComponent(
-            id: c.id,
-            tenantId: tenantId,
-            recipeId: active.id,
-            insumoId: c.insumoId,
-            quantityPerSaleUnit: c.grossQuantity,
-          ));
-
-          final insumo = await authorityDao.findInsumoById(tenantId, c.insumoId);
-          if (insumo != null) {
-            authorityInsumos.add(AuthorityInsumo(
-              id: insumo.id,
+          authorityComponents.add(
+            AuthorityComponent(
+              id: c.id,
               tenantId: tenantId,
-            ));
+              recipeId: active.id,
+              insumoId: c.insumoId,
+              quantityPerSaleUnit: c.grossQuantity,
+            ),
+          );
+
+          final insumo = await authorityDao.findInsumoById(
+            tenantId,
+            c.insumoId,
+          );
+          if (insumo != null) {
+            authorityInsumos.add(
+              AuthorityInsumo(id: insumo.id, tenantId: tenantId),
+            );
           }
         }
       }
@@ -124,11 +143,13 @@ class CheckoutInventoryPreparationService {
     final planner = SaleInventoryOutcomePlanner();
     final plan = planner.plan(
       lines: items
-          .map((i) => SaleInventoryLine(
-                id: i.id,
-                productId: i.productId,
-                quantity: i.quantity,
-              ))
+          .map(
+            (i) => SaleInventoryLine(
+              id: i.id,
+              productId: i.productId,
+              quantity: i.quantity,
+            ),
+          )
           .toList(),
       authority: authority,
     );
@@ -144,7 +165,7 @@ class CheckoutInventoryPreparationService {
     );
 
     final snapshotsByLineId = {
-      for (final l in buildResult.lines) l.lineId: l.snapshot
+      for (final l in buildResult.lines) l.lineId: l.snapshot,
     };
 
     final frozenItems = items.map((item) {
@@ -157,15 +178,19 @@ class CheckoutInventoryPreparationService {
 
     final outcomeName = switch (buildResult.outcome) {
       InvoiceInventoryOutcome.applied => 'APPLIED',
-      InvoiceInventoryOutcome.appliedNoInventoryImpact => 'APPLIED_NO_INVENTORY_IMPACT',
-      InvoiceInventoryOutcome.appliedInventoryPending => 'APPLIED_INVENTORY_PENDING',
+      InvoiceInventoryOutcome.appliedNoInventoryImpact =>
+        'APPLIED_NO_INVENTORY_IMPACT',
+      InvoiceInventoryOutcome.appliedInventoryPending =>
+        'APPLIED_INVENTORY_PENDING',
     };
 
     final reasonName = buildResult.reason == null
         ? null
         : switch (buildResult.reason!.code) {
-            InvoiceInventoryReasonCode.noExplicitInsumoMapping => 'NO_EXPLICIT_INSUMO_MAPPING',
-            InvoiceInventoryReasonCode.missingPublishedRecipe => 'MISSING_PUBLISHED_RECIPE',
+            InvoiceInventoryReasonCode.noExplicitInsumoMapping =>
+              'NO_EXPLICIT_INSUMO_MAPPING',
+            InvoiceInventoryReasonCode.missingPublishedRecipe =>
+              'MISSING_PUBLISHED_RECIPE',
           };
 
     final updatedInvoice = invoice.copyWith(

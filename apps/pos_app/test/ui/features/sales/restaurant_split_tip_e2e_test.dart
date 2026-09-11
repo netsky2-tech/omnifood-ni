@@ -22,6 +22,7 @@ import 'package:pos_app/domain/services/sales/split_bill_engine.dart';
 import 'package:pos_app/domain/services/sales/table_order_service.dart';
 import 'package:pos_app/domain/services/sales/tip_engine.dart';
 import 'package:pos_app/domain/services/sales/waiter_settlement_service.dart';
+import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
 import 'package:pos_app/ui/features/sales/tables/table_layout_view_model.dart';
 
@@ -105,7 +106,7 @@ void main() {
     );
     when(mockTransactionDao.getNextInvoiceSourceSequence(any)).thenAnswer((_) async => seq);
 
-    when(mockTransactionDao.executeSaleTransaction(any, any, any, any, any, any, any))
+    when(mockTransactionDao.executeSaleWithDgiTransaction(any, any, any, any, any, any, any, any))
         .thenAnswer((invocation) async {
       final inv = invocation.positionalArguments[0] as InvoiceEntity;
       final items = invocation.positionalArguments[1] as List<InvoiceItemEntity>;
@@ -157,6 +158,7 @@ void main() {
       false,
       fakeTenantConfigService,
     );
+    saleViewModel.setCompanyTaxRegime(TaxRegime.regimenGeneral);
 
     tableLayoutViewModel = TableLayoutViewModel(
       database: database,

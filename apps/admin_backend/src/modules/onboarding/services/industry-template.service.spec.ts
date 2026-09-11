@@ -276,10 +276,6 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
       recipeDetailRepo,
       recipeRepo,
       uomConversionRepo,
-      seedLinkRepo,
-      templateApplicationRepo,
-      previewService,
-      idempotencyCoordinator,
       dataSource,
     );
   });
@@ -407,8 +403,6 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
       expect(result).toEqual({
         tenantId,
         templateCode: 'CAFETERIA',
-        templateVersion: 1,
-        applicationId: expect.any(String),
         insumosCreated: 2,
         insumosSkipped: 0,
         productsCreated: 1,
@@ -459,6 +453,8 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
         stock: 0,
         is_perishable: false,
         is_active: true,
+        tax_rate: 0.15,
+        is_tax_exempt: false,
         created_at: new Date(),
         updated_at: new Date(),
       };
@@ -524,8 +520,6 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
       expect(result).toEqual({
         tenantId,
         templateCode: 'CAFETERIA',
-        templateVersion: 1,
-        applicationId: expect.any(String),
         insumosCreated: 1,
         insumosSkipped: 1,
         productsCreated: 0,
@@ -587,8 +581,6 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
       expect(result).toEqual({
         tenantId,
         templateCode: 'RETAIL_MINIMARKET',
-        templateVersion: 1,
-        applicationId: expect.any(String),
         insumosCreated: 0,
         insumosSkipped: 0,
         productsCreated: 1,

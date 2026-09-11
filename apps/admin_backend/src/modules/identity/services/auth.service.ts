@@ -113,6 +113,43 @@ export class AuthService {
     };
   }
 
+  async getMe(userId: string) {
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      select: ['id', 'name', 'email', 'role', 'tenant_id', 'is_active'],
+    });
+
+    if (!user || !user.is_active) {
+      throw new UnauthorizedException('Usuario no encontrado o inactivo');
+    }
+
+    const tenant = await this.dataSource.query(
+      'SELECT id, name, ruc, is_active FROM tenants WHERE id = $1',
+      [user.tenant_id],
+    );
+
+    return {
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        tenant_id: user.tenant_id,
+        active: user.is_active,
+        permissions: resolveInventoryBohPermissions(user.role),
+      },
+      tenant: tenant[0]
+        ? {
+            id: tenant[0].id,
+            name: tenant[0].name,
+            slug: tenant[0].name.toLowerCase().replace(/\s+/g, '-'),
+            ruc: tenant[0].ruc,
+            active: tenant[0].is_active,
+          }
+        : null,
+    };
+  }
+
   async refreshTokens(userId: string, refreshToken: string) {
     let refreshPayload: JwtRefreshPayload;
     try {

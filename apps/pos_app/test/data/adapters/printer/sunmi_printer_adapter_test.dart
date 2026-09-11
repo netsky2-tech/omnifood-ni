@@ -1,6 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_app/data/adapters/printer/sunmi_printer_adapter.dart';
+import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'package:pos_app/domain/models/sales/cashier_session.dart';
 import 'package:pos_app/domain/models/sales/invoice.dart';
 import 'package:pos_app/domain/models/sales/invoice_item.dart';
@@ -14,7 +17,7 @@ void main() {
   late List<MethodCall> channelLog;
   dynamic mockChannelResponse;
 
-  const channel = MethodChannel('com.omnifood.pos/sunmi_printer');
+  const channel = MethodChannel('com.nhilos.pos/sunmi_printer');
 
   setUp(() {
     channelLog = [];
@@ -107,18 +110,83 @@ void main() {
         items: testItems,
         payments: testPayments,
         businessName: 'NHILOS POS Sunmi Test',
+        taxRegime: TaxRegime.regimenGeneral,
       );
 
       expect(result.isSuccess, isTrue);
       expect(channelLog.any((c) => c.method == 'printRawBytes'), isTrue);
     });
 
-    test('printInvoice returns failure when out of paper without crashing', () async {
+    test('printInvoice converts a configured PNG into an ESC/POS raster command', () async {
+      mockChannelResponse = 'READY';
+      final png = base64Decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=');
+
+      final result = await adapter.printInvoice(
+        testInvoice,
+        items: testItems,
+        payments: testPayments,
+        taxRegime: TaxRegime.regimenGeneral,
+        logoRasterBytes: png,
+      );
+
+      final call = channelLog.firstWhere((entry) => entry.method == 'printRawBytes');
+      final bytes = (call.arguments as Map<dynamic, dynamic>)['bytes'] as List<int>;
+      expect(result.isSuccess, isTrue);
+      final rasterStart = bytes.indexWhere((value) => value == 0x1D);
+      final hasRaster = List.generate(bytes.length - 2, (index) => index).any(
+        (index) => bytes[index] == 0x1D && bytes[index + 1] == 0x76 && bytes[index + 2] == 0x30,
+      );
+      expect(rasterStart, greaterThanOrEqualTo(0));
+      expect(hasRaster, isTrue);
+      expect(bytes, isNot(contains(0x89))); // The PNG payload itself is never appended.
+    });
+
+    test('invalid logo does not prevent Sunmi receipt text from printing', () async {
+      mockChannelResponse = 'READY';
+      final result = await adapter.printInvoice(
+        testInvoice,
+        items: testItems,
+        payments: testPayments,
+        taxRegime: TaxRegime.regimenGeneral,
+        logoRasterBytes: [1, 2, 3],
+      );
+
+      expect(result.isSuccess, isTrue);
+      final call = channelLog.firstWhere((entry) => entry.method == 'printRawBytes');
+      final bytes = (call.arguments as Map<dynamic, dynamic>)['bytes'] as List<int>;
+      expect(bytes, isNot(contains(0x89)));
+    });
+
+    test('returns failure when the print transport is unavailable', () async {
+        mockChannelResponse = MissingPluginException();
+
+        final result = await adapter.printRawEscPos([0x1B, 0x40]);
+
+        expect(result.isSuccess, isFalse);
+        expect(result.status, PrinterStatus.error);
+        expect(result.message, contains('no disponible'));
+      });
+
+      test('returns failure when the native transport rejects unavailable hardware', () async {
+        mockChannelResponse = PlatformException(
+          code: 'NOT_CONNECTED',
+          message: 'Servicio de impresora Sunmi no conectado',
+        );
+
+        final result = await adapter.printRawEscPos([0x1B, 0x40]);
+
+        expect(result.isSuccess, isFalse);
+        expect(result.status, PrinterStatus.error);
+        expect(result.message, contains('no conectado'));
+      });
+
+      test('printInvoice returns failure when out of paper without crashing', () async {
       mockChannelResponse = 'OUT_OF_PAPER';
       final result = await adapter.printInvoice(
         testInvoice,
         items: testItems,
         payments: testPayments,
+        taxRegime: TaxRegime.regimenGeneral,
       );
 
       expect(result.isSuccess, isFalse);
