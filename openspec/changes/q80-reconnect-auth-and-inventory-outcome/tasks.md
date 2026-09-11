@@ -106,9 +106,9 @@ The baseline is committed at `eb70b2d`; after baseline planning semantics, the t
 - [x] Verify `cd apps/admin_backend && npm run test:db -- --runInBand`; rollback only unused additive schema.
 
 ### 10. Remediation application/API (PR 10; 220–300 lines)
-- [ ] Implement DTO/controller/permission guard/service/module registration for `POST /inventory/remediations/sale-inventory`; actor comes only from JWT principal and owner/manager permission.
-- [ ] RED/GREEN/TRIANGULATE/REFACTOR: test actor spoof rejection, tenant/RLS isolation, unchanged pending source validation, SERIALIZABLE all-or-nothing stock/Kardex/audit/receipt writes, same/different idempotent replay and already-remediated conflict.
-- [ ] Verify `cd apps/admin_backend && npm test -- --runInBand src/modules/inventory` and focused e2e; rollback endpoint/module without deleting evidence.
+- [x] Implement DTO/controller/permission guard/service/module registration for `POST /inventory/remediations/sale-inventory`; actor comes only from JWT principal and owner/manager permission.
+- [x] RED/GREEN/TRIANGULATE/REFACTOR: test actor spoof rejection, tenant/RLS isolation, unchanged pending source validation, SERIALIZABLE all-or-nothing stock/Kardex/audit/receipt writes, same/different idempotent replay and already-remediated conflict.
+- [x] Verify `cd apps/admin_backend && npm test -- --runInBand src/modules/inventory` and focused e2e; rollback endpoint/module without deleting evidence.
 
 ### 11. Readiness/UI warning and integration (PR 11; 160–240 lines)
 - [ ] Add `inventoryEnrichmentPendingCount`/warning adapter and POS warning UI without changing `SALE_READY`, activation, setup, or checkout blocking predicates.

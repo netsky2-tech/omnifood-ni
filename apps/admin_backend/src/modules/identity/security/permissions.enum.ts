@@ -24,6 +24,7 @@ export enum AppPermission {
   ONBOARDING_PRODUCT_IMPORT_MANAGE = 'onboarding:product_import:manage',
   ONBOARDING_ACTIVATION_MANAGE = 'onboarding:activation:manage',
   ONBOARDING_SUPPORT_ASSIST = 'onboarding:support:assist',
+  INVENTORY_REMEDIATION_EXECUTE = 'inventory.remediation.execute',
 }
 
 export type Permission = `${AppPermission}` | AppPermission;
@@ -53,6 +54,7 @@ export const APP_PERMISSIONS = {
     AppPermission.ONBOARDING_PRODUCT_IMPORT_MANAGE,
   ONBOARDING_ACTIVATION_MANAGE: AppPermission.ONBOARDING_ACTIVATION_MANAGE,
   ONBOARDING_SUPPORT_ASSIST: AppPermission.ONBOARDING_SUPPORT_ASSIST,
+  INVENTORY_REMEDIATION_EXECUTE: AppPermission.INVENTORY_REMEDIATION_EXECUTE,
 } as const;
 
 export const ALL_APP_PERMISSIONS = Object.values(AppPermission);
@@ -86,6 +88,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
     AppPermission.ONBOARDING_TEMPLATE_APPLY,
     AppPermission.ONBOARDING_PRODUCT_IMPORT_MANAGE,
     AppPermission.ONBOARDING_ACTIVATION_MANAGE,
+    AppPermission.INVENTORY_REMEDIATION_EXECUTE,
   ],
   [UserRole.MANAGER]: [
     AppPermission.SALES_VOID_INVOICE,
@@ -100,6 +103,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
     AppPermission.LOYALTY_CUSTOMER_READ,
     AppPermission.LOYALTY_HISTORY_READ,
     AppPermission.ONBOARDING_READ,
+    AppPermission.INVENTORY_REMEDIATION_EXECUTE,
   ],
   [UserRole.CASHIER]: [],
   [UserRole.WAITER]: [],

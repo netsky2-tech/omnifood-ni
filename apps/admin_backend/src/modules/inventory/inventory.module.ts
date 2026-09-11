@@ -25,6 +25,7 @@ import { KardexCorrection } from './entities/kardex-correction.entity';
 import { ProductInventoryMappingVersion } from './entities/product-inventory-mapping-version.entity';
 import { InventoryRemediationReceipt } from './entities/inventory-remediation-receipt.entity';
 import { ProductInventoryMappingService } from './services/product-inventory-mapping.service';
+import { SaleInventoryRemediationService } from './services/sale-inventory-remediation.service';
 import { InventoryService } from './inventory.service';
 import { PurchaseService } from './purchase.service';
 import { ShrinkageService } from './shrinkage.service';
@@ -55,6 +56,7 @@ import { CountSessionService } from './count-session.service';
 import { GovernanceApprovalService } from './services/governance-approval.service';
 import { KardexRegularizationService } from './services/kardex-regularization.service';
 import { RegularizationController } from './controllers/regularization.controller';
+import { RemediationController } from './controllers/remediation.controller';
 import { InventoryReportsService } from './services/inventory-reports.service';
 import { InventoryReportsController } from './controllers/inventory-reports.controller';
 import { AuditModule } from '../audit/audit.module';
@@ -93,6 +95,7 @@ import { AuditModule } from '../audit/audit.module';
   controllers: [
     InventoryMovementController,
     RegularizationController,
+    RemediationController,
     InventoryReportsController,
     ProductController,
     RecipeController,
@@ -119,6 +122,7 @@ import { AuditModule } from '../audit/audit.module';
     FxRateResolverService,
     ProductService,
     ProductInventoryMappingService,
+    SaleInventoryRemediationService,
     {
       provide: FORENSIC_ALERT_DISPATCHER,
       useValue: {
@@ -150,6 +154,7 @@ import { AuditModule } from '../audit/audit.module';
     UomConversionCalculator,
     ProductService,
     ProductInventoryMappingService,
+    SaleInventoryRemediationService,
   ],
 })
 export class InventoryModule {}

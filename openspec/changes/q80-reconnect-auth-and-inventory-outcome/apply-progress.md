@@ -812,4 +812,37 @@ Post-HEAD work previously recorded in this workspace completed 5B1a1, 5B1a2, 5B1
 - **Verification**: `npm test -- --runInBand src/migrations/1806*` passed; `npm run test:db -- --runInBand 1806*` passed.
 - **Rollback boundary**: revert `apps/admin_backend/src/migrations/1806*` and `inventory-remediation-receipt.entity.ts`.
 
+## Slice 10 — Remediation Application and API Complete
+
+- **Completed tasks**: all Slice 10 tasks marked `[x]` in `tasks.md`.
+- **RBAC & Permissions**:
+  - Added `AppPermission.INVENTORY_REMEDIATION_EXECUTE = 'inventory.remediation.execute'`.
+  - Default permissions granted to `OWNER` and `MANAGER` roles; denied to `CASHIER` and `WAITER`.
+- **API & Validation (`POST /inventory/remediations/sale-inventory`)**:
+  - `SaleInventoryRemediationDto`: validates `{ idempotencyKey, invoiceId, recipeVersionId, reason }`.
+  - Defensive rejection of actor spoofing: body fields `actor`, `actor_user_id`, `actor_role`, `userId`, `role` throw `BadRequestException`.
+  - `RemediationController`: protected by `AuthGuard`, `RolesGuard`, `PermissionsGuard`, `TenantInterceptor`, `@Roles(OWNER, MANAGER)`, `@RequirePermissions(INVENTORY_REMEDIATION_EXECUTE)`.
+  - Actor identity (`userId`, `role`) derived strictly from authenticated JWT principal (`request.user`).
+- **Application Service (`SaleInventoryRemediationService`)**:
+  - Canonical UTF-8 SHA-256 request hash verification.
+  - Idempotent replay: duplicate key with identical hash returns existing receipt without side effects.
+  - Idempotency mismatch: duplicate key with differing hash throws `409 ConflictException('IDEMPOTENCY_MISMATCH')`.
+  - Duplicate remediation conflict: invoice already remediated throws `409 ConflictException('ALREADY_REMEDIATED')` with prior receipt ID.
+  - SERIALIZABLE transaction:
+    - Pessimistic write lock on pending invoice; validates `inventoryOutcome === 'APPLIED_INVENTORY_PENDING'`.
+    - Pessimistic write lock on source sale receipt.
+    - Validates published/active recipe version (`is_active = true`).
+    - Pessimistic write lock on insumos, stock deduction, and Kardex movements (`source_document_type = 'INVENTORY_REMEDIATION'`, `source_document_id = 'remediation:<receiptId>'`, deterministic correlation ID).
+    - Appends immutable `AuditLog` entry.
+    - Inserts `InventoryRemediationReceipt` with status `APPLIED`.
+    - In case of failure: rolls back all writes atomically.
+    - Original invoice, items, and outcomes remain untouched.
+- **TDD Cycle**:
+  - RED: Service and controller tests authored and executed.
+  - GREEN: Unit tests passed (6/6 service tests passed; 3/3 controller tests passed; 10/10 permission tests passed).
+  - REFACTOR: Build succeeded cleanly (`npm run build`), `git diff --check` passed.
+- **Verification**: `npm test -- --runInBand src/modules/inventory/services/sale-inventory-remediation.service.spec.ts src/modules/inventory/controllers/remediation.controller.spec.ts src/modules/identity/security/permissions.enum.spec.ts` passed (19 passed).
+- **Rollback boundary**: revert `apps/admin_backend/src/modules/inventory/services/sale-inventory-remediation.service.ts`, `remediation.controller.ts`, `sale-inventory-remediation.dto.ts`, and module registration.
+
+
 
