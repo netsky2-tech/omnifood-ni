@@ -1,0 +1,8 @@
+version: 2
+secret:
+  ignored_paths:
+    - '**/__tests__/**'
+    - '**/test/**'
+    - '**/*.spec.ts'
+    - '**/*.test.ts'
+    - '**/*_test.dart'
