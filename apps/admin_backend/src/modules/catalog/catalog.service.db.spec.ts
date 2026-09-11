@@ -9,6 +9,7 @@ import { CatalogService, DEFAULT_CATALOG_SEED } from './catalog.service';
 import { CatalogValue } from './entities/catalog-value.entity';
 import { Tenant } from '../tenant/entities/tenant.entity';
 import { CATALOG_TYPE, type CatalogType } from './catalog-type';
+import { ChangeLogService } from '../audit/change-log.service';
 
 const postgresConnection = {
   host: process.env.DB_HOST ?? '127.0.0.1',
@@ -58,7 +59,18 @@ async function createTestHarness() {
   });
   await clientDs.initialize();
 
-  const service = new CatalogService(clientDs);
+  const changeLogService: jest.Mocked<
+    Pick<ChangeLogService, 'log' | 'findByTarget' | 'findByTenant'>
+  > = {
+    log: jest.fn().mockResolvedValue(undefined),
+    findByTarget: jest.fn().mockResolvedValue([]),
+    findByTenant: jest.fn().mockResolvedValue([]),
+  };
+
+  const service = new CatalogService(
+    clientDs,
+    changeLogService as unknown as ChangeLogService,
+  );
 
   return {
     service,

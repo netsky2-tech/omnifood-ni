@@ -867,7 +867,11 @@ export class ActivationService {
                 id: attempt.verificationTicketId,
               },
             });
-            if (invoice) {
+            if (
+              invoice &&
+              !invoice.isCanceled &&
+              invoice.paymentStatus === 'paid'
+            ) {
               converged = true;
               evidenceRef = `VERIFICATION_INVOICE_${invoice.id}`;
             }

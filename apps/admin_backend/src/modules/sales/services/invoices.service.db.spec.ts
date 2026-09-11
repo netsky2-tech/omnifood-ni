@@ -3,7 +3,11 @@ import { DataSource, type QueryRunner, type Repository } from 'typeorm';
 import { BohInventoryLedgerFoundation1766000000000 } from '../../../migrations/1766000000000-BohInventoryLedgerFoundation';
 import { AddDeterministicSyncSequencing1780000000000 } from '../../../migrations/1780000000000-AddDeterministicSyncSequencing';
 import { AddCreditNoteProvenance1782000000000 } from '../../../migrations/1782000000000-AddCreditNoteProvenance';
+import { AddSaleInventoryOutcomeColumns1803000000000 } from '../../../migrations/1803000000000-AddSaleInventoryOutcomeColumns';
+import { AddAcceptedAtToInventorySyncReceipts1805000000000 } from '../../../migrations/1805000000000-AddAcceptedAtToInventorySyncReceipts';
 import { Insumo } from '../../inventory/entities/insumo.entity';
+import { Product, ProductType } from '../../inventory/entities/product.entity';
+import { ProductInventoryMappingVersion } from '../../inventory/entities/product-inventory-mapping-version.entity';
 import {
   InventoryMovement,
   MovementType,
@@ -114,6 +118,19 @@ async function withIsolatedSchema(
     await queryRunner.connect();
     await queryRunner.query(`SET search_path TO "${schema}"`);
     await queryRunner.query(`SET statement_timeout TO '15000ms'`);
+    await queryRunner.query(`
+      CREATE TABLE IF NOT EXISTS invoices (
+        id varchar PRIMARY KEY,
+        tenant_id varchar NOT NULL,
+        type varchar NOT NULL DEFAULT 'regular',
+        is_canceled boolean NOT NULL DEFAULT false
+      );
+      CREATE TABLE IF NOT EXISTS invoice_items (
+        id varchar PRIMARY KEY,
+        tenant_id varchar NOT NULL,
+        invoice_id varchar NOT NULL
+      );
+    `);
 
     await assertion({ dataSource, queryRunner, schema });
   } finally {
@@ -689,6 +706,8 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
             InventoryMovement,
             Insumo,
             UomConversion,
+            Product,
+            ProductInventoryMappingVersion,
           ],
           synchronize: true,
         });
@@ -721,6 +740,26 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
             stock: 10,
             existenciaActual: 10,
             averageCost: 3.5,
+          }),
+        );
+        await dataSource.getRepository(Product).save(
+          dataSource.getRepository(Product).create({
+            id: insumoId,
+            tenant_id: tenantId,
+            name: 'Burger Bun',
+            uom: 'unit',
+            product_type: ProductType.SIMPLE,
+            tax_rate: 0.15,
+            is_tax_exempt: false,
+          }),
+        );
+        await dataSource.getRepository(ProductInventoryMappingVersion).save(
+          dataSource.getRepository(ProductInventoryMappingVersion).create({
+            id: randomUUID(),
+            tenant_id: tenantId,
+            product_id: insumoId,
+            insumo_id: insumoId,
+            effective_at: new Date(0),
           }),
         );
 
@@ -887,6 +926,12 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
           await new AddDeterministicSyncSequencing1780000000000().up(
             queryRunner,
           );
+          await new AddSaleInventoryOutcomeColumns1803000000000().up(
+            queryRunner,
+          );
+          await new AddAcceptedAtToInventorySyncReceipts1805000000000().up(
+            queryRunner,
+          );
 
           const receiptRepository =
             dataSource.getRepository(InventorySyncReceipt);
@@ -970,6 +1015,12 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
         async ({ dataSource, queryRunner }) => {
           await new BohInventoryLedgerFoundation1766000000000().up(queryRunner);
           await new AddDeterministicSyncSequencing1780000000000().up(
+            queryRunner,
+          );
+          await new AddSaleInventoryOutcomeColumns1803000000000().up(
+            queryRunner,
+          );
+          await new AddAcceptedAtToInventorySyncReceipts1805000000000().up(
             queryRunner,
           );
 

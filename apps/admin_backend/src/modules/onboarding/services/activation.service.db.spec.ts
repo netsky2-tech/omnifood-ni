@@ -23,6 +23,10 @@ import {
 } from '../entities/activation-follow-up.entity';
 import { ChangeLog } from '../../audit/entities/change-log.entity';
 import { ChangeLogService } from '../../audit/change-log.service';
+import { Invoice } from '../../sales/entities/invoice.entity';
+import { InvoiceItem } from '../../sales/entities/invoice-item.entity';
+import { InvoiceItemModifier } from '../../sales/entities/invoice-item-modifier.entity';
+import { Payment } from '../../sales/entities/payment.entity';
 import { SupportOverrideAction } from '../dto/activation.dto';
 import { ActivationService } from './activation.service';
 import { FiscalConfigVersionService } from './fiscal-config-version.service';
@@ -83,6 +87,10 @@ async function withIsolatedSchema(
         ActivationCheckResult,
         ActivationFollowUp,
         ChangeLog,
+        Invoice,
+        InvoiceItem,
+        InvoiceItemModifier,
+        Payment,
       ],
       synchronize: true,
     });
@@ -104,6 +112,30 @@ async function withIsolatedSchema(
       await bootstrap.destroy();
     }
   }
+}
+
+async function persistVerificationSaleEvidence(
+  dataSource: DataSource,
+  attemptId: string,
+  tenantId: string,
+  userId: string,
+): Promise<string> {
+  const invoiceId = randomUUID();
+  await dataSource.getRepository(Invoice).save({
+    id: invoiceId,
+    tenant_id: tenantId,
+    number: `VERIFY-${invoiceId}`,
+    created_at: new Date(),
+    userId,
+    subtotal: 1,
+    totalTax: 0,
+    total: 1,
+    paymentStatus: 'paid',
+  });
+  await dataSource
+    .getRepository(ActivationAttempt)
+    .update({ id: attemptId, tenantId }, { verificationTicketId: invoiceId });
+  return invoiceId;
 }
 
 describe('ActivationService — Real PostgreSQL Persistence', () => {
@@ -331,6 +363,13 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
         );
       }
 
+      await persistVerificationSaleEvidence(
+        dataSource,
+        attempt.id,
+        tenantId,
+        'user-admin-1',
+      );
+
       // Authoritative Backend Finalization: PASS
       const finalizedPass = await activationService.finalizeActivation(
         tenantId,
@@ -530,6 +569,13 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
         devicePrincipal,
       );
 
+      await persistVerificationSaleEvidence(
+        dataSource,
+        attemptWarn.id,
+        tenantId,
+        'user-admin-1',
+      );
+
       const finalizedWarn = await activationService.finalizeActivation(
         tenantId,
         attemptWarn.id,
@@ -723,6 +769,13 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
         devicePrincipal,
       );
 
+      const verifyInvoiceId = await persistVerificationSaleEvidence(
+        dataSource,
+        attempt.id,
+        tenantId,
+        'user-operator-1',
+      );
+
       // Finalize -> PASS_WITH_WARNING
       const finalized = await activationService.finalizeActivation(
         tenantId,
@@ -757,12 +810,25 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
       expect(openedLogs.length).toBe(1);
 
       // 3. Convergence Reconciler in background:
-      // First try: POST_RECONNECT_SYNC is still WARNING, so reconciler leaves it OPEN
+      // A canceled verification sale is not valid convergence evidence.
+      await dataSource
+        .getRepository(Invoice)
+        .update(
+          { id: verifyInvoiceId, tenant_id: tenantId },
+          { isCanceled: true },
+        );
+
+      // First try: POST_RECONNECT_SYNC is still WARNING, so reconciler leaves it OPEN.
       const preReconcile =
         await activationService.reconcileFollowUpConvergence(tenantId);
       expect(preReconcile.evaluatedCount).toBe(1);
       expect(preReconcile.closedCount).toBe(0);
+      expect(preReconcile.closedFollowUpIds).toEqual([]);
       expect(preReconcile.unresolvedCount).toBe(1);
+      const unresolvedFollowUp = await followUpRepo.findOne({
+        where: { id: openFollowUps[0].id, tenantId },
+      });
+      expect(unresolvedFollowUp?.status).toBe(ActivationFollowUpStatus.OPEN);
 
       // Now terminal reconnects and sync succeeds: update check to PASS in PostgreSQL
       const checkToUpdate = await checkRepo.findOne({

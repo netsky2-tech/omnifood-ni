@@ -86,10 +86,14 @@ async function withIsolatedRolloutSchema(
         is_perishable boolean DEFAULT false,
         name varchar NOT NULL,
         uom varchar NOT NULL,
+        product_type varchar NOT NULL DEFAULT 'SIMPLE',
+        category_code varchar,
         stock numeric(12,4) DEFAULT 0,
         "averageCost" numeric(12,2) DEFAULT 0,
         "sellPrice" numeric(12,2) DEFAULT 0,
         is_active boolean DEFAULT true,
+        tax_rate numeric(5,4) NOT NULL DEFAULT 0.15,
+        is_tax_exempt boolean NOT NULL DEFAULT false,
         created_at timestamptz DEFAULT now(),
         updated_at timestamptz DEFAULT now()
       );
