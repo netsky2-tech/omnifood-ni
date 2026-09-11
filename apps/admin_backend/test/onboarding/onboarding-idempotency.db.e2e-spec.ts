@@ -153,7 +153,7 @@ describe('Onboarding Idempotency & Optimistic Concurrency (Real PostgreSQL DB)',
   it('reclaims expired lease after worker failure and increments attempt count', async () => {
     await withIdempotencyIsolatedSchema(
       'onb_idem_recovery',
-      async ({ dataSource, coordinator, tenantId }) => {
+      async ({ coordinator, tenantId }) => {
         const payload = { importSessionId: randomUUID() };
         const idempotencyKey = 'cmd-import-commit-002';
 

@@ -1,8 +1,5 @@
 import { Repository, DataSource } from 'typeorm';
-import {
-  LegacyImportIntegrityReportService,
-  LegacyScanResult,
-} from './legacy-import-integrity-report.service';
+import { LegacyImportIntegrityReportService } from './legacy-import-integrity-report.service';
 import {
   ImportStaging,
   ImportStagingStatus,
@@ -335,7 +332,9 @@ describe('LegacyImportIntegrityReportService (Unit & Triangulation / ONB1.4H)', 
     );
 
     expect(receipt.receipt_type).toBe('LEGACY_BASELINE_RECONCILIATION');
-    expect(receipt.decision).toBe(LegacyMigrationDecision.LEGACY_BASELINE_CLOSED);
+    expect(receipt.decision).toBe(
+      LegacyMigrationDecision.LEGACY_BASELINE_CLOSED,
+    );
     expect(receipt.evidence_json).toMatchObject({
       legacyBaseline: true,
       measurementEligible: false,

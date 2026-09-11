@@ -1,4 +1,4 @@
-import { UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { UnauthorizedException } from '@nestjs/common';
 import { OnboardingCatalogController } from './onboarding-catalog.controller';
 import { OnboardingCatalogService } from '../services/onboarding-catalog.service';
 import { OnboardingLifecycleState } from '../entities/onboarding-session.entity';

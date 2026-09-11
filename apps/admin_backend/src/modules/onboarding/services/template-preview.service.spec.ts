@@ -1,9 +1,6 @@
 import { Repository } from 'typeorm';
 import { TemplatePreviewService } from './template-preview.service';
 import { IndustryTemplate } from '../entities/industry-template.entity';
-import { TemplateInsumo } from '../entities/template-insumo.entity';
-import { TemplateProduct } from '../entities/template-product.entity';
-import { TemplateRecipeItem } from '../entities/template-recipe-item.entity';
 import {
   TemplateSeedLink,
   TemplateSourceItemType,

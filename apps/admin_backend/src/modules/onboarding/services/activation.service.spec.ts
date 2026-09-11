@@ -22,11 +22,7 @@ import {
   ActivationCheckStatus,
 } from '../entities/activation-check-result.entity';
 import { ActivationFollowUp } from '../entities/activation-follow-up.entity';
-import {
-  CloseActivationFollowUpDto,
-  DevicePrincipal,
-  SupportOverrideAction,
-} from '../dto/activation.dto';
+import { DevicePrincipal, SupportOverrideAction } from '../dto/activation.dto';
 import { ActivationFollowUpStatus } from '../entities/activation-follow-up.entity';
 import { Invoice } from '../../sales/entities/invoice.entity';
 
@@ -257,6 +253,7 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
       userId,
     );
 
+    expect(result).toBeDefined();
     expect(
       onboardingCatalogService.getVerificationProductCandidate,
     ).toHaveBeenCalledWith(tenantId, 'prod-custom-99');
@@ -977,7 +974,8 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
         tenantId,
         attemptId,
         {
-          reason: 'Manual approval of transient sync variance under supervision',
+          reason:
+            'Manual approval of transient sync variance under supervision',
           overrideAction: SupportOverrideAction.DISMISS_WARNING,
         },
         userId,
@@ -1036,12 +1034,16 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
       expect(diag.checksMatrix).toHaveLength(10);
       // 1 recorded + 9 missing
       expect(diag.missingChecks).toHaveLength(9);
-      expect(diag.checksMatrix.find((c) => c.checkCode === ActivationCheckCode.TERMINAL_LINKED)?.status).toBe(
-        ActivationCheckStatus.PASS,
-      );
-      expect(diag.checksMatrix.find((c) => c.checkCode === ActivationCheckCode.SQLITE_DURABILITY)?.isMissing).toBe(
-        true,
-      );
+      expect(
+        diag.checksMatrix.find(
+          (c) => c.checkCode === ActivationCheckCode.TERMINAL_LINKED,
+        )?.status,
+      ).toBe(ActivationCheckStatus.PASS);
+      expect(
+        diag.checksMatrix.find(
+          (c) => c.checkCode === ActivationCheckCode.SQLITE_DURABILITY,
+        )?.isMissing,
+      ).toBe(true);
       expect(diag.auditTrail).toHaveLength(1);
     });
   });

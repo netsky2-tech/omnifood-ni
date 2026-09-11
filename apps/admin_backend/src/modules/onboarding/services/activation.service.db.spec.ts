@@ -675,6 +675,7 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
         { candidateTerminalId: 'term-hard-01' },
         'user-operator-1',
       );
+      expect(attempt.verificationProductId).toBe(product.id);
 
       const startLogs = await changeLogRepo.find({
         where: {
@@ -757,9 +758,8 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
 
       // 3. Convergence Reconciler in background:
       // First try: POST_RECONNECT_SYNC is still WARNING, so reconciler leaves it OPEN
-      const preReconcile = await activationService.reconcileFollowUpConvergence(
-        tenantId,
-      );
+      const preReconcile =
+        await activationService.reconcileFollowUpConvergence(tenantId);
       expect(preReconcile.evaluatedCount).toBe(1);
       expect(preReconcile.closedCount).toBe(0);
       expect(preReconcile.unresolvedCount).toBe(1);
@@ -773,14 +773,13 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
         },
       });
       expect(checkToUpdate).toBeDefined();
-      checkToUpdate!.status = ActivationCheckStatus.PASS;
-      checkToUpdate!.evidenceRef = 'SYNC_BATCH_RECONNECTED_OK_999';
-      await checkRepo.save(checkToUpdate!);
+      checkToUpdate.status = ActivationCheckStatus.PASS;
+      checkToUpdate.evidenceRef = 'SYNC_BATCH_RECONNECTED_OK_999';
+      await checkRepo.save(checkToUpdate);
 
       // Run background convergence reconciler
-      const postReconcile = await activationService.reconcileFollowUpConvergence(
-        tenantId,
-      );
+      const postReconcile =
+        await activationService.reconcileFollowUpConvergence(tenantId);
       expect(postReconcile.evaluatedCount).toBe(1);
       expect(postReconcile.closedCount).toBe(1);
       expect(postReconcile.closedFollowUpIds).toContain(openFollowUps[0].id);
@@ -810,7 +809,8 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
         tenantId,
         attempt.id,
         {
-          reason: 'Periodic compliance review and diagnostic verification performed by L2 support',
+          reason:
+            'Periodic compliance review and diagnostic verification performed by L2 support',
           overrideAction: SupportOverrideAction.RECORD_DIAGNOSTIC_ASSIST,
           notes: 'Terminal hardware validated on site',
         },

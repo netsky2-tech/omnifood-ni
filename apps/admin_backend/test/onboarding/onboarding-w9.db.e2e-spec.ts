@@ -480,7 +480,7 @@ describe('W9 Backend PostgreSQL E2E — ODAV-31..34 Specifications', () => {
   it('ODAV-34: Industry template application has blast radius = 0 on other tenants in PostgreSQL', async () => {
     await withOnboardingIsolatedSchema(
       'odav34',
-      async ({ app, dataSource, tenantAId, tenantBId, ownerTokenA }) => {
+      async ({ app, dataSource, tenantBId, ownerTokenA }) => {
         // 1. Seed Tenant B with 3 existing products and 2 insumos
         const prodRepo = dataSource.getRepository(Product);
         const insumoRepo = dataSource.getRepository(Insumo);

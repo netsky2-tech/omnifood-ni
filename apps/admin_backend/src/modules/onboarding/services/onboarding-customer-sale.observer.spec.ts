@@ -1,6 +1,4 @@
 import { OnboardingCustomerSaleObserver } from './onboarding-customer-sale.observer';
-import { OnboardingSessionService } from './onboarding-session.service';
-import { OnboardingTelemetryService } from '../telemetry/onboarding-telemetry.service';
 import { OnboardingTelemetryEventName } from '../telemetry/onboarding-telemetry.types';
 import {
   OnboardingSession,
@@ -41,10 +39,12 @@ describe('OnboardingCustomerSaleObserver (Unit — ONB1.9G)', () => {
         if (tenantId === 'tenant-123') return { ...sessionState };
         return null;
       }),
-      saveSession: jest.fn().mockImplementation(async (session: OnboardingSession) => {
-        sessionState = { ...session };
-        return session;
-      }),
+      saveSession: jest
+        .fn()
+        .mockImplementation(async (session: OnboardingSession) => {
+          sessionState = { ...session };
+          return session;
+        }),
     };
 
     mockTelemetryService = {
@@ -72,7 +72,9 @@ describe('OnboardingCustomerSaleObserver (Unit — ONB1.9G)', () => {
     expect(result.firstCustomerSaleAt).toEqual(customerSaleAt);
 
     // INVARIANT CHECK: firstSuccessfulSaleAt and activatedAt must remain identical to their historical value
-    expect(sessionState.firstSuccessfulSaleAt).toEqual(initialVerificationSaleAt);
+    expect(sessionState.firstSuccessfulSaleAt).toEqual(
+      initialVerificationSaleAt,
+    );
     expect(sessionState.activatedAt).toEqual(initialActivatedAt);
     expect(sessionState.firstCustomerSaleAt).toEqual(customerSaleAt);
     expect(sessionState.optimisticVersion).toBe(6);
@@ -129,7 +131,9 @@ describe('OnboardingCustomerSaleObserver (Unit — ONB1.9G)', () => {
     expect(result2.isFirstCustomerSale).toBe(false);
     // Invariant: still matches the first sale timestamp
     expect(sessionState.firstCustomerSaleAt).toEqual(firstSaleAt);
-    expect(sessionState.firstSuccessfulSaleAt).toEqual(initialVerificationSaleAt);
+    expect(sessionState.firstSuccessfulSaleAt).toEqual(
+      initialVerificationSaleAt,
+    );
   });
 
   it('handles case where firstSuccessfulSaleAt was not yet recorded', async () => {

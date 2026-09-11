@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ConflictException, BadRequestException } from '@nestjs/common';
+import { ConflictException } from '@nestjs/common';
 import {
   OnboardingIdempotencyRecord,
   OnboardingIdempotencyStatus,

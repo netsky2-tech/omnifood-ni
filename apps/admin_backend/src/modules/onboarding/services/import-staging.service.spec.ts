@@ -31,44 +31,6 @@ describe('ImportStagingService (Unit & Triangulation)', () => {
   const tenantId = 'tenant-uuid-1';
   const sessionToken = '11111111-2222-3333-4444-555555555555';
 
-  function createMockStagingRow(
-    partial: Partial<ImportStaging>,
-  ): ImportStaging {
-    return {
-      id: 'staged-' + Math.random().toString(36).substring(7),
-      tenant_id: tenantId,
-      token_sesion_importacion: sessionToken,
-      row_ordinal: 1,
-      matched_by: null,
-      target_product_id: null,
-      fields_to_change: null,
-      conflict_reason: null,
-      unsupported_fields: null,
-      unknown_columns: null,
-      raw_nombre: null,
-      raw_sku: null,
-      raw_precio_venta: null,
-      raw_costo_insumo: null,
-      raw_categoria: null,
-      raw_porcentaje_iva: null,
-      raw_uom: null,
-      raw_stock_inicial: null,
-      parsed_nombre: null,
-      parsed_sku: null,
-      parsed_precio_venta: null,
-      parsed_costo_insumo: null,
-      parsed_categoria: null,
-      parsed_porcentaje_iva: null,
-      parsed_uom: null,
-      parsed_stock_inicial: null,
-      estado_fila: ImportStagingStatus.PENDIENTE,
-      mensaje_error_detalle: null,
-      created_at: new Date(),
-      updated_at: new Date(),
-      ...partial,
-    };
-  }
-
   beforeEach(() => {
     stagingRepo = {
       find: jest.fn(),

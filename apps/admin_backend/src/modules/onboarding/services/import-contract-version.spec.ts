@@ -1,11 +1,9 @@
 import {
-  CANONICAL_IMPORT_CONTRACT_V1,
   getCanonicalImportContract,
   generateOfficialProductTemplateCsv,
   normalizeHeaderName,
   isUnsupportedColumn,
   isUnknownColumn,
-  CANONICAL_COLUMN_NAMES,
   UNSUPPORTED_COLUMNS_REASONS,
 } from './import-contract-version';
 

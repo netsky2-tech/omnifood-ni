@@ -3,11 +3,13 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
-import { EventEmitter2 } from '@nestjs/event-emitter';
 import * as request from 'supertest';
 import { DataSource } from 'typeorm';
 import { Tenant } from '../../src/modules/tenant/entities/tenant.entity';
-import { User, UserRole } from '../../src/modules/identity/entities/user.entity';
+import {
+  User,
+  UserRole,
+} from '../../src/modules/identity/entities/user.entity';
 import { SecurityProfile } from '../../src/modules/identity/entities/security-profile.entity';
 import { SystemParametersConfig } from '../../src/modules/inventory/entities/system-parameters-config.entity';
 import {
@@ -15,7 +17,10 @@ import {
   ProductType,
 } from '../../src/modules/inventory/entities/product.entity';
 import { Insumo } from '../../src/modules/inventory/entities/insumo.entity';
-import { Recipe, IngredientType } from '../../src/modules/inventory/entities/recipe.entity';
+import {
+  Recipe,
+  IngredientType,
+} from '../../src/modules/inventory/entities/recipe.entity';
 import {
   RecipeVersion,
   RecipePublicationState,
@@ -50,7 +55,6 @@ import { ActivationCheckResult } from '../../src/modules/onboarding/entities/act
 import { ActivationFollowUp } from '../../src/modules/onboarding/entities/activation-follow-up.entity';
 import { OnboardingTelemetryEvent } from '../../src/modules/onboarding/entities/onboarding-telemetry-event.entity';
 import { ChangeLog } from '../../src/modules/audit/entities/change-log.entity';
-import { ChangeLogService } from '../../src/modules/audit/change-log.service';
 
 import { OnboardingRolloutController } from '../../src/modules/onboarding/controllers/onboarding-rollout.controller';
 import { OnboardingFeatureRolloutService } from '../../src/modules/onboarding/services/onboarding-feature-rollout.service';
@@ -216,7 +220,7 @@ describe('ONB1.10G: Rollback Rehearsal & Controlled Degradation Suite (PostgreSQ
     });
 
     // 5. Seed Template Recipe as DRAFT/SUGGESTED
-    const recipe = await dataSource.getRepository(Recipe).save({
+    await dataSource.getRepository(Recipe).save({
       id: randomUUID(),
       tenant_id: tenantId,
       productId: seededProductId,
@@ -256,15 +260,23 @@ describe('ONB1.10G: Rollback Rehearsal & Controlled Degradation Suite (PostgreSQ
         RolesGuard,
         PermissionsGuard,
         { provide: DataSource, useValue: dataSource },
-        { provide: 'TenantRepository', useValue: dataSource.getRepository(Tenant) },
+        {
+          provide: 'TenantRepository',
+          useValue: dataSource.getRepository(Tenant),
+        },
         { provide: 'UserRepository', useValue: dataSource.getRepository(User) },
-        { provide: 'SecurityProfileRepository', useValue: dataSource.getRepository(SecurityProfile) },
+        {
+          provide: 'SecurityProfileRepository',
+          useValue: dataSource.getRepository(SecurityProfile),
+        },
         OnboardingFeatureRolloutService,
       ],
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+    app.useGlobalPipes(
+      new ValidationPipe({ whitelist: true, transform: true }),
+    );
     await app.init();
 
     jwtService = moduleFixture.get<JwtService>(JwtService);
@@ -307,13 +319,15 @@ describe('ONB1.10G: Rollback Rehearsal & Controlled Degradation Suite (PostgreSQ
       where: { id: seededProductId, tenant_id: tenantId },
     });
     expect(prod).toBeDefined();
-    expect(prod!.name).toBe('Valid Product Created In Onboarding');
+    expect(prod.name).toBe('Valid Product Created In Onboarding');
 
-    const fiscal = await dataSource.getRepository(FiscalConfigRevision).findOne({
-      where: { tenant_id: tenantId, revision: 1 },
-    });
+    const fiscal = await dataSource
+      .getRepository(FiscalConfigRevision)
+      .findOne({
+        where: { tenant_id: tenantId, revision: 1 },
+      });
     expect(fiscal).toBeDefined();
-    expect(fiscal!.fingerprint).toBe('fp-valid-fiscal-revision-1');
+    expect(fiscal.fingerprint).toBe('fp-valid-fiscal-revision-1');
   });
 
   it('INVARIANT 2: Rollback NEVER truncates import staging globally or destroys staging trace', async () => {
@@ -344,10 +358,16 @@ describe('ONB1.10G: Rollback Rehearsal & Controlled Degradation Suite (PostgreSQ
       where: { tenantId },
     });
     expect(session).toBeDefined();
-    expect(session!.onboardingStartedAt.toISOString()).toBe(seededStartedAt.toISOString());
-    expect(session!.saleReadyFirstAt?.toISOString()).toBe(seededSaleReadyFirstAt.toISOString());
-    expect(session!.activatedAt?.toISOString()).toBe(seededActivatedAt.toISOString());
-    expect(session!.lifecycleState).toBe(OnboardingLifecycleState.ACTIVATED);
+    expect(session.onboardingStartedAt.toISOString()).toBe(
+      seededStartedAt.toISOString(),
+    );
+    expect(session.saleReadyFirstAt?.toISOString()).toBe(
+      seededSaleReadyFirstAt.toISOString(),
+    );
+    expect(session.activatedAt?.toISOString()).toBe(
+      seededActivatedAt.toISOString(),
+    );
+    expect(session.lifecycleState).toBe(OnboardingLifecycleState.ACTIVATED);
   });
 
   it('INVARIANT 6: Rollback NEVER auto-publishes recipes (remains DRAFT/SUGGESTED)', async () => {
@@ -355,7 +375,11 @@ describe('ONB1.10G: Rollback Rehearsal & Controlled Degradation Suite (PostgreSQ
       where: { tenant_id: tenantId },
     });
     expect(recipeVersions.length).toBe(1);
-    expect(recipeVersions[0].publication_state).toBe(RecipePublicationState.DRAFT);
-    expect(recipeVersions[0].suggestion_state).toBe(RecipeSuggestionState.SUGGESTED);
+    expect(recipeVersions[0].publication_state).toBe(
+      RecipePublicationState.DRAFT,
+    );
+    expect(recipeVersions[0].suggestion_state).toBe(
+      RecipeSuggestionState.SUGGESTED,
+    );
   });
 });

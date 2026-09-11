@@ -7,10 +7,13 @@ import * as request from 'supertest';
 import { DataSource } from 'typeorm';
 
 import { Tenant } from '../../src/modules/tenant/entities/tenant.entity';
-import { User, UserRole } from '../../src/modules/identity/entities/user.entity';
+import {
+  User,
+  UserRole,
+} from '../../src/modules/identity/entities/user.entity';
 import { SecurityProfile } from '../../src/modules/identity/entities/security-profile.entity';
 import { SystemParametersConfig } from '../../src/modules/inventory/entities/system-parameters-config.entity';
-import { Product, ProductType } from '../../src/modules/inventory/entities/product.entity';
+import { Product } from '../../src/modules/inventory/entities/product.entity';
 import { FiscalConfigRevision } from '../../src/modules/onboarding/entities/fiscal-config-revision.entity';
 import {
   OnboardingSession,
@@ -90,7 +93,10 @@ describe('ONB1.10C: Security & Multi-Tenant Isolation Hardening (Real PostgreSQL
   beforeAll(async () => {
     schemaName = `onb_sec_iso_${randomUUID().replace(/-/g, '')}`;
 
-    const bootstrap = new DataSource({ type: 'postgres', ...postgresConnection });
+    const bootstrap = new DataSource({
+      type: 'postgres',
+      ...postgresConnection,
+    });
     await bootstrap.initialize();
     await bootstrap.query(`CREATE SCHEMA "${schemaName}"`);
     await bootstrap.destroy();
@@ -126,8 +132,16 @@ describe('ONB1.10C: Security & Multi-Tenant Isolation Hardening (Real PostgreSQL
 
     const tenantRepo = dataSource.getRepository(Tenant);
     await tenantRepo.save([
-      tenantRepo.create({ id: tenantAId, name: 'Tenant A Isolation Corp', is_active: true }),
-      tenantRepo.create({ id: tenantBId, name: 'Tenant B Isolation Corp', is_active: true }),
+      tenantRepo.create({
+        id: tenantAId,
+        name: 'Tenant A Isolation Corp',
+        is_active: true,
+      }),
+      tenantRepo.create({
+        id: tenantBId,
+        name: 'Tenant B Isolation Corp',
+        is_active: true,
+      }),
     ]);
 
     const moduleRef: TestingModule = await Test.createTestingModule({
@@ -216,7 +230,10 @@ describe('ONB1.10C: Security & Multi-Tenant Isolation Hardening (Real PostgreSQL
                 .count({ where: { tenant_id: tId, is_active: true } });
               return {
                 saleReady: prodCount > 0,
-                catalog: { sellableProductCount: prodCount, hasSellableProduct: prodCount > 0 },
+                catalog: {
+                  sellableProductCount: prodCount,
+                  hasSellableProduct: prodCount > 0,
+                },
                 fiscal: { minimumConfigurationValid: true },
                 identity: { tenantExists: true },
                 blockers: prodCount > 0 ? [] : ['CATALOG_NO_SELLABLE_PRODUCTS'],
@@ -227,15 +244,17 @@ describe('ONB1.10C: Security & Multi-Tenant Isolation Hardening (Real PostgreSQL
         {
           provide: OnboardingStateReconciler,
           useValue: {
-            reconcile: jest.fn().mockImplementation(async (tId: string, readiness: any) => {
-              const session = await dataSource
-                .getRepository(OnboardingSession)
-                .findOne({ where: { tenantId: tId } });
-              if (session && readiness.saleReady) {
-                session.lifecycleState = OnboardingLifecycleState.SALE_READY;
-              }
-              return session;
-            }),
+            reconcile: jest
+              .fn()
+              .mockImplementation(async (tId: string, readiness: any) => {
+                const session = await dataSource
+                  .getRepository(OnboardingSession)
+                  .findOne({ where: { tenantId: tId } });
+                if (session && readiness.saleReady) {
+                  session.lifecycleState = OnboardingLifecycleState.SALE_READY;
+                }
+                return session;
+              }),
           },
         },
         {
@@ -394,7 +413,9 @@ describe('ONB1.10C: Security & Multi-Tenant Isolation Hardening (Real PostgreSQL
   it('2. Forged tenant parameters in query or body NEVER alter authenticated scope (Rule 62)', async () => {
     // Attacker with Tenant B token tries to query Tenant A by injecting tenant_id query parameter
     const queryTamperRes = await request(app.getHttpServer())
-      .get(`/api/onboarding/session?tenant_id=${tenantAId}&tenantId=${tenantAId}`)
+      .get(
+        `/api/onboarding/session?tenant_id=${tenantAId}&tenantId=${tenantAId}`,
+      )
       .set('Authorization', `Bearer ${ownerTokenB}`)
       .expect(200);
 
@@ -406,7 +427,11 @@ describe('ONB1.10C: Security & Multi-Tenant Isolation Hardening (Real PostgreSQL
     const bodyTamperRes = await request(app.getHttpServer())
       .post('/api/onboarding/session/start')
       .set('Authorization', `Bearer ${ownerTokenB}`)
-      .send({ tenantId: tenantAId, tenant_id: tenantAId, source: 'SETUP_CENTER' })
+      .send({
+        tenantId: tenantAId,
+        tenant_id: tenantAId,
+        source: 'SETUP_CENTER',
+      })
       .expect(200);
 
     expect(bodyTamperRes.body.session.tenantId).toBe(tenantBId);
@@ -470,7 +495,9 @@ describe('ONB1.10C: Security & Multi-Tenant Isolation Hardening (Real PostgreSQL
   it('5. Device Evidence Trust Boundary: detects and rejects DevicePrincipal forgery (Rule 63)', async () => {
     // Ensure Tenant A session is in SALE_READY
     const sessionRepo = dataSource.getRepository(OnboardingSession);
-    let sessionA = await sessionRepo.findOne({ where: { tenantId: tenantAId } });
+    let sessionA = await sessionRepo.findOne({
+      where: { tenantId: tenantAId },
+    });
     if (!sessionA) {
       sessionA = sessionRepo.create({
         tenantId: tenantAId,
@@ -500,7 +527,9 @@ describe('ONB1.10C: Security & Multi-Tenant Isolation Hardening (Real PostgreSQL
         declarativeTenantId: randomUUID(), // Forged tenant!
       });
     expect(forgeryRes1.status).toBe(403);
-    expect(forgeryRes1.body.message).toContain('DEVICE_PRINCIPAL_FORGERY_DETECTED');
+    expect(forgeryRes1.body.message).toContain(
+      'DEVICE_PRINCIPAL_FORGERY_DETECTED',
+    );
 
     // Sub-case B: Check payload claims a forged terminalId differing from DevicePrincipal
     const forgeryRes2 = await request(app.getHttpServer())
@@ -512,7 +541,9 @@ describe('ONB1.10C: Security & Multi-Tenant Isolation Hardening (Real PostgreSQL
         declarativeTerminalId: 'fake-rogue-terminal-99', // Forged terminal!
       });
     expect(forgeryRes2.status).toBe(403);
-    expect(forgeryRes2.body.message).toContain('DEVICE_PRINCIPAL_FORGERY_DETECTED');
+    expect(forgeryRes2.body.message).toContain(
+      'DEVICE_PRINCIPAL_FORGERY_DETECTED',
+    );
 
     // Sub-case C: Token belonging to Tenant B attempts to submit checks for Tenant A's attempt
     const crossTenantRes = await request(app.getHttpServer())
@@ -542,13 +573,18 @@ describe('ONB1.10C: Security & Multi-Tenant Isolation Hardening (Real PostgreSQL
   it('6. Support Intervention Security: support overrides require explicit tenant grant and substantive justification (Rule 65)', async () => {
     // Find active attempt for Tenant A
     const attempt = await dataSource.getRepository(ActivationAttempt).findOne({
-      where: { tenantId: tenantAId, status: ActivationAttemptStatus.IN_PROGRESS },
+      where: {
+        tenantId: tenantAId,
+        status: ActivationAttemptStatus.IN_PROGRESS,
+      },
     });
     expect(attempt).toBeDefined();
 
     // Insufficient reason (< 10 chars) -> 400 Bad Request
     await request(app.getHttpServer())
-      .post(`/api/onboarding/activation/attempts/${attempt!.id}/support-override`)
+      .post(
+        `/api/onboarding/activation/attempts/${attempt.id}/support-override`,
+      )
       .set('Authorization', `Bearer ${supportToken}`)
       .send({
         overrideAction: SupportOverrideAction.FORCE_FAIL,
@@ -558,15 +594,18 @@ describe('ONB1.10C: Security & Multi-Tenant Isolation Hardening (Real PostgreSQL
 
     // Substantive reason (>= 10 chars) -> 201 Created and recorded in ChangeLog audit
     const overrideRes = await request(app.getHttpServer())
-      .post(`/api/onboarding/activation/attempts/${attempt!.id}/support-override`)
+      .post(
+        `/api/onboarding/activation/attempts/${attempt.id}/support-override`,
+      )
       .set('Authorization', `Bearer ${supportToken}`)
       .send({
         overrideAction: SupportOverrideAction.FORCE_FAIL,
-        reason: 'Level 2 support assistance verified hardware loopback connection successfully',
+        reason:
+          'Level 2 support assistance verified hardware loopback connection successfully',
       })
       .expect(201);
 
-    expect(overrideRes.body.attempt.id).toBe(attempt!.id);
+    expect(overrideRes.body.attempt.id).toBe(attempt.id);
 
     // Verification in real PostgreSQL audit log: entry is stored with actor and target
     const changeLogs = await dataSource.getRepository(ChangeLog).find({
@@ -576,6 +615,6 @@ describe('ONB1.10C: Security & Multi-Tenant Isolation Hardening (Real PostgreSQL
       },
     });
     expect(changeLogs.length).toBeGreaterThanOrEqual(1);
-    expect(changeLogs[0].target_id).toBe(attempt!.id);
+    expect(changeLogs[0].target_id).toBe(attempt.id);
   });
 });
