@@ -22,19 +22,23 @@ class DioActivationSyncPort implements ActivationSyncPort {
     final resolvedTerminalId = terminalId?.trim() ?? '';
     if (attemptId.trim().isEmpty || resolvedTerminalId.isEmpty) return false;
     try {
+      final data = <String, dynamic>{
+        'checkCode': checkCode,
+        'status': status,
+        if (evidenceType?.trim().isNotEmpty ?? false)
+          'evidenceType': evidenceType,
+        if (evidenceRef?.trim().isNotEmpty ?? false) 'evidenceRef': evidenceRef,
+        if (occurredAt?.trim().isNotEmpty ?? false) 'occurredAt': occurredAt,
+        if (tenantId?.trim().isNotEmpty ?? false)
+          'declarativeTenantId': tenantId,
+        'declarativeTerminalId': resolvedTerminalId,
+      };
+      if (details != null) {
+        data['detailsSanitizedJson'] = details;
+      }
       final response = await _dio.post<dynamic>(
         'onboarding/activation/attempts/${attemptId.trim()}/checks',
-        data: <String, dynamic>{
-          'checkCode': checkCode,
-          'status': status,
-          if (evidenceType?.trim().isNotEmpty ?? false) 'evidenceType': evidenceType,
-          if (evidenceRef?.trim().isNotEmpty ?? false) 'evidenceRef': evidenceRef,
-          if (occurredAt?.trim().isNotEmpty ?? false) 'occurredAt': occurredAt,
-          'detailsSanitizedJson': ?details,
-          if (tenantId?.trim().isNotEmpty ?? false)
-            'declarativeTenantId': tenantId,
-          'declarativeTerminalId': resolvedTerminalId,
-        },
+        data: data,
         options: Options(headers: {'x-device-terminal-id': resolvedTerminalId}),
       );
       return _isSuccess(response.statusCode);
@@ -48,7 +52,8 @@ class DioActivationSyncPort implements ActivationSyncPort {
     required String attemptId,
     required Map<String, dynamic> claimPayload,
   }) async {
-    final terminalId = (claimPayload['declarativeTerminalId'] as String? ?? '').trim();
+    final terminalId = (claimPayload['declarativeTerminalId'] as String? ?? '')
+        .trim();
     if (attemptId.trim().isEmpty || terminalId.isEmpty) return false;
     try {
       final response = await _dio.post<dynamic>(
@@ -68,8 +73,11 @@ class DioActivationSyncPort implements ActivationSyncPort {
     required Map<String, dynamic> salePayload,
   }) async {
     final terminalId = (salePayload['terminalId'] as String? ?? '').trim();
-    final sourceDeviceId = (salePayload['sourceDeviceId'] as String? ?? '').trim();
-    if (attemptId.trim().isEmpty || terminalId.isEmpty || terminalId != sourceDeviceId) {
+    final sourceDeviceId = (salePayload['sourceDeviceId'] as String? ?? '')
+        .trim();
+    if (attemptId.trim().isEmpty ||
+        terminalId.isEmpty ||
+        terminalId != sourceDeviceId) {
       return false;
     }
     try {
@@ -110,7 +118,10 @@ class DioActivationSyncPort implements ActivationSyncPort {
       }
       final status = data['status'] as String? ?? 'FAIL';
       return FinalizeActivationResult(
-        isSuccess: status == 'PASS' || status == 'PASS_WITH_WARNING' || status == 'FAIL',
+        isSuccess:
+            status == 'PASS' ||
+            status == 'PASS_WITH_WARNING' ||
+            status == 'FAIL',
         status: status,
         failureCode: data['failureCode'] as String?,
         warningsCount: data['warningsCount'] as int? ?? 0,
@@ -124,5 +135,6 @@ class DioActivationSyncPort implements ActivationSyncPort {
     }
   }
 
-  bool _isSuccess(int? statusCode) => statusCode != null && statusCode >= 200 && statusCode < 300;
+  bool _isSuccess(int? statusCode) =>
+      statusCode != null && statusCode >= 200 && statusCode < 300;
 }
