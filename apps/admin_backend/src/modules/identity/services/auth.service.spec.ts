@@ -93,6 +93,7 @@ describe('AuthService', () => {
   };
   let mockDataSource: {
     transaction: jest.Mock<unknown, [TransactionCallback]>;
+    query: jest.Mock;
   };
   const useLockedRepository = (
     repository: ReturnType<typeof createLockedRepository>,
@@ -115,6 +116,7 @@ describe('AuthService', () => {
     };
     mockDataSource = {
       transaction: jest.fn<unknown, [TransactionCallback]>(),
+      query: jest.fn(),
     };
     mockDataSource.transaction.mockImplementation((callback) =>
       callback({
@@ -1251,5 +1253,89 @@ describe('AuthService', () => {
       service.login('inactive@omnifood.ni', 'Password123!'),
     ).rejects.toThrow('Credenciales inválidas');
     expect(mockJwtService.signAsync).not.toHaveBeenCalled();
+  });
+
+  describe('getMe', () => {
+    it('returns user and mapped tenant data when tenant row is valid', async () => {
+      mockUserRepository.findOne.mockResolvedValue({
+        id: 'user-1',
+        name: 'Jane Doe',
+        email: 'jane@example.com',
+        role: UserRole.MANAGER,
+        tenant_id: 'tenant-123',
+        is_active: true,
+      });
+      mockDataSource.query.mockResolvedValue([
+        {
+          id: 'tenant-123',
+          name: 'Central Kitchen',
+          ruc: 'J0310000000000',
+          is_active: true,
+        },
+      ]);
+
+      const result = await service.getMe('user-1');
+      expect(result.user).toEqual({
+        id: 'user-1',
+        name: 'Jane Doe',
+        email: 'jane@example.com',
+        role: UserRole.MANAGER,
+        tenant_id: 'tenant-123',
+        active: true,
+        permissions: expect.any(Array),
+      });
+      expect(result.tenant).toEqual({
+        id: 'tenant-123',
+        name: 'Central Kitchen',
+        slug: 'central-kitchen',
+        ruc: 'J0310000000000',
+        active: true,
+      });
+    });
+
+    it('returns tenant as null when tenant query returns empty or malformed rows', async () => {
+      mockUserRepository.findOne.mockResolvedValue({
+        id: 'user-1',
+        name: 'Jane Doe',
+        email: 'jane@example.com',
+        role: UserRole.MANAGER,
+        tenant_id: 'tenant-123',
+        is_active: true,
+      });
+      mockDataSource.query.mockResolvedValue([]);
+
+      const result = await service.getMe('user-1');
+      expect(result.tenant).toBeNull();
+    });
+
+    it('returns tenant as null when tenant query returns non-array or invalid row shape', async () => {
+      mockUserRepository.findOne.mockResolvedValue({
+        id: 'user-1',
+        name: 'Jane Doe',
+        email: 'jane@example.com',
+        role: UserRole.MANAGER,
+        tenant_id: 'tenant-123',
+        is_active: true,
+      });
+      mockDataSource.query.mockResolvedValue({ notAnArray: true });
+
+      const result = await service.getMe('user-1');
+      expect(result.tenant).toBeNull();
+    });
+
+    it('throws UnauthorizedException when user is not found or inactive', async () => {
+      mockUserRepository.findOne.mockResolvedValue(null);
+      await expect(service.getMe('non-existent')).rejects.toThrow(
+        'Usuario no encontrado o inactivo',
+      );
+
+      mockUserRepository.findOne.mockResolvedValue({
+        id: 'user-1',
+        is_active: false,
+      });
+      await expect(service.getMe('user-1')).rejects.toThrow(
+        'Usuario no encontrado o inactivo',
+      );
+    });
   });
 });
