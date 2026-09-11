@@ -12,6 +12,8 @@ import { CatalogValue } from '../../src/modules/catalog/entities/catalog-value.e
 import { Insumo } from '../../src/modules/inventory/entities/insumo.entity';
 import { Recipe } from '../../src/modules/inventory/entities/recipe.entity';
 import { RecipeVersion } from '../../src/modules/inventory/entities/recipe-version.entity';
+import { RecipeDetail } from '../../src/modules/inventory/entities/recipe-detail.entity';
+import { ProductInventoryMappingVersion } from '../../src/modules/inventory/entities/product-inventory-mapping-version.entity';
 import {
   User,
   UserRole,
@@ -47,6 +49,8 @@ const ALL_ENTITIES = [
   Insumo,
   Recipe,
   RecipeVersion,
+  RecipeDetail,
+  ProductInventoryMappingVersion,
   User,
   UomConversion,
   SecurityProfile,
@@ -91,6 +95,7 @@ async function withIsolatedSchema(
     const insumoRepo = dataSource.getRepository(Insumo);
     const recipeRepo = dataSource.getRepository(Recipe);
     const recipeVersionRepo = dataSource.getRepository(RecipeVersion);
+    const recipeDetailRepo = dataSource.getRepository(RecipeDetail);
     const userRepo = dataSource.getRepository(User);
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -107,6 +112,10 @@ async function withIsolatedSchema(
         {
           provide: getRepositoryToken(RecipeVersion),
           useValue: recipeVersionRepo,
+        },
+        {
+          provide: getRepositoryToken(RecipeDetail),
+          useValue: recipeDetailRepo,
         },
         { provide: getRepositoryToken(User), useValue: userRepo },
         JwtService,

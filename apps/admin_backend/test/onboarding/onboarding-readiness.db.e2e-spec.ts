@@ -25,6 +25,10 @@ import { UomConversion } from '../../src/modules/inventory/entities/uom-conversi
 import { Warehouse } from '../../src/modules/inventory/entities/warehouse.entity';
 import { Supplier } from '../../src/modules/inventory/entities/supplier.entity';
 import { InventoryMovement } from '../../src/modules/inventory/entities/inventory-movement.entity';
+import { Invoice } from '../../src/modules/sales/entities/invoice.entity';
+import { InvoiceItem } from '../../src/modules/sales/entities/invoice-item.entity';
+import { InvoiceItemModifier } from '../../src/modules/sales/entities/invoice-item-modifier.entity';
+import { Payment } from '../../src/modules/sales/entities/payment.entity';
 import { IndustryTemplate } from '../../src/modules/onboarding/entities/industry-template.entity';
 import { TemplateInsumo } from '../../src/modules/onboarding/entities/template-insumo.entity';
 import { TemplateProduct } from '../../src/modules/onboarding/entities/template-product.entity';
@@ -125,6 +129,10 @@ async function withReadinessIsolatedSchema(
         Warehouse,
         Supplier,
         InventoryMovement,
+        Invoice,
+        InvoiceItem,
+        InvoiceItemModifier,
+        Payment,
         OnboardingTelemetryEvent,
         ChangeLog,
       ],
@@ -227,6 +235,10 @@ async function withReadinessIsolatedSchema(
         {
           provide: 'SupplierRepository',
           useValue: dataSource.getRepository(Supplier),
+        },
+        {
+          provide: 'InvoiceRepository',
+          useValue: dataSource.getRepository(Invoice),
         },
         {
           provide: 'InventoryMovementRepository',

@@ -284,6 +284,7 @@ describe('ProductController E2E', () => {
           name: 'Lata de Gaseosa',
           product_type: 'SIMPLE',
         }),
+        { userId: 'e2e-user', userEmail: 'e2e@example.test' },
       );
     });
 
@@ -310,6 +311,7 @@ describe('ProductController E2E', () => {
         expect.objectContaining({
           product_type: 'COMPOUND',
         }),
+        { userId: 'e2e-user', userEmail: 'e2e@example.test' },
       );
     });
 
@@ -336,6 +338,7 @@ describe('ProductController E2E', () => {
         expect.objectContaining({
           product_type: 'VARIANT_PARENT',
         }),
+        { userId: 'e2e-user', userEmail: 'e2e@example.test' },
       );
     });
 
@@ -394,6 +397,7 @@ describe('ProductController E2E', () => {
         'prod-1',
         'tenant-e2e',
         { name: 'Updated Name' },
+        { userId: 'e2e-user', userEmail: 'e2e@example.test' },
       );
     });
 
@@ -430,6 +434,7 @@ describe('ProductController E2E', () => {
       expect(productService.deactivate).toHaveBeenCalledWith(
         'prod-1',
         'tenant-e2e',
+        { userId: 'e2e-user', userEmail: 'e2e@example.test' },
       );
     });
 

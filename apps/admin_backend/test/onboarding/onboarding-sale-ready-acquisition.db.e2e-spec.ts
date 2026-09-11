@@ -67,6 +67,10 @@ import { OperationsReadinessAdapter } from '../../src/modules/onboarding/adapter
 import { Warehouse } from '../../src/modules/inventory/entities/warehouse.entity';
 import { Supplier } from '../../src/modules/inventory/entities/supplier.entity';
 import { InventoryMovement } from '../../src/modules/inventory/entities/inventory-movement.entity';
+import { Invoice } from '../../src/modules/sales/entities/invoice.entity';
+import { InvoiceItem } from '../../src/modules/sales/entities/invoice-item.entity';
+import { InvoiceItemModifier } from '../../src/modules/sales/entities/invoice-item-modifier.entity';
+import { Payment } from '../../src/modules/sales/entities/payment.entity';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
 import { PermissionsGuard } from '../../src/modules/identity/guards/permissions.guard';
@@ -135,6 +139,10 @@ async function withAcquisitionIsolatedSchema(
         Warehouse,
         Supplier,
         InventoryMovement,
+        Invoice,
+        InvoiceItem,
+        InvoiceItemModifier,
+        Payment,
       ],
       synchronize: true,
     });
@@ -316,6 +324,10 @@ async function withAcquisitionIsolatedSchema(
         {
           provide: 'OnboardingIdempotencyRecordRepository',
           useValue: dataSource.getRepository(OnboardingIdempotencyRecord),
+        },
+        {
+          provide: 'InvoiceRepository',
+          useValue: dataSource.getRepository(Invoice),
         },
         {
           provide: 'InvoiceItemRepository',

@@ -96,6 +96,8 @@ describe('LoyaltyProfitAware (Real DB E2E)', () => {
       category_code text, stock numeric(12,4) DEFAULT 100.0,
       "averageCost" numeric(12,2) DEFAULT 0.0, "sellPrice" numeric(12,2) DEFAULT 0.0,
       is_perishable boolean DEFAULT false, is_active boolean DEFAULT true,
+      tax_rate numeric(5,4) NOT NULL DEFAULT 0.15,
+      is_tax_exempt boolean NOT NULL DEFAULT false,
       warehouse_id text,
       created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now()
     )`);

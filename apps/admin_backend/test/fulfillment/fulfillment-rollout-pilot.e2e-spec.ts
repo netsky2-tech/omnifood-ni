@@ -10,6 +10,8 @@ import { App } from 'supertest/types';
 import { DataSource } from 'typeorm';
 import { BohInventoryLedgerFoundation1766000000000 } from '../../src/migrations/1766000000000-BohInventoryLedgerFoundation';
 import { AddDeterministicSyncSequencing1780000000000 } from '../../src/migrations/1780000000000-AddDeterministicSyncSequencing';
+import { AddSaleInventoryOutcomeColumns1803000000000 } from '../../src/migrations/1803000000000-AddSaleInventoryOutcomeColumns';
+import { AddAcceptedAtToInventorySyncReceipts1805000000000 } from '../../src/migrations/1805000000000-AddAcceptedAtToInventorySyncReceipts';
 import { CreateTenantTopologyRevisions1794000000000 } from '../../src/migrations/1794000000000-CreateTenantTopologyRevisions';
 import { AddTenantTopologyRevisionsRls1794000000001 } from '../../src/migrations/1794000000001-AddTenantTopologyRevisionsRls';
 import { CreateTenantFulfillmentRecords1795000000000 } from '../../src/migrations/1795000000000-CreateTenantFulfillmentRecords';
@@ -88,8 +90,22 @@ describe('FulfillmentRolloutPilot (e2e - Real PostgreSQL, Zero Mocks)', () => {
     await runner.query(`CREATE SCHEMA "${schema}"`);
     await runner.query(`SET search_path TO "${schema}", public`);
 
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS invoices (
+        id varchar(128) PRIMARY KEY,
+        tenant_id varchar(64) NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS invoice_items (
+        id varchar(128) PRIMARY KEY,
+        tenant_id varchar(64) NOT NULL,
+        invoice_id varchar(128) NOT NULL
+      );
+    `);
+
     await new BohInventoryLedgerFoundation1766000000000().up(runner);
     await new AddDeterministicSyncSequencing1780000000000().up(runner);
+    await new AddSaleInventoryOutcomeColumns1803000000000().up(runner);
+    await new AddAcceptedAtToInventorySyncReceipts1805000000000().up(runner);
     await new CreateTenantTopologyRevisions1794000000000().up(runner);
     await new AddTenantTopologyRevisionsRls1794000000001().up(runner);
     await new CreateTenantFulfillmentRecords1795000000000().up(runner);
@@ -115,10 +131,14 @@ describe('FulfillmentRolloutPilot (e2e - Real PostgreSQL, Zero Mocks)', () => {
         is_perishable boolean DEFAULT false,
         name varchar NOT NULL,
         uom varchar NOT NULL,
+        product_type varchar NOT NULL DEFAULT 'SIMPLE',
+        category_code varchar,
         stock numeric(12,4) DEFAULT 0,
         "averageCost" numeric(12,2) DEFAULT 0,
         "sellPrice" numeric(12,2) DEFAULT 0,
         is_active boolean DEFAULT true,
+        tax_rate numeric(5,4) NOT NULL DEFAULT 0.15,
+        is_tax_exempt boolean NOT NULL DEFAULT false,
         created_at timestamptz DEFAULT now(),
         updated_at timestamptz DEFAULT now()
       );
@@ -247,6 +267,14 @@ describe('FulfillmentRolloutPilot (e2e - Real PostgreSQL, Zero Mocks)', () => {
         InventoryModule,
         SalesModule,
         FulfillmentModule,
+      ],
+      providers: [
+        {
+          provide: 'InvoiceRepository',
+          useFactory: (dataSource: DataSource) =>
+            dataSource.getRepository(Invoice),
+          inject: [DataSource],
+        },
       ],
     }).compile();
 

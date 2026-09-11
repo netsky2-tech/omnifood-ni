@@ -133,9 +133,14 @@ describe('Loyalty Cutover & Writers E2E (LV1.7A / M7 & M8 Real PostgreSQL)', () 
     )`);
 
     await bootstrap.query(`CREATE TABLE "${schema}".products (
-      id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id text NOT NULL, name text NOT NULL,
-      average_cost numeric(12,4) DEFAULT 0.0, price numeric(12,4) DEFAULT 0.0,
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id text NOT NULL,
+      warehouse_id text, is_perishable boolean DEFAULT false, name text NOT NULL,
+      uom text NOT NULL, product_type text NOT NULL DEFAULT 'SIMPLE', category_code text,
+      stock numeric(12,4) DEFAULT 0.0,
+      "averageCost" numeric(12,2) DEFAULT 0.0, "sellPrice" numeric(12,2) DEFAULT 0.0,
       is_active boolean DEFAULT true,
+      tax_rate numeric(5,4) NOT NULL DEFAULT 0.15,
+      is_tax_exempt boolean NOT NULL DEFAULT false,
       created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now()
     )`);
 
