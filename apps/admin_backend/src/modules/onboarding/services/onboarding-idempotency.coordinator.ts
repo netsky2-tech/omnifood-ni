@@ -15,7 +15,7 @@ export interface AcquireLeaseParams {
   tenantId: string;
   idempotencyKey: string;
   commandType: string;
-  payload: any;
+  payload: unknown;
   leaseTtlMs?: number;
   leaseOwner?: string;
 }
@@ -24,9 +24,22 @@ export type IdempotencyExecutionLease =
   | { state: 'ACQUIRED'; record: OnboardingIdempotencyRecord }
   | {
       state: 'ALREADY_COMPLETED';
-      result: any;
+      result: unknown;
       record: OnboardingIdempotencyRecord;
     };
+
+export type IdempotencyResult = Record<PropertyKey, unknown> | null;
+
+export function isIdempotencyResult(val: unknown): val is IdempotencyResult {
+  return val === null || (typeof val === 'object' && !Array.isArray(val));
+}
+
+function parseResultRef(raw: unknown): IdempotencyResult | undefined {
+  if (isIdempotencyResult(raw)) {
+    return raw;
+  }
+  return undefined;
+}
 
 @Injectable()
 export class OnboardingIdempotencyCoordinator {
@@ -37,11 +50,10 @@ export class OnboardingIdempotencyCoordinator {
     private readonly repo: Repository<OnboardingIdempotencyRecord>,
   ) {}
 
-  computePayloadHash(payload: any): string {
-    const canonical = JSON.stringify(
-      payload,
-      Object.keys(payload ?? {}).sort(),
-    );
+  computePayloadHash(payload: unknown): string {
+    const target =
+      typeof payload === 'object' && payload !== null ? payload : {};
+    const canonical = JSON.stringify(payload, Object.keys(target).sort());
     return createHash('sha256')
       .update(canonical ?? '')
       .digest('hex');
@@ -94,7 +106,7 @@ export class OnboardingIdempotencyCoordinator {
     if (existing.status === OnboardingIdempotencyStatus.SUCCEEDED) {
       return {
         state: 'ALREADY_COMPLETED',
-        result: existing.resultRef,
+        result: parseResultRef(existing.resultRef),
         record: existing,
       };
     }
@@ -135,15 +147,17 @@ export class OnboardingIdempotencyCoordinator {
 
   async completeSuccess(
     recordId: string,
-    result: any,
+    result: unknown,
     manager?: EntityManager,
   ): Promise<void> {
+    const safeResult = parseResultRef(result) ?? null;
     const repository = manager
       ? manager.getRepository(OnboardingIdempotencyRecord)
       : this.repo;
-    await repository.update(recordId, {
+    await repository.save({
+      id: recordId,
       status: OnboardingIdempotencyStatus.SUCCEEDED,
-      resultRef: result,
+      resultRef: safeResult,
       completedAt: new Date(),
     });
   }

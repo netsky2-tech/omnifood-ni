@@ -5,11 +5,20 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { InvoicesService, SyncBatchResult } from '../../sales/services/invoices.service';
+import {
+  InvoicesService,
+  SyncBatchResult,
+} from '../../sales/services/invoices.service';
 import { SyncBatchRecordDto } from '../../sales/dto/sync-batch.dto';
 import { Invoice } from '../../sales/entities/invoice.entity';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, In, Repository } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  FindOptionsWhere,
+  In,
+  Repository,
+} from 'typeorm';
 import {
   ActivationAttempt,
   ActivationAttemptStatus,
@@ -31,6 +40,7 @@ import { FiscalConfigVersionService } from './fiscal-config-version.service';
 import { OnboardingCatalogService } from './onboarding-catalog.service';
 import { OnboardingReadinessEvaluator } from './onboarding-readiness.evaluator';
 import { ChangeLogService } from '../../audit/change-log.service';
+import { ChangeLog } from '../../audit/entities/change-log.entity';
 import {
   ActivationCheckDiagnosticItem,
   ActivationDiagnosticsDto,
@@ -110,7 +120,9 @@ export class ActivationService {
       where: { id: attemptId, tenantId },
     });
     if (!attempt) {
-      throw new NotFoundException(`Activation attempt '${attemptId}' not found for tenant`);
+      throw new NotFoundException(
+        `Activation attempt '${attemptId}' not found for tenant`,
+      );
     }
     if (attempt.candidateTerminalId.trim() !== terminalId) {
       throw new ForbiddenException('TERMINAL_MISMATCH');
@@ -143,9 +155,13 @@ export class ActivationService {
     return this.dataSource.transaction(async (manager) => {
       const aRepo = manager.getRepository(ActivationAttempt);
       const sRepo = manager.getRepository(OnboardingSession);
-      const attempt = await aRepo.findOne({ where: { id: attemptId, tenantId } });
+      const attempt = await aRepo.findOne({
+        where: { id: attemptId, tenantId },
+      });
       if (!attempt) {
-        throw new NotFoundException(`Activation attempt '${attemptId}' not found for tenant`);
+        throw new NotFoundException(
+          `Activation attempt '${attemptId}' not found for tenant`,
+        );
       }
       if (attempt.candidateTerminalId.trim() !== terminalId) {
         throw new ForbiddenException('TERMINAL_MISMATCH');
@@ -163,7 +179,9 @@ export class ActivationService {
 
       const session = await sRepo.findOne({ where: { tenantId } });
       if (!session) {
-        throw new NotFoundException(`Onboarding session not found for tenant '${tenantId}'`);
+        throw new NotFoundException(
+          `Onboarding session not found for tenant '${tenantId}'`,
+        );
       }
       if (session.firstSuccessfulSaleAt) {
         return { claimed: false, ticketId: null };
@@ -214,112 +232,114 @@ export class ActivationService {
 
     const result = await this.dataSource.transaction(
       async (manager: EntityManager) => {
-      const sRepo = manager.getRepository(OnboardingSession);
-      const aRepo = manager.getRepository(ActivationAttempt);
+        const sRepo = manager.getRepository(OnboardingSession);
+        const aRepo = manager.getRepository(ActivationAttempt);
 
-      // Precondición estricta: current SALE_READY=true
-      const session = await sRepo.findOne({
-        where: { tenantId: trimmedTenant },
-      });
+        // Precondición estricta: current SALE_READY=true
+        const session = await sRepo.findOne({
+          where: { tenantId: trimmedTenant },
+        });
 
-      if (!session) {
-        throw new BadRequestException(
-          `Onboarding session not found for tenant '${trimmedTenant}'`,
-        );
-      }
+        if (!session) {
+          throw new BadRequestException(
+            `Onboarding session not found for tenant '${trimmedTenant}'`,
+          );
+        }
 
-      if (session.lifecycleState !== OnboardingLifecycleState.SALE_READY) {
-        throw new BadRequestException(
-          `CANNOT_START_ACTIVATION_NOT_SALE_READY: Onboarding session is in '${session.lifecycleState}' state, but must be 'SALE_READY'`,
-        );
-      }
+        if (session.lifecycleState !== OnboardingLifecycleState.SALE_READY) {
+          throw new BadRequestException(
+            `CANNOT_START_ACTIVATION_NOT_SALE_READY: Onboarding session is in '${session.lifecycleState}' state, but must be 'SALE_READY'`,
+          );
+        }
 
-      // Precondición estricta: no otro attempt activo (CREATED o IN_PROGRESS)
-      const activeAttempt = await aRepo.findOne({
-        where: {
-          tenantId: trimmedTenant,
-          onboardingSessionId: session.id,
-          status: In([
-            ActivationAttemptStatus.CREATED,
-            ActivationAttemptStatus.IN_PROGRESS,
-          ]),
-        },
-      });
+        // Precondición estricta: no otro attempt activo (CREATED o IN_PROGRESS)
+        const activeAttempt = await aRepo.findOne({
+          where: {
+            tenantId: trimmedTenant,
+            onboardingSessionId: session.id,
+            status: In([
+              ActivationAttemptStatus.CREATED,
+              ActivationAttemptStatus.IN_PROGRESS,
+            ]),
+          },
+        });
 
-      if (activeAttempt) {
-        throw new ConflictException(
-          `ACTIVE_ATTEMPT_EXISTS: An activation attempt (${activeAttempt.id}) is already active in status '${activeAttempt.status}'`,
-        );
-      }
+        if (activeAttempt) {
+          throw new ConflictException(
+            `ACTIVE_ATTEMPT_EXISTS: An activation attempt (${activeAttempt.id}) is already active in status '${activeAttempt.status}'`,
+          );
+        }
 
-      // Pinning: fiscal config snapshot revision & fingerprint
-      let fiscalRevision =
-        await this.fiscalConfigVersionService.getLatestRevision(
-          trimmedTenant,
-          manager,
-        );
-
-      if (!fiscalRevision) {
-        await this.fiscalConfigVersionService.recordRevisionChange(
-          trimmedTenant,
-          manager,
-        );
-        fiscalRevision =
+        // Pinning: fiscal config snapshot revision & fingerprint
+        let fiscalRevision =
           await this.fiscalConfigVersionService.getLatestRevision(
             trimmedTenant,
             manager,
           );
-      }
 
-      if (!fiscalRevision) {
-        throw new BadRequestException(
-          'FISCAL_REVISION_NOT_AVAILABLE: Cannot pin fiscal revision',
-        );
-      }
+        if (!fiscalRevision) {
+          await this.fiscalConfigVersionService.recordRevisionChange(
+            trimmedTenant,
+            manager,
+          );
+          fiscalRevision =
+            await this.fiscalConfigVersionService.getLatestRevision(
+              trimmedTenant,
+              manager,
+            );
+        }
 
-      // Pinning: verification product candidate
-      const verificationCandidate =
-        await this.onboardingCatalogService.getVerificationProductCandidate(
-          trimmedTenant,
-          dto.verificationProductId,
-        );
+        if (!fiscalRevision) {
+          throw new BadRequestException(
+            'FISCAL_REVISION_NOT_AVAILABLE: Cannot pin fiscal revision',
+          );
+        }
 
-      const now = new Date();
+        // Pinning: verification product candidate
+        const verificationCandidate =
+          await this.onboardingCatalogService.getVerificationProductCandidate(
+            trimmedTenant,
+            dto.verificationProductId,
+          );
 
-      const attempt = aRepo.create({
-        tenantId: trimmedTenant,
-        onboardingSessionId: session.id,
-        candidateTerminalId: trimmedTerminalId,
-        trustedTerminalId: null,
-        status: ActivationAttemptStatus.CREATED,
-        startedByUserId: actorUserId || 'SYSTEM',
-        startedAt: now,
-        serverTimeAnchorAt: now,
-        requiredFiscalRevision: fiscalRevision.revision,
-        requiredFiscalFingerprint: fiscalRevision.fingerprint,
-        verificationProductId: verificationCandidate.verificationProductId,
-        verificationProductRevision:
-          verificationCandidate.verificationProductRevision ?? 1,
-        verificationProductFingerprint:
-          verificationCandidate.verificationProductFingerprint,
-        posBuild: dto.posBuild?.trim() || null,
-        warningsCount: 0,
-        idempotencyKey: trimmedIdempotencyKey || null,
-      });
+        const now = new Date();
 
-      const savedAttempt = await aRepo.save(attempt);
+        const attempt = aRepo.create({
+          tenantId: trimmedTenant,
+          onboardingSessionId: session.id,
+          candidateTerminalId: trimmedTerminalId,
+          trustedTerminalId: null,
+          status: ActivationAttemptStatus.CREATED,
+          startedByUserId: actorUserId || 'SYSTEM',
+          startedAt: now,
+          serverTimeAnchorAt: now,
+          requiredFiscalRevision: fiscalRevision.revision,
+          requiredFiscalFingerprint: fiscalRevision.fingerprint,
+          verificationProductId: verificationCandidate.verificationProductId,
+          verificationProductRevision:
+            verificationCandidate.verificationProductRevision ?? 1,
+          verificationProductFingerprint:
+            verificationCandidate.verificationProductFingerprint,
+          posBuild: dto.posBuild?.trim() || null,
+          warningsCount: 0,
+          idempotencyKey: trimmedIdempotencyKey || null,
+        });
 
-      // Actualizar sesión a ACTIVATION_IN_PROGRESS
-      session.lifecycleState = OnboardingLifecycleState.ACTIVATION_IN_PROGRESS;
-      session.currentActivationAttemptId = savedAttempt.id;
-      session.activationStartedAt = session.activationStartedAt ?? now;
-      session.lastActivityAt = now;
-      session.optimisticVersion = (session.optimisticVersion ?? 1) + 1;
+        const savedAttempt = await aRepo.save(attempt);
 
-      await sRepo.save(session);
+        // Actualizar sesión a ACTIVATION_IN_PROGRESS
+        session.lifecycleState =
+          OnboardingLifecycleState.ACTIVATION_IN_PROGRESS;
+        session.currentActivationAttemptId = savedAttempt.id;
+        session.activationStartedAt = session.activationStartedAt ?? now;
+        session.lastActivityAt = now;
+        session.optimisticVersion = (session.optimisticVersion ?? 1) + 1;
 
-      return savedAttempt;
-    });
+        await sRepo.save(session);
+
+        return savedAttempt;
+      },
+    );
 
     // ONB1.7F: Audit log for attempt started
     await this.changeLogService.log({
@@ -511,189 +531,194 @@ export class ActivationService {
       throw new BadRequestException('tenantId is required');
     }
 
-      const result = await this.dataSource.transaction(
-        async (manager: EntityManager) => {
-          const aRepo = manager.getRepository(ActivationAttempt);
-          const sRepo = manager.getRepository(OnboardingSession);
-          const cRepo = manager.getRepository(ActivationCheckResult);
-          const fRepo = manager.getRepository(ActivationFollowUp);
+    const result = await this.dataSource.transaction(
+      async (manager: EntityManager) => {
+        const aRepo = manager.getRepository(ActivationAttempt);
+        const sRepo = manager.getRepository(OnboardingSession);
+        const cRepo = manager.getRepository(ActivationCheckResult);
+        const fRepo = manager.getRepository(ActivationFollowUp);
 
-          const attempt = await aRepo.findOne({
-            where: { id: attemptId, tenantId: trimmedTenant },
-          });
+        const attempt = await aRepo.findOne({
+          where: { id: attemptId, tenantId: trimmedTenant },
+        });
 
-          if (!attempt) {
-            throw new NotFoundException(
-              `Activation attempt '${attemptId}' not found for tenant '${trimmedTenant}'`,
-            );
-          }
-
-          // Idempotency: if already terminalized, return as-is
-          if (
-            attempt.status === ActivationAttemptStatus.PASS ||
-            attempt.status === ActivationAttemptStatus.PASS_WITH_WARNING ||
-            attempt.status === ActivationAttemptStatus.FAIL
-          ) {
-            return { savedAttempt: attempt, followUpCreated: null, isReplay: true };
-          }
-
-          const session = await sRepo.findOne({
-            where: { tenantId: trimmedTenant },
-          });
-
-          if (!session) {
-            throw new NotFoundException(
-              `Onboarding session not found for tenant '${trimmedTenant}'`,
-            );
-          }
-
-          const recordedChecks = await cRepo.find({
-            where: { tenantId: trimmedTenant, activationAttemptId: attempt.id },
-          });
-          const verificationInvoice = attempt.verificationTicketId
-            ? await manager.getRepository(Invoice).findOne({
-                where: {
-                  id: attempt.verificationTicketId,
-                  tenant_id: trimmedTenant,
-                },
-              })
-            : null;
-          const hasPersistedVerificationSale = Boolean(
-            verificationInvoice &&
-              !verificationInvoice.isCanceled &&
-              verificationInvoice.paymentStatus === 'paid',
+        if (!attempt) {
+          throw new NotFoundException(
+            `Activation attempt '${attemptId}' not found for tenant '${trimmedTenant}'`,
           );
+        }
 
-          const checkMap = new Map<ActivationCheckCode, ActivationCheckResult>();
-          for (const chk of recordedChecks) {
-            checkMap.set(chk.checkCode, chk);
+        // Idempotency: if already terminalized, return as-is
+        if (
+          attempt.status === ActivationAttemptStatus.PASS ||
+          attempt.status === ActivationAttemptStatus.PASS_WITH_WARNING ||
+          attempt.status === ActivationAttemptStatus.FAIL
+        ) {
+          return {
+            savedAttempt: attempt,
+            followUpCreated: null,
+            isReplay: true,
+          };
+        }
+
+        const session = await sRepo.findOne({
+          where: { tenantId: trimmedTenant },
+        });
+
+        if (!session) {
+          throw new NotFoundException(
+            `Onboarding session not found for tenant '${trimmedTenant}'`,
+          );
+        }
+
+        const recordedChecks = await cRepo.find({
+          where: { tenantId: trimmedTenant, activationAttemptId: attempt.id },
+        });
+        const verificationInvoice = attempt.verificationTicketId
+          ? await manager.getRepository(Invoice).findOne({
+              where: {
+                id: attempt.verificationTicketId,
+                tenant_id: trimmedTenant,
+              },
+            })
+          : null;
+        const hasPersistedVerificationSale = Boolean(
+          verificationInvoice &&
+          !verificationInvoice.isCanceled &&
+          verificationInvoice.paymentStatus === 'paid',
+        );
+
+        const checkMap = new Map<ActivationCheckCode, ActivationCheckResult>();
+        for (const chk of recordedChecks) {
+          checkMap.set(chk.checkCode, chk);
+        }
+
+        // Evaluate normative truth table against catalog
+        let hasMissingChecks = false;
+        let firstFailedCode: string | null = null;
+        let warningCheck: ActivationCheckResult | null = null;
+
+        for (const requiredCode of V1_REQUIRED_ACTIVATION_CHECKS) {
+          const check = checkMap.get(requiredCode);
+          if (!check) {
+            hasMissingChecks = true;
+            break;
           }
 
-          // Evaluate normative truth table against catalog
-          let hasMissingChecks = false;
-          let firstFailedCode: string | null = null;
-          let warningCheck: ActivationCheckResult | null = null;
-
-          for (const requiredCode of V1_REQUIRED_ACTIVATION_CHECKS) {
-            const check = checkMap.get(requiredCode);
-            if (!check) {
-              hasMissingChecks = true;
-              break;
+          if (check.status === ActivationCheckStatus.FAIL) {
+            if (!firstFailedCode) {
+              firstFailedCode = `CHECK_FAILED_${check.checkCode}`;
             }
-
-            if (check.status === ActivationCheckStatus.FAIL) {
-              if (!firstFailedCode) {
-                firstFailedCode = `CHECK_FAILED_${check.checkCode}`;
-              }
-            } else if (check.status === ActivationCheckStatus.WARNING) {
-              if (check.checkCode === ActivationCheckCode.POST_RECONNECT_SYNC) {
-                warningCheck = check;
-              } else {
-                if (!firstFailedCode) {
-                  firstFailedCode = `INVALID_WARNING_${check.checkCode}`;
-                }
-              }
-            } else if (check.status !== ActivationCheckStatus.PASS) {
-              if (!firstFailedCode) {
-                firstFailedCode = `CHECK_NOT_PASSED_${check.checkCode}`;
-              }
-            }
-          }
-
-          const now = new Date();
-          let followUpCreated: ActivationFollowUp | null = null;
-
-          if (!hasPersistedVerificationSale) {
-            attempt.status = ActivationAttemptStatus.FAIL;
-            attempt.failureCode = 'VERIFICATION_SALE_EVIDENCE_MISSING';
-          } else if (hasMissingChecks) {
-            attempt.status = ActivationAttemptStatus.FAIL;
-            attempt.failureCode = 'MISSING_REQUIRED_CHECKS';
-          } else if (firstFailedCode) {
-            attempt.status = ActivationAttemptStatus.FAIL;
-            attempt.failureCode = firstFailedCode;
-          } else if (warningCheck) {
-            // PASS_WITH_WARNING: all local required checks = PASS and POST_RECONNECT_SYNC = WARNING
-            attempt.status = ActivationAttemptStatus.PASS_WITH_WARNING;
-            attempt.warningsCount = 1;
-
-            // Persist ActivationFollowUp
-            const followUp = fRepo.create({
-              tenantId: trimmedTenant,
-              activationAttemptId: attempt.id,
-              warningCode: 'POST_RECONNECT_SYNC_TRANSIENT',
-              status: ActivationFollowUpStatus.OPEN,
-              openedAt: now,
-              openedBy: actorUserId || 'SYSTEM_FINALIZER',
-              closureEvidenceRef: warningCheck.evidenceRef || null,
-            });
-            followUpCreated = await fRepo.save(followUp);
-          } else {
-            // PASS: all required checks = PASS
-            attempt.status = ActivationAttemptStatus.PASS;
-          }
-
-          attempt.completedAt = now;
-          const savedAttempt = await aRepo.save(attempt);
-
-          // Lifecycle update on OnboardingSession
-          if (
-            attempt.status === ActivationAttemptStatus.PASS ||
-            attempt.status === ActivationAttemptStatus.PASS_WITH_WARNING
-          ) {
-            session.lifecycleState = OnboardingLifecycleState.ACTIVATED;
-            session.activatedAt = session.activatedAt ?? attempt.completedAt;
-          } else {
-            // FAIL: liberate active attempt and revert lifecycle based on live readiness
-            const readiness = await this.readinessEvaluator.evaluate(trimmedTenant);
-            if (readiness.saleReady) {
-              session.lifecycleState = OnboardingLifecycleState.SALE_READY;
+          } else if (check.status === ActivationCheckStatus.WARNING) {
+            if (check.checkCode === ActivationCheckCode.POST_RECONNECT_SYNC) {
+              warningCheck = check;
             } else {
-              session.lifecycleState = OnboardingLifecycleState.SETUP_IN_PROGRESS;
+              if (!firstFailedCode) {
+                firstFailedCode = `INVALID_WARNING_${check.checkCode}`;
+              }
+            }
+          } else if (check.status !== ActivationCheckStatus.PASS) {
+            if (!firstFailedCode) {
+              firstFailedCode = `CHECK_NOT_PASSED_${check.checkCode}`;
             }
           }
+        }
 
-          session.lastActivityAt = now;
-          session.currentActivationAttemptId = savedAttempt.id;
-          session.optimisticVersion = (session.optimisticVersion ?? 1) + 1;
-          await sRepo.save(session);
+        const now = new Date();
+        let followUpCreated: ActivationFollowUp | null = null;
 
-          return { savedAttempt, followUpCreated, isReplay: false };
+        if (!hasPersistedVerificationSale) {
+          attempt.status = ActivationAttemptStatus.FAIL;
+          attempt.failureCode = 'VERIFICATION_SALE_EVIDENCE_MISSING';
+        } else if (hasMissingChecks) {
+          attempt.status = ActivationAttemptStatus.FAIL;
+          attempt.failureCode = 'MISSING_REQUIRED_CHECKS';
+        } else if (firstFailedCode) {
+          attempt.status = ActivationAttemptStatus.FAIL;
+          attempt.failureCode = firstFailedCode;
+        } else if (warningCheck) {
+          // PASS_WITH_WARNING: all local required checks = PASS and POST_RECONNECT_SYNC = WARNING
+          attempt.status = ActivationAttemptStatus.PASS_WITH_WARNING;
+          attempt.warningsCount = 1;
+
+          // Persist ActivationFollowUp
+          const followUp = fRepo.create({
+            tenantId: trimmedTenant,
+            activationAttemptId: attempt.id,
+            warningCode: 'POST_RECONNECT_SYNC_TRANSIENT',
+            status: ActivationFollowUpStatus.OPEN,
+            openedAt: now,
+            openedBy: actorUserId || 'SYSTEM_FINALIZER',
+            closureEvidenceRef: warningCheck.evidenceRef || null,
+          });
+          followUpCreated = await fRepo.save(followUp);
+        } else {
+          // PASS: all required checks = PASS
+          attempt.status = ActivationAttemptStatus.PASS;
+        }
+
+        attempt.completedAt = now;
+        const savedAttempt = await aRepo.save(attempt);
+
+        // Lifecycle update on OnboardingSession
+        if (
+          attempt.status === ActivationAttemptStatus.PASS ||
+          attempt.status === ActivationAttemptStatus.PASS_WITH_WARNING
+        ) {
+          session.lifecycleState = OnboardingLifecycleState.ACTIVATED;
+          session.activatedAt = session.activatedAt ?? attempt.completedAt;
+        } else {
+          // FAIL: liberate active attempt and revert lifecycle based on live readiness
+          const readiness =
+            await this.readinessEvaluator.evaluate(trimmedTenant);
+          if (readiness.saleReady) {
+            session.lifecycleState = OnboardingLifecycleState.SALE_READY;
+          } else {
+            session.lifecycleState = OnboardingLifecycleState.SETUP_IN_PROGRESS;
+          }
+        }
+
+        session.lastActivityAt = now;
+        session.currentActivationAttemptId = savedAttempt.id;
+        session.optimisticVersion = (session.optimisticVersion ?? 1) + 1;
+        await sRepo.save(session);
+
+        return { savedAttempt, followUpCreated, isReplay: false };
+      },
+    );
+
+    if (!result.isReplay) {
+      await this.changeLogService.log({
+        tenantId: trimmedTenant,
+        userId: actorUserId || 'SYSTEM_FINALIZER',
+        action: 'ONBOARDING_ACTIVATION_FINALIZED',
+        targetType: 'ActivationAttempt',
+        targetId: result.savedAttempt.id,
+        changes: {
+          status: result.savedAttempt.status,
+          failureCode: result.savedAttempt.failureCode,
+          warningsCount: result.savedAttempt.warningsCount,
+          completedAt: result.savedAttempt.completedAt,
         },
-      );
+      });
 
-      if (!result.isReplay) {
+      if (result.followUpCreated) {
         await this.changeLogService.log({
           tenantId: trimmedTenant,
           userId: actorUserId || 'SYSTEM_FINALIZER',
-          action: 'ONBOARDING_ACTIVATION_FINALIZED',
-          targetType: 'ActivationAttempt',
-          targetId: result.savedAttempt.id,
+          action: 'ONBOARDING_ACTIVATION_FOLLOW_UP_OPENED',
+          targetType: 'ActivationFollowUp',
+          targetId: result.followUpCreated.id,
           changes: {
-            status: result.savedAttempt.status,
-            failureCode: result.savedAttempt.failureCode,
-            warningsCount: result.savedAttempt.warningsCount,
-            completedAt: result.savedAttempt.completedAt,
+            warningCode: result.followUpCreated.warningCode,
+            closureEvidenceRef: result.followUpCreated.closureEvidenceRef,
           },
         });
-
-        if (result.followUpCreated) {
-          await this.changeLogService.log({
-            tenantId: trimmedTenant,
-            userId: actorUserId || 'SYSTEM_FINALIZER',
-            action: 'ONBOARDING_ACTIVATION_FOLLOW_UP_OPENED',
-            targetType: 'ActivationFollowUp',
-            targetId: result.followUpCreated.id,
-            changes: {
-              warningCode: result.followUpCreated.warningCode,
-              closureEvidenceRef: result.followUpCreated.closureEvidenceRef,
-            },
-          });
-        }
       }
-
-      return result.savedAttempt;
     }
+
+    return result.savedAttempt;
+  }
 
   async getAttempt(
     tenantId: string,
@@ -795,7 +820,7 @@ export class ActivationService {
     closedFollowUpIds: string[];
     unresolvedCount: number;
   }> {
-    const whereClause: any = {
+    const whereClause: FindOptionsWhere<ActivationFollowUp> = {
       status: ActivationFollowUpStatus.OPEN,
     };
     if (tenantId?.trim()) {
@@ -835,7 +860,7 @@ export class ActivationService {
         });
         if (attempt?.verificationTicketId) {
           try {
-            const invRepo = this.dataSource.getRepository('invoices');
+            const invRepo = this.dataSource.getRepository(Invoice);
             const invoice = await invRepo.findOne({
               where: {
                 tenant_id: fup.tenantId,
@@ -940,7 +965,8 @@ export class ActivationService {
           where: { tenantId: trimmedTenant },
         });
         if (session) {
-          const readiness = await this.readinessEvaluator.evaluate(trimmedTenant);
+          const readiness =
+            await this.readinessEvaluator.evaluate(trimmedTenant);
           if (readiness.saleReady) {
             session.lifecycleState = OnboardingLifecycleState.SALE_READY;
           } else {
@@ -1070,7 +1096,7 @@ export class ActivationService {
 
     const readiness = await this.readinessEvaluator.evaluate(trimmedTenant);
 
-    let auditTrail: any[] = [];
+    let auditTrail: ChangeLog[] = [];
     try {
       auditTrail = await this.changeLogService.findByTarget(
         trimmedTenant,

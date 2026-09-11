@@ -26,6 +26,14 @@ export interface LegacyScanResult {
   expiredRowsCount: number;
 }
 
+interface KardexTotalRow {
+  total: unknown;
+}
+
+function isKardexTotalRow(row: unknown): row is KardexTotalRow {
+  return typeof row === 'object' && row !== null && 'total' in row;
+}
+
 @Injectable()
 export class LegacyImportIntegrityReportService {
   constructor(
@@ -108,11 +116,16 @@ export class LegacyImportIntegrityReportService {
           // Check if there are real movements in inventory_kardex
           let kardexStock = 0;
           try {
-            const kardexRows = await this.dataSource.query(
+            const kardexRows: unknown = await this.dataSource.query(
               `SELECT COALESCE(SUM(quantity), 0) as total FROM inventory_kardex WHERE tenant_id = $1 AND insumo_id = $2`,
               [trimmedTenant, matchedProduct.id],
             );
-            if (kardexRows && kardexRows.length > 0 && kardexRows[0].total) {
+            if (
+              Array.isArray(kardexRows) &&
+              kardexRows.length > 0 &&
+              isKardexTotalRow(kardexRows[0]) &&
+              kardexRows[0].total
+            ) {
               kardexStock = Number(kardexRows[0].total);
               kardexEvidencePresent = true;
             }

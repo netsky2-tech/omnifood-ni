@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { FindOptionsWhere, Repository } from 'typeorm';
 import { OnboardingTelemetryEvent } from '../entities/onboarding-telemetry-event.entity';
 import { OnboardingSessionService } from '../services/onboarding-session.service';
 import { ChangeLogService } from '../../audit/change-log.service';
@@ -41,15 +41,22 @@ export class OnboardingTelemetryService {
       throw new BadRequestException('INVALID_TENANT: tenantId is required');
     }
 
-    if (!dto.eventName || !Object.values(OnboardingTelemetryEventName).includes(dto.eventName)) {
-      throw new BadRequestException(`INVALID_EVENT: Unknown telemetry event '${dto.eventName}'`);
+    if (
+      !dto.eventName ||
+      !Object.values(OnboardingTelemetryEventName).includes(dto.eventName)
+    ) {
+      throw new BadRequestException(
+        `INVALID_EVENT: Unknown telemetry event '${dto.eventName}'`,
+      );
     }
 
     // Guardrail: STEP_SKIPPED is only allowed for optional/postponable steps
     if (dto.eventName === OnboardingTelemetryEventName.STEP_SKIPPED) {
       const stepId = dto.stepId?.trim();
       if (!stepId) {
-        throw new BadRequestException('MISSING_STEP_ID: stepId is required for STEP_SKIPPED events');
+        throw new BadRequestException(
+          'MISSING_STEP_ID: stepId is required for STEP_SKIPPED events',
+        );
       }
 
       const stepDef = ONBOARDING_STEP_DEFINITIONS[stepId];
@@ -102,7 +109,9 @@ export class OnboardingTelemetryService {
     const trimmedTenant = tenantId?.trim();
     if (!trimmedTenant) return [];
 
-    const where: any = { tenantId: trimmedTenant };
+    const where: FindOptionsWhere<OnboardingTelemetryEvent> = {
+      tenantId: trimmedTenant,
+    };
     if (eventName) {
       where.eventName = eventName;
     }

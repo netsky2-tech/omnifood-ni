@@ -2,19 +2,15 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
-  IsUUID,
   IsEnum,
   IsBoolean,
   IsObject,
   IsDateString,
-  ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
 import {
   ActivationCheckCode,
   ActivationCheckStatus,
 } from '../entities/activation-check-result.entity';
-import { ActivationAttemptStatus } from '../entities/activation-attempt.entity';
 
 export class StartActivationDto {
   @IsNotEmpty({ message: 'candidateTerminalId is required' })

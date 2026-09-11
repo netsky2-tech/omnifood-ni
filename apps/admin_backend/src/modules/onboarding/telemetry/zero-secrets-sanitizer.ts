@@ -1,3 +1,7 @@
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 export class ZeroSecretsSanitizer {
   private static readonly JWT_REGEX =
     /\beyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\b/g;
@@ -55,15 +59,23 @@ export class ZeroSecretsSanitizer {
     }
 
     if (Array.isArray(input)) {
-      return input.map((item) => this.sanitize(item)) as unknown as T;
+      const items: readonly unknown[] = input;
+      return items.map((item: unknown): unknown =>
+        this.sanitize(item),
+      ) as unknown as T;
     }
 
-    if (typeof input === 'object') {
-      const result: Record<string, any> = {};
+    if (isRecord(input)) {
+      const result: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(input)) {
         if (typeof value === 'string') {
           // Check for JWT token pattern first
-          if (/^eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+$/.test(value.trim()) || value.includes('Bearer eyJ')) {
+          if (
+            /^eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+$/.test(
+              value.trim(),
+            ) ||
+            value.includes('Bearer eyJ')
+          ) {
             result[key] = this.sanitizeString(value);
             continue;
           }
@@ -93,7 +105,7 @@ export class ZeroSecretsSanitizer {
 
         result[key] = this.sanitize(value);
       }
-      return result as T;
+      return result as unknown as T;
     }
 
     return input;
@@ -140,7 +152,8 @@ export class ZeroSecretsSanitizer {
     // 4. PII Email masking (user@domain.com -> u***r@domain.com)
     sanitized = sanitized.replace(
       this.EMAIL_REGEX,
-      (_match, firstChar, lastChar, domain) => `${firstChar}***${lastChar}@${domain}`,
+      (_match, firstChar, lastChar, domain) =>
+        `${firstChar}***${lastChar}@${domain}`,
     );
 
     return sanitized;
