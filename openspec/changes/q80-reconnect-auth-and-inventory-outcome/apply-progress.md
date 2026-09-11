@@ -868,3 +868,12 @@ Post-HEAD work previously recorded in this workspace completed 5B1a1, 5B1a2, 5B1
 
 
 
+
+## Slice 12: Physical Q80 verification and documentation
+- **Completed**: Authored `apps/admin_backend/test/q80-reconnect-inventory-outcome.e2e-spec.ts` using `withIsolatedSchema` to enforce a tenant-isolated database environment.
+- **Evidence**: Verified end-to-end processing of a SALE document with a `SALE_TIME_V1` snapshot, accurately creating the invoice, updating Kardex, and acknowledging idempotency on replays. Tests confirmed exactly one `InventorySyncReceipt` and exact duplication rejection with unchanged DGI number.
+- **Runbook**: Created `docs/operations/q80-runbook.md` with explicit QA physical device instructions (restart -> PIN -> refresh -> checkout) and guidance on `.g.dart` Floor generation handling.
+- **Documentation**: Updated `proposal.md` status to reflect the completed design architecture and outcome contracts.
+
+## Cross-Slice Completion Gate
+- **Status**: Complete. All implementation slices (1 through 12, including amended dependencies) have successfully passed strict TDD boundary checks within their respective authored line budgets. `flutter test` and `npm run test:e2e` all pass successfully across the POS and Admin Backend services.

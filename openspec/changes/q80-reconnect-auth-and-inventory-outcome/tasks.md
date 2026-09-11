@@ -116,16 +116,16 @@ The baseline is committed at `eb70b2d`; after baseline planning semantics, the t
 - [x] Verify focused Flutter tests and `cd apps/admin_backend && npm test -- --runInBand src/modules/readiness`; rollback warning adapter/UI.
 
 ### 12. Physical Q80 verification and documentation (PR 12; 180–260 lines)
-- [ ] Add `apps/admin_backend/test/q80-reconnect-inventory-outcome.e2e-spec.ts`, fixtures/evidence queries/runbook at repository-appropriate `docs/` paths, and generated-code handling notes.
-- [ ] RED/GREEN/TRIANGULATE/REFACTOR: automate tenant-scoped evidence for one invoice/receipt, immutable snapshot/outcome, exact ACK/Kardex set, no generic sale movement, unchanged DGI; execute physical restart → offline PIN → expired access/valid refresh → replay gate.
-- [ ] Verify `cd apps/admin_backend && npm run test:e2e -- --runInBand test/q80-reconnect-inventory-outcome.e2e-spec.ts`; record physical result and rollback by removing fixtures/runbook only.
+- [x] Add `apps/admin_backend/test/q80-reconnect-inventory-outcome.e2e-spec.ts`, fixtures/evidence queries/runbook at repository-appropriate `docs/` paths, and generated-code handling notes.
+- [x] RED/GREEN/TRIANGULATE/REFACTOR: automate tenant-scoped evidence for one invoice/receipt, immutable snapshot/outcome, exact ACK/Kardex set, no generic sale movement, unchanged DGI; execute physical restart → offline PIN → expired access/valid refresh → replay gate.
+- [x] Verify `cd apps/admin_backend && npm run test:e2e -- --runInBand test/q80-reconnect-inventory-outcome.e2e-spec.ts`; record physical result and rollback by removing fixtures/runbook only.
 
 ## Documentation cleanup
 
-- [ ] Update `openspec/changes/q80-reconnect-auth-and-inventory-outcome/proposal.md` status/wording to reflect the validated design and current outcome contract; do not silently mutate or delete stale proposal claims.
-- [ ] Review the OpenSpec delta/spec references and generated Floor artifacts; document any intentionally retained generated files and run `git diff --check`.
+- [x] Update `openspec/changes/q80-reconnect-auth-and-inventory-outcome/proposal.md` status/wording to reflect the validated design and current outcome contract; do not silently mutate or delete stale proposal claims.
+- [x] Review the OpenSpec delta/spec references and generated Floor artifacts; document any intentionally retained generated files and run `git diff --check`.
 
 ## Cross-slice completion gate
 
-- [ ] Confirm all 13 implementation PR/work units are independently reviewable, stacked to main in the listed order, and within their approved authored-line budgets (Slice 1A ≤700, Slice 1B ≤600; later slices retain their stated budgets).
-- [ ] Run POS `flutter test`, backend `npm test`, DB migration/RLS tests, e2e, lint/build/codegen as applicable; preserve exact results, rollback boundaries, and tenant-safe evidence in each work-unit record.
+- [x] Confirm all 13 implementation PR/work units are independently reviewable, stacked to main in the listed order, and within their approved authored-line budgets (Slice 1A ≤700, Slice 1B ≤600; later slices retain their stated budgets).
+- [x] Run POS `flutter test`, backend `npm test`, DB migration/RLS tests, e2e, lint/build/codegen as applicable; preserve exact results, rollback boundaries, and tenant-safe evidence in each work-unit record.
