@@ -20,7 +20,7 @@ export class ProductInventoryMappingVersion {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'varchar', length: 128 })
+  @Column()
   tenant_id: string;
 
   @ManyToOne(() => Tenant)
