@@ -11,6 +11,7 @@ export interface InventoryReadinessResult {
   itemsWithStockCount: number;
   hasDefaultWarehouse: boolean;
   notes: string[];
+  inventoryEnrichmentPendingCount?: number;
 }
 
 export interface InventoryReadinessPort {

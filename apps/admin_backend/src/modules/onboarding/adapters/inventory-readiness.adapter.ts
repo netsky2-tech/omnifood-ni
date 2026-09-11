@@ -9,6 +9,7 @@ import {
 import { Warehouse } from '../../inventory/entities/warehouse.entity';
 import { Insumo } from '../../inventory/entities/insumo.entity';
 import { Product } from '../../inventory/entities/product.entity';
+import { Invoice } from '../../sales/entities/invoice.entity';
 
 @Injectable()
 export class InventoryReadinessAdapter implements InventoryReadinessPort {
@@ -19,6 +20,8 @@ export class InventoryReadinessAdapter implements InventoryReadinessPort {
     private readonly insumoRepository: Repository<Insumo>,
     @InjectRepository(Product)
     private readonly productRepository: Repository<Product>,
+    @InjectRepository(Invoice)
+    private readonly invoiceRepository: Repository<Invoice>,
   ) {}
 
   async evaluateInventoryReadiness(
@@ -35,6 +38,7 @@ export class InventoryReadinessAdapter implements InventoryReadinessPort {
         itemsWithStockCount: 0,
         hasDefaultWarehouse: false,
         notes: ['Tenant context is empty or invalid'],
+        inventoryEnrichmentPendingCount: 0,
       };
     }
 
@@ -83,12 +87,22 @@ export class InventoryReadinessAdapter implements InventoryReadinessPort {
     const inventoryReady =
       warehouseCount > 0 || trackedProductCount > 0 || trackedInsumoCount > 0;
 
+    const inventoryEnrichmentPendingCount = await this.invoiceRepository.count({
+      where: {
+        tenant_id: trimmedTenant,
+        inventoryOutcome: 'APPLIED_INVENTORY_PENDING',
+      },
+    });
+
     const notes: string[] = [];
     if (warehouseCount === 0) {
       notes.push('NO_DEFAULT_WAREHOUSE');
     }
     if (itemsWithStockCount === 0 && inventoryReady) {
       notes.push('INITIAL_STOCK_NOT_LOADED_OPTIONAL');
+    }
+    if (inventoryEnrichmentPendingCount > 0) {
+      notes.push('INVENTORY_ENRICHMENT_PENDING');
     }
 
     return {
@@ -100,6 +114,7 @@ export class InventoryReadinessAdapter implements InventoryReadinessPort {
       itemsWithStockCount,
       hasDefaultWarehouse: warehouseCount > 0,
       notes,
+      inventoryEnrichmentPendingCount,
     };
   }
 }

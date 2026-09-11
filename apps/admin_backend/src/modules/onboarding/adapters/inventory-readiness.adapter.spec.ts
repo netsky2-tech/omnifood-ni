@@ -5,12 +5,14 @@ import { InventoryReadinessAdapter } from './inventory-readiness.adapter';
 import { Warehouse } from '../../inventory/entities/warehouse.entity';
 import { Insumo } from '../../inventory/entities/insumo.entity';
 import { Product } from '../../inventory/entities/product.entity';
+import { Invoice } from '../../sales/entities/invoice.entity';
 
 describe('InventoryReadinessAdapter (Unit)', () => {
   let adapter: InventoryReadinessAdapter;
   let warehouseRepo: jest.Mocked<Partial<Repository<Warehouse>>>;
   let insumoRepo: jest.Mocked<Partial<Repository<Insumo>>>;
   let productRepo: jest.Mocked<Partial<Repository<Product>>>;
+  let invoiceRepo: jest.Mocked<Partial<Repository<Invoice>>>;
 
   beforeEach(async () => {
     warehouseRepo = {
@@ -21,6 +23,9 @@ describe('InventoryReadinessAdapter (Unit)', () => {
     };
     productRepo = {
       count: jest.fn(),
+    };
+    invoiceRepo = {
+      count: jest.fn().mockResolvedValue(0),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -37,6 +42,10 @@ describe('InventoryReadinessAdapter (Unit)', () => {
         {
           provide: getRepositoryToken(Product),
           useValue: productRepo,
+        },
+        {
+          provide: getRepositoryToken(Invoice),
+          useValue: invoiceRepo,
         },
       ],
     }).compile();
@@ -62,6 +71,19 @@ describe('InventoryReadinessAdapter (Unit)', () => {
     expect(result.itemsWithStockCount).toBe(0);
     expect(result.hasDefaultWarehouse).toBe(true);
     expect(result.scope).toBe('BASIC');
+    expect(result.inventoryEnrichmentPendingCount).toBe(0);
+  });
+
+  it('includes INVENTORY_ENRICHMENT_PENDING warning and count when pending enrichment invoices exist', async () => {
+    (warehouseRepo.count as jest.Mock).mockResolvedValue(1);
+    (productRepo.count as jest.Mock).mockResolvedValue(1);
+    (insumoRepo.count as jest.Mock).mockResolvedValue(1);
+    (invoiceRepo.count as jest.Mock).mockResolvedValue(4);
+
+    const result = await adapter.evaluateInventoryReadiness('tenant-test-pending');
+    expect(result.inventoryReady).toBe(true);
+    expect(result.inventoryEnrichmentPendingCount).toBe(4);
+    expect(result.notes).toContain('INVENTORY_ENRICHMENT_PENDING');
   });
 
   it('evaluates inventory readiness as false with scope NONE when no warehouses, products or insumos exist', async () => {

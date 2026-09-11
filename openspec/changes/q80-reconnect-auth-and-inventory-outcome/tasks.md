@@ -111,9 +111,9 @@ The baseline is committed at `eb70b2d`; after baseline planning semantics, the t
 - [x] Verify `cd apps/admin_backend && npm test -- --runInBand src/modules/inventory` and focused e2e; rollback endpoint/module without deleting evidence.
 
 ### 11. Readiness/UI warning and integration (PR 11; 160–240 lines)
-- [ ] Add `inventoryEnrichmentPendingCount`/warning adapter and POS warning UI without changing `SALE_READY`, activation, setup, or checkout blocking predicates.
-- [ ] RED/GREEN/TRIANGULATE/REFACTOR: test warning-only rendering, DGI/offline regressions, retained local session, old backend compatibility, and end-to-end sale sync ordering.
-- [ ] Verify focused Flutter tests and `cd apps/admin_backend && npm test -- --runInBand src/modules/readiness`; rollback warning adapter/UI.
+- [x] Add `inventoryEnrichmentPendingCount`/warning adapter and POS warning UI without changing `SALE_READY`, activation, setup, or checkout blocking predicates.
+- [x] RED/GREEN/TRIANGULATE/REFACTOR: test warning-only rendering, DGI/offline regressions, retained local session, old backend compatibility, and end-to-end sale sync ordering.
+- [x] Verify focused Flutter tests and `cd apps/admin_backend && npm test -- --runInBand src/modules/readiness`; rollback warning adapter/UI.
 
 ### 12. Physical Q80 verification and documentation (PR 12; 180–260 lines)
 - [ ] Add `apps/admin_backend/test/q80-reconnect-inventory-outcome.e2e-spec.ts`, fixtures/evidence queries/runbook at repository-appropriate `docs/` paths, and generated-code handling notes.

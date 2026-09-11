@@ -97,6 +97,9 @@ export class OnboardingReadinessEvaluator {
     if (!inventory.inventoryReady) {
       warnings.push('INVENTORY_NOT_INITIALIZED_OPTIONAL');
     }
+    if ((inventory.inventoryEnrichmentPendingCount ?? 0) > 0) {
+      warnings.push('INVENTORY_ENRICHMENT_PENDING');
+    }
 
     const saleReady = blockers.length === 0;
 

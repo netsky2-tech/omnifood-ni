@@ -844,5 +844,27 @@ Post-HEAD work previously recorded in this workspace completed 5B1a1, 5B1a2, 5B1
 - **Verification**: `npm test -- --runInBand src/modules/inventory/services/sale-inventory-remediation.service.spec.ts src/modules/inventory/controllers/remediation.controller.spec.ts src/modules/identity/security/permissions.enum.spec.ts` passed (19 passed).
 - **Rollback boundary**: revert `apps/admin_backend/src/modules/inventory/services/sale-inventory-remediation.service.ts`, `remediation.controller.ts`, `sale-inventory-remediation.dto.ts`, and module registration.
 
+## Slice 11 — Readiness/UI Warning and Integration Complete
+
+- **Completed tasks**: all Slice 11 tasks marked `[x]` in `tasks.md`.
+- **Backend Readiness Adapter & Evaluator**:
+  - `InventoryReadinessPort` & `InventoryReadinessResult`: added `inventoryEnrichmentPendingCount?: number`.
+  - `InventoryReadinessAdapter`: queries `invoices` with `inventoryOutcome = 'APPLIED_INVENTORY_PENDING'` and populates `inventoryEnrichmentPendingCount` and note `'INVENTORY_ENRICHMENT_PENDING'`.
+  - `OnboardingReadinessEvaluator`: adds `'INVENTORY_ENRICHMENT_PENDING'` to `warnings` list without adding to `blockers`; keeps `saleReady` predicate strictly true (`blockers.length === 0`).
+- **POS Data Layer**:
+  - `InvoiceDao`: added `@Query("SELECT COUNT(*) FROM invoices WHERE inventory_outcome = 'APPLIED_INVENTORY_PENDING'") Future<int?> getInventoryEnrichmentPendingCount()`.
+  - `SalesRepository` & `SalesRepositoryImpl`: exposed `getInventoryEnrichmentPendingCount()`.
+- **POS Warning UI**:
+  - Implemented `InventoryEnrichmentWarningBanner`: renders `SizedBox.shrink()` when pending count is 0; renders an informative warning banner when pending count > 0 without blocking checkout or DGI actions.
+- **TDD Cycle**:
+  - RED: Authored tests for adapter, evaluator, DAO, repository, and UI widget.
+  - GREEN:
+    - Backend unit tests passed: `inventory-readiness.adapter.spec.ts` (4/4 passed), `onboarding-readiness.evaluator.spec.ts` (4/4 passed).
+    - Flutter tests passed: `inventory_enrichment_warning_banner_test.dart` (2/2 passed), `sales_movement_ownership_and_ack_test.dart` (8/8 passed).
+  - REFACTOR: `git diff --check` passed cleanly; zero new static analysis issues.
+- **Verification**: `flutter test test/ui/features/sales/inventory_enrichment_warning_banner_test.dart test/data/repositories/sales` passed; `npm test -- --runInBand src/modules/onboarding/adapters/inventory-readiness.adapter.spec.ts src/modules/onboarding/services/onboarding-readiness.evaluator.spec.ts` passed.
+- **Rollback boundary**: revert `InventoryEnrichmentWarningBanner`, `getInventoryEnrichmentPendingCount`, and readiness adapter/evaluator warning additions.
+
+
 
 

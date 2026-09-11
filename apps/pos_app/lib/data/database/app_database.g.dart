@@ -3423,6 +3423,13 @@ class _$InvoiceDao extends InvoiceDao {
   }
 
   @override
+  Future<int?> getInventoryEnrichmentPendingCount() async {
+    return _queryAdapter.query(
+        'SELECT COUNT(*) FROM invoices WHERE inventory_outcome = \'APPLIED_INVENTORY_PENDING\'',
+        mapper: (Map<String, Object?> row) => row.values.first as int);
+  }
+
+  @override
   Future<void> insertInvoice(InvoiceEntity invoice) async {
     await _invoiceEntityInsertionAdapter.insert(
         invoice, OnConflictStrategy.abort);

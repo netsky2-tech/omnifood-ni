@@ -143,6 +143,65 @@ describe('OnboardingReadinessEvaluator (Unit)', () => {
     expect(snapshot.catalog.sellableProductCount).toBe(2);
   });
 
+  it('includes INVENTORY_ENRICHMENT_PENDING warning without blocking saleReady when enrichment is pending', async () => {
+    identityPort.evaluateIdentityReadiness.mockResolvedValue({
+      tenantExists: true,
+      initialOwnerExists: true,
+      ownerCanAuthenticate: true,
+      tenantContextValid: true,
+    });
+    fiscalPort.evaluateFiscalReadiness.mockResolvedValue({
+      minimumConfigurationValid: true,
+      businessName: 'Comedor Central',
+      fiscalRegime: 'GENERAL',
+      taxRate: 15,
+    });
+    catalogPort.evaluateCatalogReadiness.mockResolvedValue({
+      sellableProductCount: 2,
+      hasSellableProduct: true,
+    });
+    inventoryPort.evaluateInventoryReadiness.mockResolvedValue({
+      inventoryReady: true,
+      scope: 'BASIC',
+      warehouseCount: 1,
+      trackedProductCount: 5,
+      trackedInsumoCount: 0,
+      itemsWithStockCount: 0,
+      hasDefaultWarehouse: true,
+      inventoryEnrichmentPendingCount: 3,
+      notes: ['INVENTORY_ENRICHMENT_PENDING'],
+    });
+    costingPort.evaluateCostingReadiness.mockResolvedValue({
+      costingReady: true,
+      totalProducts: 2,
+      knownCostCount: 2,
+      pendingCostCount: 0,
+      notApplicableCount: 0,
+      items: [],
+    });
+    operationsPort.evaluateOperationsReadiness.mockResolvedValue({
+      operationsReady: true,
+      staffCount: 1,
+      additionalStaffCount: 0,
+      publishedRecipeCount: 0,
+      supplierCount: 0,
+      categoryCount: 1,
+      details: {
+        hasAdditionalStaff: false,
+        hasPublishedRecipes: false,
+        hasSuppliers: false,
+        hasCategories: true,
+      },
+      notes: [],
+    });
+
+    const snapshot = await evaluator.evaluate('tenant-warning');
+
+    expect(snapshot.saleReady).toBe(true);
+    expect(snapshot.blockers).toEqual([]);
+    expect(snapshot.warnings).toContain('INVENTORY_ENRICHMENT_PENDING');
+  });
+
   it('returns saleReady = false with blocker when catalog has 0 sellable products', async () => {
     identityPort.evaluateIdentityReadiness.mockResolvedValue({
       tenantExists: true,

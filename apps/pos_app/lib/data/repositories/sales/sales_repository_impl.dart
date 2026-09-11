@@ -410,6 +410,12 @@ class SalesRepositoryImpl implements SalesRepository {
     );
   }
 
+  @override
+  Future<int> getInventoryEnrichmentPendingCount() async {
+    final count = await invoiceDao.getInventoryEnrichmentPendingCount();
+    return count ?? 0;
+  }
+
   Future<void> markAsFailed(String invoiceId) async {
     final entity = await invoiceDao.getInvoiceById(invoiceId);
     if (entity != null) {

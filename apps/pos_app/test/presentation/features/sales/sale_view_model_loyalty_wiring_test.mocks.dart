@@ -777,6 +777,15 @@ class MockSalesRepository extends _i1.Mock implements _i52.SalesRepository {
       ) as _i49.Future<void>);
 
   @override
+  _i49.Future<int> getInventoryEnrichmentPendingCount() => (super.noSuchMethod(
+        Invocation.method(
+          #getInventoryEnrichmentPendingCount,
+          [],
+        ),
+        returnValue: _i49.Future<int>.value(0),
+      ) as _i49.Future<int>);
+
+  @override
   _i49.Future<void> voidInvoice(
     String? invoiceId,
     String? reason,

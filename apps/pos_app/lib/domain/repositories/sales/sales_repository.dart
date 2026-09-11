@@ -52,6 +52,7 @@ abstract class SalesRepository {
     required String? outcome,
     required List<String> acknowledgedCorrelationIds,
   });
+  Future<int> getInventoryEnrichmentPendingCount();
   Future<void> voidInvoice(String invoiceId, String reason);
   Future<void> createCreditNote({
     required String originalInvoiceId,

@@ -466,5 +466,51 @@ void main() {
         );
       },
     );
+
+    test(
+      'getInventoryEnrichmentPendingCount returns exact count of invoices in APPLIED_INVENTORY_PENDING outcome',
+      () async {
+        final inv1 = InvoiceEntity(
+          id: 'inv-count-1',
+          number: '001-001-01-00000010',
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+          userId: 'u1',
+          subtotal: 10,
+          totalTax: 1.5,
+          total: 11.5,
+          type: 'regular',
+          inventoryOutcome: 'APPLIED_INVENTORY_PENDING',
+        );
+        final inv2 = InvoiceEntity(
+          id: 'inv-count-2',
+          number: '001-001-01-00000011',
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+          userId: 'u1',
+          subtotal: 20,
+          totalTax: 3.0,
+          total: 23.0,
+          type: 'regular',
+          inventoryOutcome: 'APPLIED_INVENTORY_PENDING',
+        );
+        final inv3 = InvoiceEntity(
+          id: 'inv-count-3',
+          number: '001-001-01-00000012',
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+          userId: 'u1',
+          subtotal: 30,
+          totalTax: 4.5,
+          total: 34.5,
+          type: 'regular',
+          inventoryOutcome: 'APPLIED',
+        );
+
+        await database.invoiceDao.insertInvoice(inv1);
+        await database.invoiceDao.insertInvoice(inv2);
+        await database.invoiceDao.insertInvoice(inv3);
+
+        final count = await repository.getInventoryEnrichmentPendingCount();
+        expect(count, 2);
+      },
+    );
   });
 }

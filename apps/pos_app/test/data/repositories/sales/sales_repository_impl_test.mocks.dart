@@ -1313,6 +1313,15 @@ class MockInvoiceDao extends _i1.Mock implements _i25.InvoiceDao {
         ),
         returnValue: _i48.Future<_i53.InvoiceEntity?>.value(),
       ) as _i48.Future<_i53.InvoiceEntity?>);
+
+  @override
+  _i48.Future<int?> getInventoryEnrichmentPendingCount() => (super.noSuchMethod(
+        Invocation.method(
+          #getInventoryEnrichmentPendingCount,
+          [],
+        ),
+        returnValue: _i48.Future<int?>.value(),
+      ) as _i48.Future<int?>);
 }
 
 /// A class which mocks [InvoiceItemDao].

@@ -42,4 +42,9 @@ abstract class InvoiceDao {
 
   @Query('SELECT * FROM invoices WHERE idempotency_key = :key')
   Future<InvoiceEntity?> getInvoiceByIdempotencyKey(String key);
+
+  @Query(
+    "SELECT COUNT(*) FROM invoices WHERE inventory_outcome = 'APPLIED_INVENTORY_PENDING'",
+  )
+  Future<int?> getInventoryEnrichmentPendingCount();
 }
