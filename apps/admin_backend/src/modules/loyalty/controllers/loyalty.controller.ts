@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -37,6 +38,26 @@ import { AuthGuard } from '../../identity/guards/auth.guard';
 import { RolesGuard } from '../../identity/guards/roles.guard';
 import { Roles } from '../../../core/decorators/roles.decorator';
 import { UserRole } from '../../identity/entities/user.entity';
+import { LoyaltyProgramStatus } from '../entities/loyalty-program.entity';
+
+const LOYALTY_PROGRAM_STATUSES: readonly string[] =
+  Object.values(LoyaltyProgramStatus);
+
+function isLoyaltyProgramStatus(value: string): value is LoyaltyProgramStatus {
+  return LOYALTY_PROGRAM_STATUSES.includes(value);
+}
+
+function parseLoyaltyProgramStatus(
+  status?: string,
+): LoyaltyProgramStatus | undefined {
+  if (status === undefined) {
+    return undefined;
+  }
+  if (isLoyaltyProgramStatus(status)) {
+    return status;
+  }
+  throw new BadRequestException(`Invalid loyalty program status: ${status}`);
+}
 
 @Controller('loyalty')
 @UseGuards(AuthGuard, RolesGuard)
@@ -67,8 +88,10 @@ export class LoyaltyController {
     @Query('program_type') programType?: string,
     @GetTenantId() tenantId?: string,
   ) {
-    return this.loyaltyService.findAllPrograms(this.requireTenant(tenantId), {
-      status: status as any,
+    const validTenant = this.requireTenant(tenantId);
+    const programStatus = parseLoyaltyProgramStatus(status);
+    return this.loyaltyService.findAllPrograms(validTenant, {
+      status: programStatus,
       program_type: programType,
     });
   }

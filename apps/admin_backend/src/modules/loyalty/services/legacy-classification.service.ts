@@ -10,6 +10,10 @@ import { CustomerPointTransaction } from '../../customers/entities/customer-poin
 import { CustomerLoyaltyAccountProjection } from '../entities/customer-loyalty-account-projection.entity';
 import { Customer } from '../../customers/entities/customer.entity';
 
+interface TotalUnitsQueryResult {
+  total?: string | number | null;
+}
+
 @Injectable()
 export class LegacyClassificationService {
   private static readonly LEGACY_PROGRAM_NAME = 'Puntos Legacy';
@@ -80,7 +84,7 @@ export class LegacyClassificationService {
       .andWhere('tx.loyalty_program_id = :programId', {
         programId: loyaltyProgramId,
       })
-      .getRawOne();
+      .getRawOne<TotalUnitsQueryResult>();
 
     const totalUnits = Number(result?.total ?? 0);
 

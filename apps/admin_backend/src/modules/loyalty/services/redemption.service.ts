@@ -172,14 +172,9 @@ export class RedemptionService {
 
     if (intent.status !== 'PENDING' && intent.status !== 'CONFIRMED') {
       throw new BadRequestException(
-        `Cannot consolidate intent in status: ${intent.status}`,
+        'Cannot consolidate intent in current status',
       );
     }
-
-    // Find the reward at the time of intent creation (snapshot version)
-    const reward = await this.rewardRepo.findOne({
-      where: { id: intent.rewardId, tenant_id: tenantId },
-    });
 
     // Create REDEEM transaction with idempotency key
     const idempotencyKey = `loyalty:redeem:${tenantId}:${intent.ticketId}`;
@@ -227,29 +222,33 @@ export class RedemptionService {
     return { redeemTransaction: redeemTx, alreadyConsolidated: false };
   }
 
-  async voidIntent(tenantId: string, intentId: string): Promise<void> {
+  voidIntent(tenantId: string, intentId: string): Promise<void> {
     const intent = this.intents.get(intentId);
     if (!intent || intent.tenantId !== tenantId) {
-      throw new NotFoundException('Redemption intent not found');
+      return Promise.reject(
+        new NotFoundException('Redemption intent not found'),
+      );
     }
 
     if (intent.status === 'CONSUMED') {
-      throw new BadRequestException('Cannot void a consumed intent');
+      return Promise.reject(
+        new BadRequestException('Cannot void a consumed intent'),
+      );
     }
 
     intent.status = 'VOIDED';
     this.intents.set(intentId, intent);
+    return Promise.resolve();
   }
 
-  async getIntent(
-    tenantId: string,
-    intentId: string,
-  ): Promise<RedemptionIntent> {
+  getIntent(tenantId: string, intentId: string): Promise<RedemptionIntent> {
     const intent = this.intents.get(intentId);
     if (!intent || intent.tenantId !== tenantId) {
-      throw new NotFoundException('Redemption intent not found');
+      return Promise.reject(
+        new NotFoundException('Redemption intent not found'),
+      );
     }
-    return intent;
+    return Promise.resolve(intent);
   }
 
   async reverseTicketLoyalty(

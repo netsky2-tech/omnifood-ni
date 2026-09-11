@@ -1,8 +1,32 @@
 import { Injectable, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { CustomerPointTransaction } from '../../customers/entities/customer-point-transaction.entity';
+import {
+  CustomerPointTransaction,
+  PointTransactionType,
+} from '../../customers/entities/customer-point-transaction.entity';
 import { CustomerLoyaltyAccountProjection } from '../entities/customer-loyalty-account-projection.entity';
+
+interface TotalUnitsQueryResult {
+  total?: string | number | null;
+}
+
+function toLegacyPointTransactionType(
+  raw?: string | null,
+): PointTransactionType {
+  const normalized = raw?.toLowerCase();
+  switch (normalized) {
+    case 'redeem':
+      return PointTransactionType.REDEEM;
+    case 'adjust':
+      return PointTransactionType.ADJUST;
+    case 'reversal':
+      return PointTransactionType.REVERSAL;
+    case 'earn':
+    default:
+      return PointTransactionType.EARN;
+  }
+}
 
 export interface AppendLoyaltyTxDto {
   tenantId: string;
@@ -79,7 +103,7 @@ export class LoyaltyLedgerService {
       ticket_id: dto.ticketId ?? null,
       reward_id: dto.rewardId ?? null,
       transaction_type: dto.transactionType,
-      type: (dto.transactionType?.toLowerCase() ?? 'earn') as any,
+      type: toLegacyPointTransactionType(dto.transactionType),
       units: dto.units,
       points: dto.units ?? 0,
       reason: dto.reason ?? null,
@@ -123,7 +147,7 @@ export class LoyaltyLedgerService {
       .andWhere('tx.loyalty_program_id = :programId', {
         programId: loyaltyProgramId,
       })
-      .getRawOne();
+      .getRawOne<TotalUnitsQueryResult>();
 
     const totalUnits = Number(result?.total ?? 0);
 
@@ -167,7 +191,7 @@ export class LoyaltyLedgerService {
       .andWhere('tx.loyalty_program_id = :programId', {
         programId: loyaltyProgramId,
       })
-      .getRawOne();
+      .getRawOne<TotalUnitsQueryResult>();
 
     const totalUnits = Number(result?.total ?? 0);
 

@@ -1,6 +1,5 @@
 import {
   LoyaltyTicketSnapshot,
-  LoyaltyTicketLine,
   EarningResult,
 } from './loyalty-ticket-snapshot';
 import { LoyaltyProgram } from '../entities/loyalty-program.entity';

@@ -1,11 +1,4 @@
-import {
-  Entity,
-  Column,
-  ManyToOne,
-  JoinColumn,
-  Index,
-  PrimaryColumn,
-} from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn, PrimaryColumn } from 'typeorm';
 import { Customer } from '../../customers/entities/customer.entity';
 import { LoyaltyProgram } from './loyalty-program.entity';
 

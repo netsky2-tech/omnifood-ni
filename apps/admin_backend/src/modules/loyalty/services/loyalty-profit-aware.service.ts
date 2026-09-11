@@ -6,10 +6,7 @@ import {
   RewardType,
 } from '../entities/reward-definition.entity';
 import { LoyaltyProgram } from '../entities/loyalty-program.entity';
-import {
-  CustomerPointTransaction,
-  PointTransactionType,
-} from '../../customers/entities/customer-point-transaction.entity';
+import { CustomerPointTransaction } from '../../customers/entities/customer-point-transaction.entity';
 import {
   INVENTORY_COST_QUERY_PORT,
   InventoryCostQueryPort,
@@ -24,6 +21,45 @@ import {
   EarnTransactionRecord,
   RedeemTransactionRecord,
 } from '../domain/profit-aware-metrics';
+
+interface BenefitConfigSnapshot {
+  amountNio?: number;
+  productId?: string;
+  variantId?: string;
+  quantity?: number;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseRewardType(raw: unknown, fallback: RewardType): RewardType {
+  if (raw === RewardType.DISCOUNT_AMOUNT) {
+    return RewardType.DISCOUNT_AMOUNT;
+  }
+  if (raw === RewardType.FREE_PRODUCT) {
+    return RewardType.FREE_PRODUCT;
+  }
+  return fallback;
+}
+
+function getBenefitConfigSnapshot(
+  snapshot: Record<string, unknown> | null | undefined,
+): BenefitConfigSnapshot | null {
+  if (!snapshot || !isRecord(snapshot.benefitConfig)) {
+    return null;
+  }
+  const config = snapshot.benefitConfig;
+  return {
+    amountNio:
+      typeof config.amountNio === 'number' ? config.amountNio : undefined,
+    productId:
+      typeof config.productId === 'string' ? config.productId : undefined,
+    variantId:
+      typeof config.variantId === 'string' ? config.variantId : undefined,
+    quantity: typeof config.quantity === 'number' ? config.quantity : undefined,
+  };
+}
 
 @Injectable()
 export class LoyaltyProfitAwareService {
@@ -65,9 +101,13 @@ export class LoyaltyProfitAwareService {
     let estimatedCpp: number | null | undefined = null;
 
     if (reward.reward_type === RewardType.FREE_PRODUCT) {
-      const benefit = reward.benefit_config;
-      const productId = benefit?.productId as string;
-      const variantId = benefit?.variantId as string | undefined;
+      const benefit = isRecord(reward.benefit_config)
+        ? reward.benefit_config
+        : null;
+      const productId =
+        typeof benefit?.productId === 'string' ? benefit.productId : undefined;
+      const variantId =
+        typeof benefit?.variantId === 'string' ? benefit.variantId : undefined;
 
       if (productId) {
         const costRes =
@@ -155,34 +195,51 @@ export class LoyaltyProfitAwareService {
     for (const tx of rewardTxs) {
       const type = (tx.transaction_type as string)?.toLowerCase();
       if (type === 'redeem') {
-        const snapshot = tx.commercial_snapshot;
-        const rType = (snapshot?.rewardType as string) ?? reward.reward_type;
+        const snapshot = isRecord(tx.commercial_snapshot)
+          ? tx.commercial_snapshot
+          : null;
+        const benefitConfig = getBenefitConfigSnapshot(snapshot);
+        const rType = parseRewardType(snapshot?.rewardType, reward.reward_type);
 
         let appliedBenefitNio: number | null = null;
         let estimatedRedemptionCostNio: number | null = null;
         let costStatus: string | null = 'AVAILABLE';
 
         if (rType === RewardType.DISCOUNT_AMOUNT) {
-          appliedBenefitNio =
-            snapshot?.appliedBenefitNio != null
-              ? Number(snapshot.appliedBenefitNio)
-              : (snapshot?.benefitConfig as any)?.amountNio != null
-                ? Number((snapshot?.benefitConfig as any).amountNio)
-                : null;
+          const snapshotBenefit =
+            typeof snapshot?.appliedBenefitNio === 'number'
+              ? snapshot.appliedBenefitNio
+              : null;
+          const configBenefit =
+            typeof benefitConfig?.amountNio === 'number'
+              ? benefitConfig.amountNio
+              : null;
+          appliedBenefitNio = snapshotBenefit ?? configBenefit;
         } else {
           // FREE_PRODUCT
-          const rewardQty = Number(
-            snapshot?.rewardQuantity ??
-              (snapshot?.benefitConfig as any)?.quantity ??
-              1,
-          );
-          if (snapshot?.estimatedRedemptionCostNio != null) {
-            estimatedRedemptionCostNio = Number(
-              snapshot.estimatedRedemptionCostNio,
-            );
-          } else if (snapshot?.estimatedUnitCostNioAtRedemption != null) {
-            estimatedRedemptionCostNio =
-              Number(snapshot.estimatedUnitCostNioAtRedemption) * rewardQty;
+          const snapshotQty =
+            typeof snapshot?.rewardQuantity === 'number'
+              ? snapshot.rewardQuantity
+              : null;
+          const configQty =
+            typeof benefitConfig?.quantity === 'number'
+              ? benefitConfig.quantity
+              : null;
+          const rewardQty = snapshotQty ?? configQty ?? 1;
+
+          const snapshotRedemptionCost =
+            typeof snapshot?.estimatedRedemptionCostNio === 'number'
+              ? snapshot.estimatedRedemptionCostNio
+              : null;
+          const snapshotUnitCost =
+            typeof snapshot?.estimatedUnitCostNioAtRedemption === 'number'
+              ? snapshot.estimatedUnitCostNioAtRedemption
+              : null;
+
+          if (snapshotRedemptionCost !== null) {
+            estimatedRedemptionCostNio = snapshotRedemptionCost;
+          } else if (snapshotUnitCost !== null) {
+            estimatedRedemptionCostNio = snapshotUnitCost * rewardQty;
           } else if (estimatedCpp !== null && estimatedCpp !== undefined) {
             // Fallback to current estimated CPP if available
             estimatedRedemptionCostNio = estimatedCpp * rewardQty;
@@ -194,7 +251,7 @@ export class LoyaltyProfitAwareService {
         redeemRecords.push({
           id: tx.id,
           rewardId: reward.id,
-          rewardType: rType as any,
+          rewardType: rType,
           occurredAt: tx.occurred_at ?? tx.created_at,
           appliedBenefitNio,
           estimatedRedemptionCostNio,

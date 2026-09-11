@@ -10,7 +10,7 @@ import {
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { RewardType, RewardStatus } from '../entities/reward-definition.entity';
+import { RewardType } from '../entities/reward-definition.entity';
 
 class BenefitConfigDto {
   @IsOptional()

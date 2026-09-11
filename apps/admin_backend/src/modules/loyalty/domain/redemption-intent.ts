@@ -1,5 +1,3 @@
-import { LoyaltyTicketSnapshot } from './loyalty-ticket-snapshot';
-
 export type RewardApplicationType = 'DISCOUNT_AMOUNT' | 'FREE_PRODUCT';
 
 export interface RewardApplication {

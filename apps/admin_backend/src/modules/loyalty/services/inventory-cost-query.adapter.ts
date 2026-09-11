@@ -19,8 +19,6 @@ export class TypeOrmInventoryCostQueryAdapter implements InventoryCostQueryPort 
   async getCurrentEstimatedCostAndPrice(
     tenantId: string,
     productId: string,
-    variantId?: string,
-    branchId?: string,
   ): Promise<CostQueryResult> {
     if (!productId) {
       return {

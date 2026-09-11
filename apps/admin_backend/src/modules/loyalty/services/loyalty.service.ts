@@ -13,6 +13,7 @@ import {
 import {
   RewardDefinition,
   RewardStatus,
+  RewardType,
 } from '../entities/reward-definition.entity';
 import { CustomerLoyaltyAccountProjection } from '../entities/customer-loyalty-account-projection.entity';
 import { CustomerPointTransaction } from '../../customers/entities/customer-point-transaction.entity';
@@ -172,10 +173,10 @@ export class LoyaltyService {
     programId: string,
     dto: CreateRewardDefinitionDto,
   ): Promise<RewardDefinition> {
-    const program = await this.findOneProgram(tenantId, programId);
+    await this.findOneProgram(tenantId, programId);
 
     if (
-      dto.reward_type === 'DISCOUNT_AMOUNT' &&
+      dto.reward_type === RewardType.DISCOUNT_AMOUNT &&
       (!dto.benefit_config?.amountNio || dto.benefit_config.amountNio <= 0)
     ) {
       throw new BadRequestException(
@@ -183,7 +184,10 @@ export class LoyaltyService {
       );
     }
 
-    if (dto.reward_type === 'FREE_PRODUCT' && !dto.benefit_config?.productId) {
+    if (
+      dto.reward_type === RewardType.FREE_PRODUCT &&
+      !dto.benefit_config?.productId
+    ) {
       throw new BadRequestException(
         'FREE_PRODUCT requires productId in benefit_config',
       );
@@ -194,7 +198,7 @@ export class LoyaltyService {
       description: dto.description,
       reward_type: dto.reward_type,
       cost_units: dto.cost_units,
-      benefit_config: dto.benefit_config as unknown as Record<string, unknown>,
+      benefit_config: { ...dto.benefit_config },
       presentation_order: dto.presentation_order ?? 0,
       tenant_id: tenantId,
       loyalty_program_id: programId,

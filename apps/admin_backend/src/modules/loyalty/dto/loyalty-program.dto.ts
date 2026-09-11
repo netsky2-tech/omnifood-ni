@@ -8,10 +8,7 @@ import {
   IsDateString,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import {
-  LoyaltyProgramType,
-  LoyaltyProgramStatus,
-} from '../entities/loyalty-program.entity';
+import { LoyaltyProgramType } from '../entities/loyalty-program.entity';
 
 class EarningRuleDto {
   @IsOptional()
