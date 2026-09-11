@@ -16,6 +16,10 @@ import { CatalogType } from './catalog-type';
 import { CreateCatalogValueDto } from './dto/create-catalog-value.dto';
 import { UpdateCatalogValueDto } from './dto/update-catalog-value.dto';
 import { GetTenantId } from '../../core/decorators/tenant.decorator';
+import {
+  CurrentUser,
+  CurrentUserPayload,
+} from '../../core/decorators/current-user.decorator';
 import { TenantInterceptor } from '../../core/database/rls.interceptor';
 import { AuthGuard } from '../identity/guards/auth.guard';
 import { AuthoritativeCurrentUserGuard } from '../identity/guards/authoritative-current-user.guard';
@@ -73,12 +77,14 @@ export class CatalogController {
     @Param('type') type: string,
     @Body() dto: CreateCatalogValueDto,
     @GetTenantId() tenantId?: string,
+    @CurrentUser() user?: CurrentUserPayload,
   ) {
     const resolved = CatalogService.resolveType(type);
     return this.catalogService.create(
       resolved,
       this.requireTenant(tenantId),
       dto,
+      user ? { userId: user.sub, userEmail: user.email } : undefined,
     );
   }
 
@@ -90,6 +96,7 @@ export class CatalogController {
     @Param('id') id: string,
     @Body() dto: UpdateCatalogValueDto,
     @GetTenantId() tenantId?: string,
+    @CurrentUser() user?: CurrentUserPayload,
   ) {
     const resolved = CatalogService.resolveType(type);
     return this.catalogService.update(
@@ -97,6 +104,7 @@ export class CatalogController {
       id,
       this.requireTenant(tenantId),
       dto,
+      user ? { userId: user.sub, userEmail: user.email } : undefined,
     );
   }
 
@@ -107,12 +115,14 @@ export class CatalogController {
     @Param('type') type: string,
     @Param('id') id: string,
     @GetTenantId() tenantId?: string,
+    @CurrentUser() user?: CurrentUserPayload,
   ) {
     const resolved = CatalogService.resolveType(type);
     await this.catalogService.deactivate(
       resolved,
       id,
       this.requireTenant(tenantId),
+      user ? { userId: user.sub, userEmail: user.email } : undefined,
     );
     return { id, deactivated: true };
   }

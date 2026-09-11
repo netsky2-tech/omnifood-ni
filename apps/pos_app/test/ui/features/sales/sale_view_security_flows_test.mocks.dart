@@ -474,6 +474,35 @@ class MockSaleViewModel extends _i1.Mock implements _i10.SaleViewModel {
       ) as bool);
 
   @override
+  _i18.Future<_i6.Customer?> identifyCustomer(String? input) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #identifyCustomer,
+          [input],
+        ),
+        returnValue: _i18.Future<_i6.Customer?>.value(),
+        returnValueForMissingStub: _i18.Future<_i6.Customer?>.value(),
+      ) as _i18.Future<_i6.Customer?>);
+
+  @override
+  void selectReward(String? rewardId) => super.noSuchMethod(
+        Invocation.method(
+          #selectReward,
+          [rewardId],
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  void clearReward() => super.noSuchMethod(
+        Invocation.method(
+          #clearReward,
+          [],
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
   void setBuzzerNumber(String? number) => super.noSuchMethod(
         Invocation.method(
           #setBuzzerNumber,
@@ -483,13 +512,15 @@ class MockSaleViewModel extends _i1.Mock implements _i10.SaleViewModel {
       );
 
   @override
-  void selectCustomer(_i6.Customer? customer) => super.noSuchMethod(
+  _i18.Future<void> selectCustomer(_i6.Customer? customer) =>
+      (super.noSuchMethod(
         Invocation.method(
           #selectCustomer,
           [customer],
         ),
-        returnValueForMissingStub: null,
-      );
+        returnValue: _i18.Future<void>.value(),
+        returnValueForMissingStub: _i18.Future<void>.value(),
+      ) as _i18.Future<void>);
 
   @override
   void clearCustomer() => super.noSuchMethod(
@@ -1386,6 +1417,13 @@ class MockSyncService extends _i1.Mock implements _i9.SyncService {
         returnValue: 0,
         returnValueForMissingStub: 0,
       ) as int);
+
+  @override
+  bool get isCloudAuthRequired => (super.noSuchMethod(
+        Invocation.getter(#isCloudAuthRequired),
+        returnValue: false,
+        returnValueForMissingStub: false,
+      ) as bool);
 
   @override
   void start() => super.noSuchMethod(

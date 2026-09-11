@@ -1,7 +1,10 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   NotFoundException,
+  Optional,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
@@ -13,6 +16,16 @@ import {
   FiscalSetupDto,
   FiscalSetupResponse,
 } from '../dto/fiscal-setup.dto';
+import {
+  FiscalConfigSnapshot,
+  FiscalConfigVersion,
+} from '../dto/fiscal-config-version.dto';
+import { FiscalConfigVersionService } from './fiscal-config-version.service';
+import {
+  OnboardingSessionService,
+  OnboardingStartSource,
+} from './onboarding-session.service';
+import { OnboardingStateReconciler } from './onboarding-state.reconciler';
 
 export const FISCAL_PARAM_KEYS = {
   FISCAL_REGIME: 'FISCAL_REGIME',
@@ -37,6 +50,15 @@ export class FiscalSetupService {
     private readonly sysParamRepo: Repository<SystemParametersConfig>,
     private readonly eventEmitter: EventEmitter2,
     private readonly dataSource: DataSource,
+    @Optional()
+    @Inject(forwardRef(() => OnboardingSessionService))
+    private readonly sessionService?: OnboardingSessionService,
+    @Optional()
+    @Inject(forwardRef(() => OnboardingStateReconciler))
+    private readonly stateReconciler?: OnboardingStateReconciler,
+    @Optional()
+    @Inject(forwardRef(() => FiscalConfigVersionService))
+    private readonly fiscalConfigVersionService?: FiscalConfigVersionService,
   ) {}
 
   async getFiscalSetup(tenantId: string): Promise<FiscalSetupResponse> {
@@ -86,6 +108,20 @@ export class FiscalSetupService {
     const commercialFxSpread =
       typeof rawFxSpread === 'number' ? rawFxSpread : 0.5;
 
+    let configVersion: FiscalConfigVersion | undefined;
+    if (this.fiscalConfigVersionService) {
+      const latest =
+        await this.fiscalConfigVersionService.getLatestRevision(
+          trimmedTenantId,
+        );
+      if (latest) {
+        configVersion = {
+          revision: latest.revision,
+          fingerprint: latest.fingerprint,
+        };
+      }
+    }
+
     return {
       tenantId: tenant.id,
       businessName: tenant.name,
@@ -94,7 +130,25 @@ export class FiscalSetupService {
       taxRateIva,
       pricesIncludeTax,
       commercialFxSpread,
+      configVersion,
     };
+  }
+
+  async getFiscalConfigSnapshot(
+    tenantId: string,
+  ): Promise<FiscalConfigSnapshot> {
+    const trimmedTenantId = tenantId?.trim();
+    if (!trimmedTenantId) {
+      throw new BadRequestException('Tenant ID is required');
+    }
+    if (!this.fiscalConfigVersionService) {
+      throw new BadRequestException(
+        'FiscalConfigVersionService is not configured',
+      );
+    }
+    return this.fiscalConfigVersionService.getFiscalConfigSnapshot(
+      trimmedTenantId,
+    );
   }
 
   async configureFiscalSetup(
@@ -124,75 +178,102 @@ export class FiscalSetupService {
 
     const configuredAt = new Date();
 
-    return this.dataSource.transaction(async (manager: EntityManager) => {
-      // 1. Update Tenant entity
-      const tenant = await manager.findOne(Tenant, {
-        where: { id: trimmedTenantId },
-      });
+    const result = await this.dataSource.transaction(
+      async (manager: EntityManager) => {
+        // 1. Update Tenant entity
+        const tenant = await manager.findOne(Tenant, {
+          where: { id: trimmedTenantId },
+        });
 
-      if (!tenant) {
-        throw new NotFoundException(`Tenant '${trimmedTenantId}' not found`);
-      }
+        if (!tenant) {
+          throw new NotFoundException(`Tenant '${trimmedTenantId}' not found`);
+        }
 
-      tenant.name = dto.businessName.trim();
-      tenant.ruc = dto.ruc?.trim() || null;
-      await manager.save(Tenant, tenant);
+        tenant.name = dto.businessName.trim();
+        tenant.ruc = dto.ruc?.trim() || null;
+        await manager.save(Tenant, tenant);
 
-      // 2. Upsert / Version System Parameters
-      await this.upsertParameter(
-        manager,
-        trimmedTenantId,
-        FISCAL_PARAM_KEYS.FISCAL_REGIME,
-        dto.regime,
-        userId,
-      );
+        // 2. Upsert / Version System Parameters
+        await this.upsertParameter(
+          manager,
+          trimmedTenantId,
+          FISCAL_PARAM_KEYS.FISCAL_REGIME,
+          dto.regime,
+          userId,
+        );
 
-      await this.upsertParameter(
-        manager,
-        trimmedTenantId,
-        FISCAL_PARAM_KEYS.TAX_RATE_IVA,
-        targetTaxRate,
-        userId,
-      );
+        await this.upsertParameter(
+          manager,
+          trimmedTenantId,
+          FISCAL_PARAM_KEYS.TAX_RATE_IVA,
+          targetTaxRate,
+          userId,
+        );
 
-      await this.upsertParameter(
-        manager,
-        trimmedTenantId,
-        FISCAL_PARAM_KEYS.PRICES_INCLUDE_TAX,
-        dto.pricesIncludeTax,
-        userId,
-      );
+        await this.upsertParameter(
+          manager,
+          trimmedTenantId,
+          FISCAL_PARAM_KEYS.PRICES_INCLUDE_TAX,
+          dto.pricesIncludeTax,
+          userId,
+        );
 
-      await this.upsertParameter(
-        manager,
-        trimmedTenantId,
-        FISCAL_PARAM_KEYS.COMMERCIAL_FX_SPREAD,
-        dto.commercialFxSpread,
-        userId,
-      );
+        await this.upsertParameter(
+          manager,
+          trimmedTenantId,
+          FISCAL_PARAM_KEYS.COMMERCIAL_FX_SPREAD,
+          dto.commercialFxSpread,
+          userId,
+        );
 
-      // 3. Emit Domain Audit Event
-      this.eventEmitter.emit('ONBOARDING_FISCAL_SETUP_COMPLETED', {
+        // 3. Record or Update FiscalConfigVersion
+        let configVersion: FiscalConfigVersion | undefined;
+        if (this.fiscalConfigVersionService) {
+          configVersion =
+            await this.fiscalConfigVersionService.recordRevisionChange(
+              trimmedTenantId,
+              manager,
+            );
+        }
+
+        // 4. Emit Domain Audit Event
+        this.eventEmitter.emit('ONBOARDING_FISCAL_SETUP_COMPLETED', {
+          tenantId: trimmedTenantId,
+          userId,
+          regime: dto.regime,
+          taxRateIva: targetTaxRate,
+          commercialFxSpread: dto.commercialFxSpread,
+          pricesIncludeTax: dto.pricesIncludeTax,
+          configVersion,
+          configuredAt,
+        });
+
+        return {
+          tenantId: trimmedTenantId,
+          businessName: tenant.name,
+          ruc: tenant.ruc,
+          regime: dto.regime,
+          taxRateIva: targetTaxRate,
+          pricesIncludeTax: dto.pricesIncludeTax,
+          commercialFxSpread: dto.commercialFxSpread,
+          configVersion,
+          configuredAt,
+        };
+      },
+    );
+
+    if (this.sessionService) {
+      await this.sessionService.ensureOnboardingStarted({
         tenantId: trimmedTenantId,
-        userId,
-        regime: dto.regime,
-        taxRateIva: targetTaxRate,
-        commercialFxSpread: dto.commercialFxSpread,
-        pricesIncludeTax: dto.pricesIncludeTax,
-        configuredAt,
+        actorUserId: userId,
+        source: OnboardingStartSource.FISCAL_SETUP,
       });
+    }
+    if (this.stateReconciler) {
+      await this.stateReconciler.reconcile(trimmedTenantId);
+    }
 
-      return {
-        tenantId: trimmedTenantId,
-        businessName: tenant.name,
-        ruc: tenant.ruc,
-        regime: dto.regime,
-        taxRateIva: targetTaxRate,
-        pricesIncludeTax: dto.pricesIncludeTax,
-        commercialFxSpread: dto.commercialFxSpread,
-        configuredAt,
-      };
-    });
+    return result;
   }
 
   private async upsertParameter(

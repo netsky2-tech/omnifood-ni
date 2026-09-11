@@ -1,3 +1,5 @@
+import 'package:pos_app/domain/models/audit_log.dart';
+import 'package:pos_app/domain/usecases/inventory/frozen_sale_inventory_movement_boundary.dart';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
@@ -28,6 +30,56 @@ import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/domain/models/fulfillment/fulfillment_checkout_context.dart';
 
 class SalesRepositoryImpl implements SalesRepository {
+  @override
+  Future<void> acknowledgeSaleSync({
+    required String invoiceId,
+    required String? outcome,
+    required List<String> acknowledgedCorrelationIds,
+  }) async {
+    final invoice = await invoiceDao.getInvoiceById(invoiceId);
+    if (invoice == null) {
+      throw StateError('Invoice not found for ACK reconciliation: $invoiceId');
+    }
+
+    final localMovements = await transactionDao.getMovementsBySaleId(invoiceId);
+    final expectedCorrelations = localMovements
+        .map((m) => m.saleCorrelationId ?? m.id)
+        .where((id) => id.isNotEmpty)
+        .toSet();
+
+    final ackSet = acknowledgedCorrelationIds.toSet();
+    final effectiveOutcome = outcome ?? invoice.inventoryOutcome;
+
+    if (effectiveOutcome == 'APPLIED_NO_INVENTORY_IMPACT' ||
+        effectiveOutcome == 'APPLIED_INVENTORY_PENDING') {
+      if (ackSet.isNotEmpty) {
+        throw StateError(
+          'Integrity failure: Non-empty ACK set for invoice $invoiceId with outcome $effectiveOutcome: $ackSet',
+        );
+      }
+    } else {
+      if (ackSet.length != expectedCorrelations.length ||
+          !ackSet.containsAll(expectedCorrelations)) {
+        throw StateError(
+          'Integrity failure: ACK correlation IDs do not match local expected set for invoice $invoiceId. '
+          'Expected: $expectedCorrelations, Received: $ackSet',
+        );
+      }
+    }
+
+    await transactionDao.executeAckTransaction(
+      invoiceId,
+      'synced',
+      MovementDeliveryState.cloudAcknowledged,
+    );
+  }
+
+  @override
+  Future<int> getInventoryEnrichmentPendingCount() async {
+    final count = await invoiceDao.getInventoryEnrichmentPendingCount();
+    return count ?? 0;
+  }
+
   final AppDatabase database;
   final InvoiceDao invoiceDao;
   final InvoiceItemDao itemDao;
@@ -74,48 +126,42 @@ class SalesRepositoryImpl implements SalesRepository {
     final finalNumber = await numberingService.getNextNumber();
     final nextDgiSequence = _nextDgiSequence(finalNumber);
     final existingInvoice = await invoiceDao.getInvoiceById(invoice.id);
-    final terminalId = existingInvoice?.terminalId ?? 'pos-${invoice.userId}';
+    final terminalId =
+        existingInvoice?.terminalId ??
+        invoice.terminalId ??
+        'pos-${invoice.userId}';
     final sourceSequence =
         existingInvoice?.sourceSequence ??
         (await transactionDao.getNextInvoiceSourceSequence(terminalId)) ??
         1;
-    final payloadHash = _buildSalePayloadHash(
-      invoice: invoice.copyWith(number: finalNumber),
-      items: items,
-      payments: payments,
-    );
-    final updatedInvoice = invoice.copyWith(
+    final isFrozenSale = _isFrozenSale(items);
+    final sourceInvoice = invoice.copyWith(
       number: finalNumber,
       terminalId: terminalId,
       sourceSequence: sourceSequence,
-      idempotencyKey: 'sale:$terminalId:${invoice.id}',
-      payloadHash: payloadHash,
+      idempotencyKey:
+          invoice.idempotencyKey ?? 'sale:$terminalId:${invoice.id}',
     );
 
-    // Bind historical recipe version per line (UC-05). For prepared products
-    // without an explicit recipeVersionId, resolve the active version at sale
-    // time so the line is frozen to the version used when it was cooked.
-    // Items that already carry a recipeVersionId are never recomputed.
-    final resolvedItems = await _resolveRecipeVersionBindings(items);
+    // Frozen SALE_TIME_V1 lines are already bound to immutable sale-time facts.
+    // Legacy lines still resolve their active recipe version before persistence.
+    final resolvedItems = isFrozenSale
+        ? items
+        : await _resolveRecipeVersionBindings(items);
+    final updatedInvoice = sourceInvoice.copyWith(
+      payloadHash: _buildSalePayloadHash(
+        invoice: sourceInvoice,
+        items: resolvedItems,
+        payments: payments,
+      ),
+    );
 
     final invoiceEntity = SalesMapper.toInvoiceEntity(updatedInvoice);
     final itemEntities = resolvedItems.map(SalesMapper.toItemEntity).toList();
     final paymentEntities = payments.map(SalesMapper.toPaymentEntity).toList();
-
-    // Prepare inventory movements using the use case (receives resolved items
-    // so the BOM explosion uses the same historical version that is persisted).
-    final movements = await processInventoryUseCase.execute(resolvedItems);
-    final movementEntities = movements
-        .map(
-          (m) => InventoryMapper.toMovementEntity(
-            m.copyWith(
-              userId: updatedInvoice.userId,
-              sourceDocumentType: 'invoice',
-              sourceDocumentId: updatedInvoice.id,
-            ),
-          ),
-        )
-        .toList();
+    final movementEntities = isFrozenSale
+        ? _frozenMovements(resolvedItems, updatedInvoice)
+        : await _legacyMovements(resolvedItems, updatedInvoice);
 
     try {
       if (fulfillmentContext != null) {
@@ -247,6 +293,106 @@ class SalesRepositoryImpl implements SalesRepository {
     return (int.parse(match.group(1)!) + 1).toString();
   }
 
+  bool _isFrozenSale(List<InvoiceItem> items) {
+    if (items.isEmpty) return false;
+    final allFrozen = items.every(
+      (item) =>
+          item.inventorySnapshotVersion == 'SALE_TIME_V1' &&
+          item.inventorySnapshot != null,
+    );
+    final allLegacy = items.every(
+      (item) =>
+          item.inventorySnapshotVersion == null &&
+          item.inventorySnapshot == null,
+    );
+    if (!allFrozen && !allLegacy) {
+      throw StateError(
+        'Sale inventory snapshots must be all frozen or all legacy.',
+      );
+    }
+    return allFrozen;
+  }
+
+  List<MovementEntity> _frozenMovements(
+    List<InvoiceItem> items,
+    Invoice invoice,
+  ) {
+    final result = FrozenSaleInventoryMovementBoundary().derive(
+      items
+          .map(
+            (item) => FrozenSaleInventoryMovementLine(
+              invoiceItemId: item.id,
+              quantity: item.quantity,
+              snapshot: item.inventorySnapshot!,
+            ),
+          )
+          .toList(growable: false),
+    );
+    final expectedOutcome = switch (result.outcome) {
+      LocalSaleMovementOutcome.applied => 'APPLIED',
+      LocalSaleMovementOutcome.suppressedNoInventoryImpact =>
+        'APPLIED_NO_INVENTORY_IMPACT',
+      LocalSaleMovementOutcome.suppressedInventoryPending =>
+        'APPLIED_INVENTORY_PENDING',
+    };
+    final expectedReason = switch (result.outcome) {
+      LocalSaleMovementOutcome.applied => null,
+      LocalSaleMovementOutcome.suppressedNoInventoryImpact =>
+        'NO_EXPLICIT_INSUMO_MAPPING',
+      LocalSaleMovementOutcome.suppressedInventoryPending =>
+        'MISSING_PUBLISHED_RECIPE',
+    };
+    if (invoice.inventoryPolicyVersion != 'SALE_TIME_V1' ||
+        invoice.inventoryOutcome != expectedOutcome ||
+        invoice.inventoryOutcomeReason != expectedReason) {
+      throw StateError(
+        'Frozen sale inventory outcome does not match snapshots.',
+      );
+    }
+    return result.movements
+        .map(
+          (movement) => MovementEntity(
+            id: movement.saleCorrelationId,
+            insumoId: movement.insumoId,
+            type: 'sale',
+            quantity: -movement.quantity,
+            previousStock: 0,
+            newStock: 0,
+            timestamp: invoice.createdAt.toIso8601String(),
+            userId: invoice.userId,
+            sourceDocumentType: 'SALE',
+            sourceDocumentId: invoice.id,
+            originInvoiceItemId: movement.invoiceItemId,
+            deliveryOwner: MovementDeliveryOwner.saleSync,
+            deliveryState: MovementDeliveryState.localApplied,
+            saleId: invoice.id,
+            saleCorrelationId: movement.saleCorrelationId,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Future<List<MovementEntity>> _legacyMovements(
+    List<InvoiceItem> items,
+    Invoice invoice,
+  ) async {
+    final movements = await processInventoryUseCase.execute(items);
+    return movements
+        .map(
+          (movement) => InventoryMapper.toMovementEntity(
+            movement.copyWith(
+              userId: invoice.userId,
+              sourceDocumentType: 'invoice',
+              sourceDocumentId: invoice.id,
+              deliveryOwner: MovementDeliveryOwner.saleSync,
+              deliveryState: MovementDeliveryState.localApplied,
+              saleId: invoice.id,
+            ),
+          ),
+        )
+        .toList(growable: false);
+  }
+
   /// Resolves and freezes the [recipeVersionId] on each invoice line for
   /// prepared products that do not already carry one.
   ///
@@ -305,13 +451,6 @@ class SalesRepositoryImpl implements SalesRepository {
     for (final invoice in invoices) {
       final items = await itemDao.getItemsByInvoiceId(invoice.id);
       final payments = await paymentDao.getPaymentsByInvoiceId(invoice.id);
-
-      // ignore: avoid_print
-      for (final pe in payments) {
-        print(
-          '[SYNC-DB] payment entity id="${pe.id}" invoiceId="${pe.invoiceId}" method="${pe.method}"',
-        );
-      }
 
       aggregates.add(
         SalesMapper.toSyncJson(

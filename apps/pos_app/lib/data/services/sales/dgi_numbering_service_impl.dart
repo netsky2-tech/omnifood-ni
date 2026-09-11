@@ -41,13 +41,21 @@ class DgiNumberingServiceImpl implements DgiNumberingService {
     required int start,
     required int end,
   }) async {
-    await _configDao.saveConfig(LocalConfigEntity(key: _keyPrefix, value: prefix));
-    await _configDao.saveConfig(LocalConfigEntity(key: _keyStart, value: start.toString()));
-    await _configDao.saveConfig(LocalConfigEntity(key: _keyEnd, value: end.toString()));
-    
+    await _configDao.saveConfig(
+      LocalConfigEntity(key: _keyPrefix, value: prefix),
+    );
+    await _configDao.saveConfig(
+      LocalConfigEntity(key: _keyStart, value: start.toString()),
+    );
+    await _configDao.saveConfig(
+      LocalConfigEntity(key: _keyEnd, value: end.toString()),
+    );
+
     final current = await _configDao.getConfigByKey(_keyCurrent);
     if (current == null) {
-      await _configDao.saveConfig(LocalConfigEntity(key: _keyCurrent, value: start.toString()));
+      await _configDao.saveConfig(
+        LocalConfigEntity(key: _keyCurrent, value: start.toString()),
+      );
     }
   }
 
@@ -75,8 +83,16 @@ class DgiNumberingServiceImpl implements DgiNumberingService {
     final parsedCurrent = int.tryParse(current?.value ?? '1') ?? 1;
     final validSequence = await _resolveNextSequence(parsedCurrent);
 
-    final next = validSequence + 1;
-    await _configDao.saveConfig(LocalConfigEntity(key: _keyCurrent, value: next.toString()));
+    // `_resolveNextSequence` already advances past a persisted invoice.
+    // Do not advance twice when the configured cursor still points at that
+    // invoice; only increment the cursor when no persisted invoice forced
+    // the next sequence forward.
+    final next = validSequence == parsedCurrent
+        ? validSequence + 1
+        : validSequence;
+    await _configDao.saveConfig(
+      LocalConfigEntity(key: _keyCurrent, value: next.toString()),
+    );
   }
 
   @override
@@ -93,6 +109,6 @@ class DgiNumberingServiceImpl implements DgiNumberingService {
     final validSequence = await _resolveNextSequence(parsedCurrent);
     final parsedEnd = int.tryParse(end.value) ?? 1000000;
 
-    return validSequence >= parsedEnd;
+    return validSequence > parsedEnd;
   }
 }

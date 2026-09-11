@@ -31,9 +31,19 @@ mixin _$Product {
   String? get barcode => throw _privateConstructorUsedError;
   String? get category => throw _privateConstructorUsedError;
   bool get isPrepared => throw _privateConstructorUsedError;
+  String get productType => throw _privateConstructorUsedError;
+  String? get mappingVersionId => throw _privateConstructorUsedError;
+  String? get insumoId => throw _privateConstructorUsedError;
   String? get createdAt => throw _privateConstructorUsedError;
   InventoryPolicy? get inventoryPolicy => throw _privateConstructorUsedError;
   String? get directStockInsumoId => throw _privateConstructorUsedError;
+
+  /// Business migration default: 0.15 (15% IVA).
+  /// This is NOT a legal requirement (Ley 822 Art. 114 does not mandate 15%
+  /// for all retail goods). It is a conservative migration assumption for
+  /// legacy products that predate the fiscal field addition.
+  /// Risk: genuinely exempt catalogs (medicine, basic food) will show 15%
+  /// until explicitly marked isTaxExempt=true or taxRate=0.0.
   double get taxRate => throw _privateConstructorUsedError;
   bool get isTaxExempt => throw _privateConstructorUsedError;
   List<ProductVariant> get variants => throw _privateConstructorUsedError;
@@ -61,6 +71,9 @@ abstract class $ProductCopyWith<$Res> {
       String? barcode,
       String? category,
       bool isPrepared,
+      String productType,
+      String? mappingVersionId,
+      String? insumoId,
       String? createdAt,
       InventoryPolicy? inventoryPolicy,
       String? directStockInsumoId,
@@ -94,6 +107,9 @@ class _$ProductCopyWithImpl<$Res, $Val extends Product>
     Object? barcode = freezed,
     Object? category = freezed,
     Object? isPrepared = null,
+    Object? productType = null,
+    Object? mappingVersionId = freezed,
+    Object? insumoId = freezed,
     Object? createdAt = freezed,
     Object? inventoryPolicy = freezed,
     Object? directStockInsumoId = freezed,
@@ -147,6 +163,18 @@ class _$ProductCopyWithImpl<$Res, $Val extends Product>
           ? _value.isPrepared
           : isPrepared // ignore: cast_nullable_to_non_nullable
               as bool,
+      productType: null == productType
+          ? _value.productType
+          : productType // ignore: cast_nullable_to_non_nullable
+              as String,
+      mappingVersionId: freezed == mappingVersionId
+          ? _value.mappingVersionId
+          : mappingVersionId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      insumoId: freezed == insumoId
+          ? _value.insumoId
+          : insumoId // ignore: cast_nullable_to_non_nullable
+              as String?,
       createdAt: freezed == createdAt
           ? _value.createdAt
           : createdAt // ignore: cast_nullable_to_non_nullable
@@ -198,6 +226,9 @@ abstract class _$$ProductImplCopyWith<$Res> implements $ProductCopyWith<$Res> {
       String? barcode,
       String? category,
       bool isPrepared,
+      String productType,
+      String? mappingVersionId,
+      String? insumoId,
       String? createdAt,
       InventoryPolicy? inventoryPolicy,
       String? directStockInsumoId,
@@ -229,6 +260,9 @@ class __$$ProductImplCopyWithImpl<$Res>
     Object? barcode = freezed,
     Object? category = freezed,
     Object? isPrepared = null,
+    Object? productType = null,
+    Object? mappingVersionId = freezed,
+    Object? insumoId = freezed,
     Object? createdAt = freezed,
     Object? inventoryPolicy = freezed,
     Object? directStockInsumoId = freezed,
@@ -282,6 +316,18 @@ class __$$ProductImplCopyWithImpl<$Res>
           ? _value.isPrepared
           : isPrepared // ignore: cast_nullable_to_non_nullable
               as bool,
+      productType: null == productType
+          ? _value.productType
+          : productType // ignore: cast_nullable_to_non_nullable
+              as String,
+      mappingVersionId: freezed == mappingVersionId
+          ? _value.mappingVersionId
+          : mappingVersionId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      insumoId: freezed == insumoId
+          ? _value.insumoId
+          : insumoId // ignore: cast_nullable_to_non_nullable
+              as String?,
       createdAt: freezed == createdAt
           ? _value.createdAt
           : createdAt // ignore: cast_nullable_to_non_nullable
@@ -329,6 +375,9 @@ class _$ProductImpl implements _Product {
       this.barcode,
       this.category,
       this.isPrepared = false,
+      this.productType = 'SIMPLE',
+      this.mappingVersionId,
+      this.insumoId,
       this.createdAt,
       this.inventoryPolicy,
       this.directStockInsumoId,
@@ -367,11 +416,25 @@ class _$ProductImpl implements _Product {
   @JsonKey()
   final bool isPrepared;
   @override
+  @JsonKey()
+  final String productType;
+  @override
+  final String? mappingVersionId;
+  @override
+  final String? insumoId;
+  @override
   final String? createdAt;
   @override
   final InventoryPolicy? inventoryPolicy;
   @override
   final String? directStockInsumoId;
+
+  /// Business migration default: 0.15 (15% IVA).
+  /// This is NOT a legal requirement (Ley 822 Art. 114 does not mandate 15%
+  /// for all retail goods). It is a conservative migration assumption for
+  /// legacy products that predate the fiscal field addition.
+  /// Risk: genuinely exempt catalogs (medicine, basic food) will show 15%
+  /// until explicitly marked isTaxExempt=true or taxRate=0.0.
   @override
   @JsonKey()
   final double taxRate;
@@ -399,7 +462,7 @@ class _$ProductImpl implements _Product {
 
   @override
   String toString() {
-    return 'Product(id: $id, name: $name, uom: $uom, stock: $stock, averageCost: $averageCost, sellPrice: $sellPrice, isActive: $isActive, sku: $sku, barcode: $barcode, category: $category, isPrepared: $isPrepared, createdAt: $createdAt, inventoryPolicy: $inventoryPolicy, directStockInsumoId: $directStockInsumoId, taxRate: $taxRate, isTaxExempt: $isTaxExempt, variants: $variants, availableModifiers: $availableModifiers)';
+    return 'Product(id: $id, name: $name, uom: $uom, stock: $stock, averageCost: $averageCost, sellPrice: $sellPrice, isActive: $isActive, sku: $sku, barcode: $barcode, category: $category, isPrepared: $isPrepared, productType: $productType, mappingVersionId: $mappingVersionId, insumoId: $insumoId, createdAt: $createdAt, inventoryPolicy: $inventoryPolicy, directStockInsumoId: $directStockInsumoId, taxRate: $taxRate, isTaxExempt: $isTaxExempt, variants: $variants, availableModifiers: $availableModifiers)';
   }
 
   @override
@@ -423,6 +486,12 @@ class _$ProductImpl implements _Product {
                 other.category == category) &&
             (identical(other.isPrepared, isPrepared) ||
                 other.isPrepared == isPrepared) &&
+            (identical(other.productType, productType) ||
+                other.productType == productType) &&
+            (identical(other.mappingVersionId, mappingVersionId) ||
+                other.mappingVersionId == mappingVersionId) &&
+            (identical(other.insumoId, insumoId) ||
+                other.insumoId == insumoId) &&
             (identical(other.createdAt, createdAt) ||
                 other.createdAt == createdAt) &&
             (identical(other.inventoryPolicy, inventoryPolicy) ||
@@ -439,26 +508,30 @@ class _$ProductImpl implements _Product {
 
   @JsonKey(ignore: true)
   @override
-  int get hashCode => Object.hash(
-      runtimeType,
-      id,
-      name,
-      uom,
-      stock,
-      averageCost,
-      sellPrice,
-      isActive,
-      sku,
-      barcode,
-      category,
-      isPrepared,
-      createdAt,
-      inventoryPolicy,
-      directStockInsumoId,
-      taxRate,
-      isTaxExempt,
-      const DeepCollectionEquality().hash(_variants),
-      const DeepCollectionEquality().hash(_availableModifiers));
+  int get hashCode => Object.hashAll([
+        runtimeType,
+        id,
+        name,
+        uom,
+        stock,
+        averageCost,
+        sellPrice,
+        isActive,
+        sku,
+        barcode,
+        category,
+        isPrepared,
+        productType,
+        mappingVersionId,
+        insumoId,
+        createdAt,
+        inventoryPolicy,
+        directStockInsumoId,
+        taxRate,
+        isTaxExempt,
+        const DeepCollectionEquality().hash(_variants),
+        const DeepCollectionEquality().hash(_availableModifiers)
+      ]);
 
   @JsonKey(ignore: true)
   @override
@@ -487,6 +560,9 @@ abstract class _Product implements Product {
       final String? barcode,
       final String? category,
       final bool isPrepared,
+      final String productType,
+      final String? mappingVersionId,
+      final String? insumoId,
       final String? createdAt,
       final InventoryPolicy? inventoryPolicy,
       final String? directStockInsumoId,
@@ -520,12 +596,25 @@ abstract class _Product implements Product {
   @override
   bool get isPrepared;
   @override
+  String get productType;
+  @override
+  String? get mappingVersionId;
+  @override
+  String? get insumoId;
+  @override
   String? get createdAt;
   @override
   InventoryPolicy? get inventoryPolicy;
   @override
   String? get directStockInsumoId;
   @override
+
+  /// Business migration default: 0.15 (15% IVA).
+  /// This is NOT a legal requirement (Ley 822 Art. 114 does not mandate 15%
+  /// for all retail goods). It is a conservative migration assumption for
+  /// legacy products that predate the fiscal field addition.
+  /// Risk: genuinely exempt catalogs (medicine, basic food) will show 15%
+  /// until explicitly marked isTaxExempt=true or taxRate=0.0.
   double get taxRate;
   @override
   bool get isTaxExempt;

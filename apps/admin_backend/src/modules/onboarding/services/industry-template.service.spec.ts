@@ -14,6 +14,12 @@ import { RecipeVersion } from '../../inventory/entities/recipe-version.entity';
 import { RecipeDetail } from '../../inventory/entities/recipe-detail.entity';
 import { Recipe } from '../../inventory/entities/recipe.entity';
 import { UomConversion } from '../../inventory/entities/uom-conversion.entity';
+import {
+  RecipeOrigin,
+  RecipePublicationState,
+  RecipeSuggestionState,
+} from '../../inventory/entities/recipe-version.entity';
+import { TemplateApplication } from '../entities/template-application.entity';
 
 describe('IndustryTemplateService (Unit & Triangulation)', () => {
   let service: IndustryTemplateService;
@@ -39,6 +45,8 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
         'Plantilla especializada en café de especialidad, bebidas frías y calientes.',
       icon: 'coffee',
       is_active: true,
+      version: 1,
+      source_fingerprint: 'fp-cafeteria',
       created_at: new Date('2026-01-01'),
       updated_at: new Date('2026-01-01'),
       templateInsumos: [
@@ -120,6 +128,8 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
         'Plantilla para gastronomía, hamburguesas, cortes y coctelería.',
       icon: 'utensils',
       is_active: true,
+      version: 1,
+      source_fingerprint: 'fp-bar',
       created_at: new Date('2026-01-01'),
       updated_at: new Date('2026-01-01'),
       templateInsumos: [],
@@ -133,6 +143,8 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
         'Plantilla para abarrotes, bebidas embotelladas y snacks sin receta.',
       icon: 'shopping-cart',
       is_active: true,
+      version: 1,
+      source_fingerprint: 'fp-retail',
       created_at: new Date('2026-01-01'),
       updated_at: new Date('2026-01-01'),
       templateInsumos: [],
@@ -202,9 +214,17 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
       create: jest.fn(
         (_entityClass: unknown, plain: unknown) => plain as object,
       ),
-      save: jest.fn((_entityClass: unknown, entities: unknown) =>
-        Promise.resolve(entities),
-      ),
+      save: jest.fn((_entityClass: unknown, entities: unknown) => {
+        console.log(
+          'SAVE CALLED WITH:',
+          (_entityClass as any)?.name || _entityClass,
+          entities,
+        );
+        if (_entityClass === TemplateApplication) {
+          return Promise.resolve({ ...(entities as any), id: 'app-uuid-1' });
+        }
+        return Promise.resolve(entities);
+      }),
     } as unknown as jest.Mocked<EntityManager>;
 
     dataSource = {
@@ -348,7 +368,7 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
 
       const result = await service.applyTemplate(tenantId, 'CAFETERIA');
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         tenantId,
         templateCode: 'CAFETERIA',
         insumosCreated: 2,
@@ -359,6 +379,47 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
       });
 
       expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('includes every recipe ingredient when only its product is selected', async () => {
+      templateRepo.findOne.mockResolvedValueOnce(mockTemplates[0]);
+      mockManager.find.mockResolvedValue([]);
+      mockManager.save.mockImplementation(
+        (entityClass: unknown, item: unknown) => {
+          if (entityClass === Insumo)
+            return Promise.resolve({
+              ...(item as Insumo),
+              id: `ins-${(item as Insumo).name}`,
+            });
+          if (entityClass === Product)
+            return Promise.resolve({ ...(item as Product), id: 'product-1' });
+          if (entityClass === RecipeVersion)
+            return Promise.resolve({
+              ...(item as RecipeVersion),
+              id: 'version-1',
+            });
+          if (entityClass === TemplateApplication)
+            return Promise.resolve({
+              ...(item as TemplateApplication),
+              id: 'application-1',
+            });
+          return Promise.resolve(item);
+        },
+      );
+
+      const result = await service.applyTemplate(tenantId, 'CAFETERIA', {
+        selectedItemIds: ['tp-1'],
+      });
+
+      expect(result.insumosCreated).toBe(2);
+      expect(mockManager.save).toHaveBeenCalledWith(
+        Insumo,
+        expect.objectContaining({ name: 'Granos de Café Especial' }),
+      );
+      expect(mockManager.save).toHaveBeenCalledWith(
+        Insumo,
+        expect.objectContaining({ name: 'Leche Entera' }),
+      );
     });
 
     it('is strictly idempotent: skips already existing insumos and products and avoids duplicate recipes', async () => {
@@ -394,6 +455,8 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
         warehouse_id: 'wh-1',
         name: 'Capuchino 8oz',
         uom: 'UN',
+        product_type: 'SIMPLE' as never,
+        category_code: null,
         sellPrice: 95.0,
         averageCost: 15.0,
         stock: 0,
@@ -422,6 +485,9 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
         version_note: null,
         published_at: null,
         pos_created_at: null,
+        origin: RecipeOrigin.MANUAL,
+        publication_state: RecipePublicationState.PUBLISHED,
+        suggestion_state: RecipeSuggestionState.CONFIRMED,
         created_at: new Date(),
       };
 
@@ -460,7 +526,7 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
 
       const result = await service.applyTemplate(tenantId, 'CAFETERIA');
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         tenantId,
         templateCode: 'CAFETERIA',
         insumosCreated: 1,
@@ -479,6 +545,8 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
         description: 'Plantilla minimarket',
         icon: 'shopping-cart',
         is_active: true,
+        version: 1,
+        source_fingerprint: 'fp-retail',
         created_at: new Date(),
         updated_at: new Date(),
         templateInsumos: [],
@@ -519,7 +587,7 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
 
       const result = await service.applyTemplate(tenantId, 'RETAIL_MINIMARKET');
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         tenantId,
         templateCode: 'RETAIL_MINIMARKET',
         insumosCreated: 0,

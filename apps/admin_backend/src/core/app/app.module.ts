@@ -12,6 +12,12 @@ import { OnboardingModule } from '../../modules/onboarding/onboarding.module';
 import { CustomersModule } from '../../modules/customers/customers.module';
 import { Customer } from '../../modules/customers/entities/customer.entity';
 import { CustomerPointTransaction } from '../../modules/customers/entities/customer-point-transaction.entity';
+import { LoyaltyModule } from '../../modules/loyalty/loyalty.module';
+import { LoyaltyProgram } from '../../modules/loyalty/entities/loyalty-program.entity';
+import { RewardDefinition } from '../../modules/loyalty/entities/reward-definition.entity';
+import { CustomerLoyaltyAccountProjection } from '../../modules/loyalty/entities/customer-loyalty-account-projection.entity';
+import { AuditModule } from '../../modules/audit/audit.module';
+import { ChangeLog } from '../../modules/audit/entities/change-log.entity';
 import { PromotionsModule } from '../../modules/promotions/promotions.module';
 import { Promotion as CloudPromotion } from '../../modules/promotions/entities/promotion.entity';
 import { FulfillmentModule } from '../../modules/fulfillment/fulfillment.module';
@@ -59,7 +65,15 @@ import { TemplateInsumo } from '../../modules/onboarding/entities/template-insum
 import { TemplateProduct } from '../../modules/onboarding/entities/template-product.entity';
 import { TemplateRecipeItem } from '../../modules/onboarding/entities/template-recipe-item.entity';
 import { ImportStaging } from '../../modules/onboarding/entities/import-staging.entity';
+import { OnboardingSession } from '../../modules/onboarding/entities/onboarding-session.entity';
+import { OnboardingIdempotencyRecord } from '../../modules/onboarding/entities/onboarding-idempotency.entity';
+import { TemplateApplication } from '../../modules/onboarding/entities/template-application.entity';
+import { TemplateSeedLink } from '../../modules/onboarding/entities/template-seed-link.entity';
+import { LegacyOnboardingMigrationReceipt } from '../../modules/onboarding/entities/legacy-migration-receipt.entity';
+import { FiscalConfigRevision } from '../../modules/onboarding/entities/fiscal-config-revision.entity';
 
+import { InventoryRemediationReceipt } from '../../modules/inventory/entities/inventory-remediation-receipt.entity';
+import { ProductInventoryMappingVersion } from '../../modules/inventory/entities/product-inventory-mapping-version.entity';
 export const getRequiredConfigValue = (
   configService: ConfigService,
   key: string,
@@ -119,11 +133,23 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
     TemplateProduct,
     TemplateRecipeItem,
     ImportStaging,
+    OnboardingSession,
+    OnboardingIdempotencyRecord,
+    TemplateApplication,
+    TemplateSeedLink,
+    LegacyOnboardingMigrationReceipt,
+    FiscalConfigRevision,
     Customer,
     CloudPromotion,
     CustomerPointTransaction,
+    ChangeLog,
+    LoyaltyProgram,
+    RewardDefinition,
+    CustomerLoyaltyAccountProjection,
     TenantTopologyRevision,
     TenantFulfillmentRecord,
+    ProductInventoryMappingVersion,
+    InventoryRemediationReceipt,
   ],
   synchronize: false,
 });
@@ -148,7 +174,9 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
     NotificationsModule,
     OnboardingModule,
     CustomersModule,
+    LoyaltyModule,
     PromotionsModule,
+    AuditModule,
     FulfillmentModule,
   ],
   controllers: [AppController],

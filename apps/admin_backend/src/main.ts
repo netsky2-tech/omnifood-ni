@@ -42,6 +42,9 @@ class AllExceptionsFilter implements ExceptionFilter {
 }
 
 async function bootstrap() {
+  process.on('unhandledRejection', (reason) => {
+    console.error('UNHANDLED REJECTION:', reason);
+  });
   const app = await NestFactory.create(AppModule, {
     logger: ['error', 'warn', 'log', 'debug'],
   });

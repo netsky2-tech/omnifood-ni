@@ -1,4 +1,8 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import {
+  INestApplication,
+  UnauthorizedException,
+  ValidationPipe,
+} from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
@@ -9,6 +13,11 @@ import { DataSource, FindManyOptions, FindOneOptions } from 'typeorm';
 import { TenantInterceptor } from '../../src/core/database/rls.interceptor';
 import { IndustryTemplateController } from '../../src/modules/onboarding/controllers/industry-template.controller';
 import { IndustryTemplateService } from '../../src/modules/onboarding/services/industry-template.service';
+import { TemplatePreviewService } from '../../src/modules/onboarding/services/template-preview.service';
+import { TemplateSeedLink } from '../../src/modules/onboarding/entities/template-seed-link.entity';
+import { LegacyTemplateRecipeScanService } from '../../src/modules/onboarding/services/legacy-template-recipe-scan.service';
+import { OnboardingIdempotencyCoordinator } from '../../src/modules/onboarding/services/onboarding-idempotency.coordinator';
+
 import { IndustryTemplate } from '../../src/modules/onboarding/entities/industry-template.entity';
 import {
   Insumo,
@@ -21,8 +30,17 @@ import { Recipe } from '../../src/modules/inventory/entities/recipe.entity';
 import { UomConversion } from '../../src/modules/inventory/entities/uom-conversion.entity';
 import { UserRole } from '../../src/modules/identity/entities/user.entity';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
+import { AuthoritativeCurrentUserGuard } from '../../src/modules/identity/guards/authoritative-current-user.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
-import { JWT_TOKEN_TYPES } from '../../src/modules/identity/security/jwt-token.types';
+import { PermissionsGuard } from '../../src/modules/identity/guards/permissions.guard';
+import {
+  AuthoritativeCurrentUser,
+  CurrentUserAuthorizationService,
+} from '../../src/modules/identity/services/current-user-authorization.service';
+import {
+  JWT_TOKEN_TYPES,
+  JwtAccessPayload,
+} from '../../src/modules/identity/security/jwt-token.types';
 import { createIdentityJwtConfigProvider } from '../support/identity-jwt-test.fixture';
 
 const API_PREFIX = '/api/onboarding/templates';
@@ -49,6 +67,37 @@ describe('IndustryTemplate (Integration & E2E)', () => {
   let app: INestApplication<App>;
   let jwtService: JwtService;
 
+  const defaultAuthorize = async (
+    token: JwtAccessPayload,
+  ): Promise<AuthoritativeCurrentUser> => {
+    if (
+      !token ||
+      !token.sub ||
+      typeof token.sub !== 'string' ||
+      !token.tenant_id ||
+      typeof token.tenant_id !== 'string' ||
+      !token.tenant_id.trim() ||
+      token.is_active === false
+    ) {
+      throw new UnauthorizedException('Authoritative user validation failed');
+    }
+    return {
+      email: token.email,
+      tenant_id: token.tenant_id,
+      role: token.role as UserRole,
+      is_active: true,
+      security_version: token.security_version ?? 1,
+    };
+  };
+
+  const authorizeMock = jest.fn(defaultAuthorize);
+  const currentUserAuthorizationServiceMock: Pick<
+    CurrentUserAuthorizationService,
+    'authorize'
+  > = {
+    authorize: authorizeMock,
+  };
+
   const mockTemplates: IndustryTemplate[] = [
     {
       id: 'CAFETERIA',
@@ -57,6 +106,8 @@ describe('IndustryTemplate (Integration & E2E)', () => {
       description: 'Plantilla especializada en café de especialidad y bebidas.',
       icon: 'coffee',
       is_active: true,
+      version: 1,
+      source_fingerprint: 'fp-cafe',
       created_at: new Date('2026-01-01'),
       updated_at: new Date('2026-01-01'),
       templateInsumos: [
@@ -137,6 +188,8 @@ describe('IndustryTemplate (Integration & E2E)', () => {
       description: 'Plantilla para gastronomía y coctelería.',
       icon: 'utensils',
       is_active: true,
+      version: 1,
+      source_fingerprint: 'fp-bar',
       created_at: new Date('2026-01-01'),
       updated_at: new Date('2026-01-01'),
       templateInsumos: [],
@@ -149,6 +202,8 @@ describe('IndustryTemplate (Integration & E2E)', () => {
       description: 'Plantilla para abarrotes y snacks.',
       icon: 'shopping-cart',
       is_active: true,
+      version: 1,
+      source_fingerprint: 'fp-retail',
       created_at: new Date('2026-01-01'),
       updated_at: new Date('2026-01-01'),
       templateInsumos: [],
@@ -162,6 +217,7 @@ describe('IndustryTemplate (Integration & E2E)', () => {
   let dbRecipeVersions: RecipeVersion[] = [];
   let dbRecipeDetails: RecipeDetail[] = [];
   let dbRecipes: Recipe[] = [];
+  const dbSeedLinks: any[] = [];
   let dbConversions: UomConversion[] = [];
 
   const templateRepo = {
@@ -220,10 +276,7 @@ describe('IndustryTemplate (Integration & E2E)', () => {
         if (entityClass === RecipeVersion) {
           return Promise.resolve(
             dbRecipeVersions.find(
-              (r) =>
-                r.tenant_id === tenantId &&
-                r.product_id === productId &&
-                r.is_active,
+              (r) => r.tenant_id === tenantId && r.product_id === productId,
             ) || null,
           );
         }
@@ -254,6 +307,11 @@ describe('IndustryTemplate (Integration & E2E)', () => {
         if (entityClass === RecipeDetail)
           dbRecipeDetails.push(withId as unknown as RecipeDetail);
         if (entityClass === Recipe) dbRecipes.push(withId as unknown as Recipe);
+        if (
+          (entityClass as any)?.name === 'TemplateSeedLink' ||
+          (entityClass as any) === TemplateSeedLink
+        )
+          dbSeedLinks.push(withId);
         if (entityClass === UomConversion)
           dbConversions.push(withId as unknown as UomConversion);
         return withId;
@@ -289,6 +347,49 @@ describe('IndustryTemplate (Integration & E2E)', () => {
       controllers: [IndustryTemplateController],
       providers: [
         IndustryTemplateService,
+        TemplatePreviewService,
+        LegacyTemplateRecipeScanService,
+        OnboardingIdempotencyCoordinator,
+        createIdentityJwtConfigProvider(),
+        {
+          provide: 'TemplateSeedLinkRepository',
+          useValue: {
+            find: jest.fn().mockResolvedValue([]),
+            findOne: jest.fn().mockResolvedValue(null),
+            create: jest.fn((x) => x),
+            save: jest.fn((x) => Promise.resolve(x)),
+          },
+        },
+        {
+          provide: 'TemplateApplicationRepository',
+          useValue: {
+            create: jest.fn((x) => x),
+            save: jest.fn((x) => Promise.resolve({ ...x, id: 'app-1' })),
+          },
+        },
+        {
+          provide: 'OnboardingSessionRepository',
+          useValue: { findOne: jest.fn().mockResolvedValue(null) },
+        },
+        {
+          provide: 'OnboardingIdempotencyRecordRepository',
+          useValue: {
+            findOne: jest.fn().mockResolvedValue(null),
+            create: jest.fn((x) => x),
+            save: jest.fn((x) => Promise.resolve(x)),
+          },
+        },
+        {
+          provide: 'LegacyOnboardingMigrationReceiptRepository',
+          useValue: {
+            create: jest.fn((x) => x),
+            save: jest.fn((x) => Promise.resolve({ ...x, id: 'rec-1' })),
+          },
+        },
+        {
+          provide: 'InvoiceItemRepository',
+          useValue: { count: jest.fn().mockResolvedValue(0) },
+        },
         {
           provide: 'IndustryTemplateRepository',
           useValue: templateRepo,
@@ -335,9 +436,15 @@ describe('IndustryTemplate (Integration & E2E)', () => {
         },
         TenantInterceptor,
         AuthGuard,
+        AuthoritativeCurrentUserGuard,
         RolesGuard,
+        PermissionsGuard,
         Reflector,
         JwtService,
+        {
+          provide: CurrentUserAuthorizationService,
+          useValue: currentUserAuthorizationServiceMock,
+        },
         createIdentityJwtConfigProvider(),
       ],
     }).compile();
@@ -358,6 +465,7 @@ describe('IndustryTemplate (Integration & E2E)', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    authorizeMock.mockImplementation(defaultAuthorize);
     dbInsumos = [];
     dbProducts = [];
     dbRecipeVersions = [];
@@ -378,15 +486,17 @@ describe('IndustryTemplate (Integration & E2E)', () => {
       email: string;
       role: UserRole;
       tenant_id: string;
+      custom_permissions?: string[];
     }> = {},
   ): string =>
     jwtService.sign(
       {
         sub: overrides.sub ?? 'user-1',
-        email: overrides.email ?? 'manager@example.com',
-        role: overrides.role ?? UserRole.MANAGER,
+        email: overrides.email ?? 'owner@example.com',
+        role: overrides.role ?? UserRole.OWNER,
         tenant_id:
           overrides.tenant_id !== undefined ? overrides.tenant_id : 'tenant-A',
+        custom_permissions: overrides.custom_permissions,
         is_active: true,
         token_type: JWT_TOKEN_TYPES.ACCESS,
         security_version: 1,
@@ -413,12 +523,40 @@ describe('IndustryTemplate (Integration & E2E)', () => {
       .expect(401);
   });
 
+  it('blocks apply before handler when authoritative user authorization fails', async () => {
+    authorizeMock.mockRejectedValueOnce(
+      new UnauthorizedException('Authoritative user is inactive or revoked'),
+    );
+    const token = signToken({ tenant_id: 'tenant-A' });
+
+    await request(app.getHttpServer())
+      .post(`${API_PREFIX}/CAFETERIA/apply`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({})
+      .expect(401);
+
+    expect(authorizeMock).toHaveBeenCalled();
+    expect(dbInsumos).toHaveLength(0);
+    expect(dbProducts).toHaveLength(0);
+    expect(dbRecipeVersions).toHaveLength(0);
+  });
+
   it('returns 403 when user has CASHIER role', async () => {
     const token = signToken({ role: UserRole.CASHIER });
 
     await request(app.getHttpServer())
       .get(API_PREFIX)
       .set('Authorization', `Bearer ${token}`)
+      .expect(403);
+  });
+
+  it('returns 403 when user is MANAGER without ONBOARDING_TEMPLATE_APPLY attempting to apply template', async () => {
+    const token = signToken({ role: UserRole.MANAGER });
+
+    await request(app.getHttpServer())
+      .post(`${API_PREFIX}/CAFETERIA/apply`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({})
       .expect(403);
   });
 
@@ -484,6 +622,8 @@ describe('IndustryTemplate (Integration & E2E)', () => {
     expect(response.body).toEqual({
       tenantId: 'tenant-A',
       templateCode: 'CAFETERIA',
+      templateVersion: 1,
+      applicationId: expect.any(String),
       insumosCreated: 2,
       insumosSkipped: 0,
       productsCreated: 1,
@@ -526,6 +666,8 @@ describe('IndustryTemplate (Integration & E2E)', () => {
     expect(response.body).toEqual({
       tenantId: 'tenant-A',
       templateCode: 'CAFETERIA',
+      templateVersion: 1,
+      applicationId: expect.any(String),
       insumosCreated: 0,
       insumosSkipped: 2,
       productsCreated: 0,

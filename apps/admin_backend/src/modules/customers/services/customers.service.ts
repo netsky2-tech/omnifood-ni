@@ -5,7 +5,9 @@ import { Customer } from '../entities/customer.entity';
 import {
   CustomerPointTransaction,
   PointTransactionType,
+  LoyaltyTransactionOrigin,
 } from '../entities/customer-point-transaction.entity';
+import { CustomerLoyaltyAccountProjection } from '../../loyalty/entities/customer-loyalty-account-projection.entity';
 import { CreateCustomerDto } from '../dto/create-customer.dto';
 import { UpdateCustomerDto } from '../dto/update-customer.dto';
 import { CustomerQueryDto } from '../dto/customer-query.dto';
@@ -102,25 +104,83 @@ export class CustomersService {
     tenantId: string,
     customerId: string,
     dto: AdjustPointsDto,
+    actorUserId?: string,
   ): Promise<{ customer: Customer; transaction: CustomerPointTransaction }> {
     const customer = await this.findOne(tenantId, customerId);
     const currentBalance = Number(customer.points_balance) || 0.0;
-    const newBalance = Math.max(0.0, currentBalance + dto.points_delta);
+    // LV1.7 / M7: Adjustments can leave negative balance (AV-10, AV-41)
+    const newBalance = currentBalance + dto.points_delta;
+    const now = new Date();
 
     const transaction = this.pointTransactionRepository.create({
       tenant_id: tenantId,
       customer_id: customerId,
       invoice_id: dto.invoice_id,
+      loyalty_program_id: dto.loyalty_program_id ?? null,
       type: PointTransactionType.ADJUST,
+      transaction_type: PointTransactionType.ADJUST,
       points: dto.points_delta,
+      units: Math.round(dto.points_delta),
       balance_after: newBalance,
       conversion_rate: 0.1,
       reason: dto.reason,
+      actor_user_id: actorUserId ?? null,
+      origin: LoyaltyTransactionOrigin.CLOUD,
+      occurred_at: now,
+      recorded_at: now,
+      legacy_imported: false,
     });
 
     const savedTx = await this.pointTransactionRepository.save(transaction);
     customer.points_balance = newBalance;
     const savedCust = await this.customerRepository.save(customer);
+
+    if (dto.loyalty_program_id) {
+      try {
+        const projRepo = this.pointTransactionRepository.manager.getRepository(
+          CustomerLoyaltyAccountProjection,
+        );
+        const sumResult = await this.pointTransactionRepository
+          .createQueryBuilder('tx')
+          .select('COALESCE(SUM(tx.units), 0)', 'total')
+          .where('tx.tenant_id = :tenantId', { tenantId })
+          .andWhere('tx.customer_id = :customerId', { customerId })
+          .andWhere('tx.loyalty_program_id = :programId', {
+            programId: dto.loyalty_program_id,
+          })
+          .getRawOne<{ total?: string | number | null }>();
+        const totalUnits = Number(sumResult?.total ?? 0);
+
+        let projection = await projRepo.findOne({
+          where: {
+            tenant_id: tenantId,
+            customer_id: customerId,
+            loyalty_program_id: dto.loyalty_program_id,
+          },
+        });
+
+        if (projection) {
+          projection.balance_units = totalUnits;
+          projection.projection_version = projection.projection_version + 1;
+          projection.last_transaction_id = savedTx.id;
+          projection.recomputed_at = now;
+          await projRepo.save(projection);
+        } else {
+          projection = projRepo.create({
+            tenant_id: tenantId,
+            customer_id: customerId,
+            loyalty_program_id: dto.loyalty_program_id,
+            balance_units: totalUnits,
+            last_transaction_id: savedTx.id,
+            projection_version: 1,
+            recomputed_at: now,
+          });
+          await projRepo.save(projection);
+        }
+      } catch {
+        // Safe fallback if projection table not wired in current context
+      }
+    }
 
     return { customer: savedCust, transaction: savedTx };
   }

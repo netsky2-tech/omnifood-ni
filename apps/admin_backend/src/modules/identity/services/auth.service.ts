@@ -33,6 +33,31 @@ const USER_ROLE_VALUES = new Set<string>(Object.values(UserRole));
 const isUserRole = (value?: string): value is UserRole =>
   typeof value === 'string' && USER_ROLE_VALUES.has(value);
 
+interface TenantQueryResult {
+  id: string;
+  name: string;
+  ruc?: string | null;
+  is_active: boolean;
+}
+
+const isUnknownArray = (value: unknown): value is readonly unknown[] =>
+  Array.isArray(value);
+
+const isTenantQueryResult = (value: unknown): value is TenantQueryResult => {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.id === 'string' &&
+    typeof candidate.name === 'string' &&
+    (candidate.ruc === undefined ||
+      candidate.ruc === null ||
+      typeof candidate.ruc === 'string') &&
+    typeof candidate.is_active === 'boolean'
+  );
+};
+
 const isSyncScope = (value?: string): value is SyncScope =>
   value === SYNC_SCOPE.POS_AUTH_CONTINUITY;
 
@@ -123,10 +148,13 @@ export class AuthService {
       throw new UnauthorizedException('Usuario no encontrado o inactivo');
     }
 
-    const tenant = await this.dataSource.query(
+    const rawTenants: unknown = await this.dataSource.query(
       'SELECT id, name, ruc, is_active FROM tenants WHERE id = $1',
       [user.tenant_id],
     );
+
+    const firstTenant = isUnknownArray(rawTenants) ? rawTenants[0] : undefined;
+    const tenant = isTenantQueryResult(firstTenant) ? firstTenant : null;
 
     return {
       user: {
@@ -138,13 +166,13 @@ export class AuthService {
         active: user.is_active,
         permissions: resolveInventoryBohPermissions(user.role),
       },
-      tenant: tenant[0]
+      tenant: tenant
         ? {
-            id: tenant[0].id,
-            name: tenant[0].name,
-            slug: tenant[0].name.toLowerCase().replace(/\s+/g, '-'),
-            ruc: tenant[0].ruc,
-            active: tenant[0].is_active,
+            id: tenant.id,
+            name: tenant.name,
+            slug: tenant.name.toLowerCase().replace(/\s+/g, '-'),
+            ruc: tenant.ruc ?? null,
+            active: tenant.is_active,
           }
         : null,
     };

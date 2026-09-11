@@ -35,7 +35,9 @@ abstract class SalesTransactionDao {
   @Update(onConflict: OnConflictStrategy.replace)
   Future<void> updateInsumo(InsumoEntity insumo);
 
-  @Insert(onConflict: OnConflictStrategy.replace)
+  /// Sale correlation IDs are immutable evidence; replacement could erase
+  /// prior sale evidence after stock has changed.
+  @Insert(onConflict: OnConflictStrategy.abort)
   Future<void> insertMovement(MovementEntity movement);
 
   @Insert(onConflict: OnConflictStrategy.replace)
@@ -52,6 +54,29 @@ abstract class SalesTransactionDao {
   )
   Future<int?> getNextInvoiceSourceSequence(String terminalId);
 
+  @Query('UPDATE invoices SET sync_status = :status WHERE id = :id')
+  Future<void> updateInvoiceSyncStatus(String id, String status);
+
+  @Query(
+    'UPDATE inventory_movements SET delivery_state = :state WHERE sale_id = :saleId',
+  )
+  Future<void> updateMovementsDeliveryStateBySaleId(
+    String saleId,
+    String state,
+  );
+
+  @Query('SELECT * FROM inventory_movements WHERE sale_id = :saleId')
+  Future<List<MovementEntity>> getMovementsBySaleId(String saleId);
+
+  @transaction
+  Future<void> executeAckTransaction(
+    String invoiceId,
+    String syncStatus,
+    String deliveryState,
+  ) async {
+    await updateInvoiceSyncStatus(invoiceId, syncStatus);
+    await updateMovementsDeliveryStateBySaleId(invoiceId, deliveryState);
+  }
   @Query(
     "UPDATE local_configs SET value = :nextSequence WHERE `key` = 'dgi_current_number'",
   )
@@ -252,7 +277,12 @@ abstract class SalesTransactionDao {
     // 3. Inventory Movements
     for (final movement in movements) {
       final insumo = await getInsumoById(movement.insumoId);
-      if (insumo != null) {
+      if (insumo == null) {
+        throw StateError(
+          'Required movement insumo not found: ${movement.insumoId}',
+        );
+      }
+      {
         final newStock =
             insumo.stock + movement.quantity; // quantity is negative for sales
         await updateInsumo(

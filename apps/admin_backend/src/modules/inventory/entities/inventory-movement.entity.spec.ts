@@ -15,6 +15,7 @@ describe('InventoryMovement Entity', () => {
     movement.newStock = 981.5;
     movement.averageCostAfterNio = 12.75;
     movement.reason = 'Venta POS #123';
+    movement.saleCorrelationId = 'corr-sale-123';
 
     expect(movement.insumoId).toBe('insumo-123');
     expect(movement.type).toBe(MovementType.SALE);
@@ -23,5 +24,6 @@ describe('InventoryMovement Entity', () => {
     expect(movement.newStock).toBe(981.5);
     expect(movement.averageCostAfterNio).toBe(12.75);
     expect(movement.reason).toBe('Venta POS #123');
+    expect(movement.saleCorrelationId).toBe('corr-sale-123');
   });
 });

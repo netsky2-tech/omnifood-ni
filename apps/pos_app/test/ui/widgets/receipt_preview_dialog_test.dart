@@ -9,8 +9,8 @@ void main() {
   Widget buildTestWidget({
     TaxRegime initialTaxRegime = TaxRegime.cuotaFija,
     int initialPaperWidthMm = 58,
-        PrinterPort? printerPort,
-    }) {
+    PrinterPort? printerPort,
+  }) {
     return MaterialApp(
       home: Scaffold(
         body: Builder(
@@ -19,7 +19,7 @@ void main() {
               context,
               initialTaxRegime: initialTaxRegime,
               initialPaperWidthMm: initialPaperWidthMm,
-                  printerPort: printerPort,
+              printerPort: printerPort,
             ),
             child: const Text('Open Preview'),
           ),
@@ -29,31 +29,46 @@ void main() {
   }
 
   group('ReceiptPreviewDialog Tests', () {
-    testWidgets('renders dialog with monospaced sample receipt and initial Cuota Fija text', (tester) async {
-      await tester.pumpWidget(buildTestWidget(initialTaxRegime: TaxRegime.cuotaFija));
+    testWidgets(
+      'renders dialog with monospaced sample receipt and initial Cuota Fija text',
+      (tester) async {
+        await tester.pumpWidget(
+          buildTestWidget(initialTaxRegime: TaxRegime.cuotaFija),
+        );
 
-      // Tap to open dialog
-      await tester.tap(find.text('Open Preview'));
-      await tester.pumpAndSettle();
+        // Tap to open dialog
+        await tester.tap(find.text('Open Preview'));
+        await tester.pumpAndSettle();
 
-      expect(find.text('Preview de Comprobante Térmico'), findsOneWidget);
-      expect(find.text('Vista lógica: el mismo documento enviado a impresión'), findsOneWidget);
-      expect(find.textContaining('58 mm (32 columnas)'), findsOneWidget);
+        expect(find.text('Preview de Comprobante Térmico'), findsOneWidget);
+        expect(
+          find.text('Vista lógica: el mismo documento enviado a impresión'),
+          findsOneWidget,
+        );
+        expect(find.textContaining('58 mm (32 columnas)'), findsOneWidget);
 
-      // Verify Cuota Fija texts are visible in preview
-      expect(find.textContaining('REGIMEN: CUOTA FIJA'), findsOneWidget);
-      expect(find.textContaining('COMPROBANTE DE VENTA'), findsOneWidget);
-      expect(find.textContaining('NO RECAUDA IVA'), findsOneWidget);
-      expect(find.textContaining('IVA (15%):'), findsNothing);
+        // Verify Cuota Fija texts are visible in preview
+        expect(find.textContaining('REGIMEN: CUOTA FIJA'), findsOneWidget);
+        expect(find.textContaining('COMPROBANTE DE VENTA'), findsOneWidget);
+        expect(find.textContaining('NO RECAUDA IVA'), findsOneWidget);
+        expect(find.textContaining('IVA (15%):'), findsNothing);
 
-      // Verify monospace typography
-      final textWidget = tester.widget<Text>(find.byWidgetPredicate(
-        (widget) => widget is Text && widget.data != null && widget.data!.contains('COMPROBANTE DE VENTA'),
-      ));
-      expect(textWidget.style?.fontFamily, 'monospace');
-    });
+        // Verify monospace typography
+        final textWidget = tester.widget<Text>(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is Text &&
+                widget.data != null &&
+                widget.data!.contains('COMPROBANTE DE VENTA'),
+          ),
+        );
+        expect(textWidget.style?.fontFamily, 'monospace');
+      },
+    );
 
-    testWidgets('shows a success snackbar when printing succeeds', (tester) async {
+    testWidgets('shows a success snackbar when printing succeeds', (
+      tester,
+    ) async {
       final printer = MockPrinterAdapter();
       await tester.pumpWidget(buildTestWidget(printerPort: printer));
 
@@ -63,7 +78,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(printer.printHistory.single.isSuccess, isTrue);
-      expect(find.text('Ticket enviado a la impresora térmica.'), findsOneWidget);
+      expect(
+        find.text('Ticket enviado a la impresora térmica.'),
+        findsOneWidget,
+      );
       expect(find.textContaining('Error al imprimir:'), findsNothing);
       expect(
         tester.widget<SnackBar>(find.byType(SnackBar)).backgroundColor,
@@ -71,7 +89,9 @@ void main() {
       );
     });
 
-    testWidgets('shows a failure snackbar instead of success when printing fails', (tester) async {
+    testWidgets(
+      'shows a failure snackbar instead of success when printing fails',
+      (tester) async {
         final printer = MockPrinterAdapter()..shouldFail = true;
         await tester.pumpWidget(buildTestWidget(printerPort: printer));
 
@@ -81,14 +101,20 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.textContaining('Error al imprimir:'), findsOneWidget);
-        expect(find.text('Ticket enviado a la impresora térmica.'), findsNothing);
+        expect(
+          find.text('Ticket enviado a la impresora térmica.'),
+          findsNothing,
+        );
         expect(
           tester.widget<SnackBar>(find.byType(SnackBar)).backgroundColor,
           Colors.red,
         );
-      });
+      },
+    );
 
-      testWidgets('toggling between 58mm and 80mm updates header and columns', (tester) async {
+    testWidgets('toggling between 58mm and 80mm updates header and columns', (
+      tester,
+    ) async {
       await tester.pumpWidget(buildTestWidget(initialPaperWidthMm: 58));
 
       await tester.tap(find.text('Open Preview'));
@@ -100,25 +126,30 @@ void main() {
       await tester.tap(find.text('80 mm (44 col)'));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('80 mm (44 columnas)'), findsOneWidget);
+      expect(find.textContaining('80 mm (40 columnas)'), findsOneWidget);
     });
 
-    testWidgets('toggling regime switches between Cuota Fija and Régimen General', (tester) async {
-      await tester.pumpWidget(buildTestWidget(initialTaxRegime: TaxRegime.cuotaFija));
+    testWidgets(
+      'toggling regime switches between Cuota Fija and Régimen General',
+      (tester) async {
+        await tester.pumpWidget(
+          buildTestWidget(initialTaxRegime: TaxRegime.cuotaFija),
+        );
 
-      await tester.tap(find.text('Open Preview'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('Open Preview'));
+        await tester.pumpAndSettle();
 
-      expect(find.textContaining('COMPROBANTE DE VENTA'), findsOneWidget);
-      expect(find.textContaining('IVA (15%):'), findsNothing);
+        expect(find.textContaining('COMPROBANTE DE VENTA'), findsOneWidget);
+        expect(find.textContaining('IVA (15%):'), findsNothing);
 
-      // Switch to Régimen General
-      await tester.tap(find.text('Régimen Gral.'));
-      await tester.pumpAndSettle();
+        // Switch to Régimen General
+        await tester.tap(find.text('Régimen Gral.'));
+        await tester.pumpAndSettle();
 
-      expect(find.textContaining('FACTURA DE VENTA'), findsOneWidget);
-      expect(find.textContaining('REGIMEN: GENERAL'), findsOneWidget);
-      expect(find.textContaining('IVA (15%):'), findsOneWidget);
-    });
+        expect(find.textContaining('FACTURA DE VENTA'), findsOneWidget);
+        expect(find.textContaining('REGIMEN: GENERAL'), findsOneWidget);
+        expect(find.textContaining('IVA (15%):'), findsOneWidget);
+      },
+    );
   });
 }

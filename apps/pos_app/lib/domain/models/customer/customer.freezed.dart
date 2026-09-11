@@ -31,6 +31,7 @@ mixin _$Customer {
   DateTime? get createdAt => throw _privateConstructorUsedError;
   DateTime? get updatedAt => throw _privateConstructorUsedError;
   String get syncStatus => throw _privateConstructorUsedError;
+  String? get customerCode => throw _privateConstructorUsedError;
 
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
   @JsonKey(ignore: true)
@@ -54,7 +55,8 @@ abstract class $CustomerCopyWith<$Res> {
       bool isActive,
       DateTime? createdAt,
       DateTime? updatedAt,
-      String syncStatus});
+      String syncStatus,
+      String? customerCode});
 }
 
 /// @nodoc
@@ -81,6 +83,7 @@ class _$CustomerCopyWithImpl<$Res, $Val extends Customer>
     Object? createdAt = freezed,
     Object? updatedAt = freezed,
     Object? syncStatus = null,
+    Object? customerCode = freezed,
   }) {
     return _then(_value.copyWith(
       id: null == id
@@ -127,6 +130,10 @@ class _$CustomerCopyWithImpl<$Res, $Val extends Customer>
           ? _value.syncStatus
           : syncStatus // ignore: cast_nullable_to_non_nullable
               as String,
+      customerCode: freezed == customerCode
+          ? _value.customerCode
+          : customerCode // ignore: cast_nullable_to_non_nullable
+              as String?,
     ) as $Val);
   }
 }
@@ -150,7 +157,8 @@ abstract class _$$CustomerImplCopyWith<$Res>
       bool isActive,
       DateTime? createdAt,
       DateTime? updatedAt,
-      String syncStatus});
+      String syncStatus,
+      String? customerCode});
 }
 
 /// @nodoc
@@ -175,6 +183,7 @@ class __$$CustomerImplCopyWithImpl<$Res>
     Object? createdAt = freezed,
     Object? updatedAt = freezed,
     Object? syncStatus = null,
+    Object? customerCode = freezed,
   }) {
     return _then(_$CustomerImpl(
       id: null == id
@@ -221,6 +230,10 @@ class __$$CustomerImplCopyWithImpl<$Res>
           ? _value.syncStatus
           : syncStatus // ignore: cast_nullable_to_non_nullable
               as String,
+      customerCode: freezed == customerCode
+          ? _value.customerCode
+          : customerCode // ignore: cast_nullable_to_non_nullable
+              as String?,
     ));
   }
 }
@@ -239,7 +252,8 @@ class _$CustomerImpl implements _Customer {
       this.isActive = true,
       this.createdAt,
       this.updatedAt,
-      this.syncStatus = 'synced'});
+      this.syncStatus = 'synced',
+      this.customerCode});
 
   factory _$CustomerImpl.fromJson(Map<String, dynamic> json) =>
       _$$CustomerImplFromJson(json);
@@ -270,10 +284,12 @@ class _$CustomerImpl implements _Customer {
   @override
   @JsonKey()
   final String syncStatus;
+  @override
+  final String? customerCode;
 
   @override
   String toString() {
-    return 'Customer(id: $id, name: $name, taxId: $taxId, phone: $phone, email: $email, address: $address, pointsBalance: $pointsBalance, isActive: $isActive, createdAt: $createdAt, updatedAt: $updatedAt, syncStatus: $syncStatus)';
+    return 'Customer(id: $id, name: $name, taxId: $taxId, phone: $phone, email: $email, address: $address, pointsBalance: $pointsBalance, isActive: $isActive, createdAt: $createdAt, updatedAt: $updatedAt, syncStatus: $syncStatus, customerCode: $customerCode)';
   }
 
   @override
@@ -296,13 +312,27 @@ class _$CustomerImpl implements _Customer {
             (identical(other.updatedAt, updatedAt) ||
                 other.updatedAt == updatedAt) &&
             (identical(other.syncStatus, syncStatus) ||
-                other.syncStatus == syncStatus));
+                other.syncStatus == syncStatus) &&
+            (identical(other.customerCode, customerCode) ||
+                other.customerCode == customerCode));
   }
 
   @JsonKey(ignore: true)
   @override
-  int get hashCode => Object.hash(runtimeType, id, name, taxId, phone, email,
-      address, pointsBalance, isActive, createdAt, updatedAt, syncStatus);
+  int get hashCode => Object.hash(
+      runtimeType,
+      id,
+      name,
+      taxId,
+      phone,
+      email,
+      address,
+      pointsBalance,
+      isActive,
+      createdAt,
+      updatedAt,
+      syncStatus,
+      customerCode);
 
   @JsonKey(ignore: true)
   @override
@@ -330,7 +360,8 @@ abstract class _Customer implements Customer {
       final bool isActive,
       final DateTime? createdAt,
       final DateTime? updatedAt,
-      final String syncStatus}) = _$CustomerImpl;
+      final String syncStatus,
+      final String? customerCode}) = _$CustomerImpl;
 
   factory _Customer.fromJson(Map<String, dynamic> json) =
       _$CustomerImpl.fromJson;
@@ -357,6 +388,8 @@ abstract class _Customer implements Customer {
   DateTime? get updatedAt;
   @override
   String get syncStatus;
+  @override
+  String? get customerCode;
   @override
   @JsonKey(ignore: true)
   _$$CustomerImplCopyWith<_$CustomerImpl> get copyWith =>

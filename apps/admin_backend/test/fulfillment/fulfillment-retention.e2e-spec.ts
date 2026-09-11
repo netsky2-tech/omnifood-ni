@@ -10,6 +10,8 @@ import { App } from 'supertest/types';
 import { DataSource } from 'typeorm';
 import { BohInventoryLedgerFoundation1766000000000 } from '../../src/migrations/1766000000000-BohInventoryLedgerFoundation';
 import { AddDeterministicSyncSequencing1780000000000 } from '../../src/migrations/1780000000000-AddDeterministicSyncSequencing';
+import { AddSaleInventoryOutcomeColumns1803000000000 } from '../../src/migrations/1803000000000-AddSaleInventoryOutcomeColumns';
+import { AddAcceptedAtToInventorySyncReceipts1805000000000 } from '../../src/migrations/1805000000000-AddAcceptedAtToInventorySyncReceipts';
 import { CreateTenantFulfillmentRecords1795000000000 } from '../../src/migrations/1795000000000-CreateTenantFulfillmentRecords';
 import { IdentityModule } from '../../src/modules/identity/identity.module';
 import { InventoryModule } from '../../src/modules/inventory/inventory.module';
@@ -81,11 +83,33 @@ describe('FulfillmentRetention (e2e - Real PostgreSQL, No Mocks)', () => {
     await runner.query(`CREATE SCHEMA "${schema}"`);
     await runner.query(`SET search_path TO "${schema}", public`);
 
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS invoices (
+        id varchar(128) PRIMARY KEY,
+        tenant_id varchar(64) NOT NULL,
+        number varchar(64) NOT NULL,
+        user_id varchar(64) NOT NULL,
+        subtotal numeric(12, 4) NOT NULL DEFAULT 0,
+        total_tax numeric(12, 4) NOT NULL DEFAULT 0,
+        total numeric(12, 4) NOT NULL DEFAULT 0,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        status varchar(32) NOT NULL DEFAULT 'COMPLETED',
+        is_canceled boolean NOT NULL DEFAULT false
+      );
+      CREATE TABLE IF NOT EXISTS invoice_items (
+        id varchar(128) PRIMARY KEY,
+        tenant_id varchar(64) NOT NULL,
+        invoice_id varchar(128) NOT NULL
+      );
+    `);
+
     const m1 = new BohInventoryLedgerFoundation1766000000000();
     const m2 = new AddDeterministicSyncSequencing1780000000000();
     const m3 = new CreateTenantFulfillmentRecords1795000000000();
     await m1.up(runner);
     await m2.up(runner);
+    await new AddSaleInventoryOutcomeColumns1803000000000().up(runner);
+    await new AddAcceptedAtToInventorySyncReceipts1805000000000().up(runner);
     await m3.up(runner);
 
     await runner.query(`
@@ -187,6 +211,14 @@ describe('FulfillmentRetention (e2e - Real PostgreSQL, No Mocks)', () => {
         InventoryModule,
         SalesModule,
         FulfillmentModule,
+      ],
+      providers: [
+        {
+          provide: 'InvoiceRepository',
+          useFactory: (dataSource: DataSource) =>
+            dataSource.getRepository(Invoice),
+          inject: [DataSource],
+        },
       ],
     }).compile();
 

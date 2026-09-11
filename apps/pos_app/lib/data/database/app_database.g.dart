@@ -148,6 +148,24 @@ class _$AppDatabase extends AppDatabase {
 
   CustomerPointTransactionDao? _customerPointTransactionDaoInstance;
 
+  LoyaltyProgramDao? _loyaltyProgramDaoInstance;
+
+  LoyaltyRewardDao? _loyaltyRewardDaoInstance;
+
+  FiscalConfigLocalDao? _fiscalConfigLocalDaoInstance;
+
+  ActivationAttemptLocalDao? _activationAttemptLocalDaoInstance;
+
+  ActivationCheckResultLocalDao? _activationCheckResultLocalDaoInstance;
+
+  FirstSuccessfulSaleClaimDao? _firstSuccessfulSaleClaimDaoInstance;
+
+  FirstCustomerSaleObservationDao? _firstCustomerSaleObservationDaoInstance;
+
+  ActivationOutboxDao? _activationOutboxDaoInstance;
+
+  AuthorityProjectionDao? _authorityProjectionDaoInstance;
+
   FulfillmentTopologyDao? _fulfillmentTopologyDaoInstance;
 
   FulfillmentPersistenceDao? _fulfillmentPersistenceDaoInstance;
@@ -158,7 +176,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 43,
+      version: 52,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -184,7 +202,25 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `insumos` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `consumption_uom` TEXT NOT NULL, `warehouse_id` TEXT, `is_perishable` INTEGER NOT NULL, `stock` REAL NOT NULL, `average_cost` REAL NOT NULL, `par_level` REAL, `stock_min` REAL, `stock_max` REAL, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `products` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `uom` TEXT NOT NULL, `stock` REAL NOT NULL, `average_cost` REAL NOT NULL, `sell_price` REAL NOT NULL, `is_active` INTEGER NOT NULL, `sku` TEXT, `barcode` TEXT, `category` TEXT, `is_prepared` INTEGER NOT NULL, `created_at` TEXT, `inventory_policy` TEXT, `direct_stock_insumo_id` TEXT, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `authority_insumos` (`tenant_id` TEXT NOT NULL, `id` TEXT NOT NULL, `name` TEXT NOT NULL, `uom` TEXT NOT NULL, PRIMARY KEY (`tenant_id`, `id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `authority_recipe_versions` (`tenant_id` TEXT NOT NULL, `id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `version_number` INTEGER NOT NULL, `is_active` INTEGER NOT NULL, `publication_state` TEXT NOT NULL, `effective_from` TEXT NOT NULL, `effective_until` TEXT, `yield_quantity` REAL NOT NULL, `technical_shrink_pct` REAL NOT NULL, `published_at` TEXT, `created_at` TEXT NOT NULL, `updated_at` TEXT NOT NULL, PRIMARY KEY (`tenant_id`, `id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `authority_recipe_version_components` (`tenant_id` TEXT NOT NULL, `id` TEXT NOT NULL, `version_id` TEXT NOT NULL, `ordinal` INTEGER NOT NULL, `insumo_id` TEXT NOT NULL, `gross_quantity` REAL NOT NULL, `technical_shrink_pct` REAL NOT NULL, `ingredient_type` TEXT NOT NULL, `component_name` TEXT NOT NULL, `component_uom` TEXT, `reference_version_id` TEXT, FOREIGN KEY (`tenant_id`, `version_id`) REFERENCES `authority_recipe_versions` (`tenant_id`, `id`) ON UPDATE NO ACTION ON DELETE CASCADE, FOREIGN KEY (`tenant_id`, `insumo_id`) REFERENCES `authority_insumos` (`tenant_id`, `id`) ON UPDATE NO ACTION ON DELETE RESTRICT, PRIMARY KEY (`tenant_id`, `id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `topology_snapshots` (`id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `revision` INTEGER NOT NULL, `hash` TEXT NOT NULL, `payload` TEXT NOT NULL, `received_at` TEXT NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `shift_topology_bindings` (`shift_id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `snapshot_id` TEXT NOT NULL, `bound_at` TEXT NOT NULL, PRIMARY KEY (`shift_id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `emergency_topology_audits` (`id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `shift_id` TEXT NOT NULL, `snapshot_id` TEXT NOT NULL, `actor_id` TEXT NOT NULL, `actor_role` TEXT NOT NULL, `device_id` TEXT NOT NULL, `reason` TEXT NOT NULL, `occurred_at` TEXT NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `fulfillment_records` (`id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `sale_id` TEXT NOT NULL, `topology_snapshot_id` TEXT NOT NULL, `topology_revision` INTEGER NOT NULL, `channel` TEXT NOT NULL, `route_state` TEXT NOT NULL, `delivery_state` TEXT NOT NULL, `lines_payload` TEXT NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `print_jobs` (`id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `fulfillment_id` TEXT NOT NULL, `document_kind` TEXT NOT NULL, `sequence` INTEGER NOT NULL, `payload` TEXT NOT NULL, `state` TEXT NOT NULL, `retry_count` INTEGER NOT NULL, `idempotency_key` TEXT NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `fulfillment_outbox_events` (`event_id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `device_id` TEXT NOT NULL, `source_sequence` INTEGER NOT NULL, `aggregate_type` TEXT NOT NULL, `aggregate_id` TEXT NOT NULL, `idempotency_key` TEXT NOT NULL, `payload_hash` TEXT NOT NULL, `topology_revision` INTEGER NOT NULL, `state` TEXT NOT NULL, `attempts` INTEGER NOT NULL, PRIMARY KEY (`event_id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `products` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `uom` TEXT NOT NULL, `stock` REAL NOT NULL, `average_cost` REAL NOT NULL, `sell_price` REAL NOT NULL, `is_active` INTEGER NOT NULL, `sku` TEXT, `barcode` TEXT, `category` TEXT, `is_prepared` INTEGER NOT NULL, `product_type` TEXT NOT NULL, `mapping_version_id` TEXT, `insumo_id` TEXT, `created_at` TEXT, `inventory_policy` TEXT, `direct_stock_insumo_id` TEXT, `tax_rate` REAL NOT NULL, `is_tax_exempt` INTEGER NOT NULL, `tenant_id` TEXT, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `product_variants` (`id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `name` TEXT NOT NULL, `price_adjustment` REAL NOT NULL, FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
@@ -200,7 +236,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `forensic_alerts` (`id` TEXT NOT NULL, `alert_type` TEXT NOT NULL, `severity` TEXT NOT NULL, `message` TEXT NOT NULL, `created_at` TEXT NOT NULL, `status` TEXT NOT NULL, `note` TEXT, `actor_label` TEXT, `acted_at` TEXT, `source_movement_id` TEXT, `source_document_id` TEXT, `source_document_type` TEXT, `metadata_json` TEXT, `is_synced` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `inventory_movements` (`id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `type` TEXT NOT NULL, `quantity` REAL NOT NULL, `previous_stock` REAL NOT NULL, `new_stock` REAL NOT NULL, `timestamp` TEXT NOT NULL, `reason` TEXT, `user_id` TEXT, `unit_cost_nio` REAL, `source_document_type` TEXT, `source_document_id` TEXT, `origin_movement_id` TEXT, `origin_invoice_item_id` TEXT, `batch_deductions` TEXT, `estado_costeo` INTEGER NOT NULL, `intentos_count` INTEGER NOT NULL, `bloqueo_motivo` TEXT, `autorizado_por_usuario_id` TEXT, `fecha_autorizacion` TEXT, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `inventory_movements` (`id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `type` TEXT NOT NULL, `quantity` REAL NOT NULL, `previous_stock` REAL NOT NULL, `new_stock` REAL NOT NULL, `timestamp` TEXT NOT NULL, `reason` TEXT, `user_id` TEXT, `unit_cost_nio` REAL, `source_document_type` TEXT, `source_document_id` TEXT, `origin_movement_id` TEXT, `origin_invoice_item_id` TEXT, `batch_deductions` TEXT, `estado_costeo` INTEGER NOT NULL, `intentos_count` INTEGER NOT NULL, `bloqueo_motivo` TEXT, `autorizado_por_usuario_id` TEXT, `fecha_autorizacion` TEXT, `delivery_owner` TEXT NOT NULL, `delivery_state` TEXT NOT NULL, `sale_id` TEXT, `sale_correlation_id` TEXT, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `inventory_movement_sync_state` (`movement_id` TEXT NOT NULL, `sync_status` TEXT NOT NULL, `last_attempted_at` TEXT, `synced_at` TEXT, `last_error` TEXT, `terminal_id` TEXT, `flow_type` TEXT, `local_sequence` INTEGER, `idempotency_key` TEXT, `last_result_code` TEXT, FOREIGN KEY (`movement_id`) REFERENCES `inventory_movements` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE, PRIMARY KEY (`movement_id`))');
         await database.execute(
@@ -222,9 +258,9 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `catalog_values` (`id` TEXT NOT NULL, `catalog_type` TEXT NOT NULL, `code` TEXT NOT NULL, `name` TEXT NOT NULL, `is_active` INTEGER NOT NULL, `sort_order` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `invoices` (`id` TEXT NOT NULL, `invoice_number` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `user_id` TEXT NOT NULL, `subtotal` REAL NOT NULL, `total_tax` REAL NOT NULL, `total` REAL NOT NULL, `is_canceled` INTEGER NOT NULL, `void_reason` TEXT, `sync_status` TEXT NOT NULL, `payment_status` TEXT NOT NULL, `customer_id` TEXT, `global_tax_override` INTEGER NOT NULL, `type` TEXT NOT NULL, `related_invoice_id` TEXT, `origin_invoice_id` TEXT, `refund_reason_policy` TEXT, `refund_reason_code` TEXT, `authorized_by_user_id` TEXT, `authorized_by_role` TEXT, `terminal_id` TEXT, `source_sequence` INTEGER, `idempotency_key` TEXT, `payload_hash` TEXT, `bcn_official_rate` REAL NOT NULL, `commercial_rate` REAL NOT NULL, `total_usd` REAL NOT NULL, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `invoices` (`id` TEXT NOT NULL, `invoice_number` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `user_id` TEXT NOT NULL, `subtotal` REAL NOT NULL, `total_tax` REAL NOT NULL, `total` REAL NOT NULL, `is_canceled` INTEGER NOT NULL, `void_reason` TEXT, `sync_status` TEXT NOT NULL, `payment_status` TEXT NOT NULL, `customer_id` TEXT, `global_tax_override` INTEGER NOT NULL, `type` TEXT NOT NULL, `related_invoice_id` TEXT, `origin_invoice_id` TEXT, `refund_reason_policy` TEXT, `refund_reason_code` TEXT, `authorized_by_user_id` TEXT, `authorized_by_role` TEXT, `terminal_id` TEXT, `source_sequence` INTEGER, `idempotency_key` TEXT, `payload_hash` TEXT, `inventory_policy_version` TEXT, `inventory_outcome` TEXT, `inventory_outcome_reason` TEXT, `bcn_official_rate` REAL NOT NULL, `commercial_rate` REAL NOT NULL, `total_usd` REAL NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `invoice_items` (`id` TEXT NOT NULL, `invoice_id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `product_name` TEXT NOT NULL, `quantity` REAL NOT NULL, `unit_price` REAL NOT NULL, `original_tax_rate` REAL NOT NULL, `applied_tax_rate` REAL NOT NULL, `tax_amount` REAL NOT NULL, `total` REAL NOT NULL, `discount` REAL NOT NULL, `variant_id` TEXT, `notes` TEXT, `recipe_version_id` TEXT, `origin_invoice_item_id` TEXT, FOREIGN KEY (`invoice_id`) REFERENCES `invoices` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `invoice_items` (`id` TEXT NOT NULL, `invoice_id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `product_name` TEXT NOT NULL, `quantity` REAL NOT NULL, `unit_price` REAL NOT NULL, `original_tax_rate` REAL NOT NULL, `applied_tax_rate` REAL NOT NULL, `tax_amount` REAL NOT NULL, `total` REAL NOT NULL, `discount` REAL NOT NULL, `variant_id` TEXT, `notes` TEXT, `recipe_version_id` TEXT, `inventory_snapshot_json` TEXT, `inventory_snapshot_version` TEXT, `origin_invoice_item_id` TEXT, FOREIGN KEY (`invoice_id`) REFERENCES `invoices` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `invoice_item_modifiers` (`id` TEXT NOT NULL, `invoice_item_id` TEXT NOT NULL, `name` TEXT NOT NULL, `extra_price` REAL NOT NULL, FOREIGN KEY (`invoice_item_id`) REFERENCES `invoice_items` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
@@ -250,23 +286,33 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `kitchen_order_items` (`id` TEXT NOT NULL, `kitchen_order_id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `product_name` TEXT NOT NULL, `quantity` REAL NOT NULL, `status` TEXT NOT NULL, `notes` TEXT, `modifiers_json` TEXT, FOREIGN KEY (`kitchen_order_id`) REFERENCES `kitchen_orders` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `customers` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `tax_id` TEXT, `phone` TEXT, `email` TEXT, `address` TEXT, `points_balance` REAL NOT NULL, `is_active` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, `sync_status` TEXT NOT NULL, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `customers` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `tax_id` TEXT, `phone` TEXT, `email` TEXT, `address` TEXT, `points_balance` REAL NOT NULL, `is_active` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, `sync_status` TEXT NOT NULL, `customer_code` TEXT, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `customer_point_transactions` (`id` TEXT NOT NULL, `customer_id` TEXT NOT NULL, `invoice_id` TEXT, `type` TEXT NOT NULL, `points` REAL NOT NULL, `balance_after` REAL NOT NULL, `conversion_rate` REAL NOT NULL, `reason` TEXT, `created_at` INTEGER NOT NULL, `sync_status` TEXT NOT NULL, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `customer_point_transactions` (`id` TEXT NOT NULL, `customer_id` TEXT NOT NULL, `invoice_id` TEXT, `type` TEXT NOT NULL, `points` REAL NOT NULL, `balance_after` REAL NOT NULL, `conversion_rate` REAL NOT NULL, `reason` TEXT, `created_at` INTEGER NOT NULL, `sync_status` TEXT NOT NULL, `loyalty_program_id` TEXT, `ticket_id` TEXT, `reward_id` TEXT, `transaction_type` TEXT, `units` INTEGER, `reversal_of_transaction_id` TEXT, `idempotency_key` TEXT, `source_event_id` TEXT, `actor_user_id` TEXT, `branch_id` TEXT, `terminal_id` TEXT, `program_version` INTEGER, `reward_version` INTEGER, `commercial_snapshot` TEXT, `origin` TEXT, `occurred_at` INTEGER, `recorded_at` INTEGER, `legacy_imported` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `topology_snapshots` (`id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `revision` INTEGER NOT NULL, `hash` TEXT NOT NULL, `payload` TEXT NOT NULL, `received_at` TEXT NOT NULL, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `loyalty_programs` (`id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `name` TEXT NOT NULL, `program_type` TEXT NOT NULL, `status` TEXT NOT NULL, `starts_at` INTEGER, `ends_at` INTEGER, `earning_rule_json` TEXT NOT NULL, `eligibility_rule_json` TEXT NOT NULL, `config_version` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `shift_topology_bindings` (`shift_id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `snapshot_id` TEXT NOT NULL, `bound_at` TEXT NOT NULL, PRIMARY KEY (`shift_id`))');
+            'CREATE TABLE IF NOT EXISTS `loyalty_rewards` (`id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `loyalty_program_id` TEXT NOT NULL, `name` TEXT NOT NULL, `reward_type` TEXT NOT NULL, `cost_units` INTEGER NOT NULL, `benefit_config_json` TEXT NOT NULL, `status` TEXT NOT NULL, `starts_at` INTEGER, `ends_at` INTEGER, `presentation_order` INTEGER NOT NULL, `config_version` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `emergency_topology_audits` (`id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `shift_id` TEXT NOT NULL, `snapshot_id` TEXT NOT NULL, `actor_id` TEXT NOT NULL, `actor_role` TEXT NOT NULL, `device_id` TEXT NOT NULL, `reason` TEXT NOT NULL, `occurred_at` TEXT NOT NULL, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `fiscal_config_local` (`tenant_id` TEXT NOT NULL, `revision` INTEGER NOT NULL, `fingerprint` TEXT NOT NULL, `payload` TEXT NOT NULL, `applied_at` TEXT NOT NULL, PRIMARY KEY (`tenant_id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `fulfillment_records` (`id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `sale_id` TEXT NOT NULL, `topology_snapshot_id` TEXT NOT NULL, `topology_revision` INTEGER NOT NULL, `channel` TEXT NOT NULL, `route_state` TEXT NOT NULL, `delivery_state` TEXT NOT NULL, `lines_payload` TEXT NOT NULL, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `activation_attempts_local` (`attempt_id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `candidate_terminal_id` TEXT NOT NULL, `local_status` TEXT NOT NULL, `required_fiscal_revision` INTEGER NOT NULL, `required_fiscal_fingerprint` TEXT NOT NULL, `verification_product_id` TEXT NOT NULL, `verification_ticket_id` TEXT, `server_time_anchor_at` TEXT, `anchor_monotonic_ticks` INTEGER, `boot_session_id` TEXT, `assigned_at` TEXT NOT NULL, `updated_at` TEXT NOT NULL, PRIMARY KEY (`attempt_id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `print_jobs` (`id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `fulfillment_id` TEXT NOT NULL, `document_kind` TEXT NOT NULL, `sequence` INTEGER NOT NULL, `payload` TEXT NOT NULL, `state` TEXT NOT NULL, `retry_count` INTEGER NOT NULL, `idempotency_key` TEXT NOT NULL, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `activation_checks_local` (`id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `activation_attempt_id` TEXT NOT NULL, `check_code` TEXT NOT NULL, `required` INTEGER NOT NULL, `status` TEXT NOT NULL, `evidence_type` TEXT, `evidence_ref` TEXT, `occurred_at` TEXT, `recorded_at` TEXT NOT NULL, `details_sanitized_json` TEXT, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `fulfillment_outbox_events` (`event_id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `device_id` TEXT NOT NULL, `source_sequence` INTEGER NOT NULL, `aggregate_type` TEXT NOT NULL, `aggregate_id` TEXT NOT NULL, `idempotency_key` TEXT NOT NULL, `payload_hash` TEXT NOT NULL, `topology_revision` INTEGER NOT NULL, `state` TEXT NOT NULL, `attempts` INTEGER NOT NULL, PRIMARY KEY (`event_id`))');
+            'CREATE TABLE IF NOT EXISTS `first_successful_sale_claims` (`tenant_id` TEXT NOT NULL, `terminal_id` TEXT NOT NULL, `ticket_id` TEXT NOT NULL, `activation_attempt_id` TEXT, `device_occurred_at` TEXT NOT NULL, `anchored_occurred_at` TEXT, `clock_confidence` TEXT NOT NULL, `server_time_anchor_id` TEXT, `pos_build` TEXT, `outbox_event_id` TEXT NOT NULL, `created_at_local` TEXT NOT NULL, PRIMARY KEY (`tenant_id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `first_customer_sale_observations` (`tenant_id` TEXT NOT NULL, `terminal_id` TEXT NOT NULL, `ticket_id` TEXT NOT NULL, `occurred_at` TEXT NOT NULL, `outbox_event_id` TEXT NOT NULL, `created_at_local` TEXT NOT NULL, PRIMARY KEY (`tenant_id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `activation_outbox_envelopes` (`id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `activation_attempt_id` TEXT NOT NULL, `event_type` TEXT NOT NULL, `idempotency_key` TEXT NOT NULL, `payload_json` TEXT NOT NULL, `payload_hash` TEXT NOT NULL, `sync_status` TEXT NOT NULL, `created_at` TEXT NOT NULL, `synced_at` TEXT, `last_error` TEXT, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE UNIQUE INDEX `index_audit_logs_tenant_id_device_id_user_id_sequence_no` ON `audit_logs` (`tenant_id`, `device_id`, `user_id`, `sequence_no`)');
+        await database.execute(
+            'CREATE UNIQUE INDEX `index_authority_recipe_version_components_tenant_id_version_id_ordinal` ON `authority_recipe_version_components` (`tenant_id`, `version_id`, `ordinal`)');
+        await database.execute(
+            'CREATE UNIQUE INDEX `index_print_jobs_tenant_id_idempotency_key` ON `print_jobs` (`tenant_id`, `idempotency_key`)');
+        await database.execute(
+            'CREATE UNIQUE INDEX `index_fulfillment_outbox_events_tenant_id_idempotency_key` ON `fulfillment_outbox_events` (`tenant_id`, `idempotency_key`)');
         await database.execute(
             'CREATE UNIQUE INDEX `idx_movement_sync_state_stream_sequence` ON `inventory_movement_sync_state` (`terminal_id`, `flow_type`, `local_sequence`)');
         await database.execute(
@@ -302,9 +348,35 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE INDEX `index_customer_point_transactions_created_at` ON `customer_point_transactions` (`created_at`)');
         await database.execute(
-            'CREATE UNIQUE INDEX `index_print_jobs_tenant_id_idempotency_key` ON `print_jobs` (`tenant_id`, `idempotency_key`)');
+            'CREATE INDEX `index_customer_point_transactions_loyalty_program_id` ON `customer_point_transactions` (`loyalty_program_id`)');
         await database.execute(
-            'CREATE UNIQUE INDEX `index_fulfillment_outbox_events_tenant_id_idempotency_key` ON `fulfillment_outbox_events` (`tenant_id`, `idempotency_key`)');
+            'CREATE INDEX `index_customer_point_transactions_idempotency_key` ON `customer_point_transactions` (`idempotency_key`)');
+        await database.execute(
+            'CREATE INDEX `index_loyalty_programs_tenant_id` ON `loyalty_programs` (`tenant_id`)');
+        await database.execute(
+            'CREATE INDEX `index_loyalty_programs_status` ON `loyalty_programs` (`status`)');
+        await database.execute(
+            'CREATE INDEX `index_loyalty_programs_program_type` ON `loyalty_programs` (`program_type`)');
+        await database.execute(
+            'CREATE INDEX `index_loyalty_rewards_tenant_id` ON `loyalty_rewards` (`tenant_id`)');
+        await database.execute(
+            'CREATE INDEX `index_loyalty_rewards_loyalty_program_id` ON `loyalty_rewards` (`loyalty_program_id`)');
+        await database.execute(
+            'CREATE INDEX `index_loyalty_rewards_status` ON `loyalty_rewards` (`status`)');
+        await database.execute(
+            'CREATE UNIQUE INDEX `index_activation_checks_local_tenant_id_activation_attempt_id_check_code` ON `activation_checks_local` (`tenant_id`, `activation_attempt_id`, `check_code`)');
+        await database.execute(
+            'CREATE UNIQUE INDEX `index_first_successful_sale_claims_ticket_id` ON `first_successful_sale_claims` (`ticket_id`)');
+        await database.execute(
+            'CREATE UNIQUE INDEX `index_first_successful_sale_claims_outbox_event_id` ON `first_successful_sale_claims` (`outbox_event_id`)');
+        await database.execute(
+            'CREATE UNIQUE INDEX `index_first_customer_sale_observations_ticket_id` ON `first_customer_sale_observations` (`ticket_id`)');
+        await database.execute(
+            'CREATE UNIQUE INDEX `index_first_customer_sale_observations_outbox_event_id` ON `first_customer_sale_observations` (`outbox_event_id`)');
+        await database.execute(
+            'CREATE UNIQUE INDEX `index_activation_outbox_envelopes_tenant_id_idempotency_key` ON `activation_outbox_envelopes` (`tenant_id`, `idempotency_key`)');
+        await database.execute(
+            'CREATE INDEX `index_activation_outbox_envelopes_tenant_id_activation_attempt_id` ON `activation_outbox_envelopes` (`tenant_id`, `activation_attempt_id`)');
 
         await callback?.onCreate?.call(database, version);
       },
@@ -520,6 +592,60 @@ class _$AppDatabase extends AppDatabase {
   CustomerPointTransactionDao get customerPointTransactionDao {
     return _customerPointTransactionDaoInstance ??=
         _$CustomerPointTransactionDao(database, changeListener);
+  }
+
+  @override
+  LoyaltyProgramDao get loyaltyProgramDao {
+    return _loyaltyProgramDaoInstance ??=
+        _$LoyaltyProgramDao(database, changeListener);
+  }
+
+  @override
+  LoyaltyRewardDao get loyaltyRewardDao {
+    return _loyaltyRewardDaoInstance ??=
+        _$LoyaltyRewardDao(database, changeListener);
+  }
+
+  @override
+  FiscalConfigLocalDao get fiscalConfigLocalDao {
+    return _fiscalConfigLocalDaoInstance ??=
+        _$FiscalConfigLocalDao(database, changeListener);
+  }
+
+  @override
+  ActivationAttemptLocalDao get activationAttemptLocalDao {
+    return _activationAttemptLocalDaoInstance ??=
+        _$ActivationAttemptLocalDao(database, changeListener);
+  }
+
+  @override
+  ActivationCheckResultLocalDao get activationCheckResultLocalDao {
+    return _activationCheckResultLocalDaoInstance ??=
+        _$ActivationCheckResultLocalDao(database, changeListener);
+  }
+
+  @override
+  FirstSuccessfulSaleClaimDao get firstSuccessfulSaleClaimDao {
+    return _firstSuccessfulSaleClaimDaoInstance ??=
+        _$FirstSuccessfulSaleClaimDao(database, changeListener);
+  }
+
+  @override
+  FirstCustomerSaleObservationDao get firstCustomerSaleObservationDao {
+    return _firstCustomerSaleObservationDaoInstance ??=
+        _$FirstCustomerSaleObservationDao(database, changeListener);
+  }
+
+  @override
+  ActivationOutboxDao get activationOutboxDao {
+    return _activationOutboxDaoInstance ??=
+        _$ActivationOutboxDao(database, changeListener);
+  }
+
+  @override
+  AuthorityProjectionDao get authorityProjectionDao {
+    return _authorityProjectionDaoInstance ??=
+        _$AuthorityProjectionDao(database, changeListener);
   }
 
   @override
@@ -1091,11 +1217,15 @@ class _$ProductDao extends ProductDao {
                   'barcode': item.barcode,
                   'category': item.category,
                   'is_prepared': item.isPrepared ? 1 : 0,
+                  'product_type': item.productType,
+                  'mapping_version_id': item.mappingVersionId,
+                  'insumo_id': item.insumoId,
                   'created_at': item.createdAt,
                   'inventory_policy': item.inventoryPolicy,
                   'direct_stock_insumo_id': item.directStockInsumoId,
                   'tax_rate': item.taxRate,
-                  'is_tax_exempt': item.isTaxExempt ? 1 : 0
+                  'is_tax_exempt': item.isTaxExempt ? 1 : 0,
+                  'tenant_id': item.tenantId
                 }),
         _productVariantEntityInsertionAdapter = InsertionAdapter(
             database,
@@ -1145,11 +1275,15 @@ class _$ProductDao extends ProductDao {
             barcode: row['barcode'] as String?,
             category: row['category'] as String?,
             isPrepared: (row['is_prepared'] as int) != 0,
+            productType: row['product_type'] as String,
+            mappingVersionId: row['mapping_version_id'] as String?,
+            insumoId: row['insumo_id'] as String?,
             createdAt: row['created_at'] as String?,
             inventoryPolicy: row['inventory_policy'] as String?,
             directStockInsumoId: row['direct_stock_insumo_id'] as String?,
-            taxRate: (row['tax_rate'] as num?)?.toDouble() ?? 0.15,
-            isTaxExempt: (row['is_tax_exempt'] as int?) != 0));
+            taxRate: row['tax_rate'] as double,
+            isTaxExempt: (row['is_tax_exempt'] as int) != 0,
+            tenantId: row['tenant_id'] as String?));
   }
 
   @override
@@ -1167,12 +1301,56 @@ class _$ProductDao extends ProductDao {
             barcode: row['barcode'] as String?,
             category: row['category'] as String?,
             isPrepared: (row['is_prepared'] as int) != 0,
+            productType: row['product_type'] as String,
+            mappingVersionId: row['mapping_version_id'] as String?,
+            insumoId: row['insumo_id'] as String?,
             createdAt: row['created_at'] as String?,
             inventoryPolicy: row['inventory_policy'] as String?,
             directStockInsumoId: row['direct_stock_insumo_id'] as String?,
-            taxRate: (row['tax_rate'] as num?)?.toDouble() ?? 0.15,
-            isTaxExempt: (row['is_tax_exempt'] as int?) != 0),
+            taxRate: row['tax_rate'] as double,
+            isTaxExempt: (row['is_tax_exempt'] as int) != 0,
+            tenantId: row['tenant_id'] as String?),
         arguments: [id]);
+  }
+
+  @override
+  Future<ProductEntity?> findProductByIdAndTenant(
+    String id,
+    String tenantId,
+  ) async {
+    return _queryAdapter.query(
+        'SELECT * FROM products WHERE id = ?1 AND (tenant_id = ?2 OR tenant_id IS NULL)',
+        mapper: (Map<String, Object?> row) => ProductEntity(id: row['id'] as String, name: row['name'] as String, uom: row['uom'] as String, stock: row['stock'] as double, averageCost: row['average_cost'] as double, sellPrice: row['sell_price'] as double, isActive: (row['is_active'] as int) != 0, sku: row['sku'] as String?, barcode: row['barcode'] as String?, category: row['category'] as String?, isPrepared: (row['is_prepared'] as int) != 0, productType: row['product_type'] as String, mappingVersionId: row['mapping_version_id'] as String?, insumoId: row['insumo_id'] as String?, createdAt: row['created_at'] as String?, inventoryPolicy: row['inventory_policy'] as String?, directStockInsumoId: row['direct_stock_insumo_id'] as String?, taxRate: row['tax_rate'] as double, isTaxExempt: (row['is_tax_exempt'] as int) != 0, tenantId: row['tenant_id'] as String?),
+        arguments: [id, tenantId]);
+  }
+
+  @override
+  Future<List<ProductEntity>> findActiveProductsByTenant(
+      String tenantId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM products WHERE tenant_id = ?1 AND is_active = 1',
+        mapper: (Map<String, Object?> row) => ProductEntity(
+            id: row['id'] as String,
+            name: row['name'] as String,
+            uom: row['uom'] as String,
+            stock: row['stock'] as double,
+            averageCost: row['average_cost'] as double,
+            sellPrice: row['sell_price'] as double,
+            isActive: (row['is_active'] as int) != 0,
+            sku: row['sku'] as String?,
+            barcode: row['barcode'] as String?,
+            category: row['category'] as String?,
+            isPrepared: (row['is_prepared'] as int) != 0,
+            productType: row['product_type'] as String,
+            mappingVersionId: row['mapping_version_id'] as String?,
+            insumoId: row['insumo_id'] as String?,
+            createdAt: row['created_at'] as String?,
+            inventoryPolicy: row['inventory_policy'] as String?,
+            directStockInsumoId: row['direct_stock_insumo_id'] as String?,
+            taxRate: row['tax_rate'] as double,
+            isTaxExempt: (row['is_tax_exempt'] as int) != 0,
+            tenantId: row['tenant_id'] as String?),
+        arguments: [tenantId]);
   }
 
   @override
@@ -1220,11 +1398,15 @@ class _$ProductDao extends ProductDao {
             barcode: row['barcode'] as String?,
             category: row['category'] as String?,
             isPrepared: (row['is_prepared'] as int) != 0,
+            productType: row['product_type'] as String,
+            mappingVersionId: row['mapping_version_id'] as String?,
+            insumoId: row['insumo_id'] as String?,
             createdAt: row['created_at'] as String?,
             inventoryPolicy: row['inventory_policy'] as String?,
             directStockInsumoId: row['direct_stock_insumo_id'] as String?,
-            taxRate: (row['tax_rate'] as num?)?.toDouble() ?? 0.15,
-            isTaxExempt: (row['is_tax_exempt'] as int?) != 0),
+            taxRate: row['tax_rate'] as double,
+            isTaxExempt: (row['is_tax_exempt'] as int) != 0,
+            tenantId: row['tenant_id'] as String?),
         arguments: [sku, barcode]);
   }
 
@@ -1702,7 +1884,11 @@ class _$MovementDao extends MovementDao {
                   'intentos_count': item.intentosCount,
                   'bloqueo_motivo': item.bloqueoMotivo,
                   'autorizado_por_usuario_id': item.autorizadoPorUsuarioId,
-                  'fecha_autorizacion': item.fechaAutorizacion
+                  'fecha_autorizacion': item.fechaAutorizacion,
+                  'delivery_owner': item.deliveryOwner,
+                  'delivery_state': item.deliveryState,
+                  'sale_id': item.saleId,
+                  'sale_correlation_id': item.saleCorrelationId
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -1737,7 +1923,11 @@ class _$MovementDao extends MovementDao {
             intentosCount: row['intentos_count'] as int,
             bloqueoMotivo: row['bloqueo_motivo'] as String?,
             autorizadoPorUsuarioId: row['autorizado_por_usuario_id'] as String?,
-            fechaAutorizacion: row['fecha_autorizacion'] as String?));
+            fechaAutorizacion: row['fecha_autorizacion'] as String?,
+            deliveryOwner: row['delivery_owner'] as String,
+            deliveryState: row['delivery_state'] as String,
+            saleId: row['sale_id'] as String?,
+            saleCorrelationId: row['sale_correlation_id'] as String?));
   }
 
   @override
@@ -1764,7 +1954,11 @@ class _$MovementDao extends MovementDao {
             intentosCount: row['intentos_count'] as int,
             bloqueoMotivo: row['bloqueo_motivo'] as String?,
             autorizadoPorUsuarioId: row['autorizado_por_usuario_id'] as String?,
-            fechaAutorizacion: row['fecha_autorizacion'] as String?));
+            fechaAutorizacion: row['fecha_autorizacion'] as String?,
+            deliveryOwner: row['delivery_owner'] as String,
+            deliveryState: row['delivery_state'] as String,
+            saleId: row['sale_id'] as String?,
+            saleCorrelationId: row['sale_correlation_id'] as String?));
   }
 
   @override
@@ -1774,7 +1968,7 @@ class _$MovementDao extends MovementDao {
   ) async {
     return _queryAdapter.queryList(
         'SELECT * FROM inventory_movements WHERE type = ?1 ORDER BY timestamp DESC LIMIT ?2',
-        mapper: (Map<String, Object?> row) => MovementEntity(id: row['id'] as String, insumoId: row['insumo_id'] as String, type: row['type'] as String, quantity: row['quantity'] as double, previousStock: row['previous_stock'] as double, newStock: row['new_stock'] as double, timestamp: row['timestamp'] as String, reason: row['reason'] as String?, userId: row['user_id'] as String?, unitCostNio: row['unit_cost_nio'] as double?, sourceDocumentType: row['source_document_type'] as String?, sourceDocumentId: row['source_document_id'] as String?, originMovementId: row['origin_movement_id'] as String?, originInvoiceItemId: row['origin_invoice_item_id'] as String?, batch_deductions: row['batch_deductions'] as String?, estadoCosteo: row['estado_costeo'] as int, intentosCount: row['intentos_count'] as int, bloqueoMotivo: row['bloqueo_motivo'] as String?, autorizadoPorUsuarioId: row['autorizado_por_usuario_id'] as String?, fechaAutorizacion: row['fecha_autorizacion'] as String?),
+        mapper: (Map<String, Object?> row) => MovementEntity(id: row['id'] as String, insumoId: row['insumo_id'] as String, type: row['type'] as String, quantity: row['quantity'] as double, previousStock: row['previous_stock'] as double, newStock: row['new_stock'] as double, timestamp: row['timestamp'] as String, reason: row['reason'] as String?, userId: row['user_id'] as String?, unitCostNio: row['unit_cost_nio'] as double?, sourceDocumentType: row['source_document_type'] as String?, sourceDocumentId: row['source_document_id'] as String?, originMovementId: row['origin_movement_id'] as String?, originInvoiceItemId: row['origin_invoice_item_id'] as String?, batch_deductions: row['batch_deductions'] as String?, estadoCosteo: row['estado_costeo'] as int, intentosCount: row['intentos_count'] as int, bloqueoMotivo: row['bloqueo_motivo'] as String?, autorizadoPorUsuarioId: row['autorizado_por_usuario_id'] as String?, fechaAutorizacion: row['fecha_autorizacion'] as String?, deliveryOwner: row['delivery_owner'] as String, deliveryState: row['delivery_state'] as String, saleId: row['sale_id'] as String?, saleCorrelationId: row['sale_correlation_id'] as String?),
         arguments: [type, limit]);
   }
 
@@ -2153,7 +2347,11 @@ class _$InventoryDao extends InventoryDao {
                   'intentos_count': item.intentosCount,
                   'bloqueo_motivo': item.bloqueoMotivo,
                   'autorizado_por_usuario_id': item.autorizadoPorUsuarioId,
-                  'fecha_autorizacion': item.fechaAutorizacion
+                  'fecha_autorizacion': item.fechaAutorizacion,
+                  'delivery_owner': item.deliveryOwner,
+                  'delivery_state': item.deliveryState,
+                  'sale_id': item.saleId,
+                  'sale_correlation_id': item.saleCorrelationId
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -2609,7 +2807,11 @@ class _$ProductionTransactionDao extends ProductionTransactionDao {
                   'intentos_count': item.intentosCount,
                   'bloqueo_motivo': item.bloqueoMotivo,
                   'autorizado_por_usuario_id': item.autorizadoPorUsuarioId,
-                  'fecha_autorizacion': item.fechaAutorizacion
+                  'fecha_autorizacion': item.fechaAutorizacion,
+                  'delivery_owner': item.deliveryOwner,
+                  'delivery_state': item.deliveryState,
+                  'sale_id': item.saleId,
+                  'sale_correlation_id': item.saleCorrelationId
                 }),
         _productionOrderDocumentEntityInsertionAdapter = InsertionAdapter(
             database,
@@ -2928,6 +3130,9 @@ class _$InvoiceDao extends InvoiceDao {
                   'source_sequence': item.sourceSequence,
                   'idempotency_key': item.idempotencyKey,
                   'payload_hash': item.payloadHash,
+                  'inventory_policy_version': item.inventoryPolicyVersion,
+                  'inventory_outcome': item.inventoryOutcome,
+                  'inventory_outcome_reason': item.inventoryOutcomeReason,
                   'bcn_official_rate': item.bcnOfficialRate,
                   'commercial_rate': item.commercialRate,
                   'total_usd': item.totalUsd
@@ -2961,6 +3166,9 @@ class _$InvoiceDao extends InvoiceDao {
                   'source_sequence': item.sourceSequence,
                   'idempotency_key': item.idempotencyKey,
                   'payload_hash': item.payloadHash,
+                  'inventory_policy_version': item.inventoryPolicyVersion,
+                  'inventory_outcome': item.inventoryOutcome,
+                  'inventory_outcome_reason': item.inventoryOutcomeReason,
                   'bcn_official_rate': item.bcnOfficialRate,
                   'commercial_rate': item.commercialRate,
                   'total_usd': item.totalUsd
@@ -3004,6 +3212,9 @@ class _$InvoiceDao extends InvoiceDao {
             sourceSequence: row['source_sequence'] as int?,
             idempotencyKey: row['idempotency_key'] as String?,
             payloadHash: row['payload_hash'] as String?,
+            inventoryPolicyVersion: row['inventory_policy_version'] as String?,
+            inventoryOutcome: row['inventory_outcome'] as String?,
+            inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double),
@@ -3039,6 +3250,9 @@ class _$InvoiceDao extends InvoiceDao {
             sourceSequence: row['source_sequence'] as int?,
             idempotencyKey: row['idempotency_key'] as String?,
             payloadHash: row['payload_hash'] as String?,
+            inventoryPolicyVersion: row['inventory_policy_version'] as String?,
+            inventoryOutcome: row['inventory_outcome'] as String?,
+            inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double),
@@ -3074,6 +3288,9 @@ class _$InvoiceDao extends InvoiceDao {
             sourceSequence: row['source_sequence'] as int?,
             idempotencyKey: row['idempotency_key'] as String?,
             payloadHash: row['payload_hash'] as String?,
+            inventoryPolicyVersion: row['inventory_policy_version'] as String?,
+            inventoryOutcome: row['inventory_outcome'] as String?,
+            inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double));
@@ -3108,6 +3325,9 @@ class _$InvoiceDao extends InvoiceDao {
             sourceSequence: row['source_sequence'] as int?,
             idempotencyKey: row['idempotency_key'] as String?,
             payloadHash: row['payload_hash'] as String?,
+            inventoryPolicyVersion: row['inventory_policy_version'] as String?,
+            inventoryOutcome: row['inventory_outcome'] as String?,
+            inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double),
@@ -3146,6 +3366,9 @@ class _$InvoiceDao extends InvoiceDao {
             sourceSequence: row['source_sequence'] as int?,
             idempotencyKey: row['idempotency_key'] as String?,
             payloadHash: row['payload_hash'] as String?,
+            inventoryPolicyVersion: row['inventory_policy_version'] as String?,
+            inventoryOutcome: row['inventory_outcome'] as String?,
+            inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double),
@@ -3181,10 +3404,20 @@ class _$InvoiceDao extends InvoiceDao {
             sourceSequence: row['source_sequence'] as int?,
             idempotencyKey: row['idempotency_key'] as String?,
             payloadHash: row['payload_hash'] as String?,
+            inventoryPolicyVersion: row['inventory_policy_version'] as String?,
+            inventoryOutcome: row['inventory_outcome'] as String?,
+            inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double),
         arguments: [userId]);
+  }
+
+  @override
+  Future<String?> getLastInvoiceNumber() async {
+    return _queryAdapter.query(
+        'SELECT COALESCE(MAX(invoice_number), \'\') FROM invoices',
+        mapper: (Map<String, Object?> row) => row.values.first as String);
   }
 
   @override
@@ -3216,6 +3449,9 @@ class _$InvoiceDao extends InvoiceDao {
             sourceSequence: row['source_sequence'] as int?,
             idempotencyKey: row['idempotency_key'] as String?,
             payloadHash: row['payload_hash'] as String?,
+            inventoryPolicyVersion: row['inventory_policy_version'] as String?,
+            inventoryOutcome: row['inventory_outcome'] as String?,
+            inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double));
@@ -3235,6 +3471,51 @@ class _$InvoiceDao extends InvoiceDao {
             _sqliteVariablesForIds +
             ')',
         arguments: [status, ...ids]);
+  }
+
+  @override
+  Future<InvoiceEntity?> getInvoiceByIdempotencyKey(String key) async {
+    return _queryAdapter.query(
+        'SELECT * FROM invoices WHERE idempotency_key = ?1',
+        mapper: (Map<String, Object?> row) => InvoiceEntity(
+            id: row['id'] as String,
+            number: row['invoice_number'] as String,
+            createdAt: row['created_at'] as int,
+            userId: row['user_id'] as String,
+            subtotal: row['subtotal'] as double,
+            totalTax: row['total_tax'] as double,
+            total: row['total'] as double,
+            isCanceled: (row['is_canceled'] as int) != 0,
+            voidReason: row['void_reason'] as String?,
+            syncStatus: row['sync_status'] as String,
+            paymentStatus: row['payment_status'] as String,
+            customerId: row['customer_id'] as String?,
+            globalTaxOverride: (row['global_tax_override'] as int) != 0,
+            type: row['type'] as String,
+            relatedInvoiceId: row['related_invoice_id'] as String?,
+            originInvoiceId: row['origin_invoice_id'] as String?,
+            refundReasonPolicy: row['refund_reason_policy'] as String?,
+            refundReasonCode: row['refund_reason_code'] as String?,
+            authorizedByUserId: row['authorized_by_user_id'] as String?,
+            authorizedByRole: row['authorized_by_role'] as String?,
+            terminalId: row['terminal_id'] as String?,
+            sourceSequence: row['source_sequence'] as int?,
+            idempotencyKey: row['idempotency_key'] as String?,
+            payloadHash: row['payload_hash'] as String?,
+            inventoryPolicyVersion: row['inventory_policy_version'] as String?,
+            inventoryOutcome: row['inventory_outcome'] as String?,
+            inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
+            bcnOfficialRate: row['bcn_official_rate'] as double,
+            commercialRate: row['commercial_rate'] as double,
+            totalUsd: row['total_usd'] as double),
+        arguments: [key]);
+  }
+
+  @override
+  Future<int?> getInventoryEnrichmentPendingCount() async {
+    return _queryAdapter.query(
+        'SELECT COUNT(*) FROM invoices WHERE inventory_outcome = \'APPLIED_INVENTORY_PENDING\'',
+        mapper: (Map<String, Object?> row) => row.values.first as int);
   }
 
   @override
@@ -3273,6 +3554,8 @@ class _$InvoiceItemDao extends InvoiceItemDao {
                   'variant_id': item.variantId,
                   'notes': item.notes,
                   'recipe_version_id': item.recipeVersionId,
+                  'inventory_snapshot_json': item.inventorySnapshotJson,
+                  'inventory_snapshot_version': item.inventorySnapshotVersion,
                   'origin_invoice_item_id': item.originInvoiceItemId
                 });
 
@@ -3303,6 +3586,9 @@ class _$InvoiceItemDao extends InvoiceItemDao {
             variantId: row['variant_id'] as String?,
             notes: row['notes'] as String?,
             recipeVersionId: row['recipe_version_id'] as String?,
+            inventorySnapshotJson: row['inventory_snapshot_json'] as String?,
+            inventorySnapshotVersion:
+                row['inventory_snapshot_version'] as String?,
             originInvoiceItemId: row['origin_invoice_item_id'] as String?),
         arguments: [invoiceId]);
   }
@@ -3569,6 +3855,9 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'source_sequence': item.sourceSequence,
                   'idempotency_key': item.idempotencyKey,
                   'payload_hash': item.payloadHash,
+                  'inventory_policy_version': item.inventoryPolicyVersion,
+                  'inventory_outcome': item.inventoryOutcome,
+                  'inventory_outcome_reason': item.inventoryOutcomeReason,
                   'bcn_official_rate': item.bcnOfficialRate,
                   'commercial_rate': item.commercialRate,
                   'total_usd': item.totalUsd
@@ -3591,6 +3880,8 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'variant_id': item.variantId,
                   'notes': item.notes,
                   'recipe_version_id': item.recipeVersionId,
+                  'inventory_snapshot_json': item.inventorySnapshotJson,
+                  'inventory_snapshot_version': item.inventorySnapshotVersion,
                   'origin_invoice_item_id': item.originInvoiceItemId
                 }),
         _invoiceItemModifierEntityInsertionAdapter = InsertionAdapter(
@@ -3649,7 +3940,11 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'intentos_count': item.intentosCount,
                   'bloqueo_motivo': item.bloqueoMotivo,
                   'autorizado_por_usuario_id': item.autorizadoPorUsuarioId,
-                  'fecha_autorizacion': item.fechaAutorizacion
+                  'fecha_autorizacion': item.fechaAutorizacion,
+                  'delivery_owner': item.deliveryOwner,
+                  'delivery_state': item.deliveryState,
+                  'sale_id': item.saleId,
+                  'sale_correlation_id': item.saleCorrelationId
                 }),
         _auditLogEntityInsertionAdapter = InsertionAdapter(
             database,
@@ -3752,6 +4047,9 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'source_sequence': item.sourceSequence,
                   'idempotency_key': item.idempotencyKey,
                   'payload_hash': item.payloadHash,
+                  'inventory_policy_version': item.inventoryPolicyVersion,
+                  'inventory_outcome': item.inventoryOutcome,
+                  'inventory_outcome_reason': item.inventoryOutcomeReason,
                   'bcn_official_rate': item.bcnOfficialRate,
                   'commercial_rate': item.commercialRate,
                   'total_usd': item.totalUsd
@@ -3850,6 +4148,9 @@ class _$SalesTransactionDao extends SalesTransactionDao {
             sourceSequence: row['source_sequence'] as int?,
             idempotencyKey: row['idempotency_key'] as String?,
             payloadHash: row['payload_hash'] as String?,
+            inventoryPolicyVersion: row['inventory_policy_version'] as String?,
+            inventoryOutcome: row['inventory_outcome'] as String?,
+            inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double),
@@ -3886,6 +4187,9 @@ class _$SalesTransactionDao extends SalesTransactionDao {
             sourceSequence: row['source_sequence'] as int?,
             idempotencyKey: row['idempotency_key'] as String?,
             payloadHash: row['payload_hash'] as String?,
+            inventoryPolicyVersion: row['inventory_policy_version'] as String?,
+            inventoryOutcome: row['inventory_outcome'] as String?,
+            inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double),
@@ -3898,6 +4202,58 @@ class _$SalesTransactionDao extends SalesTransactionDao {
         'SELECT COALESCE(MAX(source_sequence), 0) + 1 FROM invoices WHERE terminal_id = ?1 AND source_sequence > 0',
         mapper: (Map<String, Object?> row) => row.values.first as int,
         arguments: [terminalId]);
+  }
+
+  @override
+  Future<void> updateInvoiceSyncStatus(
+    String id,
+    String status,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE invoices SET sync_status = ?2 WHERE id = ?1',
+        arguments: [id, status]);
+  }
+
+  @override
+  Future<void> updateMovementsDeliveryStateBySaleId(
+    String saleId,
+    String state,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE inventory_movements SET delivery_state = ?2 WHERE sale_id = ?1',
+        arguments: [saleId, state]);
+  }
+
+  @override
+  Future<List<MovementEntity>> getMovementsBySaleId(String saleId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM inventory_movements WHERE sale_id = ?1',
+        mapper: (Map<String, Object?> row) => MovementEntity(
+            id: row['id'] as String,
+            insumoId: row['insumo_id'] as String,
+            type: row['type'] as String,
+            quantity: row['quantity'] as double,
+            previousStock: row['previous_stock'] as double,
+            newStock: row['new_stock'] as double,
+            timestamp: row['timestamp'] as String,
+            reason: row['reason'] as String?,
+            userId: row['user_id'] as String?,
+            unitCostNio: row['unit_cost_nio'] as double?,
+            sourceDocumentType: row['source_document_type'] as String?,
+            sourceDocumentId: row['source_document_id'] as String?,
+            originMovementId: row['origin_movement_id'] as String?,
+            originInvoiceItemId: row['origin_invoice_item_id'] as String?,
+            batch_deductions: row['batch_deductions'] as String?,
+            estadoCosteo: row['estado_costeo'] as int,
+            intentosCount: row['intentos_count'] as int,
+            bloqueoMotivo: row['bloqueo_motivo'] as String?,
+            autorizadoPorUsuarioId: row['autorizado_por_usuario_id'] as String?,
+            fechaAutorizacion: row['fecha_autorizacion'] as String?,
+            deliveryOwner: row['delivery_owner'] as String,
+            deliveryState: row['delivery_state'] as String,
+            saleId: row['sale_id'] as String?,
+            saleCorrelationId: row['sale_correlation_id'] as String?),
+        arguments: [saleId]);
   }
 
   @override
@@ -3965,7 +4321,7 @@ class _$SalesTransactionDao extends SalesTransactionDao {
   @override
   Future<void> insertMovement(MovementEntity movement) async {
     await _movementEntityInsertionAdapter.insert(
-        movement, OnConflictStrategy.replace);
+        movement, OnConflictStrategy.abort);
   }
 
   @override
@@ -4000,6 +4356,25 @@ class _$SalesTransactionDao extends SalesTransactionDao {
   @override
   Future<void> updateInsumo(InsumoEntity insumo) async {
     await _insumoEntityUpdateAdapter.update(insumo, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> executeAckTransaction(
+    String invoiceId,
+    String syncStatus,
+    String deliveryState,
+  ) async {
+    if (database is sqflite.Transaction) {
+      await super.executeAckTransaction(invoiceId, syncStatus, deliveryState);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.salesTransactionDao
+            .executeAckTransaction(invoiceId, syncStatus, deliveryState);
+      });
+    }
   }
 
   @override
@@ -5303,7 +5678,8 @@ class _$CustomerDao extends CustomerDao {
                   'is_active': item.isActive ? 1 : 0,
                   'created_at': item.createdAt,
                   'updated_at': item.updatedAt,
-                  'sync_status': item.syncStatus
+                  'sync_status': item.syncStatus,
+                  'customer_code': item.customerCode
                 }),
         _customerEntityUpdateAdapter = UpdateAdapter(
             database,
@@ -5320,7 +5696,8 @@ class _$CustomerDao extends CustomerDao {
                   'is_active': item.isActive ? 1 : 0,
                   'created_at': item.createdAt,
                   'updated_at': item.updatedAt,
-                  'sync_status': item.syncStatus
+                  'sync_status': item.syncStatus,
+                  'customer_code': item.customerCode
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -5348,7 +5725,8 @@ class _$CustomerDao extends CustomerDao {
             isActive: (row['is_active'] as int) != 0,
             createdAt: row['created_at'] as int,
             updatedAt: row['updated_at'] as int,
-            syncStatus: row['sync_status'] as String));
+            syncStatus: row['sync_status'] as String,
+            customerCode: row['customer_code'] as String?));
   }
 
   @override
@@ -5365,7 +5743,8 @@ class _$CustomerDao extends CustomerDao {
             isActive: (row['is_active'] as int) != 0,
             createdAt: row['created_at'] as int,
             updatedAt: row['updated_at'] as int,
-            syncStatus: row['sync_status'] as String),
+            syncStatus: row['sync_status'] as String,
+            customerCode: row['customer_code'] as String?),
         arguments: [id]);
   }
 
@@ -5384,7 +5763,8 @@ class _$CustomerDao extends CustomerDao {
             isActive: (row['is_active'] as int) != 0,
             createdAt: row['created_at'] as int,
             updatedAt: row['updated_at'] as int,
-            syncStatus: row['sync_status'] as String),
+            syncStatus: row['sync_status'] as String,
+            customerCode: row['customer_code'] as String?),
         arguments: [taxId]);
   }
 
@@ -5403,8 +5783,17 @@ class _$CustomerDao extends CustomerDao {
             isActive: (row['is_active'] as int) != 0,
             createdAt: row['created_at'] as int,
             updatedAt: row['updated_at'] as int,
-            syncStatus: row['sync_status'] as String),
+            syncStatus: row['sync_status'] as String,
+            customerCode: row['customer_code'] as String?),
         arguments: [phone]);
+  }
+
+  @override
+  Future<CustomerEntity?> getCustomerByCode(String customerCode) async {
+    return _queryAdapter.query(
+        'SELECT * FROM customers WHERE customer_code = ?1 AND is_active = 1 LIMIT 1',
+        mapper: (Map<String, Object?> row) => CustomerEntity(id: row['id'] as String, name: row['name'] as String, taxId: row['tax_id'] as String?, phone: row['phone'] as String?, email: row['email'] as String?, address: row['address'] as String?, pointsBalance: row['points_balance'] as double, isActive: (row['is_active'] as int) != 0, createdAt: row['created_at'] as int, updatedAt: row['updated_at'] as int, syncStatus: row['sync_status'] as String, customerCode: row['customer_code'] as String?),
+        arguments: [customerCode]);
   }
 
   @override
@@ -5414,7 +5803,7 @@ class _$CustomerDao extends CustomerDao {
   ) async {
     return _queryAdapter.queryList(
         'SELECT * FROM customers      WHERE is_active = 1        AND (         name LIKE \'%\' || ?1 || \'%\'          OR tax_id LIKE \'%\' || ?1 || \'%\'          OR phone LIKE \'%\' || ?1 || \'%\'       )     ORDER BY name ASC      LIMIT ?2',
-        mapper: (Map<String, Object?> row) => CustomerEntity(id: row['id'] as String, name: row['name'] as String, taxId: row['tax_id'] as String?, phone: row['phone'] as String?, email: row['email'] as String?, address: row['address'] as String?, pointsBalance: row['points_balance'] as double, isActive: (row['is_active'] as int) != 0, createdAt: row['created_at'] as int, updatedAt: row['updated_at'] as int, syncStatus: row['sync_status'] as String),
+        mapper: (Map<String, Object?> row) => CustomerEntity(id: row['id'] as String, name: row['name'] as String, taxId: row['tax_id'] as String?, phone: row['phone'] as String?, email: row['email'] as String?, address: row['address'] as String?, pointsBalance: row['points_balance'] as double, isActive: (row['is_active'] as int) != 0, createdAt: row['created_at'] as int, updatedAt: row['updated_at'] as int, syncStatus: row['sync_status'] as String, customerCode: row['customer_code'] as String?),
         arguments: [query, limit]);
   }
 
@@ -5461,7 +5850,25 @@ class _$CustomerPointTransactionDao extends CustomerPointTransactionDao {
                   'conversion_rate': item.conversionRate,
                   'reason': item.reason,
                   'created_at': item.createdAt,
-                  'sync_status': item.syncStatus
+                  'sync_status': item.syncStatus,
+                  'loyalty_program_id': item.loyaltyProgramId,
+                  'ticket_id': item.ticketId,
+                  'reward_id': item.rewardId,
+                  'transaction_type': item.transactionType,
+                  'units': item.units,
+                  'reversal_of_transaction_id': item.reversalOfTransactionId,
+                  'idempotency_key': item.idempotencyKey,
+                  'source_event_id': item.sourceEventId,
+                  'actor_user_id': item.actorUserId,
+                  'branch_id': item.branchId,
+                  'terminal_id': item.terminalId,
+                  'program_version': item.programVersion,
+                  'reward_version': item.rewardVersion,
+                  'commercial_snapshot': item.commercialSnapshot,
+                  'origin': item.origin,
+                  'occurred_at': item.occurredAt,
+                  'recorded_at': item.recordedAt,
+                  'legacy_imported': item.legacyImported
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -5478,7 +5885,7 @@ class _$CustomerPointTransactionDao extends CustomerPointTransactionDao {
       String customerId) async {
     return _queryAdapter.queryList(
         'SELECT * FROM customer_point_transactions WHERE customer_id = ?1 ORDER BY created_at DESC',
-        mapper: (Map<String, Object?> row) => CustomerPointTransactionEntity(id: row['id'] as String, customerId: row['customer_id'] as String, invoiceId: row['invoice_id'] as String?, type: row['type'] as String, points: row['points'] as double, balanceAfter: row['balance_after'] as double, conversionRate: row['conversion_rate'] as double, reason: row['reason'] as String?, createdAt: row['created_at'] as int, syncStatus: row['sync_status'] as String),
+        mapper: (Map<String, Object?> row) => CustomerPointTransactionEntity(id: row['id'] as String, customerId: row['customer_id'] as String, invoiceId: row['invoice_id'] as String?, type: row['type'] as String, points: row['points'] as double, balanceAfter: row['balance_after'] as double, conversionRate: row['conversion_rate'] as double, reason: row['reason'] as String?, createdAt: row['created_at'] as int, syncStatus: row['sync_status'] as String, loyaltyProgramId: row['loyalty_program_id'] as String?, ticketId: row['ticket_id'] as String?, rewardId: row['reward_id'] as String?, transactionType: row['transaction_type'] as String?, units: row['units'] as int?, reversalOfTransactionId: row['reversal_of_transaction_id'] as String?, idempotencyKey: row['idempotency_key'] as String?, sourceEventId: row['source_event_id'] as String?, actorUserId: row['actor_user_id'] as String?, branchId: row['branch_id'] as String?, terminalId: row['terminal_id'] as String?, programVersion: row['program_version'] as int?, rewardVersion: row['reward_version'] as int?, commercialSnapshot: row['commercial_snapshot'] as String?, origin: row['origin'] as String?, occurredAt: row['occurred_at'] as int?, recordedAt: row['recorded_at'] as int?, legacyImported: row['legacy_imported'] as int),
         arguments: [customerId]);
   }
 
@@ -5497,7 +5904,26 @@ class _$CustomerPointTransactionDao extends CustomerPointTransactionDao {
             conversionRate: row['conversion_rate'] as double,
             reason: row['reason'] as String?,
             createdAt: row['created_at'] as int,
-            syncStatus: row['sync_status'] as String),
+            syncStatus: row['sync_status'] as String,
+            loyaltyProgramId: row['loyalty_program_id'] as String?,
+            ticketId: row['ticket_id'] as String?,
+            rewardId: row['reward_id'] as String?,
+            transactionType: row['transaction_type'] as String?,
+            units: row['units'] as int?,
+            reversalOfTransactionId:
+                row['reversal_of_transaction_id'] as String?,
+            idempotencyKey: row['idempotency_key'] as String?,
+            sourceEventId: row['source_event_id'] as String?,
+            actorUserId: row['actor_user_id'] as String?,
+            branchId: row['branch_id'] as String?,
+            terminalId: row['terminal_id'] as String?,
+            programVersion: row['program_version'] as int?,
+            rewardVersion: row['reward_version'] as int?,
+            commercialSnapshot: row['commercial_snapshot'] as String?,
+            origin: row['origin'] as String?,
+            occurredAt: row['occurred_at'] as int?,
+            recordedAt: row['recorded_at'] as int?,
+            legacyImported: row['legacy_imported'] as int),
         arguments: [invoiceId]);
   }
 
@@ -5516,8 +5942,36 @@ class _$CustomerPointTransactionDao extends CustomerPointTransactionDao {
             conversionRate: row['conversion_rate'] as double,
             reason: row['reason'] as String?,
             createdAt: row['created_at'] as int,
-            syncStatus: row['sync_status'] as String),
+            syncStatus: row['sync_status'] as String,
+            loyaltyProgramId: row['loyalty_program_id'] as String?,
+            ticketId: row['ticket_id'] as String?,
+            rewardId: row['reward_id'] as String?,
+            transactionType: row['transaction_type'] as String?,
+            units: row['units'] as int?,
+            reversalOfTransactionId:
+                row['reversal_of_transaction_id'] as String?,
+            idempotencyKey: row['idempotency_key'] as String?,
+            sourceEventId: row['source_event_id'] as String?,
+            actorUserId: row['actor_user_id'] as String?,
+            branchId: row['branch_id'] as String?,
+            terminalId: row['terminal_id'] as String?,
+            programVersion: row['program_version'] as int?,
+            rewardVersion: row['reward_version'] as int?,
+            commercialSnapshot: row['commercial_snapshot'] as String?,
+            origin: row['origin'] as String?,
+            occurredAt: row['occurred_at'] as int?,
+            recordedAt: row['recorded_at'] as int?,
+            legacyImported: row['legacy_imported'] as int),
         arguments: [status]);
+  }
+
+  @override
+  Future<CustomerPointTransactionEntity?> findByIdempotencyKey(
+      String key) async {
+    return _queryAdapter.query(
+        'SELECT * FROM customer_point_transactions WHERE idempotency_key = ?1 LIMIT 1',
+        mapper: (Map<String, Object?> row) => CustomerPointTransactionEntity(id: row['id'] as String, customerId: row['customer_id'] as String, invoiceId: row['invoice_id'] as String?, type: row['type'] as String, points: row['points'] as double, balanceAfter: row['balance_after'] as double, conversionRate: row['conversion_rate'] as double, reason: row['reason'] as String?, createdAt: row['created_at'] as int, syncStatus: row['sync_status'] as String, loyaltyProgramId: row['loyalty_program_id'] as String?, ticketId: row['ticket_id'] as String?, rewardId: row['reward_id'] as String?, transactionType: row['transaction_type'] as String?, units: row['units'] as int?, reversalOfTransactionId: row['reversal_of_transaction_id'] as String?, idempotencyKey: row['idempotency_key'] as String?, sourceEventId: row['source_event_id'] as String?, actorUserId: row['actor_user_id'] as String?, branchId: row['branch_id'] as String?, terminalId: row['terminal_id'] as String?, programVersion: row['program_version'] as int?, rewardVersion: row['reward_version'] as int?, commercialSnapshot: row['commercial_snapshot'] as String?, origin: row['origin'] as String?, occurredAt: row['occurred_at'] as int?, recordedAt: row['recorded_at'] as int?, legacyImported: row['legacy_imported'] as int),
+        arguments: [key]);
   }
 
   @override
@@ -5564,6 +6018,1032 @@ class _$CustomerPointTransactionDao extends CustomerPointTransactionDao {
                 entity, customerId, newBalance, updatedAt);
       });
     }
+  }
+}
+
+class _$LoyaltyProgramDao extends LoyaltyProgramDao {
+  _$LoyaltyProgramDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _loyaltyProgramEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'loyalty_programs',
+            (LoyaltyProgramEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'tenant_id': item.tenantId,
+                  'name': item.name,
+                  'program_type': item.programType,
+                  'status': item.status,
+                  'starts_at': item.startsAt,
+                  'ends_at': item.endsAt,
+                  'earning_rule_json': item.earningRuleJson,
+                  'eligibility_rule_json': item.eligibilityRuleJson,
+                  'config_version': item.configVersion,
+                  'created_at': item.createdAt,
+                  'updated_at': item.updatedAt
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<LoyaltyProgramEntity>
+      _loyaltyProgramEntityInsertionAdapter;
+
+  @override
+  Future<List<LoyaltyProgramEntity>> getProgramsByStatus(
+    String tenantId,
+    String status,
+  ) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM loyalty_programs WHERE tenant_id = ?1 AND status = ?2',
+        mapper: (Map<String, Object?> row) => LoyaltyProgramEntity(
+            id: row['id'] as String,
+            tenantId: row['tenant_id'] as String,
+            name: row['name'] as String,
+            programType: row['program_type'] as String,
+            status: row['status'] as String,
+            startsAt: row['starts_at'] as int?,
+            endsAt: row['ends_at'] as int?,
+            earningRuleJson: row['earning_rule_json'] as String,
+            eligibilityRuleJson: row['eligibility_rule_json'] as String,
+            configVersion: row['config_version'] as int,
+            createdAt: row['created_at'] as int,
+            updatedAt: row['updated_at'] as int),
+        arguments: [tenantId, status]);
+  }
+
+  @override
+  Future<List<LoyaltyProgramEntity>> getAllPrograms(String tenantId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM loyalty_programs WHERE tenant_id = ?1',
+        mapper: (Map<String, Object?> row) => LoyaltyProgramEntity(
+            id: row['id'] as String,
+            tenantId: row['tenant_id'] as String,
+            name: row['name'] as String,
+            programType: row['program_type'] as String,
+            status: row['status'] as String,
+            startsAt: row['starts_at'] as int?,
+            endsAt: row['ends_at'] as int?,
+            earningRuleJson: row['earning_rule_json'] as String,
+            eligibilityRuleJson: row['eligibility_rule_json'] as String,
+            configVersion: row['config_version'] as int,
+            createdAt: row['created_at'] as int,
+            updatedAt: row['updated_at'] as int),
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<LoyaltyProgramEntity?> getProgramById(String id) async {
+    return _queryAdapter.query('SELECT * FROM loyalty_programs WHERE id = ?1',
+        mapper: (Map<String, Object?> row) => LoyaltyProgramEntity(
+            id: row['id'] as String,
+            tenantId: row['tenant_id'] as String,
+            name: row['name'] as String,
+            programType: row['program_type'] as String,
+            status: row['status'] as String,
+            startsAt: row['starts_at'] as int?,
+            endsAt: row['ends_at'] as int?,
+            earningRuleJson: row['earning_rule_json'] as String,
+            eligibilityRuleJson: row['eligibility_rule_json'] as String,
+            configVersion: row['config_version'] as int,
+            createdAt: row['created_at'] as int,
+            updatedAt: row['updated_at'] as int),
+        arguments: [id]);
+  }
+
+  @override
+  Future<void> deleteAllPrograms(String tenantId) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM loyalty_programs WHERE tenant_id = ?1',
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<List<LoyaltyProgramEntity>> getActivePrograms(String tenantId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM loyalty_programs WHERE tenant_id = ?1 AND status = \'ACTIVE\'',
+        mapper: (Map<String, Object?> row) => LoyaltyProgramEntity(id: row['id'] as String, tenantId: row['tenant_id'] as String, name: row['name'] as String, programType: row['program_type'] as String, status: row['status'] as String, startsAt: row['starts_at'] as int?, endsAt: row['ends_at'] as int?, earningRuleJson: row['earning_rule_json'] as String, eligibilityRuleJson: row['eligibility_rule_json'] as String, configVersion: row['config_version'] as int, createdAt: row['created_at'] as int, updatedAt: row['updated_at'] as int),
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<void> saveProgram(LoyaltyProgramEntity program) async {
+    await _loyaltyProgramEntityInsertionAdapter.insert(
+        program, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> savePrograms(List<LoyaltyProgramEntity> programs) async {
+    await _loyaltyProgramEntityInsertionAdapter.insertList(
+        programs, OnConflictStrategy.replace);
+  }
+}
+
+class _$LoyaltyRewardDao extends LoyaltyRewardDao {
+  _$LoyaltyRewardDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _loyaltyRewardEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'loyalty_rewards',
+            (LoyaltyRewardEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'tenant_id': item.tenantId,
+                  'loyalty_program_id': item.loyaltyProgramId,
+                  'name': item.name,
+                  'reward_type': item.rewardType,
+                  'cost_units': item.costUnits,
+                  'benefit_config_json': item.benefitConfigJson,
+                  'status': item.status,
+                  'starts_at': item.startsAt,
+                  'ends_at': item.endsAt,
+                  'presentation_order': item.presentationOrder,
+                  'config_version': item.configVersion,
+                  'created_at': item.createdAt,
+                  'updated_at': item.updatedAt
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<LoyaltyRewardEntity>
+      _loyaltyRewardEntityInsertionAdapter;
+
+  @override
+  Future<List<LoyaltyRewardEntity>> getRewardsByProgram(
+      String programId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM loyalty_rewards WHERE loyalty_program_id = ?1 ORDER BY presentation_order ASC',
+        mapper: (Map<String, Object?> row) => LoyaltyRewardEntity(id: row['id'] as String, tenantId: row['tenant_id'] as String, loyaltyProgramId: row['loyalty_program_id'] as String, name: row['name'] as String, rewardType: row['reward_type'] as String, costUnits: row['cost_units'] as int, benefitConfigJson: row['benefit_config_json'] as String, status: row['status'] as String, startsAt: row['starts_at'] as int?, endsAt: row['ends_at'] as int?, presentationOrder: row['presentation_order'] as int, configVersion: row['config_version'] as int, createdAt: row['created_at'] as int, updatedAt: row['updated_at'] as int),
+        arguments: [programId]);
+  }
+
+  @override
+  Future<List<LoyaltyRewardEntity>> getRewardsByStatus(
+    String tenantId,
+    String status,
+  ) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM loyalty_rewards WHERE tenant_id = ?1 AND status = ?2',
+        mapper: (Map<String, Object?> row) => LoyaltyRewardEntity(
+            id: row['id'] as String,
+            tenantId: row['tenant_id'] as String,
+            loyaltyProgramId: row['loyalty_program_id'] as String,
+            name: row['name'] as String,
+            rewardType: row['reward_type'] as String,
+            costUnits: row['cost_units'] as int,
+            benefitConfigJson: row['benefit_config_json'] as String,
+            status: row['status'] as String,
+            startsAt: row['starts_at'] as int?,
+            endsAt: row['ends_at'] as int?,
+            presentationOrder: row['presentation_order'] as int,
+            configVersion: row['config_version'] as int,
+            createdAt: row['created_at'] as int,
+            updatedAt: row['updated_at'] as int),
+        arguments: [tenantId, status]);
+  }
+
+  @override
+  Future<LoyaltyRewardEntity?> getRewardById(String id) async {
+    return _queryAdapter.query('SELECT * FROM loyalty_rewards WHERE id = ?1',
+        mapper: (Map<String, Object?> row) => LoyaltyRewardEntity(
+            id: row['id'] as String,
+            tenantId: row['tenant_id'] as String,
+            loyaltyProgramId: row['loyalty_program_id'] as String,
+            name: row['name'] as String,
+            rewardType: row['reward_type'] as String,
+            costUnits: row['cost_units'] as int,
+            benefitConfigJson: row['benefit_config_json'] as String,
+            status: row['status'] as String,
+            startsAt: row['starts_at'] as int?,
+            endsAt: row['ends_at'] as int?,
+            presentationOrder: row['presentation_order'] as int,
+            configVersion: row['config_version'] as int,
+            createdAt: row['created_at'] as int,
+            updatedAt: row['updated_at'] as int),
+        arguments: [id]);
+  }
+
+  @override
+  Future<void> deleteAllRewards(String tenantId) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM loyalty_rewards WHERE tenant_id = ?1',
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<List<LoyaltyRewardEntity>> getActiveRewards(String tenantId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM loyalty_rewards WHERE tenant_id = ?1 AND status = \'ACTIVE\' ORDER BY presentation_order ASC',
+        mapper: (Map<String, Object?> row) => LoyaltyRewardEntity(id: row['id'] as String, tenantId: row['tenant_id'] as String, loyaltyProgramId: row['loyalty_program_id'] as String, name: row['name'] as String, rewardType: row['reward_type'] as String, costUnits: row['cost_units'] as int, benefitConfigJson: row['benefit_config_json'] as String, status: row['status'] as String, startsAt: row['starts_at'] as int?, endsAt: row['ends_at'] as int?, presentationOrder: row['presentation_order'] as int, configVersion: row['config_version'] as int, createdAt: row['created_at'] as int, updatedAt: row['updated_at'] as int),
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<void> saveReward(LoyaltyRewardEntity reward) async {
+    await _loyaltyRewardEntityInsertionAdapter.insert(
+        reward, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> saveRewards(List<LoyaltyRewardEntity> rewards) async {
+    await _loyaltyRewardEntityInsertionAdapter.insertList(
+        rewards, OnConflictStrategy.replace);
+  }
+}
+
+class _$FiscalConfigLocalDao extends FiscalConfigLocalDao {
+  _$FiscalConfigLocalDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _fiscalConfigLocalEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'fiscal_config_local',
+            (FiscalConfigLocalEntity item) => <String, Object?>{
+                  'tenant_id': item.tenantId,
+                  'revision': item.revision,
+                  'fingerprint': item.fingerprint,
+                  'payload': item.payload,
+                  'applied_at': item.appliedAt
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<FiscalConfigLocalEntity>
+      _fiscalConfigLocalEntityInsertionAdapter;
+
+  @override
+  Future<FiscalConfigLocalEntity?> getByTenantId(String tenantId) async {
+    return _queryAdapter.query(
+        'SELECT * FROM fiscal_config_local WHERE tenant_id = ?1',
+        mapper: (Map<String, Object?> row) => FiscalConfigLocalEntity(
+            tenantId: row['tenant_id'] as String,
+            revision: row['revision'] as int,
+            fingerprint: row['fingerprint'] as String,
+            payload: row['payload'] as String,
+            appliedAt: row['applied_at'] as String),
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<void> deleteByTenantId(String tenantId) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM fiscal_config_local WHERE tenant_id = ?1',
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<List<FiscalConfigLocalEntity>> getAll() async {
+    return _queryAdapter.queryList('SELECT * FROM fiscal_config_local',
+        mapper: (Map<String, Object?> row) => FiscalConfigLocalEntity(
+            tenantId: row['tenant_id'] as String,
+            revision: row['revision'] as int,
+            fingerprint: row['fingerprint'] as String,
+            payload: row['payload'] as String,
+            appliedAt: row['applied_at'] as String));
+  }
+
+  @override
+  Future<void> insertOrReplace(FiscalConfigLocalEntity entity) async {
+    await _fiscalConfigLocalEntityInsertionAdapter.insert(
+        entity, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> applyFiscalConfig(FiscalConfigLocalEntity entity) async {
+    if (database is sqflite.Transaction) {
+      await super.applyFiscalConfig(entity);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.fiscalConfigLocalDao
+            .applyFiscalConfig(entity);
+      });
+    }
+  }
+}
+
+class _$ActivationAttemptLocalDao extends ActivationAttemptLocalDao {
+  _$ActivationAttemptLocalDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _activationAttemptLocalEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'activation_attempts_local',
+            (ActivationAttemptLocalEntity item) => <String, Object?>{
+                  'attempt_id': item.attemptId,
+                  'tenant_id': item.tenantId,
+                  'candidate_terminal_id': item.candidateTerminalId,
+                  'local_status': item.localStatus,
+                  'required_fiscal_revision': item.requiredFiscalRevision,
+                  'required_fiscal_fingerprint': item.requiredFiscalFingerprint,
+                  'verification_product_id': item.verificationProductId,
+                  'verification_ticket_id': item.verificationTicketId,
+                  'server_time_anchor_at': item.serverTimeAnchorAt,
+                  'anchor_monotonic_ticks': item.anchorMonotonicTicks,
+                  'boot_session_id': item.bootSessionId,
+                  'assigned_at': item.assignedAt,
+                  'updated_at': item.updatedAt
+                }),
+        _activationAttemptLocalEntityUpdateAdapter = UpdateAdapter(
+            database,
+            'activation_attempts_local',
+            ['attempt_id'],
+            (ActivationAttemptLocalEntity item) => <String, Object?>{
+                  'attempt_id': item.attemptId,
+                  'tenant_id': item.tenantId,
+                  'candidate_terminal_id': item.candidateTerminalId,
+                  'local_status': item.localStatus,
+                  'required_fiscal_revision': item.requiredFiscalRevision,
+                  'required_fiscal_fingerprint': item.requiredFiscalFingerprint,
+                  'verification_product_id': item.verificationProductId,
+                  'verification_ticket_id': item.verificationTicketId,
+                  'server_time_anchor_at': item.serverTimeAnchorAt,
+                  'anchor_monotonic_ticks': item.anchorMonotonicTicks,
+                  'boot_session_id': item.bootSessionId,
+                  'assigned_at': item.assignedAt,
+                  'updated_at': item.updatedAt
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<ActivationAttemptLocalEntity>
+      _activationAttemptLocalEntityInsertionAdapter;
+
+  final UpdateAdapter<ActivationAttemptLocalEntity>
+      _activationAttemptLocalEntityUpdateAdapter;
+
+  @override
+  Future<ActivationAttemptLocalEntity?> getAttemptById(String attemptId) async {
+    return _queryAdapter.query(
+        'SELECT * FROM activation_attempts_local WHERE attempt_id = ?1',
+        mapper: (Map<String, Object?> row) => ActivationAttemptLocalEntity(
+            attemptId: row['attempt_id'] as String,
+            tenantId: row['tenant_id'] as String,
+            candidateTerminalId: row['candidate_terminal_id'] as String,
+            localStatus: row['local_status'] as String,
+            requiredFiscalRevision: row['required_fiscal_revision'] as int,
+            requiredFiscalFingerprint:
+                row['required_fiscal_fingerprint'] as String,
+            verificationProductId: row['verification_product_id'] as String,
+            verificationTicketId: row['verification_ticket_id'] as String?,
+            serverTimeAnchorAt: row['server_time_anchor_at'] as String?,
+            anchorMonotonicTicks: row['anchor_monotonic_ticks'] as int?,
+            bootSessionId: row['boot_session_id'] as String?,
+            assignedAt: row['assigned_at'] as String,
+            updatedAt: row['updated_at'] as String),
+        arguments: [attemptId]);
+  }
+
+  @override
+  Future<ActivationAttemptLocalEntity?> getLatestAttempt(
+      String tenantId) async {
+    return _queryAdapter.query(
+        'SELECT * FROM activation_attempts_local WHERE tenant_id = ?1 ORDER BY assigned_at DESC LIMIT 1',
+        mapper: (Map<String, Object?> row) => ActivationAttemptLocalEntity(attemptId: row['attempt_id'] as String, tenantId: row['tenant_id'] as String, candidateTerminalId: row['candidate_terminal_id'] as String, localStatus: row['local_status'] as String, requiredFiscalRevision: row['required_fiscal_revision'] as int, requiredFiscalFingerprint: row['required_fiscal_fingerprint'] as String, verificationProductId: row['verification_product_id'] as String, verificationTicketId: row['verification_ticket_id'] as String?, serverTimeAnchorAt: row['server_time_anchor_at'] as String?, anchorMonotonicTicks: row['anchor_monotonic_ticks'] as int?, bootSessionId: row['boot_session_id'] as String?, assignedAt: row['assigned_at'] as String, updatedAt: row['updated_at'] as String),
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<ActivationAttemptLocalEntity?> getActiveAttempt(
+      String tenantId) async {
+    return _queryAdapter.query(
+        'SELECT * FROM activation_attempts_local WHERE tenant_id = ?1 AND local_status NOT IN (\'EVIDENCE_ACKED\', \'FAIL\') ORDER BY assigned_at DESC LIMIT 1',
+        mapper: (Map<String, Object?> row) => ActivationAttemptLocalEntity(attemptId: row['attempt_id'] as String, tenantId: row['tenant_id'] as String, candidateTerminalId: row['candidate_terminal_id'] as String, localStatus: row['local_status'] as String, requiredFiscalRevision: row['required_fiscal_revision'] as int, requiredFiscalFingerprint: row['required_fiscal_fingerprint'] as String, verificationProductId: row['verification_product_id'] as String, verificationTicketId: row['verification_ticket_id'] as String?, serverTimeAnchorAt: row['server_time_anchor_at'] as String?, anchorMonotonicTicks: row['anchor_monotonic_ticks'] as int?, bootSessionId: row['boot_session_id'] as String?, assignedAt: row['assigned_at'] as String, updatedAt: row['updated_at'] as String),
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<void> deleteByTenantId(String tenantId) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM activation_attempts_local WHERE tenant_id = ?1',
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<List<ActivationAttemptLocalEntity>> getAll() async {
+    return _queryAdapter.queryList('SELECT * FROM activation_attempts_local',
+        mapper: (Map<String, Object?> row) => ActivationAttemptLocalEntity(
+            attemptId: row['attempt_id'] as String,
+            tenantId: row['tenant_id'] as String,
+            candidateTerminalId: row['candidate_terminal_id'] as String,
+            localStatus: row['local_status'] as String,
+            requiredFiscalRevision: row['required_fiscal_revision'] as int,
+            requiredFiscalFingerprint:
+                row['required_fiscal_fingerprint'] as String,
+            verificationProductId: row['verification_product_id'] as String,
+            verificationTicketId: row['verification_ticket_id'] as String?,
+            serverTimeAnchorAt: row['server_time_anchor_at'] as String?,
+            anchorMonotonicTicks: row['anchor_monotonic_ticks'] as int?,
+            bootSessionId: row['boot_session_id'] as String?,
+            assignedAt: row['assigned_at'] as String,
+            updatedAt: row['updated_at'] as String));
+  }
+
+  @override
+  Future<void> insertOrReplace(ActivationAttemptLocalEntity attempt) async {
+    await _activationAttemptLocalEntityInsertionAdapter.insert(
+        attempt, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> updateAttempt(ActivationAttemptLocalEntity attempt) async {
+    await _activationAttemptLocalEntityUpdateAdapter.update(
+        attempt, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> saveAttempt(ActivationAttemptLocalEntity attempt) async {
+    if (database is sqflite.Transaction) {
+      await super.saveAttempt(attempt);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.activationAttemptLocalDao
+            .saveAttempt(attempt);
+      });
+    }
+  }
+}
+
+class _$ActivationCheckResultLocalDao extends ActivationCheckResultLocalDao {
+  _$ActivationCheckResultLocalDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _activationCheckResultLocalEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'activation_checks_local',
+            (ActivationCheckResultLocalEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'tenant_id': item.tenantId,
+                  'activation_attempt_id': item.activationAttemptId,
+                  'check_code': item.checkCode,
+                  'required': item.required,
+                  'status': item.status,
+                  'evidence_type': item.evidenceType,
+                  'evidence_ref': item.evidenceRef,
+                  'occurred_at': item.occurredAt,
+                  'recorded_at': item.recordedAt,
+                  'details_sanitized_json': item.detailsSanitizedJson
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<ActivationCheckResultLocalEntity>
+      _activationCheckResultLocalEntityInsertionAdapter;
+
+  @override
+  Future<ActivationCheckResultLocalEntity?> getCheck(
+    String tenantId,
+    String attemptId,
+    String checkCode,
+  ) async {
+    return _queryAdapter.query(
+        'SELECT * FROM activation_checks_local WHERE tenant_id = ?1 AND activation_attempt_id = ?2 AND check_code = ?3',
+        mapper: (Map<String, Object?> row) => ActivationCheckResultLocalEntity(id: row['id'] as String, tenantId: row['tenant_id'] as String, activationAttemptId: row['activation_attempt_id'] as String, checkCode: row['check_code'] as String, required: row['required'] as int, status: row['status'] as String, evidenceType: row['evidence_type'] as String?, evidenceRef: row['evidence_ref'] as String?, occurredAt: row['occurred_at'] as String?, recordedAt: row['recorded_at'] as String, detailsSanitizedJson: row['details_sanitized_json'] as String?),
+        arguments: [tenantId, attemptId, checkCode]);
+  }
+
+  @override
+  Future<List<ActivationCheckResultLocalEntity>> getChecksForAttempt(
+    String tenantId,
+    String attemptId,
+  ) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM activation_checks_local WHERE tenant_id = ?1 AND activation_attempt_id = ?2',
+        mapper: (Map<String, Object?> row) => ActivationCheckResultLocalEntity(id: row['id'] as String, tenantId: row['tenant_id'] as String, activationAttemptId: row['activation_attempt_id'] as String, checkCode: row['check_code'] as String, required: row['required'] as int, status: row['status'] as String, evidenceType: row['evidence_type'] as String?, evidenceRef: row['evidence_ref'] as String?, occurredAt: row['occurred_at'] as String?, recordedAt: row['recorded_at'] as String, detailsSanitizedJson: row['details_sanitized_json'] as String?),
+        arguments: [tenantId, attemptId]);
+  }
+
+  @override
+  Future<void> deleteChecksForAttempt(
+    String tenantId,
+    String attemptId,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM activation_checks_local WHERE tenant_id = ?1 AND activation_attempt_id = ?2',
+        arguments: [tenantId, attemptId]);
+  }
+
+  @override
+  Future<List<ActivationCheckResultLocalEntity>> getAll() async {
+    return _queryAdapter.queryList('SELECT * FROM activation_checks_local',
+        mapper: (Map<String, Object?> row) => ActivationCheckResultLocalEntity(
+            id: row['id'] as String,
+            tenantId: row['tenant_id'] as String,
+            activationAttemptId: row['activation_attempt_id'] as String,
+            checkCode: row['check_code'] as String,
+            required: row['required'] as int,
+            status: row['status'] as String,
+            evidenceType: row['evidence_type'] as String?,
+            evidenceRef: row['evidence_ref'] as String?,
+            occurredAt: row['occurred_at'] as String?,
+            recordedAt: row['recorded_at'] as String,
+            detailsSanitizedJson: row['details_sanitized_json'] as String?));
+  }
+
+  @override
+  Future<void> insertOrReplace(ActivationCheckResultLocalEntity check) async {
+    await _activationCheckResultLocalEntityInsertionAdapter.insert(
+        check, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> insertChecks(
+      List<ActivationCheckResultLocalEntity> checks) async {
+    await _activationCheckResultLocalEntityInsertionAdapter.insertList(
+        checks, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> saveCheckResult(ActivationCheckResultLocalEntity check) async {
+    if (database is sqflite.Transaction) {
+      await super.saveCheckResult(check);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.activationCheckResultLocalDao
+            .saveCheckResult(check);
+      });
+    }
+  }
+}
+
+class _$FirstSuccessfulSaleClaimDao extends FirstSuccessfulSaleClaimDao {
+  _$FirstSuccessfulSaleClaimDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _firstSuccessfulSaleClaimEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'first_successful_sale_claims',
+            (FirstSuccessfulSaleClaimEntity item) => <String, Object?>{
+                  'tenant_id': item.tenantId,
+                  'terminal_id': item.terminalId,
+                  'ticket_id': item.ticketId,
+                  'activation_attempt_id': item.activationAttemptId,
+                  'device_occurred_at': item.deviceOccurredAt,
+                  'anchored_occurred_at': item.anchoredOccurredAt,
+                  'clock_confidence': item.clockConfidence,
+                  'server_time_anchor_id': item.serverTimeAnchorId,
+                  'pos_build': item.posBuild,
+                  'outbox_event_id': item.outboxEventId,
+                  'created_at_local': item.createdAtLocal
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<FirstSuccessfulSaleClaimEntity>
+      _firstSuccessfulSaleClaimEntityInsertionAdapter;
+
+  @override
+  Future<FirstSuccessfulSaleClaimEntity?> getClaimByTenantId(
+      String tenantId) async {
+    return _queryAdapter.query(
+        'SELECT * FROM first_successful_sale_claims WHERE tenant_id = ?1',
+        mapper: (Map<String, Object?> row) => FirstSuccessfulSaleClaimEntity(
+            tenantId: row['tenant_id'] as String,
+            terminalId: row['terminal_id'] as String,
+            ticketId: row['ticket_id'] as String,
+            activationAttemptId: row['activation_attempt_id'] as String?,
+            deviceOccurredAt: row['device_occurred_at'] as String,
+            anchoredOccurredAt: row['anchored_occurred_at'] as String?,
+            clockConfidence: row['clock_confidence'] as String,
+            serverTimeAnchorId: row['server_time_anchor_id'] as String?,
+            posBuild: row['pos_build'] as String?,
+            outboxEventId: row['outbox_event_id'] as String,
+            createdAtLocal: row['created_at_local'] as String),
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<List<FirstSuccessfulSaleClaimEntity>> getAll() async {
+    return _queryAdapter.queryList('SELECT * FROM first_successful_sale_claims',
+        mapper: (Map<String, Object?> row) => FirstSuccessfulSaleClaimEntity(
+            tenantId: row['tenant_id'] as String,
+            terminalId: row['terminal_id'] as String,
+            ticketId: row['ticket_id'] as String,
+            activationAttemptId: row['activation_attempt_id'] as String?,
+            deviceOccurredAt: row['device_occurred_at'] as String,
+            anchoredOccurredAt: row['anchored_occurred_at'] as String?,
+            clockConfidence: row['clock_confidence'] as String,
+            serverTimeAnchorId: row['server_time_anchor_id'] as String?,
+            posBuild: row['pos_build'] as String?,
+            outboxEventId: row['outbox_event_id'] as String,
+            createdAtLocal: row['created_at_local'] as String));
+  }
+
+  @override
+  Future<void> deleteByTenantId(String tenantId) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM first_successful_sale_claims WHERE tenant_id = ?1',
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<int> insertClaim(FirstSuccessfulSaleClaimEntity claim) {
+    return _firstSuccessfulSaleClaimEntityInsertionAdapter.insertAndReturnId(
+        claim, OnConflictStrategy.ignore);
+  }
+}
+
+class _$FirstCustomerSaleObservationDao
+    extends FirstCustomerSaleObservationDao {
+  _$FirstCustomerSaleObservationDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _firstCustomerSaleObservationEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'first_customer_sale_observations',
+            (FirstCustomerSaleObservationEntity item) => <String, Object?>{
+                  'tenant_id': item.tenantId,
+                  'terminal_id': item.terminalId,
+                  'ticket_id': item.ticketId,
+                  'occurred_at': item.occurredAt,
+                  'outbox_event_id': item.outboxEventId,
+                  'created_at_local': item.createdAtLocal
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<FirstCustomerSaleObservationEntity>
+      _firstCustomerSaleObservationEntityInsertionAdapter;
+
+  @override
+  Future<FirstCustomerSaleObservationEntity?> getObservationByTenantId(
+      String tenantId) async {
+    return _queryAdapter.query(
+        'SELECT * FROM first_customer_sale_observations WHERE tenant_id = ?1',
+        mapper: (Map<String, Object?> row) =>
+            FirstCustomerSaleObservationEntity(
+                tenantId: row['tenant_id'] as String,
+                terminalId: row['terminal_id'] as String,
+                ticketId: row['ticket_id'] as String,
+                occurredAt: row['occurred_at'] as String,
+                outboxEventId: row['outbox_event_id'] as String,
+                createdAtLocal: row['created_at_local'] as String),
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<List<FirstCustomerSaleObservationEntity>> getAll() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM first_customer_sale_observations',
+        mapper: (Map<String, Object?> row) =>
+            FirstCustomerSaleObservationEntity(
+                tenantId: row['tenant_id'] as String,
+                terminalId: row['terminal_id'] as String,
+                ticketId: row['ticket_id'] as String,
+                occurredAt: row['occurred_at'] as String,
+                outboxEventId: row['outbox_event_id'] as String,
+                createdAtLocal: row['created_at_local'] as String));
+  }
+
+  @override
+  Future<void> deleteByTenantId(String tenantId) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM first_customer_sale_observations WHERE tenant_id = ?1',
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<int> insertObservation(
+      FirstCustomerSaleObservationEntity observation) {
+    return _firstCustomerSaleObservationEntityInsertionAdapter
+        .insertAndReturnId(observation, OnConflictStrategy.ignore);
+  }
+}
+
+class _$ActivationOutboxDao extends ActivationOutboxDao {
+  _$ActivationOutboxDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _activationOutboxEnvelopeEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'activation_outbox_envelopes',
+            (ActivationOutboxEnvelopeEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'tenant_id': item.tenantId,
+                  'activation_attempt_id': item.activationAttemptId,
+                  'event_type': item.eventType,
+                  'idempotency_key': item.idempotencyKey,
+                  'payload_json': item.payloadJson,
+                  'payload_hash': item.payloadHash,
+                  'sync_status': item.syncStatus,
+                  'created_at': item.createdAt,
+                  'synced_at': item.syncedAt,
+                  'last_error': item.lastError
+                }),
+        _activationOutboxEnvelopeEntityUpdateAdapter = UpdateAdapter(
+            database,
+            'activation_outbox_envelopes',
+            ['id'],
+            (ActivationOutboxEnvelopeEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'tenant_id': item.tenantId,
+                  'activation_attempt_id': item.activationAttemptId,
+                  'event_type': item.eventType,
+                  'idempotency_key': item.idempotencyKey,
+                  'payload_json': item.payloadJson,
+                  'payload_hash': item.payloadHash,
+                  'sync_status': item.syncStatus,
+                  'created_at': item.createdAt,
+                  'synced_at': item.syncedAt,
+                  'last_error': item.lastError
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<ActivationOutboxEnvelopeEntity>
+      _activationOutboxEnvelopeEntityInsertionAdapter;
+
+  final UpdateAdapter<ActivationOutboxEnvelopeEntity>
+      _activationOutboxEnvelopeEntityUpdateAdapter;
+
+  @override
+  Future<ActivationOutboxEnvelopeEntity?> getEnvelopeById(String id) async {
+    return _queryAdapter.query(
+        'SELECT * FROM activation_outbox_envelopes WHERE id = ?1',
+        mapper: (Map<String, Object?> row) => ActivationOutboxEnvelopeEntity(
+            id: row['id'] as String,
+            tenantId: row['tenant_id'] as String,
+            activationAttemptId: row['activation_attempt_id'] as String,
+            eventType: row['event_type'] as String,
+            idempotencyKey: row['idempotency_key'] as String,
+            payloadJson: row['payload_json'] as String,
+            payloadHash: row['payload_hash'] as String,
+            syncStatus: row['sync_status'] as String,
+            createdAt: row['created_at'] as String,
+            syncedAt: row['synced_at'] as String?,
+            lastError: row['last_error'] as String?),
+        arguments: [id]);
+  }
+
+  @override
+  Future<ActivationOutboxEnvelopeEntity?> getEnvelopeByIdempotencyKey(
+    String tenantId,
+    String idempotencyKey,
+  ) async {
+    return _queryAdapter.query(
+        'SELECT * FROM activation_outbox_envelopes WHERE tenant_id = ?1 AND idempotency_key = ?2',
+        mapper: (Map<String, Object?> row) => ActivationOutboxEnvelopeEntity(id: row['id'] as String, tenantId: row['tenant_id'] as String, activationAttemptId: row['activation_attempt_id'] as String, eventType: row['event_type'] as String, idempotencyKey: row['idempotency_key'] as String, payloadJson: row['payload_json'] as String, payloadHash: row['payload_hash'] as String, syncStatus: row['sync_status'] as String, createdAt: row['created_at'] as String, syncedAt: row['synced_at'] as String?, lastError: row['last_error'] as String?),
+        arguments: [tenantId, idempotencyKey]);
+  }
+
+  @override
+  Future<List<ActivationOutboxEnvelopeEntity>> getEnvelopesByAttempt(
+    String tenantId,
+    String attemptId,
+  ) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM activation_outbox_envelopes WHERE tenant_id = ?1 AND activation_attempt_id = ?2',
+        mapper: (Map<String, Object?> row) => ActivationOutboxEnvelopeEntity(id: row['id'] as String, tenantId: row['tenant_id'] as String, activationAttemptId: row['activation_attempt_id'] as String, eventType: row['event_type'] as String, idempotencyKey: row['idempotency_key'] as String, payloadJson: row['payload_json'] as String, payloadHash: row['payload_hash'] as String, syncStatus: row['sync_status'] as String, createdAt: row['created_at'] as String, syncedAt: row['synced_at'] as String?, lastError: row['last_error'] as String?),
+        arguments: [tenantId, attemptId]);
+  }
+
+  @override
+  Future<List<ActivationOutboxEnvelopeEntity>> getPendingEnvelopes(
+      String tenantId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM activation_outbox_envelopes WHERE tenant_id = ?1 AND sync_status = \'PENDING\' ORDER BY created_at ASC',
+        mapper: (Map<String, Object?> row) => ActivationOutboxEnvelopeEntity(id: row['id'] as String, tenantId: row['tenant_id'] as String, activationAttemptId: row['activation_attempt_id'] as String, eventType: row['event_type'] as String, idempotencyKey: row['idempotency_key'] as String, payloadJson: row['payload_json'] as String, payloadHash: row['payload_hash'] as String, syncStatus: row['sync_status'] as String, createdAt: row['created_at'] as String, syncedAt: row['synced_at'] as String?, lastError: row['last_error'] as String?),
+        arguments: [tenantId]);
+  }
+
+  @override
+  Future<void> deleteByAttempt(
+    String tenantId,
+    String attemptId,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM activation_outbox_envelopes WHERE tenant_id = ?1 AND activation_attempt_id = ?2',
+        arguments: [tenantId, attemptId]);
+  }
+
+  @override
+  Future<List<ActivationOutboxEnvelopeEntity>> getAll() async {
+    return _queryAdapter.queryList('SELECT * FROM activation_outbox_envelopes',
+        mapper: (Map<String, Object?> row) => ActivationOutboxEnvelopeEntity(
+            id: row['id'] as String,
+            tenantId: row['tenant_id'] as String,
+            activationAttemptId: row['activation_attempt_id'] as String,
+            eventType: row['event_type'] as String,
+            idempotencyKey: row['idempotency_key'] as String,
+            payloadJson: row['payload_json'] as String,
+            payloadHash: row['payload_hash'] as String,
+            syncStatus: row['sync_status'] as String,
+            createdAt: row['created_at'] as String,
+            syncedAt: row['synced_at'] as String?,
+            lastError: row['last_error'] as String?));
+  }
+
+  @override
+  Future<void> insertEnvelope(ActivationOutboxEnvelopeEntity envelope) async {
+    await _activationOutboxEnvelopeEntityInsertionAdapter.insert(
+        envelope, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> insertEnvelopes(
+      List<ActivationOutboxEnvelopeEntity> envelopes) async {
+    await _activationOutboxEnvelopeEntityInsertionAdapter.insertList(
+        envelopes, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> updateEnvelope(ActivationOutboxEnvelopeEntity envelope) async {
+    await _activationOutboxEnvelopeEntityUpdateAdapter.update(
+        envelope, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> persistOutboxBatch(
+      List<ActivationOutboxEnvelopeEntity> envelopes) async {
+    if (database is sqflite.Transaction) {
+      await super.persistOutboxBatch(envelopes);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.activationOutboxDao
+            .persistOutboxBatch(envelopes);
+      });
+    }
+  }
+}
+
+class _$AuthorityProjectionDao extends AuthorityProjectionDao {
+  _$AuthorityProjectionDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _authorityInsumoEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'authority_insumos',
+            (AuthorityInsumoEntity item) => <String, Object?>{
+                  'tenant_id': item.tenantId,
+                  'id': item.id,
+                  'name': item.name,
+                  'uom': item.uom
+                }),
+        _authorityRecipeVersionEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'authority_recipe_versions',
+            (AuthorityRecipeVersionEntity item) => <String, Object?>{
+                  'tenant_id': item.tenantId,
+                  'id': item.id,
+                  'product_id': item.productId,
+                  'version_number': item.versionNumber,
+                  'is_active': item.isActive ? 1 : 0,
+                  'publication_state': item.publicationState,
+                  'effective_from': item.effectiveFrom,
+                  'effective_until': item.effectiveUntil,
+                  'yield_quantity': item.yieldQuantity,
+                  'technical_shrink_pct': item.technicalShrinkPct,
+                  'published_at': item.publishedAt,
+                  'created_at': item.createdAt,
+                  'updated_at': item.updatedAt
+                }),
+        _authorityRecipeVersionComponentEntityInsertionAdapter =
+            InsertionAdapter(
+                database,
+                'authority_recipe_version_components',
+                (AuthorityRecipeVersionComponentEntity item) =>
+                    <String, Object?>{
+                      'tenant_id': item.tenantId,
+                      'id': item.id,
+                      'version_id': item.versionId,
+                      'ordinal': item.ordinal,
+                      'insumo_id': item.insumoId,
+                      'gross_quantity': item.grossQuantity,
+                      'technical_shrink_pct': item.technicalShrinkPct,
+                      'ingredient_type': item.ingredientType,
+                      'component_name': item.componentName,
+                      'component_uom': item.componentUom,
+                      'reference_version_id': item.referenceVersionId
+                    });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<AuthorityInsumoEntity>
+      _authorityInsumoEntityInsertionAdapter;
+
+  final InsertionAdapter<AuthorityRecipeVersionEntity>
+      _authorityRecipeVersionEntityInsertionAdapter;
+
+  final InsertionAdapter<AuthorityRecipeVersionComponentEntity>
+      _authorityRecipeVersionComponentEntityInsertionAdapter;
+
+  @override
+  Future<List<AuthorityRecipeVersionEntity>> findActivePublishedVersions(
+    String tenantId,
+    String productId,
+    String saleTime,
+  ) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM authority_recipe_versions WHERE tenant_id = ?1 AND product_id = ?2 AND publication_state = \'PUBLISHED\' AND is_active = 1 AND effective_from <= ?3 AND (effective_until IS NULL OR effective_until > ?3) ORDER BY effective_from DESC, version_number DESC',
+        mapper: (Map<String, Object?> row) => AuthorityRecipeVersionEntity(tenantId: row['tenant_id'] as String, id: row['id'] as String, productId: row['product_id'] as String, versionNumber: row['version_number'] as int, isActive: (row['is_active'] as int) != 0, publicationState: row['publication_state'] as String, effectiveFrom: row['effective_from'] as String, effectiveUntil: row['effective_until'] as String?, yieldQuantity: row['yield_quantity'] as double, technicalShrinkPct: row['technical_shrink_pct'] as double, publishedAt: row['published_at'] as String?, createdAt: row['created_at'] as String, updatedAt: row['updated_at'] as String),
+        arguments: [tenantId, productId, saleTime]);
+  }
+
+  @override
+  Future<List<AuthorityRecipeVersionComponentEntity>> findComponentsByVersion(
+    String tenantId,
+    String versionId,
+  ) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM authority_recipe_version_components WHERE tenant_id = ?1 AND version_id = ?2 ORDER BY ordinal ASC',
+        mapper: (Map<String, Object?> row) => AuthorityRecipeVersionComponentEntity(tenantId: row['tenant_id'] as String, id: row['id'] as String, versionId: row['version_id'] as String, ordinal: row['ordinal'] as int, insumoId: row['insumo_id'] as String, grossQuantity: row['gross_quantity'] as double, technicalShrinkPct: row['technical_shrink_pct'] as double, ingredientType: row['ingredient_type'] as String, componentName: row['component_name'] as String, componentUom: row['component_uom'] as String?, referenceVersionId: row['reference_version_id'] as String?),
+        arguments: [tenantId, versionId]);
+  }
+
+  @override
+  Future<AuthorityInsumoEntity?> findInsumoById(
+    String tenantId,
+    String id,
+  ) async {
+    return _queryAdapter.query(
+        'SELECT * FROM authority_insumos WHERE tenant_id = ?1 AND id = ?2',
+        mapper: (Map<String, Object?> row) => AuthorityInsumoEntity(
+            tenantId: row['tenant_id'] as String,
+            id: row['id'] as String,
+            name: row['name'] as String,
+            uom: row['uom'] as String),
+        arguments: [tenantId, id]);
+  }
+
+  @override
+  Future<void> insertInsumo(AuthorityInsumoEntity insumo) async {
+    await _authorityInsumoEntityInsertionAdapter.insert(
+        insumo, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> insertRecipeVersion(AuthorityRecipeVersionEntity version) async {
+    await _authorityRecipeVersionEntityInsertionAdapter.insert(
+        version, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> insertComponent(
+      AuthorityRecipeVersionComponentEntity component) async {
+    await _authorityRecipeVersionComponentEntityInsertionAdapter.insert(
+        component, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> insertComponents(
+      List<AuthorityRecipeVersionComponentEntity> components) async {
+    await _authorityRecipeVersionComponentEntityInsertionAdapter.insertList(
+        components, OnConflictStrategy.abort);
   }
 }
 

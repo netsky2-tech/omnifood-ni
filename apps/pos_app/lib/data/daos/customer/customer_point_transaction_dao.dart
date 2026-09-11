@@ -12,6 +12,9 @@ abstract class CustomerPointTransactionDao {
   @Query('SELECT * FROM customer_point_transactions WHERE sync_status = :status')
   Future<List<CustomerPointTransactionEntity>> getTransactionsBySyncStatus(String status);
 
+  @Query('SELECT * FROM customer_point_transactions WHERE idempotency_key = :key LIMIT 1')
+  Future<CustomerPointTransactionEntity?> findByIdempotencyKey(String key);
+
   @Insert(onConflict: OnConflictStrategy.replace)
   Future<void> insertTransaction(CustomerPointTransactionEntity entity);
 

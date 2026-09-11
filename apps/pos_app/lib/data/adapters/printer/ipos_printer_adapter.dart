@@ -1,3 +1,4 @@
+import 'package:pos_app/domain/services/sales/post_paid_feedback_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import '../../../domain/models/config/tax_regime.dart';
@@ -82,6 +83,7 @@ class IPosPrinterAdapter implements PrinterPort {
     required TaxRegime taxRegime,
     bool isTaxExempt = false,
     int paperWidthMm = 58,
+    PostPaidFeedback? loyaltyFeedback,
   }) async {
     final status = await checkStatus();
     if (status == PrinterStatus.outOfPaper) {
@@ -96,24 +98,43 @@ class IPosPrinterAdapter implements PrinterPort {
       );
     }
 
-    final document = ReceiptDocument.fromInvoice(
-      invoice,
-      items: items,
-      payments: payments,
-      businessName: businessName,
-      legalName: legalName,
-      ruc: ruc,
-      address: address,
-      phone: phone,
-      cashierName: cashierName,
-      taxRegime: taxRegime,
-      isTaxExempt: isTaxExempt,
-      logoRasterBytes: logoRasterBytes,
-    );
     final normalizedPaperWidthMm = _normalizedPaperWidthMm(paperWidthMm);
-    final formattedText = ReceiptLayoutFormatter.fromPaperWidth(
+    final formatter = ReceiptLayoutFormatter.fromPaperWidth(
       normalizedPaperWidthMm,
-    ).formatReceiptDocumentText(document);
+    );
+    final String formattedText;
+    if (loyaltyFeedback?.hasContent ?? false) {
+      formattedText = formatter.formatInvoiceText(
+        invoice,
+        items: items,
+        payments: payments,
+        businessName: businessName,
+        legalName: legalName,
+        ruc: ruc,
+        address: address,
+        phone: phone,
+        cashierName: cashierName,
+        taxRegime: taxRegime,
+        isTaxExempt: isTaxExempt,
+        loyaltyFeedback: loyaltyFeedback,
+      );
+    } else {
+      final document = ReceiptDocument.fromInvoice(
+        invoice,
+        items: items,
+        payments: payments,
+        businessName: businessName,
+        legalName: legalName,
+        ruc: ruc,
+        address: address,
+        phone: phone,
+        cashierName: cashierName,
+        taxRegime: taxRegime,
+        isTaxExempt: isTaxExempt,
+        logoRasterBytes: logoRasterBytes,
+      );
+      formattedText = formatter.formatReceiptDocumentText(document);
+    }
 
     try {
       // 1. If logo is provided, print it using native Nyx bitmap printing

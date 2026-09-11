@@ -5,6 +5,7 @@ import { CatalogValue } from './entities/catalog-value.entity';
 import { CatalogService } from './catalog.service';
 import { CatalogController } from './catalog.controller';
 import { IdentityModule } from '../identity/identity.module';
+import { AuditModule } from '../audit/audit.module';
 
 export const getRequiredCatalogJwtSecret = (
   configService: ConfigService,
@@ -17,7 +18,11 @@ export const getRequiredCatalogJwtSecret = (
 };
 
 @Module({
-  imports: [IdentityModule, TypeOrmModule.forFeature([CatalogValue])],
+  imports: [
+    IdentityModule,
+    AuditModule,
+    TypeOrmModule.forFeature([CatalogValue]),
+  ],
   controllers: [CatalogController],
   providers: [CatalogService],
   exports: [CatalogService, TypeOrmModule],

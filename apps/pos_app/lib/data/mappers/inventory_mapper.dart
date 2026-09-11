@@ -198,6 +198,10 @@ class InventoryMapper {
       bloqueoMotivo: entity.bloqueoMotivo,
       autorizadoPorUsuarioId: entity.autorizadoPorUsuarioId,
       fechaAutorizacion: entity.fechaAutorizacion,
+      deliveryOwner: entity.deliveryOwner,
+      deliveryState: entity.deliveryState,
+      saleId: entity.saleId,
+      saleCorrelationId: entity.saleCorrelationId,
     );
   }
 
@@ -230,6 +234,10 @@ class InventoryMapper {
       bloqueoMotivo: domain.bloqueoMotivo,
       autorizadoPorUsuarioId: domain.autorizadoPorUsuarioId,
       fechaAutorizacion: domain.fechaAutorizacion,
+      deliveryOwner: domain.deliveryOwner,
+      deliveryState: domain.deliveryState,
+      saleId: domain.saleId,
+      saleCorrelationId: domain.saleCorrelationId,
     );
   }
 
@@ -250,6 +258,9 @@ class InventoryMapper {
       barcode: entity.barcode,
       category: entity.category,
       isPrepared: entity.isPrepared,
+      productType: entity.productType,
+      mappingVersionId: entity.mappingVersionId,
+      insumoId: entity.insumoId,
       createdAt: entity.createdAt,
       inventoryPolicy: _parseInventoryPolicy(entity.inventoryPolicy),
       directStockInsumoId: entity.directStockInsumoId,
@@ -273,6 +284,9 @@ class InventoryMapper {
       barcode: domain.barcode,
       category: domain.category,
       isPrepared: domain.isPrepared,
+      productType: domain.productType,
+      mappingVersionId: domain.mappingVersionId,
+      insumoId: domain.insumoId,
       createdAt: domain.createdAt,
       inventoryPolicy: domain.inventoryPolicy?.name,
       directStockInsumoId: domain.directStockInsumoId,

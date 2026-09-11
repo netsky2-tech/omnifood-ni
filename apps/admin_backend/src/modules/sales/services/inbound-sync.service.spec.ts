@@ -2,12 +2,15 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { UnauthorizedException } from '@nestjs/common';
 import { InboundSyncService } from './inbound-sync.service';
-import { Product } from '../../inventory/entities/product.entity';
+import { Product, ProductType } from '../../inventory/entities/product.entity';
 import { CatalogValue } from '../../catalog/entities/catalog-value.entity';
 import { Insumo } from '../../inventory/entities/insumo.entity';
 import { Recipe } from '../../inventory/entities/recipe.entity';
 import { RecipeVersion } from '../../inventory/entities/recipe-version.entity';
+import { RecipeDetail } from '../../inventory/entities/recipe-detail.entity';
+import { ProductInventoryMappingVersion } from '../../inventory/entities/product-inventory-mapping-version.entity';
 import { User, UserRole } from '../../identity/entities/user.entity';
+import { FiscalConfigVersionService } from '../../onboarding/services/fiscal-config-version.service';
 import { CatalogType } from '../../catalog/catalog-type';
 
 interface MockQueryBuilder<T> {
@@ -16,6 +19,7 @@ interface MockQueryBuilder<T> {
   leftJoinAndSelect: jest.Mock;
   addSelect: jest.Mock;
   getMany: jest.Mock<Promise<T[]>, []>;
+  orderBy: jest.Mock;
 }
 
 function createMockQueryBuilder<T>(items: T[] = []): MockQueryBuilder<T> {
@@ -25,6 +29,7 @@ function createMockQueryBuilder<T>(items: T[] = []): MockQueryBuilder<T> {
     leftJoinAndSelect: jest.fn().mockReturnThis(),
     addSelect: jest.fn().mockReturnThis(),
     getMany: jest.fn<Promise<T[]>, []>().mockResolvedValue(items),
+    orderBy: jest.fn().mockReturnThis(),
   };
   return qb;
 }
@@ -37,6 +42,8 @@ describe('InboundSyncService', () => {
   let insumoQb: MockQueryBuilder<Insumo>;
   let recipeQb: MockQueryBuilder<Recipe>;
   let recipeVersionQb: MockQueryBuilder<RecipeVersion>;
+  let recipeDetailQb: MockQueryBuilder<RecipeDetail>;
+  let mappingVersionQb: MockQueryBuilder<ProductInventoryMappingVersion>;
   let userQb: MockQueryBuilder<User>;
 
   let mockProductRepo: { createQueryBuilder: jest.Mock };
@@ -44,6 +51,8 @@ describe('InboundSyncService', () => {
   let mockInsumoRepo: { createQueryBuilder: jest.Mock };
   let mockRecipeRepo: { createQueryBuilder: jest.Mock };
   let mockRecipeVersionRepo: { createQueryBuilder: jest.Mock };
+  let mockRecipeDetailRepo: { createQueryBuilder: jest.Mock };
+  let mockMappingVersionRepo: { createQueryBuilder: jest.Mock; manager: { query: jest.Mock } };
   let mockUserRepo: { createQueryBuilder: jest.Mock };
 
   beforeEach(async () => {
@@ -52,6 +61,8 @@ describe('InboundSyncService', () => {
     insumoQb = createMockQueryBuilder<Insumo>([]);
     recipeQb = createMockQueryBuilder<Recipe>([]);
     recipeVersionQb = createMockQueryBuilder<RecipeVersion>([]);
+    recipeDetailQb = createMockQueryBuilder<RecipeDetail>([]);
+    mappingVersionQb = createMockQueryBuilder<ProductInventoryMappingVersion>([]);
     userQb = createMockQueryBuilder<User>([]);
 
     mockProductRepo = {
@@ -69,6 +80,13 @@ describe('InboundSyncService', () => {
     mockRecipeVersionRepo = {
       createQueryBuilder: jest.fn().mockReturnValue(recipeVersionQb),
     };
+    mockRecipeDetailRepo = {
+      createQueryBuilder: jest.fn().mockReturnValue(recipeDetailQb),
+    };
+    mockMappingVersionRepo = {
+      createQueryBuilder: jest.fn().mockReturnValue(mappingVersionQb),
+      manager: { query: jest.fn().mockResolvedValue(undefined) },
+    };
     mockUserRepo = {
       createQueryBuilder: jest.fn().mockReturnValue(userQb),
     };
@@ -76,6 +94,10 @@ describe('InboundSyncService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         InboundSyncService,
+        {
+          provide: FiscalConfigVersionService,
+          useValue: { getFiscalConfigSnapshot: jest.fn().mockResolvedValue(null) },
+        },
         {
           provide: getRepositoryToken(Product),
           useValue: mockProductRepo,
@@ -95,6 +117,14 @@ describe('InboundSyncService', () => {
         {
           provide: getRepositoryToken(RecipeVersion),
           useValue: mockRecipeVersionRepo,
+        },
+        {
+          provide: getRepositoryToken(RecipeDetail),
+          useValue: mockRecipeDetailRepo,
+        },
+        {
+          provide: getRepositoryToken(ProductInventoryMappingVersion),
+          useValue: mockMappingVersionRepo,
         },
         {
           provide: getRepositoryToken(User),
@@ -128,6 +158,8 @@ describe('InboundSyncService', () => {
         is_active: true,
         is_perishable: true,
         warehouse_id: 'wh-1',
+        product_type: ProductType.SIMPLE,
+        tenant_id: 'tenant-abc',
         tax_rate: 0.15,
         is_tax_exempt: false,
         created_at: new Date('2026-08-01T00:00:00Z'),
@@ -184,8 +216,10 @@ describe('InboundSyncService', () => {
       isActive: true,
       isPerishable: true,
       warehouseId: 'wh-1',
-      taxRate: 0.15,
-      isTaxExempt: false,
+      productType: ProductType.SIMPLE,
+      mappingVersionId: null,
+      insumoId: null,
+      tenantId: 'tenant-abc',
       createdAt: expect.any(Date) as Date,
       updatedAt: expect.any(Date) as Date,
     });
@@ -237,7 +271,7 @@ describe('InboundSyncService', () => {
     expect(catalogQb.andWhere).not.toHaveBeenCalled();
   });
 
-  it('preserves taxRate and isTaxExempt through inbound sync (POS → backend → POS round-trip)', async () => {
+  it('keeps persistence-only tax fields out of the inbound product contract', async () => {
     // Scenario: POS device syncs a product with explicit fiscal fields.
     // The backend must preserve tax_rate and is_tax_exempt exactly.
     const mockProducts = [
@@ -279,17 +313,13 @@ describe('InboundSyncService', () => {
 
     expect(response.deltas.products).toHaveLength(2);
 
-    // Taxable product: taxRate=0.15, isTaxExempt=false
     const taxable = response.deltas.products.find((p) => p.id === 'prod-taxable');
-    expect(taxable).toBeDefined();
-    expect(taxable!.taxRate).toBe(0.15);
-    expect(taxable!.isTaxExempt).toBe(false);
-
-    // Exempt product: taxRate=0.0, isTaxExempt=true
     const exempt = response.deltas.products.find((p) => p.id === 'prod-exempt');
-    expect(exempt).toBeDefined();
-    expect(exempt!.taxRate).toBe(0.0);
-    expect(exempt!.isTaxExempt).toBe(true);
+
+    expect(taxable).not.toHaveProperty('taxRate');
+    expect(taxable).not.toHaveProperty('isTaxExempt');
+    expect(exempt).not.toHaveProperty('taxRate');
+    expect(exempt).not.toHaveProperty('isTaxExempt');
   });
 
   it('filters deltas by ISO timestamp since string', async () => {
@@ -297,7 +327,7 @@ describe('InboundSyncService', () => {
     await service.getInboundDeltas('tenant-abc', { since: sinceIso });
 
     expect(productQb.andWhere).toHaveBeenCalledWith(
-      'product.updated_at > :sinceDate',
+      expect.stringContaining('mapping_cursor'),
       { sinceDate: new Date(sinceIso) },
     );
     expect(catalogQb.andWhere).toHaveBeenCalledWith(
@@ -313,7 +343,7 @@ describe('InboundSyncService', () => {
       { sinceDate: new Date(sinceIso) },
     );
     expect(recipeVersionQb.andWhere).toHaveBeenCalledWith(
-      'rv.created_at > :sinceDate',
+      '(rv.created_at > :sinceDate OR rv.published_at > :sinceDate OR rv.fecha_inicio_vigencia > :sinceDate)',
       { sinceDate: new Date(sinceIso) },
     );
     expect(userQb.andWhere).toHaveBeenCalledWith(
@@ -329,7 +359,7 @@ describe('InboundSyncService', () => {
     });
 
     expect(productQb.andWhere).toHaveBeenCalledWith(
-      'product.updated_at > :sinceDate',
+      expect.stringContaining('mapping_cursor'),
       { sinceDate: new Date(1787745600000) },
     );
   });

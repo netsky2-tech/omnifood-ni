@@ -166,14 +166,18 @@ class InvoiceFiscalCalculator {
     final lineGrosses = <double>[];
     double rawGrossTotal = 0.0;
     for (final item in cart) {
-      final gross = _round((item.unitPrice * item.quantity) + item.modifiersTotal);
+      final gross = _round(
+        (item.unitPrice * item.quantity) + item.modifiersTotal,
+      );
       lineGrosses.add(gross);
       rawGrossTotal += gross;
     }
     rawGrossTotal = _round(rawGrossTotal);
 
     final effectiveDiscountTotal = _round(
-      totalDiscounts > rawGrossTotal ? rawGrossTotal : (totalDiscounts < 0.0 ? 0.0 : totalDiscounts),
+      totalDiscounts > rawGrossTotal
+          ? rawGrossTotal
+          : (totalDiscounts < 0.0 ? 0.0 : totalDiscounts),
     );
 
     // 2. Deterministic discount apportionment (Largest Remainder / Hare-Niemeyer method).
@@ -190,16 +194,20 @@ class InvoiceFiscalCalculator {
         final exactLineCents = targetCents * (gross / rawGrossTotal);
         final baseCents = exactLineCents.floor();
         final maxLineCents = (gross * 100.0).round();
-        final clampedBaseCents = baseCents > maxLineCents ? maxLineCents : baseCents;
+        final clampedBaseCents = baseCents > maxLineCents
+            ? maxLineCents
+            : baseCents;
 
         baseCentsList.add(clampedBaseCents);
         allocatedCents += clampedBaseCents;
-        remainders.add(_DiscountRemainder(
-          index: i,
-          remainder: exactLineCents - baseCents,
-          gross: gross,
-          maxCents: maxLineCents,
-        ));
+        remainders.add(
+          _DiscountRemainder(
+            index: i,
+            remainder: exactLineCents - baseCents,
+            gross: gross,
+            maxCents: maxLineCents,
+          ),
+        );
       }
 
       var centsToDistribute = targetCents - allocatedCents;
@@ -236,7 +244,9 @@ class InvoiceFiscalCalculator {
       final item = cart[i];
       final lineGross = lineGrosses[i];
       final lineDiscount = lineDiscounts[i];
-      final netBase = _round(lineGross - lineDiscount > 0 ? lineGross - lineDiscount : 0.0);
+      final netBase = _round(
+        lineGross - lineDiscount > 0 ? lineGross - lineDiscount : 0.0,
+      );
 
       final double appliedRate;
       final double lineTax;
@@ -277,25 +287,27 @@ class InvoiceFiscalCalculator {
       final lineSubtotal = netBase;
       final lineTotal = _round(netBase + lineTax);
 
-      lines.add(FiscalLineCalculation(
-        productId: item.productId,
-        productName: item.productName,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        modifiersTotal: item.modifiersTotal,
-        grossAmount: lineGross,
-        discount: lineDiscount,
-        taxableBase: lineTaxableBase,
-        exemptBase: lineExemptBase,
-        nominalTaxRate: item.taxRate,
-        appliedTaxRate: appliedRate,
-        taxAmount: lineTax,
-        lineSubtotal: lineSubtotal,
-        lineTotal: lineTotal,
-      ));
+      lines.add(
+        FiscalLineCalculation(
+          productId: item.productId,
+          productName: item.productName,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          modifiersTotal: item.modifiersTotal,
+          grossAmount: lineGross,
+          discount: lineDiscount,
+          taxableBase: lineTaxableBase,
+          exemptBase: lineExemptBase,
+          nominalTaxRate: item.taxRate,
+          appliedTaxRate: appliedRate,
+          taxAmount: lineTax,
+          lineSubtotal: lineSubtotal,
+          lineTotal: lineTotal,
+        ),
+      );
 
       subtotalAccum += lineSubtotal;
-      if (taxRegime?.isRegimenGeneral == true) {
+      if (taxRegime.isRegimenGeneral) {
         if (appliedRate > 0) {
           taxableAccum += lineTaxableBase;
           taxAccum += lineTax;
@@ -308,7 +320,7 @@ class InvoiceFiscalCalculator {
     final finalSubtotal = _round(subtotalAccum);
     final finalTaxable = _round(taxableAccum);
     final finalExempt = _round(exemptAccum);
-    final finalTotalTax = (taxRegime?.isRegimenGeneral == true) ? _round(taxAccum) : 0.0;
+    final finalTotalTax = taxRegime.isRegimenGeneral ? _round(taxAccum) : 0.0;
     final finalTotal = _round(finalSubtotal + finalTotalTax);
     final commRate = commercialRate > 0 ? commercialRate : 36.50;
     final totalUsd = _round(finalTotal / commRate);
@@ -356,23 +368,35 @@ class InvoiceFiscalCalculator {
       final change = cashGivenNio - calculation.total > 0
           ? _round(cashGivenNio - calculation.total)
           : 0.0;
-      effectivePayments.add(ReceiptPayment(
-        methodLabel: 'Efectivo C\$',
-        currency: 'NIO',
-        amount: calculation.total,
-        changeGiven: change,
-      ));
+      effectivePayments.add(
+        ReceiptPayment(
+          methodLabel: 'Efectivo C\$',
+          currency: 'NIO',
+          amount: calculation.total,
+          changeGiven: change,
+        ),
+      );
     }
 
     final receiptLines = calculation.lines.asMap().entries.map((entry) {
       final index = entry.key;
       final l = entry.value;
-      final sourceItem = sourceCart != null && index < sourceCart.length ? sourceCart[index] : null;
-      final modifierDisplays = sourceItem?.selectedModifiers.map((modifier) => ReceiptModifierDisplay(
-            name: modifier.name,
-            displayAmount: modifier.extraPrice == 0 ? null : 'C\$ ${modifier.extraPrice.toStringAsFixed(2)}',
-            scope: 'por unidad',
-          )).toList() ?? const <ReceiptModifierDisplay>[];
+      final sourceItem = sourceCart != null && index < sourceCart.length
+          ? sourceCart[index]
+          : null;
+      final modifierDisplays =
+          sourceItem?.selectedModifiers
+              .map(
+                (modifier) => ReceiptModifierDisplay(
+                  name: modifier.name,
+                  displayAmount: modifier.extraPrice == 0
+                      ? null
+                      : 'C\$ ${modifier.extraPrice.toStringAsFixed(2)}',
+                  scope: 'por unidad',
+                ),
+              )
+              .toList() ??
+          const <ReceiptModifierDisplay>[];
       return ReceiptLine(
         quantity: l.quantity,
         description: l.productName,
@@ -396,11 +420,14 @@ class InvoiceFiscalCalculator {
       );
     }
 
-    final isDocTaxExempt = calculation.taxRegime!.isRegimenGeneral &&
+    final isDocTaxExempt =
+        calculation.taxRegime!.isRegimenGeneral &&
         (calculation.exemptSubtotal > 0 && calculation.taxableSubtotal == 0);
 
     return ReceiptDocument(
-      businessName: businessName?.trim().isNotEmpty == true ? businessName!.trim() : 'OMNIFOOD NI',
+      businessName: businessName?.trim().isNotEmpty == true
+          ? businessName!.trim()
+          : 'OMNIFOOD NI',
       legalName: legalName,
       ruc: businessRuc,
       taxRegime: calculation.taxRegime!,

@@ -37,7 +37,12 @@ class InventoryMovement with _$InventoryMovement {
     String? bloqueoMotivo,
     String? autorizadoPorUsuarioId,
     String? fechaAutorizacion,
+    @Default('GENERIC_INVENTORY') String deliveryOwner,
+    @Default('LOCAL_APPLIED') String deliveryState,
+    String? saleId,
+    String? saleCorrelationId,
   }) = _InventoryMovement;
 
-  factory InventoryMovement.fromJson(Map<String, dynamic> json) => _$InventoryMovementFromJson(json);
+  factory InventoryMovement.fromJson(Map<String, dynamic> json) =>
+      _$InventoryMovementFromJson(json);
 }

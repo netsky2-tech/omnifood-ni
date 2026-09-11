@@ -10,6 +10,26 @@ import {
 import { Invoice } from './invoice.entity';
 import { InvoiceItemModifier } from './invoice-item-modifier.entity';
 
+export interface InventorySnapshotBinding {
+  bindingOrdinal: number;
+  insumoId: string;
+  recipeComponentId?: string | null;
+  quantityPerSaleUnit: number;
+  saleCorrelationId: string;
+}
+
+export interface InvoiceItemInventorySnapshot {
+  classification: string;
+  disposition: string;
+  catalogRevision: string;
+  reasonCode?: string | null;
+  mappingVersionId?: string | null;
+  recipeVersionId?: string | null;
+  acceptedAt?: string;
+  bindings?: InventorySnapshotBinding[];
+  [key: string]: unknown;
+}
+
 @Entity('invoice_items')
 @Index(['tenant_id'])
 export class InvoiceItem {
@@ -75,6 +95,12 @@ export class InvoiceItem {
   @Column({ name: 'origin_invoice_item_id', nullable: true })
   @Index()
   originInvoiceItemId: string;
+
+  @Column({ name: 'inventory_snapshot_version', nullable: true })
+  inventorySnapshotVersion?: string | null;
+
+  @Column({ name: 'inventory_snapshot', type: 'jsonb', nullable: true })
+  inventorySnapshot?: InvoiceItemInventorySnapshot | null;
 
   @OneToMany(() => InvoiceItemModifier, (modifier) => modifier.item, {
     cascade: true,

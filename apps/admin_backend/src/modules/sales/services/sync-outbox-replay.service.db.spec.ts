@@ -2,6 +2,8 @@ import { randomUUID } from 'crypto';
 import { DataSource, type QueryRunner, type Repository } from 'typeorm';
 import { BohInventoryLedgerFoundation1766000000000 } from '../../../migrations/1766000000000-BohInventoryLedgerFoundation';
 import { AddDeterministicSyncSequencing1780000000000 } from '../../../migrations/1780000000000-AddDeterministicSyncSequencing';
+import { AddSaleInventoryOutcomeColumns1803000000000 } from '../../../migrations/1803000000000-AddSaleInventoryOutcomeColumns';
+import { AddAcceptedAtToInventorySyncReceipts1805000000000 } from '../../../migrations/1805000000000-AddAcceptedAtToInventorySyncReceipts';
 import { InventorySyncOutbox } from '../../inventory/entities/inventory-sync-outbox.entity';
 import { InventorySyncReceipt } from '../../inventory/entities/inventory-sync-receipt.entity';
 import { UserRole } from '../../identity/entities/user.entity';
@@ -86,6 +88,19 @@ async function withIsolatedSchema(
     await queryRunner.connect();
     await queryRunner.query(`SET search_path TO "${schema}"`);
     await queryRunner.query(`SET statement_timeout TO '15000ms'`);
+    await queryRunner.query(`
+      CREATE TABLE IF NOT EXISTS invoices (
+        id varchar PRIMARY KEY,
+        tenant_id varchar NOT NULL,
+        type varchar NOT NULL DEFAULT 'regular',
+        is_canceled boolean NOT NULL DEFAULT false
+      );
+      CREATE TABLE IF NOT EXISTS invoice_items (
+        id varchar PRIMARY KEY,
+        tenant_id varchar NOT NULL,
+        invoice_id varchar NOT NULL
+      );
+    `);
 
     await assertion({ dataSource, queryRunner, schema });
   } finally {
@@ -178,6 +193,12 @@ describe('SyncOutboxReplayService (db - Real PostgreSQL)', () => {
           await new AddDeterministicSyncSequencing1780000000000().up(
             queryRunner,
           );
+          await new AddSaleInventoryOutcomeColumns1803000000000().up(
+            queryRunner,
+          );
+          await new AddAcceptedAtToInventorySyncReceipts1805000000000().up(
+            queryRunner,
+          );
 
           const receiptRepo = dataSource.getRepository(InventorySyncReceipt);
           const outboxRepo = dataSource.getRepository(InventorySyncOutbox);
@@ -229,6 +250,12 @@ describe('SyncOutboxReplayService (db - Real PostgreSQL)', () => {
           await new AddDeterministicSyncSequencing1780000000000().up(
             queryRunner,
           );
+          await new AddSaleInventoryOutcomeColumns1803000000000().up(
+            queryRunner,
+          );
+          await new AddAcceptedAtToInventorySyncReceipts1805000000000().up(
+            queryRunner,
+          );
 
           const receiptRepo = dataSource.getRepository(InventorySyncReceipt);
           const outboxRepo = dataSource.getRepository(InventorySyncOutbox);
@@ -277,6 +304,12 @@ describe('SyncOutboxReplayService (db - Real PostgreSQL)', () => {
           await new AddDeterministicSyncSequencing1780000000000().up(
             queryRunner,
           );
+          await new AddSaleInventoryOutcomeColumns1803000000000().up(
+            queryRunner,
+          );
+          await new AddAcceptedAtToInventorySyncReceipts1805000000000().up(
+            queryRunner,
+          );
 
           const receiptRepo = dataSource.getRepository(InventorySyncReceipt);
           const outboxRepo = dataSource.getRepository(InventorySyncOutbox);
@@ -320,6 +353,12 @@ describe('SyncOutboxReplayService (db - Real PostgreSQL)', () => {
         async ({ dataSource, queryRunner }) => {
           await new BohInventoryLedgerFoundation1766000000000().up(queryRunner);
           await new AddDeterministicSyncSequencing1780000000000().up(
+            queryRunner,
+          );
+          await new AddSaleInventoryOutcomeColumns1803000000000().up(
+            queryRunner,
+          );
+          await new AddAcceptedAtToInventorySyncReceipts1805000000000().up(
             queryRunner,
           );
 
@@ -368,6 +407,12 @@ describe('SyncOutboxReplayService (db - Real PostgreSQL)', () => {
         async ({ dataSource, queryRunner }) => {
           await new BohInventoryLedgerFoundation1766000000000().up(queryRunner);
           await new AddDeterministicSyncSequencing1780000000000().up(
+            queryRunner,
+          );
+          await new AddSaleInventoryOutcomeColumns1803000000000().up(
+            queryRunner,
+          );
+          await new AddAcceptedAtToInventorySyncReceipts1805000000000().up(
             queryRunner,
           );
 
@@ -452,6 +497,12 @@ describe('SyncOutboxReplayService (db - Real PostgreSQL)', () => {
         async ({ dataSource, queryRunner }) => {
           await new BohInventoryLedgerFoundation1766000000000().up(queryRunner);
           await new AddDeterministicSyncSequencing1780000000000().up(
+            queryRunner,
+          );
+          await new AddSaleInventoryOutcomeColumns1803000000000().up(
+            queryRunner,
+          );
+          await new AddAcceptedAtToInventorySyncReceipts1805000000000().up(
             queryRunner,
           );
 

@@ -1,3 +1,4 @@
+import 'package:pos_app/domain/services/sales/post_paid_feedback_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import '../../../domain/models/config/tax_regime.dart';
@@ -14,14 +15,15 @@ import '../../../domain/services/printer/thermal_logo_processor.dart';
 /// Hardware Driver Adapter for Sunmi V2s and Sunmi OS Integrated Thermal Printers (58mm).
 /// Communicates via Android Platform Channel with fallback resilience for non-Sunmi environments.
 class SunmiPrinterAdapter implements PrinterPort {
-  static const MethodChannel _defaultChannel =
-      MethodChannel('com.nhilos.pos/sunmi_printer');
+  static const MethodChannel _defaultChannel = MethodChannel(
+    'com.nhilos.pos/sunmi_printer',
+  );
 
   final MethodChannel _channel;
   bool _isHardwareDetected = false;
 
   SunmiPrinterAdapter({MethodChannel? channel})
-      : _channel = channel ?? _defaultChannel;
+    : _channel = channel ?? _defaultChannel;
 
   bool get isHardwareDetected => _isHardwareDetected;
 
@@ -48,10 +50,14 @@ class SunmiPrinterAdapter implements PrinterPort {
     } on MissingPluginException {
       // Running on a device or platform without Sunmi hardware service (Desktop, Emulator, Test)
       _isHardwareDetected = false;
-      debugPrint('[SunmiPrinterAdapter] Sunmi service not found on this platform. Fallback active.');
+      debugPrint(
+        '[SunmiPrinterAdapter] Sunmi service not found on this platform. Fallback active.',
+      );
       return PrinterStatus.ready;
     } on PlatformException catch (e) {
-      debugPrint('[SunmiPrinterAdapter] PlatformException checking status: ${e.message}');
+      debugPrint(
+        '[SunmiPrinterAdapter] PlatformException checking status: ${e.message}',
+      );
       return PrinterStatus.error;
     } catch (e) {
       debugPrint('[SunmiPrinterAdapter] Unexpected error: $e');
@@ -74,6 +80,7 @@ class SunmiPrinterAdapter implements PrinterPort {
     required TaxRegime taxRegime,
     bool isTaxExempt = false,
     int paperWidthMm = 58,
+    PostPaidFeedback? loyaltyFeedback,
   }) async {
     final status = await checkStatus();
     if (status == PrinterStatus.outOfPaper) {
@@ -88,24 +95,61 @@ class SunmiPrinterAdapter implements PrinterPort {
       );
     }
 
-    final logoEscPosBytes = await _toEscPosRaster(logoRasterBytes, paperWidthMm);
-    final document = ReceiptDocument.fromInvoice(
-      invoice,
-      items: items,
-      payments: payments,
-      businessName: businessName,
-      legalName: legalName,
-      ruc: ruc,
-      address: address,
-      phone: phone,
-      cashierName: cashierName,
-      taxRegime: taxRegime,
-      isTaxExempt: isTaxExempt,
-      logoRasterBytes: logoEscPosBytes,
+    final logoEscPosBytes = await _toEscPosRaster(
+      logoRasterBytes,
+      paperWidthMm,
     );
     final layoutFormatter = ReceiptLayoutFormatter.fromPaperWidth(paperWidthMm);
-    final formattedText = layoutFormatter.formatReceiptDocumentText(document);
-    final rawBytes = layoutFormatter.formatReceiptDocumentEscPos(document);
+    final String formattedText;
+    final List<int> rawBytes;
+    if (loyaltyFeedback?.hasContent ?? false) {
+      formattedText = layoutFormatter.formatInvoiceText(
+        invoice,
+        items: items,
+        payments: payments,
+        businessName: businessName,
+        legalName: legalName,
+        ruc: ruc,
+        address: address,
+        phone: phone,
+        cashierName: cashierName,
+        taxRegime: taxRegime,
+        isTaxExempt: isTaxExempt,
+        loyaltyFeedback: loyaltyFeedback,
+      );
+      rawBytes = layoutFormatter.formatInvoiceEscPos(
+        invoice,
+        items: items,
+        payments: payments,
+        businessName: businessName,
+        legalName: legalName,
+        ruc: ruc,
+        address: address,
+        phone: phone,
+        cashierName: cashierName,
+        taxRegime: taxRegime,
+        isTaxExempt: isTaxExempt,
+        logoRasterBytes: logoEscPosBytes,
+        loyaltyFeedback: loyaltyFeedback,
+      );
+    } else {
+      final document = ReceiptDocument.fromInvoice(
+        invoice,
+        items: items,
+        payments: payments,
+        businessName: businessName,
+        legalName: legalName,
+        ruc: ruc,
+        address: address,
+        phone: phone,
+        cashierName: cashierName,
+        taxRegime: taxRegime,
+        isTaxExempt: isTaxExempt,
+        logoRasterBytes: logoEscPosBytes,
+      );
+      formattedText = layoutFormatter.formatReceiptDocumentText(document);
+      rawBytes = layoutFormatter.formatReceiptDocumentEscPos(document);
+    }
 
     return _sendToHardware(rawBytes: rawBytes, plainText: formattedText);
   }
@@ -116,7 +160,10 @@ class SunmiPrinterAdapter implements PrinterPort {
     int paperWidthMm = 58,
   }) async {
     final formatter = ReceiptLayoutFormatter.fromPaperWidth(paperWidthMm);
-    final logoEscPosBytes = await _toEscPosRaster(document.logoRasterBytes, paperWidthMm);
+    final logoEscPosBytes = await _toEscPosRaster(
+      document.logoRasterBytes,
+      paperWidthMm,
+    );
     final documentWithRaster = document.withLogoRasterBytes(logoEscPosBytes);
     return _sendToHardware(
       rawBytes: formatter.formatReceiptDocumentEscPos(documentWithRaster),
@@ -266,8 +313,13 @@ class SunmiPrinterAdapter implements PrinterPort {
       debugPrint('[SunmiPrinterAdapter] openDrawer fallback simulation.');
       return PrinterResult.success();
     } on PlatformException catch (e) {
-      debugPrint('[SunmiPrinterAdapter] Error opening cash drawer: ${e.message}');
-      return PrinterResult.failure(PrinterStatus.error, e.message ?? 'Error de gaveta');
+      debugPrint(
+        '[SunmiPrinterAdapter] Error opening cash drawer: ${e.message}',
+      );
+      return PrinterResult.failure(
+        PrinterStatus.error,
+        e.message ?? 'Error de gaveta',
+      );
     } catch (e) {
       return PrinterResult.failure(PrinterStatus.error, e.toString());
     }
@@ -275,21 +327,30 @@ class SunmiPrinterAdapter implements PrinterPort {
 
   /// Converts configured PNG artwork into the only image payload valid on Sunmi's
   /// raw ESC/POS transport. Invalid artwork is ignored so text printing continues.
-  Future<List<int>?> _toEscPosRaster(List<int>? logoBytes, int paperWidthMm) async {
+  Future<List<int>?> _toEscPosRaster(
+    List<int>? logoBytes,
+    int paperWidthMm,
+  ) async {
     if (logoBytes == null || logoBytes.isEmpty) return null;
     if (!ThermalLogoProcessor.isPng(Uint8List.fromList(logoBytes))) {
       return _isEscPosRaster(logoBytes) ? logoBytes : null;
     }
     final result = await ThermalLogoProcessor.processPngBytes(
       Uint8List.fromList(logoBytes),
-      maxWidth: ReceiptLayoutFormatter.fromPaperWidth(paperWidthMm).maxImageWidth,
+      maxWidth: ReceiptLayoutFormatter.fromPaperWidth(
+        paperWidthMm,
+      ).maxImageWidth,
     );
     return result.isValid ? result.escPosRasterBytes : null;
   }
 
-  bool _isEscPosRaster(List<int> bytes) => bytes.length >= 8 &&
-      bytes[0] == 0x1B && bytes[1] == 0x61 && bytes[3] == 0x1D &&
-      bytes[4] == 0x76 && bytes[5] == 0x30;
+  bool _isEscPosRaster(List<int> bytes) =>
+      bytes.length >= 8 &&
+      bytes[0] == 0x1B &&
+      bytes[1] == 0x61 &&
+      bytes[3] == 0x1D &&
+      bytes[4] == 0x76 &&
+      bytes[5] == 0x30;
 
   Future<PrinterResult> _sendToHardware({
     List<int>? rawBytes,
@@ -297,14 +358,18 @@ class SunmiPrinterAdapter implements PrinterPort {
   }) async {
     try {
       if (rawBytes != null && rawBytes.isNotEmpty) {
-        await _channel.invokeMethod('printRawBytes', {'bytes': Uint8List.fromList(rawBytes)});
+        await _channel.invokeMethod('printRawBytes', {
+          'bytes': Uint8List.fromList(rawBytes),
+        });
       } else if (plainText != null && plainText.isNotEmpty) {
         await _channel.invokeMethod('printText', {'text': plainText});
       }
       return PrinterResult.success(bytes: rawBytes, text: plainText);
     } on MissingPluginException {
       // A missing plugin cannot confirm a physical print.
-      debugPrint('[SunmiPrinterAdapter] Sunmi print service unavailable:\n${plainText ?? rawBytes.toString()}');
+      debugPrint(
+        '[SunmiPrinterAdapter] Sunmi print service unavailable:\n${plainText ?? rawBytes.toString()}',
+      );
       return PrinterResult.failure(
         PrinterStatus.error,
         'Servicio de impresión Sunmi no disponible.',

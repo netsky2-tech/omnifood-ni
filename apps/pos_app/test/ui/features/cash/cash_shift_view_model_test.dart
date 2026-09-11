@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:pos_app/data/database/app_database.dart';
+import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/ui/features/cash/cash_shift_view_model.dart';
 
 void main() {
@@ -19,6 +20,7 @@ void main() {
       currentUserId: 'user-cajero-1',
       currentUserName: 'Juan Pérez',
       currentTerminalId: 'term-main',
+      currentUserRole: UserRole.cashier,
     );
   });
 

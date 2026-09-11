@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../cash_shift_view_model.dart';
+import '../../../../domain/models/user.dart';
 import '../../../../presentation/features/sales/view_models/sale_view_model.dart';
 
 class OpenShiftDialog extends StatefulWidget {
@@ -205,7 +206,9 @@ class _OpenShiftDialogState extends State<OpenShiftDialog> {
           child: const Text('Cancelar'),
         ),
         ElevatedButton(
-          onPressed: _submitting ? null : _submit,
+          onPressed: (_submitting || context.read<CashShiftViewModel>().currentUserRole == UserRole.waiter)
+              ? null
+              : _submit,
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.indigo,
             foregroundColor: Colors.white,

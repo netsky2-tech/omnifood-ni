@@ -1,3 +1,7 @@
+import "package:pos_app/data/daos/fulfillment/fulfillment_topology_dao.dart";
+import "package:pos_app/data/daos/fulfillment/fulfillment_persistence_dao.dart";
+import "package:pos_app/data/models/fulfillment/topology_persistence_entities.dart";
+import "package:pos_app/data/models/fulfillment/fulfillment_persistence_entities.dart";
 import 'dart:async';
 import 'package:floor/floor.dart';
 import 'package:sqflite/sqflite.dart' as sqflite;
@@ -37,12 +41,26 @@ import 'package:pos_app/data/daos/sales/restaurant_area_dao.dart';
 import 'package:pos_app/data/daos/sales/restaurant_table_dao.dart';
 import 'package:pos_app/data/daos/kitchen/kitchen_order_dao.dart';
 import 'package:pos_app/data/daos/local_config_dao.dart';
-import 'package:pos_app/data/daos/fulfillment/fulfillment_topology_dao.dart';
-import 'package:pos_app/data/daos/fulfillment/fulfillment_persistence_dao.dart';
+import 'package:pos_app/data/daos/fiscal_config_local_dao.dart';
+import 'package:pos_app/data/models/fiscal_config_local_entity.dart';
+import '../daos/activation/activation_attempt_local_dao.dart';
+import '../daos/activation/activation_check_result_local_dao.dart';
+import '../daos/activation/first_successful_sale_claim_dao.dart';
+import '../daos/activation/first_customer_sale_observation_dao.dart';
+import '../daos/activation/activation_outbox_dao.dart';
+import '../models/activation/activation_attempt_local_entity.dart';
+import '../models/activation/activation_check_result_local_entity.dart';
+import '../models/activation/first_successful_sale_claim_entity.dart';
+import '../models/activation/first_customer_sale_observation_entity.dart';
+import '../models/activation/activation_outbox_envelope_entity.dart';
 import '../daos/customer/customer_dao.dart';
 import '../models/customer/customer_entity.dart';
 import '../daos/customer/customer_point_transaction_dao.dart';
 import '../models/customer/customer_point_transaction_entity.dart';
+import '../models/loyalty/loyalty_program_entity.dart';
+import '../models/loyalty/loyalty_reward_entity.dart';
+import '../daos/loyalty/loyalty_program_dao.dart';
+import '../daos/loyalty/loyalty_reward_dao.dart';
 import 'package:pos_app/data/models/user_entity.dart';
 import 'package:pos_app/data/models/audit_log_entity.dart';
 import 'package:pos_app/data/models/security_profile_entity.dart';
@@ -78,19 +96,28 @@ import 'package:pos_app/data/models/sales/restaurant_area_entity.dart';
 import 'package:pos_app/data/models/sales/restaurant_table_entity.dart';
 import 'package:pos_app/data/models/kitchen/kitchen_order_entity.dart';
 import 'package:pos_app/data/models/kitchen/kitchen_order_item_entity.dart';
-import 'package:pos_app/data/models/fulfillment/topology_persistence_entities.dart';
-import 'package:pos_app/data/models/fulfillment/fulfillment_persistence_entities.dart';
+import 'package:pos_app/data/models/inventory/authority_projection_entities.dart';
+import 'package:pos_app/data/daos/inventory/authority_projection_dao.dart';
 
 part 'app_database.g.dart'; // generated code
 
 @Database(
-  version: 44,
+  version: 52,
   entities: [
     UserEntity,
     SecurityProfileEntity,
     AuditLogEntity,
     LocalConfigEntity,
     InsumoEntity,
+    AuthorityInsumoEntity,
+    AuthorityRecipeVersionEntity,
+    AuthorityRecipeVersionComponentEntity,
+    TopologySnapshotEntity,
+    ShiftTopologyBindingEntity,
+    EmergencyTopologyAuditEntity,
+    FulfillmentRecordEntity,
+    PrintJobEntity,
+    OutboxEventEntity,
     ProductEntity,
     ProductVariantEntity,
     ProductModifierEntity,
@@ -126,12 +153,14 @@ part 'app_database.g.dart'; // generated code
     KitchenOrderItemEntity,
     CustomerEntity,
     CustomerPointTransactionEntity,
-    TopologySnapshotEntity,
-    ShiftTopologyBindingEntity,
-    EmergencyTopologyAuditEntity,
-    FulfillmentRecordEntity,
-    PrintJobEntity,
-    OutboxEventEntity,
+    LoyaltyProgramEntity,
+    LoyaltyRewardEntity,
+    FiscalConfigLocalEntity,
+    ActivationAttemptLocalEntity,
+    ActivationCheckResultLocalEntity,
+    FirstSuccessfulSaleClaimEntity,
+    FirstCustomerSaleObservationEntity,
+    ActivationOutboxEnvelopeEntity,
   ],
 )
 abstract class AppDatabase extends FloorDatabase {
@@ -173,6 +202,15 @@ abstract class AppDatabase extends FloorDatabase {
   KitchenOrderDao get kitchenOrderDao;
   CustomerDao get customerDao;
   CustomerPointTransactionDao get customerPointTransactionDao;
+  LoyaltyProgramDao get loyaltyProgramDao;
+  LoyaltyRewardDao get loyaltyRewardDao;
+  FiscalConfigLocalDao get fiscalConfigLocalDao;
+  ActivationAttemptLocalDao get activationAttemptLocalDao;
+  ActivationCheckResultLocalDao get activationCheckResultLocalDao;
+  FirstSuccessfulSaleClaimDao get firstSuccessfulSaleClaimDao;
+  FirstCustomerSaleObservationDao get firstCustomerSaleObservationDao;
+  ActivationOutboxDao get activationOutboxDao;
+  AuthorityProjectionDao get authorityProjectionDao;
   FulfillmentTopologyDao get fulfillmentTopologyDao;
   FulfillmentPersistenceDao get fulfillmentPersistenceDao;
 }

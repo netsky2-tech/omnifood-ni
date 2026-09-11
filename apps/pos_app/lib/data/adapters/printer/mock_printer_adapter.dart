@@ -1,3 +1,4 @@
+import 'package:pos_app/domain/services/sales/post_paid_feedback_service.dart';
 import '../../../domain/models/config/tax_regime.dart';
 import '../../../domain/models/sales/cashier_session.dart';
 import '../../../domain/models/printer/receipt_document.dart';
@@ -49,6 +50,7 @@ class MockPrinterAdapter implements PrinterPort {
     required TaxRegime taxRegime,
     bool isTaxExempt = false,
     int paperWidthMm = 58,
+    PostPaidFeedback? loyaltyFeedback,
   }) async {
     if (shouldFail || currentStatus != PrinterStatus.ready) {
       String defaultMsg = 'Error de impresión en hardware simulado';
@@ -58,30 +60,66 @@ class MockPrinterAdapter implements PrinterPort {
         defaultMsg = 'Cabezal sobrecalentado.';
       }
       final res = PrinterResult.failure(
-        currentStatus == PrinterStatus.ready ? PrinterStatus.error : currentStatus,
+        currentStatus == PrinterStatus.ready
+            ? PrinterStatus.error
+            : currentStatus,
         failureMessage ?? defaultMsg,
       );
       printHistory.add(res);
       return res;
     }
 
-    final document = ReceiptDocument.fromInvoice(
-      invoice,
-      items: items,
-      payments: payments,
-      businessName: businessName,
-      legalName: legalName,
-      ruc: ruc,
-      address: address,
-      phone: phone,
-      cashierName: cashierName,
-      taxRegime: taxRegime,
-      isTaxExempt: isTaxExempt,
-      logoRasterBytes: logoRasterBytes,
-    );
     final layoutFormatter = ReceiptLayoutFormatter.fromPaperWidth(paperWidthMm);
-    final text = layoutFormatter.formatReceiptDocumentText(document);
-    final bytes = layoutFormatter.formatReceiptDocumentEscPos(document);
+    final String text;
+    final List<int> bytes;
+    if (loyaltyFeedback?.hasContent ?? false) {
+      text = layoutFormatter.formatInvoiceText(
+        invoice,
+        items: items,
+        payments: payments,
+        businessName: businessName,
+        legalName: legalName,
+        ruc: ruc,
+        address: address,
+        phone: phone,
+        cashierName: cashierName,
+        taxRegime: taxRegime,
+        isTaxExempt: isTaxExempt,
+        loyaltyFeedback: loyaltyFeedback,
+      );
+      bytes = layoutFormatter.formatInvoiceEscPos(
+        invoice,
+        items: items,
+        payments: payments,
+        businessName: businessName,
+        legalName: legalName,
+        ruc: ruc,
+        address: address,
+        phone: phone,
+        cashierName: cashierName,
+        taxRegime: taxRegime,
+        isTaxExempt: isTaxExempt,
+        logoRasterBytes: logoRasterBytes,
+        loyaltyFeedback: loyaltyFeedback,
+      );
+    } else {
+      final document = ReceiptDocument.fromInvoice(
+        invoice,
+        items: items,
+        payments: payments,
+        businessName: businessName,
+        legalName: legalName,
+        ruc: ruc,
+        address: address,
+        phone: phone,
+        cashierName: cashierName,
+        taxRegime: taxRegime,
+        isTaxExempt: isTaxExempt,
+        logoRasterBytes: logoRasterBytes,
+      );
+      text = layoutFormatter.formatReceiptDocumentText(document);
+      bytes = layoutFormatter.formatReceiptDocumentEscPos(document);
+    }
 
     lastPrintedText = text;
     lastPrintedBytes = bytes;
@@ -98,7 +136,9 @@ class MockPrinterAdapter implements PrinterPort {
   }) async {
     if (shouldFail || currentStatus != PrinterStatus.ready) {
       final result = PrinterResult.failure(
-        currentStatus == PrinterStatus.ready ? PrinterStatus.error : currentStatus,
+        currentStatus == PrinterStatus.ready
+            ? PrinterStatus.error
+            : currentStatus,
         failureMessage ?? 'Error de impresión en hardware simulado',
       );
       printHistory.add(result);
@@ -127,7 +167,9 @@ class MockPrinterAdapter implements PrinterPort {
   }) async {
     if (shouldFail || currentStatus != PrinterStatus.ready) {
       final res = PrinterResult.failure(
-        currentStatus == PrinterStatus.ready ? PrinterStatus.error : currentStatus,
+        currentStatus == PrinterStatus.ready
+            ? PrinterStatus.error
+            : currentStatus,
         failureMessage ?? 'Impresora de cocina no disponible',
       );
       printHistory.add(res);
@@ -173,7 +215,9 @@ class MockPrinterAdapter implements PrinterPort {
   }) async {
     if (shouldFail || currentStatus != PrinterStatus.ready) {
       final res = PrinterResult.failure(
-        currentStatus == PrinterStatus.ready ? PrinterStatus.error : currentStatus,
+        currentStatus == PrinterStatus.ready
+            ? PrinterStatus.error
+            : currentStatus,
         failureMessage ?? 'Error imprimiendo Corte X',
       );
       printHistory.add(res);
@@ -205,7 +249,9 @@ class MockPrinterAdapter implements PrinterPort {
   }) async {
     if (shouldFail || currentStatus != PrinterStatus.ready) {
       final res = PrinterResult.failure(
-        currentStatus == PrinterStatus.ready ? PrinterStatus.error : currentStatus,
+        currentStatus == PrinterStatus.ready
+            ? PrinterStatus.error
+            : currentStatus,
         failureMessage ?? 'Error imprimiendo Corte Z',
       );
       printHistory.add(res);
@@ -241,7 +287,9 @@ class MockPrinterAdapter implements PrinterPort {
   }) async {
     if (shouldFail || currentStatus != PrinterStatus.ready) {
       final res = PrinterResult.failure(
-        currentStatus == PrinterStatus.ready ? PrinterStatus.error : currentStatus,
+        currentStatus == PrinterStatus.ready
+            ? PrinterStatus.error
+            : currentStatus,
         failureMessage ?? 'Error imprimiendo viñeta de lote',
       );
       printHistory.add(res);
@@ -281,7 +329,9 @@ class MockPrinterAdapter implements PrinterPort {
   Future<PrinterResult> printRawEscPos(List<int> bytes) async {
     if (shouldFail || currentStatus != PrinterStatus.ready) {
       return PrinterResult.failure(
-        currentStatus == PrinterStatus.ready ? PrinterStatus.error : currentStatus,
+        currentStatus == PrinterStatus.ready
+            ? PrinterStatus.error
+            : currentStatus,
         failureMessage ?? 'Error enviando comandos ESC/POS',
       );
     }

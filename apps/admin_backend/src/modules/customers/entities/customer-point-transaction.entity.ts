@@ -14,12 +14,23 @@ export enum PointTransactionType {
   EARN = 'earn',
   REDEEM = 'redeem',
   ADJUST = 'adjust',
+  REVERSAL = 'reversal',
+}
+
+export enum LoyaltyTransactionOrigin {
+  POS = 'POS',
+  CLOUD = 'CLOUD',
 }
 
 @Entity('customer_point_transactions')
 @Index('idx_point_transactions_tenant_customer', ['tenant_id', 'customer_id'])
 @Index('idx_point_transactions_tenant_invoice', ['tenant_id', 'invoice_id'])
 @Index('idx_point_transactions_created_at', ['tenant_id', 'created_at'])
+@Index('idx_loyalty_tx_customer_program_time', [
+  'tenant_id',
+  'customer_id',
+  'loyalty_program_id',
+])
 export class CustomerPointTransaction {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -37,6 +48,72 @@ export class CustomerPointTransaction {
   @ManyToOne(() => Customer)
   @JoinColumn({ name: 'customer_id' })
   customer: Customer;
+
+  // --- V1 Loyalty fields ---
+
+  @Column({ type: 'uuid', nullable: true })
+  loyalty_program_id?: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  ticket_id?: string | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  reward_id?: string | null;
+
+  @Column({
+    type: 'enum',
+    enum: PointTransactionType,
+    nullable: true,
+  })
+  transaction_type?: PointTransactionType | null;
+
+  @Column({ type: 'int', nullable: true })
+  units?: number | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  reversal_of_transaction_id?: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  idempotency_key?: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  source_event_id?: string | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  actor_user_id?: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  branch_id?: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  terminal_id?: string | null;
+
+  @Column({ type: 'int', nullable: true })
+  program_version?: number | null;
+
+  @Column({ type: 'int', nullable: true })
+  reward_version?: number | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  commercial_snapshot?: Record<string, unknown> | null;
+
+  @Column({
+    type: 'enum',
+    enum: LoyaltyTransactionOrigin,
+    nullable: true,
+  })
+  origin?: LoyaltyTransactionOrigin | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  occurred_at?: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  recorded_at?: Date | null;
+
+  @Column({ type: 'boolean', default: false })
+  legacy_imported: boolean;
+
+  // --- Legacy Batch 14.3 fields (preserved during migration) ---
 
   @Column({ type: 'varchar', nullable: true })
   invoice_id?: string | null;

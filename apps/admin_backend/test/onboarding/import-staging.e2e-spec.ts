@@ -22,6 +22,7 @@ import {
 import { UserRole } from '../../src/modules/identity/entities/user.entity';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
+import { PermissionsGuard } from '../../src/modules/identity/guards/permissions.guard';
 import { JWT_TOKEN_TYPES } from '../../src/modules/identity/security/jwt-token.types';
 import { createIdentityJwtConfigProvider } from '../support/identity-jwt-test.fixture';
 
@@ -175,6 +176,7 @@ describe('ImportStaging (Integration & E2E)', () => {
       controllers: [ImportStagingController],
       providers: [
         ImportStagingService,
+        createIdentityJwtConfigProvider(),
         {
           provide: 'ImportStagingRepository',
           useValue: stagingRepo,
@@ -190,6 +192,7 @@ describe('ImportStaging (Integration & E2E)', () => {
         TenantInterceptor,
         AuthGuard,
         RolesGuard,
+        PermissionsGuard,
         Reflector,
         JwtService,
         createIdentityJwtConfigProvider(),
@@ -228,15 +231,17 @@ describe('ImportStaging (Integration & E2E)', () => {
       email: string;
       role: UserRole;
       tenant_id: string;
+      custom_permissions?: string[];
     }> = {},
   ): string =>
     jwtService.sign(
       {
         sub: overrides.sub ?? 'user-1',
-        email: overrides.email ?? 'manager@example.com',
-        role: overrides.role ?? UserRole.MANAGER,
+        email: overrides.email ?? 'owner@example.com',
+        role: overrides.role ?? UserRole.OWNER,
         tenant_id:
           overrides.tenant_id !== undefined ? overrides.tenant_id : 'tenant-A',
+        custom_permissions: overrides.custom_permissions,
         is_active: true,
         token_type: JWT_TOKEN_TYPES.ACCESS,
         security_version: 1,
@@ -268,6 +273,16 @@ describe('ImportStaging (Integration & E2E)', () => {
 
   it('returns 403 when user has CASHIER role', async () => {
     const token = signToken({ role: UserRole.CASHIER });
+
+    await request(app.getHttpServer())
+      .post(`${API_PREFIX}/upload`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ rows: [{ nombre: 'Cafe', precioVenta: 50 }] })
+      .expect(403);
+  });
+
+  it('returns 403 when user is MANAGER without ONBOARDING_PRODUCT_IMPORT_MANAGE attempting to upload', async () => {
+    const token = signToken({ role: UserRole.MANAGER });
 
     await request(app.getHttpServer())
       .post(`${API_PREFIX}/upload`)
@@ -431,8 +446,9 @@ describe('ImportStaging (Integration & E2E)', () => {
     expect(dbProducts).toHaveLength(1);
     expect(dbProducts[0].name).toBe('Capuchino Vainilla');
     expect(dbProducts[0].sellPrice).toBe(110);
-    expect(dbProducts[0].averageCost).toBe(45);
-    expect(dbProducts[0].stock).toBe(15);
+    // AC-24: stock/cost writes neutralized outside Kardex
+    expect(dbProducts[0].averageCost).toBe(0);
+    expect(dbProducts[0].stock).toBe(0);
   });
 
   it('handles duplicates on commit with REPLACE mode updating existing products (UC-03)', async () => {
@@ -446,11 +462,15 @@ describe('ImportStaging (Integration & E2E)', () => {
       warehouse_id: 'wh-1',
       name: 'Toña 350ml',
       uom: 'UN',
+      product_type: 'SIMPLE' as never,
+      category_code: null,
       sellPrice: 50,
       averageCost: 30,
       stock: 10,
       is_perishable: false,
       is_active: true,
+      tax_rate: 0.15,
+      is_tax_exempt: false,
       created_at: new Date(),
       updated_at: new Date(),
     });
@@ -490,8 +510,9 @@ describe('ImportStaging (Integration & E2E)', () => {
 
     expect(dbProducts).toHaveLength(1);
     expect(dbProducts[0].sellPrice).toBe(65);
-    expect(dbProducts[0].averageCost).toBe(35);
-    expect(dbProducts[0].stock).toBe(50);
+    // AC-52: REPLACE does not touch stock or averageCost
+    expect(dbProducts[0].averageCost).toBe(30);
+    expect(dbProducts[0].stock).toBe(10);
   });
 
   it('guarantees multi-tenant isolation across upload and commit operations', async () => {

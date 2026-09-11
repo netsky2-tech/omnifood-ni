@@ -22,12 +22,20 @@ import { BcnFxRate } from './entities/bcn-fx-rate.entity';
 import { SystemParametersConfig } from './entities/system-parameters-config.entity';
 import { KardexRecalculateQueue } from './entities/kardex-recalculate-queue.entity';
 import { KardexCorrection } from './entities/kardex-correction.entity';
+import { ProductInventoryMappingVersion } from './entities/product-inventory-mapping-version.entity';
+import { InventoryRemediationReceipt } from './entities/inventory-remediation-receipt.entity';
+import { ProductInventoryMappingService } from './services/product-inventory-mapping.service';
+import { SaleInventoryRemediationService } from './services/sale-inventory-remediation.service';
 import { InventoryService } from './inventory.service';
 import { PurchaseService } from './purchase.service';
 import { ShrinkageService } from './shrinkage.service';
 import { CostCalculatorService } from './cost-calculator.service';
 import { InventoryMovementController } from './inventory-movement.controller';
 import { InventoryMovementService } from './inventory-movement.service';
+import { ProductService } from './product.service';
+import { ProductController } from './product.controller';
+import { RecipeController } from './recipe.controller';
+import { InsumoController } from './insumo.controller';
 import {
   FX_RATE_RESOLVER,
   InventoryPurchaseService,
@@ -48,12 +56,15 @@ import { CountSessionService } from './count-session.service';
 import { GovernanceApprovalService } from './services/governance-approval.service';
 import { KardexRegularizationService } from './services/kardex-regularization.service';
 import { RegularizationController } from './controllers/regularization.controller';
+import { RemediationController } from './controllers/remediation.controller';
 import { InventoryReportsService } from './services/inventory-reports.service';
 import { InventoryReportsController } from './controllers/inventory-reports.controller';
+import { AuditModule } from '../audit/audit.module';
 
 @Module({
   imports: [
     IdentityModule,
+    AuditModule,
     TypeOrmModule.forFeature([
       Insumo,
       Product,
@@ -77,12 +88,18 @@ import { InventoryReportsController } from './controllers/inventory-reports.cont
       SystemParametersConfig,
       KardexRecalculateQueue,
       KardexCorrection,
+      ProductInventoryMappingVersion,
+      InventoryRemediationReceipt,
     ]),
   ],
   controllers: [
     InventoryMovementController,
     RegularizationController,
+    RemediationController,
     InventoryReportsController,
+    ProductController,
+    RecipeController,
+    InsumoController,
   ],
   providers: [
     InventoryService,
@@ -103,6 +120,9 @@ import { InventoryReportsController } from './controllers/inventory-reports.cont
     InventoryReportsService,
     UomConversionCalculator,
     FxRateResolverService,
+    ProductService,
+    ProductInventoryMappingService,
+    SaleInventoryRemediationService,
     {
       provide: FORENSIC_ALERT_DISPATCHER,
       useValue: {
@@ -132,6 +152,9 @@ import { InventoryReportsController } from './controllers/inventory-reports.cont
     GovernanceApprovalService,
     KardexRegularizationService,
     UomConversionCalculator,
+    ProductService,
+    ProductInventoryMappingService,
+    SaleInventoryRemediationService,
   ],
 })
 export class InventoryModule {}

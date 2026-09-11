@@ -8,6 +8,7 @@ import { DataSource } from 'typeorm';
 import { CatalogService, DEFAULT_CATALOG_SEED } from './catalog.service';
 import { CatalogValue } from './entities/catalog-value.entity';
 import { CATALOG_TYPE } from './catalog-type';
+import { ChangeLogService } from '../audit/change-log.service';
 
 describe('CatalogService', () => {
   let service: CatalogService;
@@ -63,6 +64,14 @@ describe('CatalogService', () => {
           provide: DataSource,
           useValue: {
             createQueryRunner: jest.fn().mockReturnValue(queryRunner),
+          },
+        },
+        {
+          provide: ChangeLogService,
+          useValue: {
+            log: jest.fn(),
+            findByTarget: jest.fn(),
+            findByTenant: jest.fn(),
           },
         },
       ],

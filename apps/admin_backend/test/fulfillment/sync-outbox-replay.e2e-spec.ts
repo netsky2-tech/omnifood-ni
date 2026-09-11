@@ -10,6 +10,8 @@ import { App } from 'supertest/types';
 import { DataSource } from 'typeorm';
 import { BohInventoryLedgerFoundation1766000000000 } from '../../src/migrations/1766000000000-BohInventoryLedgerFoundation';
 import { AddDeterministicSyncSequencing1780000000000 } from '../../src/migrations/1780000000000-AddDeterministicSyncSequencing';
+import { AddSaleInventoryOutcomeColumns1803000000000 } from '../../src/migrations/1803000000000-AddSaleInventoryOutcomeColumns';
+import { AddAcceptedAtToInventorySyncReceipts1805000000000 } from '../../src/migrations/1805000000000-AddAcceptedAtToInventorySyncReceipts';
 import { IdentityModule } from '../../src/modules/identity/identity.module';
 import { InventoryModule } from '../../src/modules/inventory/inventory.module';
 import {
@@ -106,11 +108,24 @@ describe('SyncOutboxReplay (e2e - Real PostgreSQL, No Mocks)', () => {
     await runner.query(`CREATE SCHEMA "${schema}"`);
     await runner.query(`SET search_path TO "${schema}", public`);
 
-    // Run migrations inside isolated schema
+    // Create migration prerequisites and run the chain inside the isolated schema.
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS invoices (
+        id varchar(128) PRIMARY KEY,
+        tenant_id varchar(64) NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS invoice_items (
+        id varchar(128) PRIMARY KEY,
+        tenant_id varchar(64) NOT NULL,
+        invoice_id varchar(128) NOT NULL
+      );
+    `);
     const m1 = new BohInventoryLedgerFoundation1766000000000();
     const m2 = new AddDeterministicSyncSequencing1780000000000();
     await m1.up(runner);
     await m2.up(runner);
+    await new AddSaleInventoryOutcomeColumns1803000000000().up(runner);
+    await new AddAcceptedAtToInventorySyncReceipts1805000000000().up(runner);
 
     await ensurePublicAuthTables(runner);
 

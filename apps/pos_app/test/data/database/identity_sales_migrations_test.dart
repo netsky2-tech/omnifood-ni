@@ -1102,4 +1102,12 @@ void main() {
       }
     },
   );
+
+  test('migration48_49 adds all five nullable columns idempotently', () async {
+    final db = await databaseFactory.openDatabase(dbPath, options: OpenDatabaseOptions(version: 48, onCreate: (db, _) async { await db.execute('CREATE TABLE invoices (id TEXT PRIMARY KEY)'); await db.execute('CREATE TABLE invoice_items (id TEXT PRIMARY KEY)'); }));
+    await migration48_49.migrate(db); await migration48_49.migrate(db);
+    expect((await db.rawQuery('PRAGMA table_info(invoices)')).map((row) => row['name']), containsAll(['inventory_policy_version', 'inventory_outcome', 'inventory_outcome_reason']));
+    expect((await db.rawQuery('PRAGMA table_info(invoice_items)')).map((row) => row['name']), containsAll(['inventory_snapshot_json', 'inventory_snapshot_version']));
+    await db.close();
+  });
 }

@@ -4,11 +4,40 @@ import 'package:sqflite/sqflite.dart' as sqflite;
 Future<void> _createInventoryMovementAppendOnlyTriggers(
   sqflite.DatabaseExecutor database,
 ) async {
+  await database.execute(
+    'DROP TRIGGER IF EXISTS inventory_movements_block_update',
+  );
   await database.execute('''
     CREATE TRIGGER IF NOT EXISTS inventory_movements_block_update
     BEFORE UPDATE ON inventory_movements
+    FOR EACH ROW
+    WHEN (
+      OLD.id IS NOT NEW.id OR
+      OLD.insumo_id IS NOT NEW.insumo_id OR
+      OLD.type IS NOT NEW.type OR
+      OLD.quantity IS NOT NEW.quantity OR
+      OLD.previous_stock IS NOT NEW.previous_stock OR
+      OLD.new_stock IS NOT NEW.new_stock OR
+      OLD.timestamp IS NOT NEW.timestamp OR
+      OLD.reason IS NOT NEW.reason OR
+      OLD.user_id IS NOT NEW.user_id OR
+      OLD.unit_cost_nio IS NOT NEW.unit_cost_nio OR
+      OLD.source_document_type IS NOT NEW.source_document_type OR
+      OLD.source_document_id IS NOT NEW.source_document_id OR
+      OLD.origin_movement_id IS NOT NEW.origin_movement_id OR
+      OLD.origin_invoice_item_id IS NOT NEW.origin_invoice_item_id OR
+      OLD.batch_deductions IS NOT NEW.batch_deductions OR
+      OLD.estado_costeo IS NOT NEW.estado_costeo OR
+      OLD.intentos_count IS NOT NEW.intentos_count OR
+      OLD.bloqueo_motivo IS NOT NEW.bloqueo_motivo OR
+      OLD.autorizado_por_usuario_id IS NOT NEW.autorizado_por_usuario_id OR
+      OLD.fecha_autorizacion IS NOT NEW.fecha_autorizacion OR
+      OLD.delivery_owner IS NOT NEW.delivery_owner OR
+      OLD.sale_id IS NOT NEW.sale_id OR
+      OLD.sale_correlation_id IS NOT NEW.sale_correlation_id
+    )
     BEGIN
-      SELECT RAISE(ABORT, 'inventory_movements is append-only');
+      SELECT RAISE(ABORT, 'inventory_movements core fields are append-only');
     END;
   ''');
 
@@ -21,27 +50,71 @@ Future<void> _createInventoryMovementAppendOnlyTriggers(
   ''');
 }
 
-Future<void> _createTopologyPersistenceTriggers(sqflite.DatabaseExecutor database) async {
+Future<void> _createTopologyPersistenceTriggers(
+  sqflite.DatabaseExecutor database,
+) async {
   for (final table in ['topology_snapshots', 'emergency_topology_audits']) {
     final tableExists = await database.rawQuery(
       "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
       [table],
     );
     if (tableExists.isNotEmpty) {
-      await database.execute("CREATE TRIGGER IF NOT EXISTS ${table}_block_update BEFORE UPDATE ON $table BEGIN SELECT RAISE(ABORT, '$table is immutable'); END");
-      await database.execute("CREATE TRIGGER IF NOT EXISTS ${table}_block_delete BEFORE DELETE ON $table BEGIN SELECT RAISE(ABORT, '$table is append-only'); END");
+      await database.execute(
+        "CREATE TRIGGER IF NOT EXISTS ${table}_block_update BEFORE UPDATE ON $table BEGIN SELECT RAISE(ABORT, '$table is immutable'); END",
+      );
+      await database.execute(
+        "CREATE TRIGGER IF NOT EXISTS ${table}_block_delete BEFORE DELETE ON $table BEGIN SELECT RAISE(ABORT, '$table is append-only'); END",
+      );
     }
   }
+}
+
+Future<void> _createAuthorityImmutabilityTriggers(
+  sqflite.DatabaseExecutor database,
+) async {
+  await database.execute('''
+    CREATE TRIGGER IF NOT EXISTS authority_recipe_versions_block_update
+    BEFORE UPDATE ON authority_recipe_versions
+    BEGIN
+      SELECT RAISE(ABORT, 'Authority facts are immutable');
+    END;
+  ''');
+
+  await database.execute('''
+    CREATE TRIGGER IF NOT EXISTS authority_recipe_versions_block_delete
+    BEFORE DELETE ON authority_recipe_versions
+    BEGIN
+      SELECT RAISE(ABORT, 'Authority facts cannot be deleted');
+    END;
+  ''');
+
+  await database.execute('''
+    CREATE TRIGGER IF NOT EXISTS authority_components_block_update
+    BEFORE UPDATE ON authority_recipe_version_components
+    BEGIN
+      SELECT RAISE(ABORT, 'Authority facts are immutable');
+    END;
+  ''');
+
+  await database.execute('''
+    CREATE TRIGGER IF NOT EXISTS authority_components_block_delete
+    BEFORE DELETE ON authority_recipe_version_components
+    BEGIN
+      SELECT RAISE(ABORT, 'Authority facts cannot be deleted');
+    END;
+  ''');
 }
 
 final inventoryMovementAppendOnlyCallback = Callback(
   onCreate: (database, _) async {
     await _createInventoryMovementAppendOnlyTriggers(database);
+    await _createAuthorityImmutabilityTriggers(database);
+    await _createTopologyPersistenceTriggers(database);
     await _createTopologyPersistenceTriggers(database);
   },
   onOpen: (database) async {
     await _createInventoryMovementAppendOnlyTriggers(database);
-    await _createTopologyPersistenceTriggers(database);
+    await _createAuthorityImmutabilityTriggers(database);
   },
 );
 
@@ -1202,12 +1275,16 @@ final migration31_32 = Migration(31, 32, (database) async {
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'audit_logs'",
   );
   if (auditTable.isNotEmpty) {
-    final auditColumns = await database.rawQuery('PRAGMA table_info(audit_logs)');
+    final auditColumns = await database.rawQuery(
+      'PRAGMA table_info(audit_logs)',
+    );
     final existingAuditCols = auditColumns
         .map((column) => column['name'] as String)
         .toSet();
     if (!existingAuditCols.contains('hash_version')) {
-      await database.execute('ALTER TABLE audit_logs ADD COLUMN hash_version TEXT');
+      await database.execute(
+        'ALTER TABLE audit_logs ADD COLUMN hash_version TEXT',
+      );
     }
   }
 
@@ -1298,7 +1375,9 @@ final migration32_33 = Migration(32, 33, (database) async {
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'audit_logs'",
   );
   if (auditTable.isNotEmpty) {
-    final auditColumns = await database.rawQuery('PRAGMA table_info(audit_logs)');
+    final auditColumns = await database.rawQuery(
+      'PRAGMA table_info(audit_logs)',
+    );
     final existingAuditCols = auditColumns
         .map((column) => column['name'] as String)
         .toSet();
@@ -1353,46 +1432,74 @@ final migration32_33 = Migration(32, 33, (database) async {
       PRIMARY KEY (`id`)
     )
   ''');
-  final columns = await database.rawQuery('PRAGMA table_info(cashier_sessions)');
+  final columns = await database.rawQuery(
+    'PRAGMA table_info(cashier_sessions)',
+  );
   final columnNames = columns.map((c) => c['name'] as String).toSet();
   if (!columnNames.contains('terminal_id')) {
-    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `terminal_id` TEXT NOT NULL DEFAULT 'default-terminal'");
+    await database.execute(
+      "ALTER TABLE `cashier_sessions` ADD COLUMN `terminal_id` TEXT NOT NULL DEFAULT 'default-terminal'",
+    );
   }
   if (!columnNames.contains('opening_balance_nio')) {
-    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `opening_balance_nio` REAL NOT NULL DEFAULT 0.0");
+    await database.execute(
+      "ALTER TABLE `cashier_sessions` ADD COLUMN `opening_balance_nio` REAL NOT NULL DEFAULT 0.0",
+    );
   }
   if (!columnNames.contains('opening_balance_usd')) {
-    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `opening_balance_usd` REAL NOT NULL DEFAULT 0.0");
+    await database.execute(
+      "ALTER TABLE `cashier_sessions` ADD COLUMN `opening_balance_usd` REAL NOT NULL DEFAULT 0.0",
+    );
   }
   if (!columnNames.contains('closing_counted_nio')) {
-    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `closing_counted_nio` REAL");
+    await database.execute(
+      "ALTER TABLE `cashier_sessions` ADD COLUMN `closing_counted_nio` REAL",
+    );
   }
   if (!columnNames.contains('closing_counted_usd')) {
-    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `closing_counted_usd` REAL");
+    await database.execute(
+      "ALTER TABLE `cashier_sessions` ADD COLUMN `closing_counted_usd` REAL",
+    );
   }
   if (!columnNames.contains('expected_nio')) {
-    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `expected_nio` REAL NOT NULL DEFAULT 0.0");
+    await database.execute(
+      "ALTER TABLE `cashier_sessions` ADD COLUMN `expected_nio` REAL NOT NULL DEFAULT 0.0",
+    );
   }
   if (!columnNames.contains('expected_usd')) {
-    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `expected_usd` REAL NOT NULL DEFAULT 0.0");
+    await database.execute(
+      "ALTER TABLE `cashier_sessions` ADD COLUMN `expected_usd` REAL NOT NULL DEFAULT 0.0",
+    );
   }
   if (!columnNames.contains('difference_nio')) {
-    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `difference_nio` REAL");
+    await database.execute(
+      "ALTER TABLE `cashier_sessions` ADD COLUMN `difference_nio` REAL",
+    );
   }
   if (!columnNames.contains('difference_usd')) {
-    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `difference_usd` REAL");
+    await database.execute(
+      "ALTER TABLE `cashier_sessions` ADD COLUMN `difference_usd` REAL",
+    );
   }
   if (!columnNames.contains('z_report_sequence')) {
-    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `z_report_sequence` INTEGER");
+    await database.execute(
+      "ALTER TABLE `cashier_sessions` ADD COLUMN `z_report_sequence` INTEGER",
+    );
   }
   if (!columnNames.contains('supervisor_id')) {
-    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `supervisor_id` TEXT");
+    await database.execute(
+      "ALTER TABLE `cashier_sessions` ADD COLUMN `supervisor_id` TEXT",
+    );
   }
   if (!columnNames.contains('notes')) {
-    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `notes` TEXT");
+    await database.execute(
+      "ALTER TABLE `cashier_sessions` ADD COLUMN `notes` TEXT",
+    );
   }
   if (!columnNames.contains('sync_status')) {
-    await database.execute("ALTER TABLE `cashier_sessions` ADD COLUMN `sync_status` TEXT NOT NULL DEFAULT 'pending'");
+    await database.execute(
+      "ALTER TABLE `cashier_sessions` ADD COLUMN `sync_status` TEXT NOT NULL DEFAULT 'pending'",
+    );
   }
 });
 
@@ -1404,7 +1511,9 @@ final migration33_34 = Migration(33, 34, (database) async {
     final columns = await database.rawQuery('PRAGMA table_info(audit_logs)');
     final names = columns.map((column) => column['name'] as String).toSet();
     if (!names.contains('tenant_id')) {
-      await database.execute('ALTER TABLE audit_logs ADD COLUMN tenant_id TEXT');
+      await database.execute(
+        'ALTER TABLE audit_logs ADD COLUMN tenant_id TEXT',
+      );
     }
     if (!names.contains('metadata_raw')) {
       await database.execute(
@@ -1413,33 +1522,53 @@ final migration33_34 = Migration(33, 34, (database) async {
     }
   }
 
-  final invoiceColumns = await database.rawQuery("PRAGMA table_info(`invoices`)");
+  final invoiceColumns = await database.rawQuery(
+    "PRAGMA table_info(`invoices`)",
+  );
   if (invoiceColumns.isNotEmpty) {
-    final invColumnNames = invoiceColumns.map((col) => col['name'] as String).toSet();
+    final invColumnNames = invoiceColumns
+        .map((col) => col['name'] as String)
+        .toSet();
 
     if (!invColumnNames.contains('bcn_official_rate')) {
-      await database.execute("ALTER TABLE `invoices` ADD COLUMN `bcn_official_rate` REAL NOT NULL DEFAULT 36.6241");
+      await database.execute(
+        "ALTER TABLE `invoices` ADD COLUMN `bcn_official_rate` REAL NOT NULL DEFAULT 36.6241",
+      );
     }
     if (!invColumnNames.contains('commercial_rate')) {
-      await database.execute("ALTER TABLE `invoices` ADD COLUMN `commercial_rate` REAL NOT NULL DEFAULT 36.50");
+      await database.execute(
+        "ALTER TABLE `invoices` ADD COLUMN `commercial_rate` REAL NOT NULL DEFAULT 36.50",
+      );
     }
     if (!invColumnNames.contains('total_usd')) {
-      await database.execute("ALTER TABLE `invoices` ADD COLUMN `total_usd` REAL NOT NULL DEFAULT 0.0");
+      await database.execute(
+        "ALTER TABLE `invoices` ADD COLUMN `total_usd` REAL NOT NULL DEFAULT 0.0",
+      );
     }
   }
 
-  final paymentColumns = await database.rawQuery("PRAGMA table_info(`payments`)");
+  final paymentColumns = await database.rawQuery(
+    "PRAGMA table_info(`payments`)",
+  );
   if (paymentColumns.isNotEmpty) {
-    final payColumnNames = paymentColumns.map((col) => col['name'] as String).toSet();
+    final payColumnNames = paymentColumns
+        .map((col) => col['name'] as String)
+        .toSet();
 
     if (!payColumnNames.contains('amount_nio')) {
-      await database.execute("ALTER TABLE `payments` ADD COLUMN `amount_nio` REAL NOT NULL DEFAULT 0.0");
+      await database.execute(
+        "ALTER TABLE `payments` ADD COLUMN `amount_nio` REAL NOT NULL DEFAULT 0.0",
+      );
     }
     if (!payColumnNames.contains('change_given')) {
-      await database.execute("ALTER TABLE `payments` ADD COLUMN `change_given` REAL NOT NULL DEFAULT 0.0");
+      await database.execute(
+        "ALTER TABLE `payments` ADD COLUMN `change_given` REAL NOT NULL DEFAULT 0.0",
+      );
     }
     if (!payColumnNames.contains('change_currency')) {
-      await database.execute("ALTER TABLE `payments` ADD COLUMN `change_currency` TEXT NOT NULL DEFAULT 'NIO'");
+      await database.execute(
+        "ALTER TABLE `payments` ADD COLUMN `change_currency` TEXT NOT NULL DEFAULT 'NIO'",
+      );
     }
   }
 });
@@ -1456,36 +1585,56 @@ final migration34_35 = Migration(34, 35, (database) async {
     );
   }
 
-  final paymentColumns = await database.rawQuery("PRAGMA table_info(`payments`)");
+  final paymentColumns = await database.rawQuery(
+    "PRAGMA table_info(`payments`)",
+  );
   if (paymentColumns.isNotEmpty) {
-    final payColumnNames = paymentColumns.map((col) => col['name'] as String).toSet();
+    final payColumnNames = paymentColumns
+        .map((col) => col['name'] as String)
+        .toSet();
 
     if (!payColumnNames.contains('voucher_code')) {
-      await database.execute("ALTER TABLE `payments` ADD COLUMN `voucher_code` TEXT");
+      await database.execute(
+        "ALTER TABLE `payments` ADD COLUMN `voucher_code` TEXT",
+      );
     }
     if (!payColumnNames.contains('card_brand')) {
-      await database.execute("ALTER TABLE `payments` ADD COLUMN `card_brand` TEXT");
+      await database.execute(
+        "ALTER TABLE `payments` ADD COLUMN `card_brand` TEXT",
+      );
     }
     if (!payColumnNames.contains('card_type')) {
-      await database.execute("ALTER TABLE `payments` ADD COLUMN `card_type` TEXT");
+      await database.execute(
+        "ALTER TABLE `payments` ADD COLUMN `card_type` TEXT",
+      );
     }
     if (!payColumnNames.contains('bank_pos')) {
-      await database.execute("ALTER TABLE `payments` ADD COLUMN `bank_pos` TEXT");
+      await database.execute(
+        "ALTER TABLE `payments` ADD COLUMN `bank_pos` TEXT",
+      );
     }
     if (!payColumnNames.contains('reconciliation_status')) {
-      await database.execute("ALTER TABLE `payments` ADD COLUMN `reconciliation_status` TEXT");
+      await database.execute(
+        "ALTER TABLE `payments` ADD COLUMN `reconciliation_status` TEXT",
+      );
     }
     if (!payColumnNames.contains('last4')) {
       await database.execute("ALTER TABLE `payments` ADD COLUMN `last4` TEXT");
     }
     if (!payColumnNames.contains('batch_number')) {
-      await database.execute("ALTER TABLE `payments` ADD COLUMN `batch_number` TEXT");
+      await database.execute(
+        "ALTER TABLE `payments` ADD COLUMN `batch_number` TEXT",
+      );
     }
     if (!payColumnNames.contains('reconciled_at')) {
-      await database.execute("ALTER TABLE `payments` ADD COLUMN `reconciled_at` INTEGER");
+      await database.execute(
+        "ALTER TABLE `payments` ADD COLUMN `reconciled_at` INTEGER",
+      );
     }
     if (!payColumnNames.contains('reconciled_by_user_id')) {
-      await database.execute("ALTER TABLE `payments` ADD COLUMN `reconciled_by_user_id` TEXT");
+      await database.execute(
+        "ALTER TABLE `payments` ADD COLUMN `reconciled_by_user_id` TEXT",
+      );
     }
   }
 });
@@ -1519,46 +1668,74 @@ final migration35_36 = Migration(35, 36, (database) async {
   ''');
 
   // Alter hold_tickets columns
-  final holdColumns = await database.rawQuery("PRAGMA table_info(`hold_tickets`)");
+  final holdColumns = await database.rawQuery(
+    "PRAGMA table_info(`hold_tickets`)",
+  );
   if (holdColumns.isNotEmpty) {
-    final holdColumnNames = holdColumns.map((col) => col['name'] as String).toSet();
+    final holdColumnNames = holdColumns
+        .map((col) => col['name'] as String)
+        .toSet();
 
     if (!holdColumnNames.contains('updated_at')) {
-      await database.execute("ALTER TABLE `hold_tickets` ADD COLUMN `updated_at` INTEGER");
+      await database.execute(
+        "ALTER TABLE `hold_tickets` ADD COLUMN `updated_at` INTEGER",
+      );
     }
     if (!holdColumnNames.contains('table_id')) {
-      await database.execute("ALTER TABLE `hold_tickets` ADD COLUMN `table_id` TEXT");
+      await database.execute(
+        "ALTER TABLE `hold_tickets` ADD COLUMN `table_id` TEXT",
+      );
     }
     if (!holdColumnNames.contains('area_id')) {
-      await database.execute("ALTER TABLE `hold_tickets` ADD COLUMN `area_id` TEXT");
+      await database.execute(
+        "ALTER TABLE `hold_tickets` ADD COLUMN `area_id` TEXT",
+      );
     }
     if (!holdColumnNames.contains('waiter_id')) {
-      await database.execute("ALTER TABLE `hold_tickets` ADD COLUMN `waiter_id` TEXT");
+      await database.execute(
+        "ALTER TABLE `hold_tickets` ADD COLUMN `waiter_id` TEXT",
+      );
     }
     if (!holdColumnNames.contains('waiter_name')) {
-      await database.execute("ALTER TABLE `hold_tickets` ADD COLUMN `waiter_name` TEXT");
+      await database.execute(
+        "ALTER TABLE `hold_tickets` ADD COLUMN `waiter_name` TEXT",
+      );
     }
     if (!holdColumnNames.contains('guest_count')) {
-      await database.execute("ALTER TABLE `hold_tickets` ADD COLUMN `guest_count` INTEGER NOT NULL DEFAULT 1");
+      await database.execute(
+        "ALTER TABLE `hold_tickets` ADD COLUMN `guest_count` INTEGER NOT NULL DEFAULT 1",
+      );
     }
     if (!holdColumnNames.contains('version')) {
-      await database.execute("ALTER TABLE `hold_tickets` ADD COLUMN `version` INTEGER NOT NULL DEFAULT 1");
+      await database.execute(
+        "ALTER TABLE `hold_tickets` ADD COLUMN `version` INTEGER NOT NULL DEFAULT 1",
+      );
     }
   }
 
   // Alter hold_ticket_items columns
-  final itemColumns = await database.rawQuery("PRAGMA table_info(`hold_ticket_items`)");
+  final itemColumns = await database.rawQuery(
+    "PRAGMA table_info(`hold_ticket_items`)",
+  );
   if (itemColumns.isNotEmpty) {
-    final itemColumnNames = itemColumns.map((col) => col['name'] as String).toSet();
+    final itemColumnNames = itemColumns
+        .map((col) => col['name'] as String)
+        .toSet();
 
     if (!itemColumnNames.contains('variant_id')) {
-      await database.execute("ALTER TABLE `hold_ticket_items` ADD COLUMN `variant_id` TEXT");
+      await database.execute(
+        "ALTER TABLE `hold_ticket_items` ADD COLUMN `variant_id` TEXT",
+      );
     }
     if (!itemColumnNames.contains('notes')) {
-      await database.execute("ALTER TABLE `hold_ticket_items` ADD COLUMN `notes` TEXT");
+      await database.execute(
+        "ALTER TABLE `hold_ticket_items` ADD COLUMN `notes` TEXT",
+      );
     }
     if (!itemColumnNames.contains('modifiers_json')) {
-      await database.execute("ALTER TABLE `hold_ticket_items` ADD COLUMN `modifiers_json` TEXT");
+      await database.execute(
+        "ALTER TABLE `hold_ticket_items` ADD COLUMN `modifiers_json` TEXT",
+      );
     }
   }
 });
@@ -1655,15 +1832,33 @@ final migration38_39 = Migration(38, 39, (database) async {
     final columns = await database.rawQuery('PRAGMA table_info(promotions)');
     final hasCol = columns.any((c) => c['name'] == 'target_category_id');
     if (!hasCol) {
-      await database.execute('ALTER TABLE `promotions` ADD COLUMN `target_category_id` TEXT');
-      await database.execute('ALTER TABLE `promotions` ADD COLUMN `min_order_amount` REAL NOT NULL DEFAULT 0.0');
-      await database.execute('ALTER TABLE `promotions` ADD COLUMN `days_of_week` TEXT');
-      await database.execute('ALTER TABLE `promotions` ADD COLUMN `start_time` TEXT');
-      await database.execute('ALTER TABLE `promotions` ADD COLUMN `end_time` TEXT');
-      await database.execute('ALTER TABLE `promotions` ADD COLUMN `start_date` INTEGER');
-      await database.execute('ALTER TABLE `promotions` ADD COLUMN `end_date` INTEGER');
-      await database.execute('ALTER TABLE `promotions` ADD COLUMN `priority` INTEGER NOT NULL DEFAULT 0');
-      await database.execute('ALTER TABLE `promotions` ADD COLUMN `is_stackable` INTEGER NOT NULL DEFAULT 1');
+      await database.execute(
+        'ALTER TABLE `promotions` ADD COLUMN `target_category_id` TEXT',
+      );
+      await database.execute(
+        'ALTER TABLE `promotions` ADD COLUMN `min_order_amount` REAL NOT NULL DEFAULT 0.0',
+      );
+      await database.execute(
+        'ALTER TABLE `promotions` ADD COLUMN `days_of_week` TEXT',
+      );
+      await database.execute(
+        'ALTER TABLE `promotions` ADD COLUMN `start_time` TEXT',
+      );
+      await database.execute(
+        'ALTER TABLE `promotions` ADD COLUMN `end_time` TEXT',
+      );
+      await database.execute(
+        'ALTER TABLE `promotions` ADD COLUMN `start_date` INTEGER',
+      );
+      await database.execute(
+        'ALTER TABLE `promotions` ADD COLUMN `end_date` INTEGER',
+      );
+      await database.execute(
+        'ALTER TABLE `promotions` ADD COLUMN `priority` INTEGER NOT NULL DEFAULT 0',
+      );
+      await database.execute(
+        'ALTER TABLE `promotions` ADD COLUMN `is_stackable` INTEGER NOT NULL DEFAULT 1',
+      );
     }
   }
 });
@@ -1701,44 +1896,364 @@ final migration39_40 = Migration(39, 40, (database) async {
   ''');
 });
 
+Future<void> _addColumnIfMissing(
+  sqflite.DatabaseExecutor db,
+  String tableName,
+  String columnName,
+  String definition,
+) async {
+  final table = await db.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+    [tableName],
+  );
+  if (table.isEmpty) return;
+  final columns = await db.rawQuery('PRAGMA table_info($tableName)');
+  final existingNames = columns.map((c) => c['name'] as String).toSet();
+  if (!existingNames.contains(columnName)) {
+    await db.execute('ALTER TABLE $tableName ADD COLUMN $definition');
+  }
+}
+
 final migration40_41 = Migration(40, 41, (database) async {
-  final productsTable = await database.rawQuery(
-    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'products'",
+  const table = 'customer_point_transactions';
+
+  await _addColumnIfMissing(
+    database,
+    table,
+    'loyalty_program_id',
+    "loyalty_program_id TEXT",
   );
-  if (productsTable.isEmpty) return;
-  await database.execute(
-    'ALTER TABLE `products` ADD COLUMN `inventory_policy` TEXT',
+  await _addColumnIfMissing(database, table, 'ticket_id', "ticket_id TEXT");
+  await _addColumnIfMissing(database, table, 'reward_id', "reward_id TEXT");
+  await _addColumnIfMissing(
+    database,
+    table,
+    'transaction_type',
+    "transaction_type TEXT",
   );
-  await database.execute(
-    'ALTER TABLE `products` ADD COLUMN `direct_stock_insumo_id` TEXT',
+  await _addColumnIfMissing(database, table, 'units', "units INTEGER");
+  await _addColumnIfMissing(
+    database,
+    table,
+    'reversal_of_transaction_id',
+    "reversal_of_transaction_id TEXT",
+  );
+  await _addColumnIfMissing(
+    database,
+    table,
+    'idempotency_key',
+    "idempotency_key TEXT",
+  );
+  await _addColumnIfMissing(
+    database,
+    table,
+    'source_event_id',
+    "source_event_id TEXT",
+  );
+  await _addColumnIfMissing(
+    database,
+    table,
+    'actor_user_id',
+    "actor_user_id TEXT",
+  );
+  await _addColumnIfMissing(database, table, 'branch_id', "branch_id TEXT");
+  await _addColumnIfMissing(database, table, 'terminal_id', "terminal_id TEXT");
+  await _addColumnIfMissing(
+    database,
+    table,
+    'program_version',
+    "program_version INTEGER",
+  );
+  await _addColumnIfMissing(
+    database,
+    table,
+    'reward_version',
+    "reward_version INTEGER",
+  );
+  await _addColumnIfMissing(
+    database,
+    table,
+    'commercial_snapshot',
+    "commercial_snapshot TEXT",
+  );
+  await _addColumnIfMissing(database, table, 'origin', "origin TEXT");
+  await _addColumnIfMissing(
+    database,
+    table,
+    'occurred_at',
+    "occurred_at INTEGER",
+  );
+  await _addColumnIfMissing(
+    database,
+    table,
+    'recorded_at',
+    "recorded_at INTEGER",
+  );
+  await _addColumnIfMissing(
+    database,
+    table,
+    'legacy_imported',
+    "legacy_imported INTEGER NOT NULL DEFAULT 0",
   );
 });
 
 final migration41_42 = Migration(41, 42, (database) async {
-  await database.execute('CREATE TABLE topology_snapshots (id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, revision INTEGER NOT NULL, hash TEXT NOT NULL, payload TEXT NOT NULL, received_at TEXT NOT NULL)');
-  await database.execute('CREATE TABLE shift_topology_bindings (shift_id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, snapshot_id TEXT NOT NULL, bound_at TEXT NOT NULL)');
-  await database.execute('CREATE TABLE emergency_topology_audits (id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, shift_id TEXT NOT NULL, snapshot_id TEXT NOT NULL, actor_id TEXT NOT NULL, actor_role TEXT NOT NULL, device_id TEXT NOT NULL, reason TEXT NOT NULL, occurred_at TEXT NOT NULL)');
-  await _createTopologyPersistenceTriggers(database);
+  // Create loyalty_programs table
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS loyalty_programs (
+      id TEXT NOT NULL PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      program_type TEXT NOT NULL,
+      status TEXT NOT NULL,
+      starts_at INTEGER,
+      ends_at INTEGER,
+      earning_rule_json TEXT NOT NULL,
+      eligibility_rule_json TEXT NOT NULL,
+      config_version INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    )
+  ''');
+
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS idx_loyalty_programs_tenant_id ON loyalty_programs (tenant_id)',
+  );
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS idx_loyalty_programs_status ON loyalty_programs (status)',
+  );
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS idx_loyalty_programs_program_type ON loyalty_programs (program_type)',
+  );
+
+  // Create loyalty_rewards table
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS loyalty_rewards (
+      id TEXT NOT NULL PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      loyalty_program_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      reward_type TEXT NOT NULL,
+      cost_units INTEGER NOT NULL,
+      benefit_config_json TEXT NOT NULL,
+      status TEXT NOT NULL,
+      starts_at INTEGER,
+      ends_at INTEGER,
+      presentation_order INTEGER NOT NULL DEFAULT 0,
+      config_version INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    )
+  ''');
+
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS idx_loyalty_rewards_tenant_id ON loyalty_rewards (tenant_id)',
+  );
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS idx_loyalty_rewards_program_id ON loyalty_rewards (loyalty_program_id)',
+  );
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS idx_loyalty_rewards_status ON loyalty_rewards (status)',
+  );
 });
 
 final migration42_43 = Migration(42, 43, (database) async {
-  await database.execute('CREATE TABLE fulfillment_records (id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, sale_id TEXT NOT NULL, topology_snapshot_id TEXT NOT NULL, topology_revision INTEGER NOT NULL, channel TEXT NOT NULL, route_state TEXT NOT NULL, delivery_state TEXT NOT NULL, lines_payload TEXT NOT NULL)');
-  await database.execute('CREATE TABLE print_jobs (id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, fulfillment_id TEXT NOT NULL, document_kind TEXT NOT NULL, sequence INTEGER NOT NULL, payload TEXT NOT NULL, state TEXT NOT NULL, retry_count INTEGER NOT NULL, idempotency_key TEXT NOT NULL)');
-  await database.execute('CREATE UNIQUE INDEX index_print_jobs_tenant_id_idempotency_key ON print_jobs (tenant_id, idempotency_key)');
-  await database.execute('CREATE TABLE fulfillment_outbox_events (event_id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, device_id TEXT NOT NULL, source_sequence INTEGER NOT NULL, aggregate_type TEXT NOT NULL, aggregate_id TEXT NOT NULL, idempotency_key TEXT NOT NULL, payload_hash TEXT NOT NULL, topology_revision INTEGER NOT NULL, state TEXT NOT NULL, attempts INTEGER NOT NULL)');
-  await database.execute('CREATE UNIQUE INDEX index_fulfillment_outbox_events_tenant_id_idempotency_key ON fulfillment_outbox_events (tenant_id, idempotency_key)');
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS fiscal_config_local (
+      tenant_id TEXT PRIMARY KEY NOT NULL,
+      revision INTEGER NOT NULL,
+      fingerprint TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      applied_at TEXT NOT NULL
+    )
+  ''');
 });
 
 final migration43_44 = Migration(43, 44, (database) async {
+  final columns = await database.rawQuery('PRAGMA table_info(products)');
+  final columnNames = columns.map((col) => col['name'] as String).toSet();
+  if (!columnNames.contains('tenant_id')) {
+    await database.execute('ALTER TABLE products ADD COLUMN tenant_id TEXT');
+  }
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS idx_products_tenant_id ON products (tenant_id)',
+  );
+});
+
+final migration44_45 = Migration(44, 45, (database) async {
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS activation_attempts_local (
+      attempt_id TEXT NOT NULL PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      candidate_terminal_id TEXT NOT NULL,
+      local_status TEXT NOT NULL,
+      required_fiscal_revision INTEGER NOT NULL,
+      required_fiscal_fingerprint TEXT NOT NULL,
+      verification_product_id TEXT NOT NULL,
+      verification_ticket_id TEXT,
+      server_time_anchor_at TEXT,
+      anchor_monotonic_ticks INTEGER,
+      boot_session_id TEXT,
+      assigned_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  ''');
+
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS activation_checks_local (
+      id TEXT NOT NULL PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      activation_attempt_id TEXT NOT NULL,
+      check_code TEXT NOT NULL,
+      required INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      evidence_type TEXT,
+      evidence_ref TEXT,
+      occurred_at TEXT,
+      recorded_at TEXT NOT NULL,
+      details_sanitized_json TEXT
+    )
+  ''');
+
+  await database.execute('''
+    CREATE UNIQUE INDEX IF NOT EXISTS index_activation_checks_local_tenant_id_activation_attempt_id_check_code
+    ON activation_checks_local (tenant_id, activation_attempt_id, check_code)
+  ''');
+
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS first_successful_sale_claims (
+      tenant_id TEXT NOT NULL PRIMARY KEY,
+      terminal_id TEXT NOT NULL,
+      ticket_id TEXT NOT NULL,
+      activation_attempt_id TEXT,
+      device_occurred_at TEXT NOT NULL,
+      anchored_occurred_at TEXT,
+      clock_confidence TEXT NOT NULL,
+      server_time_anchor_id TEXT,
+      pos_build TEXT,
+      outbox_event_id TEXT NOT NULL,
+      created_at_local TEXT NOT NULL
+    )
+  ''');
+
+  await database.execute('''
+    CREATE UNIQUE INDEX IF NOT EXISTS index_first_successful_sale_claims_ticket_id
+    ON first_successful_sale_claims (ticket_id)
+  ''');
+
+  await database.execute('''
+    CREATE UNIQUE INDEX IF NOT EXISTS index_first_successful_sale_claims_outbox_event_id
+    ON first_successful_sale_claims (outbox_event_id)
+  ''');
+});
+
+final migration45_46 = Migration(45, 46, (database) async {
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS activation_outbox_envelopes (
+      id TEXT NOT NULL PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      activation_attempt_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      idempotency_key TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      payload_hash TEXT NOT NULL,
+      sync_status TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      synced_at TEXT,
+      last_error TEXT
+    )
+  ''');
+
+  await database.execute('''
+    CREATE UNIQUE INDEX IF NOT EXISTS index_activation_outbox_envelopes_tenant_id_idempotency_key
+    ON activation_outbox_envelopes (tenant_id, idempotency_key)
+  ''');
+
+  await database.execute('''
+    CREATE INDEX IF NOT EXISTS index_activation_outbox_envelopes_tenant_id_activation_attempt_id
+    ON activation_outbox_envelopes (tenant_id, activation_attempt_id)
+  ''');
+});
+
+final migration46_47 = Migration(46, 47, (database) async {
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS first_customer_sale_observations (
+      tenant_id TEXT NOT NULL PRIMARY KEY,
+      terminal_id TEXT NOT NULL,
+      ticket_id TEXT NOT NULL,
+      occurred_at TEXT NOT NULL,
+      outbox_event_id TEXT NOT NULL,
+      created_at_local TEXT NOT NULL
+    )
+  ''');
+
+  await database.execute('''
+    CREATE UNIQUE INDEX IF NOT EXISTS index_first_customer_sale_observations_ticket_id
+    ON first_customer_sale_observations (ticket_id)
+  ''');
+
+  await database.execute('''
+    CREATE UNIQUE INDEX IF NOT EXISTS index_first_customer_sale_observations_outbox_event_id
+    ON first_customer_sale_observations (outbox_event_id)
+  ''');
+});
+
+final migration51_52 = Migration(51, 52, (database) async {
   final productsTable = await database.rawQuery(
     "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'products'",
   );
-  if (productsTable.isEmpty) return;
+  if (productsTable.isNotEmpty) {
+    final cols = await database.rawQuery("PRAGMA table_info(products)");
+    final colNames = cols.map((row) => row['name'] as String).toSet();
+    if (!colNames.contains('inventory_policy')) {
+      await database.execute(
+        "ALTER TABLE `products` ADD COLUMN `inventory_policy` TEXT",
+      );
+    }
+    if (!colNames.contains('direct_stock_insumo_id')) {
+      await database.execute(
+        "ALTER TABLE `products` ADD COLUMN `direct_stock_insumo_id` TEXT",
+      );
+    }
+    if (!colNames.contains('tax_rate')) {
+      await database.execute(
+        "ALTER TABLE `products` ADD COLUMN `tax_rate` REAL NOT NULL DEFAULT 0.15",
+      );
+    }
+    if (!colNames.contains('is_tax_exempt')) {
+      await database.execute(
+        "ALTER TABLE `products` ADD COLUMN `is_tax_exempt` INTEGER NOT NULL DEFAULT 0",
+      );
+    }
+  }
+
+  // Topology tables
   await database.execute(
-    "ALTER TABLE `products` ADD COLUMN `tax_rate` REAL NOT NULL DEFAULT 0.15",
+    'CREATE TABLE IF NOT EXISTS topology_snapshots (id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, revision INTEGER NOT NULL, hash TEXT NOT NULL, payload TEXT NOT NULL, received_at TEXT NOT NULL)',
   );
   await database.execute(
-    "ALTER TABLE `products` ADD COLUMN `is_tax_exempt` INTEGER NOT NULL DEFAULT 0",
+    'CREATE TABLE IF NOT EXISTS shift_topology_bindings (shift_id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, snapshot_id TEXT NOT NULL, bound_at TEXT NOT NULL)',
+  );
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS emergency_topology_audits (id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, shift_id TEXT NOT NULL, snapshot_id TEXT NOT NULL, actor_id TEXT NOT NULL, actor_role TEXT NOT NULL, device_id TEXT NOT NULL, reason TEXT NOT NULL, occurred_at TEXT NOT NULL)',
+  );
+  await _createTopologyPersistenceTriggers(database);
+
+  // Fulfillment tables
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS fulfillment_records (id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, sale_id TEXT NOT NULL, topology_snapshot_id TEXT NOT NULL, topology_revision INTEGER NOT NULL, channel TEXT NOT NULL, route_state TEXT NOT NULL, delivery_state TEXT NOT NULL, lines_payload TEXT NOT NULL)',
+  );
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS print_jobs (id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, fulfillment_id TEXT NOT NULL, document_kind TEXT NOT NULL, sequence INTEGER NOT NULL, payload TEXT NOT NULL, state TEXT NOT NULL, retry_count INTEGER NOT NULL, idempotency_key TEXT NOT NULL)',
+  );
+  await database.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS index_print_jobs_tenant_id_idempotency_key ON print_jobs (tenant_id, idempotency_key)',
+  );
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS fulfillment_outbox_events (event_id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, device_id TEXT NOT NULL, source_sequence INTEGER NOT NULL, aggregate_type TEXT NOT NULL, aggregate_id TEXT NOT NULL, idempotency_key TEXT NOT NULL, payload_hash TEXT NOT NULL, topology_revision INTEGER NOT NULL, state TEXT NOT NULL, attempts INTEGER NOT NULL)',
+  );
+  await database.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS index_fulfillment_outbox_events_tenant_id_idempotency_key ON fulfillment_outbox_events (tenant_id, idempotency_key)',
   );
 });
 
@@ -1777,4 +2292,229 @@ final allMigrations = [
   migration41_42,
   migration42_43,
   migration43_44,
+  migration44_45,
+  migration45_46,
+  migration46_47,
+  migration47_48,
+  migration48_49,
+  migration49_50,
+  migration50_51,
+  migration51_52,
 ];
+
+/// Catalog mapping identity is additive: historical products remain usable.
+final migration47_48 = Migration(47, 48, (database) async {
+  final columns = await database.rawQuery('PRAGMA table_info(products)');
+  final names = columns.map((column) => column['name'] as String).toSet();
+  if (!names.contains('product_type')) {
+    await database.execute(
+      "ALTER TABLE products ADD COLUMN product_type TEXT NOT NULL DEFAULT 'SIMPLE'",
+    );
+  }
+  if (!names.contains('mapping_version_id')) {
+    await database.execute(
+      'ALTER TABLE products ADD COLUMN mapping_version_id TEXT',
+    );
+  }
+  if (!names.contains('insumo_id')) {
+    await database.execute('ALTER TABLE products ADD COLUMN insumo_id TEXT');
+  }
+});
+
+final migration48_49 = Migration(48, 49, (database) async {
+  Future<void> add(String table, String column) async {
+    final columns = await database.rawQuery('PRAGMA table_info($table)');
+    if (columns.isNotEmpty &&
+        !columns.any((row) => row['name'] == column.split(' ').first)) {
+      await database.execute('ALTER TABLE $table ADD COLUMN $column');
+    }
+  }
+
+  await add('invoices', 'inventory_policy_version TEXT');
+  await add('invoices', 'inventory_outcome TEXT');
+  await add('invoices', 'inventory_outcome_reason TEXT');
+  await add('invoice_items', 'inventory_snapshot_version TEXT');
+  await add('invoice_items', 'inventory_snapshot_json TEXT');
+});
+
+final migration49_50 = Migration(49, 50, (database) async {
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS authority_insumos (
+      tenant_id TEXT NOT NULL,
+      id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      uom TEXT NOT NULL,
+      PRIMARY KEY (tenant_id, id)
+    )
+  ''');
+
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS authority_recipe_versions (
+      tenant_id TEXT NOT NULL,
+      id TEXT NOT NULL,
+      product_id TEXT NOT NULL,
+      version_number INTEGER NOT NULL,
+      is_active INTEGER NOT NULL,
+      publication_state TEXT NOT NULL,
+      effective_from TEXT NOT NULL,
+      effective_until TEXT,
+      yield_quantity REAL NOT NULL,
+      technical_shrink_pct REAL NOT NULL,
+      published_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (tenant_id, id)
+    )
+  ''');
+
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS authority_recipe_version_components (
+      tenant_id TEXT NOT NULL,
+      id TEXT NOT NULL,
+      version_id TEXT NOT NULL,
+      ordinal INTEGER NOT NULL,
+      insumo_id TEXT NOT NULL,
+      gross_quantity REAL NOT NULL,
+      technical_shrink_pct REAL NOT NULL,
+      ingredient_type TEXT NOT NULL,
+      component_name TEXT NOT NULL,
+      component_uom TEXT,
+      reference_version_id TEXT,
+      PRIMARY KEY (tenant_id, id),
+      FOREIGN KEY (tenant_id, version_id) REFERENCES authority_recipe_versions (tenant_id, id) ON DELETE CASCADE,
+      FOREIGN KEY (tenant_id, insumo_id) REFERENCES authority_insumos (tenant_id, id) ON DELETE RESTRICT
+    )
+  ''');
+
+  await database.execute('''
+    CREATE UNIQUE INDEX IF NOT EXISTS index_authority_recipe_version_components_tenant_id_version_id_ordinal
+    ON authority_recipe_version_components (tenant_id, version_id, ordinal)
+  ''');
+
+  await _createAuthorityImmutabilityTriggers(database);
+});
+
+final migration50_51 = Migration(50, 51, (database) async {
+  final movementTable = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='inventory_movements'",
+  );
+  if (movementTable.isEmpty) return;
+
+  final columns = await database.rawQuery(
+    'PRAGMA table_info(inventory_movements)',
+  );
+  final colNames = columns.map((c) => c['name'] as String).toSet();
+  if (!colNames.contains('delivery_owner')) {
+    await database.execute(
+      "ALTER TABLE inventory_movements ADD COLUMN delivery_owner TEXT NOT NULL DEFAULT 'GENERIC_INVENTORY'",
+    );
+  }
+  if (!colNames.contains('delivery_state')) {
+    await database.execute(
+      "ALTER TABLE inventory_movements ADD COLUMN delivery_state TEXT NOT NULL DEFAULT 'LOCAL_APPLIED'",
+    );
+  }
+  if (!colNames.contains('sale_id')) {
+    await database.execute(
+      'ALTER TABLE inventory_movements ADD COLUMN sale_id TEXT',
+    );
+  }
+  if (!colNames.contains('sale_correlation_id')) {
+    await database.execute(
+      'ALTER TABLE inventory_movements ADD COLUMN sale_correlation_id TEXT',
+    );
+  }
+
+  await database.execute('''
+    CREATE INDEX IF NOT EXISTS idx_inventory_movements_sale_correlation_id
+    ON inventory_movements (sale_correlation_id)
+  ''');
+  await database.execute('''
+    CREATE INDEX IF NOT EXISTS idx_inventory_movements_delivery_owner_state
+    ON inventory_movements (delivery_owner, delivery_state)
+  ''');
+  await database.execute('''
+    CREATE INDEX IF NOT EXISTS idx_inventory_movements_sale_id
+    ON inventory_movements (sale_id)
+  ''');
+
+  await database.execute(
+    'DROP TRIGGER IF EXISTS inventory_movements_block_update',
+  );
+
+  final tables = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='invoice_items'",
+  );
+  if (tables.isNotEmpty) {
+    await database.execute('''
+      UPDATE inventory_movements
+      SET sale_id = (
+        SELECT invoice_id FROM invoice_items WHERE invoice_items.id = inventory_movements.origin_invoice_item_id
+      )
+      WHERE origin_invoice_item_id IS NOT NULL AND sale_id IS NULL
+    ''');
+  }
+  await database.execute('''
+    UPDATE inventory_movements
+    SET sale_id = source_document_id
+    WHERE sale_id IS NULL AND source_document_id IS NOT NULL AND (source_document_type IN ('SALE', 'SALE_CANCEL') OR type IN ('sale', 'SALE'))
+  ''');
+
+  await database.execute('''
+    UPDATE inventory_movements
+    SET delivery_owner = 'SALE_SYNC', delivery_state = 'QUARANTINED'
+    WHERE (
+      (type IN ('sale', 'SALE') AND source_document_type IS NOT NULL AND source_document_type NOT IN ('SALE', 'SALE_CANCEL'))
+      OR (source_document_type IN ('SALE', 'SALE_CANCEL') AND type NOT IN ('sale', 'SALE'))
+      OR (
+        (type IN ('sale', 'SALE') OR source_document_type IN ('SALE', 'SALE_CANCEL'))
+        AND (
+          sale_id IS NULL
+          OR (
+            (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='invoices') > 0
+            AND NOT EXISTS (SELECT 1 FROM invoices WHERE invoices.id = inventory_movements.sale_id)
+          )
+        )
+      )
+    )
+  ''');
+
+  await database.execute('''
+    UPDATE inventory_movements
+    SET delivery_owner = 'SALE_SYNC'
+    WHERE delivery_state != 'QUARANTINED'
+      AND (
+        type IN ('sale', 'SALE')
+        OR source_document_type IN ('SALE', 'SALE_CANCEL')
+        OR origin_invoice_item_id IS NOT NULL
+        OR (reason IS NOT NULL AND reason LIKE 'Anulación Factura:%')
+      )
+  ''');
+
+  await database.execute('''
+    UPDATE inventory_movements
+    SET delivery_owner = 'DOCUMENT_SYNC'
+    WHERE delivery_state != 'QUARANTINED'
+      AND delivery_owner != 'SALE_SYNC'
+      AND (
+        type IN ('purchase', 'PURCHASE', 'production', 'PRODUCTION')
+        OR source_document_type IN ('PURCHASE', 'PRODUCTION')
+      )
+  ''');
+
+  final syncStateTable = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='inventory_movement_sync_state'",
+  );
+  if (syncStateTable.isNotEmpty) {
+    await database.execute('''
+      UPDATE inventory_movements
+      SET delivery_state = 'CLOUD_ACKNOWLEDGED'
+      WHERE delivery_state != 'QUARANTINED'
+        AND id IN (
+          SELECT movement_id FROM inventory_movement_sync_state WHERE sync_status = 'synced'
+        )
+    ''');
+  }
+
+  await _createInventoryMovementAppendOnlyTriggers(database);
+});

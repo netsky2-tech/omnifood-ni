@@ -12,6 +12,8 @@ import { FulfillmentRetentionService } from './fulfillment-retention.service';
 import { InvoicesService } from '../../sales/services/invoices.service';
 import { BohInventoryLedgerFoundation1766000000000 } from '../../../migrations/1766000000000-BohInventoryLedgerFoundation';
 import { AddDeterministicSyncSequencing1780000000000 } from '../../../migrations/1780000000000-AddDeterministicSyncSequencing';
+import { AddSaleInventoryOutcomeColumns1803000000000 } from '../../../migrations/1803000000000-AddSaleInventoryOutcomeColumns';
+import { AddAcceptedAtToInventorySyncReceipts1805000000000 } from '../../../migrations/1805000000000-AddAcceptedAtToInventorySyncReceipts';
 import { CreateTenantFulfillmentRecords1795000000000 } from '../../../migrations/1795000000000-CreateTenantFulfillmentRecords';
 import { SyncBatchRecordDto } from '../../sales/dto/sync-batch.dto';
 
@@ -70,6 +72,25 @@ async function withIsolatedSchema(
     await queryRunner.connect();
     await queryRunner.query(`SET search_path TO "${schema}"`);
     await queryRunner.query(`SET statement_timeout TO '15000ms'`);
+    await queryRunner.query(`
+      CREATE TABLE IF NOT EXISTS invoices (
+        id varchar(128) PRIMARY KEY,
+        tenant_id varchar(64) NOT NULL,
+        number varchar(64) NOT NULL DEFAULT '',
+        user_id varchar(64) NOT NULL DEFAULT '',
+        subtotal numeric(12, 4) NOT NULL DEFAULT 0,
+        total_tax numeric(12, 4) NOT NULL DEFAULT 0,
+        total numeric(12, 4) NOT NULL DEFAULT 0,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        status varchar(32) NOT NULL DEFAULT 'COMPLETED',
+        is_canceled boolean NOT NULL DEFAULT false
+      );
+      CREATE TABLE IF NOT EXISTS invoice_items (
+        id varchar(128) PRIMARY KEY,
+        tenant_id varchar(64) NOT NULL,
+        invoice_id varchar(128) NOT NULL
+      );
+    `);
 
     await assertion({ dataSource, queryRunner, schema });
   } finally {
@@ -106,6 +127,12 @@ describe('FulfillmentRetentionService (db - Real PostgreSQL, Zero Mocks)', () =>
         async ({ dataSource, queryRunner }) => {
           await new BohInventoryLedgerFoundation1766000000000().up(queryRunner);
           await new AddDeterministicSyncSequencing1780000000000().up(
+            queryRunner,
+          );
+          await new AddSaleInventoryOutcomeColumns1803000000000().up(
+            queryRunner,
+          );
+          await new AddAcceptedAtToInventorySyncReceipts1805000000000().up(
             queryRunner,
           );
           await new CreateTenantFulfillmentRecords1795000000000().up(
@@ -195,6 +222,12 @@ describe('FulfillmentRetentionService (db - Real PostgreSQL, Zero Mocks)', () =>
           // Build required schema tables
           await new BohInventoryLedgerFoundation1766000000000().up(queryRunner);
           await new AddDeterministicSyncSequencing1780000000000().up(
+            queryRunner,
+          );
+          await new AddSaleInventoryOutcomeColumns1803000000000().up(
+            queryRunner,
+          );
+          await new AddAcceptedAtToInventorySyncReceipts1805000000000().up(
             queryRunner,
           );
           await new CreateTenantFulfillmentRecords1795000000000().up(
@@ -308,6 +341,12 @@ describe('FulfillmentRetentionService (db - Real PostgreSQL, Zero Mocks)', () =>
         async ({ dataSource, queryRunner }) => {
           await new BohInventoryLedgerFoundation1766000000000().up(queryRunner);
           await new AddDeterministicSyncSequencing1780000000000().up(
+            queryRunner,
+          );
+          await new AddSaleInventoryOutcomeColumns1803000000000().up(
+            queryRunner,
+          );
+          await new AddAcceptedAtToInventorySyncReceipts1805000000000().up(
             queryRunner,
           );
           await new CreateTenantFulfillmentRecords1795000000000().up(

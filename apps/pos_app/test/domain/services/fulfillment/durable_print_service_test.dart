@@ -11,6 +11,7 @@ import 'package:pos_app/domain/models/sales/payment.dart';
 import 'package:pos_app/domain/ports/printer_port.dart';
 import 'package:pos_app/domain/repositories/audit_repository.dart';
 import 'package:pos_app/domain/services/fulfillment/durable_print_service.dart';
+import 'package:pos_app/domain/services/sales/post_paid_feedback_service.dart';
 
 class _FakePrinterPort implements PrinterPort {
   bool failReceipt = false;
@@ -36,12 +37,16 @@ class _FakePrinterPort implements PrinterPort {
     required TaxRegime taxRegime,
     bool isTaxExempt = false,
     int paperWidthMm = 58,
+    PostPaidFeedback? loyaltyFeedback,
   }) async {
     if (failReceipt) {
       return PrinterResult.failure(PrinterStatus.error, 'Receipt failed');
     }
     if (uncertainReceipt) {
-      return PrinterResult.failure(PrinterStatus.offline, 'Printer disconnected');
+      return PrinterResult.failure(
+        PrinterStatus.offline,
+        'Printer disconnected',
+      );
     }
     printedJobs.add('RECEIPT:${invoice.id}');
     return PrinterResult.success();
@@ -232,9 +237,10 @@ void main() {
           resolution: UncertaintyResolution.leaveUnresolved,
           taxRegime: TaxRegime.regimenGeneral,
         );
-        var job = (await database.fulfillmentPersistenceDao
-            .findPrintJobsByFulfillment('f-unc-1', 'tenant-1'))
-            .single;
+        var job =
+            (await database.fulfillmentPersistenceDao
+                    .findPrintJobsByFulfillment('f-unc-1', 'tenant-1'))
+                .single;
         expect(job.state, 'UNCERTAIN');
 
         // Resolution 2: retryAsCopy creates a marked copy job
@@ -358,8 +364,9 @@ void main() {
           deliveryState: 'DELIVERED',
           linesPayload: '[]',
         );
-        await database.fulfillmentPersistenceDao
-            .insertFulfillment(expiredFulfillment);
+        await database.fulfillmentPersistenceDao.insertFulfillment(
+          expiredFulfillment,
+        );
 
         final expiredJob = PrintJobEntity(
           id: 'job-expired-1',
@@ -416,7 +423,8 @@ void main() {
         expect(remainingInvoices, hasLength(1));
         expect(remainingInvoices.single.id, 'sale-expired-1');
 
-        final remainingMovements = await database.movementDao.findAllMovements();
+        final remainingMovements = await database.movementDao
+            .findAllMovements();
         expect(remainingMovements, hasLength(1));
         expect(remainingMovements.single.id, 'mov-1');
       },

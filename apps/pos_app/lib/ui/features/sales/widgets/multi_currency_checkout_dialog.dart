@@ -18,6 +18,7 @@ class MultiCurrencyCheckoutDialog extends StatefulWidget {
 class _MultiCurrencyCheckoutDialogState
     extends State<MultiCurrencyCheckoutDialog> {
   bool _isSplitMode = false;
+  bool _isProcessing = false;
 
   // Single Checkout State
   PaymentMethod _selectedMethod = PaymentMethod.cash;
@@ -168,6 +169,7 @@ class _MultiCurrencyCheckoutDialogState
   }
 
   Future<void> _submitSingleSale(SaleViewModel vm) async {
+    if (_isProcessing) return;
     final tenderAmount =
         double.tryParse(_tenderAmountController.text.trim()) ?? 0.0;
 
@@ -243,11 +245,13 @@ class _MultiCurrencyCheckoutDialogState
 
     if (vm.tenantConfig?.buzzerPagerRequired == true && buzzerText.isEmpty) {
       setState(() {
+        _isProcessing = false;
         _buzzerValidationMessage = 'El número de Buzzer/Pager es obligatorio.';
       });
       return;
     }
 
+    setState(() => _isProcessing = true);
     try {
       await vm.processSale(
         [_selectedMethod],
@@ -266,18 +270,14 @@ class _MultiCurrencyCheckoutDialogState
         );
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al procesar el cobro: $e'),
-            backgroundColor: Colors.red.shade700,
-          ),
-        );
-      }
+      // Error is already displayed by SaleView via _errorMessage
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
     }
   }
 
   Future<void> _submitSplitSale(SaleViewModel vm) async {
+    if (_isProcessing) return;
     if (!_splitCalculator.isFullyPaid) return;
 
     final buzzerText = _buzzerController.text.trim();
@@ -285,12 +285,14 @@ class _MultiCurrencyCheckoutDialogState
 
     if (vm.tenantConfig?.buzzerPagerRequired == true && buzzerText.isEmpty) {
       setState(() {
+        _isProcessing = false;
         _buzzerValidationMessage = 'El número de Buzzer/Pager es obligatorio.';
       });
       return;
     }
 
     final methods = _splitCalculator.payments.map((p) => p.method).toSet().toList();
+    setState(() => _isProcessing = true);
     try {
       await vm.processSale(
         methods,
@@ -309,14 +311,9 @@ class _MultiCurrencyCheckoutDialogState
         );
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al procesar el cobro: $e'),
-            backgroundColor: Colors.red.shade700,
-          ),
-        );
-      }
+      // Error is already displayed by SaleView via _errorMessage
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
     }
   }
 
@@ -509,10 +506,19 @@ class _MultiCurrencyCheckoutDialogState
               // Footer Submit
               if (_isSplitMode)
                 FilledButton.icon(
-                  onPressed: _splitCalculator.isFullyPaid
+                  onPressed: (_splitCalculator.isFullyPaid && !_isProcessing)
                       ? () => _submitSplitSale(viewModel)
                       : null,
-                  icon: const Icon(Icons.check_circle),
+                  icon: _isProcessing
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.check_circle),
                   label: const Text('FINALIZAR VENTA'),
                   style: FilledButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 14),
@@ -530,11 +536,22 @@ class _MultiCurrencyCheckoutDialogState
                   );
                   final isCashValid = _selectedMethod != PaymentMethod.cash || breakdown.isSufficient;
                   return FilledButton(
-                    onPressed: isCashValid ? () => _submitSingleSale(viewModel) : null,
+                    onPressed: (isCashValid && !_isProcessing)
+                        ? () => _submitSingleSale(viewModel)
+                        : null,
                     style: FilledButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
-                    child: const Text('COBRAR'),
+                    child: _isProcessing
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text('COBRAR'),
                   );
                 }),
             ],

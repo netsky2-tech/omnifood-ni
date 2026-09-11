@@ -40,6 +40,15 @@ class MovementEntity {
   @ColumnInfo(name: 'fecha_autorizacion')
   final String? fechaAutorizacion;
 
+  @ColumnInfo(name: 'delivery_owner')
+  final String deliveryOwner;
+  @ColumnInfo(name: 'delivery_state')
+  final String deliveryState;
+  @ColumnInfo(name: 'sale_id')
+  final String? saleId;
+  @ColumnInfo(name: 'sale_correlation_id')
+  final String? saleCorrelationId;
+
   MovementEntity({
     required this.id,
     required this.insumoId,
@@ -62,5 +71,24 @@ class MovementEntity {
     this.bloqueoMotivo,
     this.autorizadoPorUsuarioId,
     this.fechaAutorizacion,
+    this.deliveryOwner = 'GENERIC_INVENTORY',
+    this.deliveryState = 'LOCAL_APPLIED',
+    this.saleId,
+    this.saleCorrelationId,
   });
+}
+
+class MovementDeliveryOwner {
+  MovementDeliveryOwner._();
+  static const String saleSync = 'SALE_SYNC';
+  static const String genericInventory = 'GENERIC_INVENTORY';
+  static const String documentSync = 'DOCUMENT_SYNC';
+}
+
+class MovementDeliveryState {
+  MovementDeliveryState._();
+  static const String localApplied = 'LOCAL_APPLIED';
+  static const String cloudAcknowledged = 'CLOUD_ACKNOWLEDGED';
+  static const String retryable = 'RETRYABLE';
+  static const String quarantined = 'QUARANTINED';
 }

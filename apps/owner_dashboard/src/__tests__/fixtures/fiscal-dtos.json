@@ -1,0 +1,136 @@
+{
+  "MonthlyFiscalSummaryReportDto": {
+    "description": "Monthly fiscal summary for DGI tax declaration",
+    "fields": {
+      "year": { "type": "number", "required": true },
+      "month": { "type": "number", "required": true },
+      "totalGrossSales": { "type": "number", "required": true },
+      "totalTaxableSales": { "type": "number", "required": true },
+      "totalExemptSales": { "type": "number", "required": true },
+      "totalTaxCollected": { "type": "number", "required": true },
+      "totalCreditNotes": { "type": "number", "required": true },
+      "totalCreditNotesTax": { "type": "number", "required": true },
+      "netTaxableSales": { "type": "number", "required": true },
+      "netTaxPayable": { "type": "number", "required": true },
+      "invoiceCount": { "type": "number", "required": true },
+      "creditNoteCount": { "type": "number", "required": true },
+      "generatedAt": { "type": "string", "required": true }
+    }
+  },
+  "VoidedInvoicesReportDto": {
+    "description": "Voided invoices audit report",
+    "fields": {
+      "startDate": { "type": "string", "required": false },
+      "endDate": { "type": "string", "required": false },
+      "totalVoidedCount": { "type": "number", "required": true },
+      "totalVoidedAmount": { "type": "number", "required": true },
+      "generatedAt": { "type": "string", "required": true },
+      "invoices": { "type": "array", "required": true }
+    }
+  },
+  "VoidedInvoiceItemDto": {
+    "description": "Individual voided invoice item",
+    "fields": {
+      "id": { "type": "string", "required": true },
+      "number": { "type": "string", "required": true },
+      "total": { "type": "number", "required": true },
+      "subtotal": { "type": "number", "required": true },
+      "totalTax": { "type": "number", "required": true },
+      "voidReason": { "type": "string", "required": true },
+      "canceledAt": { "type": "string", "required": true },
+      "userId": { "type": "string", "required": true },
+      "cashierName": { "type": "string", "required": true }
+    }
+  },
+  "FiscalSequenceAuditReportDto": {
+    "description": "Invoice sequence audit for DGI compliance",
+    "fields": {
+      "terminalId": { "type": "string", "required": false },
+      "startDate": { "type": "string", "required": false },
+      "endDate": { "type": "string", "required": false },
+      "startSequence": { "type": "number", "required": true },
+      "endSequence": { "type": "number", "required": true },
+      "expectedCount": { "type": "number", "required": true },
+      "actualCount": { "type": "number", "required": true },
+      "missingSequences": { "type": "array", "required": true },
+      "duplicateSequences": { "type": "array", "required": true },
+      "hasGaps": { "type": "boolean", "required": true },
+      "series": { "type": "array", "required": true },
+      "generatedAt": { "type": "string", "required": true }
+    }
+  },
+  "SequenceAuditSeriesDto": {
+    "description": "Individual series within sequence audit",
+    "fields": {
+      "seriesPrefix": { "type": "string", "required": true },
+      "startSequence": { "type": "number", "required": true },
+      "endSequence": { "type": "number", "required": true },
+      "expectedCount": { "type": "number", "required": true },
+      "actualCount": { "type": "number", "required": true },
+      "missingSequences": { "type": "array", "required": true },
+      "duplicateSequences": { "type": "array", "required": true },
+      "hasGaps": { "type": "boolean", "required": true }
+    }
+  },
+  "SalesBookExportDto": {
+    "description": "DGI sales book export",
+    "fields": {
+      "startDate": { "type": "string", "required": false },
+      "endDate": { "type": "string", "required": false },
+      "generatedAt": { "type": "string", "required": true },
+      "totalRecords": { "type": "number", "required": true },
+      "totalGrossNio": { "type": "number", "required": true },
+      "totalTaxNio": { "type": "number", "required": true },
+      "totalExemptNio": { "type": "number", "required": true },
+      "records": { "type": "array", "required": true }
+    }
+  },
+  "SalesBookRowDto": {
+    "description": "Individual row in sales book export",
+    "fields": {
+      "date": { "type": "string", "required": true },
+      "invoiceNumber": { "type": "string", "required": true },
+      "documentType": { "type": "string", "required": true },
+      "customerName": { "type": "string", "required": true },
+      "exemptSubtotalNio": { "type": "number", "required": true },
+      "taxableSubtotalNio": { "type": "number", "required": true },
+      "taxAmountNio": { "type": "number", "required": true },
+      "discountNio": { "type": "number", "required": true },
+      "totalNio": { "type": "number", "required": true },
+      "totalUsd": { "type": "number", "required": true },
+      "status": { "type": "string", "required": true },
+      "isCanceled": { "type": "boolean", "required": true }
+    }
+  },
+  "ZReportsExportDto": {
+    "description": "Z-report (cash shift) export",
+    "fields": {
+      "startDate": { "type": "string", "required": false },
+      "endDate": { "type": "string", "required": false },
+      "generatedAt": { "type": "string", "required": true },
+      "totalRecords": { "type": "number", "required": true },
+      "records": { "type": "array", "required": true }
+    }
+  },
+  "ZReportRowDto": {
+    "description": "Individual Z-report row",
+    "fields": {
+      "shiftId": { "type": "string", "required": true },
+      "closedAt": { "type": "string", "required": true },
+      "openedAt": { "type": "string", "required": true },
+      "terminalId": { "type": "string", "required": true },
+      "zSequence": { "type": "number", "required": false },
+      "cashierName": { "type": "string", "required": true },
+      "initialFloatNio": { "type": "number", "required": true },
+      "initialFloatUsd": { "type": "number", "required": true },
+      "expectedCashNio": { "type": "number", "required": true },
+      "expectedCashUsd": { "type": "number", "required": true },
+      "finalCountedNio": { "type": "number", "required": false },
+      "finalCountedUsd": { "type": "number", "required": false },
+      "differenceNio": { "type": "number", "required": false },
+      "differenceUsd": { "type": "number", "required": false },
+      "status": { "type": "string", "required": true },
+      "notes": { "type": "string", "required": false }
+    }
+  }
+}

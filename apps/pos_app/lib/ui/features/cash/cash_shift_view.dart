@@ -9,6 +9,7 @@ import 'widgets/close_shift_dialog.dart';
 import 'widgets/z_report_dialog.dart';
 import 'widgets/x_report_dialog.dart';
 import 'widgets/card_voucher_reconciliation_dialog.dart';
+import '../../../presentation/features/sales/view_models/sale_view_model.dart';
 
 class CashShiftView extends StatefulWidget {
   const CashShiftView({super.key});
@@ -26,7 +27,16 @@ class _CashShiftViewState extends State<CashShiftView> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        context.read<CashShiftViewModel>().init();
+        final cashVm = context.read<CashShiftViewModel>();
+        try {
+          final saleVm = context.read<SaleViewModel>();
+          if (saleVm.currentUserRole != null) {
+            cashVm.setUserRole(saleVm.currentUserRole!);
+          }
+        } catch (_) {
+          // SaleViewModel is optional when CashShiftView is mounted in isolated widget tests
+        }
+        cashVm.init();
       }
     });
   }

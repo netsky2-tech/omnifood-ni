@@ -6,6 +6,7 @@ import '../../../data/daos/sales/cash_movement_dao.dart';
 import '../../../data/daos/sales/payment_dao.dart';
 import '../../../data/models/sales/cashier_session_entity.dart';
 import '../../../data/models/sales/cash_movement_entity.dart';
+import '../../../domain/models/user.dart';
 
 class CashShiftViewModel extends ChangeNotifier {
   final CashierSessionDao sessionDao;
@@ -14,6 +15,7 @@ class CashShiftViewModel extends ChangeNotifier {
   final String currentUserId;
   final String currentUserName;
   final String currentTerminalId;
+  UserRole? _currentUserRole;
 
   CashierSessionEntity? _activeShift;
   CashierSessionEntity? _lastClosedShift;
@@ -29,13 +31,15 @@ class CashShiftViewModel extends ChangeNotifier {
     required this.currentUserId,
     this.currentUserName = 'Cajero',
     this.currentTerminalId = 'term-main',
-  });
+    UserRole? currentUserRole,
+  }) : _currentUserRole = currentUserRole;
 
   factory CashShiftViewModel.fromDatabase({
     required AppDatabase database,
     required String currentUserId,
     String currentUserName = 'Cajero',
     String currentTerminalId = 'term-main',
+    UserRole? currentUserRole,
   }) {
     return CashShiftViewModel(
       sessionDao: database.cashierSessionDao,
@@ -44,6 +48,7 @@ class CashShiftViewModel extends ChangeNotifier {
       currentUserId: currentUserId,
       currentUserName: currentUserName,
       currentTerminalId: currentTerminalId,
+      currentUserRole: currentUserRole,
     );
   }
 
@@ -55,6 +60,12 @@ class CashShiftViewModel extends ChangeNotifier {
   bool get hasPendingVouchers => _pendingVouchersCount > 0;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+  UserRole? get currentUserRole => _currentUserRole;
+
+  void setUserRole(UserRole role) {
+    _currentUserRole = role;
+    notifyListeners();
+  }
 
   Future<void> init() async {
     _isLoading = true;
@@ -93,6 +104,13 @@ class CashShiftViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
+      if (_currentUserRole == UserRole.waiter) {
+        _errorMessage = 'No tiene permiso para abrir turno de caja.';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
       final existing = await sessionDao.getActiveSession();
       if (existing != null) {
         _errorMessage = 'Ya existe un turno de caja activo en esta terminal.';

@@ -111,7 +111,12 @@ describe('CustomersController', () => {
     const dto = { points_delta: 30, reason: 'Ajuste manual' };
     const res = await controller.adjustPoints('c-1', dto, 'tenant-1');
     expect(res.customer.points_balance).toBe(80);
-    expect(service.adjustPoints).toHaveBeenCalledWith('tenant-1', 'c-1', dto);
+    expect(service.adjustPoints).toHaveBeenCalledWith(
+      'tenant-1',
+      'c-1',
+      dto,
+      undefined,
+    );
   });
 
   it('should create customer', async () => {

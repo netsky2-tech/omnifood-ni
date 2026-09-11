@@ -36,13 +36,16 @@ class _SplitBillDialogState extends State<SplitBillDialog> {
   int _itemizedCoverCount = 2;
 
   double get _cartSubtotal => widget.cart.fold(
-        0.0,
-        (sum, item) => sum + item.subtotal + item.modifiersTotal,
-      );
+    0.0,
+    (sum, item) => sum + item.subtotal + item.modifiersTotal,
+  );
 
   double get _cartTax {
     if (widget.taxRegime?.isCuotaFija == true) return 0.0;
     return widget.cart.fold(0.0, (sum, item) {
+      if (widget.taxRegime == null) {
+        return sum + item.taxAmount;
+      }
       final lineBase = item.subtotal + item.modifiersTotal;
       final lineTax = InvoiceFiscalCalculator.computeLineTax(
         taxRegime: widget.taxRegime,
@@ -54,23 +57,23 @@ class _SplitBillDialogState extends State<SplitBillDialog> {
   }
 
   TipCalculation get _tipCalculation => TipEngine.calculate(
-        subtotalNio: _cartSubtotal,
-        taxNio: _cartTax,
-        discountNio: 0.0,
-        tipType: _tipType,
-        customPercentage: _customTipPercentage,
-        fixedAmount: _fixedTipAmount,
-        commercialRate: widget.commercialRate,
-      );
+    subtotalNio: _cartSubtotal,
+    taxNio: _cartTax,
+    discountNio: 0.0,
+    tipType: _tipType,
+    customPercentage: _customTipPercentage,
+    fixedAmount: _fixedTipAmount,
+    commercialRate: widget.commercialRate,
+  );
 
   SplitBillResult get _equalSplitResult => SplitBillEngine.splitEqual(
-        subtotalNio: _cartSubtotal,
-        taxNio: _cartTax,
-        tipNio: _tipCalculation.tipAmountNio,
-        discountNio: 0.0,
-        coverCount: _coverCount,
-        commercialRate: widget.commercialRate,
-      );
+    subtotalNio: _cartSubtotal,
+    taxNio: _cartTax,
+    tipNio: _tipCalculation.tipAmountNio,
+    discountNio: 0.0,
+    coverCount: _coverCount,
+    commercialRate: widget.commercialRate,
+  );
 
   SplitBillResult get _itemizedSplitResult {
     final List<ItemizedShareInput> shareInputs = [];
@@ -124,9 +127,7 @@ class _SplitBillDialogState extends State<SplitBillDialog> {
                 _buildTipSelector(),
                 const Divider(height: 20),
                 Expanded(
-                  child: isCompact
-                      ? _buildCompactBody()
-                      : _buildDesktopBody(),
+                  child: isCompact ? _buildCompactBody() : _buildDesktopBody(),
                 ),
               ],
             ),
@@ -139,7 +140,11 @@ class _SplitBillDialogState extends State<SplitBillDialog> {
   Widget _buildHeader(BuildContext context) {
     return Row(
       children: [
-        const Icon(Icons.call_split_rounded, color: Colors.deepOrange, size: 26),
+        const Icon(
+          Icons.call_split_rounded,
+          color: Colors.deepOrange,
+          size: 26,
+        ),
         const SizedBox(width: 8),
         const Expanded(
           child: Column(
@@ -192,7 +197,10 @@ class _SplitBillDialogState extends State<SplitBillDialog> {
       scrollDirection: Axis.horizontal,
       child: Row(
         children: [
-          const Text('Propina: ', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+          const Text(
+            'Propina: ',
+            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+          ),
           const SizedBox(width: 4),
           ChoiceChip(
             key: const Key('tip_chip_10'),
@@ -208,7 +216,9 @@ class _SplitBillDialogState extends State<SplitBillDialog> {
           ChoiceChip(
             key: const Key('tip_chip_15'),
             label: const Text('15%', style: TextStyle(fontSize: 12)),
-            selected: _tipType == TipType.customPercentage && _customTipPercentage == 15.0,
+            selected:
+                _tipType == TipType.customPercentage &&
+                _customTipPercentage == 15.0,
             onSelected: (selected) {
               if (selected) {
                 setState(() {
@@ -222,7 +232,9 @@ class _SplitBillDialogState extends State<SplitBillDialog> {
           ChoiceChip(
             key: const Key('tip_chip_20'),
             label: const Text('20%', style: TextStyle(fontSize: 12)),
-            selected: _tipType == TipType.customPercentage && _customTipPercentage == 20.0,
+            selected:
+                _tipType == TipType.customPercentage &&
+                _customTipPercentage == 20.0,
             onSelected: (selected) {
               if (selected) {
                 setState(() {
@@ -250,7 +262,9 @@ class _SplitBillDialogState extends State<SplitBillDialog> {
 
   Widget _buildCompactBody() {
     final tip = _tipCalculation;
-    final splitResult = _selectedTabIndex == 0 ? _equalSplitResult : _itemizedSplitResult;
+    final splitResult = _selectedTabIndex == 0
+        ? _equalSplitResult
+        : _itemizedSplitResult;
 
     return SingleChildScrollView(
       key: const Key('split_dialog_compact_layout'),
@@ -270,7 +284,9 @@ class _SplitBillDialogState extends State<SplitBillDialog> {
 
   Widget _buildDesktopBody() {
     final tip = _tipCalculation;
-    final splitResult = _selectedTabIndex == 0 ? _equalSplitResult : _itemizedSplitResult;
+    final splitResult = _selectedTabIndex == 0
+        ? _equalSplitResult
+        : _itemizedSplitResult;
 
     return Row(
       key: const Key('split_dialog_desktop_layout'),
@@ -293,10 +309,7 @@ class _SplitBillDialogState extends State<SplitBillDialog> {
         ),
         const SizedBox(width: 16),
         // Right Column: Shares List & Payment Actions
-        Expanded(
-          flex: 5,
-          child: _buildSharesList(splitResult),
-        ),
+        Expanded(flex: 5, child: _buildSharesList(splitResult)),
       ],
     );
   }
@@ -323,7 +336,10 @@ class _SplitBillDialogState extends State<SplitBillDialog> {
                   key: const Key('btn_decrement_covers'),
                   icon: const Icon(Icons.remove, size: 16),
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
                   onPressed: _coverCount > 2
                       ? () => setState(() => _coverCount--)
                       : null,
@@ -332,14 +348,20 @@ class _SplitBillDialogState extends State<SplitBillDialog> {
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: Text(
                     '$_coverCount Comensales',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
                   ),
                 ),
                 IconButton.filledTonal(
                   key: const Key('btn_increment_covers'),
                   icon: const Icon(Icons.add, size: 16),
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
                   onPressed: _coverCount < 20
                       ? () => setState(() => _coverCount++)
                       : null,
@@ -398,17 +420,25 @@ class _SplitBillDialogState extends State<SplitBillDialog> {
             margin: const EdgeInsets.only(bottom: 6),
             child: ListTile(
               dense: true,
-              title: Text(item.quantity > 1 ? '${item.productName} (x${item.quantity.toInt()})' : item.productName),
-              subtitle: Text('C\$ ${(item.subtotal + item.modifiersTotal).toStringAsFixed(2)}'),
+              title: Text(
+                item.quantity > 1
+                    ? '${item.productName} (x${item.quantity.toInt()})'
+                    : item.productName,
+              ),
+              subtitle: Text(
+                'C\$ ${(item.subtotal + item.modifiersTotal).toStringAsFixed(2)}',
+              ),
               trailing: DropdownButton<int>(
                 key: Key('assign_item_${item.productId}_cover_$currentCover'),
                 value: currentCover,
-                items: List.generate(_itemizedCoverCount, (cIdx) => cIdx + 1).map((cNum) {
-                  return DropdownMenuItem(
-                    value: cNum,
-                    child: Text('Comensal $cNum'),
-                  );
-                }).toList(),
+                items: List.generate(_itemizedCoverCount, (cIdx) => cIdx + 1)
+                    .map((cNum) {
+                      return DropdownMenuItem(
+                        value: cNum,
+                        child: Text('Comensal $cNum'),
+                      );
+                    })
+                    .toList(),
                 onChanged: (newCover) {
                   if (newCover != null) {
                     setState(() {
@@ -434,36 +464,62 @@ class _SplitBillDialogState extends State<SplitBillDialog> {
           children: [
             Row(
               children: [
-                const Expanded(child: Text('Subtotal:', style: TextStyle(fontSize: 12))),
-                Text('C\$ ${_cartSubtotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12)),
+                const Expanded(
+                  child: Text('Subtotal:', style: TextStyle(fontSize: 12)),
+                ),
+                Text(
+                  'C\$ ${_cartSubtotal.toStringAsFixed(2)}',
+                  style: const TextStyle(fontSize: 12),
+                ),
               ],
             ),
             const SizedBox(height: 3),
             Row(
               children: [
-                const Expanded(child: Text('IVA:', style: TextStyle(fontSize: 12))),
-                Text('C\$ ${_cartTax.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12)),
+                const Expanded(
+                  child: Text('IVA:', style: TextStyle(fontSize: 12)),
+                ),
+                Text(
+                  'C\$ ${_cartTax.toStringAsFixed(2)}',
+                  style: const TextStyle(fontSize: 12),
+                ),
               ],
             ),
             const SizedBox(height: 3),
             Row(
               children: [
                 Expanded(
-                  child: Text('Propina (${tip.effectivePercentage.toInt()}%):', style: const TextStyle(fontSize: 12)),
+                  child: Text(
+                    'Propina (${tip.effectivePercentage.toInt()}%):',
+                    style: const TextStyle(fontSize: 12),
+                  ),
                 ),
-                Text('C\$ ${tip.tipAmountNio.toStringAsFixed(2)}',
-                    style: const TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.w600)),
+                Text(
+                  'C\$ ${tip.tipAmountNio.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.green,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ],
             ),
             const Divider(height: 10),
             Row(
               children: [
                 const Expanded(
-                  child: Text('Total con Propina:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                  child: Text(
+                    'Total con Propina:',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                  ),
                 ),
                 Text(
                   'C\$ ${tip.totalWithTipNio.toStringAsFixed(2)}',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.deepOrange),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: Colors.deepOrange,
+                  ),
                 ),
               ],
             ),
@@ -496,23 +552,39 @@ class _SplitBillDialogState extends State<SplitBillDialog> {
                       backgroundColor: Colors.deepOrange.shade100,
                       child: Text(
                         '${share.shareIndex}',
-                        style: const TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold, fontSize: 11),
+                        style: const TextStyle(
+                          color: Colors.deepOrange,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 11,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 6),
                     Expanded(
-                      child: Text(share.label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                      child: Text(
+                        share.label,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
                     ),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text(
                           'C\$ ${share.totalNio.toStringAsFixed(2)}',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
                         ),
                         Text(
                           '\$ ${share.totalUsd.toStringAsFixed(2)}',
-                          style: const TextStyle(fontSize: 10, color: Colors.grey),
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey,
+                          ),
                         ),
                       ],
                     ),
@@ -524,7 +596,10 @@ class _SplitBillDialogState extends State<SplitBillDialog> {
                     Expanded(
                       child: Text(
                         'Sub: C\$ ${share.subtotalNio.toStringAsFixed(2)} | Prop: C\$ ${share.tipNio.toStringAsFixed(2)}',
-                        style: const TextStyle(fontSize: 10, color: Colors.grey),
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey,
+                        ),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -532,14 +607,20 @@ class _SplitBillDialogState extends State<SplitBillDialog> {
                     FilledButton.tonal(
                       key: Key('btn_pay_share_${share.shareIndex}'),
                       style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
                         minimumSize: const Size(54, 28),
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
                       onPressed: () {
                         widget.onPayShare?.call(share);
                       },
-                      child: const Text('Cobrar', style: TextStyle(fontSize: 10)),
+                      child: const Text(
+                        'Cobrar',
+                        style: TextStyle(fontSize: 10),
+                      ),
                     ),
                   ],
                 ),

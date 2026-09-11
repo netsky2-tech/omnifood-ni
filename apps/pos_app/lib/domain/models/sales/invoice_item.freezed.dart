@@ -34,6 +34,9 @@ mixin _$InvoiceItem {
   String? get variantId => throw _privateConstructorUsedError;
   String? get notes => throw _privateConstructorUsedError;
   String? get recipeVersionId => throw _privateConstructorUsedError;
+  SaleTimeInventorySnapshot? get inventorySnapshot =>
+      throw _privateConstructorUsedError;
+  String? get inventorySnapshotVersion => throw _privateConstructorUsedError;
   String? get originInvoiceItemId => throw _privateConstructorUsedError;
   List<Modifier> get selectedModifiers => throw _privateConstructorUsedError;
 
@@ -64,6 +67,8 @@ abstract class $InvoiceItemCopyWith<$Res> {
       String? variantId,
       String? notes,
       String? recipeVersionId,
+      SaleTimeInventorySnapshot? inventorySnapshot,
+      String? inventorySnapshotVersion,
       String? originInvoiceItemId,
       List<Modifier> selectedModifiers});
 }
@@ -95,6 +100,8 @@ class _$InvoiceItemCopyWithImpl<$Res, $Val extends InvoiceItem>
     Object? variantId = freezed,
     Object? notes = freezed,
     Object? recipeVersionId = freezed,
+    Object? inventorySnapshot = freezed,
+    Object? inventorySnapshotVersion = freezed,
     Object? originInvoiceItemId = freezed,
     Object? selectedModifiers = null,
   }) {
@@ -155,6 +162,14 @@ class _$InvoiceItemCopyWithImpl<$Res, $Val extends InvoiceItem>
           ? _value.recipeVersionId
           : recipeVersionId // ignore: cast_nullable_to_non_nullable
               as String?,
+      inventorySnapshot: freezed == inventorySnapshot
+          ? _value.inventorySnapshot
+          : inventorySnapshot // ignore: cast_nullable_to_non_nullable
+              as SaleTimeInventorySnapshot?,
+      inventorySnapshotVersion: freezed == inventorySnapshotVersion
+          ? _value.inventorySnapshotVersion
+          : inventorySnapshotVersion // ignore: cast_nullable_to_non_nullable
+              as String?,
       originInvoiceItemId: freezed == originInvoiceItemId
           ? _value.originInvoiceItemId
           : originInvoiceItemId // ignore: cast_nullable_to_non_nullable
@@ -190,6 +205,8 @@ abstract class _$$InvoiceItemImplCopyWith<$Res>
       String? variantId,
       String? notes,
       String? recipeVersionId,
+      SaleTimeInventorySnapshot? inventorySnapshot,
+      String? inventorySnapshotVersion,
       String? originInvoiceItemId,
       List<Modifier> selectedModifiers});
 }
@@ -219,6 +236,8 @@ class __$$InvoiceItemImplCopyWithImpl<$Res>
     Object? variantId = freezed,
     Object? notes = freezed,
     Object? recipeVersionId = freezed,
+    Object? inventorySnapshot = freezed,
+    Object? inventorySnapshotVersion = freezed,
     Object? originInvoiceItemId = freezed,
     Object? selectedModifiers = null,
   }) {
@@ -279,6 +298,14 @@ class __$$InvoiceItemImplCopyWithImpl<$Res>
           ? _value.recipeVersionId
           : recipeVersionId // ignore: cast_nullable_to_non_nullable
               as String?,
+      inventorySnapshot: freezed == inventorySnapshot
+          ? _value.inventorySnapshot
+          : inventorySnapshot // ignore: cast_nullable_to_non_nullable
+              as SaleTimeInventorySnapshot?,
+      inventorySnapshotVersion: freezed == inventorySnapshotVersion
+          ? _value.inventorySnapshotVersion
+          : inventorySnapshotVersion // ignore: cast_nullable_to_non_nullable
+              as String?,
       originInvoiceItemId: freezed == originInvoiceItemId
           ? _value.originInvoiceItemId
           : originInvoiceItemId // ignore: cast_nullable_to_non_nullable
@@ -309,6 +336,8 @@ class _$InvoiceItemImpl implements _InvoiceItem {
       this.variantId,
       this.notes,
       this.recipeVersionId,
+      this.inventorySnapshot,
+      this.inventorySnapshotVersion,
       this.originInvoiceItemId,
       final List<Modifier> selectedModifiers = const []})
       : _selectedModifiers = selectedModifiers;
@@ -346,6 +375,10 @@ class _$InvoiceItemImpl implements _InvoiceItem {
   @override
   final String? recipeVersionId;
   @override
+  final SaleTimeInventorySnapshot? inventorySnapshot;
+  @override
+  final String? inventorySnapshotVersion;
+  @override
   final String? originInvoiceItemId;
   final List<Modifier> _selectedModifiers;
   @override
@@ -359,7 +392,7 @@ class _$InvoiceItemImpl implements _InvoiceItem {
 
   @override
   String toString() {
-    return 'InvoiceItem(id: $id, invoiceId: $invoiceId, productId: $productId, productName: $productName, quantity: $quantity, unitPrice: $unitPrice, originalTaxRate: $originalTaxRate, appliedTaxRate: $appliedTaxRate, taxAmount: $taxAmount, total: $total, discount: $discount, variantId: $variantId, notes: $notes, recipeVersionId: $recipeVersionId, originInvoiceItemId: $originInvoiceItemId, selectedModifiers: $selectedModifiers)';
+    return 'InvoiceItem(id: $id, invoiceId: $invoiceId, productId: $productId, productName: $productName, quantity: $quantity, unitPrice: $unitPrice, originalTaxRate: $originalTaxRate, appliedTaxRate: $appliedTaxRate, taxAmount: $taxAmount, total: $total, discount: $discount, variantId: $variantId, notes: $notes, recipeVersionId: $recipeVersionId, inventorySnapshot: $inventorySnapshot, inventorySnapshotVersion: $inventorySnapshotVersion, originInvoiceItemId: $originInvoiceItemId, selectedModifiers: $selectedModifiers)';
   }
 
   @override
@@ -392,6 +425,11 @@ class _$InvoiceItemImpl implements _InvoiceItem {
             (identical(other.notes, notes) || other.notes == notes) &&
             (identical(other.recipeVersionId, recipeVersionId) ||
                 other.recipeVersionId == recipeVersionId) &&
+            (identical(other.inventorySnapshot, inventorySnapshot) ||
+                other.inventorySnapshot == inventorySnapshot) &&
+            (identical(
+                    other.inventorySnapshotVersion, inventorySnapshotVersion) ||
+                other.inventorySnapshotVersion == inventorySnapshotVersion) &&
             (identical(other.originInvoiceItemId, originInvoiceItemId) ||
                 other.originInvoiceItemId == originInvoiceItemId) &&
             const DeepCollectionEquality()
@@ -416,6 +454,8 @@ class _$InvoiceItemImpl implements _InvoiceItem {
       variantId,
       notes,
       recipeVersionId,
+      inventorySnapshot,
+      inventorySnapshotVersion,
       originInvoiceItemId,
       const DeepCollectionEquality().hash(_selectedModifiers));
 
@@ -449,6 +489,8 @@ abstract class _InvoiceItem implements InvoiceItem {
       final String? variantId,
       final String? notes,
       final String? recipeVersionId,
+      final SaleTimeInventorySnapshot? inventorySnapshot,
+      final String? inventorySnapshotVersion,
       final String? originInvoiceItemId,
       final List<Modifier> selectedModifiers}) = _$InvoiceItemImpl;
 
@@ -483,6 +525,10 @@ abstract class _InvoiceItem implements InvoiceItem {
   String? get notes;
   @override
   String? get recipeVersionId;
+  @override
+  SaleTimeInventorySnapshot? get inventorySnapshot;
+  @override
+  String? get inventorySnapshotVersion;
   @override
   String? get originInvoiceItemId;
   @override

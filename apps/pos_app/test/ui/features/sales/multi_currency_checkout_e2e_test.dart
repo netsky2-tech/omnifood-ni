@@ -121,11 +121,12 @@ void main() {
       inventoryRepository: mockInventoryRepo,
     );
 
-    saleViewModel = SaleViewModel(
+    saleViewModel = SaleViewModel.withLoyalty(
       salesRepository,
       mockInventoryRepo,
       mockAuthRepo,
       database,
+      terminalId: 'terminal-test',
     );
 
     await saleViewModel.loadExchangeRates();

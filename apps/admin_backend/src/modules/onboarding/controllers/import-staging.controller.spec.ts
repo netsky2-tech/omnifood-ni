@@ -1,22 +1,107 @@
 import { UnauthorizedException } from '@nestjs/common';
+import { Response } from 'express';
 import { ImportStagingController } from './import-staging.controller';
 import { ImportStagingService } from '../services/import-staging.service';
-import { UploadBatchDto, CommitImportDto } from '../dto/import-staging.dto';
+import {
+  UploadBatchDto,
+  UploadRawCsvDto,
+  CommitImportDto,
+} from '../dto/import-staging.dto';
+import { LegacyImportIntegrityReportService } from '../services/legacy-import-integrity-report.service';
+import { LegacyImportIntegrityStatus } from '../entities/legacy-import-integrity-report.entity';
 
 describe('ImportStagingController (Unit)', () => {
   let controller: ImportStagingController;
   let service: jest.Mocked<ImportStagingService>;
+  let integrityService: jest.Mocked<LegacyImportIntegrityReportService>;
 
   const sessionToken = '11111111-2222-3333-4444-555555555555';
 
   beforeEach(() => {
     service = {
       uploadBatch: jest.fn(),
+      uploadRawCsv: jest.fn(),
+      getPreview: jest.fn(),
       commitImport: jest.fn(),
       getFailedRows: jest.fn(),
     } as unknown as jest.Mocked<ImportStagingService>;
 
-    controller = new ImportStagingController(service);
+    integrityService = {
+      generateIntegrityReport: jest.fn(),
+      expireIncompatibleLegacyStaging: jest.fn(),
+      remediateReportWithInventoryCommand: jest.fn(),
+      acceptReportAsIs: jest.fn(),
+    } as unknown as jest.Mocked<LegacyImportIntegrityReportService>;
+
+    controller = new ImportStagingController(service, integrityService);
+  });
+
+  describe('getOfficialTemplate', () => {
+    it('returns canonical template metadata and CSV content (AC-22)', () => {
+      const template = controller.getOfficialTemplate();
+      expect(template.version).toBe('v1.0');
+      expect(template.requiredColumns).toEqual(['nombre', 'precio_venta']);
+      expect(template.templateCsv).toContain(
+        'nombre,precio_venta,unidad_venta,sku',
+      );
+    });
+  });
+
+  describe('uploadRawCsv', () => {
+    it('throws UnauthorizedException when tenantId is missing', async () => {
+      const dto: UploadRawCsvDto = {
+        csvContent: 'nombre,precio_venta\nPizza,200',
+      };
+
+      await expect(controller.uploadRawCsv(dto, undefined)).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('delegates to service.uploadRawCsv with trimmed tenantId', async () => {
+      const dto: UploadRawCsvDto = {
+        csvContent: 'nombre,precio_venta\nPizza,200',
+      };
+
+      const mockResponse = {
+        sessionToken,
+        totalRows: 1,
+        validRows: 1,
+        errorRows: 0,
+        errors: [],
+      };
+
+      service.uploadRawCsv.mockResolvedValueOnce(mockResponse);
+
+      const result = await controller.uploadRawCsv(dto, ' tenant-1 ');
+      expect(result).toEqual(mockResponse);
+      expect(service.uploadRawCsv).toHaveBeenCalledWith('tenant-1', dto);
+    });
+  });
+
+  describe('getPreview', () => {
+    it('delegates to service.getPreview with trimmed tenantId (AC-23)', async () => {
+      const mockPreview = {
+        sessionToken,
+        status: 'READY',
+        parserContractVersion: 'v1.0',
+        sourceHash: 'hash-1',
+        totalRows: 2,
+        validRows: 2,
+        errorRows: 0,
+        duplicatesCount: 1,
+        conflictsCount: 0,
+        duplicates: [],
+        unsupportedColumns: [],
+        unknownColumns: [],
+      };
+
+      service.getPreview.mockResolvedValueOnce(mockPreview);
+
+      const result = await controller.getPreview(sessionToken, ' tenant-1 ');
+      expect(result).toEqual(mockPreview);
+      expect(service.getPreview).toHaveBeenCalledWith('tenant-1', sessionToken);
+    });
   });
 
   describe('uploadBatch', () => {
@@ -97,7 +182,7 @@ describe('ImportStagingController (Unit)', () => {
     });
   });
 
-  describe('getFailedRows', () => {
+  describe('getFailedRows & exportFailedRowsCsv', () => {
     it('throws UnauthorizedException when tenantId is missing', async () => {
       await expect(
         controller.getFailedRows(sessionToken, undefined),
@@ -122,6 +207,118 @@ describe('ImportStagingController (Unit)', () => {
       expect(service.getFailedRows).toHaveBeenCalledWith(
         'tenant-1',
         sessionToken,
+      );
+    });
+
+    it('exports failed rows as CSV with status 200 and headers (AC-21)', async () => {
+      const mockErrors = [
+        {
+          rowNumber: 1,
+          rawNombre: 'Prod Bad',
+          rawSku: 'SKU-BAD',
+          reason: 'Precio no numérico',
+        },
+      ];
+
+      service.getFailedRows.mockResolvedValueOnce(mockErrors);
+
+      const mockRes = {
+        setHeader: jest.fn(),
+        status: jest.fn().mockReturnThis(),
+        send: jest.fn(),
+      } as unknown as Response;
+
+      await controller.exportFailedRowsCsv(sessionToken, mockRes, 'tenant-1');
+
+      expect(mockRes.setHeader).toHaveBeenCalledWith(
+        'Content-Type',
+        'text/csv; charset=utf-8',
+      );
+      expect(mockRes.status).toHaveBeenCalledWith(200);
+      expect(mockRes.send).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'fila,nombre_suministrado,sku_suministrado,motivo_error',
+        ),
+      );
+    });
+  });
+
+  describe('runIntegrityScan & expireLegacyStaging (ONB1.4H)', () => {
+    it('delegates runIntegrityScan to integrityReportService', async () => {
+      integrityService.generateIntegrityReport.mockResolvedValueOnce({
+        id: 'report-1',
+        tenant_id: 'tenant-1',
+        status: LegacyImportIntegrityStatus.CLEAN,
+      } as never);
+
+      const result = await controller.runIntegrityScan(' tenant-1 ');
+      expect(result).toMatchObject({ id: 'report-1', status: 'CLEAN' });
+      expect(integrityService.generateIntegrityReport).toHaveBeenCalledWith(
+        'tenant-1',
+      );
+    });
+
+    it('delegates expireLegacyStaging to integrityReportService', async () => {
+      integrityService.expireIncompatibleLegacyStaging.mockResolvedValueOnce({
+        expiredSessions: ['session-1'],
+        expiredRowsCount: 3,
+      });
+
+      const result = await controller.expireLegacyStaging(' tenant-1 ');
+      expect(result).toEqual({
+        expiredSessions: ['session-1'],
+        expiredRowsCount: 3,
+      });
+      expect(
+        integrityService.expireIncompatibleLegacyStaging,
+      ).toHaveBeenCalledWith('tenant-1');
+    });
+
+    it('delegates remediateReport to integrityReportService (ONB1.10A)', async () => {
+      integrityService.remediateReportWithInventoryCommand.mockResolvedValueOnce({
+        id: 'report-1',
+        status: LegacyImportIntegrityStatus.REMEDIATED,
+      } as never);
+
+      const req = { user: { sub: 'user-audit-1' } } as never;
+      const result = await controller.remediateReport(
+        req,
+        'report-1',
+        { inventoryCommandRef: 'INV_ADJ:001' },
+        'tenant-1',
+      );
+
+      expect(result).toMatchObject({ status: 'REMEDIATED' });
+      expect(
+        integrityService.remediateReportWithInventoryCommand,
+      ).toHaveBeenCalledWith(
+        'tenant-1',
+        'report-1',
+        'INV_ADJ:001',
+        'user-audit-1',
+      );
+    });
+
+    it('delegates acceptReportAsIs to integrityReportService (ONB1.10A)', async () => {
+      integrityService.acceptReportAsIs.mockResolvedValueOnce({
+        id: 'report-2',
+        status: LegacyImportIntegrityStatus.ACCEPTED_AS_IS,
+      } as never);
+
+      const req = { user: { sub: 'user-finance-1' } } as never;
+      const result = await controller.acceptReportAsIs(
+        req,
+        'report-2',
+        { rationale: 'Approved immaterial promotional samples' },
+        'tenant-1',
+      );
+
+      expect(result).toMatchObject({ status: 'ACCEPTED_AS_IS' });
+      expect(integrityService.acceptReportAsIs).toHaveBeenCalledWith(
+        'tenant-1',
+        'report-2',
+        'Approved immaterial promotional samples',
+        'user-finance-1',
       );
     });
   });

@@ -63,6 +63,12 @@ class InvoiceEntity {
   final String? idempotencyKey;
   @ColumnInfo(name: 'payload_hash')
   final String? payloadHash;
+  @ColumnInfo(name: 'inventory_policy_version')
+  final String? inventoryPolicyVersion;
+  @ColumnInfo(name: 'inventory_outcome')
+  final String? inventoryOutcome;
+  @ColumnInfo(name: 'inventory_outcome_reason')
+  final String? inventoryOutcomeReason;
   @ColumnInfo(name: 'bcn_official_rate')
   final double bcnOfficialRate;
   @ColumnInfo(name: 'commercial_rate')
@@ -95,6 +101,9 @@ class InvoiceEntity {
     this.sourceSequence,
     this.idempotencyKey,
     this.payloadHash,
+    this.inventoryPolicyVersion,
+    this.inventoryOutcome,
+    this.inventoryOutcomeReason,
     this.bcnOfficialRate = 36.6241,
     this.commercialRate = 36.50,
     this.totalUsd = 0.0,

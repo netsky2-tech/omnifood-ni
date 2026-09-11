@@ -9,6 +9,7 @@ import { App } from 'supertest/types';
 import { CatalogController } from '../../src/modules/catalog/catalog.controller';
 import { CatalogService } from '../../src/modules/catalog/catalog.service';
 import { CatalogValue } from '../../src/modules/catalog/entities/catalog-value.entity';
+import { ChangeLogService } from '../../src/modules/audit/change-log.service';
 import { Tenant } from '../../src/modules/tenant/entities/tenant.entity';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { AuthoritativeCurrentUserGuard } from '../../src/modules/identity/guards/authoritative-current-user.guard';
@@ -100,7 +101,7 @@ describe('CatalogController E2E (real DB)', () => {
   let dbCleanup: () => Promise<void>;
 
   beforeAll(async () => {
-    const { schema, bootstrap, destroy } = await createIsolatedSchema();
+    const { schema, destroy } = await createIsolatedSchema();
     dbCleanup = destroy;
 
     const clientDs = new DataSource({
@@ -113,7 +114,16 @@ describe('CatalogController E2E (real DB)', () => {
     });
     await clientDs.initialize();
 
-    const catalogService = new CatalogService(clientDs);
+    const changeLogService = {
+      log: jest.fn<
+        ReturnType<ChangeLogService['log']>,
+        Parameters<ChangeLogService['log']>
+      >(),
+    } satisfies Pick<ChangeLogService, 'log'>;
+    const catalogService = new CatalogService(
+      clientDs,
+      changeLogService as unknown as ChangeLogService,
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       imports: [

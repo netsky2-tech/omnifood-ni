@@ -1,5 +1,6 @@
 packages:
   - "apps/*"
 allowBuilds:
+  '@swc/core': true
   bcrypt: true
   unrs-resolver: true

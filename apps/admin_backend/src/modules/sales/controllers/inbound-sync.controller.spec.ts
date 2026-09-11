@@ -86,4 +86,33 @@ describe('InboundSyncController', () => {
     );
     expect(result).toEqual(mockResponse);
   });
+
+  it('delegates fiscal ACK to InboundSyncService', async () => {
+    const ackPayload = {
+      tenantId: 'tenant-123',
+      terminalId: 'term-1',
+      revision: 1,
+      fingerprint: 'sha-hash',
+      appliedAt: '2026-03-30T12:00:00Z',
+    };
+    const ackResponse = {
+      status: 'success',
+      acknowledgedRevision: 1,
+      acknowledgedFingerprint: 'sha-hash',
+    };
+    (inboundSyncService as any).recordFiscalAck = jest
+      .fn()
+      .mockResolvedValue(ackResponse);
+
+    const result = await controller.acknowledgeFiscalConfig(
+      'tenant-123',
+      ackPayload,
+    );
+
+    expect((inboundSyncService as any).recordFiscalAck).toHaveBeenCalledWith(
+      'tenant-123',
+      ackPayload,
+    );
+    expect(result).toEqual(ackResponse);
+  });
 });

@@ -15,6 +15,9 @@ abstract class CustomerDao {
   @Query('SELECT * FROM customers WHERE phone = :phone LIMIT 1')
   Future<CustomerEntity?> getCustomerByPhone(String phone);
 
+  @Query('SELECT * FROM customers WHERE customer_code = :customerCode AND is_active = 1 LIMIT 1')
+  Future<CustomerEntity?> getCustomerByCode(String customerCode);
+
   @Query('''
     SELECT * FROM customers 
     WHERE is_active = 1 

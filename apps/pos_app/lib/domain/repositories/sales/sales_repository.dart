@@ -49,6 +49,12 @@ abstract class SalesRepository {
   Future<List<Invoice>> getUnsyncedInvoices();
   Future<List<Map<String, dynamic>>> getUnsyncedAggregates();
   Future<void> markAsSynced(List<String> invoiceIds);
+  Future<void> acknowledgeSaleSync({
+    required String invoiceId,
+    required String? outcome,
+    required List<String> acknowledgedCorrelationIds,
+  });
+  Future<int> getInventoryEnrichmentPendingCount();
   Future<void> voidInvoice(String invoiceId, String reason);
   Future<void> createCreditNote({
     required String originalInvoiceId,

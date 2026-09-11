@@ -23,7 +23,8 @@
     "migration:run": "ts-node -r tsconfig-paths/register src/data-source.ts migration:run",
     "migration:revert": "ts-node -r tsconfig-paths/register src/data-source.ts migration:revert",
     "provision": "ts-node -r tsconfig-paths/register src/scripts/provision.ts",
-    "seed:test": "ts-node -r tsconfig-paths/register src/scripts/seed-test-data.ts"
+    "seed:test": "ts-node -r tsconfig-paths/register src/scripts/seed-test-data.ts",
+    "seed:onboarding-founder-pilot": "ts-node -r tsconfig-paths/register src/scripts/seed-onboarding-founder-pilot.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

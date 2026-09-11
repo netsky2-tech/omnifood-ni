@@ -49,9 +49,39 @@ class MockSalesRepository implements SalesRepository {
   Future<List<Map<String, dynamic>>> getUnsyncedAggregates() async =>
       unsyncedAggregates;
 
+  final List<
+    ({
+      String invoiceId,
+      String? outcome,
+      List<String> acknowledgedCorrelationIds,
+    })
+  >
+  acknowledgedSales = [];
+  bool failNextAcknowledge = false;
+
+  @override
+  Future<int> getInventoryEnrichmentPendingCount() async => 0;
+
   @override
   Future<void> markAsSynced(List<String> invoiceIds) async {
     syncedInvoiceIdBatches.add(invoiceIds);
+  }
+
+  @override
+  Future<void> acknowledgeSaleSync({
+    required String invoiceId,
+    required String? outcome,
+    required List<String> acknowledgedCorrelationIds,
+  }) async {
+    if (failNextAcknowledge) {
+      throw StateError('Integrity failure acknowledging sale $invoiceId');
+    }
+    acknowledgedSales.add((
+      invoiceId: invoiceId,
+      outcome: outcome,
+      acknowledgedCorrelationIds: acknowledgedCorrelationIds,
+    ));
+    syncedInvoiceIdBatches.add([invoiceId]);
   }
 
   @override
@@ -384,7 +414,8 @@ class FakeInventoryRepository
   @override
   Future<List<KardexCorrectionEntity>> getKardexCorrections() async => [];
   @override
-  Future<List<KardexRecalculateQueueEntity>> getPendingKardexQueue() async => [];
+  Future<List<KardexRecalculateQueueEntity>> getPendingKardexQueue() async =>
+      [];
 }
 
 class RepositoryBackedPurchaseInventoryRepository
@@ -486,15 +517,23 @@ void main() {
     );
   });
 
-  InventoryMovement movement(String id, {DateTime? timestamp}) {
+  InventoryMovement movement(
+    String id, {
+    DateTime? timestamp,
+    MovementType type = MovementType.adjustment,
+    String deliveryOwner = 'GENERIC_INVENTORY',
+    String deliveryState = 'LOCAL_APPLIED',
+  }) {
     return InventoryMovement(
       id: id,
       insumoId: 'i-1',
-      type: MovementType.sale,
+      type: type,
       quantity: -1,
       previousStock: 10,
       newStock: 9,
       timestamp: timestamp ?? DateTime.parse('2026-01-01T10:00:00Z'),
+      deliveryOwner: deliveryOwner,
+      deliveryState: deliveryState,
     );
   }
 
@@ -584,28 +623,33 @@ void main() {
     },
   );
 
-  test('continues later domains and reports partial when audit transport is retryable', () async {
-    mockAuditRepository.nextOutcome = const AuditSyncOutcome.retryable(failedStreams: 1);
-    mockSalesRepository.unsyncedAggregates = [
-      {
-        'id': 'sale-1',
-        'number': 'F-001',
-        'documentType': 'INVOICE',
-        'terminalId': 'terminal-1',
-        'sourceSequence': 1,
-        'idempotencyKey': 'sales:terminal-1:sale-1',
-        'items': <Map<String, Object?>>[],
-        'payments': <Map<String, Object?>>[],
-      },
-    ];
+  test(
+    'continues later domains and reports partial when audit transport is retryable',
+    () async {
+      mockAuditRepository.nextOutcome = const AuditSyncOutcome.retryable(
+        failedStreams: 1,
+      );
+      mockSalesRepository.unsyncedAggregates = [
+        {
+          'id': 'sale-1',
+          'number': 'F-001',
+          'documentType': 'INVOICE',
+          'terminalId': 'terminal-1',
+          'sourceSequence': 1,
+          'idempotencyKey': 'sales:terminal-1:sale-1',
+          'items': <Map<String, Object?>>[],
+          'payments': <Map<String, Object?>>[],
+        },
+      ];
 
-    final outcome = await syncService.triggerManualSync();
+      final outcome = await syncService.triggerManualSync();
 
-    expect(outcome.status, SyncRunStatus.partial);
-    expect(mockSalesRepository.syncedInvoiceIdBatches, [
-      ['sale-1'],
-    ]);
-  });
+      expect(outcome.status, SyncRunStatus.partial);
+      expect(mockSalesRepository.syncedInvoiceIdBatches, [
+        ['sale-1'],
+      ]);
+    },
+  );
 
   test('reports complete when every domain has no pending work', () async {
     final outcome = await syncService.triggerManualSync();
@@ -613,39 +657,47 @@ void main() {
     expect(outcome.status, SyncRunStatus.complete);
   });
 
-  test('releases the sync guard after a retryable audit timeout outcome', () async {
-    mockAuditRepository.nextOutcome = const AuditSyncOutcome.retryable(failedStreams: 1);
+  test(
+    'releases the sync guard after a retryable audit timeout outcome',
+    () async {
+      mockAuditRepository.nextOutcome = const AuditSyncOutcome.retryable(
+        failedStreams: 1,
+      );
 
-    await syncService.triggerManualSync();
-    await syncService.triggerManualSync();
+      await syncService.triggerManualSync();
+      await syncService.triggerManualSync();
 
-    expect(mockAuditRepository.syncCount, 2);
-  });
+      expect(mockAuditRepository.syncCount, 2);
+    },
+  );
 
-  test('continues inventory after a sales timeout and reports partial', () async {
-    mockSalesRepository.unsyncedAggregates = [
-      {
-        'id': 'sale-timeout',
-        'number': 'F-002',
-        'documentType': 'INVOICE',
-        'terminalId': 'terminal-1',
-        'sourceSequence': 1,
-        'idempotencyKey': 'sales:terminal-1:sale-timeout',
-        'items': <Map<String, Object?>>[],
-        'payments': <Map<String, Object?>>[],
-      },
-    ];
-    mockInventoryRepository.unsynced = [movement('inventory-after-sales')];
-    forcedError = DioException(
-      requestOptions: RequestOptions(path: '/v1/sync/batch'),
-      type: DioExceptionType.connectionTimeout,
-    );
+  test(
+    'continues inventory after a sales timeout and reports partial',
+    () async {
+      mockSalesRepository.unsyncedAggregates = [
+        {
+          'id': 'sale-timeout',
+          'number': 'F-002',
+          'documentType': 'INVOICE',
+          'terminalId': 'terminal-1',
+          'sourceSequence': 1,
+          'idempotencyKey': 'sales:terminal-1:sale-timeout',
+          'items': <Map<String, Object?>>[],
+          'payments': <Map<String, Object?>>[],
+        },
+      ];
+      mockInventoryRepository.unsynced = [movement('inventory-after-sales')];
+      forcedError = DioException(
+        requestOptions: RequestOptions(path: '/v1/sync/batch'),
+        type: DioExceptionType.connectionTimeout,
+      );
 
-    final outcome = await syncService.triggerManualSync();
+      final outcome = await syncService.triggerManualSync();
 
-    expect(outcome.status, SyncRunStatus.partial);
-    expect(capturedPosts.length, greaterThanOrEqualTo(2));
-  });
+      expect(outcome.status, SyncRunStatus.partial);
+      expect(capturedPosts.length, greaterThanOrEqualTo(2));
+    },
+  );
 
   test('reports partial when inventory transport fails', () async {
     mockInventoryRepository.unsynced = [movement('inventory-timeout')];
@@ -660,34 +712,37 @@ void main() {
     expect(mockInventoryRepository.failedIds, ['inventory-timeout']);
   });
 
-  test('aggregates multiple domain transport failures deterministically', () async {
-    mockSalesRepository.unsyncedAggregates = [
-      {
-        'id': 'sale-failure',
-        'number': 'F-003',
-        'documentType': 'INVOICE',
-        'terminalId': 'terminal-1',
-        'sourceSequence': 1,
-        'idempotencyKey': 'sales:terminal-1:sale-failure',
-        'items': <Map<String, Object?>>[],
-        'payments': <Map<String, Object?>>[],
-      },
-    ];
-    mockInventoryRepository.unsynced = [movement('inventory-failure')];
-    forcedError = DioException(
-      requestOptions: RequestOptions(path: '/v1/sync/batch'),
-      type: DioExceptionType.connectionTimeout,
-    );
+  test(
+    'aggregates multiple domain transport failures deterministically',
+    () async {
+      mockSalesRepository.unsyncedAggregates = [
+        {
+          'id': 'sale-failure',
+          'number': 'F-003',
+          'documentType': 'INVOICE',
+          'terminalId': 'terminal-1',
+          'sourceSequence': 1,
+          'idempotencyKey': 'sales:terminal-1:sale-failure',
+          'items': <Map<String, Object?>>[],
+          'payments': <Map<String, Object?>>[],
+        },
+      ];
+      mockInventoryRepository.unsynced = [movement('inventory-failure')];
+      forcedError = DioException(
+        requestOptions: RequestOptions(path: '/v1/sync/batch'),
+        type: DioExceptionType.connectionTimeout,
+      );
 
-    final first = await syncService.triggerManualSync();
-    final second = await syncService.triggerManualSync();
+      final first = await syncService.triggerManualSync();
+      final second = await syncService.triggerManualSync();
 
-    expect([first.status, second.status], [
-      SyncRunStatus.partial,
-      SyncRunStatus.partial,
-    ]);
-    expect(capturedPosts.length, greaterThanOrEqualTo(4));
-  });
+      expect(
+        [first.status, second.status],
+        [SyncRunStatus.partial, SyncRunStatus.partial],
+      );
+      expect(capturedPosts.length, greaterThanOrEqualTo(4));
+    },
+  );
 
   test(
     'does not mark sales as synced when sync endpoint returns error',
@@ -696,7 +751,7 @@ void main() {
         InventoryMovement(
           id: 'mov-23',
           insumoId: 'i-1',
-          type: MovementType.sale,
+          type: MovementType.adjustment,
           quantity: -1,
           previousStock: 1,
           newStock: 0,
@@ -1127,9 +1182,9 @@ void main() {
           originInvoiceItemId: 'sale-line-1',
         ),
         InventoryMovement(
-          id: 'regular-sale-movement',
+          id: 'regular-inventory-movement',
           insumoId: 'i-sale',
-          type: MovementType.sale,
+          type: MovementType.adjustment,
           quantity: -1,
           previousStock: 5,
           newStock: 4,
@@ -1158,11 +1213,11 @@ void main() {
       expect(records, hasLength(1));
       expect(
         records.single['idempotencyKey'],
-        'inventory:dev-1:regular-sale-movement',
+        'inventory:dev-1:regular-inventory-movement',
       );
       expect(
         mockInventoryRepository.syncedIds,
-        contains('regular-sale-movement'),
+        contains('regular-inventory-movement'),
       );
       expect(
         mockInventoryRepository.syncedIds,
@@ -1185,7 +1240,7 @@ void main() {
       InventoryMovement(
         id: 'sale-1',
         insumoId: 'i-9',
-        type: MovementType.sale,
+        type: MovementType.adjustment,
         quantity: -1,
         previousStock: 3,
         newStock: 2,
@@ -1296,6 +1351,9 @@ void main() {
           options: OpenDatabaseOptions(
             version: 24,
             onCreate: (database, version) async {
+              await database.execute(
+                'CREATE TABLE IF NOT EXISTS products (id TEXT PRIMARY KEY);',
+              );
               await database.execute('''
                 CREATE TABLE purchases (
                   id TEXT NOT NULL PRIMARY KEY,
@@ -1500,9 +1558,9 @@ void main() {
       ];
       mockInventoryRepository.unsynced = [
         InventoryMovement(
-          id: 'mov-sale-1',
+          id: 'mov-adj-1',
           insumoId: 'i-1',
-          type: MovementType.sale,
+          type: MovementType.adjustment,
           quantity: -1,
           previousStock: 3,
           newStock: 2,
@@ -1599,9 +1657,9 @@ void main() {
           sourceDocumentId: 'po-failed-sync',
         ),
         InventoryMovement(
-          id: 'mov-sale-1',
+          id: 'mov-adj-1',
           insumoId: 'raw-2',
-          type: MovementType.sale,
+          type: MovementType.adjustment,
           quantity: -1,
           previousStock: 5,
           newStock: 4,
@@ -1621,7 +1679,7 @@ void main() {
       final records = body['records'] as List<dynamic>;
       expect(records, hasLength(1));
       final record = records.single as Map<String, Object?>;
-      expect(record['idempotencyKey'], 'inventory:dev-1:mov-sale-1');
+      expect(record['idempotencyKey'], 'inventory:dev-1:mov-adj-1');
     },
   );
 
@@ -1812,7 +1870,7 @@ void main() {
         InventoryMovement(
           id: 'mov-accepted',
           insumoId: 'i-1',
-          type: MovementType.sale,
+          type: MovementType.adjustment,
           quantity: -1,
           previousStock: 10,
           newStock: 9,
@@ -2483,432 +2541,598 @@ void main() {
   );
 
   group('Slice 8.2 Inbound Catalog & Security Delta Sync', () {
-    test('pullInboundDeltas downloads deltas and hydrates SQLite tables', () async {
-      final database = await $FloorAppDatabase
-          .inMemoryDatabaseBuilder()
-          .build();
+    test(
+      'pullInboundDeltas downloads deltas and hydrates SQLite tables',
+      () async {
+        final database = await $FloorAppDatabase
+            .inMemoryDatabaseBuilder()
+            .build();
 
-      try {
-        final syncServiceWithDb = SyncService(
-          mockAuditRepository,
-          mockSalesRepository,
-          mockInventoryRepository,
-          dio,
-          database: database,
-        );
+        try {
+          final syncServiceWithDb = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+          );
 
-        capturedGets['/v1/sync/inbound/deltas'] = {
-          'status': 'success',
-          'serverTime': '2026-08-26T18:00:00.000Z',
-          'currentVersion': 1787745600000,
-          'deltas': {
-            'products': [
-              {
-                'id': 'prod-101',
-                'name': 'Café Espresso Doble',
-                'uom': 'CUP',
-                'stock': 25.0,
-                'averageCost': 12.0,
-                'sellPrice': 55.0,
-                'isActive': true,
-                'isPerishable': false,
-                'createdAt': '2026-08-26T10:00:00.000Z',
-              },
-            ],
-            'catalogValues': [
-              {
-                'id': 'cat-101',
-                'catalogType': 'CATEGORY',
-                'code': 'HOT_BEVERAGE',
-                'name': 'Bebidas Calientes',
-                'isActive': true,
-                'sortOrder': 1,
-              },
-            ],
-            'insumos': [
-              {
-                'id': 'ins-101',
-                'name': 'Grano de Café Especial',
-                'purchaseUom': 'KG',
-                'consumptionUom': 'G',
-                'conversionFactor': 1000.0,
-                'stock': 5000.0,
-                'averageCost': 0.45,
-                'isActive': true,
-                'isPerishable': false,
-              },
-            ],
-            'recipes': [
-              {
-                'id': 'rec-101',
-                'productId': 'prod-101',
-                'ingredientId': 'ins-101',
-                'ingredientType': 'INSUMO',
-                'quantity': 18.0,
-              },
-            ],
-            'users': [
-              {
-                'id': 'user-201',
-                'name': 'Barista Principal',
-                'email': 'barista@omnifood.ni',
-                'role': 'CASHIER',
-                'isActive': true,
-                'securityProfile': {
-                  'isPinEnabled': true,
-                  'isTotpEnabled': false,
-                  'pinHash': '\$2b\$10\$inboundhashedpin',
+          capturedGets['/v1/sync/inbound/deltas'] = {
+            'status': 'success',
+            'serverTime': '2026-08-26T18:00:00.000Z',
+            'currentVersion': 1787745600000,
+            'deltas': {
+              'products': [
+                {
+                  'id': 'prod-101',
+                  'name': 'Café Espresso Doble',
+                  'uom': 'CUP',
+                  'stock': 25.0,
+                  'averageCost': 12.0,
+                  'sellPrice': 55.0,
+                  'isActive': true,
+                  'isPerishable': false,
+                  'createdAt': '2026-08-26T10:00:00.000Z',
                 },
-              },
-            ],
-          },
-        };
+              ],
+              'catalogValues': [
+                {
+                  'id': 'cat-101',
+                  'catalogType': 'CATEGORY',
+                  'code': 'HOT_BEVERAGE',
+                  'name': 'Bebidas Calientes',
+                  'isActive': true,
+                  'sortOrder': 1,
+                },
+              ],
+              'insumos': [
+                {
+                  'id': 'ins-101',
+                  'name': 'Grano de Café Especial',
+                  'purchaseUom': 'KG',
+                  'consumptionUom': 'G',
+                  'conversionFactor': 1000.0,
+                  'stock': 5000.0,
+                  'averageCost': 0.45,
+                  'isActive': true,
+                  'isPerishable': false,
+                },
+              ],
+              'recipes': [
+                {
+                  'id': 'rec-101',
+                  'productId': 'prod-101',
+                  'ingredientId': 'ins-101',
+                  'ingredientType': 'INSUMO',
+                  'quantity': 18.0,
+                },
+              ],
+              'users': [
+                {
+                  'id': 'user-201',
+                  'name': 'Barista Principal',
+                  'email': 'barista@omnifood.ni',
+                  'role': 'CASHIER',
+                  'isActive': true,
+                  'securityProfile': {
+                    'isPinEnabled': true,
+                    'isTotpEnabled': false,
+                    'pinHash': '\$2b\$10\$inboundhashedpin',
+                  },
+                },
+              ],
+            },
+          };
 
-        final result = await syncServiceWithDb.pullInboundDeltas();
+          final result = await syncServiceWithDb.pullInboundDeltas();
 
-        expect(result, isNotNull);
-        expect(result!.productsCount, 1);
-        expect(result.catalogValuesCount, 1);
-        expect(result.insumosCount, 1);
-        expect(result.recipesCount, 1);
-        expect(result.usersCount, 1);
+          expect(result, isNotNull);
+          expect(result!.productsCount, 1);
+          expect(result.catalogValuesCount, 1);
+          expect(result.insumosCount, 1);
+          expect(result.recipesCount, 1);
+          expect(result.usersCount, 1);
 
-        // Verify SQLite hydration
-        final savedProduct = await database.productDao.findProductById('prod-101');
-        expect(savedProduct, isNotNull);
-        expect(savedProduct!.name, 'Café Espresso Doble');
-        expect(savedProduct.sellPrice, 55.0);
+          // Verify SQLite hydration
+          final savedProduct = await database.productDao.findProductById(
+            'prod-101',
+          );
+          expect(savedProduct, isNotNull);
+          expect(savedProduct!.name, 'Café Espresso Doble');
+          expect(savedProduct.sellPrice, 55.0);
 
-        final savedCategory = await database.catalogValueDao.findByTypeAndCode('CATEGORY', 'HOT_BEVERAGE');
-        expect(savedCategory, isNotNull);
-        expect(savedCategory!.name, 'Bebidas Calientes');
+          final savedCategory = await database.catalogValueDao
+              .findByTypeAndCode('CATEGORY', 'HOT_BEVERAGE');
+          expect(savedCategory, isNotNull);
+          expect(savedCategory!.name, 'Bebidas Calientes');
 
-        final savedInsumo = await database.insumoDao.findInsumoById('ins-101');
-        expect(savedInsumo, isNotNull);
-        expect(savedInsumo!.name, 'Grano de Café Especial');
-        expect(savedInsumo.consumptionUom, 'G');
+          final savedInsumo = await database.insumoDao.findInsumoById(
+            'ins-101',
+          );
+          expect(savedInsumo, isNotNull);
+          expect(savedInsumo!.name, 'Grano de Café Especial');
+          expect(savedInsumo.consumptionUom, 'G');
 
-        final savedRecipes = await database.recipeDao.findRecipeByProductId('prod-101');
-        expect(savedRecipes, hasLength(1));
-        expect(savedRecipes.first.quantity, 18.0);
+          final savedRecipes = await database.recipeDao.findRecipeByProductId(
+            'prod-101',
+          );
+          expect(savedRecipes, hasLength(1));
+          expect(savedRecipes.first.quantity, 18.0);
 
-        final savedUser = await database.userDao.findUserById('user-201');
-        expect(savedUser, isNotNull);
-        expect(savedUser!.name, 'Barista Principal');
-        expect(savedUser.pinHash, '\$2b\$10\$inboundhashedpin');
+          final savedUser = await database.userDao.findUserById('user-201');
+          expect(savedUser, isNotNull);
+          expect(savedUser!.name, 'Barista Principal');
+          expect(savedUser.pinHash, '\$2b\$10\$inboundhashedpin');
 
-        final savedProfile = await database.securityProfileDao.findByUserId('user-201');
-        expect(savedProfile, isNotNull);
-        expect(savedProfile!.pinHash, '\$2b\$10\$inboundhashedpin');
+          final savedProfile = await database.securityProfileDao.findByUserId(
+            'user-201',
+          );
+          expect(savedProfile, isNotNull);
+          expect(savedProfile!.pinHash, '\$2b\$10\$inboundhashedpin');
 
-        // Verify watermark saved in local_configs
-        final savedVersionConfig = await database.localConfigDao.getConfigByKey('last_inbound_sync_version');
-        expect(savedVersionConfig, isNotNull);
-        expect(savedVersionConfig!.value, '1787745600000');
-      } finally {
-        await database.close();
-      }
-    });
+          // Verify watermark saved in local_configs
+          final savedVersionConfig = await database.localConfigDao
+              .getConfigByKey('last_inbound_sync_version');
+          expect(savedVersionConfig, isNotNull);
+          expect(savedVersionConfig!.value, '1787745600000');
+        } finally {
+          await database.close();
+        }
+      },
+    );
 
-    test('pullInboundDeltas sends sinceVersion query parameter when watermark exists', () async {
-      final database = await $FloorAppDatabase
-          .inMemoryDatabaseBuilder()
-          .build();
+    test(
+      'pullInboundDeltas sends sinceVersion query parameter when watermark exists',
+      () async {
+        final database = await $FloorAppDatabase
+            .inMemoryDatabaseBuilder()
+            .build();
 
-      try {
-        await database.localConfigDao.saveConfig(
-          LocalConfigEntity(
-            key: 'last_inbound_sync_version',
-            value: '1787700000000',
-          ),
-        );
+        try {
+          await database.localConfigDao.saveConfig(
+            LocalConfigEntity(
+              key: 'last_inbound_sync_version',
+              value: '1787700000000',
+            ),
+          );
 
-        String? requestedSinceVersion;
-        String? requestedTerminalId;
+          String? requestedSinceVersion;
+          String? requestedTerminalId;
 
-        final testDio = Dio();
-        testDio.interceptors.add(
-          InterceptorsWrapper(
-            onRequest: (options, handler) {
-              if (options.path == '/v1/sync/inbound/deltas') {
-                requestedSinceVersion = options.queryParameters['sinceVersion']?.toString();
-                requestedTerminalId = options.queryParameters['terminalId']?.toString();
+          final testDio = Dio();
+          testDio.interceptors.add(
+            InterceptorsWrapper(
+              onRequest: (options, handler) {
+                if (options.path == '/v1/sync/inbound/deltas') {
+                  requestedSinceVersion = options
+                      .queryParameters['sinceVersion']
+                      ?.toString();
+                  requestedTerminalId = options.queryParameters['terminalId']
+                      ?.toString();
+                  handler.resolve(
+                    Response<dynamic>(
+                      statusCode: 200,
+                      requestOptions: options,
+                      data: {
+                        'status': 'success',
+                        'serverTime': '2026-08-26T18:30:00.000Z',
+                        'currentVersion': 1787750000000,
+                        'deltas': {
+                          'products': [],
+                          'catalogValues': [],
+                          'insumos': [],
+                          'recipes': [],
+                          'users': [],
+                        },
+                      },
+                    ),
+                  );
+                  return;
+                }
                 handler.resolve(
                   Response<dynamic>(
                     statusCode: 200,
                     requestOptions: options,
-                    data: {
-                      'status': 'success',
-                      'serverTime': '2026-08-26T18:30:00.000Z',
-                      'currentVersion': 1787750000000,
-                      'deltas': {
-                        'products': [],
-                        'catalogValues': [],
-                        'insumos': [],
-                        'recipes': [],
-                        'users': [],
-                      },
-                    },
+                    data: {'ok': true},
                   ),
                 );
-                return;
-              }
-              handler.resolve(
-                Response<dynamic>(
-                  statusCode: 200,
-                  requestOptions: options,
-                  data: {'ok': true},
-                ),
-              );
-            },
-          ),
-        );
-
-        final syncServiceWithDb = SyncService(
-          mockAuditRepository,
-          mockSalesRepository,
-          mockInventoryRepository,
-          testDio,
-          database: database,
-        );
-
-        await syncServiceWithDb.pullInboundDeltas();
-
-        expect(requestedSinceVersion, '1787700000000');
-        expect(requestedTerminalId, 'dev-1');
-
-        final updatedVersionConfig = await database.localConfigDao.getConfigByKey('last_inbound_sync_version');
-        expect(updatedVersionConfig?.value, '1787750000000');
-      } finally {
-        await database.close();
-      }
-    });
-
-    test('onInboundSync stream emits events and triggers reactive listeners', () async {
-      final database = await $FloorAppDatabase
-          .inMemoryDatabaseBuilder()
-          .build();
-
-      try {
-        final syncServiceWithDb = SyncService(
-          mockAuditRepository,
-          mockSalesRepository,
-          mockInventoryRepository,
-          dio,
-          database: database,
-        );
-
-        capturedGets['/v1/sync/inbound/deltas'] = {
-          'status': 'success',
-          'serverTime': '2026-08-26T19:00:00.000Z',
-          'currentVersion': 1787760000000,
-          'deltas': {
-            'products': [
-              {
-                'id': 'prod-event',
-                'name': 'Smoothie Fresa',
-                'uom': 'CUP',
-                'stock': 10.0,
-                'averageCost': 20.0,
-                'sellPrice': 60.0,
-                'isActive': true,
               },
-            ],
-            'catalogValues': [],
-            'insumos': [],
-            'recipes': [],
-            'users': [],
-          },
-        };
+            ),
+          );
 
-        InboundSyncResult? emittedEvent;
-        final sub = syncServiceWithDb.onInboundSync.listen((event) {
-          emittedEvent = event;
-        });
+          final syncServiceWithDb = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            testDio,
+            database: database,
+          );
 
-        await syncServiceWithDb.pullInboundDeltas();
-        await Future<void>.delayed(Duration.zero);
+          await syncServiceWithDb.pullInboundDeltas();
 
-        expect(emittedEvent, isNotNull);
-        expect(emittedEvent!.productsCount, 1);
-        expect(emittedEvent!.timestamp, '2026-08-26T19:00:00.000Z');
+          expect(requestedSinceVersion, '1787700000000');
+          expect(requestedTerminalId, 'dev-1');
 
-        await sub.cancel();
-      } finally {
-        await database.close();
-      }
-    });
+          final updatedVersionConfig = await database.localConfigDao
+              .getConfigByKey('last_inbound_sync_version');
+          expect(updatedVersionConfig?.value, '1787750000000');
+        } finally {
+          await database.close();
+        }
+      },
+    );
+
+    test(
+      'onInboundSync stream emits events and triggers reactive listeners',
+      () async {
+        final database = await $FloorAppDatabase
+            .inMemoryDatabaseBuilder()
+            .build();
+
+        try {
+          final syncServiceWithDb = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+          );
+
+          capturedGets['/v1/sync/inbound/deltas'] = {
+            'status': 'success',
+            'serverTime': '2026-08-26T19:00:00.000Z',
+            'currentVersion': 1787760000000,
+            'deltas': {
+              'products': [
+                {
+                  'id': 'prod-event',
+                  'name': 'Smoothie Fresa',
+                  'uom': 'CUP',
+                  'stock': 10.0,
+                  'averageCost': 20.0,
+                  'sellPrice': 60.0,
+                  'isActive': true,
+                },
+              ],
+              'catalogValues': [],
+              'insumos': [],
+              'recipes': [],
+              'users': [],
+            },
+          };
+
+          InboundSyncResult? emittedEvent;
+          final sub = syncServiceWithDb.onInboundSync.listen((event) {
+            emittedEvent = event;
+          });
+
+          await syncServiceWithDb.pullInboundDeltas();
+          await Future<void>.delayed(Duration.zero);
+
+          expect(emittedEvent, isNotNull);
+          expect(emittedEvent!.productsCount, 1);
+          expect(emittedEvent!.timestamp, '2026-08-26T19:00:00.000Z');
+
+          await sub.cancel();
+        } finally {
+          await database.close();
+        }
+      },
+    );
   });
 
   group('Slice 8.3 Auto-Sync, Network Resilience & Fault Isolation', () {
-    test('triggers automatic sync when NetworkConnectivityService detects reconnection', () async {
-      final connectivityService = NetworkConnectivityService(dio);
-      connectivityService.setOnlineStateForTest(false);
+    test(
+      'triggers automatic sync when NetworkConnectivityService detects reconnection',
+      () async {
+        final connectivityService = NetworkConnectivityService(dio);
+        connectivityService.setOnlineStateForTest(false);
 
-      final autoSyncService = SyncService(
-        mockAuditRepository,
-        mockSalesRepository,
-        mockInventoryRepository,
-        dio,
-        connectivityService: connectivityService,
-      );
-
-      autoSyncService.start();
-
-      expect(mockAuditRepository.syncCount, 0);
-
-      // Simulate recovery to online
-      connectivityService.setOnlineStateForTest(true);
-      await Future<void>.delayed(Duration.zero);
-
-      expect(mockAuditRepository.syncCount, 1);
-
-      autoSyncService.dispose();
-      connectivityService.dispose();
-    });
-
-    test('updates CloudSyncStatus through syncing, success, and idle transitions', () async {
-      final statuses = <CloudSyncStatus>[];
-      final sub = syncService.onStatusChanged.listen(statuses.add);
-
-      await syncService.triggerManualSync();
-      await Future<void>.delayed(Duration.zero);
-
-      expect(statuses, contains(CloudSyncStatus.syncing));
-      expect(statuses, contains(CloudSyncStatus.success));
-      expect(statuses, contains(CloudSyncStatus.idle));
-      expect(syncService.status, CloudSyncStatus.idle);
-      expect(syncService.lastSyncTime, isNotNull);
-      expect(syncService.consecutiveFailures, 0);
-
-      await sub.cancel();
-    });
-
-    test('getPendingOutboxCount correctly aggregates pending records', () async {
-      mockSalesRepository.unsyncedAggregates = [
-        {'id': 'sale-1', 'documentType': 'INVOICE'},
-        {'id': 'sale-2', 'documentType': 'INVOICE'},
-      ];
-      mockInventoryRepository.unsynced = [
-        movement('mov-1'),
-      ];
-
-      final count = await syncService.getPendingOutboxCount();
-      expect(count, 3);
-    });
-
-    test('getNextBackoffDelay scales exponentially with consecutive failures', () async {
-      expect(syncService.getNextBackoffDelay(), Duration.zero);
-
-      // Trigger forced failure
-      forcedError = DioException(
-        requestOptions: RequestOptions(path: '/v1/sync/batch'),
-        response: Response(statusCode: 500, requestOptions: RequestOptions(path: '/v1/sync/batch')),
-      );
-
-      mockInventoryRepository.unsynced = [movement('mov-err')];
-      await syncService.triggerManualSync();
-
-      expect(syncService.consecutiveFailures, 1);
-      expect(syncService.getNextBackoffDelay(), const Duration(seconds: 5));
-
-      await syncService.triggerManualSync();
-      expect(syncService.consecutiveFailures, 2);
-      expect(syncService.getNextBackoffDelay(), const Duration(seconds: 10));
-
-      await syncService.triggerManualSync();
-      expect(syncService.consecutiveFailures, 3);
-      expect(syncService.getNextBackoffDelay(), const Duration(seconds: 20));
-    });
-
-    test('fault isolation: Inbound Catalog failure does not block Sales Outbox push', () async {
-      final database = await $FloorAppDatabase
-          .inMemoryDatabaseBuilder()
-          .build();
-
-      try {
-        final isolatedSyncService = SyncService(
+        final autoSyncService = SyncService(
           mockAuditRepository,
           mockSalesRepository,
           mockInventoryRepository,
           dio,
-          database: database,
+          connectivityService: connectivityService,
         );
 
-        mockSalesRepository.unsyncedAggregates = [
-          {
-            'id': 'sale-isolated',
-            'number': 'FAC-001',
-            'documentType': 'INVOICE',
-            'terminalId': 'pos-terminal-1',
-            'sourceSequence': 1,
-            'idempotencyKey': 'invoice:pos-terminal-1:sale-isolated',
-            'items': [],
-          },
-        ];
+        autoSyncService.start();
 
-        // Setup batch POST to succeed, but inbound GET to fail with 500
-        dio.interceptors.clear();
-        dio.interceptors.add(
-          InterceptorsWrapper(
-            onRequest: (options, handler) {
-              if (options.path == '/v1/sync/batch') {
+        expect(mockAuditRepository.syncCount, 0);
+
+        // Simulate recovery to online
+        connectivityService.setOnlineStateForTest(true);
+        await Future<void>.delayed(Duration.zero);
+
+        expect(mockAuditRepository.syncCount, 1);
+
+        autoSyncService.dispose();
+        connectivityService.dispose();
+      },
+    );
+
+    test(
+      'updates CloudSyncStatus through syncing, success, and idle transitions',
+      () async {
+        final statuses = <CloudSyncStatus>[];
+        final sub = syncService.onStatusChanged.listen(statuses.add);
+
+        await syncService.triggerManualSync();
+        await Future<void>.delayed(Duration.zero);
+
+        expect(statuses, contains(CloudSyncStatus.syncing));
+        expect(statuses, contains(CloudSyncStatus.success));
+        expect(statuses, contains(CloudSyncStatus.idle));
+        expect(syncService.status, CloudSyncStatus.idle);
+        expect(syncService.lastSyncTime, isNotNull);
+        expect(syncService.consecutiveFailures, 0);
+
+        await sub.cancel();
+      },
+    );
+
+    test(
+      'getPendingOutboxCount correctly aggregates pending records',
+      () async {
+        mockSalesRepository.unsyncedAggregates = [
+          {'id': 'sale-1', 'documentType': 'INVOICE'},
+          {'id': 'sale-2', 'documentType': 'INVOICE'},
+        ];
+        mockInventoryRepository.unsynced = [movement('mov-1')];
+
+        final count = await syncService.getPendingOutboxCount();
+        expect(count, 3);
+      },
+    );
+
+    test(
+      'getNextBackoffDelay scales exponentially with consecutive failures',
+      () async {
+        expect(syncService.getNextBackoffDelay(), Duration.zero);
+
+        // Trigger forced failure
+        forcedError = DioException(
+          requestOptions: RequestOptions(path: '/v1/sync/batch'),
+          response: Response(
+            statusCode: 500,
+            requestOptions: RequestOptions(path: '/v1/sync/batch'),
+          ),
+        );
+
+        mockInventoryRepository.unsynced = [movement('mov-err')];
+        await syncService.triggerManualSync();
+
+        expect(syncService.consecutiveFailures, 1);
+        expect(syncService.getNextBackoffDelay(), const Duration(seconds: 5));
+
+        await syncService.triggerManualSync();
+        expect(syncService.consecutiveFailures, 2);
+        expect(syncService.getNextBackoffDelay(), const Duration(seconds: 10));
+
+        await syncService.triggerManualSync();
+        expect(syncService.consecutiveFailures, 3);
+        expect(syncService.getNextBackoffDelay(), const Duration(seconds: 20));
+      },
+    );
+
+    test(
+      'fault isolation: Inbound Catalog failure does not block Sales Outbox push',
+      () async {
+        final database = await $FloorAppDatabase
+            .inMemoryDatabaseBuilder()
+            .build();
+
+        try {
+          final isolatedSyncService = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+          );
+
+          mockSalesRepository.unsyncedAggregates = [
+            {
+              'id': 'sale-isolated',
+              'number': 'FAC-001',
+              'documentType': 'INVOICE',
+              'terminalId': 'pos-terminal-1',
+              'sourceSequence': 1,
+              'idempotencyKey': 'invoice:pos-terminal-1:sale-isolated',
+              'items': [],
+            },
+          ];
+
+          // Setup batch POST to succeed, but inbound GET to fail with 500
+          dio.interceptors.clear();
+          dio.interceptors.add(
+            InterceptorsWrapper(
+              onRequest: (options, handler) {
+                if (options.path == '/v1/sync/batch') {
+                  handler.resolve(
+                    Response<dynamic>(
+                      statusCode: 200,
+                      requestOptions: options,
+                      data: {
+                        'status': 'OK',
+                        'received': 1,
+                        'results': [
+                          {
+                            'idempotencyKey':
+                                'invoice:pos-terminal-1:sale-isolated',
+                            'terminalId': 'pos-terminal-1',
+                            'flowType': 'sales',
+                            'sourceSequence': 1,
+                            'status': 'ACCEPTED',
+                          },
+                        ],
+                      },
+                    ),
+                  );
+                  return;
+                }
+                if (options.path == '/v1/sync/inbound/deltas') {
+                  handler.reject(
+                    DioException(
+                      requestOptions: options,
+                      response: Response(
+                        statusCode: 500,
+                        requestOptions: options,
+                        data: {'error': 'Internal Server Error'},
+                      ),
+                      type: DioExceptionType.badResponse,
+                    ),
+                  );
+                  return;
+                }
                 handler.resolve(
                   Response<dynamic>(
                     statusCode: 200,
                     requestOptions: options,
-                    data: {
-                      'status': 'OK',
-                      'received': 1,
-                      'results': [
-                        {
-                          'idempotencyKey': 'invoice:pos-terminal-1:sale-isolated',
-                          'terminalId': 'pos-terminal-1',
-                          'flowType': 'sales',
-                          'sourceSequence': 1,
-                          'status': 'ACCEPTED',
-                        },
-                      ],
-                    },
+                    data: {'ok': true},
                   ),
                 );
-                return;
-              }
-              if (options.path == '/v1/sync/inbound/deltas') {
-                handler.reject(
-                  DioException(
-                    requestOptions: options,
-                    response: Response(
-                      statusCode: 500,
-                      requestOptions: options,
-                      data: {'error': 'Internal Server Error'},
-                    ),
-                    type: DioExceptionType.badResponse,
-                  ),
-                );
-                return;
-              }
-              handler.resolve(
-                Response<dynamic>(
-                  statusCode: 200,
-                  requestOptions: options,
-                  data: {'ok': true},
-                ),
-              );
-            },
+              },
+            ),
+          );
+
+          await isolatedSyncService.triggerManualSync();
+
+          // Verify sales document was marked synced despite inbound catalog error!
+          expect(mockSalesRepository.syncedInvoiceIdBatches, [
+            ['sale-isolated'],
+          ]);
+          expect(isolatedSyncService.lastSyncError, contains('Catálogo'));
+        } finally {
+          await database.close();
+        }
+      },
+    );
+  });
+
+  group('Slice 8 POS movement ownership and exact ACK in SyncService', () {
+    test(
+      'generic inventory outbox sends only GENERIC_INVENTORY movements and defensively excludes sales',
+      () async {
+        mockInventoryRepository.unsynced = [
+          InventoryMovement(
+            id: 'mov-sale-sync',
+            insumoId: 'ins-1',
+            type: MovementType.sale,
+            quantity: -1.0,
+            previousStock: 10.0,
+            newStock: 9.0,
+            timestamp: DateTime.now(),
+            deliveryOwner: 'SALE_SYNC',
+            deliveryState: 'LOCAL_APPLIED',
+            saleId: 'inv-1',
           ),
+          InventoryMovement(
+            id: 'mov-sale-defensive',
+            insumoId: 'ins-1',
+            type: MovementType.sale,
+            quantity: -1.0,
+            previousStock: 10.0,
+            newStock: 9.0,
+            timestamp: DateTime.now(),
+            sourceDocumentType: 'SALE',
+            deliveryOwner: 'GENERIC_INVENTORY',
+            deliveryState: 'LOCAL_APPLIED',
+          ),
+          InventoryMovement(
+            id: 'mov-quarantined',
+            insumoId: 'ins-1',
+            type: MovementType.adjustment,
+            quantity: 1.0,
+            previousStock: 9.0,
+            newStock: 10.0,
+            timestamp: DateTime.now(),
+            deliveryOwner: 'GENERIC_INVENTORY',
+            deliveryState: 'QUARANTINED',
+          ),
+          InventoryMovement(
+            id: 'mov-generic-valid',
+            insumoId: 'ins-1',
+            type: MovementType.adjustment,
+            quantity: 2.0,
+            previousStock: 10.0,
+            newStock: 12.0,
+            timestamp: DateTime.now(),
+            deliveryOwner: 'GENERIC_INVENTORY',
+            deliveryState: 'LOCAL_APPLIED',
+          ),
+        ];
+
+        respondToInventoryBatchWith(
+          (records) => {
+            'status': 'OK',
+            'received': records.length,
+            'results': records.map((r) => {...r, 'status': 'APPLIED'}).toList(),
+          },
         );
 
-        await isolatedSyncService.triggerManualSync();
+        await syncService.triggerManualSync();
 
-        // Verify sales document was marked synced despite inbound catalog error!
-        expect(mockSalesRepository.syncedInvoiceIdBatches, [
-          ['sale-isolated'],
-        ]);
-        expect(isolatedSyncService.lastSyncError, contains('Catálogo'));
-      } finally {
-        await database.close();
-      }
-    });
+        final inventoryPosts = capturedPosts
+            .where((p) => p.path == '/v1/sync/batch')
+            .toList();
+        expect(inventoryPosts, hasLength(1));
+        final records = (inventoryPosts.first.body as Map)['records'] as List;
+        expect(records, hasLength(1));
+        expect(records.first['idempotencyKey'], contains('mov-generic-valid'));
+      },
+    );
+
+    test(
+      'sales sync reconciles ACK correlation IDs via acknowledgeSaleSync and honors integrity failures',
+      () async {
+        mockSalesRepository.unsyncedAggregates = [
+          {
+            'id': 'inv-ack-sync',
+            'terminalId': 'term-1',
+            'documentType': 'SALE',
+            'sourceSequence': 1,
+            'idempotencyKey': 'sale:term-1:inv-ack-sync',
+            'inventoryOutcome': 'APPLIED',
+            'items': [],
+            'payments': [],
+          },
+        ];
+
+        respondToInventoryBatchWith(
+          (records) => {
+            'status': 'OK',
+            'received': records.length,
+            'results': [
+              {
+                'idempotencyKey': 'sale:term-1:inv-ack-sync',
+                'terminalId': 'term-1',
+                'flowType': 'sales',
+                'sourceSequence': 1,
+                'status': 'APPLIED',
+                'inventoryOutcome': 'APPLIED',
+                'acknowledgedMovementCorrelationIds': ['corr-ack-1'],
+              },
+            ],
+          },
+        );
+
+        await syncService.triggerManualSync();
+
+        expect(mockSalesRepository.acknowledgedSales, hasLength(1));
+        expect(
+          mockSalesRepository.acknowledgedSales.first.invoiceId,
+          'inv-ack-sync',
+        );
+        expect(mockSalesRepository.acknowledgedSales.first.outcome, 'APPLIED');
+        expect(
+          mockSalesRepository
+              .acknowledgedSales
+              .first
+              .acknowledgedCorrelationIds,
+          ['corr-ack-1'],
+        );
+      },
+    );
   });
 }

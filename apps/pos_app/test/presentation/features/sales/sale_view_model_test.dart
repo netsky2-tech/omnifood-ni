@@ -65,6 +65,7 @@ class FakeLocalConfigDao extends Mock implements LocalConfigDao {
 }
 
 class FakeKitchenOrderDao extends Mock implements KitchenOrderDao {}
+
 class FakeTaxConfigDao extends Mock implements TaxConfigDao {
   @override
   Future<List<TaxConfigEntity>> getAllTaxConfigs() async => [];
@@ -94,7 +95,8 @@ class FakeTenantConfigService extends TenantConfigService {
   Future<TenantConfig> getTenantConfig() async => const TenantConfig();
 
   @override
-  Stream<TenantOperationMode> get onOperationModeChanged => const Stream.empty();
+  Stream<TenantOperationMode> get onOperationModeChanged =>
+      const Stream.empty();
 }
 
 @GenerateMocks([
@@ -129,7 +131,9 @@ void main() {
     mockHoldDao = MockHoldTicketDao();
     mockPromoDao = MockPromotionDao();
     fakeLocalConfigDao = FakeLocalConfigDao();
-    fakeLocalConfigDao.saveConfig(LocalConfigEntity(key: 'tax_regime', value: 'CUOTA_FIJA'));
+    fakeLocalConfigDao.saveConfig(
+      LocalConfigEntity(key: 'tax_regime', value: 'CUOTA_FIJA'),
+    );
 
     when(mockDb.cashierSessionDao).thenReturn(mockSessionDao);
     when(mockDb.holdTicketDao).thenReturn(mockHoldDao);
@@ -161,6 +165,22 @@ void main() {
     );
   });
 
+  test('processSale fails when there is no authenticated user', () async {
+    await expectLater(
+      viewModel.processSale([PaymentMethod.cash]),
+      throwsA(isA<StateError>()),
+    );
+
+    expect(viewModel.errorMessage, 'Usuario no autenticado');
+    verifyNever(
+      mockSalesRepo.saveSale(
+        invoice: anyNamed('invoice'),
+        items: anyNamed('items'),
+        payments: anyNamed('payments'),
+      ),
+    );
+  });
+
   test('Initial state should be empty', () {
     expect(viewModel.cart, isEmpty);
     expect(viewModel.total, 0.0);
@@ -174,6 +194,7 @@ void main() {
         name: 'Cashier',
         role: UserRole.cashier,
         isActive: true,
+        tenantId: 'tenant-test',
       ),
     );
     when(mockSessionDao.insertSession(any)).thenAnswer((_) async {});
@@ -303,6 +324,7 @@ void main() {
         name: 'Cashier',
         role: UserRole.cashier,
         isActive: true,
+        tenantId: 'tenant-test',
       ),
     );
 
@@ -380,6 +402,7 @@ void main() {
         name: 'Cashier',
         role: UserRole.cashier,
         isActive: true,
+        tenantId: 'tenant-test',
       ),
     );
 
@@ -464,6 +487,7 @@ void main() {
           name: 'Cashier',
           role: UserRole.cashier,
           isActive: true,
+          tenantId: 'tenant-test',
         ),
       );
 
@@ -488,6 +512,7 @@ void main() {
           name: 'Cashier',
           role: UserRole.cashier,
           isActive: true,
+          tenantId: 'tenant-test',
         ),
       );
 
@@ -579,7 +604,9 @@ void main() {
             averageCost: 50,
           ),
         ];
-        when(mockInventoryRepo.getActiveProducts()).thenAnswer((_) async => productList);
+        when(
+          mockInventoryRepo.getActiveProducts(),
+        ).thenAnswer((_) async => productList);
 
         final vm = SaleViewModel(
           mockSalesRepo,
@@ -617,157 +644,183 @@ void main() {
     );
 
     group('Fiscal Hardening & Dynamic Regime Lifecycle', () {
-      test('Unconfigured tax regime allows browsing and cart building, but blocks sale finalization', () async {
-        viewModel.setCompanyTaxRegime(null);
-        await fakeLocalConfigDao.deleteConfig('tax_regime');
-        expect(viewModel.companyTaxRegime, isNull);
+      test(
+        'Unconfigured tax regime allows browsing and cart building, but blocks sale finalization',
+        () async {
+          viewModel.setCompanyTaxRegime(null);
+          await fakeLocalConfigDao.deleteConfig('tax_regime');
+          expect(viewModel.companyTaxRegime, isNull);
 
-        const product = Product(
-          id: 'p-1',
-          name: 'Latte',
-          uom: 'UND',
-          stock: 10,
-          averageCost: 20,
-          sellPrice: 100.0,
-          taxRate: 0.15,
-        );
+          const product = Product(
+            id: 'p-1',
+            name: 'Latte',
+            uom: 'UND',
+            stock: 10,
+            averageCost: 20,
+            sellPrice: 100.0,
+            taxRate: 0.15,
+          );
 
-        viewModel.addToCart(product);
-        expect(viewModel.cart, hasLength(1));
-        // In unconfigured state, no IVA is applied silently
-        expect(viewModel.subtotal, equals(100.00));
-        expect(viewModel.totalTax, equals(0.00));
-        expect(viewModel.total, equals(100.00));
+          viewModel.addToCart(product);
+          expect(viewModel.cart, hasLength(1));
+          // In unconfigured state, no IVA is applied silently
+          expect(viewModel.subtotal, equals(100.00));
+          expect(viewModel.totalTax, equals(0.00));
+          expect(viewModel.total, equals(100.00));
 
-        when(mockAuthRepo.getCurrentUser()).thenAnswer(
-          (_) async => const User(id: 'u-1', name: 'Cashier', role: UserRole.cashier, isActive: true),
-        );
+          when(mockAuthRepo.getCurrentUser()).thenAnswer(
+            (_) async => const User(
+              id: 'u-1',
+              name: 'Cashier',
+              role: UserRole.cashier,
+              isActive: true,
+            ),
+          );
 
-        // Attempting to finalize or process sale must throw FiscalConfigurationException and block sale
-        await expectLater(
-          () => viewModel.finalizeSale([PaymentMethod.cash]),
-          throwsA(isA<FiscalConfigurationException>()),
-        );
-        expect(viewModel.errorMessage?.toLowerCase(), contains('régimen fiscal'));
-        verifyNever(mockSalesRepo.saveSale(
-          invoice: anyNamed('invoice'),
-          items: anyNamed('items'),
-          payments: anyNamed('payments'),
-        ));
-      });
+          // Attempting to finalize or process sale must throw FiscalConfigurationException and block sale
+          await expectLater(
+            () => viewModel.finalizeSale([PaymentMethod.cash]),
+            throwsA(isA<FiscalConfigurationException>()),
+          );
+          expect(
+            viewModel.errorMessage?.toLowerCase(),
+            contains('régimen fiscal'),
+          );
+          verifyNever(
+            mockSalesRepo.saveSale(
+              invoice: anyNamed('invoice'),
+              items: anyNamed('items'),
+              payments: anyNamed('payments'),
+            ),
+          );
+        },
+      );
 
-      test('Dynamic regime change with open cart recalculates immediately without hybrid state', () async {
-        when(mockAuthRepo.getCurrentUser()).thenAnswer(
-          (_) async => const User(id: 'u-1', name: 'Cashier', role: UserRole.cashier, isActive: true),
-        );
+      test(
+        'Dynamic regime change with open cart recalculates immediately without hybrid state',
+        () async {
+          when(mockAuthRepo.getCurrentUser()).thenAnswer(
+            (_) async => const User(
+              id: 'u-1',
+              name: 'Cashier',
+              role: UserRole.cashier,
+              isActive: true,
+            ),
+          );
 
-        // 1. Initial regime: Régimen General
-        viewModel.setCompanyTaxRegime(TaxRegime.regimenGeneral);
-        const product = Product(
-          id: 'p-dinner',
-          name: 'Cena Completa',
-          uom: 'UND',
-          stock: 10,
-          averageCost: 40,
-          sellPrice: 100.0,
-          taxRate: 0.15,
-        );
+          // 1. Initial regime: Régimen General
+          viewModel.setCompanyTaxRegime(TaxRegime.regimenGeneral);
+          const product = Product(
+            id: 'p-dinner',
+            name: 'Cena Completa',
+            uom: 'UND',
+            stock: 10,
+            averageCost: 40,
+            sellPrice: 100.0,
+            taxRate: 0.15,
+          );
 
-        viewModel.addToCart(product);
+          viewModel.addToCart(product);
 
-        expect(viewModel.companyTaxRegime, equals(TaxRegime.regimenGeneral));
-        expect(viewModel.subtotal, equals(100.00));
-        expect(viewModel.totalTax, equals(15.00));
-        expect(viewModel.total, equals(115.00));
+          expect(viewModel.companyTaxRegime, equals(TaxRegime.regimenGeneral));
+          expect(viewModel.subtotal, equals(100.00));
+          expect(viewModel.totalTax, equals(15.00));
+          expect(viewModel.total, equals(115.00));
 
-        // 2. User changes company regime to Cuota Fija in business settings while cart is open
-        viewModel.setCompanyTaxRegime(TaxRegime.cuotaFija);
+          // 2. User changes company regime to Cuota Fija in business settings while cart is open
+          viewModel.setCompanyTaxRegime(TaxRegime.cuotaFija);
 
-        // Cart immediately recalculates via currentFiscalCalculation
-        expect(viewModel.companyTaxRegime, equals(TaxRegime.cuotaFija));
-        expect(viewModel.subtotal, equals(100.00));
-        expect(viewModel.totalTax, equals(0.00));
-        expect(viewModel.total, equals(100.00));
+          // Cart immediately recalculates via currentFiscalCalculation
+          expect(viewModel.companyTaxRegime, equals(TaxRegime.cuotaFija));
+          expect(viewModel.subtotal, equals(100.00));
+          expect(viewModel.totalTax, equals(0.00));
+          expect(viewModel.total, equals(100.00));
 
-        Invoice? savedInvoice;
-        List<InvoiceItem>? savedItems;
-        when(mockSalesRepo.saveSale(
-          invoice: anyNamed('invoice'),
-          items: anyNamed('items'),
-          payments: anyNamed('payments'),
-        )).thenAnswer((inv) async {
-          savedInvoice = inv.namedArguments[#invoice] as Invoice;
-          savedItems = inv.namedArguments[#items] as List<InvoiceItem>;
-        });
+          Invoice? savedInvoice;
+          List<InvoiceItem>? savedItems;
+          when(
+            mockSalesRepo.saveSale(
+              invoice: anyNamed('invoice'),
+              items: anyNamed('items'),
+              payments: anyNamed('payments'),
+            ),
+          ).thenAnswer((inv) async {
+            savedInvoice = inv.namedArguments[#invoice] as Invoice;
+            savedItems = inv.namedArguments[#items] as List<InvoiceItem>;
+          });
 
-        await viewModel.finalizeSale([PaymentMethod.cash]);
+          await viewModel.finalizeSale([PaymentMethod.cash]);
 
-        expect(savedInvoice, isNotNull);
-        expect(savedInvoice!.subtotal, equals(100.00));
-        expect(savedInvoice!.totalTax, equals(0.00));
-        expect(savedInvoice!.total, equals(100.00));
+          expect(savedInvoice, isNotNull);
+          expect(savedInvoice!.subtotal, equals(100.00));
+          expect(savedInvoice!.totalTax, equals(0.00));
+          expect(savedInvoice!.total, equals(100.00));
 
-        expect(savedItems, isNotNull);
-        expect(savedItems!.first.appliedTaxRate, equals(0.00));
-        expect(savedItems!.first.taxAmount, equals(0.00));
-        expect(savedItems!.first.total, equals(100.00));
-      });
+          expect(savedItems, isNotNull);
+          expect(savedItems!.first.appliedTaxRate, equals(0.00));
+          expect(savedItems!.first.taxAmount, equals(0.00));
+          expect(savedItems!.first.total, equals(100.00));
+        },
+      );
 
-      test('Persistence & restart lifecycle: loads saved regime correctly and blocks on corrupt value', () async {
-        // Case A: Cuota Fija saved in database
-        fakeLocalConfigDao = FakeLocalConfigDao();
-        await fakeLocalConfigDao.saveConfig(
-          LocalConfigEntity(key: 'tax_regime', value: 'CUOTA_FIJA'),
-        );
-        when(mockDb.localConfigDao).thenReturn(fakeLocalConfigDao);
+      test(
+        'Persistence & restart lifecycle: loads saved regime correctly and blocks on corrupt value',
+        () async {
+          // Case A: Cuota Fija saved in database
+          fakeLocalConfigDao = FakeLocalConfigDao();
+          await fakeLocalConfigDao.saveConfig(
+            LocalConfigEntity(key: 'tax_regime', value: 'CUOTA_FIJA'),
+          );
+          when(mockDb.localConfigDao).thenReturn(fakeLocalConfigDao);
 
-        var vm = SaleViewModel(
-          mockSalesRepo,
-          mockInventoryRepo,
-          mockAuthRepo,
-          mockDb,
-          null,
-          true,
-          fakeTenantConfigService,
-          fakeKitchenOrderService,
-        );
-        await vm.loadCompanyTaxRegime();
-        expect(vm.companyTaxRegime, equals(TaxRegime.cuotaFija));
+          var vm = SaleViewModel(
+            mockSalesRepo,
+            mockInventoryRepo,
+            mockAuthRepo,
+            mockDb,
+            null,
+            true,
+            fakeTenantConfigService,
+            fakeKitchenOrderService,
+          );
+          await vm.loadCompanyTaxRegime();
+          expect(vm.companyTaxRegime, equals(TaxRegime.cuotaFija));
 
-        // Case B: Régimen General saved in database
-        await fakeLocalConfigDao.saveConfig(
-          LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'),
-        );
-        vm = SaleViewModel(
-          mockSalesRepo,
-          mockInventoryRepo,
-          mockAuthRepo,
-          mockDb,
-          null,
-          true,
-          fakeTenantConfigService,
-          fakeKitchenOrderService,
-        );
-        await vm.loadCompanyTaxRegime();
-        expect(vm.companyTaxRegime, equals(TaxRegime.regimenGeneral));
+          // Case B: Régimen General saved in database
+          await fakeLocalConfigDao.saveConfig(
+            LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'),
+          );
+          vm = SaleViewModel(
+            mockSalesRepo,
+            mockInventoryRepo,
+            mockAuthRepo,
+            mockDb,
+            null,
+            true,
+            fakeTenantConfigService,
+            fakeKitchenOrderService,
+          );
+          await vm.loadCompanyTaxRegime();
+          expect(vm.companyTaxRegime, equals(TaxRegime.regimenGeneral));
 
-        // Case C: Corrupt / unrecognized regime in database
-        await fakeLocalConfigDao.saveConfig(
-          LocalConfigEntity(key: 'tax_regime', value: 'VALOR_CORRUPTO_999'),
-        );
-        vm = SaleViewModel(
-          mockSalesRepo,
-          mockInventoryRepo,
-          mockAuthRepo,
-          mockDb,
-          null,
-          true,
-          fakeTenantConfigService,
-          fakeKitchenOrderService,
-        );
-        await vm.loadCompanyTaxRegime();
-        expect(vm.companyTaxRegime, isNull);
-      });
+          // Case C: Corrupt / unrecognized regime in database
+          await fakeLocalConfigDao.saveConfig(
+            LocalConfigEntity(key: 'tax_regime', value: 'VALOR_CORRUPTO_999'),
+          );
+          vm = SaleViewModel(
+            mockSalesRepo,
+            mockInventoryRepo,
+            mockAuthRepo,
+            mockDb,
+            null,
+            true,
+            fakeTenantConfigService,
+            fakeKitchenOrderService,
+          );
+          await vm.loadCompanyTaxRegime();
+          expect(vm.companyTaxRegime, isNull);
+        },
+      );
     });
   });
 }

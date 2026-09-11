@@ -168,6 +168,9 @@ describe('RecipeService', () => {
       components: [
         { insumoId: 'ins-1', grossQuantity: 1, technicalShrinkPct: 15 },
       ],
+      yieldQuantity: 10.00006,
+      technicalShrinkPct: 12.34567,
+      versionNote: 'Ten servings',
     });
 
     expect(recipeVersionRepo.save).toHaveBeenNthCalledWith(
@@ -175,15 +178,33 @@ describe('RecipeService', () => {
       expect.objectContaining({ is_active: false }),
     );
     expect(recipeVersionRepo.create).toHaveBeenCalledWith(
-      expect.objectContaining({ version_number: 8, is_active: true }),
+      expect.objectContaining({
+        version_number: 8,
+        is_active: true,
+        yield_quantity: 10.0001,
+        technical_shrink_pct: 12.3457,
+        version_note: 'Ten servings',
+      }),
     );
     expect(recipeDetailRepo.create).toHaveBeenCalledWith(
       expect.objectContaining({
         gross_quantity: 1,
         technical_shrink_pct: 15,
-        quantity: 0.85,
+        quantity: 0.085,
       }),
     );
+  });
+
+  it('rejects a yield that becomes nonpositive at persistence precision', async () => {
+    await expect(
+      service.createNewVersion({
+        tenantId: 'tenant-A',
+        productId: 'prod-1',
+        components: [],
+        yieldQuantity: 0.00004,
+        technicalShrinkPct: 0,
+      }),
+    ).rejects.toThrow('yieldQuantity must be > 0 after rounding');
   });
 
   it('returns deterministic ordered snapshot by insumo id', async () => {
@@ -281,6 +302,33 @@ describe('RecipeService', () => {
       expect(savedPrior).toMatchObject({ is_active: false });
     });
 
+    it('rejects a repost that would mutate a published effective version', async () => {
+      productRepo.findOne.mockResolvedValue({ id: buildDto().productId });
+      insumoRepo.findOne.mockResolvedValue({
+        tenant_id: 'tenant-A',
+        name: 'Arroz',
+        consumptionUom: 'kg',
+      });
+      manager.findOne.mockResolvedValue({
+        id: 'v-published',
+        tenant_id: 'tenant-A',
+        pos_document_id: buildDto().id,
+        product_id: buildDto().productId,
+        publication_state: 'PUBLISHED',
+        is_active: true,
+        fecha_inicio_vigencia: new Date('2026-01-01T00:00:00.000Z'),
+      });
+
+      await expect(
+        service.ingestPosVersion({
+          tenantId: 'tenant-A',
+          dto: buildDto({ productName: 'Attempted rewrite' }),
+        }),
+      ).rejects.toThrow('published or effective');
+      expect(manager.save).not.toHaveBeenCalled();
+      expect(manager.delete).not.toHaveBeenCalled();
+    });
+
     it('idempotently replaces details when the same pos_document_id is reposted', async () => {
       productRepo.findOne.mockResolvedValue({ id: buildDto().productId });
       insumoRepo.findOne.mockResolvedValue({
@@ -297,6 +345,9 @@ describe('RecipeService', () => {
         version_number: 1,
         yield_quantity: 1,
         technical_shrink_pct: 0,
+        publication_state: 'DRAFT',
+        published_at: null,
+        is_active: false,
         fecha_inicio_vigencia: new Date('2026-01-01T00:00:00.000Z'),
       };
       manager.findOne.mockResolvedValue(existing);
@@ -352,6 +403,9 @@ describe('RecipeService', () => {
         version_number: 1,
         yield_quantity: 10,
         technical_shrink_pct: 0,
+        publication_state: 'DRAFT',
+        published_at: null,
+        is_active: false,
         fecha_inicio_vigencia: new Date('2026-06-26T12:00:00.000Z'),
       };
       const driverError = Object.assign(

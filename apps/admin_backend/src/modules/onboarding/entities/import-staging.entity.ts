@@ -88,6 +88,30 @@ export class ImportStaging {
 
   // Validation State
   @Column({
+    type: 'int',
+    default: 1,
+  })
+  row_ordinal?: number;
+
+  @Column({ type: 'varchar', nullable: true })
+  matched_by?: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  target_product_id?: string | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  fields_to_change?: string[] | null;
+
+  @Column({ type: 'text', nullable: true })
+  conflict_reason?: string | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  unsupported_fields?: string[] | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  unknown_columns?: string[] | null;
+
+  @Column({
     type: 'varchar',
     default: ImportStagingStatus.PENDIENTE,
   })

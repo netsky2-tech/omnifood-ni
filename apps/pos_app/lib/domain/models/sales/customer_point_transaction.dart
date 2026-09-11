@@ -23,6 +23,25 @@ class CustomerPointTransaction with _$CustomerPointTransaction {
     String? reason,
     required DateTime createdAt,
     @Default(SyncStatus.pending) SyncStatus syncStatus,
+    // --- V1 Loyalty fields ---
+    String? loyaltyProgramId,
+    String? ticketId,
+    String? rewardId,
+    String? transactionType,
+    int? units,
+    String? reversalOfTransactionId,
+    String? idempotencyKey,
+    String? sourceEventId,
+    String? actorUserId,
+    String? branchId,
+    String? terminalId,
+    int? programVersion,
+    int? rewardVersion,
+    String? commercialSnapshot,
+    String? origin,
+    DateTime? occurredAt,
+    DateTime? recordedAt,
+    @Default(false) bool legacyImported,
   }) = _CustomerPointTransaction;
 
   factory CustomerPointTransaction.fromJson(Map<String, dynamic> json) =>

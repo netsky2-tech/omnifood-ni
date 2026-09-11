@@ -11,7 +11,11 @@ import {
   QueryFailedError,
   Repository,
 } from 'typeorm';
-import { RecipeVersion } from './entities/recipe-version.entity';
+import {
+  RecipePublicationState,
+  RecipeSuggestionState,
+  RecipeVersion,
+} from './entities/recipe-version.entity';
 import { RecipeDetail } from './entities/recipe-detail.entity';
 import { Insumo } from './entities/insumo.entity';
 import { Product } from './entities/product.entity';
@@ -84,8 +88,16 @@ export class RecipeService {
     tenantId: string;
     productId: string;
     components: RecipeComponentInput[];
+    yieldQuantity: number;
+    technicalShrinkPct: number;
+    versionNote?: string | null;
     effectiveAt?: Date;
   }): Promise<RecipeVersion> {
+    const yieldQuantity = round4(input.yieldQuantity);
+    if (!Number.isFinite(yieldQuantity) || yieldQuantity <= 0) {
+      throw new BadRequestException('yieldQuantity must be > 0 after rounding');
+    }
+
     const activeVersion = await this.recipeVersionRepo.findOne({
       where: {
         tenant_id: input.tenantId,
@@ -111,13 +123,18 @@ export class RecipeService {
       version_number: nextVersionNumber,
       is_active: true,
       fecha_inicio_vigencia: input.effectiveAt ?? new Date(),
+      yield_quantity: yieldQuantity,
+      technical_shrink_pct: round4(input.technicalShrinkPct),
+      version_note: input.versionNote ?? null,
     });
 
     const savedVersion = await this.recipeVersionRepo.save(version);
 
     const details = input.components.map((component) => {
+      // RecipeDetail.quantity is consumption for one sold unit, not one batch.
       const netUsableQuantity = round4(
-        component.grossQuantity * (1 - component.technicalShrinkPct / 100),
+        (component.grossQuantity * (1 - component.technicalShrinkPct / 100)) /
+          yieldQuantity,
       );
 
       return this.recipeDetailRepo.create({
@@ -144,9 +161,56 @@ export class RecipeService {
         tenant_id: tenantId,
         product_id: productId,
         is_active: true,
+        publication_state: RecipePublicationState.PUBLISHED,
       },
       order: { version_number: 'DESC' },
     });
+  }
+
+  async publishDraftVersion(
+    tenantId: string,
+    recipeVersionId: string,
+  ): Promise<RecipeVersion> {
+    const draft = await this.recipeVersionRepo.findOne({
+      where: { id: recipeVersionId, tenant_id: tenantId },
+    });
+
+    if (!draft) {
+      throw new NotFoundException(
+        `Recipe version ${recipeVersionId} not found`,
+      );
+    }
+
+    if (
+      draft.publication_state === RecipePublicationState.PUBLISHED &&
+      draft.is_active
+    ) {
+      return draft;
+    }
+
+    // Deactivate prior active version for this product
+    const priorActive = await this.recipeVersionRepo.findOne({
+      where: {
+        tenant_id: tenantId,
+        product_id: draft.product_id,
+        is_active: true,
+      },
+      order: { version_number: 'DESC' },
+    });
+
+    if (priorActive && priorActive.id !== draft.id) {
+      priorActive.is_active = false;
+      priorActive.fecha_fin_vigencia = new Date();
+      await this.recipeVersionRepo.save(priorActive);
+    }
+
+    draft.is_active = true;
+    draft.publication_state = RecipePublicationState.PUBLISHED;
+    draft.suggestion_state = RecipeSuggestionState.CONFIRMED;
+    draft.published_at = new Date();
+    draft.fecha_inicio_vigencia = draft.fecha_inicio_vigencia ?? new Date();
+
+    return this.recipeVersionRepo.save(draft);
   }
 
   async getSnapshot(
@@ -208,8 +272,12 @@ export class RecipeService {
   ): Promise<IngestPosVersionResult> {
     const { tenantId, dto } = input;
 
-    if (!Number.isFinite(dto.yieldQuantity) || dto.yieldQuantity <= 0) {
-      throw new BadRequestException('yieldQuantity must be > 0');
+    const normalizedYieldQuantity = round4(dto.yieldQuantity);
+    if (
+      !Number.isFinite(normalizedYieldQuantity) ||
+      normalizedYieldQuantity <= 0
+    ) {
+      throw new BadRequestException('yieldQuantity must be > 0 after rounding');
     }
 
     this.assertVersionShrink(dto.technicalShrinkPct, 'version');
@@ -232,7 +300,7 @@ export class RecipeService {
       tenantId,
       dto,
       resolvedComponents,
-      yieldQuantity: round4(dto.yieldQuantity),
+      yieldQuantity: normalizedYieldQuantity,
       publishedAt: this.parseDate(dto.publishedAt),
       posCreatedAt: this.parseDate(dto.createdAt),
     };
@@ -317,6 +385,19 @@ export class RecipeService {
     if (existing.product_id !== input.dto.productId) {
       throw new BadRequestException(
         `Recipe version document ${input.dto.id} already exists for product ${existing.product_id}, not ${input.dto.productId}`,
+      );
+    }
+
+    // A POS document ID becomes immutable authority once it is published or
+    // effective. Legacy/ambiguous state is rejected rather than guessed as a
+    // draft; only an explicitly unpublished, inactive draft may be edited.
+    if (
+      existing.publication_state !== RecipePublicationState.DRAFT ||
+      existing.published_at !== null ||
+      existing.is_active === true
+    ) {
+      throw new BadRequestException(
+        `Recipe version document ${input.dto.id} is published or effective and cannot be replaced`,
       );
     }
 

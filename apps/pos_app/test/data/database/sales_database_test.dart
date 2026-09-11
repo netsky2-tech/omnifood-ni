@@ -20,6 +20,29 @@ void main() {
   });
 
   group('InvoiceDao', () {
+    test('returns an empty last invoice number for an empty database', () async {
+      expect(await database.invoiceDao.getLastInvoiceNumber(), isEmpty);
+    });
+
+    test('returns the latest invoice number after an invoice is persisted', () async {
+      await database.invoiceDao.insertInvoice(
+        InvoiceEntity(
+          id: 'inv-last',
+          number: '001-001-01-00000001',
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+          userId: 'u1',
+          subtotal: 100,
+          totalTax: 15,
+          total: 115,
+        ),
+      );
+
+      expect(
+        await database.invoiceDao.getLastInvoiceNumber(),
+        '001-001-01-00000001',
+      );
+    });
+
     test('updateSyncStatusForIds should update multiple invoices', () async {
       final invoices = [
         InvoiceEntity(

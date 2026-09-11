@@ -29,6 +29,15 @@ class DatabaseSeeder {
     final localAuth = LocalAuthService();
     final now = DateTime.now();
 
+    // PILOT MODE: Skip ALL local test data seeding.
+    // In the founder pilot flow, the POS starts empty and receives
+    // products, insumos, recipes, users, and catalog values from the
+    // backend via inbound sync after login. Seeding test data with
+    // placeholder IDs causes recipe sync failures (product not found).
+    if (!force) {
+      return;
+    }
+
     // 1. Catalog Values (UOM, Categories, Product Types) - ALWAYS ENSURE PRESENT
     final existingCatalogCount = await database.catalogValueDao.countAll() ?? 0;
     if (force || existingCatalogCount == 0) {

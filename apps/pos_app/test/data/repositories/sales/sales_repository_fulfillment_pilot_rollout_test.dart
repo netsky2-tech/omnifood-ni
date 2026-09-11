@@ -19,6 +19,7 @@ import 'package:pos_app/domain/ports/printer_port.dart';
 import 'package:pos_app/domain/repositories/audit_repository.dart';
 import 'package:pos_app/domain/services/fulfillment/durable_print_service.dart';
 import 'package:pos_app/domain/services/fulfillment/fulfillment_execution_service.dart';
+import 'package:pos_app/domain/services/sales/post_paid_feedback_service.dart';
 
 import 'sales_repository_impl_test.mocks.dart';
 
@@ -45,6 +46,7 @@ class _FakePrinterPort implements PrinterPort {
     TaxRegime taxRegime = TaxRegime.regimenGeneral,
     bool isTaxExempt = false,
     int paperWidthMm = 58,
+    PostPaidFeedback? loyaltyFeedback,
   }) async {
     if (failReceipt) {
       return PrinterResult.failure(PrinterStatus.error, 'Receipt failed');
@@ -272,7 +274,10 @@ void main() {
         );
         expect(resKdsOnly.channel, 'KDS_ONLY');
         expect(resKdsOnly.kdsOrders, hasLength(1));
-        expect(resKdsOnly.printJobs, hasLength(1)); // customer receipt only, 0 kitchen tickets
+        expect(
+          resKdsOnly.printJobs,
+          hasLength(1),
+        ); // customer receipt only, 0 kitchen tickets
         expect(resKdsOnly.deliveryState, 'PENDING');
 
         // Channel C: KDS_AND_PRINT
@@ -403,7 +408,12 @@ void main() {
 
         // Verify audit log recorded role and reason
         expect(auditRepo.logs, isNotEmpty);
-        expect(auditRepo.logs.any((l) => l['metadata']?.contains('MANAGER') ?? false), isTrue);
+        expect(
+          auditRepo.logs.any(
+            (l) => l['metadata']?.contains('MANAGER') ?? false,
+          ),
+          isTrue,
+        );
       },
     );
   });

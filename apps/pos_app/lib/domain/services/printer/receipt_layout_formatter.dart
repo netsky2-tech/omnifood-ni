@@ -1,5 +1,11 @@
 import 'package:intl/intl.dart';
 import '../../models/printer/receipt_document.dart';
+import '../../models/config/tax_regime.dart';
+import '../../models/sales/cashier_session.dart';
+import '../../models/sales/invoice.dart';
+import '../../models/sales/invoice_item.dart';
+import '../../models/sales/payment.dart';
+import '../sales/post_paid_feedback_service.dart';
 import 'esc_pos_builder.dart';
 import 'receipt_layout_metrics.dart';
 import 'printable_text_codec.dart';
@@ -1238,4 +1244,697 @@ class ReceiptLayoutFormatter {
 
   /// Backwards-compatibility helper for tests.
   String drawLine([String char = '-']) => divider(char);
+
+  /// Legacy invoice adapter retained for pre-ReceiptDocument callers.
+  /// New code should build a canonical ReceiptDocument at the application boundary.
+  String formatInvoiceText(
+    Invoice invoice, {
+    required List<InvoiceItem> items,
+    required List<Payment> payments,
+    String? businessName,
+    String? legalName,
+    String? ruc,
+    String? address,
+    String? phone,
+    String? cashierName,
+    String? customerName,
+    String? customerRuc,
+    String? footerMessage,
+    TaxRegime taxRegime = TaxRegime.regimenGeneral,
+    bool isTaxExempt = false,
+    PostPaidFeedback? loyaltyFeedback,
+  }) {
+    if (!(loyaltyFeedback?.hasContent ?? false)) {
+      return formatReceiptDocumentText(
+        ReceiptDocument.fromInvoice(
+          invoice,
+          items: items,
+          payments: payments,
+          businessName: businessName,
+          legalName: legalName,
+          ruc: ruc,
+          address: address,
+          phone: phone,
+          cashierName: cashierName,
+          customerName: customerName,
+          customerRuc: customerRuc,
+          taxRegime: taxRegime,
+          isTaxExempt: isTaxExempt,
+          footerMessage: footerMessage,
+        ),
+      );
+    }
+
+    final buffer = StringBuffer();
+    final dateFormat = DateFormat('yyyy-MM-dd HH:mm');
+
+    // 1. Header (Centered)
+    buffer.writeln(center(businessName ?? 'OMNIFOOD NI'));
+    if (legalName != null &&
+        legalName.isNotEmpty &&
+        legalName != businessName) {
+      buffer.writeln(center(legalName));
+    }
+    if (ruc != null && ruc.isNotEmpty) {
+      buffer.writeln(center('RUC: $ruc'));
+    }
+
+    // Regime Identification
+    if (taxRegime.isCuotaFija) {
+      buffer.writeln(center('REGIMEN: CUOTA FIJA'));
+    } else {
+      buffer.writeln(center('REGIMEN: GENERAL'));
+    }
+
+    if (address != null && address.isNotEmpty) {
+      for (final line in wrap(address)) {
+        buffer.writeln(center(line));
+      }
+    }
+    if (phone != null && phone.isNotEmpty) {
+      buffer.writeln(center('Tel: $phone'));
+    }
+
+    // Short Terminal Alias (avoid full UUID)
+    final shortTerminal = _formatShortTerminal(invoice.terminalId);
+    if (shortTerminal.isNotEmpty) {
+      buffer.writeln(center('Caja: $shortTerminal'));
+    }
+
+    buffer.writeln(drawLine('='));
+
+    // Document Title & Number
+    final docTitle = _resolveDocumentTitle(invoice.type, taxRegime);
+    buffer.writeln(center(docTitle));
+    buffer.writeln(center('No. ${invoice.number}'));
+    buffer.writeln(
+      formatTwoColumns('Fecha:', dateFormat.format(invoice.createdAt)),
+    );
+
+    if (cashierName != null && cashierName.isNotEmpty) {
+      buffer.writeln(formatTwoColumns('Atendido por:', cashierName));
+    }
+    final printableCustomerName = customerName?.trim().isNotEmpty == true
+        ? customerName!.trim()
+        : invoice.customerId?.trim();
+    if (printableCustomerName != null &&
+        printableCustomerName.isNotEmpty &&
+        printableCustomerName.toUpperCase() != 'N/A') {
+      buffer.writeln('Cliente:');
+      for (final line in wrap(printableCustomerName)) {
+        buffer.writeln(line);
+      }
+    }
+    final printableCustomerRuc = customerRuc?.trim();
+    if (printableCustomerRuc != null &&
+        printableCustomerRuc.isNotEmpty &&
+        printableCustomerRuc.toUpperCase() != 'N/A') {
+      buffer.writeln(formatTwoColumns('RUC/Cedula:', printableCustomerRuc));
+    }
+    if (invoice.originInvoiceId != null &&
+        invoice.originInvoiceId!.isNotEmpty) {
+      buffer.writeln(
+        formatTwoColumns('Doc. Origen:', invoice.originInvoiceId!),
+      );
+    }
+
+    buffer.writeln(drawLine('-'));
+
+    // 2. Table Column Header
+    if (maxCols <= 38) {
+      buffer.writeln(formatTwoColumns('CANT DESCRIPCION', 'TOTAL'));
+    } else {
+      buffer.writeln(
+        'CANT'.padRight(4) +
+            'DESCRIPCION'.padRight(22) +
+            'P.UNIT'.padLeft(10) +
+            'TOTAL'.padLeft(12),
+      );
+    }
+    buffer.writeln(drawLine('-'));
+
+    // 3. Items Breakdown
+    for (final item in items) {
+      final rowLines = formatItemRow(
+        quantity: item.quantity,
+        name: item.productName,
+        unitPrice: item.unitPrice,
+        total: item.total,
+      );
+      for (final l in rowLines) {
+        buffer.writeln(l);
+      }
+
+      // Modifiers & Extras
+      for (final mod in item.selectedModifiers) {
+        final modPrice = mod.extraPrice > 0
+            ? ' (+C\$ ${mod.extraPrice.toStringAsFixed(2)})'
+            : '';
+        buffer.writeln('    + ${mod.name}$modPrice');
+      }
+
+      // Item Discounts
+      if (item.discount > 0) {
+        buffer.writeln('    - Desc: C\$ ${item.discount.toStringAsFixed(2)}');
+      }
+
+      // Item Notes
+      if (item.notes != null && item.notes!.isNotEmpty) {
+        for (final line in wrap(item.notes!, maxCols - 6)) {
+          buffer.writeln('    * $line');
+        }
+      }
+    }
+
+    buffer.writeln(drawLine('-'));
+
+    // 4. Totals & Tax Compliance Rules (Ley 822)
+    if (taxRegime.isCuotaFija) {
+      // CUOTA FIJA: Never disclose Subtotal or 15% IVA. Direct to TOTAL CORDOBAS.
+      buffer.writeln(
+        formatTwoColumns(
+          'TOTAL CORDOBAS:',
+          'C\$ ${invoice.total.toStringAsFixed(2)}',
+        ),
+      );
+    } else {
+      // REGIMEN GENERAL
+      final effectiveExempt = isTaxExempt || invoice.globalTaxOverride;
+      if (effectiveExempt) {
+        buffer.writeln(
+          formatTwoColumns(
+            'SUBTOTAL:',
+            'C\$ ${invoice.subtotal.toStringAsFixed(2)}',
+          ),
+        );
+        buffer.writeln(formatTwoColumns('VENTA EXENTA (IVA 0%):', 'C\$ 0.00'));
+        buffer.writeln(
+          formatTwoColumns(
+            'TOTAL CORDOBAS:',
+            'C\$ ${invoice.total.toStringAsFixed(2)}',
+          ),
+        );
+        for (final line in centerLines(
+          '** VENTA EXENTA DE IVA - POLITICA TEMPORAL **',
+        )) {
+          buffer.writeln(line);
+        }
+      } else {
+        buffer.writeln(
+          formatTwoColumns(
+            'SUBTOTAL:',
+            'C\$ ${invoice.subtotal.toStringAsFixed(2)}',
+          ),
+        );
+        buffer.writeln(
+          formatTwoColumns(
+            'IVA (15%):',
+            'C\$ ${invoice.totalTax.toStringAsFixed(2)}',
+          ),
+        );
+        buffer.writeln(
+          formatTwoColumns(
+            'TOTAL CORDOBAS:',
+            'C\$ ${invoice.total.toStringAsFixed(2)}',
+          ),
+        );
+      }
+    }
+
+    // USD Total Calculation
+    final commRate = invoice.commercialRate > 0
+        ? invoice.commercialRate
+        : (invoice.bcnOfficialRate > 0 ? invoice.bcnOfficialRate : 36.50);
+    final totalUsdCalc = invoice.totalUsd > 0
+        ? invoice.totalUsd
+        : (invoice.total / commRate);
+    buffer.writeln(
+      formatTwoColumns(
+        'TOTAL DOLARES:',
+        '\$ ${totalUsdCalc.toStringAsFixed(2)}',
+      ),
+    );
+
+    buffer.writeln(drawLine('-'));
+    buffer.writeln(
+      formatTwoColumns('Tipo de Cambio:', 'C\$ ${commRate.toStringAsFixed(2)}'),
+    );
+
+    buffer.writeln(drawLine('-'));
+    buffer.writeln(center('DETALLE DE PAGO'));
+
+    // 5. Payment Breakdown
+    if (payments.isEmpty) {
+      buffer.writeln(formatTwoColumns('Condicion:', 'Contado'));
+    } else {
+      for (final p in payments) {
+        switch (p.method) {
+          case PaymentMethod.cash:
+            if (p.currency == 'USD') {
+              buffer.writeln(
+                formatTwoColumns(
+                  'Efectivo USD:',
+                  '\$ ${p.amount.toStringAsFixed(2)}',
+                ),
+              );
+              if (p.changeGiven > 0) {
+                final cCurr = p.changeCurrency == 'USD' ? '\$ ' : 'C\$ ';
+                buffer.writeln(
+                  formatTwoColumns(
+                    'Cambio (${p.changeCurrency}):',
+                    '$cCurr${p.changeGiven.toStringAsFixed(2)}',
+                  ),
+                );
+              }
+            } else {
+              buffer.writeln(
+                formatTwoColumns(
+                  'Efectivo C\$:',
+                  'C\$ ${p.amount.toStringAsFixed(2)}',
+                ),
+              );
+              if (p.changeGiven > 0) {
+                buffer.writeln(
+                  formatTwoColumns(
+                    'Cambio C\$:',
+                    'C\$ ${p.changeGiven.toStringAsFixed(2)}',
+                  ),
+                );
+              }
+            }
+            break;
+          case PaymentMethod.card:
+            final bank = p.bankPos ?? 'POS';
+            final brand = p.cardBrand ?? 'TARJETA';
+            buffer.writeln(
+              formatTwoColumns(
+                '$brand ($bank):',
+                'C\$ ${p.amount.toStringAsFixed(2)}',
+              ),
+            );
+            final auth = p.voucherCode ?? 'PENDIENTE';
+            final last4 = p.last4 != null ? ' (****${p.last4})' : '';
+            buffer.writeln(formatTwoColumns('  Auth/Ref:', '$auth$last4'));
+            break;
+          case PaymentMethod.qr:
+            buffer.writeln(
+              formatTwoColumns(
+                'Transferencia / QR:',
+                'C\$ ${p.amount.toStringAsFixed(2)}',
+              ),
+            );
+            break;
+          case PaymentMethod.points:
+            buffer.writeln(
+              formatTwoColumns(
+                'Puntos Lealtad:',
+                'C\$ ${p.amount.toStringAsFixed(2)}',
+              ),
+            );
+            break;
+        }
+      }
+    }
+
+    buffer.writeln(drawLine('='));
+
+    // Loyalty block — inserted before GRACIAS, fiscal data never affected
+    if (loyaltyFeedback != null && loyaltyFeedback.hasContent) {
+      for (final line in formatLoyaltyBlock(feedback: loyaltyFeedback)) {
+        buffer.writeln(line);
+      }
+    }
+
+    for (final line in wrap(footerMessage ?? '*** GRACIAS POR SU COMPRA ***')) {
+      buffer.writeln(center(line));
+    }
+    buffer.writeln('');
+    buffer.writeln('');
+    buffer.writeln('');
+
+    return buffer.toString();
+  }
+
+  /// Formats the complete sales receipt into ESC/POS bytecode.
+  List<int> formatInvoiceEscPos(
+    Invoice invoice, {
+    required List<InvoiceItem> items,
+    required List<Payment> payments,
+    String? businessName,
+    String? legalName,
+    String? ruc,
+    String? address,
+    String? phone,
+    String? cashierName,
+    TaxRegime taxRegime = TaxRegime.regimenGeneral,
+    bool isTaxExempt = false,
+    List<int>? logoRasterBytes,
+    PostPaidFeedback? loyaltyFeedback,
+  }) {
+    final builder = EscPosBuilder();
+    final dateFormat = DateFormat('yyyy-MM-dd HH:mm');
+
+    // 1. Logo (if provided as 1-bit raster)
+    if (logoRasterBytes != null && logoRasterBytes.isNotEmpty) {
+      builder.rasterImage(logoRasterBytes).feedLines(1);
+    }
+
+    // 2. Header
+    builder
+        .align(EscPosAlign.center)
+        .bold(true)
+        .fontSize(EscPosFontSize.doubleWidth)
+        .textLine(businessName ?? 'OMNIFOOD NI')
+        .fontSize(EscPosFontSize.normal)
+        .bold(false);
+
+    if (legalName != null &&
+        legalName.isNotEmpty &&
+        legalName != businessName) {
+      builder.textLine(legalName);
+    }
+    if (ruc != null && ruc.isNotEmpty) {
+      builder.textLine('RUC: $ruc');
+    }
+    if (taxRegime.isCuotaFija) {
+      builder.bold(true).textLine('REGIMEN: CUOTA FIJA').bold(false);
+    } else {
+      builder.textLine('REGIMEN: GENERAL');
+    }
+    if (address != null && address.isNotEmpty) {
+      for (final line in wrap(address)) {
+        builder.textLine(line);
+      }
+    }
+    if (phone != null && phone.isNotEmpty) {
+      builder.textLine('Tel: $phone');
+    }
+
+    final shortTerminal = _formatShortTerminal(invoice.terminalId);
+    if (shortTerminal.isNotEmpty) {
+      builder.textLine('Caja: $shortTerminal');
+    }
+
+    // Document Info
+    final docTitle = _resolveDocumentTitle(invoice.type, taxRegime);
+    builder
+        .textLine(drawLine('='))
+        .bold(true)
+        .textLine(docTitle)
+        .textLine('No. ${invoice.number}')
+        .bold(false)
+        .align(EscPosAlign.left)
+        .textLine(
+          formatTwoColumns('Fecha:', dateFormat.format(invoice.createdAt)),
+        );
+
+    if (cashierName != null && cashierName.isNotEmpty) {
+      builder.textLine(formatTwoColumns('Atendido por:', cashierName));
+    }
+    if (invoice.customerId != null && invoice.customerId!.isNotEmpty) {
+      builder.textLine(formatTwoColumns('Cliente:', invoice.customerId!));
+    }
+
+    builder.textLine(drawLine('-'));
+
+    // 3. Items Header
+    if (maxCols <= 38) {
+      builder.textLine(formatTwoColumns('CANT DESCRIPCION', 'TOTAL'));
+    } else {
+      builder.textLine(
+        'CANT'.padRight(4) +
+            'DESCRIPCION'.padRight(22) +
+            'P.UNIT'.padLeft(10) +
+            'TOTAL'.padLeft(12),
+      );
+    }
+    builder.textLine(drawLine('-'));
+
+    // Items Body
+    for (final item in items) {
+      final rowLines = formatItemRow(
+        quantity: item.quantity,
+        name: item.productName,
+        unitPrice: item.unitPrice,
+        total: item.total,
+      );
+      for (final l in rowLines) {
+        builder.textLine(l);
+      }
+
+      for (final mod in item.selectedModifiers) {
+        final modPrice = mod.extraPrice > 0
+            ? ' (+C\$ ${mod.extraPrice.toStringAsFixed(2)})'
+            : '';
+        builder.textLine('    + ${mod.name}$modPrice');
+      }
+
+      if (item.discount > 0) {
+        builder.textLine('    - Desc: C\$ ${item.discount.toStringAsFixed(2)}');
+      }
+      if (item.notes != null && item.notes!.isNotEmpty) {
+        for (final line in wrap(item.notes!, maxCols - 6)) {
+          builder.textLine('    * $line');
+        }
+      }
+    }
+
+    builder.textLine(drawLine('-'));
+
+    // 4. Totals & Tax Compliance (Ley 822)
+    if (taxRegime.isCuotaFija) {
+      builder
+          .bold(true)
+          .textLine(
+            formatTwoColumns(
+              'TOTAL CORDOBAS:',
+              'C\$ ${invoice.total.toStringAsFixed(2)}',
+            ),
+          )
+          .bold(false);
+    } else {
+      final effectiveExempt = isTaxExempt || invoice.globalTaxOverride;
+      if (effectiveExempt) {
+        builder
+            .textLine(
+              formatTwoColumns(
+                'SUBTOTAL:',
+                'C\$ ${invoice.subtotal.toStringAsFixed(2)}',
+              ),
+            )
+            .textLine(formatTwoColumns('VENTA EXENTA (IVA 0%):', 'C\$ 0.00'))
+            .bold(true)
+            .textLine(
+              formatTwoColumns(
+                'TOTAL CORDOBAS:',
+                'C\$ ${invoice.total.toStringAsFixed(2)}',
+              ),
+            )
+            .bold(false)
+            .align(EscPosAlign.center);
+        for (final line in centerLines(
+          '** VENTA EXENTA DE IVA - POLITICA TEMPORAL **',
+        )) {
+          builder.textLine(line);
+        }
+        builder.align(EscPosAlign.left);
+      } else {
+        builder
+            .textLine(
+              formatTwoColumns(
+                'SUBTOTAL:',
+                'C\$ ${invoice.subtotal.toStringAsFixed(2)}',
+              ),
+            )
+            .textLine(
+              formatTwoColumns(
+                'IVA (15%):',
+                'C\$ ${invoice.totalTax.toStringAsFixed(2)}',
+              ),
+            )
+            .bold(true)
+            .textLine(
+              formatTwoColumns(
+                'TOTAL CORDOBAS:',
+                'C\$ ${invoice.total.toStringAsFixed(2)}',
+              ),
+            )
+            .bold(false);
+      }
+    }
+
+    final commRate = invoice.commercialRate > 0
+        ? invoice.commercialRate
+        : (invoice.bcnOfficialRate > 0 ? invoice.bcnOfficialRate : 36.50);
+    final totalUsdCalc = invoice.totalUsd > 0
+        ? invoice.totalUsd
+        : (invoice.total / commRate);
+    builder
+        .textLine(
+          formatTwoColumns(
+            'TOTAL DOLARES:',
+            '\$ ${totalUsdCalc.toStringAsFixed(2)}',
+          ),
+        )
+        .textLine(drawLine('-'))
+        .textLine(
+          formatTwoColumns(
+            'Tipo de Cambio:',
+            'C\$ ${commRate.toStringAsFixed(2)}',
+          ),
+        )
+        .textLine(drawLine('-'))
+        .align(EscPosAlign.center)
+        .textLine('DETALLE DE PAGO')
+        .align(EscPosAlign.left);
+
+    // 5. Payments
+    if (payments.isEmpty) {
+      builder.textLine(formatTwoColumns('Condicion:', 'Contado'));
+    } else {
+      for (final p in payments) {
+        if (p.method == PaymentMethod.cash) {
+          builder.textLine(
+            formatTwoColumns(
+              'Efectivo ${p.currency}:',
+              '${p.currency == "USD" ? "\$ " : "C\$ "}${p.amount.toStringAsFixed(2)}',
+            ),
+          );
+          if (p.changeGiven > 0) {
+            builder.textLine(
+              formatTwoColumns(
+                'Cambio (${p.changeCurrency}):',
+                '${p.changeCurrency == "USD" ? "\$ " : "C\$ "}${p.changeGiven.toStringAsFixed(2)}',
+              ),
+            );
+          }
+        } else if (p.method == PaymentMethod.card) {
+          builder.textLine(
+            formatTwoColumns(
+              '${p.cardBrand ?? "TARJETA"} (${p.bankPos ?? "POS"}):',
+              'C\$ ${p.amount.toStringAsFixed(2)}',
+            ),
+          );
+          builder.textLine(
+            formatTwoColumns('  Auth/Ref:', '${p.voucherCode ?? "PENDIENTE"}'),
+          );
+        } else if (p.method == PaymentMethod.qr) {
+          builder.textLine(
+            formatTwoColumns(
+              'Transferencia / QR:',
+              'C\$ ${p.amount.toStringAsFixed(2)}',
+            ),
+          );
+        } else if (p.method == PaymentMethod.points) {
+          builder.textLine(
+            formatTwoColumns(
+              'Puntos Lealtad:',
+              'C\$ ${p.amount.toStringAsFixed(2)}',
+            ),
+          );
+        }
+      }
+    }
+
+    // Loyalty block — inserted before GRACIAS, fiscal data never affected
+    if (loyaltyFeedback != null && loyaltyFeedback.hasContent) {
+      for (final line in formatLoyaltyBlock(feedback: loyaltyFeedback)) {
+        builder.textLine(line);
+      }
+    }
+
+    builder
+        .textLine(drawLine('='))
+        .align(EscPosAlign.center)
+        .bold(true)
+        .textLine('*** GRACIAS POR SU COMPRA ***')
+        .bold(false)
+        .feedLines(3)
+        .cut();
+
+    return builder.toBytes();
+  }
+
+  // ==========================================
+  // 4. Loyalty Block
+  // ==========================================
+
+  /// Generates the loyalty section lines for a receipt.
+  /// Returns empty list if feedback is null — fiscal data is never affected.
+  List<String> formatLoyaltyBlock({required dynamic feedback}) {
+    if (feedback == null) return const [];
+
+    final programs = feedback.programs as List<dynamic>;
+    if (programs.isEmpty) return const [];
+
+    final lines = <String>[];
+    lines.add(drawLine('-'));
+    lines.add(center('LEALTAD'));
+    lines.add('');
+
+    for (final program in programs) {
+      final name = program.programName as String;
+      final type = program.programType;
+      final unitLabel = _loyaltyUnitLabel(type, program.unitsEarned as int);
+
+      final parts = <String>[];
+
+      if (program.unitsRedeemed as int > 0) {
+        parts.add('-${program.unitsRedeemed} $unitLabel');
+      }
+      if (program.unitsEarned as int > 0) {
+        parts.add('+${program.unitsEarned} $unitLabel');
+      }
+      if (parts.isNotEmpty) {
+        lines.add(formatTwoColumns(name, parts.join('  ')));
+      }
+
+      if (program.rewardRedeemed as bool &&
+          program.redeemedRewardName != null) {
+        lines.add(
+          formatTwoColumns('  Redimido:', '${program.redeemedRewardName}'),
+        );
+      } else if (program.rewardAvailable as bool &&
+          program.rewardName != null) {
+        lines.add(formatTwoColumns('  Recompensa:', '${program.rewardName}'));
+      } else if (program.unitsToNextReward as int > 0) {
+        lines.add(
+          formatTwoColumns(
+            '  Faltan:',
+            '${program.unitsToNextReward} $unitLabel',
+          ),
+        );
+      }
+
+      lines.add(formatTwoColumns('  Saldo:', '${program.newBalance}'));
+      lines.add('');
+    }
+
+    return lines;
+  }
+
+  static String _loyaltyUnitLabel(dynamic type, int count) {
+    final typeName = type.toString().split('.').last;
+    switch (typeName) {
+      case 'spendPoints':
+        return 'puntos';
+      case 'productStamps':
+        return count == 1 ? 'sello' : 'sellos';
+      case 'visitStamps':
+        return count == 1 ? 'visita' : 'visitas';
+      default:
+        return 'unidades';
+    }
+  }
+
+  static String _formatShortTerminal(String? terminalId) {
+    if (terminalId == null || terminalId.isEmpty) return '';
+    if (terminalId.length <= 8) return terminalId;
+    return 'Caja-${terminalId.substring(0, 4)}';
+  }
+
+  static String _resolveDocumentTitle(InvoiceType type, TaxRegime regime) {
+    if (type == InvoiceType.creditNote) return 'NOTA DE CREDITO';
+    return regime.isCuotaFija ? 'COMPROBANTE DE VENTA' : 'FACTURA DE VENTA';
+  }
 }

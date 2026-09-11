@@ -20,6 +20,9 @@ import 'widgets/split_bill_dialog.dart';
 import 'widgets/cloud_sync_status_badge.dart';
 import 'tables/table_layout_view.dart';
 import '../../../presentation/features/sales/widgets/customer_select_dialog.dart';
+import '../../../presentation/features/sales/widgets/loyalty_compact_widget.dart';
+import '../../../presentation/features/sales/widgets/reward_cta_widget.dart';
+import '../../../presentation/features/sales/widgets/reward_confirmation_dialog.dart';
 
 class SaleView extends StatefulWidget {
   const SaleView({super.key});
@@ -143,12 +146,18 @@ class SaleView extends StatefulWidget {
   State<SaleView> createState() => _SaleViewState();
 }
 
-class _SaleViewState extends State<SaleView> with RouteAware {
+class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteAware {
+  late final SaleViewModel _viewModel;
+  bool _errorPresentationScheduled = false;
   ModalRoute<void>? _modalRoute;
 
   @override
   void initState() {
     super.initState();
+    _viewModel = context.read<SaleViewModel>();
+    _viewModel.addListener(_presentError);
+    _presentError();
+    WidgetsBinding.instance.addObserver(this);
     _checkAuth();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -172,6 +181,8 @@ class _SaleViewState extends State<SaleView> with RouteAware {
   @override
   void dispose() {
     appRouteObserver.unsubscribe(this);
+    _viewModel.removeListener(_presentError);
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
@@ -179,6 +190,43 @@ class _SaleViewState extends State<SaleView> with RouteAware {
   void didPopNext() {
     if (!mounted) return;
     context.read<SaleViewModel>().loadCompanyTaxRegime();
+  }
+
+  void _presentError() {
+    if (!mounted ||
+        _errorPresentationScheduled ||
+        _viewModel.errorMessage == null) {
+      return;
+    }
+
+    _errorPresentationScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      final errorMessage = _viewModel.errorMessage;
+      if (errorMessage != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            action: SnackBarAction(
+              label: 'OK',
+              textColor: Colors.white,
+              onPressed: _viewModel.clearError,
+            ),
+          ),
+        );
+        _viewModel.clearError();
+      }
+      _errorPresentationScheduled = false;
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      context.read<SaleViewModel>().checkActiveSession();
+    }
   }
 
   Future<void> _checkAuth() async {
@@ -195,24 +243,6 @@ class _SaleViewState extends State<SaleView> with RouteAware {
     final colorScheme = Theme.of(context).colorScheme;
     final hasActiveSession = viewModel.activeSession != null;
     final isHandheld = ResponsiveBreakpoints.isHandheld(context);
-
-    // Listener for errors (Visual Feedback)
-    if (viewModel.errorMessage != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(viewModel.errorMessage!),
-            backgroundColor: colorScheme.error,
-            action: SnackBarAction(
-              label: 'OK',
-              textColor: Colors.white,
-              onPressed: () => viewModel.clearError(),
-            ),
-          ),
-        );
-        viewModel.clearError();
-      });
-    }
 
     final productContent = viewModel.isLoading
         ? const Center(child: CircularProgressIndicator())
@@ -1399,6 +1429,9 @@ class CartSummary extends StatelessWidget {
             deleteIconColor: Colors.red.shade700,
           ),
           const SizedBox(height: 8),
+          // Loyalty evaluation display
+          LoyaltyCompactWidget(evaluation: viewModel.currentEvaluation),
+          const SizedBox(height: 8),
         ],
         SizedBox(
           width: double.infinity,
@@ -1432,6 +1465,12 @@ class CartSummary extends StatelessWidget {
           ),
           const SizedBox(height: 6),
         ],
+        // Reward CTA when eligible reward exists
+        RewardCtaWidget(
+          evaluation: viewModel.currentEvaluation,
+          onApplyReward: () => _showRewardConfirmationDialog(context, viewModel),
+        ),
+        const SizedBox(height: 8),
         Row(
           children: [
             Expanded(
@@ -1574,6 +1613,27 @@ class CartSummary extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _showRewardConfirmationDialog(BuildContext context, SaleViewModel viewModel) async {
+    final nextReward = viewModel.currentEvaluation?.nextReward;
+    if (nextReward == null) return;
+
+    final confirmed = await RewardConfirmationDialog.show(
+      context,
+      reward: nextReward,
+    );
+
+    if (confirmed == true && context.mounted) {
+      // Apply the reward via the view model
+      viewModel.selectReward(nextReward.rewardId);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Recompensa "${nextReward.name}" aplicada'),
+          backgroundColor: Colors.green.shade700,
+        ),
+      );
+    }
   }
 }
 

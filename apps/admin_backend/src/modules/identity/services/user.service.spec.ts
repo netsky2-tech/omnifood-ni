@@ -2,6 +2,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { UserService } from './user.service';
 import { User, UserRole } from '../entities/user.entity';
+import {
+  ALL_APP_PERMISSIONS,
+  DEFAULT_ROLE_PERMISSIONS,
+} from '../security/permissions.enum';
 import { AuditLog } from '../entities/audit-log.entity';
 import { SecurityProfile } from '../entities/security-profile.entity';
 import { DataSource } from 'typeorm';
@@ -157,8 +161,10 @@ describe('UserService', () => {
     it('returns system permissions matrix with role defaults', () => {
       const matrix = service.getPermissionsMatrix();
       expect(matrix.role_defaults).toBeDefined();
-      expect(matrix.role_defaults[UserRole.OWNER].length).toBe(8);
-      expect(matrix.all_permissions.length).toBe(8);
+      expect(matrix.role_defaults[UserRole.OWNER].length).toBe(
+        DEFAULT_ROLE_PERMISSIONS[UserRole.OWNER].length,
+      );
+      expect(matrix.all_permissions.length).toBe(ALL_APP_PERMISSIONS.length);
     });
 
     it('resolves user effective permissions including custom overrides', async () => {

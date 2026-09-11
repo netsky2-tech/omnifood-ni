@@ -8,14 +8,23 @@ import {
 import { Product } from '../../inventory/entities/product.entity';
 import {
   UploadBatchDto,
+  UploadRawCsvDto,
   CommitImportDto,
   ImportRowDto,
 } from '../dto/import-staging.dto';
+import {
+  ProductImportSession,
+  ProductImportSessionStatus,
+} from '../entities/product-import-session.entity';
+import { LegacyOnboardingMigrationReceipt } from '../entities/legacy-migration-receipt.entity';
+import { CanonicalCsvParserService } from './canonical-csv-parser.service';
 
 describe('ImportStagingService (Unit & Triangulation)', () => {
   let service: ImportStagingService;
   let stagingRepo: jest.Mocked<Repository<ImportStaging>>;
   let productRepo: jest.Mocked<Repository<Product>>;
+  let sessionRepo: jest.Mocked<Repository<ProductImportSession>>;
+  let receiptRepo: jest.Mocked<Repository<LegacyOnboardingMigrationReceipt>>;
   let dataSource: jest.Mocked<DataSource>;
   let mockManager: jest.Mocked<EntityManager>;
 
@@ -28,14 +37,28 @@ describe('ImportStagingService (Unit & Triangulation)', () => {
       findOne: jest.fn(),
       create: jest.fn((plain: unknown) => plain as ImportStaging),
       save: jest.fn((items: unknown) => Promise.resolve(items)),
+      delete: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<Repository<ImportStaging>>;
 
     productRepo = {
-      find: jest.fn(),
+      find: jest.fn().mockResolvedValue([]),
       findOne: jest.fn(),
       create: jest.fn((plain: unknown) => plain as Product),
       save: jest.fn((items: unknown) => Promise.resolve(items)),
     } as unknown as jest.Mocked<Repository<Product>>;
+
+    sessionRepo = {
+      findOne: jest.fn(),
+      create: jest.fn((plain: unknown) => plain as ProductImportSession),
+      save: jest.fn((item: unknown) => Promise.resolve(item)),
+    } as unknown as jest.Mocked<Repository<ProductImportSession>>;
+
+    receiptRepo = {
+      create: jest.fn(
+        (plain: unknown) => plain as LegacyOnboardingMigrationReceipt,
+      ),
+      save: jest.fn((item: unknown) => Promise.resolve(item)),
+    } as unknown as jest.Mocked<Repository<LegacyOnboardingMigrationReceipt>>;
 
     mockManager = {
       find: jest.fn(),
@@ -54,7 +77,14 @@ describe('ImportStagingService (Unit & Triangulation)', () => {
       ),
     } as unknown as jest.Mocked<DataSource>;
 
-    service = new ImportStagingService(stagingRepo, productRepo, dataSource);
+    service = new ImportStagingService(
+      stagingRepo,
+      productRepo,
+      dataSource,
+      sessionRepo,
+      receiptRepo,
+      new CanonicalCsvParserService(),
+    );
   });
 
   describe('uploadBatch (Parsing, Sanitization & Triangulation)', () => {
@@ -178,10 +208,12 @@ describe('ImportStagingService (Unit & Triangulation)', () => {
         rows,
       };
 
-      let saveCallCount = 0;
+      let stagingChunkCount = 0;
       mockManager.save.mockImplementation(
-        (_entityClass: unknown, items: unknown) => {
-          saveCallCount++;
+        (entityClass: unknown, items: unknown) => {
+          if (entityClass === ImportStaging) {
+            stagingChunkCount++;
+          }
           return Promise.resolve(items);
         },
       );
@@ -191,7 +223,7 @@ describe('ImportStagingService (Unit & Triangulation)', () => {
       expect(result.totalRows).toBe(150);
       expect(result.validRows).toBe(150);
       expect(result.errorRows).toBe(0);
-      expect(saveCallCount).toBe(2); // 100 rows chunk 1 + 50 rows chunk 2
+      expect(stagingChunkCount).toBe(2); // 100 rows chunk 1 + 50 rows chunk 2
     });
   });
 
@@ -319,6 +351,16 @@ describe('ImportStagingService (Unit & Triangulation)', () => {
         totalCommitted: 1,
       });
       expect(result.committedAt).toBeInstanceOf(Date);
+      expect(mockManager.create).toHaveBeenCalledWith(
+        Product,
+        expect.objectContaining({
+          tenant_id: tenantId,
+          name: 'Hamburguesa Doble',
+          sellPrice: 250,
+          averageCost: 0,
+          stock: 0,
+        }),
+      );
     });
 
     it('handles duplicate items with REPLACE duplicateResolution (UC-03 update existing)', async () => {
@@ -329,6 +371,8 @@ describe('ImportStagingService (Unit & Triangulation)', () => {
         warehouse_id: 'wh-1',
         name: 'Hamburguesa Doble',
         uom: 'UN',
+        product_type: 'SIMPLE' as never,
+        category_code: null,
         sellPrice: 200,
         averageCost: 100,
         stock: 5,
@@ -391,7 +435,8 @@ describe('ImportStagingService (Unit & Triangulation)', () => {
         totalCommitted: 1,
       });
       expect(existingProduct.sellPrice).toBe(250);
-      expect(existingProduct.averageCost).toBe(130);
+      expect(existingProduct.averageCost).toBe(100);
+      expect(existingProduct.stock).toBe(5);
     });
 
     it('handles duplicate items with SKIP duplicateResolution (UC-03 ignore duplicates)', async () => {
@@ -402,6 +447,8 @@ describe('ImportStagingService (Unit & Triangulation)', () => {
         warehouse_id: 'wh-1',
         name: 'Hamburguesa Doble',
         uom: 'UN',
+        product_type: 'SIMPLE' as never,
+        category_code: null,
         sellPrice: 200,
         averageCost: 100,
         stock: 5,
@@ -512,6 +559,167 @@ describe('ImportStagingService (Unit & Triangulation)', () => {
       await expect(
         service.getFailedRows(tenantId, 'non-existent-token'),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('uploadRawCsv (Raw CSV Parsing, Session Lifecycle & Triangulation)', () => {
+    it('parses raw CSV text, stages rows with row_ordinal and creates ProductImportSession', async () => {
+      productRepo.find.mockResolvedValue([]);
+      sessionRepo.findOne.mockResolvedValue(null);
+
+      const rawCsv = [
+        'producto,precio,unidad_venta,codigo_barras',
+        'Hamburguesa Especial,160.00,UN,743210',
+        'Gaseosa en Lata,30.00,UN,112233',
+      ].join('\n');
+
+      const dto: UploadRawCsvDto = {
+        sessionToken,
+        csvContent: rawCsv,
+        fileName: 'catalogo.csv',
+      };
+
+      const result = await service.uploadRawCsv(tenantId, dto);
+
+      expect(result.sessionToken).toBe(sessionToken);
+      expect(result.totalRows).toBe(2);
+      expect(result.validRows).toBe(2);
+      expect(result.errorRows).toBe(0);
+
+      expect(mockManager.save).toHaveBeenCalledWith(
+        ProductImportSession,
+        expect.objectContaining({
+          tenant_id: tenantId,
+          total_rows: 2,
+          valid_rows: 2,
+          error_rows: 0,
+        }),
+      );
+    });
+
+    it('detects existing duplicates during staging and prepares matchedBy and fieldsToChange', async () => {
+      const existingProduct: Product = {
+        id: 'prod-dup-1',
+        tenant_id: tenantId,
+        tenant: null,
+        warehouse_id: 'wh-1',
+        name: 'Hamburguesa Especial',
+        uom: 'UN',
+        product_type: 'SIMPLE' as never,
+        category_code: null,
+        sellPrice: 140,
+        averageCost: 70,
+        stock: 10,
+        is_perishable: false,
+        is_active: true,
+        tax_rate: 0.15,
+        is_tax_exempt: false,
+        created_at: new Date(),
+        updated_at: new Date(),
+      };
+
+      productRepo.find.mockResolvedValue([existingProduct]);
+      sessionRepo.findOne.mockResolvedValue(null);
+
+      const rawCsv = [
+        'nombre,precio_venta,uom',
+        'Hamburguesa Especial,180.00,UN',
+      ].join('\n');
+
+      const dto: UploadRawCsvDto = {
+        sessionToken,
+        csvContent: rawCsv,
+      };
+
+      await service.uploadRawCsv(tenantId, dto);
+
+      const savedBatch = mockManager.save.mock.calls[0][1] as ImportStaging[];
+      expect(savedBatch[0].matched_by).toBe('NORMALIZED_NAME');
+      expect(savedBatch[0].target_product_id).toBe('prod-dup-1');
+      expect(savedBatch[0].fields_to_change).toContain('sellPrice');
+    });
+  });
+
+  describe('getPreview (Duplicate Detection, Conflict Resolution & Preview Data)', () => {
+    it('returns preview including duplicates, fieldsToChange, and unsupported headers', async () => {
+      const sessionEntity: ProductImportSession = {
+        id: sessionToken,
+        tenant_id: tenantId,
+        onboarding_session_id: null,
+        status: ProductImportSessionStatus.READY,
+        parser_contract_version: 'v1.0',
+        source_hash: 'hash-1',
+        file_name: 'test.csv',
+        total_rows: 2,
+        valid_rows: 2,
+        error_rows: 0,
+        committed_rows: 0,
+        skipped_rows: 0,
+        commit_mode: null,
+        duplicate_policy: null,
+        created_at: new Date(),
+        updated_at: new Date(),
+        committed_at: null,
+        expires_at: null,
+      };
+
+      const stagedRow1: ImportStaging = {
+        id: 'staged-1',
+        tenant_id: tenantId,
+        token_sesion_importacion: sessionToken,
+        raw_nombre: 'Hamburguesa',
+        raw_sku: null,
+        raw_precio_venta: '180',
+        raw_costo_insumo: null,
+        raw_categoria: null,
+        raw_porcentaje_iva: null,
+        raw_uom: null,
+        raw_stock_inicial: null,
+        parsed_nombre: 'Hamburguesa',
+        parsed_sku: null,
+        parsed_precio_venta: 180,
+        parsed_costo_insumo: null,
+        parsed_categoria: 'General',
+        parsed_porcentaje_iva: 0,
+        parsed_uom: 'UN',
+        parsed_stock_inicial: null,
+        estado_fila: ImportStagingStatus.VALIDO,
+        mensaje_error_detalle: null,
+        row_ordinal: 1,
+        matched_by: 'NORMALIZED_NAME',
+        target_product_id: 'prod-1',
+        fields_to_change: ['sellPrice'],
+        conflict_reason: null,
+        unsupported_fields: ['codigo_barras'],
+        unknown_columns: null,
+        created_at: new Date(),
+        updated_at: new Date(),
+      };
+
+      sessionRepo.findOne.mockResolvedValue(sessionEntity);
+      stagingRepo.find.mockResolvedValue([stagedRow1]);
+      productRepo.findOne.mockResolvedValue({
+        id: 'prod-1',
+        name: 'Hamburguesa',
+        sellPrice: 150,
+        uom: 'UN',
+      } as Product);
+
+      const preview = await service.getPreview(tenantId, sessionToken);
+
+      expect(preview.sessionToken).toBe(sessionToken);
+      expect(preview.duplicatesCount).toBe(1);
+      expect(preview.duplicates[0]).toMatchObject({
+        rowOrdinal: 1,
+        productName: 'Hamburguesa',
+        matchedBy: 'NORMALIZED_NAME',
+        targetProductId: 'prod-1',
+        currentPrice: 150,
+        newPrice: 180,
+        fieldsToChange: ['sellPrice'],
+        isConflict: false,
+      });
+      expect(preview.unsupportedColumns).toContain('codigo_barras');
     });
   });
 });

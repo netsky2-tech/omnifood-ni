@@ -36,6 +36,10 @@ class InvoiceItemEntity {
   final String? notes;
   @ColumnInfo(name: 'recipe_version_id')
   final String? recipeVersionId;
+  @ColumnInfo(name: 'inventory_snapshot_json')
+  final String? inventorySnapshotJson;
+  @ColumnInfo(name: 'inventory_snapshot_version')
+  final String? inventorySnapshotVersion;
   @ColumnInfo(name: 'origin_invoice_item_id')
   final String? originInvoiceItemId;
 
@@ -54,6 +58,8 @@ class InvoiceItemEntity {
     this.variantId,
     this.notes,
     this.recipeVersionId,
+    this.inventorySnapshotJson,
+    this.inventorySnapshotVersion,
     this.originInvoiceItemId,
   });
 }
