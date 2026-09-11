@@ -4,7 +4,6 @@ import { ConfigModule } from '@nestjs/config';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { Reflector } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
 import * as request from 'supertest';
 import { DataSource } from 'typeorm';
 import { LoyaltyController } from '../../src/modules/loyalty/controllers/loyalty.controller';

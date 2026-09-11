@@ -17,10 +17,7 @@ import { LegacyClassificationService } from '../../src/modules/loyalty/services/
 import { LoyaltyProfitAwareService } from '../../src/modules/loyalty/services/loyalty-profit-aware.service';
 import { RedemptionService } from '../../src/modules/loyalty/services/redemption.service';
 import { LoyaltyLedgerService } from '../../src/modules/loyalty/services/loyalty-ledger.service';
-import {
-  LoyaltyProgram,
-  LoyaltyProgramStatus,
-} from '../../src/modules/loyalty/entities/loyalty-program.entity';
+import { LoyaltyProgram } from '../../src/modules/loyalty/entities/loyalty-program.entity';
 import { RewardDefinition } from '../../src/modules/loyalty/entities/reward-definition.entity';
 import { CustomerLoyaltyAccountProjection } from '../../src/modules/loyalty/entities/customer-loyalty-account-projection.entity';
 import { Customer } from '../../src/modules/customers/entities/customer.entity';
@@ -28,7 +25,6 @@ import { UserRole } from '../../src/modules/identity/entities/user.entity';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
 import { TenantInterceptor } from '../../src/core/database/rls.interceptor';
-import { JWT_TOKEN_TYPES } from '../../src/modules/identity/security/jwt-token.types';
 import {
   createIdentityJwtConfigProvider,
   signIdentityJwtAccessToken,

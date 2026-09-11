@@ -5,7 +5,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import * as request from 'supertest';
-import { App } from 'supertest/types';
 import { SyncBatchController } from '../src/modules/sales/controllers/sync-batch.controller';
 import { InvoicesService } from '../src/modules/sales/services/invoices.service';
 import { SaleInventoryOutcomeService } from '../src/modules/sales/services/sale-inventory-outcome.service';
@@ -64,7 +63,7 @@ const ALL_ENTITIES = [
   InventoryMovement,
   InventorySyncReceipt,
   InventorySyncOutbox,
-  
+
   Insumo,
   Product,
   CatalogValue,
@@ -120,13 +119,34 @@ async function withIsolatedSchema(
         InvoicesService,
         SaleInventoryOutcomeService,
         { provide: DataSource, useValue: dataSource },
-        { provide: getRepositoryToken(Invoice), useValue: dataSource.getRepository(Invoice) },
-        { provide: getRepositoryToken(InvoiceItem), useValue: dataSource.getRepository(InvoiceItem) },
-        { provide: getRepositoryToken(Payment), useValue: dataSource.getRepository(Payment) },
-        { provide: getRepositoryToken(User), useValue: dataSource.getRepository(User) },
-        { provide: getRepositoryToken(InventoryMovement), useValue: dataSource.getRepository(InventoryMovement) },
-        { provide: getRepositoryToken(InventorySyncReceipt), useValue: dataSource.getRepository(InventorySyncReceipt) },
-        { provide: getRepositoryToken(InventorySyncOutbox), useValue: dataSource.getRepository(InventorySyncOutbox) },
+        {
+          provide: getRepositoryToken(Invoice),
+          useValue: dataSource.getRepository(Invoice),
+        },
+        {
+          provide: getRepositoryToken(InvoiceItem),
+          useValue: dataSource.getRepository(InvoiceItem),
+        },
+        {
+          provide: getRepositoryToken(Payment),
+          useValue: dataSource.getRepository(Payment),
+        },
+        {
+          provide: getRepositoryToken(User),
+          useValue: dataSource.getRepository(User),
+        },
+        {
+          provide: getRepositoryToken(InventoryMovement),
+          useValue: dataSource.getRepository(InventoryMovement),
+        },
+        {
+          provide: getRepositoryToken(InventorySyncReceipt),
+          useValue: dataSource.getRepository(InventorySyncReceipt),
+        },
+        {
+          provide: getRepositoryToken(InventorySyncOutbox),
+          useValue: dataSource.getRepository(InventorySyncOutbox),
+        },
         { provide: RecipeService, useValue: {} },
         { provide: BomExplosionService, useValue: {} },
         JwtService,
@@ -151,7 +171,7 @@ async function withIsolatedSchema(
       // So no need to stub req.user here, we pass real JWTs!
       next();
     });
-    
+
     await app.init();
 
     await assertion({
@@ -172,160 +192,178 @@ async function withIsolatedSchema(
 
 describe('Q80 Reconnect Auth and Inventory Outcome Gate (e2e)', () => {
   it('processes one invoice with SALE_TIME_V1, stores outcome/Kardex, and rejects duplicate replay', async () => {
-    await withIsolatedSchema('q80_reconnect', async ({ app, dataSource, jwtService, tenantId }) => {
-      // 1. Set up product, insumo, mapping
-      const productId = randomUUID();
-      const insumoId = randomUUID();
-      const mappingVersionId = randomUUID();
-      const userId = randomUUID();
-      
-      await dataSource.query(
-        `INSERT INTO products (id, tenant_id, name, product_type, is_active, uom) VALUES ($1, $2, 'Test Product', 'SIMPLE', true, 'UN')`,
-        [productId, tenantId]
-      );
-      await dataSource.query(
-        `INSERT INTO insumos (id, tenant_id, name, "purchaseUom", "consumptionUom", stock, negative_stock_policy) VALUES ($1, $2, 'Test Insumo', 'UN', 'UN', 10, 'ALLOW_TEMPORARY')`,
-        [insumoId, tenantId]
-      );
-      await dataSource.query(
-        `INSERT INTO product_inventory_mapping_versions (id, tenant_id, product_id, insumo_id, effective_at) VALUES ($1, $2, $3, $4, now())`,
-        [mappingVersionId, tenantId, productId, insumoId]
-      );
-      
-      const token = signIdentityJwtAccessToken(jwtService, {
-        sub: userId,
-        tenant_id: tenantId,
-        email: 'test@example.com',
-        role: UserRole.CASHIER,
-        is_active: true,
-      });
+    await withIsolatedSchema(
+      'q80_reconnect',
+      async ({ app, dataSource, jwtService, tenantId }) => {
+        // 1. Set up product, insumo, mapping
+        const productId = randomUUID();
+        const insumoId = randomUUID();
+        const mappingVersionId = randomUUID();
+        const userId = randomUUID();
 
-      const invoiceId = randomUUID();
-      const itemId = randomUUID();
-      const correlationId = randomUUID();
+        await dataSource.query(
+          `INSERT INTO products (id, tenant_id, name, product_type, is_active, uom) VALUES ($1, $2, 'Test Product', 'SIMPLE', true, 'UN')`,
+          [productId, tenantId],
+        );
+        await dataSource.query(
+          `INSERT INTO insumos (id, tenant_id, name, "purchaseUom", "consumptionUom", stock, negative_stock_policy) VALUES ($1, $2, 'Test Insumo', 'UN', 'UN', 10, 'ALLOW_TEMPORARY')`,
+          [insumoId, tenantId],
+        );
+        await dataSource.query(
+          `INSERT INTO product_inventory_mapping_versions (id, tenant_id, product_id, insumo_id, effective_at) VALUES ($1, $2, $3, $4, now())`,
+          [mappingVersionId, tenantId, productId, insumoId],
+        );
 
-      const payload = {
-        records: [
-          {
-            idempotencyKey: `sale:terminal1:seq1`,
-            sourceDeviceId: 'terminal1',
-            sourceSequence: 1,
-            flowType: 'sales',
-            documentType: 'SALE',
-            invoice: {
-              id: invoiceId,
-              number: '001-001-01-00000001',
-              createdAt: new Date().toISOString(),
-              userId: userId,
-              subtotal: 100,
-              totalTax: 15,
-              total: 115,
-              paymentStatus: 'PAID',
-              inventoryOutcome: 'APPLIED',
-              items: [
-                {
-                  id: itemId,
-                  productId: productId,
-                  productName: 'Test Product',
-                  quantity: 2,
-                  unitPrice: 50,
-                  originalTaxRate: 15,
-                  appliedTaxRate: 15,
-                  taxAmount: 15,
-                  total: 115,
-                  discount: 0,
-                  inventorySnapshotVersion: 'SALE_TIME_V1',
-                  inventorySnapshot: {
-                    classification: 'SIMPLE',
-                    disposition: 'DIRECT',
-                    catalogRevision: 'test-revision',
-                    mappingVersionId: mappingVersionId,
-                    bindings: [
-                      {
-                        bindingOrdinal: 0,
-                        insumoId: insumoId,
-                        quantityPerSaleUnit: 1,
-                        saleCorrelationId: correlationId,
-                      }
-                    ]
-                  }
-                }
-              ],
-              payments: [
-                {
-                  id: randomUUID(),
-                  method: 'CASH',
-                  amount: 115,
-                  currency: 'NIO',
-                  exchangeRate: 1
-                }
-              ]
-            }
-          }
-        ]
-      };
+        const token = signIdentityJwtAccessToken(jwtService, {
+          sub: userId,
+          tenant_id: tenantId,
+          email: 'test@example.com',
+          role: UserRole.CASHIER,
+          is_active: true,
+        });
 
-      // Initial Sync
-      const response = await request(app.getHttpServer())
-        .post('/v1/sync/batch')
-        .set('Authorization', `Bearer ${token}`)
-        .send(payload)
-        .expect(201);
+        const invoiceId = randomUUID();
+        const itemId = randomUUID();
+        const correlationId = randomUUID();
 
-      expect(response.body).toMatchObject({
-        status: 'success',
-        received: 1,
-        processed: 1,
-        duplicates: 0,
-        results: [
-          expect.objectContaining({
-            idempotencyKey: 'sale:terminal1:seq1',
-            status: 'ACCEPTED'
-          })
-        ]
-      });
+        const payload = {
+          records: [
+            {
+              idempotencyKey: `sale:terminal1:seq1`,
+              sourceDeviceId: 'terminal1',
+              sourceSequence: 1,
+              flowType: 'sales',
+              documentType: 'SALE',
+              invoice: {
+                id: invoiceId,
+                number: '001-001-01-00000001',
+                createdAt: new Date().toISOString(),
+                userId: userId,
+                subtotal: 100,
+                totalTax: 15,
+                total: 115,
+                paymentStatus: 'PAID',
+                inventoryOutcome: 'APPLIED',
+                items: [
+                  {
+                    id: itemId,
+                    productId: productId,
+                    productName: 'Test Product',
+                    quantity: 2,
+                    unitPrice: 50,
+                    originalTaxRate: 15,
+                    appliedTaxRate: 15,
+                    taxAmount: 15,
+                    total: 115,
+                    discount: 0,
+                    inventorySnapshotVersion: 'SALE_TIME_V1',
+                    inventorySnapshot: {
+                      classification: 'SIMPLE',
+                      disposition: 'DIRECT',
+                      catalogRevision: 'test-revision',
+                      mappingVersionId: mappingVersionId,
+                      bindings: [
+                        {
+                          bindingOrdinal: 0,
+                          insumoId: insumoId,
+                          quantityPerSaleUnit: 1,
+                          saleCorrelationId: correlationId,
+                        },
+                      ],
+                    },
+                  },
+                ],
+                payments: [
+                  {
+                    id: randomUUID(),
+                    method: 'CASH',
+                    amount: 115,
+                    currency: 'NIO',
+                    exchangeRate: 1,
+                  },
+                ],
+              },
+            },
+          ],
+        };
 
-      // Verify DB State
-      const invoices = await dataSource.query(`SELECT * FROM invoices WHERE tenant_id = $1`, [tenantId]);
-      expect(invoices).toHaveLength(1);
-      expect(invoices[0].id).toBe(invoiceId);
-      expect(invoices[0].invoice_number).toBe('001-001-01-00000001');
+        // Initial Sync
+        const response = await request(app.getHttpServer())
+          .post('/v1/sync/batch')
+          .set('Authorization', `Bearer ${token}`)
+          .send(payload)
+          .expect(201);
 
-      const receipts = await dataSource.query(`SELECT * FROM inventory_sync_receipts WHERE tenant_id = $1`, [tenantId]);
-      expect(receipts).toHaveLength(1);
-      expect(receipts[0].idempotency_key).toBe('sale:terminal1:seq1');
+        expect(response.body).toMatchObject({
+          status: 'success',
+          received: 1,
+          processed: 1,
+          duplicates: 0,
+          results: [
+            expect.objectContaining({
+              idempotencyKey: 'sale:terminal1:seq1',
+              status: 'ACCEPTED',
+            }),
+          ],
+        });
 
-      const kardex = await dataSource.query(`SELECT * FROM inventory_kardex WHERE tenant_id = $1`, [tenantId]);
-      expect(kardex).toHaveLength(1);
-      expect(kardex[0].sale_correlation_id).toBe(correlationId);
-      expect(Number(kardex[0].quantity)).toBe(-2); // 2 units sold
+        // Verify DB State
+        const invoices = await dataSource.query(
+          `SELECT * FROM invoices WHERE tenant_id = $1`,
+          [tenantId],
+        );
+        expect(invoices).toHaveLength(1);
+        expect(invoices[0].id).toBe(invoiceId);
+        expect(invoices[0].invoice_number).toBe('001-001-01-00000001');
 
-      // Replay Sync (Duplicate Gate)
-      const replayResponse = await request(app.getHttpServer())
-        .post('/v1/sync/batch')
-        .set('Authorization', `Bearer ${token}`)
-        .send(payload)
-        .expect(201);
+        const receipts = await dataSource.query(
+          `SELECT * FROM inventory_sync_receipts WHERE tenant_id = $1`,
+          [tenantId],
+        );
+        expect(receipts).toHaveLength(1);
+        expect(receipts[0].idempotency_key).toBe('sale:terminal1:seq1');
 
-      expect(replayResponse.body).toMatchObject({
-        status: 'success',
-        received: 1,
-        processed: 0, // Duplicate is not re-processed
-        duplicates: 1,
-        results: [
-          expect.objectContaining({
-            idempotencyKey: 'sale:terminal1:seq1',
-            status: 'DUPLICATE'
-          })
-        ]
-      });
+        const kardex = await dataSource.query(
+          `SELECT * FROM inventory_kardex WHERE tenant_id = $1`,
+          [tenantId],
+        );
+        expect(kardex).toHaveLength(1);
+        expect(kardex[0].sale_correlation_id).toBe(correlationId);
+        expect(Number(kardex[0].quantity)).toBe(-2); // 2 units sold
 
-      // Verify DB State remains unchanged
-      const invoicesAfter = await dataSource.query(`SELECT * FROM invoices WHERE tenant_id = $1`, [tenantId]);
-      expect(invoicesAfter).toHaveLength(1); // DGI number unchanged
+        // Replay Sync (Duplicate Gate)
+        const replayResponse = await request(app.getHttpServer())
+          .post('/v1/sync/batch')
+          .set('Authorization', `Bearer ${token}`)
+          .send(payload)
+          .expect(201);
 
-      const kardexAfter = await dataSource.query(`SELECT * FROM inventory_kardex WHERE tenant_id = $1`, [tenantId]);
-      expect(kardexAfter).toHaveLength(1); // No new Kardex entries
-    });
+        expect(replayResponse.body).toMatchObject({
+          status: 'success',
+          received: 1,
+          processed: 0, // Duplicate is not re-processed
+          duplicates: 1,
+          results: [
+            expect.objectContaining({
+              idempotencyKey: 'sale:terminal1:seq1',
+              status: 'DUPLICATE',
+            }),
+          ],
+        });
+
+        // Verify DB State remains unchanged
+        const invoicesAfter = await dataSource.query(
+          `SELECT * FROM invoices WHERE tenant_id = $1`,
+          [tenantId],
+        );
+        expect(invoicesAfter).toHaveLength(1); // DGI number unchanged
+
+        const kardexAfter = await dataSource.query(
+          `SELECT * FROM inventory_kardex WHERE tenant_id = $1`,
+          [tenantId],
+        );
+        expect(kardexAfter).toHaveLength(1); // No new Kardex entries
+      },
+    );
   });
 });

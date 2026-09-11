@@ -4,14 +4,9 @@ import { LoyaltyService } from './loyalty.service';
 import { LoyaltyLedgerService } from './loyalty-ledger.service';
 import { TicketPaidHandler } from './ticket-paid.handler';
 import { RedemptionService } from './redemption.service';
-import {
-  LoyaltyProgram,
-  LoyaltyProgramStatus,
-  LoyaltyProgramType,
-} from '../entities/loyalty-program.entity';
+import { LoyaltyProgram } from '../entities/loyalty-program.entity';
 import {
   RewardDefinition,
-  RewardStatus,
   RewardType,
 } from '../entities/reward-definition.entity';
 import { CustomerLoyaltyAccountProjection } from '../entities/customer-loyalty-account-projection.entity';

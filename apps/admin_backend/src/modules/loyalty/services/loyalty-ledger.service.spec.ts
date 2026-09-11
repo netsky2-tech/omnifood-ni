@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource } from 'typeorm';
 import {
   LoyaltyLedgerService,
   AppendLoyaltyTxDto,

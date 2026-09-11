@@ -1,14 +1,10 @@
 import { TicketPaidHandler } from './ticket-paid.handler';
-import {
-  LoyaltyLedgerService,
-  AppendLoyaltyTxDto,
-} from './loyalty-ledger.service';
+import { AppendLoyaltyTxDto } from './loyalty-ledger.service';
 import {
   LoyaltyProgram,
   LoyaltyProgramStatus,
   LoyaltyProgramType,
 } from '../entities/loyalty-program.entity';
-import { Customer } from '../../customers/entities/customer.entity';
 import { LoyaltyTicketSnapshot } from '../domain/loyalty-ticket-snapshot';
 
 describe('TicketPaidHandler', () => {

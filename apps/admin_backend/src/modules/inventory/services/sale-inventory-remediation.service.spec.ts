@@ -1,12 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
-import { ConflictException, BadRequestException, NotFoundException } from '@nestjs/common';
+import { ConflictException, BadRequestException } from '@nestjs/common';
 import { SaleInventoryRemediationService } from './sale-inventory-remediation.service';
 import { InventoryRemediationReceipt } from '../entities/inventory-remediation-receipt.entity';
-import { Invoice } from '../../sales/entities/invoice.entity';
-import { RecipeVersion } from '../entities/recipe-version.entity';
-import { RecipeDetail } from '../entities/recipe-detail.entity';
-import { Insumo } from '../entities/insumo.entity';
 import { InventoryMovement } from '../entities/inventory-movement.entity';
 import { AuditLog } from '../../identity/entities/audit-log.entity';
 
@@ -28,7 +24,10 @@ describe('SaleInventoryRemediationService (Slice 10)', () => {
       findOne: jest.fn(),
       find: jest.fn(),
       createQueryBuilder: jest.fn(),
-      create: jest.fn((entityClass, props) => ({ ...props, id: props.id || 'mock-id' })),
+      create: jest.fn((entityClass, props) => ({
+        ...props,
+        id: props.id || 'mock-id',
+      })),
       save: jest.fn((entityClass, entity) => Promise.resolve(entity)),
     };
 

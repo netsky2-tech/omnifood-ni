@@ -5,7 +5,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import * as request from 'supertest';
-import { App } from 'supertest/types';
 import { InboundSyncController } from '../../src/modules/sales/controllers/inbound-sync.controller';
 import { InboundSyncService } from '../../src/modules/sales/services/inbound-sync.service';
 import { Product } from '../../src/modules/inventory/entities/product.entity';

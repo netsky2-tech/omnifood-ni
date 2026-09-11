@@ -5,9 +5,7 @@ import {
   calculateEffectiveIncentiveRate,
   calculateRewardCostMetrics,
   metricAvailable,
-  metricNotAvailable,
   metricStale,
-  metricNotApplicable,
   EarnTransactionRecord,
   RedeemTransactionRecord,
 } from './profit-aware-metrics';

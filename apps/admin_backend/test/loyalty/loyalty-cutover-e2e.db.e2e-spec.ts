@@ -26,10 +26,7 @@ import {
   RewardType,
 } from '../../src/modules/loyalty/entities/reward-definition.entity';
 import { CustomerLoyaltyAccountProjection } from '../../src/modules/loyalty/entities/customer-loyalty-account-projection.entity';
-import {
-  CustomerPointTransaction,
-  PointTransactionType,
-} from '../../src/modules/customers/entities/customer-point-transaction.entity';
+import { CustomerPointTransaction } from '../../src/modules/customers/entities/customer-point-transaction.entity';
 import { Product } from '../../src/modules/inventory/entities/product.entity';
 import { Customer } from '../../src/modules/customers/entities/customer.entity';
 import { Tenant } from '../../src/modules/tenant/entities/tenant.entity';

@@ -100,7 +100,7 @@ describe('CatalogController E2E (real DB)', () => {
   let dbCleanup: () => Promise<void>;
 
   beforeAll(async () => {
-    const { schema, bootstrap, destroy } = await createIsolatedSchema();
+    const { schema, destroy } = await createIsolatedSchema();
     dbCleanup = destroy;
 
     const clientDs = new DataSource({

@@ -10,7 +10,6 @@ import { RecipeDetail } from './entities/recipe-detail.entity';
 import { Product } from './entities/product.entity';
 import { UomConversion } from './entities/uom-conversion.entity';
 import { UomConversionCalculator } from './uom-conversion-calculator';
-import { Insumo } from './entities/insumo.entity';
 
 describe('Recipe Draft Lifecycle & BOM Protection (TDD / ONB1.3E / AC-45)', () => {
   let service: RecipeService;

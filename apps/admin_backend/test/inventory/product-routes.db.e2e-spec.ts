@@ -6,10 +6,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import * as request from 'supertest';
 import { DataSource } from 'typeorm';
 import { Tenant } from '../../src/modules/tenant/entities/tenant.entity';
-import {
-  Product,
-  ProductType,
-} from '../../src/modules/inventory/entities/product.entity';
+import { Product } from '../../src/modules/inventory/entities/product.entity';
 import { ProductService } from '../../src/modules/inventory/product.service';
 import { ChangeLogService } from '../../src/modules/audit/change-log.service';
 import { ProductController } from '../../src/modules/inventory/product.controller';

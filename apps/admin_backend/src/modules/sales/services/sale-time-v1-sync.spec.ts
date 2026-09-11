@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { DataSource, EntityManager, Repository } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 import { InvoicesService } from './invoices.service';
 import { SaleInventoryOutcomeService } from './sale-inventory-outcome.service';
 import { Invoice } from '../entities/invoice.entity';
@@ -17,7 +17,7 @@ import { RecipeService } from '../../inventory/recipe.service';
 import { BomExplosionService } from '../../inventory/bom-explosion.service';
 import { SyncBatchRecordDto } from '../dto/sync-batch.dto';
 import { ProductInventoryMappingVersion } from '../../inventory/entities/product-inventory-mapping-version.entity';
-import { RecipeVersion, RecipePublicationState } from '../../inventory/entities/recipe-version.entity';
+import { RecipeVersion } from '../../inventory/entities/recipe-version.entity';
 import { RecipeDetail } from '../../inventory/entities/recipe-detail.entity';
 import { Insumo } from '../../inventory/entities/insumo.entity';
 
@@ -133,7 +133,7 @@ describe('InvoicesService SALE_TIME_V1 syncBatch integration', () => {
         }
         return {} as any;
       }),
-      createQueryBuilder: jest.fn((entity: any, alias: string) => {
+      createQueryBuilder: jest.fn((entity: any) => {
         return {
           setLock: jest.fn().mockReturnThis(),
           where: jest.fn().mockReturnThis(),
@@ -148,9 +148,15 @@ describe('InvoicesService SALE_TIME_V1 syncBatch integration', () => {
         const entity = maybeEntity !== undefined ? maybeEntity : entityOrTarget;
         if (entityOrTarget === Insumo || entity.stock !== undefined) {
           updatedInsumos.push(entity);
-        } else if (entity.insumoId !== undefined || entity.type === MovementType.SALE) {
+        } else if (
+          entity.insumoId !== undefined ||
+          entity.type === MovementType.SALE
+        ) {
           savedMovements.push(entity);
-        } else if (entity.result_status !== undefined || entity.payload_hash !== undefined) {
+        } else if (
+          entity.result_status !== undefined ||
+          entity.payload_hash !== undefined
+        ) {
           savedReceipts.push(entity);
         }
         return entity;
@@ -159,7 +165,8 @@ describe('InvoicesService SALE_TIME_V1 syncBatch integration', () => {
 
     const mockDataSource: Partial<DataSource> = {
       transaction: jest.fn(async (isolationOrCb: any, maybeCb?: any) => {
-        const cb = typeof isolationOrCb === 'function' ? isolationOrCb : maybeCb;
+        const cb =
+          typeof isolationOrCb === 'function' ? isolationOrCb : maybeCb;
         return cb(mockTxManager as EntityManager);
       }),
     };
@@ -284,12 +291,14 @@ describe('InvoicesService SALE_TIME_V1 syncBatch integration', () => {
 
     expect(result.processed).toBe(1);
     expect(result.results).toHaveLength(1);
-    const itemResult = result.results![0];
+    const itemResult = result.results[0];
     expect(itemResult.status).toBe('ACCEPTED');
     expect(itemResult.code).toBe('APPLIED');
     expect(itemResult.inventoryOutcome).toBe('APPLIED');
     expect(itemResult.policyVersion).toBe('SALE_TIME_V1');
-    expect(itemResult.acknowledgedMovementCorrelationIds).toEqual([correlationId]);
+    expect(itemResult.acknowledgedMovementCorrelationIds).toEqual([
+      correlationId,
+    ]);
 
     // Check Kardex movements
     expect(savedMovements).toHaveLength(1);
@@ -355,7 +364,7 @@ describe('InvoicesService SALE_TIME_V1 syncBatch integration', () => {
     const result = await service.syncBatch(tenantId, [record]);
 
     expect(result.processed).toBe(1);
-    const itemResult = result.results![0];
+    const itemResult = result.results[0];
     expect(itemResult.code).toBe('APPLIED_NO_INVENTORY_IMPACT');
     expect(itemResult.inventoryOutcome).toBe('APPLIED_NO_INVENTORY_IMPACT');
     expect(itemResult.acknowledgedMovementCorrelationIds).toEqual([]);
@@ -371,7 +380,9 @@ describe('InvoicesService SALE_TIME_V1 syncBatch integration', () => {
     // Receipt records zero correlations
     expect(savedReceipts).toHaveLength(1);
     expect(savedReceipts[0].result_code).toBe('APPLIED_NO_INVENTORY_IMPACT');
-    expect(savedReceipts[0].inventoryOutcome).toBe('APPLIED_NO_INVENTORY_IMPACT');
+    expect(savedReceipts[0].inventoryOutcome).toBe(
+      'APPLIED_NO_INVENTORY_IMPACT',
+    );
     expect(savedReceipts[0].acknowledgedCorrelationIds).toEqual([]);
   });
 
@@ -422,7 +433,7 @@ describe('InvoicesService SALE_TIME_V1 syncBatch integration', () => {
     const result = await service.syncBatch(tenantId, [record]);
 
     expect(result.processed).toBe(1);
-    const itemResult = result.results![0];
+    const itemResult = result.results[0];
     expect(itemResult.code).toBe('APPLIED_INVENTORY_PENDING');
     expect(itemResult.inventoryOutcome).toBe('APPLIED_INVENTORY_PENDING');
     expect(itemResult.acknowledgedMovementCorrelationIds).toEqual([]);

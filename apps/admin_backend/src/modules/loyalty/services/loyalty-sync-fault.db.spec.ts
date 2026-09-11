@@ -7,7 +7,6 @@ import {
 } from './loyalty-ledger.service';
 import {
   CustomerPointTransaction,
-  PointTransactionType,
   LoyaltyTransactionOrigin,
 } from '../../customers/entities/customer-point-transaction.entity';
 import { CustomerLoyaltyAccountProjection } from '../entities/customer-loyalty-account-projection.entity';
@@ -18,11 +17,7 @@ import {
 } from '../entities/loyalty-program.entity';
 import { Customer } from '../../customers/entities/customer.entity';
 import { Tenant } from '../../tenant/entities/tenant.entity';
-import {
-  RewardDefinition,
-  RewardType,
-  RewardStatus,
-} from '../entities/reward-definition.entity';
+import { RewardDefinition } from '../entities/reward-definition.entity';
 
 const postgresConnection = {
   host: process.env.DB_HOST ?? '127.0.0.1',
@@ -344,8 +339,12 @@ describe('LV1.7C — Loyalty Sync Fault Suite (Real PostgreSQL)', () => {
       expect(cloudTx.length).toBe(1);
 
       // Verify every POS tx has origin POS and cloud has origin CLOUD
-      expect(posTx.every((t) => t.origin === 'POS')).toBe(true);
-      expect(cloudTx.every((t) => t.origin === 'CLOUD')).toBe(true);
+      expect(
+        posTx.every((t) => t.origin === LoyaltyTransactionOrigin.POS),
+      ).toBe(true);
+      expect(
+        cloudTx.every((t) => t.origin === LoyaltyTransactionOrigin.CLOUD),
+      ).toBe(true);
     });
   });
 

@@ -370,10 +370,6 @@ describe('RecipeController E2E — real PostgreSQL', () => {
               [arrozId, tenantId],
             );
 
-            // Create recipe version directly via service
-            const recipeService = (
-              await import('../../src/modules/inventory/recipe.service')
-            ).RecipeService;
             // We'll create it via the controller
             const createToken = signToken(jwtService, {
               role: UserRole.OWNER,
@@ -429,7 +425,7 @@ describe('RecipeController E2E — real PostgreSQL', () => {
       async () => {
         await withIsolatedSchema(
           'e2e_recipe_get_active_empty',
-          async ({ app, dataSource, jwtService, tenantId, productService }) => {
+          async ({ app, jwtService, tenantId, productService }) => {
             const token = signToken(jwtService, {
               role: UserRole.MANAGER,
               tenant_id: tenantId,
@@ -583,7 +579,7 @@ describe('RecipeController E2E — real PostgreSQL', () => {
       async () => {
         await withIsolatedSchema(
           'e2e_recipe_tenant_isolation',
-          async ({ app, dataSource, jwtService, tenantId, productService }) => {
+          async ({ app, dataSource, jwtService, tenantId }) => {
             const otherTenantId = randomUUID();
             await dataSource.query(
               `INSERT INTO tenants (id, name, is_active, created_at, updated_at) VALUES ($1, $2, true, now(), now())`,

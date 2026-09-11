@@ -3,7 +3,6 @@ import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import * as request from 'supertest';
-import { DataSource } from 'typeorm';
 import { ProductController } from '../../src/modules/inventory/product.controller';
 import { ProductService } from '../../src/modules/inventory/product.service';
 import { ProductType } from '../../src/modules/inventory/entities/product.entity';

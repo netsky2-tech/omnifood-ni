@@ -1,15 +1,16 @@
-import { BadRequestException } from '@nestjs/common';
 import { SaleInventoryOutcomeService } from './sale-inventory-outcome.service';
 import { SyncInvoiceDto } from '../dto/sync-invoice.dto';
 import { ProductInventoryMappingVersion } from '../../inventory/entities/product-inventory-mapping-version.entity';
-import { RecipeVersion, RecipePublicationState } from '../../inventory/entities/recipe-version.entity';
+import {
+  RecipeVersion,
+  RecipePublicationState,
+} from '../../inventory/entities/recipe-version.entity';
 import { RecipeDetail } from '../../inventory/entities/recipe-detail.entity';
 import { Insumo } from '../../inventory/entities/insumo.entity';
 import { EntityManager } from 'typeorm';
 
 describe('SaleInventoryOutcomeService (SALE_TIME_V1)', () => {
   let service: SaleInventoryOutcomeService;
-  let mockEntityManager: Partial<EntityManager>;
 
   const tenantId = 'tenant-123';
   const insumoAId = '11111111-1111-1111-1111-111111111111';
@@ -21,12 +22,14 @@ describe('SaleInventoryOutcomeService (SALE_TIME_V1)', () => {
     service = new SaleInventoryOutcomeService();
   });
 
-  const createMockManager = (overrides: {
-    mappings?: any[];
-    recipeVersions?: any[];
-    recipeDetails?: any[];
-    insumos?: any[];
-  } = {}) => {
+  const createMockManager = (
+    overrides: {
+      mappings?: any[];
+      recipeVersions?: any[];
+      recipeDetails?: any[];
+      insumos?: any[];
+    } = {},
+  ) => {
     const mappings = overrides.mappings ?? [
       {
         id: mappingAId,
@@ -71,26 +74,31 @@ describe('SaleInventoryOutcomeService (SALE_TIME_V1)', () => {
         if (entity === ProductInventoryMappingVersion) {
           return {
             findOne: jest.fn(async ({ where }: any) => {
-              return mappings.find(
-                (m) =>
-                  (!where.id || m.id === where.id) &&
-                  (!where.tenant_id || m.tenant_id === where.tenant_id) &&
-                  (!where.product_id || m.product_id === where.product_id) &&
-                  (!where.insumo_id || m.insumo_id === where.insumo_id),
-              ) ?? null;
+              return (
+                mappings.find(
+                  (m) =>
+                    (!where.id || m.id === where.id) &&
+                    (!where.tenant_id || m.tenant_id === where.tenant_id) &&
+                    (!where.product_id || m.product_id === where.product_id) &&
+                    (!where.insumo_id || m.insumo_id === where.insumo_id),
+                ) ?? null
+              );
             }),
           };
         }
         if (entity === RecipeVersion) {
           return {
             findOne: jest.fn(async ({ where }: any) => {
-              return recipeVersions.find(
-                (v) =>
-                  (!where.id || v.id === where.id) &&
-                  (!where.tenant_id || v.tenant_id === where.tenant_id) &&
-                  (!where.product_id || v.product_id === where.product_id) &&
-                  (!where.publication_state || v.publication_state === where.publication_state),
-              ) ?? null;
+              return (
+                recipeVersions.find(
+                  (v) =>
+                    (!where.id || v.id === where.id) &&
+                    (!where.tenant_id || v.tenant_id === where.tenant_id) &&
+                    (!where.product_id || v.product_id === where.product_id) &&
+                    (!where.publication_state ||
+                      v.publication_state === where.publication_state),
+                ) ?? null
+              );
             }),
           };
         }
@@ -99,7 +107,8 @@ describe('SaleInventoryOutcomeService (SALE_TIME_V1)', () => {
             find: jest.fn(async ({ where }: any) => {
               return recipeDetails.filter(
                 (d) =>
-                  (!where.recipe_version_id || d.recipe_version_id === where.recipe_version_id) &&
+                  (!where.recipe_version_id ||
+                    d.recipe_version_id === where.recipe_version_id) &&
                   (!where.tenant_id || d.tenant_id === where.tenant_id),
               );
             }),
@@ -108,11 +117,13 @@ describe('SaleInventoryOutcomeService (SALE_TIME_V1)', () => {
         if (entity === Insumo) {
           return {
             findOne: jest.fn(async ({ where }: any) => {
-              return insumos.find(
-                (i) =>
-                  (!where.id || i.id === where.id) &&
-                  (!where.tenant_id || i.tenant_id === where.tenant_id),
-              ) ?? null;
+              return (
+                insumos.find(
+                  (i) =>
+                    (!where.id || i.id === where.id) &&
+                    (!where.tenant_id || i.tenant_id === where.tenant_id),
+                ) ?? null
+              );
             }),
           };
         }
@@ -133,7 +144,11 @@ describe('SaleInventoryOutcomeService (SALE_TIME_V1)', () => {
       ],
     } as SyncInvoiceDto;
 
-    const result = await service.validateSaleTimeSnapshot(tenantId, invoice, createMockManager());
+    const result = await service.validateSaleTimeSnapshot(
+      tenantId,
+      invoice,
+      createMockManager(),
+    );
     expect(result).toBeNull();
   });
 
@@ -196,13 +211,19 @@ describe('SaleInventoryOutcomeService (SALE_TIME_V1)', () => {
       ],
     } as SyncInvoiceDto;
 
-    const result = await service.validateSaleTimeSnapshot(tenantId, invoice, createMockManager());
+    const result = await service.validateSaleTimeSnapshot(
+      tenantId,
+      invoice,
+      createMockManager(),
+    );
     expect(result).not.toBeNull();
-    expect(result!.outcome).toBe('APPLIED');
-    expect(result!.policyVersion).toBe('SALE_TIME_V1');
-    expect(result!.acknowledgedMovementCorrelationIds).toEqual(['corr-sha256-direct-1']);
-    expect(result!.bindingsToApply).toHaveLength(1);
-    expect(result!.bindingsToApply[0].explodedQuantity).toBe(3.0); // 2 * 1.5
+    expect(result.outcome).toBe('APPLIED');
+    expect(result.policyVersion).toBe('SALE_TIME_V1');
+    expect(result.acknowledgedMovementCorrelationIds).toEqual([
+      'corr-sha256-direct-1',
+    ]);
+    expect(result.bindingsToApply).toHaveLength(1);
+    expect(result.bindingsToApply[0].explodedQuantity).toBe(3.0); // 2 * 1.5
   });
 
   it('validates a PREPARED product with RECIPE disposition and published recipe version', async () => {
@@ -235,11 +256,17 @@ describe('SaleInventoryOutcomeService (SALE_TIME_V1)', () => {
       ],
     } as SyncInvoiceDto;
 
-    const result = await service.validateSaleTimeSnapshot(tenantId, invoice, createMockManager());
+    const result = await service.validateSaleTimeSnapshot(
+      tenantId,
+      invoice,
+      createMockManager(),
+    );
     expect(result).not.toBeNull();
-    expect(result!.outcome).toBe('APPLIED');
-    expect(result!.acknowledgedMovementCorrelationIds).toEqual(['corr-sha256-recipe-1']);
-    expect(result!.bindingsToApply[0].explodedQuantity).toBe(7.5); // 3 * 2.5
+    expect(result.outcome).toBe('APPLIED');
+    expect(result.acknowledgedMovementCorrelationIds).toEqual([
+      'corr-sha256-recipe-1',
+    ]);
+    expect(result.bindingsToApply[0].explodedQuantity).toBe(7.5); // 3 * 2.5
   });
 
   it('validates NO_IMPACT disposition with zero movements and APPLIED_NO_INVENTORY_IMPACT', async () => {
@@ -264,12 +291,16 @@ describe('SaleInventoryOutcomeService (SALE_TIME_V1)', () => {
       ],
     } as SyncInvoiceDto;
 
-    const result = await service.validateSaleTimeSnapshot(tenantId, invoice, createMockManager());
+    const result = await service.validateSaleTimeSnapshot(
+      tenantId,
+      invoice,
+      createMockManager(),
+    );
     expect(result).not.toBeNull();
-    expect(result!.outcome).toBe('APPLIED_NO_INVENTORY_IMPACT');
-    expect(result!.acknowledgedMovementCorrelationIds).toEqual([]);
-    expect(result!.bindingsToApply).toEqual([]);
-    expect(result!.reason).toEqual({
+    expect(result.outcome).toBe('APPLIED_NO_INVENTORY_IMPACT');
+    expect(result.acknowledgedMovementCorrelationIds).toEqual([]);
+    expect(result.bindingsToApply).toEqual([]);
+    expect(result.reason).toEqual({
       code: 'NO_EXPLICIT_INSUMO_MAPPING',
       lines: ['item-1'],
     });
@@ -316,13 +347,17 @@ describe('SaleInventoryOutcomeService (SALE_TIME_V1)', () => {
       ],
     } as SyncInvoiceDto;
 
-    const result = await service.validateSaleTimeSnapshot(tenantId, invoice, createMockManager());
+    const result = await service.validateSaleTimeSnapshot(
+      tenantId,
+      invoice,
+      createMockManager(),
+    );
     expect(result).not.toBeNull();
     // Atomic: any pending line gives APPLIED_INVENTORY_PENDING and zero cloud movements for entire invoice!
-    expect(result!.outcome).toBe('APPLIED_INVENTORY_PENDING');
-    expect(result!.acknowledgedMovementCorrelationIds).toEqual([]);
-    expect(result!.bindingsToApply).toEqual([]);
-    expect(result!.reason).toEqual({
+    expect(result.outcome).toBe('APPLIED_INVENTORY_PENDING');
+    expect(result.acknowledgedMovementCorrelationIds).toEqual([]);
+    expect(result.bindingsToApply).toEqual([]);
+    expect(result.reason).toEqual({
       code: 'MISSING_PUBLISHED_RECIPE',
       lines: ['item-2'],
     });

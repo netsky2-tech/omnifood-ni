@@ -16,7 +16,7 @@ import {
   CustomerPointTransaction,
   PointTransactionType,
 } from '../../customers/entities/customer-point-transaction.entity';
-import { Product, ProductType } from '../../inventory/entities/product.entity';
+import { Product } from '../../inventory/entities/product.entity';
 import { Tenant } from '../../tenant/entities/tenant.entity';
 import { Customer } from '../../customers/entities/customer.entity';
 
@@ -261,30 +261,26 @@ describe('LoyaltyProfitAwareService (Real PostgreSQL DB)', () => {
 
       // 1. Insert EARN transactions:
       // Earn 1: 10 days ago -> C$12,000
-      const earn1 = await dataSource
-        .getRepository(CustomerPointTransaction)
-        .save({
-          tenant_id: tenant1Id,
-          customer_id: customer1Id,
-          loyalty_program_id: program.id,
-          transaction_type: PointTransactionType.EARN,
-          units: 1200,
-          occurred_at: new Date('2026-08-23T12:00:00Z'),
-          commercial_snapshot: { earningBaseNio: 12000 },
-        });
+      await dataSource.getRepository(CustomerPointTransaction).save({
+        tenant_id: tenant1Id,
+        customer_id: customer1Id,
+        loyalty_program_id: program.id,
+        transaction_type: PointTransactionType.EARN,
+        units: 1200,
+        occurred_at: new Date('2026-08-23T12:00:00Z'),
+        commercial_snapshot: { earningBaseNio: 12000 },
+      });
 
       // Earn 2: 20 days ago -> C$8,000
-      const earn2 = await dataSource
-        .getRepository(CustomerPointTransaction)
-        .save({
-          tenant_id: tenant1Id,
-          customer_id: customer1Id,
-          loyalty_program_id: program.id,
-          transaction_type: PointTransactionType.EARN,
-          units: 800,
-          occurred_at: new Date('2026-08-13T12:00:00Z'),
-          commercial_snapshot: { earningBaseNio: 8000 },
-        });
+      await dataSource.getRepository(CustomerPointTransaction).save({
+        tenant_id: tenant1Id,
+        customer_id: customer1Id,
+        loyalty_program_id: program.id,
+        transaction_type: PointTransactionType.EARN,
+        units: 800,
+        occurred_at: new Date('2026-08-13T12:00:00Z'),
+        commercial_snapshot: { earningBaseNio: 8000 },
+      });
 
       // Earn 3: 15 days ago -> C$5,000 but reversed!
       const earn3 = await dataSource

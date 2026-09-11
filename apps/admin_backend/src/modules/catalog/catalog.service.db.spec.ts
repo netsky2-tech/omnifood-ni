@@ -179,6 +179,7 @@ describe('CatalogService — DB integration', () => {
 
       const all = await service.list(CATALOG_TYPE.INVENTORY_CATEGORY, t, true);
       expect(all).toHaveLength(2);
+      expect(all.some((v) => v.id === inactive.id)).toBe(true);
     });
 
     it('returns empty array for tenant with no values', async () => {
@@ -366,6 +367,7 @@ describe('CatalogService — DB integration', () => {
       const first = await service.seedDefaults(t);
       const second = await service.seedDefaults(t);
 
+      expect(first).toBeGreaterThan(0);
       expect(second).toBe(0);
 
       // Still has the original count

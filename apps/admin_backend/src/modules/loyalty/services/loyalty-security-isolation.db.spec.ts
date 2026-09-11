@@ -1,21 +1,10 @@
 import { randomUUID } from 'crypto';
 import { DataSource, Repository } from 'typeorm';
-import {
-  NotFoundException,
-  ConflictException,
-  ForbiddenException,
-} from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { LoyaltyService } from './loyalty.service';
-import {
-  LoyaltyLedgerService,
-  AppendLoyaltyTxDto,
-} from './loyalty-ledger.service';
+import { LoyaltyLedgerService } from './loyalty-ledger.service';
 import { RedemptionService } from './redemption.service';
-import {
-  CustomerPointTransaction,
-  PointTransactionType,
-  LoyaltyTransactionOrigin,
-} from '../../customers/entities/customer-point-transaction.entity';
+import { CustomerPointTransaction } from '../../customers/entities/customer-point-transaction.entity';
 import { CustomerLoyaltyAccountProjection } from '../entities/customer-loyalty-account-projection.entity';
 import {
   LoyaltyProgram,
