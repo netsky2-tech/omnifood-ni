@@ -21,7 +21,11 @@ export class AddSaleInventoryOutcomeColumns1803000000000 implements MigrationInt
     `);
   }
 
-  public async down(_queryRunner: QueryRunner): Promise<void> {
-    throw new Error('down migration forbidden: historical sale outcome fields are append-only');
+  public down(): Promise<void> {
+    return Promise.reject(
+      new Error(
+        'down migration forbidden: historical sale outcome fields are append-only',
+      ),
+    );
   }
 }

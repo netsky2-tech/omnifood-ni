@@ -148,7 +148,7 @@ export class CustomersService {
           .andWhere('tx.loyalty_program_id = :programId', {
             programId: dto.loyalty_program_id,
           })
-          .getRawOne();
+          .getRawOne<{ total?: string | number | null }>();
         const totalUnits = Number(sumResult?.total ?? 0);
 
         let projection = await projRepo.findOne({

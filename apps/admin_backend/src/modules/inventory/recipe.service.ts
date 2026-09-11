@@ -12,7 +12,6 @@ import {
   Repository,
 } from 'typeorm';
 import {
-  RecipeOrigin,
   RecipePublicationState,
   RecipeSuggestionState,
   RecipeVersion,
