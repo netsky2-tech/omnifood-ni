@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
   InvoicesService,
@@ -82,7 +83,7 @@ export class ActivationService {
     private readonly readinessEvaluator: OnboardingReadinessEvaluator,
     private readonly dataSource: DataSource,
     private readonly changeLogService: ChangeLogService,
-    private readonly invoicesService?: InvoicesService,
+    @Optional() private readonly invoicesService?: InvoicesService,
   ) {}
 
   private assertPrincipalMatchesRecord(

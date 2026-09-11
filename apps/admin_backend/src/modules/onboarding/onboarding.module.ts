@@ -30,6 +30,7 @@ import { UomConversion } from '../inventory/entities/uom-conversion.entity';
 import { Warehouse } from '../inventory/entities/warehouse.entity';
 import { Supplier } from '../inventory/entities/supplier.entity';
 import { InventoryMovement } from '../inventory/entities/inventory-movement.entity';
+import { Invoice } from '../sales/entities/invoice.entity';
 import { InvoiceItem } from '../sales/entities/invoice-item.entity';
 import { IndustryTemplateService } from './services/industry-template.service';
 import { TemplatePreviewService } from './services/template-preview.service';
@@ -118,6 +119,7 @@ export const getRequiredOnboardingJwtSecret = (
       Warehouse,
       Supplier,
       InventoryMovement,
+      Invoice,
       InvoiceItem,
     ]),
   ],
