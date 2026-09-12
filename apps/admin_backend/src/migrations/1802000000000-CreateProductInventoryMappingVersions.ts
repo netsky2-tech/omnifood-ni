@@ -14,17 +14,26 @@ export class CreateProductInventoryMappingVersions1802000000000 implements Migra
       END $$;
     `);
 
-    // 2. Supporting composite uniqueness on parent tables
+    // 2. Supporting composite uniqueness on parent tables (idempotent)
     await queryRunner.query(`
-      ALTER TABLE products ADD CONSTRAINT uq_products_tenant_product_id UNIQUE (tenant_id, id);
-      ALTER TABLE insumos ADD CONSTRAINT uq_insumos_tenant_insumo_id UNIQUE (tenant_id, id);
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_products_tenant_product_id') THEN
+          ALTER TABLE products ADD CONSTRAINT uq_products_tenant_product_id UNIQUE (tenant_id, id);
+        END IF;
+      END $$;
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_insumos_tenant_insumo_id') THEN
+          ALTER TABLE insumos ADD CONSTRAINT uq_insumos_tenant_insumo_id UNIQUE (tenant_id, id);
+        END IF;
+      END $$;
     `);
 
     // 3. Create mapping versions table with composite tenant foreign keys
+    // NOTE: tenant_id is uuid in products/insumos — must match, not varchar(128)
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS product_inventory_mapping_versions (
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-        tenant_id varchar(128) NOT NULL,
+        tenant_id uuid NOT NULL,
         product_id uuid NOT NULL,
         insumo_id uuid NOT NULL,
         effective_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -43,10 +52,10 @@ export class CreateProductInventoryMappingVersions1802000000000 implements Migra
     await queryRunner.query(`
       ALTER TABLE product_inventory_mapping_versions ENABLE ROW LEVEL SECURITY;
       ALTER TABLE product_inventory_mapping_versions FORCE ROW LEVEL SECURITY;
-      CREATE POLICY mapping_version_select ON product_inventory_mapping_versions FOR SELECT USING (tenant_id = current_setting('app.tenant_id', true));
-      CREATE POLICY mapping_version_insert ON product_inventory_mapping_versions FOR INSERT WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
-      CREATE POLICY mapping_version_update ON product_inventory_mapping_versions FOR UPDATE USING (tenant_id = current_setting('app.tenant_id', true)) WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
-      CREATE POLICY mapping_version_delete ON product_inventory_mapping_versions FOR DELETE USING (tenant_id = current_setting('app.tenant_id', true));
+      CREATE POLICY mapping_version_select ON product_inventory_mapping_versions FOR SELECT USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
+      CREATE POLICY mapping_version_insert ON product_inventory_mapping_versions FOR INSERT WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
+      CREATE POLICY mapping_version_update ON product_inventory_mapping_versions FOR UPDATE USING (tenant_id = current_setting('app.tenant_id', true)::uuid) WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
+      CREATE POLICY mapping_version_delete ON product_inventory_mapping_versions FOR DELETE USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
     `);
 
     // 5. Trigger guarding historical immutability: protects id, created_at, tenant, product, insumo, effective_at, and closed rows

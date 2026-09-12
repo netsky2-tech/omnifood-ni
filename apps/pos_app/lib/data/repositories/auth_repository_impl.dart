@@ -139,19 +139,25 @@ class AuthRepositoryImpl implements AuthRepository {
       debugPrint('[AuthRepository] Saving token...');
       await _saveToken(token);
       if (_credentialCoordinator != null && refreshToken != null) {
-        final intent = await _credentialCoordinator!.reserveIntent();
-        await _credentialCoordinator!.commit(
-          intent,
-          CloudCredentials(
-            accessToken: token,
-            refreshToken: refreshToken,
-            userId: user.id,
-                tenantId: (user.tenantId != null && user.tenantId!.isNotEmpty)
-                    ? user.tenantId!
-                : 'default-tenant',
-            issuedAtUtc: DateTime.now().toUtc(),
-          ),
-        );
+        try {
+          final intent = await _credentialCoordinator!.reserveIntent();
+          await _credentialCoordinator!.commit(
+            intent,
+            CloudCredentials(
+              accessToken: token,
+              refreshToken: refreshToken,
+              userId: user.id,
+                  tenantId: (user.tenantId != null && user.tenantId!.isNotEmpty)
+                      ? user.tenantId!
+                  : 'default-tenant',
+              issuedAtUtc: DateTime.now().toUtc(),
+            ),
+          );
+        } catch (e) {
+          debugPrint(
+            '[AuthRepository] Credential coordinator failed (token already persisted): $e',
+          );
+        }
       }
 
             debugPrint('[AuthRepository] Refreshing audit capability...');
