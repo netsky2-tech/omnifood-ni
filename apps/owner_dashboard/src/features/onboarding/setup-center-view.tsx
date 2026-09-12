@@ -45,6 +45,7 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
   const { data: catalogSummary } = useOnboardingCatalogSummary();
   const hasActivationPermission = useHasPermission(AppPermission.ONBOARDING_ACTIVATION_MANAGE);
 
+  const isActivated = progress.currentLifecycle === OnboardingLifecycleState.ACTIVATED;
   const [catalogModalOpen, setCatalogModalOpen] = useState(false);
 
   useEffect(() => {
@@ -132,6 +133,23 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
     }
   };
 
+  const getLifecycleDisplayLabel = (state: OnboardingLifecycleState): string => {
+    switch (state) {
+      case OnboardingLifecycleState.PROVISIONED:
+        return "Inicial";
+      case OnboardingLifecycleState.SETUP_IN_PROGRESS:
+        return "En Configuración";
+      case OnboardingLifecycleState.SALE_READY:
+        return "Listo para Venta";
+      case OnboardingLifecycleState.ACTIVATION_IN_PROGRESS:
+        return "Activación en Curso";
+      case OnboardingLifecycleState.ACTIVATED:
+        return "Activado";
+      default:
+        return state;
+    }
+  };
+
   const handleStepAction = (actionKey: OnboardingStepKey) => {
     if (actionKey === "catalog") {
       setCatalogModalOpen(true);
@@ -155,11 +173,11 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
             <Badge
               variant="outline"
               data-testid="lifecycle-badge"
-              className={`font-semibold uppercase tracking-wider text-xs px-2.5 py-0.5 border ${getLifecycleBadgeVariant(
+              className={`font-semibold tracking-wide text-xs px-2.5 py-0.5 border ${getLifecycleBadgeVariant(
                 progress.currentLifecycle,
               )}`}
             >
-              {progress.currentLifecycle}
+              {getLifecycleDisplayLabel(progress.currentLifecycle)}
             </Badge>
             <Badge variant="secondary" data-testid="optimistic-version-badge" className="font-mono text-xs">
               v{progress.optimisticVersion}
@@ -234,7 +252,7 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
             <History className="h-5 w-5 text-blue-600 shrink-0" />
             <div>
               <div className="font-semibold text-sm flex items-center gap-2">
-                <span>Hito Histórico: Listo para Venta (SALE_READY)</span>
+                <span>Hito Histórico: Listo para Venta</span>
                 <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-300 text-[11px] font-medium">
                   Milestone Registrado
                 </Badge>
@@ -266,7 +284,7 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
           </AlertTitle>
           <AlertDescription className="text-xs text-amber-800/90 mt-1 space-y-1">
             <p>
-              El negocio alcanzó SALE_READY previamente, pero actualmente existen bloqueadores activos antes de activar el terminal. El hito histórico se conserva intacto.
+              El negocio estuvo listo para venta previamente, pero actualmente existen requisitos pendientes antes de activar la terminal. El registro histórico se conserva intacto.
             </p>
             {progress.blockers.length > 0 && (
               <div className="font-mono text-[11px] bg-amber-100/80 p-2 rounded mt-1">
@@ -289,7 +307,7 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
             </div>
             {progress.isSaleReady && (
               <Badge className="bg-emerald-600 text-white hover:bg-emerald-700">
-                ¡Listo para Venta (SALE_READY)!
+                ¡Listo para Venta!
               </Badge>
             )}
           </div>
@@ -326,21 +344,27 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
             )}
             {progress.nextRecommendedAction.actionKey === "activation" && (
               <div className="flex flex-col gap-1.5">
-                <Button
-                  size="sm"
-                  variant="default"
+                <div
                   data-testid="start-pos-terminal-btn"
-                  disabled={!progress.isSaleReady || !hasActivationPermission}
-                  className={`flex items-center gap-2 font-medium transition-all focus-visible:ring-2 focus-visible:ring-[#013a57] focus-visible:ring-offset-2 ${
+                  className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium ${
                     progress.isSaleReady && hasActivationPermission
-                      ? "bg-blue-600 hover:bg-blue-700 text-white"
-                      : "bg-muted text-muted-foreground cursor-not-allowed opacity-60"
+                      ? "bg-blue-100 text-blue-800 border border-blue-300"
+                      : "bg-muted text-muted-foreground opacity-60"
                   }`}
                 >
                   <Store className="h-4 w-4" />
-                  Iniciar Terminal POS Físico
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
+                  {isActivated
+                    ? "Terminal Activado"
+                    : "Terminal Listo — Activar desde el POS"}
+                </div>
+                {progress.isSaleReady && hasActivationPermission && !isActivated && (
+                  <span
+                    data-testid="activation-hint"
+                    className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5"
+                  >
+                    Abrí la app POS en tu terminal y completá la activación desde allí.
+                  </span>
+                )}
                 {progress.isSaleReady && !hasActivationPermission && (
                   <span
                     data-testid="activation-permission-guard-note"
@@ -488,7 +512,7 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
               ) : (
                 <ShieldCheck className="h-4 w-4 text-primary shrink-0" />
               )}
-              Evaluación de Preparación para Venta (SALE_READY)
+              Evaluación de Preparación para Venta
             </CardTitle>
             <Badge
               className={
@@ -511,19 +535,19 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div className="p-2 rounded bg-background border flex items-center gap-2">
                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                <span>Identidad de Propietario (OWNER único suficiente, AC-26)</span>
+                <span>Identidad de Propietario (usuario administrador activo)</span>
               </div>
               <div className="p-2 rounded bg-background border flex items-center gap-2">
                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                <span>Configuración Fiscal DGI Mínima (AC-04)</span>
+                <span>Configuración Fiscal DGI Mínima (RUC y régimen tributario)</span>
               </div>
               <div className="p-2 rounded bg-background border flex items-center gap-2">
                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                <span>Catálogo Vendible Activo con Precio (AC-06)</span>
+                <span>Catálogo Vendible Activo con Precio</span>
               </div>
               <div className="p-2 rounded bg-background border flex items-center gap-2 text-muted-foreground">
                 <Info className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-                <span>BOH (Stock/Recetas/Costos): Opcional no bloqueante (AC-07, AC-08)</span>
+                <span>Inventario inicial (Stock y Costos): Opcional no bloqueante</span>
               </div>
             </div>
           ) : (
@@ -588,7 +612,7 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                     <Package className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
                     <div>
                       <span className="font-medium text-foreground">Stock inicial & Kardex:</span>{" "}
-                      Puede operar con stock en 0; costos se reportan como COST_PENDING / UNKNOWN (AC-07, AC-08).
+                      Puede comenzar a vender con stock en 0; los costos se calcularán cuando ingrese compras.
                     </div>
                   </div>
                   <div className="p-2 rounded bg-muted/30 border flex items-start gap-2">
@@ -679,7 +703,7 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                 Checklist Progresivo BOH (Backoffice Readiness)
               </CardTitle>
               <CardDescription className="text-xs text-muted-foreground mt-0.5">
-                Enriquecimiento posterior de almacenes, costeo y operaciones. Opcional y no bloqueante para ventas POS (AC-07, AC-08, AC-40, AC-41).
+                Carga posterior de almacenes, costeo y recetas. Opcional para habilitar ventas en el punto de venta.
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
@@ -726,7 +750,7 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                     Almacenes: <span className="font-medium text-foreground">{readiness.inventory?.warehouseCount ?? 0}</span> | Ítems rastreados: <span className="font-medium text-foreground">{readiness.inventory?.trackedProductCount ?? 0}</span>
                   </div>
                   <div className="text-[10px] text-muted-foreground/90 font-medium">
-                    Stock en 0 no bloquea venta (AC-07, AC-40)
+                    Permite operar con inventario en cero temporalmente
                   </div>
                 </div>
               </div>
@@ -761,7 +785,7 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                         : "bg-amber-50 text-amber-800 border-amber-300"
                     }`}
                   >
-                    {readiness.costingReady ? "COSTING_READY" : "COST_PENDING"}
+                    {readiness.costingReady ? "Costeo Completo" : "Costeo Inicial Pendiente"}
                   </Badge>
                 </div>
                 <div className="text-[11px] text-muted-foreground space-y-1">
@@ -769,7 +793,7 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                     Estado: <span className="font-medium text-foreground">{readiness.costing?.knownCostCount ?? 0} conocido(s)</span>, <span className="font-medium text-foreground">{readiness.costing?.pendingCostCount ?? 0} pendiente(s)</span>
                   </div>
                   <div className="text-[10px] text-muted-foreground/90 font-medium">
-                    COST_PENDING no bloquea venta
+                    Costeo pendiente no bloquea ventas
                   </div>
                 </div>
               </div>
@@ -815,7 +839,7 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                     Proveedores: {readiness.operations?.supplierCount ?? 0} | Categorías: {readiness.operations?.categoryCount ?? 0}
                   </div>
                   <div className="text-[10px] text-muted-foreground/90 font-medium">
-                    Enriquecimiento opcional; no revoca ACTIVATED
+                    Registro opcional; no altera el estado de activación
                   </div>
                 </div>
               </div>

@@ -155,5 +155,68 @@ void main() {
       expect(local.fingerprint,
           '2222222222222222222222222222222222222222222222222222222222222222');
     });
+
+    test('projects fiscal snapshot fields to local_configs for UI consumption', () async {
+      final outcome = await handler.handleFiscalEnvelope(sampleEnvelope);
+      expect(outcome.status, FiscalInboxStatus.applied);
+
+      // Verify business_name
+      final businessName = await database.localConfigDao.getConfigByKey('business_name');
+      expect(businessName?.value, 'Cafetín Central');
+
+      // Verify ruc
+      final ruc = await database.localConfigDao.getConfigByKey('ruc');
+      expect(ruc?.value, 'J0310000000001');
+
+      // Verify tax_regime
+      final taxRegime = await database.localConfigDao.getConfigByKey('tax_regime');
+      expect(taxRegime?.value, 'CUOTA_FIJA');
+
+      // Verify commercial_exchange_rate
+      final fxRate = await database.localConfigDao.getConfigByKey('commercial_exchange_rate');
+      expect(fxRate?.value, '0.5');
+
+      // Verify tenant_id
+      final tid = await database.localConfigDao.getConfigByKey('tenant_id');
+      expect(tid?.value, tenantId);
+
+      // Verify tenant_name (mirrors businessName)
+      final tName = await database.localConfigDao.getConfigByKey('tenant_name');
+      expect(tName?.value, 'Cafetín Central');
+    });
+
+    test('omits empty/null fields from local_configs projection', () async {
+      final envelopeWithoutOptionals = {
+        'tenantId': tenantId,
+        'businessName': 'Solo Nombre',
+        'ruc': null,
+        'fiscalRegime': null,
+        'commercialFxSpread': null,
+        'configVersion': {
+          'revision': 1,
+          'fingerprint':
+              'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+        },
+      };
+
+      final outcome = await handler.handleFiscalEnvelope(envelopeWithoutOptionals);
+      expect(outcome.status, FiscalInboxStatus.applied);
+
+      // business_name should be set
+      final bn = await database.localConfigDao.getConfigByKey('business_name');
+      expect(bn?.value, 'Solo Nombre');
+
+      // ruc should NOT be written (null/empty)
+      final ruc = await database.localConfigDao.getConfigByKey('ruc');
+      expect(ruc, isNull);
+
+      // tax_regime should NOT be written (null)
+      final tr = await database.localConfigDao.getConfigByKey('tax_regime');
+      expect(tr, isNull);
+
+      // commercial_exchange_rate should NOT be written (null)
+      final fx = await database.localConfigDao.getConfigByKey('commercial_exchange_rate');
+      expect(fx, isNull);
+    });
   });
 }

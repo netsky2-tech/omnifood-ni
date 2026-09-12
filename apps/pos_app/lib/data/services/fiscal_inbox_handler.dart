@@ -182,7 +182,68 @@ class FiscalInboxHandler {
       ),
     );
 
-    // 6. Project to TaxConfigEntity if taxRate is present
+    // 6. Project fiscal snapshot fields to local_configs for UI consumption
+    final businessName = rawEnvelope['businessName']?.toString();
+    final ruc = rawEnvelope['ruc']?.toString();
+    final fiscalRegime = rawEnvelope['fiscalRegime']?.toString();
+    final commercialFxSpread = rawEnvelope['commercialFxSpread'];
+
+    if (businessName != null && businessName.isNotEmpty) {
+      await _database.localConfigDao.saveConfig(
+        LocalConfigEntity(
+          key: 'business_name',
+          value: businessName,
+          description: 'Business name from fiscal config sync',
+        ),
+      );
+    }
+    if (ruc != null && ruc.isNotEmpty) {
+      await _database.localConfigDao.saveConfig(
+        LocalConfigEntity(
+          key: 'ruc',
+          value: ruc,
+          description: 'RUC from fiscal config sync',
+        ),
+      );
+    }
+    if (fiscalRegime != null && fiscalRegime.isNotEmpty) {
+      await _database.localConfigDao.saveConfig(
+        LocalConfigEntity(
+          key: 'tax_regime',
+          value: fiscalRegime,
+          description: 'Tax regime from fiscal config sync',
+        ),
+      );
+    }
+    if (commercialFxSpread != null) {
+      await _database.localConfigDao.saveConfig(
+        LocalConfigEntity(
+          key: 'commercial_exchange_rate',
+          value: commercialFxSpread.toString(),
+          description: 'Commercial FX spread from fiscal config sync',
+        ),
+      );
+    }
+    if (tenantId.isNotEmpty) {
+      await _database.localConfigDao.saveConfig(
+        LocalConfigEntity(
+          key: 'tenant_id',
+          value: tenantId,
+          description: 'Tenant ID from fiscal config sync',
+        ),
+      );
+    }
+    if (businessName != null && businessName.isNotEmpty) {
+      await _database.localConfigDao.saveConfig(
+        LocalConfigEntity(
+          key: 'tenant_name',
+          value: businessName,
+          description: 'Tenant name from fiscal config sync',
+        ),
+      );
+    }
+
+    // 7. Project to TaxConfigEntity if taxRate is present
     final taxRate = (rawEnvelope['taxRate'] as num?)?.toDouble();
     final regime = rawEnvelope['fiscalRegime']?.toString();
     if (taxRate != null) {
@@ -206,7 +267,8 @@ class FiscalInboxHandler {
     }
 
     developer.log(
-      'Successfully projected fiscal config revision $incomingRevision ($incomingFingerprint) for tenant $tenantId',
+      'Successfully projected fiscal config revision $incomingRevision ($incomingFingerprint) for tenant $tenantId'
+      '${businessName != null ? ' (business: $businessName)' : ''}',
       name: 'FiscalInboxHandler',
     );
 
