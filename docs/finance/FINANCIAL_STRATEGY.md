@@ -18,12 +18,12 @@ El archivo [FINANCIAL_TRACKER.csv](./FINANCIAL_TRACKER.csv) usa codificación **
 | GPT | 100.00 | 100.00 | Gasto compartido fijo |
 | Internet | 20.00 | 20.00 | Gasto fijo documentado |
 | Dominio | 1.92 | 1.92 | US$23/año normalizado |
-| Railway Pro y uso | 20.00 | 26.75 | Estimación inicial hasta medir consumo |
+| Railway Hobby | 5.00 | 5.00 | Plan Hobby con US$5 de uso incluido |
 | Cloudflare Pages | 0.00 | 0.00 | SPA estática inicialmente |
 | Cloudflare R2 | 0.00 | 1.35 | De hasta 10 GB gratis a ejemplo de 100 GB |
-| **Total fijo mensual** | **161.92** | **170.02** | Antes de reservas variables e impuestos |
+| **Total fijo mensual** | **146.92** | **148.27** | Antes de reservas variables e impuestos |
 
-La infraestructura representa aproximadamente **US$21.92–30.02/mes**; IA e internet representan **US$140/mes**. Para modelar variación por cliente se reserva **US$1/cliente** en el escenario bajo y **US$5/cliente** en el conservador. Son presupuestos, no pagos ya realizados ni una garantía de factura futura.
+La infraestructura representa aproximadamente **US$6.92–8.27/mes**; IA e internet representan **US$140/mes**. Para modelar variación por cliente se reserva **US$1/cliente** en el escenario bajo y **US$5/cliente** en el conservador. Son presupuestos, no pagos ya realizados ni una garantía de factura futura.
 
 ### Costos variables y únicos
 
@@ -43,7 +43,7 @@ No se tratará la tarifa de implementación como ganancia automática: primero d
 
 ### Railway
 
-Railway Hobby cuesta US$5/mes con US$5 de uso incluido; Pro cuesta US$20/mes con US$20 incluido. Para producción comercial se presupuesta **Pro en US$20–26.75/mes** hasta medir la carga.
+Railway Hobby cuesta US$5/mes con US$5 de uso incluido; Pro cuesta US$20/mes con US$20 incluido. Actualmente se utiliza **Hobby en US$5/mes** para la etapa inicial. La evaluación a Pro se realizará antes de la salida comercial si la carga lo requiere.
 
 Puede utilizarse la misma cuenta/workspace que otro sistema, pero OmniFood debe operar con:
 

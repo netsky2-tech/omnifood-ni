@@ -9,3 +9,6 @@ LEGACY-20260519-003,2026-05-19,UNVERIFIED,EXPENSE,PUBLICATION,GOOGLE_PLAY,,Googl
 LEGACY-20260601-001,2026-06-01,UNVERIFIED,INCOME,REVENUE,SETUP,Cliente 1 (legacy),Setup Fee - Cliente 1,200.00,USD,1,200.00,YES,NO,legacy-row-9,"Migrado sin comprobante; originalmente: Primer cliente Food Park (AIO); saldo acumulado -1.00. No se identifica como SOHO."
 LEGACY-20260701-001,2026-07-01,UNVERIFIED,INCOME,REVENUE,SUBSCRIPTION,Cliente 1 (legacy),SaaS historico - Cliente 1,60.00,USD,1,60.00,YES,YES,legacy-row-10,"Migrado sin comprobante; registro legado de tarifa US$60, no oferta vigente; saldo acumulado 59.00. No se identifica como SOHO."
 LEGACY-20260701-002,2026-07-01,UNVERIFIED,EXPENSE,OPERATIONS,AI_AND_INTERNET,,Gastos Mensuales (IA+Net),65.00,USD,1,65.00,YES,YES,legacy-row-11,"Migrado sin comprobante; originalmente: Cargos recurrentes mes 2; saldo acumulado -6.00."
+TX-20260909-001,2026-09-09,CLEARED,INCOME,REVENUE,SETUP,SOHO,Setup Fee - SOHO,200.00,USD,1,200.00,YES,NO,,Pago recibido de SOHO por implementación.
+TX-20260909-002,2026-09-09,CLEARED,EXPENSE,INFRASTRUCTURE,DOMAIN,,Dominio omnifoodni.com (promo anual),13.19,USD,1,13.19,YES,NO,,"Compra anual promocional; renovación a US$23/año."
+TX-20260909-003,2026-09-09,CLEARED,EXPENSE,INFRASTRUCTURE,RAILWAY,,Railway Hobby,5.00,USD,1,5.00,YES,YES,,Plan Hobby US$5/mes con US$5 de uso incluido.
