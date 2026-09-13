@@ -107,7 +107,7 @@ vi.mock("@/features/inventory/use-inventory-reports", () => ({
           insumoId: "i1",
           insumoName: "Carne Molida",
           consumptionUom: "kg",
-          type: "ENTRY",
+          type: "ENTRADA_COMPRA",
           quantity: 50,
           stockBefore: 0,
           stockAfter: 50,
@@ -119,7 +119,7 @@ vi.mock("@/features/inventory/use-inventory-reports", () => ({
           insumoId: "i1",
           insumoName: "Carne Molida",
           consumptionUom: "kg",
-          type: "EXIT",
+          type: "SALE",
           quantity: 5,
           stockBefore: 50,
           stockAfter: 45,
@@ -228,8 +228,8 @@ describe("W3 — InventoryPage", () => {
     screen.getByText("Kardex").click();
     await waitFor(() => {
       expect(screen.getByText("Todos")).toBeInTheDocument();
-      expect(screen.getAllByText("Entrada").length).toBeGreaterThanOrEqual(1);
-      expect(screen.getAllByText("Salida").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText("Entrada Compra").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText("Venta").length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText("Ajuste")).toBeInTheDocument();
       expect(screen.getByText("2 movimiento(s)")).toBeInTheDocument();
     });

@@ -131,11 +131,12 @@ describe("ONB1.5D/E — Legacy Baseline & Visible Scope Guardrails", () => {
       });
     });
 
-    global.fetch = fetchSpy;
+    vi.stubGlobal("fetch", fetchSpy);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     clearTokens();
   });
 

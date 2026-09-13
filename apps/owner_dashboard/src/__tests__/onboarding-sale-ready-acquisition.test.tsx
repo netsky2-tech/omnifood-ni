@@ -332,11 +332,11 @@ describe("ONB1.5 — Fiscal + Catalog Acquisition UX & SALE_READY Transition", (
     // 6. Verify transition to SALE_READY in Setup Center
     await waitFor(() => {
       expect(screen.getByTestId("sale-ready-review-card")).toBeInTheDocument();
-      expect(screen.getByText("¡Listo para Venta (SALE_READY)!")).toBeInTheDocument();
+      expect(screen.getByText("¡Listo para Venta!")).toBeInTheDocument();
     });
 
     expect(screen.getByText(/Catálogo Vendible Activo con Precio/i)).toBeInTheDocument();
-    expect(screen.getByText(/BOH \(Stock\/Recetas\/Costos\): Opcional no bloqueante/i)).toBeInTheDocument();
+    expect(screen.getByText(/Inventario inicial \(Stock y Costos\): Opcional no bloqueante/i)).toBeInTheDocument();
   });
 
   it("Setup Center allows acquiring catalog via Industry Template (M3 safe writer, AC-11, AC-12, AC-50)", async () => {

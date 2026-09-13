@@ -119,7 +119,7 @@ export function calculateSetupCenterProgress(
     nextRecommendedAction = {
       actionKey: "activation",
       label: "Activar Terminal POS",
-      description: "Tu negocio es SALE_READY. Iniciá sesión en el terminal POS para finalizar la activación.",
+      description: "Tu negocio está listo para vender. Iniciá sesión en la terminal POS para completar la activación.",
     };
   } else {
     nextRecommendedAction = {

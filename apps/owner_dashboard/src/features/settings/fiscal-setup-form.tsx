@@ -214,7 +214,7 @@ export function FiscalSetupForm() {
                 {...register("phone")}
               />
               <p className="text-[11px] text-muted-foreground" data-testid="phone-non-persisted-note">
-                Campo informativo local. No se almacena en el perfil fiscal DGI ni afecta la preparación para venta (AC-05).
+                Campo informativo local. No se almacena en el perfil fiscal DGI oficial.
               </p>
             </div>
 
@@ -232,7 +232,7 @@ export function FiscalSetupForm() {
                 {...register("address")}
               />
               <p className="text-[11px] text-muted-foreground" data-testid="address-non-persisted-note">
-                Campo informativo local. No se almacena en el perfil fiscal DGI ni afecta la preparación para venta (AC-05).
+                Campo informativo local. No se almacena en el perfil fiscal DGI oficial.
               </p>
             </div>
           </div>

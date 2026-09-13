@@ -100,7 +100,7 @@ describe("ONB1.2 — SetupCenterView Component (State-based Authority & Concurre
     });
 
     // Lifecycle badge and version
-    expect(screen.getByTestId("lifecycle-badge")).toHaveTextContent("SETUP_IN_PROGRESS");
+    expect(screen.getByTestId("lifecycle-badge")).toHaveTextContent("En Configuración");
     expect(screen.getByTestId("optimistic-version-badge")).toHaveTextContent("v3");
 
     // Steps rendered according to readiness
@@ -152,7 +152,7 @@ describe("ONB1.2 — SetupCenterView Component (State-based Authority & Concurre
       expect(screen.getByTestId("setup-center-view")).toBeInTheDocument();
     });
 
-    expect(screen.getByTestId("lifecycle-badge")).toHaveTextContent("SALE_READY");
+    expect(screen.getByTestId("lifecycle-badge")).toHaveTextContent("Listo para Venta");
     expect(screen.getByTestId("step-catalog")).toHaveTextContent(/Listo/i);
     expect(screen.getByTestId("step-activation")).toHaveTextContent(/Activar POS/i);
     expect(screen.getByTestId("next-recommended-action")).toHaveTextContent(/Activar Terminal POS/i);

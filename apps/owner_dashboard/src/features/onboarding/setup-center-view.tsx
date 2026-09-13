@@ -120,6 +120,10 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
     );
   }
 
+  if (!session || !readiness) {
+    return null;
+  }
+
   const getLifecycleBadgeVariant = (state: OnboardingLifecycleState) => {
     switch (state) {
       case OnboardingLifecycleState.ACTIVATED:
@@ -385,7 +389,6 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {progress.steps.map((step) => {
           const isDone = step.status === "COMPLETED";
-          const _isBlocked = step.status === "BLOCKED";
           const inProgress = step.status === "IN_PROGRESS";
 
           return (

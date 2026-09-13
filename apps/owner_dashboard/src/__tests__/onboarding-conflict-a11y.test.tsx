@@ -57,6 +57,7 @@ describe("ONB1.5F — Accessibility, Stale States & Version Conflict UX Preservi
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     clearTokens();
   });
 
@@ -125,7 +126,7 @@ describe("ONB1.5F — Accessibility, Stale States & Version Conflict UX Preservi
       return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
     });
 
-    global.fetch = fetchSpy;
+    vi.stubGlobal("fetch", fetchSpy);
 
     const onOpenChange = vi.fn();
 
@@ -206,7 +207,7 @@ describe("ONB1.5F — Accessibility, Stale States & Version Conflict UX Preservi
       return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
     });
 
-    global.fetch = fetchSpy;
+    vi.stubGlobal("fetch", fetchSpy);
 
     render(
       <TestWrapper>

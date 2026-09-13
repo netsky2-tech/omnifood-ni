@@ -4,7 +4,7 @@ import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { SetupCenterView } from "@/features/onboarding/setup-center-view";
 import { OnboardingLifecycleState } from "@/features/onboarding/types";
 import { useAuthStore } from "@/features/auth/auth-store";
-import { UserRole, AppPermission } from "@/features/users/types";
+import { UserRole } from "@/features/users/types";
 import { setTokens, clearTokens } from "@/lib/api";
 
 function createTestQueryClient() {
@@ -132,11 +132,12 @@ describe("ONB1.5C — Sale Ready Review Detallado & Activation Permission Gate",
       });
     });
 
-    global.fetch = fetchSpy;
+    vi.stubGlobal("fetch", fetchSpy);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     clearTokens();
   });
 
@@ -228,7 +229,8 @@ describe("ONB1.5C — Sale Ready Review Detallado & Activation Permission Gate",
     await waitFor(() => {
       const btn = screen.getByTestId("start-pos-terminal-btn");
       expect(btn).toBeInTheDocument();
-      expect(btn).not.toBeDisabled();
+      expect(btn).not.toHaveClass("opacity-60");
+      expect(screen.getByTestId("activation-hint")).toBeInTheDocument();
     });
 
     unmount();
@@ -256,7 +258,8 @@ describe("ONB1.5C — Sale Ready Review Detallado & Activation Permission Gate",
     await waitFor(() => {
       const btn = screen.getByTestId("start-pos-terminal-btn");
       expect(btn).toBeInTheDocument();
-      expect(btn).toBeDisabled();
+      expect(btn).toHaveClass("opacity-60");
+      expect(screen.queryByTestId("activation-hint")).not.toBeInTheDocument();
       expect(screen.getByTestId("activation-permission-guard-note")).toHaveTextContent(
         /onboarding:activation:manage/i,
       );

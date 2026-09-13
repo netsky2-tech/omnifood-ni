@@ -33,14 +33,12 @@ import {
   FileSpreadsheet,
   PlusCircle,
   Loader2,
-  CheckCircle2,
   ShieldCheck,
   Coffee,
   Utensils,
   ShoppingBag,
   Package,
   Download,
-  Upload,
   Info,
   AlertCircle,
   AlertTriangle,
@@ -177,7 +175,7 @@ export function CatalogAcquisitionModal({
       const commitRes = await commitImportMutation.mutateAsync({
         sessionToken: uploadRes.sessionToken,
         mode: "VALID_ONLY",
-        duplicatePolicy: "REPLACE",
+        duplicateResolution: "REPLACE",
       });
       setImportFeedback(`¡Importación exitosa! ${commitRes.productsCreated} productos incorporados.`);
       setTimeout(() => {
@@ -189,7 +187,7 @@ export function CatalogAcquisitionModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(v) => (!v ? handleClose() : onOpenChange(true))}>
+    <Dialog open={open} onOpenChange={(v: boolean) => (!v ? handleClose() : onOpenChange(true))}>
       <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto" data-testid="catalog-acquisition-modal">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl">
@@ -303,7 +301,7 @@ export function CatalogAcquisitionModal({
             <Alert className="bg-muted/40 border-primary/20 text-xs py-2">
               <ShieldCheck className="h-4 w-4 text-primary" />
               <AlertDescription className="text-xs text-muted-foreground">
-                Las recetas sugeridas se inyectan en estado <strong>DRAFT</strong>. No se genera stock ficticio fuera del Kardex (AC-11, AC-12).
+                Las recetas sugeridas se crean como borrador inicial. No se generan existencias ficticias fuera del Kardex oficial.
               </AlertDescription>
             </Alert>
 
@@ -365,7 +363,7 @@ export function CatalogAcquisitionModal({
             <Alert className="bg-muted/40 border-emerald-500/30 text-xs py-2">
               <Info className="h-4 w-4 text-emerald-600" />
               <AlertDescription className="text-xs text-muted-foreground">
-                Un único producto con precio válido mayor a 0 cumple el requisito de catálogo para <strong>SALE_READY</strong> (AC-06). El costo se reporta como <strong>COST_PENDING</strong> hasta que se registre en Kardex (AC-08).
+                Un único producto con precio válido mayor a 0 cumple el requisito para habilitar la venta en caja. El costo se calculará en cuanto se registren compras en inventario.
               </AlertDescription>
             </Alert>
 
@@ -498,7 +496,7 @@ export function CatalogAcquisitionModal({
             <Alert className="bg-muted/40 border-blue-500/30 text-xs py-2">
               <ShieldCheck className="h-4 w-4 text-blue-600" />
               <AlertDescription className="text-xs text-muted-foreground">
-                Contrato <strong>ImportContractVersion v1.0</strong>. No modifica existencias ni costos promedio Kardex (AC-24, AC-52).
+                Plantilla estandarizada de importación. No modifica existencias ni costos promedio de Kardex hasta su posterior registro formal.
               </AlertDescription>
             </Alert>
 

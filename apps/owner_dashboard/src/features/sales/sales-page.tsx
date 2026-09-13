@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { FreshnessBadge } from "@/components/freshness-badge";
 import { DateRangePicker, type DateRangeValue } from "@/components/date-range-picker";
 import {
   useSalesDashboard,
@@ -227,9 +226,6 @@ export function SalesPage() {
     const iso = d.toISOString().slice(0, 10);
     return { startDate: iso, endDate: iso };
   });
-
-  const generatedAt =
-    activeTab === "hourly" ? undefined : undefined;
 
   return (
     <div className="space-y-6">

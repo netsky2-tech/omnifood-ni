@@ -264,7 +264,7 @@ describe("ONB1.2 M2 E2E — State-based Setup Center Foundation & Concurrency", 
       expect(screen.getByTestId("setup-center-view")).toBeInTheDocument();
     });
 
-    expect(screen.getByTestId("lifecycle-badge")).toHaveTextContent("SALE_READY");
+    expect(screen.getByTestId("lifecycle-badge")).toHaveTextContent("Listo para Venta");
     expect(screen.getByTestId("optimistic-version-badge")).toHaveTextContent("v2");
     expect(screen.getByTestId("step-fiscal")).toHaveTextContent(/Configurado/i);
     expect(screen.getByTestId("step-catalog")).toHaveTextContent(/Listo/i);

@@ -12,7 +12,14 @@ export function useLogin() {
 
   return useMutation({
     mutationFn: async (credentials: LoginRequest) => {
-      const response = await api.post<LoginResponse>("/identity/login", credentials);
+      const { password, tenantSlug: _slug, ...rest } = credentials;
+      const raw = await api.post<{ access_token: string; refresh_token: string; user: LoginResponse["user"]; tenant: LoginResponse["tenant"] }>("/identity/login", { ...rest, pass: password }, { auth: false });
+      const response: LoginResponse = {
+        accessToken: raw.access_token,
+        refreshToken: raw.refresh_token,
+        user: raw.user,
+        tenant: raw.tenant,
+      };
       setTokens({
         accessToken: response.accessToken,
         refreshToken: response.refreshToken,

@@ -7,6 +7,8 @@ describe("W1 — API integration (fetch-level)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     apiModule.clearTokens();
+    sessionStorage.clear();
+    localStorage.clear();
     globalThis.fetch = vi.fn();
   });
 
@@ -190,5 +192,306 @@ describe("W1 — API integration (fetch-level)", () => {
         body: JSON.stringify({ name: "Updated" }),
       }),
     );
+  });
+
+  describe("Storage isolation — no localStorage token write/read fallback", () => {
+    it("setTokens writes only to sessionStorage and never to localStorage", () => {
+      apiModule.setTokens({ accessToken: "access-token-1", refreshToken: "refresh-token-1" });
+
+      expect(sessionStorage.getItem("oc_access_token")).toBe("access-token-1");
+      expect(sessionStorage.getItem("oc_refresh_token")).toBe("refresh-token-1");
+      expect(localStorage.getItem("oc_access_token")).toBeNull();
+      expect(localStorage.getItem("oc_refresh_token")).toBeNull();
+    });
+
+    it("does not fall back to localStorage tokens when sessionStorage is empty", () => {
+      apiModule.clearTokens();
+      sessionStorage.clear();
+      localStorage.setItem("oc_access_token", "leaked-access");
+      localStorage.setItem("oc_refresh_token", "leaked-refresh");
+
+      expect(apiModule.getAccessToken()).toBeNull();
+      expect(apiModule.hasStoredRefreshToken()).toBe(false);
+      expect(apiModule.isAuthenticated()).toBe(false);
+    });
+
+    it("clearTokens removes tokens from sessionStorage without touching localStorage", () => {
+      apiModule.setTokens({ accessToken: "token-a", refreshToken: "token-r" });
+      localStorage.setItem("unrelated_app_setting", "theme-dark");
+
+      apiModule.clearTokens();
+
+      expect(sessionStorage.getItem("oc_access_token")).toBeNull();
+      expect(sessionStorage.getItem("oc_refresh_token")).toBeNull();
+      expect(localStorage.getItem("unrelated_app_setting")).toBe("theme-dark");
+    });
+  });
+
+  describe("refreshAccessToken — supported response shapes", () => {
+    it("accepts snake_case response shape and updates tokens", async () => {
+      apiModule.setTokens({ accessToken: "old-at", refreshToken: "old-rt" });
+      vi.mocked(globalThis.fetch).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          access_token: "snake-new-access",
+          refresh_token: "snake-new-refresh",
+        }),
+      } as Response);
+
+      const refreshed = await apiModule.refreshAccessToken();
+
+      expect(refreshed).toBe("snake-new-access");
+      expect(apiModule.getAccessToken()).toBe("snake-new-access");
+      expect(sessionStorage.getItem("oc_access_token")).toBe("snake-new-access");
+      expect(sessionStorage.getItem("oc_refresh_token")).toBe("snake-new-refresh");
+    });
+
+    it("accepts camelCase response shape and updates tokens", async () => {
+      apiModule.setTokens({ accessToken: "old-at", refreshToken: "old-rt" });
+      vi.mocked(globalThis.fetch).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          accessToken: "camel-new-access",
+          refreshToken: "camel-new-refresh",
+        }),
+      } as Response);
+
+      const refreshed = await apiModule.refreshAccessToken();
+
+      expect(refreshed).toBe("camel-new-access");
+      expect(apiModule.getAccessToken()).toBe("camel-new-access");
+      expect(sessionStorage.getItem("oc_access_token")).toBe("camel-new-access");
+      expect(sessionStorage.getItem("oc_refresh_token")).toBe("camel-new-refresh");
+    });
+
+    it("accepts mixed snake_case and camelCase response shapes", async () => {
+      apiModule.setTokens({ accessToken: "old-at", refreshToken: "old-rt" });
+      vi.mocked(globalThis.fetch).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          access_token: "mixed-access-token",
+          refreshToken: "mixed-refresh-token",
+        }),
+      } as Response);
+
+      const refreshed = await apiModule.refreshAccessToken();
+
+      expect(refreshed).toBe("mixed-access-token");
+      expect(apiModule.getAccessToken()).toBe("mixed-access-token");
+      expect(sessionStorage.getItem("oc_access_token")).toBe("mixed-access-token");
+      expect(sessionStorage.getItem("oc_refresh_token")).toBe("mixed-refresh-token");
+    });
+  });
+
+  describe("refreshAccessToken — malformed/missing/blank token handling", () => {
+    it("clears state and throws deterministic error when access token is empty string", async () => {
+      apiModule.setTokens({ accessToken: "old-at", refreshToken: "old-rt" });
+      vi.mocked(globalThis.fetch).mockResolvedValue({
+        ok: true,
+        json: async () => ({ access_token: "", refresh_token: "valid-rt" }),
+      } as Response);
+
+      await expect(apiModule.refreshAccessToken()).rejects.toThrow("Malformed refresh response");
+      expect(apiModule.getAccessToken()).toBeNull();
+      expect(apiModule.hasStoredRefreshToken()).toBe(false);
+      expect(sessionStorage.getItem("oc_access_token")).toBeNull();
+      expect(sessionStorage.getItem("oc_refresh_token")).toBeNull();
+    });
+
+    it("clears state and throws deterministic error when access token is whitespace only", async () => {
+      apiModule.setTokens({ accessToken: "old-at", refreshToken: "old-rt" });
+      vi.mocked(globalThis.fetch).mockResolvedValue({
+        ok: true,
+        json: async () => ({ accessToken: "   \t\n  ", refreshToken: "valid-rt" }),
+      } as Response);
+
+      await expect(apiModule.refreshAccessToken()).rejects.toThrow("Malformed refresh response");
+      expect(apiModule.getAccessToken()).toBeNull();
+      expect(apiModule.hasStoredRefreshToken()).toBe(false);
+    });
+
+    it("clears state and throws deterministic error when refresh token is empty string", async () => {
+      apiModule.setTokens({ accessToken: "old-at", refreshToken: "old-rt" });
+      vi.mocked(globalThis.fetch).mockResolvedValue({
+        ok: true,
+        json: async () => ({ access_token: "valid-at", refresh_token: "" }),
+      } as Response);
+
+      await expect(apiModule.refreshAccessToken()).rejects.toThrow("Malformed refresh response");
+      expect(apiModule.getAccessToken()).toBeNull();
+      expect(apiModule.hasStoredRefreshToken()).toBe(false);
+    });
+
+    it("clears state and throws deterministic error when refresh token is whitespace only", async () => {
+      apiModule.setTokens({ accessToken: "old-at", refreshToken: "old-rt" });
+      vi.mocked(globalThis.fetch).mockResolvedValue({
+        ok: true,
+        json: async () => ({ accessToken: "valid-at", refreshToken: "    " }),
+      } as Response);
+
+      await expect(apiModule.refreshAccessToken()).rejects.toThrow("Malformed refresh response");
+      expect(apiModule.getAccessToken()).toBeNull();
+      expect(apiModule.hasStoredRefreshToken()).toBe(false);
+    });
+
+    it("clears state and throws deterministic error when access token is missing entirely", async () => {
+      apiModule.setTokens({ accessToken: "old-at", refreshToken: "old-rt" });
+      vi.mocked(globalThis.fetch).mockResolvedValue({
+        ok: true,
+        json: async () => ({ refresh_token: "valid-rt" }),
+      } as Response);
+
+      await expect(apiModule.refreshAccessToken()).rejects.toThrow("Malformed refresh response");
+      expect(apiModule.getAccessToken()).toBeNull();
+      expect(apiModule.hasStoredRefreshToken()).toBe(false);
+    });
+
+    it("clears state and throws deterministic error when refresh token is missing entirely", async () => {
+      apiModule.setTokens({ accessToken: "old-at", refreshToken: "old-rt" });
+      vi.mocked(globalThis.fetch).mockResolvedValue({
+        ok: true,
+        json: async () => ({ access_token: "valid-at" }),
+      } as Response);
+
+      await expect(apiModule.refreshAccessToken()).rejects.toThrow("Malformed refresh response");
+      expect(apiModule.getAccessToken()).toBeNull();
+      expect(apiModule.hasStoredRefreshToken()).toBe(false);
+    });
+
+    it("clears state and throws deterministic error when response is an empty object", async () => {
+      apiModule.setTokens({ accessToken: "old-at", refreshToken: "old-rt" });
+      vi.mocked(globalThis.fetch).mockResolvedValue({
+        ok: true,
+        json: async () => ({}),
+      } as Response);
+
+      await expect(apiModule.refreshAccessToken()).rejects.toThrow("Malformed refresh response");
+      expect(apiModule.getAccessToken()).toBeNull();
+      expect(apiModule.hasStoredRefreshToken()).toBe(false);
+    });
+
+    it("clears state and throws deterministic error when response is a non-object payload", async () => {
+      apiModule.setTokens({ accessToken: "old-at", refreshToken: "old-rt" });
+      vi.mocked(globalThis.fetch).mockResolvedValue({
+        ok: true,
+        json: async () => ["token-in-array"],
+      } as Response);
+
+      await expect(apiModule.refreshAccessToken()).rejects.toThrow("Malformed refresh response");
+      expect(apiModule.getAccessToken()).toBeNull();
+      expect(apiModule.hasStoredRefreshToken()).toBe(false);
+    });
+
+    it("clears state and throws deterministic error when response json parsing throws", async () => {
+      apiModule.setTokens({ accessToken: "old-at", refreshToken: "old-rt" });
+      vi.mocked(globalThis.fetch).mockResolvedValue({
+        ok: true,
+        json: async () => {
+          throw new SyntaxError("Unexpected token < in JSON at position 0");
+        },
+      } as unknown as Response);
+
+      await expect(apiModule.refreshAccessToken()).rejects.toThrow("Malformed refresh response");
+      expect(apiModule.getAccessToken()).toBeNull();
+      expect(apiModule.hasStoredRefreshToken()).toBe(false);
+    });
+  });
+
+  describe("Authorization header safety — no empty or whitespace Bearer headers", () => {
+    it("never sends Authorization header when auth: false is specified", async () => {
+      apiModule.setTokens({ accessToken: "valid-at", refreshToken: "valid-rt" });
+      vi.mocked(globalThis.fetch).mockResolvedValue({
+        ok: true,
+        json: async () => ({ public: true }),
+      } as Response);
+
+      await apiModule.apiFetch("/public-endpoint", { auth: false });
+
+      const requestHeaders = vi.mocked(globalThis.fetch).mock.calls[0]?.[1]?.headers as Record<string, string>;
+      expect(requestHeaders.Authorization).toBeUndefined();
+    });
+
+    it("setTokens never persists empty or whitespace tokens and clears state", () => {
+      apiModule.setTokens({ accessToken: "", refreshToken: "valid-rt" });
+      expect(apiModule.getAccessToken()).toBeNull();
+      expect(apiModule.hasStoredRefreshToken()).toBe(false);
+      expect(sessionStorage.getItem("oc_access_token")).toBeNull();
+
+      apiModule.setTokens({ accessToken: "valid-at", refreshToken: "" });
+      expect(apiModule.getAccessToken()).toBeNull();
+      expect(apiModule.hasStoredRefreshToken()).toBe(false);
+
+      apiModule.setTokens({ accessToken: "   ", refreshToken: "   " });
+      expect(apiModule.getAccessToken()).toBeNull();
+      expect(apiModule.hasStoredRefreshToken()).toBe(false);
+    });
+
+    it("never sends Authorization header with empty Bearer value even if custom headers pass Bearer with empty payload", async () => {
+      apiModule.setTokens({ accessToken: "valid-at", refreshToken: "valid-rt" });
+      vi.mocked(globalThis.fetch).mockResolvedValue({
+        ok: true,
+        json: async () => ({ ok: true }),
+      } as Response);
+
+      await apiModule.apiFetch("/test", {
+        headers: { Authorization: "Bearer " },
+      });
+
+      const requestHeaders = vi.mocked(globalThis.fetch).mock.calls[0]?.[1]?.headers as Record<string, string>;
+      expect(requestHeaders.Authorization).toBeUndefined();
+    });
+  });
+
+  describe("Typed ApiError representation", () => {
+    it("throws ApiError instance with status, statusCode, code, and responseBody on non-ok response", async () => {
+      apiModule.setTokens({ accessToken: "valid-at", refreshToken: "valid-rt" });
+      const errorPayload = {
+        code: "BUSINESS_VALIDATION_ERROR",
+        message: "Invalid inventory payload",
+        details: { field: "quantity", expected: "> 0" },
+      };
+      vi.mocked(globalThis.fetch).mockResolvedValue({
+        ok: false,
+        status: 422,
+        json: async () => errorPayload,
+      } as Response);
+
+      try {
+        await apiModule.apiFetch("/items/update");
+        expect.unreachable("expected apiFetch to throw");
+      } catch (error: unknown) {
+        expect(apiModule.isApiError(error)).toBe(true);
+        if (apiModule.isApiError(error)) {
+          expect(error.name).toBe("ApiError");
+          expect(error.status).toBe(422);
+          expect(error.statusCode).toBe(422);
+          expect(error.code).toBe("BUSINESS_VALIDATION_ERROR");
+          expect(error.message).toBe("Invalid inventory payload");
+          expect(error.responseBody).toEqual(errorPayload);
+        }
+      }
+    });
+
+    it("falls back to HTTP status message when responseBody has no message string", async () => {
+      apiModule.setTokens({ accessToken: "valid-at", refreshToken: "valid-rt" });
+      vi.mocked(globalThis.fetch).mockResolvedValue({
+        ok: false,
+        status: 503,
+        json: async () => ({ error: "Service unavailable" }),
+      } as Response);
+
+      try {
+        await apiModule.apiFetch("/items/update");
+        expect.unreachable("expected apiFetch to throw");
+      } catch (error: unknown) {
+        expect(apiModule.isApiError(error)).toBe(true);
+        if (apiModule.isApiError(error)) {
+          expect(error.status).toBe(503);
+          expect(error.statusCode).toBe(503);
+          expect(error.message).toBe("API error: 503");
+          expect(error.responseBody).toEqual({ error: "Service unavailable" });
+        }
+      }
+    });
   });
 });

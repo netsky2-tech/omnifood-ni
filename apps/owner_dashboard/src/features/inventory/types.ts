@@ -47,7 +47,19 @@ export interface CogsReport {
   items: CogsItem[];
 }
 
-export type MovementType = "ENTRY" | "EXIT" | "ADJUSTMENT" | "TRANSFER" | "SHRINKAGE";
+export const MovementType = {
+  SALE: "SALE",
+  SALE_CANCEL: "SALE_CANCEL",
+  PURCHASE: "PURCHASE",
+  ENTRADA_COMPRA: "ENTRADA_COMPRA",
+  SHRINKAGE: "SHRINKAGE",
+  PRODUCTION: "PRODUCTION",
+  CREDIT_NOTE_RESTOCK: "CREDIT_NOTE_RESTOCK",
+  ADJUSTMENT: "ADJUSTMENT",
+  REVERSAL: "REVERSAL",
+} as const;
+
+export type MovementType = (typeof MovementType)[keyof typeof MovementType];
 
 export interface KardexMovement {
   id: string;

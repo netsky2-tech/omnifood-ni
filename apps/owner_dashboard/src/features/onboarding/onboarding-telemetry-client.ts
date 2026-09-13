@@ -143,10 +143,14 @@ function isRawCsvContent(value: string): boolean {
   if (value.length < 50) return false;
   const lines = value.split("\n");
   if (lines.length >= 3) {
-    const firstCommaCount = (lines[0].match(/,/g) || []).length;
-    const secondCommaCount = (lines[1].match(/,/g) || []).length;
-    if (firstCommaCount >= 2 && firstCommaCount === secondCommaCount) {
-      return true;
+    const firstLine = lines[0];
+    const secondLine = lines[1];
+    if (firstLine !== undefined && secondLine !== undefined) {
+      const firstCommaCount = (firstLine.match(/,/g) || []).length;
+      const secondCommaCount = (secondLine.match(/,/g) || []).length;
+      if (firstCommaCount >= 2 && firstCommaCount === secondCommaCount) {
+        return true;
+      }
     }
   }
   return false;

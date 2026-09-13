@@ -1,10 +1,13 @@
-export enum OnboardingLifecycleState {
-  PROVISIONED = "PROVISIONED",
-  SETUP_IN_PROGRESS = "SETUP_IN_PROGRESS",
-  SALE_READY = "SALE_READY",
-  ACTIVATION_IN_PROGRESS = "ACTIVATION_IN_PROGRESS",
-  ACTIVATED = "ACTIVATED",
-}
+export const OnboardingLifecycleState = {
+  PROVISIONED: "PROVISIONED",
+  SETUP_IN_PROGRESS: "SETUP_IN_PROGRESS",
+  SALE_READY: "SALE_READY",
+  ACTIVATION_IN_PROGRESS: "ACTIVATION_IN_PROGRESS",
+  ACTIVATED: "ACTIVATED",
+} as const;
+
+export type OnboardingLifecycleState =
+  (typeof OnboardingLifecycleState)[keyof typeof OnboardingLifecycleState];
 
 export interface OnboardingSession {
   id: string;

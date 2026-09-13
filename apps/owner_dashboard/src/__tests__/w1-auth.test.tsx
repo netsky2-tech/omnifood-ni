@@ -306,8 +306,8 @@ describe("W1 — useLogin hook", () => {
 
   it("calls api.post with credentials and sets tokens on success", async () => {
     const mockResponse = {
-      accessToken: "new-at",
-      refreshToken: "new-rt",
+      access_token: "new-at",
+      refresh_token: "new-rt",
       user: { id: "u1", email: "a@b.com", name: "A", role: "OWNER" as const, tenantId: "t1", active: true },
       tenant: { id: "t1", name: "T", slug: "t", ruc: "001", active: true },
     };
@@ -319,10 +319,14 @@ describe("W1 — useLogin hook", () => {
       await result.current.mutateAsync({ email: "a@b.com", password: "123456" });
     });
 
-    expect(vi.mocked(apiModule.api.post)).toHaveBeenCalledWith("/identity/login", {
-      email: "a@b.com",
-      password: "123456",
-    });
+    expect(vi.mocked(apiModule.api.post)).toHaveBeenCalledWith(
+      "/identity/login",
+      {
+        email: "a@b.com",
+        pass: "123456",
+      },
+      { auth: false },
+    );
     expect(vi.mocked(apiModule.setTokens)).toHaveBeenCalledWith({
       accessToken: "new-at",
       refreshToken: "new-rt",

@@ -163,12 +163,12 @@ describe("ONB1.9A–D — BOH Progressive Readiness & Checklist in Setup Center"
     // Verify Inventory Readiness Card (ONB1.9A)
     expect(screen.getByTestId("boh-inventory-card")).toBeDefined();
     expect(screen.getByText("Inventario & Almacenes")).toBeDefined();
-    expect(screen.getByText("Stock en 0 no bloquea venta (AC-07, AC-40)")).toBeDefined();
+    expect(screen.getByText("Permite operar con inventario en cero temporalmente")).toBeDefined();
 
     // Verify Costing Readiness Card (ONB1.9B)
     expect(screen.getByTestId("boh-costing-card")).toBeDefined();
     expect(screen.getByText("Costeo & Valorización")).toBeDefined();
-    expect(screen.getByText("COST_PENDING no bloquea venta")).toBeDefined();
+    expect(screen.getByText("Costeo pendiente no bloquea ventas")).toBeDefined();
     expect(screen.getByText("2 pendiente(s)")).toBeDefined();
     expect(screen.getByText("1 conocido(s)")).toBeDefined();
 
@@ -183,6 +183,6 @@ describe("ONB1.9A–D — BOH Progressive Readiness & Checklist in Setup Center"
     expect(screen.getByTestId("boh-link-operations")).toBeDefined();
 
     // Verify ACTIVATED status remains prominent and unrevoked
-    expect(screen.getByText("ACTIVATED")).toBeDefined();
+    expect(screen.getByTestId("lifecycle-badge")).toHaveTextContent("Activado");
   });
 });

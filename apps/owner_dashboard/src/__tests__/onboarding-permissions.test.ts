@@ -4,7 +4,6 @@ import {
   AppPermission,
   DEFAULT_ROLE_PERMISSIONS,
   UserRole,
-  resolveEffectivePermissions,
   hasEffectivePermission,
 } from "@/features/users/types";
 import { useHasPermission } from "@/features/users/use-has-permission";

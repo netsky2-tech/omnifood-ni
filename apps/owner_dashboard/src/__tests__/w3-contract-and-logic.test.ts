@@ -463,8 +463,6 @@ describe("W3 — Valuation computed logic matches backend service", () => {
   function computeValuation(items: { stock: number; averageCostNio: number }[]) {
     let totalValuationNio = 0;
     let itemsWithStockCount = 0;
-    // @ts-expect-error - intentionally unused variable for future low-stock logic
-    let itemsLowStockCount = 0;
     let itemsNegativeStockCount = 0;
 
     for (const item of items) {
