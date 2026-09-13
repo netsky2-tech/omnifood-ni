@@ -71,6 +71,12 @@ import { TemplateApplication } from '../../modules/onboarding/entities/template-
 import { TemplateSeedLink } from '../../modules/onboarding/entities/template-seed-link.entity';
 import { LegacyOnboardingMigrationReceipt } from '../../modules/onboarding/entities/legacy-migration-receipt.entity';
 import { FiscalConfigRevision } from '../../modules/onboarding/entities/fiscal-config-revision.entity';
+import { ActivationAttempt } from '../../modules/onboarding/entities/activation-attempt.entity';
+import { ActivationCheckResult } from '../../modules/onboarding/entities/activation-check-result.entity';
+import { ActivationFollowUp } from '../../modules/onboarding/entities/activation-follow-up.entity';
+import { OnboardingTelemetryEvent } from '../../modules/onboarding/entities/onboarding-telemetry-event.entity';
+import { ProductImportSession } from '../../modules/onboarding/entities/product-import-session.entity';
+import { LegacyImportIntegrityReport } from '../../modules/onboarding/entities/legacy-import-integrity-report.entity';
 
 import { InventoryRemediationReceipt } from '../../modules/inventory/entities/inventory-remediation-receipt.entity';
 import { ProductInventoryMappingVersion } from '../../modules/inventory/entities/product-inventory-mapping-version.entity';
@@ -139,6 +145,12 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
     TemplateSeedLink,
     LegacyOnboardingMigrationReceipt,
     FiscalConfigRevision,
+    ActivationAttempt,
+    ActivationCheckResult,
+    ActivationFollowUp,
+    OnboardingTelemetryEvent,
+    ProductImportSession,
+    LegacyImportIntegrityReport,
     Customer,
     CloudPromotion,
     CustomerPointTransaction,
