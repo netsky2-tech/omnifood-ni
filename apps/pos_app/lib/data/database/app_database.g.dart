@@ -6274,6 +6274,24 @@ class _$FiscalConfigLocalDao extends FiscalConfigLocalDao {
                   'fingerprint': item.fingerprint,
                   'payload': item.payload,
                   'applied_at': item.appliedAt
+                }),
+        _localConfigEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'local_configs',
+            (LocalConfigEntity item) => <String, Object?>{
+                  'key': item.key,
+                  'value': item.value,
+                  'description': item.description
+                }),
+        _taxConfigEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'tax_configurations',
+            (TaxConfigEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'name': item.name,
+                  'rate': item.rate,
+                  'is_active': item.isActive ? 1 : 0,
+                  'is_default': item.isDefault ? 1 : 0
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -6284,6 +6302,10 @@ class _$FiscalConfigLocalDao extends FiscalConfigLocalDao {
 
   final InsertionAdapter<FiscalConfigLocalEntity>
       _fiscalConfigLocalEntityInsertionAdapter;
+
+  final InsertionAdapter<LocalConfigEntity> _localConfigEntityInsertionAdapter;
+
+  final InsertionAdapter<TaxConfigEntity> _taxConfigEntityInsertionAdapter;
 
   @override
   Future<FiscalConfigLocalEntity?> getByTenantId(String tenantId) async {
@@ -6317,9 +6339,28 @@ class _$FiscalConfigLocalDao extends FiscalConfigLocalDao {
   }
 
   @override
+  Future<void> deleteLocalConfigByKey(String key) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM local_configs WHERE `key` = ?1',
+        arguments: [key]);
+  }
+
+  @override
   Future<void> insertOrReplace(FiscalConfigLocalEntity entity) async {
     await _fiscalConfigLocalEntityInsertionAdapter.insert(
         entity, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> insertLocalConfig(LocalConfigEntity config) async {
+    await _localConfigEntityInsertionAdapter.insert(
+        config, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> insertTaxConfig(TaxConfigEntity config) async {
+    await _taxConfigEntityInsertionAdapter.insert(
+        config, OnConflictStrategy.replace);
   }
 
   @override
@@ -6333,6 +6374,46 @@ class _$FiscalConfigLocalDao extends FiscalConfigLocalDao {
           ..database = transaction;
         await transactionDatabase.fiscalConfigLocalDao
             .applyFiscalConfig(entity);
+      });
+    }
+  }
+
+  @override
+  Future<void> executeFiscalEnvelopeTransaction(
+    FiscalConfigLocalEntity? snapshot,
+    String tenantId,
+    int expectedRevision,
+    String expectedFingerprint,
+    List<LocalConfigEntity> projections,
+    List<String> keysToDelete,
+    TaxConfigEntity? taxConfig,
+    LocalConfigEntity completionMarker,
+  ) async {
+    if (database is sqflite.Transaction) {
+      await super.executeFiscalEnvelopeTransaction(
+          snapshot,
+          tenantId,
+          expectedRevision,
+          expectedFingerprint,
+          projections,
+          keysToDelete,
+          taxConfig,
+          completionMarker);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.fiscalConfigLocalDao
+            .executeFiscalEnvelopeTransaction(
+                snapshot,
+                tenantId,
+                expectedRevision,
+                expectedFingerprint,
+                projections,
+                keysToDelete,
+                taxConfig,
+                completionMarker);
       });
     }
   }

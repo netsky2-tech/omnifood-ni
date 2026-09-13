@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import '../../domain/security/cloud_auth_unavailable_exception.dart';
 import '../../domain/security/cloud_credential_coordinator.dart';
 import '../../domain/security/cloud_credential_record.dart';
 import '../../domain/security/cloud_credentials.dart';
@@ -11,13 +12,36 @@ class CloudAuthInterceptor extends Interceptor {
   final Dio clientDio;
   final VoidCallback? onReauthenticationRequired;
 
+  /// Fallback that provides a raw access token when the credential
+  /// coordinator cannot recover (e.g. Keystore hung on cold start).
+  final Future<String?> Function()? tokenFallback;
+
   Completer<String?>? _inFlightRefresh;
+
+  static const Set<String> _publicAllowlist = {
+    'identity/login',
+    'identity/refresh',
+    'v1/health',
+    'health',
+  };
+
+  static String _normalizePath(String path) {
+    var p = path.split('?').first;
+    while (p.startsWith('/')) {
+      p = p.substring(1);
+    }
+    while (p.endsWith('/') && p.length > 1) {
+      p = p.substring(0, p.length - 1);
+    }
+    return p;
+  }
 
   CloudAuthInterceptor({
     required this.coordinator,
     required this.refreshDio,
     required this.clientDio,
     this.onReauthenticationRequired,
+    this.tokenFallback,
   });
 
   @override
@@ -32,18 +56,50 @@ class CloudAuthInterceptor extends Interceptor {
       options.path = options.path.substring(1);
     }
 
+    final path = options.path;
+
+    // Narrowest exact path allowlist: login, refresh, health only
+    if (_publicAllowlist.contains(_normalizePath(path))) {
+      handler.next(options);
+      return;
+    }
+
     try {
       final recovery = await coordinator.recover();
       final creds = recovery.record?.credentials;
       if (creds != null &&
           recovery.record?.credentialState == CredentialState.active) {
         options.headers['Authorization'] = 'Bearer ${creds.accessToken}';
+        handler.next(options);
+        return;
       }
     } catch (_) {
-      // If reading credentials fails, proceed unauthenticated rather than crashing request
+      // Coordinator threw — treat as unavailable
     }
 
-    handler.next(options);
+    // Coordinator has no valid credentials. Try the SharedPreferences
+    // fallback (covers Keystore-hung cold-start where the coordinator
+    // lost its in-memory record but the token was persisted to prefs).
+    if (tokenFallback != null) {
+      try {
+        final fallbackToken = await tokenFallback!();
+        if (fallbackToken != null && fallbackToken.isNotEmpty) {
+          options.headers['Authorization'] = 'Bearer $fallbackToken';
+          handler.next(options);
+          return;
+        }
+      } catch (_) {}
+    }
+
+    handler.reject(
+      DioException(
+        requestOptions: options,
+        type: DioExceptionType.cancel,
+        error: const CloudAuthUnavailableException(
+          reason: 'No valid cloud credentials available',
+        ),
+      ),
+    );
   }
 
   @override
@@ -59,9 +115,9 @@ class CloudAuthInterceptor extends Interceptor {
       return handler.next(err);
     }
 
-    // Do not intercept login or refresh requests to avoid infinite recursion
+    // Do not intercept public requests (login, refresh, health) to avoid infinite recursion
     final path = options.path;
-    if (path.contains('identity/login') || path.contains('identity/refresh')) {
+    if (_publicAllowlist.contains(_normalizePath(path))) {
       return handler.next(err);
     }
 

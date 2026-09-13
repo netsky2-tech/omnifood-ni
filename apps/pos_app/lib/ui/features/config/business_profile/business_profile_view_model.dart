@@ -1,6 +1,11 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import '../../../../../data/daos/fiscal_config_local_dao.dart';
 import '../../../../../data/daos/local_config_dao.dart';
+import '../../../../../data/models/fiscal_config_local_entity.dart';
 import '../../../../../data/models/local_config_entity.dart';
+import '../../../../../data/services/sync_service.dart';
 
 import '../../../../domain/models/config/tax_regime.dart';
 import '../../../../domain/models/config/tenant_operation_mode.dart';
@@ -9,9 +14,24 @@ import '../../../../domain/repositories/inventory/inventory_repository.dart';
 
 class BusinessProfileViewModel extends ChangeNotifier {
   final LocalConfigDao _configDao;
+  final FiscalConfigLocalDao? _fiscalConfigLocalDao;
   final InventoryRepository? _inventoryRepository;
+  SyncService? _syncService;
+  StreamSubscription<InboundSyncResult>? _syncSubscription;
 
-  BusinessProfileViewModel(this._configDao, [this._inventoryRepository]);
+  BusinessProfileViewModel(
+    this._configDao, [
+    this._inventoryRepository,
+    SyncService? syncService,
+    this._fiscalConfigLocalDao,
+  ]) {
+    _syncService = syncService;
+    if (syncService != null) {
+      _syncSubscription = syncService.onInboundSync.listen((event) {
+        loadConfig();
+      });
+    }
+  }
 
   Map<String, String> _config = {
     'business_name': '',
@@ -97,16 +117,85 @@ class BusinessProfileViewModel extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
     try {
+      LocalConfigEntity? primaryBusinessNameEntity;
       final keys = _config.keys.toList();
       for (final key in keys) {
         final entity = await _configDao.getConfigByKey(key);
         if (entity != null) {
           _config[key] = entity.value;
+          if (key == 'business_name') {
+            primaryBusinessNameEntity = entity;
+          }
         }
       }
+
+      final primaryConfigFound = primaryBusinessNameEntity != null;
+      final rawPrimaryBusinessName = primaryBusinessNameEntity?.value;
+      final primaryBusinessNamePresent =
+          rawPrimaryBusinessName != null && rawPrimaryBusinessName.trim().isNotEmpty;
+
+      debugPrint('PRIMARY_CONFIG_FOUND: $primaryConfigFound');
+      debugPrint('PRIMARY_BUSINESS_NAME_PRESENT: $primaryBusinessNamePresent');
+
+      final fiscalFallbackTriggered = !primaryBusinessNamePresent;
+      debugPrint('FISCAL_FALLBACK_TRIGGERED: $fiscalFallbackTriggered');
+
+      // Fallback: if business_name is absent or blank, try reading from fiscal_config_local
+      if (fiscalFallbackTriggered) {
+        _config['business_name'] = '';
+        await _loadFromFiscalConfigLocal();
+      }
+
+      final vmBusinessName = _config['business_name'];
+      final vmBusinessNamePresent =
+          vmBusinessName != null && vmBusinessName.trim().isNotEmpty;
+      debugPrint('VIEW_MODEL_BUSINESS_NAME_PRESENT: $vmBusinessNamePresent');
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  Future<void> _loadFromFiscalConfigLocal() async {
+    if (_fiscalConfigLocalDao == null) {
+      debugPrint('FISCAL_BUSINESS_NAME_PRESENT: false');
+      return;
+    }
+    try {
+      // Get the tenant_id from local_configs first
+      final tenantEntity = await _configDao.getConfigByKey('tenant_id');
+      final tenantId = tenantEntity?.value;
+      if (tenantId == null || tenantId.trim().isEmpty) {
+        debugPrint('FISCAL_BUSINESS_NAME_PRESENT: false');
+        return;
+      }
+
+      final fiscalEntity = await _fiscalConfigLocalDao!.getByTenantId(tenantId);
+      if (fiscalEntity == null) {
+        debugPrint('FISCAL_BUSINESS_NAME_PRESENT: false');
+        return;
+      }
+
+      final payload = jsonDecode(fiscalEntity.payload);
+      final businessName = payload['businessName']?.toString();
+      final fiscalBusinessNamePresent =
+          businessName != null && businessName.trim().isNotEmpty;
+      debugPrint('FISCAL_BUSINESS_NAME_PRESENT: $fiscalBusinessNamePresent');
+
+      if (fiscalBusinessNamePresent) {
+        _config['business_name'] = businessName;
+      }
+      final ruc = payload['ruc']?.toString();
+      if (ruc != null && ruc.trim().isNotEmpty) {
+        _config['ruc'] = ruc;
+      }
+      final fiscalRegime = payload['fiscalRegime']?.toString();
+      if (fiscalRegime != null && fiscalRegime.trim().isNotEmpty) {
+        _config['tax_regime'] = fiscalRegime;
+      }
+    } catch (_) {
+      debugPrint('FISCAL_BUSINESS_NAME_PRESENT: false');
+      debugPrint('FISCAL_FALLBACK_ERROR: true');
     }
   }
 
@@ -125,5 +214,11 @@ class BusinessProfileViewModel extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  @override
+  void dispose() {
+    _syncSubscription?.cancel();
+    super.dispose();
   }
 }

@@ -350,13 +350,156 @@ void main() {
       expect(recovery.record?.credentials?.accessToken, 'initial-access-token');
     },
   );
+
+  test(
+    'onRequest rejects with CloudAuthUnavailableException when no credentials exist for protected endpoint',
+    () async {
+      final emptyStore = FakeCloudCredentialStore();
+      final emptyCoordinator = CloudCredentialCoordinator(
+        emptyStore,
+        commitId: () => 'b0000000-0000-4000-8000-000000000002',
+      );
+      final emptyInterceptor = CloudAuthInterceptor(
+        coordinator: emptyCoordinator,
+        refreshDio: refreshDio,
+        clientDio: clientDio,
+      );
+
+      final options = RequestOptions(
+        baseUrl: 'http://127.0.0.1:3000/api/',
+        path: 'v1/sync/inbound/deltas',
+      );
+      final handler = _TestRequestHandler();
+      await emptyInterceptor.onRequest(options, handler);
+
+      expect(handler.isNextCalled, isFalse);
+      expect(handler.isRejected, isTrue);
+      expect(
+        handler.rejectionError,
+        isA<DioException>().having(
+          (e) => (e.error).toString(),
+          'error',
+          contains('CloudAuthUnavailable'),
+        ),
+      );
+    },
+  );
+
+  test(
+    'onRequest allows public health endpoints (/v1/health, v1/health, health) to proceed unauthenticated without credentials',
+    () async {
+      final emptyStore = FakeCloudCredentialStore();
+      final emptyCoordinator = CloudCredentialCoordinator(
+        emptyStore,
+        commitId: () => 'b0000000-0000-4000-8000-000000000002',
+      );
+      final emptyInterceptor = CloudAuthInterceptor(
+        coordinator: emptyCoordinator,
+        refreshDio: refreshDio,
+        clientDio: clientDio,
+      );
+
+      for (final healthPath in ['/v1/health', 'v1/health', '/health', 'health', 'v1/health?check=reachability']) {
+        final options = RequestOptions(
+          baseUrl: 'http://127.0.0.1:3000/api/',
+          path: healthPath,
+        );
+        final handler = _TestRequestHandler();
+        await emptyInterceptor.onRequest(options, handler);
+
+        expect(handler.isNextCalled, isTrue, reason: 'Failed for $healthPath');
+        expect(handler.isRejected, isFalse, reason: 'Rejected for $healthPath');
+        expect(options.headers.containsKey('Authorization'), isFalse, reason: 'Header present for $healthPath');
+      }
+    },
+  );
+
+  test(
+    'onRequest allows public login and refresh endpoints to proceed unauthenticated without credentials',
+    () async {
+      final emptyStore = FakeCloudCredentialStore();
+      final emptyCoordinator = CloudCredentialCoordinator(
+        emptyStore,
+        commitId: () => 'b0000000-0000-4000-8000-000000000002',
+      );
+      final emptyInterceptor = CloudAuthInterceptor(
+        coordinator: emptyCoordinator,
+        refreshDio: refreshDio,
+        clientDio: clientDio,
+      );
+
+      for (final publicPath in ['/identity/login', 'identity/login', '/identity/refresh', 'identity/refresh']) {
+        final options = RequestOptions(
+          baseUrl: 'http://127.0.0.1:3000/api/',
+          path: publicPath,
+        );
+        final handler = _TestRequestHandler();
+        await emptyInterceptor.onRequest(options, handler);
+
+        expect(handler.isNextCalled, isTrue, reason: 'Failed for $publicPath');
+        expect(handler.isRejected, isFalse, reason: 'Rejected for $publicPath');
+        expect(options.headers.containsKey('Authorization'), isFalse);
+      }
+    },
+  );
+
+  test(
+    'onRequest fails closed on non-allowlisted endpoint containing allowlisted substring',
+    () async {
+      final emptyStore = FakeCloudCredentialStore();
+      final emptyCoordinator = CloudCredentialCoordinator(
+        emptyStore,
+        commitId: () => 'b0000000-0000-4000-8000-000000000002',
+      );
+      final emptyInterceptor = CloudAuthInterceptor(
+        coordinator: emptyCoordinator,
+        refreshDio: refreshDio,
+        clientDio: clientDio,
+      );
+
+      for (final nonAllowlisted in [
+        'v1/health/detailed',
+        'identity/login/admin',
+        'identity/refresh/token',
+        'unauthorized/identity/login',
+        'v1/health_check',
+      ]) {
+        final options = RequestOptions(
+          baseUrl: 'http://127.0.0.1:3000/api/',
+          path: nonAllowlisted,
+        );
+        final handler = _TestRequestHandler();
+        await emptyInterceptor.onRequest(options, handler);
+
+        expect(handler.isNextCalled, isFalse, reason: 'Should not pass for $nonAllowlisted');
+        expect(handler.isRejected, isTrue, reason: 'Should reject for $nonAllowlisted');
+        expect(
+          handler.rejectionError,
+          isA<DioException>().having(
+            (e) => (e.error).toString(),
+            'error',
+            contains('CloudAuthUnavailable'),
+          ),
+        );
+      }
+    },
+  );
 }
 
 class _TestRequestHandler extends RequestInterceptorHandler {
   bool isNextCalled = false;
+  bool isRejected = false;
+  Object? rejectionError;
+
   @override
   void next(RequestOptions requestOptions) {
     isNextCalled = true;
+  }
+
+  @override
+  void reject(DioException err, [bool callFollowingErrorInterceptor = false]) {
+    isRejected = true;
+    rejectionError = err;
   }
 }
 

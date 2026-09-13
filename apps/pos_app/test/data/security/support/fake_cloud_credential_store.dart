@@ -41,10 +41,12 @@ class FakeCloudCredentialStore implements CloudCredentialStore {
   final _readbacks = <String, FakeFaultStage>{};
   FakeStageFault? fault;
   String? readFailureKey;
+  String? writeFailureKey;
   String lastError = '';
 
   void corrupt(String key) => values[key] = 'corrupt';
-  void throwOnRead(String key) => readFailureKey = key;
+  void throwOnRead([String? key]) => readFailureKey = key ?? 'ANY';
+  void throwOnWrite([String? key]) => writeFailureKey = key ?? 'ANY';
 
   @override
   Future<String?> read(String key) async {
@@ -53,7 +55,8 @@ class FakeCloudCredentialStore implements CloudCredentialStore {
         _readbacks.remove(key) ??
         (key == hint ? FakeFaultStage.hintRead : FakeFaultStage.slotRead);
     observedStages.add(stage);
-    if (readFailureKey == key ||
+    if (readFailureKey == 'ANY' ||
+        readFailureKey == key ||
         (fault?.stage == stage &&
             (fault?.fault == FakeFault.failBefore ||
                 fault?.fault == FakeFault.mutateThenThrow))) {
@@ -70,6 +73,9 @@ class FakeCloudCredentialStore implements CloudCredentialStore {
   @override
   Future<void> write(String key, String value) async {
     keys.add(key);
+    if (writeFailureKey == 'ANY' || writeFailureKey == key) {
+      _failWrite();
+    }
     final stage = _writeStage(key, value);
     observedStages.add(stage);
     final injected = fault?.stage == stage ? fault : null;

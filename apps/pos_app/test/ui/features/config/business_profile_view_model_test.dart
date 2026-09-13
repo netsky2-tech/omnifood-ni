@@ -1,11 +1,16 @@
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:pos_app/data/daos/fiscal_config_local_dao.dart';
 import 'package:pos_app/data/daos/local_config_dao.dart';
+import 'package:pos_app/data/models/fiscal_config_local_entity.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/domain/models/config/tenant_operation_mode.dart';
 import 'package:pos_app/ui/features/config/business_profile/business_profile_view_model.dart';
 
 class _MockLocalConfigDao extends Mock implements LocalConfigDao {}
+class _MockFiscalConfigLocalDao extends Mock implements FiscalConfigLocalDao {}
 
 void main() {
   late _MockLocalConfigDao mockConfigDao;
@@ -125,6 +130,195 @@ void main() {
       expect(viewModel.operationMode, TenantOperationMode.hybrid);
       expect(viewModel.config['operation_mode'], 'HYBRID');
       expect(notified, isTrue);
+    });
+  });
+
+  group('BusinessProfileViewModel business_name fallback and blank-value semantics', () {
+    late _MockLocalConfigDao mockDao;
+    late _MockFiscalConfigLocalDao mockFiscalDao;
+    late BusinessProfileViewModel vm;
+    late List<String> printedLogs;
+    late DebugPrintCallback originalDebugPrint;
+
+    setUp(() {
+      mockDao = _MockLocalConfigDao();
+      mockFiscalDao = _MockFiscalConfigLocalDao();
+      vm = BusinessProfileViewModel(mockDao, null, null, mockFiscalDao);
+      printedLogs = [];
+      originalDebugPrint = debugPrint;
+      debugPrint = (String? message, {int? wrapWidth}) {
+        if (message != null) printedLogs.add(message);
+      };
+      when(() => mockDao.saveConfig(any())).thenAnswer((_) async {});
+    });
+
+    tearDown(() {
+      debugPrint = originalDebugPrint;
+    });
+
+    test('whitespace business_name in local_configs is treated as absent and triggers fiscal fallback', () async {
+      when(() => mockDao.getConfigByKey(any())).thenAnswer((_) async => null);
+      when(() => mockDao.getConfigByKey('business_name'))
+          .thenAnswer((_) async => LocalConfigEntity(key: 'business_name', value: '   '));
+      when(() => mockDao.getConfigByKey('tenant_id'))
+          .thenAnswer((_) async => LocalConfigEntity(key: 'tenant_id', value: 'dddb91ab-74de-4b06-aa8c-f38c6e053b5a'));
+
+      when(() => mockFiscalDao.getByTenantId('dddb91ab-74de-4b06-aa8c-f38c6e053b5a'))
+          .thenAnswer((_) async => FiscalConfigLocalEntity(
+                tenantId: 'dddb91ab-74de-4b06-aa8c-f38c6e053b5a',
+                revision: 1,
+                fingerprint: 'fp123',
+                payload: jsonEncode({
+                  'businessName': 'Founder Pilot Q80 1789164022241-e9530ebc',
+                  'ruc': 'J0310000000001',
+                  'fiscalRegime': 'CUOTA_FIJA',
+                }),
+                appliedAt: '2026-03-30T00:00:00Z',
+              ));
+
+      await vm.loadConfig();
+
+      expect(vm.config['business_name'], 'Founder Pilot Q80 1789164022241-e9530ebc');
+      verify(() => mockFiscalDao.getByTenantId('dddb91ab-74de-4b06-aa8c-f38c6e053b5a')).called(1);
+      verifyNever(() => mockDao.saveConfig(any()));
+
+      expect(printedLogs, contains('PRIMARY_CONFIG_FOUND: true'));
+      expect(printedLogs, contains('PRIMARY_BUSINESS_NAME_PRESENT: false'));
+      expect(printedLogs, contains('FISCAL_FALLBACK_TRIGGERED: true'));
+      expect(printedLogs, contains('FISCAL_BUSINESS_NAME_PRESENT: true'));
+      expect(printedLogs, contains('VIEW_MODEL_BUSINESS_NAME_PRESENT: true'));
+      expect(printedLogs.any((log) => log.contains('FISCAL_FALLBACK_USED')), isFalse);
+    });
+
+    test('non-blank business_name in local_configs preserves primary behavior and does not trigger fallback', () async {
+      when(() => mockDao.getConfigByKey(any())).thenAnswer((_) async => null);
+      when(() => mockDao.getConfigByKey('business_name'))
+          .thenAnswer((_) async => LocalConfigEntity(key: 'business_name', value: 'Café Managua'));
+      when(() => mockDao.getConfigByKey('tenant_id'))
+          .thenAnswer((_) async => LocalConfigEntity(key: 'tenant_id', value: 'dddb91ab-74de-4b06-aa8c-f38c6e053b5a'));
+
+      await vm.loadConfig();
+
+      expect(vm.config['business_name'], 'Café Managua');
+      verifyNever(() => mockFiscalDao.getByTenantId(any()));
+
+      expect(printedLogs, contains('PRIMARY_CONFIG_FOUND: true'));
+      expect(printedLogs, contains('PRIMARY_BUSINESS_NAME_PRESENT: true'));
+      expect(printedLogs, contains('FISCAL_FALLBACK_TRIGGERED: false'));
+      expect(printedLogs, contains('VIEW_MODEL_BUSINESS_NAME_PRESENT: true'));
+    });
+
+    test('null business_name in local_configs triggers fiscal fallback', () async {
+      when(() => mockDao.getConfigByKey(any())).thenAnswer((_) async => null);
+      when(() => mockDao.getConfigByKey('tenant_id'))
+          .thenAnswer((_) async => LocalConfigEntity(key: 'tenant_id', value: 'dddb91ab-74de-4b06-aa8c-f38c6e053b5a'));
+
+      when(() => mockFiscalDao.getByTenantId('dddb91ab-74de-4b06-aa8c-f38c6e053b5a'))
+          .thenAnswer((_) async => FiscalConfigLocalEntity(
+                tenantId: 'dddb91ab-74de-4b06-aa8c-f38c6e053b5a',
+                revision: 1,
+                fingerprint: 'fp123',
+                payload: jsonEncode({
+                  'businessName': 'Founder Pilot Q80 1789164022241-e9530ebc',
+                }),
+                appliedAt: '2026-03-30T00:00:00Z',
+              ));
+
+      await vm.loadConfig();
+
+      expect(vm.config['business_name'], 'Founder Pilot Q80 1789164022241-e9530ebc');
+      verify(() => mockFiscalDao.getByTenantId('dddb91ab-74de-4b06-aa8c-f38c6e053b5a')).called(1);
+      verifyNever(() => mockDao.saveConfig(any()));
+
+      expect(printedLogs, contains('PRIMARY_CONFIG_FOUND: false'));
+      expect(printedLogs, contains('PRIMARY_BUSINESS_NAME_PRESENT: false'));
+      expect(printedLogs, contains('FISCAL_FALLBACK_TRIGGERED: true'));
+      expect(printedLogs, contains('FISCAL_BUSINESS_NAME_PRESENT: true'));
+      expect(printedLogs, contains('VIEW_MODEL_BUSINESS_NAME_PRESENT: true'));
+    });
+
+    test('fiscal fallback is strictly read-only and performs zero writes to LocalConfigDao', () async {
+      when(() => mockDao.getConfigByKey(any())).thenAnswer((_) async => null);
+      when(() => mockDao.getConfigByKey('tenant_id'))
+          .thenAnswer((_) async => LocalConfigEntity(key: 'tenant_id', value: 'dddb91ab-74de-4b06-aa8c-f38c6e053b5a'));
+
+      when(() => mockFiscalDao.getByTenantId('dddb91ab-74de-4b06-aa8c-f38c6e053b5a'))
+          .thenAnswer((_) async => FiscalConfigLocalEntity(
+                tenantId: 'dddb91ab-74de-4b06-aa8c-f38c6e053b5a',
+                revision: 1,
+                fingerprint: 'fp123',
+                payload: jsonEncode({
+                  'businessName': 'ReadOnly Cafe',
+                  'ruc': 'J0310000000001',
+                  'fiscalRegime': 'REGIMEN_GENERAL',
+                }),
+                appliedAt: '2026-03-30T00:00:00Z',
+              ));
+
+      await vm.loadConfig();
+
+      expect(vm.config['business_name'], 'ReadOnly Cafe');
+      expect(vm.config['ruc'], 'J0310000000001');
+      expect(vm.config['tax_regime'], 'REGIMEN_GENERAL');
+      // Crucial: Fallback must never write to local_configs; startup repair is the only writer.
+      verifyNever(() => mockDao.saveConfig(any()));
+    });
+
+    test('when both primary and fiscal have no business name, flags absence correctly', () async {
+      when(() => mockDao.getConfigByKey(any())).thenAnswer((_) async => null);
+      when(() => mockDao.getConfigByKey('tenant_id'))
+          .thenAnswer((_) async => LocalConfigEntity(key: 'tenant_id', value: 'dddb91ab-74de-4b06-aa8c-f38c6e053b5a'));
+
+      when(() => mockFiscalDao.getByTenantId('dddb91ab-74de-4b06-aa8c-f38c6e053b5a'))
+          .thenAnswer((_) async => FiscalConfigLocalEntity(
+                tenantId: 'dddb91ab-74de-4b06-aa8c-f38c6e053b5a',
+                revision: 1,
+                fingerprint: 'fp123',
+                payload: jsonEncode({}),
+                appliedAt: '2026-03-30T00:00:00Z',
+              ));
+
+      await vm.loadConfig();
+
+      expect(vm.config['business_name'], '');
+      expect(printedLogs, contains('PRIMARY_CONFIG_FOUND: false'));
+      expect(printedLogs, contains('PRIMARY_BUSINESS_NAME_PRESENT: false'));
+      expect(printedLogs, contains('FISCAL_FALLBACK_TRIGGERED: true'));
+      expect(printedLogs, contains('FISCAL_BUSINESS_NAME_PRESENT: false'));
+      expect(printedLogs, contains('VIEW_MODEL_BUSINESS_NAME_PRESENT: false'));
+    });
+
+    test('malformed fiscal payload emits boolean diagnostics and does not log payload fragments or exception text', () async {
+      when(() => mockDao.getConfigByKey(any())).thenAnswer((_) async => null);
+      when(() => mockDao.getConfigByKey('tenant_id'))
+          .thenAnswer((_) async => LocalConfigEntity(key: 'tenant_id', value: 'dddb91ab-74de-4b06-aa8c-f38c6e053b5a'));
+
+      const sensitivePayloadSnippet = 'Confidential Restaurant Name 12345';
+      const malformedPayload = '{"businessName": "$sensitivePayloadSnippet", MALFORMED_JSON_SYNTAX}';
+      when(() => mockFiscalDao.getByTenantId('dddb91ab-74de-4b06-aa8c-f38c6e053b5a'))
+          .thenAnswer((_) async => FiscalConfigLocalEntity(
+                tenantId: 'dddb91ab-74de-4b06-aa8c-f38c6e053b5a',
+                revision: 1,
+                fingerprint: 'fp123',
+                payload: malformedPayload,
+                appliedAt: '2026-03-30T00:00:00Z',
+              ));
+
+      await vm.loadConfig();
+
+      expect(vm.config['business_name'], '');
+      expect(printedLogs, contains('PRIMARY_CONFIG_FOUND: false'));
+      expect(printedLogs, contains('PRIMARY_BUSINESS_NAME_PRESENT: false'));
+      expect(printedLogs, contains('FISCAL_FALLBACK_TRIGGERED: true'));
+      expect(printedLogs, contains('FISCAL_BUSINESS_NAME_PRESENT: false'));
+      expect(printedLogs, contains('FISCAL_FALLBACK_ERROR: true'));
+      expect(printedLogs, contains('VIEW_MODEL_BUSINESS_NAME_PRESENT: false'));
+
+      // Confirm no raw payload fragments or exception details are logged
+      expect(printedLogs.any((log) => log.contains(sensitivePayloadSnippet)), isFalse);
+      expect(printedLogs.any((log) => log.contains('MALFORMED_JSON_SYNTAX')), isFalse);
+      expect(printedLogs.any((log) => log.contains('FormatException')), isFalse);
+      expect(printedLogs.any((log) => log.contains('Exception')), isFalse);
     });
   });
 }

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../domain/models/config/tax_regime.dart';
@@ -14,29 +15,56 @@ class BusinessProfileView extends StatefulWidget {
 class _BusinessProfileViewState extends State<BusinessProfileView> {
   final _formKey = GlobalKey<FormState>();
   final Map<String, TextEditingController> _controllers = {};
+  Map<String, String> _lastSyncedConfig = {};
+  late BusinessProfileViewModel _viewModel;
 
   @override
   void initState() {
     super.initState();
-    final viewModel = context.read<BusinessProfileViewModel>();
-    for (final key in viewModel.config.keys) {
+    _viewModel = context.read<BusinessProfileViewModel>();
+    for (final key in _viewModel.config.keys) {
       _controllers[key] = TextEditingController();
     }
-    
+
+    // Listen to ViewModel changes to sync controllers (not in build!)
+    _viewModel.addListener(_onViewModelChanged);
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await viewModel.loadConfig();
-      for (final entry in viewModel.config.entries) {
-        _controllers[entry.key]?.text = entry.value;
-      }
+      await _viewModel.loadConfig();
+      _syncControllersFromViewModel(_viewModel);
     });
   }
 
   @override
   void dispose() {
+    _viewModel.removeListener(_onViewModelChanged);
     for (final controller in _controllers.values) {
       controller.dispose();
     }
     super.dispose();
+  }
+
+  void _onViewModelChanged() {
+    _syncControllersFromViewModel(_viewModel);
+  }
+
+  void _syncControllersFromViewModel(BusinessProfileViewModel viewModel) {
+    if (mapEquals(_lastSyncedConfig, viewModel.config)) {
+      debugPrint('CONTROLLER_UPDATED: false');
+      return;
+    }
+    _lastSyncedConfig = Map.from(viewModel.config);
+    var businessNameUpdated = false;
+    for (final entry in viewModel.config.entries) {
+      final controller = _controllers[entry.key];
+      if (controller != null && controller.text != entry.value) {
+        controller.text = entry.value;
+        if (entry.key == 'business_name') {
+          businessNameUpdated = true;
+        }
+      }
+    }
+    debugPrint('CONTROLLER_UPDATED: $businessNameUpdated');
   }
 
   @override

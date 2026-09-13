@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -23,6 +24,8 @@ class _MockDio extends Mock implements Dio {}
 class _MockLocalAuthService extends Mock implements LocalAuthService {}
 
 class _MockTotpSeedKeyProvider extends Mock implements TotpSeedKeyProvider {}
+
+class _MockFlutterSecureStorage extends Mock implements FlutterSecureStorage {}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -186,6 +189,80 @@ void main() {
       verifyZeroInteractions(dio);
       // coordinator was never modified
       expect((await coordinator.recover()).record, isNull);
+    },
+  );
+
+  test(
+    'logout fails closed locally even if coordinator.clear() throws',
+    () async {
+      final hungStore = FakeCloudCredentialStore();
+      final hungCoordinator = CloudCredentialCoordinator(
+        hungStore,
+        commitId: () => 'b0000000-0000-4000-8000-000000000003',
+      );
+      final hungRepo = AuthRepositoryImpl(
+        userDao,
+        securityProfileDao,
+        localAuthService,
+        dio,
+        totpSeedKeyProvider: totpSeedKeyProvider,
+        credentialCoordinator: hungCoordinator,
+      );
+
+      // Commit an active token
+      final intent = await hungCoordinator.reserveIntent();
+      await hungCoordinator.commit(
+        intent,
+        CloudCredentials(
+          accessToken: 'active-token',
+          refreshToken: 'active-refresh',
+          userId: 'u2',
+          tenantId: 't2',
+          issuedAtUtc: DateTime.utc(2026, 1, 1),
+        ),
+      );
+      dio.options.headers['Authorization'] = 'Bearer active-token';
+
+      // Simulate store write failure on clear
+      hungStore.throwOnWrite();
+
+      await hungRepo.logout();
+
+      expect(await hungRepo.getCurrentUser(), isNull);
+      expect(await hungRepo.getAccessToken(), isNull);
+      expect(dio.options.headers.containsKey('Authorization'), isFalse);
+    },
+  );
+
+  test(
+    'logout fails closed locally in legacy mode even if secure storage delete throws',
+    () async {
+      final mockStorage = _MockFlutterSecureStorage();
+      when(() => mockStorage.delete(key: 'access_token')).thenThrow(
+        Exception('Keystore delete hang/failure'),
+      );
+      when(() => mockStorage.read(key: 'access_token')).thenAnswer(
+        (_) async => 'un-deleted-zombie-token',
+      );
+
+      final legacyRepo = AuthRepositoryImpl(
+        userDao,
+        securityProfileDao,
+        localAuthService,
+        dio,
+        storage: mockStorage,
+        totpSeedKeyProvider: totpSeedKeyProvider,
+        credentialCoordinator: null,
+      );
+
+      dio.options.headers['Authorization'] = 'Bearer active-token';
+
+      await legacyRepo.logout();
+
+      // Fails closed locally: memory cleared, header removed, and revocation barrier rejects resurrection
+      expect(await legacyRepo.getCurrentUser(), isNull);
+      expect(await legacyRepo.getAccessToken(), isNull);
+      expect(dio.options.headers.containsKey('Authorization'), isFalse);
     },
   );
 }

@@ -14,6 +14,7 @@ import '../../domain/models/inventory/count_session_document.dart';
 import '../../domain/models/inventory/forensic_alert.dart';
 import '../../domain/models/inventory/recipe_version_document.dart';
 import '../../domain/models/inventory/production_order_document.dart';
+import '../../domain/security/cloud_auth_unavailable_exception.dart';
 import '../database/app_database.dart';
 import '../models/inventory/product_entity.dart';
 import '../models/catalog/catalog_value_entity.dart';
@@ -231,6 +232,7 @@ class SyncService {
     _isSyncing = true;
     _cloudAuthRequired = false;
     _updateStatus(CloudSyncStatus.syncing);
+    developer.log('[SYNC_MANUAL] triggered=true', name: 'SyncService');
 
     final List<String> domainErrors = [];
 
@@ -349,7 +351,10 @@ class SyncService {
         _lastSyncError = null;
         _updateStatus(CloudSyncStatus.success);
         _updateStatus(CloudSyncStatus.idle);
-        developer.log('Sync completed successfully', name: 'SyncService');
+        developer.log(
+          '[SYNC_MANUAL] completed=true reason=success',
+          name: 'SyncService',
+        );
         return const SyncRunOutcome.complete();
       } else {
         _consecutiveFailures++;
@@ -361,7 +366,7 @@ class SyncService {
         }
         _updateStatus(CloudSyncStatus.error);
         developer.log(
-          'Sync completed partially; domain errors: $_lastSyncError',
+          '[SYNC_MANUAL] completed=false reason=${_cloudAuthRequired ? "auth_unavailable" : domainErrors.join(",")}',
           name: 'SyncService',
         );
         return const SyncRunOutcome.partial();
@@ -401,12 +406,18 @@ class SyncService {
       if (statusCode == 401 || statusCode == 403) {
         _cloudAuthRequired = true;
         developer.log(
-          'Sync  failed with : cloud reauthentication required',
+          '[SYNC_AUTH] credential_available=false — cloud reauthentication required (HTTP $statusCode)',
+          name: 'SyncService',
+        );
+      } else if (dioErr.error is CloudAuthUnavailableException) {
+        _cloudAuthRequired = true;
+        developer.log(
+          '[SYNC_AUTH] credential_available=false — ${dioErr.error}',
           name: 'SyncService',
         );
       } else {
         developer.log(
-          'Sync  failed with network error ()',
+          'Sync $domain failed with network error',
           name: 'SyncService',
           error: dioErr,
           stackTrace: stackTrace,
@@ -1585,6 +1596,8 @@ class SyncService {
   Future<InboundSyncResult?> _pullInboundDeltas() async {
     if (_database == null) return null;
 
+    developer.log('[SYNC_PULL] started=true', name: 'SyncService');
+
     try {
       final lastSyncConfig = await _database!.localConfigDao.getConfigByKey(
         'last_inbound_sync_version',
@@ -1602,12 +1615,34 @@ class SyncService {
         queryParameters: queryParams,
       );
 
+      developer.log(
+        '[SYNC_PULL] status=${response.statusCode}',
+        name: 'SyncService',
+      );
+
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = response.data;
-        if (data is! Map) return null;
+        if (data is! Map) {
+          developer.log(
+            '[SYNC_PULL] response_keys=[] reason=non_map',
+            name: 'SyncService',
+          );
+          return null;
+        }
 
         final rawDeltas = data['deltas'];
-        if (rawDeltas is! Map) return null;
+        if (rawDeltas is! Map) {
+          developer.log(
+            '[SYNC_PULL] response_keys=[${data.keys.join(",")}] reason=no_deltas',
+            name: 'SyncService',
+          );
+          return null;
+        }
+
+        developer.log(
+          '[SYNC_PULL] response_keys=[${data.keys.join(",")}] delta_keys=[${rawDeltas.keys.join(",")}]',
+          name: 'SyncService',
+        );
 
         // 1. Products
         final rawProducts = rawDeltas['products'] as List<dynamic>? ?? const [];
@@ -1758,7 +1793,15 @@ class SyncService {
         int? appliedFiscalRevision;
         String? appliedFiscalFingerprint;
         final rawFiscal = rawDeltas['fiscalConfig'] ?? data['fiscalConfig'];
-        if (rawFiscal is Map && _database != null) {
+        final fiscalPresent = rawFiscal is Map;
+        final businessNameRaw = fiscalPresent ? rawFiscal['businessName'] : null;
+        final businessNamePresent =
+            businessNameRaw != null && businessNameRaw.toString().isNotEmpty;
+        developer.log(
+          '[SYNC_FISCAL] fiscal_config_present=$fiscalPresent business_name_present=$businessNamePresent',
+          name: 'SyncService',
+        );
+        if (fiscalPresent && _database != null) {
           final handler = _fiscalInboxHandler ?? FiscalInboxHandler(_database!);
           try {
             final outcome = await handler.handleFiscalEnvelope(

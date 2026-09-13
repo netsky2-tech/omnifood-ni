@@ -22,9 +22,7 @@ class AuthRepositoryImpl implements AuthRepository {
   final SecurityProfileDao _securityProfileDao;
   final LocalAuthService _localAuth;
   final Dio _dio;
-  final FlutterSecureStorage _storage = const FlutterSecureStorage(
-    aOptions: AndroidOptions(encryptedSharedPreferences: true),
-  );
+  final FlutterSecureStorage _storage;
   SharedPreferences? _prefs;
   User? _currentUser;
   String? _accessToken;
@@ -41,10 +39,15 @@ class AuthRepositoryImpl implements AuthRepository {
     this._securityProfileDao,
     this._localAuth,
     this._dio, {
+    FlutterSecureStorage? storage,
     TotpSeedKeyProvider? totpSeedKeyProvider,
     TenantCapabilityCache? capabilityCache,
     CloudCredentialCoordinator? credentialCoordinator,
-  }) : _totpSeedKeyProvider =
+  }) : _storage = storage ??
+           const FlutterSecureStorage(
+             aOptions: AndroidOptions(encryptedSharedPreferences: true),
+           ),
+       _totpSeedKeyProvider =
            totpSeedKeyProvider ?? DeviceBoundTotpSeedKeyProvider(),
        _capabilityCache = capabilityCache,
        _credentialCoordinator = credentialCoordinator;
@@ -102,7 +105,8 @@ class AuthRepositoryImpl implements AuthRepository {
     _dio.options.headers['Authorization'] = 'Bearer $token';
 
     if (_credentialCoordinator != null) {
-      // When coordinator is present, it is the sole secure credential store.
+      // Coordinator is the primary secure store (in-memory when Keystore hung).
+      // No SharedPreferences fallback for cloud credentials — security requirement.
       return;
     }
 
@@ -112,10 +116,8 @@ class AuthRepositoryImpl implements AuthRepository {
           .timeout(const Duration(milliseconds: 500));
     } catch (e) {
       debugPrint(
-        '[AuthRepository] Secure storage falló o timeout, usando SharedPreferences: $e',
+        '[AuthRepository] Secure storage falló o timeout, sin fallback cloud: $e',
       );
-      _prefs ??= await SharedPreferences.getInstance();
-      await _prefs?.setString('access_token', token);
     }
   }
 
@@ -147,8 +149,8 @@ class AuthRepositoryImpl implements AuthRepository {
               accessToken: token,
               refreshToken: refreshToken,
               userId: user.id,
-                  tenantId: (user.tenantId != null && user.tenantId!.isNotEmpty)
-                      ? user.tenantId!
+              tenantId: (user.tenantId != null && user.tenantId!.isNotEmpty)
+                  ? user.tenantId!
                   : 'default-tenant',
               issuedAtUtc: DateTime.now().toUtc(),
             ),
@@ -160,7 +162,7 @@ class AuthRepositoryImpl implements AuthRepository {
         }
       }
 
-            debugPrint('[AuthRepository] Refreshing audit capability...');
+      debugPrint('[AuthRepository] Refreshing audit capability...');
       await _refreshAuditCapability(user);
       debugPrint('[AuthRepository] Syncing staff...');
       try {
@@ -483,14 +485,20 @@ class AuthRepositoryImpl implements AuthRepository {
           _accessToken = creds.accessToken;
           return _accessToken;
         }
-        _accessToken = null;
-        return null;
       } catch (_) {
-        return null;
+        // Coordinator threw — no cloud credentials available
       }
+      _accessToken = null;
+      return null;
     }
 
     if (_accessToken != null) return _accessToken;
+
+    _prefs ??= await SharedPreferences.getInstance();
+    if (_prefs?.getBool('legacy_token_revoked') == true) {
+      _accessToken = null;
+      return null;
+    }
 
     try {
       _accessToken = await _storage
@@ -498,11 +506,11 @@ class AuthRepositoryImpl implements AuthRepository {
           .timeout(const Duration(milliseconds: 300));
     } catch (e) {
       debugPrint(
-        '[AuthRepository] Error o timeout leyendo secure storage, intentando SharedPreferences: $e',
+        '[AuthRepository] Error o timeout leyendo secure storage: $e',
       );
-      _prefs ??= await SharedPreferences.getInstance();
-      _accessToken = _prefs?.getString('access_token');
     }
+    // No SharedPreferences fallback for cloud credentials — security requirement.
+    // Cold start with hung Keystore = no cloud credentials available.
     return _accessToken;
   }
 
@@ -516,15 +524,20 @@ class AuthRepositoryImpl implements AuthRepository {
     if (_credentialCoordinator != null) {
       try {
         await _credentialCoordinator!.clear();
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[AuthRepository] Credential coordinator clear failed: $e');
+      }
       return;
     }
 
     try {
       await _storage.delete(key: 'access_token');
     } catch (e) {
-      _prefs ??= await SharedPreferences.getInstance();
-      await _prefs?.remove('access_token');
+      debugPrint('[AuthRepository] Error borrando secure storage en logout: $e');
+      try {
+        _prefs ??= await SharedPreferences.getInstance();
+        await _prefs?.setBool('legacy_token_revoked', true);
+      } catch (_) {}
     }
   }
 

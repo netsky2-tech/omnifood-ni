@@ -13,6 +13,7 @@ import 'data/database/database_seeder.dart';
 import 'data/network/cloud_auth_interceptor.dart';
 import 'data/security/flutter_secure_cloud_credential_store.dart';
 import 'domain/security/cloud_credential_coordinator.dart';
+import 'data/security/shared_preferences_cloud_revocation_barrier_store.dart';
 import 'data/repositories/auth_repository_impl.dart';
 import 'core/clock/monotonic_clock.dart';
 import 'core/config/production_transport_config.dart';
@@ -20,6 +21,7 @@ import 'core/navigation/route_observer.dart';
 import 'data/repositories/tenant_capability_cache.dart';
 import 'domain/repositories/auth_repository.dart';
 import 'data/repositories/audit_repository_impl.dart';
+import 'data/services/fiscal_projection_repair_service.dart';
 import 'data/services/local_auth_service.dart';
 import 'data/services/network_connectivity_service.dart';
 import 'data/services/sync_service.dart';
@@ -106,6 +108,10 @@ void main() async {
   // Populate seed test data if not present
   await DatabaseSeeder.seedAll(database);
 
+  // Offline startup backfill: rebuild incomplete/outdated fiscal projections from stored canonical snapshots.
+  // Fails closed on snapshot read/repair failure to prevent initializing fiscal-dependent consumers in corrupt state.
+  await FiscalBootstrapRunner.fromDatabase(database).run();
+
   // Initialize Services & Repositories
   final deviceId = await TerminalIdentityService(
     database.localConfigDao,
@@ -118,9 +124,11 @@ void main() async {
     bootSessionId: const Uuid().v4(),
   );
   final credentialStore = FlutterSecureCloudCredentialStore();
+  final barrierStore = SharedPreferencesCloudRevocationBarrierStore();
   final credentialCoordinator = CloudCredentialCoordinator(
     credentialStore,
     commitId: () => const Uuid().v4(),
+    barrierStore: barrierStore,
   );
   final refreshDio = Dio(productionTransportOptions(baseUrl));
   final authRepository = AuthRepositoryImpl(
@@ -138,6 +146,7 @@ void main() async {
       coordinator: credentialCoordinator,
       refreshDio: refreshDio,
       clientDio: dio,
+      tokenFallback: () => authRepository.getAccessToken(),
       onReauthenticationRequired: () {
         debugPrint(
           "[CloudAuth] Reautenticación requerida: sesión cloud expirada o revocada.",
@@ -284,7 +293,10 @@ void main() async {
           create: (_) => BusinessProfileViewModel(
             database.localConfigDao,
             inventoryRepository,
+            syncService,
+            database.fiscalConfigLocalDao,
           ),
+          lazy: false,
         ),
         ChangeNotifierProvider(
           create: (_) => HardwareSettingsViewModel(
