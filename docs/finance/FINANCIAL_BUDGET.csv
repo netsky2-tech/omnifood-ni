@@ -1,15 +1,13 @@
 budget_line_id,period,scenario,category,description,monthly_amount_usd,scope,notes
-GEMINI,RECURRING,LOW,AI,Gemini,20.00,FIXED,Gasto compartido mensual presupuestado.
-GPT,RECURRING,LOW,AI,GPT,100.00,FIXED,Gasto compartido mensual presupuestado.
+NAN,RECURRING,LOW,AI,Nan Builders,82.60,FIXED,Suscripción mensual que reemplaza GPT + Gemini.
 INTERNET,RECURRING,LOW,OPERATIONS,Internet,20.00,FIXED,Gasto mensual documentado.
 DOMAIN,RECURRING,LOW,INFRASTRUCTURE,Domain,1.92,FIXED,US$23 anuales normalizados.
-RAILWAY,RECURRING,LOW,INFRASTRUCTURE,Railway Hobby,5.00,FIXED,Plan Hobby US$5/mes con US$5 de uso incluido.
+RAILWAY,RECURRING,LOW,INFRASTRUCTURE,Railway Hobby,5.10,FIXED,Plan Hobby US$5.10/mes con US$5 de uso incluido.
 CLOUDFLARE_PAGES,RECURRING,LOW,INFRASTRUCTURE,Cloudflare Pages,0.00,FIXED,SPA estatica dentro del nivel inicial sin costo.
 CLOUDFLARE_R2,RECURRING,LOW,BACKUP,Cloudflare R2,0.00,FIXED,Dentro del nivel gratuito de 10 GB-mes.
-GEMINI,RECURRING,CONSERVATIVE,AI,Gemini,20.00,FIXED,Gasto compartido mensual presupuestado.
-GPT,RECURRING,CONSERVATIVE,AI,GPT,100.00,FIXED,Gasto compartido mensual presupuestado.
+NAN,RECURRING,CONSERVATIVE,AI,Nan Builders,82.60,FIXED,Suscripción mensual que reemplaza GPT + Gemini.
 INTERNET,RECURRING,CONSERVATIVE,OPERATIONS,Internet,20.00,FIXED,Gasto mensual documentado.
 DOMAIN,RECURRING,CONSERVATIVE,INFRASTRUCTURE,Domain,1.92,FIXED,US$23 anuales normalizados.
-RAILWAY,RECURRING,CONSERVATIVE,INFRASTRUCTURE,Railway Hobby,5.00,FIXED,Plan Hobby US$5/mes con US$5 de uso incluido.
+RAILWAY,RECURRING,CONSERVATIVE,INFRASTRUCTURE,Railway Hobby,5.10,FIXED,Plan Hobby US$5.10/mes con US$5 de uso incluido.
 CLOUDFLARE_PAGES,RECURRING,CONSERVATIVE,INFRASTRUCTURE,Cloudflare Pages,0.00,FIXED,SPA estatica dentro del nivel inicial sin costo.
 CLOUDFLARE_R2,RECURRING,CONSERVATIVE,BACKUP,Cloudflare R2,1.35,FIXED,Ejemplo de hasta 100 GB; sustituir por consumo medido.
