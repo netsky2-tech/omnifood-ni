@@ -70,6 +70,8 @@ import { InventoryReadinessAdapter } from './adapters/inventory-readiness.adapte
 import { CostingReadinessAdapter } from './adapters/costing-readiness.adapter';
 import { OperationsReadinessAdapter } from './adapters/operations-readiness.adapter';
 import { IdentityModule } from '../identity/identity.module';
+import { DeviceSyncModule } from '../identity/device-sync.module';
+import { FulfillmentModule } from '../fulfillment/fulfillment.module';
 import { AuditModule } from '../audit/audit.module';
 import { SalesModule } from '../sales/sales.module';
 
@@ -87,6 +89,8 @@ export const getRequiredOnboardingJwtSecret = (
   imports: [
     ConfigModule,
     IdentityModule,
+    DeviceSyncModule,
+    FulfillmentModule,
     AuditModule,
     forwardRef(() => SalesModule),
     TypeOrmModule.forFeature([

@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { AuthGuard } from '../../identity/guards/auth.guard';
+import { SyncTransportGuard } from '../../identity/guards/sync-transport.guard';
 import { SyncBatchController } from './sync-batch.controller';
 import { SyncCreditNoteAuthGuard } from '../guards/sync-credit-note-auth.guard';
 import { InvoicesService } from '../services/invoices.service';
@@ -15,7 +15,7 @@ describe('SyncBatchController', () => {
       controllers: [SyncBatchController],
       providers: [{ provide: InvoicesService, useValue: invoicesService }],
     })
-      .overrideGuard(AuthGuard)
+      .overrideGuard(SyncTransportGuard)
       .useValue({ canActivate: jest.fn().mockReturnValue(true) })
       .overrideGuard(SyncCreditNoteAuthGuard)
       .useValue({ canActivate: jest.fn().mockReturnValue(true) })

@@ -114,4 +114,26 @@ describe('AuthGuard strict access-token validation', () => {
     });
     expect(request.user).toEqual(payload);
   });
+
+  it('rejects a device sync token payload because AuthGuard is strict human access', async () => {
+    const request: GuardRequest = {
+      headers: { authorization: 'Bearer device-sync-access-token' },
+    };
+    const deviceSyncPayload = {
+      sub: 'credential-uuid-1',
+      principal_type: 'device_sync',
+      token_type: 'device_sync_access',
+      tenant_id: 'tenant-1',
+      device_id: 'term-pos-01',
+      scopes: ['sync:push', 'sync:pull'],
+      credential_version: 1,
+      jti: 'jti-uuid',
+    };
+    jwtService.verifyAsync.mockResolvedValue(deviceSyncPayload);
+
+    await expect(
+      guard.canActivate(createContext(request)),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(request.user).toBeUndefined();
+  });
 });

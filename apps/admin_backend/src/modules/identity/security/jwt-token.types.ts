@@ -1,7 +1,29 @@
 export const JWT_TOKEN_TYPES = {
   ACCESS: 'access',
   REFRESH: 'refresh',
+  DEVICE_SYNC_ACCESS: 'device_sync_access',
 } as const;
+
+export const DEVICE_SYNC_TOKEN_TYPE = JWT_TOKEN_TYPES.DEVICE_SYNC_ACCESS;
+export const DEVICE_SYNC_PRINCIPAL_TYPE_CLAIM = 'device_sync' as const;
+
+export interface DeviceSyncJwtClaims {
+  sub: string;
+  principal_type: typeof DEVICE_SYNC_PRINCIPAL_TYPE_CLAIM;
+  token_type: typeof DEVICE_SYNC_TOKEN_TYPE;
+  tenant_id: string;
+  device_id: string;
+  scopes: string[];
+  credential_version: number;
+  jti: string;
+}
+
+export interface DeviceSyncJwtAccessPayload extends DeviceSyncJwtClaims {
+  iss: string;
+  aud: string;
+  iat: number;
+  exp: number;
+}
 
 export type JwtTokenType =
   (typeof JWT_TOKEN_TYPES)[keyof typeof JWT_TOKEN_TYPES];
@@ -75,3 +97,29 @@ export const isRefreshTokenPayloadForSubject = (
     (typeof payload.jti === 'string' && payload.jti.trim().length > 0)) &&
   (!('refresh_token_family_id' in payload) ||
     typeof payload.refresh_token_family_id === 'string');
+
+export const isDeviceSyncAccessTokenPayload = (
+  value: unknown,
+  issuer: string,
+  audience: string,
+): value is DeviceSyncJwtAccessPayload => {
+  if (typeof value !== 'object' || value === null) return false;
+  const payload = value as Record<string, unknown>;
+  return (
+    isNonEmptyString(payload.sub) &&
+    payload.principal_type === DEVICE_SYNC_PRINCIPAL_TYPE_CLAIM &&
+    payload.token_type === DEVICE_SYNC_TOKEN_TYPE &&
+    isNonEmptyString(payload.tenant_id) &&
+    isNonEmptyString(payload.device_id) &&
+    Array.isArray(payload.scopes) &&
+    payload.scopes.length > 0 &&
+    payload.scopes.every((scope) => isNonEmptyString(scope)) &&
+    Number.isInteger(payload.credential_version) &&
+    (payload.credential_version as number) >= 1 &&
+    isNonEmptyString(payload.jti) &&
+    payload.iss === issuer &&
+    payload.aud === audience &&
+    Number.isFinite(payload.iat) &&
+    Number.isFinite(payload.exp)
+  );
+};

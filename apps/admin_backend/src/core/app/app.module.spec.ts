@@ -11,6 +11,8 @@ import { InventoryMovement } from '../../modules/inventory/entities/inventory-mo
 import { InventorySyncReceipt } from '../../modules/inventory/entities/inventory-sync-receipt.entity';
 import { PurchaseDocument } from '../../modules/inventory/entities/purchase-document.entity';
 import { ProductionBatchHistory } from '../../modules/inventory/entities/production-batch-history.entity';
+import { DeviceSyncCredential } from '../../modules/identity/entities/device-sync-credential.entity';
+import { DeviceSyncCredentialEvent } from '../../modules/identity/entities/device-sync-credential-event.entity';
 import { ConfigService } from '@nestjs/config';
 
 describe('AppModule Registration', () => {
@@ -49,6 +51,11 @@ describe('AppModule Registration', () => {
 
   it('should have ProductionBatchHistory repository registered', () => {
     expect(options.entities).toContain(ProductionBatchHistory);
+  });
+
+  it('should have DeviceSyncCredential and DeviceSyncCredentialEvent registered', () => {
+    expect(options.entities).toContain(DeviceSyncCredential);
+    expect(options.entities).toContain(DeviceSyncCredentialEvent);
   });
 });
 
