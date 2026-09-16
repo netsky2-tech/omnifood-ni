@@ -15,6 +15,7 @@ import '../../domain/models/inventory/forensic_alert.dart';
 import '../../domain/models/inventory/recipe_version_document.dart';
 import '../../domain/models/inventory/production_order_document.dart';
 import '../../domain/security/cloud_auth_unavailable_exception.dart';
+import '../../domain/security/device_sync_exceptions.dart';
 import '../database/app_database.dart';
 import '../models/inventory/product_entity.dart';
 import '../models/catalog/catalog_value_entity.dart';
@@ -107,8 +108,11 @@ class SyncService {
   StreamSubscription<bool>? _connectivitySubscription;
   bool _isSyncing = false;
   bool _hasPendingSyncRequest = false;
-  bool _cloudAuthRequired = false;
-  bool get isCloudAuthRequired => _cloudAuthRequired;
+  bool _authBlocked = false;
+  String? _syncBlockedReason;
+  bool get isAuthBlocked => _authBlocked;
+  String? get syncBlockedReason => _syncBlockedReason;
+  bool get isCloudAuthRequired => _authBlocked;
 
   SyncService(
     this._auditRepository,
@@ -230,7 +234,8 @@ class SyncService {
     }
 
     _isSyncing = true;
-    _cloudAuthRequired = false;
+    _authBlocked = false;
+    _syncBlockedReason = null;
     _updateStatus(CloudSyncStatus.syncing);
     developer.log('[SYNC_MANUAL] triggered=true', name: 'SyncService');
 
@@ -358,15 +363,16 @@ class SyncService {
         return const SyncRunOutcome.complete();
       } else {
         _consecutiveFailures++;
-        if (_cloudAuthRequired) {
-          _lastSyncError =
-              'Reautenticación requerida con el servidor nube (HTTP 401/403)';
+        if (_authBlocked) {
+          _lastSyncError = _syncBlockedReason == 'DEVICE_REVOKED'
+              ? 'DEVICE_REVOKED'
+              : 'AUTH_BLOCKED: Reautenticación requerida con el servidor nube (HTTP 401/403)';
         } else {
           _lastSyncError = domainErrors.join('; ');
         }
         _updateStatus(CloudSyncStatus.error);
         developer.log(
-          '[SYNC_MANUAL] completed=false reason=${_cloudAuthRequired ? "auth_unavailable" : domainErrors.join(",")}',
+          '[SYNC_MANUAL] completed=false reason=${_authBlocked ? _syncBlockedReason : domainErrors.join(",")}',
           name: 'SyncService',
         );
         return const SyncRunOutcome.partial();
@@ -391,11 +397,21 @@ class SyncService {
     }
   }
 
+  bool _isAuthError(dynamic e) {
+    if (e is DeviceSyncException) return true;
+    if (e is DioException) {
+      if (e.error is DeviceSyncException) return true;
+      final code = e.response?.statusCode;
+      if (code == 401 || code == 403) return true;
+    }
+    return false;
+  }
+
   Future<bool> _runDomain(
     String domain,
     Future<void> Function() operation,
   ) async {
-    if (_cloudAuthRequired) {
+    if (_authBlocked) {
       return false;
     }
     try {
@@ -403,16 +419,23 @@ class SyncService {
       return true;
     } on DioException catch (dioErr, stackTrace) {
       final statusCode = dioErr.response?.statusCode;
-      if (statusCode == 401 || statusCode == 403) {
-        _cloudAuthRequired = true;
+      if (dioErr.error is DeviceSyncRevokedException ||
+          (dioErr.response?.data is Map &&
+              (dioErr.response?.data['code'] == 'DEVICE_REVOKED' ||
+                  dioErr.response?.data['error'] == 'DEVICE_REVOKED'))) {
+        _authBlocked = true;
+        _syncBlockedReason = 'DEVICE_REVOKED';
         developer.log(
-          '[SYNC_AUTH] credential_available=false — cloud reauthentication required (HTTP $statusCode)',
+          '[SYNC_AUTH] credential_revoked=true — device sync credential revoked',
           name: 'SyncService',
         );
-      } else if (dioErr.error is CloudAuthUnavailableException) {
-        _cloudAuthRequired = true;
+      } else if (statusCode == 401 ||
+          statusCode == 403 ||
+          dioErr.error is DeviceSyncUnavailableException) {
+        _authBlocked = true;
+        _syncBlockedReason = 'AUTH_BLOCKED';
         developer.log(
-          '[SYNC_AUTH] credential_available=false — ${dioErr.error}',
+          '[SYNC_AUTH] credential_blocked=true — device sync auth unavailable or blocked (HTTP $statusCode)',
           name: 'SyncService',
         );
       } else {
@@ -423,6 +446,16 @@ class SyncService {
           stackTrace: stackTrace,
         );
       }
+      return false;
+    } on DeviceSyncRevokedException catch (e) {
+      _authBlocked = true;
+      _syncBlockedReason = 'DEVICE_REVOKED';
+      developer.log('[SYNC_AUTH] credential_revoked=true: $e', name: 'SyncService');
+      return false;
+    } on DeviceSyncUnavailableException catch (e) {
+      _authBlocked = true;
+      _syncBlockedReason = 'AUTH_BLOCKED';
+      developer.log('[SYNC_AUTH] credential_blocked=true: $e', name: 'SyncService');
       return false;
     } catch (error, stackTrace) {
       developer.log(
@@ -759,7 +792,9 @@ class SyncService {
           name: 'SyncService',
           error: e,
         );
-        await _markMovementsAsFailed(orderedBatch, error: e.message);
+        if (!_isAuthError(e)) {
+          await _markMovementsAsFailed(orderedBatch, error: e.message);
+        }
         rethrow;
       } catch (e, stackTrace) {
         developer.log(
@@ -768,7 +803,9 @@ class SyncService {
           error: e,
           stackTrace: stackTrace,
         );
-        await _markMovementsAsFailed(orderedBatch, error: e.toString());
+        if (!_isAuthError(e)) {
+          await _markMovementsAsFailed(orderedBatch, error: e.toString());
+        }
         rethrow;
       }
     } catch (e, st) {
@@ -812,10 +849,12 @@ class SyncService {
           'Failed to sync purchase ${purchase.id}: ${e.message}',
           name: 'SyncService',
         );
-        await _inventoryRepository.markMovementAsFailed(
-          purchase.id,
-          error: e.message,
-        );
+        if (!_isAuthError(e)) {
+          await _inventoryRepository.markMovementAsFailed(
+            purchase.id,
+            error: e.message,
+          );
+        }
         rethrow;
       } catch (e, stackTrace) {
         developer.log(
@@ -824,10 +863,12 @@ class SyncService {
           error: e,
           stackTrace: stackTrace,
         );
-        await _inventoryRepository.markMovementAsFailed(
-          purchase.id,
-          error: e.toString(),
-        );
+        if (!_isAuthError(e)) {
+          await _inventoryRepository.markMovementAsFailed(
+            purchase.id,
+            error: e.toString(),
+          );
+        }
         rethrow;
       }
     }
@@ -911,10 +952,20 @@ class SyncService {
           'Failed to sync production order ${document.id}: ${e.message}',
           name: 'SyncService',
         );
-        await _markMovementIdsAsFailed(
-          document.movementReferences,
-          error: e.message,
-        );
+        if (!_isAuthError(e)) {
+          await _markMovementIdsAsFailed(
+            document.movementReferences,
+            error: e.message,
+          );
+        }
+        rethrow;
+      } catch (e) {
+        if (!_isAuthError(e)) {
+          await _markMovementIdsAsFailed(
+            document.movementReferences,
+            error: e.toString(),
+          );
+        }
         rethrow;
       }
     }
@@ -947,10 +998,20 @@ class SyncService {
           'Failed to sync count session ${document.id}: ${e.message}',
           name: 'SyncService',
         );
-        await _markMovementIdsAsFailed(
-          document.movementReferences,
-          error: e.message,
-        );
+        if (!_isAuthError(e)) {
+          await _markMovementIdsAsFailed(
+            document.movementReferences,
+            error: e.message,
+          );
+        }
+        rethrow;
+      } catch (e) {
+        if (!_isAuthError(e)) {
+          await _markMovementIdsAsFailed(
+            document.movementReferences,
+            error: e.toString(),
+          );
+        }
         rethrow;
       }
     }

@@ -11,8 +11,17 @@ import 'data/database/app_database.dart';
 import 'data/database/migrations.dart';
 import 'data/database/database_seeder.dart';
 import 'data/network/cloud_auth_interceptor.dart';
+import 'data/network/device_sync_auth_interceptor.dart';
+import 'data/adapters/activation/dio_activation_sync_port.dart';
+import 'data/security/app_private_device_sync_credential_store.dart';
+import 'data/security/dio_device_sync_exchange_port.dart';
 import 'data/security/flutter_secure_cloud_credential_store.dart';
+import 'data/security/flutter_secure_device_sync_credential_store.dart';
+import 'data/security/legacy_human_credential_fallback_cleaner.dart';
+import 'data/security/resilient_device_sync_credential_store.dart';
 import 'domain/security/cloud_credential_coordinator.dart';
+import 'domain/security/device_sync_bootstrap_coordinator.dart';
+import 'domain/security/device_sync_credential_coordinator.dart';
 import 'data/security/shared_preferences_cloud_revocation_barrier_store.dart';
 import 'data/repositories/auth_repository_impl.dart';
 import 'core/clock/monotonic_clock.dart';
@@ -91,6 +100,11 @@ import 'ui/features/kitchen/kitchen_display_view_model.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Purge credentials left by pre-secure-store builds before any cloud auth
+  // component can recover state. Failure is fail-closed and must not block POS.
+  final legacyHumanCredentialCleaner = LegacyHumanCredentialFallbackCleaner();
+  await legacyHumanCredentialCleaner.clean();
+
   // Configuration (Could be loaded from .env)
   const String baseUrl = String.fromEnvironment(
     'API_URL',
@@ -131,6 +145,38 @@ void main() async {
     barrierStore: barrierStore,
   );
   final refreshDio = Dio(productionTransportOptions(baseUrl));
+
+  // Dedicated Device Sync Infrastructure
+  final deviceSyncExchangeDio = Dio(productionTransportOptions(baseUrl));
+  final deviceSyncStore = ResilientDeviceSyncCredentialStore(
+    preferredStore: FlutterSecureDeviceSyncCredentialStore(),
+    fallbackStore: AppPrivateDeviceSyncCredentialStore(database.localConfigDao),
+  );
+  final deviceSyncExchangePort = DioDeviceSyncExchangePort(
+    deviceSyncExchangeDio,
+  );
+  final deviceSyncCoordinator = DeviceSyncCredentialCoordinator(
+    store: deviceSyncStore,
+    exchangePort: deviceSyncExchangePort,
+    resolveDeviceId: () async => deviceId,
+  );
+  final syncDio = Dio(productionTransportOptions(baseUrl));
+  syncDio.interceptors.add(
+    DeviceSyncAuthInterceptor(
+      coordinator: deviceSyncCoordinator,
+      clientDio: syncDio,
+    ),
+  );
+
+  // Activation Sync Adapter & Bootstrap Coordinator (Derived one-shot provisioning for OWNER)
+  final activationSyncPort = DioActivationSyncPort(dio, deviceSyncCoordinator);
+  final deviceSyncBootstrapCoordinator = DeviceSyncBootstrapCoordinator(
+    store: deviceSyncStore,
+    activationSyncPort: activationSyncPort,
+    resolveDeviceId: () async => deviceId,
+    credentialCoordinator: deviceSyncCoordinator,
+  );
+
   final authRepository = AuthRepositoryImpl(
     database.userDao,
     database.securityProfileDao,
@@ -138,6 +184,8 @@ void main() async {
     dio,
     capabilityCache: capabilityCache,
     credentialCoordinator: credentialCoordinator,
+    bootstrapCoordinator: deviceSyncBootstrapCoordinator,
+    cleaner: legacyHumanCredentialCleaner,
   );
 
   // Add Cloud Auth, Automatic Refresh & Path Normalization Interceptor
@@ -223,7 +271,7 @@ void main() async {
     auditRepository,
     salesRepository,
     inventoryRepository,
-    dio,
+    syncDio,
     database: database,
     connectivityService: connectivityService,
   );
@@ -356,6 +404,9 @@ void main() async {
         Provider<SalesRepositoryImpl>.value(value: salesRepository),
         Provider<DgiNumberingService>.value(value: numberingService),
         Provider<SyncService>.value(value: syncService),
+        Provider<DeviceSyncBootstrapCoordinator>.value(
+          value: deviceSyncBootstrapCoordinator,
+        ),
         Provider<NetworkConnectivityService>.value(value: connectivityService),
         Provider<TenantConfigService>(
           create: (_) => TenantConfigService(database.localConfigDao),

@@ -11,6 +11,9 @@ import 'tenant_capability_cache.dart';
 import '../../domain/security/cloud_credential_coordinator.dart';
 import '../../domain/security/cloud_credential_record.dart';
 import '../../domain/security/cloud_credentials.dart';
+import '../../domain/security/device_sync_bootstrap_coordinator.dart';
+import '../../domain/security/device_sync_exceptions.dart';
+import '../security/legacy_human_credential_fallback_cleaner.dart';
 import '../security/local_totp_seed_cipher.dart';
 import '../security/totp_seed_key_provider.dart';
 import 'package:dio/dio.dart';
@@ -33,6 +36,8 @@ class AuthRepositoryImpl implements AuthRepository {
   final TotpSeedKeyProvider _totpSeedKeyProvider;
   final TenantCapabilityCache? _capabilityCache;
   final CloudCredentialCoordinator? _credentialCoordinator;
+  final DeviceSyncBootstrapCoordinator? _bootstrapCoordinator;
+  final LegacyHumanCredentialFallbackCleaner _cleaner;
 
   AuthRepositoryImpl(
     this._userDao,
@@ -43,14 +48,19 @@ class AuthRepositoryImpl implements AuthRepository {
     TotpSeedKeyProvider? totpSeedKeyProvider,
     TenantCapabilityCache? capabilityCache,
     CloudCredentialCoordinator? credentialCoordinator,
-  }) : _storage = storage ??
+    DeviceSyncBootstrapCoordinator? bootstrapCoordinator,
+    LegacyHumanCredentialFallbackCleaner? cleaner,
+  }) : _storage =
+           storage ??
            const FlutterSecureStorage(
              aOptions: AndroidOptions(encryptedSharedPreferences: true),
            ),
        _totpSeedKeyProvider =
            totpSeedKeyProvider ?? DeviceBoundTotpSeedKeyProvider(),
        _capabilityCache = capabilityCache,
-       _credentialCoordinator = credentialCoordinator;
+       _credentialCoordinator = credentialCoordinator,
+       _bootstrapCoordinator = bootstrapCoordinator,
+       _cleaner = cleaner ?? LegacyHumanCredentialFallbackCleaner();
 
   String? _lastAuthError;
 
@@ -62,6 +72,11 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   String? get lastAuthError => _lastAuthError;
+
+  DeviceSyncBootstrapCoordinator? get bootstrapCoordinator =>
+      _bootstrapCoordinator;
+
+  LegacyHumanCredentialFallbackCleaner get cleaner => _cleaner;
 
   Future<LocalTotpSeedCipher> _buildTotpSeedCipher() async {
     final keyMaterial = await _totpSeedKeyProvider.getKeyMaterial();
@@ -170,6 +185,25 @@ class AuthRepositoryImpl implements AuthRepository {
       } catch (e) {
         debugPrint('[AuthRepository] syncStaff failed but continuing: $e');
       }
+
+      if (user.role == UserRole.owner && _bootstrapCoordinator != null) {
+        try {
+          await _bootstrapCoordinator!.bootstrap(user: user);
+        } catch (e) {
+          final exceptionClass = e.runtimeType.toString();
+          final errorCode = e is DioException
+              ? (e.response?.statusCode != null
+                    ? 'HTTP_${e.response!.statusCode}'
+                    : e.type.name)
+              : (e is DeviceSyncException
+                    ? e.runtimeType.toString()
+                    : 'UNKNOWN');
+          debugPrint(
+            '[AuthRepository] Device sync bootstrap failed: [$exceptionClass] $errorCode',
+          );
+        }
+      }
+
       debugPrint('[AuthRepository] Online login successful for ${user.email}');
       return user;
     } on DioException catch (e) {
@@ -505,9 +539,7 @@ class AuthRepositoryImpl implements AuthRepository {
           .read(key: 'access_token')
           .timeout(const Duration(milliseconds: 300));
     } catch (e) {
-      debugPrint(
-        '[AuthRepository] Error o timeout leyendo secure storage: $e',
-      );
+      debugPrint('[AuthRepository] Error o timeout leyendo secure storage: $e');
     }
     // No SharedPreferences fallback for cloud credentials — security requirement.
     // Cold start with hung Keystore = no cloud credentials available.
@@ -527,18 +559,21 @@ class AuthRepositoryImpl implements AuthRepository {
       } catch (e) {
         debugPrint('[AuthRepository] Credential coordinator clear failed: $e');
       }
-      return;
+    } else {
+      try {
+        await _storage.delete(key: 'access_token');
+      } catch (e) {
+        debugPrint(
+          '[AuthRepository] Error borrando secure storage en logout: $e',
+        );
+        try {
+          _prefs ??= await SharedPreferences.getInstance();
+          await _prefs?.setBool('legacy_token_revoked', true);
+        } catch (_) {}
+      }
     }
 
-    try {
-      await _storage.delete(key: 'access_token');
-    } catch (e) {
-      debugPrint('[AuthRepository] Error borrando secure storage en logout: $e');
-      try {
-        _prefs ??= await SharedPreferences.getInstance();
-        await _prefs?.setBool('legacy_token_revoked', true);
-      } catch (_) {}
-    }
+    await _cleaner.clean();
   }
 
   @override

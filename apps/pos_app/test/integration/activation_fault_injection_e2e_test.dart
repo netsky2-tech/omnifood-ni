@@ -20,7 +20,7 @@ import 'package:pos_app/data/services/activation_clock_manager.dart';
 import 'package:pos_app/data/services/activation_reconnect_sync_runner.dart';
 import 'package:pos_app/data/services/local_auth_service.dart';
 
-class FaultyActivationSyncPort implements ActivationSyncPort {
+class FaultyActivationSyncPort extends ActivationSyncPort {
   bool simulateWanOutage = false;
   bool simulateCloudDownFinalizer = false;
   final List<Map<String, dynamic>> deliveredEnvelopes = [];
