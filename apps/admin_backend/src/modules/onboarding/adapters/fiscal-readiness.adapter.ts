@@ -4,6 +4,7 @@ import {
   FiscalReadinessResult,
 } from '../ports/fiscal-readiness.port';
 import { FiscalSetupService } from '../services/fiscal-setup.service';
+import { isValidRuc } from '../utils/nicaragua-fiscal.validator';
 
 @Injectable()
 export class FiscalReadinessAdapter implements FiscalReadinessPort {
@@ -15,7 +16,10 @@ export class FiscalReadinessAdapter implements FiscalReadinessPort {
     try {
       const config = await this.fiscalSetupService.getFiscalSetup(tenantId);
       const minimumConfigurationValid = Boolean(
-        config && config.businessName?.trim() && config.regime,
+        config &&
+        config.businessName?.trim() &&
+        config.regime &&
+        isValidRuc(config.ruc),
       );
 
       return {
