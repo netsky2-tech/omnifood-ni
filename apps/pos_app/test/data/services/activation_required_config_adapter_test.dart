@@ -495,6 +495,89 @@ void main() {
         expect(result.reason, contains('Fiscal payload is corrupt'));
       });
 
+      Future<void> seedRucPayload(String tenantId, Object? ruc) {
+        final fingerprint = 'fingerprint-$tenantId';
+        return database.fiscalConfigLocalDao.applyFiscalConfig(
+          FiscalConfigLocalEntity(
+            tenantId: tenantId,
+            revision: 1,
+            fingerprint: fingerprint,
+            payload: jsonEncode({
+              'tenantId': tenantId,
+              'businessName': 'Comedor RUC Gate',
+              'ruc': ruc,
+              'fiscalRegime': 'GENERAL',
+              'configVersion': {
+                'revision': 1,
+                'fingerprint': fingerprint,
+              },
+            }),
+            appliedAt: '2026-09-03T12:00:00.000Z',
+          ),
+        );
+      }
+
+      Future<ActivationCheckResult> runRucGate(String tenantId) =>
+          adapter.checkRequiredConfigLocal(
+            ActivationRequiredConfigParams(
+              tenantId: tenantId,
+              requiredFiscalRevision: 1,
+              requiredFiscalFingerprint: 'fingerprint-$tenantId',
+              verificationProductId: 'prod-alpha-1',
+            ),
+          );
+
+      test('FR-3 FAIL: projected fiscal RUC missing in payload, fully offline', () async {
+        await seedRucPayload('tenant-no-ruc', null);
+
+        final result = await runRucGate('tenant-no-ruc');
+
+        expect(result.isFail, isTrue);
+        expect(result.reason, contains('RUC is missing or invalid'));
+        expect(result.details['hasRuc'], isFalse);
+      });
+
+      test('FR-3 FAIL: projected fiscal RUC malformed (legacy pre-fix projection)', () async {
+        await seedRucPayload('tenant-bad-ruc', 'CF-12345');
+
+        final result = await runRucGate('tenant-bad-ruc');
+
+        expect(result.isFail, isTrue);
+        expect(result.reason, contains('RUC is missing or invalid'));
+        expect(result.details['hasRuc'], isTrue);
+      });
+
+      test('FR-3: RUC gate sanitizes details and never leaks the raw identifier', () async {
+        await seedRucPayload('tenant-leak', 'CF-99999');
+
+        final result = await runRucGate('tenant-leak');
+
+        expect(jsonEncode(result.details), isNot(contains('CF-99999')));
+        expect(result.reason ?? '', isNot(contains('CF-99999')));
+      });
+
+      test('FR-3: usable RUC passes the gate (placeholder and normalization forms)', () async {
+        final cases = {
+          'tenant-founder': 'J0000000000000',
+          'tenant-padded': '  J0310000000001  ',
+          'tenant-lower': 'j0310000000001',
+        };
+
+        for (final entry in cases.entries) {
+          await seedRucPayload(entry.key, entry.value);
+
+          final result = await runRucGate(entry.key);
+
+          // No product is seeded for these tenants, so the run must fail on the
+          // product check — never on the RUC gate.
+          expect(result.isFail, isTrue);
+          expect(
+            result.reason ?? '',
+            isNot(contains('RUC is missing or invalid')),
+          );
+        }
+      });
+
       test('evaluateAll: isReady is true and blockers empty when all checks pass', () async {
         final summary = await adapter.evaluateAll(
           configParams: const ActivationRequiredConfigParams(

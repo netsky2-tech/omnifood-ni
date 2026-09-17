@@ -21,6 +21,7 @@ _$PrinterConfigImpl _$$PrinterConfigImplFromJson(Map<String, dynamic> json) =>
       headerBusinessName:
           json['headerBusinessName'] as String? ?? 'OMNIFOOD NI',
       headerLegalName: json['headerLegalName'] as String?,
+      fiscalRuc: json['fiscalRuc'] as String?,
       headerRuc: json['headerRuc'] as String?,
       headerAddress: json['headerAddress'] as String?,
       headerPhone: json['headerPhone'] as String?,
@@ -43,6 +44,7 @@ Map<String, dynamic> _$$PrinterConfigImplToJson(_$PrinterConfigImpl instance) =>
       'copies': instance.copies,
       'headerBusinessName': instance.headerBusinessName,
       'headerLegalName': instance.headerLegalName,
+      'fiscalRuc': instance.fiscalRuc,
       'headerRuc': instance.headerRuc,
       'headerAddress': instance.headerAddress,
       'headerPhone': instance.headerPhone,

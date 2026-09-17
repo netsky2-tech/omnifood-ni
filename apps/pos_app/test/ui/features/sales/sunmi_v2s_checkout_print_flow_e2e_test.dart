@@ -88,7 +88,9 @@ void main() {
         autoPrintKitchen: true,
         openDrawerOnCash: true,
         headerBusinessName: 'OMNIFOOD SUNMI E2E',
-        headerRuc: 'J0310000000001',
+        // Divergence pin (FR-6/D1): projection vs header must resolve to the projection.
+        fiscalRuc: 'J0310000055555',
+        headerRuc: 'J0310000999999',
       ),
     );
 
@@ -178,6 +180,9 @@ void main() {
       expect(invoicePrint.printedText, contains('001-001-01-00009999'));
       expect(invoicePrint.printedText, contains('Hamburguesa'));
       expect(invoicePrint.printedText, contains('REGIMEN: GENERAL'));
+      // Printed fiscal RUC must be the projected value, never the header override.
+      expect(invoicePrint.printedText, contains('RUC: J0310000055555'));
+      expect(invoicePrint.printedText, isNot(contains('J0310000999999')));
 
       // 4. Verify cart cleared
       expect(viewModel.cart, isEmpty);
@@ -276,6 +281,9 @@ void main() {
       expect(reprintOk, isTrue);
       expect(mockPrinter.printHistory.length, 1);
       expect(mockPrinter.lastPrintedText, contains('OMNIFOOD SUNMI E2E'));
+      // Reprint fiscal RUC must also come from the projection (FR-6).
+      expect(mockPrinter.lastPrintedText, contains('RUC: J0310000055555'));
+      expect(mockPrinter.lastPrintedText, isNot(contains('J0310000999999')));
     });
   });
 }

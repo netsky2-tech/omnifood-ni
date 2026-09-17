@@ -100,7 +100,8 @@ void main() {
                 tenantId: tenantId,
                 revision: 1,
                 fingerprint: fiscalFingerprint,
-                payload: '{"businessName": "OmniFood Founder Cafe"}',
+                payload:
+                '{"businessName": "OmniFood Founder Cafe", "ruc": "J0310000000001"}',
                 appliedAt: '2026-09-04T10:00:00.000Z',
               ),
             );
