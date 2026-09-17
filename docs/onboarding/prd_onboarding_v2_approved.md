@@ -385,7 +385,7 @@ El patrón preferido de producto es un **Setup Center** con pasos cerrables y es
 Configurar como mínimo:
 
 - `businessName`;
-- RUC cuando aplique al régimen/operación;
+- RUC del emisor, **obligatorio**: RUC jurídico (`J` + 13 dígitos) o cédula válida. Se imprime en el comprobante fiscal; sin RUC válido el tenant no alcanza `SALE_READY`;
 - régimen fiscal soportado;
 - tratamiento de precios con impuestos;
 - spread/tipo de cambio comercial configurado cuando aplique.
@@ -1173,7 +1173,9 @@ Dado un onboarding incompleto, cuando el Owner recarga, cierra el navegador y vu
 
 ## AC-04 — Fiscal mínimo
 
-Dado un Owner que completa correctamente los campos fiscales mínimos soportados, el paso queda completado y puede reconstruirse al reabrir Setup Center.
+Dado un Owner que completa correctamente los campos fiscales mínimos soportados —`businessName`, **RUC del emisor válido** y régimen fiscal— el paso queda completado y puede reconstruirse al reabrir Setup Center.
+
+Un RUC ausente, vacío o con formato inválido es un error de validación en el boundary de Fiscal Setup: no se persiste y el tenant no alcanza `SALE_READY`. El RUC del emisor se imprime en el comprobante fiscal.
 
 ## AC-05 — Campo no persistido
 

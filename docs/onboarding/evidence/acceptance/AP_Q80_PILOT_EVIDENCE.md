@@ -42,7 +42,8 @@ Este documento captura la evidencia del piloto físico en hardware real. Se llen
 | Android version | «COMPLETAR: `adb shell getprop ro.build.version.release`» |
 | Security patch | «COMPLETAR: `adb shell getprop ro.build.version.security_patch`» |
 | Firmware | «COMPLETAR si aplica» |
-| Printer driver | «COMPLETAR: nombre del adapter real en logs del POS» |
+| Printer driver | Nyx Printer Service 2.0.5 (confirmar en logs del POS) |
+| Printer paper width | 80 mm (rollo del Q80) |
 | WiFi SSID | «COMPLETAR: SSID del entorno de piloto» |
 | WAN outage method | «COMPLETAR: airplane mode / router disconnect» |
 
@@ -74,11 +75,17 @@ Este documento captura la evidencia del piloto físico en hardware real. Se llen
 
 | Campo | Valor |
 |---|---|
-| RUC | «COMPLETAR: RUC del tenant fundador» |
-| Régimen | General |
+| RUC | `J0000000000000` (placeholder del seed) → **registrar aquí el RUC real usado en el run** |
+| RUC presente al activar (`rucPresent`) | «true/false — de la evidencia de TEST_PRINT» |
+| `rucHash` (SHA-256 del RUC canónico) | «de la evidencia de TEST_PRINT — nunca registrar el RUC crudo aquí» |
+| Régimen | `CUOTA_FIJA` (IVA 0.00%) |
 | Nombre comercial | «COMPLETAR» |
 | Dirección fiscal | «COMPLETAR» |
 | Teléfono | «COMPLETAR» |
+| `TEST_PRINT` ancho efectivo (mm) | «de la evidencia de TEST_PRINT — debe ser 80» |
+| `TEST_PRINT` régimen efectivo | «de la evidencia de TEST_PRINT — debe ser CUOTA_FIJA» |
+
+**Regla:** el RUC crudo sólo se comprueba contra el ticket físico. La telemetría y este documento registran `rucHash` + `rucPresent`, nunca el identificador completo.
 
 ---
 

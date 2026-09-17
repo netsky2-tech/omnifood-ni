@@ -21,7 +21,8 @@ Checklist operativo paso a paso para ejecutar el piloto físico del founder tena
 
 - [ ] Alacrity Q80/iPOS cargado al 100%
 - [ ] Impresora térmica encendida
-- [ ] Papel de recibo cargado (58 mm)
+- [ ] Papel de recibo cargado (**80 mm** — rollo incluido en el Q80)
+- [ ] **Verificar/ajustar ancho de papel del POS = 80 mm** antes de activar (el ancho es configuración local del dispositivo, no se empuja desde el servidor)
 - [ ] Test de impresión: imprimir ticket de prueba y verificar salida
 - [ ] Terminal en perfil de red correcto (WiFi del piloto)
 - [ ] Serial del dispositivo registrado: `Q802024120001`
@@ -44,12 +45,13 @@ Checklist operativo paso a paso para ejecutar el piloto físico del founder tena
 - [ ] Ejecutar seed script:
   ```bash
   cd apps/admin_backend
-  npm run seed:founder-pilot
+  npm run seed:onboarding-founder-pilot
   ```
-- [ ] Capturar output JSON — contiene tenant ID, owner credentials, offline PIN
+- [ ] Capturar output JSON — contiene tenant ID, owner credentials, offline PIN y el RUC del tenant
+- [ ] Si el seed avisa `WARNING: tenant RUC is the placeholder`, ejecutar el paso **B0** de la Phase B antes de emitir cualquier documento fiscal
 - [ ] Verificar que el tenant fue creado en PostgreSQL:
   ```sql
-  SELECT id, name, is_active FROM tenants WHERE name LIKE 'Founder Pilot Q80%';
+  SELECT id, name, ruc, is_active FROM tenants WHERE name LIKE 'Founder Pilot Q80%';
   ```
 - [ ] Guardar credenciales en lugar seguro (no en el repo)
 
@@ -75,8 +77,9 @@ Checklist operativo paso a paso para ejecutar el piloto físico del founder tena
 
 | # | Acción | Verificación | Timestamp |
 |---|---|---|---|
-| B1 | Ingresar RUC | «COMPLETAR: RUC del fixture» | — |
-| B2 | Seleccionar régimen tributario | General | — |
+| B0 | **BLOQUEANTE** — Reemplazar el RUC placeholder `J0000000000000` por el RUC real del founder (o confirmar el real si se pasó `ONBOARDING_FOUNDER_RUC`) | UI guarda el RUC válido; sin RUC válido no se alcanza `SALE_READY` | — |
+| B1 | Verificar el RUC persistido | El RUC guardado coincide con el real del founder (no el placeholder) | — |
+| B2 | Seleccionar régimen tributario | **Cuota Fija** (`CUOTA_FIJA`, IVA 0.00%) | — |
 | B3 | Ingresar nombre comercial | «COMPLETAR» | — |
 | B4 | Ingresar dirección fiscal | «COMPLETAR» | — |
 | B5 | Ingresar teléfono | «COMPLETAR» | — |
@@ -111,7 +114,7 @@ Checklist operativo paso a paso para ejecutar el piloto físico del founder tena
 | E3 | Verificar fiscal config en POS | Config recibida y aplicada | — |
 | E4 | Verificar verification product | Producto disponible localmente | — |
 | E5 | Iniciar Activation | Attempt creado | — |
-| E6 | Checks pre-offline (6 checks) | Todos PASS | — |
+| E6 | Checks pre-offline (6 checks) | Todos PASS. En `TEST_PRINT` el ticket físico debe ser de 80 mm, con identidad `COMPROBANTE DE VENTA` / `NO RECAUDA IVA` y la línea `RUC:` visible | — |
 | E7 | **CORTAR WAN** (airplane mode) | WAN desconectada | — |
 | E8 | Seleccionar verification product | Producto en carrito | — |
 | E9 | Pago en efectivo | Pago registrado | — |
@@ -163,6 +166,9 @@ timeToSaleReadyMs:        «saleReadyFirstAt - onboardingStartedAt en ms»
 saleReadyToFirstSaleMs:   «firstSuccessfulSaleAt - saleReadyFirstAt en ms»
 
 activationResult:         «PASS / PASS_WITH_WARNING / FAIL»
+testPrintRucHash:         «SHA-256 del RUC canónico tomado de la evidencia de TEST_PRINT»
+testPrintRucPresent:      «true/false»
+testPrintPaperWidthMm:    «ancho efectivo registrado por TEST_PRINT — debe ser 80»
 verificationTicketIdHash: «SHA-256 del ticket ID»
 firstSaleClaimEventIdHash: «SHA-256 del event ID del claim»
 
@@ -183,6 +189,8 @@ notes:                    «cualquier observación relevante»
 | `ACTIVATED` no aparece | Verificar que backend finalizó. Si cloud caída → `SYNC_VERIFICATION_PENDING` |
 | TTFSS > 15 min | Documentar causa. Si es harness → `RUN_INVALID_BY_HARNESS`, reiniciar cohort |
 | Seed falla | Verificar PostgreSQL, migraciones, variables de entorno |
+| `TEST_PRINT = FAIL` con "régimen fiscal DGI" o "Identidad fiscal del emisor" | Configuración fiscal local ausente: completar Fiscal Setup y esperar el sync de proyección. **No** continuar el run |
+| `TEST_PRINT` sale con ancho 58 | El ancho es local: ajustarlo a 80 mm en Ajustes de Hardware y repetir |
 
 ---
 
