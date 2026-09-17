@@ -14,15 +14,28 @@ export class CreateProductInventoryMappingVersions1802000000000 implements Migra
       END $$;
     `);
 
-    // 2. Supporting composite uniqueness on parent tables (idempotent)
+    // 2. Supporting composite uniqueness on parent tables (idempotent, scoped to
+    //    the relation the current search_path resolves — pg_constraint is database-wide)
     await queryRunner.query(`
       DO $$ BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_products_tenant_product_id') THEN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_constraint c
+          WHERE c.conrelid = to_regclass('products')
+            AND c.conname = 'uq_products_tenant_product_id'
+            AND c.contype = 'u'
+        ) THEN
           ALTER TABLE products ADD CONSTRAINT uq_products_tenant_product_id UNIQUE (tenant_id, id);
         END IF;
       END $$;
       DO $$ BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_insumos_tenant_insumo_id') THEN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_constraint c
+          WHERE c.conrelid = to_regclass('insumos')
+            AND c.conname = 'uq_insumos_tenant_insumo_id'
+            AND c.contype = 'u'
+        ) THEN
           ALTER TABLE insumos ADD CONSTRAINT uq_insumos_tenant_insumo_id UNIQUE (tenant_id, id);
         END IF;
       END $$;
