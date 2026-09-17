@@ -267,6 +267,22 @@ class ActivationPreOfflineRunner {
     final testPrintPass = testPrintResult?.isSuccess ?? false;
     final testPrintFailure = testPrintResult?.message ??
         'Cannot perform test print with unavailable printer';
+    // Built before the literal to avoid a null-aware collection element, which
+    // the code-generation analyzer cannot parse (CI runs build_runner).
+    final testPrintEvidence = <String, Object?>{
+      'testPrintExecuted': testPrintResult != null,
+      'success': testPrintPass,
+      'printerResultStatus': testPrintResult?.status.name,
+      'paperWidthMm': effectivePaperWidthMm,
+      'taxRegime': effectiveTaxRegimeCode,
+      'rucPresent': rucPresent,
+      if (!testPrintPass) 'failure': testPrintFailure,
+    };
+    final rucHashValue = rucHash;
+    if (rucHashValue != null) {
+      testPrintEvidence['rucHash'] = rucHashValue;
+    }
+
     final check5 = ActivationCheckResultLocalEntity(
       id: const Uuid().v4(),
       tenantId: trimmedTenantId,
@@ -276,16 +292,7 @@ class ActivationPreOfflineRunner {
       evidenceType: 'RECEIPT_FEED_CORROBORATION',
       evidenceRef: testPrintPass ? 'PRINT_COMMAND_ACCEPTED' : 'PRINT_TEST_FAILED',
       recordedAt: now,
-      detailsSanitizedJson: jsonEncode({
-        'testPrintExecuted': testPrintResult != null,
-        'success': testPrintPass,
-        'printerResultStatus': testPrintResult?.status.name,
-        'paperWidthMm': effectivePaperWidthMm,
-        'taxRegime': effectiveTaxRegimeCode,
-        'rucPresent': rucPresent,
-            'rucHash': ?rucHash,
-        if (!testPrintPass) 'failure': testPrintFailure,
-      }),
+      detailsSanitizedJson: jsonEncode(testPrintEvidence),
     );
     checks['TEST_PRINT'] = check5;
     if (!testPrintPass) {
