@@ -3,6 +3,10 @@ import { BIGINT_STRING } from './bigint-string.transformer';
 import { HumanAuthPolicyEpoch } from './human-auth-policy-epoch.entity';
 import { HumanAuthTerminalAckHistory } from './human-auth-terminal-ack-history.entity';
 import { HumanAuthTerminalAckFloor } from './human-auth-terminal-ack-floor.entity';
+import { HumanAuthRecoveryToken } from './human-auth-recovery-token.entity';
+import { HumanAuthRecoveryEvent } from './human-auth-recovery-event.entity';
+import { HumanAuthVerificationEvent } from './human-auth-verification-event.entity';
+import { HumanAuthRolloutCohort } from './human-auth-rollout-cohort.entity';
 
 type ColumnExpectation = readonly [
   property: string,
@@ -102,6 +106,120 @@ const mappings: readonly EntityMapping[] = [
       ['sequence', 'sequence', 'bigint', false],
       ['digest', 'digest', 'varchar', false],
       ['revision', 'revision', 'bigint', false],
+      ['updatedAt', 'updated_at', 'timestamptz', false],
+    ],
+  },
+  {
+    entity: HumanAuthRecoveryToken,
+    table: 'human_auth_recovery_tokens',
+    primary: ['tokenId'],
+    indices: {
+      uq_human_auth_recovery_tokens_hmac: ['tenantId', 'secretHmac'],
+      idx_human_auth_recovery_tokens_tenant_terminal: [
+        'tenantId',
+        'terminalId',
+      ],
+      idx_human_auth_recovery_tokens_expiry: ['status', 'expiresAt'],
+    },
+    columns: [
+      ['tokenId', 'token_id', 'uuid', false],
+      ['tenantId', 'tenant_id', 'varchar', false],
+      ['terminalId', 'terminal_id', 'varchar', false],
+      ['secretHmac', 'secret_hmac', 'varchar', false],
+      ['status', 'status', 'varchar', false],
+      ['issuedByUserId', 'issued_by_user_id', 'uuid', false],
+      ['issuanceReason', 'issuance_reason', 'varchar', false],
+      ['issuedAt', 'issued_at', 'timestamptz', false],
+      ['expiresAt', 'expires_at', 'timestamptz', false],
+      ['revokedAt', 'revoked_at', 'timestamptz', true],
+      ['revokedByUserId', 'revoked_by_user_id', 'uuid', true],
+      ['revocationReason', 'revocation_reason', 'varchar', true],
+      ['redeemedAt', 'redeemed_at', 'timestamptz', true],
+      ['redemptionCredentialId', 'redemption_credential_id', 'uuid', true],
+      ['idempotencyKey', 'idempotency_key', 'varchar', true],
+      ['redemptionRequestHash', 'redemption_request_hash', 'varchar', true],
+    ],
+  },
+  {
+    entity: HumanAuthRecoveryEvent,
+    table: 'human_auth_recovery_events',
+    primary: ['id'],
+    indices: {
+      idx_human_auth_recovery_events_token: [
+        'tenantId',
+        'tokenId',
+        'occurredAt',
+      ],
+    },
+    columns: [
+      ['id', 'id', 'uuid', false],
+      ['tenantId', 'tenant_id', 'varchar', false],
+      ['terminalId', 'terminal_id', 'varchar', false],
+      ['tokenId', 'token_id', 'uuid', false],
+      ['eventType', 'event_type', 'varchar', false],
+      ['actorUserId', 'actor_user_id', 'uuid', true],
+      ['principalType', 'principal_type', 'varchar', false],
+      ['reasonCode', 'reason_code', 'varchar', true],
+      ['correlationId', 'correlation_id', 'varchar', true],
+      ['occurredAt', 'occurred_at', 'timestamptz', false],
+    ],
+  },
+  {
+    entity: HumanAuthVerificationEvent,
+    table: 'human_auth_verification_events',
+    primary: ['id'],
+    indices: {
+      idx_human_auth_verification_events_assertion: ['tenantId', 'assertionId'],
+    },
+    columns: [
+      ['id', 'id', 'uuid', false],
+      ['tenantId', 'tenant_id', 'varchar', false],
+      ['terminalId', 'terminal_id', 'varchar', false],
+      ['assertionId', 'assertion_id', 'uuid', false],
+      ['credentialId', 'credential_id', 'uuid', false],
+      ['credentialVersion', 'credential_version', 'integer', false],
+      ['epochSequence', 'epoch_sequence', 'bigint', false],
+      ['epochDigest', 'epoch_digest', 'varchar', false],
+      ['authorizerUserId', 'authorizer_user_id', 'uuid', false],
+      ['operatorUserId', 'operator_user_id', 'uuid', true],
+      ['operationType', 'operation_type', 'varchar', false],
+      ['operationSchema', 'operation_schema', 'varchar', false],
+      ['operationDigest', 'operation_digest', 'varchar', false],
+      ['localAuditId', 'local_audit_id', 'varchar', true],
+      ['localSequence', 'local_sequence', 'bigint', true],
+      ['trustLevel', 'trust_level', 'varchar', false],
+      ['decision', 'decision', 'varchar', false],
+      ['reasonCode', 'reason_code', 'varchar', true],
+      ['correlationId', 'correlation_id', 'varchar', true],
+      ['occurredAt', 'occurred_at', 'timestamptz', false],
+    ],
+  },
+  {
+    entity: HumanAuthRolloutCohort,
+    table: 'human_auth_rollout_cohorts',
+    primary: ['id'],
+    unique: {
+      uq_human_auth_rollout_cohorts_build_pair: [
+        'tenantId',
+        'posBuild',
+        'backendBuild',
+      ],
+    },
+    indices: {
+      idx_human_auth_rollout_cohorts_tenant_enabled: ['tenantId', 'enabled'],
+    },
+    columns: [
+      ['id', 'id', 'uuid', false],
+      ['tenantId', 'tenant_id', 'varchar', false],
+      ['posBuild', 'pos_build', 'varchar', false],
+      ['backendBuild', 'backend_build', 'varchar', false],
+      ['policySchema', 'policy_schema', 'varchar', false],
+      ['assertionSchema', 'assertion_schema', 'varchar', false],
+      ['enabled', 'enabled', 'boolean', false],
+      ['ownerAcceptanceActorId', 'owner_acceptance_actor_id', 'uuid', true],
+      ['ownerAcceptanceRef', 'owner_acceptance_ref', 'varchar', true],
+      ['ownerAcceptanceAt', 'owner_acceptance_at', 'timestamptz', true],
+      ['createdAt', 'created_at', 'timestamptz', false],
       ['updatedAt', 'updated_at', 'timestamptz', false],
     ],
   },
