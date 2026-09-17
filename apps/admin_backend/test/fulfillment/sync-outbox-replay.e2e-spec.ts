@@ -1,7 +1,6 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
-import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
@@ -14,10 +13,7 @@ import { AddSaleInventoryOutcomeColumns1803000000000 } from '../../src/migration
 import { AddAcceptedAtToInventorySyncReceipts1805000000000 } from '../../src/migrations/1805000000000-AddAcceptedAtToInventorySyncReceipts';
 import { IdentityModule } from '../../src/modules/identity/identity.module';
 import { InventoryModule } from '../../src/modules/inventory/inventory.module';
-import {
-  User,
-  UserRole,
-} from '../../src/modules/identity/entities/user.entity';
+import { User } from '../../src/modules/identity/entities/user.entity';
 import { Tenant } from '../../src/modules/tenant/entities/tenant.entity';
 import { SecurityProfile } from '../../src/modules/identity/entities/security-profile.entity';
 import { AuditLog } from '../../src/modules/identity/entities/audit-log.entity';
@@ -39,14 +35,20 @@ import { InvoiceItem } from '../../src/modules/sales/entities/invoice-item.entit
 import { Payment } from '../../src/modules/sales/entities/payment.entity';
 import { InvoiceItemModifier } from '../../src/modules/sales/entities/invoice-item-modifier.entity';
 import { SalesModule } from '../../src/modules/sales/sales.module';
-import { signIdentityJwtAccessToken } from '../support/identity-jwt-test.fixture';
+import { DeviceSyncCredential } from '../../src/modules/identity/entities/device-sync-credential.entity';
+import { ActivationAttempt } from '../../src/modules/onboarding/entities/activation-attempt.entity';
 import { ensurePublicAuthTables } from '../support/fulfillment-test-db.helper';
+import {
+  ensurePublicDeviceSyncTables,
+  provisionDeviceSyncCredential,
+  signDeviceSyncAccessToken,
+  type ProvisionedDeviceSyncCredential,
+} from '../support/device-sync-e2e.helper';
 import { SyncBatchRecordDto } from '../../src/modules/sales/dto/sync-batch.dto';
 
 describe('SyncOutboxReplay (e2e - Real PostgreSQL, No Mocks)', () => {
   let app: INestApplication<App>;
   let adminSource: DataSource;
-  let jwtService: JwtService;
   let schema: string;
 
   const tenantAId = randomUUID();
@@ -54,8 +56,9 @@ describe('SyncOutboxReplay (e2e - Real PostgreSQL, No Mocks)', () => {
   const cashierAId = randomUUID();
   const cashierBId = randomUUID();
 
-  let cashierAToken: string;
-  let cashierBToken: string;
+  let deviceAToken: string;
+  let deviceBToken: string;
+  const provisionedDevices: ProvisionedDeviceSyncCredential[] = [];
 
   const postgresConnection = {
     type: 'postgres' as const,
@@ -129,6 +132,8 @@ describe('SyncOutboxReplay (e2e - Real PostgreSQL, No Mocks)', () => {
 
     await ensurePublicAuthTables(runner);
 
+    await ensurePublicDeviceSyncTables(runner);
+
     // Seed tenants and users in public tables for auth & AuthoritativeCurrentUserGuard
     await runner.query(
       `INSERT INTO tenants (id, name, created_at, updated_at) VALUES
@@ -157,6 +162,20 @@ describe('SyncOutboxReplay (e2e - Real PostgreSQL, No Mocks)', () => {
     );
 
     await runner.release();
+
+    // Provision ACTIVE device sync credentials (with PASS activation attempts)
+    // for both tenants, bound to the canonical terminal id every batch record
+    // below uses as sourceDeviceId.
+    provisionedDevices.push(
+      await provisionDeviceSyncCredential(adminSource, {
+        tenantId: tenantAId,
+        deviceId: 'terminal-1',
+      }),
+      await provisionDeviceSyncCredential(adminSource, {
+        tenantId: tenantBId,
+        deviceId: 'terminal-1',
+      }),
+    );
 
     // Bootstrap Nest testing module with real DB (NO MOCKS)
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -202,6 +221,8 @@ describe('SyncOutboxReplay (e2e - Real PostgreSQL, No Mocks)', () => {
             InvoiceItem,
             Payment,
             InvoiceItemModifier,
+            DeviceSyncCredential,
+            ActivationAttempt,
           ],
           synchronize: false,
           extra: { options: `-c search_path=${schema},public` },
@@ -211,24 +232,6 @@ describe('SyncOutboxReplay (e2e - Real PostgreSQL, No Mocks)', () => {
         SalesModule,
       ],
     }).compile();
-
-    jwtService = moduleFixture.get<JwtService>(JwtService);
-
-    cashierAToken = signIdentityJwtAccessToken(jwtService, {
-      sub: cashierAId,
-      email: 'cashier.a@test.com',
-      tenant_id: tenantAId,
-      role: UserRole.CASHIER,
-      security_version: 1,
-    });
-
-    cashierBToken = signIdentityJwtAccessToken(jwtService, {
-      sub: cashierBId,
-      email: 'cashier.b@test.com',
-      tenant_id: tenantBId,
-      role: UserRole.CASHIER,
-      security_version: 1,
-    });
 
     app = moduleFixture.createNestApplication();
     app.setGlobalPrefix('api');
@@ -240,6 +243,11 @@ describe('SyncOutboxReplay (e2e - Real PostgreSQL, No Mocks)', () => {
       }),
     );
     await app.init();
+
+    // Device tokens are minted from the SAME DEVICE_SYNC_JWT_CONFIG the
+    // bootstrapped app runs with (read from the container, not duplicated).
+    deviceAToken = signDeviceSyncAccessToken(app, provisionedDevices[0]);
+    deviceBToken = signDeviceSyncAccessToken(app, provisionedDevices[1]);
   }, 45000);
 
   afterAll(async () => {
@@ -248,6 +256,25 @@ describe('SyncOutboxReplay (e2e - Real PostgreSQL, No Mocks)', () => {
       if (adminSource && adminSource.isInitialized) {
         const runner = adminSource.createQueryRunner();
         await runner.connect();
+        // Device sync rows live in public and device_sync_credentials is FORCE
+        // RLS: delete inside a per-tenant transaction that sets the RLS tenant
+        // context, credentials before their activation attempts.
+        for (const device of provisionedDevices) {
+          await adminSource.transaction(async (manager) => {
+            await manager.query(
+              "SELECT set_config('app.tenant_id', $1, true)",
+              [device.tenantId],
+            );
+            await manager.query(
+              `DELETE FROM device_sync_credentials WHERE id = $1`,
+              [device.credentialId],
+            );
+            await manager.query(
+              `DELETE FROM onboarding_activation_attempts WHERE id = $1`,
+              [device.activationAttemptId],
+            );
+          });
+        }
         await runner.query(`DELETE FROM users WHERE id IN ($1, $2)`, [
           cashierAId,
           cashierBId,
@@ -278,7 +305,7 @@ describe('SyncOutboxReplay (e2e - Real PostgreSQL, No Mocks)', () => {
 
       const response = await request(app.getHttpServer())
         .post('/api/v1/sync/batch')
-        .set('Authorization', `Bearer ${cashierAToken}`)
+        .set('Authorization', `Bearer ${deviceAToken}`)
         .send({ records })
         .expect((res) => {
           expect([200, 201]).toContain(res.status);
@@ -310,7 +337,7 @@ describe('SyncOutboxReplay (e2e - Real PostgreSQL, No Mocks)', () => {
       // Replay the exact same records sent in the previous test (simulating network dropout reconnect)
       const response = await request(app.getHttpServer())
         .post('/api/v1/sync/batch')
-        .set('Authorization', `Bearer ${cashierAToken}`)
+        .set('Authorization', `Bearer ${deviceAToken}`)
         .send({ records })
         .expect((res) => {
           expect([200, 201]).toContain(res.status);
@@ -345,7 +372,7 @@ describe('SyncOutboxReplay (e2e - Real PostgreSQL, No Mocks)', () => {
 
       const response = await request(app.getHttpServer())
         .post('/api/v1/sync/batch')
-        .set('Authorization', `Bearer ${cashierAToken}`)
+        .set('Authorization', `Bearer ${deviceAToken}`)
         .send({ records: [seqRecord] })
         .expect((res) => {
           expect([200, 201]).toContain(res.status);
@@ -378,7 +405,7 @@ describe('SyncOutboxReplay (e2e - Real PostgreSQL, No Mocks)', () => {
 
       const response = await request(app.getHttpServer())
         .post('/api/v1/sync/batch')
-        .set('Authorization', `Bearer ${cashierAToken}`)
+        .set('Authorization', `Bearer ${deviceAToken}`)
         .send({ records: [tamperedRecord] })
         .expect((res) => {
           expect([200, 201]).toContain(res.status);
@@ -407,7 +434,7 @@ describe('SyncOutboxReplay (e2e - Real PostgreSQL, No Mocks)', () => {
       // Sequence 4 sent ahead of sequence 3 -> STAGED_FUTURE
       const res4 = await request(app.getHttpServer())
         .post('/api/v1/sync/batch')
-        .set('Authorization', `Bearer ${cashierAToken}`)
+        .set('Authorization', `Bearer ${deviceAToken}`)
         .send({ records: [record4] })
         .expect((res) => {
           expect([200, 201]).toContain(res.status);
@@ -431,7 +458,7 @@ describe('SyncOutboxReplay (e2e - Real PostgreSQL, No Mocks)', () => {
       // Duplicate replay of sequence 4 while staged -> must be safely acknowledged without error
       const res4Replay = await request(app.getHttpServer())
         .post('/api/v1/sync/batch')
-        .set('Authorization', `Bearer ${cashierAToken}`)
+        .set('Authorization', `Bearer ${deviceAToken}`)
         .send({ records: [record4] })
         .expect((res) => {
           expect([200, 201]).toContain(res.status);
@@ -453,7 +480,7 @@ describe('SyncOutboxReplay (e2e - Real PostgreSQL, No Mocks)', () => {
       // Sequence 3 arrives -> applies 3 and automatically drains 4
       const res3 = await request(app.getHttpServer())
         .post('/api/v1/sync/batch')
-        .set('Authorization', `Bearer ${cashierAToken}`)
+        .set('Authorization', `Bearer ${deviceAToken}`)
         .send({ records: [record3] })
         .expect((res) => {
           expect([200, 201]).toContain(res.status);
@@ -487,7 +514,7 @@ describe('SyncOutboxReplay (e2e - Real PostgreSQL, No Mocks)', () => {
 
       const response = await request(app.getHttpServer())
         .post('/api/v1/sync/batch')
-        .set('Authorization', `Bearer ${cashierBToken}`)
+        .set('Authorization', `Bearer ${deviceBToken}`)
         .send({ records: [tenantBRecord] })
         .expect((res) => {
           expect([200, 201]).toContain(res.status);

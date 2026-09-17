@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
@@ -11,7 +12,7 @@ import { SaleInventoryOutcomeService } from '../src/modules/sales/services/sale-
 import { Invoice } from '../src/modules/sales/entities/invoice.entity';
 import { InvoiceItem } from '../src/modules/sales/entities/invoice-item.entity';
 import { Payment } from '../src/modules/sales/entities/payment.entity';
-import { User, UserRole } from '../src/modules/identity/entities/user.entity';
+import { User } from '../src/modules/identity/entities/user.entity';
 import { InventoryMovement } from '../src/modules/inventory/entities/inventory-movement.entity';
 import { InventorySyncReceipt } from '../src/modules/inventory/entities/inventory-sync-receipt.entity';
 import { InventorySyncOutbox } from '../src/modules/inventory/entities/inventory-sync-outbox.entity';
@@ -27,7 +28,14 @@ import { RecipeService } from '../src/modules/inventory/recipe.service';
 import { BomExplosionService } from '../src/modules/inventory/bom-explosion.service';
 import { Tenant } from '../src/modules/tenant/entities/tenant.entity';
 import { AuthGuard } from '../src/modules/identity/guards/auth.guard';
+import { SyncTransportGuard } from '../src/modules/identity/guards/sync-transport.guard';
 import { SyncCreditNoteAuthGuard } from '../src/modules/sales/guards/sync-credit-note-auth.guard';
+import {
+  DEVICE_SYNC_JWT_CONFIG,
+  getDeviceSyncJwtConfig,
+} from '../src/modules/identity/config/device-sync-jwt.config';
+import { DeviceSyncCredential } from '../src/modules/identity/entities/device-sync-credential.entity';
+import { ActivationAttempt } from '../src/modules/onboarding/entities/activation-attempt.entity';
 import { UomConversion } from '../src/modules/inventory/entities/uom-conversion.entity';
 import { SecurityProfile } from '../src/modules/identity/entities/security-profile.entity';
 import { CashShiftSession } from '../src/modules/sales/entities/cash-shift.entity';
@@ -37,8 +45,13 @@ import { InvoiceItemModifier } from '../src/modules/sales/entities/invoice-item-
 import {
   createIdentityJwtConfigProvider,
   createIdentityJwtTestConfigProvider,
-  signIdentityJwtAccessToken,
 } from './support/identity-jwt-test.fixture';
+import {
+  ensurePublicDeviceSyncTables,
+  provisionDeviceSyncCredential,
+  signDeviceSyncAccessToken,
+  type ProvisionedDeviceSyncCredential,
+} from './support/device-sync-e2e.helper';
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -77,6 +90,8 @@ const ALL_ENTITIES = [
   CashMovement,
   DatafonoEquipo,
   InvoiceItemModifier,
+  DeviceSyncCredential,
+  ActivationAttempt,
 ];
 
 async function withIsolatedSchema(
@@ -84,10 +99,11 @@ async function withIsolatedSchema(
   assertion: (ctx: {
     app: INestApplication;
     dataSource: DataSource;
-    jwtService: JwtService;
+    deviceToken: string;
     tenantId: string;
   }) => Promise<void>,
 ): Promise<void> {
+  const provisionedDevices: ProvisionedDeviceSyncCredential[] = [];
   const bootstrap = new DataSource({ type: 'postgres', ...postgresConnection });
   const schema = `${schemaPrefix}_${randomUUID().replace(/-/g, '')}`;
   let dataSource: DataSource | null = null;
@@ -97,12 +113,28 @@ async function withIsolatedSchema(
     await bootstrap.initialize();
     await bootstrap.query(`CREATE SCHEMA "${schema}"`);
 
+    // Device sync rows live in public on fresh databases: create the
+    // device-only transport tables next to the schema setup (the helper
+    // also self-ensures them before provisioning).
+    const bootstrapRunner = bootstrap.createQueryRunner();
+    try {
+      await bootstrapRunner.connect();
+      await ensurePublicDeviceSyncTables(bootstrapRunner);
+    } finally {
+      await bootstrapRunner.release();
+    }
+
     dataSource = new DataSource({
       type: 'postgres',
       ...postgresConnection,
       schema,
       entities: ALL_ENTITIES,
       synchronize: true,
+      // Every pooled connection must share the isolated-schema search_path
+      // so the device-sync helper's raw INSERTs and SyncTransportGuard's
+      // entity reads resolve to the same tables (same convention as the
+      // migrated sync-down-contract reference suite).
+      extra: { options: `-c search_path=${schema},public` },
     });
     await dataSource.initialize();
     await dataSource.query(`SET search_path TO "${schema}"`);
@@ -111,6 +143,18 @@ async function withIsolatedSchema(
     await dataSource.query(
       `INSERT INTO tenants (id, name, is_active, created_at, updated_at) VALUES ($1, $2, true, now(), now())`,
       [tenantId, `E2E Tenant ${schemaPrefix}`],
+    );
+
+    // The /v1/sync transport is device-only: provision an ACTIVE device sync
+    // credential (plus its PASS activation attempt) for the tenant, bound to
+    // the canonical terminal id every batch record below uses as
+    // sourceDeviceId. sync:push is the exact scope /v1/sync/batch requires.
+    provisionedDevices.push(
+      await provisionDeviceSyncCredential(dataSource, {
+        tenantId,
+        deviceId: 'terminal1',
+        scopes: ['sync:push'],
+      }),
     );
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -151,7 +195,13 @@ async function withIsolatedSchema(
         { provide: BomExplosionService, useValue: {} },
         JwtService,
         AuthGuard,
+        SyncTransportGuard,
         SyncCreditNoteAuthGuard,
+        {
+          provide: DEVICE_SYNC_JWT_CONFIG,
+          inject: [ConfigService],
+          useFactory: getDeviceSyncJwtConfig,
+        },
         createIdentityJwtTestConfigProvider(),
         createIdentityJwtConfigProvider(),
       ],
@@ -174,15 +224,39 @@ async function withIsolatedSchema(
 
     await app.init();
 
+    // Device tokens are minted from the SAME DEVICE_SYNC_JWT_CONFIG the
+    // bootstrapped app runs with (read from the container, not duplicated).
+    const deviceToken = signDeviceSyncAccessToken(app, provisionedDevices[0]);
+
     await assertion({
       app,
       dataSource,
-      jwtService: moduleFixture.get(JwtService),
+      deviceToken,
       tenantId,
     });
   } finally {
     if (app) await app.close();
-    if (dataSource?.isInitialized) await dataSource.destroy();
+    if (dataSource?.isInitialized) {
+      // Device sync rows live in the isolated schema: delete provisioned
+      // credentials before their activation attempts inside a per-tenant
+      // transaction that sets the RLS tenant context.
+      for (const device of provisionedDevices) {
+        await dataSource.transaction(async (manager) => {
+          await manager.query("SELECT set_config('app.tenant_id', $1, true)", [
+            device.tenantId,
+          ]);
+          await manager.query(
+            `DELETE FROM device_sync_credentials WHERE id = $1`,
+            [device.credentialId],
+          );
+          await manager.query(
+            `DELETE FROM onboarding_activation_attempts WHERE id = $1`,
+            [device.activationAttemptId],
+          );
+        });
+      }
+      await dataSource.destroy();
+    }
     if (bootstrap.isInitialized) {
       await bootstrap.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
       await bootstrap.destroy();
@@ -191,10 +265,15 @@ async function withIsolatedSchema(
 }
 
 describe('Q80 Reconnect Auth and Inventory Outcome Gate (e2e)', () => {
+  // Full isolated-schema bootstrap (synchronize of all entities plus app
+  // init) runs inside the test body; same budget as the sibling
+  // sync-down-contract reference suite.
+  jest.setTimeout(30000);
+
   it('processes one invoice with SALE_TIME_V1, stores outcome/Kardex, and rejects duplicate replay', async () => {
     await withIsolatedSchema(
       'q80_reconnect',
-      async ({ app, dataSource, jwtService, tenantId }) => {
+      async ({ app, dataSource, deviceToken, tenantId }) => {
         // 1. Set up product, insumo, mapping
         const productId = randomUUID();
         const insumoId = randomUUID();
@@ -213,14 +292,6 @@ describe('Q80 Reconnect Auth and Inventory Outcome Gate (e2e)', () => {
           `INSERT INTO product_inventory_mapping_versions (id, tenant_id, product_id, insumo_id, effective_at) VALUES ($1, $2, $3, $4, now())`,
           [mappingVersionId, tenantId, productId, insumoId],
         );
-
-        const token = signIdentityJwtAccessToken(jwtService, {
-          sub: userId,
-          tenant_id: tenantId,
-          email: 'test@example.com',
-          role: UserRole.CASHIER,
-          is_active: true,
-        });
 
         const invoiceId = randomUUID();
         const itemId = randomUUID();
@@ -290,7 +361,7 @@ describe('Q80 Reconnect Auth and Inventory Outcome Gate (e2e)', () => {
         // Initial Sync
         const response = await request(app.getHttpServer())
           .post('/v1/sync/batch')
-          .set('Authorization', `Bearer ${token}`)
+          .set('Authorization', `Bearer ${deviceToken}`)
           .send(payload)
           .expect(201);
 
@@ -334,7 +405,7 @@ describe('Q80 Reconnect Auth and Inventory Outcome Gate (e2e)', () => {
         // Replay Sync (Duplicate Gate)
         const replayResponse = await request(app.getHttpServer())
           .post('/v1/sync/batch')
-          .set('Authorization', `Bearer ${token}`)
+          .set('Authorization', `Bearer ${deviceToken}`)
           .send(payload)
           .expect(201);
 

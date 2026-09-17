@@ -45,8 +45,16 @@ import { Payment } from '../../src/modules/sales/entities/payment.entity';
 import { InvoiceItemModifier } from '../../src/modules/sales/entities/invoice-item-modifier.entity';
 import { TenantTopologyRevision } from '../../src/modules/fulfillment/entities/tenant-topology-revision.entity';
 import { TenantFulfillmentRecord } from '../../src/modules/fulfillment/entities/tenant-fulfillment-record.entity';
+import { DeviceSyncCredential } from '../../src/modules/identity/entities/device-sync-credential.entity';
+import { ActivationAttempt } from '../../src/modules/onboarding/entities/activation-attempt.entity';
 import { signIdentityJwtAccessToken } from '../support/identity-jwt-test.fixture';
 import { ensurePublicAuthTables } from '../support/fulfillment-test-db.helper';
+import {
+  ensurePublicDeviceSyncTables,
+  provisionDeviceSyncCredential,
+  signDeviceSyncAccessToken,
+  type ProvisionedDeviceSyncCredential,
+} from '../support/device-sync-e2e.helper';
 import { SyncBatchRecordDto } from '../../src/modules/sales/dto/sync-batch.dto';
 import {
   BackfillScanResult,
@@ -67,6 +75,9 @@ describe('FulfillmentRolloutPilot (e2e - Real PostgreSQL, Zero Mocks)', () => {
 
   let ownerAToken: string;
   let ownerBToken: string;
+
+  let deviceAToken: string;
+  const provisionedDevices: ProvisionedDeviceSyncCredential[] = [];
 
   const postgresConnection = {
     type: 'postgres' as const,
@@ -192,6 +203,8 @@ describe('FulfillmentRolloutPilot (e2e - Real PostgreSQL, Zero Mocks)', () => {
 
     await ensurePublicAuthTables(runner);
 
+    await ensurePublicDeviceSyncTables(runner);
+
     await runner.query(
       `INSERT INTO tenants (id, name, created_at, updated_at) VALUES
        ($1, $3, now(), now()),
@@ -212,6 +225,20 @@ describe('FulfillmentRolloutPilot (e2e - Real PostgreSQL, Zero Mocks)', () => {
     );
 
     await runner.release();
+
+    // Provision an ACTIVE device sync credential (plus its PASS activation
+    // attempt) for Tenant A: /v1/sync/batch is device-only, so it is bound to
+    // the canonical device id every batch record below uses as sourceDeviceId
+    // ('pos-1') and granted only the sync:push scope the batch route requires.
+    // Tenant B never touches /v1/sync/* (human-auth endpoints only), so it
+    // needs no device credential.
+    provisionedDevices.push(
+      await provisionDeviceSyncCredential(adminSource, {
+        tenantId: tenantAId,
+        deviceId: 'pos-1',
+        scopes: ['sync:push'],
+      }),
+    );
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [
@@ -234,7 +261,13 @@ describe('FulfillmentRolloutPilot (e2e - Real PostgreSQL, Zero Mocks)', () => {
         EventEmitterModule.forRoot(),
         TypeOrmModule.forRoot({
           ...postgresConnection,
-          schema,
+          // Every pooled connection must share the isolated-schema search_path
+          // (same convention as the migrated sync-outbox-replay reference
+          // suite): tables created by the migrations above live in the isolated
+          // schema, while tenants/users and the device-sync tables provisioned
+          // by the helper live in public. A DataSource-level `schema` option
+          // would force the SyncTransportGuard's repository reads into the
+          // isolated schema and miss the public rows.
           synchronize: false,
           autoLoadEntities: true,
           entities: [
@@ -261,7 +294,10 @@ describe('FulfillmentRolloutPilot (e2e - Real PostgreSQL, Zero Mocks)', () => {
             InvoiceItemModifier,
             TenantTopologyRevision,
             TenantFulfillmentRecord,
+            DeviceSyncCredential,
+            ActivationAttempt,
           ],
+          extra: { options: `-c search_path=${schema},public` },
         }),
         IdentityModule,
         InventoryModule,
@@ -304,6 +340,10 @@ describe('FulfillmentRolloutPilot (e2e - Real PostgreSQL, Zero Mocks)', () => {
       role: UserRole.OWNER,
       security_version: 1,
     });
+
+    // Device tokens are minted from the SAME DEVICE_SYNC_JWT_CONFIG the
+    // bootstrapped app runs with (read from the container, not duplicated).
+    deviceAToken = signDeviceSyncAccessToken(app, provisionedDevices[0]);
   }, 60000);
 
   afterAll(async () => {
@@ -313,6 +353,25 @@ describe('FulfillmentRolloutPilot (e2e - Real PostgreSQL, Zero Mocks)', () => {
     if (adminSource && adminSource.isInitialized) {
       const runner = adminSource.createQueryRunner();
       await runner.connect();
+      // Device sync rows live in public and device_sync_credentials is FORCE
+      // RLS: delete inside a per-tenant transaction that sets the RLS tenant
+      // context, credentials before their activation attempts (same as the
+      // migrated sync-outbox-replay reference suite).
+      for (const device of provisionedDevices) {
+        await adminSource.transaction(async (manager) => {
+          await manager.query("SELECT set_config('app.tenant_id', $1, true)", [
+            device.tenantId,
+          ]);
+          await manager.query(
+            `DELETE FROM device_sync_credentials WHERE id = $1`,
+            [device.credentialId],
+          );
+          await manager.query(
+            `DELETE FROM onboarding_activation_attempts WHERE id = $1`,
+            [device.activationAttemptId],
+          );
+        });
+      }
       await runner.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
       await runner.release();
       await adminSource.destroy();
@@ -476,7 +535,7 @@ describe('FulfillmentRolloutPilot (e2e - Real PostgreSQL, Zero Mocks)', () => {
 
     const syncRes = await request(app.getHttpServer())
       .post('/v1/sync/batch')
-      .set('Authorization', `Bearer ${ownerAToken}`)
+      .set('Authorization', `Bearer ${deviceAToken}`)
       .send({ records: batchRecords })
       .expect(201);
 
@@ -493,7 +552,7 @@ describe('FulfillmentRolloutPilot (e2e - Real PostgreSQL, Zero Mocks)', () => {
     // 5. Verify Replay Idempotency
     const replayRes = await request(app.getHttpServer())
       .post('/v1/sync/batch')
-      .set('Authorization', `Bearer ${ownerAToken}`)
+      .set('Authorization', `Bearer ${deviceAToken}`)
       .send({ records: batchRecords })
       .expect(201);
 
