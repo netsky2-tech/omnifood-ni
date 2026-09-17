@@ -53,6 +53,10 @@ import {
   SupportOverrideAction,
   SupportOverrideDto,
 } from '../dto/activation.dto';
+import { DeviceSyncCredentialResponseDto } from '../dto/device-sync-credential-response.dto';
+import { ConfirmDeviceSyncCredentialDto } from '../dto/confirm-device-sync-credential.dto';
+import { DeviceSyncCredentialService } from '../../identity/services/device-sync-credential.service';
+import { TenantTopologyRevisionService } from '../../fulfillment/services/tenant-topology-revision.service';
 
 export const V1_REQUIRED_ACTIVATION_CHECKS: readonly ActivationCheckCode[] = [
   ActivationCheckCode.TERMINAL_LINKED,
@@ -84,6 +88,10 @@ export class ActivationService {
     private readonly dataSource: DataSource,
     private readonly changeLogService: ChangeLogService,
     @Optional() private readonly invoicesService?: InvoicesService,
+    @Optional()
+    private readonly deviceSyncCredentialService?: DeviceSyncCredentialService,
+    @Optional()
+    private readonly tenantTopologyRevisionService?: TenantTopologyRevisionService,
   ) {}
 
   private assertPrincipalMatchesRecord(
@@ -1162,5 +1170,290 @@ export class ActivationService {
         changes: a.changes,
       })),
     };
+  }
+
+  /**
+   * DSI-3: Provisions device sync credentials for a PASS or PASS_WITH_WARNING ActivationAttempt.
+   *
+   * Security & Canonical Identity Rules:
+   * 1. Tenant authority is strictly scoped to the authenticated human caller session.
+   * 2. Canonical device is ActivationAttempt.trustedTerminalId, which must match candidate terminal evidence.
+   * 3. Where topology authority exists for the tenant, canonical device must match an entry in devices[].deviceId.
+   * 4. Delegates atomic generation and PROVISIONED event logging to DeviceSyncCredentialService.
+   * 5. Never serializes renewalSecretHash or entity internals in the response.
+   */
+  async provisionDeviceCredential(
+    tenantId: string,
+    attemptId: string,
+  ): Promise<DeviceSyncCredentialResponseDto> {
+    const trimmedTenant = tenantId?.trim();
+    if (!trimmedTenant) {
+      throw new BadRequestException('tenantId is required');
+    }
+    const trimmedAttemptId = attemptId?.trim();
+    if (!trimmedAttemptId) {
+      throw new BadRequestException('attemptId is required');
+    }
+
+    const attempt = await this.attemptRepo.findOne({
+      where: { id: trimmedAttemptId, tenantId: trimmedTenant },
+    });
+
+    if (!attempt) {
+      throw new NotFoundException(
+        `Activation attempt '${trimmedAttemptId}' not found for tenant '${trimmedTenant}'`,
+      );
+    }
+
+    if (
+      attempt.status !== ActivationAttemptStatus.PASS &&
+      attempt.status !== ActivationAttemptStatus.PASS_WITH_WARNING
+    ) {
+      throw new BadRequestException(
+        `Activation attempt must be PASS or PASS_WITH_WARNING to provision credentials (current status: ${attempt.status})`,
+      );
+    }
+
+    const canonicalDeviceId = attempt.trustedTerminalId?.trim();
+    if (!canonicalDeviceId) {
+      throw new BadRequestException(
+        'Activation attempt has no canonical device identity (trustedTerminalId is null or empty)',
+      );
+    }
+
+    const candidateDeviceId = attempt.candidateTerminalId?.trim();
+    if (candidateDeviceId && candidateDeviceId !== canonicalDeviceId) {
+      throw new BadRequestException(
+        `Canonical device identity '${canonicalDeviceId}' does not match candidate terminal evidence '${candidateDeviceId}'`,
+      );
+    }
+
+    // Canonical tenant topology check where topology authority exists
+    if (this.tenantTopologyRevisionService) {
+      const topologyState =
+        await this.tenantTopologyRevisionService.current(trimmedTenant);
+      if (topologyState?.provisioned && topologyState.topology) {
+        const topologyObj = topologyState.topology;
+        const rawDevices = topologyObj.devices;
+        const matchesTopology =
+          Array.isArray(rawDevices) &&
+          rawDevices.some((d: unknown) => {
+            if (typeof d === 'object' && d !== null && 'deviceId' in d) {
+              const dev = d as { deviceId?: unknown };
+              return (
+                typeof dev.deviceId === 'string' &&
+                dev.deviceId.trim() === canonicalDeviceId
+              );
+            }
+            return false;
+          });
+        if (!matchesTopology) {
+          throw new BadRequestException(
+            `Latest tenant topology does not contain canonical device '${canonicalDeviceId}'`,
+          );
+        }
+      }
+    }
+
+    if (!this.deviceSyncCredentialService) {
+      throw new BadRequestException(
+        'Device sync credential service is not available',
+      );
+    }
+
+    const result = await this.deviceSyncCredentialService.provisionCredential({
+      tenantId: trimmedTenant,
+      activationAttemptId: attempt.id,
+    });
+
+    return {
+      credentialId: result.credential.id,
+      tenantId: result.credential.tenantId,
+      deviceId: canonicalDeviceId,
+      scopes: [...result.credential.scopes],
+      credentialVersion: result.credential.version,
+      renewalSecret: result.renewalSecret,
+      renewalCredentialExpiresAt: result.credential.expiresAt.toISOString(),
+      status: result.credential.status,
+    };
+  }
+
+  async confirmDeviceCredential(
+    tenantId: string,
+    attemptId: string,
+    dto: ConfirmDeviceSyncCredentialDto,
+  ): Promise<DeviceSyncCredentialResponseDto> {
+    const trimmedTenant = tenantId?.trim();
+    const trimmedAttemptId = attemptId?.trim();
+
+    if (!trimmedTenant || !trimmedAttemptId) {
+      throw new BadRequestException('tenantId and attemptId are required');
+    }
+
+    const attempt = await this.attemptRepo.findOne({
+      where: {
+        id: trimmedAttemptId,
+        tenantId: trimmedTenant,
+      },
+    });
+
+    if (!attempt) {
+      throw new NotFoundException(
+        `Activation attempt '${trimmedAttemptId}' not found for tenant '${trimmedTenant}'`,
+      );
+    }
+
+    if (
+      attempt.status !== ActivationAttemptStatus.PASS &&
+      attempt.status !== ActivationAttemptStatus.PASS_WITH_WARNING
+    ) {
+      throw new BadRequestException(
+        `Activation attempt must be PASS or PASS_WITH_WARNING to confirm credentials (current status: ${attempt.status})`,
+      );
+    }
+
+    const canonicalDeviceId = attempt.trustedTerminalId?.trim();
+    if (!canonicalDeviceId) {
+      throw new BadRequestException(
+        'Activation attempt has no canonical device identity (trustedTerminalId is null or empty)',
+      );
+    }
+
+    const candidateId = attempt.candidateTerminalId?.trim();
+    if (candidateId && candidateId !== canonicalDeviceId) {
+      throw new BadRequestException(
+        `Canonical trustedTerminalId '${canonicalDeviceId}' does not match candidateTerminalId '${candidateId}'`,
+      );
+    }
+
+    if (dto.deviceId?.trim() !== canonicalDeviceId) {
+      throw new BadRequestException(
+        `Declared device '${dto.deviceId}' does not match canonical device '${canonicalDeviceId}'`,
+      );
+    }
+
+    if (this.tenantTopologyRevisionService) {
+      const topologyState =
+        await this.tenantTopologyRevisionService.current(trimmedTenant);
+      if (topologyState?.provisioned && topologyState.topology) {
+        const topologyObj = topologyState.topology;
+        const rawDevices = topologyObj.devices;
+        const matchesTopology =
+          Array.isArray(rawDevices) &&
+          rawDevices.some((d: unknown) => {
+            if (typeof d === 'object' && d !== null && 'deviceId' in d) {
+              const dev = d as { deviceId?: unknown };
+              return (
+                typeof dev.deviceId === 'string' &&
+                dev.deviceId.trim() === canonicalDeviceId
+              );
+            }
+            return false;
+          });
+        if (!matchesTopology) {
+          throw new BadRequestException(
+            `Latest tenant topology does not contain canonical device '${canonicalDeviceId}'`,
+          );
+        }
+      }
+    }
+
+    if (!this.deviceSyncCredentialService) {
+      throw new BadRequestException(
+        'Device sync credential service is not available',
+      );
+    }
+
+    const confirmed = await this.deviceSyncCredentialService.confirmCredential({
+      tenantId: trimmedTenant,
+      activationAttemptId: attempt.id,
+      credentialId: dto.credentialId,
+      credentialVersion: dto.credentialVersion,
+      renewalSecret: dto.renewalSecret,
+      canonicalDeviceId,
+    });
+
+    return {
+      credentialId: confirmed.id,
+      tenantId: confirmed.tenantId,
+      deviceId: canonicalDeviceId,
+      scopes: [...confirmed.scopes],
+      credentialVersion: confirmed.version,
+      renewalCredentialExpiresAt: confirmed.expiresAt.toISOString(),
+      status: confirmed.status,
+    };
+  }
+
+  /**
+   * Resolves the latest finalized PASS or PASS_WITH_WARNING ActivationAttempt
+   * for a given tenant and canonical device ID.
+   * Rejects when no finalized attempt is found.
+   */
+  async resolveLatestFinalizedAttemptForDevice(
+    tenantId: string,
+    deviceId: string,
+  ): Promise<ActivationAttempt> {
+    const trimmedTenant = tenantId?.trim();
+    const trimmedDevice = deviceId?.trim();
+
+    if (!trimmedTenant) {
+      throw new BadRequestException('tenantId is required');
+    }
+    if (!trimmedDevice) {
+      throw new BadRequestException('deviceId is required');
+    }
+
+    const attempt = await this.attemptRepo.findOne({
+      where: {
+        tenantId: trimmedTenant,
+        trustedTerminalId: trimmedDevice,
+        status: In([
+          ActivationAttemptStatus.PASS,
+          ActivationAttemptStatus.PASS_WITH_WARNING,
+        ]),
+      },
+      order: {
+        completedAt: 'DESC',
+        startedAt: 'DESC',
+      },
+    });
+
+    if (!attempt) {
+      throw new NotFoundException(
+        `No finalized activation attempt found for device '${trimmedDevice}' in tenant '${trimmedTenant}'`,
+      );
+    }
+
+    return attempt;
+  }
+
+  /**
+   * Bootstrap provisioning endpoint helper: resolves latest finalized attempt
+   * for (tenantId, deviceId) and delegates to provisionDeviceCredential.
+   */
+  async provisionBootstrapDeviceCredential(
+    tenantId: string,
+    deviceId: string,
+  ): Promise<DeviceSyncCredentialResponseDto> {
+    const attempt = await this.resolveLatestFinalizedAttemptForDevice(
+      tenantId,
+      deviceId,
+    );
+    return this.provisionDeviceCredential(tenantId, attempt.id);
+  }
+
+  /**
+   * Bootstrap confirm endpoint helper: resolves latest finalized attempt
+   * for (tenantId, dto.deviceId) and delegates to confirmDeviceCredential.
+   */
+  async confirmBootstrapDeviceCredential(
+    tenantId: string,
+    dto: ConfirmDeviceSyncCredentialDto,
+  ): Promise<DeviceSyncCredentialResponseDto> {
+    const attempt = await this.resolveLatestFinalizedAttemptForDevice(
+      tenantId,
+      dto.deviceId,
+    );
+    return this.confirmDeviceCredential(tenantId, attempt.id, dto);
   }
 }

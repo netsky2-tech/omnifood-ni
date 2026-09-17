@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
@@ -14,19 +15,27 @@ import { Recipe } from '../../src/modules/inventory/entities/recipe.entity';
 import { RecipeVersion } from '../../src/modules/inventory/entities/recipe-version.entity';
 import { RecipeDetail } from '../../src/modules/inventory/entities/recipe-detail.entity';
 import { ProductInventoryMappingVersion } from '../../src/modules/inventory/entities/product-inventory-mapping-version.entity';
-import {
-  User,
-  UserRole,
-} from '../../src/modules/identity/entities/user.entity';
+import { User } from '../../src/modules/identity/entities/user.entity';
 import { UomConversion } from '../../src/modules/inventory/entities/uom-conversion.entity';
 import { SecurityProfile } from '../../src/modules/identity/entities/security-profile.entity';
 import { Tenant } from '../../src/modules/tenant/entities/tenant.entity';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
+import { SyncTransportGuard } from '../../src/modules/identity/guards/sync-transport.guard';
+import {
+  DEVICE_SYNC_JWT_CONFIG,
+  getDeviceSyncJwtConfig,
+} from '../../src/modules/identity/config/device-sync-jwt.config';
+import { DeviceSyncCredential } from '../../src/modules/identity/entities/device-sync-credential.entity';
+import { ActivationAttempt } from '../../src/modules/onboarding/entities/activation-attempt.entity';
 import {
   createIdentityJwtConfigProvider,
   createIdentityJwtTestConfigProvider,
-  signIdentityJwtAccessToken,
 } from '../support/identity-jwt-test.fixture';
+import {
+  provisionDeviceSyncCredential,
+  signDeviceSyncAccessToken,
+  type ProvisionedDeviceSyncCredential,
+} from '../support/device-sync-e2e.helper';
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -54,6 +63,8 @@ const ALL_ENTITIES = [
   User,
   UomConversion,
   SecurityProfile,
+  DeviceSyncCredential,
+  ActivationAttempt,
 ];
 
 async function withIsolatedSchema(
@@ -61,7 +72,7 @@ async function withIsolatedSchema(
   assertion: (ctx: {
     app: INestApplication;
     dataSource: DataSource;
-    jwtService: JwtService;
+    deviceToken: string;
     tenantId: string;
   }) => Promise<void>,
 ): Promise<void> {
@@ -69,6 +80,7 @@ async function withIsolatedSchema(
   const schema = `${schemaPrefix}_${randomUUID().replace(/-/g, '')}`;
   let dataSource: DataSource | null = null;
   let app: INestApplication | null = null;
+  const provisionedDevices: ProvisionedDeviceSyncCredential[] = [];
 
   try {
     await bootstrap.initialize();
@@ -80,6 +92,11 @@ async function withIsolatedSchema(
       schema,
       entities: ALL_ENTITIES,
       synchronize: true,
+      // Every pooled connection must share the isolated-schema search_path so
+      // the device-sync helper's raw INSERTs and the guard's entity reads
+      // resolve to the same tables (same convention as the migrated
+      // sync-outbox-replay reference suite).
+      extra: { options: `-c search_path=${schema},public` },
     });
     await dataSource.initialize();
     await dataSource.query(`SET search_path TO "${schema}"`);
@@ -88,6 +105,21 @@ async function withIsolatedSchema(
     await dataSource.query(
       `INSERT INTO tenants (id, name, is_active, created_at, updated_at) VALUES ($1, $2, true, now(), now())`,
       [tenantId, `E2E Tenant ${schemaPrefix}`],
+    );
+
+    // Provision an ACTIVE device sync credential (plus its PASS activation
+    // attempt) for the tenant: the /v1/sync transport is device-only, so the
+    // inbound pull routes below authenticate with a device token.
+    provisionedDevices.push(
+      await provisionDeviceSyncCredential(dataSource, {
+        // This suite bootstraps the app with a DataSource-level `schema` option,
+        // so SyncTransportGuard reads the device tables from that isolated schema
+        // and the provisioned rows must land there too.
+        schema,
+        tenantId,
+        deviceId: 'terminal-1',
+        scopes: ['sync:pull'],
+      }),
     );
 
     const productRepo = dataSource.getRepository(Product);
@@ -120,6 +152,13 @@ async function withIsolatedSchema(
         { provide: getRepositoryToken(User), useValue: userRepo },
         JwtService,
         AuthGuard,
+        SyncTransportGuard,
+        { provide: DataSource, useValue: dataSource },
+        {
+          provide: DEVICE_SYNC_JWT_CONFIG,
+          inject: [ConfigService],
+          useFactory: getDeviceSyncJwtConfig,
+        },
         createIdentityJwtTestConfigProvider(),
         createIdentityJwtConfigProvider(),
       ],
@@ -131,12 +170,32 @@ async function withIsolatedSchema(
     );
     await app.init();
 
-    const jwtService = app.get(JwtService);
+    const deviceToken = signDeviceSyncAccessToken(app, provisionedDevices[0]);
 
-    await assertion({ app, dataSource, jwtService, tenantId });
+    await assertion({ app, dataSource, deviceToken, tenantId });
   } finally {
     if (app) await app.close();
-    if (dataSource?.isInitialized) await dataSource.destroy();
+    if (dataSource?.isInitialized) {
+      // Device sync rows live in the isolated schema: delete provisioned
+      // credentials before their activation attempts inside a per-tenant
+      // transaction that sets the RLS tenant context.
+      for (const device of provisionedDevices) {
+        await dataSource.transaction(async (manager) => {
+          await manager.query("SELECT set_config('app.tenant_id', $1, true)", [
+            device.tenantId,
+          ]);
+          await manager.query(
+            `DELETE FROM device_sync_credentials WHERE id = $1`,
+            [device.credentialId],
+          );
+          await manager.query(
+            `DELETE FROM onboarding_activation_attempts WHERE id = $1`,
+            [device.activationAttemptId],
+          );
+        });
+      }
+      await dataSource.destroy();
+    }
     if (bootstrap.isInitialized) {
       await bootstrap.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
       await bootstrap.destroy();
@@ -155,11 +214,8 @@ describe('InboundSyncController E2E — real PostgreSQL', () => {
       async () => {
         await withIsolatedSchema(
           'e2e_sync_products',
-          async ({ app, dataSource, jwtService, tenantId }) => {
-            const token = signIdentityJwtAccessToken(jwtService, {
-              role: UserRole.MANAGER,
-              tenant_id: tenantId,
-            });
+          async ({ app, dataSource, deviceToken, tenantId }) => {
+            const token = deviceToken;
 
             const productId = randomUUID();
             await dataSource.query(
@@ -211,11 +267,8 @@ describe('InboundSyncController E2E — real PostgreSQL', () => {
       async () => {
         await withIsolatedSchema(
           'e2e_sync_catalog',
-          async ({ app, dataSource, jwtService, tenantId }) => {
-            const token = signIdentityJwtAccessToken(jwtService, {
-              role: UserRole.MANAGER,
-              tenant_id: tenantId,
-            });
+          async ({ app, dataSource, deviceToken, tenantId }) => {
+            const token = deviceToken;
 
             const catalogId = randomUUID();
             await dataSource.query(
@@ -262,11 +315,8 @@ describe('InboundSyncController E2E — real PostgreSQL', () => {
       async () => {
         await withIsolatedSchema(
           'e2e_sync_since',
-          async ({ app, dataSource, jwtService, tenantId }) => {
-            const token = signIdentityJwtAccessToken(jwtService, {
-              role: UserRole.MANAGER,
-              tenant_id: tenantId,
-            });
+          async ({ app, dataSource, deviceToken, tenantId }) => {
+            const token = deviceToken;
 
             const oldProductId = randomUUID();
             const newProductId = randomUUID();
@@ -314,11 +364,8 @@ describe('InboundSyncController E2E — real PostgreSQL', () => {
       async () => {
         await withIsolatedSchema(
           'e2e_sync_types',
-          async ({ app, dataSource, jwtService, tenantId }) => {
-            const token = signIdentityJwtAccessToken(jwtService, {
-              role: UserRole.MANAGER,
-              tenant_id: tenantId,
-            });
+          async ({ app, dataSource, deviceToken, tenantId }) => {
+            const token = deviceToken;
 
             // Seed a product
             await dataSource.query(
@@ -357,17 +404,14 @@ describe('InboundSyncController E2E — real PostgreSQL', () => {
       async () => {
         await withIsolatedSchema(
           'e2e_sync_tenant',
-          async ({ app, dataSource, jwtService, tenantId }) => {
+          async ({ app, dataSource, deviceToken, tenantId }) => {
             const otherTenantId = randomUUID();
             await dataSource.query(
               `INSERT INTO tenants (id, name, is_active, created_at, updated_at) VALUES ($1, $2, true, now(), now())`,
               [otherTenantId, 'Other Tenant'],
             );
 
-            const tokenA = signIdentityJwtAccessToken(jwtService, {
-              role: UserRole.MANAGER,
-              tenant_id: tenantId,
-            });
+            const tokenA = deviceToken;
 
             // Product for tenant A
             await dataSource.query(

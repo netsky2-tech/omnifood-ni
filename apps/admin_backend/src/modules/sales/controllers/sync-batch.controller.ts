@@ -9,13 +9,14 @@ import {
 } from '@nestjs/common';
 import { GetTenantId } from '../../../core/decorators/tenant.decorator';
 import { TenantInterceptor } from '../../../core/database/rls.interceptor';
-import { AuthGuard } from '../../identity/guards/auth.guard';
+import { SyncTransportGuard } from '../../identity/guards/sync-transport.guard';
+import { RequireSyncScopes } from '../../identity/decorators/sync-scopes.decorator';
 import { SyncBatchEnvelopeDto } from '../dto/sync-batch.dto';
 import { SyncCreditNoteAuthGuard } from '../guards/sync-credit-note-auth.guard';
 import { InvoicesService } from '../services/invoices.service';
 
 @Controller('v1/sync')
-@UseGuards(AuthGuard, SyncCreditNoteAuthGuard)
+@UseGuards(SyncTransportGuard, SyncCreditNoteAuthGuard)
 @UseInterceptors(TenantInterceptor)
 export class SyncBatchController {
   private readonly logger = new Logger(SyncBatchController.name);
@@ -30,6 +31,7 @@ export class SyncBatchController {
   }
 
   @Post('batch')
+  @RequireSyncScopes('sync:push')
   async syncBatch(
     @GetTenantId() tenantId: string | undefined,
     @Body() envelope: SyncBatchEnvelopeDto,

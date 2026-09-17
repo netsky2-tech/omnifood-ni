@@ -12,13 +12,18 @@ interface RequestWithTenantUser extends Request {
   user?: {
     tenant_id?: string;
   };
+  devicePrincipal?: {
+    tenantId?: string;
+  };
 }
 
 @Injectable()
 export class TenantInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const request = context.switchToHttp().getRequest<RequestWithTenantUser>();
-    if (!request.user?.tenant_id?.trim()) {
+    const tenantId =
+      request.devicePrincipal?.tenantId ?? request.user?.tenant_id;
+    if (!tenantId?.trim()) {
       throw new UnauthorizedException('Tenant context is required');
     }
 

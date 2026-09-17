@@ -26,6 +26,9 @@ import { PermissionsGuard } from '../../identity/guards/permissions.guard';
 import { RequirePermissions } from '../../identity/decorators/permissions.decorator';
 import { AppPermission } from '../../identity/security/permissions.enum';
 import { SyncBatchRecordDto } from '../../sales/dto/sync-batch.dto';
+import { DeviceSyncCredentialResponseDto } from '../dto/device-sync-credential-response.dto';
+import { ConfirmDeviceSyncCredentialDto } from '../dto/confirm-device-sync-credential.dto';
+import { BootstrapDeviceSyncCredentialDto } from '../dto/bootstrap-device-sync-credential.dto';
 
 interface RequestWithUser extends Request {
   user?: {
@@ -183,6 +186,60 @@ export class ActivationController {
       tenantId,
       attemptId,
       actorUserId,
+    );
+  }
+
+  @Post('attempts/:id/device-sync-credential')
+  @RequirePermissions(AppPermission.ONBOARDING_ACTIVATION_MANAGE)
+  async provisionDeviceSyncCredential(
+    @Req() req: RequestWithUser,
+    @Param('id') attemptId: string,
+  ): Promise<DeviceSyncCredentialResponseDto> {
+    const tenantId = this.getEffectiveTenantId(req);
+    return this.activationService.provisionDeviceCredential(
+      tenantId,
+      attemptId,
+    );
+  }
+
+  @Post('attempts/:id/device-sync-credential/confirm')
+  @RequirePermissions(AppPermission.ONBOARDING_ACTIVATION_MANAGE)
+  async confirmDeviceSyncCredential(
+    @Req() req: RequestWithUser,
+    @Param('id') attemptId: string,
+    @Body() dto: ConfirmDeviceSyncCredentialDto,
+  ): Promise<DeviceSyncCredentialResponseDto> {
+    const tenantId = this.getEffectiveTenantId(req);
+    return this.activationService.confirmDeviceCredential(
+      tenantId,
+      attemptId,
+      dto,
+    );
+  }
+
+  @Post('device-sync-credential')
+  @RequirePermissions(AppPermission.ONBOARDING_ACTIVATION_MANAGE)
+  async provisionBootstrapDeviceSyncCredential(
+    @Req() req: RequestWithUser,
+    @Body() dto: BootstrapDeviceSyncCredentialDto,
+  ): Promise<DeviceSyncCredentialResponseDto> {
+    const tenantId = this.getEffectiveTenantId(req);
+    return this.activationService.provisionBootstrapDeviceCredential(
+      tenantId,
+      dto.deviceId,
+    );
+  }
+
+  @Post('device-sync-credential/confirm')
+  @RequirePermissions(AppPermission.ONBOARDING_ACTIVATION_MANAGE)
+  async confirmBootstrapDeviceSyncCredential(
+    @Req() req: RequestWithUser,
+    @Body() dto: ConfirmDeviceSyncCredentialDto,
+  ): Promise<DeviceSyncCredentialResponseDto> {
+    const tenantId = this.getEffectiveTenantId(req);
+    return this.activationService.confirmBootstrapDeviceCredential(
+      tenantId,
+      dto,
     );
   }
 

@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UnauthorizedException } from '@nestjs/common';
-import { AuthGuard } from '../../identity/guards/auth.guard';
+import { SyncTransportGuard } from '../../identity/guards/sync-transport.guard';
 import { InboundSyncController } from './inbound-sync.controller';
 import { InboundSyncService } from '../services/inbound-sync.service';
 import { InboundSyncResponseDto } from '../dto/inbound-sync.dto';
@@ -32,7 +32,7 @@ describe('InboundSyncController', () => {
         { provide: InboundSyncService, useValue: inboundSyncService },
       ],
     })
-      .overrideGuard(AuthGuard)
+      .overrideGuard(SyncTransportGuard)
       .useValue({ canActivate: jest.fn().mockReturnValue(true) })
       .compile();
 

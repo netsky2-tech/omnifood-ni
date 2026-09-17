@@ -54,6 +54,9 @@ describe('ActivationController', () => {
         claimed: true,
         ticketId: 'invoice-1',
       } as any),
+      provisionDeviceCredential: jest.fn().mockResolvedValue({
+        credentialId: 'cred-1',
+      } as any),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -177,6 +180,18 @@ describe('ActivationController', () => {
       tenantId,
       'att-1',
       userId,
+    );
+  });
+
+  it('delegates device sync credential provisioning', async () => {
+    const req = { user: { id: userId, tenant_id: tenantId } } as any;
+
+    const result = await controller.provisionDeviceSyncCredential(req, 'att-1');
+
+    expect(result).toBeDefined();
+    expect(activationService.provisionDeviceCredential).toHaveBeenCalledWith(
+      tenantId,
+      'att-1',
     );
   });
 

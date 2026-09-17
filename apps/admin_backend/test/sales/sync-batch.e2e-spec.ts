@@ -6,6 +6,7 @@ import * as request from 'supertest';
 import { App } from 'supertest/types';
 import { UserRole } from '../../src/modules/identity/entities/user.entity';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
+import { SyncTransportGuard } from '../../src/modules/identity/guards/sync-transport.guard';
 import { SyncBatchController } from '../../src/modules/sales/controllers/sync-batch.controller';
 import { SyncCreditNoteAuthGuard } from '../../src/modules/sales/guards/sync-credit-note-auth.guard';
 import { InvoicesService } from '../../src/modules/sales/services/invoices.service';
@@ -142,7 +143,10 @@ describe('Sync batch route (e2e)', () => {
         createIdentityJwtTestConfigProvider(),
         createIdentityJwtConfigProvider(),
       ],
-    }).compile();
+    })
+      .overrideGuard(SyncTransportGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     app = moduleFixture.createNestApplication();
     jwtService = moduleFixture.get(JwtService);

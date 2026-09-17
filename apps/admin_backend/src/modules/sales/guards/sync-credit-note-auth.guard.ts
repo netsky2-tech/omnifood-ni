@@ -8,6 +8,7 @@ import {
 import { Request } from 'express';
 import { UserRole } from '../../identity/entities/user.entity';
 import { AuthGuard } from '../../identity/guards/auth.guard';
+import { DeviceSyncPrincipal } from '../../identity/security/device-sync-principal';
 import { SyncBatchEnvelopeDto } from '../dto/sync-batch.dto';
 
 interface SyncAuthUser {
@@ -20,6 +21,7 @@ interface SyncAuthUser {
 
 interface RequestWithSyncUser extends Request {
   user?: SyncAuthUser;
+  devicePrincipal?: DeviceSyncPrincipal;
   body: SyncBatchEnvelopeDto;
 }
 
@@ -40,6 +42,14 @@ export class SyncCreditNoteAuthGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<RequestWithSyncUser>();
     if (!hasCreditNoteRecord(request.body)) {
       return true;
+    }
+
+    // Until DSI-6 is implemented with authorization auditing (authorizationAuditId),
+    // a device-authenticated batch containing CREDIT_NOTE must fail closed.
+    if (request.devicePrincipal) {
+      throw new ForbiddenException(
+        'CREDIT_NOTE sync is not permitted for device transport until DSI-6 authorization auditing is implemented',
+      );
     }
 
     await this.authGuard.canActivate(context);

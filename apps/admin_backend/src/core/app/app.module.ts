@@ -80,6 +80,9 @@ import { LegacyImportIntegrityReport } from '../../modules/onboarding/entities/l
 
 import { InventoryRemediationReceipt } from '../../modules/inventory/entities/inventory-remediation-receipt.entity';
 import { ProductInventoryMappingVersion } from '../../modules/inventory/entities/product-inventory-mapping-version.entity';
+import { DeviceSyncCredential } from '../../modules/identity/entities/device-sync-credential.entity';
+import { DeviceSyncCredentialEvent } from '../../modules/identity/entities/device-sync-credential-event.entity';
+import { DeviceSyncModule } from '../../modules/identity/device-sync.module';
 export const getRequiredConfigValue = (
   configService: ConfigService,
   key: string,
@@ -162,6 +165,8 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
     TenantFulfillmentRecord,
     ProductInventoryMappingVersion,
     InventoryRemediationReceipt,
+    DeviceSyncCredential,
+    DeviceSyncCredentialEvent,
   ],
   synchronize: false,
 });
@@ -190,6 +195,7 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
     PromotionsModule,
     AuditModule,
     FulfillmentModule,
+    DeviceSyncModule,
   ],
   controllers: [AppController],
   providers: [AppService],

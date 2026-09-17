@@ -33,12 +33,14 @@ import { FiscalReportsService } from './services/fiscal-reports.service';
 import { SalesExportService } from './services/sales-export.service';
 import { SaleInventoryOutcomeService } from './services/sale-inventory-outcome.service';
 import { IdentityModule } from '../identity/identity.module';
+import { DeviceSyncModule } from '../identity/device-sync.module';
 import { OnboardingModule } from '../onboarding/onboarding.module';
 import { forwardRef } from '@nestjs/common';
 
 @Module({
   imports: [
     IdentityModule,
+    DeviceSyncModule,
     InventoryModule,
     forwardRef(() => OnboardingModule),
     TypeOrmModule.forFeature([
