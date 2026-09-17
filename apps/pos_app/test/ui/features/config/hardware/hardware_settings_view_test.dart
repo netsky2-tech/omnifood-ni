@@ -102,6 +102,98 @@ void main() {
       expect(find.textContaining('Impresión de prueba enviada'), findsWidgets);
     });
 
+    testWidgets('preview prints the locally persisted issuer RUC, never the header override',
+        (tester) async {
+      tester.view.physicalSize = const Size(1024, 1000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      when(mockConfigService.getPrinterConfig()).thenAnswer(
+        (_) async => const PrinterConfig(
+          driverType: PrinterDriverType.sunmiV2s,
+          paperWidthMm: 80,
+          headerBusinessName: 'NHILOS POS HW Test',
+          taxRegime: 'CUOTA_FIJA',
+          fiscalRuc: 'J0310000000001',
+          headerRuc: 'J0310000999999',
+        ),
+      );
+
+      String? capturedRuc;
+      when(mockPrinterPort.printInvoice(
+        any,
+        items: anyNamed('items'),
+        payments: anyNamed('payments'),
+        businessName: anyNamed('businessName'),
+        legalName: anyNamed('legalName'),
+        ruc: anyNamed('ruc'),
+        address: anyNamed('address'),
+        phone: anyNamed('phone'),
+        logoRasterBytes: anyNamed('logoRasterBytes'),
+        taxRegime: anyNamed('taxRegime'),
+        isTaxExempt: anyNamed('isTaxExempt'),
+        paperWidthMm: anyNamed('paperWidthMm'),
+      )).thenAnswer((Invocation invocation) async {
+        capturedRuc = invocation.namedArguments[const Symbol('ruc')] as String?;
+        return PrinterResult.success();
+      });
+
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+      final printButton = find.byKey(const Key('test_print_button'));
+      await tester.ensureVisible(printButton);
+      await tester.pumpAndSettle();
+      await tester.tap(printButton);
+      await tester.pumpAndSettle();
+
+      expect(capturedRuc, equals('J0310000000001'));
+    });
+
+    testWidgets('preview never fabricates a RUC when nothing is configured',
+        (tester) async {
+      tester.view.physicalSize = const Size(1024, 1000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      when(mockConfigService.getPrinterConfig()).thenAnswer(
+        (_) async => const PrinterConfig(
+          driverType: PrinterDriverType.sunmiV2s,
+          paperWidthMm: 80,
+          headerBusinessName: 'NHILOS POS HW Test',
+          taxRegime: 'CUOTA_FIJA',
+        ),
+      );
+
+      String? capturedRuc = 'sentinel';
+      when(mockPrinterPort.printInvoice(
+        any,
+        items: anyNamed('items'),
+        payments: anyNamed('payments'),
+        businessName: anyNamed('businessName'),
+        legalName: anyNamed('legalName'),
+        ruc: anyNamed('ruc'),
+        address: anyNamed('address'),
+        phone: anyNamed('phone'),
+        logoRasterBytes: anyNamed('logoRasterBytes'),
+        taxRegime: anyNamed('taxRegime'),
+        isTaxExempt: anyNamed('isTaxExempt'),
+        paperWidthMm: anyNamed('paperWidthMm'),
+      )).thenAnswer((Invocation invocation) async {
+        capturedRuc = invocation.namedArguments[const Symbol('ruc')] as String?;
+        return PrinterResult.success();
+      });
+
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+      final printButton = find.byKey(const Key('test_print_button'));
+      await tester.ensureVisible(printButton);
+      await tester.pumpAndSettle();
+      await tester.tap(printButton);
+      await tester.pumpAndSettle();
+
+      expect(capturedRuc, isNull);
+    });
+
     testWidgets('tapping test drawer triggers openCashDrawer and shows feedback', (tester) async {
       tester.view.physicalSize = const Size(1024, 1000);
       tester.view.devicePixelRatio = 1.0;
