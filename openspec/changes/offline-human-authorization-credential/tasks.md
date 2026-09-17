@@ -28,6 +28,41 @@ Chain strategy: chained, dependency-ordered
 400-line budget risk: High for PR 2+; acceptable for PR 1
 ```
 
+### Forecast correction and PR 2 re-split (2026-09-17)
+
+The original whole-change estimate of ~1,400–2,200 lines was measured against the real implementation
+surfaces before PR 2 started. **PR 2 alone is ~2,840–4,870 authored lines**, so the original number was
+optimistic by roughly 2×. The plan below replaces the PR 2 row of the split table above.
+
+Measured slice estimates (authored lines; generated `app_database.g.dart` excluded):
+
+| Slice | Scope | Estimate | vs 400 budget |
+|---|---|---|---|
+| 2a-1 (docs) | Resolve and record storage decisions (§11.1) + this forecast correction | ~110 | within |
+| 2a-2 | `I-2` migration 1: epochs, ack history, ack floor + unit SQL spec | ~450–560 | ~1.4× |
+| 2a-3 | `I-2` migration 2: recovery tokens/events, verification events, cohorts + unit SQL spec | ~430–540 | ~1.3× |
+| 2b | Backend epoch publication/ack + RLS-bound transaction + DTOs + `I-5` dark module/route registration + TypeORM entities | ~640–1,110 | ~2.7× |
+| 2c | `I-3` POS Floor migration + entities/DAOs | ~600–1,100 | ~2.7× |
+| 2d | POS epoch state machine + drain gate + R1-008 registration coupler + quarantine | ~630–1,140 | ~2.8× |
+| 2e | `B-TRIANGULATE` + `B-REFACTOR` + `B-EVIDENCE` | ~340–630 | ~0.9–1.6× |
+
+Slices 2b–2d still exceed the budget and are expected to be split again at apply time, the same way
+PR 2 was split here. The authoritative budget rule is unchanged: 400 lines per PR, and any overshoot
+must be an explicit, recorded decision rather than silent acceptance.
+
+Hard sequencing constraints confirmed by implementation-surface review, binding every future split:
+
+- **Merge order is mandatory: 2a → 2b → 2c → 2d → 2e.** The POS state machine posts to the backend
+  ack route, so the route must exist first.
+- **The drain gate cannot be deferred out of 2d.** §5.1 requires it in the same POS build pair as the
+  ack path, so the state machine, the `ACK_SUBMITTING` flip, and the gate ship as one atomic unit.
+- **§16.2 RLS-before-reads is a correctness precondition.** The epoch/ack path MUST open its own
+  tenant-bound transaction with `set_config('app.tenant_id', …, true)`. The pattern in
+  `InboundSyncService` (8 injected repositories scoped by text tenant predicates) is the negative
+  precedent and MUST NOT be copied.
+- **TypeORM entities are assigned to `modules/identity/human-authorization/entities/`**, following the
+  repository's per-module `entities/` convention, and land with slice 2b.
+
 ## Dependencies, Order & Critical Path
 
 Critical path (design §14):
@@ -59,13 +94,17 @@ canonical fixtures/contracts
   escaped controls, astral Unicode, UTF-16 key ordering, NFC/NFD distinction, empty arrays, forbidden
   number, forbidden `null`, duplicate keys, leading-zero sequence, unknown field, one-byte mutation,
   max 1 MiB size) with exact expected canonical bytes/hex per design §7.2.
-- [ ] `I-2` **(PR 2)** Author backend additive TypeORM migration
+- [ ] `I-2` **(PR 2a)** Author backend additive TypeORM migrations for the OHAC core and recovery tables.
+  The single-file form originally named here was split in two to respect the 400-line review budget
+  (recorded in the forecast correction above and in design §11.1 decision 11):
   `apps/admin_backend/src/migrations/1809000000000-CreateHumanAuthorizationCore.ts` creating
-  `human_auth_policy_epochs`, `human_auth_terminal_ack_history`, `human_auth_terminal_ack_floor`,
-  `human_auth_recovery_tokens`, `human_auth_recovery_events`, `human_auth_verification_events`,
-  `human_auth_rollout_cohorts` with unique/check constraints, indexes, `ENABLE` + `FORCE ROW LEVEL
+  `human_auth_policy_epochs`, `human_auth_terminal_ack_history`, `human_auth_terminal_ack_floor`, and
+  `apps/admin_backend/src/migrations/1809010000000-CreateHumanAuthorizationRecoveryAndObservability.ts`
+  creating `human_auth_recovery_tokens`, `human_auth_recovery_events`, `human_auth_verification_events`,
+  `human_auth_rollout_cohorts`, both with unique/check constraints, indexes, `ENABLE` + `FORCE ROW LEVEL
   SECURITY`, tenant SELECT/INSERT/update policies using `current_setting('app.tenant_id', true)`, and
-  UPDATE/DELETE-denial triggers on append-only tables plus floor-regression triggers (design §4.2, §11).
+  UPDATE/DELETE-denial triggers on append-only tables plus floor-regression triggers (design §4.2, §11,
+  §11.1).
 - [ ] `I-3` **(PR 2)** Add POS additive Floor migration + entities/DAOs registration in
   `apps/pos_app/lib/data/database/app_database.dart` and `migrations.dart` for
   `human_auth_policy_epochs`, `human_auth_policy_entries`, singleton `human_auth_terminal_state`,
