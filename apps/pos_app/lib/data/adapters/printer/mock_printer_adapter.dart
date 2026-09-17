@@ -20,6 +20,11 @@ class MockPrinterAdapter implements PrinterPort {
   List<int>? lastPrintedBytes;
   int cashDrawerKickCount = 0;
 
+  /// Argument capture for printInvoice assertions (e.g. activation TEST_PRINT).
+  int? lastPaperWidthMm;
+  TaxRegime? lastTaxRegime;
+  String? lastRuc;
+
   void reset() {
     currentStatus = PrinterStatus.ready;
     shouldFail = false;
@@ -28,6 +33,9 @@ class MockPrinterAdapter implements PrinterPort {
     lastPrintedText = null;
     lastPrintedBytes = null;
     cashDrawerKickCount = 0;
+    lastPaperWidthMm = null;
+    lastTaxRegime = null;
+    lastRuc = null;
   }
 
   @override
@@ -52,6 +60,10 @@ class MockPrinterAdapter implements PrinterPort {
     int paperWidthMm = 58,
     PostPaidFeedback? loyaltyFeedback,
   }) async {
+    // Clear captures first so a failing call cannot leave stale argument values.
+    lastPaperWidthMm = null;
+    lastTaxRegime = null;
+    lastRuc = null;
     if (shouldFail || currentStatus != PrinterStatus.ready) {
       String defaultMsg = 'Error de impresión en hardware simulado';
       if (currentStatus == PrinterStatus.outOfPaper) {
@@ -123,6 +135,9 @@ class MockPrinterAdapter implements PrinterPort {
 
     lastPrintedText = text;
     lastPrintedBytes = bytes;
+    lastPaperWidthMm = paperWidthMm;
+    lastTaxRegime = taxRegime;
+    lastRuc = ruc;
 
     final res = PrinterResult.success(text: text, bytes: bytes);
     printHistory.add(res);

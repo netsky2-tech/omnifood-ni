@@ -1,5 +1,7 @@
 import 'package:pos_app/domain/models/config/tax_regime.dart';
+import '../../domain/models/config/printer_config.dart';
 import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:uuid/uuid.dart';
 
 import '../database/app_database.dart';
@@ -9,6 +11,8 @@ import '../../domain/models/sales/invoice.dart';
 import '../../domain/models/sales/invoice_item.dart';
 import '../../domain/models/sales/payment.dart';
 import '../../domain/ports/printer_port.dart';
+import '../../core/utils/nicaragua_fiscal_validator.dart';
+import '../../domain/services/config/printer_config_service.dart';
 import 'activation_required_config_adapter.dart';
 import 'terminal_identity_service.dart';
 
@@ -43,16 +47,19 @@ class ActivationPreOfflineRunner {
   final ActivationRequiredConfigAdapter _configAdapter;
   final TerminalIdentityService _terminalIdentity;
   final PrinterPort _printer;
+  final PrinterConfigService _printerConfigService;
 
   ActivationPreOfflineRunner({
     required AppDatabase database,
     required ActivationRequiredConfigAdapter configAdapter,
     required TerminalIdentityService terminalIdentityService,
     required PrinterPort printerPort,
+    required PrinterConfigService printerConfigService,
   })  : _database = database,
         _configAdapter = configAdapter,
         _terminalIdentity = terminalIdentityService,
-        _printer = printerPort;
+        _printer = printerPort,
+        _printerConfigService = printerConfigService;
 
   Future<PreOfflineRunnerSummary> runPreOfflineChecks(
     PreOfflineRunnerParams params,
@@ -165,9 +172,55 @@ class ActivationPreOfflineRunner {
     }
 
     // 5. TEST_PRINT
+    // The test print is a fixture proof: it must exercise the EFFECTIVE locally
+    // persisted configuration (paper width, tax regime, issuer RUC) and fail
+    // closed with a named blocker instead of silently defaulting.
     PrinterResult? testPrintResult;
+    int? effectivePaperWidthMm;
+    String? effectiveTaxRegimeCode;
+    bool rucPresent = false;
+    String? rucHash;
     if (printerIsReady) {
-      final testInvoiceId = 'onb1.10-test-$trimmedAttemptId';
+      PrinterConfig? effectiveConfig;
+      try {
+        effectiveConfig = await _printerConfigService.getPrinterConfig();
+      } catch (_) {
+        effectiveConfig = null;
+      }
+      final effectiveRucRaw = effectiveConfig?.fiscalRuc?.trim();
+      final effectiveRuc =
+          (effectiveRucRaw != null && effectiveRucRaw.isNotEmpty)
+              ? effectiveRucRaw
+              : null;
+      final effectiveRegimeRaw = effectiveConfig?.taxRegime?.trim();
+      final effectiveRegime =
+          (effectiveRegimeRaw != null && effectiveRegimeRaw.isNotEmpty)
+              ? TaxRegime.fromString(effectiveRegimeRaw)
+              : null;
+
+      if (effectiveConfig == null) {
+        testPrintResult = PrinterResult.failure(
+          PrinterStatus.error,
+          'Configuración fiscal local no disponible — no se pudo leer la configuración efectiva',
+        );
+      } else if (effectiveRegime == null) {
+        testPrintResult = PrinterResult.failure(
+          PrinterStatus.error,
+          'Empresa sin régimen fiscal DGI configurado (proyección fiscal local)',
+        );
+      } else if (effectiveRuc == null) {
+        testPrintResult = PrinterResult.failure(
+          PrinterStatus.error,
+          'Identidad fiscal del emisor (RUC) no disponible — complete la configuración fiscal',
+        );
+      } else {
+        effectivePaperWidthMm = effectiveConfig.paperWidthMm;
+        effectiveTaxRegimeCode = effectiveRegime.code;
+        rucPresent = true;
+        rucHash = sha256
+            .convert(utf8.encode(NicaraguaFiscalValidator.clean(effectiveRuc)))
+            .toString();
+        final testInvoiceId = 'onb1.10-test-$trimmedAttemptId';
       final testInvoice = Invoice(
         id: testInvoiceId,
         number: 'ONB1.10-$trimmedAttemptId',
@@ -203,11 +256,13 @@ class ActivationPreOfflineRunner {
             amountNio: 0,
           ),
         ],
-        businessName: 'ONB1.10 TEST PRINT',
+        businessName: effectiveConfig.headerBusinessName,
         cashierName: params.authorizedUserId.trim(),
-        paperWidthMm: 58,
-            taxRegime: TaxRegime.regimenGeneral,
+        paperWidthMm: effectiveConfig.paperWidthMm,
+        taxRegime: effectiveRegime,
+        ruc: effectiveRuc,
       );
+      }
     }
     final testPrintPass = testPrintResult?.isSuccess ?? false;
     final testPrintFailure = testPrintResult?.message ??
@@ -225,6 +280,10 @@ class ActivationPreOfflineRunner {
         'testPrintExecuted': testPrintResult != null,
         'success': testPrintPass,
         'printerResultStatus': testPrintResult?.status.name,
+        'paperWidthMm': effectivePaperWidthMm,
+        'taxRegime': effectiveTaxRegimeCode,
+        'rucPresent': rucPresent,
+            'rucHash': ?rucHash,
         if (!testPrintPass) 'failure': testPrintFailure,
       }),
     );

@@ -22,6 +22,7 @@ import 'package:pos_app/data/repositories/sales/sales_repository_impl.dart';
 import 'package:pos_app/data/repositories/tenant_capability_cache.dart';
 import 'package:pos_app/data/services/activation_clock_manager.dart';
 import 'package:pos_app/data/services/activation_controlled_sale_runner.dart';
+import 'package:pos_app/domain/services/config/printer_config_service.dart';
 import 'package:pos_app/data/services/activation_pre_offline_runner.dart';
 import 'package:pos_app/data/services/activation_reconnect_sync_runner.dart';
 import 'package:pos_app/data/services/activation_required_config_adapter.dart';
@@ -192,6 +193,17 @@ void main() {
           LocalConfigEntity(key: 'dgi_range_end', value: '1000'),
         );
 
+        // Effective fiscal/printer config consumed by TEST_PRINT (FR-4 fixture proof).
+        for (final entry in {
+          PrinterConfigService.fiscalRucKey: 'J0310000000001',
+          'tax_regime': 'CUOTA_FIJA',
+          PrinterConfigService.paperWidthMmKey: '80',
+        }.entries) {
+          await dbPhase1.localConfigDao.saveConfig(
+            LocalConfigEntity(key: entry.key, value: entry.value),
+          );
+        }
+
         await dbPhase1.fiscalConfigLocalDao.applyFiscalConfig(
           const FiscalConfigLocalEntity(
             tenantId: tenantId,
@@ -266,6 +278,7 @@ void main() {
           configAdapter: configAdapter,
           terminalIdentityService: terminalIdentity,
           printerPort: printerAdapter,
+          printerConfigService: PrinterConfigService(dbPhase1.localConfigDao),
         );
 
         final preOfflineSummary = await preOfflineRunner.runPreOfflineChecks(
