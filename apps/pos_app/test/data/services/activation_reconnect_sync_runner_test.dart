@@ -12,7 +12,7 @@ import 'package:pos_app/data/models/activation/first_successful_sale_claim_entit
 import 'package:pos_app/data/ports/activation_sync_port.dart';
 import 'package:pos_app/data/services/activation_reconnect_sync_runner.dart';
 
-class FakeActivationSyncPort implements ActivationSyncPort {
+class FakeActivationSyncPort extends ActivationSyncPort {
   bool simulateNetworkFailure = false;
   bool simulateFinalizeFailure = false;
   String finalizeVerdict = 'PASS';

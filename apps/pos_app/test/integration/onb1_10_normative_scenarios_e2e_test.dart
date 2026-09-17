@@ -42,7 +42,7 @@ class MockAlertService extends Mock implements AlertService {
       Future<void>.value();
 }
 
-class NormativeActivationSyncPort implements ActivationSyncPort {
+class NormativeActivationSyncPort extends ActivationSyncPort {
   final List<Map<String, dynamic>> deliveredChecks = [];
   final List<Map<String, dynamic>> deliveredClaims = [];
   final List<Map<String, dynamic>> deliveredSales = [];

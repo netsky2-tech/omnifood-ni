@@ -1,3 +1,5 @@
+import '../../domain/security/device_sync_credential_record.dart';
+
 abstract class ActivationSyncPort {
   Future<bool> sendCheck({
     required String attemptId,
@@ -25,6 +27,49 @@ abstract class ActivationSyncPort {
     required String tenantId,
     required String attemptId,
   });
+
+  /// Explicitly calls POST /onboarding/activation/attempts/:id/device-sync-credential
+  /// while a human authorized cloud session exists, parses the one-time response
+  /// into [DeviceSyncCredentialRecord], verifies that the returned deviceId equals
+  /// [expectedDeviceId], and provisions it into the coordinator if present.
+  Future<DeviceSyncCredentialRecord> provisionDeviceSyncCredential({
+    required String attemptId,
+    required String expectedDeviceId,
+  }) {
+    throw UnimplementedError();
+  }
+
+  /// Calls POST /onboarding/activation/attempts/:id/device-sync-credential/confirm
+  /// with exact credential ID, version, device, and renewal secret.
+  Future<DeviceSyncCredentialRecord> confirmDeviceSyncCredential({
+    required String attemptId,
+    required String credentialId,
+    required String deviceId,
+    required int credentialVersion,
+    required String renewalSecret,
+  }) {
+    throw UnimplementedError();
+  }
+
+  /// Calls POST /onboarding/activation/device-sync-credential with { deviceId }
+  /// while a human authorized cloud session exists, resolving latest PASS attempt.
+  Future<DeviceSyncCredentialRecord> provisionBootstrapDeviceSyncCredential({
+    required String deviceId,
+  }) {
+    throw UnimplementedError();
+  }
+
+  /// Calls POST /onboarding/activation/device-sync-credential/confirm
+  /// with exact credential ID, version, device, and renewal secret,
+  /// without requiring client-held attemptId.
+  Future<DeviceSyncCredentialRecord> confirmBootstrapDeviceSyncCredential({
+    required String credentialId,
+    required String deviceId,
+    required int credentialVersion,
+    required String renewalSecret,
+  }) {
+    throw UnimplementedError();
+  }
 }
 
 class FinalizeActivationResult {

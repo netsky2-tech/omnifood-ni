@@ -1,11 +1,15 @@
 import 'package:dio/dio.dart';
 
+import '../../../domain/security/device_sync_credential_coordinator.dart';
+import '../../../domain/security/device_sync_credential_record.dart';
+import '../../../domain/security/device_sync_exceptions.dart';
 import '../../ports/activation_sync_port.dart';
 
 class DioActivationSyncPort implements ActivationSyncPort {
   final Dio _dio;
+  final DeviceSyncCredentialCoordinator? _coordinator;
 
-  DioActivationSyncPort(this._dio);
+  DioActivationSyncPort(this._dio, [this._coordinator]);
 
   @override
   Future<bool> sendCheck({
@@ -137,4 +141,272 @@ class DioActivationSyncPort implements ActivationSyncPort {
 
   bool _isSuccess(int? statusCode) =>
       statusCode != null && statusCode >= 200 && statusCode < 300;
+
+  @override
+  Future<DeviceSyncCredentialRecord> provisionDeviceSyncCredential({
+    required String attemptId,
+    required String expectedDeviceId,
+  }) async {
+    final cleanAttemptId = attemptId.trim();
+    final cleanExpectedDeviceId = expectedDeviceId.trim();
+    if (cleanAttemptId.isEmpty || cleanExpectedDeviceId.isEmpty) {
+      throw ArgumentError('attemptId and expectedDeviceId must not be blank');
+    }
+
+    Response<dynamic> response;
+    try {
+      response = await _dio.post<dynamic>(
+        'onboarding/activation/attempts/$cleanAttemptId/device-sync-credential',
+      );
+    } on DioException catch (e) {
+      final statusCode = e.response?.statusCode;
+      final errorData = e.response?.data;
+      final errorCode = errorData is Map
+          ? errorData['code'] ?? errorData['error']
+          : null;
+
+      if (statusCode == 409 && errorCode == 'DEVICE_RECOVERY_REQUIRED') {
+        throw DeviceSyncRecoveryRequiredException(
+          errorData is Map && errorData['message'] != null
+              ? errorData['message'].toString()
+              : 'Device credential requires explicit recovery; auto-bootstrap is blocked',
+        );
+      }
+      if (statusCode == 401 && errorCode == 'DEVICE_REVOKED') {
+        throw DeviceSyncRevokedException(
+          reason: errorData is Map && errorData['message'] != null
+              ? errorData['message'].toString()
+              : 'REVOKED',
+        );
+      }
+      rethrow;
+    }
+
+    final raw = response.data;
+    if (raw is! Map) {
+      throw const DeviceSyncMalformedResponseException(
+        'Server returned non-object credential provisioning payload',
+      );
+    }
+
+    final data = Map<String, dynamic>.from(raw);
+    if (data.containsKey('renewalCredentialExpiresAt') &&
+        !data.containsKey('expiresAt')) {
+      data['expiresAt'] = data['renewalCredentialExpiresAt'];
+      data.remove('renewalCredentialExpiresAt');
+    }
+    data.remove('status');
+
+    final record = DeviceSyncCredentialRecord.fromJson(data);
+
+    if (record.deviceId.trim() != cleanExpectedDeviceId) {
+      throw StateError(
+        'Provisioned device ID (${record.deviceId}) does not match expected terminal identity ($cleanExpectedDeviceId)',
+      );
+    }
+
+    return record;
+  }
+
+  @override
+  Future<DeviceSyncCredentialRecord> provisionBootstrapDeviceSyncCredential({
+    required String deviceId,
+  }) async {
+    final cleanDeviceId = deviceId.trim();
+    if (cleanDeviceId.isEmpty) {
+      throw ArgumentError('deviceId must not be blank');
+    }
+
+    Response<dynamic> response;
+    try {
+      response = await _dio.post<dynamic>(
+        'onboarding/activation/device-sync-credential',
+        data: {'deviceId': cleanDeviceId},
+      );
+    } on DioException catch (e) {
+      final statusCode = e.response?.statusCode;
+      final errorData = e.response?.data;
+      final errorCode = errorData is Map
+          ? errorData['code'] ?? errorData['error']
+          : null;
+
+      if (statusCode == 409 && errorCode == 'DEVICE_RECOVERY_REQUIRED') {
+        throw DeviceSyncRecoveryRequiredException(
+          errorData is Map && errorData['message'] != null
+              ? errorData['message'].toString()
+              : 'Device credential requires explicit recovery; auto-bootstrap is blocked',
+        );
+      }
+      if (statusCode == 401 && errorCode == 'DEVICE_REVOKED') {
+        throw DeviceSyncRevokedException(
+          reason: errorData is Map && errorData['message'] != null
+              ? errorData['message'].toString()
+              : 'REVOKED',
+        );
+      }
+      rethrow;
+    }
+
+    final raw = response.data;
+    if (raw is! Map) {
+      throw const DeviceSyncMalformedResponseException(
+        'Server returned non-object credential provisioning payload',
+      );
+    }
+
+    final data = Map<String, dynamic>.from(raw);
+    if (data.containsKey('renewalCredentialExpiresAt') &&
+        !data.containsKey('expiresAt')) {
+      data['expiresAt'] = data['renewalCredentialExpiresAt'];
+      data.remove('renewalCredentialExpiresAt');
+    }
+    data.remove('status');
+
+    final record = DeviceSyncCredentialRecord.fromJson(data);
+
+    if (record.deviceId.trim() != cleanDeviceId) {
+      throw StateError(
+        'Provisioned device ID (${record.deviceId}) does not match expected terminal identity ($cleanDeviceId)',
+      );
+    }
+
+    return record;
+  }
+
+  @override
+  Future<DeviceSyncCredentialRecord> confirmDeviceSyncCredential({
+    required String attemptId,
+    required String credentialId,
+    required String deviceId,
+    required int credentialVersion,
+    required String renewalSecret,
+  }) async {
+    final cleanAttemptId = attemptId.trim();
+    if (cleanAttemptId.isEmpty) {
+      throw ArgumentError('attemptId must not be blank');
+    }
+
+    try {
+      final response = await _dio.post<dynamic>(
+        'onboarding/activation/attempts/$cleanAttemptId/device-sync-credential/confirm',
+        data: {
+          'credentialId': credentialId,
+          'deviceId': deviceId,
+          'credentialVersion': credentialVersion,
+          'renewalSecret': renewalSecret,
+        },
+      );
+
+      final raw = response.data;
+      if (raw is! Map) {
+        throw const DeviceSyncMalformedResponseException(
+          'Server returned non-object credential confirm payload',
+        );
+      }
+
+      final data = Map<String, dynamic>.from(raw);
+      if (data.containsKey('renewalCredentialExpiresAt') &&
+          !data.containsKey('expiresAt')) {
+        data['expiresAt'] = data['renewalCredentialExpiresAt'];
+        data.remove('renewalCredentialExpiresAt');
+      }
+      data.remove('status');
+
+      if (!data.containsKey('renewalSecret') || data['renewalSecret'] == null) {
+        data['renewalSecret'] = renewalSecret;
+      }
+
+      return DeviceSyncCredentialRecord.fromJson(data);
+    } on DioException catch (e) {
+      final statusCode = e.response?.statusCode;
+      final errorData = e.response?.data;
+      final errorCode = errorData is Map
+          ? errorData['code'] ?? errorData['error']
+          : null;
+
+      if (statusCode == 409 && errorCode == 'DEVICE_RECOVERY_REQUIRED') {
+        throw DeviceSyncRecoveryRequiredException(
+          errorData is Map && errorData['message'] != null
+              ? errorData['message'].toString()
+              : 'Device credential requires explicit recovery; auto-bootstrap is blocked',
+        );
+      }
+      if (statusCode == 401 && errorCode == 'DEVICE_REVOKED') {
+        throw DeviceSyncRevokedException(
+          reason: errorData is Map && errorData['message'] != null
+              ? errorData['message'].toString()
+              : 'REVOKED',
+        );
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  Future<DeviceSyncCredentialRecord> confirmBootstrapDeviceSyncCredential({
+    required String credentialId,
+    required String deviceId,
+    required int credentialVersion,
+    required String renewalSecret,
+  }) async {
+    final cleanDeviceId = deviceId.trim();
+    if (cleanDeviceId.isEmpty) {
+      throw ArgumentError('deviceId must not be blank');
+    }
+
+    try {
+      final response = await _dio.post<dynamic>(
+        'onboarding/activation/device-sync-credential/confirm',
+        data: {
+          'credentialId': credentialId,
+          'deviceId': cleanDeviceId,
+          'credentialVersion': credentialVersion,
+          'renewalSecret': renewalSecret,
+        },
+      );
+
+      final raw = response.data;
+      if (raw is! Map) {
+        throw const DeviceSyncMalformedResponseException(
+          'Server returned non-object credential confirm payload',
+        );
+      }
+
+      final data = Map<String, dynamic>.from(raw);
+      if (data.containsKey('renewalCredentialExpiresAt') &&
+          !data.containsKey('expiresAt')) {
+        data['expiresAt'] = data['renewalCredentialExpiresAt'];
+        data.remove('renewalCredentialExpiresAt');
+      }
+      data.remove('status');
+
+      if (!data.containsKey('renewalSecret') || data['renewalSecret'] == null) {
+        data['renewalSecret'] = renewalSecret;
+      }
+
+      return DeviceSyncCredentialRecord.fromJson(data);
+    } on DioException catch (e) {
+      final statusCode = e.response?.statusCode;
+      final errorData = e.response?.data;
+      final errorCode = errorData is Map
+          ? errorData['code'] ?? errorData['error']
+          : null;
+
+      if (statusCode == 409 && errorCode == 'DEVICE_RECOVERY_REQUIRED') {
+        throw DeviceSyncRecoveryRequiredException(
+          errorData is Map && errorData['message'] != null
+              ? errorData['message'].toString()
+              : 'Device credential requires explicit recovery; auto-bootstrap is blocked',
+        );
+      }
+      if (statusCode == 401 && errorCode == 'DEVICE_REVOKED') {
+        throw DeviceSyncRevokedException(
+          reason: errorData is Map && errorData['message'] != null
+              ? errorData['message'].toString()
+              : 'REVOKED',
+        );
+      }
+      rethrow;
+    }
+  }
 }
