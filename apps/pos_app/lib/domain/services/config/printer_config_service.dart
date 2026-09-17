@@ -18,6 +18,14 @@ class PrinterConfigService {
   static const String copiesKey = 'printer_copies';
   static const String headerBusinessNameKey = 'printer_header_business_name';
   static const String headerRucKey = 'printer_header_ruc';
+
+  /// Locally persisted issuer RUC key (`FiscalProjectionKeys.ruc`).
+  ///
+  /// Written by the DGI fiscal projection (`fiscal_inbox_handler.dart`) and,
+  /// by explicit product decision, also by the operator from the POS business
+  /// profile. The local value therefore wins over the projection until the next
+  /// fiscal resync restores it — that override is intentional (offline-first).
+  static const String fiscalRucKey = 'ruc';
   static const String headerAddressKey = 'printer_header_address';
   static const String headerPhoneKey = 'printer_header_phone';
   static const String logoBase64Key = 'printer_logo_base64';
@@ -42,8 +50,8 @@ class PrinterConfigService {
     final copiesEntity = await _configDao.getConfigByKey(copiesKey);
     final bizNameEntity = await _configDao.getConfigByKey(headerBusinessNameKey) ??
         await _configDao.getConfigByKey('business_name');
-    final rucEntity = await _configDao.getConfigByKey(headerRucKey) ??
-        await _configDao.getConfigByKey('ruc');
+    final rucEntity = await _configDao.getConfigByKey(headerRucKey);
+    final fiscalRucEntity = await _configDao.getConfigByKey(fiscalRucKey);
     final addressEntity = await _configDao.getConfigByKey(headerAddressKey) ??
         await _configDao.getConfigByKey('address');
     final phoneEntity = await _configDao.getConfigByKey(headerPhoneKey) ??
@@ -94,6 +102,7 @@ class PrinterConfigService {
       copies: copies,
       headerBusinessName: bizNameEntity?.value ?? 'OMNIFOOD NI',
       headerRuc: rucEntity?.value,
+      fiscalRuc: fiscalRucEntity?.value,
       headerAddress: addressEntity?.value,
       headerPhone: phoneEntity?.value,
       taxRegime: taxRegimeEntity?.value,

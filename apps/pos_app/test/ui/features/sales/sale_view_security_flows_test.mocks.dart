@@ -1419,6 +1419,13 @@ class MockSyncService extends _i1.Mock implements _i9.SyncService {
       ) as int);
 
   @override
+  bool get isAuthBlocked => (super.noSuchMethod(
+        Invocation.getter(#isAuthBlocked),
+        returnValue: false,
+        returnValueForMissingStub: false,
+      ) as bool);
+
+  @override
   bool get isCloudAuthRequired => (super.noSuchMethod(
         Invocation.getter(#isCloudAuthRequired),
         returnValue: false,

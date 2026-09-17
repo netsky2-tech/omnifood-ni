@@ -57,6 +57,48 @@ void main() {
       expect(config.headerBusinessName, 'Café Managua');
     });
 
+    test('split fields: fiscalRuc reads the projected ruc key; headerRuc reads printer_header_ruc only (FR-6/D1)', () async {
+      when(mockDao.getConfigByKey(any)).thenAnswer((_) async => null);
+      when(mockDao.getConfigByKey('ruc')).thenAnswer(
+          (_) async => LocalConfigEntity(key: 'ruc', value: 'J0310000055555'));
+      when(mockDao.getConfigByKey(PrinterConfigService.headerRucKey)).thenAnswer(
+          (_) async => LocalConfigEntity(
+              key: PrinterConfigService.headerRucKey, value: 'J0310000999999'));
+
+      final config = await service.getPrinterConfig();
+
+      expect(config.fiscalRuc, 'J0310000055555');
+      expect(config.headerRuc, 'J0310000999999');
+    });
+
+    test('header-only device: headerRuc present does NOT shadow fiscalRuc (projection wins)', () async {
+      when(mockDao.getConfigByKey(any)).thenAnswer((_) async => null);
+      when(mockDao.getConfigByKey(PrinterConfigService.headerRucKey)).thenAnswer(
+          (_) async => LocalConfigEntity(
+              key: PrinterConfigService.headerRucKey, value: 'J0310000999999'));
+
+      final config = await service.getPrinterConfig();
+
+      expect(config.headerRuc, 'J0310000999999');
+      expect(config.fiscalRuc, isNull);
+    });
+
+    test('savePrinterConfig never writes the projected ruc key (no round-trip contamination)', () async {
+      const newConfig = PrinterConfig(
+        driverType: PrinterDriverType.mock,
+        headerBusinessName: 'Mi Restaurante',
+        headerRuc: 'J0310000999999',
+        fiscalRuc: 'J0310000055555',
+      );
+
+      await service.savePrinterConfig(newConfig);
+
+      final savedRucWrites = verify(mockDao.saveConfig(captureAny)).captured
+          .whereType<LocalConfigEntity>()
+          .where((e) => e.key == 'ruc');
+      expect(savedRucWrites, isEmpty);
+    });
+
     test('savePrinterConfig persists all values and emits on stream', () async {
       const newConfig = PrinterConfig(
         driverType: PrinterDriverType.mock,

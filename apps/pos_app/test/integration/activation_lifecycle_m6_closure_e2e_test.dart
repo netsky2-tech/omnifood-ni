@@ -165,7 +165,8 @@ void main() {
             tenantId: tenantId,
             revision: 1,
             fingerprint: fiscalFingerprint,
-            payload: '{"businessName": "OmniFood M6 Closure Cafe"}',
+            payload:
+            '{"businessName": "OmniFood M6 Closure Cafe", "ruc": "J0310000000001"}',
             appliedAt: '2026-09-04T12:00:00.000Z',
           ),
         );

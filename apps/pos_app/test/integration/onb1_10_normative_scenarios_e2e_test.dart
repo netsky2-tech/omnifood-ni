@@ -137,7 +137,8 @@ void main() {
           tenantId: tenantId,
           revision: 1,
           fingerprint: fiscalFingerprint,
-          payload: '{"regime":"REGIMEN_GENERAL","businessName":"Normative Store NI"}',
+          payload:
+              '{"regime":"REGIMEN_GENERAL","businessName":"Normative Store NI","ruc":"J0310000000001"}',
           appliedAt: '2026-09-04T12:00:00.000Z',
         );
 
@@ -196,7 +197,7 @@ void main() {
             tenantId: tenantId,
             revision: 1,
             fingerprint: fiscalFingerprint,
-            payload: '{"businessName": "Normative Store NI"}',
+            payload: '{"businessName": "Normative Store NI", "ruc": "J0310000000001"}',
             appliedAt: '2026-09-04T12:00:00.000Z',
           ),
         );

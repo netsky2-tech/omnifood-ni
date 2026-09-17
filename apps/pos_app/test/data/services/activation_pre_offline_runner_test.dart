@@ -236,6 +236,8 @@ void main() {
       final fiscalPayload = jsonEncode({
         'tenantId': tenantId,
         'businessName': 'Comedor El Fundador',
+        // Projected DGI RUC: REQUIRED_CONFIG_LOCAL fails closed without it (FR-3).
+        'ruc': 'J0310000000001',
         'fiscalRegime': 'GENERAL',
         'taxRate': 0.15,
         'configVersion': {
