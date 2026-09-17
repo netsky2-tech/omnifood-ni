@@ -93,6 +93,23 @@ export const ensureDeviceSyncTables = async (
   runner: QueryRunner,
   schema = 'public',
 ): Promise<void> => {
+  // `CREATE TABLE IF NOT EXISTS` is not atomic against a concurrent creator:
+  // parallel jest workers both pass the existence check and one then fails with
+  // a duplicate pg_type entry. Serialize the create per schema with a
+  // session-level advisory lock, released as soon as the DDL is done.
+  const lockKey = `omnifood:e2e:device-sync-tables:${schema}`;
+  await runner.query('SELECT pg_advisory_lock(hashtext($1))', [lockKey]);
+  try {
+    await createDeviceSyncTables(runner, schema);
+  } finally {
+    await runner.query('SELECT pg_advisory_unlock(hashtext($1))', [lockKey]);
+  }
+};
+
+const createDeviceSyncTables = async (
+  runner: QueryRunner,
+  schema: string,
+): Promise<void> => {
   await runner.query(`
     CREATE TABLE IF NOT EXISTS "${schema}".onboarding_activation_attempts (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
