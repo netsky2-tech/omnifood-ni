@@ -41,11 +41,15 @@ Measured slice estimates (authored lines; generated `app_database.g.dart` exclud
 | 2a-1 (docs) | Resolve and record storage decisions (§11.1) + this forecast correction | ~110 | within |
 | 2a-2 | `I-2` migration 1: epochs, ack history, ack floor + unit SQL spec | 379 actual | within |
 | 2a-3 | `I-2` migration 2: recovery tokens, recovery events + unit SQL spec | 410 actual | ~1.03× |
-| 2a-4 | `I-2` migration 3: verification events, rollout cohorts + unit SQL spec | ~330 est. | within |
-| 2b | Backend epoch publication/ack + RLS-bound transaction + DTOs + `I-5` dark module/route registration + TypeORM entities | ~640–1,110 | ~2.7× |
-| 2c | `I-3` POS Floor migration + entities/DAOs | ~600–1,100 | ~2.7× |
-| 2d | POS epoch state machine + drain gate + R1-008 registration coupler + quarantine | ~630–1,140 | ~2.8× |
-| 2e | `B-TRIANGULATE` + `B-REFACTOR` + `B-EVIDENCE` | ~340–630 | ~0.9–1.6× |
+| 2a-4 | `I-2` migration 3: verification events, rollout cohorts + unit SQL spec | 351 actual | within |
+| 2b-1 | Entities for the seven OHAC tables, shared Int64-safe bigint transformer, registration-only module | 499 + 372 actual | 1.25x then within |
+| 2b-2a | RLS-bound tenant transaction seam + device-principal accessor | ~260 est. | within |
+| 2b-2b | Persisted per-user `attemptResetGeneration` column + tenant dirty marker (two additive migrations) | ~330 est. | within |
+| 2b-2c | Epoch projection and serialized publisher, idempotent by projected digest | ~380 est. | ~0.95x |
+| 2b-3 | Ack route + DTOs + dark module and route registration | ~380 est. | ~0.95x |
+| 2c | `I-3` POS Floor migration + entities/DAOs | ~600–1,100 | ~2.7x |
+| 2d | POS epoch state machine + drain gate + R1-008 registration coupler + quarantine | ~630–1,140 | ~2.8x |
+| 2e | `B-TRIANGULATE` + `B-REFACTOR` + `B-EVIDENCE` | ~340–630 | ~0.9–1.6x |
 
 Slices 2b–2d still exceed the budget and are expected to be split again at apply time, the same way
 PR 2 was split here. The authoritative budget rule is unchanged: 400 lines per PR, and any overshoot
