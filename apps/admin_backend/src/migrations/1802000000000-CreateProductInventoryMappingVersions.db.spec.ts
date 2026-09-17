@@ -63,13 +63,13 @@ async function withIsolatedSchema(
     await queryRunner.query(`
       CREATE TABLE products (
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-        tenant_id varchar(128) NOT NULL,
+        tenant_id uuid NOT NULL,
         name varchar(255) NOT NULL,
         created_at timestamptz DEFAULT now()
       );
       CREATE TABLE insumos (
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-        tenant_id varchar(128) NOT NULL,
+        tenant_id uuid NOT NULL,
         name varchar(255) NOT NULL,
         created_at timestamptz DEFAULT now()
       );
@@ -108,8 +108,9 @@ describe('Migration 1802000000000-CreateProductInventoryMappingVersions DB spec'
             new CreateProductInventoryMappingVersions1802000000000();
           await migration.up(queryRunner);
 
-          const tenantA = 'tenant-alpha';
-          const tenantB = 'tenant-beta';
+          // tenant_id is uuid in the real schema, so tenant identifiers must be valid UUIDs.
+          const tenantA = randomUUID();
+          const tenantB = randomUUID();
 
           // Seed parent records
           const [prodA] = await queryRunner.query(
@@ -205,6 +206,130 @@ describe('Migration 1802000000000-CreateProductInventoryMappingVersions DB spec'
           await expect(migration.down(queryRunner)).rejects.toThrow(
             'refusing to remove product mapping history',
           );
+        },
+      );
+    },
+  );
+
+  itDb(
+    'creates tenant composite unique constraints in the isolated schema despite same-named constraints in another schema',
+    async () => {
+      await withIsolatedSchema(
+        'mapping_fk_scope_test',
+        async ({ queryRunner }) => {
+          const migration =
+            new CreateProductInventoryMappingVersions1802000000000();
+          const poisonSchema = `mapping_fk_poison_${randomUUID().replace(/-/g, '')}`;
+          await queryRunner.query(`CREATE SCHEMA "${poisonSchema}"`);
+          try {
+            // pg_constraint is database-wide: same-named unique constraints in an
+            // unrelated schema must not make the migration skip creating them in
+            // the isolated schema resolved by search_path.
+            await queryRunner.query(`
+              CREATE TABLE "${poisonSchema}".products (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                tenant_id uuid NOT NULL
+              );
+              ALTER TABLE "${poisonSchema}".products
+                ADD CONSTRAINT uq_products_tenant_product_id UNIQUE (tenant_id, id);
+              CREATE TABLE "${poisonSchema}".insumos (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                tenant_id uuid NOT NULL
+              );
+              ALTER TABLE "${poisonSchema}".insumos
+                ADD CONSTRAINT uq_insumos_tenant_insumo_id UNIQUE (tenant_id, id);
+            `);
+
+            const countScopedConstraints = async (
+              tableName: string,
+              constraintName: string,
+            ): Promise<number> => {
+              const rows = await queryRunner.query(
+                `SELECT count(*)::int AS count
+                 FROM pg_constraint c
+                 WHERE c.conrelid = to_regclass($1)
+                   AND c.conname = $2
+                   AND c.contype = 'u'`,
+                [tableName, constraintName],
+              );
+              return rows[0].count;
+            };
+
+            // Sanity: the isolated schema's parent tables start without them
+            expect(
+              await countScopedConstraints(
+                'products',
+                'uq_products_tenant_product_id',
+              ),
+            ).toBe(0);
+            expect(
+              await countScopedConstraints(
+                'insumos',
+                'uq_insumos_tenant_insumo_id',
+              ),
+            ).toBe(0);
+
+            await migration.up(queryRunner);
+
+            expect(
+              await countScopedConstraints(
+                'products',
+                'uq_products_tenant_product_id',
+              ),
+            ).toBe(1);
+            expect(
+              await countScopedConstraints(
+                'insumos',
+                'uq_insumos_tenant_insumo_id',
+              ),
+            ).toBe(1);
+          } finally {
+            try {
+              await queryRunner.query(
+                `DROP SCHEMA IF EXISTS "${poisonSchema}" CASCADE`,
+              );
+            } catch {
+              // best-effort cleanup
+            }
+          }
+        },
+      );
+    },
+  );
+
+  itDb(
+    'does not recreate tenant composite unique constraints already present in the resolved schema',
+    async () => {
+      await withIsolatedSchema(
+        'mapping_fk_idempotent_test',
+        async ({ queryRunner }) => {
+          const migration =
+            new CreateProductInventoryMappingVersions1802000000000();
+
+          // Simulate an already-migrated database: the composite unique
+          // constraints already exist on the search_path-resolved parent tables.
+          await queryRunner.query(`
+            ALTER TABLE products ADD CONSTRAINT uq_products_tenant_product_id UNIQUE (tenant_id, id);
+            ALTER TABLE insumos ADD CONSTRAINT uq_insumos_tenant_insumo_id UNIQUE (tenant_id, id);
+          `);
+
+          // Must not attempt to create them again (no duplicate-object error)
+          await migration.up(queryRunner);
+
+          const rows = await queryRunner.query(
+            `SELECT c.conname AS constraint_name
+             FROM pg_constraint c
+             JOIN pg_class t ON t.oid = c.conrelid
+             JOIN pg_namespace n ON n.oid = t.relnamespace
+             WHERE c.conname IN ('uq_products_tenant_product_id', 'uq_insumos_tenant_insumo_id')
+               AND c.contype = 'u'
+               AND t.relname IN ('products', 'insumos')
+               AND n.nspname = current_schema()`,
+          );
+          expect(rows.map((row) => row.constraint_name).sort()).toEqual([
+            'uq_insumos_tenant_insumo_id',
+            'uq_products_tenant_product_id',
+          ]);
         },
       );
     },
