@@ -1,0 +1,108 @@
+{
+  "schema": "human-authorization-conformance-v1",
+  "contract": "OHAC-C14N-1",
+  "digestForm": "lowercase sha256: followed by 64 hex characters over the canonical UTF-8 bytes",
+  "canonicalVectors": [
+    {
+      "id": "C01",
+      "note": "reordered keys and removed whitespace",
+      "raw": "{ \"b\" : \"2\" , \"a\" : \"1\" }",
+      "canonical": "{\"a\":\"1\",\"b\":\"2\"}",
+      "digest": "sha256:21f76dfbfe6dfe21f762080ef484112cf2952974cef30741fd1931e1c6d92112"
+    },
+    {
+      "id": "C02",
+      "note": "minimal escaping keeps the control character escaped",
+      "raw": "{\"a\":\"\\u0001\"}",
+      "canonical": "{\"a\":\"\\u0001\"}",
+      "digest": "sha256:cdb4909e9996a7f541b72c340918f49c974b149a80b95000960ae324a8b8c628"
+    },
+    {
+      "id": "C03",
+      "note": "astral character is emitted as raw UTF-8",
+      "raw": "{\"a\":\"𝄞\"}",
+      "canonical": "{\"a\":\"𝄞\"}",
+      "digest": "sha256:fb30136d50ba755c7574e1d90e74e844235fe9c57080ec5df85b37f79d8c4641"
+    },
+    {
+      "id": "C04",
+      "note": "NFC composed form is preserved exactly",
+      "raw": "{\"k\":\"ó\"}",
+      "canonical": "{\"k\":\"ó\"}",
+      "digest": "sha256:ce39d56658ba02105db28cad1095ffb510d973eff7cd27f4c016c9450d4700fa"
+    },
+    {
+      "id": "C05",
+      "note": "NFD decomposed form stays distinct from C04",
+      "raw": "{\"k\":\"ó\"}",
+      "canonical": "{\"k\":\"ó\"}",
+      "digest": "sha256:21bf31ad6ca29f2860df690f0a3a6784741c485bbde3b15bf2a162920799a55d"
+    },
+    {
+      "id": "C06",
+      "note": "empty array is preserved",
+      "raw": "{\"a\":[]}",
+      "canonical": "{\"a\":[]}",
+      "digest": "sha256:50e8660084976a10f0b3b9b3a6352d5881cbd219b5587a26224971a60ff2cc55"
+    },
+    {
+      "id": "C07",
+      "note": "keys order by UTF-16 code units, so the astral key sorts before U+FF01",
+      "raw": "{\"！\":\"2\",\"😀\":\"1\"}",
+      "canonical": "{\"😀\":\"1\",\"！\":\"2\"}",
+      "digest": "sha256:972074cca87e4e0b60a0c7d94f9267497cb3f12c7c52c945e4bfa01a40298682"
+    },
+    {
+      "id": "C08",
+      "note": "nested objects are ordered recursively and empty strings are allowed",
+      "raw": "{\"z\":{\"b\":\"\",\"a\":\"1\"},\"a\":\"0\"}",
+      "canonical": "{\"a\":\"0\",\"z\":{\"a\":\"1\",\"b\":\"\"}}",
+      "digest": "sha256:11a67bb45686cc561d39f241e3a349a1cebc436f5f6cc05d9e68a269e5d8cd5d"
+    },
+    {
+      "id": "C09",
+      "note": "decimal strings are ordinary strings, never numbers",
+      "raw": "{\"sequence\":\"17\"}",
+      "canonical": "{\"sequence\":\"17\"}",
+      "digest": "sha256:2e8db036f88f2e0b6a7af5fe6a54f93fb625f12087558931c3d2bf8ce82eb194"
+    }
+  ],
+  "rejectionVectors": [
+    {
+      "id": "R01",
+      "note": "JSON numbers are forbidden",
+      "raw": "{\"n\":1}",
+      "errorCode": "OHAC_NUMBER_FORBIDDEN"
+    },
+    {
+      "id": "R02",
+      "note": "null is forbidden in v1 payloads",
+      "raw": "{\"n\":null}",
+      "errorCode": "OHAC_NULL_FORBIDDEN"
+    },
+    {
+      "id": "R03",
+      "note": "duplicate keys are rejected",
+      "raw": "{\"a\":\"1\",\"a\":\"1\"}",
+      "errorCode": "OHAC_DUPLICATE_KEY"
+    },
+    {
+      "id": "R04",
+      "note": "unpaired surrogate is rejected",
+      "raw": "{\"a\":\"\\ud800\"}",
+      "errorCode": "OHAC_INVALID_UNICODE"
+    },
+    {
+      "id": "R05",
+      "note": "truncated JSON is rejected",
+      "raw": "{\"a\":",
+      "errorCode": "OHAC_INVALID_JSON"
+    },
+    {
+      "id": "R06",
+      "note": "invalid UTF-8 bytes are rejected",
+      "rawHex": "7b2261223a22ff227d",
+      "errorCode": "OHAC_INVALID_UTF8"
+    }
+  ]
+}

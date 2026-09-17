@@ -13,6 +13,7 @@ import {
   type OhacErrorCode,
   type OhacResult,
 } from './error-codes';
+import { isDigest } from './field-guards';
 
 /**
  * OHAC-C14N-1: the project's existing number-free JCS subset, plus the two
@@ -65,4 +66,28 @@ export const digestOfJson = (rawUtf8: Buffer): OhacResult<string> => {
   const canonical = canonicalizeOhac(rawUtf8);
   if (canonical.ok === false) return canonical;
   return ohacOk(ohacDigest(canonical.value));
+};
+
+/**
+ * OHAC-C14N-1 digests cover the whole object except `digest` itself, so the
+ * transmitted digest can be verified against a body that is re-canonicalized
+ * from the parsed value. Returns the body without the digest field on success.
+ */
+export const verifyBodyDigest = (
+  object: Record<string, unknown>,
+): OhacResult<Record<string, unknown>> => {
+  const transmitted = object.digest;
+  if (!isDigest(transmitted)) {
+    return ohacFail(OHAC_ERROR_CODE.MISSING_FIELD, 'digest');
+  }
+  const body: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(object)) {
+    if (key !== 'digest') body[key] = value;
+  }
+  const canonical = canonicalizeOhac(Buffer.from(JSON.stringify(body), 'utf8'));
+  if (canonical.ok === false) return canonical;
+  if (ohacDigest(canonical.value) !== transmitted) {
+    return ohacFail(OHAC_ERROR_CODE.DIGEST_MISMATCH);
+  }
+  return ohacOk(body);
 };
