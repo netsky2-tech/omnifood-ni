@@ -365,6 +365,43 @@ describe('FiscalSetup (Integration & E2E)', () => {
     );
   });
 
+  it('returns 400 when the issuer RUC is absent, blank, or malformed (FR-1)', async () => {
+    const token = signToken();
+
+    const base = {
+      regime: FiscalRegime.CUOTA_FIJA,
+      businessName: 'Café Central',
+      commercialFxSpread: 0.5,
+      pricesIncludeTax: true,
+    };
+
+    const cases: Array<Record<string, unknown>> = [
+      { ...base }, // ruc absent
+      { ...base, ruc: '' },
+      { ...base, ruc: '   ' },
+      { ...base, ruc: 'CF-12345' },
+      { ...base, ruc: 'K0310000055555' },
+      { ...base, ruc: 'J031000005555' },
+    ];
+
+    for (const rejectedBody of cases) {
+      const response = await request(app.getHttpServer())
+        .post(API_PREFIX)
+        .set('Authorization', `Bearer ${token}`)
+        .send(rejectedBody)
+        .expect(400);
+
+      const body = response.body as BadRequestResponseBody;
+      const messages = Array.isArray(body.message)
+        ? body.message
+        : [body.message];
+      expect(messages.join(' ')).toContain('RUC');
+    }
+
+    // Nothing was persisted for any rejected request.
+    expect(dbSysParams).toHaveLength(0);
+  });
+
   it('returns 200 with default fiscal setup when not yet configured', async () => {
     const token = signToken({ tenant_id: 'tenant-A' });
 
@@ -391,7 +428,7 @@ describe('FiscalSetup (Integration & E2E)', () => {
     const payload = {
       regime: FiscalRegime.CUOTA_FIJA,
       businessName: 'Comedor Doña Mary',
-      ruc: 'CF-99999',
+      ruc: 'J0310000099999',
       commercialFxSpread: 0.5,
       pricesIncludeTax: true,
     };
@@ -406,7 +443,7 @@ describe('FiscalSetup (Integration & E2E)', () => {
     expect(body).toMatchObject({
       tenantId: 'tenant-A',
       businessName: 'Comedor Doña Mary',
-      ruc: 'CF-99999',
+      ruc: 'J0310000099999',
       regime: FiscalRegime.CUOTA_FIJA,
       taxRateIva: 0.0,
       pricesIncludeTax: true,
@@ -415,7 +452,7 @@ describe('FiscalSetup (Integration & E2E)', () => {
 
     const tenantA = dbTenants.find((t) => t.id === 'tenant-A');
     expect(tenantA?.name).toBe('Comedor Doña Mary');
-    expect(tenantA?.ruc).toBe('CF-99999');
+    expect(tenantA?.ruc).toBe('J0310000099999');
 
     const params = dbSysParams.filter(
       (p) => p.tenant_id === 'tenant-A' && p.isActive,
@@ -439,7 +476,7 @@ describe('FiscalSetup (Integration & E2E)', () => {
       .send({
         regime: FiscalRegime.CUOTA_FIJA,
         businessName: 'Restaurante Managua',
-        ruc: 'CF-12345',
+        ruc: 'J0310000055555',
         commercialFxSpread: 0.5,
         pricesIncludeTax: true,
       })
@@ -513,7 +550,7 @@ describe('FiscalSetup (Integration & E2E)', () => {
       .send({
         regime: FiscalRegime.CUOTA_FIJA,
         businessName: 'Tenant B Pulpería',
-        ruc: null,
+        ruc: 'J0310000000002',
         commercialFxSpread: 0.25,
         pricesIncludeTax: true,
       })
