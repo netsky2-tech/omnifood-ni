@@ -25,6 +25,20 @@ export const isNonEmptyString = (value: unknown): value is string =>
 export const isDecimalString = (value: unknown): value is string =>
   typeof value === 'string' && DECIMAL_STRING.test(value);
 
+/** Maximum signed Int64 (exploration.md §7.3 sequenceNumber) as canonical decimal. */
+export const MAX_INT64_DECIMAL = '9223372036854775807';
+
+/**
+ * Canonical decimal within the signed Int64 range (0..9223372036854775807),
+ * no leading zeros. The range is checked lexicographically — digit length,
+ * then the max-Int64 bound for 19-digit values — so an over-range or hostile
+ * multi-hundred-digit payload is rejected before any BigInt allocation.
+ */
+export const isInt64DecimalString = (value: unknown): value is string =>
+  isDecimalString(value) &&
+  (value.length < MAX_INT64_DECIMAL.length ||
+    (value.length === MAX_INT64_DECIMAL.length && value <= MAX_INT64_DECIMAL));
+
 export const isLowercaseUuid = (value: unknown): value is string =>
   typeof value === 'string' && LOWERCASE_UUID.test(value);
 

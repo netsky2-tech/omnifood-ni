@@ -3,7 +3,12 @@ import {
   type OhacErrorCode,
   type OhacResult,
 } from './error-codes';
-import { canonicalizeOhac, digestOfJson, ohacDigest } from './canonical';
+import {
+  canonicalizeOhac,
+  digestOfJson,
+  ohacDigest,
+  verifyBodyDigest,
+} from './canonical';
 
 const utf8 = (value: string): Buffer => Buffer.from(value, 'utf8');
 
@@ -61,5 +66,47 @@ describe('OHAC-C14N-1 canonicalization', () => {
     if (!digest.ok) return;
     expect(digest.value).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(digest.value).toBe(ohacDigest(Buffer.from('{"a":"1"}', 'utf8')));
+  });
+});
+describe('verifyBodyDigest reserved-key parity', () => {
+  // `__proto__` arrives from JSON.parse as an own enumerable data property,
+  // so a digest computed over the signed bytes covers it. Dart keeps the map
+  // entry; TS must keep the own property too. Plain assignment would hit the
+  // Object.prototype setter: the key would be silently dropped (or the body's
+  // prototype mutated) and identical bytes would diverge into
+  // OHAC_DIGEST_MISMATCH instead of the stable unknown-field rejection.
+  it('verifies a digest computed over a body carrying the reserved `__proto__` key', () => {
+    const bodyUtf8 =
+      '{"__proto__":{"injected":true},"schema":"ohac.assertion.v1"}';
+    const digest = digestOfJson(utf8(bodyUtf8));
+    expect(digest.ok).toBe(true);
+    if (!digest.ok) return;
+    const envelope = JSON.parse(
+      `${bodyUtf8.slice(0, -1)},"digest":"${digest.value}"}`,
+    ) as Record<string, unknown>;
+    const verified = verifyBodyDigest(envelope);
+    expect(verified.ok).toBe(true);
+    if (!verified.ok) return;
+    expect(
+      Object.prototype.hasOwnProperty.call(verified.value, '__proto__'),
+    ).toBe(true);
+    expect(
+      Object.getOwnPropertyDescriptor(verified.value, '__proto__')?.value,
+    ).toEqual({ injected: true });
+    // No prototype mutation: the body stays a plain object and the injected
+    // object is stored as data, never linked as [[Prototype]].
+    expect(Object.getPrototypeOf(verified.value)).toBe(Object.prototype);
+  });
+
+  it('still fails with DIGEST_MISMATCH when the transmitted digest does not cover the reserved key', () => {
+    const digest = digestOfJson(utf8('{"schema":"ohac.assertion.v1"}'));
+    expect(digest.ok).toBe(true);
+    if (!digest.ok) return;
+    const envelope = JSON.parse(
+      `{"__proto__":{"injected":true},"schema":"ohac.assertion.v1","digest":"${digest.value}"}`,
+    ) as Record<string, unknown>;
+    expect(ohacFailureCode(verifyBodyDigest(envelope))).toBe(
+      OHAC_ERROR_CODE.DIGEST_MISMATCH,
+    );
   });
 });

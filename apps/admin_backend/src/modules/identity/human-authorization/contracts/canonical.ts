@@ -82,7 +82,18 @@ export const verifyBodyDigest = (
   }
   const body: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(object)) {
-    if (key !== 'digest') body[key] = value;
+    if (key === 'digest') continue;
+    // JSON.parse gives `__proto__` as an own data property, but plain
+    // assignment would trigger the Object.prototype setter: the key would be
+    // silently dropped (or this object's prototype mutated) and the
+    // re-canonicalized bytes would diverge from Dart, which always keeps the
+    // map entry. Define every key as an own data property instead.
+    Object.defineProperty(body, key, {
+      value,
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
   }
   const canonical = canonicalizeOhac(Buffer.from(JSON.stringify(body), 'utf8'));
   if (canonical.ok === false) return canonical;

@@ -9,6 +9,7 @@ import {
   asObject,
   isDecimalString,
   isDigest,
+  isInt64DecimalString,
   isLowercaseUuid,
   isNonEmptyString,
   requireExactKeys,
@@ -204,10 +205,12 @@ export const parseStaffPolicyEpochV1 = (
   if (!isNonEmptyString(object.targetTerminalId)) {
     return ohacFail(OHAC_ERROR_CODE.INVALID_FIELD, 'targetTerminalId');
   }
-  if (!isDecimalString(object.sequence)) {
+  // Int64-bounded (exploration.md §7.3) so BigInt below never sees an
+  // arbitrary-length or over-range value.
+  if (!isInt64DecimalString(object.sequence)) {
     return ohacFail(OHAC_ERROR_CODE.INVALID_FIELD, 'sequence');
   }
-  if (!isDecimalString(object.previousSequence)) {
+  if (!isInt64DecimalString(object.previousSequence)) {
     return ohacFail(OHAC_ERROR_CODE.INVALID_FIELD, 'previousSequence');
   }
   if (!isGenesisOrDigest(object.previousDigest)) {
@@ -219,6 +222,15 @@ export const parseStaffPolicyEpochV1 = (
     !isNonEmptyString(object.minimumAssertionSchema)
   ) {
     return ohacFail(OHAC_ERROR_CODE.INVALID_FIELD, 'build');
+  }
+  // The epoch pins the minimum assertion schema this POS build accepts:
+  // only the supported assertion schema constant is valid. Unknown non-empty
+  // schema ids are a schema-version problem, not a build/field problem.
+  if (object.minimumAssertionSchema !== MINIMUM_ASSERTION_SCHEMA) {
+    return ohacFail(
+      OHAC_ERROR_CODE.UNSUPPORTED_SCHEMA,
+      'minimumAssertionSchema',
+    );
   }
   if (
     !Array.isArray(object.policyEntries) ||
@@ -296,9 +308,20 @@ export const validateEpochAcceptance = (
     return ohacFail(OHAC_ERROR_CODE.UNSUPPORTED_BUILD_PAIR, 'targetPosBuild');
   }
 
+  // Caller input: must be Int64-canonical or the BigInt comparisons below
+  // would throw or silently misparse; reject with the stable field name.
+  if (!isInt64DecimalString(input.acceptedSequence)) {
+    return ohacFail(OHAC_ERROR_CODE.INVALID_FIELD, 'acceptedSequence');
+  }
   const accepted = BigInt(input.acceptedSequence);
   if (BigInt(epoch.sequence) <= accepted) {
     return ohacFail(OHAC_ERROR_CODE.SEQUENCE_NOT_NEWER, 'sequence');
+  }
+  // Caller input: must be exactly GENESIS or a canonical lowercase sha256
+  // digest, or the chain comparison below would misattribute the caller's
+  // malformed head to the epoch's previousDigest field.
+  if (!isGenesisOrDigest(input.acceptedDigest)) {
+    return ohacFail(OHAC_ERROR_CODE.INVALID_FIELD, 'acceptedDigest');
   }
   if (
     epoch.previousSequence !== input.acceptedSequence ||

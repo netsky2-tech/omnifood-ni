@@ -104,5 +104,51 @@
       "rawHex": "7b2261223a22ff227d",
       "errorCode": "OHAC_INVALID_UTF8"
     }
+  ],
+  "contractVectors": [
+    {
+      "id": "K01",
+      "operation": "parseStaffPolicyEpochV1",
+      "note": "leading-zero sequence is non-canonical Int64 text",
+      "raw": "{\"schema\":\"ohac.staff-policy-epoch.v1\",\"tenantId\":\"11111111-1111-4111-8111-111111111111\",\"targetTerminalId\":\"Q802024120001\",\"sequence\":\"01\",\"previousSequence\":\"0\",\"previousDigest\":\"GENESIS\",\"publisherBackendBuild\":\"backend-build-1\",\"targetPosBuild\":\"pos-build-1\",\"minimumAssertionSchema\":\"ohac.assertion.v1\",\"policyEntries\":[{\"userId\":\"33333333-3333-4333-8333-333333333333\",\"status\":\"ACTIVE\",\"role\":\"MANAGER\",\"permissions\":[\"sales:void_invoice\"],\"pinVerifier\":{\"algorithm\":\"bcrypt\",\"formatVersion\":\"2b\",\"encoded\":\"$2b$10$abcdefghijklmnopqrstuv\"},\"attemptResetGeneration\":\"0\"}],\"digest\":\"sha256:60b43e41000ab71322f93415dd5026d76d565239e7b37282d433ff748127c6ec\"}",
+      "errorCode": "OHAC_INVALID_FIELD",
+      "field": "sequence"
+    },
+    {
+      "id": "K02",
+      "operation": "parseStaffPolicyEpochV1",
+      "note": "digest-valid unknown field is rejected after integrity verification",
+      "raw": "{\"schema\":\"ohac.staff-policy-epoch.v1\",\"tenantId\":\"11111111-1111-4111-8111-111111111111\",\"targetTerminalId\":\"Q802024120001\",\"sequence\":\"1\",\"previousSequence\":\"0\",\"previousDigest\":\"GENESIS\",\"publisherBackendBuild\":\"backend-build-1\",\"targetPosBuild\":\"pos-build-1\",\"minimumAssertionSchema\":\"ohac.assertion.v1\",\"policyEntries\":[{\"userId\":\"33333333-3333-4333-8333-333333333333\",\"status\":\"ACTIVE\",\"role\":\"MANAGER\",\"permissions\":[\"sales:void_invoice\"],\"pinVerifier\":{\"algorithm\":\"bcrypt\",\"formatVersion\":\"2b\",\"encoded\":\"$2b$10$abcdefghijklmnopqrstuv\"},\"attemptResetGeneration\":\"0\"}],\"unexpected\":\"x\",\"digest\":\"sha256:8d2f4c7877af8861599bf8785ccda74eacfa7608c50b2da8f947524c70b4b8c8\"}",
+      "errorCode": "OHAC_UNKNOWN_FIELD",
+      "field": "unexpected"
+    },
+    {
+      "id": "K03",
+      "operation": "parseStaffPolicyEpochV1",
+      "note": "one-byte mutation changes backend-build-1 to backend-build-2 without changing the authored digest",
+      "validRaw": "{\"schema\":\"ohac.staff-policy-epoch.v1\",\"tenantId\":\"11111111-1111-4111-8111-111111111111\",\"targetTerminalId\":\"Q802024120001\",\"sequence\":\"1\",\"previousSequence\":\"0\",\"previousDigest\":\"GENESIS\",\"publisherBackendBuild\":\"backend-build-1\",\"targetPosBuild\":\"pos-build-1\",\"minimumAssertionSchema\":\"ohac.assertion.v1\",\"policyEntries\":[{\"userId\":\"33333333-3333-4333-8333-333333333333\",\"status\":\"ACTIVE\",\"role\":\"MANAGER\",\"permissions\":[\"sales:void_invoice\"],\"pinVerifier\":{\"algorithm\":\"bcrypt\",\"formatVersion\":\"2b\",\"encoded\":\"$2b$10$abcdefghijklmnopqrstuv\"},\"attemptResetGeneration\":\"0\"}],\"digest\":\"sha256:69b5b005e442feadab1689c3b7ebe4a4bc0c85a90839a61a8bc903951c117127\"}",
+      "mutatedRaw": "{\"schema\":\"ohac.staff-policy-epoch.v1\",\"tenantId\":\"11111111-1111-4111-8111-111111111111\",\"targetTerminalId\":\"Q802024120001\",\"sequence\":\"1\",\"previousSequence\":\"0\",\"previousDigest\":\"GENESIS\",\"publisherBackendBuild\":\"backend-build-2\",\"targetPosBuild\":\"pos-build-1\",\"minimumAssertionSchema\":\"ohac.assertion.v1\",\"policyEntries\":[{\"userId\":\"33333333-3333-4333-8333-333333333333\",\"status\":\"ACTIVE\",\"role\":\"MANAGER\",\"permissions\":[\"sales:void_invoice\"],\"pinVerifier\":{\"algorithm\":\"bcrypt\",\"formatVersion\":\"2b\",\"encoded\":\"$2b$10$abcdefghijklmnopqrstuv\"},\"attemptResetGeneration\":\"0\"}],\"digest\":\"sha256:69b5b005e442feadab1689c3b7ebe4a4bc0c85a90839a61a8bc903951c117127\"}",
+      "errorCode": "OHAC_DIGEST_MISMATCH"
+    }
+  ],
+  "sizeVectors": [
+    {
+      "id": "S01",
+      "note": "exactly 1 MiB is accepted",
+      "totalBytes": 1048576,
+      "fillCharacter": "a",
+      "jsonPrefix": "{\"pad\":\"",
+      "jsonSuffix": "\"}",
+      "expected": "success"
+    },
+    {
+      "id": "S02",
+      "note": "1 MiB plus one byte is rejected",
+      "totalBytes": 1048577,
+      "fillCharacter": "a",
+      "jsonPrefix": "{\"pad\":\"",
+      "jsonSuffix": "\"}",
+      "errorCode": "OHAC_LIMIT_EXCEEDED"
+    }
   ]
 }

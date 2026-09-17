@@ -2,7 +2,7 @@
 
 Shared cross-runtime vectors for the offline human authorization credential
 contract. Dart and TypeScript tests consume the same file so a divergence in
-either canonicalizer fails both suites.
+either canonicalizer or value-layer contract fails both suites.
 
 ## Contract
 
@@ -26,8 +26,15 @@ This differs from the DSI-6 `CN-AUTH-V1` contract, which normalizes to NFC.
 
 - `canonicalVectors` — inputs that must canonicalize to the stated bytes, digest
   included.
-- `rejectionVectors` — inputs that must fail with the stated stable OHAC error
-  code. `rawHex` carries byte sequences that are not valid UTF-8 text.
+- `rejectionVectors` — inputs that must fail canonicalization with the stated
+  stable OHAC error code. `rawHex` carries byte sequences that are not valid
+  UTF-8 text.
+- `contractVectors` — digest-valid staff-policy envelopes that pin value-layer
+  rejection, plus a valid envelope and its authored one-byte mutation. The
+  runners verify the mutation changes exactly one UTF-8 byte.
+- `sizeVectors` — compact recipes materialized by each runner at exactly 1 MiB
+  and 1 MiB + 1 byte, avoiding a megabyte fixture blob while pinning the shared
+  scanner boundary.
 
 ## Adding vectors
 

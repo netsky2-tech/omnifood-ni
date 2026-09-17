@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { canonicalizeOhac, ohacDigest } from './canonical';
 import { OHAC_ERROR_CODE, type OhacErrorCode } from './error-codes';
+import { parseStaffPolicyEpochV1 } from './staff-policy-epoch.v1';
 
 interface CanonicalVector {
   readonly id: string;
@@ -19,10 +20,34 @@ interface RejectionVector {
   readonly errorCode: string;
 }
 
+interface ContractVector {
+  readonly id: string;
+  readonly note: string;
+  readonly operation: 'parseStaffPolicyEpochV1';
+  readonly raw?: string;
+  readonly validRaw?: string;
+  readonly mutatedRaw?: string;
+  readonly errorCode: string;
+  readonly field?: string;
+}
+
+interface SizeVector {
+  readonly id: string;
+  readonly note: string;
+  readonly totalBytes: number;
+  readonly fillCharacter: string;
+  readonly jsonPrefix: string;
+  readonly jsonSuffix: string;
+  readonly expected?: 'success';
+  readonly errorCode?: string;
+}
+
 interface Fixture {
   readonly contract: string;
   readonly canonicalVectors: readonly CanonicalVector[];
   readonly rejectionVectors: readonly RejectionVector[];
+  readonly contractVectors: readonly ContractVector[];
+  readonly sizeVectors: readonly SizeVector[];
 }
 
 /** Same resolution convention as the audit-v3 fixtures (jest cwd is apps/admin_backend). */
@@ -43,6 +68,15 @@ describe('OHAC-C14N-1 shared conformance vectors', () => {
     expect(fixture.contract).toBe('OHAC-C14N-1');
     expect(fixture.canonicalVectors.length).toBeGreaterThanOrEqual(9);
     expect(fixture.rejectionVectors.length).toBeGreaterThanOrEqual(6);
+    expect(fixture.contractVectors.map((vector) => vector.id)).toEqual([
+      'K01',
+      'K02',
+      'K03',
+    ]);
+    expect(fixture.sizeVectors.map((vector) => vector.id)).toEqual([
+      'S01',
+      'S02',
+    ]);
   });
 
   it.each(fixture.canonicalVectors.map((vector) => [vector.id, vector]))(
@@ -61,6 +95,67 @@ describe('OHAC-C14N-1 shared conformance vectors', () => {
     '%s fails with the authored error code',
     (id, vector) => {
       const result = canonicalizeOhac(rawBytes(vector));
+      if (result.ok === true) {
+        throw new Error(`${id} was accepted but must be rejected`);
+      }
+      expect(result.error.code).toBe(vector.errorCode as OhacErrorCode);
+    },
+  );
+
+  it.each(fixture.contractVectors.map((vector) => [vector.id, vector]))(
+    '%s enforces the authored contract-level expectation',
+    (id, vector) => {
+      expect(vector.operation).toBe('parseStaffPolicyEpochV1');
+      if (vector.validRaw !== undefined) {
+        expect(
+          parseStaffPolicyEpochV1(Buffer.from(vector.validRaw, 'utf8')).ok,
+        ).toBe(true);
+      }
+      const rejectedRaw = vector.raw ?? vector.mutatedRaw;
+      if (rejectedRaw === undefined) {
+        throw new Error(`${id} has no rejection payload`);
+      }
+      if (vector.validRaw !== undefined && vector.mutatedRaw !== undefined) {
+        const validBytes = Buffer.from(vector.validRaw, 'utf8');
+        const mutatedBytes = Buffer.from(vector.mutatedRaw, 'utf8');
+        expect(mutatedBytes).toHaveLength(validBytes.length);
+        expect(
+          validBytes.reduce(
+            (count, byte, index) =>
+              count + (byte === mutatedBytes[index] ? 0 : 1),
+            0,
+          ),
+        ).toBe(1);
+      }
+      const result = parseStaffPolicyEpochV1(Buffer.from(rejectedRaw, 'utf8'));
+      if (result.ok === true) {
+        throw new Error(`${id} was accepted but must be rejected`);
+      }
+      expect(result.error.code).toBe(vector.errorCode as OhacErrorCode);
+      expect(result.error.field).toBe(vector.field);
+    },
+  );
+
+  it.each(fixture.sizeVectors.map((vector) => [vector.id, vector]))(
+    '%s enforces the authored compact size boundary',
+    (id, vector) => {
+      const fixedBytes = Buffer.byteLength(
+        vector.jsonPrefix + vector.jsonSuffix,
+      );
+      const fillBytes = Buffer.byteLength(vector.fillCharacter);
+      expect(fillBytes).toBe(1);
+      const raw = Buffer.from(
+        vector.jsonPrefix +
+          vector.fillCharacter.repeat(vector.totalBytes - fixedBytes) +
+          vector.jsonSuffix,
+        'utf8',
+      );
+      expect(raw).toHaveLength(vector.totalBytes);
+      const result = canonicalizeOhac(raw);
+      if (vector.expected === 'success') {
+        expect(result.ok).toBe(true);
+        return;
+      }
       if (result.ok === true) {
         throw new Error(`${id} was accepted but must be rejected`);
       }
