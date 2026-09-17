@@ -230,11 +230,11 @@ class HardwareSettingsViewModel extends ChangeNotifier {
         return false;
       }
 
-      // Preview only (never a fiscal document): prefer the projected DGI RUC so
-      // the operator validates the real fiscal identity and layout. The demo
-      // fallback exists solely to draw the header line when nothing is configured.
-      final previewRuc =
-          _config.fiscalRuc ?? _config.headerRuc ?? 'J0310000000001';
+      // Preview only (never a fiscal document): use the locally persisted issuer
+      // RUC so the operator validates the real fiscal identity and layout. Never
+      // substitute the decorative header field nor a fabricated identifier: with
+      // nothing configured the preview simply omits the RUC line.
+      final previewRuc = _config.fiscalRuc;
 
       final result = await _printerPort.printInvoice(
         sampleInvoice,
