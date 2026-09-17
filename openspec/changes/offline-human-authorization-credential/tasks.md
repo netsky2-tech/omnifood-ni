@@ -54,7 +54,7 @@ canonical fixtures/contracts
 
 ## Phase 1 — Infrastructure
 
-- [ ] `I-1` **(PR 1)** Add shared cross-runtime conformance fixture directory `fixtures/human-authorization/v1/`
+- [x] `I-1` **(PR 1)** Add shared cross-runtime conformance fixture directory `fixtures/human-authorization/v1/`
   containing canonical UTF-8 + `sha256:` vectors for epoch and assertion payloads (reordered keys,
   escaped controls, astral Unicode, UTF-16 key ordering, NFC/NFD distinction, empty arrays, forbidden
   number, forbidden `null`, duplicate keys, leading-zero sequence, unknown field, one-byte mutation,
@@ -90,21 +90,21 @@ PR 1 contains `I-1` plus `A-RED` → `A-EVIDENCE` and nothing else. It MUST NOT 
 migration `1809000000000-CreateHumanAuthorizationCore.ts`, the POS Floor migration/entities, the
 pepper config module, or Nest module/route wiring; those move to PR 2 onwards.
 
-- [ ] `A-RED` Write failing TS + Dart tests (both consuming `fixtures/human-authorization/v1/`) proving
+- [x] `A-RED` Write failing TS + Dart tests (both consuming `fixtures/human-authorization/v1/`) proving
   `canonicalizeNumberFreeJson` + canonical UTF-8 → `sha256:` digest equality for every vector, and that
   live validation = re-canonicalize + digest equality + schema validation (duplicate-key/unknown-field
   vectors remain fixture-only per R1-006) — must fail before implementation (design §7.2).
-- [ ] `A-GREEN` Implement `apps/admin_backend/src/modules/identity/human-authorization/contracts/`
+- [x] `A-GREEN` Implement `apps/admin_backend/src/modules/identity/human-authorization/contracts/`
   (`staff-policy-epoch.v1.ts`, `assertion.v1.ts`) and Dart counterparts under
   `apps/pos_app/lib/data/models/human_authorization/` with all required fields, decimal-string
   integers, explicit status/role enums, sorted/deduped arrays, and no `null`/numbers/unknown fields
   (design §4.1, §7.1).
-- [ ] `A-TRIANGULATE` Add tests for tenant-scope rejection, digest-mismatch rejection, sequence not
+- [x] `A-TRIANGULATE` Add tests for tenant-scope rejection, digest-mismatch rejection, sequence not
   newer than accepted, and build/schema-pair support, proving contracts reject invalid inputs at the
   value layer with stable codes (spec `Staff Policy Epochs`; proposal invariant 1/4).
-- [ ] `A-REFACTOR` Extract shared canonical helper + stable error-code enum so domain/application
+- [x] `A-REFACTOR` Extract shared canonical helper + stable error-code enum so domain/application
   layers import no NestJS/TypeORM/Dio/Floor/bcrypt; keep contracts immutable value objects (design §3).
-- [ ] `A-EVIDENCE` Run `npm run lint && npm test` in `apps/admin_backend` and `flutter analyze &&
+- [x] `A-EVIDENCE` Run `npm run lint && npm test` in `apps/admin_backend` and `flutter analyze &&
   flutter test` in `apps/pos_app`; record exact commands/results. Rollback: revert Slice A files and
   `1809000000000-CreateHumanAuthorizationCore.ts`; no runtime behavior depends on the tables yet.
 
