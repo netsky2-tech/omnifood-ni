@@ -28,4 +28,13 @@ This document provides specific instructions for AI agents working on the **Omni
 - `flutter pub run build_runner build --delete-conflicting-outputs` - Generate boilerplate.
 - `flutter test` - Execute unit and widget tests.
 
+> **Never run two Flutter tool commands concurrently in this project.** Running `flutter test`
+> alongside `flutter analyze`, `build_runner`, or a second `flutter test` in the same directory
+> makes one of them fail with `Failed to load "<file>": Unable to connect to flutter_tester
+> process: WebSocketException: Invalid WebSocket upgrade request` and exit 1. The file named in
+> the failure differs between runs, so it is not a reliable pointer to a broken test; a sequential
+> re-run of the same command passes. Run Flutter commands one at a time, and serialize them when
+> tooling or subagents verify in parallel. `flutter test` alone on this repository passes the full
+> suite. Upstream report: flutter/flutter#9078.
+
 Refer to the root [AGENTS.md](../../AGENTS.md) for global project principles.
