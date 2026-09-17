@@ -233,12 +233,11 @@ describe('FulfillmentRetention (e2e - Real PostgreSQL, No Mocks)', () => {
             DeviceSyncCredential,
             ActivationAttempt,
           ],
-          // Every pooled connection must share the isolated-schema search_path
-          // (same convention as the migrated reference suites): tables created
-          // by the migrations above live in the isolated schema, while
-          // tenants/users and the device-sync tables provisioned by the helper
-          // live in public. A DataSource-level `schema` option would force the
-          // SyncTransportGuard's repository reads into the isolated schema and
+          // Every pooled connection must share the isolated-schema search_path:
+          // tables created by the migrations above live in the isolated schema,
+          // while tenants/users and the device-sync tables provisioned by the
+          // helper live in public. A DataSource-level `schema` option would force
+          // the SyncTransportGuard's repository reads into the isolated schema and
           // miss the public rows.
           extra: { options: `-c search_path=${schema},public` },
           synchronize: false,

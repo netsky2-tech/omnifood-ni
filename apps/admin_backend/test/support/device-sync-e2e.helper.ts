@@ -35,6 +35,13 @@ import {
 export interface DeviceSyncE2EProvisionOptions {
   readonly tenantId: string;
   readonly deviceId: string;
+  /**
+   * Schema that owns the device sync tables. Provide it when the suite
+   * bootstraps the app with a DataSource-level `schema` option, because then
+   * SyncTransportGuard reads `"<schema>".device_sync_credentials` and the
+   * provisioned rows must live in that same schema.
+   */
+  readonly schema?: string;
   readonly scopes?: readonly DeviceSyncScope[];
   readonly credentialVersion?: number;
   readonly credentialExpiresAt?: Date;
@@ -82,11 +89,12 @@ const assertDeviceSyncScopes = (
  * migration DDL without its RLS policies so fresh CI databases can insert;
  * databases migrated by the app keep their own RLS untouched.
  */
-export const ensurePublicDeviceSyncTables = async (
+export const ensureDeviceSyncTables = async (
   runner: QueryRunner,
+  schema = 'public',
 ): Promise<void> => {
   await runner.query(`
-    CREATE TABLE IF NOT EXISTS public.onboarding_activation_attempts (
+    CREATE TABLE IF NOT EXISTS "${schema}".onboarding_activation_attempts (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       tenant_id varchar(128) NOT NULL,
       onboarding_session_id uuid NOT NULL,
@@ -111,7 +119,7 @@ export const ensurePublicDeviceSyncTables = async (
       updated_at timestamptz NOT NULL DEFAULT now()
     );
 
-    CREATE TABLE IF NOT EXISTS public.device_sync_credentials (
+    CREATE TABLE IF NOT EXISTS "${schema}".device_sync_credentials (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       tenant_id varchar(128) NOT NULL,
       activation_attempt_id uuid NOT NULL,
@@ -132,6 +140,13 @@ export const ensurePublicDeviceSyncTables = async (
         ON DELETE RESTRICT
     );
   `);
+};
+
+/** Public-schema convenience wrapper kept for suites without a DataSource `schema`. */
+export const ensurePublicDeviceSyncTables = async (
+  runner: QueryRunner,
+): Promise<void> => {
+  await ensureDeviceSyncTables(runner, 'public');
 };
 
 /**
@@ -161,10 +176,13 @@ export const provisionDeviceSyncCredential = async (
     options.credentialExpiresAt ??
     new Date(Date.now() + DEFAULT_DEVICE_SYNC_RENEWAL_TTL_SECONDS * 1000);
 
+  const targetSchema = options.schema?.trim() || 'public';
+  const qualified = (table: string): string => `"${targetSchema}".${table}`;
+
   const ensureRunner = dataSource.createQueryRunner();
   try {
     await ensureRunner.connect();
-    await ensurePublicDeviceSyncTables(ensureRunner);
+    await ensureDeviceSyncTables(ensureRunner, targetSchema);
   } finally {
     await ensureRunner.release();
   }
@@ -183,7 +201,7 @@ export const provisionDeviceSyncCredential = async (
 
       const activationAttemptId = randomUUID();
       await manager.query(
-        `INSERT INTO onboarding_activation_attempts (
+        `INSERT INTO ${qualified('onboarding_activation_attempts')} (
            id, tenant_id, onboarding_session_id, candidate_terminal_id,
            trusted_terminal_id, status, started_by_user_id, started_at,
            completed_at, server_time_anchor_at, required_fiscal_revision,
@@ -208,7 +226,7 @@ export const provisionDeviceSyncCredential = async (
 
       const credentialId = randomUUID();
       await manager.query(
-        `INSERT INTO device_sync_credentials (
+        `INSERT INTO ${qualified('device_sync_credentials')} (
            id, tenant_id, activation_attempt_id, renewal_secret_hash, scopes,
            version, status, expires_at, issued_at
          ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, now())`,

@@ -151,6 +151,10 @@ async function withIsolatedSchema(
     // sourceDeviceId. sync:push is the exact scope /v1/sync/batch requires.
     provisionedDevices.push(
       await provisionDeviceSyncCredential(dataSource, {
+        // This suite bootstraps the app with a DataSource-level `schema` option,
+        // so SyncTransportGuard reads the device tables from that isolated schema
+        // and the provisioned rows must land there too.
+        schema,
         tenantId,
         deviceId: 'terminal1',
         scopes: ['sync:push'],

@@ -112,6 +112,10 @@ async function withIsolatedSchema(
     // inbound pull routes below authenticate with a device token.
     provisionedDevices.push(
       await provisionDeviceSyncCredential(dataSource, {
+        // This suite bootstraps the app with a DataSource-level `schema` option,
+        // so SyncTransportGuard reads the device tables from that isolated schema
+        // and the provisioned rows must land there too.
+        schema,
         tenantId,
         deviceId: 'terminal-1',
         scopes: ['sync:pull'],
