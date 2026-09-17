@@ -143,13 +143,20 @@ export class FulfillmentRetentionService {
       // 3. Invariant Assertion: Invoices and Kardex/movements MUST NEVER be purged!
       let excludedInvoices = 0;
       let excludedKardex = 0;
-      // Resolve the schema this connection actually reads from. Deriving it
-      // from the DataSource `schema` option silently fell back to public and
-      // made the purge report zero excluded invoices whenever the tables live
-      // in a non-public search_path schema.
-      const [{ current_schema: targetSchema }] = await manager.query<
-        Array<{ current_schema: string }>
-      >('SELECT current_schema() AS current_schema');
+      // Resolve the schema exactly the way TypeORM resolves the table for
+      // this entity: the DataSource or entity `schema` option wins, and only
+      // when neither is set does the schema come from the connection search
+      // path. Deriving it from the `schema` option alone fell back to public
+      // and made the purge report zero excluded invoices whenever the tables
+      // live elsewhere.
+      const invoiceSchema = manager.connection.getMetadata(Invoice).schema;
+      const targetSchema =
+        invoiceSchema ??
+        (
+          await manager.query<Array<{ current_schema: string }>>(
+            'SELECT current_schema() AS current_schema',
+          )
+        )[0].current_schema;
 
       const invoiceTableCheck = await manager.query<
         Array<Record<string, unknown>>
