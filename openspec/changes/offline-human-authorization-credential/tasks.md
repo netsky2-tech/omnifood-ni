@@ -12,19 +12,20 @@ Artifact store: `openspec`. Delivery strategy: `ask-always`. Execution mode: `in
 | Estimated changed lines | ~1,400–2,200 (authored additions + deletions; excludes generated Floor `.g.dart`) |
 | 400-line budget risk | High |
 | Chained PRs recommended | Yes |
-| Suggested split | Dependency-valid slices only: PR 1 canonical contracts+persistence → PR 2 epoch/ack state machine + drain gate → PR 3 durable PIN + assertion creation → PR 4 verifier + recovery + observability → PR 5 pilot/Q80 evidence. **Final PR/chained-PR/work-unit decision is a PENDING user decision under `ask-always`; no strategy is selected here.** |
-| Delivery strategy | ask-on-risk |
-| Chain strategy | pending |
+| Suggested split | Approved delivery strategy: **chained PRs**. PR 1 (approved scope) = `I-1` + `A-RED/A-GREEN/A-TRIANGULATE/A-REFACTOR/A-EVIDENCE` only: shared canonical fixtures plus cross-runtime contracts, no database migrations, no Nest routes. PR 2 = epoch/ack state machine + drain gate + additive persistence (`I-2`, `I-3`, `I-5`, `B-*`). PR 3 = durable PIN attempts + assertion creation + `I-4` (`C-*`). PR 4 = verifier + recovery + observability (`D-*`). PR 5 = pilot/Q80 evidence (`T-*`). |
+| Delivery strategy | chained-pr (user-approved) |
+| Chain strategy | chained PRs, dependency-ordered, one reviewable slice per PR |
+| PR 1 scope (approved) | Canonical contracts + fixtures only; migrations explicitly deferred |
 
-The total (~1,400–2,200 lines) **far exceeds the 400-line `review_budget_lines` budget**. Under
-`ask-always` the final PR / chained-PR / work-unit selection is deferred to the user before `apply`;
-this file proposes only dependency-valid slices and does not silently select a chain strategy.
+The total (~1,400–2,200 lines) **far exceeds the 400-line `review_budget_lines` budget**, so delivery
+is split into chained PRs as approved by the user. PR 1 is deliberately limited to the canonical
+contract work so it stays inside the budget.
 
 ```text
-Decision needed before apply: Yes
-Chained PRs recommended: Yes
-Chain strategy: pending
-400-line budget risk: High
+Decision needed before apply: No (resolved)
+Chained PRs recommended: Yes (selected)
+Chain strategy: chained, dependency-ordered
+400-line budget risk: High for PR 2+; acceptable for PR 1
 ```
 
 ## Dependencies, Order & Critical Path
@@ -53,53 +54,57 @@ canonical fixtures/contracts
 
 ## Phase 1 — Infrastructure
 
-- [ ] `I-1` Add shared cross-runtime conformance fixture directory `fixtures/human-authorization/v1/`
+- [x] `I-1` **(PR 1)** Add shared cross-runtime conformance fixture directory `fixtures/human-authorization/v1/`
   containing canonical UTF-8 + `sha256:` vectors for epoch and assertion payloads (reordered keys,
   escaped controls, astral Unicode, UTF-16 key ordering, NFC/NFD distinction, empty arrays, forbidden
   number, forbidden `null`, duplicate keys, leading-zero sequence, unknown field, one-byte mutation,
   max 1 MiB size) with exact expected canonical bytes/hex per design §7.2.
-- [ ] `I-2` Author backend additive TypeORM migration
+- [ ] `I-2` **(PR 2)** Author backend additive TypeORM migration
   `apps/admin_backend/src/migrations/1809000000000-CreateHumanAuthorizationCore.ts` creating
   `human_auth_policy_epochs`, `human_auth_terminal_ack_history`, `human_auth_terminal_ack_floor`,
   `human_auth_recovery_tokens`, `human_auth_recovery_events`, `human_auth_verification_events`,
   `human_auth_rollout_cohorts` with unique/check constraints, indexes, `ENABLE` + `FORCE ROW LEVEL
   SECURITY`, tenant SELECT/INSERT/update policies using `current_setting('app.tenant_id', true)`, and
   UPDATE/DELETE-denial triggers on append-only tables plus floor-regression triggers (design §4.2, §11).
-- [ ] `I-3` Add POS additive Floor migration + entities/DAOs registration in
+- [ ] `I-3` **(PR 2)** Add POS additive Floor migration + entities/DAOs registration in
   `apps/pos_app/lib/data/database/app_database.dart` and `migrations.dart` for
   `human_auth_policy_epochs`, `human_auth_policy_entries`, singleton `human_auth_terminal_state`,
   `human_auth_attempt_state`, append-only `human_auth_local_events`; new installs start `UNENROLLED`
   with NO backfill/fabricated ack from `security_profiles`; migration/integrity failure sets fail-closed
   before authorization UI enables (design §11).
-- [ ] `I-4` Add deployment-secret config module for the recovery-token pepper
+- [ ] `I-4` **(PR 3)** Add deployment-secret config module for the recovery-token pepper
   (backend `ConfigModule` provider, e.g. under
   `apps/admin_backend/src/modules/identity/human-authorization/config/`): no default value, never
   committed, never derived from tenant/user material; MUST fail fast at startup when missing or empty
   (design §9). No plaintext secret material in logs/metrics/exceptions.
-- [ ] `I-5` Register `HumanAuthorizationModule` providers/routes from
+- [ ] `I-5` **(PR 2)** Register `HumanAuthorizationModule` providers/routes from
   `apps/admin_backend/src/modules/identity/identity.module.ts` with dark/disabled routes, capability
   negotiation seam, and `InboundSyncResponseDto` extension point; `sales.module.ts` only consumes the
   exported verifier port later (design §2).
 
 ## Phase 2 — Implementation (Strict TDD slices)
 
-### Slice A — Cross-runtime canonical contracts + disabled additive persistence
+### Slice A — Cross-runtime canonical contracts (PR 1, approved scope)
 
-- [ ] `A-RED` Write failing TS + Dart tests (both consuming `fixtures/human-authorization/v1/`) proving
+PR 1 contains `I-1` plus `A-RED` → `A-EVIDENCE` and nothing else. It MUST NOT create the backend
+migration `1809000000000-CreateHumanAuthorizationCore.ts`, the POS Floor migration/entities, the
+pepper config module, or Nest module/route wiring; those move to PR 2 onwards.
+
+- [x] `A-RED` Write failing TS + Dart tests (both consuming `fixtures/human-authorization/v1/`) proving
   `canonicalizeNumberFreeJson` + canonical UTF-8 → `sha256:` digest equality for every vector, and that
   live validation = re-canonicalize + digest equality + schema validation (duplicate-key/unknown-field
   vectors remain fixture-only per R1-006) — must fail before implementation (design §7.2).
-- [ ] `A-GREEN` Implement `apps/admin_backend/src/modules/identity/human-authorization/contracts/`
+- [x] `A-GREEN` Implement `apps/admin_backend/src/modules/identity/human-authorization/contracts/`
   (`staff-policy-epoch.v1.ts`, `assertion.v1.ts`) and Dart counterparts under
   `apps/pos_app/lib/data/models/human_authorization/` with all required fields, decimal-string
   integers, explicit status/role enums, sorted/deduped arrays, and no `null`/numbers/unknown fields
   (design §4.1, §7.1).
-- [ ] `A-TRIANGULATE` Add tests for tenant-scope rejection, digest-mismatch rejection, sequence not
+- [x] `A-TRIANGULATE` Add tests for tenant-scope rejection, digest-mismatch rejection, sequence not
   newer than accepted, and build/schema-pair support, proving contracts reject invalid inputs at the
   value layer with stable codes (spec `Staff Policy Epochs`; proposal invariant 1/4).
-- [ ] `A-REFACTOR` Extract shared canonical helper + stable error-code enum so domain/application
+- [x] `A-REFACTOR` Extract shared canonical helper + stable error-code enum so domain/application
   layers import no NestJS/TypeORM/Dio/Floor/bcrypt; keep contracts immutable value objects (design §3).
-- [ ] `A-EVIDENCE` Run `npm run lint && npm test` in `apps/admin_backend` and `flutter analyze &&
+- [x] `A-EVIDENCE` Run `npm run lint && npm test` in `apps/admin_backend` and `flutter analyze &&
   flutter test` in `apps/pos_app`; record exact commands/results. Rollback: revert Slice A files and
   `1809000000000-CreateHumanAuthorizationCore.ts`; no runtime behavior depends on the tables yet.
 
