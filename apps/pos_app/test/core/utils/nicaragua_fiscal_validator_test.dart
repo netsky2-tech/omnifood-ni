@@ -104,6 +104,68 @@ void main() {
           equals('J031000000001'),
         );
       });
+
+      /// Normative parity vectors (design §3, corrected per SDD erratum #9051)
+      /// for change founder-pilot-fiscal-and-printer-fixture-alignment.
+      ///
+      /// CHARACTERIZATION PIN: the Dart validator is the normative reference;
+      /// this table pins existing behavior and MUST stay identical to the TS
+      /// suites (`apps/admin_backend/src/modules/onboarding/utils/
+      /// nicaragua-fiscal.validator.spec.ts` and the owner-dashboard copy).
+      /// The TS table carries 18 rows because JS distinguishes `null` from
+      /// `undefined`; Dart has no undefined, so those rows collapse here.
+      /// Rows 17/18 raws were mislabeled in design §3 rows 9/10 ("month 15" /
+      /// "day 32") — under day=DD/month=MM over the 6-digit block they are
+      /// VALID cédulas; the genuine invalid vectors are month-13 / day-32.
+      group('PR-1 parity vectors (normative table)', () {
+        const vectors = <(String?, bool, String?, FiscalIdentificationType)>[
+          ('J0310000055555', true, 'J0310000055555', FiscalIdentificationType.rucJuridico),
+          ('j0310000055555', true, 'J0310000055555', FiscalIdentificationType.rucJuridico),
+          ('J 031-0000055555', true, 'J0310000055555', FiscalIdentificationType.rucJuridico),
+          ('J031000005555', false, null, FiscalIdentificationType.invalid),
+          ('K0310000055555', false, null, FiscalIdentificationType.invalid),
+          ('CF-12345', false, null, FiscalIdentificationType.invalid),
+          ('001-150885-1004J', true, '0011508851004J', FiscalIdentificationType.cedula),
+          ('0011508851004j', true, '0011508851004J', FiscalIdentificationType.cedula),
+          ('001-121390-1004J', false, null, FiscalIdentificationType.invalid), // month 13
+          ('001-320590-1004J', false, null, FiscalIdentificationType.invalid), // day 32
+          ('001-150885-10044', false, null, FiscalIdentificationType.invalid), // no letter
+          ('0011508851004', false, null, FiscalIdentificationType.invalid), // no J prefix
+          ('', false, null, FiscalIdentificationType.none),
+          ('   ', false, null, FiscalIdentificationType.none),
+          (null, false, null, FiscalIdentificationType.none),
+          ('001-150985-1004J', true, '0011509851004J', FiscalIdentificationType.cedula), // day 15, month 09
+          ('321-150885-1004J', true, '3211508851004J', FiscalIdentificationType.cedula), // 321 = municipality
+        ];
+
+        test('every vector satisfies isValidRuc / detectType / canonical clean', () {
+          for (final (raw, valid, canonical, type) in vectors) {
+            expect(
+              NicaraguaFiscalValidator.isValidRuc(raw),
+              valid,
+              reason: 'isValidRuc($raw) must be $valid',
+            );
+            expect(
+              NicaraguaFiscalValidator.detectType(raw),
+              type,
+              reason: 'detectType($raw) must be $type',
+            );
+            if (valid) {
+              expect(
+                NicaraguaFiscalValidator.clean(raw),
+                canonical,
+                reason: 'clean($raw) must be $canonical',
+              );
+            }
+          }
+        });
+
+        test('rejects J-RUC with too many digits and cédula with bad letter position', () {
+          expect(NicaraguaFiscalValidator.isValidRuc('J03100000555555'), isFalse);
+          expect(NicaraguaFiscalValidator.isValidRuc('001-150885-1004'), isFalse);
+          expect(NicaraguaFiscalValidator.isValidRuc('X0310000055555'), isFalse);
+        });
+      });
     });
   });
 }

@@ -127,7 +127,7 @@ export function FiscalSetupForm() {
 
             {/* RUC */}
             <div className="space-y-2">
-              <Label htmlFor="ruc">RUC (Número RUC)</Label>
+              <Label htmlFor="ruc">RUC (Número RUC) *</Label>
               <Input
                 id="ruc"
                 placeholder="Ej. J0310000012345"
