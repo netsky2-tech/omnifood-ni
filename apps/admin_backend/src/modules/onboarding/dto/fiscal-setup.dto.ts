@@ -1,5 +1,7 @@
+import { Transform } from 'class-transformer';
 import {
   IsBoolean,
+  IsDefined,
   IsEnum,
   IsNumber,
   IsOptional,
@@ -8,6 +10,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { FiscalConfigVersion } from './fiscal-config-version.dto';
+import { IsValidNicaraguaFiscalId } from '../validators/is-valid-nicaragua-fiscal-id.validator';
 
 export enum FiscalRegime {
   CUOTA_FIJA = 'CUOTA_FIJA',
@@ -24,9 +27,13 @@ export class FiscalSetupDto {
   @MinLength(1, { message: 'businessName must not be empty' })
   businessName: string;
 
-  @IsOptional()
+  @IsDefined()
   @IsString()
-  ruc?: string;
+  @Transform(({ value }: { value: unknown }): unknown =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsValidNicaraguaFiscalId()
+  ruc: string;
 
   @IsNumber()
   @Min(0, { message: 'commercialFxSpread must be greater than or equal to 0' })

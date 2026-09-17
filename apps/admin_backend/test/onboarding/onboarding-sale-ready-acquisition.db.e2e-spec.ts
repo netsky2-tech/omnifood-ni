@@ -709,6 +709,7 @@ describe('ONB1.5 — Fiscal + Catalog Acquisition UX & SALE_READY Transition (Po
           .send({
             regime: FiscalRegime.REGIMEN_GENERAL,
             businessName: 'Coffee Boutique',
+            ruc: 'J0310000070701',
             commercialFxSpread: 0.5,
             pricesIncludeTax: true,
           })
@@ -750,6 +751,7 @@ describe('ONB1.5 — Fiscal + Catalog Acquisition UX & SALE_READY Transition (Po
           .send({
             regime: FiscalRegime.CUOTA_FIJA,
             businessName: 'MiniMarket Express',
+            ruc: 'J0310000074802',
             commercialFxSpread: 0.5,
             pricesIncludeTax: true,
           })
@@ -804,6 +806,7 @@ describe('ONB1.5 — Fiscal + Catalog Acquisition UX & SALE_READY Transition (Po
           .send({
             regime: FiscalRegime.CUOTA_FIJA,
             businessName: 'Combo Store',
+            ruc: 'J0310000080203',
             commercialFxSpread: 0.5,
             pricesIncludeTax: true,
           })
