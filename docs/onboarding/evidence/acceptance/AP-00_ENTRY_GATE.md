@@ -14,8 +14,11 @@
 ╔═══════════════════════════════════════════════════════════╗
 ║  RESULTADO: NOT READY FOR ACCEPTANCE                     ║
 ║  Razón: Piloto físico Q80 pendiente (hardware real)      ║
-║  Non-hardware checks: ALL PASS                           ║
-║  Acceptance Release ID: c6b61cd-m1801000000000-stage10   ║
+║          + identidad de release NOT FROZEN (FREEZE-05)   ║
+║  Non-hardware checks: PASS salvo Release Candidate       ║
+║    (§5 = PENDING: release no congelada)                  ║
+║  Acceptance Release ID: NOT FROZEN — pendiente de        ║
+║    acuñar en FREEZE-05                                   ║
 ╚═══════════════════════════════════════════════════════════╝
 ```
 
@@ -73,8 +76,9 @@
 
 | Check | Estado | Evidencia |
 |---|---|---|
-| Release candidate exacto congelado | ✅ | `AP_FIXTURE_MANIFEST.md` v1.0 — commit `c6b61cd` congelado, builds reales documentados |
-| `acceptanceReleaseId` calculado | ✅ | `c6b61cd-m1801000000000-stage10` (backend commit + last migration + stage 10 flags) |
+| Release candidate exacto congelado | ⚠️ PENDING | La identidad de release anterior estaba desactualizada y fue retirada. **NOT FROZEN:** el manifest no declara release congelada; acuñar `acceptanceReleaseId` en FREEZE-05 tras estabilizar todo cambio que afecte release |
+| `acceptanceReleaseId` calculado | ⚠️ PENDING | **NOT FROZEN** — se acuña una sola vez en FREEZE-05 (commit final de release + última migración + stage 10 flags). Los valores anteriores no corresponden al árbol actual |
+| Migración y schema verificables en el árbol | ✅ | Última migración TypeORM: `1809040000000-CreateHumanAuthorizationTenantPublicationState`; Floor schema version del POS: `52`; POS pubspec: `1.0.0+1` |
 | Feature flags/cutover state documentado | ✅ | `AP_FIXTURE_MANIFEST.md` §3 — Stage 10 (todos los flags `true`) |
 | No existen P0/P1 conocidos abiertos | ✅ | Architecture audit: P0=0, P1=0; PRD audit: P0=0, P1=0; Acceptance plan re-audit: AP-A01..A10 CLOSED |
 | No existe corrupción de Inventory por imports legacy | ✅ | PR-ONB-24: `LegacyImportIntegrityReport` cerrado |
@@ -98,8 +102,8 @@
 | Check | Estado | Evidencia |
 |---|---|---|
 | `onboarding_acceptance_plan_v1.0.md` aprobado | ✅ | Re-auditoría cerrada (AP-A01..A10 = CLOSED) |
-| `AP_FIXTURE_MANIFEST.md` creado | ✅ | v1.0 — builds reales congelados, hardware fixture pendiente de campo |
-| `AP_REFERENCE_RUN_PROTOCOL.md` creado | ✅ | v1.0 — protocolo congelado, Wan/operador pendiente de campo |
+| `AP_FIXTURE_MANIFEST.md` creado | ✅ | v1.0 — estructura disponible; identidad y hardware NOT FROZEN hasta FREEZE-05 |
+| `AP_REFERENCE_RUN_PROTOCOL.md` creado | ✅ | v1.0 — protocolo disponible; ejecución WAN/operador pendiente de campo |
 | `onboarding_execution_roadmap.md` v1.1 aprobado | ✅ | Re-auditoría cerrada (ER-01..ER-09 = CLOSED) |
 
 ---
@@ -107,30 +111,40 @@
 # 8. Decisión
 
 ```text
-El Entry Gate NO PASSA por el blocker de hardware.
+El Entry Gate NO PASSA por el blocker de hardware y porque la identidad de release aún NO está congelada.
 
-Non-hardware checks: ALL PASS (§1–§5, §7)
+Non-hardware checks:
   §1 Architecture Authority:     PASS (P0=0, P1=0)
   §2 Implementation Completeness: PASS (ONB1.0–ONB1.9 cerrados; ONB1.10F = hardware blocker)
   §3 Regression Completeness:     PASS (74/74 escenarios verdes)
   §4 Baselines & Restoration:     DEFERRED (post-piloto con datos reales)
-  §5 Release Candidate:           PASS (acceptanceReleaseId congelado)
-  §7 Documentation Readiness:     PASS (fixture + protocol v1.0 congelados)
+  §5 Release Candidate:           PENDING (NOT FROZEN — release id se acuña en FREEZE-05)
+  §7 Documentation Readiness:     PASS (fixture + protocol v1.0; release identity pendiente)
 
-Blocker: §6 Hardware & Pilot Readiness
+Blockers:
+  §6 Hardware & Pilot Readiness
   Founder pilot en hardware real:    ❌ BLOCKER
   TTFSS <= 15 min (cohort de 5):     ❌ BLOCKER
   Impresión de ticket:                ❌ BLOCKER
   WAN outage real:                    ❌ BLOCKER
   Restart recovery en dispositivo:    ❌ BLOCKER
 
+  Pre-rehearsal adicionales (documentados en el manifest):
+  Mismatch de régimen tributario:     ❌ BLOCKER — fixture CUOTA_FIJA vs harness
+                                      attachado REGIMEN_GENERAL; resolver antes
+                                      del piloto (§9 de AP_FIXTURE_MANIFEST.md)
+  RUC placeholder del seed:           ❌ BLOCKER — reemplazar antes de emitir
+                                      cualquier documento fiscal
+
 Siguiente acción:
   1. Ejecutar piloto físico en Alacrity Q80/iPOS
   2. Capturar evidencia: APK, ticket impreso, WAN outage, restart
   3. Completar hardware fixture en AP_FIXTURE_MANIFEST.md (§5)
   4. Completar Wan/operador en AP_REFERENCE_RUN_PROTOCOL.md (§1, §6)
-  5. Actualizar este gate con resultado
-  6. Iniciar AP-01..AP-12
+  5. Acuñar y congelar el acceptanceReleaseId en FREEZE-05, tras estabilizar
+     todo cambio que afecte release (código, migraciones, configuración, fixtures)
+  6. Actualizar este gate con resultado
+  7. Iniciar AP-01..AP-12
 ```
 
 ---
@@ -140,8 +154,8 @@ Siguiente acción:
 ```text
 Revisado por:    «COMPLETAR EN CAMPO»
 Fecha:           «COMPLETAR EN CAMPO»
-Decisión:        NOT READY FOR ACCEPTANCE (hardware blocker)
-Blocker:         ONB1.10F — Physical pilot pending
-acceptanceReleaseId: c6b61cd-m1801000000000-stage10
+Decisión:        NOT READY FOR ACCEPTANCE (hardware blocker + release NOT FROZEN)
+Blocker:         ONB1.10F — Physical pilot pending; release id pendiente de FREEZE-05
+acceptanceReleaseId: **NOT FROZEN** — «COMPLETAR EN FREEZE-05»
 Next gate:       AP-00 re-evaluation post-pilot → AP-01..AP-12
 ```

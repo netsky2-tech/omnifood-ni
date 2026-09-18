@@ -41,8 +41,9 @@ A real fiscal document cannot be corrected after issuance. Acceptance evidence m
 
 ## Delivery and verification
 
-- Delivery strategy: `ask-on-risk`.
+- Delivery strategy: `stacked-to-main`, selected after the first slice exceeded the review budget.
 - Review budget: approximately 400 authored changed lines per slice.
+- Stack boundary: `feat/founder-pilot-freeze` is slice 1; `feat/founder-pilot-freeze-docs` is slice 2 and must target slice 1.
 - TDD mode: strict, from `openspec/config.yaml`.
 - Backend runner: `npm test`; focused Jest commands are preferred for fixture-contract work.
 - Documentation-only tasks use structural checks, grep/readback, and hash verification.
@@ -70,7 +71,7 @@ Evidence: completed 2026-09-17; the main checkout's unrelated `.pi/` paths were 
 
 ### FREEZE-02 — Create deterministic F2–F5 CSV fixtures
 
-Status: in_progress — implementation and verification complete; awaiting explicit commit authorization.
+Status: complete — committed as `f9d1f91c71bc1627781ac055e2a72ad744f9f28e`.
 Depends on: FREEZE-01
 
 - [x] Derive fixture headers and unsupported-column behavior from the canonical import contract.
@@ -99,19 +100,19 @@ Fixture hashes:
 - F4: `2279c1c9bcefe3b881258db093d2804201f0d93df421f3dd657e24d7b1c76d25`
 - F5: `6ec18aa73493e5046c3ee607f283d13b40a0397fd843c0ba28644e21fe8a4307`
 
-Evidence: strict-TDD writer reported RED from missing fixtures, GREEN at 28/28 focused tests, triangulation for aliases and five invalid classes, and post-format refactor. RED history was not independently reproducible after implementation. Authored scope: 331 lines. Commit identity pending explicit user authorization.
+Evidence: strict-TDD writer reported RED from missing fixtures, GREEN at 28/28 focused tests, triangulation for aliases and five invalid classes, and post-format refactor. RED history was not independently reproducible after implementation. Candidate authored scope: 331 fixture/spec lines. Work-unit commit `f9d1f91c71bc1627781ac055e2a72ad744f9f28e` contains the fixture/spec candidate plus this durable task document (567 inserted lines total). Runtime harness: N/A because these are static import fixtures validated through the real parser/service contract; no runtime transport or device boundary changed. Rollback boundary: revert the five fixture/spec files and their FREEZE-02 tracking record without touching later acceptance evidence.
 
 ### FREEZE-03 — Correct deterministic acceptance-document drift
 
-Status: pending
+Status: in_progress — implementation and independent verification complete; awaiting explicit commit authorization.
 Depends on: FREEZE-02
 
-- [ ] Correct the Android package ID to `com.nhilos.pos_app`.
-- [ ] Record derivable POS version `1.0.0+1`, Floor schema version `52`, and current migration facts.
-- [ ] Remove stale identity values from active fields or label historical values explicitly as superseded.
-- [ ] Align the declared fiscal regime with the real attached-device rehearsal fixture.
-- [ ] Clearly distinguish the mocked rehearsal from the real Q80 integration test.
-- [ ] Keep unknown field values as explicit human-gated placeholders.
+- [x] Correct the Android package ID to `com.nhilos.pos_app`.
+- [x] Record derivable POS version `1.0.0+1`, Floor schema version `52`, and current migration facts.
+- [x] Remove stale identity values from active fields and mark release identity NOT FROZEN pending FREEZE-05.
+- [x] Investigate the fiscal-regime mismatch; no unique authority exists, so it is an explicit pre-rehearsal blocker.
+- [x] Clearly distinguish the mocked rehearsal from the real Q80 integration test.
+- [x] Keep unknown field values as explicit human-gated placeholders.
 
 Acceptance criteria:
 - Active acceptance instructions no longer target `com.omnifood.pos`.
@@ -124,7 +125,7 @@ Checks:
 - Readback against POS build files, Floor database annotation, and TypeORM migration tail.
 - Markdown structural review.
 
-Evidence: pending.
+Evidence: documentation-only task, so RED/GREEN was N/A; structural/readback verification used instead. Writer checks passed for diff hygiene, stale identifiers, package/version/schema/migration facts, mock-vs-physical distinction, and 5-file scope. Independent verification found one MEDIUM stale freeze claim in AP-00 summary cells; bounded correction replaced both affirmative freeze claims, and focused reverification passed. Final slice-2 document delta: 102 insertions, 64 deletions (166 changed lines), plus the parent-owned task tracking delta; within the 400-line budget. Runtime harness: N/A because no executable behavior changed. Rollback boundary: revert the five acceptance-document changes without touching FREEZE-02 fixtures or tests. Commit identity pending explicit user authorization.
 
 ### FREEZE-04 — Resolve human safety and environment prerequisites
 
@@ -229,8 +230,11 @@ Evidence: pending.
 - Exploration completed from repository evidence.
 - SDD was intentionally abandoned in favor of ODD because this is an operational acceptance workflow rather than a new product capability.
 - FREEZE-01 completed with the dedicated worktree clean except for the authorized ODD task document.
-- FREEZE-02 implementation and independent verification are complete; work-unit closure is waiting for explicit commit authorization.
+- FREEZE-02 completed and committed as `f9d1f91c71bc1627781ac055e2a72ad744f9f28e` after explicit user authorization.
+- The commit is one coherent work unit, but its 567 inserted lines exceed the 400-line PR budget because it includes the 331-line verified candidate and the 236-line durable ODD task document.
+- User selected `stacked-to-main`. Slice 1 remains on `feat/founder-pilot-freeze`; slice 2 started from it on `feat/founder-pilot-freeze-docs` for FREEZE-03.
+- FREEZE-03 implementation and independent reverification are complete; work-unit closure is waiting for explicit commit authorization.
 
 ## Next step
 
-Obtain explicit authorization for the FREEZE-02 work-unit commit. After recording its commit identity, close FREEZE-02 and start FREEZE-03.
+Obtain explicit authorization for the FREEZE-03 slice-2 commit. After recording its commit identity, close FREEZE-03 and begin the human-gated FREEZE-04 decisions.

@@ -2,7 +2,7 @@
 
 **Documento:** `AP_Q80_PILOT_CHECKLIST.md`  
 **Ubicación:** `docs/onboarding/evidence/acceptance/AP_Q80_PILOT_CHECKLIST.md`  
-**Estado:** **READY FOR EXECUTION**  
+**Estado:** **READY FOR EXECUTION — con bloqueantes pre-rehearsal pendientes (régimen fiscal y RUC placeholder; ver §9 de `AP_FIXTURE_MANIFEST.md`)**
 **Versión:** 1.0  
 **Fecha:** 2026-09-04  
 **Autoridad:** `onboarding_acceptance_plan_v1.0.md` §AP-12, `onboarding_execution_roadmap.md` ONB1.10F
@@ -12,6 +12,12 @@
 # 0. Objetivo
 
 Checklist operativo paso a paso para ejecutar el piloto físico del founder tenant en un Alacrity Q80/iPOS real. Este documento es la guía de campo; no reemplaza el Acceptance Plan ni el Reference Run Protocol.
+
+**Harness de acceptance — rehearsal simulado vs run físico real:**
+
+- **Rehearsal simulado (NO satisface aceptación física):** `apps/pos_app/test/integration/onb1_10_founder_pilot_rehearsal_e2e_test.dart` usa `MockDio`, `MockAlertService` y `MockPrinterAdapter` — es un ensayo lógico sin hardware.
+- **Run físico real (el único que satisface la aceptación física):** harness attachado al dispositivo `apps/pos_app/integration_test/onb1_10_founder_pilot_q80_e2e_test.dart`, con adaptador de impresora real (`IPosPrinterAdapter`) y variables `PILOT_*` provenientes del JSON del seed script.
+- Sólo el run attachado real produce la evidencia física de este checklist (ticket impreso, WAN outage real, outbox drain) y los campos de `AP_Q80_PILOT_EVIDENCE.md` §2–§9.
 
 ---
 
@@ -32,10 +38,10 @@ Checklist operativo paso a paso para ejecutar el piloto físico del founder tena
 - [ ] Backend NestJS corriendo y accesible desde la red del piloto
 - [ ] PostgreSQL con migración correcta verificada
 - [ ] Feature flags en Stage 10 (todos `true`)
-- [ ] POS APK instalado en Q80 — verificar versión:
+- [ ] POS APK instalado en Q80 — verificar versión (pubspec declara `1.0.0+1`; registrar el valor real observado en `AP_Q80_PILOT_EVIDENCE.md`):
   ```bash
   # En el dispositivo o vía ADB:
-  adb shell dumpsys package com.omnifood.pos | grep versionName
+  adb shell dumpsys package com.nhilos.pos_app | grep versionName
   ```
 - [ ] Owner Dashboard accesible en browser
 - [ ] Browser limpio (cache, cookies, local storage borrados)
@@ -79,7 +85,7 @@ Checklist operativo paso a paso para ejecutar el piloto físico del founder tena
 |---|---|---|---|
 | B0 | **BLOQUEANTE** — Reemplazar el RUC placeholder `J0000000000000` por el RUC real del founder (o confirmar el real si se pasó `ONBOARDING_FOUNDER_RUC`) | UI guarda el RUC válido; sin RUC válido no se alcanza `SALE_READY` | — |
 | B1 | Verificar el RUC persistido | El RUC guardado coincide con el real del founder (no el placeholder) | — |
-| B2 | Seleccionar régimen tributario | **Cuota Fija** (`CUOTA_FIJA`, IVA 0.00%) | — |
+| B2 | Seleccionar régimen tributario | **BLOQUEANTE PRE-REHEARSAL:** régimen pendiente de resolución — mismatch `CUOTA_FIJA` (fixture) vs `REGIMEN_GENERAL` (harness attachado real); ver §9 de `AP_FIXTURE_MANIFEST.md`. No continuar sin decisión explícita | — |
 | B3 | Ingresar nombre comercial | «COMPLETAR» | — |
 | B4 | Ingresar dirección fiscal | «COMPLETAR» | — |
 | B5 | Ingresar teléfono | «COMPLETAR» | — |
@@ -114,7 +120,7 @@ Checklist operativo paso a paso para ejecutar el piloto físico del founder tena
 | E3 | Verificar fiscal config en POS | Config recibida y aplicada | — |
 | E4 | Verificar verification product | Producto disponible localmente | — |
 | E5 | Iniciar Activation | Attempt creado | — |
-| E6 | Checks pre-offline (6 checks) | Todos PASS. En `TEST_PRINT` el ticket físico debe ser de 80 mm, con identidad `COMPROBANTE DE VENTA` / `NO RECAUDA IVA` y la línea `RUC:` visible | — |
+| E6 | Checks pre-offline (6 checks) | Todos PASS. En `TEST_PRINT` el ticket físico debe ser de 80 mm, con la identidad fiscal correcta para el régimen resuelto (si el régimen resuelto es `CUOTA_FIJA`: `COMPROBANTE DE VENTA` / `NO RECAUDA IVA`; si es `REGIMEN_GENERAL`: `FACTURA DE VENTA` con desglose de IVA) y la línea `RUC:` visible | — |
 | E7 | **CORTAR WAN** (airplane mode) | WAN desconectada | — |
 | E8 | Seleccionar verification product | Producto en carrito | — |
 | E9 | Pago en efectivo | Pago registrado | — |
@@ -190,6 +196,7 @@ notes:                    «cualquier observación relevante»
 | TTFSS > 15 min | Documentar causa. Si es harness → `RUN_INVALID_BY_HARNESS`, reiniciar cohort |
 | Seed falla | Verificar PostgreSQL, migraciones, variables de entorno |
 | `TEST_PRINT = FAIL` con "régimen fiscal DGI" o "Identidad fiscal del emisor" | Configuración fiscal local ausente: completar Fiscal Setup y esperar el sync de proyección. **No** continuar el run |
+| `TEST_PRINT` sale con un régimen distinto al resuelto en el bloqueante pre-rehearsal (§9 del manifest) | El régimen local no coincide con la decisión: no emitir documentos, resolver la configuración fiscal y repetir |
 | `TEST_PRINT` sale con ancho 58 | El ancho es local: ajustarlo a 80 mm en Ajustes de Hardware y repetir |
 
 ---
