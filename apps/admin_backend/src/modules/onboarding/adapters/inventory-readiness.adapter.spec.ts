@@ -80,9 +80,7 @@ describe('InventoryReadinessAdapter (Unit)', () => {
     (insumoRepo.count as jest.Mock).mockResolvedValue(1);
     (invoiceRepo.count as jest.Mock).mockResolvedValue(4);
 
-    const result = await adapter.evaluateInventoryReadiness(
-      'tenant-test-pending',
-    );
+    const result = await adapter.evaluateInventoryReadiness('tenant-test-pending');
     expect(result.inventoryReady).toBe(true);
     expect(result.inventoryEnrichmentPendingCount).toBe(4);
     expect(result.notes).toContain('INVENTORY_ENRICHMENT_PENDING');
