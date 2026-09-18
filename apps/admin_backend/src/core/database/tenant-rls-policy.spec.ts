@@ -5,6 +5,7 @@ import {
   rebindTenantColumns,
   resolveTenantRlsPredicate,
   type TenantRlsTarget,
+  type TenantRlsViewDependency,
 } from './tenant-rls-policy';
 
 /**
@@ -351,6 +352,143 @@ describe('rebindTenantColumns', () => {
       expect.stringContaining('information_schema.columns'),
       ['inventory_kardex', 'tenant_id'],
     );
+  });
+
+  describe('view dependencies', () => {
+    const viewDependency = (): TenantRlsViewDependency => ({
+      name: 'v_sys_parametros_config_active',
+      createSql:
+        'CREATE VIEW "v_sys_parametros_config_active" WITH (security_invoker = true) AS ' +
+        'SELECT DISTINCT ON (tenant_id, param_key) id, tenant_id ' +
+        'FROM sys_parametros_config;',
+    });
+
+    it('drops declared views after the policies and recreates them after the type change', async () => {
+      const { queryRunner, queries } = createQueryRunner({
+        data_type: 'character varying',
+      });
+
+      await rebindTenantColumns(
+        queryRunner,
+        [allPolicyTarget({ views: [viewDependency()] })],
+        TENANT_RLS_PREDICATE,
+      );
+
+      const dropPolicyIndex = queries.findIndex((sql) =>
+        sql.includes('DROP POLICY'),
+      );
+      const dropViewIndex = queries.findIndex((sql) =>
+        sql.includes('DROP VIEW IF EXISTS'),
+      );
+      const alterIndex = queries.findIndex((sql) => sql.includes('ALTER TABLE'));
+      const createViewIndex = queries.findIndex((sql) =>
+        sql.includes('CREATE VIEW'),
+      );
+      const createPolicyIndex = queries.findIndex((sql) =>
+        sql.includes('CREATE POLICY'),
+      );
+
+      expect(dropViewIndex).toBeGreaterThan(dropPolicyIndex);
+      expect(dropViewIndex).toBeLessThan(alterIndex);
+      expect(createViewIndex).toBeGreaterThan(alterIndex);
+      expect(createViewIndex).toBeLessThan(createPolicyIndex);
+    });
+
+    it('emits the declared createSql verbatim, preserving security_invoker', async () => {
+      const { queryRunner, queries } = createQueryRunner({
+        data_type: 'character varying',
+      });
+
+      await rebindTenantColumns(
+        queryRunner,
+        [allPolicyTarget({ views: [viewDependency()] })],
+        TENANT_RLS_PREDICATE,
+      );
+
+      // The migration owns the DDL; the emitter only places it.
+      expect(queries).toContain(viewDependency().createSql);
+      expect(
+        queries.find((sql) => sql.includes('CREATE VIEW')),
+      ).toContain('WITH (security_invoker = true)');
+    });
+
+    it('drops the view by its quoted name', async () => {
+      const { queryRunner, queries } = createQueryRunner({
+        data_type: 'character varying',
+      });
+
+      await rebindTenantColumns(
+        queryRunner,
+        [allPolicyTarget({ views: [viewDependency()] })],
+        TENANT_RLS_PREDICATE,
+      );
+
+      expect(queries).toContain(
+        'DROP VIEW IF EXISTS "v_sys_parametros_config_active"',
+      );
+    });
+
+    it('emits no view statements when the target declares no views', async () => {
+      const { queryRunner, queries } = createQueryRunner({
+        data_type: 'character varying',
+      });
+
+      await rebindTenantColumns(
+        queryRunner,
+        [allPolicyTarget()],
+        TENANT_RLS_PREDICATE,
+      );
+
+      expect(queries.some((sql) => sql.includes('DROP VIEW'))).toBe(false);
+      expect(queries.some((sql) => sql.includes('CREATE VIEW'))).toBe(false);
+    });
+
+    it('down() mirrors the order with the previous predicate', async () => {
+      const { queryRunner, queries } = createQueryRunner({ data_type: 'uuid' });
+
+      await rebindTenantColumns(
+        queryRunner,
+        [
+          allPolicyTarget({
+            views: [viewDependency()],
+            previousType: 'character varying',
+          }),
+        ],
+        PREVIOUS_TENANT_RLS_PREDICATE,
+        (target) => target.previousType,
+      );
+
+      const dropPolicyIndex = queries.findIndex((sql) =>
+        sql.includes('DROP POLICY'),
+      );
+      const dropViewIndex = queries.findIndex((sql) =>
+        sql.includes('DROP VIEW IF EXISTS'),
+      );
+      const alterIndex = queries.findIndex((sql) => sql.includes('ALTER TABLE'));
+      const createViewIndex = queries.findIndex((sql) =>
+        sql.includes('CREATE VIEW'),
+      );
+      const createPolicyIndex = queries.findIndex((sql) =>
+        sql.includes('CREATE POLICY'),
+      );
+
+      expect(dropViewIndex).toBeGreaterThan(dropPolicyIndex);
+      expect(dropViewIndex).toBeLessThan(alterIndex);
+      expect(createViewIndex).toBeGreaterThan(alterIndex);
+      expect(createViewIndex).toBeLessThan(createPolicyIndex);
+
+      // The restored policies carry the previous predicate form.
+      for (const statement of queries.filter((sql) =>
+        sql.includes('CREATE POLICY'),
+      )) {
+        expect(statement).toContain(
+          `USING (${PREVIOUS_TENANT_RLS_PREDICATE})`,
+        );
+      }
+      expect(
+        queries.find((sql) => sql.includes('ALTER TABLE')),
+      ).toContain('TYPE character varying');
+    });
   });
 
   describe('resolveTenantRlsPredicate', () => {
