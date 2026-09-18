@@ -1,4 +1,4 @@
-const API_BASE = "/api";
+import { getApiBaseUrl } from "./api-base-url";
 
 const STORAGE_KEY_ACCESS = "oc_access_token";
 const STORAGE_KEY_REFRESH = "oc_refresh_token";
@@ -127,7 +127,7 @@ export async function refreshAccessToken(): Promise<string> {
     ? { userId, refreshToken: currentRefresh.trim() }
     : { refreshToken: currentRefresh.trim() };
 
-  const response = await fetch(`${API_BASE}/identity/refresh`, {
+  const response = await fetch(`${getApiBaseUrl()}/identity/refresh`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -217,7 +217,7 @@ export async function apiFetch<T>(
     delete headers.Authorization;
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await fetch(`${getApiBaseUrl()}${path}`, {
     ...rest,
     headers,
     body: body ? JSON.stringify(body) : undefined,
@@ -236,7 +236,7 @@ export async function apiFetch<T>(
         delete retryHeaders.Authorization;
       }
 
-      const retryResponse = await fetch(`${API_BASE}${path}`, {
+      const retryResponse = await fetch(`${getApiBaseUrl()}${path}`, {
         ...rest,
         headers: retryHeaders,
         body: body ? JSON.stringify(body) : undefined,
