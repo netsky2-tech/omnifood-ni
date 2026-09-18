@@ -173,10 +173,18 @@ El intento previo sobre otro target falló y lo consumió: la fase `offline` ago
 
 Para cada run, capturar evidencia física/digital:
 
+> **Cambio de protocolo (2026-09-18, decidido por el operador).** La cohorte 5/5 **no** captura el ticket físico por run. La impresión en 80 mm con el documento correcto ya quedó verificada sobre este mismo dispositivo e impresora en el rehearsal de FREEZE-06: COMPROBANTE DE VENTA, NO RECAUDA IVA, RUC del emisor presente y 80 mm sin truncamiento (§8.0). Esa es la configuración con la que SOHO va a operar, y es lo que se quiso verificar. El dispositivo es prestado y tiene poco papel.
+>
+> **Lo que este cambio NO modifica:** el paso de impresión sigue siendo parte del contrato de activación. `PRINTER_AVAILABLE`, `TEST_PRINT` y `SALE_RECEIPT_PATH` están entre los diez checks, y un FAIL bloquea la activación. Cada corrida de la cohorte sigue necesitando la impresora disponible y con papel, y sigue imprimiendo. El cambio elimina la carga de **captura de evidencia**, no el paso de impresión.
+>
+> **Riesgo residual aceptado:** la salida física por run no se reverifica de forma independiente en la cohorte. Una regresión de impresión introducida entre el rehearsal y una corrida de cohorte no sería detectada por la evidencia de esa corrida.
+>
+> **Opción pendiente de decisión aparte:** si el papel no debe consumirse en absoluto, el instrumento necesitaría un modo que satisfaga los checks de impresión sin salida física. Es una reducción de alcance de la misma clase que este cambio y **no** se asume aquí.
+
 | Evidencia | Run 1 | Run 2 | Run 3 | Run 4 | Run 5 |
 |---|---|---|---|---|---|
 | APK installed (screenshot/log) | «» | «» | «» | «» | «» |
-| Ticket impreso (foto) | «» | «» | «» | «» | «» |
+| Ticket impreso (foto) | «NO POR CAMBIO DE PROTOCOLO» | «idem» | «idem» | «idem» | «idem» |
 | WAN outage activado (screenshot/log) | «» | «» | «» | «» | «» |
 | Restart recovery (log) | «» | «» | «» | «» | «» |
 | Outbox drain (log/backend receipt) | «» | «» | «» | «» | «» |
