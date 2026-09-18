@@ -83,6 +83,9 @@ void main() {
       await database.localConfigDao.saveConfig(
         LocalConfigEntity(key: 'dgi_range_end', value: '1000'),
       );
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'),
+      );
 
       // Seed fiscal configuration
       await database.fiscalConfigLocalDao.applyFiscalConfig(
