@@ -3,11 +3,22 @@ import { AddCreditNoteProvenance1782000000000 } from './1782000000000-AddCreditN
 
 describe('AddCreditNoteProvenance1782000000000', () => {
   const migration = new AddCreditNoteProvenance1782000000000();
-  const collectSql = async (direction: 'up' | 'down' = 'up') => {
+  // The migration reads the tenant_id column type from information_schema
+  // before emitting tenant policies, so each run must stub the data_type the
+  // environment declares. `null` stubs a table without a tenant_id column.
+  const collectSql = async (
+    direction: 'up' | 'down' = 'up',
+    tenantIdDataType: string | null = 'character varying',
+  ) => {
     const queries: string[] = [];
     const queryRunner = {
       query: jest.fn((sql: string): Promise<QueryResult> => {
         queries.push(sql);
+        if (sql.includes('information_schema.columns')) {
+          return Promise.resolve(
+            tenantIdDataType === null ? [] : [{ data_type: tenantIdDataType }],
+          ) as unknown as Promise<QueryResult>;
+        }
         return Promise.resolve(new QueryResult());
       }),
     } as unknown as QueryRunner;
@@ -56,7 +67,7 @@ describe('AddCreditNoteProvenance1782000000000', () => {
   });
 
   it('enforces tenant RLS, same-tenant origin ownership, and append-only guards', async () => {
-    const sql = await collectSql();
+    const sql = await collectSql('up', 'uuid');
 
     for (const tableName of ['invoices', 'invoice_items', 'inventory_kardex']) {
       expect(sql).toContain(
@@ -67,7 +78,6 @@ describe('AddCreditNoteProvenance1782000000000', () => {
       );
     }
     for (const fragment of [
-      "tenant_id::text = current_setting('app.tenant_id', true)",
       'validate_credit_note_invoice_origin_tenant',
       'validate_credit_note_item_origin_tenant',
       'validate_credit_note_kardex_origin_tenant',
@@ -95,12 +105,12 @@ describe('AddCreditNoteProvenance1782000000000', () => {
       expect(sql).toContain(fragment);
     }
 
-    // The invoices tenant_id column is uuid, so its policies must use the
-    // index-friendly uuid predicate instead of the text cast: a single
-    // hardcoded text predicate would make PostgreSQL evaluate the tenant check
-    // as a Filter instead of an Index Cond. These assertions fail if anyone
-    // reverts invoices to the text form (which a re-run of this migration would
-    // otherwise silently do, clobbering the later predicate-alignment fix).
+    // The stubbed tenant_id column type is uuid, so every tenant policy must
+    // use the index-friendly uuid predicate instead of the text cast: a text
+    // predicate makes PostgreSQL evaluate the tenant check as a Filter instead
+    // of an Index Cond. These assertions fail if anyone reverts to the text
+    // form (which a re-run of this migration would otherwise silently do,
+    // clobbering the later predicate-alignment fix).
     const uuidPredicate =
       "tenant_id = current_setting('app.tenant_id', true)::uuid";
     expect(sql).toContain(uuidPredicate);
@@ -121,6 +131,51 @@ describe('AddCreditNoteProvenance1782000000000', () => {
       sql.indexOf('ALTER TABLE invoice_items ENABLE ROW LEVEL SECURITY'),
     );
     expect(invoicesRlsSection).not.toContain('tenant_id::text');
+    const itemsRlsSection = sql.slice(
+      sql.indexOf('ALTER TABLE invoice_items ENABLE ROW LEVEL SECURITY'),
+      sql.indexOf('ALTER TABLE inventory_kardex ENABLE ROW LEVEL SECURITY'),
+    );
+    expect(itemsRlsSection).not.toContain('tenant_id::text');
+    const kardexRlsSection = sql.slice(
+      sql.indexOf('ALTER TABLE inventory_kardex ENABLE ROW LEVEL SECURITY'),
+      sql.indexOf('CREATE OR REPLACE FUNCTION validate_credit_note_invoice_origin_tenant'),
+    );
+    expect(kardexRlsSection).not.toContain('tenant_id::text');
+  });
+
+  it('emits the text-cast tenant predicate when tenant_id is varchar, never the uuid cast', async () => {
+    const sql = await collectSql('up', 'character varying');
+
+    // The stubbed tenant_id column type is varchar, so a uuid-cast predicate
+    // would break the migration with "operator does not exist: character
+    // varying = uuid" (the exact CI regression this guards against). The text
+    // cast is the only valid form here, and it must appear in the same policy
+    // shapes as the uuid run.
+    const textPredicate = "tenant_id::text = current_setting('app.tenant_id', true)";
+    expect(sql).toContain(textPredicate);
+    expect(sql).toContain(
+      `CREATE POLICY credit_note_invoices_tenant_select\n            ON invoices FOR SELECT USING (${textPredicate});`,
+    );
+    expect(sql).toContain(
+      `CREATE POLICY credit_note_invoice_items_tenant_select\n            ON invoice_items FOR SELECT USING (${textPredicate});`,
+    );
+    expect(sql).toContain(
+      `CREATE POLICY credit_note_inventory_kardex_tenant_select\n            ON inventory_kardex FOR SELECT USING (${textPredicate});`,
+    );
+    expect(sql).not.toContain('::uuid');
+  });
+
+  it('refuses to emit tenant policies when the table has no tenant_id column', async () => {
+    // The first table processed is invoices, so the error must name it.
+    await expect(collectSql('up', null)).rejects.toThrow(
+      /'invoices' has no tenant_id column/,
+    );
+  });
+
+  it('refuses to emit tenant policies for an unsupported tenant_id column type', async () => {
+    await expect(collectSql('up', 'integer')).rejects.toThrow(
+      /unsupported tenant_id column type 'integer'/,
+    );
   });
 
   it('rolls back migration-owned provenance schema objects', async () => {
