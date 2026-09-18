@@ -24,7 +24,7 @@ export function DashboardPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
+      <div className="flex min-h-[320px] items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
       </div>
     );
@@ -32,9 +32,9 @@ export function DashboardPage() {
 
   if (error) {
     return (
-      <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-6 text-center">
-        <p className="text-sm text-destructive">
-          Error al cargar el dashboard. Verifique su conexión.
+      <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-6 text-center">
+        <p className="text-sm font-medium text-destructive">
+          Error al cargar el dashboard. Verifique su conexión o vuelva a intentar.
         </p>
       </div>
     );
@@ -42,9 +42,14 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Dashboard</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+            Métricas clave de facturación y resumen de operaciones
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2.5">
           {data && <FreshnessBadge generatedAt={data.generatedAt} />}
           <DateRangePicker value={range} onChange={setRange} />
         </div>

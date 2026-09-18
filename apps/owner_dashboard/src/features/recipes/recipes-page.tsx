@@ -7,6 +7,8 @@ import { useActiveRecipe, useInsumos } from './use-recipes';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { LoadingState } from '@/components/ui/loading-state';
+import { EmptyState } from '@/components/ui/empty-state';
 import {
   Dialog,
   DialogContent,
@@ -49,9 +51,7 @@ export function RecipesPage() {
 
   if (productsLoading) {
     return (
-      <div className="flex items-center justify-center h-64" role="status" aria-label="Cargando productos">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-      </div>
+      <LoadingState message="Cargando productos..." className="h-64" />
     );
   }
 
@@ -91,11 +91,12 @@ export function RecipesPage() {
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {filteredProducts.length === 0 ? (
-          <div className="col-span-full text-center py-12 text-muted-foreground">
-            <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p className="text-lg">No se encontraron productos compuestos</p>
-            <p className="text-sm">Cree un producto de tipo "Compuesto" en el catálogo para gestionar su receta</p>
-          </div>
+          <EmptyState
+            icon={Package}
+            title="No se encontraron productos compuestos"
+            description='Cree un producto de tipo "Compuesto" en el catálogo para gestionar su receta'
+            className="col-span-full py-12"
+          />
         ) : (
           filteredProducts.map((product) => (
             <div

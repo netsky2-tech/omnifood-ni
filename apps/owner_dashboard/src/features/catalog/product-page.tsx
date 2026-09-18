@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Edit2, Trash2 } from "lucide-react";
 import {
   useProducts,
   useCreateProduct,
@@ -13,6 +14,19 @@ import {
 } from "./product-types";
 import { useCatalogValues } from "./use-catalog";
 import type { CatalogType } from "./types";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { LoadingState } from "@/components/ui/loading-state";
+import { EmptyState } from "@/components/ui/empty-state";
 
 type TabId = ProductType;
 
@@ -29,85 +43,85 @@ function ProductTable({
 }) {
   const { data, isLoading, error } = useProducts(productType, true);
 
-  if (isLoading) return <LoadingState />;
+  if (isLoading) return <LoadingState message="Cargando productos..." />;
   if (error) return <EmptyState message="Error al cargar productos" />;
   if (!data || data.length === 0)
     return <EmptyState message="Sin productos en esta categoría" />;
 
   return (
-    <div className="rounded-lg border border-border bg-card">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-border bg-muted">
-            <th className="px-4 py-3 text-left font-semibold uppercase text-muted-foreground">
-              Nombre
-            </th>
-            <th className="px-4 py-3 text-left font-semibold uppercase text-muted-foreground">
-              UOM
-            </th>
-            <th className="px-4 py-3 text-right font-semibold uppercase text-muted-foreground">
-              Precio
-            </th>
-            <th className="px-4 py-3 text-right font-semibold uppercase text-muted-foreground">
-              Stock
-            </th>
-            <th className="px-4 py-3 text-center font-semibold uppercase text-muted-foreground">
-              Estado
-            </th>
-            <th className="px-4 py-3 text-right font-semibold uppercase text-muted-foreground">
-              Acciones
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.map((p) => (
-            <tr
-              key={p.id}
-              className="border-b border-border last:border-0 hover:bg-muted/50"
-            >
-              <td className="px-4 py-3 font-medium">{p.name}</td>
-              <td className="px-4 py-3 font-mono text-xs">{p.uom}</td>
-              <td className="px-4 py-3 text-right tabular-nums">
-                C${p.sellPrice.toFixed(2)}
-              </td>
-              <td className="px-4 py-3 text-right tabular-nums">
-                {p.stock.toFixed(2)}
-              </td>
-              <td className="px-4 py-3 text-center">
-                <span
-                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                    p.is_active
-                      ? "bg-secondary-50 text-secondary-700"
-                      : "bg-muted text-muted-foreground"
-                  }`}
-                >
-                  {p.is_active ? "Activo" : "Inactivo"}
-                </span>
-              </td>
-              <td className="px-4 py-3 text-right">
-                <div className="flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => onEdit(p)}
-                    className="rounded px-2 py-1 text-xs font-medium text-primary hover:bg-primary-50"
-                  >
-                    Editar
-                  </button>
-                  {p.is_active && (
-                    <button
-                      type="button"
-                      onClick={() => onDeactivate(p)}
-                      className="rounded px-2 py-1 text-xs font-medium text-destructive hover:bg-destructive-50"
-                    >
-                      Desactivar
-                    </button>
-                  )}
-                </div>
-              </td>
+    <div className="rounded-lg border border-border bg-card shadow-xs overflow-hidden">
+      <div className="overflow-x-auto w-full">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border bg-muted/60">
+              <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
+                Nombre
+              </th>
+              <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
+                UOM
+              </th>
+              <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
+                Precio
+              </th>
+              <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
+                Stock
+              </th>
+              <th className="px-4 py-3 text-center font-semibold uppercase text-xs text-muted-foreground">
+                Estado
+              </th>
+              <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
+                Acciones
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {data.map((p) => (
+              <tr
+                key={p.id}
+                className="border-b border-border last:border-0 hover:bg-muted/40 transition-colors"
+              >
+                <td className="px-4 py-3 font-medium text-foreground">{p.name}</td>
+                <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{p.uom}</td>
+                <td className="px-4 py-3 text-right tabular-nums font-semibold text-foreground">
+                  C${p.sellPrice.toFixed(2)}
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums text-foreground">
+                  {p.stock.toFixed(2)}
+                </td>
+                <td className="px-4 py-3 text-center">
+                  <Badge variant={p.is_active ? "success" : "secondary"}>
+                    {p.is_active ? "Activo" : "Inactivo"}
+                  </Badge>
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <div className="flex justify-end gap-1.5">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onEdit(p)}
+                      className="h-8 px-2 text-primary"
+                    >
+                      <Edit2 className="h-3.5 w-3.5 mr-1" />
+                      Editar
+                    </Button>
+                    {p.is_active && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onDeactivate(p)}
+                        className="h-8 px-2 text-destructive hover:text-destructive hover:bg-destructive-50"
+                      >
+                        <Trash2 className="h-3.5 w-3.5 mr-1" />
+                        Desactivar
+                      </Button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -115,10 +129,12 @@ function ProductTable({
 function ProductDialog({
   productType,
   product,
+  open,
   onClose,
 }: {
   productType: ProductType;
   product?: Product;
+  open: boolean;
   onClose: () => void;
 }) {
   const isEdit = !!product;
@@ -172,7 +188,7 @@ function ProductDialog({
       onClose();
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Error al guardar",
+        err instanceof Error ? err.message : "Error al guardar producto",
       );
     }
   };
@@ -180,129 +196,135 @@ function ProductDialog({
   const isPending = createMutation.isPending || updateMutation.isPending;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="w-full max-w-md rounded-lg bg-card p-6 shadow-lg">
-        <h2 className="mb-4 text-lg font-bold text-card-foreground">
-          {isEdit ? "Editar Producto" : "Nuevo Producto"}
-        </h2>
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{isEdit ? "Editar Producto" : "Nuevo Producto"}</DialogTitle>
+          <DialogDescription>
+            {isEdit
+              ? "Actualice los precios, UOM o categoría del producto."
+              : "Defina los detalles del producto para ventas o compras."}
+          </DialogDescription>
+        </DialogHeader>
 
         {error && (
-          <div className="mb-4 rounded border border-destructive bg-destructive-50 px-3 py-2 text-sm text-destructive">
+          <div className="rounded-md border border-destructive/20 bg-destructive-50 p-3 text-xs font-medium text-destructive">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 pt-1">
           <div>
-            <label className="mb-1 block text-sm font-medium text-foreground">
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Nombre *
             </label>
-            <input
+            <Input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
               maxLength={200}
-              className="w-full rounded border border-input px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary"
               placeholder="Ej: Taza de Capuccino"
             />
           </div>
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-foreground">
-              Unidad de Medida *
-            </label>
-            <select
-              value={uom}
-              onChange={(e) => setUom(e.target.value)}
-              required
-              className="w-full rounded border border-input px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary"
-            >
-              <option value="">Seleccionar UOM</option>
-              {uomValues?.map((v) => (
-                <option key={v.code} value={v.code}>
-                  {v.name} ({v.code})
-                </option>
-              ))}
-            </select>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Unidad de Medida *
+              </label>
+              <select
+                value={uom}
+                onChange={(e) => setUom(e.target.value)}
+                required
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <option value="">Seleccionar UOM</option>
+                {uomValues?.map((v) => (
+                  <option key={v.code} value={v.code}>
+                    {v.name} ({v.code})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Categoría
+              </label>
+              <select
+                value={categoryCode}
+                onChange={(e) => setCategoryCode(e.target.value)}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <option value="">Sin categoría</option>
+                {categoryValues?.map((v) => (
+                  <option key={v.code} value={v.code}>
+                    {v.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-foreground">
-              Categoría
-            </label>
-            <select
-              value={categoryCode}
-              onChange={(e) => setCategoryCode(e.target.value)}
-              className="w-full rounded border border-input px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary"
-            >
-              <option value="">Sin categoría</option>
-              {categoryValues?.map((v) => (
-                <option key={v.code} value={v.code}>
-                  {v.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-sm font-medium text-foreground">
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Precio de Venta (C$)
             </label>
-            <input
+            <Input
               type="number"
               value={sellPrice}
               onChange={(e) => setSellPrice(Number(e.target.value))}
               min={0}
               step={0.01}
-              className="w-full rounded border border-input px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 pt-1">
             <input
               type="checkbox"
               id="isPerishable"
               checked={isPerishable}
               onChange={(e) => setIsPerishable(e.target.checked)}
-              className="h-4 w-4 rounded border-input text-primary focus:ring-primary"
+              className="h-4 w-4 rounded border-input text-primary focus:ring-primary cursor-pointer"
             />
             <label
               htmlFor="isPerishable"
-              className="text-sm font-medium text-foreground"
+              className="text-sm font-medium text-foreground cursor-pointer"
             >
-              Perecedero
+              Producto perecedero (control de caducidad)
             </label>
           </div>
 
-          <div className="flex justify-end gap-3 pt-2">
-            <button
+          <DialogFooter className="pt-3">
+            <Button
               type="button"
+              variant="outline"
               onClick={onClose}
               disabled={isPending}
-              className="rounded px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted"
             >
               Cancelar
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
-              disabled={isPending}
-              className="rounded bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-400 disabled:opacity-50"
+              loading={isPending}
             >
-              {isPending ? "Guardando..." : isEdit ? "Guardar" : "Crear"}
-            </button>
-          </div>
+              {isEdit ? "Guardar" : "Crear"}
+            </Button>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
 function DeactivateDialog({
   product,
+  open,
   onClose,
 }: {
   product: Product;
+  open: boolean;
   onClose: () => void;
 }) {
   const deactivateMutation = useDeactivateProduct();
@@ -317,55 +339,38 @@ function DeactivateDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="w-full max-w-sm rounded-lg bg-card p-6 shadow-lg">
-        <h2 className="mb-2 text-lg font-bold text-card-foreground">
-          Desactivar Producto
-        </h2>
-        <p className="mb-4 text-sm text-muted-foreground">
-          ¿Estás seguro de desactivar{" "}
-          <span className="font-medium text-foreground">{product.name}</span>?
-          El producto no aparecerá en listados activos pero se mantendrá en el
-          historial.
-        </p>
-        <div className="flex justify-end gap-3">
-          <button
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Desactivar Producto</DialogTitle>
+          <DialogDescription>
+            ¿Estás seguro de desactivar{" "}
+            <span className="font-semibold text-foreground">{product.name}</span>?
+            El producto no aparecerá en listados de venta activos pero se mantendrá
+            en el historial de facturación e inventario.
+          </DialogDescription>
+        </DialogHeader>
+
+        <DialogFooter className="pt-3">
+          <Button
             type="button"
+            variant="outline"
             onClick={onClose}
             disabled={deactivateMutation.isPending}
-            className="rounded px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted"
           >
             Cancelar
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="destructive"
             onClick={handleConfirm}
-            disabled={deactivateMutation.isPending}
-            className="rounded bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50"
+            loading={deactivateMutation.isPending}
           >
-            {deactivateMutation.isPending
-              ? "Desactivando..."
-              : "Desactivar"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function LoadingState() {
-  return (
-    <div className="flex items-center justify-center py-12">
-      <div className="h-6 w-6 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-    </div>
-  );
-}
-
-function EmptyState({ message }: { message: string }) {
-  return (
-    <div className="rounded-lg border border-border bg-card p-8 text-center">
-      <p className="text-sm text-muted-foreground">{message}</p>
-    </div>
+            Desactivar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -394,27 +399,28 @@ export function ProductPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-foreground">Productos</h1>
-        <button
-          type="button"
-          onClick={handleCreate}
-          className="rounded bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-400"
-        >
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Productos</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+            Gestión de catálogo de productos simples, compuestos e insumos
+          </p>
+        </div>
+        <Button onClick={handleCreate} className="shadow-xs">
           + Nuevo Producto
-        </button>
+        </Button>
       </div>
 
       <div className="border-b border-border">
-        <nav className="-mb-px flex gap-6 overflow-x-auto">
+        <nav className="-mb-px flex gap-4 sm:gap-6 overflow-x-auto pb-1 sm:pb-0" aria-label="Tipos de producto">
           {TABS.map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
-              className={`whitespace-nowrap border-b-2 px-1 py-3 text-sm font-medium transition-colors ${
+              className={`whitespace-nowrap border-b-2 px-1 py-3 text-xs sm:text-sm font-medium transition-colors cursor-pointer ${
                 activeTab === tab.id
-                  ? "border-primary text-primary"
+                  ? "border-primary text-primary font-semibold"
                   : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -435,8 +441,10 @@ export function ProductPage() {
 
       {dialogOpen && (
         <ProductDialog
+          key={editingProduct?.id ?? "create"}
           productType={activeTab}
           product={editingProduct}
+          open={dialogOpen}
           onClose={handleCloseDialog}
         />
       )}
@@ -444,6 +452,7 @@ export function ProductPage() {
       {deactivatingProduct && (
         <DeactivateDialog
           product={deactivatingProduct}
+          open={!!deactivatingProduct}
           onClose={() => setDeactivatingProduct(undefined)}
         />
       )}

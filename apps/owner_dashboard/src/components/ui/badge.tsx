@@ -2,17 +2,18 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 
 export interface BadgeProps extends React.HTMLAttributes<HTMLDivElement> {
-  variant?: 'default' | 'secondary' | 'destructive' | 'outline' | 'success' | 'warning';
+  variant?: 'default' | 'secondary' | 'destructive' | 'outline' | 'success' | 'warning' | 'info';
 }
 
 function Badge({ className, variant = 'default', ...props }: BadgeProps) {
   const variantStyles = {
-    default: 'border-transparent bg-primary text-primary-foreground hover:bg-primary/80',
-    secondary: 'border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80',
-    destructive: 'border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80',
-    outline: 'text-foreground',
-    success: 'border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80',
-    warning: 'border-transparent bg-warning text-warning-foreground hover:bg-warning/80',
+    default: 'border-transparent bg-primary text-primary-foreground hover:bg-primary/90',
+    secondary: 'border-transparent bg-muted text-muted-foreground hover:bg-muted/80',
+    destructive: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/50 dark:text-red-300',
+    outline: 'border-border text-foreground',
+    success: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/50 dark:text-emerald-300',
+    warning: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/50 dark:text-amber-300',
+    info: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/50 dark:text-blue-300',
   };
 
   return (

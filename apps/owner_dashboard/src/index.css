@@ -32,18 +32,20 @@
   --color-info-foreground: #ffffff;
   --color-info-50: #eff6ff;
 
-  /* Neutral */
+  /* Neutral & Surfaces */
   --color-background: #ffffff;
-  --color-foreground: #1a1a1a;
-  --color-muted: #f5f5f5;
-  --color-muted-foreground: #737373;
+  --color-foreground: #0f172a;
+  --color-muted: #f1f5f9;
+  --color-muted-foreground: #64748b;
+  --color-accent: #f1f5f9;
+  --color-accent-foreground: #013a57;
   --color-card: #ffffff;
-  --color-card-foreground: #1a1a1a;
+  --color-card-foreground: #0f172a;
   --color-popover: #ffffff;
-  --color-popover-foreground: #1a1a1a;
-  --color-border: #e5e5e5;
-  --color-border-strong: #d4d4d4;
-  --color-input: #e5e5e5;
+  --color-popover-foreground: #0f172a;
+  --color-border: #e2e8f0;
+  --color-border-strong: #cbd5e1;
+  --color-input: #e2e8f0;
   --color-ring: #013a57;
 
   /* Radius */

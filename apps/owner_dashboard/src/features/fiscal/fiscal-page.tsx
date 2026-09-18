@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { FreshnessBadge } from "@/components/freshness-badge";
 import { DateRangePicker, type DateRangeValue } from "@/components/date-range-picker";
+import { StatCard } from "@/components/ui/stat-card";
+import { LoadingState } from "@/components/ui/loading-state";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   useMonthlyFiscalSummary,
   useVoidedInvoices,
@@ -35,35 +38,35 @@ function SummaryTab(_props: { startDate?: string; endDate?: string }) {
   const { year, month } = currentMonthYear();
   const { data, isLoading } = useMonthlyFiscalSummary(year, month);
 
-  if (isLoading) return <LoadingState />;
+  if (isLoading) return <LoadingState message="Cargando resumen fiscal mensual..." />;
   if (!data) return <EmptyState message="Sin datos de resumen fiscal" />;
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard label="Ventas Brutas" value={formatCurrency(data.totalGrossSales)} />
         <StatCard label="Facturas" value={String(data.invoiceCount)} />
         <StatCard label="IVA Recaudado" value={formatCurrency(data.totalTaxCollected)} />
       </div>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard label="Ventas Gravables" value={formatCurrency(data.totalTaxableSales)} />
         <StatCard label="Ventas Exentas" value={formatCurrency(data.totalExemptSales)} />
         <StatCard label="Notas de Crédito" value={String(data.creditNoteCount)} />
       </div>
-      <div className="rounded-lg border border-border bg-card p-6">
-        <h3 className="mb-3 text-sm font-semibold uppercase text-muted-foreground">
-          Resumen Fiscal
+      <div className="rounded-lg border border-border bg-card p-5 sm:p-6 shadow-xs">
+        <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Resumen Fiscal (DGI)
         </h3>
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           {[
             { label: "Neto Gravable", val: formatCurrency(data.netTaxableSales) },
             { label: "IVA Neto a Pagar", val: formatCurrency(data.netTaxPayable) },
             { label: "Notas de Crédito (total)", val: formatCurrency(data.totalCreditNotes) },
             { label: "IVA en Notas de Crédito", val: formatCurrency(data.totalCreditNotesTax) },
           ].map((item) => (
-            <div key={item.label} className="flex justify-between text-sm">
+            <div key={item.label} className="flex justify-between text-sm py-1 border-b border-border/50 last:border-0">
               <span className="text-muted-foreground">{item.label}</span>
-              <span className="tabular-nums">{item.val}</span>
+              <span className="tabular-nums font-medium text-foreground">{item.val}</span>
             </div>
           ))}
         </div>
@@ -76,50 +79,52 @@ function SummaryTab(_props: { startDate?: string; endDate?: string }) {
 function VoidedTab({ startDate, endDate }: { startDate?: string; endDate?: string }) {
   const { data, isLoading } = useVoidedInvoices(startDate, endDate);
 
-  if (isLoading) return <LoadingState />;
+  if (isLoading) return <LoadingState message="Cargando facturas anuladas..." />;
   if (!data) return <EmptyState message="Sin datos de anulaciones" />;
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <StatCard label="Total Anuladas" value={String(data.totalVoidedCount)} />
         <StatCard label="Monto Total Anulado" value={formatCurrency(data.totalVoidedAmount)} />
       </div>
-      <div className="rounded-lg border border-border bg-card">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border bg-muted">
-              <th className="px-4 py-3 text-left font-semibold uppercase text-muted-foreground">
-                Factura
-              </th>
-              <th className="px-4 py-3 text-left font-semibold uppercase text-muted-foreground">
-                Cajero
-              </th>
-              <th className="px-4 py-3 text-right font-semibold uppercase text-muted-foreground">
-                Total
-              </th>
-              <th className="px-4 py-3 text-left font-semibold uppercase text-muted-foreground">
-                Motivo
-              </th>
-              <th className="px-4 py-3 text-left font-semibold uppercase text-muted-foreground">
-                Fecha
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.invoices.map((inv) => (
-              <tr key={inv.id} className="border-b border-border last:border-0 hover:bg-muted/50">
-                <td className="px-4 py-3 font-mono text-xs">{inv.number}</td>
-                <td className="px-4 py-3">{inv.cashierName}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{formatCurrency(inv.total)}</td>
-                <td className="px-4 py-3 text-muted-foreground">{inv.voidReason}</td>
-                <td className="px-4 py-3 text-muted-foreground">
-                  {new Date(inv.canceledAt).toLocaleDateString("es-NI")}
-                </td>
+      <div className="rounded-lg border border-border bg-card shadow-xs overflow-hidden">
+        <div className="overflow-x-auto w-full">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/60">
+                <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
+                  Factura
+                </th>
+                <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
+                  Cajero
+                </th>
+                <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
+                  Total
+                </th>
+                <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
+                  Motivo
+                </th>
+                <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
+                  Fecha
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {data.invoices.map((inv) => (
+                <tr key={inv.id} className="border-b border-border last:border-0 hover:bg-muted/40 transition-colors">
+                  <td className="px-4 py-3 font-mono text-xs font-medium text-foreground">{inv.number}</td>
+                  <td className="px-4 py-3 text-foreground">{inv.cashierName}</td>
+                  <td className="px-4 py-3 text-right tabular-nums font-semibold text-foreground">{formatCurrency(inv.total)}</td>
+                  <td className="px-4 py-3 text-muted-foreground text-xs">{inv.voidReason}</td>
+                  <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">
+                    {new Date(inv.canceledAt).toLocaleDateString("es-NI")}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
       <FreshnessBadge generatedAt={data.generatedAt} />
     </div>
@@ -129,23 +134,23 @@ function VoidedTab({ startDate, endDate }: { startDate?: string; endDate?: strin
 function SequenceTab({ startDate, endDate }: { startDate?: string; endDate?: string }) {
   const { data, isLoading } = useSequenceAudit(startDate, endDate);
 
-  if (isLoading) return <LoadingState />;
+  if (isLoading) return <LoadingState message="Auditoría de correlatividad fiscal en progreso..." />;
   if (!data) return <EmptyState message="Sin datos de auditoría de secuencia" />;
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard label="Secuencia Esperada" value={String(data.expectedCount)} />
         <StatCard label="Secuencia Real" value={String(data.actualCount)} />
         <StatCard
           label="Secuencias Faltantes"
           value={String(data.missingSequences.length)}
-          variant={data.hasGaps ? "warning" : "default"}
+          accent={data.hasGaps}
         />
       </div>
 
       {data.hasGaps && (
-        <div className="rounded-lg border border-yellow-300 bg-yellow-50 p-4 text-sm text-yellow-800 dark:border-yellow-700 dark:bg-yellow-950 dark:text-yellow-200">
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
           {data.missingSequences.length} secuencia(s) faltante(s):{" "}
           <span className="font-mono">{data.missingSequences.join(", ")}</span>
         </div>
@@ -158,51 +163,53 @@ function SequenceTab({ startDate, endDate }: { startDate?: string; endDate?: str
         </div>
       )}
 
-      <div className="rounded-lg border border-border bg-card">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border bg-muted">
-              <th className="px-4 py-3 text-left font-semibold uppercase text-muted-foreground">
-                Serie
-              </th>
-              <th className="px-4 py-3 text-right font-semibold uppercase text-muted-foreground">
-                Inicio
-              </th>
-              <th className="px-4 py-3 text-right font-semibold uppercase text-muted-foreground">
-                Fin
-              </th>
-              <th className="px-4 py-3 text-right font-semibold uppercase text-muted-foreground">
-                Real / Esperado
-              </th>
-              <th className="px-4 py-3 text-center font-semibold uppercase text-muted-foreground">
-                Estado
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.series.map((s) => (
-              <tr key={s.seriesPrefix} className="border-b border-border last:border-0 hover:bg-muted/50">
-                <td className="px-4 py-3 font-mono text-xs">{s.seriesPrefix}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{s.startSequence}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{s.endSequence}</td>
-                <td className="px-4 py-3 text-right tabular-nums">
-                  {s.actualCount} / {s.expectedCount}
-                </td>
-                <td className="px-4 py-3 text-center">
-                  {s.hasGaps ? (
-                    <span className="inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
-                      CON FALTAS
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900 dark:text-green-200">
-                      OK
-                    </span>
-                  )}
-                </td>
+      <div className="rounded-lg border border-border bg-card shadow-xs overflow-hidden">
+        <div className="overflow-x-auto w-full">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/60">
+                <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
+                  Serie
+                </th>
+                <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
+                  Inicio
+                </th>
+                <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
+                  Fin
+                </th>
+                <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
+                  Real / Esperado
+                </th>
+                <th className="px-4 py-3 text-center font-semibold uppercase text-xs text-muted-foreground">
+                  Estado
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {data.series.map((s) => (
+                <tr key={s.seriesPrefix} className="border-b border-border last:border-0 hover:bg-muted/40 transition-colors">
+                  <td className="px-4 py-3 font-mono text-xs font-medium text-foreground">{s.seriesPrefix}</td>
+                  <td className="px-4 py-3 text-right tabular-nums text-foreground">{s.startSequence}</td>
+                  <td className="px-4 py-3 text-right tabular-nums text-foreground">{s.endSequence}</td>
+                  <td className="px-4 py-3 text-right tabular-nums font-medium text-foreground">
+                    {s.actualCount} / {s.expectedCount}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    {s.hasGaps ? (
+                      <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800">
+                        CON FALTAS
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800">
+                        OK
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
       <FreshnessBadge generatedAt={data.generatedAt} />
     </div>
@@ -272,61 +279,14 @@ function ExportsTab({ startDate, endDate }: { startDate?: string; endDate?: stri
   );
 }
 
-function StatCard({
-  label,
-  value,
-  variant = "default",
-}: {
-  label: string;
-  value: string;
-  variant?: "default" | "warning";
-}) {
-  return (
-    <div
-      className={`rounded-lg border bg-card p-4 ${
-        variant === "warning"
-          ? "border-yellow-300 dark:border-yellow-700"
-          : "border-border"
-      }`}
-    >
-      <p className="text-xs font-semibold uppercase text-muted-foreground">{label}</p>
-      <p
-        className={`mt-1 text-2xl font-bold tabular-nums ${
-          variant === "warning"
-            ? "text-yellow-600 dark:text-yellow-400"
-            : "text-card-foreground"
-        }`}
-      >
-        {value}
-      </p>
-    </div>
-  );
-}
-
 function ExportButton({ label }: { label: string }) {
   return (
     <button
       type="button"
-      className="rounded-md border border-border bg-muted px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent"
+      className="rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted cursor-pointer transition-colors shadow-xs"
     >
       {label}
     </button>
-  );
-}
-
-function LoadingState() {
-  return (
-    <div className="flex items-center justify-center py-12">
-      <div className="h-6 w-6 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-    </div>
-  );
-}
-
-function EmptyState({ message }: { message: string }) {
-  return (
-    <div className="rounded-lg border border-border bg-card p-8 text-center">
-      <p className="text-sm text-muted-foreground">{message}</p>
-    </div>
   );
 }
 
@@ -340,21 +300,26 @@ export function FiscalPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-foreground">Fiscal</h1>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Fiscal</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+            Cumplimiento DGI, correlatividad de facturas y libros de ventas
+          </p>
+        </div>
         <div className="flex items-center gap-3">
           <DateRangePicker value={range} onChange={setRange} />
         </div>
       </div>
 
       <div className="border-b border-border">
-        <nav className="-mb-px flex gap-6">
+        <nav className="-mb-px flex gap-4 sm:gap-6 overflow-x-auto pb-1 sm:pb-0" aria-label="Secciones fiscales">
           {TABS.map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
-              className={`border-b-2 px-1 py-3 text-sm font-medium transition-colors ${
+              className={`border-b-2 px-1 py-3 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap cursor-pointer ${
                 activeTab === tab.id
                   ? "border-primary text-primary"
                   : "border-transparent text-muted-foreground hover:text-foreground"
