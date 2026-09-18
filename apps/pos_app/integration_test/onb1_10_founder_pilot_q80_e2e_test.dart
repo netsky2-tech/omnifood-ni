@@ -34,7 +34,9 @@ import 'package:pos_app/domain/usecases/inventory/reverse_sale_inventory_use_cas
 import 'package:pos_app/presentation/services/alert_service_impl.dart';
 import 'package:sqflite/sqflite.dart' show getDatabasesPath;
 
-const _phase = String.fromEnvironment('PILOT_PHASE', defaultValue: 'setup');
+// `all` is the default so an unqualified invocation performs the whole physical
+// rehearsal. Naming one phase stays supported for focused debugging.
+const _phase = String.fromEnvironment('PILOT_PHASE', defaultValue: 'all');
 const _ownerEmail = String.fromEnvironment('PILOT_OWNER_EMAIL');
 const _ownerPassword = String.fromEnvironment('PILOT_OWNER_PASSWORD');
 const _ownerPin = String.fromEnvironment('PILOT_OWNER_PIN');
@@ -50,28 +52,34 @@ const _dbName = String.fromEnvironment(
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('ONB1.10F founder pilot Q80 attached-device phase $_phase', (
+  testWidgets('ONB1.10F founder pilot Q80 attached-device $_phase run', (
     WidgetTester tester,
   ) async {
     _requireFixture();
+    final phases = _selectedPhases();
     final dbPath = '${await getDatabasesPath()}/$_dbName';
     final database = await $FloorAppDatabase.databaseBuilder(dbPath).build();
     final startedAt = DateTime.now().toUtc();
-    final marker = 'ONB1.10F-Q80-${startedAt.millisecondsSinceEpoch}-$_phase';
 
     try {
-      switch (_phase) {
-        case 'setup':
-          await _setup(database, marker);
-          break;
-        case 'offline':
-          await _offline(database, marker);
-          break;
-        case 'reconnect':
-          await _reconnectAndVoid(database, marker);
-          break;
-        default:
-          fail('PILOT_PHASE must be setup, offline, or reconnect; got $_phase');
+      // One test body drives every phase on purpose. `flutter test` installs the
+      // application, runs it, and then uninstalls it, so the application data
+      // directory does not survive a run. `offline` and `reconnect` read back the
+      // activation state that `setup` persisted in Floor, so running the phases as
+      // separate invocations would find that state already destroyed.
+      for (final phase in phases) {
+        final marker = 'ONB1.10F-Q80-${startedAt.millisecondsSinceEpoch}-$phase';
+        switch (phase) {
+          case 'setup':
+            await _setup(database, marker);
+            break;
+          case 'offline':
+            await _offline(database, marker);
+            break;
+          case 'reconnect':
+            await _reconnectAndVoid(database, marker);
+            break;
+        }
       }
     } finally {
       await database.close();
@@ -79,7 +87,30 @@ void main() {
   });
 }
 
+/// Phases to drive, in order. `all` performs the whole rehearsal; a single named
+/// phase is still accepted so one step can be debugged in isolation.
+List<String> _selectedPhases() {
+  const phases = <String>['setup', 'offline', 'reconnect'];
+  if (_phase == 'all') return phases;
+  if (phases.contains(_phase)) return <String>[_phase];
+  fail('PILOT_PHASE must be all, setup, offline, or reconnect; got $_phase');
+}
+
 Dio _dio() => Dio(BaseOptions(baseUrl: 'http://127.0.0.1:3000/api/'));
+
+/// Counts every request that reaches Dio, so the offline phase can prove that the
+/// sale path issued none rather than assuming the tunnel had been removed.
+class _RequestRecorder extends Interceptor {
+  int count = 0;
+  final List<String> observed = <String>[];
+
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    count++;
+    observed.add('${options.method} ${options.uri}');
+    handler.next(options);
+  }
+}
 
 void _requireFixture() {
   for (final entry in <String, String>{
@@ -136,13 +167,25 @@ Future<void> _setup(AppDatabase db, String marker) async {
     'idempotencyKey': '$marker-csv',
   });
 
+  // The founder-pilot seed already provisioned this tenant with the real issuer RUC.
+  // Reuse that value instead of synthesising one: the fiscal-setup response below feeds
+  // PrinterConfigService.fiscalRucKey, so the physical TEST_PRINT must carry the real
+  // issuer identity, and a generated RUC would misattribute the printed evidence.
+  final currentFiscal = await dio.get<Map<String, dynamic>>('onboarding/fiscal-setup');
+  final issuerRuc = (currentFiscal.data!['ruc'] as String?)?.trim();
+  expect(
+    issuerRuc,
+    isNotEmpty,
+    reason: 'the pilot tenant must already carry the seeded issuer RUC',
+  );
+
   final fiscal = await dio.post<Map<String, dynamic>>('onboarding/fiscal-setup', data: {
     // Founder regime decision (FREEZE-04): the pilot tenant is CUOTA_FIJA
     // (COMPROBANTE DE VENTA, no IVA collected), matching the declared
     // acceptance fixture in AP_FIXTURE_MANIFEST.md.
     'regime': 'CUOTA_FIJA',
     'businessName': 'Founder Pilot Q80 $marker',
-    'ruc': 'J${startedRuc(marker)}',
+    'ruc': issuerRuc,
     'commercialFxSpread': 0,
     'pricesIncludeTax': true,
   });
@@ -278,11 +321,6 @@ SecurityProfileEntity _profileEntity(Map<String, dynamic> profile) =>
       isTotpEnabled: profile['is_totp_enabled'] as bool? ?? false,
     );
 
-String startedRuc(String marker) => marker.codeUnits
-    .fold<int>(0, (a, b) => (a + b) % 9999999999)
-    .toString()
-    .padLeft(10, '0');
-
 Future<SalesRepositoryImpl> _salesRepository(AppDatabase db, Dio dio) async {
   final localAuth = LocalAuthService();
   final capabilityCache = TenantCapabilityCache(
@@ -340,13 +378,16 @@ Future<SalesRepositoryImpl> _salesRepository(AppDatabase db, Dio dio) async {
 }
 
 Future<void> _offline(AppDatabase db, String marker) async {
-  // The parent removes adb reverse before this invocation. No HTTP is attempted here.
+  // Offline is enforced by construction instead of by cutting the tunnel: the
+  // recorder fails the phase if the sale path issues even one request, which is a
+  // stronger guarantee than assuming adb reverse was removed beforehand.
   final attempt = await db.activationAttemptLocalDao.getLatestAttempt(_tenantId);
   expect(attempt, isNotNull);
   final resolvedAttempt = attempt!;
+  final recorder = _RequestRecorder();
   final sale = await ActivationControlledSaleRunner(
     database: db,
-    salesRepository: await _salesRepository(db, _dio()),
+    salesRepository: await _salesRepository(db, _dio()..interceptors.add(recorder)),
     printerPort: IPosPrinterAdapter(),
     clockManager: ActivationClockManager(initialBootSessionId: 'onb1.10f-q80'),
   ).executeControlledOfflineSale(ControlledSaleParams(
@@ -356,6 +397,12 @@ Future<void> _offline(AppDatabase db, String marker) async {
     customAmount: 1,
   ));
   expect(sale.isSuccess, isTrue, reason: sale.errors.join('\n'));
+  expect(
+    recorder.count,
+    0,
+    reason:
+        'the offline sale must issue no HTTP request; observed ${recorder.observed}',
+  );
   final invoice = await db.invoiceDao.getInvoiceById(sale.verificationTicketId!);
   expect(invoice, isNotNull);
   expect(invoice!.number, isNotEmpty);
@@ -363,7 +410,7 @@ Future<void> _offline(AppDatabase db, String marker) async {
   final claim = await db.firstSuccessfulSaleClaimDao.getClaimByTenantId(_tenantId);
   expect(claim?.ticketId, sale.verificationTicketId);
   // ignore: avoid_print
-  print('ONB1.10F_PHASE_RECEIPT ${jsonEncode({'phase': 'offline', 'marker': marker, 'attemptId': resolvedAttempt.attemptId, 'ticketId': sale.verificationTicketId, 'physicalReceipt': 'print-command-accepted'})}');
+  print('ONB1.10F_PHASE_RECEIPT ${jsonEncode({'phase': 'offline', 'marker': marker, 'attemptId': resolvedAttempt.attemptId, 'ticketId': sale.verificationTicketId, 'physicalReceipt': 'print-command-accepted', 'httpRequests': recorder.count})}');
 }
 
 Future<void> _reconnectAndVoid(AppDatabase db, String marker) async {
