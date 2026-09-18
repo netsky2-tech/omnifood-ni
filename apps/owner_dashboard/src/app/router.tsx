@@ -1,46 +1,46 @@
-import { lazy } from "react";
 import { createBrowserRouter } from "react-router-dom";
 import { AppLayout } from "@/app/layout/app-layout";
 import { ProtectedRoute } from "@/app/protected-route";
 import { SuspenseWrapper } from "@/app/layout/page-loader";
+import { lazyWithRetry } from "@/lib/lazy-with-retry";
 
-const LoginPage = lazy(() =>
+const LoginPage = lazyWithRetry(() =>
   import("@/features/auth/login-page").then((m) => ({ default: m.LoginPage })),
 );
-const DashboardPage = lazy(() =>
+const DashboardPage = lazyWithRetry(() =>
   import("@/features/dashboard/dashboard-page").then((m) => ({ default: m.DashboardPage })),
 );
-const SalesPage = lazy(() =>
+const SalesPage = lazyWithRetry(() =>
   import("@/features/sales/sales-page").then((m) => ({ default: m.SalesPage })),
 );
-const InventoryPage = lazy(() =>
+const InventoryPage = lazyWithRetry(() =>
   import("@/features/inventory/inventory-page").then((m) => ({ default: m.InventoryPage })),
 );
-const FiscalPage = lazy(() =>
+const FiscalPage = lazyWithRetry(() =>
   import("@/features/fiscal/fiscal-page").then((m) => ({ default: m.FiscalPage })),
 );
-const CatalogPage = lazy(() =>
+const CatalogPage = lazyWithRetry(() =>
   import("@/features/catalog/catalog-page").then((m) => ({ default: m.CatalogPage })),
 );
-const ProductPage = lazy(() =>
+const ProductPage = lazyWithRetry(() =>
   import("@/features/catalog/product-page").then((m) => ({ default: m.ProductPage })),
 );
-const PromotionsPage = lazy(() =>
+const PromotionsPage = lazyWithRetry(() =>
   import("@/features/promotions/promotions-page").then((m) => ({ default: m.PromotionsPage })),
 );
-const RecipesPage = lazy(() =>
+const RecipesPage = lazyWithRetry(() =>
   import("@/features/recipes/recipes-page").then((m) => ({ default: m.RecipesPage })),
 );
-const UsersPage = lazy(() =>
+const UsersPage = lazyWithRetry(() =>
   import("@/features/users/users-page").then((m) => ({ default: m.UsersPage })),
 );
-const SettingsPage = lazy(() =>
+const SettingsPage = lazyWithRetry(() =>
   import("@/features/settings/settings-page").then((m) => ({ default: m.SettingsPage })),
 );
-const CustomersPage = lazy(() =>
+const CustomersPage = lazyWithRetry(() =>
   import("@/features/customers/customers-page").then((m) => ({ default: m.CustomersPage })),
 );
-const NotFoundPage = lazy(() =>
+const NotFoundPage = lazyWithRetry(() =>
   import("@/app/not-found-page").then((m) => ({ default: m.NotFoundPage })),
 );
 
