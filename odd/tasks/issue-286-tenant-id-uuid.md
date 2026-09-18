@@ -195,6 +195,8 @@ Roughly **14 write sites can pass a blank** against ~6 correctly guarded ones. T
 
 **Slicing of Phase 2** — see below. Two options with materially different review cost. **Undecided.**
 
+**The tenant guard is closed but not unified.** Four mechanisms now guard the same class of error, and they disagree on the status: `TenantContextRequiredError` on the shared helper (400 via `AllExceptionsFilter`), `BadRequestException` in the OHAC helper that #329 added deliberately and in the inline checks in `device-sync-credential`, and `UnauthorizedException` in the private `requireTenant` of `catalog.service.ts:79` and `product.service.ts:24` — which answers **401**. So a missing tenant context is a 401 on two services and a 400 everywhere else. Consolidating it touches #329's deliberately extracted helper and its design reference, so it is a decision, not a cleanup. **Undecided.**
+
 **Tables with a varchar `tenant_id` but no RLS policy** — `tenant_fulfillment_records`, `promotions`, `customers`, `customer_point_transactions`, `audit_integrity_alerts`, `forensic_alerts` and the legacy/privacy tables. They still need the column change; they carry no policy work. Whether to add policies to them is out of scope for #286 and must not be smuggled in.
 
 ---
@@ -227,13 +229,21 @@ The guard already exists once, as `bindTenantContext()` / `resolveTenantContextI
 
 | Task | What | Files |
 | --- | --- | --- |
-| **0b-1** | Widen the helper so both an `EntityManager` and a `QueryRunner` can bind (some sites hold a query runner, not a manager), and map `TenantContextRequiredError` to **400** in `AllExceptionsFilter`, which today sends every non-`HttpException` to 500. Without the mapping the guard would trade an opaque SQL error for an opaque 500. | `core/database/tenant-transaction.ts`, `main.ts`, plus specs |
-| **0b-2** | Delete the three private unguarded copies (`fulfillment-retention.service.ts:29`, `fulfillment-rollout.service.ts:86`, `invoices.service.ts:1179`) and call the shared helper. | 3 services |
-| **0b-3** | Route the remaining raw writers through the shared helper, one blank-rejection test per touched service. The exposed set includes `identity/guards/sync-transport.guard.ts:99` (raw device claim on a sync route), `inventory/production.service.ts:138`, `inventory/inventory-purchase.service.ts:128,274`, `inventory/services/product-inventory-mapping.service.ts:24,49`, `sales/services/inbound-sync.service.ts:235`, `identity/services/tenant-capability.service.ts:88`, `fulfillment/services/tenant-topology-revision.service.ts:104`, and `identity/services/device-sync-credential.service.ts:106,245`. Split by module group if the review size demands it. | ~10 files |
+| **0b-1** | **DONE — #331.** Widen the helper so both an `EntityManager` and a `QueryRunner` can bind (some sites hold a query runner, not a manager), and map `TenantContextRequiredError` to **400** in `AllExceptionsFilter`, which today sends every non-`HttpException` to 500. Without the mapping the guard would trade an opaque SQL error for an opaque 500. | `core/database/tenant-transaction.ts`, `main.ts`, plus specs |
+| **0b-2** | **DONE — #333.** Delete the three private unguarded copies (`fulfillment-retention.service.ts:29`, `fulfillment-rollout.service.ts:86`, `invoices.service.ts:1179`) and call the shared helper. | 3 services |
+| **0b-3** | **DONE — #334.** Route the remaining raw writers through the shared helper, one blank-rejection test per touched service. The exposed set includes `identity/guards/sync-transport.guard.ts:99` (raw device claim on a sync route), `inventory/production.service.ts:138`, `inventory/inventory-purchase.service.ts:128,274`, `inventory/services/product-inventory-mapping.service.ts:24,49`, `sales/services/inbound-sync.service.ts:235`, `identity/services/tenant-capability.service.ts:88`, `fulfillment/services/tenant-topology-revision.service.ts:104`, and `identity/services/device-sync-credential.service.ts:106,245`. Split by module group if the review size demands it. | ~10 files |
 
 Already guarded, so no change: `catalog.service.ts:102` and `product.service.ts:42` (a local `requireTenant`), `identity/human-authorization/rls/ohac-tenant-transaction.ts:37`, and `device-sync-credential.service.ts:400,448,503`.
 
-**Done condition for 0b:** every writer of `app.tenant_id` passes through `resolveTenantContextId` before any SQL, and a blank id produces a 400 rather than a deferred database error. Then Phase 2 may touch the 94 policies.
+**Unit 0b is CLOSED.** Enumerating every writer of `app.tenant_id` on `main` (`34677f6`) confirms no writer can pass a blank: `catalog.service.ts:102` and `product.service.ts:42` sit behind a private `requireTenant`, `device-sync-credential.service.ts` sites at 393/441/496 carry inline emptiness checks, and everything else — including the eleven raw sites and the three private copies — now calls the shared `bindTenantContext`. The one apparent exception, `device-sync-credential.service.ts:231`, is a JSDoc comment mentioning `set_config`, not a call site.
+
+**The original done condition was over-specified and is corrected here.** It read "every writer passes through `resolveTenantContextId`". An equivalent inline emptiness check also closes the hole, and three sites do exactly that. The substantive requirement — no blank can reach `set_config` — is what mattered and it is met; requiring one specific helper was an unnecessary constraint.
+
+**Two behaviours recorded rather than changed:**
+- `device-sync-credential.service.ts:241` — `renewAccessToken` keeps the binding conditional on `dto.declarativeTenantId?.trim()`, because that DTO field is **optional** and about ten existing tests exercise renewal without it. A blank-but-present value therefore skips binding silently: no SQL, no rejection. Making it unconditional would throw for legitimate calls.
+- The `inbound-sync.service.ts` binding now sits inside that method's pre-existing `try`/`catch`, so a binding failure is caught there.
+
+Then Phase 2 may touch the 94 policies.
 
 ### The size arithmetic, stated plainly
 
