@@ -37,6 +37,7 @@ import {
   OnboardingSession,
   OnboardingLifecycleState,
 } from '../entities/onboarding-session.entity';
+import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 import { FiscalConfigVersionService } from './fiscal-config-version.service';
 import { OnboardingCatalogService } from './onboarding-catalog.service';
 import { OnboardingReadinessEvaluator } from './onboarding-readiness.evaluator';
@@ -94,6 +95,19 @@ export class ActivationService {
     private readonly tenantTopologyRevisionService?: TenantTopologyRevisionService,
   ) {}
 
+  /**
+   * Runs work inside a DataSource transaction whose manager is bound to the
+   * tenant context (transaction-local set_config) before any repository
+   * access. Every access to RLS-protected activation tables must go through
+   * this wrapper or an explicitly bound transaction manager.
+   */
+  private runTenantBound<T>(
+    tenantId: string,
+    work: (manager: EntityManager) => Promise<T>,
+  ): Promise<T> {
+    return runInTenantTransaction(this.dataSource, tenantId, work);
+  }
+
   private assertPrincipalMatchesRecord(
     record: SyncBatchRecordDto,
     devicePrincipal: DevicePrincipal,
@@ -125,9 +139,11 @@ export class ActivationService {
     }
     this.assertPrincipalMatchesRecord(record, devicePrincipal);
 
-    const attempt = await this.attemptRepo.findOne({
-      where: { id: attemptId, tenantId },
-    });
+    const attempt = await this.runTenantBound(tenantId, (manager) =>
+      manager
+        .getRepository(ActivationAttempt)
+        .findOne({ where: { id: attemptId, tenantId } }),
+    );
     if (!attempt) {
       throw new NotFoundException(
         `Activation attempt '${attemptId}' not found for tenant`,
@@ -161,7 +177,7 @@ export class ActivationService {
       throw new ForbiddenException('DEVICE_PRINCIPAL_FORGERY_DETECTED');
     }
 
-    return this.dataSource.transaction(async (manager) => {
+    return this.runTenantBound(tenantId, async (manager) => {
       const aRepo = manager.getRepository(ActivationAttempt);
       const sRepo = manager.getRepository(OnboardingSession);
       const attempt = await aRepo.findOne({
@@ -226,23 +242,26 @@ export class ActivationService {
       throw new BadRequestException('candidateTerminalId is required');
     }
 
-    const trimmedIdempotencyKey = dto.idempotencyKey?.trim();
-    if (trimmedIdempotencyKey) {
-      const existing = await this.attemptRepo.findOne({
-        where: {
-          tenantId: trimmedTenant,
-          idempotencyKey: trimmedIdempotencyKey,
-        },
-      });
-      if (existing) {
-        return existing;
-      }
-    }
-
-    const result = await this.dataSource.transaction(
+    let idempotentReplay = false;
+    const result = await this.runTenantBound(
+      trimmedTenant,
       async (manager: EntityManager) => {
         const sRepo = manager.getRepository(OnboardingSession);
         const aRepo = manager.getRepository(ActivationAttempt);
+
+        const trimmedIdempotencyKey = dto.idempotencyKey?.trim();
+        if (trimmedIdempotencyKey) {
+          const existing = await aRepo.findOne({
+            where: {
+              tenantId: trimmedTenant,
+              idempotencyKey: trimmedIdempotencyKey,
+            },
+          });
+          if (existing) {
+            idempotentReplay = true;
+            return existing;
+          }
+        }
 
         // Precondición estricta: current SALE_READY=true
         const session = await sRepo.findOne({
@@ -350,20 +369,22 @@ export class ActivationService {
       },
     );
 
-    // ONB1.7F: Audit log for attempt started
-    await this.changeLogService.log({
-      tenantId: trimmedTenant,
-      userId: actorUserId || 'SYSTEM',
-      action: 'ONBOARDING_ACTIVATION_ATTEMPT_STARTED',
-      targetType: 'ActivationAttempt',
-      targetId: result.id,
-      changes: {
-        candidateTerminalId: result.candidateTerminalId,
-        requiredFiscalRevision: result.requiredFiscalRevision,
-        verificationProductId: result.verificationProductId,
-        serverTimeAnchorAt: result.serverTimeAnchorAt,
-      },
-    });
+    // ONB1.7F: Audit log for attempt started (idempotent replays skip the audit log)
+    if (!idempotentReplay) {
+      await this.changeLogService.log({
+        tenantId: trimmedTenant,
+        userId: actorUserId || 'SYSTEM',
+        action: 'ONBOARDING_ACTIVATION_ATTEMPT_STARTED',
+        targetType: 'ActivationAttempt',
+        targetId: result.id,
+        changes: {
+          candidateTerminalId: result.candidateTerminalId,
+          requiredFiscalRevision: result.requiredFiscalRevision,
+          verificationProductId: result.verificationProductId,
+          serverTimeAnchorAt: result.serverTimeAnchorAt,
+        },
+      });
+    }
 
     return result;
   }
@@ -404,110 +425,124 @@ export class ActivationService {
       );
     }
 
-    // 2. Validate attempt existence and tenant boundary
-    const attempt = await this.attemptRepo.findOne({
-      where: { id: attemptId, tenantId: effectiveTenantId },
-    });
+    let idempotentReplay = false;
+    const savedCheck = await this.runTenantBound(
+      effectiveTenantId,
+      async (manager: EntityManager) => {
+        const attemptRepo = manager.getRepository(ActivationAttempt);
+        const checkRepo = manager.getRepository(ActivationCheckResult);
 
-    if (!attempt) {
-      throw new NotFoundException(
-        `Activation attempt '${attemptId}' not found for tenant '${effectiveTenantId}'`,
-      );
-    }
+        // 2. Validate attempt existence and tenant boundary
+        const attempt = await attemptRepo.findOne({
+          where: { id: attemptId, tenantId: effectiveTenantId },
+        });
 
-    // 3. Validate device terminal matches candidate terminal
-    if (attempt.candidateTerminalId.trim() !== effectiveTerminalId) {
-      throw new ForbiddenException(
-        `TERMINAL_MISMATCH: DevicePrincipal terminal '${effectiveTerminalId}' does not match candidate terminal '${attempt.candidateTerminalId}'`,
-      );
-    }
+        if (!attempt) {
+          throw new NotFoundException(
+            `Activation attempt '${attemptId}' not found for tenant '${effectiveTenantId}'`,
+          );
+        }
 
-    // 4. Attempt status invariant: no checks allowed on completed attempt
-    if (
-      attempt.status === ActivationAttemptStatus.PASS ||
-      attempt.status === ActivationAttemptStatus.PASS_WITH_WARNING ||
-      attempt.status === ActivationAttemptStatus.FAIL
-    ) {
-      throw new ConflictException(
-        `ATTEMPT_ALREADY_COMPLETED: Cannot ingest checks into an attempt in status '${attempt.status}'`,
-      );
-    }
+        // 3. Validate device terminal matches candidate terminal
+        if (attempt.candidateTerminalId.trim() !== effectiveTerminalId) {
+          throw new ForbiddenException(
+            `TERMINAL_MISMATCH: DevicePrincipal terminal '${effectiveTerminalId}' does not match candidate terminal '${attempt.candidateTerminalId}'`,
+          );
+        }
 
-    // 5. Normative check status constraint: Only POST_RECONNECT_SYNC may be WARNING
-    if (
-      dto.status === ActivationCheckStatus.WARNING &&
-      dto.checkCode !== ActivationCheckCode.POST_RECONNECT_SYNC
-    ) {
-      throw new BadRequestException(
-        `INVALID_CHECK_STATUS: Only POST_RECONNECT_SYNC may have WARNING status. Check '${dto.checkCode}' accepts only PASS | FAIL`,
-      );
-    }
+        // 4. Attempt status invariant: no checks allowed on completed attempt
+        if (
+          attempt.status === ActivationAttemptStatus.PASS ||
+          attempt.status === ActivationAttemptStatus.PASS_WITH_WARNING ||
+          attempt.status === ActivationAttemptStatus.FAIL
+        ) {
+          throw new ConflictException(
+            `ATTEMPT_ALREADY_COMPLETED: Cannot ingest checks into an attempt in status '${attempt.status}'`,
+          );
+        }
 
-    // 6. Uniqueness & idempotency: (tenant_id, activation_attempt_id, check_code)
-    const existingCheck = await this.checkRepo.findOne({
-      where: {
-        tenantId: effectiveTenantId,
-        activationAttemptId: attempt.id,
-        checkCode: dto.checkCode,
+        // 5. Normative check status constraint: Only POST_RECONNECT_SYNC may be WARNING
+        if (
+          dto.status === ActivationCheckStatus.WARNING &&
+          dto.checkCode !== ActivationCheckCode.POST_RECONNECT_SYNC
+        ) {
+          throw new BadRequestException(
+            `INVALID_CHECK_STATUS: Only POST_RECONNECT_SYNC may have WARNING status. Check '${dto.checkCode}' accepts only PASS | FAIL`,
+          );
+        }
+
+        // 6. Uniqueness & idempotency: (tenant_id, activation_attempt_id, check_code)
+        const existingCheck = await checkRepo.findOne({
+          where: {
+            tenantId: effectiveTenantId,
+            activationAttemptId: attempt.id,
+            checkCode: dto.checkCode,
+          },
+        });
+
+        if (existingCheck) {
+          if (existingCheck.status !== dto.status) {
+            throw new ConflictException(
+              `INTEGRITY_CONFLICT: Check '${dto.checkCode}' already exists with status '${existingCheck.status}', cannot conflict with '${dto.status}'`,
+            );
+          }
+
+          // Idempotent update of non-destructive evidence fields
+          if (dto.evidenceType) existingCheck.evidenceType = dto.evidenceType;
+          if (dto.evidenceRef) existingCheck.evidenceRef = dto.evidenceRef;
+          if (dto.detailsSanitizedJson) {
+            existingCheck.detailsSanitizedJson = dto.detailsSanitizedJson;
+          }
+          if (dto.occurredAt) {
+            existingCheck.occurredAt = new Date(dto.occurredAt);
+          }
+          // Already-persisted check: skip the failure audit emission below
+          // (parity with the pre-tenant-binding early return)
+          idempotentReplay = true;
+          return checkRepo.save(existingCheck);
+        }
+
+        // Create new check result
+        const newCheck = checkRepo.create({
+          tenantId: effectiveTenantId,
+          activationAttemptId: attempt.id,
+          checkCode: dto.checkCode,
+          required: dto.required !== undefined ? dto.required : true,
+          status: dto.status,
+          evidenceType: dto.evidenceType?.trim() || null,
+          evidenceRef: dto.evidenceRef?.trim() || null,
+          occurredAt: dto.occurredAt ? new Date(dto.occurredAt) : null,
+          recordedAt: new Date(),
+          detailsSanitizedJson: dto.detailsSanitizedJson || null,
+        });
+
+        const saved = await checkRepo.save(newCheck);
+
+        // 7. Advance attempt state & materialize trustedTerminalId
+        let attemptMutated = false;
+        if (attempt.status === ActivationAttemptStatus.CREATED) {
+          attempt.status = ActivationAttemptStatus.IN_PROGRESS;
+          attemptMutated = true;
+        }
+        if (!attempt.trustedTerminalId) {
+          attempt.trustedTerminalId = effectiveTerminalId;
+          attemptMutated = true;
+        }
+        if (dto.verificationTicketId && !attempt.verificationTicketId) {
+          attempt.verificationTicketId = dto.verificationTicketId.trim();
+          attemptMutated = true;
+        }
+
+        if (attemptMutated) {
+          await attemptRepo.save(attempt);
+        }
+
+        return saved;
       },
-    });
+    );
 
-    if (existingCheck) {
-      if (existingCheck.status !== dto.status) {
-        throw new ConflictException(
-          `INTEGRITY_CONFLICT: Check '${dto.checkCode}' already exists with status '${existingCheck.status}', cannot conflict with '${dto.status}'`,
-        );
-      }
-
-      // Idempotent update of non-destructive evidence fields
-      if (dto.evidenceType) existingCheck.evidenceType = dto.evidenceType;
-      if (dto.evidenceRef) existingCheck.evidenceRef = dto.evidenceRef;
-      if (dto.detailsSanitizedJson) {
-        existingCheck.detailsSanitizedJson = dto.detailsSanitizedJson;
-      }
-      if (dto.occurredAt) {
-        existingCheck.occurredAt = new Date(dto.occurredAt);
-      }
-      return this.checkRepo.save(existingCheck);
-    }
-
-    // Create new check result
-    const newCheck = this.checkRepo.create({
-      tenantId: effectiveTenantId,
-      activationAttemptId: attempt.id,
-      checkCode: dto.checkCode,
-      required: dto.required !== undefined ? dto.required : true,
-      status: dto.status,
-      evidenceType: dto.evidenceType?.trim() || null,
-      evidenceRef: dto.evidenceRef?.trim() || null,
-      occurredAt: dto.occurredAt ? new Date(dto.occurredAt) : null,
-      recordedAt: new Date(),
-      detailsSanitizedJson: dto.detailsSanitizedJson || null,
-    });
-
-    const savedCheck = await this.checkRepo.save(newCheck);
-
-    // 7. Advance attempt state & materialize trustedTerminalId
-    let attemptMutated = false;
-    if (attempt.status === ActivationAttemptStatus.CREATED) {
-      attempt.status = ActivationAttemptStatus.IN_PROGRESS;
-      attemptMutated = true;
-    }
-    if (!attempt.trustedTerminalId) {
-      attempt.trustedTerminalId = effectiveTerminalId;
-      attemptMutated = true;
-    }
-    if (dto.verificationTicketId && !attempt.verificationTicketId) {
-      attempt.verificationTicketId = dto.verificationTicketId.trim();
-      attemptMutated = true;
-    }
-
-    if (attemptMutated) {
-      await this.attemptRepo.save(attempt);
-    }
-
-    // ONB1.7F: Audit log for check failure
-    if (savedCheck.status === ActivationCheckStatus.FAIL) {
+    // ONB1.7F: Audit log for check failure (idempotent replays skip the audit log)
+    if (savedCheck.status === ActivationCheckStatus.FAIL && !idempotentReplay) {
       await this.changeLogService.log({
         tenantId: effectiveTenantId,
         userId: effectiveTerminalId,
@@ -540,7 +575,8 @@ export class ActivationService {
       throw new BadRequestException('tenantId is required');
     }
 
-    const result = await this.dataSource.transaction(
+    const result = await this.runTenantBound(
+      trimmedTenant,
       async (manager: EntityManager) => {
         const aRepo = manager.getRepository(ActivationAttempt);
         const sRepo = manager.getRepository(OnboardingSession);
@@ -733,9 +769,11 @@ export class ActivationService {
     tenantId: string,
     attemptId: string,
   ): Promise<ActivationAttempt> {
-    const attempt = await this.attemptRepo.findOne({
-      where: { id: attemptId, tenantId },
-    });
+    const attempt = await this.runTenantBound(tenantId, (manager) =>
+      manager
+        .getRepository(ActivationAttempt)
+        .findOne({ where: { id: attemptId, tenantId } }),
+    );
     if (!attempt) {
       throw new NotFoundException(
         `Activation attempt '${attemptId}' not found for tenant`,
@@ -745,26 +783,30 @@ export class ActivationService {
   }
 
   async getActiveAttempt(tenantId: string): Promise<ActivationAttempt | null> {
-    return this.attemptRepo.findOne({
-      where: {
-        tenantId,
-        status: In([
-          ActivationAttemptStatus.CREATED,
-          ActivationAttemptStatus.IN_PROGRESS,
-        ]),
-      },
-      order: { startedAt: 'DESC' },
-    });
+    return this.runTenantBound(tenantId, (manager) =>
+      manager.getRepository(ActivationAttempt).findOne({
+        where: {
+          tenantId,
+          status: In([
+            ActivationAttemptStatus.CREATED,
+            ActivationAttemptStatus.IN_PROGRESS,
+          ]),
+        },
+        order: { startedAt: 'DESC' },
+      }),
+    );
   }
 
   async getFollowUps(
     tenantId: string,
     attemptId: string,
   ): Promise<ActivationFollowUp[]> {
-    return this.followUpRepo.find({
-      where: { tenantId, activationAttemptId: attemptId },
-      order: { openedAt: 'DESC' },
-    });
+    return this.runTenantBound(tenantId, (manager) =>
+      manager.getRepository(ActivationFollowUp).find({
+        where: { tenantId, activationAttemptId: attemptId },
+        order: { openedAt: 'DESC' },
+      }),
+    );
   }
 
   async closeFollowUp(
@@ -773,46 +815,55 @@ export class ActivationService {
     dto: CloseActivationFollowUpDto,
     actorUserId: string,
   ): Promise<ActivationFollowUp> {
-    const followUp = await this.followUpRepo.findOne({
-      where: { id: followUpId, tenantId },
-    });
-
-    if (!followUp) {
-      throw new NotFoundException(
-        `Activation follow-up '${followUpId}' not found for tenant`,
-      );
-    }
-
-    if (followUp.status === ActivationFollowUpStatus.CLOSED) {
-      return followUp;
-    }
-
-    followUp.status = ActivationFollowUpStatus.CLOSED;
-    followUp.closedAt = new Date();
-    followUp.closedBy = actorUserId || 'SYSTEM_RECONCILER';
-    if (dto.closureEvidenceRef) {
-      followUp.closureEvidenceRef = dto.closureEvidenceRef.trim();
-    }
-    if (dto.closureNote) {
-      followUp.closureNote = dto.closureNote.trim();
-    }
-
-    const savedFollowUp = await this.followUpRepo.save(followUp);
-
-    await this.changeLogService.log({
+    const outcome = await this.runTenantBound(
       tenantId,
-      userId: actorUserId || 'SYSTEM_RECONCILER',
-      action: 'ONBOARDING_ACTIVATION_FOLLOW_UP_CLOSED',
-      targetType: 'ActivationFollowUp',
-      targetId: savedFollowUp.id,
-      changes: {
-        closedBy: savedFollowUp.closedBy,
-        closureEvidenceRef: savedFollowUp.closureEvidenceRef,
-        closureNote: savedFollowUp.closureNote,
-      },
-    });
+      async (manager: EntityManager) => {
+        const followUpRepo = manager.getRepository(ActivationFollowUp);
 
-    return savedFollowUp;
+        const followUp = await followUpRepo.findOne({
+          where: { id: followUpId, tenantId },
+        });
+
+        if (!followUp) {
+          throw new NotFoundException(
+            `Activation follow-up '${followUpId}' not found for tenant`,
+          );
+        }
+
+        if (followUp.status === ActivationFollowUpStatus.CLOSED) {
+          return { followUp, changed: false };
+        }
+
+        followUp.status = ActivationFollowUpStatus.CLOSED;
+        followUp.closedAt = new Date();
+        followUp.closedBy = actorUserId || 'SYSTEM_RECONCILER';
+        if (dto.closureEvidenceRef) {
+          followUp.closureEvidenceRef = dto.closureEvidenceRef.trim();
+        }
+        if (dto.closureNote) {
+          followUp.closureNote = dto.closureNote.trim();
+        }
+
+        return { followUp: await followUpRepo.save(followUp), changed: true };
+      },
+    );
+
+    if (outcome.changed) {
+      await this.changeLogService.log({
+        tenantId,
+        userId: actorUserId || 'SYSTEM_RECONCILER',
+        action: 'ONBOARDING_ACTIVATION_FOLLOW_UP_CLOSED',
+        targetType: 'ActivationFollowUp',
+        targetId: outcome.followUp.id,
+        changes: {
+          closedBy: outcome.followUp.closedBy,
+          closureEvidenceRef: outcome.followUp.closureEvidenceRef,
+          closureNote: outcome.followUp.closureNote,
+        },
+      });
+    }
+
+    return outcome.followUp;
   }
 
   /**
@@ -829,76 +880,98 @@ export class ActivationService {
     closedFollowUpIds: string[];
     unresolvedCount: number;
   }> {
+    // Tenant context is mandatory: every activation-table access below runs
+    // inside a transaction whose manager is bound to app.tenant_id.
+    const scopedTenantId = tenantId?.trim();
+    if (!scopedTenantId) {
+      throw new BadRequestException('tenantId is required');
+    }
+
     const whereClause: FindOptionsWhere<ActivationFollowUp> = {
       status: ActivationFollowUpStatus.OPEN,
+      tenantId: scopedTenantId,
     };
-    if (tenantId?.trim()) {
-      whereClause.tenantId = tenantId.trim();
-    }
     if (attemptId?.trim()) {
       whereClause.activationAttemptId = attemptId.trim();
     }
 
-    const openFollowUps = await this.followUpRepo.find({
-      where: whereClause,
-    });
+    const openFollowUps = await this.runTenantBound(scopedTenantId, (manager) =>
+      manager.getRepository(ActivationFollowUp).find({
+        where: whereClause,
+      }),
+    );
 
     const closedFollowUpIds: string[] = [];
     let unresolvedCount = 0;
 
     for (const fup of openFollowUps) {
-      // Corroborate convergence: check if POST_RECONNECT_SYNC check has converged to PASS
-      const check = await this.checkRepo.findOne({
-        where: {
-          tenantId: fup.tenantId,
-          activationAttemptId: fup.activationAttemptId,
-          checkCode: ActivationCheckCode.POST_RECONNECT_SYNC,
-        },
-      });
+      // Corroborate convergence inside a tenant-bound transaction per
+      // follow-up, preserving per-follow-up commit atomicity.
+      const outcome = await this.runTenantBound(
+        fup.tenantId,
+        async (manager: EntityManager) => {
+          const checkRepo = manager.getRepository(ActivationCheckResult);
+          const attemptRepo = manager.getRepository(ActivationAttempt);
+          const followUpRepo = manager.getRepository(ActivationFollowUp);
 
-      let converged = false;
-      let evidenceRef = fup.closureEvidenceRef;
+          // Corroborate convergence: check if POST_RECONNECT_SYNC check has converged to PASS
+          const check = await checkRepo.findOne({
+            where: {
+              tenantId: fup.tenantId,
+              activationAttemptId: fup.activationAttemptId,
+              checkCode: ActivationCheckCode.POST_RECONNECT_SYNC,
+            },
+          });
 
-      if (check && check.status === ActivationCheckStatus.PASS) {
-        converged = true;
-        evidenceRef = check.evidenceRef || 'POST_RECONNECT_SYNC_PASS_CONVERGED';
-      } else {
-        // Corroborate via verificationTicketId in real sales persistence
-        const attempt = await this.attemptRepo.findOne({
-          where: { id: fup.activationAttemptId, tenantId: fup.tenantId },
-        });
-        if (attempt?.verificationTicketId) {
-          try {
-            const invRepo = this.dataSource.getRepository(Invoice);
-            const invoice = await invRepo.findOne({
-              where: {
-                tenant_id: fup.tenantId,
-                id: attempt.verificationTicketId,
-              },
+          let converged = false;
+          let evidenceRef = fup.closureEvidenceRef;
+
+          if (check && check.status === ActivationCheckStatus.PASS) {
+            converged = true;
+            evidenceRef =
+              check.evidenceRef || 'POST_RECONNECT_SYNC_PASS_CONVERGED';
+          } else {
+            // Corroborate via verificationTicketId in real sales persistence
+            const attempt = await attemptRepo.findOne({
+              where: { id: fup.activationAttemptId, tenantId: fup.tenantId },
             });
-            if (
-              invoice &&
-              !invoice.isCanceled &&
-              invoice.paymentStatus === 'paid'
-            ) {
-              converged = true;
-              evidenceRef = `VERIFICATION_INVOICE_${invoice.id}`;
+            if (attempt?.verificationTicketId) {
+              try {
+                const invoice = await manager.getRepository(Invoice).findOne({
+                  where: {
+                    tenant_id: fup.tenantId,
+                    id: attempt.verificationTicketId,
+                  },
+                });
+                if (
+                  invoice &&
+                  !invoice.isCanceled &&
+                  invoice.paymentStatus === 'paid'
+                ) {
+                  converged = true;
+                  evidenceRef = `VERIFICATION_INVOICE_${invoice.id}`;
+                }
+              } catch {
+                // Table not available or query error; ignore
+              }
             }
-          } catch {
-            // Table not available or query error; ignore
           }
-        }
-      }
 
-      if (converged) {
-        fup.status = ActivationFollowUpStatus.CLOSED;
-        fup.closedAt = new Date();
-        fup.closedBy = 'SYSTEM_RECONCILER';
-        fup.closureEvidenceRef = evidenceRef;
-        fup.closureNote =
-          'Automated background convergence completed without operator intervention';
-        await this.followUpRepo.save(fup);
+          if (converged) {
+            fup.status = ActivationFollowUpStatus.CLOSED;
+            fup.closedAt = new Date();
+            fup.closedBy = 'SYSTEM_RECONCILER';
+            fup.closureEvidenceRef = evidenceRef;
+            fup.closureNote =
+              'Automated background convergence completed without operator intervention';
+            await followUpRepo.save(fup);
+          }
 
+          return { converged };
+        },
+      );
+
+      if (outcome.converged) {
         await this.changeLogService.log({
           tenantId: fup.tenantId,
           userId: 'SYSTEM_RECONCILER',
@@ -950,7 +1023,7 @@ export class ActivationService {
       );
     }
 
-    return this.dataSource.transaction(async (manager: EntityManager) => {
+    return this.runTenantBound(trimmedTenant, async (manager) => {
       const aRepo = manager.getRepository(ActivationAttempt);
       const sRepo = manager.getRepository(OnboardingSession);
       const fRepo = manager.getRepository(ActivationFollowUp);
@@ -1045,131 +1118,140 @@ export class ActivationService {
       throw new BadRequestException('tenantId is required');
     }
 
-    const attempt = await this.attemptRepo.findOne({
-      where: { id: attemptId, tenantId: trimmedTenant },
-    });
+    return this.runTenantBound(
+      trimmedTenant,
+      async (manager: EntityManager) => {
+        const attemptRepo = manager.getRepository(ActivationAttempt);
+        const checkRepo = manager.getRepository(ActivationCheckResult);
+        const followUpRepo = manager.getRepository(ActivationFollowUp);
 
-    if (!attempt) {
-      throw new NotFoundException(
-        `Activation attempt '${attemptId}' not found for tenant '${trimmedTenant}'`,
-      );
-    }
-
-    const session = await this.sessionRepo.findOne({
-      where: { tenantId: trimmedTenant },
-    });
-
-    if (!session) {
-      throw new NotFoundException(
-        `Onboarding session not found for tenant '${trimmedTenant}'`,
-      );
-    }
-
-    const recordedChecks = await this.checkRepo.find({
-      where: { tenantId: trimmedTenant, activationAttemptId: attempt.id },
-    });
-
-    const checkMap = new Map<ActivationCheckCode, ActivationCheckResult>();
-    for (const chk of recordedChecks) {
-      checkMap.set(chk.checkCode, chk);
-    }
-
-    const checksMatrix: ActivationCheckDiagnosticItem[] = [];
-    const missingChecks: ActivationCheckCode[] = [];
-
-    for (const requiredCode of V1_REQUIRED_ACTIVATION_CHECKS) {
-      const recorded = checkMap.get(requiredCode);
-      if (recorded) {
-        checksMatrix.push({
-          checkCode: requiredCode,
-          status: recorded.status,
-          required: recorded.required,
-          isMissing: false,
-          recordedAt: recorded.recordedAt,
-          occurredAt: recorded.occurredAt,
-          evidenceType: recorded.evidenceType,
-          evidenceRef: recorded.evidenceRef,
-          detailsSanitizedJson: recorded.detailsSanitizedJson,
+        const attempt = await attemptRepo.findOne({
+          where: { id: attemptId, tenantId: trimmedTenant },
         });
-      } else {
-        missingChecks.push(requiredCode);
-        checksMatrix.push({
-          checkCode: requiredCode,
-          status: 'MISSING',
-          required: true,
-          isMissing: true,
+
+        if (!attempt) {
+          throw new NotFoundException(
+            `Activation attempt '${attemptId}' not found for tenant '${trimmedTenant}'`,
+          );
+        }
+
+        const session = await manager.getRepository(OnboardingSession).findOne({
+          where: { tenantId: trimmedTenant },
         });
-      }
-    }
 
-    const followUps = await this.followUpRepo.find({
-      where: { tenantId: trimmedTenant, activationAttemptId: attempt.id },
-      order: { openedAt: 'ASC' },
-    });
+        if (!session) {
+          throw new NotFoundException(
+            `Onboarding session not found for tenant '${trimmedTenant}'`,
+          );
+        }
 
-    const readiness = await this.readinessEvaluator.evaluate(trimmedTenant);
+        const recordedChecks = await checkRepo.find({
+          where: { tenantId: trimmedTenant, activationAttemptId: attempt.id },
+        });
 
-    let auditTrail: ChangeLog[] = [];
-    try {
-      auditTrail = await this.changeLogService.findByTarget(
-        trimmedTenant,
-        'ActivationAttempt',
-        attempt.id,
-      );
-    } catch {
-      // Table not present or query error; ignore
-    }
+        const checkMap = new Map<ActivationCheckCode, ActivationCheckResult>();
+        for (const chk of recordedChecks) {
+          checkMap.set(chk.checkCode, chk);
+        }
 
-    return {
-      tenantId: trimmedTenant,
-      attempt: {
-        id: attempt.id,
-        status: attempt.status,
-        candidateTerminalId: attempt.candidateTerminalId,
-        trustedTerminalId: attempt.trustedTerminalId,
-        verificationTicketId: attempt.verificationTicketId,
-        requiredFiscalRevision: attempt.requiredFiscalRevision,
-        requiredFiscalFingerprint: attempt.requiredFiscalFingerprint,
-        verificationProductId: attempt.verificationProductId,
-        verificationProductRevision: attempt.verificationProductRevision,
-        startedAt: attempt.startedAt,
-        completedAt: attempt.completedAt,
-        failureCode: attempt.failureCode,
-        warningsCount: attempt.warningsCount,
+        const checksMatrix: ActivationCheckDiagnosticItem[] = [];
+        const missingChecks: ActivationCheckCode[] = [];
+
+        for (const requiredCode of V1_REQUIRED_ACTIVATION_CHECKS) {
+          const recorded = checkMap.get(requiredCode);
+          if (recorded) {
+            checksMatrix.push({
+              checkCode: requiredCode,
+              status: recorded.status,
+              required: recorded.required,
+              isMissing: false,
+              recordedAt: recorded.recordedAt,
+              occurredAt: recorded.occurredAt,
+              evidenceType: recorded.evidenceType,
+              evidenceRef: recorded.evidenceRef,
+              detailsSanitizedJson: recorded.detailsSanitizedJson,
+            });
+          } else {
+            missingChecks.push(requiredCode);
+            checksMatrix.push({
+              checkCode: requiredCode,
+              status: 'MISSING',
+              required: true,
+              isMissing: true,
+            });
+          }
+        }
+
+        const followUps = await followUpRepo.find({
+          where: { tenantId: trimmedTenant, activationAttemptId: attempt.id },
+          order: { openedAt: 'ASC' },
+        });
+
+        const readiness = await this.readinessEvaluator.evaluate(trimmedTenant);
+
+        let auditTrail: ChangeLog[] = [];
+        try {
+          auditTrail = await this.changeLogService.findByTarget(
+            trimmedTenant,
+            'ActivationAttempt',
+            attempt.id,
+          );
+        } catch {
+          // Table not present or query error; ignore
+        }
+
+        return {
+          tenantId: trimmedTenant,
+          attempt: {
+            id: attempt.id,
+            status: attempt.status,
+            candidateTerminalId: attempt.candidateTerminalId,
+            trustedTerminalId: attempt.trustedTerminalId,
+            verificationTicketId: attempt.verificationTicketId,
+            requiredFiscalRevision: attempt.requiredFiscalRevision,
+            requiredFiscalFingerprint: attempt.requiredFiscalFingerprint,
+            verificationProductId: attempt.verificationProductId,
+            verificationProductRevision: attempt.verificationProductRevision,
+            startedAt: attempt.startedAt,
+            completedAt: attempt.completedAt,
+            failureCode: attempt.failureCode,
+            warningsCount: attempt.warningsCount,
+          },
+          session: {
+            id: session.id,
+            lifecycleState: session.lifecycleState,
+            activatedAt: session.activatedAt,
+            saleReadyFirstAt: session.saleReadyFirstAt,
+          },
+          checksMatrix,
+          missingChecks,
+          followUps: followUps.map((f) => ({
+            id: f.id,
+            warningCode: f.warningCode,
+            status: f.status,
+            openedAt: f.openedAt,
+            openedBy: f.openedBy,
+            closureEvidenceRef: f.closureEvidenceRef,
+            closedAt: f.closedAt,
+            closedBy: f.closedBy,
+            closureNote: f.closureNote,
+          })),
+          readiness: {
+            saleReady: readiness.saleReady,
+            blockers: readiness.blockers,
+            warnings: readiness.warnings,
+          },
+          auditTrail: auditTrail.map((a) => ({
+            action: a.action,
+            targetType: a.target_type,
+            targetId: a.target_id,
+            userId: a.user_id,
+            createdAt: a.created_at,
+            changes: a.changes,
+          })),
+        };
       },
-      session: {
-        id: session.id,
-        lifecycleState: session.lifecycleState,
-        activatedAt: session.activatedAt,
-        saleReadyFirstAt: session.saleReadyFirstAt,
-      },
-      checksMatrix,
-      missingChecks,
-      followUps: followUps.map((f) => ({
-        id: f.id,
-        warningCode: f.warningCode,
-        status: f.status,
-        openedAt: f.openedAt,
-        openedBy: f.openedBy,
-        closureEvidenceRef: f.closureEvidenceRef,
-        closedAt: f.closedAt,
-        closedBy: f.closedBy,
-        closureNote: f.closureNote,
-      })),
-      readiness: {
-        saleReady: readiness.saleReady,
-        blockers: readiness.blockers,
-        warnings: readiness.warnings,
-      },
-      auditTrail: auditTrail.map((a) => ({
-        action: a.action,
-        targetType: a.target_type,
-        targetId: a.target_id,
-        userId: a.user_id,
-        createdAt: a.created_at,
-        changes: a.changes,
-      })),
-    };
+    );
   }
 
   /**
@@ -1195,9 +1277,11 @@ export class ActivationService {
       throw new BadRequestException('attemptId is required');
     }
 
-    const attempt = await this.attemptRepo.findOne({
-      where: { id: trimmedAttemptId, tenantId: trimmedTenant },
-    });
+    const attempt = await this.runTenantBound(trimmedTenant, (manager) =>
+      manager.getRepository(ActivationAttempt).findOne({
+        where: { id: trimmedAttemptId, tenantId: trimmedTenant },
+      }),
+    );
 
     if (!attempt) {
       throw new NotFoundException(
@@ -1290,12 +1374,14 @@ export class ActivationService {
       throw new BadRequestException('tenantId and attemptId are required');
     }
 
-    const attempt = await this.attemptRepo.findOne({
-      where: {
-        id: trimmedAttemptId,
-        tenantId: trimmedTenant,
-      },
-    });
+    const attempt = await this.runTenantBound(trimmedTenant, (manager) =>
+      manager.getRepository(ActivationAttempt).findOne({
+        where: {
+          id: trimmedAttemptId,
+          tenantId: trimmedTenant,
+        },
+      }),
+    );
 
     if (!attempt) {
       throw new NotFoundException(
@@ -1403,20 +1489,22 @@ export class ActivationService {
       throw new BadRequestException('deviceId is required');
     }
 
-    const attempt = await this.attemptRepo.findOne({
-      where: {
-        tenantId: trimmedTenant,
-        trustedTerminalId: trimmedDevice,
-        status: In([
-          ActivationAttemptStatus.PASS,
-          ActivationAttemptStatus.PASS_WITH_WARNING,
-        ]),
-      },
-      order: {
-        completedAt: 'DESC',
-        startedAt: 'DESC',
-      },
-    });
+    const attempt = await this.runTenantBound(trimmedTenant, (manager) =>
+      manager.getRepository(ActivationAttempt).findOne({
+        where: {
+          tenantId: trimmedTenant,
+          trustedTerminalId: trimmedDevice,
+          status: In([
+            ActivationAttemptStatus.PASS,
+            ActivationAttemptStatus.PASS_WITH_WARNING,
+          ]),
+        },
+        order: {
+          completedAt: 'DESC',
+          startedAt: 'DESC',
+        },
+      }),
+    );
 
     if (!attempt) {
       throw new NotFoundException(

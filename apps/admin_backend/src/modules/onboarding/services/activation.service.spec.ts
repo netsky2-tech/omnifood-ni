@@ -107,6 +107,8 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
     dataSource = {
       transaction: jest.fn((cb) =>
         cb({
+          // Transaction-local tenant context binding (RLS pre-policy).
+          query: jest.fn().mockResolvedValue(undefined),
           getRepository: (entityClass: any) => {
             if (entityClass === ActivationAttempt) return attemptRepo;
             if (entityClass === OnboardingSession) return sessionRepo;
@@ -753,6 +755,7 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
         devicePrincipal,
       );
 
+      expect(changeLogService.log).toHaveBeenCalledTimes(1);
       expect(changeLogService.log).toHaveBeenCalledWith(
         expect.objectContaining({
           tenantId,
@@ -760,6 +763,44 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
           targetType: 'ActivationCheckResult',
         }),
       );
+    });
+
+    it('does not record audit log on idempotent re-ingest of a persisted FAIL check', async () => {
+      const attempt = {
+        id: attemptId,
+        tenantId,
+        candidateTerminalId: 'pos-term-01',
+        trustedTerminalId: 'pos-term-01',
+        status: ActivationAttemptStatus.IN_PROGRESS,
+      };
+      const existingCheck = {
+        id: 'check-1',
+        tenantId,
+        activationAttemptId: attemptId,
+        checkCode: ActivationCheckCode.TEST_PRINT,
+        status: ActivationCheckStatus.FAIL,
+        evidenceType: null,
+        evidenceRef: null,
+      };
+      attemptRepo.findOne.mockResolvedValueOnce(attempt);
+      checkRepo.findOne.mockResolvedValueOnce(existingCheck);
+
+      const devicePrincipal: DevicePrincipal = {
+        tenantId,
+        terminalId: 'pos-term-01',
+      };
+
+      await service.ingestCheck(
+        attemptId,
+        {
+          checkCode: ActivationCheckCode.TEST_PRINT,
+          status: ActivationCheckStatus.FAIL,
+        },
+        devicePrincipal,
+      );
+
+      expect(checkRepo.save).toHaveBeenCalled();
+      expect(changeLogService.log).not.toHaveBeenCalled();
     });
 
     it('records audit log on FinalizeActivation (PASS)', async () => {
@@ -1046,5 +1087,313 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
       ).toBe(true);
       expect(diag.auditTrail).toHaveLength(1);
     });
+  });
+});
+
+describe('ActivationService — transaction-local tenant binding (RLS pre-policy)', () => {
+  const tenantId = 'tenant-founder-01';
+  const terminalId = 'pos-term-01';
+  const userId = 'user-owner-01';
+  const devicePrincipal: DevicePrincipal = { tenantId, terminalId };
+
+  let service: ActivationService;
+  let dataSource: any;
+  let setConfigCalls: Array<{ sql: string; params: unknown[] }>;
+  let accessOrder: string[];
+  let attemptRepo: any;
+  let checkRepo: any;
+  let followUpRepo: any;
+  let sessionRepo: any;
+
+  beforeEach(() => {
+    setConfigCalls = [];
+    accessOrder = [];
+
+    const makeRepo = (name: string) => ({
+      findOne: jest.fn(async () => {
+        accessOrder.push(`${name}.findOne`);
+        return null;
+      }),
+      find: jest.fn(async () => {
+        accessOrder.push(`${name}.find`);
+        return [] as unknown[];
+      }),
+      create: jest.fn((dto: any) => ({ ...dto, id: `${name}-uuid-1` })),
+      save: jest.fn(async (entity: any) => {
+        accessOrder.push(`${name}.save`);
+        return entity;
+      }),
+    });
+
+    attemptRepo = makeRepo('attempt');
+    checkRepo = makeRepo('check');
+    followUpRepo = makeRepo('followUp');
+    sessionRepo = makeRepo('session');
+    const invoiceRepo = makeRepo('invoice');
+
+    dataSource = {
+      transaction: jest.fn(async (cb: (m: any) => Promise<unknown>) =>
+        cb({
+          query: jest.fn(async (sql: string, params: unknown[]) => {
+            accessOrder.push('set_config');
+            setConfigCalls.push({ sql, params });
+            return undefined;
+          }),
+          getRepository: (entityClass: any) => {
+            if (entityClass === ActivationAttempt) return attemptRepo;
+            if (entityClass === ActivationCheckResult) return checkRepo;
+            if (entityClass === ActivationFollowUp) return followUpRepo;
+            if (entityClass === OnboardingSession) return sessionRepo;
+            if (entityClass === Invoice) return invoiceRepo;
+            return null;
+          },
+        }),
+      ),
+    };
+
+    service = new ActivationService(
+      attemptRepo,
+      checkRepo,
+      followUpRepo,
+      sessionRepo,
+      {
+        getLatestRevision: jest.fn().mockResolvedValue({
+          revision: 2,
+          fingerprint: 'fiscal-sha256-rev2',
+        }),
+      } as any,
+      {
+        getVerificationProductCandidate: jest.fn().mockResolvedValue({
+          verificationProductId: 'prod-uuid-10',
+          verificationProductRevision: 1,
+          verificationProductFingerprint: 'product-sha256-rev1',
+        }),
+      } as any,
+      { evaluate: jest.fn().mockResolvedValue({ saleReady: true }) } as any,
+      dataSource,
+      {
+        log: jest.fn().mockResolvedValue(undefined),
+        findByTarget: jest.fn().mockResolvedValue([]),
+      } as any,
+    );
+  });
+
+  const publicPaths: Array<{ name: string; run: () => Promise<unknown> }> = [
+    {
+      name: 'syncVerificationSale',
+      run: () =>
+        service.syncVerificationSale(
+          'attempt-uuid-1',
+          {
+            documentType: 'SALE',
+            flowType: 'sales',
+            invoiceId: 'verification-invoice-1',
+            invoice: { id: 'verification-invoice-1' },
+            sourceDeviceId: terminalId,
+            terminalId,
+          } as any,
+          devicePrincipal,
+        ),
+    },
+    {
+      name: 'claimFirstSuccessfulSale',
+      run: () =>
+        service.claimFirstSuccessfulSale(
+          'attempt-uuid-1',
+          {
+            declarativeTenantId: tenantId,
+            declarativeTerminalId: terminalId,
+            activationAttemptId: 'attempt-uuid-1',
+            ticketId: 'verification-invoice-1',
+            deviceOccurredAt: new Date().toISOString(),
+          } as any,
+          devicePrincipal,
+        ),
+    },
+    {
+      name: 'startActivation',
+      run: () =>
+        service.startActivation(
+          tenantId,
+          { candidateTerminalId: terminalId },
+          userId,
+        ),
+    },
+    {
+      name: 'ingestCheck',
+      run: () =>
+        service.ingestCheck(
+          'attempt-uuid-1',
+          {
+            checkCode: ActivationCheckCode.TERMINAL_LINKED,
+            status: ActivationCheckStatus.PASS,
+          },
+          devicePrincipal,
+        ),
+    },
+    {
+      name: 'finalizeActivation',
+      run: () => service.finalizeActivation(tenantId, 'attempt-uuid-1', userId),
+    },
+    {
+      name: 'getAttempt',
+      run: () => service.getAttempt(tenantId, 'attempt-uuid-1'),
+    },
+    {
+      name: 'getActiveAttempt',
+      run: () => service.getActiveAttempt(tenantId),
+    },
+    {
+      name: 'getFollowUps',
+      run: () => service.getFollowUps(tenantId, 'attempt-uuid-1'),
+    },
+    {
+      name: 'closeFollowUp',
+      run: () =>
+        service.closeFollowUp(
+          tenantId,
+          'follow-up-uuid-1',
+          { closureEvidenceRef: 'ref-1' },
+          userId,
+        ),
+    },
+    {
+      name: 'reconcileFollowUpConvergence',
+      run: () => service.reconcileFollowUpConvergence(tenantId),
+    },
+    {
+      name: 'executeSupportOverride',
+      run: () =>
+        service.executeSupportOverride(
+          tenantId,
+          'attempt-uuid-1',
+          {
+            reason: 'Manual support intervention requested',
+            overrideAction: SupportOverrideAction.FORCE_FAIL,
+          },
+          userId,
+        ),
+    },
+    {
+      name: 'getActivationDiagnostics',
+      run: () => service.getActivationDiagnostics(tenantId, 'attempt-uuid-1'),
+    },
+    {
+      name: 'provisionDeviceCredential',
+      run: () => service.provisionDeviceCredential(tenantId, 'attempt-uuid-1'),
+    },
+    {
+      name: 'confirmDeviceCredential',
+      run: () =>
+        service.confirmDeviceCredential(tenantId, 'attempt-uuid-1', {
+          deviceId: terminalId,
+          credentialId: 'cred-1',
+          credentialVersion: 1,
+          renewalSecret: 'renewal-secret',
+        }),
+    },
+    {
+      name: 'resolveLatestFinalizedAttemptForDevice',
+      run: () =>
+        service.resolveLatestFinalizedAttemptForDevice(tenantId, terminalId),
+    },
+    {
+      name: 'provisionBootstrapDeviceCredential',
+      run: () =>
+        service.provisionBootstrapDeviceCredential(tenantId, terminalId),
+    },
+    {
+      name: 'confirmBootstrapDeviceCredential',
+      run: () =>
+        service.confirmBootstrapDeviceCredential(tenantId, {
+          deviceId: terminalId,
+          credentialId: 'cred-1',
+          credentialVersion: 1,
+          renewalSecret: 'renewal-secret',
+        }),
+    },
+  ];
+
+  it.each(publicPaths.map((p) => [p.name]))(
+    'binds app.tenant_id inside a DataSource transaction before repository access: %s',
+    async (name) => {
+      const path = publicPaths.find((p) => p.name === name);
+      // Outcomes are asserted by the behavioral suites; this suite asserts the
+      // binding contract, which holds whether the path resolves or rejects.
+      await path.run().catch(() => undefined);
+
+      expect(dataSource.transaction).toHaveBeenCalled();
+      expect(setConfigCalls.length).toBeGreaterThanOrEqual(1);
+      for (const call of setConfigCalls) {
+        // Exact SQL: the tenant id is a bound parameter, never interpolated.
+        expect(call.sql).toBe("SELECT set_config('app.tenant_id', $1, true)");
+        expect(call.params).toEqual([tenantId]);
+      }
+      // Ordering: the transaction-local bind precedes every repository access.
+      expect(accessOrder[0]).toBe('set_config');
+    },
+  );
+
+  it('opens no transaction and issues no SQL for a blank tenant id', async () => {
+    await expect(service.reconcileFollowUpConvergence('   ')).rejects.toThrow(
+      BadRequestException,
+    );
+
+    expect(dataSource.transaction).not.toHaveBeenCalled();
+    expect(setConfigCalls).toHaveLength(0);
+    expect(accessOrder).toHaveLength(0);
+  });
+
+  it('reconcileFollowUpConvergence binds once per convergence transaction', async () => {
+    followUpRepo.find.mockImplementationOnce(async () => {
+      accessOrder.push('followUp.find');
+      return [
+        {
+          id: 'fup-1',
+          tenantId,
+          activationAttemptId: 'attempt-uuid-1',
+          status: ActivationFollowUpStatus.OPEN,
+          closureEvidenceRef: null,
+        },
+        {
+          id: 'fup-2',
+          tenantId,
+          activationAttemptId: 'attempt-uuid-1',
+          status: ActivationFollowUpStatus.OPEN,
+          closureEvidenceRef: null,
+        },
+      ];
+    });
+    checkRepo.findOne.mockImplementationOnce(async () => {
+      accessOrder.push('check.findOne');
+      return {
+        id: 'chk-sync-1',
+        tenantId,
+        activationAttemptId: 'attempt-uuid-1',
+        checkCode: ActivationCheckCode.POST_RECONNECT_SYNC,
+        status: ActivationCheckStatus.PASS,
+        evidenceRef: 'SYNC_BATCH_ACK_1',
+      };
+    });
+    checkRepo.findOne.mockImplementationOnce(async () => {
+      accessOrder.push('check.findOne');
+      return {
+        id: 'chk-sync-2',
+        tenantId,
+        activationAttemptId: 'attempt-uuid-1',
+        checkCode: ActivationCheckCode.POST_RECONNECT_SYNC,
+        status: ActivationCheckStatus.PASS,
+        evidenceRef: 'SYNC_BATCH_ACK_2',
+      };
+    });
+
+    const result = await service.reconcileFollowUpConvergence(tenantId);
+
+    expect(result.closedCount).toBe(2);
+    // One transaction for the scan plus one per follow-up convergence step;
+    // each transaction binds the tenant context exactly once at its start.
+    expect(dataSource.transaction).toHaveBeenCalledTimes(3);
+    expect(setConfigCalls).toHaveLength(3);
+    expect(accessOrder.slice(0, 2)).toEqual(['set_config', 'followUp.find']);
   });
 });
