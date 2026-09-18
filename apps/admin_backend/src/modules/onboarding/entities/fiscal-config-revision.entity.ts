@@ -14,7 +14,7 @@ export class FiscalConfigRevision {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ name: 'tenant_id', type: 'varchar', length: 128 })
+  @Column({ name: 'tenant_id', type: 'uuid' })
   tenant_id: string;
 
   @Column({ type: 'int' })

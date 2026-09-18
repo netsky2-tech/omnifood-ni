@@ -14,7 +14,7 @@ export class OnboardingTelemetryEvent {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column({ name: 'tenant_id', type: 'varchar', length: 128 })
+  @Column({ name: 'tenant_id', type: 'uuid' })
   @Index('idx_onboarding_telemetry_tenant_id')
   tenantId!: string;
 
