@@ -15,6 +15,8 @@ Este documento captura la evidencia del piloto físico en hardware real. Se llen
 
 **Regla:** Cada campo se llena con datos observados/persistidos en el momento. No se rellena retrospectivamente sin anotar la fuente.
 
+**Alcance del piloto (decisión del founder, 2026-09-17):** la evidencia de este documento valida el ciclo de vida de activación en hardware real. **Ningún campo de este documento implica que el rehearsal validó el transporte de dispositivo `/v1/sync/*`**: esa validación está fuera del alcance de la aceptación y la precondición 2 del cutover DSI **NO está satisfecha** para este piloto. Las limitaciones conocidas se registran en `AP_KNOWN_LIMITATIONS.md`; este documento no las duplica.
+
 ---
 
 # 1. Build & Release Freeze

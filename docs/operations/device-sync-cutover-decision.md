@@ -56,3 +56,35 @@ rewritten during rollback.
 - Deploy trigger verification in the hosting dashboard.
 - DSI-6 delivery, which closes the credit-note gap.
 - The offline human authorization prerequisite that DSI-6 consumes.
+
+## Addendum (2026-09-17): founder pilot acceptance status — factual record only
+
+This addendum records findings from the founder-pilot acceptance scoping. It does not
+rewrite, reopen, or amend the accepted decision or its conditions above; the accepted
+decision text is preserved unchanged. The record below is based on static reading of
+the repository at the pilot freeze base and is not runtime-verified.
+
+- Cutover precondition 2 ("Every enrolled pilot terminal runs a POS build that can
+  provision and use a device credential") is **NOT SATISFIED** for the founder pilot
+  acceptance. The acceptance scope was narrowed accordingly: `/v1/sync/*` device
+  transport validation is out of scope for the ONB1.10F physical rehearsal.
+- Device-credential enrollment gap (static reading): no POS path creates or finalizes
+  the activation attempt that device-scoped bootstrap provisioning requires, and the
+  pilot APK resolves its device id from the `DEVICE_ID` dart-define — absent from the
+  documented build path — so a freshly built APK cannot match the seeded terminal id
+  `Q802024120001`. Provisioning from `loginOnline` is OWNER-only, online-only, and
+  silently best-effort.
+- Mixed-transport defect (static reading): `SyncService` sends every request through
+  the device-only Dio, while `/inventory/purchases`, `/inventory/production-orders/close`,
+  `/inventory/recipes/versions`, and `/inventory/alerts` are guarded by the human
+  `AuthGuard` (plus roles/authoritative-user guards), so those inventory domains cannot
+  authenticate with a device credential.
+- The accepted credit-note gap is **not yet inventoried** as this decision requires:
+  the inventory of affected operations, including whether any open credit note is
+  pending on an enrolled terminal, has not been recorded. The pilot follows the
+  inventory-first decision and does not start until that inventory exists.
+- No pilot evidence claims that device transport works. No evidence produced by the
+  pilot may be cited as validation of `/v1/sync/*` on the terminal.
+
+Detailed findings, evidence locations, and closure requirements are tracked in
+`docs/onboarding/evidence/acceptance/AP_KNOWN_LIMITATIONS.md`.

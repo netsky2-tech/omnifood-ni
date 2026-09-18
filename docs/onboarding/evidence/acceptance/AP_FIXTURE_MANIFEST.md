@@ -18,6 +18,8 @@ Este manifest se congela **una sola vez** antes del primer acceptance run. Cualq
 
 Los campos marcados con `«COMPLETAR»` deben llenarse con datos reales antes de ejecutar AP-00.
 
+**Alcance del piloto (decisión del founder, 2026-09-17):** el piloto físico ONB1.10F valida el ciclo de vida de activación en hardware real. La validación del transporte de dispositivo `/v1/sync/*` está **FUERA de alcance** para esta aceptación, y la precondición 2 del cutover DSI **NO está satisfecha** para este piloto. Las limitaciones conocidas se registran en `AP_KNOWN_LIMITATIONS.md` (documento de referencia; este manifest no duplica su contenido). Ningún campo de este manifest implica que el rehearsal valide el transporte device-only.
+
 ---
 
 # 1. Release Identity
