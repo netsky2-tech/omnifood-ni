@@ -8,7 +8,7 @@ const VALID_PRODUCTION_RUNTIME_ENV = {
   DB_HOST: 'db-staging.example.internal',
   DB_PORT: '6543',
   DB_USERNAME: 'staging_role',
-  DB_PASSWORD: 'fixture-value',
+  DB_PASSWORD: 'staging-password',
   DB_DATABASE: 'staging_db',
 } as const;
 
@@ -17,7 +17,7 @@ const VALID_PRODUCTION_MIGRATION_ENV = {
   DB_HOST: 'db-staging.example.internal',
   DB_PORT: '6543',
   DB_MIGRATION_USERNAME: 'staging_migrator',
-  DB_MIGRATION_PASSWORD: 'fixture-migrator-value',
+  DB_MIGRATION_PASSWORD: 'staging-migrator-password',
   DB_DATABASE: 'staging_db',
 } as const;
 
@@ -37,21 +37,12 @@ const MIGRATION_DB_VAR_NAMES = [
   'DB_MIGRATION_PASSWORD',
 ] as const;
 
-/**
- * The resolver must keep returning the historical local defaults outside
- * production, so this fixture has to hold the real default password. It is
- * assembled at runtime because a credential-shaped literal is
- * indistinguishable from a leaked secret to a scanner, and this is a test
- * fixture rather than a credential.
- */
-const DEV_PASSWORD = ['post', 'gres'].join('');
-
 /** Historical local defaults that must keep applying outside production. */
 const DEV_DEFAULTS = {
   host: '127.0.0.1',
   port: 5432,
   username: 'postgres',
-  password: DEV_PASSWORD,
+  password: 'postgres',
   database: 'omnifood',
 };
 
@@ -76,7 +67,7 @@ describe('resolveDatabaseConnection', () => {
         host: 'db-staging.example.internal',
         port: 6543,
         username: 'staging_role',
-        password: 'fixture-value',
+        password: 'staging-password',
         database: 'staging_db',
       });
       expect(typeof connection.port).toBe('number');
@@ -105,8 +96,8 @@ describe('resolveDatabaseConnection', () => {
         resolveDatabaseConnection({
           env: {
             NODE_ENV: 'production',
-            DB_HOST: 'fixture-host-a',
-            DB_PASSWORD: 'fixture-value-b',
+            DB_HOST: 'secret-host-value',
+            DB_PASSWORD: 'secret-password-value',
           },
           role: 'runtime',
         }),
@@ -115,8 +106,8 @@ describe('resolveDatabaseConnection', () => {
       expect(message).toContain('DB_PORT');
       expect(message).toContain('DB_USERNAME');
       expect(message).toContain('DB_DATABASE');
-      expect(message).not.toContain('fixture-host-a');
-      expect(message).not.toContain('fixture-value-b');
+      expect(message).not.toContain('secret-host-value');
+      expect(message).not.toContain('secret-password-value');
     });
 
     it('uses production values exactly as provided without trimming', () => {
@@ -142,7 +133,7 @@ describe('resolveDatabaseConnection', () => {
       });
 
       expect(connection.username).toBe('staging_role');
-      expect(connection.password).toBe('fixture-value');
+      expect(connection.password).toBe('staging-password');
     });
   });
 
@@ -152,7 +143,7 @@ describe('resolveDatabaseConnection', () => {
         env: {
           ...VALID_PRODUCTION_MIGRATION_ENV,
           DB_USERNAME: 'staging_role',
-          DB_PASSWORD: 'fixture-value',
+          DB_PASSWORD: 'staging-password',
         },
         role: 'migration',
       });
@@ -161,7 +152,7 @@ describe('resolveDatabaseConnection', () => {
         host: 'db-staging.example.internal',
         port: 6543,
         username: 'staging_migrator',
-        password: 'fixture-migrator-value',
+        password: 'staging-migrator-password',
         database: 'staging_db',
       });
     });
@@ -189,7 +180,7 @@ describe('resolveDatabaseConnection', () => {
             DB_PORT: '6543',
             DB_DATABASE: 'staging_db',
             DB_USERNAME: 'staging_role',
-            DB_PASSWORD: 'fixture-value',
+            DB_PASSWORD: 'staging-password',
           },
           role: 'migration',
         }),
@@ -198,7 +189,7 @@ describe('resolveDatabaseConnection', () => {
       expect(message).toContain('DB_MIGRATION_USERNAME');
       expect(message).toContain('DB_MIGRATION_PASSWORD');
       expect(message).not.toContain('staging_role');
-      expect(message).not.toContain('fixture-value');
+      expect(message).not.toContain('staging-password');
     });
 
     it('validates DB_PORT for the migration role', () => {
@@ -284,7 +275,7 @@ describe('resolveDatabaseConnection', () => {
             DB_HOST: 'localhost',
             DB_PORT: '6543',
             DB_USERNAME: 'dev_role',
-            DB_PASSWORD: 'fixture-dev-value',
+            DB_PASSWORD: 'dev-password',
             DB_DATABASE: 'dev_db',
           },
           role: 'runtime',
@@ -293,7 +284,7 @@ describe('resolveDatabaseConnection', () => {
         host: 'localhost',
         port: 6543,
         username: 'dev_role',
-        password: 'fixture-dev-value',
+        password: 'dev-password',
         database: 'dev_db',
       });
     });
@@ -310,14 +301,14 @@ describe('resolveDatabaseConnection', () => {
           env: {
             NODE_ENV: 'development',
             DB_USERNAME: 'dev_role',
-            DB_PASSWORD: 'fixture-dev-value',
+            DB_PASSWORD: 'dev-password',
           },
           role: 'migration',
         }),
       ).toEqual({
         ...DEV_DEFAULTS,
         username: 'dev_role',
-        password: 'fixture-dev-value',
+        password: 'dev-password',
       });
     });
 
@@ -327,16 +318,16 @@ describe('resolveDatabaseConnection', () => {
           env: {
             NODE_ENV: 'development',
             DB_MIGRATION_USERNAME: 'migrator_role',
-            DB_MIGRATION_PASSWORD: 'fixture-migrator-value',
+            DB_MIGRATION_PASSWORD: 'migrator-password',
             DB_USERNAME: 'dev_role',
-            DB_PASSWORD: 'fixture-dev-value',
+            DB_PASSWORD: 'dev-password',
           },
           role: 'migration',
         }),
       ).toEqual({
         ...DEV_DEFAULTS,
         username: 'migrator_role',
-        password: 'fixture-migrator-value',
+        password: 'migrator-password',
       });
     });
   });
@@ -367,14 +358,14 @@ describe('resolveDatabaseConnection', () => {
       process.env.DB_HOST = 'from-process-env.example.internal';
       process.env.DB_PORT = '6544';
       process.env.DB_USERNAME = 'env_role';
-      process.env.DB_PASSWORD = 'fixture-env-value';
+      process.env.DB_PASSWORD = 'env-password';
       process.env.DB_DATABASE = 'env_db';
 
       expect(resolveDatabaseConnection({ role: 'runtime' })).toEqual({
         host: 'from-process-env.example.internal',
         port: 6544,
         username: 'env_role',
-        password: 'fixture-env-value',
+        password: 'env-password',
         database: 'env_db',
       });
     });
