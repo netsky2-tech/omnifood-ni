@@ -1,6 +1,7 @@
 import { MODULE_METADATA } from '@nestjs/common/constants';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
+import { DataSource } from 'typeorm';
 import { HumanAuthorizationModule } from './human-authorization.module';
 import { HumanAuthPolicyEpoch } from './entities/human-auth-policy-epoch.entity';
 import { HumanAuthTerminalAckHistory } from './entities/human-auth-terminal-ack-history.entity';
@@ -11,6 +12,8 @@ import { HumanAuthVerificationEvent } from './entities/human-auth-verification-e
 import { HumanAuthRolloutCohort } from './entities/human-auth-rollout-cohort.entity';
 import { HumanAuthPolicySnapshot } from './entities/human-auth-policy-snapshot.entity';
 import { HumanAuthTenantPublicationState } from './entities/human-auth-tenant-publication-state.entity';
+import { OhacTenantTransaction } from './rls/ohac-tenant-transaction';
+import { StaffPolicySnapshotPublisher } from './services/staff-policy-snapshot-publisher.service';
 
 const ohacEntities = [
   HumanAuthPolicyEpoch,
@@ -29,7 +32,16 @@ describe('HumanAuthorizationModule skeleton', () => {
 
   beforeAll(async () => {
     const builder = Test.createTestingModule({
-      imports: [HumanAuthorizationModule],
+      imports: [
+        // The RLS seam injects the DataSource token, which in production is
+        // registered by TypeOrmModule.forRoot at the app level. This dormant
+        // module is imported by nobody, so the test wraps it in a
+        // DynamicModule that provides a stub DataSource instead.
+        {
+          module: HumanAuthorizationModule,
+          providers: [{ provide: DataSource, useValue: {} }],
+        },
+      ],
     });
     for (const entity of ohacEntities) {
       builder.overrideProvider(getRepositoryToken(entity)).useValue({});
@@ -54,5 +66,10 @@ describe('HumanAuthorizationModule skeleton', () => {
         HumanAuthorizationModule,
       ) ?? [];
     expect(controllers).toEqual([]);
+  });
+
+  it('registers the staff policy snapshot publisher with its RLS transaction seam', () => {
+    expect(module.get(StaffPolicySnapshotPublisher)).toBeDefined();
+    expect(module.get(OhacTenantTransaction)).toBeDefined();
   });
 });
