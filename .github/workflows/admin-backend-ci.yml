@@ -86,6 +86,20 @@ jobs:
           DB_PASSWORD: admin
           DB_DATABASE: omnifood
 
+      # The schema only stays reproducible while this runs. Before this check
+      # existed, 26 entity tables had no creating migration and nothing caught
+      # it, because every environment had been provisioned before the
+      # migrations did. This rebuilds the schema on a scratch database and
+      # fails when any entity table is missing.
+      - name: Verify the schema builds from an empty database
+        run: bash scripts/verify-schema-build.sh
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USERNAME: postgres
+          DB_PASSWORD: admin
+          SCHEMA_CHECK_DB: omnifood_schema_build_test
+
   build:
     needs: lint-and-test
     runs-on: ubuntu-latest
