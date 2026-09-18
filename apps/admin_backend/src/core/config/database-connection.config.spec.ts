@@ -3,6 +3,19 @@ import {
   resolveDatabaseConnection,
 } from './database-connection.config';
 
+/**
+ * Fixture credentials below are deliberately credential-shaped, and that is not
+ * an accident: the resolver is asserted to return the real development default
+ * outside production, so the fixture has to hold it. A secret scanner cannot
+ * tell such a value apart from a leaked credential.
+ *
+ * The exclusion lives in the GitGuardian workspace dashboard, not in this
+ * repository's `.gitguardian.yaml`, because the GitHub App reads its filepath
+ * exclusions from workspace settings while that file only configures the
+ * ggshield CLI. Rewriting these values to dodge the detector was tried and made
+ * things worse: the detector matches the shape of the assignment rather than
+ * the value.
+ */
 const VALID_PRODUCTION_RUNTIME_ENV = {
   NODE_ENV: 'production',
   DB_HOST: 'db-staging.example.internal',
