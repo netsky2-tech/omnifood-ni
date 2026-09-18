@@ -3,6 +3,19 @@ import {
   resolveDatabaseConnection,
 } from './database-connection.config';
 
+/**
+ * Fixture credentials below are deliberately credential-shaped, and that is not
+ * an accident: the resolver is asserted to return the real development default
+ * outside production, so the fixture has to hold it. A secret scanner cannot
+ * tell such a value apart from a leaked credential.
+ *
+ * The exclusion lives in the GitGuardian workspace dashboard, not in this
+ * repository's `.gitguardian.yaml`, because the GitHub App reads its filepath
+ * exclusions from workspace settings while that file only configures the
+ * ggshield CLI. Rewriting these values to dodge the detector was tried and made
+ * things worse: the detector matches the shape of the assignment rather than
+ * the value.
+ */
 const VALID_PRODUCTION_RUNTIME_ENV = {
   NODE_ENV: 'production',
   DB_HOST: 'db-staging.example.internal',
@@ -77,9 +90,9 @@ describe('resolveDatabaseConnection', () => {
       const env: Record<string, string> = { ...VALID_PRODUCTION_RUNTIME_ENV };
       delete env[name];
 
-      expect(() =>
-        resolveDatabaseConnection({ env, role: 'runtime' }),
-      ).toThrow(DatabaseConnectionConfigError);
+      expect(() => resolveDatabaseConnection({ env, role: 'runtime' })).toThrow(
+        DatabaseConnectionConfigError,
+      );
     });
 
     it.each(RUNTIME_DB_VAR_NAMES)('treats a blank %s as missing', (name) => {
@@ -235,9 +248,9 @@ describe('resolveDatabaseConnection', () => {
 
   describe('non-production defaults', () => {
     it('preserves the historical local defaults when every variable is unset', () => {
-      expect(
-        resolveDatabaseConnection({ env: {}, role: 'runtime' }),
-      ).toEqual(DEV_DEFAULTS);
+      expect(resolveDatabaseConnection({ env: {}, role: 'runtime' })).toEqual(
+        DEV_DEFAULTS,
+      );
     });
 
     it('preserves the historical local defaults for development', () => {
@@ -290,9 +303,9 @@ describe('resolveDatabaseConnection', () => {
     });
 
     it('falls back to historical postgres defaults for migrations outside production', () => {
-      expect(
-        resolveDatabaseConnection({ env: {}, role: 'migration' }),
-      ).toEqual(DEV_DEFAULTS);
+      expect(resolveDatabaseConnection({ env: {}, role: 'migration' })).toEqual(
+        DEV_DEFAULTS,
+      );
     });
 
     it('falls back to DB_USERNAME/DB_PASSWORD for migrations outside production', () => {
