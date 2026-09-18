@@ -69,6 +69,9 @@ describe('FiscalSetup (Integration & E2E)', () => {
   };
 
   const manager = {
+    // The service binds the tenant context on the transaction manager before
+    // touching a repository, so the mock has to expose query.
+    query: jest.fn(() => Promise.resolve([])),
     findOne: jest.fn(
       (entityClass: unknown, options: FindOneOptions<Tenant>) => {
         if (entityClass === Tenant) {
