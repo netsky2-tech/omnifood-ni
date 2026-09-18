@@ -19,10 +19,17 @@ export function AppLayout() {
 
   // Reset any browser window scroll (e.g. from mobile keyboard on login) and main container scroll
   useEffect(() => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
     window.scrollTo(0, 0);
+    const timer = setTimeout(() => {
+      window.scrollTo(0, 0);
+    }, 150);
     if (mainRef.current) {
       mainRef.current.scrollTop = 0;
     }
+    return () => clearTimeout(timer);
   }, [location.pathname]);
 
   useEffect(() => {
@@ -40,20 +47,20 @@ export function AppLayout() {
 
   if (!hydrated) {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-background">
+      <div className="fixed inset-0 flex items-center justify-center bg-background">
         <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
       </div>
     );
   }
 
   return (
-    <div className="flex h-full w-full h-[100dvh] overflow-hidden bg-background">
+    <div className="fixed inset-0 flex flex-col lg:flex-row overflow-hidden bg-background">
       <Sidebar />
       <div className="flex flex-1 flex-col h-full min-w-0 overflow-hidden">
         <Header />
         <main
           ref={mainRef}
-          className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 lg:p-8"
+          className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 lg:p-8 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))]"
         >
           <div className="mx-auto max-w-[1440px] w-full">
             <ErrorBoundary>
