@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:pos_app/data/adapters/activation/dio_activation_sync_port.dart';
 import 'package:pos_app/data/adapters/printer/ipos_printer_adapter.dart';
+import 'package:pos_app/data/adapters/printer/mock_printer_adapter.dart';
+import 'package:pos_app/domain/ports/printer_port.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/models/activation/activation_attempt_local_entity.dart';
 import 'package:pos_app/data/models/fiscal_config_local_entity.dart';
@@ -37,6 +39,27 @@ import 'package:sqflite/sqflite.dart' show getDatabasesPath;
 // `all` is the default so an unqualified invocation performs the whole physical
 // rehearsal. Naming one phase stays supported for focused debugging.
 const _phase = String.fromEnvironment('PILOT_PHASE', defaultValue: 'all');
+
+// `real` drives the hardware printer adapter and consumes paper. `simulated` reports a
+// ready printer and acknowledges print commands without producing output, so a run can
+// complete without paper. The cohort uses `simulated` because the physical 80 mm output
+// was already accepted in the FREEZE-06 rehearsal; every receipt carries the mode so a
+// simulated print can never be mistaken for a physical one.
+const _printerMode = String.fromEnvironment(
+  'PILOT_PRINTER_MODE',
+  defaultValue: 'real',
+);
+
+PrinterPort _printerPort() {
+  switch (_printerMode) {
+    case 'real':
+      return IPosPrinterAdapter();
+    case 'simulated':
+      return MockPrinterAdapter();
+    default:
+      fail('PILOT_PRINTER_MODE must be real or simulated; got $_printerMode');
+  }
+}
 const _ownerEmail = String.fromEnvironment('PILOT_OWNER_EMAIL');
 const _ownerPassword = String.fromEnvironment('PILOT_OWNER_PASSWORD');
 const _ownerPin = String.fromEnvironment('PILOT_OWNER_PIN');
@@ -285,7 +308,7 @@ Future<void> _setup(AppDatabase db, String marker) async {
     updatedAt: DateTime.now().toUtc().toIso8601String(),
   ));
 
-  final printer = IPosPrinterAdapter();
+  final printer = _printerPort();
   final preflight = await ActivationPreOfflineRunner(
     database: db,
     configAdapter: ActivationRequiredConfigAdapter(database: db),
@@ -300,7 +323,7 @@ Future<void> _setup(AppDatabase db, String marker) async {
   ));
   expect(preflight.isReadyForOffline, isTrue, reason: preflight.blockers.join('\n'));
   // ignore: avoid_print
-  print('ONB1.10F_PHASE_RECEIPT ${jsonEncode({'phase': 'setup', 'marker': marker, 'attemptId': attempt['id'], 'dbName': _dbName, 'testPrint': 'accepted'})}');
+  print('ONB1.10F_PHASE_RECEIPT ${jsonEncode({'phase': 'setup', 'marker': marker, 'attemptId': attempt['id'], 'dbName': _dbName, 'testPrint': 'accepted', 'printerMode': _printerMode})}');
 }
 
 UserEntity _ownerEntity(Map<String, dynamic> owner) => UserEntity(
@@ -388,7 +411,7 @@ Future<void> _offline(AppDatabase db, String marker) async {
   final sale = await ActivationControlledSaleRunner(
     database: db,
     salesRepository: await _salesRepository(db, _dio()..interceptors.add(recorder)),
-    printerPort: IPosPrinterAdapter(),
+    printerPort: _printerPort(),
     clockManager: ActivationClockManager(initialBootSessionId: 'onb1.10f-q80'),
   ).executeControlledOfflineSale(ControlledSaleParams(
     tenantId: _tenantId,
@@ -410,7 +433,7 @@ Future<void> _offline(AppDatabase db, String marker) async {
   final claim = await db.firstSuccessfulSaleClaimDao.getClaimByTenantId(_tenantId);
   expect(claim?.ticketId, sale.verificationTicketId);
   // ignore: avoid_print
-  print('ONB1.10F_PHASE_RECEIPT ${jsonEncode({'phase': 'offline', 'marker': marker, 'attemptId': resolvedAttempt.attemptId, 'ticketId': sale.verificationTicketId, 'physicalReceipt': 'print-command-accepted', 'httpRequests': recorder.count})}');
+  print('ONB1.10F_PHASE_RECEIPT ${jsonEncode({'phase': 'offline', 'marker': marker, 'attemptId': resolvedAttempt.attemptId, 'ticketId': sale.verificationTicketId, 'physicalReceipt': _printerMode == 'real' ? 'print-command-accepted' : 'simulated-no-output', 'printerMode': _printerMode, 'httpRequests': recorder.count})}');
 }
 
 Future<void> _reconnectAndVoid(AppDatabase db, String marker) async {
@@ -474,5 +497,5 @@ Future<void> _reconnectAndVoid(AppDatabase db, String marker) async {
   expect(fixtureStartedAt, isNotNull, reason: 'PILOT_FIXTURE_STARTED_AT must be ISO-8601');
   final elapsed = DateTime.now().toUtc().difference(fixtureStartedAt!);
   // ignore: avoid_print
-  print('ONB1.10F_PHASE_RECEIPT ${jsonEncode({'phase': 'reconnect', 'marker': marker, 'attemptId': resolvedAttempt.attemptId, 'ticketId': ticketId, 'backendStatus': diagnostics.data!['attempt']['status'], 'elapsedWallClockMs': elapsed.inMilliseconds, 'visualConfirmation': 'not-claimed'})}');
+  print('ONB1.10F_PHASE_RECEIPT ${jsonEncode({'phase': 'reconnect', 'marker': marker, 'attemptId': resolvedAttempt.attemptId, 'ticketId': ticketId, 'backendStatus': diagnostics.data!['attempt']['status'], 'elapsedWallClockMs': elapsed.inMilliseconds, 'visualConfirmation': _printerMode == 'real' ? 'not-claimed' : 'not-applicable-simulated-printer', 'printerMode': _printerMode})}');
 }
