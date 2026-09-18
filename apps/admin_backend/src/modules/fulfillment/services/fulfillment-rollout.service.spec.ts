@@ -11,6 +11,7 @@ import { Insumo } from '../../inventory/entities/insumo.entity';
 import { Recipe } from '../../inventory/entities/recipe.entity';
 import { TenantFulfillmentRecord } from '../entities/tenant-fulfillment-record.entity';
 import { TenantTopologyRevision } from '../entities/tenant-topology-revision.entity';
+import { TenantContextRequiredError } from '../../../core/database/tenant-transaction';
 
 describe('FulfillmentRolloutService (Unit & Triangulation)', () => {
   let service: FulfillmentRolloutService;
@@ -23,6 +24,10 @@ describe('FulfillmentRolloutService (Unit & Triangulation)', () => {
   const mockQueryRunner = {
     query: jest.fn(),
   };
+
+  // Exposed so the tenant-binding guard test can assert that no SQL escapes
+  // the transaction manager when the guard rejects a blank tenant id.
+  let txManagerQuery: jest.Mock;
 
   const mockDataSource = {
     createQueryRunner: jest.fn().mockReturnValue(mockQueryRunner),
@@ -39,7 +44,7 @@ describe('FulfillmentRolloutService (Unit & Triangulation)', () => {
               : fnOrUndefined;
           if (!callback) throw new Error('Callback required');
           const manager = {
-            query: jest.fn().mockResolvedValue([]),
+            query: txManagerQuery,
             getRepository: (entity: unknown) => {
               if (entity === Product) return productRepo;
               if (entity === Insumo) return insumoRepo;
@@ -55,6 +60,7 @@ describe('FulfillmentRolloutService (Unit & Triangulation)', () => {
   };
 
   beforeEach(async () => {
+    txManagerQuery = jest.fn().mockResolvedValue([]);
     productRepo = {
       find: jest.fn(),
       findOne: jest.fn(),
@@ -312,6 +318,16 @@ describe('FulfillmentRolloutService (Unit & Triangulation)', () => {
         KDS_AND_PRINT: 1,
       });
       expect(dashboard.enforcementStatus).toBe('ACTIVE');
+    });
+  });
+
+  describe('tenant binding guard (Unit 0b-2)', () => {
+    it('rejects a blank tenant id with TenantContextRequiredError and issues no set_config SQL', async () => {
+      await expect(service.scanBackfillDiscrepancies('   ')).rejects.toThrow(
+        TenantContextRequiredError,
+      );
+      expect(txManagerQuery).not.toHaveBeenCalled();
+      expect(productRepo.find).not.toHaveBeenCalled();
     });
   });
 });

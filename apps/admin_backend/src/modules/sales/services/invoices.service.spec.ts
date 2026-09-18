@@ -20,6 +20,7 @@ import {
   NEGATIVE_STOCK_POLICY,
 } from '../../inventory/entities/insumo.entity';
 import { User, UserRole } from '../../identity/entities/user.entity';
+import { TenantContextRequiredError } from '../../../core/database/tenant-transaction';
 
 describe('InvoicesService', () => {
   let service: InvoicesService;
@@ -3668,6 +3669,18 @@ describe('InvoicesService', () => {
       });
       expect(dataSource.transaction).toHaveBeenCalledTimes(2);
       expect(movementRepo.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('tenant binding guard (Unit 0b-2)', () => {
+    it('rejects a blank tenant id with TenantContextRequiredError and issues no set_config SQL', async () => {
+      // syncInvoices without an external manager opens the transaction and
+      // binds the tenant context before any repository access.
+      await expect(service.syncInvoices('   ', [])).rejects.toThrow(
+        TenantContextRequiredError,
+      );
+      expect(txManager.query).not.toHaveBeenCalled();
+      expect(invoiceRepo.upsert).not.toHaveBeenCalled();
     });
   });
 });

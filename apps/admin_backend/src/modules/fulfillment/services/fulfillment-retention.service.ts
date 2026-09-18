@@ -5,6 +5,7 @@ import { TenantFulfillmentRecord } from '../entities/tenant-fulfillment-record.e
 import { Invoice } from '../../sales/entities/invoice.entity';
 import { InventoryMovement } from '../../inventory/entities/inventory-movement.entity';
 import { SyncFulfillmentDto } from '../../sales/dto/sync-batch.dto';
+import { bindTenantContext } from '../../../core/database/tenant-transaction';
 
 export interface RetentionPurgeResult {
   purgedFulfillments: number;
@@ -24,22 +25,13 @@ export class FulfillmentRetentionService {
     private readonly fulfillmentRepo: Repository<TenantFulfillmentRecord>,
   ) {}
 
-  private async bindTenantContext(
-    manager: EntityManager,
-    tenantId: string,
-  ): Promise<void> {
-    await manager.query(`SELECT set_config('app.tenant_id', $1, true)`, [
-      tenantId,
-    ]);
-  }
-
   async saveFulfillment(
     tenantId: string,
     dto: SyncFulfillmentDto,
     externalManager?: EntityManager,
   ): Promise<TenantFulfillmentRecord> {
     const execute = async (manager: EntityManager) => {
-      await this.bindTenantContext(manager, tenantId);
+      await bindTenantContext(manager, tenantId);
       const repo = manager.getRepository(TenantFulfillmentRecord);
       const rawLines: unknown =
         dto.linesPayload != null
@@ -85,7 +77,7 @@ export class FulfillmentRetentionService {
     id: string,
   ): Promise<TenantFulfillmentRecord | null> {
     return this.dataSource.transaction(async (manager) => {
-      await this.bindTenantContext(manager, tenantId);
+      await bindTenantContext(manager, tenantId);
       return manager.getRepository(TenantFulfillmentRecord).findOne({
         where: { id, tenant_id: tenantId },
       });
@@ -97,7 +89,7 @@ export class FulfillmentRetentionService {
     saleId: string,
   ): Promise<TenantFulfillmentRecord[]> {
     return this.dataSource.transaction(async (manager) => {
-      await this.bindTenantContext(manager, tenantId);
+      await bindTenantContext(manager, tenantId);
       return manager.getRepository(TenantFulfillmentRecord).find({
         where: { tenant_id: tenantId, sale_id: saleId },
       });
@@ -109,7 +101,7 @@ export class FulfillmentRetentionService {
     cutoffDate: Date,
   ): Promise<RetentionPurgeResult> {
     return this.dataSource.transaction('SERIALIZABLE', async (manager) => {
-      await this.bindTenantContext(manager, tenantId);
+      await bindTenantContext(manager, tenantId);
 
       const fulfillmentRepo = manager.getRepository(TenantFulfillmentRecord);
       const invoiceRepo = manager.getRepository(Invoice);

@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { DataSource, EntityManager, Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
+import { bindTenantContext } from '../../../core/database/tenant-transaction';
 import { Product } from '../../inventory/entities/product.entity';
 import { Insumo } from '../../inventory/entities/insumo.entity';
 import { Recipe } from '../../inventory/entities/recipe.entity';
@@ -81,20 +82,11 @@ export class FulfillmentRolloutService {
     private readonly revisionRepo: Repository<TenantTopologyRevision>,
   ) {}
 
-  private async bindTenantContext(
-    manager: EntityManager,
-    tenantId: string,
-  ): Promise<void> {
-    await manager.query(`SELECT set_config('app.tenant_id', $1, true)`, [
-      tenantId,
-    ]);
-  }
-
   async scanBackfillDiscrepancies(
     tenantId: string,
   ): Promise<BackfillScanResult> {
     return this.dataSource.transaction(async (manager) => {
-      await this.bindTenantContext(manager, tenantId);
+      await bindTenantContext(manager, tenantId);
 
       const pRepo = manager.getRepository(Product);
       const iRepo = manager.getRepository(Insumo);
@@ -229,7 +221,7 @@ export class FulfillmentRolloutService {
     tenantId: string,
   ): Promise<ObservabilityDashboard> {
     return this.dataSource.transaction(async (manager) => {
-      await this.bindTenantContext(manager, tenantId);
+      await bindTenantContext(manager, tenantId);
 
       const revRepo = manager.getRepository(TenantTopologyRevision);
       const fulRepo = manager.getRepository(TenantFulfillmentRecord);

@@ -34,9 +34,9 @@ import {
   SaleTimeSnapshotValidationResult,
 } from './sale-inventory-outcome.service';
 import { TenantFulfillmentRecord } from '../../fulfillment/entities/tenant-fulfillment-record.entity';
+import { bindTenantContext } from '../../../core/database/tenant-transaction';
 
 const SCALE_4 = 4;
-const SET_LOCAL_TENANT_SQL = "SELECT set_config('app.tenant_id', $1, true)";
 const CREDIT_NOTE_NO_STOCK_POLICIES = new Set([
   'FINANCIAL_ONLY',
   'WASTE_NO_RESTOCK',
@@ -198,7 +198,7 @@ export class InvoicesService {
     );
     if (!manager) {
       await this.dataSource.transaction('SERIALIZABLE', async (txManager) => {
-        await this.bindTenantContext(txManager, tenantId);
+        await bindTenantContext(txManager, tenantId);
         await this.syncInvoices(tenantId, dtos, txManager, options);
       });
       return;
@@ -622,7 +622,7 @@ export class InvoicesService {
       }
 
       await this.dataSource.transaction('SERIALIZABLE', async (manager) => {
-        await this.bindTenantContext(manager, tenantId);
+        await bindTenantContext(manager, tenantId);
         if (record.invoice) {
           await this.validateInvoiceRecipeVersions(
             tenantId,
@@ -901,7 +901,7 @@ export class InvoicesService {
     try {
       let v1Outcome: SaleTimeSnapshotValidationResult | null = null;
       await this.dataSource.transaction('SERIALIZABLE', async (manager) => {
-        await this.bindTenantContext(manager, tenantId);
+        await bindTenantContext(manager, tenantId);
         this.assertRecordCreditNoteBoundary(record);
         this.assertSupportedCreditNoteStockBehavior(record);
         const acceptedAt = new Date();
@@ -1171,16 +1171,9 @@ export class InvoicesService {
     operation: (manager: EntityManager) => Promise<T>,
   ): Promise<T> {
     return this.dataSource.transaction('SERIALIZABLE', async (manager) => {
-      await this.bindTenantContext(manager, tenantId);
+      await bindTenantContext(manager, tenantId);
       return operation(manager);
     });
-  }
-
-  private async bindTenantContext(
-    manager: EntityManager,
-    tenantId: string,
-  ): Promise<void> {
-    await manager.query(SET_LOCAL_TENANT_SQL, [tenantId]);
   }
 
   private assertDirectCreditNoteBoundary(
