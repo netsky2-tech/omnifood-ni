@@ -80,14 +80,26 @@ test.describe("NHILOS POS — Brand, Viewport & Authentication E2E", () => {
       });
     });
 
-    await page.route("**/api/sales/reports/daily-metrics**", async (route) => {
+    await page.route("**/api/sales/reports/**", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
-          totalSales: 15420,
-          ordersCount: 42,
-          averageTicket: 367.14,
+          grossSales: 15420,
+          netSales: 13408.7,
+          totalTax: 2011.3,
+          totalDiscounts: 0,
+          invoiceCount: 42,
+          ticketAverage: 367.14,
+          paymentMethodsBreakdown: {
+            cashNio: 15420,
+            cashUsd: 0,
+            cardNio: 0,
+            cardUsd: 0,
+            other: 0,
+            totalNio: 15420,
+          },
+          generatedAt: new Date().toISOString(),
         }),
       });
     });
