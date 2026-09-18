@@ -101,7 +101,7 @@ export function UsersPage() {
 
       {/* Users Data Table */}
       <div className="rounded-md border border-border bg-card shadow-sm">
-        <Table>
+        <Table className="min-w-[580px]">
           <TableHeader>
             <TableRow>
               <TableHead>Usuario</TableHead>

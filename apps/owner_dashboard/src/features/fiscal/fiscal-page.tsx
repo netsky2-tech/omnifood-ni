@@ -91,7 +91,7 @@ function VoidedTab({ startDate, endDate }: { startDate?: string; endDate?: strin
       </div>
       <div className="rounded-lg border border-border bg-card shadow-xs overflow-hidden">
         <div className="overflow-x-auto w-full">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm min-w-[540px]">
             <thead>
               <tr className="border-b border-border bg-muted/60">
                 <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
@@ -166,7 +166,7 @@ function SequenceTab({ startDate, endDate }: { startDate?: string; endDate?: str
 
       <div className="rounded-lg border border-border bg-card shadow-xs overflow-hidden">
         <div className="overflow-x-auto w-full">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm min-w-[500px]">
             <thead>
               <tr className="border-b border-border bg-muted/60">
                 <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
