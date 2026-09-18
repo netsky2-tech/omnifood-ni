@@ -1,4 +1,4 @@
-import { UserRole } from '../entities/user.entity';
+import { UserRole } from './user-role.enum';
 
 export enum AppPermission {
   SALES_VOID_INVOICE = 'sales:void_invoice',
