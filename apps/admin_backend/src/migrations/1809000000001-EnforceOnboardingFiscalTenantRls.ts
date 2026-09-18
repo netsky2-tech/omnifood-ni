@@ -30,9 +30,7 @@ const TENANT_PREDICATE = "tenant_id = current_setting('app.tenant_id', true)";
 const quoteIdentifier = (identifier: string): string =>
   `"${identifier.replace(/"/g, '""')}"`;
 
-export class EnforceOnboardingFiscalTenantRls1809000000001
-  implements MigrationInterface
-{
+export class EnforceOnboardingFiscalTenantRls1809000000001 implements MigrationInterface {
   name = 'EnforceOnboardingFiscalTenantRls1809000000001';
 
   private policyName(table: string, command: string): string {

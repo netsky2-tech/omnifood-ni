@@ -1213,7 +1213,11 @@ describe('ActivationService — transaction-local tenant binding (RLS pre-policy
     {
       name: 'startActivation',
       run: () =>
-        service.startActivation(tenantId, { candidateTerminalId: terminalId }, userId),
+        service.startActivation(
+          tenantId,
+          { candidateTerminalId: terminalId },
+          userId,
+        ),
     },
     {
       name: 'ingestCheck',
@@ -1249,7 +1253,7 @@ describe('ActivationService — transaction-local tenant binding (RLS pre-policy
         service.closeFollowUp(
           tenantId,
           'follow-up-uuid-1',
-          { closureEvidenceRef: 'ref-1' } as any,
+          { closureEvidenceRef: 'ref-1' },
           userId,
         ),
     },
@@ -1266,7 +1270,7 @@ describe('ActivationService — transaction-local tenant binding (RLS pre-policy
           {
             reason: 'Manual support intervention requested',
             overrideAction: SupportOverrideAction.FORCE_FAIL,
-          } as any,
+          },
           userId,
         ),
     },
@@ -1281,16 +1285,12 @@ describe('ActivationService — transaction-local tenant binding (RLS pre-policy
     {
       name: 'confirmDeviceCredential',
       run: () =>
-        service.confirmDeviceCredential(
-          tenantId,
-          'attempt-uuid-1',
-          {
-            deviceId: terminalId,
-            credentialId: 'cred-1',
-            credentialVersion: 1,
-            renewalSecret: 'renewal-secret',
-          } as any,
-        ),
+        service.confirmDeviceCredential(tenantId, 'attempt-uuid-1', {
+          deviceId: terminalId,
+          credentialId: 'cred-1',
+          credentialVersion: 1,
+          renewalSecret: 'renewal-secret',
+        }),
     },
     {
       name: 'resolveLatestFinalizedAttemptForDevice',
@@ -1310,14 +1310,14 @@ describe('ActivationService — transaction-local tenant binding (RLS pre-policy
           credentialId: 'cred-1',
           credentialVersion: 1,
           renewalSecret: 'renewal-secret',
-        } as any),
+        }),
     },
   ];
 
   it.each(publicPaths.map((p) => [p.name]))(
     'binds app.tenant_id inside a DataSource transaction before repository access: %s',
     async (name) => {
-      const path = publicPaths.find((p) => p.name === name)!;
+      const path = publicPaths.find((p) => p.name === name);
       // Outcomes are asserted by the behavioral suites; this suite asserts the
       // binding contract, which holds whether the path resolves or rejects.
       await path.run().catch(() => undefined);
@@ -1335,9 +1335,9 @@ describe('ActivationService — transaction-local tenant binding (RLS pre-policy
   );
 
   it('opens no transaction and issues no SQL for a blank tenant id', async () => {
-    await expect(
-      service.reconcileFollowUpConvergence('   '),
-    ).rejects.toThrow(BadRequestException);
+    await expect(service.reconcileFollowUpConvergence('   ')).rejects.toThrow(
+      BadRequestException,
+    );
 
     expect(dataSource.transaction).not.toHaveBeenCalled();
     expect(setConfigCalls).toHaveLength(0);

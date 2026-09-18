@@ -40,9 +40,9 @@ describe('bindTenantContext — transaction-local tenant binding', () => {
   it.each(['', '   ', ' \t '])(
     'rejects blank tenant id %p before issuing any SQL',
     async (blank) => {
-      await expect(
-        bindTenantContext(asManager(), blank),
-      ).rejects.toThrow(TenantContextRequiredError);
+      await expect(bindTenantContext(asManager(), blank)).rejects.toThrow(
+        TenantContextRequiredError,
+      );
       expect(manager.query).not.toHaveBeenCalled();
     },
   );
@@ -77,9 +77,9 @@ describe('resolveTenantContextId', () => {
     expect(() => resolveTenantContextId('   ')).toThrow(
       TenantContextRequiredError,
     );
-    expect(() => resolveTenantContextId(undefined as unknown as string)).toThrow(
-      TenantContextRequiredError,
-    );
+    expect(() =>
+      resolveTenantContextId(undefined as unknown as string),
+    ).toThrow(TenantContextRequiredError);
   });
 
   it('returns the trimmed tenant id', () => {

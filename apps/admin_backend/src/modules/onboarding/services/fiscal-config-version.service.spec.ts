@@ -1,4 +1,8 @@
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Repository, DataSource, EntityManager } from 'typeorm';
 import { FiscalConfigVersionService } from './fiscal-config-version.service';
 import {
@@ -109,7 +113,9 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
         if (target === Tenant) return tenantRepo;
         if (target === SystemParametersConfig) return sysParamRepo;
         if (target === FiscalConfigRevision) return revisionRepo;
-        throw new Error(`Unexpected repository target: ${String(target)}`);
+        throw new Error(
+          `Unexpected repository target: ${(target as { name?: string }).name ?? '<anonymous>'}`,
+        );
       }),
       findOne: jest.fn(),
       find: jest.fn(),
@@ -291,9 +297,9 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
         TENANT_CONTEXT_SET_CONFIG_SQL,
         [tenantId],
       );
-      expect(
-        mockManager.query.mock.invocationCallOrder[0],
-      ).toBeLessThan(revisionRepo.findOne.mock.invocationCallOrder[0]);
+      expect(mockManager.query.mock.invocationCallOrder[0]).toBeLessThan(
+        revisionRepo.findOne.mock.invocationCallOrder[0],
+      );
     });
 
     it('does not open a nested transaction when a caller-supplied manager is used; binds on that manager instead', async () => {
@@ -306,9 +312,9 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
         TENANT_CONTEXT_SET_CONFIG_SQL,
         [tenantId],
       );
-      expect(
-        mockManager.query.mock.invocationCallOrder[0],
-      ).toBeLessThan(revisionRepo.findOne.mock.invocationCallOrder[0]);
+      expect(mockManager.query.mock.invocationCallOrder[0]).toBeLessThan(
+        revisionRepo.findOne.mock.invocationCallOrder[0],
+      );
     });
 
     it('preserves BadRequestException for a blank tenant on getFiscalConfigSnapshot without any SQL', async () => {

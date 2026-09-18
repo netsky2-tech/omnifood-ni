@@ -895,12 +895,10 @@ export class ActivationService {
       whereClause.activationAttemptId = attemptId.trim();
     }
 
-    const openFollowUps = await this.runTenantBound(
-      scopedTenantId,
-      (manager) =>
-        manager.getRepository(ActivationFollowUp).find({
-          where: whereClause,
-        }),
+    const openFollowUps = await this.runTenantBound(scopedTenantId, (manager) =>
+      manager.getRepository(ActivationFollowUp).find({
+        where: whereClause,
+      }),
     );
 
     const closedFollowUpIds: string[] = [];

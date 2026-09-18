@@ -1,9 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
 import { OnboardingTelemetryService } from './onboarding-telemetry.service';
-import {
-  TENANT_CONTEXT_SET_CONFIG_SQL,
-} from '../../../core/database/tenant-transaction';
+import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 import {
   OnboardingTelemetryEventName,
   IngestTelemetryEventDto,
@@ -162,7 +160,8 @@ describe('OnboardingTelemetryService (Unit — ONB1.9E & ONB1.9F)', () => {
         properties: {
           user_password: 'superSecretPassword!',
           pin: '9876',
-          jwt_token: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIn0.xyz',
+          jwt_token:
+            'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIn0.xyz',
           card: '4532015012345678',
           rawCsvContent: rawCsv,
           normalMetric: 'valid_metric',
@@ -171,7 +170,7 @@ describe('OnboardingTelemetryService (Unit — ONB1.9E & ONB1.9F)', () => {
 
       expect(savedEvents.length).toBe(1);
       const saved = savedEvents[0];
-      const props = saved.propertiesSanitizedJson!;
+      const props = saved.propertiesSanitizedJson;
 
       expect(props.user_password).toBe('[REDACTED_SECRET]');
       expect(props.pin).toBe('[REDACTED_PIN]');
@@ -208,9 +207,9 @@ describe('OnboardingTelemetryService (Unit — ONB1.9E & ONB1.9F)', () => {
         TENANT_CONTEXT_SET_CONFIG_SQL,
         ['tenant-test-1'],
       );
-      expect(
-        mockManager.query.mock.invocationCallOrder[0],
-      ).toBeLessThan(mockTelemetryRepo.save.mock.invocationCallOrder[0]);
+      expect(mockManager.query.mock.invocationCallOrder[0]).toBeLessThan(
+        mockTelemetryRepo.save.mock.invocationCallOrder[0],
+      );
     });
 
     it('rejects a blank tenant before opening a transaction or issuing SQL', async () => {

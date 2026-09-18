@@ -122,20 +122,22 @@ export class OnboardingTelemetryService {
     if (!trimmedTenant) return [];
 
     // Tenant-bound transaction: the telemetry table is RLS-protected.
-    return runInTenantTransaction(this.dataSource, trimmedTenant, async (
-      manager,
-    ) => {
-      const where: FindOptionsWhere<OnboardingTelemetryEvent> = {
-        tenantId: trimmedTenant,
-      };
-      if (eventName) {
-        where.eventName = eventName;
-      }
+    return runInTenantTransaction(
+      this.dataSource,
+      trimmedTenant,
+      async (manager) => {
+        const where: FindOptionsWhere<OnboardingTelemetryEvent> = {
+          tenantId: trimmedTenant,
+        };
+        if (eventName) {
+          where.eventName = eventName;
+        }
 
-      return manager.getRepository(OnboardingTelemetryEvent).find({
-        where,
-        order: { occurredAt: 'ASC' },
-      });
-    });
+        return manager.getRepository(OnboardingTelemetryEvent).find({
+          where,
+          order: { occurredAt: 'ASC' },
+        });
+      },
+    );
   }
 }

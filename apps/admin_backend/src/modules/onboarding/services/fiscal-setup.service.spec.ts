@@ -401,9 +401,9 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         TENANT_CONTEXT_SET_CONFIG_SQL,
         [tenantId],
       );
-      expect(
-        mockManager.query.mock.invocationCallOrder[0],
-      ).toBeLessThan(mockManager.findOne.mock.invocationCallOrder[0]);
+      expect(mockManager.query.mock.invocationCallOrder[0]).toBeLessThan(
+        mockManager.findOne.mock.invocationCallOrder[0],
+      );
     });
   });
 });
