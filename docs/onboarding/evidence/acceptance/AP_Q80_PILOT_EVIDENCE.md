@@ -78,12 +78,12 @@ Este documento captura la evidencia del piloto físico en hardware real. Se llen
 | RUC | `J0000000000000` (placeholder del seed) → **registrar aquí el RUC real usado en el run** |
 | RUC presente al activar (`rucPresent`) | «true/false — de la evidencia de TEST_PRINT» |
 | `rucHash` (SHA-256 del RUC canónico) | «de la evidencia de TEST_PRINT — nunca registrar el RUC crudo aquí» |
-| Régimen | **PENDIENTE DE RESOLUCIÓN — mismatch:** el fixture declara `CUOTA_FIJA` (IVA 0.00%) pero el harness attachado real (`integration_test/onb1_10_founder_pilot_q80_e2e_test.dart`) envía `REGIMEN_GENERAL`. Ver BLOQUEANTE PRE-REHEARSAL en §9 de `AP_FIXTURE_MANIFEST.md`; registrar aquí el régimen resuelto |
+| Régimen | **RESUELTO: `CUOTA_FIJA`** (decisión del founder, 2026-09-17; IVA 0.00%). El harness attachado (`integration_test/onb1_10_founder_pilot_q80_e2e_test.dart`) ya envía `CUOTA_FIJA` y coincide con el fixture declarado (§9 de `AP_FIXTURE_MANIFEST.md`) |
 | Nombre comercial | «COMPLETAR» |
 | Dirección fiscal | «COMPLETAR» |
 | Teléfono | «COMPLETAR» |
 | `TEST_PRINT` ancho efectivo (mm) | «de la evidencia de TEST_PRINT — debe ser 80» |
-| `TEST_PRINT` régimen efectivo | «de la evidencia de TEST_PRINT — debe coincidir con el régimen resuelto en el bloqueante pre-rehearsal (§9 de `AP_FIXTURE_MANIFEST.md`)» |
+| `TEST_PRINT` régimen efectivo | «de la evidencia de TEST_PRINT — debe ser `CUOTA_FIJA` (`COMPROBANTE DE VENTA` / `NO RECAUDA IVA`); la decisión del founder es la autoridad (§9 de `AP_FIXTURE_MANIFEST.md`)» |
 
 **Regla:** el RUC crudo sólo se comprueba contra el ticket físico. La telemetría y este documento registran `rucHash` + `rucPresent`, nunca el identificador completo.
 

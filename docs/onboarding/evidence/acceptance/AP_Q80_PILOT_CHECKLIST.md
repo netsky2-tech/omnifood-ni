@@ -2,7 +2,7 @@
 
 **Documento:** `AP_Q80_PILOT_CHECKLIST.md`  
 **Ubicación:** `docs/onboarding/evidence/acceptance/AP_Q80_PILOT_CHECKLIST.md`  
-**Estado:** **READY FOR EXECUTION — con bloqueantes pre-rehearsal pendientes (régimen fiscal y RUC placeholder; ver §9 de `AP_FIXTURE_MANIFEST.md`)**
+**Estado:** **READY FOR EXECUTION — con bloqueante pre-rehearsal pendiente (RUC placeholder; ver §9 de `AP_FIXTURE_MANIFEST.md`). Régimen resuelto: `CUOTA_FIJA` (decisión del founder; harness alineado)**
 **Versión:** 1.0  
 **Fecha:** 2026-09-04  
 **Autoridad:** `onboarding_acceptance_plan_v1.0.md` §AP-12, `onboarding_execution_roadmap.md` ONB1.10F
@@ -85,7 +85,7 @@ Checklist operativo paso a paso para ejecutar el piloto físico del founder tena
 |---|---|---|---|
 | B0 | **BLOQUEANTE** — Reemplazar el RUC placeholder `J0000000000000` por el RUC real del founder (o confirmar el real si se pasó `ONBOARDING_FOUNDER_RUC`) | UI guarda el RUC válido; sin RUC válido no se alcanza `SALE_READY` | — |
 | B1 | Verificar el RUC persistido | El RUC guardado coincide con el real del founder (no el placeholder) | — |
-| B2 | Seleccionar régimen tributario | **BLOQUEANTE PRE-REHEARSAL:** régimen pendiente de resolución — mismatch `CUOTA_FIJA` (fixture) vs `REGIMEN_GENERAL` (harness attachado real); ver §9 de `AP_FIXTURE_MANIFEST.md`. No continuar sin decisión explícita | — |
+| B2 | Seleccionar régimen tributario `CUOTA_FIJA` | **RESUELTO (2026-09-17):** régimen decidido por el founder — `CUOTA_FIJA` (IVA 0.00%); el harness attachado ya lo envía y coincide con el fixture (§9 de `AP_FIXTURE_MANIFEST.md`). Confirmar que la UI queda en `CUOTA_FIJA` | — |
 | B3 | Ingresar nombre comercial | «COMPLETAR» | — |
 | B4 | Ingresar dirección fiscal | «COMPLETAR» | — |
 | B5 | Ingresar teléfono | «COMPLETAR» | — |
@@ -120,7 +120,7 @@ Checklist operativo paso a paso para ejecutar el piloto físico del founder tena
 | E3 | Verificar fiscal config en POS | Config recibida y aplicada | — |
 | E4 | Verificar verification product | Producto disponible localmente | — |
 | E5 | Iniciar Activation | Attempt creado | — |
-| E6 | Checks pre-offline (6 checks) | Todos PASS. En `TEST_PRINT` el ticket físico debe ser de 80 mm, con la identidad fiscal correcta para el régimen resuelto (si el régimen resuelto es `CUOTA_FIJA`: `COMPROBANTE DE VENTA` / `NO RECAUDA IVA`; si es `REGIMEN_GENERAL`: `FACTURA DE VENTA` con desglose de IVA) y la línea `RUC:` visible | — |
+| E6 | Checks pre-offline (6 checks) | Todos PASS. En `TEST_PRINT` el ticket físico debe ser de 80 mm, con la identidad fiscal del régimen resuelto `CUOTA_FIJA` (`COMPROBANTE DE VENTA` / `NO RECAUDA IVA`) y la línea `RUC:` visible | — |
 | E7 | **CORTAR WAN** (airplane mode) | WAN desconectada | — |
 | E8 | Seleccionar verification product | Producto en carrito | — |
 | E9 | Pago en efectivo | Pago registrado | — |
@@ -196,7 +196,7 @@ notes:                    «cualquier observación relevante»
 | TTFSS > 15 min | Documentar causa. Si es harness → `RUN_INVALID_BY_HARNESS`, reiniciar cohort |
 | Seed falla | Verificar PostgreSQL, migraciones, variables de entorno |
 | `TEST_PRINT = FAIL` con "régimen fiscal DGI" o "Identidad fiscal del emisor" | Configuración fiscal local ausente: completar Fiscal Setup y esperar el sync de proyección. **No** continuar el run |
-| `TEST_PRINT` sale con un régimen distinto al resuelto en el bloqueante pre-rehearsal (§9 del manifest) | El régimen local no coincide con la decisión: no emitir documentos, resolver la configuración fiscal y repetir |
+| `TEST_PRINT` sale con un régimen distinto a `CUOTA_FIJA` (decisión del founder, 2026-09-17; §9 del manifest) | El régimen local no coincide con la decisión: no emitir documentos, resolver la configuración fiscal y repetir |
 | `TEST_PRINT` sale con ancho 58 | El ancho es local: ajustarlo a 80 mm en Ajustes de Hardware y repetir |
 
 ---
