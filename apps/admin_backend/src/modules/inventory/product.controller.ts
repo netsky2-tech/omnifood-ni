@@ -59,12 +59,12 @@ export class ProductController {
   async list(
     @Query('productType') productType?: string,
     @Query('includeInactive') includeInactive?: string,
+    @GetTenantId() tenantId?: string,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
     @Query('search') search?: string,
     @Query('sortBy') sortBy?: string,
     @Query('sortOrder') sortOrder?: 'ASC' | 'DESC',
-    @GetTenantId() tenantId?: string,
   ) {
     const resolved = this.resolveProductType(productType);
 
