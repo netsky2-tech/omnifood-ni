@@ -83,6 +83,23 @@ Task 3 depends on 1 and 2 because the harness can only assert the re-application
 - **Evidence:** the scenario now removes **27** ledger rows (was 10) and re-applies cleanly. Scenario 1 reports 75 entity tables and 953 entity columns, 0 missing; scenario 2 reports the same with 0 missing.
 - **Integrity check:** every `CREATE POLICY`, `USING` and `WITH CHECK` fragment was compared before and after, normalising the trailing semicolon and whitespace. 106 added against 105 removed, and the single difference is one template-literal line that lost its opening backtick because it now lives inside a `DO $$` block. No policy definition changed.
 
+## Task 4: Assert policies exist in the schema build check
+
+- **Status:** done
+- **Goal:** Close the gap review exposed: the harness verifies tables and columns, so a guard whose catalog check names the wrong policy would skip creation silently and still pass, leaving a table that returns zero rows forever.
+- **Dependencies:** Task 3.
+- **In scope:** assertion logic in `scripts/verify-schema-build.sh`; both scenarios.
+- **Out of scope:** parsing migration source to build an expected policy list, which the loop-built statements make unreliable.
+- **Approach:** assert invariants rather than an exact list:
+  1. every table with `relforcerowsecurity = t` has at least one policy — zero policies is a silent deny-all;
+  2. every expression a policy defines must reference `app.tenant_id`.
+- **Acceptance:** the check fails when a policy is missing or lacks the tenant predicate, and both scenarios still PASS on a correct schema.
+- **Commit:** pending
+- **Evidence:** both scenarios report 32 forced-RLS tables, 102 policies, 0 deny-all tables and 0 policy expressions without the tenant predicate.
+- **The check was tightened after review, and the reason is worth keeping:** the first version accepted a policy when the predicate appeared in `USING` **or** in `WITH CHECK`. Review pointed out that a `FOR ALL` policy written as `USING (true)` with a tenant-scoped `WITH CHECK` would pass while allowing every tenant's rows to be read — the exact failure the check exists to catch. The rule is now per expression: every non-null `qual` and every non-null `with_check` must each reference `app.tenant_id`, and the report names the table, policy, command and which expression is wrong.
+- **Negative proof:** on the scratch database a policy was set to `USING (true)` with a tenant-scoped `WITH CHECK`. The previous rule returned zero rows for it; the tightened rule returns it with the offending expression and the gate fails. A second proof drops a table's only policy and confirms the deny-all gate fails. Both mutations touched the scratch database only and were restored.
+- **No existing policy violates the stricter rule**, so the invariant did not have to be weakened to accommodate one.
+
 ## Open questions recorded by review
 
 - **Eleven of the seventeen migrations already issued `DROP POLICY IF EXISTS` before their `CREATE POLICY`**, so those were already safe to re-apply and the new guard is redundant there. It is harmless and kept for uniformity, but the honest statement of what happened is: five migrations genuinely lacked idempotency (`1768000000000`, `1776000000000`, `1802000000000`, `1806000000000`, `1807000000000`), and twelve gained a guard as a side effect of making the pattern uniform. An earlier revision of this document described the interaction backwards: the drop runs unconditionally and removes an existing policy, after which the guard is always true. The reset behaviour is the point of the drop and is preserved.
