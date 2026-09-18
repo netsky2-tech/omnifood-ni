@@ -23,14 +23,14 @@ Este documento captura la evidencia del piloto físico en hardware real. Se llen
 
 | Campo | Valor |
 |---|---|
-| acceptanceReleaseId | **NOT FROZEN** — «COMPLETAR EN FREEZE-05: acuñar una sola vez tras estabilizar todo cambio que afecte release» |
-| Backend commit | «COMPLETAR EN FREEZE-05: SHA del commit de release» |
-| Owner Dashboard commit | «COMPLETAR EN FREEZE-05: SHA del commit de release» |
-| POS commit | «COMPLETAR EN FREEZE-05: SHA del commit de release» |
-| POS APK version | pubspec declara `1.0.0+1` — «COMPLETAR EN CAMPO: `adb shell dumpsys package com.nhilos.pos_app \| grep versionName`» |
-| POS APK SHA-256 | «COMPLETAR EN CAMPO: `sha256sum path/to/pos.apk`» |
-| Database migration version | `1809040000000-CreateHumanAuthorizationTenantPublicationState` (última migración TypeORM verificada en el árbol) |
-| SQLite schema version | `52` (Floor database version verificada en `apps/pos_app/lib/data/database/app_database.dart`; confirmar en el APK instalado) |
+| acceptanceReleaseId | `fp-acceptance-96440859` — acuñado una sola vez el 2026-09-18, después de la entrega |
+| Backend commit | `9644085940de704eae0c0fcb23609df66e631770` (merge de PR #328 sobre `main`) |
+| Owner Dashboard commit | `9644085940de704eae0c0fcb23609df66e631770` (monorepo) |
+| POS commit | `9644085940de704eae0c0fcb23609df66e631770` (monorepo) |
+| POS APK version | `1.0.0+1` (declarado en `pubspec.yaml`; el APK instalado reportó `versionName 1.0.0`, `versionCode 1`) |
+| POS APK SHA-256 | `f93b63107f51bcbd70639fae896894e34dc36e37340a61b507b13c8e5d14550b` (el APK que corrió el rehearsal) |
+| Database migration version | `1809060000000-AlignInvoiceTenantPolicyPredicate` (última migración presente en el árbol del release) |
+| SQLite schema version | `52` (Floor database version verificada en `apps/pos_app/lib/data/database/app_database.dart`) |
 
 ---
 
@@ -115,6 +115,25 @@ Este documento captura la evidencia del piloto físico en hardware real. Se llen
 ---
 
 # 8. Reference Run Results (TTFSS Cohort)
+
+## 8.0 Rehearsal — FREEZE-06 (2026-09-18)
+
+Primera corrida del harness attachado sobre hardware real con el instrumento entregado. **Resultado: PASS en las tres fases internas.**
+
+| Campo | Valor |
+|---|---|
+| Instrumento | `apps/pos_app/integration_test/onb1_10_founder_pilot_q80_e2e_test.dart` del commit `9644085` |
+| Target | base de aceptación dedicada, recreada desde cero para esta corrida |
+| attemptId | `c868ae10-c377-4e70-85e8-43df3b0a6ab7` (el mismo en las tres fases) |
+| Recibos | `setup` con `testPrint: accepted`; `offline` con `httpRequests: 0`; `reconnect` con `backendStatus: PASS` |
+| Confirmación independiente | `attempt.status = PASS`, `session.lifecycleState = ACTIVATED`, y los diez checks de activación en `PASS` (leídos del backend, no del harness) |
+| Ticket físico | COMPROBANTE DE VENTA, NO RECAUDA IVA / IVA 0, RUC del emisor presente, 80 mm sin truncamiento |
+| Confirmación visual | reportada por el operador en el dispositivo; el harness declara `visualConfirmation: not-claimed` y no la infiere |
+| RUC del emisor | presencia registrada y hash `46cef85fa3720cb8a1dee8b02aa4b59ab5bab3c1e116f0763759564d20581841`; el valor crudo no se persiste |
+
+**Salvedad de fidelidad del entorno (decidida por el operador):** el target de esta corrida se aprovisionó con **69 migraciones** mientras el árbol del release contiene **70**. El `dist/migrations` que lee el runner estaba compilado a las 08:35 y `1809060000000-AlignInvoiceTenantPolicyPredicate.ts` llegó al `src` a las 11:14, así que esa migración se omitió en silencio. El defecto estaba en el script de aprovisionamiento, no en el repositorio: `apps/admin_backend/scripts/verify-schema-build.sh` compila antes de migrar. El script ya reconstruye y se niega a migrar si los conteos de origen y compilados no coinciden (probado aplicando 70/70). Por lo tanto **esta corrida es válida para el ciclo de vida de activación que ejercita, pero no se tomó sobre un entorno idéntico al árbol del release**; la cohorte debe correr con el camino corregido.
+
+El intento previo sobre otro target falló y lo consumió: la fase `offline` agotó el timeout de 60 s con el dispositivo **dormido** (`mWakefulness=Asleep`). Con la pantalla despierta y timeout extendido, la corrida completa tardó 16 s.
 
 ## 8.1 Run Summary
 
