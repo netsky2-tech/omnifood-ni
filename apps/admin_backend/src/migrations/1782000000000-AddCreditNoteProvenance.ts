@@ -185,8 +185,48 @@ export class AddCreditNoteProvenance1782000000000 implements MigrationInterface 
     queryRunner: QueryRunner,
     tableName: string,
   ): Promise<void> {
+    // The RLS predicate depends on the tenant_id column's actual type, which
+    // differs between environments: production declares tenant_id as uuid,
+    // while the DB test fixture (and older schemas) declare it as varchar.
+    // No single predicate form is both valid and index-friendly for both
+    // column types:
+    //
+    // | predicate form                                  | on varchar | on uuid |
+    // | ----------------------------------------------- | ---------- | ------- |
+    // | tenant_id = current_setting('app.tenant_id', true)  | valid      | ERROR: operator does not exist |
+    // | tenant_id = current_setting('app.tenant_id', true)::uuid | ERROR: operator does not exist | valid, keeps the index |
+    // | tenant_id::text = current_setting('app.tenant_id', true) | valid      | valid, but the index stops restricting rows |
+    //
+    // So the column type is read from the catalog before emitting policies:
+    // a wrong-form predicate would either break the migration outright or
+    // silently degrade tenant filtering to a post-scan Filter.
+    const columns = (await queryRunner.query(
+      `
+      SELECT data_type
+      FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = $1
+        AND column_name = 'tenant_id'
+    `,
+      [tableName],
+    )) as Array<{ data_type: string }>;
+    const dataType = columns[0]?.data_type;
+    if (dataType === undefined) {
+      throw new Error(
+        `Table '${tableName}' has no tenant_id column; tenant policies must not be emitted without knowing the column type`,
+      );
+    }
     const predicate =
-      "tenant_id::text = current_setting('app.tenant_id', true)";
+      dataType === 'uuid'
+        ? "tenant_id = current_setting('app.tenant_id', true)::uuid"
+        : dataType === 'character varying' || dataType === 'text'
+          ? "tenant_id::text = current_setting('app.tenant_id', true)"
+          : undefined;
+    if (predicate === undefined) {
+      throw new Error(
+        `Table '${tableName}' has unsupported tenant_id column type '${dataType}'; refusing to emit tenant policies with a type-inappropriate predicate`,
+      );
+    }
     await queryRunner.query(`
       ALTER TABLE ${tableName} ENABLE ROW LEVEL SECURITY;
       ALTER TABLE ${tableName} FORCE ROW LEVEL SECURITY;
