@@ -4,11 +4,22 @@ import { AddBatch6bCostingLifecycle1785000000000 } from './1785000000000-AddBatc
 describe('AddBatch6bCostingLifecycle1785000000000', () => {
   const migration = new AddBatch6bCostingLifecycle1785000000000();
 
-  const createQueryRunner = () => {
+  // The migration resolves one predicate per guarded table through the
+  // shared type-aware resolver, which reads each tenant_id column type from
+  // information_schema. The stub answers with the declared data_type; a raw
+  // rows array mirrors what PostgresQueryRunner.query returns at runtime.
+  const createQueryRunner = (
+    tenantIdDataType: string = 'character varying',
+  ) => {
     const queries: string[] = [];
     const queryRunner = {
       query: jest.fn((sql: string): Promise<QueryResult> => {
         queries.push(sql);
+        if (sql.includes('information_schema.columns')) {
+          return Promise.resolve([
+            { data_type: tenantIdDataType },
+          ]) as unknown as Promise<QueryResult>;
+        }
         return Promise.resolve(new QueryResult());
       }),
     } as unknown as QueryRunner;
@@ -73,5 +84,25 @@ describe('AddBatch6bCostingLifecycle1785000000000', () => {
     expect(sql).toContain('DROP TABLE IF EXISTS kardex_correction');
     expect(sql).toContain('DROP TABLE IF EXISTS kardex_recalculate_queue');
     expect(sql).toContain('DROP COLUMN IF EXISTS estado_costeo');
+  });
+
+  it('emits the setting-cast predicate for both guarded tables when tenant_id is already uuid (partial-ledger re-run)', async () => {
+    // A partial-ledger re-run happens after later slices converted the
+    // columns to uuid; each table resolves its own predicate, and the
+    // recreated policies must use the setting-cast form.
+    const { queryRunner, queries } = createQueryRunner('uuid');
+
+    await migration.up(queryRunner);
+
+    const sql = queries.join('\n');
+
+    for (const tableName of ['kardex_correction', 'kardex_recalculate_queue']) {
+      expect(sql).toContain(
+        `CREATE POLICY ${tableName === 'kardex_correction' ? 'kardex_correction_tenant_isolation' : 'kardex_queue_tenant_isolation'} ON ${tableName}\n            FOR ALL\n            USING (tenant_id = current_setting('app.tenant_id', true)::uuid)\n            WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);`,
+      );
+    }
+    expect(sql).not.toContain(
+      "tenant_id::text = current_setting('app.tenant_id', true)",
+    );
   });
 });

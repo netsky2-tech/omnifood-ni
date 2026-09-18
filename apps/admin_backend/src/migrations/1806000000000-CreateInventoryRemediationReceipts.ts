@@ -1,4 +1,5 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
+import { resolveTenantRlsPredicate } from '../core/database/tenant-rls-policy';
 
 export class CreateInventoryRemediationReceipts1806000000000 implements MigrationInterface {
   name = 'CreateInventoryRemediationReceipts1806000000000';
@@ -32,7 +33,19 @@ export class CreateInventoryRemediationReceipts1806000000000 implements Migratio
         ON inventory_remediation_receipts (tenant_id, source_inventory_receipt_id);
       CREATE INDEX IF NOT EXISTS idx_inventory_remediation_receipts_recipe_version
         ON inventory_remediation_receipts (tenant_id, recipe_version_id);
+    `);
 
+    // The predicate form must match the tenant_id column's CURRENT type: a
+    // partial-ledger re-run happens after later slices converted the column
+    // to uuid, and a hardcoded bare compare would fail with
+    // "operator does not exist: uuid = text". Resolved after the CREATE TABLE
+    // above, so the column exists in a fresh build too.
+    const tenantPredicate = await resolveTenantRlsPredicate(
+      queryRunner,
+      'inventory_remediation_receipts',
+    );
+
+    await queryRunner.query(`
       ALTER TABLE inventory_remediation_receipts ENABLE ROW LEVEL SECURITY;
       ALTER TABLE inventory_remediation_receipts FORCE ROW LEVEL SECURITY;
 
@@ -45,7 +58,7 @@ export class CreateInventoryRemediationReceipts1806000000000 implements Migratio
             AND policyname = 'remediation_receipts_select'
         ) THEN
           CREATE POLICY remediation_receipts_select ON inventory_remediation_receipts
-            FOR SELECT USING (tenant_id = current_setting('app.tenant_id', true));
+            FOR SELECT USING (${tenantPredicate});
         END IF;
         IF NOT EXISTS (
           SELECT 1 FROM pg_policies
@@ -54,7 +67,7 @@ export class CreateInventoryRemediationReceipts1806000000000 implements Migratio
             AND policyname = 'remediation_receipts_insert'
         ) THEN
           CREATE POLICY remediation_receipts_insert ON inventory_remediation_receipts
-            FOR INSERT WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+            FOR INSERT WITH CHECK (${tenantPredicate});
         END IF;
       END;
       $$;
