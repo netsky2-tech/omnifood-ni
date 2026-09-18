@@ -90,12 +90,14 @@ describe('SalesReportsService — America/Managua Business Day Boundaries Regres
     const saleC2 = new Date('2026-09-19T06:00:00.000Z'); // 00:00:00 next day local
 
     // C1 is in day 18, NOT day 19
+    expect(saleC1.getTime()).toBeGreaterThanOrEqual(day18Start.getTime());
     expect(saleC1.getTime()).toBeLessThanOrEqual(day18End.getTime());
     expect(saleC1.getTime()).toBeLessThan(day19Start.getTime());
 
     // C2 is in day 19, NOT day 18
     expect(saleC2.getTime()).toBeGreaterThan(day18End.getTime());
     expect(saleC2.getTime()).toBeGreaterThanOrEqual(day19Start.getTime());
+    expect(saleC2.getTime()).toBeLessThanOrEqual(day19End.getTime());
   });
 
   it('Caso D (Month end) partitions 23:30 Aug 31 into August and 00:30 Sep 1 into September', () => {
@@ -108,11 +110,13 @@ describe('SalesReportsService — America/Managua Business Day Boundaries Regres
     const saleD1 = new Date('2026-09-01T05:30:00.000Z'); // Aug 31 23:30 local
     const saleD2 = new Date('2026-09-01T06:30:00.000Z'); // Sep 1 00:30 local
 
+    expect(saleD1.getTime()).toBeGreaterThanOrEqual(augStart.getTime());
     expect(saleD1.getTime()).toBeLessThanOrEqual(augEnd.getTime());
     expect(saleD1.getTime()).toBeLessThan(sepStart.getTime());
 
     expect(saleD2.getTime()).toBeGreaterThan(augEnd.getTime());
     expect(saleD2.getTime()).toBeGreaterThanOrEqual(sepStart.getTime());
+    expect(saleD2.getTime()).toBeLessThanOrEqual(sepEnd.getTime());
   });
 
   it('Caso E (Year end) partitions 23:30 Dec 31 into 2026 and 00:30 Jan 1 into 2027', () => {
