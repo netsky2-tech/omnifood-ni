@@ -36,9 +36,9 @@ export function Header() {
           <div className="flex flex-col min-w-0">
             <h2
               className="text-base sm:text-lg font-semibold text-foreground truncate max-w-[180px] xs:max-w-[220px] sm:max-w-xs md:max-w-md"
-              title={tenant?.name ?? "OmniCommerce"}
+              title={tenant?.name ?? "NHILOS"}
             >
-              {tenant?.name ?? "OmniCommerce"}
+              {tenant?.name ?? "NHILOS"}
             </h2>
             {tenant?.ruc && (
               <span
