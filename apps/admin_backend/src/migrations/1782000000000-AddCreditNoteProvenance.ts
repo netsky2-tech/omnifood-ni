@@ -185,8 +185,23 @@ export class AddCreditNoteProvenance1782000000000 implements MigrationInterface 
     queryRunner: QueryRunner,
     tableName: string,
   ): Promise<void> {
-    const predicate =
-      "tenant_id::text = current_setting('app.tenant_id', true)";
+    // The predicate is chosen per table: a single hardcoded string cannot serve
+    // tables whose tenant_id columns have different types (invoices is uuid,
+    // invoice_items and inventory_kardex are still varchar). Because this
+    // method drops each policy before recreating it, a re-run of this migration
+    // would clobber a later migration's fix if the predicate did not match the
+    // actual column type.
+    const predicates: Record<string, string> = {
+      invoices: "tenant_id = current_setting('app.tenant_id', true)::uuid",
+      invoice_items: "tenant_id::text = current_setting('app.tenant_id', true)",
+      inventory_kardex: "tenant_id::text = current_setting('app.tenant_id', true)",
+    };
+    const predicate = predicates[tableName];
+    if (predicate === undefined) {
+      throw new Error(
+        `No tenant RLS predicate mapped for table '${tableName}'; refusing to emit tenant policies without a type-appropriate predicate`,
+      );
+    }
     await queryRunner.query(`
       ALTER TABLE ${tableName} ENABLE ROW LEVEL SECURITY;
       ALTER TABLE ${tableName} FORCE ROW LEVEL SECURITY;

@@ -70,6 +70,27 @@
 # the changing unit must drop and recreate the view. Tracking it here is what
 # stops that blocker from being rediscovered during a migration.
 #
+# Why the predicate-form assertion is scoped to uuid columns
+# ----------------------------------------------------------
+# A policy guarding a tenant column whose predicate casts the COLUMN to text
+# loses its index: `tenant_id::text = current_setting(...)` deparses to a
+# Filter rather than an Index Cond, so the index stops restricting rows. On a
+# uuid column the correct form casts the SETTING instead:
+# `tenant_id = current_setting('app.tenant_id', true)::uuid`.
+#
+# That assertion is only meaningful on a uuid column, and the scope is not a
+# convenience. PostgreSQL deparses an IMPLICIT varchar -> text coercion as an
+# explicit cast, so on a varchar column every working policy reads as
+# `(tenant_id)::text = ...` whether or not its author wrote the cast: a bare
+# compare and a hand-written cast are indistinguishable in pg_policies.
+# Asserting the form on a varchar column would flag the 94 policies that are
+# waiting for their column to change, for a reason that does not exist.
+# Scoped to uuid columns the assertion is exact: it catches a predicate left
+# behind in the text form after its column already became uuid, which is a
+# silent index loss rather than a loud error. Note that `::text` also appears
+# inside the CORRECT form, in current_setting('app.tenant_id'::text, true), so
+# the discriminator targets the column-side cast specifically.
+#
 # Why the migration run uses a restricted role
 # --------------------------------------------
 # Running the migrations as a superuser made this harness blind to privilege
@@ -186,7 +207,8 @@ rls_policies="$(mktemp)"
 rls_policy_exprs_missing_tenant="$(mktemp)"
 tenant_type_manifest="$(mktemp)"
 tenant_type_actual="$(mktemp)"
-trap 'rm -f "${entities}" "${applied}" "${entity_columns}" "${db_columns}" "${forced_rls_tables}" "${rls_policies}" "${rls_policy_exprs_missing_tenant}" "${tenant_type_manifest}" "${tenant_type_actual}"' EXIT
+tenant_uuid_cast_issues="$(mktemp)"
+trap 'rm -f "${entities}" "${applied}" "${entity_columns}" "${db_columns}" "${forced_rls_tables}" "${rls_policies}" "${rls_policy_exprs_missing_tenant}" "${tenant_type_manifest}" "${tenant_type_actual}" "${tenant_uuid_cast_issues}"' EXIT
 
 # Entities declare their table two ways: @Entity('name') and
 # @Entity({ name: 'name' }). Missing the second form would silently under-count
@@ -447,6 +469,15 @@ collect_tenant_type_invariants() {
   sed -e 's/#.*//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e '/^$/d' "${MANIFEST_TENANT_TYPES}" \
     | sort -u > "${tenant_type_manifest}"
 
+  # Predicate form, scoped to columns that are ALREADY uuid. See the header:
+  # on a varchar column the deparse cannot distinguish a bare compare from a
+  # hand-written text cast, so the assertion would be meaningless there.
+  # Each non-null expression is judged independently. A violation is an
+  # expression that omits the tenant setting, never casts it to uuid, or casts
+  # the column to text.
+  psql_admin -d "${SCRATCH_DB}" -tAc \
+    "SELECT p.tablename || '|' || p.policyname || '|' || p.cmd || '|' || e.expr_kind FROM pg_policies p JOIN information_schema.columns c ON c.table_schema = 'public' AND c.table_name = p.tablename AND c.column_name = 'tenant_id' AND c.data_type = 'uuid' CROSS JOIN LATERAL (VALUES ('USING', p.qual), ('WITH CHECK', p.with_check)) AS e(expr_kind, expr) WHERE p.schemaname = 'public' AND e.expr IS NOT NULL AND ( position('app.tenant_id' in e.expr) = 0 OR position('::uuid' in e.expr) = 0 OR e.expr ~ 'tenant_id[[:space:]]*\)?[[:space:]]*::text' ) ORDER BY 1" \
+    | sed '/^[[:space:]]*$/d' | sort -u > "${tenant_uuid_cast_issues}"
 }
 
 report_tenant_type_diff() {
@@ -460,10 +491,13 @@ report_tenant_type_diff() {
   stale_tenant_entries="$(comm -23 "${tenant_type_manifest}" "${tenant_type_actual}")"
   stale_tenant_count="$(printf '%s' "${stale_tenant_entries}" | grep -c . || true)"
 
+  uuid_cast_issue_count="$(wc -l < "${tenant_uuid_cast_issues}" | tr -d ' ')"
+
   printf 'non-uuid tenant columns: %s\n' "$(wc -l < "${tenant_type_actual}" | tr -d ' ')"
   printf 'tenant-type manifest   : %s\n' "$(wc -l < "${tenant_type_manifest}" | tr -d ' ')"
   printf 'unlisted (new drift)   : %s\n' "${unlisted_tenant_count}"
   printf 'stale manifest entries : %s\n' "${stale_tenant_count}"
+  printf 'uuid col text casts    : %s\n' "${uuid_cast_issue_count}"
 
   if [ -n "${unlisted_tenant_cols}" ]; then
     printf '\n%s\n' "Tenant columns that are not uuid and are missing from scripts/schema-tenant-type-manifest.txt:"
@@ -472,6 +506,10 @@ report_tenant_type_diff() {
   if [ -n "${stale_tenant_entries}" ]; then
     printf '\n%s\n' "Tenant-type manifest entries matching no non-uuid tenant column (delete the line if the column was fixed):"
     printf '%s\n' "${stale_tenant_entries}" | sed 's/^/  - /'
+  fi
+  if [ "${uuid_cast_issue_count}" -ne 0 ]; then
+    printf '\n%s\n' "Policy expressions on a uuid tenant column that cast the column to text, or never cast the setting to uuid (table | policy | command | expression):"
+    sed 's/^/  - /' "${tenant_uuid_cast_issues}"
   fi
 }
 
@@ -506,6 +544,9 @@ if [ "${unlisted_tenant_count}" -ne 0 ]; then
 fi
 if [ "${stale_tenant_count}" -ne 0 ]; then
   fail "FAIL: ${stale_tenant_count} tenant-type manifest entry(ies) match no non-uuid tenant column - delete the line if the column was fixed (see above)."
+fi
+if [ "${uuid_cast_issue_count}" -ne 0 ]; then
+  fail "FAIL: ${uuid_cast_issue_count} policy expression(s) on a uuid tenant column still cast the column to text or omit the uuid cast on the setting (see above)."
 fi
 
 printf '%s\n' "PASS (scenario 1): the migration set builds every entity table and column from an empty database, and no forced-RLS table is left deny-all without a tenant-scoped policy."
@@ -566,6 +607,9 @@ fi
 if [ "${stale_tenant_count}" -ne 0 ]; then
   fail "FAIL: ${stale_tenant_count} tenant-type manifest entry(ies) match no non-uuid tenant column after the partial-ledger re-run (see above)."
 fi
+if [ "${uuid_cast_issue_count}" -ne 0 ]; then
+  fail "FAIL: ${uuid_cast_issue_count} policy expression(s) on a uuid tenant column cast the column to text or omit the uuid cast after the partial-ledger re-run (see above)."
+fi
 
 printf '%s\n' "PASS (scenario 2): the migration set re-applies cleanly over an existing schema with a partial ledger."
-printf '%s\n' "PASS: the migration set builds every entity table and column from an empty database, survives a partial-ledger re-run, and leaves no forced-RLS table deny-all, no defined policy expression without the app.tenant_id predicate, and no non-uuid tenant column outside the reviewed manifest."
+printf '%s\n' "PASS: the migration set builds every entity table and column from an empty database, survives a partial-ledger re-run, and leaves no forced-RLS table deny-all, no defined policy expression without the app.tenant_id predicate, no non-uuid tenant column outside the reviewed manifest, and no predicate on a uuid tenant column left in the text form."

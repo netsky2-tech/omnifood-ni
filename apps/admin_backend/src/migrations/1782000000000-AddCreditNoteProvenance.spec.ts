@@ -94,6 +94,33 @@ describe('AddCreditNoteProvenance1782000000000', () => {
     ]) {
       expect(sql).toContain(fragment);
     }
+
+    // The invoices tenant_id column is uuid, so its policies must use the
+    // index-friendly uuid predicate instead of the text cast: a single
+    // hardcoded text predicate would make PostgreSQL evaluate the tenant check
+    // as a Filter instead of an Index Cond. These assertions fail if anyone
+    // reverts invoices to the text form (which a re-run of this migration would
+    // otherwise silently do, clobbering the later predicate-alignment fix).
+    const uuidPredicate =
+      "tenant_id = current_setting('app.tenant_id', true)::uuid";
+    expect(sql).toContain(uuidPredicate);
+    expect(sql).toContain(
+      `CREATE POLICY credit_note_invoices_tenant_select\n            ON invoices FOR SELECT USING (${uuidPredicate});`,
+    );
+    expect(sql).toContain(
+      `CREATE POLICY credit_note_invoices_tenant_insert\n            ON invoices FOR INSERT WITH CHECK (${uuidPredicate});`,
+    );
+    expect(sql).toContain(
+      `CREATE POLICY credit_note_invoices_tenant_update\n            ON invoices FOR UPDATE USING (${uuidPredicate}) WITH CHECK (${uuidPredicate});`,
+    );
+    expect(sql).toContain(
+      `CREATE POLICY credit_note_invoices_tenant_delete\n            ON invoices FOR DELETE USING (${uuidPredicate});`,
+    );
+    const invoicesRlsSection = sql.slice(
+      sql.indexOf('ALTER TABLE invoices ENABLE ROW LEVEL SECURITY'),
+      sql.indexOf('ALTER TABLE invoice_items ENABLE ROW LEVEL SECURITY'),
+    );
+    expect(invoicesRlsSection).not.toContain('tenant_id::text');
   });
 
   it('rolls back migration-owned provenance schema objects', async () => {
