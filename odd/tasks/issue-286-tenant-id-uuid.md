@@ -221,6 +221,20 @@ The 43 varchar tables plus `invoices` (already `uuid`, but its predicates need r
 
 Totals: 44 tables, 98 policies touched. 98 + the 4 that need no change = 102. ✔
 
+### Unit 0b — task breakdown (the prerequisite from Decision 2)
+
+The guard already exists once, as `bindTenantContext()` / `resolveTenantContextId()` in `core/database/tenant-transaction.ts`, and it throws before any SQL is issued. The work is adoption, not invention. Split it because the foundation is independently reviewable and everything else depends on its shape.
+
+| Task | What | Files |
+| --- | --- | --- |
+| **0b-1** | Widen the helper so both an `EntityManager` and a `QueryRunner` can bind (some sites hold a query runner, not a manager), and map `TenantContextRequiredError` to **400** in `AllExceptionsFilter`, which today sends every non-`HttpException` to 500. Without the mapping the guard would trade an opaque SQL error for an opaque 500. | `core/database/tenant-transaction.ts`, `main.ts`, plus specs |
+| **0b-2** | Delete the three private unguarded copies (`fulfillment-retention.service.ts:29`, `fulfillment-rollout.service.ts:86`, `invoices.service.ts:1179`) and call the shared helper. | 3 services |
+| **0b-3** | Route the remaining raw writers through the shared helper, one blank-rejection test per touched service. The exposed set includes `identity/guards/sync-transport.guard.ts:99` (raw device claim on a sync route), `inventory/production.service.ts:138`, `inventory/inventory-purchase.service.ts:128,274`, `inventory/services/product-inventory-mapping.service.ts:24,49`, `sales/services/inbound-sync.service.ts:235`, `identity/services/tenant-capability.service.ts:88`, `fulfillment/services/tenant-topology-revision.service.ts:104`, and `identity/services/device-sync-credential.service.ts:106,245`. Split by module group if the review size demands it. | ~10 files |
+
+Already guarded, so no change: `catalog.service.ts:102` and `product.service.ts:42` (a local `requireTenant`), `identity/human-authorization/rls/ohac-tenant-transaction.ts:37`, and `device-sync-credential.service.ts:400,448,503`.
+
+**Done condition for 0b:** every writer of `app.tenant_id` passes through `resolveTenantContextId` before any SQL, and a blank id produces a 400 rather than a deferred database error. Then Phase 2 may touch the 94 policies.
+
 ### The size arithmetic, stated plainly
 
 At the repository's existing style each policy costs a one-line `DROP POLICY IF EXISTS` plus a ~16-line `DO $$ ... IF NOT EXISTS ... CREATE POLICY ... $$` block. With a mirrored `down()` that is roughly **34 review-facing lines per policy**.
