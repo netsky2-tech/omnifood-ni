@@ -179,7 +179,9 @@ Para cada run, capturar evidencia física/digital:
 >
 > **Riesgo residual aceptado:** la salida física por run no se reverifica de forma independiente en la cohorte. Una regresión de impresión introducida entre el rehearsal y una corrida de cohorte no sería detectada por la evidencia de esa corrida.
 >
-> **Opción pendiente de decisión aparte:** si el papel no debe consumirse en absoluto, el instrumento necesitaría un modo que satisfaga los checks de impresión sin salida física. Es una reducción de alcance de la misma clase que este cambio y **no** se asume aquí.
+> **Reducción aplicada (2026-09-18, decidida por el operador porque no puede seguir consumiendo papel).** La cohorte corre el harness con `PILOT_PRINTER_MODE=simulated`: el adaptador simulado reporta impresora lista y acepta las órdenes de impresión **sin producir salida**, así que una corrida completa no consume papel. En consecuencia `PRINTER_AVAILABLE`, `TEST_PRINT` y `SALE_RECEIPT_PATH` quedan satisfechos **por simulación** y en la cohorte **no son evidencia sobre hardware**. La evidencia de impresión física sigue siendo el rehearsal de FREEZE-06 (§8.0), que es la configuración con la que va a operar SOHO. Cada recibo de fase incluye `printerMode`, de modo que una impresión simulada no puede confundirse con una física. El modo por defecto sigue siendo `real`; una corrida sin `PILOT_PRINTER_MODE` imprime y consume papel como antes.
+>
+> **Salvedad sobre la métrica principal.** El TTFSS medido con impresora simulada **excluye la latencia de impresión física**. Base de magnitud, medida en el rehearsal de FREEZE-06: las dos operaciones de impresión abarcaron unos 18 s de tiempo de dispositivo (12:19:24 y 12:19:42), contra un elapsed de activación de 320 201 ms (~5,3 min) reportado por el recibo de reconexión. Es decir, del orden del 5–6 % del span de esa corrida, y el TTFSS de la cohorte debe leerse como levemente optimista respecto de la operación real.
 
 | Evidencia | Run 1 | Run 2 | Run 3 | Run 4 | Run 5 |
 |---|---|---|---|---|---|
