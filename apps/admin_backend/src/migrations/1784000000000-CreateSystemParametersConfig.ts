@@ -54,10 +54,21 @@ export class CreateSystemParametersConfig1784000000000 implements MigrationInter
 
     await queryRunner.query(`
       DROP POLICY IF EXISTS sys_parametros_config_tenant_isolation ON sys_parametros_config;
-      CREATE POLICY sys_parametros_config_tenant_isolation ON sys_parametros_config
-        FOR ALL
-        USING (tenant_id = current_setting('app.tenant_id', true))
-        WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = 'sys_parametros_config'
+            AND policyname = 'sys_parametros_config_tenant_isolation'
+        ) THEN
+          CREATE POLICY sys_parametros_config_tenant_isolation ON sys_parametros_config
+            FOR ALL
+            USING (tenant_id = current_setting('app.tenant_id', true))
+            WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+        END IF;
+      END;
+      $$;
     `);
 
     // Active configuration view with security_invoker = true to respect RLS

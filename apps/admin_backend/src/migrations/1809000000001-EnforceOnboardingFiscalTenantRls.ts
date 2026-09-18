@@ -72,9 +72,19 @@ export class EnforceOnboardingFiscalTenantRls1809000000001 implements MigrationI
         await runner.query(
           `DROP POLICY IF EXISTS ${quoteIdentifier(this.policyName(table, policy.command))} ON ${tableId}`,
         );
+        // PostgreSQL has no `CREATE POLICY IF NOT EXISTS`, so guard on the catalog.
         await runner.query(
-          `CREATE POLICY ${quoteIdentifier(this.policyName(table, policy.command))} ON ${tableId}
-      ${policy.expression}`,
+          `DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = current_schema()
+          AND tablename = '${table}'
+          AND policyname = '${this.policyName(table, policy.command)}'
+      ) THEN
+        CREATE POLICY ${quoteIdentifier(this.policyName(table, policy.command))} ON ${tableId}
+      ${policy.expression};
+      END IF;
+      END $$;`,
         );
       }
     }

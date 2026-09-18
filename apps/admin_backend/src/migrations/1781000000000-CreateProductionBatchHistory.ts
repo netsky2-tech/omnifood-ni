@@ -52,29 +52,66 @@ export class CreateProductionBatchHistory1781000000000 implements MigrationInter
       ALTER TABLE production_batch_history FORCE ROW LEVEL SECURITY
     `);
 
+    // PostgreSQL has no `CREATE POLICY IF NOT EXISTS`, so guard on the catalog.
     await queryRunner.query(`
-      CREATE POLICY production_batch_history_tenant_isolation ON production_batch_history
-      FOR SELECT
-      USING (tenant_id = current_setting('app.tenant_id', true))
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = 'production_batch_history'
+            AND policyname = 'production_batch_history_tenant_isolation'
+        ) THEN
+          CREATE POLICY production_batch_history_tenant_isolation ON production_batch_history
+          FOR SELECT
+          USING (tenant_id = current_setting('app.tenant_id', true));
+        END IF;
+      END $$;
     `);
 
     await queryRunner.query(`
-      CREATE POLICY production_batch_history_tenant_insert ON production_batch_history
-      FOR INSERT
-      WITH CHECK (tenant_id = current_setting('app.tenant_id', true))
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = 'production_batch_history'
+            AND policyname = 'production_batch_history_tenant_insert'
+        ) THEN
+          CREATE POLICY production_batch_history_tenant_insert ON production_batch_history
+          FOR INSERT
+          WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+        END IF;
+      END $$;
     `);
 
     await queryRunner.query(`
-      CREATE POLICY production_batch_history_tenant_update ON production_batch_history
-      FOR UPDATE
-      USING (tenant_id = current_setting('app.tenant_id', true))
-      WITH CHECK (tenant_id = current_setting('app.tenant_id', true))
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = 'production_batch_history'
+            AND policyname = 'production_batch_history_tenant_update'
+        ) THEN
+          CREATE POLICY production_batch_history_tenant_update ON production_batch_history
+          FOR UPDATE
+          USING (tenant_id = current_setting('app.tenant_id', true))
+          WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+        END IF;
+      END $$;
     `);
 
     await queryRunner.query(`
-      CREATE POLICY production_batch_history_tenant_delete ON production_batch_history
-      FOR DELETE
-      USING (tenant_id = current_setting('app.tenant_id', true))
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = 'production_batch_history'
+            AND policyname = 'production_batch_history_tenant_delete'
+        ) THEN
+          CREATE POLICY production_batch_history_tenant_delete ON production_batch_history
+          FOR DELETE
+          USING (tenant_id = current_setting('app.tenant_id', true));
+        END IF;
+      END $$;
     `);
 
     await queryRunner.query(`

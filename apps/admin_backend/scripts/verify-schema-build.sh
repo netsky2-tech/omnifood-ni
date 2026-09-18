@@ -7,8 +7,10 @@
 #               every column the entities declare exists in those tables.
 #   Scenario 2: simulate a pre-existing environment — the same database already
 #               holds every table, but the migrations ledger has no rows for the
-#               bootstrap migrations and the three previously non-idempotent
-#               creates. Re-running the migration set must succeed (no
+#               bootstrap migrations, the three previously non-idempotent
+#               creates, and the sixteen migrations whose CREATE POLICY
+#               statements were guarded for re-application (issue #285).
+#               Re-running the migration set must succeed (no
 #               "already exists" failure) and leave every entity table present.
 #
 # Why this exists
@@ -19,6 +21,28 @@
 # gap detectable instead of invisible. The same blind spot existed one level
 # down: a table can exist while the columns its entity declares do not, so the
 # comparison is repeated per column.
+#
+# Why the RLS invariants exist
+# ----------------------------
+# A table can exist with every column in place and still be unusable: when
+# FORCE ROW LEVEL SECURITY is set but no policy was created (for example
+# because a migration guard looked up the WRONG policy name and silently
+# skipped creation), every SELECT, INSERT, UPDATE and DELETE returns zero
+# affected rows forever. Two invariants catch that failure mode, in both
+# scenarios:
+#   1. No forced-RLS base table in public is left deny-all: every table with
+#      relforcerowsecurity = true must own at least one row in pg_policies.
+#   2. Every expression a policy on such a table actually defines must
+#      reference app.tenant_id: if pg_policies.qual is not null it must
+#      contain it (SELECT, DELETE, UPDATE and the USING half of FOR ALL), and
+#      if pg_policies.with_check is not null it must contain it (INSERT,
+#      UPDATE and the WITH CHECK half of FOR ALL). A policy that defines only
+#      one of the two is judged on that one alone. This is deliberately
+#      stricter than an OR across both expressions: a FOR ALL policy written
+#      as USING (true) WITH CHECK (tenant match) would pass an OR check while
+#      allowing every tenant's rows to be read.
+# The counts are printed with the other comparisons so a vacuous
+# zero-tables-and-zero-policies result is visible instead of passing silently.
 #
 # Why the migration run uses a restricted role
 # --------------------------------------------
@@ -124,7 +148,10 @@ entities="$(mktemp)"
 applied="$(mktemp)"
 entity_columns="$(mktemp)"
 db_columns="$(mktemp)"
-trap 'rm -f "${entities}" "${applied}" "${entity_columns}" "${db_columns}"' EXIT
+forced_rls_tables="$(mktemp)"
+rls_policies="$(mktemp)"
+rls_policy_exprs_missing_tenant="$(mktemp)"
+trap 'rm -f "${entities}" "${applied}" "${entity_columns}" "${db_columns}" "${forced_rls_tables}" "${rls_policies}" "${rls_policy_exprs_missing_tenant}"' EXIT
 
 # Entities declare their table two ways: @Entity('name') and
 # @Entity({ name: 'name' }). Missing the second form would silently under-count
@@ -326,11 +353,58 @@ report_column_diff() {
   fi
 }
 
+collect_rls_invariants() {
+  # Base tables in public that FORCE ROW LEVEL SECURITY. A table on this list
+  # without a single policy is deny-all: RLS rejects every row.
+  psql_admin -d "${SCRATCH_DB}" -tAc \
+    "SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relforcerowsecurity ORDER BY c.relname" \
+    | sed '/^[[:space:]]*$/d' | sort -u > "${forced_rls_tables}"
+
+  psql_admin -d "${SCRATCH_DB}" -tAc \
+    "SELECT tablename || '|' || policyname FROM pg_policies WHERE schemaname = 'public' ORDER BY 1" \
+    | sed '/^[[:space:]]*$/d' | sort -u > "${rls_policies}"
+
+  # Every expression a policy on a forced-RLS table defines must reference
+  # app.tenant_id. Each non-null expression (pg_policies.qual and
+  # pg_policies.with_check) is judged independently; a policy defining only
+  # one is judged on that one. The expression text comes straight from
+  # pg_policies, so the comparison sees what the database will actually
+  # enforce, not what the migration intended. Each violating row carries the
+  # table, policy name, command and which expression lacks the predicate.
+  psql_admin -d "${SCRATCH_DB}" -tAc \
+    "SELECT p.tablename || '|' || p.policyname || '|' || p.cmd || '|' || e.expr_kind FROM pg_policies p JOIN pg_class c ON c.relname = p.tablename JOIN pg_namespace n ON n.oid = c.relnamespace CROSS JOIN LATERAL (VALUES ('USING', p.qual), ('WITH CHECK', p.with_check)) AS e(expr_kind, expr) WHERE p.schemaname = 'public' AND n.nspname = 'public' AND c.relkind = 'r' AND c.relforcerowsecurity AND e.expr IS NOT NULL AND position('app.tenant_id' in e.expr) = 0 ORDER BY 1" \
+    | sed '/^[[:space:]]*$/d' | sort -u > "${rls_policy_exprs_missing_tenant}"
+}
+
+report_rls_diff() {
+  # Forced-RLS tables whose table name never appears as a policy owner: the
+  # deny-all set. comm needs both sides sorted, hence the cut | sort.
+  deny_all_tables="$(comm -23 "${forced_rls_tables}" <(cut -d'|' -f1 "${rls_policies}" | sort -u))"
+  deny_all_count="$(printf '%s' "${deny_all_tables}" | grep -c . || true)"
+  missing_tenant_count="$(wc -l < "${rls_policy_exprs_missing_tenant}" | tr -d ' ')"
+
+  printf 'forced-RLS tables      : %s\n' "$(wc -l < "${forced_rls_tables}" | tr -d ' ')"
+  printf 'RLS policies           : %s\n' "$(wc -l < "${rls_policies}" | tr -d ' ')"
+  printf 'deny-all tables        : %s\n' "${deny_all_count}"
+  printf 'policy exprs w/o tenant: %s\n' "${missing_tenant_count}"
+
+  if [ -n "${deny_all_tables}" ]; then
+    printf '\n%s\n' "Forced-RLS tables with no policy at all (every query would return zero rows):"
+    printf '%s\n' "${deny_all_tables}" | sed 's/^/  - /'
+  fi
+  if [ "${missing_tenant_count}" -ne 0 ]; then
+    printf '\n%s\n' "Policy expressions on forced-RLS tables that never mention app.tenant_id (table | policy | command | expression):"
+    sed 's/^/  - /' "${rls_policy_exprs_missing_tenant}"
+  fi
+}
+
 printf '\n%s\n' "==> Scenario 1: comparing against the entity declarations"
 collect_tables
 report_diff
 collect_columns
 report_column_diff
+collect_rls_invariants
+report_rls_diff
 
 printf '\n'
 if [ "${migration_status}" -ne 0 ]; then
@@ -342,26 +416,34 @@ fi
 if [ "${missing_column_count}" -ne 0 ]; then
   fail "FAIL: ${missing_column_count} entity column(s) are never created (see above)."
 fi
+if [ "${deny_all_count}" -ne 0 ]; then
+  fail "FAIL: ${deny_all_count} forced-RLS table(s) have no policy at all and would deny every row (see above)."
+fi
+if [ "${missing_tenant_count}" -ne 0 ]; then
+  fail "FAIL: ${missing_tenant_count} policy expression(s) on forced-RLS tables never reference app.tenant_id (see above)."
+fi
 
-printf '%s\n' "PASS (scenario 1): the migration set builds every entity table and column from an empty database."
+printf '%s\n' "PASS (scenario 1): the migration set builds every entity table and column from an empty database, and no forced-RLS table is left deny-all without a tenant-scoped policy."
 
 # ---------------------------------------------------------------------------
 # Scenario 2: a developer database with a partial ledger. The tables already
-# exist, but the migrations ledger has no row for the bootstrap migrations nor
-# for the four creates that used to be non-idempotent (the three CREATE TABLEs
-# and the follow-up RLS migration), so TypeORM re-runs them. Every statement
-# those migrations issue must tolerate the existing schema instead of failing
-# with "already exists".
+# exist, but the migrations ledger has no row for the bootstrap migrations, the
+# four creates that used to be non-idempotent (the three CREATE TABLEs and the
+# follow-up RLS migration), nor for the sixteen migrations whose CREATE POLICY
+# statements were guarded for re-application (issue #285), so TypeORM re-runs
+# them. Every statement those migrations issue must tolerate the existing
+# schema instead of failing with "already exists".
 # ---------------------------------------------------------------------------
 printf '\n%s\n' "==> Scenario 2: re-running against the same database with a partial ledger"
 
-partial_ledger_names="CreateBaseCashierSessions1759000000000,CreateBootstrapIdentityTables1759000000001,CreateBootstrapInventorySalesTables1759000000002,CreateBootstrapExtensions1759000000003,CreateBootstrapLoyaltyTables1759000000004,CreateBootstrapSalesTables1759000000005,AddTenantCapabilityEvent1785000000000,CreateTenantTopologyRevisions1794000000000,AddTenantTopologyRevisionsRls1794000000001,CreateTenantFulfillmentRecords1795000000000"
+partial_ledger_names="CreateBaseCashierSessions1759000000000,CreateBootstrapIdentityTables1759000000001,CreateBootstrapInventorySalesTables1759000000002,CreateBootstrapExtensions1759000000003,CreateBootstrapLoyaltyTables1759000000004,CreateBootstrapSalesTables1759000000005,AddTenantCapabilityEvent1785000000000,CreateTenantTopologyRevisions1794000000000,AddTenantTopologyRevisionsRls1794000000001,CreateTenantFulfillmentRecords1795000000000,CreateCatalogValues1768000000000,CreateInventoryPurchaseDocuments1776000000000,AddDeterministicSyncSequencing1780000000000,AddCreditNoteProvenance1782000000000,CreateSystemParametersConfig1784000000000,CreateProductionBatchHistory1781000000000,AddBatch6bCostingLifecycle1785000000000,CreateProductInventoryMappingVersions1802000000000,CreateInventoryRemediationReceipts1806000000000,CreateDeviceSyncCredentials1807000000000,RepairTenantTopologyRevisions1808000000000,CreateHumanAuthorizationCore1809000000000,EnforceOnboardingFiscalTenantRls1809000000001,CreateHumanAuthorizationRecovery1809010000000,CreateHumanAuthorizationObservability1809020000000,CreateHumanAuthorizationTenantPublicationState1809040000000,CreateHumanAuthorizationPolicySnapshots1809050000000"
 deleted_rows="$(psql_admin -d "${SCRATCH_DB}" -tAc \
   "WITH removed AS (DELETE FROM migrations WHERE name = ANY (string_to_array('${partial_ledger_names}', ',')) RETURNING 1) SELECT count(*) FROM removed" \
   | tr -d ' ')"
-printf 'ledger rows removed    : %s (expected 10)\n' "${deleted_rows}"
-if [ "${deleted_rows}" -ne 10 ]; then
-  fail "FAIL: expected to remove 10 ledger rows to simulate the partial ledger, removed ${deleted_rows}."
+expected_deleted_rows=27
+printf 'ledger rows removed    : %s (expected %s)\n' "${deleted_rows}" "${expected_deleted_rows}"
+if [ "${deleted_rows}" -ne "${expected_deleted_rows}" ]; then
+  fail "FAIL: expected to remove ${expected_deleted_rows} ledger rows to simulate the partial ledger, removed ${deleted_rows}."
 fi
 
 migration2_status=0
@@ -372,6 +454,8 @@ collect_tables
 report_diff
 collect_columns
 report_column_diff
+collect_rls_invariants
+report_rls_diff
 
 printf '\n'
 if [ "${migration2_status}" -ne 0 ]; then
@@ -383,6 +467,12 @@ fi
 if [ "${missing_column_count}" -ne 0 ]; then
   fail "FAIL: ${missing_column_count} entity column(s) are missing after the partial-ledger re-run (see above)."
 fi
+if [ "${deny_all_count}" -ne 0 ]; then
+  fail "FAIL: ${deny_all_count} forced-RLS table(s) lost every policy after the partial-ledger re-run (see above)."
+fi
+if [ "${missing_tenant_count}" -ne 0 ]; then
+  fail "FAIL: ${missing_tenant_count} policy expression(s) on forced-RLS tables lost the app.tenant_id predicate after the partial-ledger re-run (see above)."
+fi
 
 printf '%s\n' "PASS (scenario 2): the migration set re-applies cleanly over an existing schema with a partial ledger."
-printf '%s\n' "PASS: the migration set builds every entity table and column from an empty database and survives a partial-ledger re-run."
+printf '%s\n' "PASS: the migration set builds every entity table and column from an empty database, survives a partial-ledger re-run, and leaves no forced-RLS table deny-all and no defined policy expression without the app.tenant_id predicate."

@@ -38,28 +38,72 @@ export class CreateCatalogValues1768000000000 implements MigrationInterface {
     `);
 
     await queryRunner.query(`
-      CREATE POLICY catalog_values_tenant_select ON catalog_values
-      FOR SELECT
-      USING (tenant_id = current_setting('app.tenant_id', true))
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = 'catalog_values'
+            AND policyname = 'catalog_values_tenant_select'
+        ) THEN
+          CREATE POLICY catalog_values_tenant_select ON catalog_values
+          FOR SELECT
+          USING (tenant_id = current_setting('app.tenant_id', true));
+        END IF;
+      END;
+      $$
     `);
 
     await queryRunner.query(`
-      CREATE POLICY catalog_values_tenant_insert ON catalog_values
-      FOR INSERT
-      WITH CHECK (tenant_id = current_setting('app.tenant_id', true))
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = 'catalog_values'
+            AND policyname = 'catalog_values_tenant_insert'
+        ) THEN
+          CREATE POLICY catalog_values_tenant_insert ON catalog_values
+          FOR INSERT
+          WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+        END IF;
+      END;
+      $$
     `);
 
     await queryRunner.query(`
-      CREATE POLICY catalog_values_tenant_update ON catalog_values
-      FOR UPDATE
-      USING (tenant_id = current_setting('app.tenant_id', true))
-      WITH CHECK (tenant_id = current_setting('app.tenant_id', true))
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = 'catalog_values'
+            AND policyname = 'catalog_values_tenant_update'
+        ) THEN
+          CREATE POLICY catalog_values_tenant_update ON catalog_values
+          FOR UPDATE
+          USING (tenant_id = current_setting('app.tenant_id', true))
+          WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+        END IF;
+      END;
+      $$
     `);
 
     await queryRunner.query(`
-      CREATE POLICY catalog_values_tenant_delete ON catalog_values
-      FOR DELETE
-      USING (tenant_id = current_setting('app.tenant_id', true))
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = 'catalog_values'
+            AND policyname = 'catalog_values_tenant_delete'
+        ) THEN
+          CREATE POLICY catalog_values_tenant_delete ON catalog_values
+          FOR DELETE
+          USING (tenant_id = current_setting('app.tenant_id', true));
+        END IF;
+      END;
+      $$
     `);
   }
 

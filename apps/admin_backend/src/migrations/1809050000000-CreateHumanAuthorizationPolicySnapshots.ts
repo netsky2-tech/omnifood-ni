@@ -95,12 +95,34 @@ export class CreateHumanAuthorizationPolicySnapshots1809050000000 implements Mig
       ALTER TABLE ${tableName} FORCE ROW LEVEL SECURITY;
 
       DROP POLICY IF EXISTS ${tableName}_tenant_select ON ${tableName};
-      CREATE POLICY ${tableName}_tenant_select ON ${tableName}
-        FOR SELECT USING (${tenantPredicate});
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = '${tableName}'
+            AND policyname = '${tableName}_tenant_select'
+        ) THEN
+          CREATE POLICY ${tableName}_tenant_select ON ${tableName}
+            FOR SELECT USING (${tenantPredicate});
+        END IF;
+      END;
+      $$;
 
       DROP POLICY IF EXISTS ${tableName}_tenant_insert ON ${tableName};
-      CREATE POLICY ${tableName}_tenant_insert ON ${tableName}
-        FOR INSERT WITH CHECK (${tenantPredicate});
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = '${tableName}'
+            AND policyname = '${tableName}_tenant_insert'
+        ) THEN
+          CREATE POLICY ${tableName}_tenant_insert ON ${tableName}
+            FOR INSERT WITH CHECK (${tenantPredicate});
+        END IF;
+      END;
+      $$;
     `);
   }
 }
