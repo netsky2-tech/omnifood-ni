@@ -17,6 +17,7 @@ import type { CatalogType } from "./types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { getApiErrorMessage } from "@/lib/api-error";
 import {
   Dialog,
   DialogContent,
@@ -158,8 +159,34 @@ function ProductDialog({
   );
   const [error, setError] = useState<string | null>(null);
 
+  const isPending = createMutation.isPending || updateMutation.isPending;
+
+  const isDirty = isEdit
+    ? name !== (product?.name ?? "") ||
+      uom !== (product?.uom ?? "") ||
+      categoryCode !== (product?.category_code ?? "") ||
+      sellPrice !== (product?.sellPrice ?? 0) ||
+      isPerishable !== (product?.is_perishable ?? false)
+    : name.trim() !== "" ||
+      uom.trim() !== "" ||
+      categoryCode.trim() !== "" ||
+      sellPrice !== 0 ||
+      isPerishable !== false;
+
+  const handleAttemptClose = () => {
+    if (isPending) return;
+    if (isDirty) {
+      if (window.confirm("Tiene cambios sin guardar en el producto. ¿Desea descartarlos?")) {
+        onClose();
+      }
+      return;
+    }
+    onClose();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isPending) return;
     setError(null);
 
     try {
@@ -167,8 +194,8 @@ function ProductDialog({
         await updateMutation.mutateAsync({
           id: product.id,
           input: {
-            name,
-            uom,
+            name: name.trim(),
+            uom: uom.trim(),
             category_code: categoryCode || undefined,
             sellPrice,
             is_perishable: isPerishable,
@@ -187,17 +214,25 @@ function ProductDialog({
       }
       onClose();
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Error al guardar producto",
-      );
+      setError(getApiErrorMessage(err, "Error al guardar producto"));
     }
   };
 
-  const isPending = createMutation.isPending || updateMutation.isPending;
-
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent>
+    <Dialog
+      open={open}
+      onOpenChange={(isOpen) => {
+        if (!isOpen) handleAttemptClose();
+      }}
+    >
+      <DialogContent
+        onPointerDownOutside={(e) => {
+          if (isPending) e.preventDefault();
+        }}
+        onEscapeKeyDown={(e) => {
+          if (isPending) e.preventDefault();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{isEdit ? "Editar Producto" : "Nuevo Producto"}</DialogTitle>
           <DialogDescription>
@@ -225,6 +260,7 @@ function ProductDialog({
               required
               maxLength={200}
               placeholder="Ej: Taza de Capuccino"
+              disabled={isPending}
             />
           </div>
 
@@ -237,7 +273,8 @@ function ProductDialog({
                 value={uom}
                 onChange={(e) => setUom(e.target.value)}
                 required
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                disabled={isPending}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50"
               >
                 <option value="">Seleccionar UOM</option>
                 {uomValues?.map((v) => (
@@ -255,7 +292,8 @@ function ProductDialog({
               <select
                 value={categoryCode}
                 onChange={(e) => setCategoryCode(e.target.value)}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                disabled={isPending}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50"
               >
                 <option value="">Sin categoría</option>
                 {categoryValues?.map((v) => (
@@ -273,24 +311,27 @@ function ProductDialog({
             </label>
             <Input
               type="number"
+              step="0.01"
+              min="0"
               value={sellPrice}
-              onChange={(e) => setSellPrice(Number(e.target.value))}
-              min={0}
-              step={0.01}
+              onChange={(e) => setSellPrice(parseFloat(e.target.value) || 0)}
+              placeholder="0.00"
+              disabled={isPending}
             />
           </div>
 
           <div className="flex items-center gap-2 pt-1">
             <input
               type="checkbox"
-              id="isPerishable"
+              id="is_perishable"
               checked={isPerishable}
               onChange={(e) => setIsPerishable(e.target.checked)}
-              className="h-4 w-4 rounded border-input text-primary focus:ring-primary cursor-pointer"
+              disabled={isPending}
+              className="h-4 w-4 rounded border-border text-primary focus:ring-primary cursor-pointer disabled:opacity-50"
             />
             <label
-              htmlFor="isPerishable"
-              className="text-sm font-medium text-foreground cursor-pointer"
+              htmlFor="is_perishable"
+              className="text-xs sm:text-sm font-medium text-foreground cursor-pointer"
             >
               Producto perecedero (control de caducidad)
             </label>
@@ -300,7 +341,7 @@ function ProductDialog({
             <Button
               type="button"
               variant="outline"
-              onClick={onClose}
+              onClick={handleAttemptClose}
               disabled={isPending}
             >
               Cancelar
@@ -308,6 +349,7 @@ function ProductDialog({
             <Button
               type="submit"
               loading={isPending}
+              disabled={isPending}
             >
               {isEdit ? "Guardar" : "Crear"}
             </Button>
@@ -328,19 +370,34 @@ function DeactivateDialog({
   onClose: () => void;
 }) {
   const deactivateMutation = useDeactivateProduct();
+  const [error, setError] = useState<string | null>(null);
 
   const handleConfirm = async () => {
+    if (deactivateMutation.isPending) return;
+    setError(null);
     try {
       await deactivateMutation.mutateAsync(product.id);
       onClose();
-    } catch {
-      // Error handled by mutation
+    } catch (err) {
+      setError(getApiErrorMessage(err, "Error al desactivar el producto"));
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent>
+    <Dialog
+      open={open}
+      onOpenChange={(isOpen) => {
+        if (!isOpen && !deactivateMutation.isPending) onClose();
+      }}
+    >
+      <DialogContent
+        onPointerDownOutside={(e) => {
+          if (deactivateMutation.isPending) e.preventDefault();
+        }}
+        onEscapeKeyDown={(e) => {
+          if (deactivateMutation.isPending) e.preventDefault();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>Desactivar Producto</DialogTitle>
           <DialogDescription>
@@ -350,6 +407,12 @@ function DeactivateDialog({
             en el historial de facturación e inventario.
           </DialogDescription>
         </DialogHeader>
+
+        {error && (
+          <div className="rounded-md border border-destructive/20 bg-destructive-50 p-3 text-xs font-medium text-destructive">
+            {error}
+          </div>
+        )}
 
         <DialogFooter className="pt-3">
           <Button
@@ -365,6 +428,7 @@ function DeactivateDialog({
             variant="destructive"
             onClick={handleConfirm}
             loading={deactivateMutation.isPending}
+            disabled={deactivateMutation.isPending}
           >
             Desactivar
           </Button>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export interface DateRangeValue {
   startDate: string;
@@ -53,6 +53,35 @@ function previousMonth(): DateRangeValue {
 export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
   const [open, setOpen] = useState(false);
 
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open]);
+
+  const handleStartDateChange = (newStart: string) => {
+    if (!newStart) return;
+    if (value.endDate && newStart > value.endDate) {
+      onChange({ startDate: newStart, endDate: newStart });
+    } else {
+      onChange({ ...value, startDate: newStart });
+    }
+  };
+
+  const handleEndDateChange = (newEnd: string) => {
+    if (!newEnd) return;
+    if (value.startDate && newEnd < value.startDate) {
+      onChange({ startDate: newEnd, endDate: newEnd });
+    } else {
+      onChange({ ...value, endDate: newEnd });
+    }
+  };
+
   return (
     <div className="relative inline-flex items-center">
       <button
@@ -98,7 +127,7 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
                 <input
                   type="date"
                   value={value.startDate}
-                  onChange={(e) => onChange({ ...value, startDate: e.target.value })}
+                  onChange={(e) => handleStartDateChange(e.target.value)}
                   className="flex-1 rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                   aria-label="Fecha inicio"
                 />
@@ -106,7 +135,7 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
                 <input
                   type="date"
                   value={value.endDate}
-                  onChange={(e) => onChange({ ...value, endDate: e.target.value })}
+                  onChange={(e) => handleEndDateChange(e.target.value)}
                   className="flex-1 rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                   aria-label="Fecha fin"
                 />

@@ -71,9 +71,10 @@ function HourlyTab({ date }: { date?: string }) {
   const { data, isLoading } = useHourlySales(date ?? todayISO());
 
   if (isLoading) return <LoadingState message="Cargando ventas por hora..." />;
-  if (!data) return <EmptyState message="Sin datos horarios" />;
+  if (!data || !Array.isArray(data.hourly) || data.hourly.length === 0)
+    return <EmptyState message="Sin datos horarios" />;
 
-  const maxSales = Math.max(...data.hourly.map((h) => h.totalSales), 1);
+  const maxSales = Math.max(...data.hourly.map((h) => Number(h.totalSales) || 0), 1);
 
   return (
     <div className="space-y-6">

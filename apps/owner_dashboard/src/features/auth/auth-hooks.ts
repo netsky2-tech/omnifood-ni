@@ -36,6 +36,7 @@ export function useLogin() {
 
 export function useLogout() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const logout = useAuthStore((s) => s.logout);
   const clearTenant = useTenantContext((s) => s.clear);
 
@@ -43,6 +44,7 @@ export function useLogout() {
     clearTokens();
     logout();
     clearTenant();
+    queryClient.clear();
     navigate("/login");
   };
 }

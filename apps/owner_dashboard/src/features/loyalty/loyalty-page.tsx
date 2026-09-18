@@ -56,31 +56,33 @@ function ProgramForm({
   const [name, setName] = useState(initial?.name ?? '');
   const [programType, setProgramType] = useState<LoyaltyProgramType>(initial?.program_type ?? 'SPEND_POINTS');
 
+  const rule = initial?.earning_rule as Record<string, unknown> | undefined;
+
   // Specific fields for SPEND_POINTS
   const [spendBlockNio, setSpendBlockNio] = useState<number>(
-    Number((initial?.earning_rule as any)?.spendBlockNio ?? 10)
+    Number(rule?.spendBlockNio ?? 10)
   );
   const [pointsPerBlock, setPointsPerBlock] = useState<number>(
-    Number((initial?.earning_rule as any)?.pointsPerBlock ?? 1)
+    Number(rule?.pointsPerBlock ?? 1)
   );
 
   // Specific fields for PRODUCT_STAMPS
   const [eligibleProductIds, setEligibleProductIds] = useState<string>(
-    Array.isArray((initial?.earning_rule as any)?.eligibleProductIds)
-      ? (initial?.earning_rule as any).eligibleProductIds.join(', ')
+    Array.isArray(rule?.eligibleProductIds)
+      ? (rule.eligibleProductIds as string[]).join(', ')
       : 'prod-smash'
   );
   const [unitsPerPurchasedUnit, setUnitsPerPurchasedUnit] = useState<number>(
-    Number((initial?.earning_rule as any)?.unitsPerPurchasedUnit ?? 1)
+    Number(rule?.unitsPerPurchasedUnit ?? 1)
   );
 
   // Specific fields for VISIT_STAMPS
   const [unitsPerVisit, setUnitsPerVisit] = useState<number>(
-    Number((initial?.earning_rule as any)?.unitsPerVisit ?? 1)
+    Number(rule?.unitsPerVisit ?? 1)
   );
   const [minimumSpendNio, setMinimumSpendNio] = useState<string>(
-    (initial?.earning_rule as any)?.minimumSpendNio != null
-      ? String((initial?.earning_rule as any).minimumSpendNio)
+    rule?.minimumSpendNio != null
+      ? String(rule.minimumSpendNio)
       : ''
   );
 
@@ -92,9 +94,11 @@ function ProgramForm({
 
   const createMutation = useCreateProgram();
   const updateMutation = useUpdateProgram();
+  const isPending = createMutation.isPending || updateMutation.isPending;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isPending) return;
     setError(null);
 
     let parsedRule: Record<string, unknown>;
@@ -327,14 +331,16 @@ function RewardForm({
   const [rewardType, setRewardType] = useState<RewardType>(initial?.reward_type ?? 'DISCOUNT_AMOUNT');
   const [costUnits, setCostUnits] = useState(initial?.cost_units ?? 10);
 
+  const benefit = initial?.benefit_config as Record<string, unknown> | undefined;
+
   // Specific field for DISCOUNT_AMOUNT
   const [amountNio, setAmountNio] = useState<number>(
-    Number((initial?.benefit_config as any)?.amountNio ?? 50)
+    Number(benefit?.amountNio ?? 50)
   );
 
   // Specific field for FREE_PRODUCT
   const [productId, setProductId] = useState<string>(
-    (initial?.benefit_config as any)?.productId ?? 'prod-smash'
+    typeof benefit?.productId === 'string' ? benefit.productId : 'prod-smash'
   );
 
   const [useCustomJson, setUseCustomJson] = useState(false);
@@ -345,9 +351,11 @@ function RewardForm({
 
   const createMutation = useCreateReward();
   const updateMutation = useUpdateReward();
+  const isPending = createMutation.isPending || updateMutation.isPending;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isPending) return;
     setError(null);
 
     let parsedConfig: Record<string, unknown>;

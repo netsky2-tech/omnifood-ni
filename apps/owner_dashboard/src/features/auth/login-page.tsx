@@ -25,6 +25,7 @@ export function LoginPage() {
   });
 
   const onSubmit = (data: LoginForm) => {
+    if (loginMutation.isPending) return;
     loginMutation.mutate(data);
   };
 
@@ -55,6 +56,7 @@ export function LoginPage() {
               {...register("email")}
               placeholder="admin@negocio.com"
               aria-invalid={!!errors.email}
+              disabled={loginMutation.isPending}
             />
             {errors.email && (
               <p className="mt-1 text-xs text-destructive">
@@ -76,6 +78,7 @@ export function LoginPage() {
               {...register("password")}
               placeholder="••••••"
               aria-invalid={!!errors.password}
+              disabled={loginMutation.isPending}
             />
             {errors.password && (
               <p className="mt-1 text-xs text-destructive">
@@ -96,6 +99,7 @@ export function LoginPage() {
               type="text"
               {...register("tenantSlug")}
               placeholder="mi-negocio"
+              disabled={loginMutation.isPending}
             />
           </div>
 

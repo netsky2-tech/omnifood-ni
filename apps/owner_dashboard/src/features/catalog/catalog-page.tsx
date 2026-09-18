@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { getApiErrorMessage } from "@/lib/api-error";
 import {
   Dialog,
   DialogContent,
@@ -138,15 +139,33 @@ function CatalogDialog({
   const [sortOrder, setSortOrder] = useState(value?.sort_order ?? 0);
   const [error, setError] = useState<string | null>(null);
 
+  const isPending = createMutation.isPending || updateMutation.isPending;
+
+  const isDirty = isEdit
+    ? name !== (value?.name ?? "") || sortOrder !== (value?.sort_order ?? 0)
+    : code.trim() !== "" || name.trim() !== "" || sortOrder !== 0;
+
+  const handleAttemptClose = () => {
+    if (isPending) return;
+    if (isDirty) {
+      if (window.confirm("Tiene cambios sin guardar en el formulario. ¿Desea descartarlos?")) {
+        onClose();
+      }
+      return;
+    }
+    onClose();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isPending) return;
     setError(null);
 
     try {
       if (isEdit && value) {
         await updateMutation.mutateAsync({
           id: value.id,
-          input: { name, sort_order: sortOrder },
+          input: { name: name.trim(), sort_order: sortOrder },
         });
       } else {
         const input: CreateCatalogValueInput = {
@@ -158,17 +177,25 @@ function CatalogDialog({
       }
       onClose();
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Error al guardar",
-      );
+      setError(getApiErrorMessage(err, "Error al guardar valor de catálogo"));
     }
   };
 
-  const isPending = createMutation.isPending || updateMutation.isPending;
-
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent>
+    <Dialog
+      open={open}
+      onOpenChange={(isOpen) => {
+        if (!isOpen) handleAttemptClose();
+      }}
+    >
+      <DialogContent
+        onPointerDownOutside={(e) => {
+          if (isPending) e.preventDefault();
+        }}
+        onEscapeKeyDown={(e) => {
+          if (isPending) e.preventDefault();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{isEdit ? "Editar Valor" : "Nuevo Valor"}</DialogTitle>
           <DialogDescription>
@@ -198,6 +225,7 @@ function CatalogDialog({
                 pattern="^[A-Za-z0-9_-]+$"
                 maxLength={64}
                 placeholder="Ej: kg, LACTEOS"
+                disabled={isPending}
               />
               <p className="mt-1 text-[11px] text-muted-foreground">
                 Solo letras, números, guiones y guiones bajos
@@ -216,6 +244,7 @@ function CatalogDialog({
               required
               maxLength={120}
               placeholder="Ej: Kilogramo, Lácteos"
+              disabled={isPending}
             />
           </div>
 
@@ -228,6 +257,7 @@ function CatalogDialog({
               value={sortOrder}
               onChange={(e) => setSortOrder(Number(e.target.value))}
               min={0}
+              disabled={isPending}
             />
           </div>
 
@@ -235,7 +265,7 @@ function CatalogDialog({
             <Button
               type="button"
               variant="outline"
-              onClick={onClose}
+              onClick={handleAttemptClose}
               disabled={isPending}
             >
               Cancelar
@@ -243,6 +273,7 @@ function CatalogDialog({
             <Button
               type="submit"
               loading={isPending}
+              disabled={isPending}
             >
               {isEdit ? "Guardar" : "Crear"}
             </Button>
@@ -265,19 +296,34 @@ function DeactivateDialog({
   onClose: () => void;
 }) {
   const deactivateMutation = useDeactivateCatalogValue(type);
+  const [error, setError] = useState<string | null>(null);
 
   const handleConfirm = async () => {
+    if (deactivateMutation.isPending) return;
+    setError(null);
     try {
       await deactivateMutation.mutateAsync(value.id);
       onClose();
-    } catch {
-      // Error handled by mutation
+    } catch (err) {
+      setError(getApiErrorMessage(err, "Error al desactivar el valor de catálogo"));
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent>
+    <Dialog
+      open={open}
+      onOpenChange={(isOpen) => {
+        if (!isOpen && !deactivateMutation.isPending) onClose();
+      }}
+    >
+      <DialogContent
+        onPointerDownOutside={(e) => {
+          if (deactivateMutation.isPending) e.preventDefault();
+        }}
+        onEscapeKeyDown={(e) => {
+          if (deactivateMutation.isPending) e.preventDefault();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>Desactivar Valor</DialogTitle>
           <DialogDescription>
@@ -287,6 +333,12 @@ function DeactivateDialog({
             mantendrá en el historial para integridad referencial.
           </DialogDescription>
         </DialogHeader>
+
+        {error && (
+          <div className="rounded-md border border-destructive/20 bg-destructive-50 p-3 text-xs font-medium text-destructive">
+            {error}
+          </div>
+        )}
 
         <DialogFooter className="pt-3">
           <Button
@@ -302,6 +354,7 @@ function DeactivateDialog({
             variant="destructive"
             onClick={handleConfirm}
             loading={deactivateMutation.isPending}
+            disabled={deactivateMutation.isPending}
           >
             Desactivar
           </Button>

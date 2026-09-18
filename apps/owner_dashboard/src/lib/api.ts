@@ -62,6 +62,26 @@ let accessToken: string | null = sessionStorage.getItem(STORAGE_KEY_ACCESS);
 let refreshToken: string | null = sessionStorage.getItem(STORAGE_KEY_REFRESH);
 let refreshPromise: Promise<string> | null = null;
 
+type AuthExpiredListener = () => void;
+const authExpiredListeners = new Set<AuthExpiredListener>();
+
+export function onAuthExpired(listener: AuthExpiredListener): () => void {
+  authExpiredListeners.add(listener);
+  return () => {
+    authExpiredListeners.delete(listener);
+  };
+}
+
+export function notifyAuthExpired(): void {
+  for (const listener of authExpiredListeners) {
+    try {
+      listener();
+    } catch {
+      // ignore
+    }
+  }
+}
+
 export function setTokens(tokens: TokenPair): void {
   if (
     !tokens ||
@@ -243,12 +263,25 @@ export async function apiFetch<T>(
       });
 
       if (!retryResponse.ok) {
-        throw new Error(`API error: ${retryResponse.status}`);
+        const errorBody = (await retryResponse.json().catch(() => null)) as Record<string, unknown> | null;
+        const message =
+          typeof errorBody?.message === "string" && errorBody.message.trim().length > 0
+            ? errorBody.message
+            : `API error: ${retryResponse.status}`;
+        throw new ApiError(message, {
+          status: retryResponse.status,
+          code: errorBody?.code,
+          responseBody: errorBody,
+        });
       }
 
       return retryResponse.json() as Promise<T>;
-    } catch {
+    } catch (refreshErr) {
       clearTokens();
+      notifyAuthExpired();
+      if (refreshErr instanceof ApiError) {
+        throw refreshErr;
+      }
       throw new Error("Session expired");
     }
   }

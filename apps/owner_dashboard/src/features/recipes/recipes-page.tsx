@@ -93,8 +93,16 @@ export function RecipesPage() {
         {filteredProducts.length === 0 ? (
           <EmptyState
             icon={Package}
-            title="No se encontraron productos compuestos"
-            description='Cree un producto de tipo "Compuesto" en el catálogo para gestionar su receta'
+            title={
+              searchQuery.trim()
+                ? "No se encontraron productos compuestos para esta búsqueda"
+                : "No se encontraron productos compuestos"
+            }
+            description={
+              searchQuery.trim()
+                ? `No se encontraron productos que coincidan con "${searchQuery.trim()}". Intente con otro término.`
+                : 'Cree un producto de tipo "Compuesto" en el catálogo para gestionar su receta'
+            }
             className="col-span-full py-12"
           />
         ) : (

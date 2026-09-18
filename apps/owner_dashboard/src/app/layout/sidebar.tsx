@@ -74,7 +74,20 @@ export function Sidebar() {
         document.body.style.overflow = "";
         window.removeEventListener("keydown", handleKeyDown);
       };
+    } else {
+      document.body.style.overflow = "";
     }
+  }, [mobileSidebarOpen, closeMobileSidebar]);
+
+  // Ensure scroll lock is released and drawer is closed if window is resized to desktop (>= 1024px)
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 1024 && mobileSidebarOpen) {
+        closeMobileSidebar();
+      }
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, [mobileSidebarOpen, closeMobileSidebar]);
 
   const sections = navItems.reduce<Record<string, NavItem[]>>((acc, item) => {

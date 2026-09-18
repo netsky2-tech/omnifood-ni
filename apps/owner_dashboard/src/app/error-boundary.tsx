@@ -24,26 +24,48 @@ class ErrorBoundaryInner extends Component<
     return { hasError: true, error };
   }
 
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    // Preserve technical log for debugging without polluting user UI
+    console.error("[ErrorBoundary caught]:", error, info);
+  }
+
   render() {
     if (this.state.hasError) {
       return (
-        <div className="flex min-h-screen items-center justify-center bg-primary-50 p-8">
-          <div className="w-full max-w-md rounded-lg border border-border bg-white p-8 shadow-lg text-center">
-            <h1 className="text-xl font-bold text-destructive mb-2">
-              Algo salió mal
-            </h1>
-            <p className="text-sm text-muted-foreground mb-4">
-              {this.state.error?.message || "Error inesperado"}
+        <div className="flex min-h-[360px] w-full items-center justify-center p-6" role="alert">
+          <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-sm text-center">
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <h2 className="text-lg font-bold text-foreground mb-1">
+              Error al cargar esta sección
+            </h2>
+            <p className="text-xs sm:text-sm text-muted-foreground mb-4">
+              {this.state.error?.message || "Ocurrió un error inesperado al procesar la vista."}
             </p>
-            <button
-              onClick={() => {
-                this.setState({ hasError: false, error: null });
-                window.location.reload();
-              }}
-              className="h-10 rounded-md bg-primary px-6 text-sm font-medium text-primary-foreground hover:bg-primary-400"
-            >
-              Recargar página
-            </button>
+            <div className="flex justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  this.setState({ hasError: false, error: null });
+                }}
+                className="h-9 rounded-md border border-border bg-background px-4 text-xs sm:text-sm font-medium text-foreground hover:bg-muted cursor-pointer transition-colors"
+              >
+                Reintentar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  this.setState({ hasError: false, error: null });
+                  window.location.reload();
+                }}
+                className="h-9 rounded-md bg-primary px-4 text-xs sm:text-sm font-medium text-primary-foreground hover:bg-primary/90 cursor-pointer transition-colors shadow-xs"
+              >
+                Recargar página
+              </button>
+            </div>
           </div>
         </div>
       );

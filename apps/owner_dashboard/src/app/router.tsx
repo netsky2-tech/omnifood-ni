@@ -1,5 +1,5 @@
 import { lazy } from "react";
-import { createBrowserRouter, Navigate } from "react-router-dom";
+import { createBrowserRouter } from "react-router-dom";
 import { AppLayout } from "@/app/layout/app-layout";
 import { ProtectedRoute } from "@/app/protected-route";
 import { SuspenseWrapper } from "@/app/layout/page-loader";
@@ -39,6 +39,9 @@ const SettingsPage = lazy(() =>
 );
 const CustomersPage = lazy(() =>
   import("@/features/customers/customers-page").then((m) => ({ default: m.CustomersPage })),
+);
+const NotFoundPage = lazy(() =>
+  import("@/app/not-found-page").then((m) => ({ default: m.NotFoundPage })),
 );
 
 export const router = createBrowserRouter([
@@ -146,7 +149,11 @@ export const router = createBrowserRouter([
       },
       {
         path: "*",
-        element: <Navigate to="/" replace />,
+        element: (
+          <SuspenseWrapper>
+            <NotFoundPage />
+          </SuspenseWrapper>
+        ),
       },
     ],
   },

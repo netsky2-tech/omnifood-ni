@@ -28,11 +28,17 @@ export function StatCard({
         className,
       )}
     >
-      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground truncate">
+      <p
+        className="text-xs font-semibold uppercase tracking-wider text-muted-foreground truncate"
+        title={label}
+      >
         {label}
       </p>
       <div className="mt-1.5 flex items-baseline justify-between gap-2">
-        <p className="text-xl sm:text-2xl font-bold tabular-nums text-card-foreground truncate">
+        <p
+          className="text-xl sm:text-2xl font-bold tabular-nums text-card-foreground truncate"
+          title={value}
+        >
           {value}
         </p>
         {trend && (
@@ -41,13 +47,16 @@ export function StatCard({
               "text-xs font-semibold tabular-nums",
               trend.isPositive ? "text-emerald-600" : "text-rose-600",
             )}
+            title={trend.value}
           >
             {trend.value}
           </span>
         )}
       </div>
       {subtitle && (
-        <p className="mt-1 text-xs text-muted-foreground truncate">{subtitle}</p>
+        <p className="mt-1 text-xs text-muted-foreground truncate" title={subtitle}>
+          {subtitle}
+        </p>
       )}
     </div>
   );

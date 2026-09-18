@@ -64,7 +64,11 @@ export function PromotionsList() {
       await togglePromotion.mutateAsync({ id: promotion.id, isActive: !promotion.is_active });
       toast({ title: promotion.is_active ? 'Promoción desactivada' : 'Promoción activada' });
     } catch (err) {
-      toast({ title: 'Error', description: 'No se pudo cambiar el estado', variant: 'destructive' });
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'No se pudo cambiar el estado',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -74,7 +78,11 @@ export function PromotionsList() {
       await deletePromotion.mutateAsync(id);
       toast({ title: 'Promoción eliminada' });
     } catch (err) {
-      toast({ title: 'Error', description: 'No se pudo eliminar la promoción', variant: 'destructive' });
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'No se pudo eliminar la promoción',
+        variant: 'destructive',
+      });
     }
   };
 
