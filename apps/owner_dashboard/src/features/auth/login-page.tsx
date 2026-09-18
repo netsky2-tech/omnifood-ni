@@ -30,8 +30,8 @@ export function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/30 px-4 py-8">
-      <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 sm:p-8 shadow-lg">
+    <div className="flex h-full w-full h-[100dvh] overflow-y-auto overscroll-contain items-center justify-center bg-muted/30 px-4 py-8">
+      <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 sm:p-8 shadow-lg my-auto">
         <div className="mb-8 text-center">
           <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-xl font-bold text-primary-foreground mb-3 shadow-sm">
             N
@@ -53,6 +53,9 @@ export function LoginPage() {
             <Input
               id="email"
               type="email"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               {...register("email")}
               placeholder="admin@negocio.com"
               aria-invalid={!!errors.email}
@@ -76,7 +79,7 @@ export function LoginPage() {
               id="password"
               type="password"
               {...register("password")}
-              placeholder="••••••"
+              placeholder="••••••••"
               aria-invalid={!!errors.password}
               disabled={loginMutation.isPending}
             />
@@ -97,6 +100,9 @@ export function LoginPage() {
             <Input
               id="tenantSlug"
               type="text"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               {...register("tenantSlug")}
               placeholder="mi-negocio"
               disabled={loginMutation.isPending}

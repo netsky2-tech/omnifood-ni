@@ -270,7 +270,7 @@ export async function apiFetch<T>(
     body: body ? JSON.stringify(body) : undefined,
   });
 
-  if (response.status === 401) {
+  if (auth && response.status === 401) {
     if (hasStoredRefreshToken()) {
       try {
         const newToken = await requestTokenRefresh();

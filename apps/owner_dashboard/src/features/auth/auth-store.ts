@@ -20,7 +20,8 @@ export const useAuthStore = create<AuthStore>((set) => ({
   hydrated: false,
   setUser: (user) => set({ user }),
   setTenant: (tenant) => set({ tenant }),
-  login: (user, tenant) => set({ user, tenant, isAuthenticated: true }),
+  login: (user, tenant) =>
+    set({ user, tenant, isAuthenticated: true, hydrated: true }),
   initialize: (user, tenant) =>
     set({ user, tenant, isAuthenticated: true, hydrated: true }),
   logout: () =>
