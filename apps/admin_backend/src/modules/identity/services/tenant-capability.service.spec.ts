@@ -1,4 +1,4 @@
-import { ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
 import { TenantCapabilityService } from './tenant-capability.service';
@@ -109,5 +109,25 @@ describe('TenantCapabilityService', () => {
     await expect(service.current('tenant-a')).rejects.toThrow('start failed');
     expect(runner.rollbackTransaction).not.toHaveBeenCalled();
     expect(runner.release).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a blank tenant id (Unit 0b-3) and issues no set_config SQL', async () => {
+    for (const blankTenantId of ['', '   ']) {
+      await expect(service.current(blankTenantId)).rejects.toThrow(
+        UnauthorizedException,
+      );
+      await expect(
+        service.append({
+          tenantId: blankTenantId,
+          actorUserId: 'owner-a',
+          version: 'v2',
+          reason: 'blank tenant',
+        }),
+      ).rejects.toThrow(UnauthorizedException);
+
+      // Absence of SQL, not just the rejection: a blank tenant id must
+      // never reach set_config on the query runner.
+      expect(runner.query).not.toHaveBeenCalled();
+    }
   });
 });

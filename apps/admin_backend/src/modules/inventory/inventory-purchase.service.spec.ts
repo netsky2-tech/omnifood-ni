@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { DataSource, QueryFailedError } from 'typeorm';
 import {
   CURRENCY,
@@ -950,5 +950,37 @@ describe('InventoryPurchaseService', () => {
         sourceDocumentType: 'PURCHASE_CORRECTION',
       }),
     );
+  });
+
+  it('rejects a blank tenant id (Unit 0b-3) before any transaction and issues no set_config SQL', async () => {
+    for (const blankTenantId of ['', '   ']) {
+      await expect(
+        service.recordPurchase({
+          id: 'purchase-doc-blank-tenant',
+          tenantId: blankTenantId,
+          insumoId: 'ins-1',
+          supplierId: 'sup-1',
+          invoiceNumber: 'INV-BLANK-1',
+          quantity: 2,
+          unitCost: 10,
+          currency: CURRENCY.NIO,
+          invoiceDate: '2026-01-03',
+          entryTimestamp: '2026-01-03T08:15:00.000Z',
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      await expect(
+        service.correctPurchase({
+          tenantId: blankTenantId,
+          purchaseDocumentId: 'purchase-doc-original-1',
+          reason: 'blank tenant',
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      // Absence of SQL, not just the rejection: a blank tenant id must
+      // never reach set_config on the transaction manager.
+      expect(manager.query).not.toHaveBeenCalled();
+    }
+    expect(transaction).not.toHaveBeenCalled();
   });
 });

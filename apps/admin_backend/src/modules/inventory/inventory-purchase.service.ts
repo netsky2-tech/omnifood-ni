@@ -22,6 +22,7 @@ import {
 import { Supplier } from './entities/supplier.entity';
 import { PurchaseDocument } from './entities/purchase-document.entity';
 import { CostCalculatorService } from './cost-calculator.service';
+import { bindTenantContext } from '../../core/database/tenant-transaction';
 
 export const CURRENCY = {
   NIO: 'NIO',
@@ -125,9 +126,7 @@ export class InventoryPurchaseService {
       return await this.dataSource.transaction(
         'SERIALIZABLE',
         async (manager) => {
-          await manager.query("SELECT set_config('app.tenant_id', $1, true)", [
-            tenantId,
-          ]);
+          await bindTenantContext(manager, tenantId);
 
           const insumo = await manager
             .createQueryBuilder(Insumo, 'insumo')
@@ -271,9 +270,7 @@ export class InventoryPurchaseService {
       return await this.dataSource.transaction(
         'SERIALIZABLE',
         async (manager) => {
-          await manager.query("SELECT set_config('app.tenant_id', $1, true)", [
-            tenantId,
-          ]);
+          await bindTenantContext(manager, tenantId);
 
           const originalDocument = await manager.findOne(PurchaseDocument, {
             where: {

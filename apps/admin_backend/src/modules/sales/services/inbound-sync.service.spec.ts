@@ -426,4 +426,27 @@ describe('InboundSyncService', () => {
       });
     });
   });
+
+  describe('mapping version tenant binding guard (Unit 0b-3)', () => {
+    it('rejects a blank tenant id (Unit 0b-3) and issues no set_config SQL', async () => {
+      for (const blankTenantId of ['', '   ']) {
+        await expect(
+          service.getInboundDeltas(blankTenantId, {}),
+        ).rejects.toThrow(UnauthorizedException);
+
+        // Absence of SQL, not just the rejection: a blank tenant id must
+        // never reach set_config on the mapping version manager.
+        expect(mockMappingVersionRepo.manager.query).not.toHaveBeenCalled();
+      }
+    });
+
+    it('binds the tenant context via the shared guard before reading mapping versions', async () => {
+      await service.getInboundDeltas('tenant-abc', { types: 'products' });
+
+      expect(mockMappingVersionRepo.manager.query).toHaveBeenCalledWith(
+        "SELECT set_config('app.tenant_id', $1, true)",
+        ['tenant-abc'],
+      );
+    });
+  });
 });

@@ -456,6 +456,27 @@ describe('SyncTransportGuard', () => {
         ['tenant-alpha'],
       );
     });
+
+    it('rejects a blank tenant_id claim (Unit 0b-3) and issues no set_config SQL', async () => {
+      for (const blankTenantId of ['', '   ']) {
+        const token = await signDeviceToken({
+          ...validDeviceClaims,
+          tenant_id: blankTenantId,
+        });
+        const ctx = createMockContext({
+          headers: { authorization: `Bearer ${token}` },
+        });
+
+        await expect(guard.canActivate(ctx)).rejects.toThrow(
+          UnauthorizedException,
+        );
+
+        // Absence of SQL, not just the rejection: a blank tenant id must
+        // never reach set_config, even if claim validation is weakened later.
+        expect(dataSource.transaction).not.toHaveBeenCalled();
+        expect(transactionManager.query).not.toHaveBeenCalled();
+      }
+    });
   });
 
   describe('Scope hardening against DB corruption and least-privilege narrowing', () => {

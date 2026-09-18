@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource, type QueryRunner } from 'typeorm';
+import { bindTenantContext } from '../../../core/database/tenant-transaction';
 import { TopologyRevisionConflictError } from '../domain/topology-revision-conflict.error';
 
 export interface CreateTenantTopologyRevision {
@@ -101,9 +102,7 @@ export class TenantTopologyRevisionService {
     try {
       await runner.connect();
       await runner.startTransaction();
-      await runner.query("SELECT set_config('app.tenant_id', $1, true)", [
-        tenantId,
-      ]);
+      await bindTenantContext(runner, tenantId);
       const result = await action(runner);
       await runner.commitTransaction();
       return result;

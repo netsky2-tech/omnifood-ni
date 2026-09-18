@@ -4,6 +4,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { DataSource, type QueryRunner } from 'typeorm';
+import { bindTenantContext } from '../../../core/database/tenant-transaction';
 import { UserRole } from '../entities/user.entity';
 
 export interface CapabilityState {
@@ -85,9 +86,7 @@ export class TenantCapabilityService {
       await runner.connect();
       await runner.startTransaction();
       transactionActive = true;
-      await runner.query("SELECT set_config('app.tenant_id', $1, true)", [
-        tenantId,
-      ]);
+      await bindTenantContext(runner, tenantId);
       const result = await action(runner);
       await runner.commitTransaction();
       transactionActive = false;
