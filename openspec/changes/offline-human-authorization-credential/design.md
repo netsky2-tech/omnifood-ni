@@ -399,6 +399,24 @@ The publisher cannot be built from §4.1 and decision 16 alone: three referenced
 
 No OHAC `.db.spec.ts` or end-to-end spec exists, so the publisher slice must also establish its own database-level coverage, which the `T-2` migration runtime suite is expected to own.
 
+### 11.4 Epoch delivery decisions resolved before implementation
+
+The publisher side (§11.2 decisions 16-23) is merged. Designing the delivery half surfaced six points this design left open or silent; they are recorded here before any delivery code is written, because the pull contract conditions the POS client and the reconciliation of §5.1.
+
+| # | Decision | Status |
+|---|---|---|
+| 24 | **Module ownership of the delivery path.** §2 places the route on the existing inbound sync controller and §16.2 forbids the injected-repository, unbound-transaction pattern that service uses. Both hold: the route stays where §2 puts it, and it delegates to an OHAC-owned service that opens its own tenant-bound transaction. Sales never performs an epoch or verifier read itself. | implementer-chosen (satisfies §2 and §16.2 together) |
+| 25 | **Negotiation transport (user decision).** Negotiation travels as query parameters on the existing inbound pull — negotiated POS build, supported policy and assertion schemas, and the terminal's local floor — and the response gains an optional `humanAuthorization` member alongside the existing optional `fiscalConfig`, rather than a separate envelope. This keeps one contract surface for the client and matches how the response is already extended. | user-decided (query parameters plus response member) |
+| 26 | **Replay inheritance for the per-terminal epoch.** Decision 23's replay-based comparison is inherited, not reinterpreted: materialization compares the terminal's newest epoch by reprojecting under that epoch's own chain metadata, and a cohort-decision flip counts as a change. The comparison head is the terminal's own newest epoch, never the tenant snapshot, because the terminal and the negotiated build enter the per-terminal digest. | design-specified (decision 23), implementer-chosen (comparison head) |
+| 27 | **Delivery is split into a backend and a POS slice (user decision).** This slice delivers per-terminal materialization on the pull, the acknowledgement route, and real-database coverage. The POS half — local epoch storage, the candidate state machine, the drain gate, and the acknowledgement client — is a sibling slice, and no cohort is enablement-eligible until that half exists. This preserves §5.1's requirement that the ack path and the gate ship in the same POS build pair, because nothing becomes enablement-eligible in the meantime. | user-decided (backend first, POS sibling) |
+| 28 | **Drain gate and its outbox registry (user decision).** The gate's contract and semantics are defined with this slice, and its implementation — the outbox registration coupler, the blocked `ACK_SUBMITTING` transition, and the `OHAC_ACK_DEFERRED_OUTBOX` reason — lands with the POS slice, because that is where the blocking happens. Nothing in this slice may allow a terminal to advance its floor past an epoch whose assertion-bearing outbox work is still unconsumed. | user-decided (contract now, implementation with POS) |
+| 29 | **`attempt_reset_generation` still has no writer.** Decision 14 requires the backend to increment it on an administrative reset, and no such path exists anywhere in the repository, so the projected value is faithful to stored `"0"` while administrative reset remains non-functional. It stays out of the delivery slice and is tracked as its own issue rather than silently absorbed. | design-specified (decision 14), user-decided (separate slice) |
+
+Two consequences worth stating explicitly, because they are easy to lose:
+
+- The acknowledgement route accepts the terminal's identity only from the authenticated device principal, never from a request body, matching §4.1 rule 2 and the existing transport guard.
+- `InboundSyncService.fetchUserDeltas` currently ships raw PIN verifiers through the device pull. Delivery does not remove that legacy path — §2 keeps it for old clients until retirement — so the epoch path must not _depend_ on that exposure being gone, and the retirement of the legacy projection stays a separate compatibility decision.
+
 ## 12. Compatibility, rollout, rollback, and operations
 
 Negotiation adds exact `ohacPosBuild`, supported policy/assertion schema arrays, and local floor to inbound query/headers. The backend returns `DISABLED`, `UPGRADE_REQUIRED`, `RECOVERY_REQUIRED`, or the next epoch. Activation requires both an explicit tenant cohort row with OWNER delayed-revocation acceptance and an allowlisted exact POS/backend build pair. Version alone never enables it.
