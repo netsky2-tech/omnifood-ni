@@ -72,7 +72,7 @@ Evidence: completed 2026-09-17; the main checkout's unrelated `.pi/` paths were 
 
 ### FREEZE-02 — Create deterministic F2–F5 CSV fixtures
 
-Status: complete — committed as `f9d1f91c71bc1627781ac055e2a72ad744f9f28e`.
+Status: complete — committed as `1c405f239ff53cf466245d4f8e2c9033a717a582`.
 Depends on: FREEZE-01
 
 - [x] Derive fixture headers and unsupported-column behavior from the canonical import contract.
@@ -101,11 +101,11 @@ Fixture hashes:
 - F4: `2279c1c9bcefe3b881258db093d2804201f0d93df421f3dd657e24d7b1c76d25`
 - F5: `6ec18aa73493e5046c3ee607f283d13b40a0397fd843c0ba28644e21fe8a4307`
 
-Evidence: strict-TDD writer reported RED from missing fixtures, GREEN at 28/28 focused tests, triangulation for aliases and five invalid classes, and post-format refactor. RED history was not independently reproducible after implementation. Candidate authored scope: 331 fixture/spec lines. Work-unit commit `f9d1f91c71bc1627781ac055e2a72ad744f9f28e` contains the fixture/spec candidate plus this durable task document (567 inserted lines total). Runtime harness: N/A because these are static import fixtures validated through the real parser/service contract; no runtime transport or device boundary changed. Rollback boundary: revert the five fixture/spec files and their FREEZE-02 tracking record without touching later acceptance evidence.
+Evidence: strict-TDD writer reported RED from missing fixtures, GREEN at 28/28 focused tests, triangulation for aliases and five invalid classes, and post-format refactor. RED history was not independently reproducible after implementation. Candidate authored scope: 331 fixture/spec lines. Work-unit commit `1c405f239ff53cf466245d4f8e2c9033a717a582` contains the fixture/spec candidate plus this durable task document (567 inserted lines total). Runtime harness: N/A because these are static import fixtures validated through the real parser/service contract; no runtime transport or device boundary changed. Rollback boundary: revert the five fixture/spec files and their FREEZE-02 tracking record without touching later acceptance evidence.
 
 ### FREEZE-03 — Correct deterministic acceptance-document drift
 
-Status: complete — committed as `bd5ddfeacfe1cf966f8ad1695a452cdb76d4fe6f`.
+Status: complete — committed as `980851fea260e957f4cfea7932571746a5427130`.
 Depends on: FREEZE-02
 
 - [x] Correct the Android package ID to `com.nhilos.pos_app`.
@@ -126,7 +126,7 @@ Checks:
 - Readback against POS build files, Floor database annotation, and TypeORM migration tail.
 - Markdown structural review.
 
-Evidence: documentation-only task, so RED/GREEN was N/A; structural/readback verification used instead. Writer checks passed for diff hygiene, stale identifiers, package/version/schema/migration facts, mock-vs-physical distinction, and 5-file scope. Independent verification found one MEDIUM stale freeze claim in AP-00 summary cells; bounded correction replaced both affirmative freeze claims, and focused reverification passed. Final document delta before tracking update: 102 insertions, 64 deletions (166 changed lines), within the 400-line budget. Runtime harness: N/A because no executable behavior changed. Rollback boundary: revert the five acceptance-document changes without touching FREEZE-02 fixtures or tests. Work-unit commit: `bd5ddfeacfe1cf966f8ad1695a452cdb76d4fe6f`.
+Evidence: documentation-only task, so RED/GREEN was N/A; structural/readback verification used instead. Writer checks passed for diff hygiene, stale identifiers, package/version/schema/migration facts, mock-vs-physical distinction, and 5-file scope. Independent verification found one MEDIUM stale freeze claim in AP-00 summary cells; bounded correction replaced both affirmative freeze claims, and focused reverification passed. Final document delta before tracking update: 102 insertions, 64 deletions (166 changed lines), within the 400-line budget. Runtime harness: N/A because no executable behavior changed. Rollback boundary: revert the five acceptance-document changes without touching FREEZE-02 fixtures or tests. Work-unit commit: `980851fea260e957f4cfea7932571746a5427130`.
 
 ### FREEZE-04 — Resolve human safety and environment prerequisites
 
@@ -171,7 +171,7 @@ Device-credential readiness analysis (read-only, static reading only):
 - Consequence: the rehearsal as written satisfies neither cutover precondition 2 nor a demonstration that `/v1/sync/*` works on the Q80. Making it work requires an explicit enrollment step, an APK built with the matching `DEVICE_ID`, and resolution of the mixed-transport defect.
 
 Acceptance backend environment record (provisioned and verified 2026-09-17):
-- Base change: the four slices were rebased onto `origin/main` `4a9efea696812290cc2d18062949c302926712c2`. New commits: slice 1 `1c405f2`, slice 2 `980851f`, slice 3 `aeb5793`, slice 4 `79f1c1c`. Rebase had no conflicts; nothing had been pushed, so no remote history was rewritten.
+- Base change: the four slices were rebased onto `origin/main` `4a9efea696812290cc2d18062949c302926712c2`. New commits: slice 1 `1c405f2`, slice 2 `980851f`, slice 3 `aeb5793`, slice 4 `79f1c1c`. Rebase had no conflicts; nothing had been pushed, so no remote history was rewritten. The pre-rebase commits (`f9d1f91` fixtures, `bd5ddfe` doc drift, `10b2433` regime, `e263d5e` scope) still exist in the repository but are NOT in the delivered history; each old/new pair has an identical `git patch-id`, so the mapping is proven by content rather than by matching commit titles.
 - Why the rebase was required: the pre-rebase base `f71e8e5` could not build the schema from an empty database. Its second migration failed with `relation "users" does not exist` because the bootstrap migrations that create the base tables landed later on `main` (`f4fee0d`, PR #293). `main` also carries the platform extensions the pilot relies on: tenant isolation for onboarding and fiscal data (PR #294) and idempotent RLS policy creation (PR #311).
 - Host: PostgreSQL 16.15 (Ubuntu 16.15-0ubuntu0.24.04.1) on x86_64, local, port 5432.
 - Database: `omnifood_founder_pilot_acceptance` (dedicated, created for this acceptance; the shared development database `omnifood` was deliberately left untouched).
@@ -238,7 +238,7 @@ Evidence: decisions recorded; field evidence pending.
 
 ### FREEZE-04B — Align the attached-device rehearsal regime to `CUOTA_FIJA`
 
-Status: complete — committed as `10b2433` on slice 3.
+Status: complete — committed as `aeb5793` on slice 3.
 Depends on: FREEZE-04 regime decision
 
 - [x] Align the attached-device Q80 harness fiscal setup to `CUOTA_FIJA`.
@@ -263,11 +263,11 @@ Evidence: The writer subagent failed after writing and returned no result envelo
 
 The verifier's LOW finding was that the manifest claimed a repository-wide single authority while `business_profile_view_model.dart` still defaults to `REGIMEN_GENERAL` for new profiles. Correction applied by the parent: the claim was narrowed to the acceptance path, and the pre-existing non-pilot default, its override behavior, and the troubleshooting rule are now stated explicitly. That correction is parent-authored and parent-spot-checked against the verifier's own cited evidence; it was not re-verified by a separate agent.
 
-Slice-3 changed lines: 22 insertions / 16 deletions across the harness and four documents (38 changed lines) plus the parent-owned task tracking file; within the 400-line budget. Runtime harness: the attached-device Q80 harness cannot execute without physical hardware, which is expected. Rollback boundary: revert the harness regime line and the four acceptance-document edits without touching FREEZE-02 fixtures or FREEZE-03 corrections. Work-unit commit: `10b2433` (6 files, 75 insertions, 30 deletions including the durable task document).
+Slice-3 changed lines: 22 insertions / 16 deletions across the harness and four documents (38 changed lines) plus the parent-owned task tracking file; within the 400-line budget. Runtime harness: the attached-device Q80 harness cannot execute without physical hardware, which is expected. Rollback boundary: revert the harness regime line and the four acceptance-document edits without touching FREEZE-02 fixtures or FREEZE-03 corrections. Work-unit commit: `aeb5793` (6 files, 75 insertions, 30 deletions including the durable task document).
 
 ### FREEZE-04C — Record the narrowed acceptance scope and known limitations
 
-Status: complete — committed as `e263d5e` on slice 4.
+Status: complete — committed as `79f1c1c` on slice 4.
 Depends on: FREEZE-04 device-credential analysis
 
 - [x] State explicitly that `/v1/sync/*` device-transport validation is OUT of ONB1.10F acceptance scope.
@@ -299,7 +299,7 @@ Corrections applied after verification (parent-authored, then citation-spot-chec
 - L2 gained the omitted `/inventory/count-sessions` and `/inventory/regularization/sync` routes, corrected guard line numbers, corrected `alerts` route semantics for line 1049, and the correct interceptor path `apps/pos_app/lib/data/network/device_sync_auth_interceptor.dart`.
 - The L2 residual unknown was relabelled to a static conclusion rather than a runtime question.
 
-Slice-4 changed lines: 107 insertions / 5 deletions across six tracked files plus the new 85-line limitations document; within the 400-line budget. Runtime harness: N/A, no executable behavior changed. Rollback boundary: revert the six tracked documents and delete `AP_KNOWN_LIMITATIONS.md`, without touching FREEZE-02 fixtures, FREEZE-03 corrections, or the FREEZE-04B harness change. Work-unit commit: `e263d5e` (7 files, 203 insertions, 5 deletions including the durable task document).
+Slice-4 changed lines: 107 insertions / 5 deletions across six tracked files plus the new 85-line limitations document; within the 400-line budget. Runtime harness: N/A, no executable behavior changed. Rollback boundary: revert the six tracked documents and delete `AP_KNOWN_LIMITATIONS.md`, without touching FREEZE-02 fixtures, FREEZE-03 corrections, or the FREEZE-04B harness change. Work-unit commit: `79f1c1c` (7 files, 203 insertions, 5 deletions including the durable task document).
 
 ### FREEZE-05 — Freeze release identity and manifest
 
@@ -376,17 +376,19 @@ Evidence: pending.
 - Exploration completed from repository evidence.
 - SDD was intentionally abandoned in favor of ODD because this is an operational acceptance workflow rather than a new product capability.
 - FREEZE-01 completed with the dedicated worktree clean except for the authorized ODD task document.
-- FREEZE-02 completed and committed as `f9d1f91c71bc1627781ac055e2a72ad744f9f28e` after explicit user authorization.
+- FREEZE-02 completed and committed as `1c405f239ff53cf466245d4f8e2c9033a717a582` after explicit user authorization.
 - The commit is one coherent work unit, but its 567 inserted lines exceed the 400-line PR budget because it includes the 331-line verified candidate and the 236-line durable ODD task document.
-- User selected `stacked-to-main`. Slice 1 remains on `feat/founder-pilot-freeze`; slice 2 started from it on `feat/founder-pilot-freeze-docs` for FREEZE-03.
-- FREEZE-03 completed and committed as `bd5ddfeacfe1cf966f8ad1695a452cdb76d4fe6f` after explicit user authorization.
+- User selected `stacked-to-main`. The slices were accumulated as ordered commits on `feat/founder-pilot-freeze-scope`, and delivery creates one branch per slice so each PR carries exactly one work unit.
+- FREEZE-03 completed and committed as `980851fea260e957f4cfea7932571746a5427130` after explicit user authorization.
 - FREEZE-04 human decisions recorded: `CUOTA_FIJA`, local frozen backend, Q80 available, real RUC available.
-- FREEZE-04B completed and committed as `10b2433` after explicit user authorization.
-- Stacked slices so far: `f9d1f91` (fixtures) → `bd5ddfe` (doc drift) → `10b2433` (regime alignment).
+- FREEZE-04B completed and committed as `aeb5793` after explicit user authorization.
+- Stacked slices so far: `1c405f2` (fixtures) → `980851f` (doc drift) → `aeb5793` (regime alignment).
 - FREEZE-04 is on the inventory-first path for the DSI credit-note gap.
 - Decision (2026-09-17): narrow the acceptance scope. `/v1/sync/*` device-transport validation is explicitly out of ONB1.10F scope and its two defects are recorded as known limitations, not silently absorbed.
-- FREEZE-04C completed and committed as `e263d5e` (slice 4) after explicit user authorization.
-- Stacked slices so far: `f9d1f91` (fixtures) → `bd5ddfe` (doc drift) → `10b2433` (regime alignment) → `e263d5e` (narrowed scope and limitations).
+- FREEZE-04C completed and committed as `79f1c1c` (slice 4) after explicit user authorization.
+- Stacked slices so far: `1c405f2` (fixtures) → `980851f` (doc drift) → `aeb5793` (regime alignment) → `79f1c1c` (narrowed scope and limitations).
+- FREEZE-04 harness fix completed and committed as `8a4c8e8` (slice 5) after explicit user authorization.
+- Stacked slices for delivery, with their review budgets (additions + deletions): `1c405f2` fixtures 567, `980851f` doc drift 196, `aeb5793` regime alignment 105, `79f1c1c` narrowed scope 208, `8a4c8e8` harness fix 181. Slice 1 is the only one over the 400-line budget, and it is over because it carries the durable task document alongside the fixture candidate.
 
 - FREEZE-04 harness smoke (2026-09-18) ran the attached ONB1.10F harness against a local acceptance backend and the physical Q80. The `setup` phase reached green for the first time (`ONB1.10F_PHASE_RECEIPT {"phase":"setup","attemptId":"59c9c0d5-ead9-47ec-ab9b-2e9984ebcf9d","testPrint":"accepted"}`). The smoke was pre-rehearsal instrument validation, not acceptance evidence.
 - Environment defects found and fixed during the smoke: the working `adb` was a wrapper around the Windows `adb.exe`, so `flutter test`'s `adb forward` landed on Windows localhost, invisible to the Linux Flutter tool (fixed with a real Linux adb plus a non-destructive alternate SDK root, reusing the already-paired ADB key); port 3000 was held by a nest watcher from the main checkout serving `DB_DATABASE=omnifood`, so every earlier health and login probe was answered by the development backend against the development database, which produced a false "wrong password" diagnosis.
