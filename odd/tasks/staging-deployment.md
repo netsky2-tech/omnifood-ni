@@ -202,3 +202,31 @@ Verified from outside the providers, not from their dashboards.
 - Probe 8.9 (pooled-connection isolation) needs a second tenant with its own user; not yet run.
 - The stray `owner-dashboard` Pages project should be checked so nothing conflicts with `soho.nhilospos.com`.
 - The pull requests are not opened yet.
+
+## Probe 8.9 — pooled-connection isolation (2026-04-18)
+
+Verified against the deployed API, not by inspection.
+
+Sixteen authenticated reads were alternated between two tenants across eight
+rounds, so the same pooled connection served both. Every read returned exactly
+one tenant ID, always the caller's own (`b94b8536-…` for the pilot tenant,
+`22222222-…` for the probe tenant); no read listed a second tenant; and both
+counts stayed constant (7 and 1) across all sixteen reads.
+
+Two details make this a real proof rather than a formality:
+
+- **Repetition matters.** A single interleaved read would not show leakage; the
+  claim is about a reused connection, so the reads have to alternate.
+- **Constant counts matter.** A leaked context would have made the second
+  tenant's count grow by inheriting the first one's rows. It did not move.
+
+This closes the last unverified item in the runbook's isolation section, and it
+also confirmed the pilot tenant is writing real telemetry: four of its seven
+events came from browsing the deployed dashboard, not from seed data.
+
+**A separate schema defect surfaced while preparing this probe.** Joining
+`onboarding_telemetry_events` to `tenants` fails with
+`operator does not exist: character varying = uuid`, because the table's
+`tenant_id` is varchar while `tenants.id` is uuid. The comparison needs an
+explicit cast. This is the column type drift tracked in #286, now with a
+concrete reproduction instead of a table comparison.

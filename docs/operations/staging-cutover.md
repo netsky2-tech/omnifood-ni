@@ -528,8 +528,7 @@ deployed API for each tenant and compare the output to the 8.5 baseline, so
 the check can actually fail instead of resting on a visual impression.
 Because TypeORM pools connections, this proves the transaction-local
 `set_config('app.tenant_id', ..., true)` binding resets correctly across
-pooled connections. **[unverified]** until executed against the deployed
-API.
+pooled connections.
 
 Log in once per tenant with fresh credentials from section 5.1 (never reuse
 a token across tenants):
@@ -562,6 +561,14 @@ Failure: any response listing a second tenant ID, any tenant ID that is not
 the logged-in tenant's, or a count differing from the recorded baseline. A
 count of 0 means the seed data or the endpoint is broken — fix before
 granting access.
+
+**Verified against the deployed API.** Sixteen reads were alternated between
+two tenants over eight rounds so the same pooled connection served both. Every
+read returned exactly one tenant ID and it was always the caller's own; no read
+listed a second tenant; and both counts stayed constant across all sixteen
+reads, which is what rules out a second tenant inheriting the first one's
+context. A single interleaved read would not have been enough: the point is
+repetition across a reused connection, not one successful call.
 
 ## 9. Smoke test checklist
 
@@ -611,7 +618,7 @@ Grant SOHO access only when **every** item is green:
 **Known open items / unproven claims:** live RLS row filtering, index usage
 under the text predicate, and the two-tenant probe are unproven without
 staging PostgreSQL (Task 6 carried them here); the pooled-connection probe
-(8.9) is unverified; no backup/restore rehearsal has been performed.
+(8.9) is now verified; no backup/restore rehearsal has been performed.
 
 ## 13. Known limitations
 
