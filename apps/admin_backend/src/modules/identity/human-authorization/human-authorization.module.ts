@@ -9,14 +9,16 @@ import { HumanAuthVerificationEvent } from './entities/human-auth-verification-e
 import { HumanAuthRolloutCohort } from './entities/human-auth-rollout-cohort.entity';
 import { HumanAuthPolicySnapshot } from './entities/human-auth-policy-snapshot.entity';
 import { HumanAuthTenantPublicationState } from './entities/human-auth-tenant-publication-state.entity';
+import { StaffPolicySnapshotPublisher } from './services/staff-policy-snapshot-publisher.service';
+import { OhacTenantTransaction } from './rls/ohac-tenant-transaction';
 
 /**
  * Human Authorization (OHAC) backend module.
  *
- * Registration-only seam: this slice maps the nine tables and nothing else.
- * Routes, controllers, services, and DTOs arrive in a later slice, and no
- * other module imports this one yet, so the dormant registration is
- * intentional.
+ * Maps the nine OHAC tables and registers the serialized staff-policy
+ * snapshot publisher with its RLS transaction seam. Routes, controllers, and
+ * DTOs arrive in a later slice, and no other module imports this one yet, so
+ * the dormant registration is intentional.
  */
 @Module({
   imports: [
@@ -32,5 +34,6 @@ import { HumanAuthTenantPublicationState } from './entities/human-auth-tenant-pu
       HumanAuthTenantPublicationState,
     ]),
   ],
+  providers: [OhacTenantTransaction, StaffPolicySnapshotPublisher],
 })
 export class HumanAuthorizationModule {}
