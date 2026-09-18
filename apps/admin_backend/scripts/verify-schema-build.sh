@@ -44,6 +44,32 @@
 # The counts are printed with the other comparisons so a vacuous
 # zero-tables-and-zero-policies result is visible instead of passing silently.
 #
+# Why the tenant-type ratchet exists
+# ----------------------------------
+# The entity declarations say `tenant_id` is uuid. The migrations say varchar
+# in 43 tables. Nothing measured that disagreement, so it survived until
+# someone joined two tables and got "operator does not exist: character
+# varying = uuid". This check measures it, in both scenarios.
+#
+# The target type cannot simply be asserted: 43 columns are still wrong, and
+# asserting the target would leave CI red until every unit of issue #286
+# lands. So the check is a ratchet, following the convention the Admin Backend
+# CI ratchet already uses
+# (openspec/changes/restore-admin-backend-ci-baseline). A reviewed manifest
+# lists the known non-uuid tenant columns; the check fails when the schema
+# drifts OUTSIDE that list, and it also fails when a listed entry no longer
+# matches a real non-uuid column. That second half is what makes the ratchet
+# tighten rather than merely not regress: fixing a column without deleting its
+# line is a failure, not a no-op. The manifest is expected to end empty, and
+# additions require a separately approved baseline-change decision.
+#
+# Views appear in the same manifest under a separate marker, and they are not
+# cosmetic. PostgreSQL refuses to change the type of a column used by a view
+# rule, so a view exposing a varchar tenant column BLOCKS the migration of the
+# base column it reads. v_sys_parametros_config_active is exactly that case:
+# the changing unit must drop and recreate the view. Tracking it here is what
+# stops that blocker from being rediscovered during a migration.
+#
 # Why the migration run uses a restricted role
 # --------------------------------------------
 # Running the migrations as a superuser made this harness blind to privilege
@@ -82,6 +108,13 @@ RESTRICTED_PASS="schema-build-test-only-password"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+# Reviewed manifest for the tenant-type ratchet. A missing file is a failure
+# and never an empty ratchet: an empty manifest would report every non-uuid
+# tenant column as new drift and bury the real problem, which is that the file
+# was not shipped.
+MANIFEST_TENANT_TYPES="${SCRIPT_DIR}/schema-tenant-type-manifest.txt"
+[ -f "${MANIFEST_TENANT_TYPES}" ] || fail "FAIL: tenant-type manifest not found at ${MANIFEST_TENANT_TYPES}."
 
 fail() { printf '%s\n' "$*" >&2; exit 1; }
 
@@ -151,7 +184,9 @@ db_columns="$(mktemp)"
 forced_rls_tables="$(mktemp)"
 rls_policies="$(mktemp)"
 rls_policy_exprs_missing_tenant="$(mktemp)"
-trap 'rm -f "${entities}" "${applied}" "${entity_columns}" "${db_columns}" "${forced_rls_tables}" "${rls_policies}" "${rls_policy_exprs_missing_tenant}"' EXIT
+tenant_type_manifest="$(mktemp)"
+tenant_type_actual="$(mktemp)"
+trap 'rm -f "${entities}" "${applied}" "${entity_columns}" "${db_columns}" "${forced_rls_tables}" "${rls_policies}" "${rls_policy_exprs_missing_tenant}" "${tenant_type_manifest}" "${tenant_type_actual}"' EXIT
 
 # Entities declare their table two ways: @Entity('name') and
 # @Entity({ name: 'name' }). Missing the second form would silently under-count
@@ -398,6 +433,48 @@ report_rls_diff() {
   fi
 }
 
+collect_tenant_type_invariants() {
+  # Every tenant_id column in public that is not uuid, base tables and views
+  # alike. information_schema is used rather than a pg_class join so the
+  # base-table / view distinction comes from table_type, which is the same
+  # distinction the manifest draws.
+  psql_admin -d "${SCRATCH_DB}" -tAc \
+    "SELECT CASE t.table_type WHEN 'VIEW' THEN 'view ' ELSE 'column ' END || c.table_name || '.' || c.column_name FROM information_schema.columns c JOIN information_schema.tables t ON t.table_schema = c.table_schema AND t.table_name = c.table_name WHERE c.table_schema = 'public' AND c.column_name = 'tenant_id' AND c.data_type <> 'uuid' ORDER BY 1" \
+    | sed '/^[[:space:]]*$/d' | sort -u > "${tenant_type_actual}"
+
+  # The manifest is read fresh here, not once at startup, so both scenarios
+  # judge the same reviewed list.
+  sed -e 's/#.*//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e '/^$/d' "${MANIFEST_TENANT_TYPES}" \
+    | sort -u > "${tenant_type_manifest}"
+
+}
+
+report_tenant_type_diff() {
+  # Unlisted: a non-uuid tenant column the manifest does not know about.
+  unlisted_tenant_cols="$(comm -13 "${tenant_type_manifest}" "${tenant_type_actual}")"
+  unlisted_tenant_count="$(printf '%s' "${unlisted_tenant_cols}" | grep -c . || true)"
+
+  # Stale: a manifest line matching nothing. Either the column was fixed and
+  # its line was not deleted (the ratchet failing to tighten), or the column
+  # was dropped or renamed and the entry needs a human look.
+  stale_tenant_entries="$(comm -23 "${tenant_type_manifest}" "${tenant_type_actual}")"
+  stale_tenant_count="$(printf '%s' "${stale_tenant_entries}" | grep -c . || true)"
+
+  printf 'non-uuid tenant columns: %s\n' "$(wc -l < "${tenant_type_actual}" | tr -d ' ')"
+  printf 'tenant-type manifest   : %s\n' "$(wc -l < "${tenant_type_manifest}" | tr -d ' ')"
+  printf 'unlisted (new drift)   : %s\n' "${unlisted_tenant_count}"
+  printf 'stale manifest entries : %s\n' "${stale_tenant_count}"
+
+  if [ -n "${unlisted_tenant_cols}" ]; then
+    printf '\n%s\n' "Tenant columns that are not uuid and are missing from scripts/schema-tenant-type-manifest.txt:"
+    printf '%s\n' "${unlisted_tenant_cols}" | sed 's/^/  - /'
+  fi
+  if [ -n "${stale_tenant_entries}" ]; then
+    printf '\n%s\n' "Tenant-type manifest entries matching no non-uuid tenant column (delete the line if the column was fixed):"
+    printf '%s\n' "${stale_tenant_entries}" | sed 's/^/  - /'
+  fi
+}
+
 printf '\n%s\n' "==> Scenario 1: comparing against the entity declarations"
 collect_tables
 report_diff
@@ -405,6 +482,8 @@ collect_columns
 report_column_diff
 collect_rls_invariants
 report_rls_diff
+collect_tenant_type_invariants
+report_tenant_type_diff
 
 printf '\n'
 if [ "${migration_status}" -ne 0 ]; then
@@ -421,6 +500,12 @@ if [ "${deny_all_count}" -ne 0 ]; then
 fi
 if [ "${missing_tenant_count}" -ne 0 ]; then
   fail "FAIL: ${missing_tenant_count} policy expression(s) on forced-RLS tables never reference app.tenant_id (see above)."
+fi
+if [ "${unlisted_tenant_count}" -ne 0 ]; then
+  fail "FAIL: ${unlisted_tenant_count} tenant column(s) are not uuid and are not listed in scripts/schema-tenant-type-manifest.txt (see above)."
+fi
+if [ "${stale_tenant_count}" -ne 0 ]; then
+  fail "FAIL: ${stale_tenant_count} tenant-type manifest entry(ies) match no non-uuid tenant column - delete the line if the column was fixed (see above)."
 fi
 
 printf '%s\n' "PASS (scenario 1): the migration set builds every entity table and column from an empty database, and no forced-RLS table is left deny-all without a tenant-scoped policy."
@@ -456,6 +541,8 @@ collect_columns
 report_column_diff
 collect_rls_invariants
 report_rls_diff
+collect_tenant_type_invariants
+report_tenant_type_diff
 
 printf '\n'
 if [ "${migration2_status}" -ne 0 ]; then
@@ -473,6 +560,12 @@ fi
 if [ "${missing_tenant_count}" -ne 0 ]; then
   fail "FAIL: ${missing_tenant_count} policy expression(s) on forced-RLS tables lost the app.tenant_id predicate after the partial-ledger re-run (see above)."
 fi
+if [ "${unlisted_tenant_count}" -ne 0 ]; then
+  fail "FAIL: ${unlisted_tenant_count} tenant column(s) are not uuid and are not listed in scripts/schema-tenant-type-manifest.txt after the partial-ledger re-run (see above)."
+fi
+if [ "${stale_tenant_count}" -ne 0 ]; then
+  fail "FAIL: ${stale_tenant_count} tenant-type manifest entry(ies) match no non-uuid tenant column after the partial-ledger re-run (see above)."
+fi
 
 printf '%s\n' "PASS (scenario 2): the migration set re-applies cleanly over an existing schema with a partial ledger."
-printf '%s\n' "PASS: the migration set builds every entity table and column from an empty database, survives a partial-ledger re-run, and leaves no forced-RLS table deny-all and no defined policy expression without the app.tenant_id predicate."
+printf '%s\n' "PASS: the migration set builds every entity table and column from an empty database, survives a partial-ledger re-run, and leaves no forced-RLS table deny-all, no defined policy expression without the app.tenant_id predicate, and no non-uuid tenant column outside the reviewed manifest."
