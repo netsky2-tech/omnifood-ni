@@ -144,12 +144,58 @@ The target form is `::uuid` on the setting side. `product_inventory_mapping_vers
 
 ---
 
-## Open decisions
+## Decisions — both open questions are resolved
 
-1. **`products.product_type`** — the issue body's third confirmed case, not covered by the five phases. Local is `character varying(20)` holding only `SIMPLE` (32 rows); staging is enum `products_product_type_enum` (`SIMPLE, COMPOUND, PREPARED, VARIANT_PARENT`). Casting local to the enum would succeed today, but that is a data check for the other environments too, and the target type is unchosen. **Undecided.**
-2. **Empty `app.tenant_id`** — the decision comment predicts `ERROR: invalid input syntax for type uuid: ""` where today it yields zero rows. This holds **only if the policies adopt `::uuid`**. §5 recommends exactly that, so the behaviour change follows and must be chosen explicitly; runbook probe 8.7 changes with it. **Undecided.**
-3. **Slicing of Phase 2** — see below. Two options with materially different review cost. **Undecided.**
-4. **`tenant_fulfillment_records`, `promotions`, `customers`, `customer_point_transactions`, `audit_integrity_alerts`, `forensic_alerts` and the legacy/privacy tables have a varchar `tenant_id` but no RLS policy.** They still need the column change; they carry no policy work. Whether to add policies to them is out of scope for #286 and should not be smuggled in.
+### Decision 1 — `products.product_type` converges on the **enum**
+
+Recorded by the user on 2026-09-18. The evidence, all measured:
+
+| Evidence | Says |
+| --- | --- |
+| The entity **today** | `@Column({ type: 'enum', enum: ProductType, default: ProductType.SIMPLE })` |
+| The entity **in history** | `c314381` *introduced* the column already as `enum`; before that commit the column did not exist. A varchar form never existed on the entity. |
+| Migration `1759000000002` | creates `products_product_type_enum` (`SIMPLE, COMPOUND, PREPARED, VARIANT_PARENT`) and declares the column with it |
+| The create DTO | `@IsEnum(ProductType)` — no value outside the four labels is writable through the API |
+| Code | 3 references, all against `ProductType` members. No index or constraint on the column |
+| Staging | enum; **`products` has 0 rows** |
+| Local dev | `character varying(20)`, holding only `SIMPLE` (32 rows) |
+
+**The issue's framing was wrong.** It called this column "synchronize-provisioned". `synchronize: false` is fixed in `data-source.ts` and a spec asserts it inside and outside tests. The varchar form actually lives in **two test harnesses** that hand-create `products` (`test/fulfillment/fulfillment-rollout-pilot.e2e-spec.ts:145`, `modules/fulfillment/services/fulfillment-rollout.service.db.spec.ts`) — deliberately simplified fixtures, like the varchar tenant fixture in the predicate work — and in the local dev database, whose `varchar(20)` **has no provenance in this repository**: no `.sql` declares it, the harnesses declare it without a length, and the entity never did.
+
+**Why every existing check missed it.** The bootstrap group is `IF NOT EXISTS` throughout (29 × `CREATE TABLE IF NOT EXISTS`, 3 × `ADD COLUMN IF NOT EXISTS`). The schema build check *does* re-run `1759000000002` in scenario 2 against a schema where the tables already exist — it re-runs, does nothing, and reports PASS. **This class of drift is structurally undetectable by the current harness**, and the ratchet hardcodes `column_name = 'tenant_id'` in both assertions, so non-tenant column types have no detector at all. Same defect class as the `1782000000000` re-run problem fixed in Unit 0.
+
+**Consequence for Phase 2:** `product_type` needs **two** things, not one — a reconciling migration (a no-op where the column is already the enum, and a loud failure on a value outside the labels, since only the local database's value set is known), **and** a harness assertion so it cannot return. Feasibility: local is `{SIMPLE}` ⊂ the labels; staging is already the enum and empty; every other environment is unknown, so the migration must fail loudly rather than coerce.
+
+### Decision 2 — adopt `::uuid` predicates, and close the tenant-binding guard gap **first**
+
+Recorded by the user on 2026-09-18: the guard gap is closed before any of the 94 policies is touched.
+
+The question was framed as "what should an empty `app.tenant_id` do". Measured, the reachable states are:
+
+| Setting state | Text predicate (today) | `::uuid` predicate |
+| --- | --- | --- |
+| **UNSET** | 0 rows | **0 rows** — `current_setting(..., true)` is NULL, `NULL::uuid` is NULL, the comparison is NULL, so it denies quietly |
+| **empty string** | 0 rows (quiet deny) | `set_config` **accepts it**, and the first policy evaluation raises `invalid input syntax for type uuid: ""` |
+
+So **UNSET is safe in both forms**, and the only hazard is a literal empty string — whose failure is **deferred and opaque**, not a clean rejection at the boundary.
+
+**And the hazard is reachable.** `core/database/tenant-transaction.ts` exports a guarded `bindTenantContext()` / `resolveTenantContextId()` that throws `TenantContextRequiredError` before any SQL, but **three services re-implemented that helper privately and unguarded**:
+
+| File | What it does |
+| --- | --- |
+| `modules/fulfillment/services/fulfillment-retention.service.ts:29` | private copy, no validation |
+| `modules/fulfillment/services/fulfillment-rollout.service.ts:86` | private copy, no validation |
+| `modules/sales/services/invoices.service.ts:1179` | private copy via a SQL constant, no validation |
+
+Roughly **14 write sites can pass a blank** against ~6 correctly guarded ones. The most exposed are `modules/identity/guards/sync-transport.guard.ts:99` (`deviceClaims.tenant_id` passed raw, on a sync route), `modules/inventory/production.service.ts:138`, `modules/inventory/inventory-purchase.service.ts:128,274`, `modules/inventory/services/product-inventory-mapping.service.ts:24,49`, `modules/sales/services/inbound-sync.service.ts:235`, `modules/identity/services/tenant-capability.service.ts:88`, `modules/fulfillment/services/tenant-topology-revision.service.ts:104`, and `modules/identity/services/device-sync-credential.service.ts:106,245` (a `.trim()` with no emptiness check). Correctly guarded: `modules/catalog/catalog.service.ts:102` and `modules/inventory/product.service.ts:42` (a local `requireTenant`), `modules/identity/human-authorization/rls/ohac-tenant-transaction.ts:37`, and `device-sync-credential.service.ts:400,448,503`.
+
+**Consequence for Phase 2:** the prerequisite is not a behaviour choice, it is a bounded hardening — delete the three private duplicates, route every writer through the shared guarded helper, and add the missing check at the raw sites. Roughly 14–17 call sites across ~10 files. Choosing "the empty setting denies" without closing the gap would mean choosing that a programming error surfaces as an opaque 500 in production.
+
+### Still open
+
+**Slicing of Phase 2** — see below. Two options with materially different review cost. **Undecided.**
+
+**Tables with a varchar `tenant_id` but no RLS policy** — `tenant_fulfillment_records`, `promotions`, `customers`, `customer_point_transactions`, `audit_integrity_alerts`, `forensic_alerts` and the legacy/privacy tables. They still need the column change; they carry no policy work. Whether to add policies to them is out of scope for #286 and must not be smuggled in.
 
 ---
 
@@ -161,7 +207,9 @@ The 43 varchar tables plus `invoices` (already `uuid`, but its predicates need r
 
 | Unit | Domain | Tables | Policies | Table names (policies in parentheses) |
 | --- | --- | --- | --- | --- |
-| **0** | Pre-flight guard + harness coverage | — | — | The non-UUID assertion as a migration guard, and the column-type assertion as the schema build check's fourth layer. Write it first and watch it fail on both environments. |
+| **0** | Pre-flight guard + harness coverage | — | — | **DONE — merged as #319, #323, #321.** The tenant-column ratchet, the predicate-form assertion scoped to uuid columns, the adaptive predicate fix, and the forward `invoices` migration. The non-UUID pre-flight was re-scoped: the `ALTER` is already the guard. |
+| **0b** | Tenant-binding guard gap | — | — | **Prerequisite, from Decision 2, before any policy is touched.** Delete the three private unguarded copies of `bindTenantContext`, route every `set_config('app.tenant_id', ...)` writer through the shared guarded helper, and add the missing emptiness check at the raw sites. ~14–17 sites across ~10 files. No migration. |
+| **0c** | Harness coverage for non-tenant column types | — | — | **New, from Decision 1.** The ratchet hardcodes `tenant_id`, so `products.product_type` drift and the `IF NOT EXISTS` non-reconciliation class are both invisible. Extend the check so they cannot return. |
 | **1** | Inventory & Kardex | 10 | 27 | `inventory_kardex` (8), `inventory_purchase_documents` (4), `inventory_sync_outbox` (3), `inventory_sync_receipts` (4), `inventory_remediation_receipts` (2), `kardex_correction` (1), `kardex_recalculate_queue` (1), `production_batch_history` (4), `product_import_sessions` (0), `staging_importacion_productos` (0) |
 | **2** | Onboarding & fiscal | 10 | 21 | `onboarding_activation_attempts` (4), `onboarding_activation_check_results` (4), `onboarding_activation_follow_ups` (4), `onboarding_telemetry_events` (4), `onboarding_sessions` (0), `onboarding_idempotency_records` (0), `onboarding_template_applications` (0), `onboarding_template_seed_links` (0), `fiscal_config_revisions` (4), `sys_parametros_config` (1) |
 | **3** | OHAC / human authorization | 9 | 22 | `human_auth_policy_epochs` (2), `human_auth_policy_snapshots` (2), `human_auth_recovery_events` (2), `human_auth_recovery_tokens` (3), `human_auth_rollout_cohorts` (3), `human_auth_tenant_publication_state` (3), `human_auth_terminal_ack_floor` (3), `human_auth_terminal_ack_history` (2), `human_auth_verification_events` (2) |
@@ -169,7 +217,7 @@ The 43 varchar tables plus `invoices` (already `uuid`, but its predicates need r
 | **5** | Catalog, loyalty & legacy import | 6 | 4 | `catalog_values` (4), `promotions` (0), `customers` (0), `customer_point_transactions` (0), `legacy_import_integrity_reports` (0), `legacy_onboarding_migration_receipts` (0) |
 | **6** | Sales | 2 | 8 | `invoice_items` (4, varchar → uuid), `invoices` (4, already uuid — `::text` → `::uuid` only) |
 | **7** | Declare the foreign keys | — | — | Phase 3. Only possible once a column is `uuid`. 43 candidate constraints; none exist today. |
-| **8** | `products.product_type` | 1 | 0 | Conditional on open decision 1. |
+| **8** | `products.product_type` | 1 | 0 | **Decided (Decision 1): converge on the enum.** Reconciling migration — a no-op where the column is already the enum, a loud failure on a value outside the labels. Depends on 0c. |
 
 Totals: 44 tables, 98 policies touched. 98 + the 4 that need no change = 102. ✔
 
