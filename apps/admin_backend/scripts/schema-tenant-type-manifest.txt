@@ -1,0 +1,65 @@
+# Tenant columns that are not yet uuid. The schema build check reads this file
+# as a ratchet: it fails when a tenant column that is not uuid is MISSING from
+# this list (new drift), and it fails when a line here no longer matches a real
+# non-uuid tenant column (a stale entry, which means the list was not tightened
+# after the column was fixed).
+#
+# Direction: downward only. Entries are removed as each Phase 2 unit of issue
+# #286 lands; the file ends empty. Additions require a separately approved
+# baseline-change decision, the same rule the Admin Backend CI ratchet uses
+# (openspec/changes/restore-admin-backend-ci-baseline).
+#
+# Format, one entry per line, blank lines and # comments ignored:
+#
+#   column <table>.<column>   A base table column that must become uuid.
+#                             Its policies depend on it, so PostgreSQL refuses
+#                             the ALTER while they exist.
+#   view   <view>.<column>    A view exposing a varchar tenant column. It does
+#                             not get altered itself; it BLOCKS the ALTER of
+#                             the base column it reads, because PostgreSQL
+#                             refuses to change a type used by a view rule.
+#                             The changing unit must drop and recreate it.
+column audit_integrity_alerts.tenant_id
+column catalog_values.tenant_id
+column customer_point_transactions.tenant_id
+column customers.tenant_id
+column device_sync_credential_events.tenant_id
+column device_sync_credentials.tenant_id
+column fiscal_config_revisions.tenant_id
+column forensic_alerts.tenant_id
+column human_auth_policy_epochs.tenant_id
+column human_auth_policy_snapshots.tenant_id
+column human_auth_recovery_events.tenant_id
+column human_auth_recovery_tokens.tenant_id
+column human_auth_rollout_cohorts.tenant_id
+column human_auth_tenant_publication_state.tenant_id
+column human_auth_terminal_ack_floor.tenant_id
+column human_auth_terminal_ack_history.tenant_id
+column human_auth_verification_events.tenant_id
+column inventory_kardex.tenant_id
+column inventory_purchase_documents.tenant_id
+column inventory_remediation_receipts.tenant_id
+column inventory_sync_outbox.tenant_id
+column inventory_sync_receipts.tenant_id
+column invoice_items.tenant_id
+column kardex_correction.tenant_id
+column kardex_recalculate_queue.tenant_id
+column legacy_import_integrity_reports.tenant_id
+column legacy_onboarding_migration_receipts.tenant_id
+column onboarding_activation_attempts.tenant_id
+column onboarding_activation_check_results.tenant_id
+column onboarding_activation_follow_ups.tenant_id
+column onboarding_idempotency_records.tenant_id
+column onboarding_sessions.tenant_id
+column onboarding_telemetry_events.tenant_id
+column onboarding_template_applications.tenant_id
+column onboarding_template_seed_links.tenant_id
+column product_import_sessions.tenant_id
+column production_batch_history.tenant_id
+column promotions.tenant_id
+column staging_importacion_productos.tenant_id
+column sys_parametros_config.tenant_id
+column tenant_capability_event.tenant_id
+column tenant_fulfillment_records.tenant_id
+column tenant_topology_revisions.tenant_id
+view v_sys_parametros_config_active.tenant_id

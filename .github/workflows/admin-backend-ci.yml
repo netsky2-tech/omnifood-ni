@@ -6,10 +6,13 @@ on:
     paths:
       - "apps/admin_backend/**"
       - ".github/workflows/admin-backend-ci.yml"
+  # No `branches:` filter here on purpose. It used to list [main, "feat/**"],
+  # which silently skipped this entire job for chained pull requests whose base
+  # is a test/..., fix/... or docs/... branch -- so the schema build check never
+  # ran on the very pull requests that changed tenant policies, and a red check
+  # was never seen. The base branch says nothing about whether backend code
+  # changed; the `paths:` filter below is what scopes this job.
   pull_request:
-    branches:
-      - main
-      - "feat/**"
     paths:
       - "apps/admin_backend/**"
       - ".github/workflows/admin-backend-ci.yml"
