@@ -7,6 +7,7 @@ import 'package:pos_app/data/daos/local_config_dao.dart';
 import 'package:pos_app/data/models/fiscal_config_local_entity.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/domain/models/config/tenant_operation_mode.dart';
+import 'package:pos_app/domain/services/config/printer_config_service.dart';
 import 'package:pos_app/ui/features/config/business_profile/business_profile_view_model.dart';
 
 class _MockLocalConfigDao extends Mock implements LocalConfigDao {}
@@ -108,6 +109,26 @@ void main() {
       expect(viewModel.operationMode, TenantOperationMode.restaurant);
       expect(viewModel.commercialRate, 36.80);
       verify(() => mockConfigDao.saveConfig(any())).called(15);
+    });
+
+    test('operator RUC override is deliberate: it persists under the local issuer key the printer config reads',
+        () async {
+      // PRODUCT DECISION (founder-pilot-fiscal-and-printer-fixture-alignment):
+      // the DGI projection seeds the issuer RUC, and the operator may override it
+      // locally from this screen (offline-first). The printed fiscal identity
+      // follows the local value until the next fiscal resync. Do NOT "fix" this
+      // by blocking the write without revisiting that decision.
+      when(() => mockConfigDao.saveConfig(any())).thenAnswer((_) async {});
+
+      await viewModel.saveConfig({'ruc': 'J0310000999999'});
+
+      final saved = verify(() => mockConfigDao.saveConfig(captureAny()))
+          .captured
+          .whereType<LocalConfigEntity>()
+          .singleWhere((e) => e.key == PrinterConfigService.fiscalRucKey);
+
+      expect(PrinterConfigService.fiscalRucKey, 'ruc');
+      expect(saved.value, 'J0310000999999');
     });
 
     test('fetchOfficialBcnRate updates bcn_official_exchange_rate and persists it', () async {

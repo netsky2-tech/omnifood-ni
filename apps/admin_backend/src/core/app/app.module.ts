@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { resolveDatabaseConnection } from '../config/database-connection.config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { IdentityModule } from '../../modules/identity/identity.module';
@@ -96,11 +97,25 @@ export const getRequiredConfigValue = (
 
 export const createTypeOrmOptions = (configService: ConfigService) => ({
   type: 'postgres' as const,
-  host: configService.get<string>('DB_HOST', '127.0.0.1'),
-  port: configService.get<number>('DB_PORT', 5432),
-  username: configService.get<string>('DB_USERNAME', 'postgres'),
-  password: getRequiredConfigValue(configService, 'DB_PASSWORD'),
-  database: configService.get<string>('DB_DATABASE', 'omnifood'),
+  // Existing contract: the serving process requires an explicit DB password in
+  // every environment, including local development, so `getRequiredConfigValue`
+  // throws before any resolver default can apply.
+  //
+  // Credentials are resolved by the pure runtime resolver: under
+  // NODE_ENV=production it fails closed instead of silently defaulting the
+  // serving role to `postgres`/`omnifood`, validates DB_PORT, and never reads
+  // the migration-owner credentials (`DB_MIGRATION_*`).
+  ...resolveDatabaseConnection({
+    role: 'runtime',
+    env: {
+      NODE_ENV: configService.get<string>('NODE_ENV'),
+      DB_HOST: configService.get<string>('DB_HOST'),
+      DB_PORT: configService.get<string>('DB_PORT'),
+      DB_USERNAME: configService.get<string>('DB_USERNAME'),
+      DB_PASSWORD: getRequiredConfigValue(configService, 'DB_PASSWORD'),
+      DB_DATABASE: configService.get<string>('DB_DATABASE'),
+    },
+  }),
   entities: [
     Tenant,
     User,

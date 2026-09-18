@@ -179,6 +179,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
       const dto: FiscalSetupDto = {
         regime: FiscalRegime.CUOTA_FIJA,
         businessName: 'Café Central',
+        ruc: 'J0310000055555',
         commercialFxSpread: 0.5,
         pricesIncludeTax: true,
       };
@@ -192,6 +193,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
       const dto: FiscalSetupDto = {
         regime: FiscalRegime.CUOTA_FIJA,
         businessName: 'Café Central',
+        ruc: 'J0310000055555',
         commercialFxSpread: -0.1,
         pricesIncludeTax: true,
       };
@@ -208,7 +210,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
       const dto: FiscalSetupDto = {
         regime: FiscalRegime.CUOTA_FIJA,
         businessName: 'Cafetín Las Palmeras',
-        ruc: 'CF-12345',
+        ruc: 'J0310000055555',
         commercialFxSpread: 0.5,
         pricesIncludeTax: true,
       };
@@ -218,7 +220,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
       expect(result).toMatchObject({
         tenantId,
         businessName: 'Cafetín Las Palmeras',
-        ruc: 'CF-12345',
+        ruc: 'J0310000055555',
         regime: FiscalRegime.CUOTA_FIJA,
         taxRateIva: 0.0,
         pricesIncludeTax: true,
@@ -319,6 +321,65 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
     });
   });
 
+  describe('configureFiscalSetup (defense-in-depth RUC guard, FR-1)', () => {
+    it.each([
+      ['empty string', ''],
+      ['whitespace only', '   '],
+      ['malformed (CF prefix)', 'CF-12345'],
+      ['wrong letter (K)', 'K0310000055555'],
+      ['too short (12 digits)', 'J031000005555'],
+    ])(
+      'rejects %s before any mutation and preserves the prior tenant RUC',
+      async (_label, ruc) => {
+        mockManager.findOne.mockResolvedValueOnce({
+          ...mockTenant,
+          ruc: 'J0310000099999',
+        });
+
+        const dto: FiscalSetupDto = {
+          regime: FiscalRegime.CUOTA_FIJA,
+          businessName: 'Cafe Central',
+          ruc,
+          commercialFxSpread: 0.5,
+          pricesIncludeTax: true,
+        };
+
+        const rejection = service.configureFiscalSetup(tenantId, dto, userId);
+
+        await expect(rejection).rejects.toThrow(BadRequestException);
+        await expect(rejection).rejects.toThrow(
+          'El RUC del emisor es obligatorio',
+        );
+
+        // Guard fires before the transactional mutation path: the prior
+        // tenant RUC is untouched and nothing is saved.
+        expect(dataSource.transaction).not.toHaveBeenCalled();
+        expect(mockManager.save).not.toHaveBeenCalled();
+      },
+    );
+
+    it('persists the trimmed accepted RUC on success', async () => {
+      mockManager.findOne.mockResolvedValueOnce({ ...mockTenant });
+      mockManager.find.mockResolvedValue([]);
+
+      const dto: FiscalSetupDto = {
+        regime: FiscalRegime.CUOTA_FIJA,
+        businessName: 'Cafetin Las Palmeras',
+        ruc: '  J0310000055555  ',
+        commercialFxSpread: 0.5,
+        pricesIncludeTax: true,
+      };
+
+      const result = await service.configureFiscalSetup(tenantId, dto, userId);
+
+      expect(result.ruc).toBe('J0310000055555');
+      expect(mockManager.save).toHaveBeenCalledWith(
+        Tenant,
+        expect.objectContaining({ ruc: 'J0310000055555' }),
+      );
+    });
+  });
+
   describe('Tenant context binding (RLS pre-hardening)', () => {
     it('binds tenant context at the start of the configureFiscalSetup transaction before any repository access', async () => {
       mockManager.findOne.mockResolvedValueOnce({ ...mockTenant });
@@ -327,6 +388,9 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
       const dto: FiscalSetupDto = {
         regime: FiscalRegime.CUOTA_FIJA,
         businessName: 'Cafetín Las Palmeras',
+        // The RUC guard introduced on main runs before the transaction, so a
+        // valid value is required for this test to reach the binding point.
+        ruc: 'J0310000055555',
         commercialFxSpread: 0.5,
         pricesIncludeTax: true,
       };

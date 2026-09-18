@@ -67,8 +67,8 @@ void main() {
       ],
       businessName: 'OMNIFOOD ONB1.10 HARDWARE SMOKE',
       cashierName: 'ATTACHED DEVICE TEST',
-      taxRegime: TaxRegime.regimenGeneral,
-      paperWidthMm: 58,
+      taxRegime: TaxRegime.cuotaFija,
+      paperWidthMm: 80,
     );
 
     expect(

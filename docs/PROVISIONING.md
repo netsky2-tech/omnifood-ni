@@ -16,7 +16,7 @@ npx ts-node src/scripts/provision.ts
 
 El script solicitará interactivamente:
 1.  **Nombre del Negocio**: Nombre legal o comercial.
-2.  **RUC**: Registro único de contribuyente (opcional).
+2.  **RUC**: Registro único de contribuyente. El provisioning puede omitirlo (el tenant existe sin configuración fiscal), pero un tenant sin RUC válido **no alcanza `SALE_READY` ni puede emitir documentos fiscales** hasta completar el Fiscal Setup.
 3.  **Nombre del Dueño**: Nombre de la persona que administrará el tenant.
 4.  **Email**: Correo para acceso web.
 5.  **Contraseña**: Clave para el dashboard administrativo.

@@ -96,7 +96,7 @@ graph TD
   - `apps/admin_backend/src/modules/onboarding/controllers/fiscal-setup.controller.ts`
   - `apps/admin_backend/test/onboarding/fiscal-setup.e2e-spec.ts`
 - **Acceptance Criteria**:
-  - `POST /onboarding/fiscal-setup`: Accepts `{ regime: 'CUOTA_FIJA' | 'REGIMEN_GENERAL', ruc?: string, businessName: string, commercialFxSpread: number, pricesIncludeTax: boolean }`.
+  - `POST /onboarding/fiscal-setup`: Accepts `{ regime: 'CUOTA_FIJA' | 'REGIMEN_GENERAL', ruc: string, businessName: string, commercialFxSpread: number, pricesIncludeTax: boolean }`. `ruc` es obligatorio: se rechaza (400) si falta, viene vacío o no es un RUC jurídico (`J` + 13 dígitos) ni una cédula válida.
   - Updates `Tenant` entity (`ruc`, `name`, etc.).
   - Configures `sys_parametros_config` with fiscal settings:
     - `FISCAL_REGIME`: `'CUOTA_FIJA'` or `'REGIMEN_GENERAL'`.

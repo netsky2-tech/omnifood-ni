@@ -16,6 +16,8 @@ import {
   FiscalSetupDto,
   FiscalSetupResponse,
 } from '../dto/fiscal-setup.dto';
+import { isValidRuc } from '../utils/nicaragua-fiscal.validator';
+import { NICARAGUA_FISCAL_ID_REQUIRED_MESSAGE } from '../validators/is-valid-nicaragua-fiscal-id.validator';
 import {
   FiscalConfigSnapshot,
   FiscalConfigVersion,
@@ -172,6 +174,15 @@ export class FiscalSetupService {
       );
     }
 
+    // Defense-in-depth (FR-1): never silently persist a blank/invalid RUC as
+    // NULL. The ValidationPipe normally rejects it at the HTTP boundary; a
+    // directly-constructed DTO reaching this service must be rejected here
+    // too, before any mutation — the prior tenant RUC stays untouched.
+    const trimmedRuc = dto.ruc?.trim() ?? '';
+    if (!isValidRuc(trimmedRuc)) {
+      throw new BadRequestException(NICARAGUA_FISCAL_ID_REQUIRED_MESSAGE);
+    }
+
     const targetTaxRate =
       dto.regime === FiscalRegime.REGIMEN_GENERAL
         ? DGI_NICARAGUA_TAX_RATES.REGIMEN_GENERAL
@@ -194,7 +205,7 @@ export class FiscalSetupService {
         }
 
         tenant.name = dto.businessName.trim();
-        tenant.ruc = dto.ruc?.trim() || null;
+        tenant.ruc = trimmedRuc;
         await manager.save(Tenant, tenant);
 
         // 2. Upsert / Version System Parameters
