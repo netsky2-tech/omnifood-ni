@@ -1,46 +1,10 @@
 import { NestFactory } from '@nestjs/core';
-import {
-  ValidationPipe,
-  Logger,
-  ExceptionFilter,
-  Catch,
-  ArgumentsHost,
-  HttpException,
-} from '@nestjs/common';
+import { ValidationPipe, Logger } from '@nestjs/common';
 import helmet from 'helmet';
 import { Request, Response, NextFunction } from 'express';
 import { AppModule } from './core/app/app.module';
 import { resolveCorsOrigins } from './core/config/http-security.config';
-
-@Catch()
-class AllExceptionsFilter implements ExceptionFilter {
-  private readonly logger = new Logger('ExceptionFilter');
-
-  catch(exception: unknown, host: ArgumentsHost) {
-    const ctx = host.switchToHttp();
-    const response = ctx.getResponse<Response>();
-    const request = ctx.getRequest<Request>();
-
-    let status = 500;
-    let message: unknown = 'Internal server error';
-
-    if (exception instanceof HttpException) {
-      status = exception.getStatus();
-      message = exception.getResponse();
-    } else if (exception instanceof Error) {
-      this.logger.error(
-        `[${request.method}] ${request.url} unhandled error: ${exception.message}`,
-        exception.stack,
-      );
-    }
-
-    this.logger.error(
-      `[${request.method}] ${request.url} -> ${status}: ${JSON.stringify(message)}`,
-    );
-
-    response.status(status).json(message);
-  }
-}
+import { AllExceptionsFilter } from './core/http/all-exceptions.filter';
 
 async function bootstrap() {
   process.on('unhandledRejection', (reason) => {

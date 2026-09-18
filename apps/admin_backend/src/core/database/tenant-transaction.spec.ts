@@ -1,4 +1,4 @@
-import { DataSource, EntityManager } from 'typeorm';
+import { DataSource, EntityManager, QueryRunner } from 'typeorm';
 import {
   bindTenantContext,
   resolveTenantContextId,
@@ -69,6 +69,46 @@ describe('bindTenantContext — transaction-local tenant binding', () => {
     releaseQuery?.();
     await bound;
     expect(settled).toBe(true);
+  });
+});
+
+describe('bindTenantContext — widened executor shapes', () => {
+  let executor: { query: jest.Mock };
+
+  beforeEach(() => {
+    executor = { query: jest.fn().mockResolvedValue(undefined) };
+  });
+
+  const asManager = () => executor as unknown as EntityManager;
+  const asQueryRunner = () => executor as unknown as QueryRunner;
+
+  it.each([
+    ['EntityManager', asManager],
+    ['QueryRunner', asQueryRunner],
+  ])('rejects a blank tenant id without issuing SQL through %s', async (_, cast) => {
+    await expect(bindTenantContext(cast(), '')).rejects.toThrow(
+      TenantContextRequiredError,
+    );
+    expect(executor.query).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['EntityManager', asManager],
+    ['QueryRunner', asQueryRunner],
+  ])('rejects a whitespace-only tenant id without issuing SQL through %s', async (_, cast) => {
+    await expect(bindTenantContext(cast(), '  \t  ')).rejects.toThrow(
+      TenantContextRequiredError,
+    );
+    expect(executor.query).not.toHaveBeenCalled();
+  });
+
+  it('binds a valid tenant id through a QueryRunner with the same parameterised SQL as through a manager', async () => {
+    await bindTenantContext(asQueryRunner(), 'tenant-a');
+
+    expect(executor.query).toHaveBeenCalledTimes(1);
+    expect(executor.query).toHaveBeenCalledWith(TENANT_CONTEXT_SET_CONFIG_SQL, [
+      'tenant-a',
+    ]);
   });
 });
 

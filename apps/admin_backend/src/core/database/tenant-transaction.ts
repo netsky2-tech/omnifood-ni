@@ -1,4 +1,4 @@
-import { DataSource, EntityManager } from 'typeorm';
+import { DataSource, EntityManager, QueryRunner } from 'typeorm';
 
 /**
  * Transaction-local PostgreSQL tenant context binding for RLS-protected tables.
@@ -43,16 +43,23 @@ export function resolveTenantContextId(tenantId: string): string {
 }
 
 /**
- * Binds the tenant id on the given transaction manager so RLS policies using
- * `current_setting('app.tenant_id', true)` authorize subsequent queries.
- * Must be awaited before any repository access on the same manager.
+ * Binds the tenant id on the given transactional executor so RLS policies
+ * using `current_setting('app.tenant_id', true)` authorize subsequent queries.
+ * Must be awaited before any repository access on the same executor.
+ *
+ * The parameter accepts an `EntityManager` or a `QueryRunner`: several call
+ * sites already hold the transaction's `QueryRunner` (not its manager), and
+ * both expose the same parameterised `query(sql, parameters)` surface, so the
+ * guard must be reachable from either shape. Type safety is preserved: the
+ * union still compiles only against objects exposing that exact method, and
+ * the tenant id remains a bound parameter in every case.
  */
 export async function bindTenantContext(
-  manager: EntityManager,
+  executor: EntityManager | QueryRunner,
   tenantId: string,
 ): Promise<void> {
   const trimmed = resolveTenantContextId(tenantId);
-  await manager.query(TENANT_CONTEXT_SET_CONFIG_SQL, [trimmed]);
+  await executor.query(TENANT_CONTEXT_SET_CONFIG_SQL, [trimmed]);
 }
 
 /**
