@@ -38,6 +38,7 @@ import {
   FiscalConfigSnapshot,
 } from '../../onboarding/dto/fiscal-config-version.dto';
 import { FiscalConfigVersionService } from '../../onboarding/services/fiscal-config-version.service';
+import { bindTenantContext } from '../../../core/database/tenant-transaction';
 
 @Injectable()
 export class InboundSyncService {
@@ -231,9 +232,9 @@ export class InboundSyncService {
     const now = new Date();
     if (this.mappingVersionRepository?.manager) {
       try {
-        await this.mappingVersionRepository.manager.query(
-          "SELECT set_config('app.tenant_id', $1, true)",
-          [tenantId],
+        await bindTenantContext(
+          this.mappingVersionRepository.manager,
+          tenantId,
         );
       } catch (error) {
         this.logger.debug(

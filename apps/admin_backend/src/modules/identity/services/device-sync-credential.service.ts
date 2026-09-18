@@ -45,6 +45,7 @@ import {
   DEVICE_SYNC_TOKEN_TYPE,
   DeviceSyncJwtClaims,
 } from '../security/jwt-token.types';
+import { bindTenantContext } from '../../../core/database/tenant-transaction';
 
 export interface ProvisionCredentialResult {
   readonly credential: DeviceSyncCredential;
@@ -102,11 +103,7 @@ export class DeviceSyncCredentialService {
     dto: ProvisionDeviceCredentialDto,
   ): Promise<ProvisionCredentialResult> {
     return await this.dataSource.transaction(async (manager) => {
-      if (dto.tenantId?.trim()) {
-        await manager.query("SELECT set_config('app.tenant_id', $1, true)", [
-          dto.tenantId.trim(),
-        ]);
-      }
+      await bindTenantContext(manager, dto.tenantId);
 
       const attemptRepo = manager.getRepository(ActivationAttempt);
       const credentialRepo = manager.getRepository(DeviceSyncCredential);
@@ -242,9 +239,7 @@ export class DeviceSyncCredentialService {
   ): Promise<RenewTokenResponse> {
     return await this.dataSource.transaction(async (manager) => {
       if (dto.declarativeTenantId?.trim()) {
-        await manager.query("SELECT set_config('app.tenant_id', $1, true)", [
-          dto.declarativeTenantId.trim(),
-        ]);
+        await bindTenantContext(manager, dto.declarativeTenantId);
       }
 
       const credentialRepo = manager.getRepository(DeviceSyncCredential);
@@ -331,9 +326,7 @@ export class DeviceSyncCredentialService {
       }
 
       // Ensure session tenant is authoritative before writing the lifecycle event under RLS
-      await manager.query("SELECT set_config('app.tenant_id', $1, true)", [
-        credential.tenantId,
-      ]);
+      await bindTenantContext(manager, credential.tenantId);
 
       const jti = randomUUID();
       const claims: DeviceSyncJwtClaims = {

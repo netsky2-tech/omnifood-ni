@@ -25,6 +25,7 @@ import {
 } from './dto/production-order-document.dto';
 import { InventorySyncReceipt } from './entities/inventory-sync-receipt.entity';
 import { ProductionBatchHistory } from './entities/production-batch-history.entity';
+import { bindTenantContext } from '../../core/database/tenant-transaction';
 
 const SCALE_4 = 4;
 const PRODUCTION_FLOW_TYPE = 'production';
@@ -135,9 +136,7 @@ export class ProductionService {
     }
 
     return this.dataSource.transaction('SERIALIZABLE', async (manager) => {
-      await manager.query("SELECT set_config('app.tenant_id', $1, true)", [
-        input.tenantId,
-      ]);
+      await bindTenantContext(manager, input.tenantId);
 
       const receiptRepo = manager.getRepository(InventorySyncReceipt);
       const existingReceiptByStream = await receiptRepo.findOneBy({

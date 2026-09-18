@@ -12,6 +12,7 @@ import { BatchCostingService } from './batch-costing.service';
 import { ProductionBatchHistory } from './entities/production-batch-history.entity';
 import { InventoryMovement } from './entities/inventory-movement.entity';
 import { InventorySyncReceipt } from './entities/inventory-sync-receipt.entity';
+import { TenantContextRequiredError } from '../../core/database/tenant-transaction';
 
 describe('ProductionService', () => {
   let service: ProductionService;
@@ -1638,5 +1639,41 @@ describe('ProductionService', () => {
         cost: 2,
       }),
     );
+  });
+
+  it('rejects a blank tenant id (Unit 0b-3) with TenantContextRequiredError and issues no set_config SQL', async () => {
+    recipeService.getSnapshot.mockResolvedValue({
+      recipeVersion: { id: 'v3' },
+      components: [],
+    });
+    bomExplosionService.explode.mockReturnValue(new Map());
+
+    for (const blankTenantId of ['', '   ']) {
+      await expect(
+        service.replayProductionClose({
+          tenantId: blankTenantId,
+          document: {
+            id: 'prod-doc-blank-tenant',
+            recipeVersionId: 'v3',
+            producedInsumoId: 'ins-finished',
+            producedBatchNumber: 'PB-BLANK',
+            producedExpirationDate: '2026-12-01T00:00:00.000Z',
+            plannedQuantity: 4,
+            actualQuantity: 4,
+            outcome: 'COMPLETED',
+            terminalId: 'terminal-1',
+            sourceSequence: 12,
+            idempotencyKey: 'production:terminal-1:prod-doc-blank-tenant',
+            payloadHash: 'client-hash',
+            operationDate: '2026-05-01T00:00:00.000Z',
+            movementReferences: ['out-1', 'in-1'],
+          },
+        }),
+      ).rejects.toThrow(TenantContextRequiredError);
+
+      // Absence of SQL, not just the rejection: a blank tenant id must
+      // never reach set_config on the transaction manager.
+      expect(manager.query).not.toHaveBeenCalled();
+    }
   });
 });

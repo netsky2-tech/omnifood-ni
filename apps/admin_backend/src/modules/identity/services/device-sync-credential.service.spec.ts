@@ -23,6 +23,7 @@ import {
 } from '../../onboarding/entities/activation-attempt.entity';
 import { DeviceSyncCredentialService } from './device-sync-credential.service';
 import { DeviceCredentialRevokedException } from '../exceptions/device-credential-revoked.exception';
+import { TenantContextRequiredError } from '../../../core/database/tenant-transaction';
 import {
   DEVICE_SYNC_JWT_CONFIG,
   DeviceSyncJwtConfig,
@@ -1012,6 +1013,26 @@ describe('DeviceSyncCredentialService', () => {
           canonicalDeviceId: 'term-pos-01',
         }),
       ).rejects.toBeInstanceOf(BadRequestException);
+    });
+  });
+
+  describe('tenant binding guard (Unit 0b-3)', () => {
+    it('rejects a blank or whitespace-only tenantId with TenantContextRequiredError and issues no set_config SQL', async () => {
+      attemptRepo.findOne.mockResolvedValue(sampleAttempt);
+
+      for (const blankTenantId of ['', '   ']) {
+        await expect(
+          service.provisionCredential({
+            activationAttemptId: 'attempt-uuid-1',
+            tenantId: blankTenantId,
+          }),
+        ).rejects.toThrow(TenantContextRequiredError);
+
+        // Absence of SQL, not just the rejection: a blank tenant id must
+        // never reach set_config on the transaction manager.
+        expect(mockManager.query).not.toHaveBeenCalled();
+        expect(attemptRepo.findOne).not.toHaveBeenCalled();
+      }
     });
   });
 });

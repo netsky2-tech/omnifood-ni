@@ -1,4 +1,5 @@
 import { ProductInventoryMappingService } from './product-inventory-mapping.service';
+import { TenantContextRequiredError } from '../../../core/database/tenant-transaction';
 
 describe('ProductInventoryMappingService', () => {
   const tenant = 'tenant-a';
@@ -139,5 +140,61 @@ describe('ProductInventoryMappingService', () => {
 
     expect(mockQueryRunner.rollbackTransaction).toHaveBeenCalled();
     expect(mockQueryRunner.release).toHaveBeenCalled();
+  });
+
+  it('rejects a blank tenant id (Unit 0b-3) with TenantContextRequiredError and issues no set_config SQL', async () => {
+    const makeRunner = () => ({
+      connect: jest.fn().mockResolvedValue(undefined),
+      startTransaction: jest.fn().mockResolvedValue(undefined),
+      commitTransaction: jest.fn().mockResolvedValue(undefined),
+      rollbackTransaction: jest.fn().mockResolvedValue(undefined),
+      release: jest.fn().mockResolvedValue(undefined),
+      query: jest.fn().mockResolvedValue([]),
+      manager: {
+        getRepository: jest.fn(),
+      },
+    });
+
+    for (const blankTenantId of ['', '   ']) {
+      const readRunner = makeRunner();
+      const readSource = {
+        createQueryRunner: jest.fn().mockReturnValue(readRunner),
+      };
+      const readService = new ProductInventoryMappingService(readSource as any);
+
+      await expect(
+        readService.findEffective(
+          blankTenantId,
+          product,
+          new Date('2026-01-02T00:00:00Z'),
+        ),
+      ).rejects.toThrow(TenantContextRequiredError);
+
+      expect(readRunner.query).not.toHaveBeenCalled();
+      expect(readRunner.release).toHaveBeenCalled();
+
+      const supersedeRunner = makeRunner();
+      const supersedeSource = {
+        createQueryRunner: jest.fn().mockReturnValue(supersedeRunner),
+      };
+      const supersedeService = new ProductInventoryMappingService(
+        supersedeSource as any,
+      );
+
+      await expect(
+        supersedeService.supersede({
+          tenantId: blankTenantId,
+          productId: product,
+          insumoId: insumoA,
+          effectiveAt: new Date('2026-01-02T00:00:00Z'),
+        }),
+      ).rejects.toThrow(TenantContextRequiredError);
+
+      // Absence of SQL, not just the rejection: a blank tenant id must
+      // never reach set_config on the query runner.
+      expect(supersedeRunner.query).not.toHaveBeenCalled();
+      expect(supersedeRunner.rollbackTransaction).toHaveBeenCalled();
+      expect(supersedeRunner.release).toHaveBeenCalled();
+    }
   });
 });

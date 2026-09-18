@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource, IsNull } from 'typeorm';
+import { bindTenantContext } from '../../../core/database/tenant-transaction';
 import { ProductInventoryMappingVersion } from '../entities/product-inventory-mapping-version.entity';
 
 export interface SupersedeProductInventoryMapping {
@@ -21,7 +22,7 @@ export class ProductInventoryMappingService {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     try {
-      await queryRunner.query("SELECT set_config('app.tenant_id', $1, true)", [tenantId]);
+      await bindTenantContext(queryRunner, tenantId);
       const repository = queryRunner.manager.getRepository(ProductInventoryMappingVersion);
       const mapping = await repository.createQueryBuilder('mapping')
         .where('mapping.tenant_id = :tenantId', { tenantId })
@@ -46,7 +47,7 @@ export class ProductInventoryMappingService {
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
-      await queryRunner.query("SELECT set_config('app.tenant_id', $1, true)", [command.tenantId]);
+      await bindTenantContext(queryRunner, command.tenantId);
       // Advisory transaction lock prevents concurrent first-mapping races
       await queryRunner.query('SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))', [
         command.tenantId,

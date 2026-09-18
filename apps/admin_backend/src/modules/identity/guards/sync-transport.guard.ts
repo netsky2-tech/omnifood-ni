@@ -28,6 +28,7 @@ import {
 } from '../security/device-sync-principal';
 import { isDeviceSyncAccessTokenPayload } from '../security/jwt-token.types';
 import { SYNC_SCOPES_KEY } from '../decorators/sync-scopes.decorator';
+import { bindTenantContext } from '../../../core/database/tenant-transaction';
 
 export interface RequestWithDevicePrincipal extends Request {
   devicePrincipal?: DeviceSyncPrincipal;
@@ -96,9 +97,7 @@ export class SyncTransportGuard implements CanActivate {
 
     const principal = await this.dataSource.transaction(async (manager) => {
       // 1. Enforce PostgreSQL RLS tenant context inside transaction before repository queries
-      await manager.query("SELECT set_config('app.tenant_id', $1, true)", [
-        deviceClaims.tenant_id,
-      ]);
+      await bindTenantContext(manager, deviceClaims.tenant_id);
 
       const credentialRepo = manager.getRepository(DeviceSyncCredential);
       const tenantRepo = manager.getRepository(Tenant);
