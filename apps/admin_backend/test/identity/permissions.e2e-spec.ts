@@ -24,6 +24,28 @@ import { TenantCapabilityEvent } from '../../src/modules/identity/entities/tenan
 import { AppPermission } from '../../src/modules/identity/security/permissions.enum';
 import { JWT_TOKEN_TYPES } from '../../src/modules/identity/security/jwt-token.types';
 
+/**
+ * Repository registry the fake transaction manager resolves through. The
+ * repositories themselves are created in beforeAll, so this map is populated
+ * lazily and read at request time.
+ */
+const repositoriesByName: Record<string, unknown> = {};
+
+/**
+ * Transaction-manager stand-in. The user service now runs every policy
+ * mutation inside `dataSource.transaction`, binding the tenant context and
+ * marking the publication state dirty through `manager.query`. The manager
+ * therefore has to expose both `query` and `getRepository`, and the latter has
+ * to return the same overridden repositories the spec asserts against.
+ */
+const managerMock = {
+  query: jest.fn().mockResolvedValue([]),
+  getRepository: jest.fn(
+    (entity: unknown) =>
+      repositoriesByName[(entity as { name?: string }).name ?? ''] ?? {},
+  ),
+};
+
 @Global()
 @Module({
   providers: [
@@ -32,6 +54,10 @@ import { JWT_TOKEN_TYPES } from '../../src/modules/identity/security/jwt-token.t
       useValue: {
         entityMetadatas: [],
         getRepository: jest.fn().mockReturnValue({}),
+        transaction: jest.fn(
+          async (work: (manager: unknown) => Promise<unknown>) =>
+            await work(managerMock),
+        ),
       },
     },
   ],
@@ -142,6 +168,12 @@ describe('Permissions & Fine-Grained RBAC (e2e) (Slice 10.1)', () => {
     auditRepository = {
       save: jest.fn(),
     };
+
+    Object.assign(repositoriesByName, {
+      User: userRepository,
+      SecurityProfile: securityProfileRepository,
+      AuditLog: auditRepository,
+    });
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [

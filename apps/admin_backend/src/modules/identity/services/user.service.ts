@@ -21,7 +21,23 @@ import {
   UserEffectivePermissionsDto,
 } from '../dto/permission-matrix.dto';
 import { AuthService } from './auth.service';
+import { bindRlsTenantContext } from '../human-authorization/rls/tenant-context';
+import { markTenantPublicationDirty } from '../human-authorization/services/tenant-publication-marker';
 
+/**
+ * Publication marking (design §11.2 decision 16): every policy-affecting
+ * staff/profile mutation (users.role, users.is_active,
+ * users.attempt_reset_generation, security_profiles.pin_hash,
+ * security_profiles.custom_permissions) marks the tenant's publication state
+ * dirty inside its own transaction, unconditionally instead of diffing policy
+ * fields. Unconditional marking is correct because a spurious dirty flag only
+ * costs the publisher one replay-identical publication that clears the
+ * marker, whereas a missed mark silently leaves the published policy stale.
+ * Reads, audit writes, and refresh-token revocations are not policy mutations
+ * and never mark; neither binding nor marking failures are ever swallowed, so
+ * a mutation whose tenant scope or publication signal cannot be persisted
+ * rolls back whole.
+ */
 @Injectable()
 export class UserService {
   constructor(
@@ -51,38 +67,55 @@ export class UserService {
     tenantId: string,
     adminId: string,
   ): Promise<User> {
-    const existing = await this.userRepository.findOne({
-      where: { email: dto.email },
+    // Hashing is pure CPU work over secrets: keep it outside the transaction.
+    const passwordHash = dto.password
+      ? await bcrypt.hash(dto.password, 10)
+      : undefined;
+    const pinHash = dto.pin ? await bcrypt.hash(dto.pin, 10) : undefined;
+
+    return this.dataSource.transaction(async (manager) => {
+      await bindRlsTenantContext(manager, tenantId);
+
+      const existing = await manager
+        .getRepository(User)
+        .findOne({ where: { email: dto.email } });
+      if (existing) {
+        throw new ConflictException('El email ya está registrado');
+      }
+
+      const user = new User();
+      user.email = dto.email;
+      user.name = dto.name;
+      user.role = dto.role;
+      user.tenant_id = tenantId;
+      user.is_active = true;
+      if (passwordHash) user.password_hash = passwordHash;
+
+      const savedUser = await manager.getRepository(User).save(user);
+
+      if (pinHash) {
+        const profiles = manager.getRepository(SecurityProfile);
+        await profiles.save(
+          profiles.create({
+            user_id: savedUser.id,
+            pin_hash: pinHash,
+            is_pin_enabled: true,
+          }),
+        );
+      }
+
+      await this.logAction(
+        'USER_CREATED',
+        savedUser.id,
+        tenantId,
+        adminId,
+        manager,
+      );
+
+      await markTenantPublicationDirty(manager, tenantId);
+
+      return savedUser;
     });
-    if (existing) {
-      throw new ConflictException('El email ya está registrado');
-    }
-
-    const user = new User();
-    user.email = dto.email;
-    user.name = dto.name;
-    user.role = dto.role;
-    user.tenant_id = tenantId;
-    user.is_active = true;
-
-    if (dto.password) {
-      user.password_hash = await bcrypt.hash(dto.password, 10);
-    }
-
-    const savedUser = await this.userRepository.save(user);
-
-    if (dto.pin) {
-      const profile = this.securityProfileRepository.create({
-        user_id: savedUser.id,
-        pin_hash: await bcrypt.hash(dto.pin, 10),
-        is_pin_enabled: true,
-      });
-      await this.securityProfileRepository.save(profile);
-    }
-
-    await this.logAction('USER_CREATED', savedUser.id, tenantId, adminId);
-
-    return savedUser;
   }
 
   async update(
@@ -112,33 +145,46 @@ export class UserService {
       );
     }
 
-    const user = await this.userRepository.findOne({
-      where: { id, tenant_id: tenantId },
-    });
-    if (!user) {
-      throw new NotFoundException('Usuario no encontrado');
-    }
+    return this.dataSource.transaction(async (manager) => {
+      await bindRlsTenantContext(manager, tenantId);
 
-    if (dto.name) user.name = dto.name;
-    if (dto.role) user.role = dto.role;
-
-    const updatedUser = await this.userRepository.save(user);
-
-    if (pinHash) {
-      const existingProfile = await this.securityProfileRepository.findOne({
-        where: { user_id: updatedUser.id },
+      const users = manager.getRepository(User);
+      const user = await users.findOne({
+        where: { id, tenant_id: tenantId },
       });
-      const profile =
-        existingProfile ??
-        this.securityProfileRepository.create({ user_id: updatedUser.id });
-      profile.pin_hash = pinHash;
-      profile.is_pin_enabled = true;
-      await this.securityProfileRepository.save(profile);
-    }
+      if (!user) {
+        throw new NotFoundException('Usuario no encontrado');
+      }
 
-    await this.logAction('USER_UPDATED', updatedUser.id, tenantId, adminId);
+      if (dto.name) user.name = dto.name;
+      if (dto.role) user.role = dto.role;
 
-    return updatedUser;
+      const updatedUser = await users.save(user);
+
+      if (pinHash) {
+        const profiles = manager.getRepository(SecurityProfile);
+        const existingProfile = await profiles.findOne({
+          where: { user_id: updatedUser.id },
+        });
+        const profile =
+          existingProfile ?? profiles.create({ user_id: updatedUser.id });
+        profile.pin_hash = pinHash;
+        profile.is_pin_enabled = true;
+        await profiles.save(profile);
+      }
+
+      await this.logAction(
+        'USER_UPDATED',
+        updatedUser.id,
+        tenantId,
+        adminId,
+        manager,
+      );
+
+      await markTenantPublicationDirty(manager, tenantId);
+
+      return updatedUser;
+    });
   }
 
   async deactivate(
@@ -147,6 +193,8 @@ export class UserService {
     adminId: string,
   ): Promise<void> {
     await this.dataSource.transaction(async (manager) => {
+      await bindRlsTenantContext(manager, tenantId);
+
       const users = manager.getRepository(User);
       const user = await users.findOne({
         where: { id, tenant_id: tenantId },
@@ -166,6 +214,7 @@ export class UserService {
         new Date(),
       );
       await this.logAction('USER_DEACTIVATED', id, tenantId, adminId, manager);
+      await markTenantPublicationDirty(manager, tenantId);
     });
   }
 
@@ -178,6 +227,8 @@ export class UserService {
     passwordHash?: string,
     pinHash?: string,
   ): Promise<User> {
+    await bindRlsTenantContext(manager, tenantId);
+
     const users = manager.getRepository(User);
     const user = await users.findOne({
       where: { id, tenant_id: tenantId },
@@ -225,6 +276,7 @@ export class UserService {
       adminId,
       manager,
     );
+    await markTenantPublicationDirty(manager, tenantId);
     return updatedUser;
   }
 
@@ -277,49 +329,58 @@ export class UserService {
     tenantId: string,
     adminId: string,
   ): Promise<UserEffectivePermissionsDto> {
-    const user = await this.userRepository.findOne({
-      where: { id: userId, tenant_id: tenantId, is_active: true },
-    });
-    if (!user) {
-      throw new NotFoundException('Usuario no encontrado');
-    }
+    return this.dataSource.transaction(async (manager) => {
+      await bindRlsTenantContext(manager, tenantId);
 
-    let profile = await this.securityProfileRepository.findOne({
-      where: { user_id: user.id },
-    });
-    if (!profile) {
-      profile = this.securityProfileRepository.create({
-        user_id: user.id,
-        is_pin_enabled: false,
-        is_totp_enabled: false,
-        custom_permissions: [],
+      const users = manager.getRepository(User);
+      const user = await users.findOne({
+        where: { id: userId, tenant_id: tenantId, is_active: true },
       });
-    }
+      if (!user) {
+        throw new NotFoundException('Usuario no encontrado');
+      }
 
-    profile.custom_permissions = customPermissions;
-    await this.securityProfileRepository.save(profile);
+      const profiles = manager.getRepository(SecurityProfile);
+      let profile = await profiles.findOne({
+        where: { user_id: user.id },
+      });
+      if (!profile) {
+        profile = profiles.create({
+          user_id: user.id,
+          is_pin_enabled: false,
+          is_totp_enabled: false,
+          custom_permissions: [],
+        });
+      }
 
-    await this.logAction(
-      'USER_PERMISSIONS_UPDATED',
-      user.id,
-      tenantId,
-      adminId,
-    );
+      profile.custom_permissions = customPermissions;
+      await profiles.save(profile);
 
-    const rolePermissions = (DEFAULT_ROLE_PERMISSIONS[user.role] ??
-      []) as AppPermission[];
-    const effectivePermissions = resolveEffectivePermissions(
-      user.role,
-      profile.custom_permissions,
-    );
+      await this.logAction(
+        'USER_PERMISSIONS_UPDATED',
+        user.id,
+        tenantId,
+        adminId,
+        manager,
+      );
 
-    return {
-      user_id: user.id,
-      role: user.role,
-      role_permissions: rolePermissions,
-      custom_permissions: profile.custom_permissions as AppPermission[],
-      effective_permissions: effectivePermissions,
-    };
+      await markTenantPublicationDirty(manager, tenantId);
+
+      const rolePermissions = (DEFAULT_ROLE_PERMISSIONS[user.role] ??
+        []) as AppPermission[];
+      const effectivePermissions = resolveEffectivePermissions(
+        user.role,
+        profile.custom_permissions,
+      );
+
+      return {
+        user_id: user.id,
+        role: user.role,
+        role_permissions: rolePermissions,
+        custom_permissions: profile.custom_permissions as AppPermission[],
+        effective_permissions: effectivePermissions,
+      };
+    });
   }
 
   private async logAction(
