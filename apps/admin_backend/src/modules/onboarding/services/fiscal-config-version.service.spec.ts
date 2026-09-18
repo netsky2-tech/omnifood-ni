@@ -1,6 +1,10 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { Repository, DataSource, EntityManager } from 'typeorm';
 import { FiscalConfigVersionService } from './fiscal-config-version.service';
+import {
+  TENANT_CONTEXT_SET_CONFIG_SQL,
+  TenantContextRequiredError,
+} from '../../../core/database/tenant-transaction';
 import { FiscalConfigRevision } from '../entities/fiscal-config-revision.entity';
 import { Tenant } from '../../tenant/entities/tenant.entity';
 import { SystemParametersConfig } from '../../inventory/entities/system-parameters-config.entity';
@@ -100,6 +104,13 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
     } as unknown as jest.Mocked<Repository<SystemParametersConfig>>;
 
     mockManager = {
+      query: jest.fn().mockResolvedValue(undefined),
+      getRepository: jest.fn((target: unknown) => {
+        if (target === Tenant) return tenantRepo;
+        if (target === SystemParametersConfig) return sysParamRepo;
+        if (target === FiscalConfigRevision) return revisionRepo;
+        throw new Error(`Unexpected repository target: ${String(target)}`);
+      }),
       findOne: jest.fn(),
       find: jest.fn(),
       create: jest.fn((_cls: unknown, plain: unknown) => plain as object),
@@ -266,6 +277,57 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
       await expect(
         service.validateIntegrity(tenantId, 3, fingerprint),
       ).resolves.toBeUndefined();
+    });
+  });
+
+  describe('Tenant context binding (RLS pre-hardening)', () => {
+    it('binds tenant context with a parameterized set_config before reading fiscal_config_revisions when no manager is supplied', async () => {
+      revisionRepo.findOne.mockResolvedValueOnce(null);
+
+      await service.recordRevisionChange(tenantId);
+
+      expect(dataSource.transaction).toHaveBeenCalled();
+      expect(mockManager.query).toHaveBeenCalledWith(
+        TENANT_CONTEXT_SET_CONFIG_SQL,
+        [tenantId],
+      );
+      expect(
+        mockManager.query.mock.invocationCallOrder[0],
+      ).toBeLessThan(revisionRepo.findOne.mock.invocationCallOrder[0]);
+    });
+
+    it('does not open a nested transaction when a caller-supplied manager is used; binds on that manager instead', async () => {
+      revisionRepo.findOne.mockResolvedValueOnce(null);
+
+      await service.validateIntegrity(tenantId, 1, 'fp-1', mockManager);
+
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+      expect(mockManager.query).toHaveBeenCalledWith(
+        TENANT_CONTEXT_SET_CONFIG_SQL,
+        [tenantId],
+      );
+      expect(
+        mockManager.query.mock.invocationCallOrder[0],
+      ).toBeLessThan(revisionRepo.findOne.mock.invocationCallOrder[0]);
+    });
+
+    it('preserves BadRequestException for a blank tenant on getFiscalConfigSnapshot without any SQL', async () => {
+      await expect(service.getFiscalConfigSnapshot('   ')).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+      expect(mockManager.query).not.toHaveBeenCalled();
+    });
+
+    it('fails with TenantContextRequiredError before any SQL for a blank tenant id', async () => {
+      await expect(service.getLatestRevision('   ')).rejects.toThrow(
+        TenantContextRequiredError,
+      );
+      await expect(service.recordRevisionChange('  ')).rejects.toThrow(
+        TenantContextRequiredError,
+      );
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+      expect(mockManager.query).not.toHaveBeenCalled();
     });
   });
 });

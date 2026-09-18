@@ -10,6 +10,10 @@ import { FiscalConfigRevision } from '../entities/fiscal-config-revision.entity'
 import { Tenant } from '../../tenant/entities/tenant.entity';
 import { SystemParametersConfig } from '../../inventory/entities/system-parameters-config.entity';
 import {
+  bindTenantContext,
+  runInTenantTransaction,
+} from '../../../core/database/tenant-transaction';
+import {
   FiscalRegime,
   FISCAL_PARAM_KEYS,
   DGI_NICARAGUA_TAX_RATES,
@@ -45,10 +49,16 @@ export class FiscalConfigVersionService {
       throw new BadRequestException('Tenant ID is required');
     }
 
-    const tRepo = manager ? manager.getRepository(Tenant) : this.tenantRepo;
-    const sRepo = manager
-      ? manager.getRepository(SystemParametersConfig)
-      : this.sysParamRepo;
+    if (manager) {
+      await bindTenantContext(manager, trimmedTenantId);
+    } else {
+      return runInTenantTransaction(this.dataSource, trimmedTenantId, (mgr) =>
+        this.getEffectiveFiscalPayload(trimmedTenantId, mgr),
+      );
+    }
+
+    const tRepo = manager.getRepository(Tenant);
+    const sRepo = manager.getRepository(SystemParametersConfig);
 
     const tenant = await tRepo.findOne({
       where: { id: trimmedTenantId },
@@ -116,9 +126,15 @@ export class FiscalConfigVersionService {
     tenantId: string,
     manager?: EntityManager,
   ): Promise<FiscalConfigRevision | null> {
-    const rRepo = manager
-      ? manager.getRepository(FiscalConfigRevision)
-      : this.revisionRepo;
+    if (manager) {
+      await bindTenantContext(manager, tenantId);
+    } else {
+      return runInTenantTransaction(this.dataSource, tenantId, (mgr) =>
+        this.getLatestRevision(tenantId, mgr),
+      );
+    }
+
+    const rRepo = manager.getRepository(FiscalConfigRevision);
 
     return rRepo.findOne({
       where: { tenant_id: tenantId.trim() },
@@ -136,15 +152,22 @@ export class FiscalConfigVersionService {
     manager?: EntityManager,
   ): Promise<FiscalConfigVersion> {
     const trimmedTenantId = tenantId.trim();
+
+    if (manager) {
+      await bindTenantContext(manager, trimmedTenantId);
+    } else {
+      return runInTenantTransaction(this.dataSource, trimmedTenantId, (mgr) =>
+        this.recordRevisionChange(trimmedTenantId, mgr),
+      );
+    }
+
     const effectivePayload = await this.getEffectiveFiscalPayload(
       trimmedTenantId,
       manager,
     );
     const newFingerprint = this.computeCanonicalFingerprint(effectivePayload);
 
-    const rRepo = manager
-      ? manager.getRepository(FiscalConfigRevision)
-      : this.revisionRepo;
+    const rRepo = manager.getRepository(FiscalConfigRevision);
 
     const latest = await rRepo.findOne({
       where: { tenant_id: trimmedTenantId },
@@ -189,6 +212,18 @@ export class FiscalConfigVersionService {
     manager?: EntityManager,
   ): Promise<FiscalConfigSnapshot> {
     const trimmedTenantId = tenantId.trim();
+    if (!trimmedTenantId) {
+      throw new BadRequestException('Tenant ID is required');
+    }
+
+    if (manager) {
+      await bindTenantContext(manager, trimmedTenantId);
+    } else {
+      return runInTenantTransaction(this.dataSource, trimmedTenantId, (mgr) =>
+        this.getFiscalConfigSnapshot(trimmedTenantId, mgr),
+      );
+    }
+
     const payload = await this.getEffectiveFiscalPayload(
       trimmedTenantId,
       manager,
@@ -235,9 +270,15 @@ export class FiscalConfigVersionService {
     fingerprint: string,
     manager?: EntityManager,
   ): Promise<void> {
-    const rRepo = manager
-      ? manager.getRepository(FiscalConfigRevision)
-      : this.revisionRepo;
+    if (manager) {
+      await bindTenantContext(manager, tenantId);
+    } else {
+      return runInTenantTransaction(this.dataSource, tenantId, (mgr) =>
+        this.validateIntegrity(tenantId, revision, fingerprint, mgr),
+      );
+    }
+
+    const rRepo = manager.getRepository(FiscalConfigRevision);
 
     const record = await rRepo.findOne({
       where: { tenant_id: tenantId.trim(), revision },

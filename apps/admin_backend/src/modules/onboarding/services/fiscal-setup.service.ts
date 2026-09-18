@@ -21,6 +21,7 @@ import {
   FiscalConfigVersion,
 } from '../dto/fiscal-config-version.dto';
 import { FiscalConfigVersionService } from './fiscal-config-version.service';
+import { bindTenantContext } from '../../../core/database/tenant-transaction';
 import {
   OnboardingSessionService,
   OnboardingStartSource,
@@ -180,6 +181,9 @@ export class FiscalSetupService {
 
     const result = await this.dataSource.transaction(
       async (manager: EntityManager) => {
+        // 0. Bind transaction-local tenant context for RLS-protected access
+        await bindTenantContext(manager, trimmedTenantId);
+
         // 1. Update Tenant entity
         const tenant = await manager.findOne(Tenant, {
           where: { id: trimmedTenantId },

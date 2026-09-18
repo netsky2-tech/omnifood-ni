@@ -36,6 +36,10 @@ function createMockQueryBuilder<T>(items: T[] = []): MockQueryBuilder<T> {
 
 describe('InboundSyncService', () => {
   let service: InboundSyncService;
+  let fiscalService: {
+    getFiscalConfigSnapshot: jest.Mock;
+    validateIntegrity: jest.Mock;
+  };
 
   let productQb: MockQueryBuilder<Product>;
   let catalogQb: MockQueryBuilder<CatalogValue>;
@@ -96,7 +100,10 @@ describe('InboundSyncService', () => {
         InboundSyncService,
         {
           provide: FiscalConfigVersionService,
-          useValue: { getFiscalConfigSnapshot: jest.fn().mockResolvedValue(null) },
+          useValue: {
+            getFiscalConfigSnapshot: jest.fn().mockResolvedValue(null),
+            validateIntegrity: jest.fn().mockResolvedValue(undefined),
+          },
         },
         {
           provide: getRepositoryToken(Product),
@@ -134,6 +141,7 @@ describe('InboundSyncService', () => {
     }).compile();
 
     service = module.get<InboundSyncService>(InboundSyncService);
+    fiscalService = module.get(FiscalConfigVersionService);
     jest.clearAllMocks();
   });
 
@@ -380,5 +388,42 @@ describe('InboundSyncService', () => {
     expect(response.deltas.insumos).toEqual([]);
     expect(response.deltas.recipes).toEqual([]);
     expect(response.deltas.recipeVersions).toEqual([]);
+  });
+
+  describe('Fiscal paths tenant binding (RLS pre-hardening)', () => {
+    it('reaches fiscal_config_revisions only through FiscalConfigVersionService, which owns the tenant-bound transaction', async () => {
+      const response = await service.getInboundDeltas('tenant-abc', {
+        types: 'fiscal',
+      });
+
+      expect(fiscalService.getFiscalConfigSnapshot).toHaveBeenCalledTimes(1);
+      expect(fiscalService.getFiscalConfigSnapshot).toHaveBeenCalledWith(
+        'tenant-abc',
+      );
+      expect(response.deltas.fiscalConfig).toBeNull();
+      expect(response.fiscalConfig).toBeNull();
+    });
+
+    it('reaches the fiscal ack path only through FiscalConfigVersionService.validateIntegrity, which binds tenant context', async () => {
+      const result = await service.recordFiscalAck('tenant-abc', {
+        tenantId: 'tenant-abc',
+        terminalId: 'term-1',
+        revision: 2,
+        fingerprint: 'fp-2',
+        appliedAt: '2026-01-01T00:00:00Z',
+      });
+
+      expect(fiscalService.validateIntegrity).toHaveBeenCalledTimes(1);
+      expect(fiscalService.validateIntegrity).toHaveBeenCalledWith(
+        'tenant-abc',
+        2,
+        'fp-2',
+      );
+      expect(result).toEqual({
+        status: 'success',
+        acknowledgedRevision: 2,
+        acknowledgedFingerprint: 'fp-2',
+      });
+    });
   });
 });

@@ -1,5 +1,9 @@
 import { BadRequestException } from '@nestjs/common';
+import { DataSource, EntityManager } from 'typeorm';
 import { OnboardingTelemetryService } from './onboarding-telemetry.service';
+import {
+  TENANT_CONTEXT_SET_CONFIG_SQL,
+} from '../../../core/database/tenant-transaction';
 import {
   OnboardingTelemetryEventName,
   IngestTelemetryEventDto,
@@ -11,6 +15,8 @@ describe('OnboardingTelemetryService (Unit — ONB1.9E & ONB1.9F)', () => {
   let mockTelemetryRepo: any;
   let mockSessionService: any;
   let mockChangeLogService: any;
+  let mockManager: jest.Mocked<EntityManager>;
+  let mockDataSource: jest.Mocked<DataSource>;
   let savedEvents: OnboardingTelemetryEvent[];
 
   beforeEach(() => {
@@ -43,10 +49,22 @@ describe('OnboardingTelemetryService (Unit — ONB1.9E & ONB1.9F)', () => {
       log: jest.fn(),
     };
 
+    mockManager = {
+      query: jest.fn().mockResolvedValue(undefined),
+      getRepository: jest.fn().mockReturnValue(mockTelemetryRepo),
+    } as unknown as jest.Mocked<EntityManager>;
+
+    mockDataSource = {
+      transaction: jest.fn((cb: (mgr: EntityManager) => Promise<unknown>) =>
+        cb(mockManager),
+      ),
+    } as unknown as jest.Mocked<DataSource>;
+
     service = new OnboardingTelemetryService(
       mockTelemetryRepo,
       mockSessionService,
       mockChangeLogService,
+      mockDataSource,
     );
   });
 
@@ -175,6 +193,58 @@ describe('OnboardingTelemetryService (Unit — ONB1.9E & ONB1.9F)', () => {
           eventName: OnboardingTelemetryEventName.STEP_VIEWED,
         }),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('Tenant context binding (RLS pre-hardening)', () => {
+    it('binds tenant context with a parameterized set_config before saving telemetry', async () => {
+      await service.recordEvent({
+        tenantId: 'tenant-test-1',
+        eventName: OnboardingTelemetryEventName.STEP_VIEWED,
+      });
+
+      expect(mockDataSource.transaction).toHaveBeenCalled();
+      expect(mockManager.query).toHaveBeenCalledWith(
+        TENANT_CONTEXT_SET_CONFIG_SQL,
+        ['tenant-test-1'],
+      );
+      expect(
+        mockManager.query.mock.invocationCallOrder[0],
+      ).toBeLessThan(mockTelemetryRepo.save.mock.invocationCallOrder[0]);
+    });
+
+    it('rejects a blank tenant before opening a transaction or issuing SQL', async () => {
+      await expect(
+        service.recordEvent({
+          tenantId: '   ',
+          eventName: OnboardingTelemetryEventName.STEP_VIEWED,
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockDataSource.transaction).not.toHaveBeenCalled();
+      expect(mockManager.query).not.toHaveBeenCalled();
+    });
+
+    it('runs getEventsByTenant inside a tenant-bound transaction with the parameterized tenant id', async () => {
+      const events = await service.getEventsByTenant('tenant-test-1');
+
+      expect(mockDataSource.transaction).toHaveBeenCalled();
+      expect(mockManager.query).toHaveBeenCalledWith(
+        TENANT_CONTEXT_SET_CONFIG_SQL,
+        ['tenant-test-1'],
+      );
+      expect(mockTelemetryRepo.find).toHaveBeenCalledWith({
+        where: { tenantId: 'tenant-test-1' },
+        order: { occurredAt: 'ASC' },
+      });
+      expect(events).toEqual([]);
+    });
+
+    it('returns [] for a blank tenant in getEventsByTenant without opening a transaction', async () => {
+      expect(await service.getEventsByTenant('   ')).toEqual([]);
+
+      expect(mockDataSource.transaction).not.toHaveBeenCalled();
+      expect(mockManager.query).not.toHaveBeenCalled();
     });
   });
 });

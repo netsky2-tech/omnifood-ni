@@ -1,9 +1,10 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, Repository } from 'typeorm';
+import { DataSource, FindOptionsWhere, Repository } from 'typeorm';
 import { OnboardingTelemetryEvent } from '../entities/onboarding-telemetry-event.entity';
 import { OnboardingSessionService } from '../services/onboarding-session.service';
 import { ChangeLogService } from '../../audit/change-log.service';
+import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 import {
   IngestTelemetryEventDto,
   TelemetryIngestReceipt,
@@ -22,6 +23,7 @@ export class OnboardingTelemetryService {
     private readonly telemetryRepo: Repository<OnboardingTelemetryEvent>,
     private readonly sessionService: OnboardingSessionService,
     private readonly changeLogService: ChangeLogService,
+    private readonly dataSource: DataSource,
   ) {}
 
   /**
@@ -74,19 +76,29 @@ export class OnboardingTelemetryService {
 
     const occurredAt = dto.occurredAt ? new Date(dto.occurredAt) : new Date();
 
-    const entity = this.telemetryRepo.create({
-      tenantId: trimmedTenant,
-      eventName: dto.eventName,
-      sessionId: dto.sessionId?.trim() || null,
-      stepId: dto.stepId?.trim() || null,
-      durationMs: dto.durationMs !== undefined ? dto.durationMs : null,
-      countsJson: dto.counts || null,
-      propertiesSanitizedJson: sanitizedProps,
-      errorSanitizedCode: dto.errorSanitizedCode?.trim() || null,
-      occurredAt,
-    });
+    // Tenant-bound transaction: the telemetry table is RLS-protected, so the
+    // transaction-local tenant context must be bound before any insert.
+    const saved = await runInTenantTransaction(
+      this.dataSource,
+      trimmedTenant,
+      async (manager) => {
+        const telemetryRepo = manager.getRepository(OnboardingTelemetryEvent);
 
-    const saved = await this.telemetryRepo.save(entity);
+        const entity = telemetryRepo.create({
+          tenantId: trimmedTenant,
+          eventName: dto.eventName,
+          sessionId: dto.sessionId?.trim() || null,
+          stepId: dto.stepId?.trim() || null,
+          durationMs: dto.durationMs !== undefined ? dto.durationMs : null,
+          countsJson: dto.counts || null,
+          propertiesSanitizedJson: sanitizedProps,
+          errorSanitizedCode: dto.errorSanitizedCode?.trim() || null,
+          occurredAt,
+        });
+
+        return telemetryRepo.save(entity);
+      },
+    );
 
     this.logger.debug(
       `Recorded telemetry event '${dto.eventName}' for tenant '${trimmedTenant}' (id: ${saved.id})`,
@@ -109,16 +121,21 @@ export class OnboardingTelemetryService {
     const trimmedTenant = tenantId?.trim();
     if (!trimmedTenant) return [];
 
-    const where: FindOptionsWhere<OnboardingTelemetryEvent> = {
-      tenantId: trimmedTenant,
-    };
-    if (eventName) {
-      where.eventName = eventName;
-    }
+    // Tenant-bound transaction: the telemetry table is RLS-protected.
+    return runInTenantTransaction(this.dataSource, trimmedTenant, async (
+      manager,
+    ) => {
+      const where: FindOptionsWhere<OnboardingTelemetryEvent> = {
+        tenantId: trimmedTenant,
+      };
+      if (eventName) {
+        where.eventName = eventName;
+      }
 
-    return this.telemetryRepo.find({
-      where,
-      order: { occurredAt: 'ASC' },
+      return manager.getRepository(OnboardingTelemetryEvent).find({
+        where,
+        order: { occurredAt: 'ASC' },
+      });
     });
   }
 }

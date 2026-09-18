@@ -2,6 +2,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { FiscalSetupService, FiscalRegime } from './fiscal-setup.service';
+import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 import { Tenant } from '../../tenant/entities/tenant.entity';
 import { SystemParametersConfig } from '../../inventory/entities/system-parameters-config.entity';
 import { FiscalSetupDto } from '../dto/fiscal-setup.dto';
@@ -44,6 +45,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
     } as unknown as jest.Mocked<EventEmitter2>;
 
     mockManager = {
+      query: jest.fn().mockResolvedValue(undefined),
       findOne: jest.fn(),
       find: jest.fn(),
       create: jest.fn(
@@ -314,6 +316,30 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
       );
       expect(deactivated?.isActive).toBe(false);
       expect(deactivated?.effectiveTo).toBeInstanceOf(Date);
+    });
+  });
+
+  describe('Tenant context binding (RLS pre-hardening)', () => {
+    it('binds tenant context at the start of the configureFiscalSetup transaction before any repository access', async () => {
+      mockManager.findOne.mockResolvedValueOnce({ ...mockTenant });
+      mockManager.find.mockResolvedValue([]);
+
+      const dto: FiscalSetupDto = {
+        regime: FiscalRegime.CUOTA_FIJA,
+        businessName: 'Cafetín Las Palmeras',
+        commercialFxSpread: 0.5,
+        pricesIncludeTax: true,
+      };
+
+      await service.configureFiscalSetup(tenantId, dto, userId);
+
+      expect(mockManager.query).toHaveBeenCalledWith(
+        TENANT_CONTEXT_SET_CONFIG_SQL,
+        [tenantId],
+      );
+      expect(
+        mockManager.query.mock.invocationCallOrder[0],
+      ).toBeLessThan(mockManager.findOne.mock.invocationCallOrder[0]);
     });
   });
 });

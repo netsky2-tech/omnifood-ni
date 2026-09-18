@@ -478,7 +478,18 @@ describe('DSI-3: Activation Device Credential Provisioning', () => {
       fiscalConfigVersionService = {};
       onboardingCatalogService = {};
       readinessEvaluator = { evaluate: jest.fn() };
-      dataSource = { transaction: jest.fn() };
+      // ActivationService binds transaction-local tenant context (set_config)
+      // on the transaction manager before repository access; the mock must
+      // execute the transaction callback with a capable manager.
+      dataSource = {
+        transaction: jest.fn((cb: (manager: any) => Promise<unknown>) =>
+          cb({
+            query: jest.fn().mockResolvedValue(undefined),
+            getRepository: (entityClass: any) =>
+              entityClass === ActivationAttempt ? attemptRepo : null,
+          }),
+        ),
+      };
       changeLogService = { log: jest.fn() };
 
       deviceSyncCredentialService = {

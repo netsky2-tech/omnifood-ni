@@ -162,4 +162,24 @@ describe('OnboardingCustomerSaleObserver (Unit — ONB1.9G)', () => {
       }),
     );
   });
+
+  it('reaches the telemetry table only through the tenant-bound recordEvent method (RLS pre-hardening)', async () => {
+    const result = await observer.observeSale({
+      tenantId: 'tenant-123',
+      ticketId: 'ticket-bound-1',
+      occurredAt: new Date('2026-09-04T16:00:00.000Z'),
+    });
+
+    expect(result.observed).toBe(true);
+    // All telemetry access is delegated to OnboardingTelemetryService.recordEvent,
+    // which owns the tenant-bound transaction — the observer holds no repository.
+    expect(mockTelemetryService.recordEvent).toHaveBeenCalledTimes(1);
+    expect(mockTelemetryService.recordEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: 'tenant-123',
+        eventName: OnboardingTelemetryEventName.FIRST_CUSTOMER_SALE,
+        sessionId: 'session-uuid-1',
+      }),
+    );
+  });
 });
