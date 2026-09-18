@@ -1,5 +1,6 @@
 import { Component, type ReactNode } from "react";
 import { isApiError } from "@/lib/api";
+import { isChunkLoadError, triggerSafeChunkReload } from "@/lib/chunk-reload";
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -28,11 +29,15 @@ class ErrorBoundaryInner extends Component<
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     // Preserve technical log for debugging without polluting user UI
     console.error("[ErrorBoundary caught]:", error, info);
+    if (isChunkLoadError(error)) {
+      triggerSafeChunkReload();
+    }
   }
 
   render() {
     if (this.state.hasError) {
       const requestId = isApiError(this.state.error) ? this.state.error.requestId : null;
+      const isChunkError = isChunkLoadError(this.state.error);
 
       return (
         <div className="flex min-h-[360px] w-full items-center justify-center p-6" role="alert">
@@ -46,7 +51,9 @@ class ErrorBoundaryInner extends Component<
               Error al cargar esta sección
             </h2>
             <p className="text-xs sm:text-sm text-muted-foreground mb-3">
-              {this.state.error?.message || "Ocurrió un error inesperado al procesar la vista."}
+              {isChunkError
+                ? "Se detectó una actualización en el sistema o una interrupción temporal de descarga. Si la página no se recarga automáticamente, use el botón a continuación."
+                : this.state.error?.message || "Ocurrió un error inesperado al procesar la vista."}
             </p>
             {requestId && (
               <p className="text-[11px] font-mono text-muted-foreground bg-muted/40 rounded px-2 py-1 mb-4 inline-block">
