@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { UnauthorizedException } from '@nestjs/common';
 import { EntityManager } from 'typeorm';
 import { bindRlsTenantContext, requireTenantId } from './tenant-context';
 
@@ -36,7 +36,7 @@ describe('bindRlsTenantContext', () => {
     'rejects tenant id %p without issuing any statement',
     async (badTenant) => {
       await expect(bindRlsTenantContext(manager, badTenant)).rejects.toThrow(
-        BadRequestException,
+        UnauthorizedException,
       );
       expect(query).not.toHaveBeenCalled();
     },
@@ -51,7 +51,13 @@ describe('bindRlsTenantContext', () => {
   });
 
   it('exposes the same validation the binding uses, trimmed on success', () => {
-    expect(() => requireTenantId('   ')).toThrow(BadRequestException);
+    for (const badTenant of [undefined, null, '', '   ', 42]) {
+      expect(() => requireTenantId(badTenant)).toThrow(
+        new UnauthorizedException(
+          'A non-empty tenant id is required to bind the RLS tenant context',
+        ),
+      );
+    }
     expect(requireTenantId('  tenant-1  ')).toBe('tenant-1');
   });
 });

@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { UnauthorizedException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 
 /**
@@ -12,12 +12,12 @@ import type { EntityManager } from 'typeorm';
 /**
  * Validates a tenant id for RLS binding and marker writes: a non-empty,
  * non-whitespace string is required. Returns the trimmed tenant id.
- * Rejections throw before any statement is issued, so a caller can never
- * bind or mark without a tenant.
+ * Rejections throw an UnauthorizedException before any statement is issued,
+ * so a caller can never bind or mark without a tenant.
  */
 export function requireTenantId(tenantId: unknown): string {
   if (typeof tenantId !== 'string' || tenantId.trim().length === 0) {
-    throw new BadRequestException(
+    throw new UnauthorizedException(
       'A non-empty tenant id is required to bind the RLS tenant context',
     );
   }

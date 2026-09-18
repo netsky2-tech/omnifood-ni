@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { UnauthorizedException } from '@nestjs/common';
 import { EntityManager } from 'typeorm';
 import {
   markTenantPublicationDirty,
@@ -84,14 +84,14 @@ describe('markTenantPublicationDirty', () => {
     for (const badTenant of [undefined, null, '', '   ', 42]) {
       await expect(
         markTenantPublicationDirty(manager, badTenant),
-      ).rejects.toThrow(BadRequestException);
+      ).rejects.toThrow(UnauthorizedException);
     }
     expect(query).not.toHaveBeenCalled();
   });
 
   it('rejects with the exact documented message, not merely the exception type', async () => {
     await expect(markTenantPublicationDirty(manager, '   ')).rejects.toThrow(
-      new BadRequestException(EXACT_TENANT_MESSAGE),
+      new UnauthorizedException(EXACT_TENANT_MESSAGE),
     );
     expect(query).not.toHaveBeenCalled();
   });
@@ -183,7 +183,7 @@ describe('readOrMaterializeMarker', () => {
   it('validates the tenant before issuing anything and rejects with the exact documented message', async () => {
     for (const badTenant of [undefined, null, '', '   ', 42]) {
       await expect(readOrMaterializeMarker(manager, badTenant)).rejects.toThrow(
-        new BadRequestException(EXACT_TENANT_MESSAGE),
+        new UnauthorizedException(EXACT_TENANT_MESSAGE),
       );
     }
     expect(query).not.toHaveBeenCalled();

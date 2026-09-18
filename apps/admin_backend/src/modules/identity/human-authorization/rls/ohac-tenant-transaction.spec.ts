@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { UnauthorizedException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { DataSource, EntityManager } from 'typeorm';
 import { OhacTenantTransaction } from './ohac-tenant-transaction';
@@ -65,7 +65,7 @@ describe('OhacTenantTransaction', () => {
     'rejects tenant id %p without opening a transaction',
     async (badTenant) => {
       await expect(service.run(badTenant, async () => null)).rejects.toThrow(
-        BadRequestException,
+        UnauthorizedException,
       );
       expect(transaction).not.toHaveBeenCalled();
       expect(query).not.toHaveBeenCalled();

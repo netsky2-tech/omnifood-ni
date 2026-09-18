@@ -36,15 +36,15 @@ describe('AllExceptionsFilter', () => {
     jest.restoreAllMocks();
   });
 
-  it('maps TenantContextRequiredError to HTTP 400 with a stable message that leaks no internals', () => {
+  it('maps TenantContextRequiredError to HTTP 401 with a stable message that leaks no internals', () => {
     const { host, status, json } = makeHost();
 
     filter.catch(new TenantContextRequiredError(), host);
 
-    expect(status).toHaveBeenCalledWith(400);
+    expect(status).toHaveBeenCalledWith(401);
     const body = json.mock.calls[0][0];
     expect(body).toEqual(
-      expect.objectContaining({ statusCode: 400, message: expect.any(String) }),
+      expect.objectContaining({ statusCode: 401, message: expect.any(String) }),
     );
     // The response body must not leak internals: no error class name, no SQL.
     expect(JSON.stringify(body)).not.toContain('TenantContextRequiredError');
