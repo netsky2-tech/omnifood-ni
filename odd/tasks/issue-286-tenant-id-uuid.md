@@ -193,9 +193,13 @@ Roughly **14 write sites can pass a blank** against ~6 correctly guarded ones. T
 
 ### Still open
 
-**Slicing of Phase 2** — see below. Two options with materially different review cost. **Undecided.**
 
-**The tenant guard is closed but not unified.** Four mechanisms now guard the same class of error, and they disagree on the status: `TenantContextRequiredError` on the shared helper (400 via `AllExceptionsFilter`), `BadRequestException` in the OHAC helper that #329 added deliberately and in the inline checks in `device-sync-credential`, and `UnauthorizedException` in the private `requireTenant` of `catalog.service.ts:79` and `product.service.ts:24` — which answers **401**. So a missing tenant context is a 401 on two services and a 400 everywhere else. Consolidating it touches #329's deliberately extracted helper and its design reference, so it is a decision, not a cleanup. **Undecided.**
+**The tenant guard is closed and now unified on 401 (#337).** Measured before changing anything: 21 files throw `UnauthorizedException('Tenant context is required')` and 19 more define a private `requireTenant` doing the same, all answering 401. Only two mechanisms answered 400 — `AllExceptionsFilter`'s mapping of `TenantContextRequiredError` and the OHAC helper's `requireTenantId` — and they were the outlier.
+
+**Why 401 is the right status, from measurement not taste:** the tenant is credential-derived. `GetTenantId` in `core/decorators/tenant.decorator.ts` returns `request.devicePrincipal?.tenantId ?? request.user?.tenant_id` and never reads a body or header field. A missing tenant therefore means the presented credential did not establish a tenant scope, which is an authorization failure rather than a malformed request.
+
+**Recorded follow-up, deliberately not done:** the **19 private `requireTenant` copies**. They already answer 401, so nothing is inconsistent; consolidating them is a mechanical refactor across 19 files in unrelated domains with no open design question. An earlier draft of this plan would have folded it into the status change, which would have buried the only real decision in kilobytes of repetitive diff.
+
 
 **Tables with a varchar `tenant_id` but no RLS policy** — `tenant_fulfillment_records`, `promotions`, `customers`, `customer_point_transactions`, `audit_integrity_alerts`, `forensic_alerts` and the legacy/privacy tables. They still need the column change; they carry no policy work. Whether to add policies to them is out of scope for #286 and must not be smuggled in.
 
@@ -260,14 +264,27 @@ At the repository's existing style each policy costs a one-line `DROP POLICY IF 
 
 **Units 1–4 exceed the 400-line review budget and must be split further**, at roughly 11 policies per PR. That means the policy rewrite alone is **~9 pull requests** plus Unit 0, Unit 7, Unit 5 and Unit 6. Phase 2 is on the order of 3,000 review-facing lines.
 
-### Two options for carrying the predicate
+### How the predicate is carried: one shared definition (DECIDED)
 
-**Option A — explicit per-policy SQL.** Matches the repository convention, greppable, reviewable line by line. Cost: the ~9 PRs above, and 94 independent chances to write the wrong cast.
+Decided by the user on 2026-09-18, superseding this plan's earlier recommendation of explicit per-policy SQL. The reason changed after Unit 0b: four duplicated tenant guards were exactly what produced that gap, and writing the predicate 94 times recreates the same shape at larger scale.
 
-**Option B — one shared definition.** A migration helper taking `(table, policy_name, cmd, has_check)` that emits the policy with the target predicate defined once. Collapses the work to roughly three PRs and removes 94 opportunities to get the cast wrong. Cost: the predicate is no longer visible in the migration, and the `up`/`down` symmetry has to be engineered rather than read.
+| | Explicit per-policy SQL | **One shared definition (chosen)** |
+| --- | --- | --- |
+| Pull requests | ~9 | ~3 |
+| Review-facing lines | ~3,000 | far less; the repeated part becomes data |
+| Places the cast can be wrong | 94 | **1** |
+| What the unit carries | 94 near-identical blocks | the shared emitter plus a list of `(table, policy_name, cmd, has_check)` rows |
 
-**Recommendation: Option A, plus a harness assertion on the predicate form.** The harness already asserts that every policy expression references the tenant setting (added in #285). Extending it to assert the form is `current_setting('app.tenant_id', true)::uuid` — and that no policy expression uses `tenant_id::text` — makes the outcome machine-checked regardless of which option produces it. With that assertion in place, explicit SQL is reviewable *and* the wrong cast cannot survive CI. Option B's compactness then buys only PR count, not safety.
+The predicate lives in one place, so a wrong cast cannot be introduced 94 times. The SQL is no longer visible line-by-line in each migration, which is the cost accepted — and the harness assertion below is what makes that cost acceptable, because the *outcome* is machine-checked rather than proofread.
 
+**The shared emitter's contract, to be written once in the first slice:**
+- Input: the target predicate string, defined once as the target form `tenant_id = current_setting('app.tenant_id', true)::uuid`.
+- Per row: `(table, policy_name, cmd, has_check)`; `cmd` drives `USING` and/or `WITH CHECK` exactly as the four shapes already established for the `invoices` policies.
+- Order per table: `DROP POLICY IF EXISTS` for every policy, then the column `ALTER`, then the guarded `CREATE POLICY` — the order PostgreSQL forces, all inside one transaction.
+- `down()` mirrors it, restoring the previous predicate form.
+- Rows come from the `pg_policies` **structural** metadata (which is reliable), never from its predicate text (which is a deparse and cannot distinguish a bare compare from a written cast).
+
+### Harness extensions (Unit 0)
 ### Harness extensions (Unit 0)
 
 1. **Column-type assertion** — for every tenant-scoped column the entities declare, assert the type is `uuid`. This is Phase 5 and the fourth layer of `apps/admin_backend/scripts/verify-schema-build.sh`, alongside tables, columns, RLS enforcement and the tenant predicate. It is also the check that would have caught this drift in the first place.
