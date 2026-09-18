@@ -14,6 +14,7 @@ import { ProductionBatchHistory } from '../../modules/inventory/entities/product
 import { DeviceSyncCredential } from '../../modules/identity/entities/device-sync-credential.entity';
 import { DeviceSyncCredentialEvent } from '../../modules/identity/entities/device-sync-credential-event.entity';
 import { ConfigService } from '@nestjs/config';
+import { DatabaseConnectionConfigError } from '../config/database-connection.config';
 
 describe('AppModule Registration', () => {
   const configService = {
@@ -87,6 +88,47 @@ describe('createTypeOrmOptions', () => {
     expect(() =>
       getRequiredConfigValue(missingConfigService, 'DB_PASSWORD'),
     ).toThrow('DB_PASSWORD is required');
+  });
+
+  describe('production runtime resolution', () => {
+    const productionConfig = (
+      overrides: Record<string, string | undefined>,
+    ): ConfigService => {
+      const values: Record<string, string | undefined> = {
+        NODE_ENV: 'production',
+        DB_HOST: 'db.example.internal',
+        DB_PORT: '5432',
+        DB_USERNAME: 'runtime_role',
+        DB_PASSWORD: 'runtime-password',
+        DB_DATABASE: 'runtime_db',
+        ...overrides,
+      };
+      return {
+        get: jest.fn((key: string) => values[key]),
+      } as unknown as ConfigService;
+    };
+
+    it('resolves the runtime role in production without local defaults', () => {
+      const options = createTypeOrmOptions(productionConfig({}));
+
+      expect(options.username).toBe('runtime_role');
+      expect(options.database).toBe('runtime_db');
+      expect(options.host).toBe('db.example.internal');
+      expect(options.port).toBe(5432);
+      expect(options.synchronize).toBe(false);
+    });
+
+    it('fails closed instead of defaulting DB_USERNAME to postgres in production', () => {
+      expect(() =>
+        createTypeOrmOptions(productionConfig({ DB_USERNAME: undefined })),
+      ).toThrow(DatabaseConnectionConfigError);
+    });
+
+    it('fails closed instead of defaulting DB_DATABASE to omnifood in production', () => {
+      expect(() =>
+        createTypeOrmOptions(productionConfig({ DB_DATABASE: undefined })),
+      ).toThrow(DatabaseConnectionConfigError);
+    });
   });
 });
 
