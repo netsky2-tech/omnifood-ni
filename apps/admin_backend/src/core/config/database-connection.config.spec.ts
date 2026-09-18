@@ -90,9 +90,9 @@ describe('resolveDatabaseConnection', () => {
       const env: Record<string, string> = { ...VALID_PRODUCTION_RUNTIME_ENV };
       delete env[name];
 
-      expect(() =>
-        resolveDatabaseConnection({ env, role: 'runtime' }),
-      ).toThrow(DatabaseConnectionConfigError);
+      expect(() => resolveDatabaseConnection({ env, role: 'runtime' })).toThrow(
+        DatabaseConnectionConfigError,
+      );
     });
 
     it.each(RUNTIME_DB_VAR_NAMES)('treats a blank %s as missing', (name) => {
@@ -248,9 +248,9 @@ describe('resolveDatabaseConnection', () => {
 
   describe('non-production defaults', () => {
     it('preserves the historical local defaults when every variable is unset', () => {
-      expect(
-        resolveDatabaseConnection({ env: {}, role: 'runtime' }),
-      ).toEqual(DEV_DEFAULTS);
+      expect(resolveDatabaseConnection({ env: {}, role: 'runtime' })).toEqual(
+        DEV_DEFAULTS,
+      );
     });
 
     it('preserves the historical local defaults for development', () => {
@@ -303,9 +303,9 @@ describe('resolveDatabaseConnection', () => {
     });
 
     it('falls back to historical postgres defaults for migrations outside production', () => {
-      expect(
-        resolveDatabaseConnection({ env: {}, role: 'migration' }),
-      ).toEqual(DEV_DEFAULTS);
+      expect(resolveDatabaseConnection({ env: {}, role: 'migration' })).toEqual(
+        DEV_DEFAULTS,
+      );
     });
 
     it('falls back to DB_USERNAME/DB_PASSWORD for migrations outside production', () => {
