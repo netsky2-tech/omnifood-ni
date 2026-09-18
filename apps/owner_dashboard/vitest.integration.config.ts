@@ -10,7 +10,10 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
-    include: ["src/__tests__/w1.integration.test.ts"],
+    include: [
+      "src/__tests__/w1.integration.test.ts",
+      "src/__tests__/w4-e2e-fiscal.test.ts",
+    ],
     testTimeout: 15_000,
   },
 });
