@@ -1,12 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, renderHook, act } from "@testing-library/react";
+import { useState, useRef } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { getApiErrorMessage } from "@/lib/api-error";
-import { ApiError, onAuthExpired, notifyAuthExpired } from "@/lib/api";
+import { ApiError, onAuthExpired, notifyAuthExpired, resetAuthExpired, api } from "@/lib/api";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { NotFoundPage } from "@/app/not-found-page";
 import { ErrorBoundary } from "@/app/error-boundary";
+import { Sidebar } from "@/app/layout/sidebar";
 import { useAuthStore } from "@/features/auth/auth-store";
 import { useTenantContext } from "@/lib/tenant";
 import { useLogout } from "@/features/auth/auth-hooks";
@@ -79,6 +81,7 @@ describe("Quality & Robustness Audit — Unit & Interaction Tests", () => {
 
   describe("Session & Auth Event Bus", () => {
     beforeEach(() => {
+      resetAuthExpired();
       useAuthStore.setState({
         user: { id: "u-1", name: "Admin", email: "a@a.com", role: "OWNER", tenantId: "t-1", active: true },
         tenant: { id: "t-1", name: "Test Tenant", slug: "test", ruc: "123", active: true },
@@ -95,8 +98,56 @@ describe("Quality & Robustness Audit — Unit & Interaction Tests", () => {
       expect(listener).toHaveBeenCalledTimes(1);
 
       unsubscribe();
+      resetAuthExpired();
       notifyAuthExpired();
       expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it("handles 5 simultaneous 401 requests with invalid refresh, causing a single effective session expiration transition", async () => {
+      resetAuthExpired();
+      const listener = vi.fn();
+      const unsubscribe = onAuthExpired(listener);
+
+      sessionStorage.setItem("oc_access_token", "expired-access-token");
+      sessionStorage.setItem("oc_refresh_token", "invalid-refresh-token");
+
+      let refreshFetchCount = 0;
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+        if (typeof url === "string" && url.includes("/identity/refresh")) {
+          refreshFetchCount++;
+          return Promise.resolve({
+            ok: false,
+            status: 401,
+            json: async () => ({ message: "Invalid refresh token" }),
+          });
+        }
+        return Promise.resolve({
+          ok: false,
+          status: 401,
+          json: async () => ({ message: "Token expired" }),
+        });
+      });
+
+      try {
+        const results = await Promise.allSettled([
+          api.get("/sales/report-1"),
+          api.get("/sales/report-2"),
+          api.get("/sales/report-3"),
+          api.get("/sales/report-4"),
+          api.get("/sales/report-5"),
+        ]);
+
+        expect(results.every((r) => r.status === "rejected")).toBe(true);
+        expect(refreshFetchCount).toBe(1);
+        expect(listener).toHaveBeenCalledTimes(1);
+        expect(sessionStorage.getItem("oc_access_token")).toBeNull();
+        expect(sessionStorage.getItem("oc_refresh_token")).toBeNull();
+      } finally {
+        globalThis.fetch = originalFetch;
+        unsubscribe();
+        resetAuthExpired();
+      }
     });
   });
 
@@ -252,6 +303,154 @@ describe("Quality & Robustness Audit — Unit & Interaction Tests", () => {
       expect(useAuthStore.getState().isAuthenticated).toBe(false);
       expect(useAuthStore.getState().user).toBeNull();
       expect(useTenantContext.getState().tenant).toBeNull();
+    });
+
+    it("cancels in-flight queries before clear and prevents stale responses from rehydrating cache after logout", async () => {
+      const queryClient = new QueryClient();
+      const cancelSpy = vi.spyOn(queryClient, "cancelQueries");
+      const clearSpy = vi.spyOn(queryClient, "clear");
+
+      let resolveInFlight: (data: unknown) => void;
+      const inFlightPromise = new Promise((resolve) => {
+        resolveInFlight = resolve;
+      });
+
+      // Active query initiated during old session
+      const activeQueryPromise = queryClient.fetchQuery({
+        queryKey: ["tenant-confidential-report"],
+        queryFn: () => inFlightPromise,
+      });
+
+      expect(queryClient.isFetching({ queryKey: ["tenant-confidential-report"] })).toBe(1);
+
+      const wrapper = ({ children }: { children: React.ReactNode }) => (
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter>{children}</MemoryRouter>
+        </QueryClientProvider>
+      );
+
+      const { result } = renderHook(() => useLogout(), { wrapper });
+      act(() => {
+        result.current();
+      });
+
+      // Must cancel queries before clearing cache
+      expect(cancelSpy).toHaveBeenCalledTimes(1);
+      expect(clearSpy).toHaveBeenCalledTimes(1);
+      expect(cancelSpy.mock.invocationCallOrder[0]!).toBeLessThan(clearSpy.mock.invocationCallOrder[0]!);
+
+      // In-flight response from old session finally resolves after logout
+      resolveInFlight!({ secret: "TENANT_A_CONFIDENTIAL_PAYLOAD" });
+      await activeQueryPromise.catch(() => {});
+
+      // Regression check: query cache must remain empty, never rehydrated with previous session data
+      expect(queryClient.getQueryData(["tenant-confidential-report"])).toBeUndefined();
+      expect(queryClient.getQueryState(["tenant-confidential-report"])).toBeUndefined();
+    });
+  });
+
+  describe("Aggressive Double Submit Prevention", () => {
+    it("blocks rapid concurrent form submissions using synchronous lock and invokes mutation exactly once", async () => {
+      let resolveMutation: (val: unknown) => void;
+      const deferredMutation = new Promise((resolve) => {
+        resolveMutation = resolve;
+      });
+
+      const mockMutateAsync = vi.fn().mockReturnValue(deferredMutation);
+
+      // Render a form using the synchronous isSubmittingRef lock pattern
+      const TestForm = () => {
+        const isSubmittingRef = useRef(false);
+        const [isPending, setIsPending] = useState(false);
+
+        const handleSubmit = async (e: React.FormEvent) => {
+          e.preventDefault();
+          if (isPending || isSubmittingRef.current) return;
+          isSubmittingRef.current = true;
+          setIsPending(true);
+          try {
+            await mockMutateAsync({ name: "Producto Test" });
+          } finally {
+            isSubmittingRef.current = false;
+            setIsPending(false);
+          }
+        };
+
+        return (
+          <form onSubmit={handleSubmit} data-testid="test-form">
+            <input name="name" defaultValue="Producto Test" />
+            <button type="submit" disabled={isPending} data-testid="submit-btn">
+              Guardar
+            </button>
+          </form>
+        );
+      };
+
+      render(<TestForm />);
+      const form = screen.getByTestId("test-form");
+      const button = screen.getByTestId("submit-btn");
+
+      // AGGRESSIVE SUBMISSION BURST:
+      // Trigger multiple synthetic submit events and button clicks synchronously
+      // in the same tick before React re-renders with isPending: true
+      fireEvent.submit(form);
+      fireEvent.submit(form);
+      fireEvent.click(button);
+      fireEvent.submit(form);
+
+      // Mutation must only be initiated ONCE despite 4 concurrent attempts
+      expect(mockMutateAsync).toHaveBeenCalledTimes(1);
+
+      // Resolve in-flight mutation
+      await act(async () => {
+        resolveMutation!({ id: "p-1", name: "Producto Test" });
+        await deferredMutation;
+      });
+
+      // Remains called only once
+      expect(mockMutateAsync).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("Accessibility — Accessible Names vs title Attribute", () => {
+    it("ensures collapsed sidebar links provide accessible names via aria-label, not relying solely on title", () => {
+      const queryClient = new QueryClient();
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter>
+            <Sidebar />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      const links = screen.getAllByRole("link");
+      expect(links.length).toBeGreaterThan(0);
+
+      // Every link must have an explicit aria-label for assistive tech
+      for (const link of links) {
+        expect(link).toHaveAttribute("aria-label");
+        expect(link.getAttribute("aria-label")).toBeTruthy();
+      }
+    });
+
+    it("ensures icon buttons provide accessible names and decorative SVG icons have aria-hidden", () => {
+      const queryClient = new QueryClient();
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter>
+            <Sidebar />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      const allButtons = screen.getAllByRole("button");
+      expect(allButtons.length).toBeGreaterThan(0);
+
+      for (const btn of allButtons) {
+        const hasVisibleText = (btn.textContent?.trim().length ?? 0) > 0 && btn.textContent?.trim() !== "N";
+        const hasAriaLabel = !!btn.getAttribute("aria-label");
+        expect(hasVisibleText || hasAriaLabel).toBe(true);
+      }
     });
   });
 });

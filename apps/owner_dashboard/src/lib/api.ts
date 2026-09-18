@@ -64,6 +64,11 @@ let refreshPromise: Promise<string> | null = null;
 
 type AuthExpiredListener = () => void;
 const authExpiredListeners = new Set<AuthExpiredListener>();
+let authExpiredNotified = false;
+
+export function resetAuthExpired(): void {
+  authExpiredNotified = false;
+}
 
 export function onAuthExpired(listener: AuthExpiredListener): () => void {
   authExpiredListeners.add(listener);
@@ -73,6 +78,10 @@ export function onAuthExpired(listener: AuthExpiredListener): () => void {
 }
 
 export function notifyAuthExpired(): void {
+  if (authExpiredNotified) {
+    return;
+  }
+  authExpiredNotified = true;
   for (const listener of authExpiredListeners) {
     try {
       listener();
@@ -83,6 +92,7 @@ export function notifyAuthExpired(): void {
 }
 
 export function setTokens(tokens: TokenPair): void {
+  authExpiredNotified = false;
   if (
     !tokens ||
     !isNonBlankString(tokens.accessToken) ||
@@ -195,17 +205,27 @@ export async function refreshAccessToken(): Promise<string> {
   return nextAccess;
 }
 
+async function requestTokenRefresh(): Promise<string> {
+  if (!refreshPromise) {
+    refreshPromise = refreshAccessToken()
+      .catch((err) => {
+        clearTokens();
+        notifyAuthExpired();
+        throw err;
+      })
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+  return refreshPromise;
+}
+
 async function getValidAccessToken(): Promise<string> {
   const token = getAccessToken();
   if (isNonBlankString(token)) return token;
 
   if (hasStoredRefreshToken()) {
-    if (!refreshPromise) {
-      refreshPromise = refreshAccessToken().finally(() => {
-        refreshPromise = null;
-      });
-    }
-    const refreshed = await refreshPromise;
+    const refreshed = await requestTokenRefresh();
     if (isNonBlankString(refreshed)) {
       return refreshed;
     }
@@ -243,46 +263,52 @@ export async function apiFetch<T>(
     body: body ? JSON.stringify(body) : undefined,
   });
 
-  if (response.status === 401 && hasStoredRefreshToken()) {
-    try {
-      const newToken = await refreshAccessToken();
-      const retryHeaders: Record<string, string> = {
-        "Content-Type": "application/json",
-        ...(newToken && isNonBlankString(newToken) ? { Authorization: `Bearer ${newToken}` } : {}),
-        ...(customHeaders as Record<string, string>),
-      };
+  if (response.status === 401) {
+    if (hasStoredRefreshToken()) {
+      try {
+        const newToken = await requestTokenRefresh();
+        const retryHeaders: Record<string, string> = {
+          "Content-Type": "application/json",
+          ...(newToken && isNonBlankString(newToken) ? { Authorization: `Bearer ${newToken}` } : {}),
+          ...(customHeaders as Record<string, string>),
+        };
 
-      if (retryHeaders.Authorization && !retryHeaders.Authorization.replace(/^Bearer\s*/, "").trim()) {
-        delete retryHeaders.Authorization;
-      }
+        if (retryHeaders.Authorization && !retryHeaders.Authorization.replace(/^Bearer\s*/, "").trim()) {
+          delete retryHeaders.Authorization;
+        }
 
-      const retryResponse = await fetch(`${getApiBaseUrl()}${path}`, {
-        ...rest,
-        headers: retryHeaders,
-        body: body ? JSON.stringify(body) : undefined,
-      });
-
-      if (!retryResponse.ok) {
-        const errorBody = (await retryResponse.json().catch(() => null)) as Record<string, unknown> | null;
-        const message =
-          typeof errorBody?.message === "string" && errorBody.message.trim().length > 0
-            ? errorBody.message
-            : `API error: ${retryResponse.status}`;
-        throw new ApiError(message, {
-          status: retryResponse.status,
-          code: errorBody?.code,
-          responseBody: errorBody,
+        const retryResponse = await fetch(`${getApiBaseUrl()}${path}`, {
+          ...rest,
+          headers: retryHeaders,
+          body: body ? JSON.stringify(body) : undefined,
         });
-      }
 
-      return retryResponse.json() as Promise<T>;
-    } catch (refreshErr) {
+        if (!retryResponse.ok) {
+          const errorBody = (await retryResponse.json().catch(() => null)) as Record<string, unknown> | null;
+          const message =
+            typeof errorBody?.message === "string" && errorBody.message.trim().length > 0
+              ? errorBody.message
+              : `API error: ${retryResponse.status}`;
+          throw new ApiError(message, {
+            status: retryResponse.status,
+            code: errorBody?.code,
+            responseBody: errorBody,
+          });
+        }
+
+        return retryResponse.json() as Promise<T>;
+      } catch (refreshErr) {
+        clearTokens();
+        notifyAuthExpired();
+        if (refreshErr instanceof ApiError) {
+          throw refreshErr;
+        }
+        throw new Error("Session expired");
+      }
+    } else {
       clearTokens();
       notifyAuthExpired();
-      if (refreshErr instanceof ApiError) {
-        throw refreshErr;
-      }
-      throw new Error("Session expired");
+      throw new ApiError("Session expired", { status: 401 });
     }
   }
 

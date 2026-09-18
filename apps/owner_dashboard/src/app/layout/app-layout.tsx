@@ -19,6 +19,7 @@ export function AppLayout() {
     return onAuthExpired(() => {
       logout();
       clearTenant();
+      queryClient.cancelQueries();
       queryClient.clear();
     });
   }, [logout, clearTenant, queryClient]);

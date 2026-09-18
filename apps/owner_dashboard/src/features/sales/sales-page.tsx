@@ -98,6 +98,8 @@ function HourlyTab({ date }: { date?: string }) {
               <div
                 key={bucket.hour}
                 className="flex flex-1 flex-col items-center gap-1.5"
+                role="img"
+                aria-label={`${bucket.hour}:00 — ${formatCurrency(bucket.totalSales)}`}
                 title={`${bucket.hour}:00 — ${formatCurrency(bucket.totalSales)}`}
               >
                 <div

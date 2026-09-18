@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CatalogPage } from "@/features/catalog/catalog-page";
 import {
   useCatalogValues,
+  useCreateCatalogValue,
 } from "@/features/catalog/use-catalog";
 import type { CatalogValue } from "@/features/catalog/types";
 
@@ -300,6 +301,42 @@ describe("W5 — CatalogPage create dialog", () => {
     await waitFor(() => {
       expect(screen.queryByText("Nuevo Valor")).not.toBeInTheDocument();
     });
+  });
+
+  it("prevents duplicate submissions on rapid double submit of create catalog value", async () => {
+    let resolveMutation: (val: unknown) => void;
+    const pendingPromise = new Promise((resolve) => {
+      resolveMutation = resolve;
+    });
+    const mockMutateAsync = vi.fn().mockReturnValue(pendingPromise);
+    vi.mocked(useCreateCatalogValue).mockReturnValue({
+      mutateAsync: mockMutateAsync,
+      isPending: false,
+    } as any);
+
+    const user = userEvent.setup();
+    render(<CatalogPage />, { wrapper: TestWrapper });
+
+    await user.click(screen.getByText("+ Nuevo Valor"));
+    expect(screen.getByText("Nuevo Valor")).toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText("Ej: kg, LACTEOS"), "g");
+    await user.type(screen.getByPlaceholderText("Ej: Kilogramo, Lácteos"), "Gramo");
+
+    const submitBtn = screen.getByRole("button", { name: /^crear$/i });
+    // Aggressive double submit: click twice rapidly before the mutation promise resolves
+    await user.click(submitBtn);
+    await user.click(submitBtn);
+
+    // Assert that the mutation was invoked exactly once
+    expect(mockMutateAsync).toHaveBeenCalledTimes(1);
+
+    // Resolve in-flight mutation
+    resolveMutation!({ id: "v-new", code: "g", name: "Gramo" });
+    await waitFor(() => {
+      expect(screen.queryByText("Nuevo Valor")).not.toBeInTheDocument();
+    });
+    expect(mockMutateAsync).toHaveBeenCalledTimes(1);
   });
 });
 

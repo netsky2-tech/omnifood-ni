@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Edit2, Trash2 } from "lucide-react";
 import {
   useCatalogValues,
@@ -156,9 +156,12 @@ function CatalogDialog({
     onClose();
   };
 
+  const isSubmittingRef = useRef(false);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isPending) return;
+    if (isPending || isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
     setError(null);
 
     try {
@@ -178,6 +181,8 @@ function CatalogDialog({
       onClose();
     } catch (err) {
       setError(getApiErrorMessage(err, "Error al guardar valor de catálogo"));
+    } finally {
+      isSubmittingRef.current = false;
     }
   };
 
@@ -298,14 +303,19 @@ function DeactivateDialog({
   const deactivateMutation = useDeactivateCatalogValue(type);
   const [error, setError] = useState<string | null>(null);
 
+  const isSubmittingRef = useRef(false);
+
   const handleConfirm = async () => {
-    if (deactivateMutation.isPending) return;
+    if (deactivateMutation.isPending || isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
     setError(null);
     try {
       await deactivateMutation.mutateAsync(value.id);
       onClose();
     } catch (err) {
       setError(getApiErrorMessage(err, "Error al desactivar el valor de catálogo"));
+    } finally {
+      isSubmittingRef.current = false;
     }
   };
 

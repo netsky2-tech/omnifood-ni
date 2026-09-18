@@ -44,6 +44,7 @@ export function useLogout() {
     clearTokens();
     logout();
     clearTenant();
+    queryClient.cancelQueries();
     queryClient.clear();
     navigate("/login");
   };

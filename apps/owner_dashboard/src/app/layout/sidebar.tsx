@@ -135,6 +135,7 @@ export function Sidebar() {
                       ? "bg-white/15 text-white font-semibold shadow-xs"
                       : "text-white/70 hover:bg-white/10 hover:text-white",
                   )}
+                  aria-label={item.label}
                   title={collapsed ? item.label : undefined}
                 >
                   {isActive && (
@@ -145,7 +146,7 @@ export function Sidebar() {
                       )}
                     />
                   )}
-                  <Icon className="h-5 w-5 shrink-0 transition-transform duration-150 group-hover:scale-105" />
+                  <Icon className="h-5 w-5 shrink-0 transition-transform duration-150 group-hover:scale-105" aria-hidden="true" />
                   {!collapsed && <span className="truncate">{item.label}</span>}
                 </Link>
               );
@@ -248,28 +249,32 @@ export function Sidebar() {
                 </div>
               </div>
               <button
+                type="button"
                 onClick={toggleSidebar}
                 className="rounded-md p-1.5 text-white/70 hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-white/40 cursor-pointer"
                 aria-label="Colapsar barra lateral"
               >
-                <ChevronLeft className="h-5 w-5" />
+                <ChevronLeft className="h-5 w-5" aria-hidden="true" />
               </button>
             </>
           ) : (
             <div className="flex w-full items-center justify-between">
-              <div
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-secondary text-primary font-bold shadow-xs cursor-pointer"
+              <button
+                type="button"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-secondary text-primary font-bold shadow-xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-white/40"
                 onClick={toggleSidebar}
+                aria-label="Expandir barra lateral"
                 title="NHILOS POS — Expandir"
               >
                 N
-              </div>
+              </button>
               <button
+                type="button"
                 onClick={toggleSidebar}
                 className="rounded-md p-1 text-white/70 hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-white/40 cursor-pointer"
                 aria-label="Expandir barra lateral"
               >
-                <ChevronRight className="h-4 w-4" />
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
           )}
@@ -293,10 +298,11 @@ export function Sidebar() {
                 </div>
               )}
               <button
+                type="button"
                 onClick={logout}
-                className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+                className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-white/40"
               >
-                <LogOut className="h-5 w-5 shrink-0" />
+                <LogOut className="h-5 w-5 shrink-0" aria-hidden="true" />
                 <span>Cerrar sesión</span>
               </button>
             </>
@@ -305,18 +311,21 @@ export function Sidebar() {
               {user && (
                 <div
                   className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 text-xs font-bold text-white"
+                  role="img"
+                  aria-label={`Usuario: ${user.name} (${user.role})`}
                   title={`${user.name} (${user.role})`}
                 >
                   {user.name ? user.name.charAt(0).toUpperCase() : "U"}
                 </div>
               )}
               <button
+                type="button"
                 onClick={logout}
-                className="flex h-9 w-9 items-center justify-center rounded-md text-white/70 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+                className="flex h-9 w-9 items-center justify-center rounded-md text-white/70 hover:bg-white/10 hover:text-white transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-white/40"
                 title="Cerrar sesión"
                 aria-label="Cerrar sesión"
               >
-                <LogOut className="h-5 w-5" />
+                <LogOut className="h-5 w-5" aria-hidden="true" />
               </button>
             </div>
           )}

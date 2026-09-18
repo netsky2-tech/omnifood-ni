@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Edit2, Trash2 } from "lucide-react";
 import {
   useProducts,
@@ -184,9 +184,12 @@ function ProductDialog({
     onClose();
   };
 
+  const isSubmittingRef = useRef(false);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isPending) return;
+    if (isPending || isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
     setError(null);
 
     try {
@@ -215,6 +218,8 @@ function ProductDialog({
       onClose();
     } catch (err) {
       setError(getApiErrorMessage(err, "Error al guardar producto"));
+    } finally {
+      isSubmittingRef.current = false;
     }
   };
 
@@ -372,14 +377,19 @@ function DeactivateDialog({
   const deactivateMutation = useDeactivateProduct();
   const [error, setError] = useState<string | null>(null);
 
+  const isSubmittingRef = useRef(false);
+
   const handleConfirm = async () => {
-    if (deactivateMutation.isPending) return;
+    if (deactivateMutation.isPending || isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
     setError(null);
     try {
       await deactivateMutation.mutateAsync(product.id);
       onClose();
     } catch (err) {
       setError(getApiErrorMessage(err, "Error al desactivar el producto"));
+    } finally {
+      isSubmittingRef.current = false;
     }
   };
 
