@@ -43,7 +43,7 @@ A real fiscal document cannot be corrected after issuance. Acceptance evidence m
 
 - Delivery strategy: `stacked-to-main`, selected after the first slice exceeded the review budget.
 - Review budget: approximately 400 authored changed lines per slice.
-- Stack boundary: `feat/founder-pilot-freeze` is slice 1; `feat/founder-pilot-freeze-docs` is slice 2 and must target slice 1.
+- Stack boundary: slice 1 `feat/founder-pilot-freeze` (fixtures); slice 2 `feat/founder-pilot-freeze-docs` targets slice 1; slice 3 `feat/founder-pilot-freeze-regime` targets slice 2.
 - TDD mode: strict, from `openspec/config.yaml`.
 - Backend runner: `npm test`; focused Jest commands are preferred for fixture-contract work.
 - Documentation-only tasks use structural checks, grep/readback, and hash verification.
@@ -104,7 +104,7 @@ Evidence: strict-TDD writer reported RED from missing fixtures, GREEN at 28/28 f
 
 ### FREEZE-03 — Correct deterministic acceptance-document drift
 
-Status: in_progress — implementation and independent verification complete; awaiting explicit commit authorization.
+Status: complete — committed as `bd5ddfeacfe1cf966f8ad1695a452cdb76d4fe6f`.
 Depends on: FREEZE-02
 
 - [x] Correct the Android package ID to `com.nhilos.pos_app`.
@@ -125,21 +125,29 @@ Checks:
 - Readback against POS build files, Floor database annotation, and TypeORM migration tail.
 - Markdown structural review.
 
-Evidence: documentation-only task, so RED/GREEN was N/A; structural/readback verification used instead. Writer checks passed for diff hygiene, stale identifiers, package/version/schema/migration facts, mock-vs-physical distinction, and 5-file scope. Independent verification found one MEDIUM stale freeze claim in AP-00 summary cells; bounded correction replaced both affirmative freeze claims, and focused reverification passed. Final slice-2 document delta: 102 insertions, 64 deletions (166 changed lines), plus the parent-owned task tracking delta; within the 400-line budget. Runtime harness: N/A because no executable behavior changed. Rollback boundary: revert the five acceptance-document changes without touching FREEZE-02 fixtures or tests. Commit identity pending explicit user authorization.
+Evidence: documentation-only task, so RED/GREEN was N/A; structural/readback verification used instead. Writer checks passed for diff hygiene, stale identifiers, package/version/schema/migration facts, mock-vs-physical distinction, and 5-file scope. Independent verification found one MEDIUM stale freeze claim in AP-00 summary cells; bounded correction replaced both affirmative freeze claims, and focused reverification passed. Final document delta before tracking update: 102 insertions, 64 deletions (166 changed lines), within the 400-line budget. Runtime harness: N/A because no executable behavior changed. Rollback boundary: revert the five acceptance-document changes without touching FREEZE-02 fixtures or tests. Work-unit commit: `bd5ddfeacfe1cf966f8ad1695a452cdb76d4fe6f`.
 
 ### FREEZE-04 — Resolve human safety and environment prerequisites
 
-Status: pending
+Status: in_progress — human decisions recorded; field capture pending.
 Depends on: FREEZE-03
 Owner: human, agent-assisted
 
-- [ ] Replace the placeholder issuer RUC before any fiscal action.
-- [ ] Capture only permitted RUC presence/hash evidence.
-- [ ] Capture Q80 serial hash, OS/security patch, firmware, real printer adapter, paper width, WiFi, and WAN outage method.
+Recorded decisions (user, 2026-09-17):
+- Fiscal regime: `CUOTA_FIJA` is the founder's real regime. The declared fixture is therefore authoritative, and the attached-device harness must be aligned to it (see FREEZE-04B). Physical ticket expectation: `COMPROBANTE DE VENTA` / `NO RECAUDA IVA`, no IVA collected.
+- Acceptance backend: local frozen backend, not a cloud deployment. No external deploy-trigger mapping is required; the PostgreSQL version must be captured from the local instance actually used.
+- Physical hardware: the real Q80 is available now for field capture.
+- Issuer RUC: the real RUC is available and will replace the placeholder through `ONBOARDING_FOUNDER_RUC`; evidence records presence/hash only.
+
+Pending human capture:
+- [ ] Bring up the local acceptance backend and record its PostgreSQL version.
+- [ ] Run the seed on a fresh tenant with `ONBOARDING_FOUNDER_RUC` set and confirm no placeholder warning remains.
+- [ ] Capture Q80 serial hash, OS version and security patch, firmware, and the real printer adapter.
+- [ ] Verify the device paper width is 80 mm (local device setting; not server-pushed).
 - [ ] Capture workstation browser, OS, and resolution.
-- [ ] Capture real APK version/build and SHA-256.
-- [ ] Choose local or deployed backend; if deployed, verify the external deploy trigger and branch mapping.
-- [ ] Record PostgreSQL version and explicitly resolve/document DSI device-only and credit-note risk for the pilot.
+- [ ] Capture the real APK version and SHA-256.
+- [ ] Record the WiFi SSID and the WAN outage method.
+- [ ] Record explicit DSI device-only and credit-note posture for the pilot.
 
 Acceptance criteria:
 - No placeholder warning remains for the selected fresh tenant.
@@ -151,9 +159,38 @@ Checks:
 - Human-run seed and tenant query.
 - `adb` package/version/device-property commands.
 - APK and device-serial SHA-256 checks.
-- Hosting dashboard and database evidence.
+- Local backend database evidence.
 
-Evidence: pending.
+Evidence: decisions recorded; field evidence pending.
+
+### FREEZE-04B — Align the attached-device rehearsal regime to `CUOTA_FIJA`
+
+Status: in_progress — implementation and independent verification complete; awaiting explicit commit authorization.
+Depends on: FREEZE-04 regime decision
+
+- [x] Align the attached-device Q80 harness fiscal setup to `CUOTA_FIJA`.
+- [x] Update the acceptance documents so the regime blocker records the resolved decision and the physical-ticket expectation.
+- [x] Confirm no regime-specific assertion is weakened or removed.
+
+Acceptance criteria:
+- The attached-device harness publishes `CUOTA_FIJA`, matching the declared fixture and the founder's real regime.
+- No acceptance document still describes the regime mismatch as unresolved.
+- The physical-ticket expectation is unambiguous: `COMPROBANTE DE VENTA` / `NO RECAUDA IVA`, 80 mm.
+- No IVA-collecting expectation remains in the pilot acceptance path.
+
+Checks:
+- Flutter analyze — PASS, `No issues found!`.
+- Mocked rehearsal test — PASS, `All tests passed!` (3 tests).
+- `git diff --check` — PASS.
+- Unresolved-regime grep — PASS, none remaining.
+- Assertion count at HEAD vs working tree — PASS, 23 vs 23, so nothing was weakened.
+- Independent verifier — PASS; identical code diff and `flutter test` result reproduced independently.
+
+Evidence: The writer subagent failed after writing and returned no result envelope, so its edits were treated as untrusted partial work and verified from scratch; the verifier reproduced the analyze and test results and confirmed the harness derives persisted `tax_regime` from the `fiscal-setup` response.
+
+The verifier's LOW finding was that the manifest claimed a repository-wide single authority while `business_profile_view_model.dart` still defaults to `REGIMEN_GENERAL` for new profiles. Correction applied by the parent: the claim was narrowed to the acceptance path, and the pre-existing non-pilot default, its override behavior, and the troubleshooting rule are now stated explicitly. That correction is parent-authored and parent-spot-checked against the verifier's own cited evidence; it was not re-verified by a separate agent.
+
+Slice-3 changed lines: 22 insertions / 16 deletions across the harness and four documents (38 changed lines) plus the parent-owned task tracking file; within the 400-line budget. Runtime harness: the attached-device Q80 harness cannot execute without physical hardware, which is expected. Rollback boundary: revert the harness regime line and the four acceptance-document edits without touching FREEZE-02 fixtures or FREEZE-03 corrections. Commit identity pending explicit user authorization.
 
 ### FREEZE-05 — Freeze release identity and manifest
 
@@ -233,8 +270,10 @@ Evidence: pending.
 - FREEZE-02 completed and committed as `f9d1f91c71bc1627781ac055e2a72ad744f9f28e` after explicit user authorization.
 - The commit is one coherent work unit, but its 567 inserted lines exceed the 400-line PR budget because it includes the 331-line verified candidate and the 236-line durable ODD task document.
 - User selected `stacked-to-main`. Slice 1 remains on `feat/founder-pilot-freeze`; slice 2 started from it on `feat/founder-pilot-freeze-docs` for FREEZE-03.
-- FREEZE-03 implementation and independent reverification are complete; work-unit closure is waiting for explicit commit authorization.
+- FREEZE-03 completed and committed as `bd5ddfeacfe1cf966f8ad1695a452cdb76d4fe6f` after explicit user authorization.
+- FREEZE-04 human decisions recorded: `CUOTA_FIJA`, local frozen backend, Q80 available, real RUC available.
+- FREEZE-04B created on slice 3 `feat/founder-pilot-freeze-regime` to align the attached-device harness and resolve the documented regime blocker.
 
 ## Next step
 
-Obtain explicit authorization for the FREEZE-03 slice-2 commit. After recording its commit identity, close FREEZE-03 and begin the human-gated FREEZE-04 decisions.
+Obtain explicit authorization for the FREEZE-04B slice-3 commit. In parallel, the human field capture for FREEZE-04 remains pending: local backend up, PostgreSQL version, fresh-tenant seed with the real RUC, and Q80 device/workstation/APK observations.

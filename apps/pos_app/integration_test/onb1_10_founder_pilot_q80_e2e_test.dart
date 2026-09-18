@@ -137,7 +137,10 @@ Future<void> _setup(AppDatabase db, String marker) async {
   });
 
   final fiscal = await dio.post<Map<String, dynamic>>('onboarding/fiscal-setup', data: {
-    'regime': 'REGIMEN_GENERAL',
+    // Founder regime decision (FREEZE-04): the pilot tenant is CUOTA_FIJA
+    // (COMPROBANTE DE VENTA, no IVA collected), matching the declared
+    // acceptance fixture in AP_FIXTURE_MANIFEST.md.
+    'regime': 'CUOTA_FIJA',
     'businessName': 'Founder Pilot Q80 $marker',
     'ruc': 'J${startedRuc(marker)}',
     'commercialFxSpread': 0,

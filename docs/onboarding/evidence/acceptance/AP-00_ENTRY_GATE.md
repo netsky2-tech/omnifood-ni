@@ -130,9 +130,10 @@ Blockers:
   Restart recovery en dispositivo:    ❌ BLOCKER
 
   Pre-rehearsal adicionales (documentados en el manifest):
-  Mismatch de régimen tributario:     ❌ BLOCKER — fixture CUOTA_FIJA vs harness
-                                      attachado REGIMEN_GENERAL; resolver antes
-                                      del piloto (§9 de AP_FIXTURE_MANIFEST.md)
+  Régimen tributario:                 ✅ RESUELTO — CUOTA_FIJA (decisión del
+                                      founder); harness attachado alineado;
+                                      ticket esperado COMPROBANTE DE VENTA /
+                                      NO RECAUDA IVA, 80 mm (§9 del manifest)
   RUC placeholder del seed:           ❌ BLOCKER — reemplazar antes de emitir
                                       cualquier documento fiscal
 

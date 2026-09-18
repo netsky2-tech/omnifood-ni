@@ -132,20 +132,22 @@ Flags según `OnboardingFeatureRolloutService` — estado congelado para accepta
 | Campo | Valor |
 |---|---|
 | RUC | `J0000000000000` — **placeholder** provisto por el seed script (override: `ONBOARDING_FOUNDER_RUC`). Estructuralmente válido (`J` + 13 dígitos) pero **no es un RUC real de contribuyente** |
-| Régimen | `CUOTA_FIJA` declarado en este fixture — **PENDIENTE DE RESOLUCIÓN**: el harness attachado real usa `REGIMEN_GENERAL` (ver BLOQUEANTE PRE-REHEARSAL abajo). No mezclar regímenes en el cohort |
+| Régimen | `CUOTA_FIJA` — **RESUELTO (decisión del founder, 2026-09-17)**: el fixture declarado es la autoridad y el harness attachado real ahora también envía `CUOTA_FIJA` (ver registro de resolución abajo). No mezclar regímenes en el cohort |
 | Nombre comercial | «COMPLETAR EN CAMPO: nombre del tenant pilot» |
 | Dirección fiscal | «COMPLETAR EN CAMPO: dirección ficticia de prueba pero con formato válido» |
 | Teléfono | «COMPLETAR EN CAMPO» |
 
 **ORDEN BLOQUEANTE:** el RUC placeholder debe reemplazarse por el RUC real del founder **antes de emitir el primer documento fiscal**. Los documentos emitidos son inmutables ante DGI: no se borran, no se re-numeran y no se corrigen retroactivamente. Corregir el RUC después de la primera factura deja esa factura con un identificador inválido de forma permanente. El RUC placeholder `J0000000000000` queda visiblemente prohibido para ejecución fiscal: ninguna emisión, TEST_PRINT ni rehearsal puede ejecutarse con él.
 
-### BLOQUEANTE PRE-REHEARSAL — mismatch de régimen tributario
+### Régimen tributario resuelto (ex BLOQUEANTE PRE-REHEARSAL)
 
-Este fixture declara régimen `CUOTA_FIJA` (IVA 0.00%), pero el harness real de dispositivo attachado (`apps/pos_app/integration_test/onb1_10_founder_pilot_q80_e2e_test.dart`) envía `regime: 'REGIMEN_GENERAL'` a `onboarding/fiscal-setup`. El rehearsal simulado (`apps/pos_app/test/integration/onb1_10_founder_pilot_rehearsal_e2e_test.dart`) sí usa `CUOTA_FIJA`, lo que confirma la divergencia entre fixture documentado y harness físico.
+**Decisión registrada (2026-09-17):** el régimen real del tenant piloto es `CUOTA_FIJA` (IVA 0.00%). El fixture declarado en este documento es la autoridad del piloto, y **la ruta de aceptación queda alineada**: el harness attachado real (`apps/pos_app/integration_test/onb1_10_founder_pilot_q80_e2e_test.dart`) ya envía `regime: 'CUOTA_FIJA'` a `onboarding/fiscal-setup`, igual que el rehearsal simulado (`apps/pos_app/test/integration/onb1_10_founder_pilot_rehearsal_e2e_test.dart`), que ya usaba `CUOTA_FIJA`. El `tax_regime` persistido en el dispositivo se deriva de la respuesta de `fiscal-setup`, así que el valor enviado por el harness es el que gobierna el run físico.
 
-Ambos regímenes son válidos en el dominio (`TaxRegime`, DGI / Ley 822): `CUOTA_FIJA` emite «COMPROBANTE DE VENTA» sin IVA recaudado; `REGIMEN_GENERAL` emite «FACTURA DE VENTA» con desglose de IVA (15%). El seed script no fija ningún régimen, por lo que **el repositorio no establece una autoridad única** entre el fixture y el harness.
+**Alcance de esta afirmación:** la alineación es de la ruta de aceptación, no de todo el repositorio. `business_profile_view_model.dart` conserva un default `REGIMEN_GENERAL` para perfiles nuevos, preexistente y fuera del alcance del piloto; en el run de aceptación ese default queda sobrescrito por la configuración persistida y por el payload fiscal. Si un run mostrara un régimen distinto de `CUOTA_FIJA`, prevalece la regla de troubleshooting del checklist: no emitir documentos y repetir.
 
-**No se elige régimen en este documento y no se modifica código.** La emisión de cualquier documento fiscal y la ejecución del rehearsal físico quedan bloqueadas hasta que se resuelva explícitamente qué régimen declara el piloto (decisión humana) y se alineen fixture documentado, harness y expectativas de ticket físico. Este mismatch debe resolverse antes de AP-00 (FREEZE-04/05).
+**Semántica del ticket físico resuelta:** el rehearsal debe emitir `COMPROBANTE DE VENTA` / `NO RECAUDA IVA`, papel 80 mm. Bajo `CUOTA_FIJA` (DGI / Ley 822) no se emite `FACTURA DE VENTA` ni desglose de IVA (15%); esa semántica corresponde únicamente a `REGIMEN_GENERAL`, que queda fuera del piloto.
+
+La emisión de documentos fiscales sigue bloqueada por el RUC placeholder hasta que se registre el RUC real del founder (bloqueante separado, arriba). Ninguna evidencia de campo fue inventada en esta resolución: el valor observado del ticket físico se captura en el rehearsal (FREEZE-06).
 
 ---
 
@@ -184,7 +186,7 @@ Este manifest describe el **fixture real del piloto**. La identidad de release a
 | SQLite Floor schema version (§2) | Verificado contra el árbol: `52` |
 | Versión POS (§2) | Verificada contra el árbol: pubspec `1.0.0+1` |
 | CSV fixtures F2–F5 (§11) | **Archivos deterministas existen** (FREEZE-02); hashes pendientes de binding al congelar (FREEZE-05) |
-| Régimen tributario (§9) | **BLOQUEANTE PRE-REHEARSAL:** mismatch `CUOTA_FIJA` (fixture) vs `REGIMEN_GENERAL` (harness attachado real). Resolver antes del piloto |
+| Régimen tributario (§9) | **RESUELTO (2026-09-17):** `CUOTA_FIJA` por decisión del founder; harness attachado alineado con el fixture. Ticket esperado: `COMPROBANTE DE VENTA` / `NO RECAUDA IVA`, 80 mm |
 | Capturas de campo (§5, §6) | Pendientes de captura en el dispositivo físico |
 
 ---
