@@ -2,8 +2,9 @@
 
 **Documento:** `AP_REFERENCE_RUN_PROTOCOL.md`  
 **Ubicación:** `docs/onboarding/evidence/acceptance/AP_REFERENCE_RUN_PROTOCOL.md`  
-**Estado:** **SEMI-FROZEN — builds congelados; protocolo humano/operativo pendiente de confirmación en campo**  
-**Versión:** 1.0 (builds congelados 2026-09-04; Wan/operador pendiente de captura)  
+**Estado:** **NOT FROZEN — protocolo operativo pendiente de confirmación en campo; identidad de release pendiente de FREEZE-05**
+
+**Versión:** 1.0 (protocolo humano/operativo pendiente de captura; release id NO acuñada)
 **Fecha de creación:** 2026-09-04  
 **Autoridad:** `onboarding_acceptance_plan_v1.0.md` §4.3
 
@@ -285,6 +286,6 @@ Cuando este protocolo se use para el cohort formal, firmar:
 Firmado por:              «COMPLETAR EN CAMPO»
 Fecha de congelación:     «COMPLETAR EN CAMPO: actualizar fecha/hora exacta de firma»
 Protocol version:         1.0
-Fixture manifest ref:     AP_FIXTURE_MANIFEST.md v1.0 (commit c6b61cd)
-acceptanceReleaseId:      c6b61cd-m1801000000000-stage10
+Fixture manifest ref:     AP_FIXTURE_MANIFEST.md v1.0 (release identity pendiente de FREEZE-05)
+acceptanceReleaseId:      **NOT FROZEN** — «COMPLETAR EN FREEZE-05: acuñar una sola vez tras estabilizar todo cambio que afecte release»
 ```

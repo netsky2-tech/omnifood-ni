@@ -21,14 +21,14 @@ Este documento captura la evidencia del piloto físico en hardware real. Se llen
 
 | Campo | Valor |
 |---|---|
-| acceptanceReleaseId | `c6b61cd-m1801000000000-stage10` |
-| Backend commit | `c6b61cd15428593ff04afdd8b3be52c43814753a` |
-| Owner Dashboard commit | `c6b61cd15428593ff04afdd8b3be52c43814753a` |
-| POS commit | `c6b61cd15428593ff04afdd8b3be52c43814753a` |
-| POS APK version | «COMPLETAR: `adb shell dumpsys package com.omnifood.pos \| grep versionName`» |
-| POS APK SHA-256 | «COMPLETAR: `sha256sum path/to/pos.apk`» |
-| Database migration version | `1801000000000` |
-| SQLite schema version | «COMPLETAR: Floor database version del POS tras build» |
+| acceptanceReleaseId | **NOT FROZEN** — «COMPLETAR EN FREEZE-05: acuñar una sola vez tras estabilizar todo cambio que afecte release» |
+| Backend commit | «COMPLETAR EN FREEZE-05: SHA del commit de release» |
+| Owner Dashboard commit | «COMPLETAR EN FREEZE-05: SHA del commit de release» |
+| POS commit | «COMPLETAR EN FREEZE-05: SHA del commit de release» |
+| POS APK version | pubspec declara `1.0.0+1` — «COMPLETAR EN CAMPO: `adb shell dumpsys package com.nhilos.pos_app \| grep versionName`» |
+| POS APK SHA-256 | «COMPLETAR EN CAMPO: `sha256sum path/to/pos.apk`» |
+| Database migration version | `1809040000000-CreateHumanAuthorizationTenantPublicationState` (última migración TypeORM verificada en el árbol) |
+| SQLite schema version | `52` (Floor database version verificada en `apps/pos_app/lib/data/database/app_database.dart`; confirmar en el APK instalado) |
 
 ---
 
@@ -78,12 +78,12 @@ Este documento captura la evidencia del piloto físico en hardware real. Se llen
 | RUC | `J0000000000000` (placeholder del seed) → **registrar aquí el RUC real usado en el run** |
 | RUC presente al activar (`rucPresent`) | «true/false — de la evidencia de TEST_PRINT» |
 | `rucHash` (SHA-256 del RUC canónico) | «de la evidencia de TEST_PRINT — nunca registrar el RUC crudo aquí» |
-| Régimen | `CUOTA_FIJA` (IVA 0.00%) |
+| Régimen | **PENDIENTE DE RESOLUCIÓN — mismatch:** el fixture declara `CUOTA_FIJA` (IVA 0.00%) pero el harness attachado real (`integration_test/onb1_10_founder_pilot_q80_e2e_test.dart`) envía `REGIMEN_GENERAL`. Ver BLOQUEANTE PRE-REHEARSAL en §9 de `AP_FIXTURE_MANIFEST.md`; registrar aquí el régimen resuelto |
 | Nombre comercial | «COMPLETAR» |
 | Dirección fiscal | «COMPLETAR» |
 | Teléfono | «COMPLETAR» |
 | `TEST_PRINT` ancho efectivo (mm) | «de la evidencia de TEST_PRINT — debe ser 80» |
-| `TEST_PRINT` régimen efectivo | «de la evidencia de TEST_PRINT — debe ser CUOTA_FIJA» |
+| `TEST_PRINT` régimen efectivo | «de la evidencia de TEST_PRINT — debe coincidir con el régimen resuelto en el bloqueante pre-rehearsal (§9 de `AP_FIXTURE_MANIFEST.md`)» |
 
 **Regla:** el RUC crudo sólo se comprueba contra el ticket físico. La telemetría y este documento registran `rucHash` + `rucPresent`, nunca el identificador completo.
 
@@ -105,10 +105,10 @@ Este documento captura la evidencia del piloto físico en hardware real. Se llen
 
 | Fixture | SHA-256 del archivo CSV |
 |---|---|
-| F2 — CSV Clean | «COMPLETAR: generar CSV, hashear» |
-| F3 — CSV Mixed | «COMPLETAR» |
-| F4 — CSV Duplicate | «COMPLETAR» |
-| F5 — Legacy Unsafe | «COMPLETAR» |
+| F2 — CSV Clean | **Archivo determinista existe** (FREEZE-02) — hash pendiente de binding al congelar (FREEZE-05) |
+| F3 — CSV Mixed | **Archivo determinista existe** (FREEZE-02) — hash pendiente de binding al congelar |
+| F4 — CSV Duplicate | **Archivo determinista existe** (FREEZE-02) — hash pendiente de binding al congelar |
+| F5 — Legacy Unsafe | **Archivo determinista existe** (FREEZE-02) — hash pendiente de binding al congelar |
 
 ---
 
@@ -180,6 +180,6 @@ Para cada run, capturar evidencia física/digital:
 ```text
 Ejecutado por:    «COMPLETAR EN CAMPO»
 Fecha del piloto: «COMPLETAR EN CAMPO»
-acceptanceReleaseId: c6b61cd-m1801000000000-stage10
+acceptanceReleaseId: **NOT FROZEN** — «COMPLETAR EN FREEZE-05»
 Cohort result:    «PASS / FAIL»
 ```
