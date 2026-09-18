@@ -1,0 +1,9 @@
+nombre,precio_venta,unidad_venta,sku,categoria,porcentaje_iva
+Hamburguesa Clásica,180.00,UN,HAM-01,Comida,15
+Gaseosa 500ml,35.00,UN,BEB-01,Bebidas,15
+Papas Fritas Medianas,75.00,UN,PAP-01,Acompañamientos,15
+Café Americano,60.00,UN,CAF-01,Bebidas,0
+Hamburguesa Clásica,190.00,ORDEN,HAM-01,Comida,15
+Gaseosa 500ml,38.00,UN,BEB-01,Bebidas,15
+Papas Fritas Medianas,75.00,UN,PAP-01,Acompañamientos,15
+Jugo Natural Naranja,45.00,UN,JUG-01,Bebidas,0
