@@ -17,9 +17,11 @@ import {
   ROLE_LABELS,
   createUserSchema,
   updateUserSchema,
+  type User,
 } from "./types";
-import type { User } from "./types";
 import { useCreateUser, useUpdateUser } from "./use-users";
+import { toast } from "@/hooks/use-toast";
+import { getApiErrorMessage } from "@/lib/api-error";
 
 interface UserDialogProps {
   open: boolean;
@@ -62,6 +64,10 @@ function UserForm({ userToEdit, onClose }: UserFormProps) {
           return;
         }
         await updateUser.mutateAsync({ id: userToEdit.id, input: payload });
+        toast({
+          title: "Usuario actualizado",
+          description: `Los datos de "${name}" fueron actualizados exitosamente.`,
+        });
       } else {
         const payload = {
           name,
@@ -76,14 +82,20 @@ function UserForm({ userToEdit, onClose }: UserFormProps) {
           return;
         }
         await createUser.mutateAsync(payload);
+        toast({
+          title: "Usuario creado",
+          description: `"${name}" fue registrado exitosamente.`,
+        });
       }
       onClose();
     } catch (err: unknown) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("Ocurrió un error inesperado al guardar el usuario");
-      }
+      const msg = getApiErrorMessage(err, "Ocurrió un error inesperado al guardar el usuario");
+      setError(msg);
+      toast({
+        variant: "destructive",
+        title: "Error al guardar usuario",
+        description: msg,
+      });
     }
   };
 

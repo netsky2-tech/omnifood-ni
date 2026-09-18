@@ -2,11 +2,13 @@
 
 import { useState } from 'react';
 import { CustomerLoyaltyProfile } from '@/features/loyalty/customer-loyalty-profile';
+import { LoyaltyPage } from '@/features/loyalty/loyalty-page';
 
-type TabId = 'loyalty';
+type TabId = 'loyalty' | 'programs';
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'loyalty', label: 'Perfil de Lealtad' },
+  { id: 'programs', label: 'Programas y Recompensas' },
 ];
 
 export function CustomersPage() {
@@ -40,6 +42,7 @@ export function CustomersPage() {
 
       <div>
         {activeTab === 'loyalty' && <CustomerLoyaltyProfile />}
+        {activeTab === 'programs' && <LoyaltyPage />}
       </div>
     </div>
   );

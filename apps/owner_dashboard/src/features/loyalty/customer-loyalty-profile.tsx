@@ -20,6 +20,8 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
+import { toast } from '@/hooks/use-toast';
+import { getApiErrorMessage } from '@/lib/api-error';
 
 function AdjustDialog({
   customer,
@@ -52,9 +54,19 @@ function AdjustDialog({
     try {
       const input: AdjustPointsInput = { points_delta: delta, reason: reason.trim() };
       await adjustMutation.mutateAsync({ customerId: customer.id, input });
+      toast({
+        title: "Puntos ajustados",
+        description: `Se aplicó un ajuste de ${delta > 0 ? "+" : ""}${delta} puntos para ${customer.name}.`,
+      });
       onSuccess();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al ajustar puntos');
+      const msg = getApiErrorMessage(err, "Error al ajustar puntos");
+      setError(msg);
+      toast({
+        variant: "destructive",
+        title: "Error al ajustar puntos",
+        description: msg,
+      });
     }
   };
 
