@@ -1,5 +1,6 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
+import { bindRlsTenantContext, requireTenantId } from './tenant-context';
 
 /**
  * RLS-bound tenant transaction seam for the OHAC module.
@@ -22,21 +23,18 @@ export class OhacTenantTransaction {
    * A binding failure aborts the transaction and propagates: it is never
    * swallowed, so work can never run without a tenant scope.
    * Returns the callback result unchanged.
+   * Binding itself lives in bindRlsTenantContext (tenant-context.ts); this
+   * seam validates before opening the transaction and delegates the
+   * binding statement, keeping its observable behaviour identical.
    */
   async run<T>(
     tenantId: unknown,
     work: (manager: EntityManager) => Promise<T>,
   ): Promise<T> {
-    if (typeof tenantId !== 'string' || tenantId.trim().length === 0) {
-      throw new BadRequestException(
-        'A non-empty tenant id is required to bind the RLS tenant context',
-      );
-    }
+    requireTenantId(tenantId);
 
     return await this.dataSource.transaction(async (manager) => {
-      await manager.query("SELECT set_config('app.tenant_id', $1, true)", [
-        tenantId.trim(),
-      ]);
+      await bindRlsTenantContext(manager, tenantId);
       return await work(manager);
     });
   }
