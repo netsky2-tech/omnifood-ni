@@ -85,8 +85,9 @@ export class AuthService {
     > | null = null;
 
     try {
+      const cleanEmail = email ? email.trim().toLowerCase() : '';
       user = await this.userRepository.findOne({
-        where: { email },
+        where: [{ email: cleanEmail }, { email: email ? email.trim() : '' }],
         select: [
           'id',
           'name',

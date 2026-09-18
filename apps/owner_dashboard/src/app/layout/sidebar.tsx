@@ -177,15 +177,14 @@ export function Sidebar() {
       >
         <div className="flex h-16 shrink-0 items-center justify-between border-b border-white/10 px-4">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-secondary text-primary font-bold shadow-xs">
-              N
-            </div>
+            <img
+              src="/logo.png"
+              alt="NHILOS POS"
+              className="h-9 w-9 shrink-0 rounded-lg object-contain bg-white p-0.5 shadow-xs"
+            />
             <div className="flex flex-col">
               <span className="text-base font-bold tracking-tight text-white leading-tight">
                 NHILOS POS
-              </span>
-              <span className="text-[10px] text-white/60 tracking-wider uppercase">
-                Retail B2B
               </span>
             </div>
           </div>
@@ -235,15 +234,14 @@ export function Sidebar() {
           {!sidebarCollapsed ? (
             <>
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-secondary text-primary font-bold shadow-xs">
-                  N
-                </div>
+                <img
+                  src="/logo.png"
+                  alt="NHILOS POS"
+                  className="h-9 w-9 shrink-0 rounded-lg object-contain bg-white p-0.5 shadow-xs"
+                />
                 <div className="flex flex-col min-w-0">
                   <span className="text-base font-bold tracking-tight text-white leading-tight truncate">
                     NHILOS POS
-                  </span>
-                  <span className="text-[10px] text-white/60 tracking-wider uppercase truncate">
-                    Retail B2B
                   </span>
                 </div>
               </div>
@@ -260,12 +258,16 @@ export function Sidebar() {
             <div className="flex w-full items-center justify-between">
               <button
                 type="button"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-secondary text-primary font-bold shadow-xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-white/40"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white p-0.5 shadow-xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-white/40 overflow-hidden"
                 onClick={toggleSidebar}
                 aria-label="Expandir barra lateral"
                 title="NHILOS POS — Expandir"
               >
-                N
+                <img
+                  src="/logo.png"
+                  alt="NHILOS POS"
+                  className="h-full w-full object-contain"
+                />
               </button>
               <button
                 type="button"

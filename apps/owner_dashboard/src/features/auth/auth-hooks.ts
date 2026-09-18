@@ -14,7 +14,12 @@ export function useLogin() {
   return useMutation({
     mutationFn: async (credentials: LoginRequest) => {
       const { password, tenantSlug: _slug, ...rest } = credentials;
-      const raw = await api.post<{ access_token: string; refresh_token: string; user: LoginResponse["user"]; tenant: LoginResponse["tenant"] }>("/identity/login", { ...rest, pass: password }, { auth: false });
+      const cleanEmail = credentials.email.trim().toLowerCase();
+      const raw = await api.post<{ access_token: string; refresh_token: string; user: LoginResponse["user"]; tenant: LoginResponse["tenant"] }>(
+        "/identity/login",
+        { ...rest, email: cleanEmail, pass: password },
+        { auth: false },
+      );
       const response: LoginResponse = {
         accessToken: raw.access_token,
         refreshToken: raw.refresh_token,
@@ -85,7 +90,7 @@ export function useAuthInitialization() {
     },
     retry: false,
     staleTime: 5 * 60 * 1000,
-    enabled: !hydrated,
+    enabled: !hydrated && !useAuthStore.getState().isAuthenticated,
   });
 }
 
