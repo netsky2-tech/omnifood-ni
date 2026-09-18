@@ -116,3 +116,31 @@ Apply is complete for PR 1. Native verify/re-review, work-unit commit, issue-fir
 - "One marker row per tenant" is the `tenant_id` PRIMARY KEY schema property materialized by the publisher on demand; no backfill (a fabricated marker would be dead state; the INSERT policy covers publisher-created rows).
 - `pnpm install --frozen-lockfile` ran once to restore workspace `node_modules` (environment only; no source/lockfile change). The parent-owned `odd/` execution tracker is intentionally outside this PR boundary.
 - Remaining: slice 2b-2c epoch projection + serialized publisher (consumes both markers/columns this slice provisioned); 2b-3, 2c, 2d, 2e, Phase 3 `T-*`, `DEP-1`–`DEP-4` as recorded in tasks.md.
+
+## Slice 2b-2c1 — framework-free epoch projection
+
+- Date: 2026-09-17; branch `feat/ohac-epoch-projection` from `origin/main@6837032`.
+- User-approved split: projection lands first; database publication remains blocked and out of scope.
+- Authority: design §4.1 and §11.2 decisions 13-15.
+
+### Candidate boundary
+
+- `staff-policy-epoch-projector.ts` maps explicit source records to `ohac.staff-policy-epoch.v1` without direct NestJS/TypeORM/bcrypt imports, clocks, environment reads, or persistence.
+- Permissions use only `resolveEffectivePermissions`; entries/permissions are deterministic and UTF-16 sorted.
+- Status derives from `isActive`; nullable PIN rows are omitted; `$2a$`, `$2b$`, and `$2y$` prefixes derive the exact format version and every other non-null prefix fails closed.
+- Existing OHAC canonical/digest helpers build the digest and `parseStaffPolicyEpochV1` self-validates the final envelope.
+- Duplicate users, malformed metadata/chains/generations, and an empty projected policy return stable OHAC failures.
+
+### Evidence and limits
+
+| Check                                  | Result                                                                                                   |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Focused Jest                           | PASS: 1 suite, 14 tests                                                                                  |
+| `npx eslint` on both files, no `--fix` | PASS                                                                                                     |
+| `npx prettier --check` on both files   | PASS                                                                                                     |
+| `npm run build`                        | PASS                                                                                                     |
+| RED output                             | UNAVAILABLE: both phase-agent attempts failed before returning evidence; no historical RED claim is made |
+
+- Review budget: 372 projector/spec lines (single-record test strengthened in review) plus this 28-line progress section = 400 review-facing lines.
+- Rollback: revert the two projector files and this section; no runtime/module imports depend on them.
+- Prerequisite resolved by merged PR #289 (`6837032`): `UserRole` now lives in a framework-free vocabulary and `resolveEffectivePermissions` no longer loads TypeORM transitively. Publisher authority must separately define tenant-global fan-out/per-terminal build persistence and empty-policy revocation.
