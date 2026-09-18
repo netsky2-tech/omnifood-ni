@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { useUiStore } from "@/features/auth/ui-store";
 import { useAuthStore } from "@/features/auth/auth-store";
 import { useLogout } from "@/features/auth/auth-hooks";
+import { canAccessRoute } from "@/lib/rbac";
 
 interface NavItem {
   label: string;
@@ -98,9 +99,7 @@ export function Sidebar() {
 
   const filteredSections = Object.entries(sections).map(([section, items]) => ({
     section,
-    items: items.filter(
-      (item) => !item.requiredRoles || item.requiredRoles.includes(user?.role ?? ""),
-    ),
+    items: items.filter((item) => canAccessRoute(user?.role, item.path)),
   }));
 
   const renderNavLinks = (collapsed: boolean) => (
@@ -305,6 +304,9 @@ export function Sidebar() {
                 <LogOut className="h-5 w-5 shrink-0" aria-hidden="true" />
                 <span>Cerrar sesión</span>
               </button>
+              <p className="mt-2 text-center font-mono text-[10px] text-white/40">
+                v{import.meta.env.VITE_APP_VERSION ?? "1.0.0"} ({String(import.meta.env.VITE_COMMIT_SHA ?? "dev").slice(0, 7)})
+              </p>
             </>
           ) : (
             <div className="flex flex-col items-center gap-2">

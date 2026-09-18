@@ -1,4 +1,4 @@
-import { api } from "@/lib/api";
+import { api, type ApiClientMethodOptions } from "@/lib/api";
 import type {
   Product,
   ProductType,
@@ -9,28 +9,30 @@ import type {
 export function fetchProducts(
   productType?: ProductType,
   includeInactive = false,
+  opts?: ApiClientMethodOptions,
 ) {
   const params = new URLSearchParams();
   if (productType) params.set("productType", productType);
   if (includeInactive) params.set("includeInactive", "true");
   const qs = params.toString();
-  return api.get<Product[]>(`/products${qs ? `?${qs}` : ""}`);
+  return api.get<Product[]>(`/products${qs ? `?${qs}` : ""}`, opts);
 }
 
-export function fetchProduct(id: string) {
-  return api.get<Product>(`/products/${id}`);
+export function fetchProduct(id: string, opts?: ApiClientMethodOptions) {
+  return api.get<Product>(`/products/${id}`, opts);
 }
 
-export function createProduct(input: CreateProductInput) {
-  return api.post<Product>("/products", input);
+export function createProduct(input: CreateProductInput, opts?: ApiClientMethodOptions) {
+  return api.post<Product>("/products", input, opts);
 }
 
-export function updateProduct(id: string, input: UpdateProductInput) {
-  return api.patch<Product>(`/products/${id}`, input);
+export function updateProduct(id: string, input: UpdateProductInput, opts?: ApiClientMethodOptions) {
+  return api.patch<Product>(`/products/${id}`, input, opts);
 }
 
-export function deactivateProduct(id: string) {
+export function deactivateProduct(id: string, opts?: ApiClientMethodOptions) {
   return api.delete<{ id: string; deactivated: boolean }>(
     `/products/${id}`,
+    opts,
   );
 }

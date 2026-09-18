@@ -216,9 +216,75 @@ function SequenceTab({ startDate, endDate }: { startDate?: string; endDate?: str
   );
 }
 
+function downloadBlob(content: string, filename: string, mimeType: string) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function convertRowsToCsv(rows: Record<string, unknown>[]): string {
+  if (!rows || rows.length === 0 || !rows[0]) return "";
+  const headers = Object.keys(rows[0]);
+  const headerLine = headers.join(",");
+  const dataLines = rows.map((r) =>
+    headers
+      .map((h) => {
+        const val = r[h];
+        if (val === null || val === undefined) return "";
+        const str = String(val);
+        if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+          return `"${str.replace(/"/g, '""')}"`;
+        }
+        return str;
+      })
+      .join(","),
+  );
+  return [headerLine, ...dataLines].join("\n");
+}
+
 function ExportsTab({ startDate, endDate }: { startDate?: string; endDate?: string }) {
   const salesBook = useSalesBookExport(startDate, endDate);
   const zReports = useZReportsExport(startDate, endDate);
+
+  const handleExportSalesBook = (format: "csv" | "json") => {
+    if (!salesBook.data) return;
+    const fileSuffix = `${startDate ?? "inicio"}_${endDate ?? "fin"}`;
+    if (format === "json") {
+      downloadBlob(
+        JSON.stringify(salesBook.data, null, 2),
+        `libro_ventas_${fileSuffix}.json`,
+        "application/json",
+      );
+    } else {
+      const csv = convertRowsToCsv(
+        (salesBook.data.records ?? []) as unknown as Record<string, unknown>[],
+      );
+      downloadBlob(csv, `libro_ventas_${fileSuffix}.csv`, "text/csv;charset=utf-8;");
+    }
+  };
+
+  const handleExportZReports = (format: "csv" | "json") => {
+    if (!zReports.data) return;
+    const fileSuffix = `${startDate ?? "inicio"}_${endDate ?? "fin"}`;
+    if (format === "json") {
+      downloadBlob(
+        JSON.stringify(zReports.data, null, 2),
+        `reportes_z_${fileSuffix}.json`,
+        "application/json",
+      );
+    } else {
+      const csv = convertRowsToCsv(
+        (zReports.data.records ?? []) as unknown as Record<string, unknown>[],
+      );
+      downloadBlob(csv, `reportes_z_${fileSuffix}.csv`, "text/csv;charset=utf-8;");
+    }
+  };
 
   if (salesBook.isLoading || zReports.isLoading) return <LoadingState />;
 
@@ -228,8 +294,16 @@ function ExportsTab({ startDate, endDate }: { startDate?: string; endDate?: stri
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-sm font-semibold uppercase text-muted-foreground">Libro de Ventas</h3>
           <div className="flex gap-2">
-            <ExportButton label="CSV" />
-            <ExportButton label="JSON" />
+            <ExportButton
+              label="CSV"
+              disabled={!salesBook.data || salesBook.data.totalRecords === 0}
+              onClick={() => handleExportSalesBook("csv")}
+            />
+            <ExportButton
+              label="JSON"
+              disabled={!salesBook.data || salesBook.data.totalRecords === 0}
+              onClick={() => handleExportSalesBook("json")}
+            />
           </div>
         </div>
         {salesBook.data ? (
@@ -260,8 +334,16 @@ function ExportsTab({ startDate, endDate }: { startDate?: string; endDate?: stri
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-sm font-semibold uppercase text-muted-foreground">Reportes Z</h3>
           <div className="flex gap-2">
-            <ExportButton label="CSV" />
-            <ExportButton label="JSON" />
+            <ExportButton
+              label="CSV"
+              disabled={!zReports.data || zReports.data.totalRecords === 0}
+              onClick={() => handleExportZReports("csv")}
+            />
+            <ExportButton
+              label="JSON"
+              disabled={!zReports.data || zReports.data.totalRecords === 0}
+              onClick={() => handleExportZReports("json")}
+            />
           </div>
         </div>
         {zReports.data ? (
@@ -279,11 +361,21 @@ function ExportsTab({ startDate, endDate }: { startDate?: string; endDate?: stri
   );
 }
 
-function ExportButton({ label }: { label: string }) {
+function ExportButton({
+  label,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  disabled?: boolean;
+  onClick?: () => void;
+}) {
   return (
     <button
       type="button"
-      className="rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted cursor-pointer transition-colors shadow-xs"
+      disabled={disabled}
+      onClick={onClick}
+      className="rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50 disabled:pointer-events-none cursor-pointer transition-colors shadow-xs"
     >
       {label}
     </button>

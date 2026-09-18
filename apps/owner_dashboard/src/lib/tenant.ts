@@ -19,9 +19,21 @@ export const useTenantContext = create<TenantContextStore>((set) => ({
 }));
 
 /**
- * Derives tenant context from the auth store.
- * When OD-03 lands, this will also check URL slug resolution.
+ * Derives tenant context from the auth store or tenant context.
  */
 export function getActiveTenant(): Tenant | null {
   return useAuthStore.getState().tenant ?? useTenantContext.getState().tenant;
+}
+
+export function getActiveTenantId(): string {
+  return getActiveTenant()?.id ?? "";
+}
+
+/**
+ * Hook to retrieve active tenant ID for reactive partitioning of query keys.
+ */
+export function useTenantId(): string {
+  const authTenant = useAuthStore((s) => s.tenant);
+  const contextTenant = useTenantContext((s) => s.tenant);
+  return authTenant?.id ?? contextTenant?.id ?? "";
 }

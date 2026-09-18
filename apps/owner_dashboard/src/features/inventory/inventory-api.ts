@@ -1,4 +1,4 @@
-import { api } from "@/lib/api";
+import { api, type ApiClientMethodOptions } from "@/lib/api";
 import type {
   ValuationReport,
   CogsReport,
@@ -17,22 +17,20 @@ function toQueryParams(
   return "?" + new URLSearchParams(entries.map(([k, v]) => [k, String(v)])).toString();
 }
 
-export function fetchValuation() {
-  return api.get<ValuationReport>("/inventory/reports/valuation");
+export function fetchValuation(opts?: ApiClientMethodOptions) {
+  return opts ? api.get<ValuationReport>("/inventory/reports/valuation", opts) : api.get<ValuationReport>("/inventory/reports/valuation");
 }
 
-export function fetchCogs(from?: string, to?: string) {
-  return api.get<CogsReport>(
-    `/inventory/reports/cogs${toQueryParams({ from, to })}`,
-  );
+export function fetchCogs(from?: string, to?: string, opts?: ApiClientMethodOptions) {
+  const url = `/inventory/reports/cogs${toQueryParams({ from, to })}`;
+  return opts ? api.get<CogsReport>(url, opts) : api.get<CogsReport>(url);
 }
 
-export function fetchKardex(filters: KardexFilters = {}) {
-  return api.get<KardexReport>(
-    `/inventory/reports/kardex${toQueryParams(filters)}`,
-  );
+export function fetchKardex(filters: KardexFilters = {}, opts?: ApiClientMethodOptions) {
+  const url = `/inventory/reports/kardex${toQueryParams(filters)}`;
+  return opts ? api.get<KardexReport>(url, opts) : api.get<KardexReport>(url);
 }
 
-export function fetchAlerts() {
-  return api.get<AlertsSummary>("/inventory/reports/alerts");
+export function fetchAlerts(opts?: ApiClientMethodOptions) {
+  return opts ? api.get<AlertsSummary>("/inventory/reports/alerts", opts) : api.get<AlertsSummary>("/inventory/reports/alerts");
 }

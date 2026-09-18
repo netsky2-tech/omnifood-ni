@@ -1,4 +1,5 @@
 import { Component, type ReactNode } from "react";
+import { isApiError } from "@/lib/api";
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -31,6 +32,8 @@ class ErrorBoundaryInner extends Component<
 
   render() {
     if (this.state.hasError) {
+      const requestId = isApiError(this.state.error) ? this.state.error.requestId : null;
+
       return (
         <div className="flex min-h-[360px] w-full items-center justify-center p-6" role="alert">
           <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-sm text-center">
@@ -42,9 +45,14 @@ class ErrorBoundaryInner extends Component<
             <h2 className="text-lg font-bold text-foreground mb-1">
               Error al cargar esta sección
             </h2>
-            <p className="text-xs sm:text-sm text-muted-foreground mb-4">
+            <p className="text-xs sm:text-sm text-muted-foreground mb-3">
               {this.state.error?.message || "Ocurrió un error inesperado al procesar la vista."}
             </p>
+            {requestId && (
+              <p className="text-[11px] font-mono text-muted-foreground bg-muted/40 rounded px-2 py-1 mb-4 inline-block">
+                ID de Seguimiento: {requestId}
+              </p>
+            )}
             <div className="flex justify-center gap-3">
               <button
                 type="button"

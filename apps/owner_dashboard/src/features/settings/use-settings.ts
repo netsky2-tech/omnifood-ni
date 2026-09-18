@@ -19,31 +19,34 @@ import type {
   ImportRowDto,
 } from "./types";
 import { useToast } from "@/hooks/use-toast";
+import { useTenantId } from "@/lib/tenant";
 
 export const SETTINGS_QUERY_KEYS = {
-  fiscalSetup: ["settings", "fiscal-setup"] as const,
+  fiscalSetup: (tenantId?: string | null) => ["settings", tenantId ?? "unknown", "fiscal-setup"] as const,
   templates: ["settings", "industry-templates"] as const,
   templateDetail: (code: string) => ["settings", "industry-templates", code] as const,
   importErrors: (token: string) => ["settings", "import-errors", token] as const,
 };
 
 export function useFiscalSetup() {
+  const tenantId = useTenantId();
   return useQuery({
-    queryKey: SETTINGS_QUERY_KEYS.fiscalSetup,
-    queryFn: fetchFiscalSetup,
+    queryKey: SETTINGS_QUERY_KEYS.fiscalSetup(tenantId),
+    queryFn: ({ signal }) => fetchFiscalSetup({ signal }),
     staleTime: 5 * 60 * 1000,
   });
 }
 
 export function useUpdateFiscalSetup() {
   const queryClient = useQueryClient();
+  const tenantId = useTenantId();
   const { toast } = useToast();
 
   return useMutation({
     mutationFn: (payload: FiscalSetupFormValues) => updateFiscalSetup(payload),
     onSuccess: (data) => {
-      queryClient.setQueryData(SETTINGS_QUERY_KEYS.fiscalSetup, data);
-      queryClient.invalidateQueries({ queryKey: ["onboarding"] });
+      queryClient.setQueryData(SETTINGS_QUERY_KEYS.fiscalSetup(tenantId), data);
+      queryClient.invalidateQueries({ queryKey: ["onboarding", tenantId] });
       toast({
         title: "Configuración fiscal guardada",
         description: `Régimen: ${data.regime}. Aplicable a nuevas transacciones.`,
@@ -77,16 +80,18 @@ export function useIndustryTemplateDetail(code: string) {
 
 export function useApplyIndustryTemplate() {
   const queryClient = useQueryClient();
+  const tenantId = useTenantId();
   const { toast } = useToast();
 
   return useMutation({
     mutationFn: ({ code, dto }: { code: string; dto?: ApplyTemplateDto }) =>
       applyIndustryTemplate(code, dto),
     onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ["products"] });
-      queryClient.invalidateQueries({ queryKey: ["catalogs"] });
-      queryClient.invalidateQueries({ queryKey: ["recipes"] });
-      queryClient.invalidateQueries({ queryKey: ["onboarding"] });
+      queryClient.invalidateQueries({ queryKey: ["products", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["catalog", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["recipes", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["inventory", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["onboarding", tenantId] });
       toast({
         title: "Plantilla aplicada con éxito",
         description: `Creados: ${result.productsCreated} productos, ${result.insumosCreated} insumos, ${result.recipesCreated} recetas.`,
@@ -122,14 +127,17 @@ export function useUploadChunkedImport() {
 
 export function useCommitImport() {
   const queryClient = useQueryClient();
+  const tenantId = useTenantId();
   const { toast } = useToast();
 
   return useMutation({
     mutationFn: (dto: CommitImportDto) => commitImport(dto),
     onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ["products"] });
-      queryClient.invalidateQueries({ queryKey: ["catalogs"] });
-      queryClient.invalidateQueries({ queryKey: ["onboarding"] });
+      queryClient.invalidateQueries({ queryKey: ["products", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["catalog", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["recipes", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["inventory", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["onboarding", tenantId] });
       toast({
         title: "Importación completada",
         description: `Se incorporaron ${result.totalCommitted} productos al catálogo (${result.productsCreated} nuevos, ${result.productsUpdated} actualizados).`,

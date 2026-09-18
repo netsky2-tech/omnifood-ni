@@ -12,6 +12,7 @@ export interface ApiErrorInit {
   status: number;
   code?: unknown;
   responseBody?: Record<string, unknown> | null;
+  requestId?: string | null;
 }
 
 export class ApiError extends Error {
@@ -19,6 +20,7 @@ export class ApiError extends Error {
   readonly statusCode: number;
   readonly code?: unknown;
   readonly responseBody: Record<string, unknown> | null;
+  readonly requestId: string | null;
 
   constructor(message: string, init: ApiErrorInit) {
     super(message);
@@ -27,6 +29,7 @@ export class ApiError extends Error {
     this.statusCode = init.status;
     this.code = init.code;
     this.responseBody = init.responseBody ?? null;
+    this.requestId = init.requestId ?? null;
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }
@@ -316,6 +319,11 @@ export async function apiFetch<T>(
     }
   }
 
+  const requestId =
+    response.headers?.get?.("x-request-id") ??
+    response.headers?.get?.("x-correlation-id") ??
+    null;
+
   if (!response.ok) {
     const errorBody = (await response.json().catch(() => null)) as Record<string, unknown> | null;
     const message =
@@ -326,22 +334,25 @@ export async function apiFetch<T>(
       status: response.status,
       code: errorBody?.code,
       responseBody: errorBody,
+      requestId,
     });
   }
 
   return response.json() as Promise<T>;
 }
 
+export type ApiClientMethodOptions = Omit<ApiRequestInit, "method" | "body">;
+
 export const api = {
-  get: <T>(path: string, opts?: { auth?: boolean }) =>
+  get: <T>(path: string, opts?: ApiClientMethodOptions) =>
     apiFetch<T>(path, { method: "GET", ...opts }),
-  post: <T>(path: string, body: unknown, opts?: { auth?: boolean }) =>
+  post: <T>(path: string, body?: unknown, opts?: ApiClientMethodOptions) =>
     apiFetch<T>(path, { method: "POST", body, ...opts }),
-  put: <T>(path: string, body: unknown, opts?: { auth?: boolean }) =>
+  put: <T>(path: string, body?: unknown, opts?: ApiClientMethodOptions) =>
     apiFetch<T>(path, { method: "PUT", body, ...opts }),
-  patch: <T>(path: string, body: unknown, opts?: { auth?: boolean }) =>
+  patch: <T>(path: string, body?: unknown, opts?: ApiClientMethodOptions) =>
     apiFetch<T>(path, { method: "PATCH", body, ...opts }),
-  delete: <T>(path: string, opts?: { auth?: boolean }) =>
+  delete: <T>(path: string, opts?: ApiClientMethodOptions) =>
     apiFetch<T>(path, { method: "DELETE", ...opts }),
 };
 

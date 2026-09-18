@@ -22,7 +22,7 @@ export function DashboardPage() {
   const [range, setRange] = useState<DateRangeValue>(todayRange);
   const { data, isLoading, error } = useSalesDashboard(range.startDate, range.endDate);
 
-  if (isLoading) {
+  if (isLoading && !data) {
     return (
       <div className="flex min-h-[320px] items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
@@ -30,7 +30,7 @@ export function DashboardPage() {
     );
   }
 
-  if (error) {
+  if (error && !data) {
     return (
       <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-6 text-center">
         <p className="text-sm font-medium text-destructive">
@@ -42,6 +42,11 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {error && data && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+          No se pudieron actualizar los datos más recientes. Mostrando información en caché.
+        </div>
+      )}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">Dashboard</h1>

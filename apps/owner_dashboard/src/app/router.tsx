@@ -44,6 +44,8 @@ const NotFoundPage = lazy(() =>
   import("@/app/not-found-page").then((m) => ({ default: m.NotFoundPage })),
 );
 
+import { ROUTE_ROLE_PERMISSIONS } from "@/lib/rbac";
+
 export const router = createBrowserRouter([
   {
     path: "/login",
@@ -60,71 +62,87 @@ export const router = createBrowserRouter([
       {
         index: true,
         element: (
-          <SuspenseWrapper>
-            <DashboardPage />
-          </SuspenseWrapper>
+          <ProtectedRoute requiredRoles={ROUTE_ROLE_PERMISSIONS["/"]}>
+            <SuspenseWrapper>
+              <DashboardPage />
+            </SuspenseWrapper>
+          </ProtectedRoute>
         ),
       },
       {
         path: "sales",
         element: (
-          <SuspenseWrapper>
-            <SalesPage />
-          </SuspenseWrapper>
+          <ProtectedRoute requiredRoles={ROUTE_ROLE_PERMISSIONS["/sales"]}>
+            <SuspenseWrapper>
+              <SalesPage />
+            </SuspenseWrapper>
+          </ProtectedRoute>
         ),
       },
       {
         path: "inventory",
         element: (
-          <SuspenseWrapper>
-            <InventoryPage />
-          </SuspenseWrapper>
+          <ProtectedRoute requiredRoles={ROUTE_ROLE_PERMISSIONS["/inventory"]}>
+            <SuspenseWrapper>
+              <InventoryPage />
+            </SuspenseWrapper>
+          </ProtectedRoute>
         ),
       },
       {
         path: "fiscal",
         element: (
-          <SuspenseWrapper>
-            <FiscalPage />
-          </SuspenseWrapper>
+          <ProtectedRoute requiredRoles={ROUTE_ROLE_PERMISSIONS["/fiscal"]}>
+            <SuspenseWrapper>
+              <FiscalPage />
+            </SuspenseWrapper>
+          </ProtectedRoute>
         ),
       },
       {
         path: "catalog",
         element: (
-          <SuspenseWrapper>
-            <CatalogPage />
-          </SuspenseWrapper>
+          <ProtectedRoute requiredRoles={ROUTE_ROLE_PERMISSIONS["/catalog"]}>
+            <SuspenseWrapper>
+              <CatalogPage />
+            </SuspenseWrapper>
+          </ProtectedRoute>
         ),
       },
       {
         path: "products",
         element: (
-          <SuspenseWrapper>
-            <ProductPage />
-          </SuspenseWrapper>
+          <ProtectedRoute requiredRoles={ROUTE_ROLE_PERMISSIONS["/products"]}>
+            <SuspenseWrapper>
+              <ProductPage />
+            </SuspenseWrapper>
+          </ProtectedRoute>
         ),
       },
       {
         path: "promotions",
         element: (
-          <SuspenseWrapper>
-            <PromotionsPage />
-          </SuspenseWrapper>
+          <ProtectedRoute requiredRoles={ROUTE_ROLE_PERMISSIONS["/promotions"]}>
+            <SuspenseWrapper>
+              <PromotionsPage />
+            </SuspenseWrapper>
+          </ProtectedRoute>
         ),
       },
       {
         path: "recipes",
         element: (
-          <SuspenseWrapper>
-            <RecipesPage />
-          </SuspenseWrapper>
+          <ProtectedRoute requiredRoles={ROUTE_ROLE_PERMISSIONS["/recipes"]}>
+            <SuspenseWrapper>
+              <RecipesPage />
+            </SuspenseWrapper>
+          </ProtectedRoute>
         ),
       },
       {
         path: "users",
         element: (
-          <ProtectedRoute requiredRoles={["OWNER"]}>
+          <ProtectedRoute requiredRoles={ROUTE_ROLE_PERMISSIONS["/users"]}>
             <SuspenseWrapper>
               <UsersPage />
             </SuspenseWrapper>
@@ -134,17 +152,21 @@ export const router = createBrowserRouter([
       {
         path: "customers",
         element: (
-          <SuspenseWrapper>
-            <CustomersPage />
-          </SuspenseWrapper>
+          <ProtectedRoute requiredRoles={ROUTE_ROLE_PERMISSIONS["/customers"]}>
+            <SuspenseWrapper>
+              <CustomersPage />
+            </SuspenseWrapper>
+          </ProtectedRoute>
         ),
       },
       {
         path: "settings",
         element: (
-          <SuspenseWrapper>
-            <SettingsPage />
-          </SuspenseWrapper>
+          <ProtectedRoute requiredRoles={ROUTE_ROLE_PERMISSIONS["/settings"]}>
+            <SuspenseWrapper>
+              <SettingsPage />
+            </SuspenseWrapper>
+          </ProtectedRoute>
         ),
       },
       {

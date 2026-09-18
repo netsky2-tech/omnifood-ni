@@ -43,14 +43,46 @@ function ProductTable({
   onDeactivate: (product: Product) => void;
 }) {
   const { data, isLoading, error } = useProducts(productType, true);
+  const [search, setSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 25;
 
   if (isLoading) return <LoadingState message="Cargando productos..." />;
   if (error) return <EmptyState message="Error al cargar productos" />;
   if (!data || data.length === 0)
     return <EmptyState message="Sin productos en esta categoría" />;
 
+  const filtered = data.filter((p) => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return p.name.toLowerCase().includes(q) || p.uom?.toLowerCase().includes(q);
+  });
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+  const startIndex = (safePage - 1) * PAGE_SIZE;
+  const paginated = filtered.slice(startIndex, startIndex + PAGE_SIZE);
+
   return (
     <div className="rounded-lg border border-border bg-card shadow-xs overflow-hidden">
+      <div className="flex flex-col sm:flex-row gap-3 items-center justify-between p-3 border-b border-border bg-muted/20">
+        <Input
+          placeholder="Buscar por nombre o UOM..."
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setCurrentPage(1);
+          }}
+          className="max-w-xs h-9 text-xs"
+          aria-label="Buscar productos"
+        />
+        <span className="text-xs text-muted-foreground">
+          {filtered.length === data.length
+            ? `Total: ${data.length} productos`
+            : `Encontrados: ${filtered.length} de ${data.length}`}
+        </span>
+      </div>
+
       <div className="overflow-x-auto w-full">
         <table className="w-full text-sm">
           <thead>
@@ -76,53 +108,89 @@ function ProductTable({
             </tr>
           </thead>
           <tbody>
-            {data.map((p) => (
-              <tr
-                key={p.id}
-                className="border-b border-border last:border-0 hover:bg-muted/40 transition-colors"
-              >
-                <td className="px-4 py-3 font-medium text-foreground">{p.name}</td>
-                <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{p.uom}</td>
-                <td className="px-4 py-3 text-right tabular-nums font-semibold text-foreground">
-                  C${p.sellPrice.toFixed(2)}
+            {paginated.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="text-center py-6 text-xs text-muted-foreground">
+                  No se encontraron productos coincidentes con "{search}"
                 </td>
-                <td className="px-4 py-3 text-right tabular-nums text-foreground">
-                  {p.stock.toFixed(2)}
-                </td>
-                <td className="px-4 py-3 text-center">
-                  <Badge variant={p.is_active ? "success" : "secondary"}>
-                    {p.is_active ? "Activo" : "Inactivo"}
-                  </Badge>
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <div className="flex justify-end gap-1.5">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onEdit(p)}
-                      className="h-8 px-2 text-primary"
-                    >
-                      <Edit2 className="h-3.5 w-3.5 mr-1" />
-                      Editar
-                    </Button>
-                    {p.is_active && (
+              </tr>
+            ) : (
+              paginated.map((p) => (
+                <tr
+                  key={p.id}
+                  className="border-b border-border last:border-0 hover:bg-muted/40 transition-colors"
+                >
+                  <td className="px-4 py-3 font-medium text-foreground">{p.name}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{p.uom}</td>
+                  <td className="px-4 py-3 text-right tabular-nums font-semibold text-foreground">
+                    C${p.sellPrice.toFixed(2)}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums text-foreground">
+                    {p.stock.toFixed(2)}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <Badge variant={p.is_active ? "success" : "secondary"}>
+                      {p.is_active ? "Activo" : "Inactivo"}
+                    </Badge>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex justify-end gap-1.5">
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => onDeactivate(p)}
-                        className="h-8 px-2 text-destructive hover:text-destructive hover:bg-destructive-50"
+                        onClick={() => onEdit(p)}
+                        className="h-8 px-2 text-primary"
                       >
-                        <Trash2 className="h-3.5 w-3.5 mr-1" />
-                        Desactivar
+                        <Edit2 className="h-3.5 w-3.5 mr-1" />
+                        Editar
                       </Button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
+                      {p.is_active && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onDeactivate(p)}
+                          className="h-8 px-2 text-destructive hover:text-destructive hover:bg-destructive-50"
+                        >
+                          <Trash2 className="h-3.5 w-3.5 mr-1" />
+                          Desactivar
+                        </Button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-card">
+          <span className="text-xs text-muted-foreground">
+            Página {safePage} de {totalPages}
+          </span>
+          <div className="flex gap-1.5">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={safePage <= 1}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              className="h-8 text-xs"
+            >
+              Anterior
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={safePage >= totalPages}
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              className="h-8 text-xs"
+            >
+              Siguiente
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

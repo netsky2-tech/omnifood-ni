@@ -17,8 +17,10 @@ import {
 
 // --- Fiscal Setup Endpoints ---
 
-export async function fetchFiscalSetup(): Promise<FiscalSetupResponse> {
-  return api.get<FiscalSetupResponse>("/onboarding/fiscal-setup");
+export async function fetchFiscalSetup(
+  options?: { signal?: AbortSignal },
+): Promise<FiscalSetupResponse> {
+  return api.get<FiscalSetupResponse>("/onboarding/fiscal-setup", options);
 }
 
 export async function updateFiscalSetup(
