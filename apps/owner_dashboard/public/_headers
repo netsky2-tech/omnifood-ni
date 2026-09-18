@@ -1,0 +1,11 @@
+# Owner dashboard security headers (Cloudflare Pages).
+# Applied to every deployed response (production branch and previews).
+# Local development does not use these headers: the Vite dev server serves
+# /api through its own proxy, so local flows never depend on this file.
+/*
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api-staging.nhilospos.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'

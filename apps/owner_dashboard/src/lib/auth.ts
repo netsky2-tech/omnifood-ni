@@ -1,4 +1,5 @@
 import { setTokens, getAccessToken, clearTokens, type TokenPair } from './api';
+import { getApiBaseUrl } from './api-base-url';
 
 export interface LoginCredentials {
   email: string;
@@ -19,14 +20,11 @@ export interface AuthResponse {
 }
 
 export async function login(credentials: LoginCredentials): Promise<AuthResponse> {
-  const response = await fetch(
-    `${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/identity/login`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(credentials),
-    }
-  );
+  const response = await fetch(`${getApiBaseUrl()}/identity/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(credentials),
+  });
 
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
