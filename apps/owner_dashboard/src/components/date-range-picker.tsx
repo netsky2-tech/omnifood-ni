@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { formatLocalDate } from "@/lib/utils";
 
 export interface DateRangeValue {
   startDate: string;
@@ -20,7 +21,7 @@ const PRESETS = [
 ] as const;
 
 function toISODate(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  return formatLocalDate(d);
 }
 
 function singleDay(offset: number): DateRangeValue {

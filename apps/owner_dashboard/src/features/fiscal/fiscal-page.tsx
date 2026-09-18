@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { formatLocalDate } from "@/lib/utils";
 import { FreshnessBadge } from "@/components/freshness-badge";
 import { DateRangePicker, type DateRangeValue } from "@/components/date-range-picker";
 import { StatCard } from "@/components/ui/stat-card";
@@ -385,8 +386,7 @@ function ExportButton({
 export function FiscalPage() {
   const [activeTab, setActiveTab] = useState<TabId>("summary");
   const [range, setRange] = useState<DateRangeValue>(() => {
-    const d = new Date();
-    const iso = d.toISOString().slice(0, 10);
+    const iso = formatLocalDate(new Date());
     return { startDate: iso, endDate: iso };
   });
 

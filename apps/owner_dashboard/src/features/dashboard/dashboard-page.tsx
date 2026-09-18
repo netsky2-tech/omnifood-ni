@@ -4,6 +4,8 @@ import { FreshnessBadge } from "@/components/freshness-badge";
 import { DateRangePicker, type DateRangeValue } from "@/components/date-range-picker";
 import { useSalesDashboard } from "@/features/sales/use-sales-reports";
 
+import { formatLocalDate } from "@/lib/utils";
+
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat("es-NI", {
     style: "currency",
@@ -13,8 +15,7 @@ function formatCurrency(amount: number): string {
 }
 
 function todayRange(): DateRangeValue {
-  const d = new Date();
-  const iso = d.toISOString().slice(0, 10);
+  const iso = formatLocalDate(new Date());
   return { startDate: iso, endDate: iso };
 }
 

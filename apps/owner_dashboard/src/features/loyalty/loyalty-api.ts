@@ -86,11 +86,18 @@ export function fetchCustomerTransactions(customerId: string, programId?: string
 
 // --- Customers (for selector) ---
 
-export function fetchCustomers(search?: string) {
+export async function fetchCustomers(search?: string): Promise<Customer[]> {
   const query = new URLSearchParams();
   if (search) query.set('search', search);
   const qs = query.toString();
-  return api.get<Customer[]>(`/customers${qs ? `?${qs}` : ''}`);
+  const res = await api.get<{ data: Customer[]; total: number } | Customer[]>(`/customers${qs ? `?${qs}` : ''}`);
+  if (res && typeof res === 'object' && 'data' in res && Array.isArray((res as { data: Customer[] }).data)) {
+    return (res as { data: Customer[] }).data;
+  }
+  if (Array.isArray(res)) {
+    return res;
+  }
+  return [];
 }
 
 export function adjustPoints(customerId: string, input: AdjustPointsInput) {

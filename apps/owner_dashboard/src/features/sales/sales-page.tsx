@@ -19,8 +19,10 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "cashiers", label: "Rendimiento Cajeros" },
 ];
 
+import { formatLocalDate } from "@/lib/utils";
+
 function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  return formatLocalDate(new Date());
 }
 
 function formatCurrency(amount: number): string {
@@ -209,8 +211,7 @@ function CashiersTab({ startDate, endDate }: { startDate?: string; endDate?: str
 export function SalesPage() {
   const [activeTab, setActiveTab] = useState<TabId>("summary");
   const [range, setRange] = useState<DateRangeValue>(() => {
-    const d = new Date();
-    const iso = d.toISOString().slice(0, 10);
+    const iso = formatLocalDate(new Date());
     return { startDate: iso, endDate: iso };
   });
 

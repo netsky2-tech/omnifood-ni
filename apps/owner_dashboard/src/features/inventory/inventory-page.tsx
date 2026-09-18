@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { formatLocalDate } from "@/lib/utils";
 import { FreshnessBadge } from "@/components/freshness-badge";
 import { DateRangePicker, type DateRangeValue } from "@/components/date-range-picker";
 import { StatCard } from "@/components/ui/stat-card";
@@ -384,8 +385,7 @@ function AlertsTab() {
 export function InventoryPage() {
   const [activeTab, setActiveTab] = useState<TabId>("valuation");
   const [range, setRange] = useState<DateRangeValue>(() => {
-    const d = new Date();
-    const iso = d.toISOString().slice(0, 10);
+    const iso = formatLocalDate(new Date());
     return { startDate: iso, endDate: iso };
   });
 

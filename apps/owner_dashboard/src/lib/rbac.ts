@@ -29,7 +29,7 @@ export type AppAction =
 export const ROUTE_ROLE_PERMISSIONS: Record<string, UserRole[]> = {
   "/": ["OWNER", "MANAGER"],
   "/sales": ["OWNER", "MANAGER"],
-  "/inventory": ["OWNER", "MANAGER", "CASHIER"],
+  "/inventory": ["OWNER", "MANAGER"],
   "/fiscal": ["OWNER", "MANAGER"],
   "/catalog": ["OWNER", "MANAGER"],
   "/products": ["OWNER", "MANAGER"],
@@ -70,7 +70,7 @@ export function canPerformAction(role: UserRole | undefined | null, action: AppA
 export function getDefaultRouteForRole(role: UserRole | undefined | null): string {
   if (!role) return "/login";
   if (role === "OWNER" || role === "MANAGER") return "/";
-  if (role === "CASHIER") return "/inventory";
+  if (role === "CASHIER") return "/promotions";
   if (role === "WAITER") return "/promotions";
   return "/login";
 }
