@@ -11,6 +11,10 @@ import {
   resolveTenantCohortDecision,
 } from './staff-policy-source-reader';
 import { OhacTenantTransaction } from '../rls/ohac-tenant-transaction';
+import {
+  readOrMaterializeMarker,
+  type TenantPublicationMarkerRow,
+} from './tenant-publication-marker';
 
 /**
  * Discriminated publication outcomes. Expected states are returned, never
@@ -38,11 +42,6 @@ export type StaffPolicySnapshotPublicationOutcome =
 export interface PublishStaffPolicySnapshotInput {
   readonly tenantId: string;
   readonly publisherBackendBuild: string;
-}
-
-interface MarkerRow {
-  readonly dirty: boolean;
-  readonly revision: string;
 }
 
 interface NewestSnapshotRow {
@@ -91,7 +90,15 @@ export class StaffPolicySnapshotPublisher {
       tenantId,
     ]);
 
-    const marker = await this.readOrMaterializeMarker(tenantId, manager);
+    // Marker materialization is owned by the marker module (a single upsert
+    // with a no-op conflict branch and RETURNING): a read-then-INSERT here
+    // could race a concurrent markTenantPublicationDirty — which inserts
+    // marker rows too and does not hold this advisory lock — and abort
+    // publication with a unique violation between SELECT and INSERT.
+    const marker: TenantPublicationMarkerRow = await readOrMaterializeMarker(
+      manager,
+      tenantId,
+    );
     if (!marker.dirty) return { status: 'noop' };
 
     const newest = await this.readNewestSnapshot(tenantId, manager);
@@ -221,26 +228,6 @@ export class StaffPolicySnapshotPublisher {
       digest: body.digest,
       markerCleared,
     };
-  }
-
-  private async readOrMaterializeMarker(
-    tenantId: string,
-    manager: EntityManager,
-  ): Promise<MarkerRow> {
-    const rows: MarkerRow[] = await manager.query(
-      'SELECT dirty, revision FROM human_auth_tenant_publication_state WHERE tenant_id = $1',
-      [tenantId],
-    );
-    const row = rows[0];
-    if (row) return row;
-    // The marker migration states the publisher owns creating the row: an
-    // absent row materializes with the schema defaults (dirty, revision 1)
-    // and is treated as dirty, so a lost first signal is never dropped.
-    await manager.query(
-      'INSERT INTO human_auth_tenant_publication_state (tenant_id) VALUES ($1)',
-      [tenantId],
-    );
-    return { dirty: true, revision: '1' };
   }
 
   private async readNewestSnapshot(

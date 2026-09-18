@@ -50,6 +50,23 @@ interface AuditRow {
   target_id: string;
 }
 
+// Fixture mirror of migration 1809040000000: mutating user-service paths mark
+// human_auth_tenant_publication_state inside their transaction, so every
+// hand-built schema that exercises one needs the table (columns and primary
+// key; the spec user bypasses row-level security as the table owner).
+async function createMarkerTable(
+  bootstrap: DataSource,
+  schema: string,
+): Promise<void> {
+  await bootstrap.query(`CREATE TABLE "${schema}".human_auth_tenant_publication_state (
+        tenant_id varchar(128) PRIMARY KEY,
+        dirty boolean NOT NULL DEFAULT true,
+        revision bigint NOT NULL DEFAULT 1 CHECK (revision >= 1),
+        marked_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        published_at timestamptz NULL,
+        updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)`);
+}
+
 async function createClient(schema: string): Promise<DataSource> {
   const dataSource = new DataSource({
     type: 'postgres',
@@ -59,6 +76,11 @@ async function createClient(schema: string): Promise<DataSource> {
     extra: { max: 1 },
   });
   await dataSource.initialize();
+  // Mutating paths reach human_auth_tenant_publication_state through raw SQL,
+  // which ignores TypeORM's schema option; point search_path at the test
+  // schema so the raw statements resolve it (same convention as
+  // auth.service.db.spec.ts). Schema-qualified entity queries are unaffected.
+  await dataSource.query(`SET search_path TO "${schema}"`);
   return dataSource;
 }
 
@@ -101,6 +123,7 @@ describe('UserService atomic mutations (db)', () => {
         entry_hash text DEFAULT 'test', metodo_autorizacion text,
         usuario_autorizador_id text, forensic_status text DEFAULT 'ACTIVE',
         hash_version varchar)`);
+      await createMarkerTable(bootstrap, schema);
       await bootstrap.query(
         `INSERT INTO "${schema}".users (id, tenant_id, name, email, role, hashed_refresh_token, refresh_token_family_id)
          VALUES ($1, 'tenant-1', 'Cashier', 'cashier@omnifood.ni', 'CASHIER', 'verifier', $2)`,
@@ -182,6 +205,7 @@ describe('UserService atomic mutations (db)', () => {
         await bootstrap.query(
           `CREATE TABLE "${schema}".audit_logs (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id text, user_id text, action text, target_type text, target_id text, device_id text, timestamp timestamptz, metadata jsonb, sequence_no integer DEFAULT 1, prev_hash text DEFAULT 'GENESIS', entry_hash text DEFAULT 'test', metodo_autorizacion text, usuario_autorizador_id text, forensic_status text DEFAULT 'ACTIVE', hash_version varchar)`,
         );
+        await createMarkerTable(bootstrap, schema);
         await bootstrap.query(
           `INSERT INTO "${schema}".users (id, tenant_id, name, email, role, hashed_refresh_token, refresh_token_family_id) VALUES ($1, 'tenant-1', 'Cashier', 'cashier@omnifood.ni', 'CASHIER', 'original-verifier', $2)`,
           [userId, familyId],
@@ -247,4 +271,75 @@ describe('UserService atomic mutations (db)', () => {
       }
     },
   );
+
+  it('rolls the whole mutation back when publication marking fails', async () => {
+    const schema = `jwt_mark_${randomUUID().replace(/-/g, '')}`;
+    const bootstrap = new DataSource({ type: 'postgres', ...connection });
+    const userId = randomUUID();
+    const familyId = randomUUID();
+    let client: DataSource | undefined;
+    try {
+      await bootstrap.initialize();
+      await bootstrap.query(`CREATE SCHEMA "${schema}"`);
+      await bootstrap.query(
+        `CREATE TABLE "${schema}".users (id uuid PRIMARY KEY, tenant_id text NOT NULL, name text NOT NULL, email text, password_hash text, role text NOT NULL, is_active boolean NOT NULL DEFAULT true, hashed_refresh_token text, security_version integer NOT NULL DEFAULT 1, refresh_token_family_id uuid, refresh_token_revoked_at timestamptz, attempt_reset_generation bigint NOT NULL DEFAULT 0, created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now())`,
+      );
+      await bootstrap.query(
+        `CREATE TABLE "${schema}".security_profiles (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id text UNIQUE NOT NULL, pin_hash text, totp_secret_seed text, is_totp_enabled boolean DEFAULT false, is_pin_enabled boolean DEFAULT true, custom_permissions jsonb DEFAULT '[]'::jsonb, created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now())`,
+      );
+      await bootstrap.query(
+        `CREATE TABLE "${schema}".audit_logs (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id text, user_id text, action text, target_type text, target_id text, device_id text, timestamp timestamptz, metadata jsonb, sequence_no integer DEFAULT 1, prev_hash text DEFAULT 'GENESIS', entry_hash text DEFAULT 'test', metodo_autorizacion text, usuario_autorizador_id text, forensic_status text DEFAULT 'ACTIVE', hash_version varchar)`,
+      );
+      await createMarkerTable(bootstrap, schema);
+      await bootstrap.query(
+        `INSERT INTO "${schema}".users (id, tenant_id, name, email, role, hashed_refresh_token, refresh_token_family_id) VALUES ($1, 'tenant-1', 'Cashier', 'cashier@omnifood.ni', 'CASHIER', 'original-verifier', $2)`,
+        [userId, familyId],
+      );
+      await bootstrap.query(
+        `CREATE FUNCTION "${schema}".fail_mark() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected publication-marking failure'; END; $$; CREATE TRIGGER fail_mark BEFORE INSERT ON "${schema}".human_auth_tenant_publication_state FOR EACH ROW EXECUTE FUNCTION "${schema}".fail_mark()`,
+      );
+      client = await createClient(schema);
+
+      await expect(
+        createService(client).update(
+          userId,
+          { password: 'Password123!', pin: '654321' },
+          'tenant-1',
+          'admin-1',
+        ),
+      ).rejects.toThrow('injected publication-marking failure');
+
+      await client.destroy();
+      client = await createClient(schema);
+      const users = await client.query<MutationUserState[]>(
+        `SELECT name, security_version, hashed_refresh_token, refresh_token_family_id, refresh_token_revoked_at FROM "${schema}".users WHERE id = $1`,
+        [userId],
+      );
+      const profiles = await client.query<ProfileRow[]>(
+        `SELECT user_id FROM "${schema}".security_profiles WHERE user_id = $1`,
+        [userId],
+      );
+      const audits = await client.query<AuditRow[]>(
+        `SELECT target_id FROM "${schema}".audit_logs WHERE target_id = $1`,
+        [userId],
+      );
+      expect(users).toEqual([
+        expect.objectContaining({
+          name: 'Cashier',
+          security_version: 1,
+          hashed_refresh_token: 'original-verifier',
+          refresh_token_family_id: familyId,
+          refresh_token_revoked_at: null,
+        }),
+      ]);
+      expect(profiles).toEqual([]);
+      expect(audits).toEqual([]);
+    } finally {
+      await client?.destroy();
+      if (bootstrap.isInitialized) {
+        await bootstrap.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+        await bootstrap.destroy();
+      }
+    }
+  });
 });

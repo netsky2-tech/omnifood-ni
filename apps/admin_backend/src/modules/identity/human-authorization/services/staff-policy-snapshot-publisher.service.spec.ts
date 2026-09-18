@@ -114,10 +114,11 @@ const makeQuery = (calls: QueryCall[], answers: Answers) =>
     calls.push({ sql, params });
     if (sql.includes('set_config')) return [];
     if (sql.includes('pg_advisory_xact_lock')) return [];
-    if (sql.includes('FROM human_auth_tenant_publication_state'))
-      return answers.marker ?? [{ dirty: true, revision: '3' }];
+    // The marker read-or-materialize is ONE upsert statement; its RETURNING
+    // row stands in for both the stored row and the freshly materialized
+    // defaults (dirty = TRUE, revision 1).
     if (sql.startsWith('INSERT INTO human_auth_tenant_publication_state'))
-      return [];
+      return answers.marker ?? [{ dirty: true, revision: '3' }];
     if (sql.includes('FROM human_auth_policy_snapshots'))
       return answers.newest ?? [DEFAULT_NEWEST];
     if (sql.includes('FROM human_auth_rollout_cohorts'))
@@ -185,21 +186,31 @@ describe('StaffPolicySnapshotPublisher', () => {
     });
     expect(outcome).toEqual({ status: 'noop' });
     expect(
-      callFor(calls, 'FROM human_auth_tenant_publication_state').params,
+      callFor(calls, 'INSERT INTO human_auth_tenant_publication_state').params,
     ).toEqual([TENANT]);
-    for (const call of calls.slice(2)) {
+    for (const call of calls.filter(
+      (c) => !c.sql.includes('INSERT INTO human_auth_tenant_publication_state'),
+    )) {
       expect(call.sql).not.toMatch(
         /FROM users|human_auth_policy_snapshots|INSERT|UPDATE/,
       );
     }
   });
 
-  it('materializes an absent marker on demand with schema defaults and treats it as dirty', async () => {
-    const { outcome, calls } = await runPublish({ marker: [] });
+  it('materializes an absent marker with schema defaults through the single marker upsert and treats it as dirty', async () => {
+    // An absent row is materialized by the marker upsert itself, whose
+    // RETURNING hands back the fresh row: dirty = TRUE, revision 1.
+    const { outcome, calls } = await runPublish({
+      marker: [{ dirty: true, revision: '1' }],
+    });
     expect(outcome).toMatchObject({ status: 'published', sequence: '8' });
-    expect(
-      callFor(calls, 'INSERT INTO human_auth_tenant_publication_state').params,
-    ).toEqual([TENANT]);
+    const markerCall = callFor(
+      calls,
+      'INSERT INTO human_auth_tenant_publication_state',
+    );
+    expect(markerCall.sql).toMatch(/ON CONFLICT \(tenant_id\) DO UPDATE/);
+    expect(markerCall.sql).toMatch(/RETURNING dirty,\s*revision/);
+    expect(markerCall.params).toEqual([TENANT]);
     expect(callFor(calls, CAS_UPDATE).params).toEqual([TENANT, '1']);
   });
 
@@ -358,7 +369,7 @@ describe('StaffPolicySnapshotPublisher', () => {
     }
     expect(callFor(calls, 'pg_advisory_xact_lock').params).toEqual([TENANT]);
     expect(
-      callFor(calls, 'FROM human_auth_tenant_publication_state').params,
+      callFor(calls, 'INSERT INTO human_auth_tenant_publication_state').params,
     ).toEqual([TENANT]);
     expect(callFor(calls, 'FROM human_auth_policy_snapshots').params).toEqual([
       TENANT,

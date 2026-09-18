@@ -32,6 +32,7 @@ describe('UserService', () => {
 
   const manager = {
     getRepository: jest.fn(),
+    query: jest.fn(),
   };
   const dataSource = {
     transaction: jest.fn(),
@@ -41,7 +42,28 @@ describe('UserService', () => {
   };
 
   beforeEach(async () => {
-    jest.clearAllMocks();
+    // resetAllMocks (not clearAllMocks): unconsumed mockResolvedValueOnce
+    // values would otherwise leak into later tests.
+    jest.resetAllMocks();
+
+    // Per-test implementations on these mocks must not leak between tests.
+    manager.query.mockReset();
+    manager.query.mockResolvedValue([]);
+    manager.getRepository.mockReset();
+    manager.getRepository.mockImplementation((entity: unknown) => {
+      if (entity === User) return userRepository;
+      if (entity === AuditLog) return auditRepository;
+      if (entity === SecurityProfile) return securityProfileRepository;
+      if (entity instanceof Function) {
+        throw new Error(`Unexpected repository request: ${entity.name}`);
+      }
+      throw new Error('Unexpected repository request');
+    });
+    dataSource.transaction.mockReset();
+    dataSource.transaction.mockImplementation(
+      (operation: (transactionManager: typeof manager) => Promise<unknown>) =>
+        operation(manager),
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -333,29 +355,278 @@ describe('UserService', () => {
     expect(lockedAudit.save).toHaveBeenCalledTimes(2);
   });
 
-  it('keeps name and PIN changes outside refresh revocation', async () => {
-    const user = {
-      id: 'user-1',
-      tenant_id: 'tenant-1',
-      name: 'Cashier',
-      role: UserRole.CASHIER,
-      security_version: 7,
-    };
-    userRepository.findOne.mockResolvedValue(user);
-    userRepository.save.mockResolvedValue(user);
-    securityProfileRepository.findOne.mockResolvedValue({ user_id: 'user-1' });
-    securityProfileRepository.save.mockResolvedValue({ id: 'profile-1' });
-    auditRepository.save.mockResolvedValue({ id: 'audit-1' });
+  describe('publication marking and transaction boundaries', () => {
+    const SET_CONFIG = "set_config('app.tenant_id'";
+    const MARKER = 'human_auth_tenant_publication_state';
+    const CREATE_ORDER = [
+      'tx:start',
+      'bind',
+      'save-user',
+      'save-profile',
+      'audit',
+      'mark',
+      'tx:end',
+    ];
+    const REVOKING_ORDER = [
+      'tx:start',
+      'bind',
+      'load-user',
+      'save-user',
+      'revoke',
+      'audit',
+      'mark',
+      'tx:end',
+    ];
 
-    await service.update(
-      'user-1',
-      { name: 'Renamed', pin: '654321' },
-      'tenant-1',
-      'admin-1',
+    function queryCalls(): string[] {
+      return (manager.query.mock.calls as Array<[string]>).map(([sql]) => sql);
+    }
+    const bindCount = () =>
+      queryCalls().filter((sql) => sql.includes(SET_CONFIG)).length;
+    const markCount = () =>
+      queryCalls().filter((sql) => sql.includes(MARKER)).length;
+
+    let order: string[];
+
+    // Records the whole statement order of a mutating path — transaction
+    // boundaries, RLS binding, publication marking, and every repository
+    // write — so each test only supplies its fixture and assertions.
+    async function recordTransactionOrder(): Promise<string[]> {
+      order = [];
+      dataSource.transaction.mockImplementation(
+        async (
+          operation: (transactionManager: typeof manager) => Promise<unknown>,
+        ) => {
+          order.push('tx:start');
+          const result = await operation(manager);
+          order.push('tx:end');
+          return result;
+        },
+      );
+      manager.query.mockImplementation(async (sql: string) => {
+        if (sql.includes(SET_CONFIG)) order.push('bind');
+        if (sql.includes(MARKER)) order.push('mark');
+        return [];
+      });
+      userRepository.save.mockImplementation(
+        async (user: Record<string, unknown>) => {
+          order.push('save-user');
+          return user;
+        },
+      );
+      securityProfileRepository.save.mockImplementation(
+        async (profile: Record<string, unknown>) => {
+          order.push('save-profile');
+          return profile;
+        },
+      );
+      auditRepository.save.mockImplementation(async () => {
+        order.push('audit');
+        return { id: 'audit-x' };
+      });
+      authService.revokeRefreshSessionForUser.mockImplementation(async () => {
+        order.push('revoke');
+      });
+      return order;
+    }
+
+    function mockLockedUser(extra: Record<string, unknown>) {
+      userRepository.findOne.mockImplementation(async () => {
+        order.push('load-user');
+        return {
+          id: 'user-1',
+          tenant_id: 'tenant-1',
+          security_version: 7,
+          ...extra,
+        };
+      });
+    }
+
+    function expectBoundAndMarkedOnce() {
+      expect(bindCount()).toBe(1);
+      expect(markCount()).toBe(1);
+    }
+
+    it('creates a user in one transaction: binds first, marks exactly once before returning', async () => {
+      await recordTransactionOrder();
+      userRepository.findOne.mockResolvedValue(null);
+      securityProfileRepository.create.mockImplementation(
+        (input: Record<string, unknown>) => ({ ...input }),
+      );
+
+      await service.create(
+        {
+          email: 'cashier@omnifood.ni',
+          name: 'Cashier',
+          role: UserRole.CASHIER,
+          password: 'Password123!',
+          pin: '123456',
+        },
+        'tenant-1',
+        'admin-1',
+      );
+
+      expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+      expect(order).toEqual(CREATE_ORDER);
+      expectBoundAndMarkedOnce();
+    });
+
+    it('keeps name and PIN changes inside one marked transaction but outside refresh revocation', async () => {
+      await recordTransactionOrder();
+      userRepository.findOne.mockResolvedValue({
+        id: 'user-1',
+        tenant_id: 'tenant-1',
+        name: 'Cashier',
+        role: UserRole.CASHIER,
+        security_version: 7,
+      });
+      securityProfileRepository.findOne.mockResolvedValue({
+        user_id: 'user-1',
+      });
+
+      await service.update(
+        'user-1',
+        { name: 'Renamed', pin: '654321' },
+        'tenant-1',
+        'admin-1',
+      );
+
+      expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+      expect(order).toEqual(CREATE_ORDER);
+      expectBoundAndMarkedOnce();
+      expect(authService.revokeRefreshSessionForUser).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      [
+        'the sensitive update path',
+        (s: UserService) =>
+          s.update('user-1', { role: UserRole.MANAGER }, 'tenant-1', 'admin-1'),
+      ],
+      [
+        'deactivate',
+        (s: UserService) => s.deactivate('user-1', 'tenant-1', 'admin-1'),
+      ],
+    ])(
+      'keeps %s in its existing transaction: bind, locked load, mutate, revoke, audit, mark',
+      async (_name, run) => {
+        await recordTransactionOrder();
+        mockLockedUser({ name: 'Cashier', role: UserRole.CASHIER });
+
+        await run(service);
+
+        expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+        expect(order).toEqual(REVOKING_ORDER);
+        expectBoundAndMarkedOnce();
+      },
     );
 
-    expect(dataSource.transaction).not.toHaveBeenCalled();
-    expect(authService.revokeRefreshSessionForUser).not.toHaveBeenCalled();
-    expect(user.security_version).toBe(7);
+    it('runs setCustomPermissions in one transaction and builds the DTO from in-transaction values', async () => {
+      await recordTransactionOrder();
+      userRepository.findOne.mockResolvedValue({
+        id: 'user-1',
+        tenant_id: 'tenant-1',
+        role: UserRole.CASHIER,
+        is_active: true,
+      });
+      securityProfileRepository.findOne.mockResolvedValue(null);
+      securityProfileRepository.create.mockImplementation(
+        (input: Record<string, unknown>) => ({ ...input }),
+      );
+
+      const result = await service.setCustomPermissions(
+        'user-1',
+        ['sales:void_invoice' as any],
+        'tenant-1',
+        'admin-1',
+      );
+
+      expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+      expect(order).toEqual([
+        'tx:start',
+        'bind',
+        'save-profile',
+        'audit',
+        'mark',
+        'tx:end',
+      ]);
+      expectBoundAndMarkedOnce();
+      expect(result).toEqual({
+        user_id: 'user-1',
+        role: UserRole.CASHIER,
+        role_permissions: [],
+        custom_permissions: ['sales:void_invoice'],
+        effective_permissions: ['sales:void_invoice'],
+      });
+    });
+
+    it('rolls the mutation back when the RLS tenant binding fails', async () => {
+      order = [];
+      manager.query.mockImplementation(async (sql: string) => {
+        if (sql.includes(SET_CONFIG)) throw new Error('binding failed');
+        return [];
+      });
+      userRepository.findOne.mockResolvedValue({
+        id: 'user-1',
+        tenant_id: 'tenant-1',
+        role: UserRole.CASHIER,
+        is_active: true,
+      });
+      userRepository.save.mockResolvedValue({ id: 'user-1' });
+
+      await expect(
+        service.setCustomPermissions(
+          'user-1',
+          ['sales:void_invoice' as any],
+          'tenant-1',
+          'admin-1',
+        ),
+      ).rejects.toThrow('binding failed');
+
+      expect(userRepository.findOne).not.toHaveBeenCalled();
+      expect(userRepository.save).not.toHaveBeenCalled();
+      expect(markCount()).toBe(0);
+    });
+
+    it('rolls the mutation back when publication marking fails', async () => {
+      await recordTransactionOrder();
+      manager.query.mockImplementation(async (sql: string) => {
+        if (sql.includes(MARKER)) throw new Error('marking failed');
+        return [];
+      });
+      mockLockedUser({ name: 'Cashier', role: UserRole.CASHIER });
+
+      await expect(
+        service.update(
+          'user-1',
+          { password: 'Password123!' },
+          'tenant-1',
+          'admin-1',
+        ),
+      ).rejects.toThrow('marking failed');
+
+      expect(bindCount()).toBe(1);
+      expect(markCount()).toBe(1);
+    });
+
+    it('never marks publication dirty from read paths', async () => {
+      userRepository.findOne.mockResolvedValue({
+        id: 'user-1',
+        tenant_id: 'tenant-1',
+        role: UserRole.CASHIER,
+        is_active: true,
+      });
+      securityProfileRepository.findOne.mockResolvedValue({
+        user_id: 'user-1',
+        custom_permissions: [],
+      });
+
+      await service.getUserEffectivePermissions('user-1', 'tenant-1');
+      await service.findById('user-1');
+
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+      expect(bindCount()).toBe(0);
+      expect(markCount()).toBe(0);
+    });
   });
 });
