@@ -7,6 +7,8 @@ import { HumanAuthRecoveryToken } from './human-auth-recovery-token.entity';
 import { HumanAuthRecoveryEvent } from './human-auth-recovery-event.entity';
 import { HumanAuthVerificationEvent } from './human-auth-verification-event.entity';
 import { HumanAuthRolloutCohort } from './human-auth-rollout-cohort.entity';
+import { HumanAuthPolicySnapshot } from './human-auth-policy-snapshot.entity';
+import { HumanAuthTenantPublicationState } from './human-auth-tenant-publication-state.entity';
 
 type ColumnExpectation = readonly [
   property: string,
@@ -223,6 +225,45 @@ const mappings: readonly EntityMapping[] = [
       ['updatedAt', 'updated_at', 'timestamptz', false],
     ],
   },
+  {
+    entity: HumanAuthPolicySnapshot,
+    table: 'human_auth_policy_snapshots',
+    primary: ['id'],
+    unique: {
+      uq_human_auth_policy_snapshots_sequence: ['tenantId', 'sequence'],
+      uq_human_auth_policy_snapshots_digest: ['tenantId', 'digest'],
+    },
+    indices: {
+      idx_human_auth_policy_snapshots_tenant_sequence: ['tenantId', 'sequence'],
+    },
+    columns: [
+      ['id', 'id', 'uuid', false],
+      ['tenantId', 'tenant_id', 'varchar', false],
+      ['sequence', 'sequence', 'bigint', false],
+      ['previousSequence', 'previous_sequence', 'bigint', false],
+      ['schema', 'schema', 'varchar', false],
+      ['previousDigest', 'previous_digest', 'varchar', false],
+      ['publisherBackendBuild', 'publisher_backend_build', 'varchar', false],
+      ['minimumAssertionSchema', 'minimum_assertion_schema', 'varchar', false],
+      ['cohortDecision', 'cohort_decision', 'varchar', false],
+      ['digest', 'digest', 'varchar', false],
+      ['payload', 'payload', 'jsonb', false],
+      ['publishedAt', 'published_at', 'timestamptz', false],
+    ],
+  },
+  {
+    entity: HumanAuthTenantPublicationState,
+    table: 'human_auth_tenant_publication_state',
+    primary: ['tenantId'],
+    columns: [
+      ['tenantId', 'tenant_id', 'varchar', false],
+      ['dirty', 'dirty', 'boolean', false],
+      ['revision', 'revision', 'bigint', false],
+      ['markedAt', 'marked_at', 'timestamptz', false],
+      ['publishedAt', 'published_at', 'timestamptz', true],
+      ['updatedAt', 'updated_at', 'timestamptz', false],
+    ],
+  },
 ];
 
 const entities = mappings.map((m) => m.entity);
@@ -270,6 +311,75 @@ describe('OHAC entity mapping vs migrations', () => {
       expect(actualIndices).toEqual(mapping.indices ?? {});
     },
   );
+
+  it('keeps the terminal-agnostic snapshot free of per-terminal columns', () => {
+    const declaredProperties = getMetadataArgsStorage()
+      .columns.filter((column) => column.target === HumanAuthPolicySnapshot)
+      .map((column) => column.propertyName);
+
+    // Design §11.2 decision 17: terminal_id and target_pos_build are resolved on the
+    // terminal's first pull, never stored on the terminal-agnostic snapshot. The
+    // migration declares no such column and the entity must not invent one, which is
+    // exactly the invariant that would silently drift if this assertion were dropped.
+    expect(declaredProperties).not.toContain('terminalId');
+    expect(declaredProperties).not.toContain('targetPosBuild');
+    expect(declaredProperties).not.toContain('updatedAt');
+  });
+
+  it('preserves the varchar widths the migrations declare for the publisher tables', () => {
+    const widthOf = (target: EntityClass, property: string) =>
+      getMetadataArgsStorage().columns.find(
+        (column) =>
+          column.target === target && column.propertyName === property,
+      )?.options.length;
+
+    const widths: readonly (readonly [EntityClass, string, number])[] = [
+      [HumanAuthPolicySnapshot, 'tenantId', 128],
+      [HumanAuthPolicySnapshot, 'schema', 128],
+      [HumanAuthPolicySnapshot, 'publisherBackendBuild', 128],
+      [HumanAuthPolicySnapshot, 'minimumAssertionSchema', 128],
+      [HumanAuthPolicySnapshot, 'cohortDecision', 32],
+      [HumanAuthPolicySnapshot, 'previousDigest', 71],
+      [HumanAuthPolicySnapshot, 'digest', 71],
+      [HumanAuthTenantPublicationState, 'tenantId', 128],
+    ];
+
+    for (const [entity, property, length] of widths) {
+      expect([entity.name, property, widthOf(entity, property)]).toEqual([
+        entity.name,
+        property,
+        length,
+      ]);
+    }
+  });
+
+  it('starts the publication marker dirty at revision one', () => {
+    // The publisher clears dirty and advances revision by compare-and-set, so a marker
+    // that defaulted to clean or to revision zero would silently drop the first signal
+    // or break monotonicity. The default is a schema property the mutation trigger
+    // depends on, so it is asserted here rather than left to the migration alone.
+    const primary = getMetadataArgsStorage().columns.find(
+      (column) =>
+        column.target === HumanAuthTenantPublicationState &&
+        column.propertyName === 'tenantId',
+    );
+    expect(primary?.options).toMatchObject({ primary: true, length: 128 });
+
+    const dirty = getMetadataArgsStorage().columns.find(
+      (column) =>
+        column.target === HumanAuthTenantPublicationState &&
+        column.propertyName === 'dirty',
+    );
+    expect(dirty?.options).toMatchObject({ type: 'boolean', default: true });
+
+    const revision = getMetadataArgsStorage().columns.find(
+      (column) =>
+        column.target === HumanAuthTenantPublicationState &&
+        column.propertyName === 'revision',
+    );
+    expect(revision?.options).toMatchObject({ type: 'bigint', default: 1 });
+    expect(revision?.options.transformer).toBe(BIGINT_STRING);
+  });
 
   it('leaves the partial indexes owned by the migrations undeclared', () => {
     const entitySet = new Set<EntityClass>(entities);

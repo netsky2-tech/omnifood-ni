@@ -64,6 +64,15 @@ export class User {
   @Column({ type: 'timestamptz', nullable: true, select: false })
   refresh_token_revoked_at: Date | null;
 
+  // Durable per-user PIN-attempt reset generation (migration 1809030000000;
+  // design §11.2 decisions 14/20). Deliberately NOT the OHAC BIGINT_STRING
+  // transformer: that Int64 guard belongs to the human-authorization evidence
+  // tables, and core identity columns follow this module's plain bigint
+  // convention. The non-negative CHECK (ck_users_attempt_reset_generation_non_negative)
+  // stays migration-owned; entity decorators cannot declare named constraints.
+  @Column({ type: 'bigint', default: 0 })
+  attempt_reset_generation: string;
+
   @CreateDateColumn()
   created_at: Date;
 
