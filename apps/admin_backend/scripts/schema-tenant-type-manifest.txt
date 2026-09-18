@@ -36,14 +36,7 @@ column human_auth_tenant_publication_state.tenant_id
 column human_auth_terminal_ack_floor.tenant_id
 column human_auth_terminal_ack_history.tenant_id
 column human_auth_verification_events.tenant_id
-column inventory_kardex.tenant_id
-column inventory_purchase_documents.tenant_id
-column inventory_remediation_receipts.tenant_id
-column inventory_sync_outbox.tenant_id
-column inventory_sync_receipts.tenant_id
 column invoice_items.tenant_id
-column kardex_correction.tenant_id
-column kardex_recalculate_queue.tenant_id
 column legacy_import_integrity_reports.tenant_id
 column legacy_onboarding_migration_receipts.tenant_id
 column onboarding_activation_attempts.tenant_id
@@ -54,10 +47,7 @@ column onboarding_sessions.tenant_id
 column onboarding_telemetry_events.tenant_id
 column onboarding_template_applications.tenant_id
 column onboarding_template_seed_links.tenant_id
-column product_import_sessions.tenant_id
-column production_batch_history.tenant_id
 column promotions.tenant_id
-column staging_importacion_productos.tenant_id
 column sys_parametros_config.tenant_id
 column tenant_capability_event.tenant_id
 column tenant_fulfillment_records.tenant_id
