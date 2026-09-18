@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { Edit2, Trash2 } from "lucide-react";
 import {
-  useProducts,
+  usePaginatedProducts,
   useCreateProduct,
   useUpdateProduct,
   useDeactivateProduct,
@@ -42,26 +42,27 @@ function ProductTable({
   onEdit: (product: Product) => void;
   onDeactivate: (product: Product) => void;
 }) {
-  const { data, isLoading, error } = useProducts(productType, true);
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 25;
 
-  if (isLoading) return <LoadingState message="Cargando productos..." />;
-  if (error) return <EmptyState message="Error al cargar productos" />;
-  if (!data || data.length === 0)
-    return <EmptyState message="Sin productos en esta categoría" />;
-
-  const filtered = data.filter((p) => {
-    if (!search.trim()) return true;
-    const q = search.toLowerCase();
-    return p.name.toLowerCase().includes(q) || p.uom?.toLowerCase().includes(q);
+  const { data, isLoading, error } = usePaginatedProducts({
+    productType,
+    includeInactive: true,
+    page: currentPage,
+    pageSize: PAGE_SIZE,
+    search: search.trim() ? search.trim() : undefined,
   });
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const safePage = Math.min(currentPage, totalPages);
-  const startIndex = (safePage - 1) * PAGE_SIZE;
-  const paginated = filtered.slice(startIndex, startIndex + PAGE_SIZE);
+  if (isLoading && !data) return <LoadingState message="Cargando productos..." />;
+  if (error) return <EmptyState message="Error al cargar productos" />;
+  if (!data || (data.total === 0 && !search.trim()))
+    return <EmptyState message="Sin productos en esta categoría" />;
+
+  const paginated = data.data ?? [];
+  const total = data.total ?? 0;
+  const totalPages = data.totalPages ?? 1;
+  const safePage = data.page ?? currentPage;
 
   return (
     <div className="rounded-lg border border-border bg-card shadow-xs overflow-hidden">
@@ -77,9 +78,9 @@ function ProductTable({
           aria-label="Buscar productos"
         />
         <span className="text-xs text-muted-foreground">
-          {filtered.length === data.length
-            ? `Total: ${data.length} productos`
-            : `Encontrados: ${filtered.length} de ${data.length}`}
+          {search.trim()
+            ? `Encontrados: ${total} productos`
+            : `Total: ${total} productos`}
         </span>
       </div>
 

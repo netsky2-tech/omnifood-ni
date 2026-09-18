@@ -59,9 +59,33 @@ export class ProductController {
   async list(
     @Query('productType') productType?: string,
     @Query('includeInactive') includeInactive?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Query('search') search?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortOrder') sortOrder?: 'ASC' | 'DESC',
     @GetTenantId() tenantId?: string,
   ) {
     const resolved = this.resolveProductType(productType);
+
+    if (page !== undefined && page !== '') {
+      const parsedPage = Math.max(1, parseInt(page, 10) || 1);
+      const parsedPageSize = Math.max(
+        1,
+        Math.min(100, parseInt(pageSize || '25', 10) || 25),
+      );
+      return this.productService.listPaginated({
+        tenantId: this.requireTenant(tenantId),
+        productType: resolved,
+        includeInactive: includeInactive === 'true',
+        page: parsedPage,
+        pageSize: parsedPageSize,
+        search,
+        sortBy,
+        sortOrder,
+      });
+    }
+
     return this.productService.list(
       this.requireTenant(tenantId),
       resolved,

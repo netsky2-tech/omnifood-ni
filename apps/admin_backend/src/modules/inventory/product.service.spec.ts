@@ -14,6 +14,7 @@ describe('ProductService', () => {
     findOne: jest.fn(),
     create: jest.fn(),
     save: jest.fn(),
+    createQueryBuilder: jest.fn(),
   });
 
   const mockDataSource = () => ({
@@ -164,6 +165,86 @@ describe('ProductService', () => {
 
     it('fails closed on empty tenant', async () => {
       await expect(service.list('   ')).rejects.toThrow(UnauthorizedException);
+    });
+  });
+
+  // ── Triangulation: listPaginated ────────────────────────────────────
+
+  describe('listPaginated', () => {
+    let qbMock: any;
+
+    beforeEach(() => {
+      qbMock = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([
+          [makeProduct({ id: 'p1', name: 'Café Espresso' })],
+          1,
+        ]),
+      };
+      repo.createQueryBuilder.mockReturnValue(qbMock);
+    });
+
+    it('returns paginated items with total and totalPages', async () => {
+      const result = await service.listPaginated({
+        tenantId: 'tenant-A',
+        page: 1,
+        pageSize: 25,
+      });
+
+      expect(result.data).toHaveLength(1);
+      expect(result.total).toBe(1);
+      expect(result.page).toBe(1);
+      expect(result.pageSize).toBe(25);
+      expect(result.totalPages).toBe(1);
+      expect(qbMock.skip).toHaveBeenCalledWith(0);
+      expect(qbMock.take).toHaveBeenCalledWith(25);
+      expect(qbMock.andWhere).toHaveBeenCalledWith('p.is_active = true');
+    });
+
+    it('supports global search across name and uom', async () => {
+      await service.listPaginated({
+        tenantId: 'tenant-A',
+        page: 2,
+        pageSize: 10,
+        search: 'espresso',
+      });
+
+      expect(qbMock.skip).toHaveBeenCalledWith(10);
+      expect(qbMock.take).toHaveBeenCalledWith(10);
+      expect(qbMock.andWhere).toHaveBeenCalledWith(
+        '(p.name ILIKE :search OR p.uom ILIKE :search)',
+        { search: '%espresso%' },
+      );
+    });
+
+    it('forwards productType filter', async () => {
+      await service.listPaginated({
+        tenantId: 'tenant-A',
+        page: 1,
+        pageSize: 25,
+        productType: ProductType.COMPOUND,
+      });
+
+      expect(qbMock.andWhere).toHaveBeenCalledWith(
+        'p.product_type = :productType',
+        { productType: ProductType.COMPOUND },
+      );
+    });
+
+    it('supports custom sortBy and sortOrder', async () => {
+      await service.listPaginated({
+        tenantId: 'tenant-A',
+        page: 1,
+        pageSize: 25,
+        sortBy: 'sellPrice',
+        sortOrder: 'DESC',
+      });
+
+      expect(qbMock.orderBy).toHaveBeenCalledWith('p.sellPrice', 'DESC');
     });
   });
 

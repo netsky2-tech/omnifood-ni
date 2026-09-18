@@ -136,8 +136,8 @@ export class SalesExportService {
       }
 
       const dateStr = inv.created_at
-        ? new Date(inv.created_at).toISOString().split('T')[0]
-        : new Date().toISOString().split('T')[0];
+        ? new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Managua' }).format(new Date(inv.created_at))
+        : new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Managua' }).format(new Date());
 
       return {
         date: dateStr,
@@ -167,7 +167,8 @@ export class SalesExportService {
     };
 
     const datePrefix =
-      query?.startDate || new Date().toISOString().split('T')[0];
+      query?.startDate ||
+      new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Managua' }).format(new Date());
 
     if (format === 'csv') {
       return {
@@ -273,7 +274,8 @@ export class SalesExportService {
     };
 
     const datePrefix =
-      query?.startDate || new Date().toISOString().split('T')[0];
+      query?.startDate ||
+      new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Managua' }).format(new Date());
 
     if (format === 'csv') {
       return {
@@ -640,7 +642,7 @@ export class SalesExportService {
 
     if (startDateStr) {
       if (/^\d{4}-\d{2}-\d{2}$/.test(startDateStr)) {
-        start = new Date(`${startDateStr}T00:00:00.000Z`);
+        start = new Date(`${startDateStr}T00:00:00.000-06:00`);
       } else {
         start = new Date(startDateStr);
       }
@@ -648,7 +650,7 @@ export class SalesExportService {
 
     if (endDateStr) {
       if (/^\d{4}-\d{2}-\d{2}$/.test(endDateStr)) {
-        end = new Date(`${endDateStr}T23:59:59.999Z`);
+        end = new Date(`${endDateStr}T23:59:59.999-06:00`);
       } else {
         end = new Date(endDateStr);
       }
