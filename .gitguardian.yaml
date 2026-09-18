@@ -1,3 +1,22 @@
+# Configuration for ggshield, the GitGuardian command-line scanner.
+#
+# IMPORTANT: this file does NOT configure the GitGuardian GitHub App, and so it
+# does not affect the "GitGuardian Security Checks" status on a pull request.
+# The App reads its exclusions from the workspace dashboard instead:
+#   Workspace settings -> Secrets detection -> Filepath exclusions
+#   https://dashboard.gitguardian.com/settings/secrets/filepath-exclusions
+#
+# The paths below therefore only cover local and self-hosted ggshield runs.
+# They are kept in sync with the dashboard deliberately, so a developer running
+# ggshield locally sees the same scope as CI.
+#
+# Why test paths are excluded: unit tests carry credential-shaped fixtures.
+# `apps/admin_backend/src/core/config/database-connection.config.spec.ts`, for
+# example, has to hold the real development-default password because the resolver
+# is asserted to return it outside production. A scanner cannot tell that value
+# apart from a leaked credential, and rewriting the fixture to dodge the pattern
+# only moves the problem: it was tried, and the finding count went from one to
+# four because the detector matches the shape of the assignment, not the value.
 version: 2
 secret:
   ignored_paths:
