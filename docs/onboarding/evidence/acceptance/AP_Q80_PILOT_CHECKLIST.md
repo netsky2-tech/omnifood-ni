@@ -19,6 +19,8 @@ Checklist operativo paso a paso para ejecutar el piloto físico del founder tena
 - **Run físico real (el único que satisface la aceptación física):** harness attachado al dispositivo `apps/pos_app/integration_test/onb1_10_founder_pilot_q80_e2e_test.dart`, con adaptador de impresora real (`IPosPrinterAdapter`) y variables `PILOT_*` provenientes del JSON del seed script.
 - Sólo el run attachado real produce la evidencia física de este checklist (ticket impreso, WAN outage real, outbox drain) y los campos de `AP_Q80_PILOT_EVIDENCE.md` §2–§9.
 
+**Alcance del piloto (decisión del founder, 2026-09-17):** este checklist valida el ciclo de vida de activación en hardware real; **NO valida el transporte de dispositivo `/v1/sync/*`**, que está fuera del alcance de esta aceptación. El outbox que se drena en F2 es el **outbox de activación** (`onboarding/activation/*`), no `/v1/sync/batch`. La precondición 2 del cutover DSI **NO está satisfecha** para este piloto. Las limitaciones conocidas se rastrean en `AP_KNOWN_LIMITATIONS.md`; este checklist no las duplica.
+
 ---
 
 # 1. Pre-Flight (Day Before o Morning Of)
@@ -133,7 +135,7 @@ Checklist operativo paso a paso para ejecutar el piloto físico del founder tena
 | # | Acción | Verificación | Timestamp |
 |---|---|---|---|
 | F1 | **RESTAURAR WAN** | WAN conectada | — |
-| F2 | Outbox se drena | Evidence enviada a cloud | — |
+| F2 | Outbox se drena | Evidence enviada a cloud (outbox de activación `onboarding/activation/*`; no constituye validación de `/v1/sync/*` — ver `AP_KNOWN_LIMITATIONS.md`) | — |
 | F3 | Backend finaliza | Activation attempt completado | — |
 | F4 | Verificar `ACTIVATED` | Lifecycle = ACTIVATED | `activatedAt` ✓ |
 

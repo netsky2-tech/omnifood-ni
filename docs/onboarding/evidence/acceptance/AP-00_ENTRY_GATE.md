@@ -24,6 +24,14 @@
 
 ---
 
+# 0.1 Alcance del piloto físico (ONB1.10F) — decisión de reducción (2026-09-17)
+
+El piloto físico valida el ciclo de vida de activación en hardware real (configuración fiscal `CUOTA_FIJA`, venta offline con ticket, `ACTIVATED`, drenaje del outbox de activación, VOID con `is_canceled`). **La validación del transporte de dispositivo `/v1/sync/*` está FUERA del alcance de esta aceptación**: ninguna evidencia de este piloto implica que el transporte device-only funcione en el Q80. La precondición 2 del cutover DSI **NO está satisfecha** para este piloto.
+
+Las limitaciones conocidas (brecha de enrolamiento de credencial de dispositivo, defecto de transporte mixto en inventario, brecha de nota de crédito con decisión inventory-first) se registran y rastrean en `AP_KNOWN_LIMITATIONS.md`; este gate no las duplica.
+
+---
+
 # 1. Architecture Authority
 
 | Check | Estado | Evidencia |
@@ -136,6 +144,9 @@ Blockers:
                                       NO RECAUDA IVA, 80 mm (§9 del manifest)
   RUC placeholder del seed:           ❌ BLOCKER — reemplazar antes de emitir
                                       cualquier documento fiscal
+  Alcance del piloto (§0.1):          ⚠️ REDUCIDO — transporte de dispositivo
+                                      /v1/sync/* fuera de alcance; ver
+                                      AP_KNOWN_LIMITATIONS.md
 
 Siguiente acción:
   1. Ejecutar piloto físico en Alacrity Q80/iPOS
