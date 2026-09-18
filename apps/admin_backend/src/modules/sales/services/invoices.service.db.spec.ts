@@ -22,6 +22,7 @@ import { InvoiceItem } from '../entities/invoice-item.entity';
 import { Invoice } from '../entities/invoice.entity';
 import { Payment } from '../entities/payment.entity';
 import type { SyncBatchRecordDto } from '../dto/sync-batch.dto';
+import { TENANT_RLS_PREDICATE } from '../../../core/database/tenant-rls-policy';
 import { InvoicesService } from './invoices.service';
 
 function getRequiredEnv(name: string): string {
@@ -542,10 +543,16 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
             FOR SELECT USING (tenant_id::text = current_setting('app.tenant_id', true));
           CREATE POLICY item_tenant_insert ON invoice_items
             FOR INSERT WITH CHECK (tenant_id::text = current_setting('app.tenant_id', true));
+          -- inventory_sync_receipts.tenant_id is uuid (Phase 2 slice A rebound
+          -- the real column, and synchronize builds this fixture's column from
+          -- the same entity declaration). The predicate therefore comes from the
+          -- shared definition instead of being written out here: a hand-written
+          -- form would silently become invalid for the column the fixture just
+          -- created, which is how this spec broke when the entity was corrected.
           CREATE POLICY receipt_tenant_select ON inventory_sync_receipts
-            FOR SELECT USING (tenant_id = current_setting('app.tenant_id', true));
+            FOR SELECT USING (${TENANT_RLS_PREDICATE});
           CREATE POLICY receipt_tenant_insert ON inventory_sync_receipts
-            FOR INSERT WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+            FOR INSERT WITH CHECK (${TENANT_RLS_PREDICATE});
           GRANT USAGE ON SCHEMA "${schema}" TO "${tenantRole}";
           GRANT SELECT, INSERT, UPDATE ON invoices TO "${tenantRole}";
           GRANT SELECT, INSERT, UPDATE ON invoice_items TO "${tenantRole}";

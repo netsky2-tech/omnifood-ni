@@ -18,7 +18,7 @@ export class CashShiftSession {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'varchar', length: 100 })
+  @Column({ type: 'uuid' })
   tenant_id: string;
 
   @Column({ type: 'varchar', length: 100 })

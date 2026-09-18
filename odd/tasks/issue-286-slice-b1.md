@@ -89,9 +89,35 @@ Two declaration shapes exist for `tenant_id`, and they do not mean the same thin
 
 So `system-parameters-config.entity.ts` *already* reports `uuid` while its column is still `varchar`, and an assertion of the form "every entity must declare `tenant_id` as uuid" would start red for a reason unrelated to #286.
 
-**Assertion semantics (symmetric with assertion D's scoping):** for every table whose `tenant_id` is **uuid in the built schema**, the entity that declares that table must declare `tenant_id` as uuid. Assertion D is scoped to uuid columns because on a varchar column every working policy deparses as `(tenant_id)::text = ...` and the check would flag 94 policies for a reason that does not exist; this assertion is scoped for the same class of reason.
+**Assertion semantics, one-directional (symmetric with assertion D's scoping):** for every base table whose `tenant_id` is **uuid in the built schema**, the entity that maps it must declare `tenant_id` as uuid. Assertion D is scoped to uuid columns because on a varchar column every working policy deparses as `(tenant_id)::text = ...` and the check would flag 94 policies for a reason that does not exist; this assertion is scoped for the same class of reason, and the census below shows why the scope is load-bearing rather than convenient.
 
-**Requirement: `L1` lands green.** If the assertion exposes a pre-existing mismatch the writer must stop and report it as a finding rather than silently widening the slice to unrelated tables. A mismatch on a table slice A already rebound is a slice-A leftover and belongs in the report.
+### The census that decided the semantics (MEASURED)
+
+TypeORM `DataSource.entityMetadatas` against the built scratch schema, 64 joined rows: **50 agree, 14 disagree**, and the 14 split into two directions that mean opposite things.
+
+| Direction | Meaning | Count |
+| --- | --- | --- |
+| column `uuid` → entity declares varchar-ish | the column arrived, the entity was left behind — **a regression with no tracker** | 8 |
+| column `varchar` → entity declares `uuid` (via the `tenant` relation) | the entity is already at the destination, the column is not — **the in-transit state the ratchet already tracks** | 6 |
+
+Direction 1 (all 8 fixed by this unit, because the assertion cannot land green otherwise):
+
+```
+cash_movements                      (uuid -> varchar)  modules/sales/entities/cash-movement.entity.ts
+cash_shift_sessions                 (uuid -> varchar)  modules/sales/entities/cash-shift.entity.ts
+customer_loyalty_account_projection (uuid -> String)   modules/loyalty/entities/customer-loyalty-account-projection.entity.ts
+datafonos_equipos                   (uuid -> String)   modules/sales/entities/datafono-equipo.entity.ts
+inventory_remediation_receipts      (uuid -> varchar)  modules/inventory/entities/inventory-remediation-receipt.entity.ts   << slice-A leftover >>
+inventory_sync_outbox               (uuid -> String)   modules/inventory/entities/inventory-sync-outbox.entity.ts           << slice-A leftover >>
+inventory_sync_receipts             (uuid -> String)   modules/inventory/entities/inventory-sync-receipt.entity.ts           << slice-A leftover >>
+production_batch_history            (uuid -> String)   modules/inventory/entities/production-batch-history.entity.ts          << slice-A leftover >>
+```
+
+**Four of the eight are slice-A leftovers: slice A rebound those columns and never touched the entities, and nothing could see it.** That is the finding this detector exists for, delivered by the census before a line of the assertion was written.
+
+Direction 2 stays permitted and needs no new artifact, for a reason that is checkable: every one of those six columns is already a line in `schema-tenant-type-manifest.txt` (`catalog_values`, `customer_point_transactions`, `customers`, `legacy_import_integrity_reports`, `promotions`, `sys_parametros_config`). The slice that rebinds the column is the same slice that makes the entity truthful, and until then the ratchet already names the column. A second manifest would be a second tracker to empty for no additional detection.
+
+Also measured, and worth recording: 30 entity files declare `tenant_id` twice in source — a plain `@Column` **and** a `@ManyToOne(() => Tenant) @JoinColumn({ name: 'tenant_id' })`. TypeORM folds them into **one** column metadata whose type is the relation-derived `uuid` (0 entities with two `tenant_id` column metadata). Any check written against entity source text instead of metadata would misread those 30.
 
 The assertion must be proven able to fail by mutation in the scratch database, the same way the four existing layers were.
 
@@ -100,7 +126,8 @@ The assertion must be proven able to fail by mutation in the scratch database, t
 | # | Task | Acceptance evidence |
 | --- | --- | --- |
 | **B1.1** | Emitter view support in `src/core/database/tenant-rls-policy.ts`: a target may carry views to drop before the `ALTER` and recreate after, in the forced order, inside the caller's transaction. Emitter spec extended. | `up()`, `down()` and the view ordering asserted by SQL-text spec; the harness stays green in both scenarios (no consumer yet) |
-| **B1.2** | Entity/schema consistency assertion in `scripts/verify-schema-build.sh`, scoped per the design above, in **both** scenarios. | Green on the current tree (entities and schema agree wherever the column is uuid); RED captured by reverting one entity to `varchar`; the mutation reverted afterwards |
+| **B1.2** | Entity/schema consistency assertion in `scripts/verify-schema-build.sh`, scoped per the design above, in **both** scenarios, plus the **8 direction-1 entity declarations** corrected to `uuid` (4 of them slice-A leftovers). | **DONE** — see the evidence log. `entity uuid mismatches: 0` in both scenarios; RED proven by mutation. |
+| — | **Found by the unit, not in the plan:** `invoices.service.db.spec.ts` wrote the bare predicate form on `inventory_sync_receipts` while `synchronize: true` built that fixture's column from the entity, so correcting the entity made the fixture's own policy invalid (`uuid = text`). Fixed inside the unit by taking the predicate from the shared definition. | **DONE** — 36 db suites / 200 tests pass, was 9/10 suites. |
 | **B1.3** | `1809000000001`: replace the single `TENANT_PREDICATE` constant with one `resolveTenantRlsPredicate(queryRunner, table)` resolution **per table**. Spec updated. | Spec asserts five distinct resolutions, one per table; behaviour-neutral — the harness is green in both scenarios and every column is still varchar |
 | **B1.4** | `1784000000000`: resolve its own predicate through the shared seam. The view DDL stays as-is here (it is not a policy). Spec updated. | Same shape as B1.3; harness green in both scenarios |
 | **B1.5** | Slice migration (L3a) rebinding the 9 non-view tables through `rebindTenantColumns`, with authored `(table, policy_name, cmd, using, check)` rows taken from `pg_policies` **structural** metadata. Their entities converted to `uuid`. Manifest shrinks by 9. | Harness green in both scenarios; `uuid col text casts: 0`; entity assertion still green; spec pins the emitted DDL |
@@ -115,20 +142,31 @@ Slice A's measured rates are the calibration: 27 policies → 1,701 review-facin
 
 | Unit | Expectation | Measured at close |
 | --- | --- | --- |
-| B1.1 + B1.2 (L1) | ~300–450 | |
+| B1.1 + B1.2 (L1) | ~300–450 | **B1.1 = 209** (`tenant-rls-policy.ts` +65/−3, spec +138, doc +147) and **B1.2 = 154** (harness +124/−2, 8 entities +8/−8, spec +20/−6) |
 | B1.3 + B1.4 (L2) | ~250–350 | |
 | B1.5 (L3a) | ~500–700 → **likely needs its own split** | |
 | B1.6 (L3b) | ~200–300 | |
+
+L1's landed cost is **below** the projection, which is the first time in this slice a plan estimate was not falsified. What made it cheap is that the emitter and the harness already existed: `L1` extended both instead of creating either.
 
 Overages are disclosed in the pull request body rather than hidden, and a spec is never split from the implementation it pins.
 
 ## Evidence log
 
-Filled as units close. Empty means nothing has been measured yet.
-
 | Unit | Commit | Evidence |
 | --- | --- | --- |
-| — | — | — |
+| L1 doc + B1.1 | `44a5e8b` | Emitter view support. `npx jest src/core/database/tenant-rls-policy.spec.ts` → 22/22. Harness exit 0, both scenarios, `uuid col text casts: 0`, ratchet `34/34`, `unlisted 0`, `stale 0`. Baseline before the unit was measured GREEN on the same tree at `5f33320` (27 s), so the green is attributable to the change rather than to the environment. |
+| B1.2 | _(this commit)_ | Assertion in both scenarios: `uuid tenant_id tables: 32`, `entity uuid mismatches: 0`. RED proven by mutation (reverting `inventory-sync-outbox.entity.ts` to the non-uuid form): exit 1 with the named row `inventory_sync_outbox|InventorySyncOutbox|uuid|String`. Mutation reverted byte-identically. `npm run test:db` → **36 suites / 200 tests pass**. Full harness exit 0 after the correction. |
+
+**Re-measured after the base moved.** `origin/main` advanced from `5f33320` to `33d5379` (8 commits) while L1 was being written, so the branch was rebased and every result above re-taken on the new base: harness exit 0 with identical counts (`75` entity tables, `953` entity columns, `34/34` ratchet, `text casts 0`, `entity uuid mismatches 0`), `npm run test:db` 36/200. The 8 commits added no migration and no entity, which the re-run confirms rather than assumes.
+
+## Process hazard found while verifying this slice
+
+**`npm run lint` in `apps/admin_backend` is `eslint "{src,apps,libs,test}/**/*.ts" --fix`.** Running it as a verification step rewrote **48 tracked files** that have nothing to do with this slice — migrations, audit, onboarding controllers — and reformatted this slice's own spec, in a tree that was otherwise clean. It exits 0 regardless, so nothing signals the mutation.
+
+The changes were reverted wholesale before the rebase, and the PR contains exactly the 13 intended paths. To verify lint without mutating the tree, call eslint directly on the paths in question without `--fix`; never run the package script as a check.
+
+**A measurement that corrected this document, not the other way round.** This document first required the assertion to land green and told the writer to stop and report if it did not. The census then showed 14 disagreements in two opposite directions, which is what turned a one-directional gate plus eight one-line entity corrections into the design — instead of a second manifest tracking eight tables. The four slice-A leftovers among them are a finding about merged work, not about this unit.
 
 ## Open items carried, not resolved here
 
