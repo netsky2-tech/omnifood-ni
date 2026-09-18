@@ -8,6 +8,7 @@ import '../../domain/models/sales/invoice_item.dart';
 import '../../domain/models/sales/payment.dart';
 import '../../domain/ports/printer_port.dart';
 import '../../domain/repositories/sales/sales_repository.dart';
+import '../../domain/services/config/printer_config_service.dart';
 import '../database/app_database.dart';
 import '../mappers/sales_mapper.dart';
 import '../models/activation/activation_check_result_local_entity.dart';
@@ -60,16 +61,20 @@ class ActivationControlledSaleRunner {
   final SalesRepository _salesRepository;
   final PrinterPort _printerPort;
   final ActivationClockManager? _clockManager;
+  final PrinterConfigService _printerConfigService;
 
   ActivationControlledSaleRunner({
     required AppDatabase database,
     required SalesRepository salesRepository,
     required PrinterPort printerPort,
     ActivationClockManager? clockManager,
+    PrinterConfigService? printerConfigService,
   })  : _database = database,
         _salesRepository = salesRepository,
         _printerPort = printerPort,
-        _clockManager = clockManager;
+        _clockManager = clockManager,
+        _printerConfigService =
+            printerConfigService ?? PrinterConfigService(database.localConfigDao);
 
   Future<ControlledSaleResult> executeControlledOfflineSale(
     ControlledSaleParams params,
@@ -287,8 +292,18 @@ class ActivationControlledSaleRunner {
     final printerStatus = await _printerPort.checkStatus();
     final printerIsReady = printerStatus == PrinterStatus.ready;
     bool receiptPrintedSuccess = false;
+    String? receiptRegimeEvidence;
+    int? receiptPaperWidthEvidence;
+    String? receiptBlockedReason;
 
     if (printerIsReady) {
+      // Resolve the tenant fiscal configuration once. Issue #343: the receipt
+      // must use the tenant's own tax regime and paper width; never literals.
+      final receiptConfig = await _printerConfigService.getPrinterConfig();
+      final regimeRaw = receiptConfig.taxRegime?.trim();
+      final resolvedRegime =
+          (regimeRaw != null && regimeRaw.isNotEmpty) ? TaxRegime.fromString(regimeRaw) : null;
+
       final receiptInvoice = Invoice(
         id: ticketId,
         number: ticketNumber,
@@ -324,14 +339,25 @@ class ActivationControlledSaleRunner {
         createdAt: now,
       );
 
-      final printResult = await _printerPort.printInvoice(
-        receiptInvoice,
-        items: [receiptItem],
-        payments: [receiptPayment],
-        cashierName: trimmedCashierId,
-            taxRegime: TaxRegime.regimenGeneral,
-          );
-      receiptPrintedSuccess = printResult.isSuccess;
+      if (resolvedRegime == null) {
+        // Fail closed: issuing a fiscal document with a guessed document type
+        // is worse than not printing it (DGI DT 09-2007).
+        receiptBlockedReason = 'RECEIPT_BLOCKED_UNRESOLVED_TAX_REGIME';
+        receiptRegimeEvidence = regimeRaw;
+        receiptPaperWidthEvidence = receiptConfig.paperWidthMm;
+      } else {
+        final printResult = await _printerPort.printInvoice(
+          receiptInvoice,
+          items: [receiptItem],
+          payments: [receiptPayment],
+          cashierName: trimmedCashierId,
+          taxRegime: resolvedRegime,
+          paperWidthMm: receiptConfig.paperWidthMm,
+        );
+        receiptPrintedSuccess = printResult.isSuccess;
+        receiptRegimeEvidence = resolvedRegime.code;
+        receiptPaperWidthEvidence = receiptConfig.paperWidthMm;
+      }
     }
 
     final checks = <String, ActivationCheckResultLocalEntity>{};
@@ -367,17 +393,28 @@ class ActivationControlledSaleRunner {
       checkCode: 'SALE_RECEIPT_PATH',
       status: receiptPrintedSuccess ? 'PASS' : 'FAIL',
       evidenceType: 'RECEIPT_PRINTER_OUTPUT',
-      evidenceRef: receiptPrintedSuccess ? 'RECEIPT_PRINTED_OK' : 'RECEIPT_PRINT_FAILED',
+      evidenceRef: receiptPrintedSuccess
+          ? 'RECEIPT_PRINTED_OK'
+          : (receiptBlockedReason ?? 'RECEIPT_PRINT_FAILED'),
       occurredAt: nowIso,
       recordedAt: nowIso,
       detailsSanitizedJson: jsonEncode({
         'printerStatus': printerStatus.name,
         'receiptSuccess': receiptPrintedSuccess,
         'ticketId': ticketId,
+        'taxRegime': receiptRegimeEvidence,
+        'paperWidthMm': receiptPaperWidthEvidence,
+        'blockedReason': receiptBlockedReason,
       }),
     );
     checks['SALE_RECEIPT_PATH'] = receiptCheck;
-    if (!receiptPrintedSuccess) {
+    if (receiptBlockedReason != null) {
+      errors.add(
+        'SALE_RECEIPT_PATH_FAILED: $receiptBlockedReason — receipt not printed because the tenant tax regime '
+        'could not be resolved from printer configuration (configured value: ${receiptRegimeEvidence ?? '<empty>'}). '
+        'Printing a fiscal document with a guessed document type is prohibited (DGI DT 09-2007).',
+      );
+    } else if (!receiptPrintedSuccess) {
       errors.add(
         'SALE_RECEIPT_PATH_FAILED: Printing receipt failed with printer status ${printerStatus.name}',
       );
@@ -425,7 +462,9 @@ class ActivationControlledSaleRunner {
       payload: {
         'checkCode': 'SALE_RECEIPT_PATH',
         'status': receiptPrintedSuccess ? 'PASS' : 'FAIL',
-        'evidenceRef': receiptPrintedSuccess ? 'RECEIPT_PRINTED_OK' : 'RECEIPT_PRINT_FAILED',
+        'evidenceRef': receiptPrintedSuccess
+            ? 'RECEIPT_PRINTED_OK'
+            : (receiptBlockedReason ?? 'RECEIPT_PRINT_FAILED'),
         'occurredAt': nowIso,
       },
     );

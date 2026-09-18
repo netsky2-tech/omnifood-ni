@@ -92,6 +92,12 @@ void main() {
       await database.localConfigDao.saveConfig(
         LocalConfigEntity(key: 'dgi_range_end', value: '1000'),
       );
+      // Tax regime resolved by PrinterConfigService when the verification receipt is
+      // printed. This fixture predates that requirement and relied on the runner's
+      // removed literal, so it keeps the general regime it used to print with.
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'),
+      );
 
       // Seed fiscal configuration
       await database.fiscalConfigLocalDao.applyFiscalConfig(

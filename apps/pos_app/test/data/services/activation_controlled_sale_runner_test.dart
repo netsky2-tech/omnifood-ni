@@ -25,6 +25,7 @@ import 'package:pos_app/data/repositories/tenant_capability_cache.dart';
 import 'package:pos_app/data/services/activation_controlled_sale_runner.dart';
 import 'package:pos_app/data/services/local_auth_service.dart';
 import 'package:pos_app/data/services/sales/dgi_numbering_service_impl.dart';
+import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'package:pos_app/domain/ports/printer_port.dart';
 import 'package:pos_app/domain/services/alerts/alert_service.dart';
 import 'package:pos_app/domain/services/inventory/movement_engine_impl.dart';
@@ -143,7 +144,10 @@ void main() {
     const verificationProductId = 'prod-pin-001';
     const cashierId = 'cashier-off-01';
 
-    Future<void> seedPrerequisites({String attemptStatus = 'RUNNING'}) async {
+    Future<void> seedPrerequisites({
+      String attemptStatus = 'RUNNING',
+      String taxRegimeConfig = 'REGIMEN_GENERAL',
+    }) async {
       // 1. DGI Numbering range in localConfig
       await database.localConfigDao.saveConfig(
         LocalConfigEntity(
@@ -162,6 +166,11 @@ void main() {
           key: 'dgi_range_end',
           value: '1000',
         ),
+      );
+
+      // Tax regime resolved by PrinterConfigService for the receipt print.
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'tax_regime', value: taxRegimeConfig),
       );
 
       // 2. User & profile
@@ -315,6 +324,82 @@ void main() {
       expect(updatedAttempt.localStatus, equals('LOCAL_ACTIVATION_EVIDENCE_COMPLETE'));
     });
 
+    test('prints the activation receipt with the CONFIGURED tax regime and paper width, not literals (#343)', () async {
+      await seedPrerequisites(taxRegimeConfig: 'CUOTA_FIJA');
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'printer_paper_width_mm', value: '80'),
+      );
+
+      final result = await saleRunner.executeControlledOfflineSale(
+        const ControlledSaleParams(
+          tenantId: tenantId,
+          attemptId: attemptId,
+          cashierUserId: cashierId,
+        ),
+      );
+
+      expect(result.isSuccess, isTrue);
+      expect(printerAdapter.printHistory.length, equals(1));
+
+      // A CUOTA_FIJA tenant must not receive a FACTURA DE VENTA (DGI DT 09-2007).
+      expect(printerAdapter.lastTaxRegime, equals(TaxRegime.cuotaFija));
+      // An 80 mm installation must be laid out for 80 mm, not the 58 mm default.
+      expect(printerAdapter.lastPaperWidthMm, equals(80));
+
+      // Evidence must record what was printed so acceptance can detect
+      // wrong regime or width regressions.
+      final receiptCheck = await database.activationCheckResultLocalDao.getCheck(
+        tenantId,
+        attemptId,
+        'SALE_RECEIPT_PATH',
+      );
+      expect(receiptCheck, isNotNull);
+      expect(receiptCheck!.status, equals('PASS'));
+      final evidence =
+          jsonDecode(receiptCheck.detailsSanitizedJson!) as Map<String, dynamic>;
+      expect(evidence['taxRegime'], equals('CUOTA_FIJA'));
+      expect(evidence['paperWidthMm'], equals(80));
+    });
+
+    test('fails closed: no receipt is printed when the tax regime cannot be resolved (#343)', () async {
+      await seedPrerequisites(taxRegimeConfig: 'NOT_A_REAL_REGIME');
+
+      final result = await saleRunner.executeControlledOfflineSale(
+        const ControlledSaleParams(
+          tenantId: tenantId,
+          attemptId: attemptId,
+          cashierUserId: cashierId,
+        ),
+      );
+
+      expect(result.isSuccess, isFalse);
+      // No fiscal document may be printed with a guessed document type.
+      expect(printerAdapter.printHistory, isEmpty);
+      expect(
+        result.errors,
+        anyElement(contains('RECEIPT_BLOCKED_UNRESOLVED_TAX_REGIME')),
+      );
+
+      final receiptCheck = await database.activationCheckResultLocalDao.getCheck(
+        tenantId,
+        attemptId,
+        'SALE_RECEIPT_PATH',
+      );
+      expect(receiptCheck, isNotNull);
+      expect(receiptCheck!.status, equals('FAIL'));
+      expect(
+        receiptCheck.evidenceRef,
+        equals('RECEIPT_BLOCKED_UNRESOLVED_TAX_REGIME'),
+      );
+      final evidence =
+          jsonDecode(receiptCheck.detailsSanitizedJson!) as Map<String, dynamic>;
+      expect(
+        evidence['blockedReason'],
+        equals('RECEIPT_BLOCKED_UNRESOLVED_TAX_REGIME'),
+      );
+      expect(evidence['taxRegime'], equals('NOT_A_REAL_REGIME'));
+    });
+
     test('retry of attempt does not create a second verification ticket (idempotency)', () async {
       await seedPrerequisites();
 
@@ -427,6 +512,9 @@ void main() {
           key: 'dgi_range_end',
           value: '1000',
         ),
+      );
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'),
       );
 
       await database.userDao.insertUsers([
@@ -616,6 +704,9 @@ void main() {
             key: 'dgi_range_end',
             value: '1000',
           ),
+        );
+        await diskDb1.localConfigDao.saveConfig(
+          LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'),
         );
         await diskDb1.productDao.insertProducts([
           ProductEntity(
@@ -866,6 +957,9 @@ void main() {
         await database.localConfigDao.saveConfig(
           LocalConfigEntity(key: 'dgi_range_end', value: '1000'),
         );
+        await database.localConfigDao.saveConfig(
+          LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'),
+        );
 
         await database.userDao.insertUsers([
           UserEntity(
@@ -1016,6 +1110,7 @@ void main() {
           await diskDb.localConfigDao.saveConfig(LocalConfigEntity(key: 'dgi_prefix', value: '001-001-01'));
           await diskDb.localConfigDao.saveConfig(LocalConfigEntity(key: 'dgi_current_seq', value: '1'));
           await diskDb.localConfigDao.saveConfig(LocalConfigEntity(key: 'dgi_range_end', value: '1000'));
+          await diskDb.localConfigDao.saveConfig(LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'));
           await diskDb.userDao.insertUsers([
             UserEntity(id: cashierId, name: 'Cajero Offline', role: 'CASHIER', pinHash: '', isActive: true, tenantId: tenantId),
           ]);
