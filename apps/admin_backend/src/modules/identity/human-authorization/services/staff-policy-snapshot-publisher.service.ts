@@ -86,6 +86,18 @@ export class StaffPolicySnapshotPublisher {
     // Serialize publishers per tenant before reading any state, so the
     // derived sequence is contiguous (decision 19) and no other publisher
     // can interleave between the marker read and the snapshot insert.
+    //
+    // Measured redundancy, recorded so nobody mistakes this lock for the only
+    // guarantee: removing this statement entirely leaves every real-database
+    // assertion green, including the concurrent-publication test that asserts
+    // one `published` and one `noop` outcome. The reason is the marker upsert
+    // below — a single INSERT ... ON CONFLICT takes a row lock on the tenant's
+    // marker, so a competing publisher blocks there until the winner commits
+    // and then observes the marker already cleared. The lock is therefore
+    // defensive belt-and-braces rather than the mechanism the concurrency test
+    // proves, and it stays because decision 16 mandates an advisory lock on the
+    // tenant sequence and because relying on a row lock taken as a side effect
+    // of marker materialization would be an undocumented dependency.
     await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
       tenantId,
     ]);
