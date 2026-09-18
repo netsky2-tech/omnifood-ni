@@ -4,11 +4,23 @@ import { CreateInventoryRemediationReceipts1806000000000 } from './1806000000000
 describe('CreateInventoryRemediationReceipts1806000000000', () => {
   const migration = new CreateInventoryRemediationReceipts1806000000000();
 
-  const collectSql = async (direction: 'up' | 'down' = 'up') => {
+  // The migration resolves the tenant predicate through the shared
+  // type-aware resolver, which reads the tenant_id column type from
+  // information_schema. The stub answers with the declared data_type; a raw
+  // rows array mirrors what PostgresQueryRunner.query returns at runtime.
+  const collectSql = async (
+    direction: 'up' | 'down' = 'up',
+    tenantIdDataType: string = 'character varying',
+  ) => {
     const queries: string[] = [];
     const queryRunner = {
       query: jest.fn((sql: string): Promise<QueryResult> => {
         queries.push(sql);
+        if (sql.includes('information_schema.columns')) {
+          return Promise.resolve([
+            { data_type: tenantIdDataType },
+          ]) as unknown as Promise<QueryResult>;
+        }
         return Promise.resolve(new QueryResult());
       }),
     } as unknown as QueryRunner;
@@ -32,7 +44,7 @@ describe('CreateInventoryRemediationReceipts1806000000000', () => {
       'actor_user_id varchar(128) NOT NULL',
       'actor_role varchar(64) NOT NULL',
       'reason text NOT NULL',
-      'status varchar(32) NOT NULL DEFAULT \'APPLIED\'',
+      "status varchar(32) NOT NULL DEFAULT 'APPLIED'",
       'result jsonb NOT NULL',
       'audit_event_id uuid NOT NULL',
       'created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP',
@@ -52,7 +64,7 @@ describe('CreateInventoryRemediationReceipts1806000000000', () => {
       'ALTER TABLE inventory_remediation_receipts FORCE ROW LEVEL SECURITY',
       'CREATE POLICY remediation_receipts_select ON inventory_remediation_receipts',
       'CREATE POLICY remediation_receipts_insert ON inventory_remediation_receipts',
-      'current_setting(\'app.tenant_id\', true)',
+      "current_setting('app.tenant_id', true)",
     ]) {
       expect(sql).toContain(fragment);
     }
@@ -81,5 +93,22 @@ describe('CreateInventoryRemediationReceipts1806000000000', () => {
     ]) {
       expect(sql).toContain(fragment);
     }
+  });
+
+  it('emits the setting-cast predicate when tenant_id is already uuid (partial-ledger re-run)', async () => {
+    // A partial-ledger re-run happens after later slices converted the
+    // column to uuid; the recreated policies must use the setting-cast form
+    // instead of the hardcoded bare compare.
+    const sql = await collectSql('up', 'uuid');
+
+    expect(sql).toContain(
+      "FOR SELECT USING (tenant_id = current_setting('app.tenant_id', true)::uuid);",
+    );
+    expect(sql).toContain(
+      "FOR INSERT WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);",
+    );
+    expect(sql).not.toContain(
+      "tenant_id::text = current_setting('app.tenant_id', true)",
+    );
   });
 });

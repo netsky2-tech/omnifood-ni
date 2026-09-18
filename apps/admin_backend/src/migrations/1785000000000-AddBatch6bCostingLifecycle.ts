@@ -1,4 +1,5 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
+import { resolveTenantRlsPredicate } from '../core/database/tenant-rls-policy';
 
 export class AddBatch6bCostingLifecycle1785000000000 implements MigrationInterface {
   name = 'AddBatch6bCostingLifecycle1785000000000';
@@ -47,6 +48,15 @@ export class AddBatch6bCostingLifecycle1785000000000 implements MigrationInterfa
         ON kardex_recalculate_queue (tenant_id, origin_movement_id, trigger_movement_id);
     `);
 
+    // Each table resolves its own predicate: the two tenant_id columns can
+    // be in different states (a partial-ledger re-run reaches this migration
+    // after later slices converted them to uuid), and a hardcoded bare
+    // compare would fail with "operator does not exist: uuid = text".
+    const queueTenantPredicate = await resolveTenantRlsPredicate(
+      queryRunner,
+      'kardex_recalculate_queue',
+    );
+
     await queryRunner.query(`
       ALTER TABLE kardex_recalculate_queue ENABLE ROW LEVEL SECURITY;
       ALTER TABLE kardex_recalculate_queue FORCE ROW LEVEL SECURITY;
@@ -61,8 +71,8 @@ export class AddBatch6bCostingLifecycle1785000000000 implements MigrationInterfa
         ) THEN
           CREATE POLICY kardex_queue_tenant_isolation ON kardex_recalculate_queue
             FOR ALL
-            USING (tenant_id = current_setting('app.tenant_id', true))
-            WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+            USING (${queueTenantPredicate})
+            WITH CHECK (${queueTenantPredicate});
         END IF;
       END;
       $$;
@@ -115,6 +125,11 @@ export class AddBatch6bCostingLifecycle1785000000000 implements MigrationInterfa
       EXECUTE FUNCTION reject_kardex_correction_mutation();
     `);
 
+    const correctionTenantPredicate = await resolveTenantRlsPredicate(
+      queryRunner,
+      'kardex_correction',
+    );
+
     await queryRunner.query(`
       ALTER TABLE kardex_correction ENABLE ROW LEVEL SECURITY;
       ALTER TABLE kardex_correction FORCE ROW LEVEL SECURITY;
@@ -129,8 +144,8 @@ export class AddBatch6bCostingLifecycle1785000000000 implements MigrationInterfa
         ) THEN
           CREATE POLICY kardex_correction_tenant_isolation ON kardex_correction
             FOR ALL
-            USING (tenant_id = current_setting('app.tenant_id', true))
-            WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+            USING (${correctionTenantPredicate})
+            WITH CHECK (${correctionTenantPredicate});
         END IF;
       END;
       $$;

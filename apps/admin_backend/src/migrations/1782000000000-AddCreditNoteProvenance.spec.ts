@@ -138,7 +138,9 @@ describe('AddCreditNoteProvenance1782000000000', () => {
     expect(itemsRlsSection).not.toContain('tenant_id::text');
     const kardexRlsSection = sql.slice(
       sql.indexOf('ALTER TABLE inventory_kardex ENABLE ROW LEVEL SECURITY'),
-      sql.indexOf('CREATE OR REPLACE FUNCTION validate_credit_note_invoice_origin_tenant'),
+      sql.indexOf(
+        'CREATE OR REPLACE FUNCTION validate_credit_note_invoice_origin_tenant',
+      ),
     );
     expect(kardexRlsSection).not.toContain('tenant_id::text');
   });
@@ -151,7 +153,8 @@ describe('AddCreditNoteProvenance1782000000000', () => {
     // varying = uuid" (the exact CI regression this guards against). The text
     // cast is the only valid form here, and it must appear in the same policy
     // shapes as the uuid run.
-    const textPredicate = "tenant_id::text = current_setting('app.tenant_id', true)";
+    const textPredicate =
+      "tenant_id::text = current_setting('app.tenant_id', true)";
     expect(sql).toContain(textPredicate);
     expect(sql).toContain(
       `CREATE POLICY credit_note_invoices_tenant_select\n            ON invoices FOR SELECT USING (${textPredicate});`,

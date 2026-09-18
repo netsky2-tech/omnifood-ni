@@ -1,4 +1,5 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
+import { resolveTenantRlsPredicate } from '../core/database/tenant-rls-policy';
 
 export class AddDeterministicSyncSequencing1780000000000 implements MigrationInterface {
   name = 'AddDeterministicSyncSequencing1780000000000';
@@ -75,8 +76,15 @@ export class AddDeterministicSyncSequencing1780000000000 implements MigrationInt
     tableName: string,
     options: { allowUpdate: boolean },
   ): Promise<void> {
-    const tenantPredicate =
-      "tenant_id = current_setting('app.tenant_id', true)";
+    // The predicate form must match the tenant_id column's CURRENT type: a
+    // partial-ledger re-run happens after later slices converted these
+    // columns to uuid, and a hardcoded bare compare would fail with
+    // "operator does not exist: uuid = text". The shared resolver reads the
+    // catalog once and returns the valid, index-friendly form.
+    const tenantPredicate = await resolveTenantRlsPredicate(
+      queryRunner,
+      tableName,
+    );
 
     await queryRunner.query(`
       ALTER TABLE ${tableName} ENABLE ROW LEVEL SECURITY

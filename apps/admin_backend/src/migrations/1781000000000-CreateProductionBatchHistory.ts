@@ -1,4 +1,5 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
+import { resolveTenantRlsPredicate } from '../core/database/tenant-rls-policy';
 
 export class CreateProductionBatchHistory1781000000000 implements MigrationInterface {
   name = 'CreateProductionBatchHistory1781000000000';
@@ -52,6 +53,16 @@ export class CreateProductionBatchHistory1781000000000 implements MigrationInter
       ALTER TABLE production_batch_history FORCE ROW LEVEL SECURITY
     `);
 
+    // The predicate form must match the tenant_id column's CURRENT type: a
+    // partial-ledger re-run happens after later slices converted the column
+    // to uuid, and a hardcoded bare compare would fail with
+    // "operator does not exist: uuid = text". The shared resolver reads the
+    // catalog once and returns the valid, index-friendly form.
+    const tenantPredicate = await resolveTenantRlsPredicate(
+      queryRunner,
+      'production_batch_history',
+    );
+
     // PostgreSQL has no `CREATE POLICY IF NOT EXISTS`, so guard on the catalog.
     await queryRunner.query(`
       DO $$ BEGIN
@@ -63,7 +74,7 @@ export class CreateProductionBatchHistory1781000000000 implements MigrationInter
         ) THEN
           CREATE POLICY production_batch_history_tenant_isolation ON production_batch_history
           FOR SELECT
-          USING (tenant_id = current_setting('app.tenant_id', true));
+          USING (${tenantPredicate});
         END IF;
       END $$;
     `);
@@ -78,7 +89,7 @@ export class CreateProductionBatchHistory1781000000000 implements MigrationInter
         ) THEN
           CREATE POLICY production_batch_history_tenant_insert ON production_batch_history
           FOR INSERT
-          WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+          WITH CHECK (${tenantPredicate});
         END IF;
       END $$;
     `);
@@ -93,8 +104,8 @@ export class CreateProductionBatchHistory1781000000000 implements MigrationInter
         ) THEN
           CREATE POLICY production_batch_history_tenant_update ON production_batch_history
           FOR UPDATE
-          USING (tenant_id = current_setting('app.tenant_id', true))
-          WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+          USING (${tenantPredicate})
+          WITH CHECK (${tenantPredicate});
         END IF;
       END $$;
     `);
@@ -109,7 +120,7 @@ export class CreateProductionBatchHistory1781000000000 implements MigrationInter
         ) THEN
           CREATE POLICY production_batch_history_tenant_delete ON production_batch_history
           FOR DELETE
-          USING (tenant_id = current_setting('app.tenant_id', true));
+          USING (${tenantPredicate});
         END IF;
       END $$;
     `);
@@ -146,6 +157,11 @@ export class CreateProductionBatchHistory1781000000000 implements MigrationInter
       ALTER TABLE production_batch_history FORCE ROW LEVEL SECURITY
     `);
 
+    const tenantPredicate = await resolveTenantRlsPredicate(
+      queryRunner,
+      'production_batch_history',
+    );
+
     await queryRunner.query(`
       DO $$
       BEGIN
@@ -157,7 +173,7 @@ export class CreateProductionBatchHistory1781000000000 implements MigrationInter
         ) THEN
           CREATE POLICY production_batch_history_tenant_isolation ON production_batch_history
           FOR SELECT
-          USING (tenant_id = current_setting('app.tenant_id', true));
+          USING (${tenantPredicate});
         END IF;
       END;
       $$
@@ -174,7 +190,7 @@ export class CreateProductionBatchHistory1781000000000 implements MigrationInter
         ) THEN
           CREATE POLICY production_batch_history_tenant_insert ON production_batch_history
           FOR INSERT
-          WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+          WITH CHECK (${tenantPredicate});
         END IF;
       END;
       $$
@@ -191,8 +207,8 @@ export class CreateProductionBatchHistory1781000000000 implements MigrationInter
         ) THEN
           CREATE POLICY production_batch_history_tenant_update ON production_batch_history
           FOR UPDATE
-          USING (tenant_id = current_setting('app.tenant_id', true))
-          WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+          USING (${tenantPredicate})
+          WITH CHECK (${tenantPredicate});
         END IF;
       END;
       $$
@@ -209,7 +225,7 @@ export class CreateProductionBatchHistory1781000000000 implements MigrationInter
         ) THEN
           CREATE POLICY production_batch_history_tenant_delete ON production_batch_history
           FOR DELETE
-          USING (tenant_id = current_setting('app.tenant_id', true));
+          USING (${tenantPredicate});
         END IF;
       END;
       $$

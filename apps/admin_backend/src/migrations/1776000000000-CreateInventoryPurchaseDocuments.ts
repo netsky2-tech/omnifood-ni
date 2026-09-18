@@ -1,4 +1,5 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
+import { resolveTenantRlsPredicate } from '../core/database/tenant-rls-policy';
 
 export class CreateInventoryPurchaseDocuments1776000000000 implements MigrationInterface {
   name = 'CreateInventoryPurchaseDocuments1776000000000';
@@ -46,6 +47,16 @@ export class CreateInventoryPurchaseDocuments1776000000000 implements MigrationI
       ALTER TABLE inventory_purchase_documents FORCE ROW LEVEL SECURITY
     `);
 
+    // The predicate form must match the tenant_id column's CURRENT type: a
+    // partial-ledger re-run happens after later slices converted the column
+    // to uuid, and a hardcoded bare compare would fail with
+    // "operator does not exist: uuid = text". The shared resolver reads the
+    // catalog once and returns the valid, index-friendly form.
+    const tenantPredicate = await resolveTenantRlsPredicate(
+      queryRunner,
+      'inventory_purchase_documents',
+    );
+
     await queryRunner.query(`
       DO $$
       BEGIN
@@ -57,7 +68,7 @@ export class CreateInventoryPurchaseDocuments1776000000000 implements MigrationI
         ) THEN
           CREATE POLICY inventory_purchase_documents_tenant_select ON inventory_purchase_documents
           FOR SELECT
-          USING (tenant_id = current_setting('app.tenant_id', true));
+          USING (${tenantPredicate});
         END IF;
       END;
       $$
@@ -74,7 +85,7 @@ export class CreateInventoryPurchaseDocuments1776000000000 implements MigrationI
         ) THEN
           CREATE POLICY inventory_purchase_documents_tenant_insert ON inventory_purchase_documents
           FOR INSERT
-          WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+          WITH CHECK (${tenantPredicate});
         END IF;
       END;
       $$
@@ -91,8 +102,8 @@ export class CreateInventoryPurchaseDocuments1776000000000 implements MigrationI
         ) THEN
           CREATE POLICY inventory_purchase_documents_tenant_update ON inventory_purchase_documents
           FOR UPDATE
-          USING (tenant_id = current_setting('app.tenant_id', true))
-          WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+          USING (${tenantPredicate})
+          WITH CHECK (${tenantPredicate});
         END IF;
       END;
       $$
@@ -109,7 +120,7 @@ export class CreateInventoryPurchaseDocuments1776000000000 implements MigrationI
         ) THEN
           CREATE POLICY inventory_purchase_documents_tenant_delete ON inventory_purchase_documents
           FOR DELETE
-          USING (tenant_id = current_setting('app.tenant_id', true));
+          USING (${tenantPredicate});
         END IF;
       END;
       $$
