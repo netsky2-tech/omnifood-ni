@@ -43,18 +43,47 @@ export class CreateDeviceSyncCredentials1807000000000 implements MigrationInterf
       ALTER TABLE device_sync_credentials ENABLE ROW LEVEL SECURITY;
       ALTER TABLE device_sync_credentials FORCE ROW LEVEL SECURITY;
 
-      CREATE POLICY device_sync_credentials_tenant_select ON device_sync_credentials
-        FOR SELECT USING (tenant_id = current_setting('app.tenant_id', true));
-
-      CREATE POLICY device_sync_credentials_tenant_insert ON device_sync_credentials
-        FOR INSERT WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
-
-      CREATE POLICY device_sync_credentials_tenant_update ON device_sync_credentials
-        FOR UPDATE USING (tenant_id = current_setting('app.tenant_id', true))
-        WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
-
-      CREATE POLICY device_sync_credentials_tenant_delete ON device_sync_credentials
-        FOR DELETE USING (tenant_id = current_setting('app.tenant_id', true));
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = 'device_sync_credentials'
+            AND policyname = 'device_sync_credentials_tenant_select'
+        ) THEN
+          CREATE POLICY device_sync_credentials_tenant_select ON device_sync_credentials
+            FOR SELECT USING (tenant_id = current_setting('app.tenant_id', true));
+        END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = 'device_sync_credentials'
+            AND policyname = 'device_sync_credentials_tenant_insert'
+        ) THEN
+          CREATE POLICY device_sync_credentials_tenant_insert ON device_sync_credentials
+            FOR INSERT WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+        END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = 'device_sync_credentials'
+            AND policyname = 'device_sync_credentials_tenant_update'
+        ) THEN
+          CREATE POLICY device_sync_credentials_tenant_update ON device_sync_credentials
+            FOR UPDATE USING (tenant_id = current_setting('app.tenant_id', true))
+            WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+        END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = 'device_sync_credentials'
+            AND policyname = 'device_sync_credentials_tenant_delete'
+        ) THEN
+          CREATE POLICY device_sync_credentials_tenant_delete ON device_sync_credentials
+            FOR DELETE USING (tenant_id = current_setting('app.tenant_id', true));
+        END IF;
+      END;
+      $$;
 
       CREATE TABLE IF NOT EXISTS device_sync_credential_events (
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -77,11 +106,28 @@ export class CreateDeviceSyncCredentials1807000000000 implements MigrationInterf
       ALTER TABLE device_sync_credential_events ENABLE ROW LEVEL SECURITY;
       ALTER TABLE device_sync_credential_events FORCE ROW LEVEL SECURITY;
 
-      CREATE POLICY device_sync_cred_events_tenant_select ON device_sync_credential_events
-        FOR SELECT USING (tenant_id = current_setting('app.tenant_id', true));
-
-      CREATE POLICY device_sync_cred_events_tenant_insert ON device_sync_credential_events
-        FOR INSERT WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = 'device_sync_credential_events'
+            AND policyname = 'device_sync_cred_events_tenant_select'
+        ) THEN
+          CREATE POLICY device_sync_cred_events_tenant_select ON device_sync_credential_events
+            FOR SELECT USING (tenant_id = current_setting('app.tenant_id', true));
+        END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = 'device_sync_credential_events'
+            AND policyname = 'device_sync_cred_events_tenant_insert'
+        ) THEN
+          CREATE POLICY device_sync_cred_events_tenant_insert ON device_sync_credential_events
+            FOR INSERT WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+        END IF;
+      END;
+      $$;
 
       CREATE OR REPLACE FUNCTION guard_device_sync_credential_events_immutability() RETURNS trigger AS $$
       BEGIN

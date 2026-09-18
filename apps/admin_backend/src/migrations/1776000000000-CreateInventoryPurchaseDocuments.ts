@@ -47,28 +47,72 @@ export class CreateInventoryPurchaseDocuments1776000000000 implements MigrationI
     `);
 
     await queryRunner.query(`
-      CREATE POLICY inventory_purchase_documents_tenant_select ON inventory_purchase_documents
-      FOR SELECT
-      USING (tenant_id = current_setting('app.tenant_id', true))
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = 'inventory_purchase_documents'
+            AND policyname = 'inventory_purchase_documents_tenant_select'
+        ) THEN
+          CREATE POLICY inventory_purchase_documents_tenant_select ON inventory_purchase_documents
+          FOR SELECT
+          USING (tenant_id = current_setting('app.tenant_id', true));
+        END IF;
+      END;
+      $$
     `);
 
     await queryRunner.query(`
-      CREATE POLICY inventory_purchase_documents_tenant_insert ON inventory_purchase_documents
-      FOR INSERT
-      WITH CHECK (tenant_id = current_setting('app.tenant_id', true))
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = 'inventory_purchase_documents'
+            AND policyname = 'inventory_purchase_documents_tenant_insert'
+        ) THEN
+          CREATE POLICY inventory_purchase_documents_tenant_insert ON inventory_purchase_documents
+          FOR INSERT
+          WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+        END IF;
+      END;
+      $$
     `);
 
     await queryRunner.query(`
-      CREATE POLICY inventory_purchase_documents_tenant_update ON inventory_purchase_documents
-      FOR UPDATE
-      USING (tenant_id = current_setting('app.tenant_id', true))
-      WITH CHECK (tenant_id = current_setting('app.tenant_id', true))
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = 'inventory_purchase_documents'
+            AND policyname = 'inventory_purchase_documents_tenant_update'
+        ) THEN
+          CREATE POLICY inventory_purchase_documents_tenant_update ON inventory_purchase_documents
+          FOR UPDATE
+          USING (tenant_id = current_setting('app.tenant_id', true))
+          WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+        END IF;
+      END;
+      $$
     `);
 
     await queryRunner.query(`
-      CREATE POLICY inventory_purchase_documents_tenant_delete ON inventory_purchase_documents
-      FOR DELETE
-      USING (tenant_id = current_setting('app.tenant_id', true))
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = 'inventory_purchase_documents'
+            AND policyname = 'inventory_purchase_documents_tenant_delete'
+        ) THEN
+          CREATE POLICY inventory_purchase_documents_tenant_delete ON inventory_purchase_documents
+          FOR DELETE
+          USING (tenant_id = current_setting('app.tenant_id', true));
+        END IF;
+      END;
+      $$
     `);
   }
 

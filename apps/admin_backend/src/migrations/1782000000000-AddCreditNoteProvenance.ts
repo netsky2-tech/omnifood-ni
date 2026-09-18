@@ -194,14 +194,46 @@ export class AddCreditNoteProvenance1782000000000 implements MigrationInterface 
       DROP POLICY IF EXISTS credit_note_${tableName}_tenant_insert ON ${tableName};
       DROP POLICY IF EXISTS credit_note_${tableName}_tenant_update ON ${tableName};
       DROP POLICY IF EXISTS credit_note_${tableName}_tenant_delete ON ${tableName};
-      CREATE POLICY credit_note_${tableName}_tenant_select
-        ON ${tableName} FOR SELECT USING (${predicate});
-      CREATE POLICY credit_note_${tableName}_tenant_insert
-        ON ${tableName} FOR INSERT WITH CHECK (${predicate});
-      CREATE POLICY credit_note_${tableName}_tenant_update
-        ON ${tableName} FOR UPDATE USING (${predicate}) WITH CHECK (${predicate});
-      CREATE POLICY credit_note_${tableName}_tenant_delete
-        ON ${tableName} FOR DELETE USING (${predicate});
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = '${tableName}'
+            AND policyname = 'credit_note_${tableName}_tenant_select'
+        ) THEN
+          CREATE POLICY credit_note_${tableName}_tenant_select
+            ON ${tableName} FOR SELECT USING (${predicate});
+        END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = '${tableName}'
+            AND policyname = 'credit_note_${tableName}_tenant_insert'
+        ) THEN
+          CREATE POLICY credit_note_${tableName}_tenant_insert
+            ON ${tableName} FOR INSERT WITH CHECK (${predicate});
+        END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = '${tableName}'
+            AND policyname = 'credit_note_${tableName}_tenant_update'
+        ) THEN
+          CREATE POLICY credit_note_${tableName}_tenant_update
+            ON ${tableName} FOR UPDATE USING (${predicate}) WITH CHECK (${predicate});
+        END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = '${tableName}'
+            AND policyname = 'credit_note_${tableName}_tenant_delete'
+        ) THEN
+          CREATE POLICY credit_note_${tableName}_tenant_delete
+            ON ${tableName} FOR DELETE USING (${predicate});
+        END IF;
+      END;
+      $$;
     `);
   }
 

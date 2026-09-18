@@ -88,19 +88,41 @@ export class AddDeterministicSyncSequencing1780000000000 implements MigrationInt
       DROP POLICY IF EXISTS sync_ledger_${tableName}_tenant_select ON ${tableName}
     `);
     await queryRunner.query(`
-      CREATE POLICY sync_ledger_${tableName}_tenant_select
-      ON ${tableName}
-      FOR SELECT
-      USING (${tenantPredicate})
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = '${tableName}'
+            AND policyname = 'sync_ledger_${tableName}_tenant_select'
+        ) THEN
+          CREATE POLICY sync_ledger_${tableName}_tenant_select
+          ON ${tableName}
+          FOR SELECT
+          USING (${tenantPredicate});
+        END IF;
+      END;
+      $$
     `);
     await queryRunner.query(`
       DROP POLICY IF EXISTS sync_ledger_${tableName}_tenant_insert ON ${tableName}
     `);
     await queryRunner.query(`
-      CREATE POLICY sync_ledger_${tableName}_tenant_insert
-      ON ${tableName}
-      FOR INSERT
-      WITH CHECK (${tenantPredicate})
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = '${tableName}'
+            AND policyname = 'sync_ledger_${tableName}_tenant_insert'
+        ) THEN
+          CREATE POLICY sync_ledger_${tableName}_tenant_insert
+          ON ${tableName}
+          FOR INSERT
+          WITH CHECK (${tenantPredicate});
+        END IF;
+      END;
+      $$
     `);
 
     if (!options.allowUpdate) {
@@ -108,20 +130,42 @@ export class AddDeterministicSyncSequencing1780000000000 implements MigrationInt
         DROP POLICY IF EXISTS sync_ledger_${tableName}_append_only_update ON ${tableName}
       `);
       await queryRunner.query(`
-        CREATE POLICY sync_ledger_${tableName}_append_only_update
-        ON ${tableName}
-        FOR UPDATE
-        USING (${tenantPredicate})
-        WITH CHECK (${tenantPredicate})
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_policies
+            WHERE schemaname = current_schema()
+              AND tablename = '${tableName}'
+              AND policyname = 'sync_ledger_${tableName}_append_only_update'
+          ) THEN
+            CREATE POLICY sync_ledger_${tableName}_append_only_update
+            ON ${tableName}
+            FOR UPDATE
+            USING (${tenantPredicate})
+            WITH CHECK (${tenantPredicate});
+          END IF;
+        END;
+        $$
       `);
       await queryRunner.query(`
         DROP POLICY IF EXISTS sync_ledger_${tableName}_append_only_delete ON ${tableName}
       `);
       await queryRunner.query(`
-        CREATE POLICY sync_ledger_${tableName}_append_only_delete
-        ON ${tableName}
-        FOR DELETE
-        USING (${tenantPredicate})
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_policies
+            WHERE schemaname = current_schema()
+              AND tablename = '${tableName}'
+              AND policyname = 'sync_ledger_${tableName}_append_only_delete'
+          ) THEN
+            CREATE POLICY sync_ledger_${tableName}_append_only_delete
+            ON ${tableName}
+            FOR DELETE
+            USING (${tenantPredicate});
+          END IF;
+        END;
+        $$
       `);
       return;
     }
@@ -130,11 +174,22 @@ export class AddDeterministicSyncSequencing1780000000000 implements MigrationInt
       DROP POLICY IF EXISTS sync_ledger_${tableName}_tenant_update ON ${tableName}
     `);
     await queryRunner.query(`
-      CREATE POLICY sync_ledger_${tableName}_tenant_update
-      ON ${tableName}
-      FOR UPDATE
-      USING (${tenantPredicate})
-      WITH CHECK (${tenantPredicate})
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = '${tableName}'
+            AND policyname = 'sync_ledger_${tableName}_tenant_update'
+        ) THEN
+          CREATE POLICY sync_ledger_${tableName}_tenant_update
+          ON ${tableName}
+          FOR UPDATE
+          USING (${tenantPredicate})
+          WITH CHECK (${tenantPredicate});
+        END IF;
+      END;
+      $$
     `);
   }
 

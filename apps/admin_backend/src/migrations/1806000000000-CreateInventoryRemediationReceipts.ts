@@ -36,11 +36,28 @@ export class CreateInventoryRemediationReceipts1806000000000 implements Migratio
       ALTER TABLE inventory_remediation_receipts ENABLE ROW LEVEL SECURITY;
       ALTER TABLE inventory_remediation_receipts FORCE ROW LEVEL SECURITY;
 
-      CREATE POLICY remediation_receipts_select ON inventory_remediation_receipts
-        FOR SELECT USING (tenant_id = current_setting('app.tenant_id', true));
-
-      CREATE POLICY remediation_receipts_insert ON inventory_remediation_receipts
-        FOR INSERT WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = 'inventory_remediation_receipts'
+            AND policyname = 'remediation_receipts_select'
+        ) THEN
+          CREATE POLICY remediation_receipts_select ON inventory_remediation_receipts
+            FOR SELECT USING (tenant_id = current_setting('app.tenant_id', true));
+        END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = 'inventory_remediation_receipts'
+            AND policyname = 'remediation_receipts_insert'
+        ) THEN
+          CREATE POLICY remediation_receipts_insert ON inventory_remediation_receipts
+            FOR INSERT WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+        END IF;
+      END;
+      $$;
 
       CREATE OR REPLACE FUNCTION guard_remediation_receipt_immutability() RETURNS trigger AS $$
       BEGIN

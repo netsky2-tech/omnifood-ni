@@ -51,10 +51,21 @@ export class AddBatch6bCostingLifecycle1785000000000 implements MigrationInterfa
       ALTER TABLE kardex_recalculate_queue ENABLE ROW LEVEL SECURITY;
       ALTER TABLE kardex_recalculate_queue FORCE ROW LEVEL SECURITY;
       DROP POLICY IF EXISTS kardex_queue_tenant_isolation ON kardex_recalculate_queue;
-      CREATE POLICY kardex_queue_tenant_isolation ON kardex_recalculate_queue
-        FOR ALL
-        USING (tenant_id = current_setting('app.tenant_id', true))
-        WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = 'kardex_recalculate_queue'
+            AND policyname = 'kardex_queue_tenant_isolation'
+        ) THEN
+          CREATE POLICY kardex_queue_tenant_isolation ON kardex_recalculate_queue
+            FOR ALL
+            USING (tenant_id = current_setting('app.tenant_id', true))
+            WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+        END IF;
+      END;
+      $$;
     `);
 
     // 3. Create kardex_correction table with RLS and append-only trigger
@@ -108,10 +119,21 @@ export class AddBatch6bCostingLifecycle1785000000000 implements MigrationInterfa
       ALTER TABLE kardex_correction ENABLE ROW LEVEL SECURITY;
       ALTER TABLE kardex_correction FORCE ROW LEVEL SECURITY;
       DROP POLICY IF EXISTS kardex_correction_tenant_isolation ON kardex_correction;
-      CREATE POLICY kardex_correction_tenant_isolation ON kardex_correction
-        FOR ALL
-        USING (tenant_id = current_setting('app.tenant_id', true))
-        WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = 'kardex_correction'
+            AND policyname = 'kardex_correction_tenant_isolation'
+        ) THEN
+          CREATE POLICY kardex_correction_tenant_isolation ON kardex_correction
+            FOR ALL
+            USING (tenant_id = current_setting('app.tenant_id', true))
+            WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+        END IF;
+      END;
+      $$;
     `);
   }
 

@@ -65,10 +65,42 @@ export class CreateProductInventoryMappingVersions1802000000000 implements Migra
     await queryRunner.query(`
       ALTER TABLE product_inventory_mapping_versions ENABLE ROW LEVEL SECURITY;
       ALTER TABLE product_inventory_mapping_versions FORCE ROW LEVEL SECURITY;
-      CREATE POLICY mapping_version_select ON product_inventory_mapping_versions FOR SELECT USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
-      CREATE POLICY mapping_version_insert ON product_inventory_mapping_versions FOR INSERT WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
-      CREATE POLICY mapping_version_update ON product_inventory_mapping_versions FOR UPDATE USING (tenant_id = current_setting('app.tenant_id', true)::uuid) WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
-      CREATE POLICY mapping_version_delete ON product_inventory_mapping_versions FOR DELETE USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = 'product_inventory_mapping_versions'
+            AND policyname = 'mapping_version_select'
+        ) THEN
+          CREATE POLICY mapping_version_select ON product_inventory_mapping_versions FOR SELECT USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
+        END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = 'product_inventory_mapping_versions'
+            AND policyname = 'mapping_version_insert'
+        ) THEN
+          CREATE POLICY mapping_version_insert ON product_inventory_mapping_versions FOR INSERT WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
+        END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = 'product_inventory_mapping_versions'
+            AND policyname = 'mapping_version_update'
+        ) THEN
+          CREATE POLICY mapping_version_update ON product_inventory_mapping_versions FOR UPDATE USING (tenant_id = current_setting('app.tenant_id', true)::uuid) WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
+        END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = current_schema()
+            AND tablename = 'product_inventory_mapping_versions'
+            AND policyname = 'mapping_version_delete'
+        ) THEN
+          CREATE POLICY mapping_version_delete ON product_inventory_mapping_versions FOR DELETE USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
+        END IF;
+      END;
+      $$;
     `);
 
     // 5. Trigger guarding historical immutability: protects id, created_at, tenant, product, insumo, effective_at, and closed rows

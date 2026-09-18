@@ -7,8 +7,10 @@
 #               every column the entities declare exists in those tables.
 #   Scenario 2: simulate a pre-existing environment — the same database already
 #               holds every table, but the migrations ledger has no rows for the
-#               bootstrap migrations and the three previously non-idempotent
-#               creates. Re-running the migration set must succeed (no
+#               bootstrap migrations, the three previously non-idempotent
+#               creates, and the sixteen migrations whose CREATE POLICY
+#               statements were guarded for re-application (issue #285).
+#               Re-running the migration set must succeed (no
 #               "already exists" failure) and leave every entity table present.
 #
 # Why this exists
@@ -347,21 +349,23 @@ printf '%s\n' "PASS (scenario 1): the migration set builds every entity table an
 
 # ---------------------------------------------------------------------------
 # Scenario 2: a developer database with a partial ledger. The tables already
-# exist, but the migrations ledger has no row for the bootstrap migrations nor
-# for the four creates that used to be non-idempotent (the three CREATE TABLEs
-# and the follow-up RLS migration), so TypeORM re-runs them. Every statement
-# those migrations issue must tolerate the existing schema instead of failing
-# with "already exists".
+# exist, but the migrations ledger has no row for the bootstrap migrations, the
+# four creates that used to be non-idempotent (the three CREATE TABLEs and the
+# follow-up RLS migration), nor for the sixteen migrations whose CREATE POLICY
+# statements were guarded for re-application (issue #285), so TypeORM re-runs
+# them. Every statement those migrations issue must tolerate the existing
+# schema instead of failing with "already exists".
 # ---------------------------------------------------------------------------
 printf '\n%s\n' "==> Scenario 2: re-running against the same database with a partial ledger"
 
-partial_ledger_names="CreateBaseCashierSessions1759000000000,CreateBootstrapIdentityTables1759000000001,CreateBootstrapInventorySalesTables1759000000002,CreateBootstrapExtensions1759000000003,CreateBootstrapLoyaltyTables1759000000004,CreateBootstrapSalesTables1759000000005,AddTenantCapabilityEvent1785000000000,CreateTenantTopologyRevisions1794000000000,AddTenantTopologyRevisionsRls1794000000001,CreateTenantFulfillmentRecords1795000000000"
+partial_ledger_names="CreateBaseCashierSessions1759000000000,CreateBootstrapIdentityTables1759000000001,CreateBootstrapInventorySalesTables1759000000002,CreateBootstrapExtensions1759000000003,CreateBootstrapLoyaltyTables1759000000004,CreateBootstrapSalesTables1759000000005,AddTenantCapabilityEvent1785000000000,CreateTenantTopologyRevisions1794000000000,AddTenantTopologyRevisionsRls1794000000001,CreateTenantFulfillmentRecords1795000000000,CreateCatalogValues1768000000000,CreateInventoryPurchaseDocuments1776000000000,AddDeterministicSyncSequencing1780000000000,AddCreditNoteProvenance1782000000000,CreateSystemParametersConfig1784000000000,AddBatch6bCostingLifecycle1785000000000,CreateProductInventoryMappingVersions1802000000000,CreateInventoryRemediationReceipts1806000000000,CreateDeviceSyncCredentials1807000000000,RepairTenantTopologyRevisions1808000000000,CreateHumanAuthorizationCore1809000000000,EnforceOnboardingFiscalTenantRls1809000000001,CreateHumanAuthorizationRecovery1809010000000,CreateHumanAuthorizationObservability1809020000000,CreateHumanAuthorizationTenantPublicationState1809040000000,CreateHumanAuthorizationPolicySnapshots1809050000000"
 deleted_rows="$(psql_admin -d "${SCRATCH_DB}" -tAc \
   "WITH removed AS (DELETE FROM migrations WHERE name = ANY (string_to_array('${partial_ledger_names}', ',')) RETURNING 1) SELECT count(*) FROM removed" \
   | tr -d ' ')"
-printf 'ledger rows removed    : %s (expected 10)\n' "${deleted_rows}"
-if [ "${deleted_rows}" -ne 10 ]; then
-  fail "FAIL: expected to remove 10 ledger rows to simulate the partial ledger, removed ${deleted_rows}."
+expected_deleted_rows=26
+printf 'ledger rows removed    : %s (expected %s)\n' "${deleted_rows}" "${expected_deleted_rows}"
+if [ "${deleted_rows}" -ne "${expected_deleted_rows}" ]; then
+  fail "FAIL: expected to remove ${expected_deleted_rows} ledger rows to simulate the partial ledger, removed ${deleted_rows}."
 fi
 
 migration2_status=0
