@@ -34,8 +34,11 @@ import { PromotionForm } from './PromotionForm';
 import { type Promotion, PromotionType, PROMOTION_TYPE_LABELS } from '@/types/promotions';
 import { formatCurrency, formatDate, DAYS_OF_WEEK } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
+import { useRbac } from '@/lib/rbac';
 
 export function PromotionsList() {
+  const { canPerformAction } = useRbac();
+  const canWrite = canPerformAction('promotions.write');
   const { data: promotions, isLoading, error, refetch } = usePromotions();
   const togglePromotion = useTogglePromotion();
   const deletePromotion = useDeletePromotion();
@@ -64,7 +67,11 @@ export function PromotionsList() {
       await togglePromotion.mutateAsync({ id: promotion.id, isActive: !promotion.is_active });
       toast({ title: promotion.is_active ? 'Promoción desactivada' : 'Promoción activada' });
     } catch (err) {
-      toast({ title: 'Error', description: 'No se pudo cambiar el estado', variant: 'destructive' });
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'No se pudo cambiar el estado',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -74,7 +81,11 @@ export function PromotionsList() {
       await deletePromotion.mutateAsync(id);
       toast({ title: 'Promoción eliminada' });
     } catch (err) {
-      toast({ title: 'Error', description: 'No se pudo eliminar la promoción', variant: 'destructive' });
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'No se pudo eliminar la promoción',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -123,10 +134,12 @@ export function PromotionsList() {
           <h1 className="text-2xl font-bold text-foreground">Promociones</h1>
           <p className="text-sm text-muted-foreground">Gestione promociones, descuentos y ofertas programadas</p>
         </div>
-        <Button onClick={() => { setEditingPromotion(null); setIsFormOpen(true); }}>
-          <Plus className="h-4 w-4 mr-2" />
-          Nueva Promoción
-        </Button>
+        {canWrite && (
+          <Button onClick={() => { setEditingPromotion(null); setIsFormOpen(true); }}>
+            <Plus className="h-4 w-4 mr-2" />
+            Nueva Promoción
+          </Button>
+        )}
       </div>
 
       <div className="flex flex-col sm:flex-row gap-4">
@@ -250,34 +263,52 @@ export function PromotionsList() {
                   </TableCell>
                   <TableCell className="tabular-nums">{promotion.priority}</TableCell>
                   <TableCell>
-                    <Switch
-                      checked={promotion.is_active}
-                      onCheckedChange={() => handleToggle(promotion)}
-                      disabled={togglePromotion.isPending}
-                      aria-label={promotion.is_active ? 'Desactivar' : 'Activar'}
-                    />
+                    {canWrite ? (
+                      <Switch
+                        checked={promotion.is_active}
+                        onCheckedChange={() => handleToggle(promotion)}
+                        disabled={togglePromotion.isPending}
+                        aria-label={promotion.is_active ? 'Desactivar' : 'Activar'}
+                      />
+                    ) : (
+                      <Badge variant={promotion.is_active ? 'default' : 'secondary'}>
+                        {promotion.is_active ? 'Activa' : 'Inactiva'}
+                      </Badge>
+                    )}
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => handleEdit(promotion)}
-                        disabled={togglePromotion.isPending || deletePromotion.isPending}
-                        aria-label="Editar promoción"
+                        onClick={() => handleView(promotion)}
+                        aria-label="Ver detalles"
                       >
-                        <Edit className="h-4 w-4" />
+                        <Eye className="h-4 w-4" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDelete(promotion.id)}
-                        disabled={togglePromotion.isPending || deletePromotion.isPending}
-                        className="text-destructive hover:text-destructive"
-                        aria-label="Eliminar promoción"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      {canWrite && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleEdit(promotion)}
+                            disabled={togglePromotion.isPending || deletePromotion.isPending}
+                            aria-label="Editar promoción"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDelete(promotion.id)}
+                            disabled={togglePromotion.isPending || deletePromotion.isPending}
+                            className="text-destructive hover:text-destructive"
+                            aria-label="Eliminar promoción"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>

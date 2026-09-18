@@ -86,7 +86,7 @@ describe('AddSaleCorrelationIdToInventoryKardex1804000000000 (db)', () => {
         const columnCheck: unknown = await queryRunner.query(`
           SELECT column_name, data_type, is_nullable
           FROM information_schema.columns
-          WHERE table_name = 'inventory_kardex' AND column_name = 'sale_correlation_id'
+          WHERE table_schema = current_schema() AND table_name = 'inventory_kardex' AND column_name = 'sale_correlation_id'
         `);
         const columns = columnCheck as Array<{ column_name: string; data_type: string; is_nullable: string }>;
         expect(columns).toHaveLength(1);
@@ -96,7 +96,7 @@ describe('AddSaleCorrelationIdToInventoryKardex1804000000000 (db)', () => {
         const indexCheck: unknown = await queryRunner.query(`
           SELECT indexname, indexdef
           FROM pg_indexes
-          WHERE tablename = 'inventory_kardex' AND indexname = 'uq_inventory_kardex_sale_correlation'
+          WHERE schemaname = current_schema() AND tablename = 'inventory_kardex' AND indexname = 'uq_inventory_kardex_sale_correlation'
         `);
         const indexes = indexCheck as Array<{ indexname: string; indexdef: string }>;
         expect(indexes).toHaveLength(1);
@@ -188,14 +188,14 @@ describe('AddSaleCorrelationIdToInventoryKardex1804000000000 (db)', () => {
         const columnCheck: unknown = await queryRunner.query(`
           SELECT column_name
           FROM information_schema.columns
-          WHERE table_name = 'inventory_kardex' AND column_name = 'sale_correlation_id'
+          WHERE table_schema = current_schema() AND table_name = 'inventory_kardex' AND column_name = 'sale_correlation_id'
         `);
         expect(columnCheck as unknown[]).toHaveLength(0);
 
         const indexCheck: unknown = await queryRunner.query(`
           SELECT indexname
           FROM pg_indexes
-          WHERE tablename = 'inventory_kardex' AND indexname = 'uq_inventory_kardex_sale_correlation'
+          WHERE schemaname = current_schema() AND tablename = 'inventory_kardex' AND indexname = 'uq_inventory_kardex_sale_correlation'
         `);
         expect(indexCheck as unknown[]).toHaveLength(0);
       });

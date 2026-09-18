@@ -1,6 +1,10 @@
 import { useState } from "react";
+import { formatLocalDate } from "@/lib/utils";
 import { FreshnessBadge } from "@/components/freshness-badge";
 import { DateRangePicker, type DateRangeValue } from "@/components/date-range-picker";
+import { StatCard } from "@/components/ui/stat-card";
+import { LoadingState } from "@/components/ui/loading-state";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   useMonthlyFiscalSummary,
   useVoidedInvoices,
@@ -35,35 +39,35 @@ function SummaryTab(_props: { startDate?: string; endDate?: string }) {
   const { year, month } = currentMonthYear();
   const { data, isLoading } = useMonthlyFiscalSummary(year, month);
 
-  if (isLoading) return <LoadingState />;
+  if (isLoading) return <LoadingState message="Cargando resumen fiscal mensual..." />;
   if (!data) return <EmptyState message="Sin datos de resumen fiscal" />;
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard label="Ventas Brutas" value={formatCurrency(data.totalGrossSales)} />
         <StatCard label="Facturas" value={String(data.invoiceCount)} />
         <StatCard label="IVA Recaudado" value={formatCurrency(data.totalTaxCollected)} />
       </div>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard label="Ventas Gravables" value={formatCurrency(data.totalTaxableSales)} />
         <StatCard label="Ventas Exentas" value={formatCurrency(data.totalExemptSales)} />
         <StatCard label="Notas de Crédito" value={String(data.creditNoteCount)} />
       </div>
-      <div className="rounded-lg border border-border bg-card p-6">
-        <h3 className="mb-3 text-sm font-semibold uppercase text-muted-foreground">
-          Resumen Fiscal
+      <div className="rounded-lg border border-border bg-card p-5 sm:p-6 shadow-xs">
+        <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Resumen Fiscal (DGI)
         </h3>
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           {[
             { label: "Neto Gravable", val: formatCurrency(data.netTaxableSales) },
             { label: "IVA Neto a Pagar", val: formatCurrency(data.netTaxPayable) },
             { label: "Notas de Crédito (total)", val: formatCurrency(data.totalCreditNotes) },
             { label: "IVA en Notas de Crédito", val: formatCurrency(data.totalCreditNotesTax) },
           ].map((item) => (
-            <div key={item.label} className="flex justify-between text-sm">
+            <div key={item.label} className="flex justify-between text-sm py-1 border-b border-border/50 last:border-0">
               <span className="text-muted-foreground">{item.label}</span>
-              <span className="tabular-nums">{item.val}</span>
+              <span className="tabular-nums font-medium text-foreground">{item.val}</span>
             </div>
           ))}
         </div>
@@ -76,50 +80,52 @@ function SummaryTab(_props: { startDate?: string; endDate?: string }) {
 function VoidedTab({ startDate, endDate }: { startDate?: string; endDate?: string }) {
   const { data, isLoading } = useVoidedInvoices(startDate, endDate);
 
-  if (isLoading) return <LoadingState />;
+  if (isLoading) return <LoadingState message="Cargando facturas anuladas..." />;
   if (!data) return <EmptyState message="Sin datos de anulaciones" />;
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <StatCard label="Total Anuladas" value={String(data.totalVoidedCount)} />
         <StatCard label="Monto Total Anulado" value={formatCurrency(data.totalVoidedAmount)} />
       </div>
-      <div className="rounded-lg border border-border bg-card">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border bg-muted">
-              <th className="px-4 py-3 text-left font-semibold uppercase text-muted-foreground">
-                Factura
-              </th>
-              <th className="px-4 py-3 text-left font-semibold uppercase text-muted-foreground">
-                Cajero
-              </th>
-              <th className="px-4 py-3 text-right font-semibold uppercase text-muted-foreground">
-                Total
-              </th>
-              <th className="px-4 py-3 text-left font-semibold uppercase text-muted-foreground">
-                Motivo
-              </th>
-              <th className="px-4 py-3 text-left font-semibold uppercase text-muted-foreground">
-                Fecha
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.invoices.map((inv) => (
-              <tr key={inv.id} className="border-b border-border last:border-0 hover:bg-muted/50">
-                <td className="px-4 py-3 font-mono text-xs">{inv.number}</td>
-                <td className="px-4 py-3">{inv.cashierName}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{formatCurrency(inv.total)}</td>
-                <td className="px-4 py-3 text-muted-foreground">{inv.voidReason}</td>
-                <td className="px-4 py-3 text-muted-foreground">
-                  {new Date(inv.canceledAt).toLocaleDateString("es-NI")}
-                </td>
+      <div className="rounded-lg border border-border bg-card shadow-xs overflow-hidden">
+        <div className="overflow-x-auto w-full">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/60">
+                <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
+                  Factura
+                </th>
+                <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
+                  Cajero
+                </th>
+                <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
+                  Total
+                </th>
+                <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
+                  Motivo
+                </th>
+                <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
+                  Fecha
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {data.invoices.map((inv) => (
+                <tr key={inv.id} className="border-b border-border last:border-0 hover:bg-muted/40 transition-colors">
+                  <td className="px-4 py-3 font-mono text-xs font-medium text-foreground">{inv.number}</td>
+                  <td className="px-4 py-3 text-foreground">{inv.cashierName}</td>
+                  <td className="px-4 py-3 text-right tabular-nums font-semibold text-foreground">{formatCurrency(inv.total)}</td>
+                  <td className="px-4 py-3 text-muted-foreground text-xs">{inv.voidReason}</td>
+                  <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">
+                    {new Date(inv.canceledAt).toLocaleDateString("es-NI")}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
       <FreshnessBadge generatedAt={data.generatedAt} />
     </div>
@@ -129,23 +135,23 @@ function VoidedTab({ startDate, endDate }: { startDate?: string; endDate?: strin
 function SequenceTab({ startDate, endDate }: { startDate?: string; endDate?: string }) {
   const { data, isLoading } = useSequenceAudit(startDate, endDate);
 
-  if (isLoading) return <LoadingState />;
+  if (isLoading) return <LoadingState message="Auditoría de correlatividad fiscal en progreso..." />;
   if (!data) return <EmptyState message="Sin datos de auditoría de secuencia" />;
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard label="Secuencia Esperada" value={String(data.expectedCount)} />
         <StatCard label="Secuencia Real" value={String(data.actualCount)} />
         <StatCard
           label="Secuencias Faltantes"
           value={String(data.missingSequences.length)}
-          variant={data.hasGaps ? "warning" : "default"}
+          accent={data.hasGaps}
         />
       </div>
 
       {data.hasGaps && (
-        <div className="rounded-lg border border-yellow-300 bg-yellow-50 p-4 text-sm text-yellow-800 dark:border-yellow-700 dark:bg-yellow-950 dark:text-yellow-200">
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
           {data.missingSequences.length} secuencia(s) faltante(s):{" "}
           <span className="font-mono">{data.missingSequences.join(", ")}</span>
         </div>
@@ -158,60 +164,128 @@ function SequenceTab({ startDate, endDate }: { startDate?: string; endDate?: str
         </div>
       )}
 
-      <div className="rounded-lg border border-border bg-card">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border bg-muted">
-              <th className="px-4 py-3 text-left font-semibold uppercase text-muted-foreground">
-                Serie
-              </th>
-              <th className="px-4 py-3 text-right font-semibold uppercase text-muted-foreground">
-                Inicio
-              </th>
-              <th className="px-4 py-3 text-right font-semibold uppercase text-muted-foreground">
-                Fin
-              </th>
-              <th className="px-4 py-3 text-right font-semibold uppercase text-muted-foreground">
-                Real / Esperado
-              </th>
-              <th className="px-4 py-3 text-center font-semibold uppercase text-muted-foreground">
-                Estado
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.series.map((s) => (
-              <tr key={s.seriesPrefix} className="border-b border-border last:border-0 hover:bg-muted/50">
-                <td className="px-4 py-3 font-mono text-xs">{s.seriesPrefix}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{s.startSequence}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{s.endSequence}</td>
-                <td className="px-4 py-3 text-right tabular-nums">
-                  {s.actualCount} / {s.expectedCount}
-                </td>
-                <td className="px-4 py-3 text-center">
-                  {s.hasGaps ? (
-                    <span className="inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
-                      CON FALTAS
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900 dark:text-green-200">
-                      OK
-                    </span>
-                  )}
-                </td>
+      <div className="rounded-lg border border-border bg-card shadow-xs overflow-hidden">
+        <div className="overflow-x-auto w-full">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/60">
+                <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
+                  Serie
+                </th>
+                <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
+                  Inicio
+                </th>
+                <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
+                  Fin
+                </th>
+                <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
+                  Real / Esperado
+                </th>
+                <th className="px-4 py-3 text-center font-semibold uppercase text-xs text-muted-foreground">
+                  Estado
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {data.series.map((s) => (
+                <tr key={s.seriesPrefix} className="border-b border-border last:border-0 hover:bg-muted/40 transition-colors">
+                  <td className="px-4 py-3 font-mono text-xs font-medium text-foreground">{s.seriesPrefix}</td>
+                  <td className="px-4 py-3 text-right tabular-nums text-foreground">{s.startSequence}</td>
+                  <td className="px-4 py-3 text-right tabular-nums text-foreground">{s.endSequence}</td>
+                  <td className="px-4 py-3 text-right tabular-nums font-medium text-foreground">
+                    {s.actualCount} / {s.expectedCount}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    {s.hasGaps ? (
+                      <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800">
+                        CON FALTAS
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800">
+                        OK
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
       <FreshnessBadge generatedAt={data.generatedAt} />
     </div>
   );
 }
 
+function downloadBlob(content: string, filename: string, mimeType: string) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function convertRowsToCsv(rows: Record<string, unknown>[]): string {
+  if (!rows || rows.length === 0 || !rows[0]) return "";
+  const headers = Object.keys(rows[0]);
+  const headerLine = headers.join(",");
+  const dataLines = rows.map((r) =>
+    headers
+      .map((h) => {
+        const val = r[h];
+        if (val === null || val === undefined) return "";
+        const str = String(val);
+        if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+          return `"${str.replace(/"/g, '""')}"`;
+        }
+        return str;
+      })
+      .join(","),
+  );
+  return [headerLine, ...dataLines].join("\n");
+}
+
 function ExportsTab({ startDate, endDate }: { startDate?: string; endDate?: string }) {
   const salesBook = useSalesBookExport(startDate, endDate);
   const zReports = useZReportsExport(startDate, endDate);
+
+  const handleExportSalesBook = (format: "csv" | "json") => {
+    if (!salesBook.data) return;
+    const fileSuffix = `${startDate ?? "inicio"}_${endDate ?? "fin"}`;
+    if (format === "json") {
+      downloadBlob(
+        JSON.stringify(salesBook.data, null, 2),
+        `libro_ventas_${fileSuffix}.json`,
+        "application/json",
+      );
+    } else {
+      const csv = convertRowsToCsv(
+        (salesBook.data.records ?? []) as unknown as Record<string, unknown>[],
+      );
+      downloadBlob(csv, `libro_ventas_${fileSuffix}.csv`, "text/csv;charset=utf-8;");
+    }
+  };
+
+  const handleExportZReports = (format: "csv" | "json") => {
+    if (!zReports.data) return;
+    const fileSuffix = `${startDate ?? "inicio"}_${endDate ?? "fin"}`;
+    if (format === "json") {
+      downloadBlob(
+        JSON.stringify(zReports.data, null, 2),
+        `reportes_z_${fileSuffix}.json`,
+        "application/json",
+      );
+    } else {
+      const csv = convertRowsToCsv(
+        (zReports.data.records ?? []) as unknown as Record<string, unknown>[],
+      );
+      downloadBlob(csv, `reportes_z_${fileSuffix}.csv`, "text/csv;charset=utf-8;");
+    }
+  };
 
   if (salesBook.isLoading || zReports.isLoading) return <LoadingState />;
 
@@ -221,8 +295,16 @@ function ExportsTab({ startDate, endDate }: { startDate?: string; endDate?: stri
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-sm font-semibold uppercase text-muted-foreground">Libro de Ventas</h3>
           <div className="flex gap-2">
-            <ExportButton label="CSV" />
-            <ExportButton label="JSON" />
+            <ExportButton
+              label="CSV"
+              disabled={!salesBook.data || salesBook.data.totalRecords === 0}
+              onClick={() => handleExportSalesBook("csv")}
+            />
+            <ExportButton
+              label="JSON"
+              disabled={!salesBook.data || salesBook.data.totalRecords === 0}
+              onClick={() => handleExportSalesBook("json")}
+            />
           </div>
         </div>
         {salesBook.data ? (
@@ -253,8 +335,16 @@ function ExportsTab({ startDate, endDate }: { startDate?: string; endDate?: stri
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-sm font-semibold uppercase text-muted-foreground">Reportes Z</h3>
           <div className="flex gap-2">
-            <ExportButton label="CSV" />
-            <ExportButton label="JSON" />
+            <ExportButton
+              label="CSV"
+              disabled={!zReports.data || zReports.data.totalRecords === 0}
+              onClick={() => handleExportZReports("csv")}
+            />
+            <ExportButton
+              label="JSON"
+              disabled={!zReports.data || zReports.data.totalRecords === 0}
+              onClick={() => handleExportZReports("json")}
+            />
           </div>
         </div>
         {zReports.data ? (
@@ -272,89 +362,56 @@ function ExportsTab({ startDate, endDate }: { startDate?: string; endDate?: stri
   );
 }
 
-function StatCard({
+function ExportButton({
   label,
-  value,
-  variant = "default",
+  disabled,
+  onClick,
 }: {
   label: string;
-  value: string;
-  variant?: "default" | "warning";
+  disabled?: boolean;
+  onClick?: () => void;
 }) {
-  return (
-    <div
-      className={`rounded-lg border bg-card p-4 ${
-        variant === "warning"
-          ? "border-yellow-300 dark:border-yellow-700"
-          : "border-border"
-      }`}
-    >
-      <p className="text-xs font-semibold uppercase text-muted-foreground">{label}</p>
-      <p
-        className={`mt-1 text-2xl font-bold tabular-nums ${
-          variant === "warning"
-            ? "text-yellow-600 dark:text-yellow-400"
-            : "text-card-foreground"
-        }`}
-      >
-        {value}
-      </p>
-    </div>
-  );
-}
-
-function ExportButton({ label }: { label: string }) {
   return (
     <button
       type="button"
-      className="rounded-md border border-border bg-muted px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent"
+      disabled={disabled}
+      onClick={onClick}
+      className="rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50 disabled:pointer-events-none cursor-pointer transition-colors shadow-xs"
     >
       {label}
     </button>
   );
 }
 
-function LoadingState() {
-  return (
-    <div className="flex items-center justify-center py-12">
-      <div className="h-6 w-6 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-    </div>
-  );
-}
-
-function EmptyState({ message }: { message: string }) {
-  return (
-    <div className="rounded-lg border border-border bg-card p-8 text-center">
-      <p className="text-sm text-muted-foreground">{message}</p>
-    </div>
-  );
-}
-
 export function FiscalPage() {
   const [activeTab, setActiveTab] = useState<TabId>("summary");
   const [range, setRange] = useState<DateRangeValue>(() => {
-    const d = new Date();
-    const iso = d.toISOString().slice(0, 10);
+    const iso = formatLocalDate(new Date());
     return { startDate: iso, endDate: iso };
   });
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-foreground">Fiscal</h1>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Fiscal</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+            Cumplimiento DGI, correlatividad de facturas y libros de ventas
+          </p>
+        </div>
         <div className="flex items-center gap-3">
           <DateRangePicker value={range} onChange={setRange} />
         </div>
       </div>
 
       <div className="border-b border-border">
-        <nav className="-mb-px flex gap-6">
+        <nav className="-mb-px flex gap-4 sm:gap-6 overflow-x-auto pb-1 sm:pb-0" aria-label="Secciones fiscales">
           {TABS.map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
-              className={`border-b-2 px-1 py-3 text-sm font-medium transition-colors ${
+              className={`border-b-2 px-1 py-3 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap cursor-pointer ${
                 activeTab === tab.id
                   ? "border-primary text-primary"
                   : "border-transparent text-muted-foreground hover:text-foreground"

@@ -6,25 +6,45 @@ import { ProductPage } from "@/features/catalog/product-page";
 import { useProducts } from "@/features/catalog/use-product";
 import type { Product } from "@/features/catalog/product-types";
 
-vi.mock("@/features/catalog/use-product", () => ({
-  useProducts: vi.fn(() => ({
-    data: [],
+vi.mock("@/features/catalog/use-product", () => {
+  const useProductsMock = vi.fn((_type?: string, _inactive?: boolean) => ({
+    data: [] as Product[],
     isLoading: false,
     error: null,
-  })),
-  useCreateProduct: vi.fn(() => ({
-    mutateAsync: vi.fn().mockResolvedValue({}),
-    isPending: false,
-  })),
-  useUpdateProduct: vi.fn(() => ({
-    mutateAsync: vi.fn().mockResolvedValue({}),
-    isPending: false,
-  })),
-  useDeactivateProduct: vi.fn(() => ({
-    mutateAsync: vi.fn().mockResolvedValue({}),
-    isPending: false,
-  })),
-}));
+  }));
+  const usePaginatedProductsMock = vi.fn((params: any) => {
+    const prodRes = useProductsMock(params?.productType, true) as any;
+    const rawData = Array.isArray(prodRes?.data) ? prodRes.data : [];
+    return {
+      data: prodRes?.isLoading ? undefined : {
+        data: rawData,
+        total: rawData.length,
+        page: params?.page ?? 1,
+        pageSize: params?.pageSize ?? 25,
+        totalPages: Math.max(1, Math.ceil(rawData.length / 25)),
+      },
+      isLoading: prodRes?.isLoading ?? false,
+      error: prodRes?.error ?? null,
+    };
+  });
+
+  return {
+    useProducts: useProductsMock,
+    usePaginatedProducts: usePaginatedProductsMock,
+    useCreateProduct: vi.fn(() => ({
+      mutateAsync: vi.fn().mockResolvedValue({}),
+      isPending: false,
+    })),
+    useUpdateProduct: vi.fn(() => ({
+      mutateAsync: vi.fn().mockResolvedValue({}),
+      isPending: false,
+    })),
+    useDeactivateProduct: vi.fn(() => ({
+      mutateAsync: vi.fn().mockResolvedValue({}),
+      isPending: false,
+    })),
+  };
+});
 
 vi.mock("@/features/catalog/use-catalog", () => ({
   useCatalogValues: vi.fn(() => ({

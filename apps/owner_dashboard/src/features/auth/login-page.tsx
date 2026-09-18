@@ -2,6 +2,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useLogin } from "@/features/auth/auth-hooks";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 const loginSchema = z.object({
   email: z.string().email("Correo inválido"),
@@ -23,15 +25,19 @@ export function LoginPage() {
   });
 
   const onSubmit = (data: LoginForm) => {
+    if (loginMutation.isPending) return;
     loginMutation.mutate(data);
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-primary-50">
-      <div className="w-full max-w-md rounded-lg border border-border bg-white p-8 shadow-lg">
+    <div className="flex min-h-screen items-center justify-center bg-muted/30 px-4 py-8">
+      <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 sm:p-8 shadow-lg">
         <div className="mb-8 text-center">
-          <h1 className="text-2xl font-bold text-primary">NHILOS POS</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-xl font-bold text-primary-foreground mb-3 shadow-sm">
+            N
+          </div>
+          <h1 className="text-2xl font-bold text-foreground">NHILOS POS</h1>
+          <p className="mt-1.5 text-sm text-muted-foreground">
             Panel de administración
           </p>
         </div>
@@ -40,16 +46,17 @@ export function LoginPage() {
           <div>
             <label
               htmlFor="email"
-              className="mb-1 block text-sm font-medium text-foreground"
+              className="mb-1.5 block text-sm font-medium text-foreground"
             >
               Correo electrónico
             </label>
-            <input
+            <Input
               id="email"
               type="email"
               {...register("email")}
-              className="h-10 w-full rounded-md border border-input bg-white px-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
               placeholder="admin@negocio.com"
+              aria-invalid={!!errors.email}
+              disabled={loginMutation.isPending}
             />
             {errors.email && (
               <p className="mt-1 text-xs text-destructive">
@@ -61,16 +68,17 @@ export function LoginPage() {
           <div>
             <label
               htmlFor="password"
-              className="mb-1 block text-sm font-medium text-foreground"
+              className="mb-1.5 block text-sm font-medium text-foreground"
             >
               Contraseña
             </label>
-            <input
+            <Input
               id="password"
               type="password"
               {...register("password")}
-              className="h-10 w-full rounded-md border border-input bg-white px-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
               placeholder="••••••"
+              aria-invalid={!!errors.password}
+              disabled={loginMutation.isPending}
             />
             {errors.password && (
               <p className="mt-1 text-xs text-destructive">
@@ -82,21 +90,21 @@ export function LoginPage() {
           <div>
             <label
               htmlFor="tenantSlug"
-              className="mb-1 block text-sm font-medium text-foreground"
+              className="mb-1.5 block text-sm font-medium text-foreground"
             >
               Negocio (opcional)
             </label>
-            <input
+            <Input
               id="tenantSlug"
               type="text"
               {...register("tenantSlug")}
-              className="h-10 w-full rounded-md border border-input bg-white px-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
               placeholder="mi-negocio"
+              disabled={loginMutation.isPending}
             />
           </div>
 
           {loginMutation.isError && (
-            <div className="rounded-md border border-destructive/20 bg-destructive-50 p-3">
+            <div className="rounded-md border border-destructive/20 bg-destructive/10 p-3" role="alert">
               <p className="text-sm text-destructive">
                 {loginMutation.error.message === "Session expired"
                   ? "Sesión expirada. Inicie sesión nuevamente."
@@ -105,13 +113,14 @@ export function LoginPage() {
             </div>
           )}
 
-          <button
+          <Button
             type="submit"
             disabled={loginMutation.isPending}
-            className="h-10 w-full rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary-400 disabled:cursor-not-allowed disabled:opacity-50"
+            loading={loginMutation.isPending}
+            className="w-full mt-2"
           >
             {loginMutation.isPending ? "Ingresando..." : "Iniciar sesión"}
-          </button>
+          </Button>
         </form>
       </div>
     </div>

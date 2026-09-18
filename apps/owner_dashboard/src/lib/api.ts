@@ -12,6 +12,7 @@ export interface ApiErrorInit {
   status: number;
   code?: unknown;
   responseBody?: Record<string, unknown> | null;
+  requestId?: string | null;
 }
 
 export class ApiError extends Error {
@@ -19,6 +20,7 @@ export class ApiError extends Error {
   readonly statusCode: number;
   readonly code?: unknown;
   readonly responseBody: Record<string, unknown> | null;
+  readonly requestId: string | null;
 
   constructor(message: string, init: ApiErrorInit) {
     super(message);
@@ -27,6 +29,7 @@ export class ApiError extends Error {
     this.statusCode = init.status;
     this.code = init.code;
     this.responseBody = init.responseBody ?? null;
+    this.requestId = init.requestId ?? null;
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }
@@ -62,6 +65,35 @@ let accessToken: string | null = sessionStorage.getItem(STORAGE_KEY_ACCESS);
 let refreshToken: string | null = sessionStorage.getItem(STORAGE_KEY_REFRESH);
 let refreshPromise: Promise<string> | null = null;
 
+type AuthExpiredListener = () => void | Promise<void>;
+const authExpiredListeners = new Set<AuthExpiredListener>();
+let authExpiredNotified = false;
+
+export function resetAuthExpired(): void {
+  authExpiredNotified = false;
+}
+
+export function onAuthExpired(listener: AuthExpiredListener): () => void {
+  authExpiredListeners.add(listener);
+  return () => {
+    authExpiredListeners.delete(listener);
+  };
+}
+
+export function notifyAuthExpired(): void {
+  if (authExpiredNotified) {
+    return;
+  }
+  authExpiredNotified = true;
+  for (const listener of authExpiredListeners) {
+    try {
+      void listener();
+    } catch {
+      // ignore
+    }
+  }
+}
+
 export function setTokens(tokens: TokenPair): void {
   if (
     !tokens ||
@@ -77,11 +109,14 @@ export function setTokens(tokens: TokenPair): void {
   refreshToken = cleanRefresh;
   sessionStorage.setItem(STORAGE_KEY_ACCESS, cleanAccess);
   sessionStorage.setItem(STORAGE_KEY_REFRESH, cleanRefresh);
+  // Reset only upon successfully establishing a verified valid session
+  authExpiredNotified = false;
 }
 
 export function clearTokens(): void {
   accessToken = null;
   refreshToken = null;
+  refreshPromise = null;
   sessionStorage.removeItem(STORAGE_KEY_ACCESS);
   sessionStorage.removeItem(STORAGE_KEY_REFRESH);
 }
@@ -175,17 +210,29 @@ export async function refreshAccessToken(): Promise<string> {
   return nextAccess;
 }
 
+async function requestTokenRefresh(): Promise<string> {
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
+      try {
+        return await refreshAccessToken();
+      } catch (err) {
+        clearTokens();
+        notifyAuthExpired();
+        throw err;
+      } finally {
+        refreshPromise = null;
+      }
+    })();
+  }
+  return refreshPromise;
+}
+
 async function getValidAccessToken(): Promise<string> {
   const token = getAccessToken();
   if (isNonBlankString(token)) return token;
 
   if (hasStoredRefreshToken()) {
-    if (!refreshPromise) {
-      refreshPromise = refreshAccessToken().finally(() => {
-        refreshPromise = null;
-      });
-    }
-    const refreshed = await refreshPromise;
+    const refreshed = await requestTokenRefresh();
     if (isNonBlankString(refreshed)) {
       return refreshed;
     }
@@ -223,35 +270,59 @@ export async function apiFetch<T>(
     body: body ? JSON.stringify(body) : undefined,
   });
 
-  if (response.status === 401 && hasStoredRefreshToken()) {
-    try {
-      const newToken = await refreshAccessToken();
-      const retryHeaders: Record<string, string> = {
-        "Content-Type": "application/json",
-        ...(newToken && isNonBlankString(newToken) ? { Authorization: `Bearer ${newToken}` } : {}),
-        ...(customHeaders as Record<string, string>),
-      };
+  if (response.status === 401) {
+    if (hasStoredRefreshToken()) {
+      try {
+        const newToken = await requestTokenRefresh();
+        const retryHeaders: Record<string, string> = {
+          "Content-Type": "application/json",
+          ...(newToken && isNonBlankString(newToken) ? { Authorization: `Bearer ${newToken}` } : {}),
+          ...(customHeaders as Record<string, string>),
+        };
 
-      if (retryHeaders.Authorization && !retryHeaders.Authorization.replace(/^Bearer\s*/, "").trim()) {
-        delete retryHeaders.Authorization;
+        if (retryHeaders.Authorization && !retryHeaders.Authorization.replace(/^Bearer\s*/, "").trim()) {
+          delete retryHeaders.Authorization;
+        }
+
+        const retryResponse = await fetch(`${getApiBaseUrl()}${path}`, {
+          ...rest,
+          headers: retryHeaders,
+          body: body ? JSON.stringify(body) : undefined,
+        });
+
+        if (!retryResponse.ok) {
+          const errorBody = (await retryResponse.json().catch(() => null)) as Record<string, unknown> | null;
+          const message =
+            typeof errorBody?.message === "string" && errorBody.message.trim().length > 0
+              ? errorBody.message
+              : `API error: ${retryResponse.status}`;
+          throw new ApiError(message, {
+            status: retryResponse.status,
+            code: errorBody?.code,
+            responseBody: errorBody,
+          });
+        }
+
+        return retryResponse.json() as Promise<T>;
+      } catch (refreshErr) {
+        clearTokens();
+        notifyAuthExpired();
+        if (refreshErr instanceof ApiError) {
+          throw refreshErr;
+        }
+        throw new Error("Session expired");
       }
-
-      const retryResponse = await fetch(`${getApiBaseUrl()}${path}`, {
-        ...rest,
-        headers: retryHeaders,
-        body: body ? JSON.stringify(body) : undefined,
-      });
-
-      if (!retryResponse.ok) {
-        throw new Error(`API error: ${retryResponse.status}`);
-      }
-
-      return retryResponse.json() as Promise<T>;
-    } catch {
+    } else {
       clearTokens();
-      throw new Error("Session expired");
+      notifyAuthExpired();
+      throw new ApiError("Session expired", { status: 401 });
     }
   }
+
+  const requestId =
+    response.headers?.get?.("x-request-id") ??
+    response.headers?.get?.("x-correlation-id") ??
+    null;
 
   if (!response.ok) {
     const errorBody = (await response.json().catch(() => null)) as Record<string, unknown> | null;
@@ -263,22 +334,25 @@ export async function apiFetch<T>(
       status: response.status,
       code: errorBody?.code,
       responseBody: errorBody,
+      requestId,
     });
   }
 
   return response.json() as Promise<T>;
 }
 
+export type ApiClientMethodOptions = Omit<ApiRequestInit, "method" | "body">;
+
 export const api = {
-  get: <T>(path: string, opts?: { auth?: boolean }) =>
+  get: <T>(path: string, opts?: ApiClientMethodOptions) =>
     apiFetch<T>(path, { method: "GET", ...opts }),
-  post: <T>(path: string, body: unknown, opts?: { auth?: boolean }) =>
+  post: <T>(path: string, body?: unknown, opts?: ApiClientMethodOptions) =>
     apiFetch<T>(path, { method: "POST", body, ...opts }),
-  put: <T>(path: string, body: unknown, opts?: { auth?: boolean }) =>
+  put: <T>(path: string, body?: unknown, opts?: ApiClientMethodOptions) =>
     apiFetch<T>(path, { method: "PUT", body, ...opts }),
-  patch: <T>(path: string, body: unknown, opts?: { auth?: boolean }) =>
+  patch: <T>(path: string, body?: unknown, opts?: ApiClientMethodOptions) =>
     apiFetch<T>(path, { method: "PATCH", body, ...opts }),
-  delete: <T>(path: string, opts?: { auth?: boolean }) =>
+  delete: <T>(path: string, opts?: ApiClientMethodOptions) =>
     apiFetch<T>(path, { method: "DELETE", ...opts }),
 };
 

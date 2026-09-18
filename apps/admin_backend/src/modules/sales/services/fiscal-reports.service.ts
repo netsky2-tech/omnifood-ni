@@ -320,16 +320,27 @@ export class FiscalReportsService {
     yearParam?: number,
     monthParam?: number,
   ): { year: number; month: number; start: Date; end: Date } {
-    const now = new Date();
+    const managuaDateStr = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Managua',
+    }).format(new Date());
+    const [currY, currM] = managuaDateStr
+      .split('-')
+      .map((v) => parseInt(v, 10));
+
     const year =
-      yearParam != null && yearParam >= 2000 ? yearParam : now.getUTCFullYear();
+      yearParam != null && yearParam >= 2000 ? yearParam : currY;
     const month =
       monthParam != null && monthParam >= 1 && monthParam <= 12
         ? monthParam
-        : now.getUTCMonth() + 1;
+        : currM;
 
-    const start = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
-    const end = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
+    const yStr = String(year);
+    const mStr = String(month).padStart(2, '0');
+    const lastDay = new Date(year, month, 0).getDate();
+    const dStr = String(lastDay).padStart(2, '0');
+
+    const start = new Date(`${yStr}-${mStr}-01T00:00:00.000-06:00`);
+    const end = new Date(`${yStr}-${mStr}-${dStr}T23:59:59.999-06:00`);
 
     return { year, month, start, end };
   }
@@ -343,7 +354,7 @@ export class FiscalReportsService {
 
     if (startDateStr) {
       if (/^\d{4}-\d{2}-\d{2}$/.test(startDateStr)) {
-        start = new Date(`${startDateStr}T00:00:00.000Z`);
+        start = new Date(`${startDateStr}T00:00:00.000-06:00`);
       } else {
         start = new Date(startDateStr);
       }
@@ -351,7 +362,7 @@ export class FiscalReportsService {
 
     if (endDateStr) {
       if (/^\d{4}-\d{2}-\d{2}$/.test(endDateStr)) {
-        end = new Date(`${endDateStr}T23:59:59.999Z`);
+        end = new Date(`${endDateStr}T23:59:59.999-06:00`);
       } else {
         end = new Date(endDateStr);
       }

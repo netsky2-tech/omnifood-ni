@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api, clearTokens, hasStoredRefreshToken, refreshAccessToken, setTokens } from "@/lib/api";
 import { useAuthStore } from "@/features/auth/auth-store";
 import { useTenantContext } from "@/lib/tenant";
+import { getDefaultRouteForRole } from "@/lib/rbac";
 import type { LoginRequest, LoginResponse } from "@/types";
 
 export function useLogin() {
@@ -28,21 +29,24 @@ export function useLogin() {
       resolveFromLogin(response.tenant);
       return response;
     },
-    onSuccess: () => {
-      navigate("/");
+    onSuccess: (data) => {
+      navigate(getDefaultRouteForRole(data.user.role));
     },
   });
 }
 
 export function useLogout() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const logout = useAuthStore((s) => s.logout);
   const clearTenant = useTenantContext((s) => s.clear);
 
-  return () => {
+  return async () => {
     clearTokens();
     logout();
     clearTenant();
+    await queryClient.cancelQueries();
+    queryClient.clear();
     navigate("/login");
   };
 }

@@ -1,6 +1,10 @@
 import { useState } from "react";
+import { formatLocalDate } from "@/lib/utils";
 import { FreshnessBadge } from "@/components/freshness-badge";
 import { DateRangePicker, type DateRangeValue } from "@/components/date-range-picker";
+import { StatCard } from "@/components/ui/stat-card";
+import { LoadingState } from "@/components/ui/loading-state";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   useValuation,
   useCogs,
@@ -51,12 +55,12 @@ const SEVERITY_STYLES: Record<AlertSeverity, string> = {
 function ValuationTab() {
   const { data, isLoading } = useValuation();
 
-  if (isLoading) return <LoadingState />;
+  if (isLoading) return <LoadingState message="Cargando valoración de inventario..." />;
   if (!data) return <EmptyState message="Sin datos de valoración" />;
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard label="Valoración Total" value={formatCurrency(data.totalValuationNio)} />
         <StatCard label="Total Ítems" value={formatNumber(data.totalItemsCount)} />
         <StatCard label="Con Stock" value={formatNumber(data.itemsWithStockCount)} />
@@ -71,52 +75,54 @@ function ValuationTab() {
         </div>
       )}
 
-      <div className="rounded-lg border border-border bg-card">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border bg-muted">
-              <th className="px-4 py-3 text-left font-semibold uppercase text-muted-foreground">
-                Ítem
-              </th>
-              <th className="px-4 py-3 text-left font-semibold uppercase text-muted-foreground">
-                UoM
-              </th>
-              <th className="px-4 py-3 text-right font-semibold uppercase text-muted-foreground">
-                Stock
-              </th>
-              <th className="px-4 py-3 text-right font-semibold uppercase text-muted-foreground">
-                Costo Prom.
-              </th>
-              <th className="px-4 py-3 text-right font-semibold uppercase text-muted-foreground">
-                Valoración
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.items.map((item) => (
-              <tr
-                key={item.id}
-                className={`border-b border-border last:border-0 hover:bg-muted/50 ${
-                  item.isNegativeStock ? "bg-red-50" : item.isLowStock ? "bg-yellow-50" : ""
-                }`}
-              >
-                <td className="px-4 py-3 font-medium">{item.name}</td>
-                <td className="px-4 py-3 text-muted-foreground">{item.consumptionUom}</td>
-                <td className="px-4 py-3 text-right tabular-nums">
-                  <span className={item.isNegativeStock ? "font-bold text-red-600" : ""}>
-                    {formatNumber(item.stock)}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-right tabular-nums">
-                  {formatCurrency(item.averageCostNio)}
-                </td>
-                <td className="px-4 py-3 text-right tabular-nums font-medium">
-                  {formatCurrency(item.totalValuationNio)}
-                </td>
+      <div className="rounded-lg border border-border bg-card shadow-xs overflow-hidden">
+        <div className="overflow-x-auto w-full">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/60">
+                <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
+                  Ítem
+                </th>
+                <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
+                  UoM
+                </th>
+                <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
+                  Stock
+                </th>
+                <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
+                  Costo Prom.
+                </th>
+                <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
+                  Valoración
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {data.items.map((item) => (
+                <tr
+                  key={item.id}
+                  className={`border-b border-border last:border-0 hover:bg-muted/40 transition-colors ${
+                    item.isNegativeStock ? "bg-red-50/70" : item.isLowStock ? "bg-amber-50/50" : ""
+                  }`}
+                >
+                  <td className="px-4 py-3 font-medium text-foreground">{item.name}</td>
+                  <td className="px-4 py-3 text-muted-foreground font-mono text-xs">{item.consumptionUom}</td>
+                  <td className="px-4 py-3 text-right tabular-nums">
+                    <span className={item.isNegativeStock ? "font-bold text-red-600" : "text-foreground"}>
+                      {formatNumber(item.stock)}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums text-foreground">
+                    {formatCurrency(item.averageCostNio)}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums font-semibold text-foreground">
+                    {formatCurrency(item.totalValuationNio)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <FreshnessBadge generatedAt={data.generatedAt} />
@@ -127,60 +133,62 @@ function ValuationTab() {
 function CogsTab({ startDate, endDate }: { startDate?: string; endDate?: string }) {
   const { data, isLoading } = useCogs(startDate, endDate);
 
-  if (isLoading) return <LoadingState />;
+  if (isLoading) return <LoadingState message="Cargando costos de mercancía (COGS)..." />;
   if (!data) return <EmptyState message="Sin datos de COGS" />;
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard label="COGS Total" value={formatCurrency(data.totalCogsNio)} />
         <StatCard label="COGS Ventas" value={formatCurrency(data.salesCogsNio)} />
         <StatCard label="COGS Mermas" value={formatCurrency(data.shrinkageCogsNio)} accent={data.shrinkageCogsNio > 0} />
       </div>
 
-      <div className="rounded-lg border border-border bg-card">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border bg-muted">
-              <th className="px-4 py-3 text-left font-semibold uppercase text-muted-foreground">
-                Insumo
-              </th>
-              <th className="px-4 py-3 text-right font-semibold uppercase text-muted-foreground">
-                UoM
-              </th>
-              <th className="px-4 py-3 text-right font-semibold uppercase text-muted-foreground">
-                Cant. Ventas
-              </th>
-              <th className="px-4 py-3 text-right font-semibold uppercase text-muted-foreground">
-                Costo Ventas
-              </th>
-              <th className="px-4 py-3 text-right font-semibold uppercase text-muted-foreground">
-                Cant. Mermas
-              </th>
-              <th className="px-4 py-3 text-right font-semibold uppercase text-muted-foreground">
-                Costo Total
-              </th>
-              <th className="px-4 py-3 text-right font-semibold uppercase text-muted-foreground">
-                %
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.items.map((item) => (
-              <tr key={item.insumoId} className="border-b border-border last:border-0 hover:bg-muted/50">
-                <td className="px-4 py-3 font-medium">{item.insumoName}</td>
-                <td className="px-4 py-3 text-right text-muted-foreground">{item.consumptionUom}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{formatNumber(item.salesQuantity)}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{formatCurrency(item.salesCostNio)}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{formatNumber(item.shrinkageQuantity)}</td>
-                <td className="px-4 py-3 text-right tabular-nums font-medium">
-                  {formatCurrency(item.totalCostNio)}
-                </td>
-                <td className="px-4 py-3 text-right tabular-nums">{item.costPercentage.toFixed(1)}%</td>
+      <div className="rounded-lg border border-border bg-card shadow-xs overflow-hidden">
+        <div className="overflow-x-auto w-full">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/60">
+                <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
+                  Insumo
+                </th>
+                <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
+                  UoM
+                </th>
+                <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
+                  Cant. Ventas
+                </th>
+                <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
+                  Costo Ventas
+                </th>
+                <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
+                  Cant. Mermas
+                </th>
+                <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
+                  Costo Total
+                </th>
+                <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
+                  %
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {data.items.map((item) => (
+                <tr key={item.insumoId} className="border-b border-border last:border-0 hover:bg-muted/40 transition-colors">
+                  <td className="px-4 py-3 font-medium text-foreground">{item.insumoName}</td>
+                  <td className="px-4 py-3 text-right text-muted-foreground font-mono text-xs">{item.consumptionUom}</td>
+                  <td className="px-4 py-3 text-right tabular-nums text-foreground">{formatNumber(item.salesQuantity)}</td>
+                  <td className="px-4 py-3 text-right tabular-nums text-foreground">{formatCurrency(item.salesCostNio)}</td>
+                  <td className="px-4 py-3 text-right tabular-nums text-foreground">{formatNumber(item.shrinkageQuantity)}</td>
+                  <td className="px-4 py-3 text-right tabular-nums font-semibold text-foreground">
+                    {formatCurrency(item.totalCostNio)}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums text-foreground">{item.costPercentage.toFixed(1)}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <FreshnessBadge generatedAt={data.generatedAt} />
@@ -201,18 +209,18 @@ function KardexTab({ startDate, endDate }: { startDate?: string; endDate?: strin
     setFilters((prev) => ({ ...prev, type: type || undefined }));
   };
 
-  if (isLoading) return <LoadingState />;
+  if (isLoading) return <LoadingState message="Cargando movimientos de kardex..." />;
   if (!data) return <EmptyState message="Sin datos de kardex" />;
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-1.5 sm:gap-2">
         <button
           type="button"
           onClick={() => handleTypeFilter("")}
-          className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+          className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
             !filters.type
-              ? "bg-primary text-primary-foreground"
+              ? "bg-primary text-primary-foreground shadow-xs"
               : "bg-muted text-muted-foreground hover:bg-muted/80"
           }`}
         >
@@ -223,9 +231,9 @@ function KardexTab({ startDate, endDate }: { startDate?: string; endDate?: strin
             key={type}
             type="button"
             onClick={() => handleTypeFilter(type)}
-            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
               filters.type === type
-                ? "bg-primary text-primary-foreground"
+                ? "bg-primary text-primary-foreground shadow-xs"
                 : "bg-muted text-muted-foreground hover:bg-muted/80"
             }`}
           >
@@ -234,60 +242,62 @@ function KardexTab({ startDate, endDate }: { startDate?: string; endDate?: strin
         ))}
       </div>
 
-      <div className="rounded-lg border border-border bg-card">
-        <div className="px-4 py-3 border-b border-border">
-          <p className="text-sm text-muted-foreground">
-            {formatNumber(data.totalCount)} movimiento(s)
+      <div className="rounded-lg border border-border bg-card shadow-xs overflow-hidden">
+        <div className="px-4 py-3 border-b border-border bg-muted/30">
+          <p className="text-xs sm:text-sm font-medium text-muted-foreground">
+            {data.totalCount} movimiento(s)
           </p>
         </div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border bg-muted">
-              <th className="px-4 py-3 text-left font-semibold uppercase text-muted-foreground">
-                Fecha
-              </th>
-              <th className="px-4 py-3 text-left font-semibold uppercase text-muted-foreground">
-                Ítem
-              </th>
-              <th className="px-4 py-3 text-left font-semibold uppercase text-muted-foreground">
-                Tipo
-              </th>
-              <th className="px-4 py-3 text-right font-semibold uppercase text-muted-foreground">
-                Cant.
-              </th>
-              <th className="px-4 py-3 text-right font-semibold uppercase text-muted-foreground">
-                Antes
-              </th>
-              <th className="px-4 py-3 text-right font-semibold uppercase text-muted-foreground">
-                Después
-              </th>
-              <th className="px-4 py-3 text-right font-semibold uppercase text-muted-foreground">
-                Costo Unit.
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.movements.map((m) => (
-              <tr key={m.id} className="border-b border-border last:border-0 hover:bg-muted/50">
-                <td className="px-4 py-3 text-muted-foreground">
-                  {new Date(m.createdAt).toLocaleDateString("es-NI")}
-                </td>
-                <td className="px-4 py-3 font-medium">{m.insumoName}</td>
-                <td className="px-4 py-3">
-                  <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
-                    {MOVEMENT_LABELS[m.type]}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-right tabular-nums">{formatNumber(m.quantity)}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{formatNumber(m.stockBefore)}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{formatNumber(m.stockAfter)}</td>
-                <td className="px-4 py-3 text-right tabular-nums">
-                  {m.unitCostNio != null ? formatCurrency(m.unitCostNio) : "—"}
-                </td>
+        <div className="overflow-x-auto w-full">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/60">
+                <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
+                  Fecha
+                </th>
+                <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
+                  Ítem
+                </th>
+                <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
+                  Tipo
+                </th>
+                <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
+                  Cant.
+                </th>
+                <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
+                  Antes
+                </th>
+                <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
+                  Después
+                </th>
+                <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
+                  Costo Unit.
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {data.movements.map((m) => (
+                <tr key={m.id} className="border-b border-border last:border-0 hover:bg-muted/40 transition-colors">
+                  <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">
+                    {new Date(m.createdAt).toLocaleDateString("es-NI")}
+                  </td>
+                  <td className="px-4 py-3 font-medium text-foreground">{m.insumoName}</td>
+                  <td className="px-4 py-3">
+                    <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
+                      {MOVEMENT_LABELS[m.type]}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums text-foreground">{formatNumber(m.quantity)}</td>
+                  <td className="px-4 py-3 text-right tabular-nums text-foreground">{formatNumber(m.stockBefore)}</td>
+                  <td className="px-4 py-3 text-right tabular-nums font-medium text-foreground">{formatNumber(m.stockAfter)}</td>
+                  <td className="px-4 py-3 text-right tabular-nums text-foreground">
+                    {m.unitCostNio != null ? formatCurrency(m.unitCostNio) : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <FreshnessBadge generatedAt={data.generatedAt} />
@@ -298,12 +308,12 @@ function KardexTab({ startDate, endDate }: { startDate?: string; endDate?: strin
 function AlertsTab() {
   const { data, isLoading } = useAlerts();
 
-  if (isLoading) return <LoadingState />;
+  if (isLoading) return <LoadingState message="Cargando alertas de inventario..." />;
   if (!data) return <EmptyState message="Sin datos de alertas" />;
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard label="Total Alertas" value={String(data.totalAlertsCount)} />
         <StatCard label="Críticas" value={String(data.criticalCount)} accent={data.criticalCount > 0} />
         <StatCard label="Advertencias" value={String(data.warningCount)} />
@@ -311,57 +321,59 @@ function AlertsTab() {
       </div>
 
       {data.alerts.length === 0 ? (
-        <EmptyState message="No hay alertas activas" />
+        <EmptyState message="No hay alertas activas en este momento" />
       ) : (
-        <div className="rounded-lg border border-border bg-card">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted">
-                <th className="px-4 py-3 text-left font-semibold uppercase text-muted-foreground">
-                  Insumo
-                </th>
-                <th className="px-4 py-3 text-right font-semibold uppercase text-muted-foreground">
-                  Stock
-                </th>
-                <th className="px-4 py-3 text-right font-semibold uppercase text-muted-foreground">
-                  Mínimo
-                </th>
-                <th className="px-4 py-3 text-center font-semibold uppercase text-muted-foreground">
-                  Severidad
-                </th>
-                <th className="px-4 py-3 text-left font-semibold uppercase text-muted-foreground">
-                  Mensaje
-                </th>
-                <th className="px-4 py-3 text-right font-semibold uppercase text-muted-foreground">
-                  Reorden Sugerida
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.alerts.map((alert) => (
-                <tr key={alert.insumoId} className="border-b border-border last:border-0 hover:bg-muted/50">
-                  <td className="px-4 py-3 font-medium">{alert.insumoName}</td>
-                  <td className="px-4 py-3 text-right tabular-nums">
-                    <span className={alert.severity === "NEGATIVE_STOCK" ? "font-bold text-red-600" : ""}>
-                      {formatNumber(alert.stock)}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums">
-                    {alert.minStock != null ? formatNumber(alert.minStock) : "—"}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${SEVERITY_STYLES[alert.severity]}`}>
-                      {alert.severity}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">{alert.message}</td>
-                  <td className="px-4 py-3 text-right tabular-nums font-medium">
-                    {formatNumber(alert.suggestedReorderQuantity)}
-                  </td>
+        <div className="rounded-lg border border-border bg-card shadow-xs overflow-hidden">
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/60">
+                  <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
+                    Insumo
+                  </th>
+                  <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
+                    Stock
+                  </th>
+                  <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
+                    Mínimo
+                  </th>
+                  <th className="px-4 py-3 text-center font-semibold uppercase text-xs text-muted-foreground">
+                    Severidad
+                  </th>
+                  <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
+                    Mensaje
+                  </th>
+                  <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
+                    Reorden Sugerida
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {data.alerts.map((alert) => (
+                  <tr key={alert.insumoId} className="border-b border-border last:border-0 hover:bg-muted/40 transition-colors">
+                    <td className="px-4 py-3 font-medium text-foreground">{alert.insumoName}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      <span className={alert.severity === "NEGATIVE_STOCK" ? "font-bold text-red-600" : "text-foreground"}>
+                        {formatNumber(alert.stock)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-foreground">
+                      {alert.minStock != null ? formatNumber(alert.minStock) : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${SEVERITY_STYLES[alert.severity]}`}>
+                        {alert.severity}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground text-xs">{alert.message}</td>
+                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-foreground">
+                      {formatNumber(alert.suggestedReorderQuantity)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -370,58 +382,35 @@ function AlertsTab() {
   );
 }
 
-function StatCard({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
-  return (
-    <div className="rounded-lg border border-border bg-card p-4">
-      <p className="text-xs font-semibold uppercase text-muted-foreground">{label}</p>
-      <p className={`mt-1 text-2xl font-bold tabular-nums ${accent ? "text-red-600" : "text-card-foreground"}`}>
-        {value}
-      </p>
-    </div>
-  );
-}
-
-function LoadingState() {
-  return (
-    <div className="flex items-center justify-center py-12">
-      <div className="h-6 w-6 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-    </div>
-  );
-}
-
-function EmptyState({ message }: { message: string }) {
-  return (
-    <div className="rounded-lg border border-border bg-card p-8 text-center">
-      <p className="text-sm text-muted-foreground">{message}</p>
-    </div>
-  );
-}
-
 export function InventoryPage() {
   const [activeTab, setActiveTab] = useState<TabId>("valuation");
   const [range, setRange] = useState<DateRangeValue>(() => {
-    const d = new Date();
-    const iso = d.toISOString().slice(0, 10);
+    const iso = formatLocalDate(new Date());
     return { startDate: iso, endDate: iso };
   });
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-foreground">Inventario</h1>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Inventario</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+            Valoración de existencias, kardex de movimientos y alertas de stock
+          </p>
+        </div>
         <div className="flex items-center gap-3">
           <DateRangePicker value={range} onChange={setRange} />
         </div>
       </div>
 
       <div className="border-b border-border">
-        <nav className="-mb-px flex gap-6">
+        <nav className="-mb-px flex gap-4 sm:gap-6 overflow-x-auto pb-1 sm:pb-0" aria-label="Secciones de inventario">
           {TABS.map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
-              className={`border-b-2 px-1 py-3 text-sm font-medium transition-colors ${
+              className={`border-b-2 px-1 py-3 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap cursor-pointer ${
                 activeTab === tab.id
                   ? "border-primary text-primary"
                   : "border-transparent text-muted-foreground hover:text-foreground"

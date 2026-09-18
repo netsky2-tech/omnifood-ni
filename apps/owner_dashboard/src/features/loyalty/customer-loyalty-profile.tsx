@@ -165,11 +165,15 @@ export function CustomerLoyaltyProfile() {
 
   const programMap = new Map(programs?.map((p) => [p.id, p.name]) ?? []);
 
-  const filteredCustomers = customers?.filter((c) =>
+  const customerList: Customer[] = Array.isArray(customers)
+    ? customers
+    : (customers as unknown as { data?: Customer[] })?.data ?? [];
+
+  const filteredCustomers = customerList.filter((c) =>
     c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     c.phone?.includes(searchQuery) ||
     c.email?.toLowerCase().includes(searchQuery.toLowerCase()),
-  ) ?? [];
+  );
 
   return (
     <div className="space-y-6">

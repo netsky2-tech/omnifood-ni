@@ -13,6 +13,7 @@
 .atl/
 .agents/
 .codegraph/
+.pi/
 
 # App specific ignores are handled within apps/
 # Node.js

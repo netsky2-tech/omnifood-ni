@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
+import { Edit2, Trash2 } from "lucide-react";
 import {
   useCatalogValues,
   useCreateCatalogValue,
@@ -11,6 +12,20 @@ import {
   type CatalogValue,
   type CreateCatalogValueInput,
 } from "./types";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { getApiErrorMessage } from "@/lib/api-error";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { LoadingState } from "@/components/ui/loading-state";
+import { EmptyState } from "@/components/ui/empty-state";
 
 type TabId = CatalogType;
 
@@ -27,79 +42,79 @@ function CatalogTable({
 }) {
   const { data, isLoading, error } = useCatalogValues(type, true);
 
-  if (isLoading) return <LoadingState />;
+  if (isLoading) return <LoadingState message="Cargando catálogo..." />;
   if (error) return <EmptyState message="Error al cargar catálogo" />;
   if (!data || data.length === 0)
     return <EmptyState message="Sin valores en este catálogo" />;
 
   return (
-    <div className="rounded-lg border border-border bg-card">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-border bg-muted">
-            <th className="px-4 py-3 text-left font-semibold uppercase text-muted-foreground">
-              Código
-            </th>
-            <th className="px-4 py-3 text-left font-semibold uppercase text-muted-foreground">
-              Nombre
-            </th>
-            <th className="px-4 py-3 text-center font-semibold uppercase text-muted-foreground">
-              Estado
-            </th>
-            <th className="px-4 py-3 text-right font-semibold uppercase text-muted-foreground">
-              Orden
-            </th>
-            <th className="px-4 py-3 text-right font-semibold uppercase text-muted-foreground">
-              Acciones
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.map((v) => (
-            <tr
-              key={v.id}
-              className="border-b border-border last:border-0 hover:bg-muted/50"
-            >
-              <td className="px-4 py-3 font-mono text-xs">{v.code}</td>
-              <td className="px-4 py-3 font-medium">{v.name}</td>
-              <td className="px-4 py-3 text-center">
-                <span
-                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                    v.is_active
-                      ? "bg-secondary-50 text-secondary-700"
-                      : "bg-muted text-muted-foreground"
-                  }`}
-                >
-                  {v.is_active ? "Activo" : "Inactivo"}
-                </span>
-              </td>
-              <td className="px-4 py-3 text-right tabular-nums">
-                {v.sort_order}
-              </td>
-              <td className="px-4 py-3 text-right">
-                <div className="flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => onEdit(v)}
-                    className="rounded px-2 py-1 text-xs font-medium text-primary hover:bg-primary-50"
-                  >
-                    Editar
-                  </button>
-                  {v.is_active && (
-                    <button
-                      type="button"
-                      onClick={() => onDeactivate(v)}
-                      className="rounded px-2 py-1 text-xs font-medium text-destructive hover:bg-destructive-50"
-                    >
-                      Desactivar
-                    </button>
-                  )}
-                </div>
-              </td>
+    <div className="rounded-lg border border-border bg-card shadow-xs overflow-hidden">
+      <div className="overflow-x-auto w-full">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border bg-muted/60">
+              <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
+                Código
+              </th>
+              <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
+                Nombre
+              </th>
+              <th className="px-4 py-3 text-center font-semibold uppercase text-xs text-muted-foreground">
+                Estado
+              </th>
+              <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
+                Orden
+              </th>
+              <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
+                Acciones
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {data.map((v) => (
+              <tr
+                key={v.id}
+                className="border-b border-border last:border-0 hover:bg-muted/40 transition-colors"
+              >
+                <td className="px-4 py-3 font-mono text-xs font-medium text-foreground">{v.code}</td>
+                <td className="px-4 py-3 font-medium text-foreground">{v.name}</td>
+                <td className="px-4 py-3 text-center">
+                  <Badge variant={v.is_active ? "success" : "secondary"}>
+                    {v.is_active ? "Activo" : "Inactivo"}
+                  </Badge>
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums text-foreground">
+                  {v.sort_order}
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <div className="flex justify-end gap-1.5">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onEdit(v)}
+                      className="h-8 px-2 text-primary"
+                    >
+                      <Edit2 className="h-3.5 w-3.5 mr-1" />
+                      Editar
+                    </Button>
+                    {v.is_active && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onDeactivate(v)}
+                        className="h-8 px-2 text-destructive hover:text-destructive hover:bg-destructive-50"
+                      >
+                        <Trash2 className="h-3.5 w-3.5 mr-1" />
+                        Desactivar
+                      </Button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -107,10 +122,12 @@ function CatalogTable({
 function CatalogDialog({
   type,
   value,
+  open,
   onClose,
 }: {
   type: CatalogType;
   value?: CatalogValue;
+  open: boolean;
   onClose: () => void;
 }) {
   const isEdit = !!value;
@@ -122,15 +139,36 @@ function CatalogDialog({
   const [sortOrder, setSortOrder] = useState(value?.sort_order ?? 0);
   const [error, setError] = useState<string | null>(null);
 
+  const isPending = createMutation.isPending || updateMutation.isPending;
+
+  const isDirty = isEdit
+    ? name !== (value?.name ?? "") || sortOrder !== (value?.sort_order ?? 0)
+    : code.trim() !== "" || name.trim() !== "" || sortOrder !== 0;
+
+  const handleAttemptClose = () => {
+    if (isPending) return;
+    if (isDirty) {
+      if (window.confirm("Tiene cambios sin guardar en el formulario. ¿Desea descartarlos?")) {
+        onClose();
+      }
+      return;
+    }
+    onClose();
+  };
+
+  const isSubmittingRef = useRef(false);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isPending || isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
     setError(null);
 
     try {
       if (isEdit && value) {
         await updateMutation.mutateAsync({
           id: value.id,
-          input: { name, sort_order: sortOrder },
+          input: { name: name.trim(), sort_order: sortOrder },
         });
       } else {
         const input: CreateCatalogValueInput = {
@@ -142,170 +180,197 @@ function CatalogDialog({
       }
       onClose();
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Error al guardar",
-      );
+      setError(getApiErrorMessage(err, "Error al guardar valor de catálogo"));
+    } finally {
+      isSubmittingRef.current = false;
     }
   };
 
-  const isPending = createMutation.isPending || updateMutation.isPending;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="w-full max-w-md rounded-lg bg-card p-6 shadow-lg">
-        <h2 className="mb-4 text-lg font-bold text-card-foreground">
-          {isEdit ? "Editar Valor" : "Nuevo Valor"}
-        </h2>
+    <Dialog
+      open={open}
+      onOpenChange={(isOpen) => {
+        if (!isOpen) handleAttemptClose();
+      }}
+    >
+      <DialogContent
+        onPointerDownOutside={(e) => {
+          if (isPending) e.preventDefault();
+        }}
+        onEscapeKeyDown={(e) => {
+          if (isPending) e.preventDefault();
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>{isEdit ? "Editar Valor" : "Nuevo Valor"}</DialogTitle>
+          <DialogDescription>
+            {isEdit
+              ? "Modifique los detalles del elemento de catálogo seleccionado."
+              : "Defina el código y nombre del nuevo elemento."}
+          </DialogDescription>
+        </DialogHeader>
 
         {error && (
-          <div className="mb-4 rounded border border-destructive bg-destructive-50 px-3 py-2 text-sm text-destructive">
+          <div className="rounded-md border border-destructive/20 bg-destructive-50 p-3 text-xs font-medium text-destructive">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 pt-1">
           {!isEdit && (
             <div>
-              <label className="mb-1 block text-sm font-medium text-foreground">
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Código *
               </label>
-              <input
+              <Input
                 type="text"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
                 required
                 pattern="^[A-Za-z0-9_-]+$"
                 maxLength={64}
-                className="w-full rounded border border-input px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary"
                 placeholder="Ej: kg, LACTEOS"
+                disabled={isPending}
               />
-              <p className="mt-1 text-xs text-muted-foreground">
+              <p className="mt-1 text-[11px] text-muted-foreground">
                 Solo letras, números, guiones y guiones bajos
               </p>
             </div>
           )}
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-foreground">
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Nombre *
             </label>
-            <input
+            <Input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
               maxLength={120}
-              className="w-full rounded border border-input px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary"
               placeholder="Ej: Kilogramo, Lácteos"
+              disabled={isPending}
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-foreground">
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Orden
             </label>
-            <input
+            <Input
               type="number"
               value={sortOrder}
               onChange={(e) => setSortOrder(Number(e.target.value))}
               min={0}
-              className="w-full rounded border border-input px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary"
+              disabled={isPending}
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-2">
-            <button
+          <DialogFooter className="pt-3">
+            <Button
               type="button"
-              onClick={onClose}
+              variant="outline"
+              onClick={handleAttemptClose}
               disabled={isPending}
-              className="rounded px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted"
             >
               Cancelar
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
+              loading={isPending}
               disabled={isPending}
-              className="rounded bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-400 disabled:opacity-50"
             >
-              {isPending ? "Guardando..." : isEdit ? "Guardar" : "Crear"}
-            </button>
-          </div>
+              {isEdit ? "Guardar" : "Crear"}
+            </Button>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
 function DeactivateDialog({
   type,
   value,
+  open,
   onClose,
 }: {
   type: CatalogType;
   value: CatalogValue;
+  open: boolean;
   onClose: () => void;
 }) {
   const deactivateMutation = useDeactivateCatalogValue(type);
+  const [error, setError] = useState<string | null>(null);
+
+  const isSubmittingRef = useRef(false);
 
   const handleConfirm = async () => {
+    if (deactivateMutation.isPending || isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
+    setError(null);
     try {
       await deactivateMutation.mutateAsync(value.id);
       onClose();
-    } catch {
-      // Error handled by mutation
+    } catch (err) {
+      setError(getApiErrorMessage(err, "Error al desactivar el valor de catálogo"));
+    } finally {
+      isSubmittingRef.current = false;
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="w-full max-w-sm rounded-lg bg-card p-6 shadow-lg">
-        <h2 className="mb-2 text-lg font-bold text-card-foreground">
-          Desactivar Valor
-        </h2>
-        <p className="mb-4 text-sm text-muted-foreground">
-          ¿Estás seguro de desactivar{" "}
-          <span className="font-medium text-foreground">{value.name}</span> (
-          {value.code})? El valor no aparecerá en listados activos pero se
-          mantendrá en el historial.
-        </p>
-        <div className="flex justify-end gap-3">
-          <button
+    <Dialog
+      open={open}
+      onOpenChange={(isOpen) => {
+        if (!isOpen && !deactivateMutation.isPending) onClose();
+      }}
+    >
+      <DialogContent
+        onPointerDownOutside={(e) => {
+          if (deactivateMutation.isPending) e.preventDefault();
+        }}
+        onEscapeKeyDown={(e) => {
+          if (deactivateMutation.isPending) e.preventDefault();
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>Desactivar Valor</DialogTitle>
+          <DialogDescription>
+            ¿Estás seguro de desactivar{" "}
+            <span className="font-semibold text-foreground">{value.name}</span> (
+            {value.code})? El valor no aparecerá en listados activos pero se
+            mantendrá en el historial para integridad referencial.
+          </DialogDescription>
+        </DialogHeader>
+
+        {error && (
+          <div className="rounded-md border border-destructive/20 bg-destructive-50 p-3 text-xs font-medium text-destructive">
+            {error}
+          </div>
+        )}
+
+        <DialogFooter className="pt-3">
+          <Button
             type="button"
+            variant="outline"
             onClick={onClose}
             disabled={deactivateMutation.isPending}
-            className="rounded px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted"
           >
             Cancelar
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="destructive"
             onClick={handleConfirm}
+            loading={deactivateMutation.isPending}
             disabled={deactivateMutation.isPending}
-            className="rounded bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50"
           >
-            {deactivateMutation.isPending
-              ? "Desactivando..."
-              : "Desactivar"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function LoadingState() {
-  return (
-    <div className="flex items-center justify-center py-12">
-      <div className="h-6 w-6 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-    </div>
-  );
-}
-
-function EmptyState({ message }: { message: string }) {
-  return (
-    <div className="rounded-lg border border-border bg-card p-8 text-center">
-      <p className="text-sm text-muted-foreground">{message}</p>
-    </div>
+            Desactivar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -334,27 +399,28 @@ export function CatalogPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-foreground">Catálogo</h1>
-        <button
-          type="button"
-          onClick={handleCreate}
-          className="rounded bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-400"
-        >
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Catálogo</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+            Tablas maestras de unidades de medida, categorías y clasificaciones
+          </p>
+        </div>
+        <Button onClick={handleCreate} className="shadow-xs">
           + Nuevo Valor
-        </button>
+        </Button>
       </div>
 
       <div className="border-b border-border">
-        <nav className="-mb-px flex gap-6 overflow-x-auto">
+        <nav className="-mb-px flex gap-4 sm:gap-6 overflow-x-auto pb-1 sm:pb-0" aria-label="Tipos de catálogo">
           {TABS.map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
-              className={`whitespace-nowrap border-b-2 px-1 py-3 text-sm font-medium transition-colors ${
+              className={`border-b-2 px-1 py-3 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap cursor-pointer ${
                 activeTab === tab.id
-                  ? "border-primary text-primary"
+                  ? "border-primary text-primary font-semibold"
                   : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -364,19 +430,18 @@ export function CatalogPage() {
         </nav>
       </div>
 
-      <div>
-        <CatalogTable
-          key={activeTab}
-          type={activeTab}
-          onEdit={handleEdit}
-          onDeactivate={setDeactivatingValue}
-        />
-      </div>
+      <CatalogTable
+        type={activeTab}
+        onEdit={handleEdit}
+        onDeactivate={(val) => setDeactivatingValue(val)}
+      />
 
       {dialogOpen && (
         <CatalogDialog
+          key={editingValue?.id ?? "create"}
           type={activeTab}
           value={editingValue}
+          open={dialogOpen}
           onClose={handleCloseDialog}
         />
       )}
@@ -385,6 +450,7 @@ export function CatalogPage() {
         <DeactivateDialog
           type={activeTab}
           value={deactivatingValue}
+          open={!!deactivatingValue}
           onClose={() => setDeactivatingValue(undefined)}
         />
       )}

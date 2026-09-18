@@ -76,6 +76,71 @@ export class ProductService {
     });
   }
 
+  async listPaginated(params: {
+    tenantId: string;
+    productType?: ProductType;
+    includeInactive?: boolean;
+    page: number;
+    pageSize: number;
+    search?: string;
+    sortBy?: string;
+    sortOrder?: 'ASC' | 'DESC';
+  }): Promise<{
+    data: Product[];
+    total: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+  }> {
+    return this.withTenantContext(params.tenantId, async (repo) => {
+      const qb = repo.createQueryBuilder('p');
+      qb.where('p.tenant_id = :tenantId', {
+        tenantId: this.requireTenant(params.tenantId),
+      });
+
+      if (params.productType) {
+        qb.andWhere('p.product_type = :productType', {
+          productType: params.productType,
+        });
+      }
+
+      if (!params.includeInactive) {
+        qb.andWhere('p.is_active = true');
+      }
+
+      if (params.search && params.search.trim().length > 0) {
+        qb.andWhere('(p.name ILIKE :search OR p.uom ILIKE :search)', {
+          search: `%${params.search.trim()}%`,
+        });
+      }
+
+      const allowedSortColumns: Record<string, string> = {
+        name: 'p.name',
+        sellPrice: 'p.sellPrice',
+        stock: 'p.stock',
+        createdAt: 'p.created_at',
+      };
+      const sortCol =
+        (params.sortBy && allowedSortColumns[params.sortBy]) || 'p.name';
+      const sortDir = params.sortOrder === 'DESC' ? 'DESC' : 'ASC';
+      qb.orderBy(sortCol, sortDir);
+
+      const skip = (params.page - 1) * params.pageSize;
+      qb.skip(skip).take(params.pageSize);
+
+      const [data, total] = await qb.getManyAndCount();
+      const totalPages = Math.max(1, Math.ceil(total / params.pageSize));
+
+      return {
+        data,
+        total,
+        page: params.page,
+        pageSize: params.pageSize,
+        totalPages,
+      };
+    });
+  }
+
   async findOne(id: string, tenantId: string): Promise<Product> {
     return this.withTenantContext(tenantId, async (repo) => {
       const row = await repo.findOne({

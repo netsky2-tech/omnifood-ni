@@ -105,7 +105,7 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
     } catch (error) {
       toast({
         title: 'Error',
-        description: 'No se pudo guardar la promoción',
+        description: error instanceof Error ? error.message : 'No se pudo guardar la promoción',
         variant: 'destructive',
       });
     }

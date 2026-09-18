@@ -1,5 +1,6 @@
 import { Navigate } from "react-router-dom";
 import { useAuthStore } from "@/features/auth/auth-store";
+import { getDefaultRouteForRole } from "@/lib/rbac";
 import type { UserRole } from "@/types";
 
 interface ProtectedRouteProps {
@@ -16,7 +17,8 @@ export function ProtectedRoute({ children, requiredRoles }: ProtectedRouteProps)
   }
 
   if (requiredRoles && user && !requiredRoles.includes(user.role)) {
-    return <Navigate to="/" replace />;
+    const target = getDefaultRouteForRole(user.role);
+    return <Navigate to={target} replace />;
   }
 
   return <>{children}</>;

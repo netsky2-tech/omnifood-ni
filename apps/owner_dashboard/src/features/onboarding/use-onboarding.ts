@@ -15,11 +15,13 @@ import {
   type CreateManualProductDto,
 } from "./types";
 
+import { getActiveTenantId } from "@/lib/tenant";
+
 export const onboardingKeys = {
   all: ["onboarding"] as const,
-  session: () => [...onboardingKeys.all, "session"] as const,
-  readiness: () => [...onboardingKeys.all, "readiness"] as const,
-  catalogSummary: () => [...onboardingKeys.all, "catalog-summary"] as const,
+  session: (tenantId?: string) => ["onboarding", tenantId ?? getActiveTenantId(), "session"] as const,
+  readiness: (tenantId?: string) => ["onboarding", tenantId ?? getActiveTenantId(), "readiness"] as const,
+  catalogSummary: (tenantId?: string) => ["onboarding", tenantId ?? getActiveTenantId(), "catalog-summary"] as const,
 };
 
 export function calculateSetupCenterProgress(
@@ -214,7 +216,8 @@ export function useCreateManualProduct() {
       queryClient.setQueryData(onboardingKeys.readiness(), data.readiness);
       queryClient.invalidateQueries({ queryKey: onboardingKeys.all });
       queryClient.invalidateQueries({ queryKey: ["products"] });
-      queryClient.invalidateQueries({ queryKey: ["catalogs"] });
+      queryClient.invalidateQueries({ queryKey: ["catalog"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
     },
   });
 }

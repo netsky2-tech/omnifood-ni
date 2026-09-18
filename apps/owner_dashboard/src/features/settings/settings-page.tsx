@@ -28,20 +28,20 @@ export function SettingsPage({ initialTab = "fiscal" }: SettingsPageProps) {
       </div>
 
       {/* Tabs Navigation */}
-      <div className="flex border-b border-border space-x-2" role="tablist" aria-label="Secciones de Configuración">
+      <div className="flex border-b border-border space-x-2 overflow-x-auto scrollbar-thin" role="tablist" aria-label="Secciones de Configuración">
         <button
           role="tab"
           aria-selected={activeTab === "setup"}
           data-testid="tab-setup"
           onClick={() => setActiveTab("setup")}
-          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px cursor-pointer ${
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px cursor-pointer whitespace-nowrap flex-shrink-0 ${
             activeTab === "setup"
               ? "border-primary text-primary"
               : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30"
           }`}
         >
           <Store className="h-4 w-4" />
-          Setup Center (M2)
+          Centro de Configuración
         </button>
 
         <button
@@ -49,7 +49,7 @@ export function SettingsPage({ initialTab = "fiscal" }: SettingsPageProps) {
           aria-selected={activeTab === "fiscal"}
           data-testid="tab-fiscal"
           onClick={() => setActiveTab("fiscal")}
-          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px cursor-pointer ${
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px cursor-pointer whitespace-nowrap flex-shrink-0 ${
             activeTab === "fiscal"
               ? "border-primary text-primary"
               : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30"
@@ -64,7 +64,7 @@ export function SettingsPage({ initialTab = "fiscal" }: SettingsPageProps) {
           aria-selected={activeTab === "templates"}
           data-testid="tab-templates"
           onClick={() => setActiveTab("templates")}
-          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px cursor-pointer ${
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px cursor-pointer whitespace-nowrap flex-shrink-0 ${
             activeTab === "templates"
               ? "border-primary text-primary"
               : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30"
@@ -79,7 +79,7 @@ export function SettingsPage({ initialTab = "fiscal" }: SettingsPageProps) {
           aria-selected={activeTab === "import"}
           data-testid="tab-import"
           onClick={() => setActiveTab("import")}
-          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px cursor-pointer ${
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px cursor-pointer whitespace-nowrap flex-shrink-0 ${
             activeTab === "import"
               ? "border-primary text-primary"
               : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30"
