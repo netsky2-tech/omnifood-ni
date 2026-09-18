@@ -22,6 +22,7 @@ export async function ensurePublicAuthTables(
       password_hash varchar(255) NOT NULL DEFAULT '',
       is_active boolean NOT NULL DEFAULT true,
       security_version int NOT NULL DEFAULT 1,
+      attempt_reset_generation bigint NOT NULL DEFAULT 0,
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     );
