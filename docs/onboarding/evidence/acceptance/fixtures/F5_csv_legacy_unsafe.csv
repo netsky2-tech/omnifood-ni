@@ -1,0 +1,5 @@
+nombre,precio_venta,stock_inicial,stock,costo_insumo,costo_promedio,codigo_barras,barcode
+Hamburguesa Clásica,180.00,25,25,95.50,97.00,2000000000017,7432109876543
+Gaseosa 500ml,35.00,100,100,18.00,19.50,2000000000024,7432109876550
+Papas Fritas Medianas,75.00,40,40,22.00,23.00,2000000000031,7432109876567
+Café Americano,60.00,0,0,12.00,12.50,2000000000048,7432109876574

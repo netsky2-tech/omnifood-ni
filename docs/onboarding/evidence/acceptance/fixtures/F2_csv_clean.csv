@@ -1,0 +1,26 @@
+nombre,precio_venta,unidad_venta,sku,categoria,porcentaje_iva
+Hamburguesa Clásica,180.00,UN,HAM-01,Comida,15
+Hamburguesa Doble,240.00,UN,HAM-02,Comida,15
+Cheeseburger,190.00,UN,HAM-03,Comida,15
+Hot Dog Clásico,90.00,UN,HOT-01,Comida,15
+Hot Dog Especial,120.00,UN,HOT-02,Comida,15
+Pizza Personal,150.00,UN,PIZ-01,Comida,15
+Pizza Familiar,320.00,UN,PIZ-02,Comida,15
+Pollo Asado Medio,220.00,UN,PLC-01,Comida,15
+Pollo Asado Entero,380.00,UN,PLC-02,Comida,15
+Tacos de Res,140.00,ORDEN,TAC-01,Comida,15
+Nachos Supremos,165.00,UN,NAC-01,Acompañamientos,15
+Papas Fritas Medianas,75.00,UN,PAP-01,Acompañamientos,15
+Papas Fritas Grandes,95.00,UN,PAP-02,Acompañamientos,15
+Ensalada César,135.00,UN,ENS-01,Acompañamientos,15
+Arroz con Pollo,180.00,ORDEN,ARR-01,Platos Fuertes,15
+Gaseosa 500ml,35.00,UN,BEB-01,Bebidas,15
+Gaseosa 2L,70.00,UN,BEB-02,Bebidas,15
+Agua Embotellada 600ml,25.00,UN,BEB-03,Bebidas,15
+Cerveza Fría,50.00,UN,BEB-04,Bebidas,15
+Café Americano,60.00,UN,CAF-01,Bebidas,0
+Capuchino,85.00,UN,CAF-02,Bebidas,0
+Jugo Natural Naranja,45.00,UN,JUG-01,Bebidas,0
+Batido de Fresa,95.00,UN,BAT-01,Bebidas,0
+Flan de Caramelo,70.00,UN,POS-01,Postres,15
+Helado con Galleta,80.00,UN,POS-02,Postres,15
