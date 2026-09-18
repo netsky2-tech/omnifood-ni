@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
+import '../../core/utils/nicaragua_fiscal_validator.dart';
 import '../database/app_database.dart';
 import '../models/inventory/product_entity.dart';
 import 'local_auth_service.dart';
@@ -178,6 +179,22 @@ class ActivationRequiredConfigAdapter {
           checkCode: 'REQUIRED_CONFIG_LOCAL',
           status: ActivationCheckStatus.fail,
           reason: 'Fiscal payload is corrupt (not an object)',
+          evaluatedAt: now,
+        );
+      }
+
+      // The projected DGI RUC is the authoritative issuer fiscal identity (D1).
+      // Missing/malformed values fail closed here, offline, so a pre-fix legacy
+      // projection cannot complete activation.
+      final rawRuc = decoded['ruc']?.toString().trim();
+      if (!NicaraguaFiscalValidator.isValidRuc(rawRuc)) {
+        return ActivationCheckResult(
+          checkCode: 'REQUIRED_CONFIG_LOCAL',
+          status: ActivationCheckStatus.fail,
+          reason:
+              'Fiscal payload RUC is missing or invalid (local projection) — complete fiscal setup and re-sync',
+          // Sanitized: never leak the raw fiscal identifier.
+          details: {'hasRuc': rawRuc != null && rawRuc.isNotEmpty},
           evaluatedAt: now,
         );
       }

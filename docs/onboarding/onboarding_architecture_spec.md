@@ -602,7 +602,7 @@ El adapter Fiscal expone una configuración efectiva, no una copia en Onboarding
 ```text
 EffectiveFiscalConfiguration
   businessName
-  ruc?
+  ruc                 # obligatorio: RUC jurídico (J + 13 dígitos) o cédula válida
   fiscalRegime
   taxRate
   pricesIncludeTax
@@ -613,6 +613,10 @@ EffectiveFiscalConfiguration
 ```
 
 `phone`/`address` u otros campos que no estén persistidos end-to-end no participan en readiness.
+
+**Identidad fiscal impresa.** La proyección fiscal siembra el RUC del emisor tanto en el payload fiscal local como en `local_configs['ruc']`. Readiness en cloud valida el RUC del tenant; el check local `REQUIRED_CONFIG_LOCAL` valida el RUC dentro del payload fiscal persistido; y los caminos de impresión (venta, reimpresión y `TEST_PRINT`) leen `local_configs['ruc']`. El operador puede sobreescribir ese valor localmente desde el perfil de negocio del POS (capacidad offline-first deliberada); el valor local es el que se imprime en el comprobante hasta que una nueva proyección lo restaure. El campo decorativo de encabezado (`printer_header_ruc`) **nunca** sustituye al RUC del emisor.
+
+`TEST_PRINT` de activación debe probar la configuración efectiva y **fallar cerrado** —FAIL con blocker nombrado y sin imprimir— cuando la configuración local no se puede leer, o falta el régimen o el RUC del emisor. El **ancho de papel no es fail-closed**: se consume y se registra en la evidencia (un equipo legítimo de 58 mm sigue pasando; por eso el checklist del piloto incluye un pre-check explícito de 80 mm).
 
 ## 4.5 BOH readiness
 
@@ -846,7 +850,9 @@ FiscalConfigVersion
 FiscalConfigSnapshot
   tenantId
   businessName
-  ruc?
+  ruc?                # opcional en el tipo TS, pero la proyección SIEMPRE lo emite
+                      # (puede ser null en snapshots históricos; readiness y la
+                      # identidad impresa exigen un valor válido)
   fiscalRegime
   taxRate
   pricesIncludeTax

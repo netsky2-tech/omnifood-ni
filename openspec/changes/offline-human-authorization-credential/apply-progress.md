@@ -78,3 +78,69 @@ The Dart source/test directories contain 2,063 physical lines. Tracked diff befo
 ## Delivery state
 
 Apply is complete for PR 1. Native verify/re-review, work-unit commit, issue-first PR creation, and CI observation remain. Nothing in this progress record authorizes merge or deployment.
+
+## Slice 2b-2b — attempt-reset generation column + tenant publication marker (two additive migrations)
+
+- Date: 2026-09-17 · Branch: `feat/ohac-persistence-markers` (stacked on `feat/ohac-rls-seam` at `4b66944`)
+- Strict TDD: active · store `openspec` · budget 400 authored lines · delivery `auto-chain` / `stacked-to-main`
+- Design authority: §11.2 decisions 14 (per-user `attemptResetGeneration` storage) and 16 (durable tenant dirty marker + serialized publisher)
+
+### Completed work units
+
+1. **`1809030000000-AddHumanAuthorizationAttemptResetGeneration.ts`** (+ spec): adds `users.attempt_reset_generation bigint NOT NULL DEFAULT 0` idempotently (`ADD COLUMN IF NOT EXISTS`) plus named `ck_users_attempt_reset_generation_non_negative` CHECK idempotently (`DROP CONSTRAINT IF EXISTS` → `ADD CONSTRAINT`). No entity edits; `down()` is a documented no-op retaining the durable column, data, and constraint (no destructive rollback).
+2. **`1809040000000-CreateHumanAuthorizationTenantPublicationState.ts`** (+ spec): creates `human_auth_tenant_publication_state` — `tenant_id varchar(128) PRIMARY KEY` (one mutable marker row per tenant), `dirty boolean NOT NULL DEFAULT true`, `revision bigint NOT NULL DEFAULT 1 CHECK (revision >= 1)` for CAS, plus `marked_at`/`published_at`/`updated_at` as implementer-chosen storage. `ENABLE` + `FORCE ROW LEVEL SECURITY`; tenant SELECT/INSERT/UPDATE policies via `current_setting('app.tenant_id', true)`; no DELETE policy. Owned trigger/function `guard_human_auth_tenant_publication_state_mutation` forbids tenant re-identification (`NEW.tenant_id <> OLD.tenant_id`) and revision regression (`NEW.revision < OLD.revision`) while keeping UPDATE legal (no append-only semantics). Equal revisions remain legal; lost-signal safety is a 2b-2c application obligation using conditional revision predicates. No FK, no entity/module registration, no backfill rows. `down()` drops only its trigger then its function; table and rows retained, no `DROP TABLE`.
+
+### TDD cycle and verification evidence
+
+| Cycle | Result |
+| --- | --- |
+| RED WU1 — `npx jest src/migrations/1809030000000-…spec.ts` | FAIL — `TS2307: Cannot find module './1809030000000-AddHumanAuthorizationAttemptResetGeneration'` |
+| RED WU2 — `npx jest src/migrations/1809040000000-…spec.ts` | FAIL — `TS2307: Cannot find module './1809040000000-CreateHumanAuthorizationTenantPublicationState'` |
+| GREEN — focused jest on both spec files | PASS — 2 suites / 11 tests |
+| TRIANGULATE — added convergent re-run, CAS-equality-legal, no-backfill tests; focused jest | PASS — 14/14 |
+| REFACTOR — repo migration style, prettier shapes, non-async no-op `down()`; focused jest re-run | PASS — 14/14 |
+| `npx eslint` (four slice files, NO `--fix`) | PASS — no diagnostics (`npm run lint` deliberately never run) |
+| `npx prettier --check` (four slice files) | PASS — all files formatted |
+| `npm run build` | PASS — exit 0 |
+| Real-DB harness | N/A — DDL-only slice, no runtime seam; real-DB RLS/trigger coverage belongs to the `T-2` migration runtime suite |
+
+### Budget, PR boundary, rollback
+
+- Review-facing authored diff: 395 lines total (357 across the four migration/spec files + 38 in this progress update), all additions — within the 400-line budget; no `size:exception` needed.
+- PR boundary (stacked-to-main): one work-unit pair on `feat/ohac-persistence-markers`; 2b-2c (epoch projection + serialized publisher) is the next child and MUST consume `resolveEffectivePermissions`, never `resolveInventoryBohPermissions`.
+- Rollback boundary: revert the two migration files and their specs; no other slice, entity, or module depends on them yet. WU2 `down()` removes only its own trigger/function; WU1 `down()` is a no-op — neither destroys data.
+
+### Notes and deviations
+
+- Slice 2b-2b has no dedicated checkbox in tasks.md (forecast-table row only); numbered checkboxes belong to other slices/sessions and were left untouched.
+- "One marker row per tenant" is the `tenant_id` PRIMARY KEY schema property materialized by the publisher on demand; no backfill (a fabricated marker would be dead state; the INSERT policy covers publisher-created rows).
+- `pnpm install --frozen-lockfile` ran once to restore workspace `node_modules` (environment only; no source/lockfile change). The parent-owned `odd/` execution tracker is intentionally outside this PR boundary.
+- Remaining: slice 2b-2c epoch projection + serialized publisher (consumes both markers/columns this slice provisioned); 2b-3, 2c, 2d, 2e, Phase 3 `T-*`, `DEP-1`–`DEP-4` as recorded in tasks.md.
+
+## Slice 2b-2c1 — framework-free epoch projection
+
+- Date: 2026-09-17; branch `feat/ohac-epoch-projection` from `origin/main@6837032`.
+- User-approved split: projection lands first; database publication remains blocked and out of scope.
+- Authority: design §4.1 and §11.2 decisions 13-15.
+
+### Candidate boundary
+
+- `staff-policy-epoch-projector.ts` maps explicit source records to `ohac.staff-policy-epoch.v1` without direct NestJS/TypeORM/bcrypt imports, clocks, environment reads, or persistence.
+- Permissions use only `resolveEffectivePermissions`; entries/permissions are deterministic and UTF-16 sorted.
+- Status derives from `isActive`; nullable PIN rows are omitted; `$2a$`, `$2b$`, and `$2y$` prefixes derive the exact format version and every other non-null prefix fails closed.
+- Existing OHAC canonical/digest helpers build the digest and `parseStaffPolicyEpochV1` self-validates the final envelope.
+- Duplicate users, malformed metadata/chains/generations, and an empty projected policy return stable OHAC failures.
+
+### Evidence and limits
+
+| Check                                  | Result                                                                                                   |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Focused Jest                           | PASS: 1 suite, 14 tests                                                                                  |
+| `npx eslint` on both files, no `--fix` | PASS                                                                                                     |
+| `npx prettier --check` on both files   | PASS                                                                                                     |
+| `npm run build`                        | PASS                                                                                                     |
+| RED output                             | UNAVAILABLE: both phase-agent attempts failed before returning evidence; no historical RED claim is made |
+
+- Review budget: 372 projector/spec lines (single-record test strengthened in review) plus this 28-line progress section = 400 review-facing lines.
+- Rollback: revert the two projector files and this section; no runtime/module imports depend on them.
+- Prerequisite resolved by merged PR #289 (`6837032`): `UserRole` now lives in a framework-free vocabulary and `resolveEffectivePermissions` no longer loads TypeORM transitively. Publisher authority must separately define tenant-global fan-out/per-terminal build persistence and empty-policy revocation.

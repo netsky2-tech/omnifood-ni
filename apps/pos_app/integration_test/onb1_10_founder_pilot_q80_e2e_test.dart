@@ -20,6 +20,7 @@ import 'package:pos_app/data/repositories/tenant_capability_cache.dart';
 import 'package:pos_app/core/clock/monotonic_clock.dart';
 import 'package:pos_app/data/services/activation_clock_manager.dart';
 import 'package:pos_app/data/services/activation_controlled_sale_runner.dart';
+import 'package:pos_app/domain/services/config/printer_config_service.dart';
 import 'package:pos_app/data/services/activation_pre_offline_runner.dart';
 import 'package:pos_app/data/services/activation_reconnect_sync_runner.dart';
 import 'package:pos_app/data/services/activation_required_config_adapter.dart';
@@ -175,6 +176,21 @@ Future<void> _setup(AppDatabase db, String marker) async {
     payload: jsonEncode(fiscalData),
     appliedAt: DateTime.now().toUtc().toIso8601String(),
   ));
+  // Effective fiscal/printer configuration consumed by TEST_PRINT (FR-4).
+  // The fiscal-setup response exposes `ruc` and `regime` (not `taxRegime`);
+  // never write an empty value (it would clobber previously projected data).
+  for (final entry in {
+    PrinterConfigService.fiscalRucKey: (fiscalData['ruc'] as String?)?.trim(),
+    'tax_regime': (fiscalData['regime'] as String?)?.trim(),
+    PrinterConfigService.paperWidthMmKey: '80',
+  }.entries) {
+    final value = entry.value;
+    if (value == null || value.isEmpty) continue;
+    await db.localConfigDao.saveConfig(
+      LocalConfigEntity(key: entry.key, value: value),
+    );
+  }
+
   await db.productDao.insertProducts([
     ProductEntity(
       id: manualProduct['id'] as String,
@@ -229,6 +245,7 @@ Future<void> _setup(AppDatabase db, String marker) async {
     configAdapter: ActivationRequiredConfigAdapter(database: db),
     terminalIdentityService: TerminalIdentityService(db.localConfigDao),
     printerPort: printer,
+    printerConfigService: PrinterConfigService(db.localConfigDao),
   ).runPreOfflineChecks(PreOfflineRunnerParams(
     attemptId: attempt['id'] as String,
     tenantId: _tenantId,

@@ -10,13 +10,14 @@ import {
 } from 'typeorm';
 import { Tenant } from '../../tenant/entities/tenant.entity';
 import { SecurityProfile } from './security-profile.entity';
+import { UserRole } from '../security/user-role.enum';
 
-export enum UserRole {
-  OWNER = 'OWNER',
-  MANAGER = 'MANAGER',
-  CASHIER = 'CASHIER',
-  WAITER = 'WAITER',
-}
+/**
+ * Canonical UserRole values live in the framework-free leaf
+ * (../security/user-role.enum.ts). Re-exported here so existing imports from
+ * the entity keep working while TypeORM uses it for enum column metadata.
+ */
+export { UserRole };
 
 @Entity('users')
 export class User {

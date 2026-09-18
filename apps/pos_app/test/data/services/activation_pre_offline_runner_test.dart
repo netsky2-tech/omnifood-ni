@@ -1,9 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart' as p;
 
+import 'package:pos_app/core/utils/nicaragua_fiscal_validator.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/models/activation/activation_attempt_local_entity.dart';
 import 'package:pos_app/data/models/activation/activation_check_result_local_entity.dart';
@@ -14,7 +16,10 @@ import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/data/models/security_profile_entity.dart';
 import 'package:pos_app/data/models/user_entity.dart';
 import 'package:pos_app/data/adapters/printer/mock_printer_adapter.dart';
+import 'package:pos_app/domain/models/config/printer_config.dart';
+import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'package:pos_app/domain/ports/printer_port.dart';
+import 'package:pos_app/domain/services/config/printer_config_service.dart';
 import 'package:pos_app/data/services/activation_pre_offline_runner.dart';
 import 'package:pos_app/data/services/activation_required_config_adapter.dart';
 import 'package:pos_app/data/services/local_auth_service.dart';
@@ -47,6 +52,7 @@ void main() {
       configAdapter: configAdapter,
       terminalIdentityService: terminalIdentity,
       printerPort: printerAdapter,
+      printerConfigService: PrinterConfigService(database.localConfigDao),
     );
   });
 
@@ -236,6 +242,8 @@ void main() {
       final fiscalPayload = jsonEncode({
         'tenantId': tenantId,
         'businessName': 'Comedor El Fundador',
+        // Projected DGI RUC: REQUIRED_CONFIG_LOCAL fails closed without it (FR-3).
+        'ruc': 'J0310000000001',
         'fiscalRegime': 'GENERAL',
         'taxRate': 0.15,
         'configVersion': {
@@ -252,6 +260,23 @@ void main() {
           appliedAt: '2026-09-04T12:00:00.000Z',
         ),
       );
+
+      // Provision the EFFECTIVE fiscal/printer configuration consumed by
+      // TEST_PRINT, which is a fixture proof and fails closed without it (FR-4).
+      for (final entry in {
+        PrinterConfigService.fiscalRucKey: 'J0310000000001',
+        'tax_regime': 'CUOTA_FIJA',
+        PrinterConfigService.paperWidthMmKey: '80',
+      }.entries) {
+        await database.localConfigDao.saveConfig(
+          LocalConfigEntity(
+            key: entry.key,
+            value: entry.value,
+            description: 'Activation fixture (founder pilot)',
+          ),
+        );
+      }
+
 
       // 3. Provision product in SQLite
       final product = ProductEntity(
@@ -447,6 +472,154 @@ void main() {
         contains('TEST_PRINT_FAILED: Nyx native printText returned code -7'),
       );
     });
+    group('PR-5 - TEST_PRINT proves the effective founder fixture', () {
+      Future<void> overrideConfig(String key, String value) async {
+        await database.localConfigDao.saveConfig(
+          LocalConfigEntity(key: key, value: value),
+        );
+      }
+
+      Future<PreOfflineRunnerSummary> runPreOffline() =>
+          runner.runPreOfflineChecks(
+            const PreOfflineRunnerParams(
+              attemptId: attemptId,
+              tenantId: tenantId,
+              authorizedUserId: authorizedUserId,
+              authorizedUserPin: validPin,
+            ),
+          );
+
+      test('AC-FP-05/06: effective 80mm + CUOTA_FIJA + projected RUC reach the printer',
+          () async {
+        final summary = await runPreOffline();
+
+        expect(summary.checks['TEST_PRINT']!.status, equals('PASS'));
+        expect(printerAdapter.lastPaperWidthMm, equals(80));
+        expect(printerAdapter.lastTaxRegime, equals(TaxRegime.cuotaFija));
+        expect(printerAdapter.lastRuc, equals('J0310000000001'));
+        expect(printerAdapter.lastPrintedText, contains('RUC: J0310000000001'));
+        expect(
+          printerAdapter.lastPrintedText,
+          contains('COMPROBANTE DE VENTA'),
+        );
+      });
+
+      test('AC-FP-08: evidence records the effective fixture and never the raw RUC',
+          () async {
+        final summary = await runPreOffline();
+        final details = summary.checks['TEST_PRINT']!.detailsSanitizedJson;
+
+        expect(details, contains('"paperWidthMm":80'));
+        expect(details, contains('"taxRegime":"CUOTA_FIJA"'));
+        expect(details, contains('"rucPresent":true'));
+        // Golden constant, derived independently:
+        //   printf 'J0310000000001' | sha256sum
+        // Not a re-computation with the production helper.
+        expect(
+          details,
+          contains(
+            '"rucHash":"d91cf1221bf0b8281db39bcde354840b92b52dfcde8d433db353dc9dc866f948"',
+          ),
+        );
+        expect(details, isNot(contains('J0310000000001')));
+      });
+
+      test('AC-FP-08: a hyphenated/lowercase stored RUC hashes to the same canonical proof',
+          () async {
+        await overrideConfig(PrinterConfigService.fiscalRucKey, ' j031-0000000001 ');
+
+        final summary = await runPreOffline();
+        final details = summary.checks['TEST_PRINT']!.detailsSanitizedJson;
+
+        expect(summary.checks['TEST_PRINT']!.status, equals('PASS'));
+        expect(details, contains('"rucPresent":true'));
+        expect(
+          details,
+          contains(
+            '"rucHash":"d91cf1221bf0b8281db39bcde354840b92b52dfcde8d433db353dc9dc866f948"',
+          ),
+        );
+        expect(details, isNot(contains('j031-0000000001')));
+      });
+
+      test('AC-FP-07: fails closed when the effective config cannot be read', () async {
+        final throwingRunner = ActivationPreOfflineRunner(
+          database: database,
+          configAdapter: configAdapter,
+          terminalIdentityService: terminalIdentity,
+          printerPort: printerAdapter,
+          printerConfigService: _ThrowingPrinterConfigService(
+            database.localConfigDao,
+          ),
+        );
+
+        final summary = await throwingRunner.runPreOfflineChecks(
+          const PreOfflineRunnerParams(
+            attemptId: attemptId,
+            tenantId: tenantId,
+            authorizedUserId: authorizedUserId,
+            authorizedUserPin: validPin,
+          ),
+        );
+
+        expect(summary.checks['TEST_PRINT']!.status, equals('FAIL'));
+        expect(printerAdapter.printHistory, isEmpty);
+        expect(
+          summary.blockers,
+          contains(
+            'TEST_PRINT_FAILED: Configuración fiscal local no disponible — no se pudo leer la configuración efectiva',
+          ),
+        );
+      });
+
+      test('AC-FP-07: fails closed with a named blocker when the regime is missing',
+          () async {
+        await overrideConfig('tax_regime', '');
+
+        final summary = await runPreOffline();
+
+        expect(summary.checks['TEST_PRINT']!.status, equals('FAIL'));
+        expect(printerAdapter.printHistory, isEmpty);
+        expect(
+          summary.blockers,
+          contains(
+            'TEST_PRINT_FAILED: Empresa sin régimen fiscal DGI configurado (proyección fiscal local)',
+          ),
+        );
+      });
+
+      test('AC-FP-07: fails closed with a named blocker when the projected RUC is missing',
+          () async {
+        await overrideConfig(PrinterConfigService.fiscalRucKey, '');
+
+        final summary = await runPreOffline();
+
+        expect(summary.checks['TEST_PRINT']!.status, equals('FAIL'));
+        expect(printerAdapter.printHistory, isEmpty);
+        expect(printerAdapter.lastRuc, isNull);
+        expect(printerAdapter.lastPaperWidthMm, isNull);
+        expect(
+          summary.blockers,
+          contains(
+            'TEST_PRINT_FAILED: Identidad fiscal del emisor (RUC) no disponible — complete la configuración fiscal',
+          ),
+        );
+      });
+
+      test('Q6: a non-fixture paper width is verified, not hard-failed', () async {
+        await overrideConfig(PrinterConfigService.paperWidthMmKey, '58');
+
+        final summary = await runPreOffline();
+
+        expect(summary.checks['TEST_PRINT']!.status, equals('PASS'));
+        expect(printerAdapter.lastPaperWidthMm, equals(58));
+        expect(
+          summary.checks['TEST_PRINT']!.detailsSanitizedJson,
+          contains('"paperWidthMm":58'),
+        );
+      });
+    });
+
   });
 
   group('ONB1.8A–B — Offline Restart Durability (Disk Persistence Roundtrip)', () {
@@ -542,4 +715,13 @@ void main() {
       }
     });
   });
+}
+
+/// Forces the effective-config read to fail so the fail-closed path is pinned.
+class _ThrowingPrinterConfigService extends PrinterConfigService {
+  _ThrowingPrinterConfigService(super.configDao);
+
+  @override
+  Future<PrinterConfig> getPrinterConfig() =>
+      Future<PrinterConfig>.error(StateError('local config unreadable'));
 }

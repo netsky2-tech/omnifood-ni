@@ -30,6 +30,16 @@ mixin _$PrinterConfig {
   int get copies => throw _privateConstructorUsedError;
   String get headerBusinessName => throw _privateConstructorUsedError;
   String? get headerLegalName => throw _privateConstructorUsedError;
+
+  /// Issuer fiscal RUC printed on fiscal documents (local_configs['ruc']).
+  ///
+  /// The DGI fiscal projection seeds it, and the operator may override it from
+  /// the POS business profile (intentional, offline-first). This is the value
+  /// the sale and reprint paths print; [headerRuc] must never shadow it.
+  /// Never written by [PrinterConfigService.savePrinterConfig].
+  String? get fiscalRuc => throw _privateConstructorUsedError;
+
+  /// Decorative printer header field (printer_header_ruc); must not shadow [fiscalRuc].
   String? get headerRuc => throw _privateConstructorUsedError;
   String? get headerAddress => throw _privateConstructorUsedError;
   String? get headerPhone => throw _privateConstructorUsedError;
@@ -62,6 +72,7 @@ abstract class $PrinterConfigCopyWith<$Res> {
       int copies,
       String headerBusinessName,
       String? headerLegalName,
+      String? fiscalRuc,
       String? headerRuc,
       String? headerAddress,
       String? headerPhone,
@@ -95,6 +106,7 @@ class _$PrinterConfigCopyWithImpl<$Res, $Val extends PrinterConfig>
     Object? copies = null,
     Object? headerBusinessName = null,
     Object? headerLegalName = freezed,
+    Object? fiscalRuc = freezed,
     Object? headerRuc = freezed,
     Object? headerAddress = freezed,
     Object? headerPhone = freezed,
@@ -144,6 +156,10 @@ class _$PrinterConfigCopyWithImpl<$Res, $Val extends PrinterConfig>
       headerLegalName: freezed == headerLegalName
           ? _value.headerLegalName
           : headerLegalName // ignore: cast_nullable_to_non_nullable
+              as String?,
+      fiscalRuc: freezed == fiscalRuc
+          ? _value.fiscalRuc
+          : fiscalRuc // ignore: cast_nullable_to_non_nullable
               as String?,
       headerRuc: freezed == headerRuc
           ? _value.headerRuc
@@ -200,6 +216,7 @@ abstract class _$$PrinterConfigImplCopyWith<$Res>
       int copies,
       String headerBusinessName,
       String? headerLegalName,
+      String? fiscalRuc,
       String? headerRuc,
       String? headerAddress,
       String? headerPhone,
@@ -231,6 +248,7 @@ class __$$PrinterConfigImplCopyWithImpl<$Res>
     Object? copies = null,
     Object? headerBusinessName = null,
     Object? headerLegalName = freezed,
+    Object? fiscalRuc = freezed,
     Object? headerRuc = freezed,
     Object? headerAddress = freezed,
     Object? headerPhone = freezed,
@@ -280,6 +298,10 @@ class __$$PrinterConfigImplCopyWithImpl<$Res>
       headerLegalName: freezed == headerLegalName
           ? _value.headerLegalName
           : headerLegalName // ignore: cast_nullable_to_non_nullable
+              as String?,
+      fiscalRuc: freezed == fiscalRuc
+          ? _value.fiscalRuc
+          : fiscalRuc // ignore: cast_nullable_to_non_nullable
               as String?,
       headerRuc: freezed == headerRuc
           ? _value.headerRuc
@@ -331,6 +353,7 @@ class _$PrinterConfigImpl implements _PrinterConfig {
       this.copies = 1,
       this.headerBusinessName = 'OMNIFOOD NI',
       this.headerLegalName,
+      this.fiscalRuc,
       this.headerRuc,
       this.headerAddress,
       this.headerPhone,
@@ -371,6 +394,17 @@ class _$PrinterConfigImpl implements _PrinterConfig {
   final String headerBusinessName;
   @override
   final String? headerLegalName;
+
+  /// Issuer fiscal RUC printed on fiscal documents (local_configs['ruc']).
+  ///
+  /// The DGI fiscal projection seeds it, and the operator may override it from
+  /// the POS business profile (intentional, offline-first). This is the value
+  /// the sale and reprint paths print; [headerRuc] must never shadow it.
+  /// Never written by [PrinterConfigService.savePrinterConfig].
+  @override
+  final String? fiscalRuc;
+
+  /// Decorative printer header field (printer_header_ruc); must not shadow [fiscalRuc].
   @override
   final String? headerRuc;
   @override
@@ -391,7 +425,7 @@ class _$PrinterConfigImpl implements _PrinterConfig {
 
   @override
   String toString() {
-    return 'PrinterConfig(driverType: $driverType, autoPrintInvoice: $autoPrintInvoice, autoPrintKitchen: $autoPrintKitchen, openDrawerOnCash: $openDrawerOnCash, paperWidthMm: $paperWidthMm, networkIp: $networkIp, networkPort: $networkPort, copies: $copies, headerBusinessName: $headerBusinessName, headerLegalName: $headerLegalName, headerRuc: $headerRuc, headerAddress: $headerAddress, headerPhone: $headerPhone, taxRegime: $taxRegime, logoBase64: $logoBase64, logoWidth: $logoWidth, logoHeight: $logoHeight, isLogoEnabled: $isLogoEnabled)';
+    return 'PrinterConfig(driverType: $driverType, autoPrintInvoice: $autoPrintInvoice, autoPrintKitchen: $autoPrintKitchen, openDrawerOnCash: $openDrawerOnCash, paperWidthMm: $paperWidthMm, networkIp: $networkIp, networkPort: $networkPort, copies: $copies, headerBusinessName: $headerBusinessName, headerLegalName: $headerLegalName, fiscalRuc: $fiscalRuc, headerRuc: $headerRuc, headerAddress: $headerAddress, headerPhone: $headerPhone, taxRegime: $taxRegime, logoBase64: $logoBase64, logoWidth: $logoWidth, logoHeight: $logoHeight, isLogoEnabled: $isLogoEnabled)';
   }
 
   @override
@@ -418,6 +452,8 @@ class _$PrinterConfigImpl implements _PrinterConfig {
                 other.headerBusinessName == headerBusinessName) &&
             (identical(other.headerLegalName, headerLegalName) ||
                 other.headerLegalName == headerLegalName) &&
+            (identical(other.fiscalRuc, fiscalRuc) ||
+                other.fiscalRuc == fiscalRuc) &&
             (identical(other.headerRuc, headerRuc) ||
                 other.headerRuc == headerRuc) &&
             (identical(other.headerAddress, headerAddress) ||
@@ -438,26 +474,28 @@ class _$PrinterConfigImpl implements _PrinterConfig {
 
   @JsonKey(ignore: true)
   @override
-  int get hashCode => Object.hash(
-      runtimeType,
-      driverType,
-      autoPrintInvoice,
-      autoPrintKitchen,
-      openDrawerOnCash,
-      paperWidthMm,
-      networkIp,
-      networkPort,
-      copies,
-      headerBusinessName,
-      headerLegalName,
-      headerRuc,
-      headerAddress,
-      headerPhone,
-      taxRegime,
-      logoBase64,
-      logoWidth,
-      logoHeight,
-      isLogoEnabled);
+  int get hashCode => Object.hashAll([
+        runtimeType,
+        driverType,
+        autoPrintInvoice,
+        autoPrintKitchen,
+        openDrawerOnCash,
+        paperWidthMm,
+        networkIp,
+        networkPort,
+        copies,
+        headerBusinessName,
+        headerLegalName,
+        fiscalRuc,
+        headerRuc,
+        headerAddress,
+        headerPhone,
+        taxRegime,
+        logoBase64,
+        logoWidth,
+        logoHeight,
+        isLogoEnabled
+      ]);
 
   @JsonKey(ignore: true)
   @override
@@ -485,6 +523,7 @@ abstract class _PrinterConfig implements PrinterConfig {
       final int copies,
       final String headerBusinessName,
       final String? headerLegalName,
+      final String? fiscalRuc,
       final String? headerRuc,
       final String? headerAddress,
       final String? headerPhone,
@@ -518,6 +557,17 @@ abstract class _PrinterConfig implements PrinterConfig {
   @override
   String? get headerLegalName;
   @override
+
+  /// Issuer fiscal RUC printed on fiscal documents (local_configs['ruc']).
+  ///
+  /// The DGI fiscal projection seeds it, and the operator may override it from
+  /// the POS business profile (intentional, offline-first). This is the value
+  /// the sale and reprint paths print; [headerRuc] must never shadow it.
+  /// Never written by [PrinterConfigService.savePrinterConfig].
+  String? get fiscalRuc;
+  @override
+
+  /// Decorative printer header field (printer_header_ruc); must not shadow [fiscalRuc].
   String? get headerRuc;
   @override
   String? get headerAddress;

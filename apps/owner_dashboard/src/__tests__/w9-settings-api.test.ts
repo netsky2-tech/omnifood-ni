@@ -18,6 +18,7 @@ import {
   MAX_IMPORT_CHUNK_SIZE,
 } from "@/features/settings/types";
 import type { ImportRowDto } from "@/features/settings/types";
+import { RUC_ACCEPTED_FORMS_MESSAGE } from "@/features/settings/nicaragua-fiscal";
 
 let fetchSpy: ReturnType<typeof vi.fn>;
 
@@ -110,6 +111,55 @@ describe("W9 — Fiscal Setup & Onboarding API & Schemas (TDD RED -> GREEN -> TR
         };
         const parsed = fiscalSetupSchema.safeParse(invalid);
         expect(parsed.success).toBe(false);
+      });
+    });
+
+    describe("fiscalSetupSchema — required issuer RUC (PR-1)", () => {
+      const basePayload = {
+        regime: FiscalRegime.CUOTA_FIJA,
+        businessName: "Cafetería La Esquina",
+        commercialFxSpread: 0.5,
+        pricesIncludeTax: false,
+      };
+
+      it.each([
+        ["absent", undefined],
+        ["empty string", ""],
+        ["whitespace only", "   "],
+        ["malformed CF form", "CF-12345"],
+        ["wrong leading letter", "K0310000055555"],
+        ["J-RUC too short", "J031000005555"],
+      ])("rejects %s RUC", (_case, ruc) => {
+        const parsed = fiscalSetupSchema.safeParse({ ...basePayload, ruc });
+        expect(parsed.success).toBe(false);
+      });
+
+      it("accepts a valid legal J-RUC", () => {
+        const parsed = fiscalSetupSchema.safeParse({
+          ...basePayload,
+          ruc: "J0310000055555",
+        });
+        expect(parsed.success).toBe(true);
+      });
+
+      it("accepts a valid natural-person cédula", () => {
+        const parsed = fiscalSetupSchema.safeParse({
+          ...basePayload,
+          ruc: "001-150885-1004J",
+        });
+        expect(parsed.success).toBe(true);
+      });
+
+      it("names RUC and the accepted forms in the rejection message", () => {
+        const parsed = fiscalSetupSchema.safeParse({
+          ...basePayload,
+          ruc: "CF-12345",
+        });
+        const messages =
+          parsed.success === false
+            ? parsed.error.issues.map((issue) => issue.message).join(" ")
+            : "";
+        expect(messages).toContain(RUC_ACCEPTED_FORMS_MESSAGE);
       });
     });
 

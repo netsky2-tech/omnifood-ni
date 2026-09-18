@@ -54,6 +54,7 @@ describe('FiscalSetupController (Unit)', () => {
       const dto: FiscalSetupDto = {
         regime: FiscalRegime.CUOTA_FIJA,
         businessName: 'Cafetín',
+        ruc: 'J0310000055555',
         commercialFxSpread: 0.5,
         pricesIncludeTax: true,
       };
@@ -71,6 +72,7 @@ describe('FiscalSetupController (Unit)', () => {
       const dto: FiscalSetupDto = {
         regime: FiscalRegime.CUOTA_FIJA,
         businessName: 'Cafetín',
+        ruc: 'J0310000055555',
         commercialFxSpread: 0.5,
         pricesIncludeTax: true,
       };
@@ -78,7 +80,7 @@ describe('FiscalSetupController (Unit)', () => {
       const mockResponse = {
         tenantId: 'tenant-1',
         businessName: 'Cafetín',
-        ruc: null,
+        ruc: 'J0310000055555',
         regime: FiscalRegime.CUOTA_FIJA,
         taxRateIva: 0.0,
         pricesIncludeTax: true,

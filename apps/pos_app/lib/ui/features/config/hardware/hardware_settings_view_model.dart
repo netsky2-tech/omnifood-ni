@@ -230,13 +230,19 @@ class HardwareSettingsViewModel extends ChangeNotifier {
         return false;
       }
 
+      // Preview only (never a fiscal document): use the locally persisted issuer
+      // RUC so the operator validates the real fiscal identity and layout. Never
+      // substitute the decorative header field nor a fabricated identifier: with
+      // nothing configured the preview simply omits the RUC line.
+      final previewRuc = _config.fiscalRuc;
+
       final result = await _printerPort.printInvoice(
         sampleInvoice,
         items: sampleItems,
         payments: samplePayments,
         businessName: _config.headerBusinessName,
         legalName: _config.headerLegalName,
-        ruc: _config.headerRuc ?? 'J0310000000001',
+        ruc: previewRuc,
         address: _config.headerAddress,
         phone: _config.headerPhone,
         logoRasterBytes: logoRasterBytes,

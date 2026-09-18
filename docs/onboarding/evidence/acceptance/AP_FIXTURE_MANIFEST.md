@@ -72,13 +72,13 @@ Flags según `OnboardingFeatureRolloutService` — estado congelado para accepta
 
 | Campo | Valor |
 |---|---|
-| Device model | Alacrity Q80 / iPOS (confirmar modelo exacto en campo) |
+| Device model | MIRAY Q80 (iPOS) — Android 12, Nyx Printer Service 2.0.5 |
 | Device serial hash | «COMPLETAR EN CAMPO: SHA-256 del serial físico — obtener con `adb shell getprop ro.serialno` y hashear» |
 | Terminal ID (DevicePrincipal) | `Q802024120001` (fijo según seed script) |
 | OS version | «COMPLETAR EN CAMPO: `adb shell getprop ro.build.version.release` + security patch» |
 | Firmware | «COMPLETAR EN CAMPO si aplica» |
 | Printer adapter | «COMPLETAR EN CAMPO: driver real que aparece en logs del POS al imprimir — NO MockPrinterAdapter» |
-| Printer paper width | 58 mm (estándar ticket) |
+| Printer paper width | **80 mm** (rollo incluido en el Q80). Es el único perfil físicamente calibrado en este equipo: Nyx `TLMono` font 4, 40 columnas, 576 dots, leftPadding 8. El soporte de 58 mm existe en software (32 columnas / 384 dots) pero **no está validado físicamente** en el piloto |
 | Network profile | «COMPLETAR EN CAMPO: WiFi SSID del entorno de piloto» |
 | WAN outage method | «COMPLETAR EN CAMPO: airplane mode / router disconnect / other» |
 
@@ -103,6 +103,7 @@ Flags según `OnboardingFeatureRolloutService` — estado congelado para accepta
 | Tenant name pattern | `Founder Pilot Q80 <runId>` |
 | Owner role | `OWNER` |
 | Owner offline PIN | 6 dígitos (generado por el seed script — capturar del output JSON) |
+| Tenant RUC | `J0000000000000` (placeholder del seed — ver §9; reemplazar antes del primer documento fiscal real) |
 | Tenant initial state | `is_active=true`, `OnboardingSession` NO iniciada, sin milestones |
 
 **IMPORTANTE:** Cada reference run crea un tenant nuevo. El seed se ejecuta antes de cada run, no se reutiliza entre runs.
@@ -125,11 +126,13 @@ Flags según `OnboardingFeatureRolloutService` — estado congelado para accepta
 
 | Campo | Valor |
 |---|---|
-| RUC | «COMPLETAR EN CAMPO: RUC del tenant fundador — debe ser válido para DGI; usar el del seed o uno de prueba oficial» |
-| Régimen | General (confirmar) |
+| RUC | `J0000000000000` — **placeholder** provisto por el seed script (override: `ONBOARDING_FOUNDER_RUC`). Estructuralmente válido (`J` + 13 dígitos) pero **no es un RUC real de contribuyente** |
+| Régimen | `CUOTA_FIJA` — IVA `0.00`. No mezclar regímenes en el cohort |
 | Nombre comercial | «COMPLETAR EN CAMPO: nombre del tenant pilot» |
 | Dirección fiscal | «COMPLETAR EN CAMPO: dirección ficticia de prueba pero con formato válido» |
 | Teléfono | «COMPLETAR EN CAMPO» |
+
+**ORDEN BLOQUEANTE:** el RUC placeholder debe reemplazarse por el RUC real del founder **antes de emitir el primer documento fiscal**. Los documentos emitidos son inmutables ante DGI: no se borran, no se re-numeran y no se corrigen retroactivamente. Corregir el RUC después de la primera factura deja esa factura con un identificador inválido de forma permanente.
 
 ---
 
@@ -153,6 +156,20 @@ Flags según `OnboardingFeatureRolloutService` — estado congelado para accepta
 | F3 — CSV Mixed | 20 válidas + 5 inválidas + alias + columna desconocida | «COMPLETAR EN CAMPO» |
 | F4 — CSV Duplicate | Productos existentes para REPLACE/SKIP/FAIL | «COMPLETAR EN CAMPO» |
 | F5 — Legacy Unsafe | Columnas legacy: stock_inicial, costo, barcode | «COMPLETAR EN CAMPO» |
+
+---
+
+# 11.1 Pendiente para el freeze (no ejecutado por este cambio)
+
+Este manifest describe el **fixture real del piloto**, pero su identidad de release está desactualizada y debe refrescarse al congelar:
+
+| Campo | Estado |
+|---|---|
+| `acceptanceReleaseId` | **Stale.** El valor registrado corresponde a un commit 137 atrás; regenerarlo con el HEAD final y la última migración tras este cambio |
+| Último commit congelado / builds (§1, §2) | **Stale.** Reemplazar por el HEAD y los builds reales al firmar |
+| Database migration version (§2) | **Stale.** La versión registrada no coincide con la última migración del árbol |
+| Capturas de campo (§5, §6) | Pendientes de captura en el dispositivo físico |
+| CSV fixtures F2–F5 + hashes (§11) | Pendientes |
 
 ---
 

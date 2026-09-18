@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+import {
+  isValidNicaraguaFiscalId,
+  RUC_ACCEPTED_FORMS_MESSAGE,
+} from "./nicaragua-fiscal";
+
 // --- Fiscal Setup ---
 
 export const FiscalRegime = {
@@ -17,11 +22,14 @@ export const fiscalSetupSchema = z.object({
     .string()
     .trim()
     .min(1, "El nombre comercial es obligatorio"),
+  // PR-1: issuer RUC mandatory; HTTP enforcement lands in PR-2.
   ruc: z
     .string()
     .trim()
-    .optional()
-    .or(z.literal("")),
+    .min(1, RUC_ACCEPTED_FORMS_MESSAGE)
+    .refine((ruc) => isValidNicaraguaFiscalId(ruc), {
+      message: RUC_ACCEPTED_FORMS_MESSAGE,
+    }),
   commercialFxSpread: z
     .number({ invalid_type_error: "El spread cambiario debe ser un número" })
     .min(0, "El spread cambiario debe ser mayor o igual a 0"),

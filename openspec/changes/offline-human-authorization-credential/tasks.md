@@ -39,12 +39,17 @@ Measured slice estimates (authored lines; generated `app_database.g.dart` exclud
 | Slice | Scope | Estimate | vs 400 budget |
 |---|---|---|---|
 | 2a-1 (docs) | Resolve and record storage decisions (§11.1) + this forecast correction | ~110 | within |
-| 2a-2 | `I-2` migration 1: epochs, ack history, ack floor + unit SQL spec | ~450–560 | ~1.4× |
-| 2a-3 | `I-2` migration 2: recovery tokens/events, verification events, cohorts + unit SQL spec | ~430–540 | ~1.3× |
-| 2b | Backend epoch publication/ack + RLS-bound transaction + DTOs + `I-5` dark module/route registration + TypeORM entities | ~640–1,110 | ~2.7× |
-| 2c | `I-3` POS Floor migration + entities/DAOs | ~600–1,100 | ~2.7× |
-| 2d | POS epoch state machine + drain gate + R1-008 registration coupler + quarantine | ~630–1,140 | ~2.8× |
-| 2e | `B-TRIANGULATE` + `B-REFACTOR` + `B-EVIDENCE` | ~340–630 | ~0.9–1.6× |
+| 2a-2 | `I-2` migration 1: epochs, ack history, ack floor + unit SQL spec | 379 actual | within |
+| 2a-3 | `I-2` migration 2: recovery tokens, recovery events + unit SQL spec | 410 actual | ~1.03× |
+| 2a-4 | `I-2` migration 3: verification events, rollout cohorts + unit SQL spec | 351 actual | within |
+| 2b-1 | Entities for the seven OHAC tables, shared Int64-safe bigint transformer, registration-only module | 499 + 372 actual | 1.25x then within |
+| 2b-2a | RLS-bound tenant transaction seam + device-principal accessor | ~260 est. | within |
+| 2b-2b | Persisted per-user `attemptResetGeneration` column + tenant dirty marker (two additive migrations) | ~330 est. | within |
+| 2b-2c | Epoch projection and serialized publisher, idempotent by projected digest | ~380 est. | ~0.95x |
+| 2b-3 | Ack route + DTOs + dark module and route registration | ~380 est. | ~0.95x |
+| 2c | `I-3` POS Floor migration + entities/DAOs | ~600–1,100 | ~2.7x |
+| 2d | POS epoch state machine + drain gate + R1-008 registration coupler + quarantine | ~630–1,140 | ~2.8x |
+| 2e | `B-TRIANGULATE` + `B-REFACTOR` + `B-EVIDENCE` | ~340–630 | ~0.9–1.6x |
 
 Slices 2b–2d still exceed the budget and are expected to be split again at apply time, the same way
 PR 2 was split here. The authoritative budget rule is unchanged: 400 lines per PR, and any overshoot
@@ -94,17 +99,18 @@ canonical fixtures/contracts
   escaped controls, astral Unicode, UTF-16 key ordering, NFC/NFD distinction, empty arrays, forbidden
   number, forbidden `null`, duplicate keys, leading-zero sequence, unknown field, one-byte mutation,
   max 1 MiB size) with exact expected canonical bytes/hex per design §7.2.
-- [ ] `I-2` **(PR 2a)** Author backend additive TypeORM migrations for the OHAC core and recovery tables.
-  The single-file form originally named here was split in two to respect the 400-line review budget
-  (recorded in the forecast correction above and in design §11.1 decision 11):
+- [ ] `I-2` **(PR 2a)** Author backend additive TypeORM migrations for the OHAC core, recovery, and observability tables.
+  The single-file form originally named here was split into three to respect the 400-line review budget
+  (recorded in design §11.1 decision 11 and in the forecast correction above):
   `apps/admin_backend/src/migrations/1809000000000-CreateHumanAuthorizationCore.ts` creating
-  `human_auth_policy_epochs`, `human_auth_terminal_ack_history`, `human_auth_terminal_ack_floor`, and
-  `apps/admin_backend/src/migrations/1809010000000-CreateHumanAuthorizationRecoveryAndObservability.ts`
-  creating `human_auth_recovery_tokens`, `human_auth_recovery_events`, `human_auth_verification_events`,
-  `human_auth_rollout_cohorts`, both with unique/check constraints, indexes, `ENABLE` + `FORCE ROW LEVEL
-  SECURITY`, tenant SELECT/INSERT/update policies using `current_setting('app.tenant_id', true)`, and
-  UPDATE/DELETE-denial triggers on append-only tables plus floor-regression triggers (design §4.2, §11,
-  §11.1).
+  `human_auth_policy_epochs`, `human_auth_terminal_ack_history`, `human_auth_terminal_ack_floor`;
+  `apps/admin_backend/src/migrations/1809010000000-CreateHumanAuthorizationRecovery.ts` creating
+  `human_auth_recovery_tokens`, `human_auth_recovery_events`;
+  `apps/admin_backend/src/migrations/1809020000000-CreateHumanAuthorizationObservability.ts` creating
+  `human_auth_verification_events`, `human_auth_rollout_cohorts`. All three ship unique/check constraints,
+  indexes, `ENABLE` + `FORCE ROW LEVEL SECURITY`, tenant SELECT/INSERT/update policies using
+  `current_setting('app.tenant_id', true)`, and UPDATE/DELETE-denial triggers on append-only tables plus
+  floor-regression and token-transition triggers (design §4.2, §11, §11.1).
 - [ ] `I-3` **(PR 2)** Add POS additive Floor migration + entities/DAOs registration in
   `apps/pos_app/lib/data/database/app_database.dart` and `migrations.dart` for
   `human_auth_policy_epochs`, `human_auth_policy_entries`, singleton `human_auth_terminal_state`,
