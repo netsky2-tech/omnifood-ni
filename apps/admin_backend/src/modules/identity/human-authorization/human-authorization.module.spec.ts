@@ -9,6 +9,8 @@ import { HumanAuthRecoveryToken } from './entities/human-auth-recovery-token.ent
 import { HumanAuthRecoveryEvent } from './entities/human-auth-recovery-event.entity';
 import { HumanAuthVerificationEvent } from './entities/human-auth-verification-event.entity';
 import { HumanAuthRolloutCohort } from './entities/human-auth-rollout-cohort.entity';
+import { HumanAuthPolicySnapshot } from './entities/human-auth-policy-snapshot.entity';
+import { HumanAuthTenantPublicationState } from './entities/human-auth-tenant-publication-state.entity';
 
 const ohacEntities = [
   HumanAuthPolicyEpoch,
@@ -18,6 +20,8 @@ const ohacEntities = [
   HumanAuthRecoveryEvent,
   HumanAuthVerificationEvent,
   HumanAuthRolloutCohort,
+  HumanAuthPolicySnapshot,
+  HumanAuthTenantPublicationState,
 ];
 
 describe('HumanAuthorizationModule skeleton', () => {
@@ -37,7 +41,7 @@ describe('HumanAuthorizationModule skeleton', () => {
     await module.close();
   });
 
-  it('registers repositories for all seven OHAC entities', () => {
+  it('registers repositories for all nine OHAC entities', () => {
     for (const entity of ohacEntities) {
       expect(module.get(getRepositoryToken(entity))).toBeDefined();
     }

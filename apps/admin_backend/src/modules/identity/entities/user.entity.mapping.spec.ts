@@ -54,4 +54,27 @@ describe('User Entity Mapping', () => {
       select: false,
     });
   });
+
+  it('maps attempt_reset_generation as a plain non-null bigint defaulting to 0 without the OHAC transformer', () => {
+    const column = getMetadataArgsStorage().columns.find(
+      (column) =>
+        column.target === User &&
+        column.propertyName === 'attempt_reset_generation',
+    );
+
+    expect(column).toBeDefined();
+    // The column name is carried by the snake_case property name, matching
+    // the migration's `attempt_reset_generation bigint NOT NULL DEFAULT 0`.
+    expect(column?.options.name ?? column?.propertyName).toBe(
+      'attempt_reset_generation',
+    );
+    // TypeORM leaves nullable undefined when it is the default false, so the
+    // nullability is asserted on the normalized value, as the OHAC spec does.
+    expect(column?.options.type).toBe('bigint');
+    expect(column?.options.nullable ?? false).toBe(false);
+    expect(column?.options.default).toBe(0);
+    // Non-OHAC entities deliberately do not use the OHAC BIGINT_STRING
+    // transformer; the non-negative CHECK stays migration-owned.
+    expect(column?.options.transformer).toBeUndefined();
+  });
 });
