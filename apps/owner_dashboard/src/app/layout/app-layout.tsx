@@ -16,10 +16,10 @@ export function AppLayout() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    return onAuthExpired(() => {
+    return onAuthExpired(async () => {
       logout();
       clearTenant();
-      queryClient.cancelQueries();
+      await queryClient.cancelQueries();
       queryClient.clear();
     });
   }, [logout, clearTenant, queryClient]);

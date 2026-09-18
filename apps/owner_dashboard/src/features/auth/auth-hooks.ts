@@ -40,11 +40,11 @@ export function useLogout() {
   const logout = useAuthStore((s) => s.logout);
   const clearTenant = useTenantContext((s) => s.clear);
 
-  return () => {
+  return async () => {
     clearTokens();
     logout();
     clearTenant();
-    queryClient.cancelQueries();
+    await queryClient.cancelQueries();
     queryClient.clear();
     navigate("/login");
   };

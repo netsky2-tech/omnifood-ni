@@ -62,7 +62,7 @@ let accessToken: string | null = sessionStorage.getItem(STORAGE_KEY_ACCESS);
 let refreshToken: string | null = sessionStorage.getItem(STORAGE_KEY_REFRESH);
 let refreshPromise: Promise<string> | null = null;
 
-type AuthExpiredListener = () => void;
+type AuthExpiredListener = () => void | Promise<void>;
 const authExpiredListeners = new Set<AuthExpiredListener>();
 let authExpiredNotified = false;
 
@@ -84,7 +84,7 @@ export function notifyAuthExpired(): void {
   authExpiredNotified = true;
   for (const listener of authExpiredListeners) {
     try {
-      listener();
+      void listener();
     } catch {
       // ignore
     }
@@ -92,7 +92,6 @@ export function notifyAuthExpired(): void {
 }
 
 export function setTokens(tokens: TokenPair): void {
-  authExpiredNotified = false;
   if (
     !tokens ||
     !isNonBlankString(tokens.accessToken) ||
@@ -107,11 +106,14 @@ export function setTokens(tokens: TokenPair): void {
   refreshToken = cleanRefresh;
   sessionStorage.setItem(STORAGE_KEY_ACCESS, cleanAccess);
   sessionStorage.setItem(STORAGE_KEY_REFRESH, cleanRefresh);
+  // Reset only upon successfully establishing a verified valid session
+  authExpiredNotified = false;
 }
 
 export function clearTokens(): void {
   accessToken = null;
   refreshToken = null;
+  refreshPromise = null;
   sessionStorage.removeItem(STORAGE_KEY_ACCESS);
   sessionStorage.removeItem(STORAGE_KEY_REFRESH);
 }
@@ -207,15 +209,17 @@ export async function refreshAccessToken(): Promise<string> {
 
 async function requestTokenRefresh(): Promise<string> {
   if (!refreshPromise) {
-    refreshPromise = refreshAccessToken()
-      .catch((err) => {
+    refreshPromise = (async () => {
+      try {
+        return await refreshAccessToken();
+      } catch (err) {
         clearTokens();
         notifyAuthExpired();
         throw err;
-      })
-      .finally(() => {
+      } finally {
         refreshPromise = null;
-      });
+      }
+    })();
   }
   return refreshPromise;
 }

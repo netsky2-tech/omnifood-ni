@@ -4,7 +4,15 @@ import { useState, useRef } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { getApiErrorMessage } from "@/lib/api-error";
-import { ApiError, onAuthExpired, notifyAuthExpired, resetAuthExpired, api } from "@/lib/api";
+import {
+  ApiError,
+  onAuthExpired,
+  notifyAuthExpired,
+  resetAuthExpired,
+  setTokens,
+  clearTokens,
+  api,
+} from "@/lib/api";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { NotFoundPage } from "@/app/not-found-page";
 import { ErrorBoundary } from "@/app/error-boundary";
@@ -149,6 +157,66 @@ describe("Quality & Robustness Audit — Unit & Interaction Tests", () => {
         resetAuthExpired();
       }
     });
+
+    it("does not reset authExpiredNotified when invalid or blank tokens are provided to setTokens", () => {
+      const listener = vi.fn();
+      onAuthExpired(listener);
+
+      notifyAuthExpired();
+      expect(listener).toHaveBeenCalledTimes(1);
+
+      // Attempt to set invalid/empty tokens
+      setTokens({ accessToken: "", refreshToken: "" });
+      setTokens(null as any);
+      setTokens({ accessToken: "   ", refreshToken: "valid" });
+
+      // notifyAuthExpired must remain guarded because no verified valid session was established
+      notifyAuthExpired();
+      expect(listener).toHaveBeenCalledTimes(1);
+
+      // Setting verified valid tokens resets the notification guard for future sessions
+      setTokens({ accessToken: "valid-acc", refreshToken: "valid-ref" });
+      notifyAuthExpired();
+      expect(listener).toHaveBeenCalledTimes(2);
+    });
+
+    it("resets refreshPromise in finally so a failed refresh does not leave a rejected promise retained", async () => {
+      clearTokens();
+      resetAuthExpired();
+      sessionStorage.setItem("oc_refresh_token", "test-refresh-token");
+
+      let refreshAttempts = 0;
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+        if (typeof url === "string" && url.includes("/identity/refresh")) {
+          refreshAttempts++;
+          return Promise.resolve({
+            ok: false,
+            status: 401,
+            json: async () => ({ message: "Failed refresh" }),
+          });
+        }
+        return Promise.resolve({ ok: true, json: async () => ({}) });
+      });
+
+      try {
+        // First call fails refresh
+        await expect(api.get("/protected-endpoint-1")).rejects.toThrow();
+        expect(refreshAttempts).toBe(1);
+
+        // Put a refresh token again to simulate a new attempt or retry
+        sessionStorage.setItem("oc_refresh_token", "new-attempt-refresh-token");
+        resetAuthExpired();
+
+        // Second call must make a fresh network attempt and not reuse the previous rejected promise
+        await expect(api.get("/protected-endpoint-2")).rejects.toThrow();
+        expect(refreshAttempts).toBe(2);
+      } finally {
+        globalThis.fetch = originalFetch;
+        clearTokens();
+        resetAuthExpired();
+      }
+    });
   });
 
   describe("DateRangePicker Robustness", () => {
@@ -270,7 +338,7 @@ describe("Quality & Robustness Audit — Unit & Interaction Tests", () => {
   });
 
   describe("useLogout Cache Purge & Cross-Tenant Safety", () => {
-    it("clears React Query cache, resets auth store, and clears tenant context on logout", () => {
+    it("clears React Query cache, resets auth store, and clears tenant context on logout", async () => {
       const queryClient = new QueryClient();
       queryClient.setQueryData(["sales-data"], { revenue: 15000 });
       expect(queryClient.getQueryData(["sales-data"])).toEqual({ revenue: 15000 });
@@ -294,8 +362,8 @@ describe("Quality & Robustness Audit — Unit & Interaction Tests", () => {
       );
 
       const { result } = renderHook(() => useLogout(), { wrapper });
-      act(() => {
-        result.current();
+      await act(async () => {
+        await result.current();
       });
 
       expect(clearSpy).toHaveBeenCalledTimes(1);
@@ -320,6 +388,7 @@ describe("Quality & Robustness Audit — Unit & Interaction Tests", () => {
         queryKey: ["tenant-confidential-report"],
         queryFn: () => inFlightPromise,
       });
+      activeQueryPromise.catch(() => {});
 
       expect(queryClient.isFetching({ queryKey: ["tenant-confidential-report"] })).toBe(1);
 
@@ -330,8 +399,8 @@ describe("Quality & Robustness Audit — Unit & Interaction Tests", () => {
       );
 
       const { result } = renderHook(() => useLogout(), { wrapper });
-      act(() => {
-        result.current();
+      await act(async () => {
+        await result.current();
       });
 
       // Must cancel queries before clearing cache
@@ -346,6 +415,44 @@ describe("Quality & Robustness Audit — Unit & Interaction Tests", () => {
       // Regression check: query cache must remain empty, never rehydrated with previous session data
       expect(queryClient.getQueryData(["tenant-confidential-report"])).toBeUndefined();
       expect(queryClient.getQueryState(["tenant-confidential-report"])).toBeUndefined();
+    });
+
+    it("strictly awaits cancelQueries completion before purging the QueryClient cache", async () => {
+      const queryClient = new QueryClient();
+      let resolveCancel: () => void;
+      const cancelPromise = new Promise<void>((res) => {
+        resolveCancel = res;
+      });
+
+      let clearCalled = false;
+      vi.spyOn(queryClient, "cancelQueries").mockImplementation(() => cancelPromise);
+      vi.spyOn(queryClient, "clear").mockImplementation(() => {
+        clearCalled = true;
+      });
+
+      const wrapper = ({ children }: { children: React.ReactNode }) => (
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter>{children}</MemoryRouter>
+        </QueryClientProvider>
+      );
+
+      const { result } = renderHook(() => useLogout(), { wrapper });
+      let logoutPromise!: Promise<void>;
+      act(() => {
+        logoutPromise = result.current();
+      });
+
+      // At this point cancelQueries is pending, so clear MUST NOT have been called yet
+      expect(clearCalled).toBe(false);
+
+      // Resolve cancelQueries
+      await act(async () => {
+        resolveCancel!();
+        await logoutPromise;
+      });
+
+      // Now clear has been called
+      expect(clearCalled).toBe(true);
     });
   });
 
