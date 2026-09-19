@@ -139,7 +139,7 @@ export function UsersPage() {
                   </TableCell>
                   <TableCell>
                     <Badge
-                      variant={u.is_active ? "secondary" : "destructive"}
+                      variant={u.is_active ? "success" : "destructive"}
                       className="text-xs"
                     >
                       {u.is_active ? "Activo" : "Inactivo"}

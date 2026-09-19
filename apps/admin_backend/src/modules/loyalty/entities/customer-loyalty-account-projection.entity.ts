@@ -4,7 +4,7 @@ import { LoyaltyProgram } from './loyalty-program.entity';
 
 @Entity('customer_loyalty_account_projection')
 export class CustomerLoyaltyAccountProjection {
-  @PrimaryColumn()
+  @PrimaryColumn({ type: 'uuid' })
   tenant_id: string;
 
   @PrimaryColumn()

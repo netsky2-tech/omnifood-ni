@@ -13,7 +13,7 @@ export class DatafonoEquipo {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ name: 'tenant_id' })
+  @Column({ name: 'tenant_id', type: 'uuid' })
   @Index()
   tenantId: string;
 

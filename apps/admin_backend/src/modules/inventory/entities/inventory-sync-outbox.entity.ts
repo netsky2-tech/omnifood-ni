@@ -17,7 +17,7 @@ export class InventorySyncOutbox {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ type: 'uuid' })
   tenant_id: string;
 
   @Column()

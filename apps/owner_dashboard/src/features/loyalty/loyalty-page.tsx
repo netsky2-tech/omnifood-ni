@@ -143,6 +143,7 @@ function ProgramForm({
         const input: UpdateLoyaltyProgramInput = { name, earning_rule: parsedRule };
         await updateMutation.mutateAsync({ programId: initial.id, input });
         toast({
+          variant: "success",
           title: "Programa actualizado",
           description: `El programa "${name}" fue actualizado exitosamente.`,
         });
@@ -154,6 +155,7 @@ function ProgramForm({
         };
         await createMutation.mutateAsync(input);
         toast({
+          variant: "success",
           title: "Programa creado",
           description: `El programa "${name}" fue creado exitosamente.`,
         });
@@ -404,6 +406,7 @@ function RewardForm({
         };
         await updateMutation.mutateAsync({ rewardId: initial.id, input });
         toast({
+          variant: "success",
           title: "Recompensa actualizada",
           description: `"${name}" fue actualizada exitosamente.`,
         });
@@ -417,6 +420,7 @@ function RewardForm({
         };
         await createMutation.mutateAsync({ programId, input });
         toast({
+          variant: "success",
           title: "Recompensa creada",
           description: `"${name}" fue creada exitosamente.`,
         });
@@ -584,10 +588,18 @@ export function LoyaltyPage() {
     try {
       if (p.status === 'ACTIVE') {
         await deactivateProgram.mutateAsync(p.id);
-        toast({ title: 'Programa desactivado', description: `El programa "${p.name}" fue desactivado.` });
+        toast({
+          variant: 'success',
+          title: 'Programa desactivado',
+          description: `El programa "${p.name}" fue desactivado.`,
+        });
       } else if (p.status === 'DRAFT' || p.status === 'INACTIVE') {
         await activateProgram.mutateAsync(p.id);
-        toast({ title: 'Programa activado', description: `El programa "${p.name}" está ahora activo.` });
+        toast({
+          variant: 'success',
+          title: 'Programa activado',
+          description: `El programa "${p.name}" está ahora activo.`,
+        });
       }
     } catch (err) {
       toast({
@@ -602,10 +614,18 @@ export function LoyaltyPage() {
     try {
       if (r.status === 'ACTIVE') {
         await deactivateReward.mutateAsync(r.id);
-        toast({ title: 'Recompensa desactivada', description: `"${r.name}" fue desactivada.` });
+        toast({
+          variant: 'success',
+          title: 'Recompensa desactivada',
+          description: `"${r.name}" fue desactivada.`,
+        });
       } else {
         await activateReward.mutateAsync(r.id);
-        toast({ title: 'Recompensa activada', description: `"${r.name}" está ahora activa.` });
+        toast({
+          variant: 'success',
+          title: 'Recompensa activada',
+          description: `"${r.name}" está ahora activa.`,
+        });
       }
     } catch (err) {
       toast({

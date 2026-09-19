@@ -18,6 +18,28 @@ import { QueryResult, type QueryRunner } from 'typeorm';
  * every uuid tenant column, so a wrong predicate fails CI instead of
  * silently losing the tenant index.
  *
+ * Why views are declared, not inferred
+ * ------------------------------------
+ * A view over the tenant column blocks the `ALTER` exactly like a policy
+ * does — its `_RETURN` rewrite rule depends on the column (measured on
+ * issue #286: `ERROR: cannot alter type of a column used by a view or rule`,
+ * `DETAIL: rule _RETURN on view v_sys_parametros_config_active depends on
+ * column "tenant_id"`). `CREATE OR REPLACE VIEW` alone is insufficient:
+ * the view's EXISTENCE is what blocks the type change, so the view must be
+ * dropped first and recreated after. PostgreSQL has no way to "replace" a
+ * dependency away. Each target therefore declares the views over its
+ * `tenant_id` column (`views`), carrying the exact recreation DDL — the
+ * migration owns the DDL, the emitter only places it in the forced order:
+ *
+ *   DROP POLICY (every policy) -> DROP VIEW (every view) -> the column
+ *   type change -> CREATE VIEW (declared DDL) -> CREATE POLICY (guarded)
+ *
+ * `down()` mirrors the same shape: drop the views, restore the previous
+ * column type, recreate the views, recreate the policies with the previous
+ * predicate. The declared `createSql` is type-independent (the reference
+ * view selects named columns, not `SELECT *`), so the same DDL serves both
+ * directions.
+ *
  * Why `using` and `check` are booleans, not inferred from `cmd`
  * ------------------------------------------------------------
  * FOR ALL carries both halves; SELECT/DELETE carry only USING; INSERT carries
@@ -39,7 +61,7 @@ export const PREVIOUS_TENANT_RLS_PREDICATE =
 /** Target column type for every Phase 2 rebind. */
 export const UUID_TENANT_COLUMN_TYPE = 'uuid';
 
-/** Policy commands covered by the tenant policies. */
+/** One policy command covered by the tenant policies. */
 export type TenantRlsPolicyCommand =
   | 'SELECT'
   | 'INSERT'
@@ -59,11 +81,30 @@ export interface TenantRlsPolicyRow {
   check: boolean;
 }
 
+/**
+ * One view whose `_RETURN` rule depends on the target's `tenant_id` column.
+ * Declared, never inferred from the catalog: the emitter cannot reconstruct
+ * the exact DDL the migration authored, and guessing it would silently
+ * change the view.
+ */
+export interface TenantRlsViewDependency {
+  name: string;
+  /** The complete `CREATE VIEW` statement that recreates the view, emitted verbatim. */
+  createSql: string;
+}
+
 /** One table whose tenant column and policies are rebound together. */
 export interface TenantRlsTarget {
   table: string;
   /** The column's type before the rebind; needed by `down()` to restore it. */
   previousType: string;
+  /**
+   * Views over the table's `tenant_id` column, dropped before the column
+   * type change and recreated after it. Optional: a target without views
+   * omits it and the emitter's output is exactly what it was before this
+   * field existed.
+   */
+  views?: TenantRlsViewDependency[];
   policies: TenantRlsPolicyRow[];
 }
 
@@ -94,16 +135,23 @@ const canonicalColumnType = (
  * caller's transaction:
  *
  *   1. `DROP POLICY IF EXISTS` for every listed policy.
- *   2. The column type change, idempotent: the current type is read from
+ *   2. `DROP VIEW IF EXISTS` for every declared view: the view's existence
+ *      (its `_RETURN` rewrite rule) is what blocks the type change, so it
+ *      must go before the `ALTER` — `CREATE OR REPLACE VIEW` cannot lift the
+ *      dependency.
+ *   3. The column type change, idempotent: the current type is read from
  *      `information_schema.columns` (scoped to `current_schema()`) and the
  *      `ALTER` is skipped when the column already has the target type.
- *   3. A catalog-guarded `CREATE POLICY` (PostgreSQL has no
+ *   4. The declared `CREATE VIEW` DDL, verbatim, for every view.
+ *   5. A catalog-guarded `CREATE POLICY` (PostgreSQL has no
  *      `CREATE POLICY IF NOT EXISTS`) for every row, carrying the predicate
  *      in the `USING` / `WITH CHECK` halves each row declares.
  *
  * `resolveTargetType` decides the column type each target is changed to. The
  * default is `uuid`, the direction every `up()` uses; a `down()` that must
  * restore the pre-migration type passes `(target) => target.previousType`.
+ * A `down()` reuses the same declared `createSql`, which is
+ * type-independent for a view that selects named columns.
  *
  * Identifiers are quoted; the table name passed to the information_schema
  * lookup is a bound parameter. The predicate is a constant SQL expression, so
@@ -135,8 +183,22 @@ export async function rebindTenantColumns(
       );
     }
 
+    // The view must be dropped before the column change: its rewrite rule
+    // is what blocks the `ALTER`, the same way a policy does.
+    for (const view of target.views ?? []) {
+      await queryRunner.query(
+        `DROP VIEW IF EXISTS ${quoteIdentifier(view.name)}`,
+      );
+    }
+
     const targetType = resolveTargetType(target);
     await changeTenantColumnType(queryRunner, table, targetType);
+
+    // Recreate the view with the migration's own DDL, placed after the
+    // column change and before the policies.
+    for (const view of target.views ?? []) {
+      await queryRunner.query(view.createSql);
+    }
 
     for (const policy of target.policies) {
       const halves = [

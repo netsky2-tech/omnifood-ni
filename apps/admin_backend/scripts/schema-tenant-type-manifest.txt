@@ -25,7 +25,6 @@ column customer_point_transactions.tenant_id
 column customers.tenant_id
 column device_sync_credential_events.tenant_id
 column device_sync_credentials.tenant_id
-column fiscal_config_revisions.tenant_id
 column forensic_alerts.tenant_id
 column human_auth_policy_epochs.tenant_id
 column human_auth_policy_snapshots.tenant_id
@@ -39,17 +38,7 @@ column human_auth_verification_events.tenant_id
 column invoice_items.tenant_id
 column legacy_import_integrity_reports.tenant_id
 column legacy_onboarding_migration_receipts.tenant_id
-column onboarding_activation_attempts.tenant_id
-column onboarding_activation_check_results.tenant_id
-column onboarding_activation_follow_ups.tenant_id
-column onboarding_idempotency_records.tenant_id
-column onboarding_sessions.tenant_id
-column onboarding_telemetry_events.tenant_id
-column onboarding_template_applications.tenant_id
-column onboarding_template_seed_links.tenant_id
 column promotions.tenant_id
-column sys_parametros_config.tenant_id
 column tenant_capability_event.tenant_id
 column tenant_fulfillment_records.tenant_id
 column tenant_topology_revisions.tenant_id
-view v_sys_parametros_config_active.tenant_id

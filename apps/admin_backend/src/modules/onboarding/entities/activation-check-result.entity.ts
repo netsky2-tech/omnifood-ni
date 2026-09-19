@@ -38,7 +38,7 @@ export class ActivationCheckResult {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column({ name: 'tenant_id', type: 'varchar', length: 128 })
+  @Column({ name: 'tenant_id', type: 'uuid' })
   @Index('idx_activation_checks_tenant')
   tenantId!: string;
 

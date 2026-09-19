@@ -1,4 +1,5 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
+import { resolveTenantRlsPredicate } from '../core/database/tenant-rls-policy';
 
 /**
  * Forces tenant row level security on the onboarding/fiscal tables.
@@ -7,10 +8,16 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *   can bypass tenant isolation.
  * - One policy per command (select/insert/update/delete) named
  *   `{table}_tenant_{command}`, following the existing project convention.
- * - The predicate is a text comparison against the transaction-local
- *   `app.tenant_id` setting because these tenant_id columns are varchar(128):
- *   casting to uuid is not allowed. A missing setting resolves to NULL and an
- *   empty setting never equals a real tenant_id, so both deny access.
+ * - The predicate is resolved per table (never one shared across tables)
+ *   through the shared type-aware resolver `resolveTenantRlsPredicate`,
+ *   which reads each tenant_id column's real type from information_schema:
+ *   a uuid column gets the uuid-cast setting form (index-friendly), and a
+ *   varchar/text column keeps the text comparison. A re-run of this
+ *   migration after the columns are rebound to uuid must emit the uuid
+ *   form, and a varchar column must keep the text form. A missing setting
+ *   resolves to NULL and an empty setting never equals a real tenant_id,
+ *   so both deny access. A missing column or an unsupported type fails
+ *   closed naming the table.
  * - up() is idempotent: deterministic policy names with DROP POLICY IF EXISTS
  *   before CREATE; ENABLE/FORCE are already idempotent.
  * - down() reverses only this migration's effect: it drops exactly the
@@ -24,8 +31,6 @@ const TABLES = [
   'onboarding_telemetry_events',
   'fiscal_config_revisions',
 ] as const;
-
-const TENANT_PREDICATE = "tenant_id = current_setting('app.tenant_id', true)";
 
 const quoteIdentifier = (identifier: string): string =>
   `"${identifier.replace(/"/g, '""')}"`;
@@ -44,27 +49,33 @@ export class EnforceOnboardingFiscalTenantRls1809000000001 implements MigrationI
       await runner.query(`ALTER TABLE ${tableId} ENABLE ROW LEVEL SECURITY`);
       await runner.query(`ALTER TABLE ${tableId} FORCE ROW LEVEL SECURITY`);
 
+      // One resolution per table, never one shared across tables: each
+      // table's tenant_id column can sit at a different point of the
+      // varchar -> uuid rebind, so the predicate must match the column type
+      // as it is right now, not as it was when this migration was written.
+      const tenantPredicate = await resolveTenantRlsPredicate(runner, table);
+
       const policies = [
         {
           command: 'select',
           expression: `FOR SELECT
-      USING (${TENANT_PREDICATE})`,
+      USING (${tenantPredicate})`,
         },
         {
           command: 'insert',
           expression: `FOR INSERT
-      WITH CHECK (${TENANT_PREDICATE})`,
+      WITH CHECK (${tenantPredicate})`,
         },
         {
           command: 'update',
           expression: `FOR UPDATE
-      USING (${TENANT_PREDICATE})
-      WITH CHECK (${TENANT_PREDICATE})`,
+      USING (${tenantPredicate})
+      WITH CHECK (${tenantPredicate})`,
         },
         {
           command: 'delete',
           expression: `FOR DELETE
-      USING (${TENANT_PREDICATE})`,
+      USING (${tenantPredicate})`,
         },
       ];
 
