@@ -170,7 +170,22 @@ Overages are disclosed in the pull request body rather than hidden, and a spec i
 
 **Re-measured after the base moved.** `origin/main` advanced from `5f33320` to `33d5379` (8 commits) while L1 was being written, so the branch was rebased and every result above re-taken on the new base: harness exit 0 with identical counts (`75` entity tables, `953` entity columns, `34/34` ratchet, `text casts 0`, `entity uuid mismatches 0`), `npm run test:db` 36/200. The 8 commits added no migration and no entity, which the re-run confirms rather than assumes.
 
-## Process hazard found while verifying this slice
+## Process hazards found while verifying and merging this slice
+
+**`gh pr edit <n> --base main` can fail silently, and chaining `&&` after it merges into the wrong branch.** During this slice's merge sequence it printed a GraphQL deprecation notice about the unrelated Projects API and exited **0** without changing the base. The `&&` chain that followed squash-merged the child pull request with its base still pointing at its parent branch, so the commit landed on that branch instead of `main`:
+
+```
+origin/feat/tenant-uuid-slice-b1-view-support  99aae4f  fix(db): resolve ... (#361)
+origin/main                                    88973f6  feat(db): detect entity ... (#360)
+```
+
+A merged pull request **cannot** have its base changed — GitHub answers `422 Cannot change the base branch of a closed pull request` — so the mistake is not repairable in place. Recovery is a cherry-pick of the original commit onto `main` plus a fresh pull request (#369), which keeps the content and the review unit identical. The rules that follow:
+
+1. Retarget with the REST API, which does not go through GraphQL: `gh api -X PATCH repos/<owner>/<repo>/pulls/<n> -f base=main`.
+2. **Read the base back** before merging. Never assume a retarget succeeded because the command exited 0.
+3. Retarget **before** pushing, so the `synchronize` event runs CI against the new base. A retarget does not itself trigger `pull_request` workflows (the default event types are opened/synchronize/reopened), so a push made before the retarget leaves the new head with no CI run at all.
+4. Because a squash merge breaks the child's merge base, `main` must be merged **into** the child branch first; otherwise the child's diff re-includes the parent's already-merged changes.
+5. Every intermediate merge brings an `add/add` conflict in this slice's own task document, because the squash on `main` and the branch both added it. The branch's copy is the superset (it carries the later links' evidence rows); take it and say so, rather than resolving by hand.
 
 **`npm run lint` in `apps/admin_backend` is `eslint "{src,apps,libs,test}/**/*.ts" --fix`.** Running it as a verification step rewrote **48 tracked files** that have nothing to do with this slice — migrations, audit, onboarding controllers — and reformatted this slice's own spec, in a tree that was otherwise clean. It exits 0 regardless, so nothing signals the mutation.
 
