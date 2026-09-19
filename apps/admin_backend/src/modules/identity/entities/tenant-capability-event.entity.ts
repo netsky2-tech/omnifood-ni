@@ -12,7 +12,7 @@ import {
 })
 export class TenantCapabilityEvent {
   @PrimaryGeneratedColumn('uuid') id: string;
-  @Column() tenant_id: string;
+  @Column({ type: 'uuid' }) tenant_id: string;
   @Column() actor_user_id: string;
   @Column() previous_version: string;
   @Column() new_version: string;

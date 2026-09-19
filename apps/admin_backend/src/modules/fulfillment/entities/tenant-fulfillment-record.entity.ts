@@ -13,7 +13,7 @@ export class TenantFulfillmentRecord {
   @PrimaryColumn({ type: 'varchar', length: 128 })
   id: string;
 
-  @Column({ type: 'varchar', length: 64 })
+  @Column({ type: 'uuid' })
   tenant_id: string;
 
   @Column({ type: 'varchar', length: 128, nullable: true })
