@@ -37,6 +37,7 @@ export const ROUTE_ROLE_PERMISSIONS: Record<string, UserRole[]> = {
   "/recipes": ["OWNER", "MANAGER"],
   "/users": ["OWNER"],
   "/customers": ["OWNER", "MANAGER", "CASHIER", "WAITER"],
+  "/loyalty": ["OWNER", "MANAGER"],
   "/settings": ["OWNER", "MANAGER"],
 };
 

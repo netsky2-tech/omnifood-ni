@@ -8,6 +8,7 @@ import {
   Tag,
   Box,
   Gift,
+  Award,
   FlaskConical,
   Users,
   Settings,
@@ -39,6 +40,7 @@ const navItems: NavItem[] = [
   { label: "Catálogo", path: "/catalog", icon: Tag, section: "Gestión" },
   { label: "Productos", path: "/products", icon: Box, section: "Gestión" },
   { label: "Promociones", path: "/promotions", icon: Gift, section: "Gestión" },
+  { label: "Fidelización", path: "/loyalty", icon: Award, section: "Gestión" },
   { label: "Recetas", path: "/recipes", icon: FlaskConical, section: "Gestión" },
   { label: "Usuarios", path: "/users", icon: Users, section: "Administración", requiredRoles: ["OWNER"] },
   { label: "Clientes", path: "/customers", icon: UserCircle, section: "Administración" },
@@ -306,9 +308,6 @@ export function Sidebar() {
                 <LogOut className="h-5 w-5 shrink-0" aria-hidden="true" />
                 <span>Cerrar sesión</span>
               </button>
-              <p className="mt-2 text-center font-mono text-[10px] text-white/40">
-                v{import.meta.env.VITE_APP_VERSION ?? "1.0.0"} ({String(import.meta.env.VITE_COMMIT_SHA ?? "dev").slice(0, 7)})
-              </p>
             </>
           ) : (
             <div className="flex flex-col items-center gap-2">

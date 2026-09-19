@@ -45,9 +45,27 @@ describe("W1 — LoginPage", () => {
   it("renders form fields", () => {
     render(<LoginPage />, { wrapper: TestWrapper });
     expect(screen.getByLabelText(/correo electrónico/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/contraseña/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/negocio/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^contraseña$/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/negocio/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /iniciar sesión/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /mostrar contraseña/i })).toBeInTheDocument();
+  });
+
+  it("toggles password visibility when clicking eye button", async () => {
+    const user = userEvent.setup();
+    render(<LoginPage />, { wrapper: TestWrapper });
+
+    const passwordInput = screen.getByLabelText(/^contraseña$/i);
+    expect(passwordInput).toHaveAttribute("type", "password");
+
+    const toggleButton = screen.getByRole("button", { name: /mostrar contraseña/i });
+    await user.click(toggleButton);
+
+    expect(passwordInput).toHaveAttribute("type", "text");
+    expect(screen.getByRole("button", { name: /ocultar contraseña/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /ocultar contraseña/i }));
+    expect(passwordInput).toHaveAttribute("type", "password");
   });
 
   it("renders heading and branding", () => {
@@ -61,7 +79,7 @@ describe("W1 — LoginPage", () => {
     render(<LoginPage />, { wrapper: TestWrapper });
 
     await user.type(screen.getByLabelText(/correo electrónico/i), "not-an-email");
-    await user.type(screen.getByLabelText(/contraseña/i), "1234567");
+    await user.type(screen.getByLabelText(/^contraseña$/i), "1234567");
     fireEvent.submit(screen.getByRole("button", { name: /iniciar sesión/i }));
 
     await waitFor(() => {
@@ -74,7 +92,7 @@ describe("W1 — LoginPage", () => {
     render(<LoginPage />, { wrapper: TestWrapper });
 
     await user.type(screen.getByLabelText(/correo electrónico/i), "test@test.com");
-    await user.type(screen.getByLabelText(/contraseña/i), "123");
+    await user.type(screen.getByLabelText(/^contraseña$/i), "123");
     fireEvent.submit(screen.getByRole("button", { name: /iniciar sesión/i }));
 
     await waitFor(() => {
@@ -110,7 +128,7 @@ describe("W1 — LoginPage error states", () => {
     render(<LoginPage />, { wrapper: TestWrapper });
 
     await user.type(screen.getByLabelText(/correo electrónico/i), "test@test.com");
-    await user.type(screen.getByLabelText(/contraseña/i), "123456");
+    await user.type(screen.getByLabelText(/^contraseña$/i), "123456");
     await user.click(screen.getByRole("button", { name: /iniciar sesión/i }));
 
     await waitFor(() => {
@@ -125,7 +143,7 @@ describe("W1 — LoginPage error states", () => {
     render(<LoginPage />, { wrapper: TestWrapper });
 
     await user.type(screen.getByLabelText(/correo electrónico/i), "test@test.com");
-    await user.type(screen.getByLabelText(/contraseña/i), "123456");
+    await user.type(screen.getByLabelText(/^contraseña$/i), "123456");
     await user.click(screen.getByRole("button", { name: /iniciar sesión/i }));
 
     await waitFor(() => {
@@ -153,7 +171,7 @@ describe("W1 — LoginPage loading state", () => {
     render(<LoginPage />, { wrapper: TestWrapper });
 
     await user.type(screen.getByLabelText(/correo electrónico/i), "test@test.com");
-    await user.type(screen.getByLabelText(/contraseña/i), "123456");
+    await user.type(screen.getByLabelText(/^contraseña$/i), "123456");
     await user.click(screen.getByRole("button", { name: /iniciar sesión/i }));
 
     await waitFor(() => {

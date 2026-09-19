@@ -1,21 +1,22 @@
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { Eye, EyeOff } from "lucide-react";
 import { useLogin } from "@/features/auth/auth-hooks";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
-
 const loginSchema = z.object({
   email: z.string().email("Correo inválido"),
   password: z.string().min(6, "Mínimo 6 caracteres"),
-  tenantSlug: z.string().optional(),
 });
 
 type LoginForm = z.infer<typeof loginSchema>;
 
 export function LoginPage() {
   const loginMutation = useLogin();
+  const [showPassword, setShowPassword] = useState(false);
 
   const {
     register,
@@ -80,38 +81,35 @@ export function LoginPage() {
             >
               Contraseña
             </label>
-            <Input
-              id="password"
-              type="password"
-              {...register("password")}
-              placeholder="••••••••"
-              aria-invalid={!!errors.password}
-              disabled={loginMutation.isPending}
-            />
+            <div className="relative">
+              <Input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                {...register("password")}
+                placeholder="••••••••"
+                className="pr-10"
+                aria-invalid={!!errors.password}
+                disabled={loginMutation.isPending}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors focus:outline-none"
+                aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                tabIndex={-1}
+              >
+                {showPassword ? (
+                  <EyeOff className="h-4 w-4" aria-hidden="true" />
+                ) : (
+                  <Eye className="h-4 w-4" aria-hidden="true" />
+                )}
+              </button>
+            </div>
             {errors.password && (
               <p className="mt-1 text-xs text-destructive">
                 {errors.password.message}
               </p>
             )}
-          </div>
-
-          <div>
-            <label
-              htmlFor="tenantSlug"
-              className="mb-1.5 block text-sm font-medium text-foreground"
-            >
-              Negocio (opcional)
-            </label>
-            <Input
-              id="tenantSlug"
-              type="text"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              {...register("tenantSlug")}
-              placeholder="mi-negocio"
-              disabled={loginMutation.isPending}
-            />
           </div>
 
           {loginMutation.isError && (

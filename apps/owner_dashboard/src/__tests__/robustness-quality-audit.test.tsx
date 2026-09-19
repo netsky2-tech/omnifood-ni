@@ -540,6 +540,21 @@ describe("Quality & Robustness Audit — Unit & Interaction Tests", () => {
       }
     });
 
+    it("renders navigation link for Fidelización pointing to /loyalty", () => {
+      const queryClient = new QueryClient();
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter>
+            <Sidebar />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      const loyaltyLinks = screen.getAllByRole("link", { name: "Fidelización" });
+      expect(loyaltyLinks.length).toBeGreaterThan(0);
+      expect(loyaltyLinks[0]).toHaveAttribute("href", "/loyalty");
+    });
+
     it("ensures icon buttons provide accessible names and decorative SVG icons have aria-hidden", () => {
       const queryClient = new QueryClient();
       render(
