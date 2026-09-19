@@ -19,13 +19,9 @@
 #                             the base column it reads, because PostgreSQL
 #                             refuses to change a type used by a view rule.
 #                             The changing unit must drop and recreate it.
-column audit_integrity_alerts.tenant_id
 column catalog_values.tenant_id
 column customer_point_transactions.tenant_id
 column customers.tenant_id
-column device_sync_credential_events.tenant_id
-column device_sync_credentials.tenant_id
-column forensic_alerts.tenant_id
 column invoice_items.tenant_id
 column legacy_import_integrity_reports.tenant_id
 column legacy_onboarding_migration_receipts.tenant_id
