@@ -75,6 +75,8 @@ The rule recorded after slice B1: a fixture census that greps for entity class n
 
 Literal text seeds were found in `invoices.service.db.spec.ts` (6), `onboarding-template-cutover.db.e2e-spec.ts` (2) and `onboarding-security-isolation.db.e2e-spec.ts` (1); the rest seed from variables whose values must be checked at the unit, not assumed. **The fix pattern is slice B1's**: a valid, deterministic UUID derived from a readable label, with no assertion weakened and no test skipped.
 
+**Corrected in C.3, and it invalidates a forward claim in this plan.** The C.3 unit row originally read "`forensic_alerts` has no entity, so the harness's entity assertion cannot see it". **That is backwards.** `collect_schema_uuid_tenant_tables` selects *every* public base table whose `tenant_id` is uuid, with no entity requirement, and `report_tenant_entity_diff` counts a uuid tenant table that no entity declares and `fail`s the build when that count is non-zero (`verify-schema-build.sh:664` and `:732`). The script's own comment states the intent: a table with no entity "mean[s] the entity was left behind by the slice that rebound the column". Measured consequence: rebinding `forensic_alerts` without an entity takes `entity uuid mismatches` from 0 to 1 and fails both scenarios. C.3 therefore **adds** `modules/inventory/entities/forensic-alert.entity.ts` and registers it in `app.module.ts`; that entity is what makes the counter 0, confirmed by verifying the rebind migration applied and that `forensic_alerts.tenant_id` is uuid in the built schema. The rule for C.4 and C.5: **a rebind target needs an entity declaring `tenant_id` as uuid, so measure entity coverage per table before assuming any table is invisible to the harness.** Measured now for the remaining units: all seven of C.4's and C.5's tables (`catalog_values`, `promotions`, `customers`, `customer_point_transactions`, `legacy_import_integrity_reports`, `legacy_onboarding_migration_receipts`, `invoice_items`) already have an entity, so `forensic_alerts` was the only orphan in this slice.
+
 ## Units
 
 Each unit is its own commit, its own pull request, and — following slice B2, which was right — **based directly on `main`, never stacked**. Every unit here is green on its own.
@@ -83,7 +85,7 @@ Each unit is its own commit, its own pull request, and — following slice B2, w
 | --- | --- | --- |
 | **C.1** | The six earlier migrations resolve the predicate per table site. Behaviour-neutral: every column is still varchar, so no harness counter may move. | ~350–450 |
 | **C.2** | Lifecycle: `tenant_capability_event` (4), `tenant_topology_revisions` (2), `tenant_fulfillment_records` (4) = 3 tables / 10 policies, plus their entities. Manifest −3. | ~400 |
-| **C.3** | Devices and alerts: `device_sync_credentials` (4), `device_sync_credential_events` (2) = 6 policies, plus `audit_integrity_alerts` and `forensic_alerts` with no policies. Manifest −4. `forensic_alerts` has no entity, so the harness's entity assertion cannot see it. | ~350 |
+| **C.3** | Devices and alerts: `device_sync_credentials` (4), `device_sync_credential_events` (2) = 6 policies, plus `audit_integrity_alerts` and `forensic_alerts` with no policies. Manifest −4. `forensic_alerts` has no entity, and **one must be added** — see the correction below; the harness's entity assertion does see it. | ~350 |
 | **C.4** | Catalog, loyalty and legacy: `catalog_values` (4) plus `promotions`, `customers`, `customer_point_transactions`, `legacy_import_integrity_reports`, `legacy_onboarding_migration_receipts` with no policies. Manifest −6. **Carries the `LegacyOnboardingMigrationReceipt` fixture fixes** (nine fixtures). | ~450 (fixtures included) |
 | **C.5** | Sales: `invoice_items` (4). Manifest −1, leaving **0**. **Carries the `InvoiceItem` fixture fixes** (five fixtures, one shared with C.4's list). | ~350 (fixtures included) |
 | **C.6** | Independent verification out of the catalog, not the specs: zero non-uuid tenant columns, every policy in the target form with no column-side `::text`, and `EXPLAIN` as a **non-bypassing role** on a sample including the composite-key tables. | evidence only |
@@ -114,7 +116,7 @@ Calibration, measured across this issue: a migration plus its spec costs roughly
 | --- | --- | --- |
 | C.1 | ~350–450 | |
 | C.2 | ~400 | |
-| C.3 | ~350 | |
+| C.3 | ~350 | 459 (452 ins / 7 del) |
 | C.4 | ~450 | |
 | C.5 | ~350 | |
 
@@ -132,10 +134,14 @@ Calibration, measured across this issue: a migration plus its spec costs roughly
 | Unit | Commit | Evidence |
 | --- | --- | --- |
 | **C.1** | pending merge | Six migrations resolve per table site. Harness exit 0 in both scenarios, `14 / 0 / 0 / 0` verbatim, `uuid tenant_id tables: 51`, `entity uuid mismatches: 0`. 232 suites / 2128 tests green. |
+| **C.3** | `feat/tenant-uuid-slice-c3-devices-alerts` (PR pending) | 4 tables rebound, 6 policies recreated (2 alert tables column-only); ratchet 14 → 10. Harness exit 0 in both scenarios: `10 / 0 / 0 / 0` verbatim, `uuid tenant_id tables: 51 → 55`, `entity uuid mismatches: 0`, `ledger rows removed: 27 / 27`. Spec 5/5; `1807000000000-CreateDeviceSyncCredentials.spec.ts` 6/6 and unmodified, its `::text` pins at `:141`/`:169` intact. Suites: `npm test` 233 / 2176, `test:db` 38 / 219, `test:e2e` 49 / 394, all green. The three `DB_PASSWORD`-gated specs activated and green (3 / 7). The six policies verified present exactly once in the scratch catalog, both device tables still `FORCE ROW LEVEL SECURITY` and not deny-all, and the abbreviated `device_sync_cred_events_tenant_*` naming preserved. `previousType` verified against the live pre-C.3 `information_schema`: `character varying(128)` ×2, `character varying` ×2. |
+
+**Re-measured after rebase, because hazard 3 applies to this slice.** These numbers were first taken against `5ecbe23`. `main` then moved eleven commits (`5ecbe23` to `262088a`, the OHAC delivery work), which changed **both** `verify-schema-build.sh` (it learned to ignore `@ViewEntity` / `@ViewColumn`) and several fixtures this slice builds against, including `activation-device-provisioning.db.spec.ts` and six onboarding e2e specs. A green measured against a superseded base is not evidence, so every unit was rebased onto `262088a` and re-measured there: harness exit 0 in both scenarios with unchanged counters, and suites green on the new baseline of **233 / 2176, 38 / 219, 49 / 394**. All four rebases were conflict-free, including `app.module.ts`, where the C.3 `ForensicAlert` entity and the `SystemParametersConfigActiveView` entity added by main both survive.
+
 ## Relevant files
 
 - `apps/admin_backend/src/migrations/1768000000000-CreateCatalogValues.ts`, `1785000000000-AddTenantCapabilityEvent.ts`, `1794000000001-AddTenantTopologyRevisionsRls.ts`, `1795000000000-CreateTenantFulfillmentRecords.ts`, `1807000000000-CreateDeviceSyncCredentials.ts`, `1808000000000-RepairTenantTopologyRevisions.ts` — C.1's six files.
-- `apps/admin_backend/src/migrations/1809100000000-RebindHumanAuthorizationTenantColumns.ts` — the closest template (slice B2's first slice unit).
+- `apps/admin_backend/src/migrations/1809100000000-RebindHumanAuthorizationTenantColumns.ts` — the closest template (slice B2's first slice unit), and now also `1809130000000-RebindDeviceAndAlertTenantColumns.ts` (C.3), which is the closest template for the units that follow. Note the deliberate timestamp gap: C.2 and C.3 are not stacked, so each claimed a distinct timestamp to avoid a collision at merge.
 - `apps/admin_backend/scripts/schema-tenant-type-manifest.txt` — the ratchet, 14 entries, empty at the end of this slice.
 - `apps/admin_backend/scripts/verify-schema-build.sh` — `partial_ledger_names` defines the re-run class.
 - `apps/admin_backend/src/core/database/tenant-rls-policy.ts` — the shared emitter and `resolveTenantRlsPredicate`; unchanged here, consumed by every unit.

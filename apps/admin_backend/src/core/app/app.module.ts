@@ -86,6 +86,7 @@ import { InventoryRemediationReceipt } from '../../modules/inventory/entities/in
 import { ProductInventoryMappingVersion } from '../../modules/inventory/entities/product-inventory-mapping-version.entity';
 import { DeviceSyncCredential } from '../../modules/identity/entities/device-sync-credential.entity';
 import { DeviceSyncCredentialEvent } from '../../modules/identity/entities/device-sync-credential-event.entity';
+import { ForensicAlert } from '../../modules/inventory/entities/forensic-alert.entity';
 import { DeviceSyncModule } from '../../modules/identity/device-sync.module';
 export const getRequiredConfigValue = (
   configService: ConfigService,
@@ -186,6 +187,7 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
     InventoryRemediationReceipt,
     DeviceSyncCredential,
     DeviceSyncCredentialEvent,
+    ForensicAlert,
   ],
   synchronize: false,
 });
