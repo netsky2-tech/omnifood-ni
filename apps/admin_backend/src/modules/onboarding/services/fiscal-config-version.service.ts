@@ -8,10 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { FiscalConfigRevision } from '../entities/fiscal-config-revision.entity';
 import { Tenant } from '../../tenant/entities/tenant.entity';
-import {
-  SystemParametersConfig,
-  SystemParametersConfigActiveView,
-} from '../../inventory/entities/system-parameters-config.entity';
+import { SystemParametersConfigActiveView } from '../../inventory/entities/system-parameters-config.entity';
 import {
   bindTenantContext,
   runInTenantTransaction,
