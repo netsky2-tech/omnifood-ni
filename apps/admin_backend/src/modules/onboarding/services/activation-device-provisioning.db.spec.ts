@@ -3,7 +3,10 @@ import { DataSource } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { Tenant } from '../../tenant/entities/tenant.entity';
-import { SystemParametersConfig } from '../../inventory/entities/system-parameters-config.entity';
+import {
+  SystemParametersConfig,
+  SystemParametersConfigActiveView,
+} from '../../inventory/entities/system-parameters-config.entity';
 import { Product } from '../../inventory/entities/product.entity';
 import { FiscalConfigRevision } from '../entities/fiscal-config-revision.entity';
 import {
@@ -96,6 +99,7 @@ async function withIsolatedSchema(
       entities: [
         Tenant,
         SystemParametersConfig,
+        SystemParametersConfigActiveView,
         FiscalConfigRevision,
         Product,
         OnboardingSession,
@@ -115,6 +119,31 @@ async function withIsolatedSchema(
     });
     await dataSource.initialize();
     await dataSource.query(`SET search_path TO "${schema}"`);
+
+    // The active-config view is owned by migration 1784000000000
+    // (synchronize: false on the view entity), so it must be created here
+    // with the exact same DDL for fiscal config reads to resolve the
+    // governing version.
+    await dataSource.query(`
+      CREATE OR REPLACE VIEW v_sys_parametros_config_active
+      WITH (security_invoker = true)
+      AS
+      SELECT DISTINCT ON (tenant_id, param_key)
+        id,
+        tenant_id,
+        param_key,
+        param_value,
+        version,
+        effective_from,
+        effective_to,
+        is_active,
+        created_by,
+        created_at
+      FROM sys_parametros_config
+      WHERE is_active = true
+        AND (effective_to IS NULL OR effective_to > now())
+      ORDER BY tenant_id, param_key, version DESC, effective_from DESC;
+    `);
 
     await assertion({ dataSource, schema });
   } finally {
@@ -224,7 +253,6 @@ describe('Activation Device Credential Provisioning (db)', () => {
       const fiscalService = new FiscalConfigVersionService(
         dataSource.getRepository(FiscalConfigRevision),
         dataSource.getRepository(Tenant),
-        dataSource.getRepository(SystemParametersConfig),
         dataSource,
       );
 

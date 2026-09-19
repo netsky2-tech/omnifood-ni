@@ -8,7 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { FiscalConfigRevision } from '../entities/fiscal-config-revision.entity';
 import { Tenant } from '../../tenant/entities/tenant.entity';
-import { SystemParametersConfig } from '../../inventory/entities/system-parameters-config.entity';
+import { SystemParametersConfigActiveView } from '../../inventory/entities/system-parameters-config.entity';
 import {
   bindTenantContext,
   runInTenantTransaction,
@@ -32,8 +32,6 @@ export class FiscalConfigVersionService {
     private readonly revisionRepo: Repository<FiscalConfigRevision>,
     @InjectRepository(Tenant)
     private readonly tenantRepo: Repository<Tenant>,
-    @InjectRepository(SystemParametersConfig)
-    private readonly sysParamRepo: Repository<SystemParametersConfig>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -58,7 +56,7 @@ export class FiscalConfigVersionService {
     }
 
     const tRepo = manager.getRepository(Tenant);
-    const sRepo = manager.getRepository(SystemParametersConfig);
+    const sRepo = manager.getRepository(SystemParametersConfigActiveView);
 
     const tenant = await tRepo.findOne({
       where: { id: trimmedTenantId },
@@ -69,7 +67,7 @@ export class FiscalConfigVersionService {
     }
 
     const activeParams = await sRepo.find({
-      where: { tenant_id: trimmedTenantId, isActive: true },
+      where: { tenant_id: trimmedTenantId },
     });
 
     const paramMap = new Map<string, unknown>();

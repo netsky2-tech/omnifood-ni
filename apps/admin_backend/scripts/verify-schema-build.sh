@@ -254,6 +254,12 @@ perl -ne 'print "$1\n" if /\@Entity\(\s*(?:\{\s*name:\s*)?["\x27]([A-Za-z_0-9]+)
 #     declares a physical primary-key column. Relation decorators
 #     (@ManyToOne, @OneToMany, @OneToOne, @JoinColumn, @JoinTable,
 #     @ManyToMany) and any property without a column decorator are ignored.
+#   - @ViewEntity and @ViewColumn are ignored too: a view entity maps to a
+#     VIEW, not to a table, and this harness compares entity tables and columns
+#     against what the migrations create. Views are authored by migrations, not
+#     by entities, so a view entity declares no table for this comparison. It is
+#     NOT a signal to skip verification: any @Column inside a real @Entity is
+#     still extracted and checked.
 #   - Both single-line and multi-line decorator forms are handled, and both
 #     quoted and unquoted @Entity table names. @Entity() without a name falls
 #     back to the class name, which is what TypeORM does.
@@ -273,6 +279,7 @@ my %IGNORED_DECORATOR = map { $_ => 1 } qw(
   Entity Index Unique
   ManyToOne OneToMany OneToOne ManyToMany
   JoinColumn JoinTable Generated
+  ViewEntity ViewColumn
 );
 
 sub net_parens {

@@ -12,7 +12,10 @@ import {
   UserRole,
 } from '../../src/modules/identity/entities/user.entity';
 import { SecurityProfile } from '../../src/modules/identity/entities/security-profile.entity';
-import { SystemParametersConfig } from '../../src/modules/inventory/entities/system-parameters-config.entity';
+import {
+  SystemParametersConfig,
+  SystemParametersConfigActiveView,
+} from '../../src/modules/inventory/entities/system-parameters-config.entity';
 import {
   Product,
   ProductType,
@@ -113,6 +116,7 @@ async function withReadinessIsolatedSchema(
         User,
         SecurityProfile,
         SystemParametersConfig,
+        SystemParametersConfigActiveView,
         Product,
         Insumo,
         Recipe,
@@ -140,6 +144,31 @@ async function withReadinessIsolatedSchema(
     });
     await dataSource.initialize();
     await dataSource.query(`SET search_path TO "${schema}"`);
+
+    // The active-config view is owned by migration 1784000000000
+    // (synchronize: false on the view entity), so it must be created here
+    // with the exact same DDL for the fiscal read path to resolve the
+    // governing configuration version.
+    await dataSource.query(`
+      CREATE OR REPLACE VIEW v_sys_parametros_config_active
+      WITH (security_invoker = true)
+      AS
+      SELECT DISTINCT ON (tenant_id, param_key)
+        id,
+        tenant_id,
+        param_key,
+        param_value,
+        version,
+        effective_from,
+        effective_to,
+        is_active,
+        created_by,
+        created_at
+      FROM sys_parametros_config
+      WHERE is_active = true
+        AND (effective_to IS NULL OR effective_to > now())
+      ORDER BY tenant_id, param_key, version DESC, effective_from DESC;
+    `);
 
     const tenantRepo = dataSource.getRepository(Tenant);
     const userRepo = dataSource.getRepository(User);

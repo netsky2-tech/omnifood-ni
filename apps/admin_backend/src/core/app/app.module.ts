@@ -50,7 +50,10 @@ import { ProductionOrderLine } from '../../modules/inventory/entities/production
 import { ProductionBatchHistory } from '../../modules/inventory/entities/production-batch-history.entity';
 import { Shrinkage } from '../../modules/inventory/entities/shrinkage.entity';
 import { ShrinkageDetail } from '../../modules/inventory/entities/shrinkage-detail.entity';
-import { SystemParametersConfig } from '../../modules/inventory/entities/system-parameters-config.entity';
+import {
+  SystemParametersConfig,
+  SystemParametersConfigActiveView,
+} from '../../modules/inventory/entities/system-parameters-config.entity';
 import { KardexRecalculateQueue } from '../../modules/inventory/entities/kardex-recalculate-queue.entity';
 import { KardexCorrection } from '../../modules/inventory/entities/kardex-correction.entity';
 import { CatalogValue } from '../../modules/catalog/entities/catalog-value.entity';
@@ -142,6 +145,7 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
     Shrinkage,
     ShrinkageDetail,
     SystemParametersConfig,
+    SystemParametersConfigActiveView,
     KardexRecalculateQueue,
     KardexCorrection,
     CatalogValue,
