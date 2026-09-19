@@ -99,10 +99,12 @@ import 'package:pos_app/data/models/kitchen/kitchen_order_item_entity.dart';
 import 'package:pos_app/data/models/inventory/authority_projection_entities.dart';
 import 'package:pos_app/data/daos/inventory/authority_projection_dao.dart';
 
+import 'package:pos_app/data/models/human_authorization/ohac_delivery_entities.dart';
+
 part 'app_database.g.dart'; // generated code
 
 @Database(
-  version: 52,
+  version: 53,
   entities: [
     UserEntity,
     SecurityProfileEntity,
@@ -161,6 +163,11 @@ part 'app_database.g.dart'; // generated code
     FirstSuccessfulSaleClaimEntity,
     FirstCustomerSaleObservationEntity,
     ActivationOutboxEnvelopeEntity,
+    OhacPolicyEpochEntity,
+    OhacPolicyEntryEntity,
+    OhacTerminalStateEntity,
+    OhacAttemptStateEntity,
+    OhacLocalEventEntity,
   ],
 )
 abstract class AppDatabase extends FloorDatabase {
