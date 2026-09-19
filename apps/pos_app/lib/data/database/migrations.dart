@@ -111,12 +111,60 @@ final inventoryMovementAppendOnlyCallback = Callback(
     await _createAuthorityImmutabilityTriggers(database);
     await _createTopologyPersistenceTriggers(database);
     await _createTopologyPersistenceTriggers(database);
+    await _ensureHumanAuthorizationLocalIndexesAndTriggers(database);
   },
   onOpen: (database) async {
     await _createInventoryMovementAppendOnlyTriggers(database);
     await _createAuthorityImmutabilityTriggers(database);
+    await _ensureHumanAuthorizationLocalIndexesAndTriggers(database);
   },
 );
+
+/// Single source of truth for the OHAC local-delivery indexes and the
+/// append-only triggers guarding `human_auth_policy_epochs`,
+/// `human_auth_policy_entries` and `human_auth_local_events`.
+///
+/// This is called by both `migration52_53` (upgrade path) and
+/// `inventoryMovementAppendOnlyCallback` (fresh-install path, where migrations
+/// never run) precisely so a fresh install cannot drift from an upgraded one.
+Future<void> _ensureHumanAuthorizationLocalIndexesAndTriggers(
+  sqflite.DatabaseExecutor database,
+) async {
+  await database.execute('''
+    CREATE INDEX IF NOT EXISTS index_human_auth_policy_entries_user
+    ON human_auth_policy_entries (tenant_id, terminal_id, user_id)
+  ''');
+
+  await database.execute('''
+    CREATE INDEX IF NOT EXISTS index_human_auth_local_events_terminal
+    ON human_auth_local_events (tenant_id, terminal_id, created_at)
+  ''');
+
+  // Immutability is a property of the schema, not a convention callers
+  // remember: a policy artifact that could be edited in place would let the
+  // stored epoch disagree with the digest the backend signed. The local event
+  // log is append-only for the same reason.
+  for (final table in [
+    'human_auth_policy_epochs',
+    'human_auth_policy_entries',
+    'human_auth_local_events',
+  ]) {
+    await database.execute('''
+      CREATE TRIGGER IF NOT EXISTS trg_${table}_no_update
+      BEFORE UPDATE ON $table
+      BEGIN
+        SELECT RAISE(ABORT, '$table is append-only: update is forbidden');
+      END
+    ''');
+    await database.execute('''
+      CREATE TRIGGER IF NOT EXISTS trg_${table}_no_delete
+      BEFORE DELETE ON $table
+      BEGIN
+        SELECT RAISE(ABORT, '$table is append-only: delete is forbidden');
+      END
+    ''');
+  }
+}
 
 final migration10_11 = Migration(10, 11, (database) async {
   await database.execute(
@@ -2301,11 +2349,6 @@ final migration52_53 = Migration(52, 53, (database) async {
     )
   ''');
 
-  await database.execute('''
-    CREATE INDEX IF NOT EXISTS index_human_auth_policy_entries_user
-    ON human_auth_policy_entries (tenant_id, terminal_id, user_id)
-  ''');
-
   // Mutable terminal state, one row per terminal, guarded by a revision so a
   // transition is a compare-and-set rather than a blind write.
   await database.execute('''
@@ -2351,35 +2394,7 @@ final migration52_53 = Migration(52, 53, (database) async {
     )
   ''');
 
-  await database.execute('''
-    CREATE INDEX IF NOT EXISTS index_human_auth_local_events_terminal
-    ON human_auth_local_events (tenant_id, terminal_id, created_at)
-  ''');
-
-  // Immutability is a property of the schema, not a convention callers
-  // remember: a policy artifact that could be edited in place would let the
-  // stored epoch disagree with the digest the backend signed. The local event
-  // log is append-only for the same reason.
-  for (final table in [
-    'human_auth_policy_epochs',
-    'human_auth_policy_entries',
-    'human_auth_local_events',
-  ]) {
-    await database.execute('''
-      CREATE TRIGGER IF NOT EXISTS trg_${table}_no_update
-      BEFORE UPDATE ON $table
-      BEGIN
-        SELECT RAISE(ABORT, '$table is append-only: update is forbidden');
-      END
-    ''');
-    await database.execute('''
-      CREATE TRIGGER IF NOT EXISTS trg_${table}_no_delete
-      BEFORE DELETE ON $table
-      BEGIN
-        SELECT RAISE(ABORT, '$table is append-only: delete is forbidden');
-      END
-    ''');
-  }
+  await _ensureHumanAuthorizationLocalIndexesAndTriggers(database);
 });
 
 final allMigrations = [
