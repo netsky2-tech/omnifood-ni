@@ -30,7 +30,7 @@ export class DeviceSyncCredential {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column({ name: 'tenant_id', type: 'varchar', length: 128 })
+  @Column({ name: 'tenant_id', type: 'uuid' })
   @Index('idx_device_sync_credentials_tenant')
   tenantId!: string;
 
