@@ -228,7 +228,6 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
       const fiscalService = new FiscalConfigVersionService(
         revRepo,
         tenantRepo,
-        dataSource.getRepository(SystemParametersConfigActiveView),
         dataSource,
       );
 
@@ -477,7 +476,6 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
       const fiscalService = new FiscalConfigVersionService(
         revRepo,
         tenantRepo,
-        dataSource.getRepository(SystemParametersConfigActiveView),
         dataSource,
       );
       const dummyReadiness = {
@@ -706,7 +704,6 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
       const fiscalService = new FiscalConfigVersionService(
         revRepo,
         tenantRepo,
-        dataSource.getRepository(SystemParametersConfigActiveView),
         dataSource,
       );
       const dummyReadiness = {

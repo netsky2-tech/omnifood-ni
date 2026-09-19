@@ -155,7 +155,6 @@ describe('FiscalConfigVersionService — Real PostgreSQL Persistence', () => {
       const service = new FiscalConfigVersionService(
         dataSource.getRepository(FiscalConfigRevision),
         dataSource.getRepository(Tenant),
-        dataSource.getRepository(SystemParametersConfigActiveView),
         dataSource,
       );
 
@@ -198,7 +197,6 @@ describe('FiscalConfigVersionService — Real PostgreSQL Persistence', () => {
       const service = new FiscalConfigVersionService(
         dataSource.getRepository(FiscalConfigRevision),
         dataSource.getRepository(Tenant),
-        dataSource.getRepository(SystemParametersConfigActiveView),
         dataSource,
       );
 
@@ -261,7 +259,6 @@ describe('FiscalConfigVersionService — Real PostgreSQL Persistence', () => {
       const service = new FiscalConfigVersionService(
         dataSource.getRepository(FiscalConfigRevision),
         dataSource.getRepository(Tenant),
-        dataSource.getRepository(SystemParametersConfigActiveView),
         dataSource,
       );
 
@@ -331,7 +328,6 @@ describe('FiscalConfigVersionService — Real PostgreSQL Persistence', () => {
       const service = new FiscalConfigVersionService(
         dataSource.getRepository(FiscalConfigRevision),
         dataSource.getRepository(Tenant),
-        dataSource.getRepository(SystemParametersConfigActiveView),
         dataSource,
       );
 

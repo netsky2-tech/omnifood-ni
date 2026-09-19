@@ -253,7 +253,6 @@ describe('Activation Device Credential Provisioning (db)', () => {
       const fiscalService = new FiscalConfigVersionService(
         dataSource.getRepository(FiscalConfigRevision),
         dataSource.getRepository(Tenant),
-        dataSource.getRepository(SystemParametersConfigActiveView),
         dataSource,
       );
 

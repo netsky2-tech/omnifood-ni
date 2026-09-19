@@ -32,10 +32,6 @@ export class FiscalConfigVersionService {
     private readonly revisionRepo: Repository<FiscalConfigRevision>,
     @InjectRepository(Tenant)
     private readonly tenantRepo: Repository<Tenant>,
-    // Injection token follows the read model: configuration reads resolve
-    // through the active-configuration view (issue #377).
-    @InjectRepository(SystemParametersConfigActiveView)
-    private readonly sysParamRepo: Repository<SystemParametersConfigActiveView>,
     private readonly dataSource: DataSource,
   ) {}
 

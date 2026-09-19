@@ -12,7 +12,10 @@ import {
   UserRole,
 } from '../../src/modules/identity/entities/user.entity';
 import { SecurityProfile } from '../../src/modules/identity/entities/security-profile.entity';
-import { SystemParametersConfig } from '../../src/modules/inventory/entities/system-parameters-config.entity';
+import {
+  SystemParametersConfig,
+  SystemParametersConfigActiveView,
+} from '../../src/modules/inventory/entities/system-parameters-config.entity';
 import { Product } from '../../src/modules/inventory/entities/product.entity';
 import { FiscalConfigRevision } from '../../src/modules/onboarding/entities/fiscal-config-revision.entity';
 import {
@@ -110,6 +113,7 @@ describe('ONB1.10C: Security & Multi-Tenant Isolation Hardening (Real PostgreSQL
         User,
         SecurityProfile,
         SystemParametersConfig,
+        SystemParametersConfigActiveView,
         Product,
         FiscalConfigRevision,
         OnboardingSession,
@@ -125,6 +129,31 @@ describe('ONB1.10C: Security & Multi-Tenant Isolation Hardening (Real PostgreSQL
     });
     await dataSource.initialize();
     await dataSource.query(`SET search_path TO "${schemaName}"`);
+
+    // The active-config view is owned by migration 1784000000000
+    // (synchronize: false on the view entity), so it must be created here
+    // with the exact same DDL for the fiscal read path to resolve the
+    // governing configuration version.
+    await dataSource.query(`
+      CREATE OR REPLACE VIEW v_sys_parametros_config_active
+      WITH (security_invoker = true)
+      AS
+      SELECT DISTINCT ON (tenant_id, param_key)
+        id,
+        tenant_id,
+        param_key,
+        param_value,
+        version,
+        effective_from,
+        effective_to,
+        is_active,
+        created_by,
+        created_at
+      FROM sys_parametros_config
+      WHERE is_active = true
+        AND (effective_to IS NULL OR effective_to > now())
+      ORDER BY tenant_id, param_key, version DESC, effective_from DESC;
+    `);
 
     tenantAId = randomUUID();
     tenantBId = randomUUID();

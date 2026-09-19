@@ -136,10 +136,13 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
       ),
     } as unknown as jest.Mocked<DataSource>;
 
+    // The service no longer takes an injected active-configuration repository: the
+    // read resolves through manager.getRepository(...) inside the tenant-bound
+    // transaction (issue #377), so the injection was dead and its absence is what
+    // keeps every test module that builds this service free of an extra provider.
     service = new FiscalConfigVersionService(
       revisionRepo,
       tenantRepo,
-      sysParamRepo,
       dataSource,
     );
   });

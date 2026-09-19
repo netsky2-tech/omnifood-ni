@@ -12,7 +12,10 @@ import {
   UserRole,
 } from '../../src/modules/identity/entities/user.entity';
 import { SecurityProfile } from '../../src/modules/identity/entities/security-profile.entity';
-import { SystemParametersConfig } from '../../src/modules/inventory/entities/system-parameters-config.entity';
+import {
+  SystemParametersConfig,
+  SystemParametersConfigActiveView,
+} from '../../src/modules/inventory/entities/system-parameters-config.entity';
 import {
   Product,
   ProductType,
@@ -100,6 +103,7 @@ describe('ONB1.7A–C Activation Flow (E2E with Real PostgreSQL Persistence)', (
         User,
         SecurityProfile,
         SystemParametersConfig,
+        SystemParametersConfigActiveView,
         FiscalConfigRevision,
         Product,
         OnboardingSession,
@@ -116,6 +120,31 @@ describe('ONB1.7A–C Activation Flow (E2E with Real PostgreSQL Persistence)', (
     });
     await dataSource.initialize();
     await dataSource.query(`SET search_path TO "${schemaName}"`);
+
+    // The active-config view is owned by migration 1784000000000
+    // (synchronize: false on the view entity), so it must be created here
+    // with the exact same DDL for the fiscal read path to resolve the
+    // governing configuration version.
+    await dataSource.query(`
+      CREATE OR REPLACE VIEW v_sys_parametros_config_active
+      WITH (security_invoker = true)
+      AS
+      SELECT DISTINCT ON (tenant_id, param_key)
+        id,
+        tenant_id,
+        param_key,
+        param_value,
+        version,
+        effective_from,
+        effective_to,
+        is_active,
+        created_by,
+        created_at
+      FROM sys_parametros_config
+      WHERE is_active = true
+        AND (effective_to IS NULL OR effective_to > now())
+      ORDER BY tenant_id, param_key, version DESC, effective_from DESC;
+    `);
 
     // Create partial unique index on real Postgres
     await dataSource.query(`
@@ -342,10 +371,12 @@ describe('ONB1.7A–C Activation Flow (E2E with Real PostgreSQL Persistence)', (
       total: 1,
       paymentStatus: 'paid',
     });
-    await dataSource.getRepository(ActivationAttempt).update(
-      { id: attemptId, tenantId: evidenceTenantId },
-      { verificationTicketId: invoiceId },
-    );
+    await dataSource
+      .getRepository(ActivationAttempt)
+      .update(
+        { id: attemptId, tenantId: evidenceTenantId },
+        { verificationTicketId: invoiceId },
+      );
   }
 
   afterAll(async () => {
@@ -820,9 +851,9 @@ describe('ONB1.7A–C Activation Flow (E2E with Real PostgreSQL Persistence)', (
           checkCode: ActivationCheckCode.POST_RECONNECT_SYNC,
         },
       });
-    checkToPass!.status = ActivationCheckStatus.PASS;
-    checkToPass!.evidenceRef = 'SYNC_CONVERGED_BATCH_E2E';
-    await dataSource.getRepository(ActivationCheckResult).save(checkToPass!);
+    checkToPass.status = ActivationCheckStatus.PASS;
+    checkToPass.evidenceRef = 'SYNC_CONVERGED_BATCH_E2E';
+    await dataSource.getRepository(ActivationCheckResult).save(checkToPass);
 
     // Call Reconcile Convergence endpoint
     const reconRes = await request(app.getHttpServer())
@@ -837,11 +868,15 @@ describe('ONB1.7A–C Activation Flow (E2E with Real PostgreSQL Persistence)', (
     // Verify follow-up in DB is CLOSED by SYSTEM_RECONCILER
     const followUpsInDb = await dataSource
       .getRepository(ActivationFollowUp)
-      .find({ where: { tenantId: tenantConvId, activationAttemptId: attemptId } });
+      .find({
+        where: { tenantId: tenantConvId, activationAttemptId: attemptId },
+      });
     expect(followUpsInDb.length).toBe(1);
     expect(followUpsInDb[0].status).toBe(ActivationFollowUpStatus.CLOSED);
     expect(followUpsInDb[0].closedBy).toBe('SYSTEM_RECONCILER');
-    expect(followUpsInDb[0].closureEvidenceRef).toBe('SYNC_CONVERGED_BATCH_E2E');
+    expect(followUpsInDb[0].closureEvidenceRef).toBe(
+      'SYNC_CONVERGED_BATCH_E2E',
+    );
 
     // Invariant: activatedAt remains strictly identical
     const sessionAfterReconcile = await dataSource
@@ -879,10 +914,13 @@ describe('ONB1.7A–C Activation Flow (E2E with Real PostgreSQL Persistence)', (
       .findOne({ where: { tenantId } });
 
     const overrideRes = await request(app.getHttpServer())
-      .post(`/api/onboarding/activation/attempts/${activeAttempt?.id}/support-override`)
+      .post(
+        `/api/onboarding/activation/attempts/${activeAttempt?.id}/support-override`,
+      )
       .set('Authorization', `Bearer ${supportToken}`)
       .send({
-        reason: 'Assisted tenant through support channel with peripheral hardware diagnostics',
+        reason:
+          'Assisted tenant through support channel with peripheral hardware diagnostics',
         overrideAction: SupportOverrideAction.RECORD_DIAGNOSTIC_ASSIST,
         notes: 'Serial printer baudrate adjusted to 9600',
       });
@@ -907,7 +945,9 @@ describe('ONB1.7A–C Activation Flow (E2E with Real PostgreSQL Persistence)', (
       .findOne({ where: { tenantId } });
 
     const diagRes = await request(app.getHttpServer())
-      .get(`/api/onboarding/activation/attempts/${activeAttempt?.id}/diagnostics`)
+      .get(
+        `/api/onboarding/activation/attempts/${activeAttempt?.id}/diagnostics`,
+      )
       .set('Authorization', `Bearer ${ownerToken}`);
 
     expect(diagRes.status).toBe(200);
