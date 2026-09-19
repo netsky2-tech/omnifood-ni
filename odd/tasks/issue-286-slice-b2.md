@@ -72,7 +72,7 @@ Migration timestamps `1809100000000` (B2.2) and `1809110000000` (B2.3) are free.
 | **B2.1** | Five earlier migrations resolve per table, one resolution per table, header comments corrected where they assert the varchar rationale. | Specs assert one resolution per table and both directions per file; harness green in both scenarios with **no counter moved** (all columns still varchar) |
 | **B2.2** | Migration `1809100000000` rebinding 5 tables / 12 policies through the emitter, authored from `pg_policies` structural columns; 5 entities to `uuid`; manifest −5. | **DONE** — 23 → 18 columns, `uuid tenant_id tables` 42 → 47, `entity uuid mismatches 0`, `RLS policies 102`. Harness green in both scenarios; specs 5/5; `test:db` 36/200; `test:e2e` 49/392; `npm test` 227 suites / 2091 tests. |
 | **B2.3** | Migration `1809110000000` rebinding 4 tables / 10 policies; 4 entities; manifest −4. | Same, ending at `non-uuid tenant columns 25` |
-| **B2.4** | Independent verification out of the catalog, not out of the specs: column types, every policy's `qual`/`with_check` in the target form with no column-side `::text`, and `EXPLAIN` as a **non-bypassing role** showing `Index Cond` on the composite keys (`human_auth_terminal_ack_floor` and `human_auth_tenant_publication_state` are keyed on `tenant_id`, so their index behaviour is worth its own look). | Catalog output and plan lines in this document |
+| **B2.4** | Independent verification out of the catalog, not out of the specs: column types, every policy's `qual`/`with_check` in the target form with no column-side `::text`, and `EXPLAIN` as a **non-bypassing role** showing `Index Cond` on the composite keys. | **DONE** — 9/9 columns uuid; 22 OHAC policies with **0** missing the setting-side uuid cast; `Index Cond` on all three probed tables, including both composite-PK ones. Evidence below. |
 
 Each unit closes with one work-unit commit and its own pull request, chained in the order above.
 
@@ -104,6 +104,32 @@ If either slice unit lands over 400 the overage is disclosed in the pull request
 
 Basing B2 on `main` rather than on B1's unmerged chain is deliberate — the slices are independent, and stacking seven pull requests would entangle them. The consequence is exactly this: B1's assertions are absent here, so **the entity conversions in B2.2 and B2.3 are pinned by the harness only after B1 merges**; until then, the agreement they must satisfy (uuid column, uuid entity) is what those units deliver by construction.
 
+## Catalogue evidence for B2, taken as the non-bypassing migration role
+
+A spec that pins generated SQL strings cannot show that the recreated policies still restrict by index, nor that a composite primary key survived the type change. Both were read from the scratch database after the slice's units landed:
+
+```
+information_schema, tenant_id column types under human_auth_*   -> 9/9 uuid
+
+pg_policies, OHAC total = 22
+policies whose qual and with_check both lack the setting-side uuid cast = 0
+
+target form, read back:
+  (tenant_id = (current_setting('app.tenant_id'::text, true))::uuid)
+
+EXPLAIN, enable_seqscan = off, as omnifood_schema_build_migrator (NOBYPASSRLS):
+  human_auth_policy_epochs             Index Scan using idx_human_auth_policy_epochs_terminal_sequence
+                                         Index Cond: (tenant_id = (... )::uuid)
+  human_auth_terminal_ack_floor        Index Scan using human_auth_terminal_ack_floor_pkey
+                                         Index Cond: (tenant_id = (... )::uuid)   <- composite PK rebuilt
+  human_auth_tenant_publication_state  Index Scan using human_auth_tenant_publication_state_pkey
+                                         Index Cond: (tenant_id = (... )::uuid)   <- composite PK rebuilt
+```
+
+`Index Cond` rather than `Filter` is the check that catches a policy which is correct but no longer index-usable. The role matters for a second reason: as a superuser the RLS qual is not added to the plan at all, so the same `EXPLAIN` comes back clean without ever touching the predicate.
+
+**One observation left standing, not attributed.** `npm run test:e2e` failed once during this slice's last unit (7 tests, suite name not captured) and then passed on every subsequent run: two by the implementing run, one by the parent, plus four across slice B1's units. Observed, not reproduced, cause unidentified — recorded rather than blamed on the environment, because that was not proven either.
+
 ## Process hazards carried from slice B1
 
 - **`npm run lint` in `apps/admin_backend` is `eslint --fix`.** It rewrote 48 unrelated tracked files during B1 and exited 0 while doing it. Verify lint with a direct `npx eslint <paths>` call, never with the package script.
@@ -125,5 +151,5 @@ Basing B2 on `main` rather than on B1's unmerged chain is deliberate — the sli
 - `apps/admin_backend/src/migrations/1809080000000-RebindOnboardingFiscalTenantColumns.ts` — slice B1's slice migration, the template.
 - `apps/admin_backend/src/migrations/1809000000000`..`1809050000000` — the five files link B2.1 makes type-aware.
 - `apps/admin_backend/scripts/verify-schema-build.sh` — the check that finds every defect of this class; `partial_ledger_names` defines the re-run class.
-- `apps/admin_backend/scripts/schema-tenant-type-manifest.txt` — the ratchet, 25 → 16.
+- `apps/admin_backend/scripts/schema-tenant-type-manifest.txt` — the ratchet, 23 → 14 across this slice (34 → 14 since slice B1 began).
 - `apps/admin_backend/src/modules/identity/human-authorization/runtime/ohac-publication-db.fixture.ts` — the fixture that runs the real migrations and seeds these tables.
