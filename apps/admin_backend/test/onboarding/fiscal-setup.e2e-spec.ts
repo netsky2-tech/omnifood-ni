@@ -8,6 +8,7 @@ import * as request from 'supertest';
 import { App } from 'supertest/types';
 import { DataSource, FindManyOptions, FindOneOptions } from 'typeorm';
 import { TenantInterceptor } from '../../src/core/database/rls.interceptor';
+import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../src/core/database/tenant-transaction';
 import { FiscalSetupController } from '../../src/modules/onboarding/controllers/fiscal-setup.controller';
 import {
   FiscalSetupService,
@@ -15,7 +16,10 @@ import {
 } from '../../src/modules/onboarding/services/fiscal-setup.service';
 import { FiscalSetupResponse } from '../../src/modules/onboarding/dto/fiscal-setup.dto';
 import { Tenant } from '../../src/modules/tenant/entities/tenant.entity';
-import { SystemParametersConfig } from '../../src/modules/inventory/entities/system-parameters-config.entity';
+import {
+  SystemParametersConfig,
+  SystemParametersConfigActiveView,
+} from '../../src/modules/inventory/entities/system-parameters-config.entity';
 import { UserRole } from '../../src/modules/identity/entities/user.entity';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
@@ -55,17 +59,20 @@ describe('FiscalSetup (Integration & E2E)', () => {
     }),
   };
 
-  const sysParamRepo = {
-    find: jest.fn((options: FindManyOptions<SystemParametersConfig>) => {
-      const where = options.where as { tenant_id?: string; isActive?: boolean };
-      return Promise.resolve(
-        dbSysParams.filter(
-          (p) =>
-            p.tenant_id === where?.tenant_id &&
-            (where.isActive === undefined || p.isActive === where.isActive),
-        ),
-      );
-    }),
+  // Emulates the v_sys_parametros_config_active read semantics: one
+  // governing row per (tenant_id, param_key) — the highest version among
+  // active, unexpired rows.
+  const latestActivePerKey = (
+    rows: SystemParametersConfig[],
+  ): SystemParametersConfig[] => {
+    const latest = new Map<string, SystemParametersConfig>();
+    for (const p of rows) {
+      const current = latest.get(p.paramKey);
+      if (!current || p.version > current.version) {
+        latest.set(p.paramKey, p);
+      }
+    }
+    return [...latest.values()];
   };
 
   const manager = {
@@ -88,6 +95,21 @@ describe('FiscalSetup (Integration & E2E)', () => {
         entityClass: unknown,
         options: FindManyOptions<SystemParametersConfig>,
       ) => {
+        if (entityClass === SystemParametersConfigActiveView) {
+          const where = options.where as {
+            tenant_id?: string;
+            paramKey?: string;
+          };
+          const matching = dbSysParams.filter(
+            (p) =>
+              p.tenant_id === where?.tenant_id &&
+              (where.paramKey === undefined ||
+                p.paramKey === where.paramKey) &&
+              p.isActive &&
+              (p.effectiveTo === null || p.effectiveTo > new Date()),
+          );
+          return Promise.resolve(latestActivePerKey(matching));
+        }
         if (entityClass === SystemParametersConfig) {
           const where = options.where as {
             tenant_id?: string;
@@ -172,10 +194,6 @@ describe('FiscalSetup (Integration & E2E)', () => {
         {
           provide: 'TenantRepository',
           useValue: tenantRepo,
-        },
-        {
-          provide: 'SystemParametersConfigRepository',
-          useValue: sysParamRepo,
         },
         {
           provide: EventEmitter2,
@@ -509,24 +527,158 @@ describe('FiscalSetup (Integration & E2E)', () => {
       commercialFxSpread: 0.75,
     });
 
+    // Issue #377: supersession is append-only. The governing row is the
+    // one with the highest version; the first row is never deactivated in
+    // place (the trg_sys_parametros_config_immutable trigger rejects that
+    // UPDATE in a migrated database).
     const activeTaxParam = dbSysParams.find(
       (p) =>
         p.tenant_id === 'tenant-A' &&
         p.paramKey === 'TAX_RATE_IVA' &&
-        p.isActive,
+        p.version === 2,
     );
     expect(activeTaxParam?.paramValue).toBe(0.15);
-    expect(activeTaxParam?.version).toBe(2);
+    expect(activeTaxParam?.isActive).toBe(true);
+    expect(activeTaxParam?.effectiveTo).toBeNull();
 
     const oldTaxParam = dbSysParams.find(
       (p) =>
         p.tenant_id === 'tenant-A' &&
         p.paramKey === 'TAX_RATE_IVA' &&
-        !p.isActive,
+        p.version === 1,
     );
     expect(oldTaxParam?.paramValue).toBe(0.0);
     expect(oldTaxParam?.version).toBe(1);
-    expect(oldTaxParam?.effectiveTo).toBeInstanceOf(Date);
+    // Append-only contract: the first row stays exactly as written.
+    expect(oldTaxParam?.isActive).toBe(true);
+    expect(oldTaxParam?.effectiveTo).toBeNull();
+  });
+
+  it('appends a second version on reconfiguration without mutating the first (issue #377 append-only contract)', async () => {
+    // NOTE: this spec runs against an in-memory simulated database, so the
+    // trg_sys_parametros_config_immutable trigger is absent here. The
+    // assertions below encode the contract that the trigger enforces in a
+    // migrated database: reconfiguration inserts new version rows and never
+    // updates the rows written by a previous call.
+    const token = signToken({ tenant_id: 'tenant-A' });
+
+    await request(app.getHttpServer())
+      .post(API_PREFIX)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        regime: FiscalRegime.CUOTA_FIJA,
+        businessName: 'Comedor Doña Mary',
+        ruc: 'J0310000055555',
+        commercialFxSpread: 0.5,
+        pricesIncludeTax: true,
+      })
+      .expect(201);
+
+    const firstRows = dbSysParams.map((p) => ({ ...p }));
+    expect(firstRows.length).toBeGreaterThan(0);
+
+    // Second configuration with different values succeeds where the old
+    // UPDATE-based supersession used to fail against the trigger.
+    const response = await request(app.getHttpServer())
+      .post(API_PREFIX)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        regime: FiscalRegime.REGIMEN_GENERAL,
+        businessName: 'Comedor Doña Mary S.A.',
+        ruc: 'J0310000055555',
+        commercialFxSpread: 0.75,
+        pricesIncludeTax: false,
+      })
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      regime: FiscalRegime.REGIMEN_GENERAL,
+      taxRateIva: 0.15,
+      pricesIncludeTax: false,
+      commercialFxSpread: 0.75,
+    });
+
+    // The rows written by the first call are left completely untouched.
+    for (const original of firstRows) {
+      const current = dbSysParams.find((p) => p.id === original.id);
+      expect(current).toEqual(original);
+      // Original state preserved: still active, still open, version 1.
+      expect(current?.isActive).toBe(true);
+      expect(current?.effectiveTo).toBeNull();
+      expect(current?.version).toBe(1);
+    }
+
+    // A second row per key exists, carrying the new values.
+    const secondRows = dbSysParams.filter(
+      (p) => p.tenant_id === 'tenant-A' && p.version === 2,
+    );
+    expect(secondRows).toHaveLength(4);
+    expect(
+      secondRows.find((p) => p.paramKey === 'FISCAL_REGIME')?.paramValue,
+    ).toBe(FiscalRegime.REGIMEN_GENERAL);
+    expect(secondRows.find((p) => p.paramKey === 'TAX_RATE_IVA')?.paramValue).toBe(
+      0.15,
+    );
+    expect(
+      secondRows.find((p) => p.paramKey === 'PRICES_INCLUDE_TAX')?.paramValue,
+    ).toBe(false);
+    expect(
+      secondRows.find((p) => p.paramKey === 'COMMERCIAL_FX_SPREAD')?.paramValue,
+    ).toBe(0.75);
+
+    // The active-configuration read resolves the SECOND values, not the first.
+    const read = await request(app.getHttpServer())
+      .get(API_PREFIX)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(read.body).toMatchObject({
+      regime: FiscalRegime.REGIMEN_GENERAL,
+      taxRateIva: 0.15,
+      pricesIncludeTax: false,
+      commercialFxSpread: 0.75,
+    });
+  });
+
+  it('resolves the configured value on read inside a tenant-bound transaction (issue #377 read path)', async () => {
+    // NOTE: this spec runs against an in-memory simulated database, so it
+    // cannot reproduce the view's RLS behaviour (security_invoker = true).
+    // Against a migrated database, an unbound read of the view either
+    // returns zero rows — making the API silently serve fallback defaults —
+    // or throws on current_setting('app.tenant_id', true)::uuid. The value
+    // assertion below guards the "params map came back empty" symptom; the
+    // binding-count assertion guards the structural contract that the read
+    // is tenant-bound on the same connection.
+    const token = signToken({ tenant_id: 'tenant-A' });
+
+    await request(app.getHttpServer())
+      .post(API_PREFIX)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        regime: FiscalRegime.CUOTA_FIJA,
+        businessName: 'Comedor Doña Mary',
+        ruc: 'J0310000055555',
+        commercialFxSpread: 1.25, // non-default: the fallback is 0.5
+        pricesIncludeTax: true,
+      })
+      .expect(201);
+
+    const countBinds = (): number =>
+      (manager.query.mock.calls as unknown as unknown[][]).filter(
+        (call) => call[0] === TENANT_CONTEXT_SET_CONFIG_SQL,
+      ).length;
+    const bindsBefore = countBinds();
+
+    const response = await request(app.getHttpServer())
+      .get(API_PREFIX)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect((response.body as FiscalSetupResponse).commercialFxSpread).toBe(
+      1.25,
+    );
+
+    const bindsAfter = countBinds();
+    expect(bindsAfter).toBeGreaterThan(bindsBefore);
   });
 
   it('guarantees multi-tenant isolation for fiscal configuration', async () => {

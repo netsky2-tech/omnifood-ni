@@ -20,7 +20,10 @@ import { ActivationFollowUp } from './entities/activation-follow-up.entity';
 import { OnboardingTelemetryEvent } from './entities/onboarding-telemetry-event.entity';
 import { Tenant } from '../tenant/entities/tenant.entity';
 import { User } from '../identity/entities/user.entity';
-import { SystemParametersConfig } from '../inventory/entities/system-parameters-config.entity';
+import {
+  SystemParametersConfig,
+  SystemParametersConfigActiveView,
+} from '../inventory/entities/system-parameters-config.entity';
 import { Insumo } from '../inventory/entities/insumo.entity';
 import { Product } from '../inventory/entities/product.entity';
 import { RecipeVersion } from '../inventory/entities/recipe-version.entity';
@@ -114,6 +117,7 @@ export const getRequiredOnboardingJwtSecret = (
       Tenant,
       User,
       SystemParametersConfig,
+      SystemParametersConfigActiveView,
       Insumo,
       Product,
       RecipeVersion,

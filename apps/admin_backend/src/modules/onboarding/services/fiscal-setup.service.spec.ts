@@ -10,7 +10,6 @@ import { FiscalSetupDto } from '../dto/fiscal-setup.dto';
 describe('FiscalSetupService (Unit & Triangulation)', () => {
   let service: FiscalSetupService;
   let tenantRepo: jest.Mocked<Repository<Tenant>>;
-  let sysParamRepo: jest.Mocked<Repository<SystemParametersConfig>>;
   let eventEmitter: jest.Mocked<EventEmitter2>;
   let dataSource: jest.Mocked<DataSource>;
   let mockManager: jest.Mocked<EntityManager>;
@@ -32,13 +31,6 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
       findOne: jest.fn(),
       save: jest.fn(),
     } as unknown as jest.Mocked<Repository<Tenant>>;
-
-    sysParamRepo = {
-      find: jest.fn(),
-      findOne: jest.fn(),
-      save: jest.fn(),
-      create: jest.fn(),
-    } as unknown as jest.Mocked<Repository<SystemParametersConfig>>;
 
     eventEmitter = {
       emit: jest.fn(),
@@ -62,12 +54,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
       ),
     } as unknown as jest.Mocked<DataSource>;
 
-    service = new FiscalSetupService(
-      tenantRepo,
-      sysParamRepo,
-      eventEmitter,
-      dataSource,
-    );
+    service = new FiscalSetupService(tenantRepo, eventEmitter, dataSource);
   });
 
   describe('getFiscalSetup', () => {
@@ -133,7 +120,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         },
       ];
 
-      sysParamRepo.find.mockResolvedValueOnce(params);
+      mockManager.find.mockResolvedValueOnce(params);
 
       const result = await service.getFiscalSetup(tenantId);
 
@@ -150,7 +137,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
 
     it('returns default values when system parameters have not yet been configured', async () => {
       tenantRepo.findOne.mockResolvedValueOnce({ ...mockTenant });
-      sysParamRepo.find.mockResolvedValueOnce([]);
+      mockManager.find.mockResolvedValueOnce([]);
 
       const result = await service.getFiscalSetup(tenantId);
 
@@ -264,7 +251,12 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
       expect(result.configuredAt).toBeInstanceOf(Date);
     });
 
-    it('versions updated parameters (increments version and deactivates prior rows)', async () => {
+    it('appends version 2 on value change and never mutates the prior row (append-only, issue #377)', async () => {
+      // Issue #377: this test previously asserted the defective supersession
+      // — deactivating the prior row in place (UPDATE) — which the
+      // trg_sys_parametros_config_immutable trigger rejects in a migrated
+      // database. It now encodes the append-only contract: the prior row
+      // stays untouched and a new version row is inserted instead.
       mockManager.findOne.mockResolvedValueOnce({ ...mockTenant });
 
       // Existing active version 1 parameters
@@ -312,12 +304,22 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
       expect(result.regime).toBe(FiscalRegime.REGIMEN_GENERAL);
       expect(result.taxRateIva).toBe(0.15);
 
-      // Verify that the prior active parameter was marked inactive
-      const deactivated = existingParams.find(
-        (p) => p.paramKey === 'FISCAL_REGIME',
+      // Append-only: the prior row is untouched — no in-place deactivation.
+      const prior = existingParams.find((p) => p.paramKey === 'FISCAL_REGIME');
+      expect(prior?.isActive).toBe(true);
+      expect(prior?.effectiveTo).toBeNull();
+
+      // Supersession inserts a new version row instead of saving the loaded one.
+      expect(mockManager.save).toHaveBeenCalledWith(
+        SystemParametersConfig,
+        expect.objectContaining({
+          paramKey: 'FISCAL_REGIME',
+          paramValue: FiscalRegime.REGIMEN_GENERAL,
+          version: 2,
+          isActive: true,
+          effectiveTo: null,
+        }),
       );
-      expect(deactivated?.isActive).toBe(false);
-      expect(deactivated?.effectiveTo).toBeInstanceOf(Date);
     });
   });
 

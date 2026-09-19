@@ -10,7 +10,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Tenant } from '../../tenant/entities/tenant.entity';
-import { SystemParametersConfig } from '../../inventory/entities/system-parameters-config.entity';
+import {
+  SystemParametersConfig,
+  SystemParametersConfigActiveView,
+} from '../../inventory/entities/system-parameters-config.entity';
 import {
   FiscalRegime,
   FiscalSetupDto,
@@ -49,8 +52,6 @@ export class FiscalSetupService {
   constructor(
     @InjectRepository(Tenant)
     private readonly tenantRepo: Repository<Tenant>,
-    @InjectRepository(SystemParametersConfig)
-    private readonly sysParamRepo: Repository<SystemParametersConfig>,
     private readonly eventEmitter: EventEmitter2,
     private readonly dataSource: DataSource,
     @Optional()
@@ -78,9 +79,19 @@ export class FiscalSetupService {
       throw new NotFoundException(`Tenant '${trimmedTenantId}' not found`);
     }
 
-    const activeParams = await this.sysParamRepo.find({
-      where: { tenant_id: trimmedTenantId, isActive: true },
-    });
+    // The view is WITH (security_invoker = true): it must be read on the
+    // same connection whose transaction has the tenant context bound, or RLS
+    // either returns zero rows (the API would silently serve fallback
+    // defaults) or throws on the blank app.tenant_id setting. Mirrors the
+    // write path's transaction below.
+    const activeParams = await this.dataSource.transaction(
+      async (manager: EntityManager) => {
+        await bindTenantContext(manager, trimmedTenantId);
+        return manager.find(SystemParametersConfigActiveView, {
+          where: { tenant_id: trimmedTenantId },
+        });
+      },
+    );
 
     const paramMap = new Map<string, unknown>();
     for (const p of activeParams) {
@@ -298,8 +309,11 @@ export class FiscalSetupService {
     paramValue: Record<string, unknown> | number | string | boolean,
     userId?: string,
   ): Promise<void> {
-    const activeParams = await manager.find(SystemParametersConfig, {
-      where: { tenant_id: tenantId, paramKey, isActive: true },
+    // Resolve the current active version through the active-configuration
+    // view: it honours is_active and effective_to and resolves a single
+    // governing row per key deterministically (DISTINCT ON, version DESC).
+    const activeParams = await manager.find(SystemParametersConfigActiveView, {
+      where: { tenant_id: tenantId, paramKey },
       order: { version: 'DESC' },
     });
 
@@ -309,38 +323,23 @@ export class FiscalSetupService {
       if (activeParam.paramValue === paramValue) {
         return;
       }
-
-      // Deactivate prior version
-      activeParam.isActive = false;
-      activeParam.effectiveTo = new Date();
-      await manager.save(SystemParametersConfig, activeParam);
-
-      // Create next version
-      const newVersion = manager.create(SystemParametersConfig, {
-        tenant_id: tenantId,
-        paramKey,
-        paramValue,
-        version: activeParam.version + 1,
-        effectiveFrom: new Date(),
-        effectiveTo: null,
-        isActive: true,
-        createdBy: userId,
-      });
-
-      await manager.save(SystemParametersConfig, newVersion);
-    } else {
-      const initialVersion = manager.create(SystemParametersConfig, {
-        tenant_id: tenantId,
-        paramKey,
-        paramValue,
-        version: 1,
-        effectiveFrom: new Date(),
-        effectiveTo: null,
-        isActive: true,
-        createdBy: userId,
-      });
-
-      await manager.save(SystemParametersConfig, initialVersion);
     }
+
+    // Append-only contract (issue #377): the table is append-only — trigger
+    // trg_sys_parametros_config_immutable rejects UPDATE and DELETE — so
+    // supersession NEVER saves a loaded row. It inserts a new version and
+    // leaves every existing row untouched; the view decides which governs.
+    const nextVersion = manager.create(SystemParametersConfig, {
+      tenant_id: tenantId,
+      paramKey,
+      paramValue,
+      version: (activeParam?.version ?? 0) + 1,
+      effectiveFrom: new Date(),
+      effectiveTo: null,
+      isActive: true,
+      createdBy: userId,
+    });
+
+    await manager.save(SystemParametersConfig, nextVersion);
   }
 }

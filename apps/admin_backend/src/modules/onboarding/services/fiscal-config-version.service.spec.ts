@@ -11,7 +11,10 @@ import {
 } from '../../../core/database/tenant-transaction';
 import { FiscalConfigRevision } from '../entities/fiscal-config-revision.entity';
 import { Tenant } from '../../tenant/entities/tenant.entity';
-import { SystemParametersConfig } from '../../inventory/entities/system-parameters-config.entity';
+import {
+  SystemParametersConfig,
+  SystemParametersConfigActiveView,
+} from '../../inventory/entities/system-parameters-config.entity';
 import { FiscalRegime } from '../dto/fiscal-setup.dto';
 import { computeJcsSha256 } from '../utils/canonical-jcs';
 
@@ -19,7 +22,7 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
   let service: FiscalConfigVersionService;
   let revisionRepo: jest.Mocked<Repository<FiscalConfigRevision>>;
   let tenantRepo: jest.Mocked<Repository<Tenant>>;
-  let sysParamRepo: jest.Mocked<Repository<SystemParametersConfig>>;
+  let sysParamRepo: jest.Mocked<Repository<SystemParametersConfigActiveView>>;
   let dataSource: jest.Mocked<DataSource>;
   let mockManager: jest.Mocked<EntityManager>;
 
@@ -105,13 +108,15 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
 
     sysParamRepo = {
       find: jest.fn().mockResolvedValue(mockParams),
-    } as unknown as jest.Mocked<Repository<SystemParametersConfig>>;
+    } as unknown as jest.Mocked<Repository<SystemParametersConfigActiveView>>;
 
     mockManager = {
       query: jest.fn().mockResolvedValue(undefined),
       getRepository: jest.fn((target: unknown) => {
         if (target === Tenant) return tenantRepo;
-        if (target === SystemParametersConfig) return sysParamRepo;
+        // Issue #377: configuration reads resolve through the
+        // active-configuration view instead of the append-only table.
+        if (target === SystemParametersConfigActiveView) return sysParamRepo;
         if (target === FiscalConfigRevision) return revisionRepo;
         throw new Error(
           `Unexpected repository target: ${(target as { name?: string }).name ?? '<anonymous>'}`,

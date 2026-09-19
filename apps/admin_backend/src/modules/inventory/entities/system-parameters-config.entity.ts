@@ -1,5 +1,7 @@
 import {
   Entity,
+  ViewEntity,
+  ViewColumn,
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
@@ -52,5 +54,51 @@ export class SystemParametersConfig {
   createdBy: string;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
+  createdAt: Date;
+}
+
+/**
+ * Read model mapping the database view created by migration
+ * 1784000000000-CreateSystemParametersConfig (its DDL is owned by the
+ * migration, hence synchronize: false). The view resolves the governing
+ * configuration version per (tenant_id, param_key) with DISTINCT ON and
+ * version DESC, and its security_invoker = true keeps reads under the
+ * caller's RLS context.
+ *
+ * Readers MUST use this view instead of filtering the table by isActive:
+ * once supersession became append-only (issue #377), every historical row
+ * keeps is_active = true, so the table alone cannot resolve a single
+ * governing version per key.
+ */
+@ViewEntity({ name: 'v_sys_parametros_config_active', synchronize: false })
+export class SystemParametersConfigActiveView {
+  @ViewColumn()
+  id: string;
+
+  @ViewColumn({ name: 'tenant_id' })
+  tenant_id: string;
+
+  @ViewColumn({ name: 'param_key' })
+  paramKey: string;
+
+  @ViewColumn({ name: 'param_value' })
+  paramValue: Record<string, unknown> | number | string | boolean;
+
+  @ViewColumn()
+  version: number;
+
+  @ViewColumn({ name: 'effective_from' })
+  effectiveFrom: Date;
+
+  @ViewColumn({ name: 'effective_to' })
+  effectiveTo: Date | null;
+
+  @ViewColumn({ name: 'is_active' })
+  isActive: boolean;
+
+  @ViewColumn({ name: 'created_by' })
+  createdBy: string | null;
+
+  @ViewColumn({ name: 'created_at' })
   createdAt: Date;
 }
