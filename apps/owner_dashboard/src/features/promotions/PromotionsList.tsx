@@ -35,6 +35,7 @@ import { type Promotion, PromotionType, PROMOTION_TYPE_LABELS } from '@/types/pr
 import { formatCurrency, formatDate, DAYS_OF_WEEK } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 import { useRbac } from '@/lib/rbac';
+import { getApiErrorMessage } from '@/lib/api-error';
 
 export function PromotionsList() {
   const { canPerformAction } = useRbac();
@@ -68,8 +69,8 @@ export function PromotionsList() {
       toast({ title: promotion.is_active ? 'Promoción desactivada' : 'Promoción activada' });
     } catch (err) {
       toast({
-        title: 'Error',
-        description: err instanceof Error ? err.message : 'No se pudo cambiar el estado',
+        title: 'Error al cambiar estado',
+        description: getApiErrorMessage(err, 'No se pudo cambiar el estado de la promoción'),
         variant: 'destructive',
       });
     }
@@ -82,8 +83,8 @@ export function PromotionsList() {
       toast({ title: 'Promoción eliminada' });
     } catch (err) {
       toast({
-        title: 'Error',
-        description: err instanceof Error ? err.message : 'No se pudo eliminar la promoción',
+        title: 'Error al eliminar',
+        description: getApiErrorMessage(err, 'No se pudo eliminar la promoción'),
         variant: 'destructive',
       });
     }

@@ -22,6 +22,7 @@ import type {
   CreateLoyaltyProgramInput,
   UpdateLoyaltyProgramInput,
   RewardType,
+  RewardDefinition,
   CreateRewardInput,
   UpdateRewardInput,
 } from './types';
@@ -36,8 +37,13 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
+import { toast } from '@/hooks/use-toast';
+import { getApiErrorMessage } from '@/lib/api-error';
 
-const STATUS_LABELS: Record<LoyaltyProgramStatus, { label: string; variant: string }> = {
+const STATUS_LABELS: Record<
+  LoyaltyProgramStatus,
+  { label: string; variant: "default" | "secondary" | "destructive" | "outline" | "success" }
+> = {
   DRAFT: { label: 'Borrador', variant: 'secondary' },
   ACTIVE: { label: 'Activo', variant: 'success' },
   INACTIVE: { label: 'Inactivo', variant: 'destructive' },
@@ -136,6 +142,10 @@ function ProgramForm({
       if (isEditing) {
         const input: UpdateLoyaltyProgramInput = { name, earning_rule: parsedRule };
         await updateMutation.mutateAsync({ programId: initial.id, input });
+        toast({
+          title: "Programa actualizado",
+          description: `El programa "${name}" fue actualizado exitosamente.`,
+        });
       } else {
         const input: CreateLoyaltyProgramInput = {
           name,
@@ -143,10 +153,20 @@ function ProgramForm({
           earning_rule: parsedRule,
         };
         await createMutation.mutateAsync(input);
+        toast({
+          title: "Programa creado",
+          description: `El programa "${name}" fue creado exitosamente.`,
+        });
       }
       onSuccess();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al guardar');
+      const msg = getApiErrorMessage(err, 'Error al guardar el programa');
+      setError(msg);
+      toast({
+        variant: "destructive",
+        title: "Error al guardar",
+        description: msg,
+      });
     }
   };
 
@@ -169,7 +189,7 @@ function ProgramForm({
           <select
             id="program-type"
             value={programType}
-            onChange={(e) => setProgramType(e.target.value as any)}
+            onChange={(e) => setProgramType(e.target.value as LoyaltyProgramType)}
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors"
           >
             {LOYALTY_PROGRAM_TYPES.map((t) => (
@@ -383,6 +403,10 @@ function RewardForm({
           benefit_config: parsedConfig,
         };
         await updateMutation.mutateAsync({ rewardId: initial.id, input });
+        toast({
+          title: "Recompensa actualizada",
+          description: `"${name}" fue actualizada exitosamente.`,
+        });
       } else {
         const input: CreateRewardInput = {
           name,
@@ -392,10 +416,20 @@ function RewardForm({
           benefit_config: parsedConfig,
         };
         await createMutation.mutateAsync({ programId, input });
+        toast({
+          title: "Recompensa creada",
+          description: `"${name}" fue creada exitosamente.`,
+        });
       }
       onSuccess();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al guardar');
+      const msg = getApiErrorMessage(err, 'Error al guardar la recompensa');
+      setError(msg);
+      toast({
+        variant: "destructive",
+        title: "Error al guardar",
+        description: msg,
+      });
     }
   };
 
@@ -428,7 +462,7 @@ function RewardForm({
           <select
             id="reward-type"
             value={rewardType}
-            onChange={(e) => setRewardType(e.target.value as any)}
+            onChange={(e) => setRewardType(e.target.value as RewardType)}
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors"
           >
             {REWARD_TYPES.map((t) => (
@@ -528,8 +562,8 @@ export function LoyaltyPage() {
   const [showCreateProgram, setShowCreateProgram] = useState(false);
   const [editingProgram, setEditingProgram] = useState<LoyaltyProgram | null>(null);
   const [showCreateReward, setShowCreateReward] = useState(false);
-  const [editingReward, setEditingReward] = useState<any>(null);
-  const [profitAwareReward, setProfitAwareReward] = useState<any>(null);
+  const [editingReward, setEditingReward] = useState<RewardDefinition | null>(null);
+  const [profitAwareReward, setProfitAwareReward] = useState<RewardDefinition | null>(null);
 
   const { data: programs, isLoading, error } = usePrograms(
     statusFilter ? { status: statusFilter } : undefined,
@@ -547,18 +581,38 @@ export function LoyaltyPage() {
   ) ?? [];
 
   const handleToggleProgram = async (p: LoyaltyProgram) => {
-    if (p.status === 'ACTIVE') {
-      await deactivateProgram.mutateAsync(p.id);
-    } else if (p.status === 'DRAFT' || p.status === 'INACTIVE') {
-      await activateProgram.mutateAsync(p.id);
+    try {
+      if (p.status === 'ACTIVE') {
+        await deactivateProgram.mutateAsync(p.id);
+        toast({ title: 'Programa desactivado', description: `El programa "${p.name}" fue desactivado.` });
+      } else if (p.status === 'DRAFT' || p.status === 'INACTIVE') {
+        await activateProgram.mutateAsync(p.id);
+        toast({ title: 'Programa activado', description: `El programa "${p.name}" está ahora activo.` });
+      }
+    } catch (err) {
+      toast({
+        title: 'Error al cambiar estado',
+        description: getApiErrorMessage(err, 'No se pudo cambiar el estado del programa'),
+        variant: 'destructive',
+      });
     }
   };
 
-  const handleToggleReward = async (r: any) => {
-    if (r.status === 'ACTIVE') {
-      await deactivateReward.mutateAsync(r.id);
-    } else {
-      await activateReward.mutateAsync(r.id);
+  const handleToggleReward = async (r: RewardDefinition) => {
+    try {
+      if (r.status === 'ACTIVE') {
+        await deactivateReward.mutateAsync(r.id);
+        toast({ title: 'Recompensa desactivada', description: `"${r.name}" fue desactivada.` });
+      } else {
+        await activateReward.mutateAsync(r.id);
+        toast({ title: 'Recompensa activada', description: `"${r.name}" está ahora activa.` });
+      }
+    } catch (err) {
+      toast({
+        title: 'Error al cambiar estado',
+        description: getApiErrorMessage(err, 'No se pudo cambiar el estado de la recompensa'),
+        variant: 'destructive',
+      });
     }
   };
 
@@ -573,7 +627,7 @@ export function LoyaltyPage() {
   if (error) {
     return (
       <div className="text-center py-8 text-destructive">
-        <p>Error al cargar programas: {(error as Error).message}</p>
+        <p>{getApiErrorMessage(error, "Error al cargar programas")}</p>
       </div>
     );
   }
@@ -642,7 +696,7 @@ export function LoyaltyPage() {
                     <Trophy className="h-5 w-5 text-primary" />
                     <h3 className="font-semibold text-foreground">{program.name}</h3>
                   </div>
-                  <Badge variant={statusInfo.variant as any}>{statusInfo.label}</Badge>
+                  <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
                 </div>
 
                 <div className="space-y-1 text-sm text-muted-foreground">

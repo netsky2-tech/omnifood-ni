@@ -16,11 +16,13 @@ describe('UserService', () => {
   let service: UserService;
 
   const userRepository = {
+    find: jest.fn(),
     findOne: jest.fn(),
     save: jest.fn(),
   };
 
   const auditRepository = {
+    findOne: jest.fn(),
     save: jest.fn(),
   };
 
@@ -294,7 +296,7 @@ describe('UserService', () => {
           Promise.resolve(user),
         ),
     };
-    const lockedAudit = { save: jest.fn() };
+    const lockedAudit = { findOne: jest.fn(), save: jest.fn() };
     manager.getRepository.mockImplementation((entity: unknown) =>
       entity === User ? lockedUsers : lockedAudit,
     );
@@ -337,6 +339,7 @@ describe('UserService', () => {
       save: jest.fn().mockResolvedValue({ id: 'user-1' }),
     };
     const lockedAudit = {
+      findOne: jest.fn(),
       save: jest.fn().mockResolvedValue({ id: 'audit-1' }),
     };
     manager.getRepository.mockImplementation((entity: unknown) =>
@@ -627,6 +630,65 @@ describe('UserService', () => {
       expect(dataSource.transaction).not.toHaveBeenCalled();
       expect(bindCount()).toBe(0);
       expect(markCount()).toBe(0);
+    });
+
+    it('findByTenant requests is_active along with other core fields', async () => {
+      const mockUsers = [
+        {
+          id: 'user-1',
+          email: 'admin@test.com',
+          name: 'Admin',
+          role: UserRole.OWNER,
+          created_at: new Date(),
+          is_active: true,
+        },
+      ];
+      userRepository.find.mockResolvedValue(mockUsers);
+
+      const result = await service.findByTenant('tenant-1');
+      expect(result).toEqual(mockUsers);
+      expect(userRepository.find).toHaveBeenCalledWith({
+        where: { tenant_id: 'tenant-1', is_active: true },
+        select: ['id', 'email', 'name', 'role', 'created_at', 'is_active'],
+      });
+    });
+
+    it('logAction chains sequence_no and entry_hash from latest active log', async () => {
+      userRepository.findOne.mockResolvedValue({
+        id: 'user-1',
+        tenant_id: 'tenant-1',
+        name: 'Old Name',
+        role: UserRole.CASHIER,
+        security_version: 1,
+      });
+      userRepository.save.mockImplementation((u: unknown) => Promise.resolve(u));
+      auditRepository.findOne.mockResolvedValue({
+        sequence_no: 5,
+        entry_hash: 'hash-of-entry-5',
+      });
+      auditRepository.save.mockImplementation((log: unknown) => Promise.resolve(log));
+
+      await service.update('user-1', { name: 'New Name' }, 'tenant-1', 'admin-1');
+
+      expect(auditRepository.findOne).toHaveBeenCalledWith({
+        where: {
+          tenant_id: 'tenant-1',
+          device_id: 'WEB_ADMIN',
+          user_id: 'admin-1',
+          forensic_status: 'ACTIVE',
+        },
+        order: { sequence_no: 'DESC' },
+      });
+      expect(auditRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'USER_UPDATED',
+          sequence_no: 6,
+          prev_hash: 'hash-of-entry-5',
+          device_id: 'WEB_ADMIN',
+          user_id: 'admin-1',
+          forensic_status: 'ACTIVE',
+        }),
+      );
     });
   });
 });

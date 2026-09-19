@@ -20,6 +20,7 @@ import type {
 } from "./types";
 import { useToast } from "@/hooks/use-toast";
 import { useTenantId } from "@/lib/tenant";
+import { getApiErrorMessage } from "@/lib/api-error";
 
 export const SETTINGS_QUERY_KEYS = {
   fiscalSetup: (tenantId?: string | null) => ["settings", tenantId ?? "unknown", "fiscal-setup"] as const,
@@ -56,7 +57,7 @@ export function useUpdateFiscalSetup() {
       toast({
         variant: "destructive",
         title: "Error al guardar configuración fiscal",
-        description: err.message,
+        description: getApiErrorMessage(err, "No se pudo guardar la configuración fiscal"),
       });
     },
   });
@@ -101,7 +102,7 @@ export function useApplyIndustryTemplate() {
       toast({
         variant: "destructive",
         title: "Error al aplicar plantilla",
-        description: err.message,
+        description: getApiErrorMessage(err, "No se pudo aplicar la plantilla"),
       });
     },
   });
@@ -147,7 +148,7 @@ export function useCommitImport() {
       toast({
         variant: "destructive",
         title: "Error al confirmar importación",
-        description: err.message,
+        description: getApiErrorMessage(err, "No se pudo confirmar la importación"),
       });
     },
   });

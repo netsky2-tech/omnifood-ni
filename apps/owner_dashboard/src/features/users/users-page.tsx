@@ -18,6 +18,7 @@ import { useUsers } from "./use-users";
 import { UserDialog } from "./user-dialog";
 import { UserPermissionsDialog } from "./user-permissions-dialog";
 import { DeactivateUserDialog } from "./deactivate-user-dialog";
+import { getApiErrorMessage } from "@/lib/api-error";
 
 export function UsersPage() {
   const { data: users, isLoading, error } = useUsers();
@@ -79,9 +80,7 @@ export function UsersPage() {
       {error && (
         <Alert variant="destructive">
           <AlertDescription>
-            {error instanceof Error
-              ? error.message
-              : "Error al cargar el listado de usuarios"}
+            {getApiErrorMessage(error, "Error al cargar el listado de usuarios")}
           </AlertDescription>
         </Alert>
       )}

@@ -28,6 +28,8 @@ import {
 } from "../settings/use-settings";
 import { useCreateManualProduct } from "./use-onboarding";
 import { isVersionConflictError } from "./onboarding-api";
+import { toast } from "@/hooks/use-toast";
+import { getApiErrorMessage } from "@/lib/api-error";
 import {
   Sparkles,
   FileSpreadsheet,
@@ -127,7 +129,18 @@ export function CatalogAcquisitionModal({
       },
       {
         onSuccess: () => {
+          toast({
+            title: "Producto creado",
+            description: `"${values.name.trim()}" fue agregado al catálogo.`,
+          });
           handleClose();
+        },
+        onError: (err) => {
+          toast({
+            variant: "destructive",
+            title: "Error al crear producto",
+            description: getApiErrorMessage(err, "No se pudo guardar el producto."),
+          });
         },
       },
     );
@@ -139,7 +152,18 @@ export function CatalogAcquisitionModal({
       { code },
       {
         onSuccess: () => {
+          toast({
+            title: "Plantilla aplicada",
+            description: "Los productos y recetas iniciales se cargaron exitosamente.",
+          });
           handleClose();
+        },
+        onError: (err) => {
+          toast({
+            variant: "destructive",
+            title: "Error al aplicar plantilla",
+            description: getApiErrorMessage(err, "No se pudo aplicar la plantilla."),
+          });
         },
       },
     );
@@ -178,11 +202,21 @@ export function CatalogAcquisitionModal({
         duplicateResolution: "REPLACE",
       });
       setImportFeedback(`¡Importación exitosa! ${commitRes.productsCreated} productos incorporados.`);
+      toast({
+        title: "Importación exitosa",
+        description: `${commitRes.productsCreated} productos incorporados correctamente.`,
+      });
       setTimeout(() => {
         handleClose();
       }, 1200);
-    } catch (err: any) {
-      setImportFeedback(`Error: ${err?.message || "No se pudo procesar el archivo"}`);
+    } catch (err: unknown) {
+      const msg = getApiErrorMessage(err, "No se pudo procesar el archivo");
+      setImportFeedback(`Error: ${msg}`);
+      toast({
+        variant: "destructive",
+        title: "Error en importación",
+        description: msg,
+      });
     }
   };
 
@@ -393,9 +427,10 @@ export function CatalogAcquisitionModal({
                       <AlertCircle className="h-4 w-4 shrink-0" />
                       <AlertTitle className="font-bold text-xs">Error al guardar producto</AlertTitle>
                       <AlertDescription className="text-xs mt-0.5">
-                        {createManualMutation.error instanceof Error
-                          ? createManualMutation.error.message
-                          : "No se pudo guardar el producto. Verificá los campos e intentá nuevamente."}
+                        {getApiErrorMessage(
+                          createManualMutation.error,
+                          "No se pudo guardar el producto. Verificá los campos e intentá nuevamente.",
+                        )}
                       </AlertDescription>
                     </Alert>
                   )}
