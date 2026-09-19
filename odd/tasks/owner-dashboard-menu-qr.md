@@ -64,7 +64,7 @@ Business owners need a printable QR that customers can scan to open an externall
 - **Commit evidence:** `43a535add829d6a80af5a11f280a3565dd2c01f6` — `feat(owner-dashboard): add menu QR workflow`.
 
 ### T3 — Integrate and verify the feature
-- **Status:** verified; awaiting commit authorization
+- **Status:** done
 - Added lazy `/menu-qr` routing, explicit OWNER/MANAGER permissions, and a `Gestión` sidebar entry backed by the same RBAC map.
 - Added focused route/navigation coverage and deterministic Playwright coverage across the three configured Chromium device projects.
 - Confirmed data-URL preview/download behavior, a stable PNG filename, no remote QR-service request after login, and a dedicated production build chunk.
@@ -73,7 +73,7 @@ Business owners need a printable QR that customers can scan to open an externall
 - **Runtime harness:** Playwright exercised login → sidebar navigation → Google Drive-style URL → generate → data-URL preview → real download event on desktop and mobile projects.
 - **Unverified non-blockers:** no browser-level negative-role scenario and no browser context forced offline; role denial is covered in routing tests and the feature path is proven network-free after login.
 - **Rollback boundary:** revert menu-QR changes in `router.tsx`, `rbac.ts`, and `sidebar.tsx`; remove `menu-qr-routing.test.tsx`, `menu-qr-navigation.test.tsx`, and `e2e/menu-qr.spec.ts`; preserve T1/T2 commits.
-- **Commit evidence:** pending explicit commit authorization.
+- **Commit evidence:** `cd73bb2a11079151d07eb50f1ed26edaef56449a` — `feat(owner-dashboard): expose menu QR generator`.
 
 ## Progress and evidence
 - 2026-09-19: Read-only exploration confirmed React/Vite owner dashboard conventions, no existing QR dependency, CSP restrictions, and the absence of a service worker.
@@ -89,6 +89,7 @@ Business owners need a printable QR that customers can scan to open an externall
 - 2026-09-19: User authorized and created T2 work-unit commit `43a535add829d6a80af5a11f280a3565dd2c01f6`.
 - 2026-09-19: T3 implemented under TDD and independently verified. Full tests, typecheck, lint, production build, and two Playwright runs passed; all acceptance criteria have observed evidence.
 - Review workload note: T3 is approximately 330 lines and remains below the preferred 400-line review slice. The complete feature is approximately 1,614 inserted lines across three independent work units and should be reviewed as commit slices or chained PRs, not as one undifferentiated diff.
+- 2026-09-19: User authorized and created T3 work-unit commit `cd73bb2a11079151d07eb50f1ed26edaef56449a`.
 
 ## Next step
-Obtain explicit authorization for the T3 work-unit commit and final ODD closeout record, then run the native review preflight for the completed candidate.
+Run the native review preflight for the completed commit range, then report the verified outcome and delivery options. Push and PR creation remain user decisions.
