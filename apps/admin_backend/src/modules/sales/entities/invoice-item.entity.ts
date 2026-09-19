@@ -52,7 +52,7 @@ export class InvoiceItem {
   @JoinColumn({ name: 'invoice_id' })
   invoice: Invoice;
 
-  @Column({ name: 'product_id' })
+  @Column({ name: 'product_id', type: 'uuid' })
   productId: string;
 
   @Column({ name: 'product_name' })
@@ -96,7 +96,12 @@ export class InvoiceItem {
   @Index()
   originInvoiceItemId: string;
 
-  @Column({ name: 'inventory_snapshot_version', nullable: true })
+  @Column({
+    name: 'inventory_snapshot_version',
+    type: 'varchar',
+    length: 64,
+    nullable: true,
+  })
   inventorySnapshotVersion?: string | null;
 
   @Column({ name: 'inventory_snapshot', type: 'jsonb', nullable: true })

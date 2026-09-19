@@ -61,7 +61,7 @@ export class AuditLog {
   @Column({ nullable: true })
   metodo_autorizacion: string;
 
-  @Column({ nullable: true })
+  @Column({ type: 'uuid', nullable: true })
   usuario_autorizador_id: string;
 
   @CreateDateColumn({ type: 'timestamptz' })
@@ -70,7 +70,7 @@ export class AuditLog {
   @Column({ type: 'jsonb', nullable: true })
   metadata: unknown;
 
-  @Column({ default: 'ACTIVE' })
+  @Column({ type: 'varchar', length: 32, default: 'ACTIVE' })
   forensic_status: string;
 
   @Column({ type: 'varchar', nullable: true })

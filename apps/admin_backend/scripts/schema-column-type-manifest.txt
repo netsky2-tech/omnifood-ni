@@ -22,20 +22,18 @@
 #   abstract The declaration is TypeORM's reflection of a bare @Column()
 #            (Number or Date); deciding the real type is a separate,
 #            per-column design decision, so it is recorded, not normalized.
-audit_logs.forensic_status|character varying|character varying(32)
 audit_logs.id|uuid|character varying
 audit_logs.sequence_no|Number|integer
-audit_logs.usuario_autorizador_id|character varying|uuid
 batches.created_at|timestamp without time zone|timestamp with time zone
 batches.updated_at|timestamp without time zone|timestamp with time zone
-cash_movements.shift_id|character varying(100)|uuid
+  # Not retyped by #407 on purpose: the migration creates this column as
+  # `user_id UUID NOT NULL`, but activation.service.ts writes non-uuid actors
+  # ('SYSTEM', 'SYSTEM_RECONCILER', a terminal id). The fix is a decision about
+  # what the audit trail records, tracked by its own issue; the line stays so
+  # the drift remains measured.
+  change_log.user_id|character varying|uuid
 catalog_values.created_at|timestamp without time zone|timestamp with time zone
 catalog_values.updated_at|timestamp without time zone|timestamp with time zone
-change_log.action|character varying|character varying(64)
-change_log.target_id|character varying|uuid
-change_log.target_type|character varying|character varying(64)
-change_log.user_email|character varying|character varying(255)
-change_log.user_id|character varying|uuid
 customer_point_transactions.created_at|timestamp without time zone|timestamp with time zone
 customer_point_transactions.origin|enum|character varying
 customer_point_transactions.transaction_type|enum|character varying
@@ -49,55 +47,33 @@ industry_templates.updated_at|timestamp without time zone|timestamp with time zo
 insumos.created_at|timestamp without time zone|timestamp with time zone
 insumos.updated_at|timestamp without time zone|timestamp with time zone
 inventory_bcn_fx_rates.created_at|timestamp without time zone|timestamp with time zone
-inventory_kardex.insumo_id|character varying|uuid
 inventory_kardex.movement_type|enum|character varying
 inventory_kardex.occurred_at|timestamp without time zone|timestamp with time zone
 inventory_purchase_documents.created_at|timestamp without time zone|timestamp with time zone
 inventory_sync_outbox.created_at|timestamp without time zone|timestamp with time zone
 inventory_sync_outbox.updated_at|timestamp without time zone|timestamp with time zone
 inventory_sync_receipts.created_at|timestamp without time zone|timestamp with time zone
-inventory_sync_receipts.inventory_outcome|character varying|character varying(64)
-inventory_sync_receipts.inventory_policy_version|character varying|character varying(64)
-invoice_items.inventory_snapshot_version|character varying|character varying(64)
-invoice_items.product_id|character varying|uuid
 invoice_payments.created_at|timestamp without time zone|timestamp with time zone
 invoice_payments.reconciled_at|Date|timestamp without time zone
-invoices.inventory_outcome|character varying|character varying(64)
-invoices.inventory_policy_version|character varying|character varying(64)
 invoices.updated_at|timestamp without time zone|timestamp with time zone
-invoices.user_id|character varying|uuid
 kardex_recalculate_queue.attempts|Number|integer
 kardex_recalculate_queue.status|enum|character varying
-legacy_import_integrity_reports.reviewed_by|character varying|character varying(128)
-legacy_import_integrity_reports.status|character varying|character varying(64)
 loyalty_programs.created_at|timestamp without time zone|timestamp with time zone
 loyalty_programs.updated_at|timestamp without time zone|timestamp with time zone
 loyalty_rewards.created_at|timestamp without time zone|timestamp with time zone
 loyalty_rewards.updated_at|timestamp without time zone|timestamp with time zone
-product_import_sessions.commit_mode|character varying|character varying(32)
-product_import_sessions.duplicate_policy|character varying|character varying(32)
-product_import_sessions.file_name|character varying|character varying(255)
-product_import_sessions.parser_contract_version|character varying|character varying(32)
-product_import_sessions.source_hash|character varying|character varying(64)
-product_import_sessions.status|character varying|character varying(64)
-production_order_lines.insumo_id|character varying|uuid
 production_orders.created_at|timestamp without time zone|timestamp with time zone
 products.created_at|timestamp without time zone|timestamp with time zone
 products.updated_at|timestamp without time zone|timestamp with time zone
 promotions.created_at|timestamp without time zone|timestamp with time zone
 promotions.type|enum|character varying
 promotions.updated_at|timestamp without time zone|timestamp with time zone
-recipe_details.insumo_id|character varying|uuid
 recipe_versions.created_at|timestamp without time zone|timestamp with time zone
 recipe_versions.version_number|Number|integer
 recipes.created_at|timestamp without time zone|timestamp with time zone
-recipes.ingredientId|character varying|uuid
 recipes.updated_at|timestamp without time zone|timestamp with time zone
-shrinkage_details.insumo_id|character varying|uuid
 shrinkages.created_at|timestamp without time zone|timestamp with time zone
 staging_importacion_productos.created_at|timestamp without time zone|timestamp with time zone
-staging_importacion_productos.matched_by|character varying|character varying(32)
-staging_importacion_productos.target_product_id|character varying|character varying(128)
 staging_importacion_productos.updated_at|timestamp without time zone|timestamp with time zone
 suppliers.created_at|timestamp without time zone|timestamp with time zone
 suppliers.updated_at|timestamp without time zone|timestamp with time zone

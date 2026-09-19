@@ -249,9 +249,9 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
             total_tax, total, is_canceled, payment_status, global_tax_override,
             type, updated_at
           ) VALUES
-            ($1, $2, 'A-001', now(), 'user-a', 10.00, 1.50,
+            ($1, $2, 'A-001', now(), 'a0000000-0000-4000-8000-00000000000a', 10.00, 1.50,
              11.50, false, 'PAID', false, 'regular', now()),
-            ($3, $4, 'B-001', now(), 'user-b', 20.00, 3.00,
+            ($3, $4, 'B-001', now(), 'b0000000-0000-4000-8000-00000000000b', 20.00, 3.00,
              23.00, false, 'PAID', false, 'regular', now());
         `,
           [invoiceAId, tenantAId, invoiceBId, tenantBId],
@@ -380,9 +380,9 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
              total_tax, total, is_canceled, payment_status, global_tax_override,
              type, updated_at
            ) VALUES
-             ($1, $2, 'A-ORIGIN', now(), 'user-a', 10.00, 1.50, 11.50,
+             ($1, $2, 'A-ORIGIN', now(), 'a0000000-0000-4000-8000-00000000000a', 10.00, 1.50, 11.50,
               false, 'PAID', false, 'regular', now()),
-             ($3, $4, 'B-SALE', now(), 'user-b', 20.00, 3.00, 23.00,
+             ($3, $4, 'B-SALE', now(), 'b0000000-0000-4000-8000-00000000000b', 20.00, 3.00, 23.00,
               false, 'PAID', false, 'regular', now())`,
           [originInvoiceId, tenantAId, tenantBInvoiceId, tenantBId],
         );
@@ -392,9 +392,9 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
              unit_price, original_tax_rate, applied_tax_rate, tax_amount,
              total, discount
            ) VALUES
-             ($1, $2, $3, 'prod-a', 'Burger', 1.0000, 10.00, 0.1500,
+             ($1, $2, $3, 'a2000000-0000-4000-8000-0000000000a2', 'Burger', 1.0000, 10.00, 0.1500,
               0.1500, 1.50, 11.50, 0.00),
-             ($4, $5, $6, 'prod-b', 'Burger', 1.0000, 20.00, 0.1500,
+             ($4, $5, $6, 'a1000000-0000-4000-8000-0000000000b1', 'Burger', 1.0000, 20.00, 0.1500,
               0.1500, 3.00, 23.00, 0.00)`,
           [
             originItemId,
@@ -431,7 +431,7 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
               id: randomUUID(),
               number: 'CN-RLS-001',
               createdAt: new Date().toISOString(),
-              userId: 'user-a',
+              userId: 'a0000000-0000-4000-8000-00000000000a',
               subtotal: -10,
               totalTax: -1.5,
               total: -11.5,
@@ -445,7 +445,7 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
               items: [
                 {
                   id: collidingItemId,
-                  productId: 'prod-a',
+                  productId: 'a2000000-0000-4000-8000-0000000000a2',
                   productName: 'Burger',
                   quantity: -1,
                   unitPrice: 10,
@@ -573,9 +573,9 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
              total_tax, total, is_canceled, payment_status, global_tax_override,
              type, updated_at
            ) VALUES
-             ($1, $2, 'A-ORIGIN', now(), 'user-a', 10.00, 1.50, 11.50,
+             ($1, $2, 'A-ORIGIN', now(), 'a0000000-0000-4000-8000-00000000000a', 10.00, 1.50, 11.50,
               false, 'PAID', false, 'regular', now()),
-             ($3, $4, 'B-SALE', now(), 'user-b', 20.00, 3.00, 23.00,
+             ($3, $4, 'B-SALE', now(), 'b0000000-0000-4000-8000-00000000000b', 20.00, 3.00, 23.00,
               false, 'PAID', false, 'regular', now())`,
           [originInvoiceId, tenantAId, tenantBInvoiceId, tenantBId],
         );
@@ -585,7 +585,7 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
              unit_price, original_tax_rate, applied_tax_rate, tax_amount,
              total, discount
            ) VALUES
-             ($1, $2, $3, 'prod-b', 'Burger', 1.0000, 20.00, 0.1500,
+             ($1, $2, $3, 'a1000000-0000-4000-8000-0000000000b1', 'Burger', 1.0000, 20.00, 0.1500,
               0.1500, 3.00, 23.00, 0.00)`,
           [hiddenOriginItemId, tenantBId, tenantBInvoiceId],
         );
@@ -615,7 +615,7 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
               id: randomUUID(),
               number: 'CN-RLS-ORIGIN-001',
               createdAt: new Date().toISOString(),
-              userId: 'user-a',
+              userId: 'a0000000-0000-4000-8000-00000000000a',
               subtotal: -10,
               totalTax: -1.5,
               total: -11.5,
@@ -629,7 +629,7 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
               items: [
                 {
                   id: randomUUID(),
-                  productId: 'prod-a',
+                  productId: 'a2000000-0000-4000-8000-0000000000a2',
                   productName: 'Burger',
                   quantity: -1,
                   unitPrice: 10,
@@ -794,7 +794,7 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
               id: saleInvoiceId,
               number: 'A-RESTOCK-001',
               createdAt: new Date().toISOString(),
-              userId: 'user-db',
+              userId: 'd0000000-0000-4000-8000-00000000000d',
               subtotal: 7,
               totalTax: 1.05,
               total: 8.05,
@@ -832,7 +832,7 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
             id: creditNoteId,
             number: 'CN-RESTOCK-001',
             createdAt: new Date().toISOString(),
-            userId: 'user-db',
+            userId: 'd0000000-0000-4000-8000-00000000000d',
             subtotal: -3.5,
             totalTax: -0.53,
             total: -4.03,

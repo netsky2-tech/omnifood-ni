@@ -93,10 +93,10 @@ export class ImportStaging {
   })
   row_ordinal?: number;
 
-  @Column({ type: 'varchar', nullable: true })
+  @Column({ type: 'varchar', length: 32, nullable: true })
   matched_by?: string | null;
 
-  @Column({ type: 'varchar', nullable: true })
+  @Column({ type: 'varchar', length: 128, nullable: true })
   target_product_id?: string | null;
 
   @Column({ type: 'jsonb', nullable: true })

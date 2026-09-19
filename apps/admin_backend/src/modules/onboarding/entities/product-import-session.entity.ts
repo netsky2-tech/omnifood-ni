@@ -41,17 +41,18 @@ export class ProductImportSession {
 
   @Column({
     type: 'varchar',
+    length: 64,
     default: ProductImportSessionStatus.CREATED,
   })
   status: ProductImportSessionStatus;
 
-  @Column({ type: 'varchar', default: 'v1.0' })
+  @Column({ type: 'varchar', length: 32, default: 'v1.0' })
   parser_contract_version: string;
 
-  @Column({ type: 'varchar' })
+  @Column({ type: 'varchar', length: 64 })
   source_hash: string;
 
-  @Column({ type: 'varchar', nullable: true })
+  @Column({ type: 'varchar', length: 255, nullable: true })
   file_name: string | null;
 
   @Column({ type: 'int', default: 0 })
@@ -69,10 +70,10 @@ export class ProductImportSession {
   @Column({ type: 'int', default: 0 })
   skipped_rows: number;
 
-  @Column({ type: 'varchar', nullable: true })
+  @Column({ type: 'varchar', length: 32, nullable: true })
   commit_mode: string | null;
 
-  @Column({ type: 'varchar', nullable: true })
+  @Column({ type: 'varchar', length: 32, nullable: true })
   duplicate_policy: string | null;
 
   @CreateDateColumn({ type: 'timestamptz' })
