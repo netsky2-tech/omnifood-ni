@@ -75,6 +75,10 @@ The rule recorded after slice B1: a fixture census that greps for entity class n
 
 Literal text seeds were found in `invoices.service.db.spec.ts` (6), `onboarding-template-cutover.db.e2e-spec.ts` (2) and `onboarding-security-isolation.db.e2e-spec.ts` (1); the rest seed from variables whose values must be checked at the unit, not assumed. **The fix pattern is slice B1's**: a valid, deterministic UUID derived from a readable label, with no assertion weakened and no test skipped.
 
+**Corrected in C.4, and it was wrong in both directions.** Three separate claims in the preflight needed re-measurement. (1) The table above says *thirteen* fixtures; it actually has **14 rows**. (2) The receipt-building fixtures number **eight**, not nine — `onboarding-readiness.db.e2e-spec.ts` is listed here as building `LegacyOnboardingMigrationReceipt` but does not; its `entities:` array builds `InvoiceItem`, so it belongs to C.5. (3) The literal-seed claim misattributes its evidence: `onboarding-template-cutover.db.e2e-spec.ts` and `onboarding-security-isolation.db.e2e-spec.ts` hold **no literal tenant-id database seed at all** — the only matches in the latter are `tenantId: ''` / `tenant_id: ''` in a malformed-token 401 test, which is a JWT claim, not a row. Measured consequence: **C.4's fixture work is zero and no fixture was edited**, confirmed empirically rather than argued, because all eight receipt-building fixtures seed `randomUUID()` and every onboarding suite stayed green (`test:e2e` 49 suites / 392 tests). The six literal seeds the plan attributes here live in `invoices.service.db.spec.ts`, which builds `InvoiceItem` — that is C.5's exposure, and it is real: that spec is `synchronize: true` and seeds `tenant_id: 'tenant-db'` and `'tenant-rls'`. Do not carry C.4's predicted fixture cost into C.5, and do not assume C.5's away.
+
+**Also corrected in C.4, and it is load-bearing.** Five of C.4's six entities were deliberately **not** edited, because they declare `@Column()` or `@Column({ type: 'varchar' })` alongside `@ManyToOne(() => Tenant) @JoinColumn({ name: 'tenant_id' })` and TypeORM folds the dual declaration into one column whose type it overrides with the referenced column's (`node_modules/typeorm/metadata-builder/RelationJoinColumnBuilder.js:183`: *"we override user defined column type"*); `Tenant.id` is uuid. So those five already report uuid metadata and need no edit — only `legacy-migration-receipt.entity.ts`, which has no relation, changes. This is verifiable rather than arguable, because the harness flags a uuid tenant column whose entity declares another type: had the folding been false, those five tables would appear as mismatches and `entity uuid mismatches` would read 5. It read **0**, with all six tables confirmed uuid in the built schema. C.5's `invoice-item.entity.ts` declares `@Column({ name: 'tenant_id' })` on a string with no relation, so it **does** need converting — the two units are not symmetric here.
+
 ## Units
 
 Each unit is its own commit, its own pull request, and — following slice B2, which was right — **based directly on `main`, never stacked**. Every unit here is green on its own.
@@ -84,7 +88,7 @@ Each unit is its own commit, its own pull request, and — following slice B2, w
 | **C.1** | The six earlier migrations resolve the predicate per table site. Behaviour-neutral: every column is still varchar, so no harness counter may move. | ~350–450 |
 | **C.2** | Lifecycle: `tenant_capability_event` (4), `tenant_topology_revisions` (2), `tenant_fulfillment_records` (4) = 3 tables / 10 policies, plus their entities. Manifest −3. | ~400 |
 | **C.3** | Devices and alerts: `device_sync_credentials` (4), `device_sync_credential_events` (2) = 6 policies, plus `audit_integrity_alerts` and `forensic_alerts` with no policies. Manifest −4. `forensic_alerts` has no entity, so the harness's entity assertion cannot see it. | ~350 |
-| **C.4** | Catalog, loyalty and legacy: `catalog_values` (4) plus `promotions`, `customers`, `customer_point_transactions`, `legacy_import_integrity_reports`, `legacy_onboarding_migration_receipts` with no policies. Manifest −6. **Carries the `LegacyOnboardingMigrationReceipt` fixture fixes** (nine fixtures). | ~450 (fixtures included) |
+| **C.4** | Catalog, loyalty and legacy: `catalog_values` (4) plus `promotions`, `customers`, `customer_point_transactions`, `legacy_import_integrity_reports`, `legacy_onboarding_migration_receipts` with no policies. Manifest −6. Fixture work was predicted at nine fixtures and **measured at zero** — see the correction below. | ~450 (fixtures included) |
 | **C.5** | Sales: `invoice_items` (4). Manifest −1, leaving **0**. **Carries the `InvoiceItem` fixture fixes** (five fixtures, one shared with C.4's list). | ~350 (fixtures included) |
 | **C.6** | Independent verification out of the catalog, not the specs: zero non-uuid tenant columns, every policy in the target form with no column-side `::text`, and `EXPLAIN` as a **non-bypassing role** on a sample including the composite-key tables. | evidence only |
 
@@ -115,7 +119,7 @@ Calibration, measured across this issue: a migration plus its spec costs roughly
 | C.1 | ~350–450 | |
 | C.2 | ~400 | |
 | C.3 | ~350 | |
-| C.4 | ~450 | |
+| C.4 | ~450 | 372 (365 ins / 7 del) |
 | C.5 | ~350 | |
 
 ## Process hazards inherited (all measured, all cost something already)
@@ -132,10 +136,14 @@ Calibration, measured across this issue: a migration plus its spec costs roughly
 | Unit | Commit | Evidence |
 | --- | --- | --- |
 | **C.1** | pending merge | Six migrations resolve per table site. Harness exit 0 in both scenarios, `14 / 0 / 0 / 0` verbatim, `uuid tenant_id tables: 51`, `entity uuid mismatches: 0`. 232 suites / 2128 tests green. |
+| **C.4** | `feat/tenant-uuid-slice-c4-catalog-loyalty-legacy` (PR pending) | 6 tables rebound, 4 policies recreated (5 tables column-only); ratchet 14 → 8. Harness exit 0 in both scenarios: `8 / 0 / 0 / 0` verbatim, `uuid tenant_id tables: 51 → 57`, `entity uuid mismatches: 0`, `ledger rows removed: 27 / 27`. Spec 5/5; `1768000000000-CreateCatalogValues.spec.ts` 3/3 and `1795000000000-AddLoyaltyV1Columns…spec.ts` 6/6, both unmodified. Suites: `npm test` 233 / 2176, `test:db` 38 / 219, `test:e2e` 49 / 394 — all green with no fixture edited, which is the empirical refutation of the predicted fixture work. The three `DB_PASSWORD`-gated specs activated and green (3 / 7). `previousType` verified against the live pre-C.4 `information_schema`: `character varying` ×4, `character varying(128)` ×2. The four `catalog_values` policies verified present exactly once in the scratch catalog and the table still `FORCE ROW LEVEL SECURITY`. |
+
+**Re-measured after rebase, because hazard 3 applies to this slice.** These numbers were first taken against `5ecbe23`. `main` then moved eleven commits (`5ecbe23` to `262088a`, the OHAC delivery work), which changed **both** `verify-schema-build.sh` (it learned to ignore `@ViewEntity` / `@ViewColumn`) and several fixtures this slice builds against, including `activation-device-provisioning.db.spec.ts` and six onboarding e2e specs. A green measured against a superseded base is not evidence, so every unit was rebased onto `262088a` and re-measured there: harness exit 0 in both scenarios with unchanged counters, and suites green on the new baseline of **233 / 2176, 38 / 219, 49 / 394**. All four rebases were conflict-free, including `app.module.ts`, where the C.3 `ForensicAlert` entity and the `SystemParametersConfigActiveView` entity added by main both survive.
+
 ## Relevant files
 
 - `apps/admin_backend/src/migrations/1768000000000-CreateCatalogValues.ts`, `1785000000000-AddTenantCapabilityEvent.ts`, `1794000000001-AddTenantTopologyRevisionsRls.ts`, `1795000000000-CreateTenantFulfillmentRecords.ts`, `1807000000000-CreateDeviceSyncCredentials.ts`, `1808000000000-RepairTenantTopologyRevisions.ts` — C.1's six files.
-- `apps/admin_backend/src/migrations/1809100000000-RebindHumanAuthorizationTenantColumns.ts` — the closest template (slice B2's first slice unit).
+- `apps/admin_backend/src/migrations/1809100000000-RebindHumanAuthorizationTenantColumns.ts` — the closest template (slice B2's first slice unit), and now also `1809140000000-RebindCatalogLoyaltyLegacyTenantColumns.ts` (C.4). Note the deliberate timestamp gaps: C.2, C.3 and C.4 are not stacked, so each claims a distinct timestamp to avoid a collision at merge.
 - `apps/admin_backend/scripts/schema-tenant-type-manifest.txt` — the ratchet, 14 entries, empty at the end of this slice.
 - `apps/admin_backend/scripts/verify-schema-build.sh` — `partial_ledger_names` defines the re-run class.
 - `apps/admin_backend/src/core/database/tenant-rls-policy.ts` — the shared emitter and `resolveTenantRlsPredicate`; unchanged here, consumed by every unit.
