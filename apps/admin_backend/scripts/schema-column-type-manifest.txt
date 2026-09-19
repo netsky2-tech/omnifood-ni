@@ -1,0 +1,115 @@
+# Entity-declared column types that diverge from the schema built by the
+# migrations (issue #405). The schema build check (scripts/
+# verify-schema-build.sh) reads this file as a ratchet: it fails when a
+# divergence is MISSING from this list (unlisted, new drift), and it fails
+# when a line here no longer matches a real divergence (a stale entry, which
+# means a column was fixed or dropped without deleting its line).
+#
+# Direction: downward only. Entries are removed as each converging unit
+# lands; the file ends empty. Additions require a separately approved
+# baseline-change decision, the same rule the Admin Backend CI ratchet uses
+# (openspec/changes/restore-admin-backend-ci-baseline).
+#
+# Format, one entry per line, blank lines and # comments ignored:
+#
+#   <table>.<column>|<declared>|<actual>
+#
+# The drift class is NOT part of the line; it is derived at report time from
+# the two canonical types:
+#
+#   type     The declared type and the built type differ.
+#   length   Same type, but one side carries a length the other omits.
+#   abstract The declaration is TypeORM's reflection of a bare @Column()
+#            (Number or Date); deciding the real type is a separate,
+#            per-column design decision, so it is recorded, not normalized.
+audit_logs.forensic_status|character varying|character varying(32)
+audit_logs.id|uuid|character varying
+audit_logs.sequence_no|Number|integer
+audit_logs.usuario_autorizador_id|character varying|uuid
+batches.created_at|timestamp without time zone|timestamp with time zone
+batches.updated_at|timestamp without time zone|timestamp with time zone
+cash_movements.shift_id|character varying(100)|uuid
+catalog_values.created_at|timestamp without time zone|timestamp with time zone
+catalog_values.updated_at|timestamp without time zone|timestamp with time zone
+change_log.action|character varying|character varying(64)
+change_log.target_id|character varying|uuid
+change_log.target_type|character varying|character varying(64)
+change_log.user_email|character varying|character varying(255)
+change_log.user_id|character varying|uuid
+customer_point_transactions.created_at|timestamp without time zone|timestamp with time zone
+customer_point_transactions.origin|enum|character varying
+customer_point_transactions.transaction_type|enum|character varying
+customer_point_transactions.type|enum|character varying
+customers.created_at|timestamp without time zone|timestamp with time zone
+customers.updated_at|timestamp without time zone|timestamp with time zone
+datafonos_equipos.created_at|timestamp without time zone|timestamp with time zone
+datafonos_equipos.updated_at|timestamp without time zone|timestamp with time zone
+industry_templates.created_at|timestamp without time zone|timestamp with time zone
+industry_templates.updated_at|timestamp without time zone|timestamp with time zone
+insumos.created_at|timestamp without time zone|timestamp with time zone
+insumos.updated_at|timestamp without time zone|timestamp with time zone
+inventory_bcn_fx_rates.created_at|timestamp without time zone|timestamp with time zone
+inventory_kardex.insumo_id|character varying|uuid
+inventory_kardex.movement_type|enum|character varying
+inventory_kardex.occurred_at|timestamp without time zone|timestamp with time zone
+inventory_purchase_documents.created_at|timestamp without time zone|timestamp with time zone
+inventory_sync_outbox.created_at|timestamp without time zone|timestamp with time zone
+inventory_sync_outbox.updated_at|timestamp without time zone|timestamp with time zone
+inventory_sync_receipts.created_at|timestamp without time zone|timestamp with time zone
+inventory_sync_receipts.inventory_outcome|character varying|character varying(64)
+inventory_sync_receipts.inventory_policy_version|character varying|character varying(64)
+invoice_items.inventory_snapshot_version|character varying|character varying(64)
+invoice_items.product_id|character varying|uuid
+invoice_payments.created_at|timestamp without time zone|timestamp with time zone
+invoice_payments.reconciled_at|Date|timestamp without time zone
+invoices.inventory_outcome|character varying|character varying(64)
+invoices.inventory_policy_version|character varying|character varying(64)
+invoices.updated_at|timestamp without time zone|timestamp with time zone
+invoices.user_id|character varying|uuid
+kardex_recalculate_queue.attempts|Number|integer
+kardex_recalculate_queue.status|enum|character varying
+legacy_import_integrity_reports.reviewed_by|character varying|character varying(128)
+legacy_import_integrity_reports.status|character varying|character varying(64)
+loyalty_programs.created_at|timestamp without time zone|timestamp with time zone
+loyalty_programs.updated_at|timestamp without time zone|timestamp with time zone
+loyalty_rewards.created_at|timestamp without time zone|timestamp with time zone
+loyalty_rewards.updated_at|timestamp without time zone|timestamp with time zone
+product_import_sessions.commit_mode|character varying|character varying(32)
+product_import_sessions.duplicate_policy|character varying|character varying(32)
+product_import_sessions.file_name|character varying|character varying(255)
+product_import_sessions.parser_contract_version|character varying|character varying(32)
+product_import_sessions.source_hash|character varying|character varying(64)
+product_import_sessions.status|character varying|character varying(64)
+production_order_lines.insumo_id|character varying|uuid
+production_orders.created_at|timestamp without time zone|timestamp with time zone
+products.created_at|timestamp without time zone|timestamp with time zone
+products.updated_at|timestamp without time zone|timestamp with time zone
+promotions.created_at|timestamp without time zone|timestamp with time zone
+promotions.type|enum|character varying
+promotions.updated_at|timestamp without time zone|timestamp with time zone
+recipe_details.insumo_id|character varying|uuid
+recipe_versions.created_at|timestamp without time zone|timestamp with time zone
+recipe_versions.version_number|Number|integer
+recipes.created_at|timestamp without time zone|timestamp with time zone
+recipes.ingredientId|character varying|uuid
+recipes.updated_at|timestamp without time zone|timestamp with time zone
+shrinkage_details.insumo_id|character varying|uuid
+shrinkages.created_at|timestamp without time zone|timestamp with time zone
+staging_importacion_productos.created_at|timestamp without time zone|timestamp with time zone
+staging_importacion_productos.matched_by|character varying|character varying(32)
+staging_importacion_productos.target_product_id|character varying|character varying(128)
+staging_importacion_productos.updated_at|timestamp without time zone|timestamp with time zone
+suppliers.created_at|timestamp without time zone|timestamp with time zone
+suppliers.updated_at|timestamp without time zone|timestamp with time zone
+sys_parametros_config.version|Number|integer
+template_insumos.created_at|timestamp without time zone|timestamp with time zone
+template_insumos.updated_at|timestamp without time zone|timestamp with time zone
+template_products.created_at|timestamp without time zone|timestamp with time zone
+template_products.updated_at|timestamp without time zone|timestamp with time zone
+template_recipe_items.created_at|timestamp without time zone|timestamp with time zone
+template_recipe_items.updated_at|timestamp without time zone|timestamp with time zone
+uom_conversions.created_at|timestamp without time zone|timestamp with time zone
+uom_conversions.updated_at|timestamp without time zone|timestamp with time zone
+users.security_version|Number|integer
+warehouses.created_at|timestamp without time zone|timestamp with time zone
+warehouses.updated_at|timestamp without time zone|timestamp with time zone

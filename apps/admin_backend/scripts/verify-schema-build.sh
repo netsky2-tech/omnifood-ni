@@ -70,6 +70,66 @@
 # the changing unit must drop and recreate the view. Tracking it here is what
 # stops that blocker from being rediscovered during a migration.
 #
+# Why the column-type ratchet exists
+# ----------------------------------
+# Issue #405. The existence check above asserts that every column an entity
+# declares exists, but the column's TYPE was asserted only for tenant_id.
+# Nothing measured the declared type of the other columns against what the
+# migrations actually build, so a varchar declared over a uuid column, a
+# missing length, or a timestamp/timestamptz disagreement survived invisibly
+# until a query or a join failed at runtime.
+#
+# This ratchet compares the type of EVERY column of every regular entity
+# table against the built schema, in both scenarios, with the same two failure
+# directions as the tenant-type ratchet:
+#   - unlisted (new drift): a declared/actual divergence that is not in the
+#     reviewed manifest scripts/schema-column-type-manifest.txt.
+#   - stale manifest entry: a line that matches no real divergence, which
+#     means a column was fixed (or dropped) and its line was not deleted.
+#
+# Both sides are folded onto one vocabulary through a normalization table.
+# TypeORM's column.type is heterogeneous (a bare @Column() reflects the JS
+# constructor, an explicit type is a driver string), while information_schema
+# reports PostgreSQL names; without the table the comparison would be against
+# spellings, not types. Any declared type the table does not know about makes
+# the extractor fail closed, naming the table, column and type: an unknown
+# declaration must be judged by a human, never silently skipped and never
+# normalized away by accident.
+#
+# Number and Date are deliberately NOT normalized. They are TypeORM's
+# reflection of a bare @Column() on a JS number or Date property; deciding
+# whether the author meant integer/numeric or timestamp/timestamptz is a
+# per-column design decision. The check records them in the manifest as the
+# "abstract" drift class instead of deciding for them.
+#
+# isArray and length are part of the canonical form, not noise: text[] over
+# text, or varchar(64) over varchar, are real schema differences a join, an
+# index or a constraint can feel. Numeric precision is canonical form too:
+# numeric(10,2) over bare numeric is a real difference, so both sides carry
+# (precision,scale) when set. Timestamp precision is deliberately NOT
+# canonicalized: every timestamp column in this schema is precision 6, so
+# adding it would only create a default-equivalence problem (a declared
+# default and an explicit precision 6 must compare equal) with nothing to
+# catch today. Array-ness wins over the length/precision appends: an array
+# column's canonical is its element type plus [], never a parenthesized
+# suffix. View entities are excluded from the
+# entity side: a view's columns are authored by migrations, not by entity
+# declarations, and their types are not alterable while the view exists, so
+# there is nothing for an entity declaration to be compared against.
+#
+# Recorded decision: the 48 timestamp/timestamptz divergences are held as
+# drift in the manifest rather than normalized away. Converging them is a
+# separate slice (48 entities or 40 migrations); the ratchet freezes today's
+# count so it cannot grow silently.
+#
+# A schema column can never silently drop out of the comparison. The schema
+# side is wrapped in COALESCE (an unresolvable type becomes a visible
+# 'unresolved:...' divergence instead of a NULL that a blank-line filter
+# deletes) and a count guard fails the run when the extraction holds fewer
+# rows than public has columns. Both nets exist because a join scoped to the
+# wrong namespace once left the two ARRAY columns unjoined, unconcatenated,
+# filtered out, and silently never compared.
+#
 # Why the predicate-form assertion is scoped to uuid columns
 # ----------------------------------------------------------
 # A policy guarding a tenant column whose predicate casts the COLUMN to text
@@ -157,9 +217,16 @@ APP_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # tenant column as new drift and bury the real problem, which is that the file
 # was not shipped.
 MANIFEST_TENANT_TYPES="${SCRIPT_DIR}/schema-tenant-type-manifest.txt"
-[ -f "${MANIFEST_TENANT_TYPES}" ] || fail "FAIL: tenant-type manifest not found at ${MANIFEST_TENANT_TYPES}."
+
+# Reviewed manifest for the column-type ratchet (issue #405). Same contract as
+# the tenant-type manifest: a missing file is a failure, never an empty
+# ratchet, so an unshipped file cannot silently flag the whole baseline.
+MANIFEST_COLUMN_TYPES="${SCRIPT_DIR}/schema-column-type-manifest.txt"
 
 fail() { printf '%s\n' "$*" >&2; exit 1; }
+
+[ -f "${MANIFEST_TENANT_TYPES}" ] || fail "FAIL: tenant-type manifest not found at ${MANIFEST_TENANT_TYPES}."
+[ -f "${MANIFEST_COLUMN_TYPES}" ] || fail "FAIL: column-type manifest not found at ${MANIFEST_COLUMN_TYPES}."
 
 case "${SCRATCH_DB}" in
   *_schema_build_test|*_scratch) ;;
@@ -232,7 +299,11 @@ tenant_type_actual="$(mktemp)"
 tenant_uuid_cast_issues="$(mktemp)"
 schema_uuid_tenant_tables="$(mktemp)"
 entity_tenant_types="$(mktemp)"
-trap 'rm -f "${entities}" "${applied}" "${entity_columns}" "${db_columns}" "${forced_rls_tables}" "${rls_policies}" "${rls_policy_exprs_missing_tenant}" "${tenant_type_manifest}" "${tenant_type_actual}" "${tenant_uuid_cast_issues}" "${schema_uuid_tenant_tables}" "${entity_tenant_types}"' EXIT
+entity_column_types="$(mktemp)"
+schema_column_types="$(mktemp)"
+column_type_divergences="$(mktemp)"
+column_type_manifest="$(mktemp)"
+trap 'rm -f "${entities}" "${applied}" "${entity_columns}" "${db_columns}" "${forced_rls_tables}" "${rls_policies}" "${rls_policy_exprs_missing_tenant}" "${tenant_type_manifest}" "${tenant_type_actual}" "${tenant_uuid_cast_issues}" "${schema_uuid_tenant_tables}" "${entity_tenant_types}" "${entity_column_types}" "${schema_column_types}" "${column_type_divergences}" "${column_type_manifest}"' EXIT
 
 # Entities declare their table two ways: @Entity('name') and
 # @Entity({ name: 'name' }). Missing the second form would silently under-count
@@ -630,6 +701,198 @@ report_tenant_entity_diff() {
   fi
 }
 
+collect_entity_column_types() {
+  # Entity side of the column-type ratchet: one row per declared column of
+  # every regular entity table, <table>.<column>|<declaredCanonical>. Same
+  # dist-metadata harness as collect_entity_tenant_types (no database
+  # connection), so the comparison is against exactly what TypeORM issues at
+  # runtime. View entities are excluded: their columns come from migrations.
+  ( cd "${APP_DIR}" && node -e '
+const { DataSource, getMetadataArgsStorage } = require("typeorm");
+const fs = require("fs");
+const path = require("path");
+function walk(dir, acc) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) walk(p, acc);
+    else if (e.name.endsWith(".entity.js")) acc.push(p);
+  }
+  return acc;
+}
+const files = walk(path.join(process.cwd(), "dist"), []);
+// Decorator metadata is registered while the entity modules load, so every
+// module must be required BEFORE the storage is read.
+const mods = files.map((file) => require(file));
+const entityClasses = new Set(getMetadataArgsStorage().tables.map((t) => t.target));
+const entities = [];
+for (const mod of mods) {
+  for (const key of Object.keys(mod)) {
+    const value = mod[key];
+    if (typeof value === "function" && entityClasses.has(value)) entities.push(value);
+  }
+}
+// Normalization table: folds the heterogeneous column.type spellings of
+// TypeORM (reflected constructors and driver strings) onto the PostgreSQL
+// names information_schema reports, so both sides compare against one
+// vocabulary.
+const NORMALIZE = {
+  "String": "character varying",
+  "varchar": "character varying",
+  "character varying": "character varying",
+  "Boolean": "boolean",
+  "boolean": "boolean",
+  "bool": "boolean",
+  "int": "integer",
+  "integer": "integer",
+  "int4": "integer",
+  "smallint": "smallint",
+  "bigint": "bigint",
+  "int8": "bigint",
+  "decimal": "numeric",
+  "numeric": "numeric",
+  "float": "double precision",
+  "double precision": "double precision",
+  "timestamp": "timestamp without time zone",
+  "timestamp without time zone": "timestamp without time zone",
+  "timestamptz": "timestamp with time zone",
+  "timestamp with time zone": "timestamp with time zone",
+  "date": "date",
+  "jsonb": "jsonb",
+  "json": "json",
+  "text": "text",
+  "uuid": "uuid",
+  "simple-array": "text",
+  "enum": "enum",
+};
+// A bare @Column() on a JS number or Date property reflects the constructor.
+// The check records these abstract declarations instead of deciding whether
+// the author meant integer/numeric or timestamp/timestamptz.
+const ABSTRACT = new Set(["Number", "Date"]);
+const dataSource = new DataSource({ type: "postgres", entities: entities });
+const run = async () => {
+  await dataSource.buildMetadatas();
+  const rows = [];
+  for (const entityMetadata of dataSource.entityMetadatas) {
+    // "regular" excludes view entities (whose columns are migration-authored)
+    // and junction tables; neither is a declaration the migrations must match.
+    if (entityMetadata.tableType !== "regular") continue;
+    for (const column of entityMetadata.columns) {
+      const raw = typeof column.type === "function" ? column.type.name : String(column.type);
+      let canonical;
+      if (ABSTRACT.has(raw)) {
+        canonical = raw;
+      } else if (Object.prototype.hasOwnProperty.call(NORMALIZE, raw)) {
+        canonical = NORMALIZE[raw];
+      } else {
+        console.error("FAIL: unrecognized declared type on " + entityMetadata.tableName + "." + column.databaseName + ": " + raw + " - teach the normalization table about it or fix the declaration");
+        process.exit(1);
+      }
+      if (column.isArray) canonical += "[]";
+      else if (canonical === "character varying" && column.length) canonical += "(" + column.length + ")";
+      else if (canonical === "numeric" && column.precision) canonical += "(" + column.precision + "," + (column.scale || 0) + ")";
+      rows.push(entityMetadata.tableName + "." + column.databaseName + "|" + canonical);
+    }
+  }
+  if (rows.length > 0) process.stdout.write(rows.sort().join("\n") + "\n");
+};
+run().catch((e) => { console.error(String((e && e.stack) || e)); process.exit(1); });
+  ' ) | sort -u > "${entity_column_types}"
+}
+
+collect_schema_column_types() {
+  # Schema side of the column-type ratchet: the actual type of every column in
+  # public, folded onto the same vocabulary as the entity side. pg_type is
+  # joined on udt_name + the type's OWN namespace to resolve USER-DEFINED and
+  # ARRAY entries, which information_schema reports opaquely. The namespace
+  # must come from c.udt_schema, never a hard-coded 'public': built-in array
+  # types (_text, _int4, ...) live in pg_catalog, so joining on public left
+  # every ARRAY column unjoined, made the whole concatenation NULL, and an
+  # empty field was then dropped by the blank-line filter - array columns were
+  # silently never compared. The ARRAY arms use c.udt_name directly so they
+  # cannot depend on the join at all; t is kept only for typtype = 'e'.
+  # COALESCE makes a dropped row impossible: an unresolvable type becomes a
+  # visible 'unresolved:...' divergence (which the ratchet fails on) instead
+  # of a silently deleted line. The count guard below is the second net: if
+  # extraction ever loses a row again, the script fails loudly instead of
+  # comparing a subset.
+  psql_admin -d "${SCRATCH_DB}" -tAc \
+    "SELECT c.table_name || '.' || c.column_name || '|' || COALESCE(CASE WHEN c.data_type = 'USER-DEFINED' AND t.typtype = 'e' THEN 'enum' WHEN c.data_type = 'USER-DEFINED' THEN 'user-defined:' || c.udt_name WHEN c.data_type = 'ARRAY' THEN CASE c.udt_name WHEN '_text' THEN 'text[]' WHEN '_int4' THEN 'integer[]' WHEN '_uuid' THEN 'uuid[]' WHEN '_varchar' THEN 'character varying[]' ELSE 'array:' || c.udt_name || '[]' END WHEN c.data_type = 'character varying' THEN 'character varying' || CASE WHEN c.character_maximum_length IS NOT NULL THEN '(' || c.character_maximum_length || ')' ELSE '' END WHEN c.data_type = 'numeric' AND c.numeric_precision IS NOT NULL THEN 'numeric(' || c.numeric_precision || ',' || COALESCE(c.numeric_scale, 0) || ')' ELSE c.data_type END, 'unresolved:' || c.data_type || ':' || c.udt_name) FROM information_schema.columns c LEFT JOIN pg_type t ON t.typname = c.udt_name AND t.typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = c.udt_schema) WHERE c.table_schema = 'public' ORDER BY 1" \
+    | sed '/^[[:space:]]*$/d' | sort -u > "${schema_column_types}"
+
+  # Count guard: the extraction must carry every public column. A shorter
+  # extraction means a schema column was dropped from the type comparison
+  # (the exact defect class that let array columns silently skip the check).
+  local public_column_count
+  public_column_count="$(psql_admin -d "${SCRATCH_DB}" -tAc "SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public'" | tr -d ' ')"
+  local extracted_column_count
+  extracted_column_count="$(wc -l < "${schema_column_types}" | tr -d ' ')"
+  if [ "${extracted_column_count}" -ne "${public_column_count}" ]; then
+    fail "FAIL: the schema-side type extraction emitted ${extracted_column_count} row(s) but public holds ${public_column_count} column(s) - a schema column was dropped from the type comparison (see collect_schema_column_types)."
+  fi
+}
+
+report_column_type_diff() {
+  # Join the two sides on table.column. Only pairs present on BOTH sides are
+  # compared: a column the schema never creates is the existence check's job.
+  awk -F'|' '
+    NR == FNR { actual[$1] = $2; next }
+    ($1 in actual) && actual[$1] != $2 { print $1 "|" $2 "|" actual[$1] }
+  ' "${schema_column_types}" "${entity_column_types}" | sort > "${column_type_divergences}"
+
+  # The manifest is read fresh here, not once at startup, so both scenarios
+  # judge the same reviewed list. Same comment-stripping as the tenant
+  # manifest.
+  sed -e 's/#.*//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e '/^$/d' "${MANIFEST_COLUMN_TYPES}" \
+    | sort -u > "${column_type_manifest}"
+
+  # Unlisted: a real divergence the manifest does not know about.
+  unlisted_column_type_drifts="$(comm -13 "${column_type_manifest}" "${column_type_divergences}")"
+  unlisted_column_type_count="$(printf '%s' "${unlisted_column_type_drifts}" | grep -c . || true)"
+
+  # Stale: a manifest line matching nothing. Either the column was fixed and
+  # its line was not deleted (the ratchet failing to tighten), or the column
+  # was dropped or renamed and the entry needs a human look.
+  stale_column_type_entries="$(comm -23 "${column_type_manifest}" "${column_type_divergences}")"
+  stale_column_type_count="$(printf '%s' "${stale_column_type_entries}" | grep -c . || true)"
+
+  # Per-class breakdown of the divergence set, derived from the two canonical
+  # strings (never stored in the manifest): abstract when the declared side is
+  # a bare @Column() reflection (Number or Date); length when stripping a
+  # trailing (...) from both sides makes them equal; type otherwise.
+  read -r type_drift_count len_drift_count abstract_drift_count <<< "$(awk -F'|' '
+    {
+      if ($2 == "Number" || $2 == "Date") { abstract++ }
+      else {
+        d = $2; a = $3;
+        sub(/\([^)]*\)$/, "", d); sub(/\([^)]*\)$/, "", a);
+        if (d == a) { len++ } else { typ++ }
+      }
+    }
+    END { print typ + 0, len + 0, abstract + 0 }
+  ' "${column_type_divergences}")"
+
+  printf 'entity columns compared : %s\n' "$(wc -l < "${entity_column_types}" | tr -d ' ')"
+  printf 'column-type drifts      : %s\n' "$(wc -l < "${column_type_divergences}" | tr -d ' ')"
+  printf 'column-type manifest    : %s\n' "$(wc -l < "${column_type_manifest}" | tr -d ' ')"
+  # These two labels are deliberately prefixed: the tenant-type ratchet above
+  # prints counters with the same names, and an unprefixed block would leave a
+  # reader unable to tell which ratchet a number belongs to.
+  printf 'column-type unlisted    : %s\n' "${unlisted_column_type_count}"
+  printf 'column-type stale       : %s\n' "${stale_column_type_count}"
+  printf 'drift class type        : %s\n' "${type_drift_count}"
+  printf 'drift class length      : %s\n' "${len_drift_count}"
+  printf 'drift class abstract    : %s\n' "${abstract_drift_count}"
+
+  if [ -n "${unlisted_column_type_drifts}" ]; then
+    printf '\n%s\n' "Entity column types that diverge from the built schema and are missing from scripts/schema-column-type-manifest.txt (table.column | declared | actual):"
+    printf '%s\n' "${unlisted_column_type_drifts}" | sed 's/^/  - /'
+  fi
+  if [ -n "${stale_column_type_entries}" ]; then
+    printf '\n%s\n' "Column-type manifest entries matching no real divergence (delete the line if the column was fixed):"
+    printf '%s\n' "${stale_column_type_entries}" | sed 's/^/  - /'
+  fi
+}
+
 printf '\n%s\n' "==> Scenario 1: comparing against the entity declarations"
 collect_tables
 report_diff
@@ -642,6 +905,9 @@ report_tenant_type_diff
 collect_entity_tenant_types
 collect_schema_uuid_tenant_tables
 report_tenant_entity_diff
+collect_entity_column_types
+collect_schema_column_types
+report_column_type_diff
 
 printf '\n'
 if [ "${migration_status}" -ne 0 ]; then
@@ -670,6 +936,12 @@ if [ "${uuid_cast_issue_count}" -ne 0 ]; then
 fi
 if [ "${tenant_entity_mismatch_count}" -ne 0 ]; then
   fail "FAIL: ${tenant_entity_mismatch_count} entity declaration(s) disagree with a uuid tenant_id column in the built schema (see above)."
+fi
+if [ "${unlisted_column_type_count}" -ne 0 ]; then
+  fail "FAIL: ${unlisted_column_type_count} entity column type(s) diverge from the built schema and are not listed in scripts/schema-column-type-manifest.txt (see above)."
+fi
+if [ "${stale_column_type_count}" -ne 0 ]; then
+  fail "FAIL: ${stale_column_type_count} column-type manifest entry(ies) match no real divergence - delete the line if the column was fixed (see above)."
 fi
 
 printf '%s\n' "PASS (scenario 1): the migration set builds every entity table and column from an empty database, and no forced-RLS table is left deny-all without a tenant-scoped policy."
@@ -710,6 +982,9 @@ report_tenant_type_diff
 collect_entity_tenant_types
 collect_schema_uuid_tenant_tables
 report_tenant_entity_diff
+collect_entity_column_types
+collect_schema_column_types
+report_column_type_diff
 
 printf '\n'
 if [ "${migration2_status}" -ne 0 ]; then
@@ -739,6 +1014,12 @@ fi
 if [ "${tenant_entity_mismatch_count}" -ne 0 ]; then
   fail "FAIL: ${tenant_entity_mismatch_count} entity declaration(s) disagree with a uuid tenant_id column in the built schema after the partial-ledger re-run (see above)."
 fi
+if [ "${unlisted_column_type_count}" -ne 0 ]; then
+  fail "FAIL: ${unlisted_column_type_count} entity column type(s) diverge from the built schema and are not listed in scripts/schema-column-type-manifest.txt after the partial-ledger re-run (see above)."
+fi
+if [ "${stale_column_type_count}" -ne 0 ]; then
+  fail "FAIL: ${stale_column_type_count} column-type manifest entry(ies) match no real divergence after the partial-ledger re-run - delete the line if the column was fixed (see above)."
+fi
 
 printf '%s\n' "PASS (scenario 2): the migration set re-applies cleanly over an existing schema with a partial ledger."
-printf '%s\n' "PASS: the migration set builds every entity table and column from an empty database, survives a partial-ledger re-run, and leaves no forced-RLS table deny-all, no defined policy expression without the app.tenant_id predicate, no non-uuid tenant column outside the reviewed manifest, no predicate on a uuid tenant column left in the text form, and no entity declaring tenant_id with a non-uuid type where the schema column is uuid."
+printf '%s\n' "PASS: the migration set builds every entity table and column from an empty database, survives a partial-ledger re-run, and leaves no forced-RLS table deny-all, no defined policy expression without the app.tenant_id predicate, no non-uuid tenant column outside the reviewed manifest, no predicate on a uuid tenant column left in the text form, no entity declaring tenant_id with a non-uuid type where the schema column is uuid, and no entity-declared column type diverging from the built schema outside the reviewed column-type manifest."
