@@ -19,7 +19,7 @@ export class ShrinkageDetail {
   @JoinColumn({ name: 'shrinkage_id' })
   shrinkage: Shrinkage;
 
-  @Column()
+  @Column({ type: 'uuid' })
   insumo_id: string;
 
   @Column('decimal', { precision: 14, scale: 4 })

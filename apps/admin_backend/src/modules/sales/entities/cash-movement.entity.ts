@@ -23,7 +23,7 @@ export class CashMovement {
   @Column({ type: 'uuid' })
   tenant_id: string;
 
-  @Column({ type: 'varchar', length: 100 })
+  @Column({ type: 'uuid' })
   shift_id: string;
 
   @Column({ type: 'varchar', length: 100 })

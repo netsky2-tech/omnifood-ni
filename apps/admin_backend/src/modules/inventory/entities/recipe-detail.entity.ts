@@ -27,7 +27,7 @@ export class RecipeDetail {
   @JoinColumn({ name: 'recipe_version_id' })
   recipeVersion: RecipeVersion;
 
-  @Column()
+  @Column({ type: 'uuid' })
   insumo_id: string;
 
   /**

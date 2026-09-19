@@ -34,7 +34,7 @@ export class Recipe {
   @JoinColumn({ name: 'productId' })
   product: Product;
 
-  @Column()
+  @Column({ type: 'uuid' })
   ingredientId: string;
 
   @Column({

@@ -32,7 +32,7 @@ export class InventoryMovement {
   @JoinColumn({ name: 'tenant_id' })
   tenant: Tenant;
 
-  @Column({ name: 'insumo_id' })
+  @Column({ name: 'insumo_id', type: 'uuid' })
   insumoId: string;
 
   @Column({

@@ -30,19 +30,19 @@ export class ChangeLog {
   @Column()
   user_id: string;
 
-  @Column()
+  @Column({ type: 'varchar', length: 64 })
   action: string;
 
-  @Column()
+  @Column({ type: 'varchar', length: 64 })
   target_type: string;
 
-  @Column()
+  @Column({ type: 'uuid' })
   target_id: string;
 
   @Column({ type: 'jsonb', nullable: true })
   changes: Record<string, unknown> | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', length: 255, nullable: true })
   user_email: string | null;
 
   @CreateDateColumn({ type: 'timestamptz' })

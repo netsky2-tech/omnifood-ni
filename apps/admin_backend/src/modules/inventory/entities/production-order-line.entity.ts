@@ -19,7 +19,7 @@ export class ProductionOrderLine {
   @JoinColumn({ name: 'production_order_id' })
   productionOrder: ProductionOrder;
 
-  @Column()
+  @Column({ type: 'uuid' })
   insumo_id: string;
 
   @Column('decimal', { precision: 14, scale: 4 })

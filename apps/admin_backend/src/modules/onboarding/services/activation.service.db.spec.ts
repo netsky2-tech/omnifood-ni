@@ -269,7 +269,7 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
       const attempt = await activationService.startActivation(
         tenantId,
         { candidateTerminalId: 'term-pos-01' },
-        'user-admin-1',
+        'c0000000-0000-4000-8000-00000000c1a0',
       );
 
       expect(attempt).toBeDefined();
@@ -297,7 +297,7 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
         activationService.startActivation(
           tenantId,
           { candidateTerminalId: 'term-pos-02' },
-          'user-admin-1',
+          'c0000000-0000-4000-8000-00000000c1a0',
         ),
       ).rejects.toThrow(BadRequestException); // Because session is now ACTIVATION_IN_PROGRESS, not SALE_READY
 
@@ -309,7 +309,7 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
         activationService.startActivation(
           tenantId,
           { candidateTerminalId: 'term-pos-02' },
-          'user-admin-1',
+          'c0000000-0000-4000-8000-00000000c1a0',
         ),
       ).rejects.toThrow(ConflictException);
 
@@ -395,14 +395,14 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
         dataSource,
         attempt.id,
         tenantId,
-        'user-admin-1',
+        'c0000000-0000-4000-8000-00000000c1a0',
       );
 
       // Authoritative Backend Finalization: PASS
       const finalizedPass = await activationService.finalizeActivation(
         tenantId,
         attempt.id,
-        'user-admin-1',
+        'c0000000-0000-4000-8000-00000000c1a0',
       );
 
       expect(finalizedPass.status).toBe(ActivationAttemptStatus.PASS);
@@ -420,7 +420,7 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
       const finalizeReplay = await activationService.finalizeActivation(
         tenantId,
         attempt.id,
-        'user-admin-1',
+        'c0000000-0000-4000-8000-00000000c1a0',
       );
       expect(finalizeReplay.id).toBe(attempt.id);
       expect(finalizeReplay.status).toBe(ActivationAttemptStatus.PASS);
@@ -515,7 +515,7 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
       const attemptFail = await activationService.startActivation(
         tenantId,
         { candidateTerminalId: 'term-warn-01' },
-        'user-admin-1',
+        'c0000000-0000-4000-8000-00000000c1a0',
       );
 
       const devicePrincipal = {
@@ -536,7 +536,7 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
       const finalizedFail = await activationService.finalizeActivation(
         tenantId,
         attemptFail.id,
-        'user-admin-1',
+        'c0000000-0000-4000-8000-00000000c1a0',
       );
 
       expect(finalizedFail.status).toBe(ActivationAttemptStatus.FAIL);
@@ -555,7 +555,7 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
       const attemptWarn = await activationService.startActivation(
         tenantId,
         { candidateTerminalId: 'term-warn-01' },
-        'user-admin-1',
+        'c0000000-0000-4000-8000-00000000c1a0',
       );
       expect(attemptWarn.id).not.toBe(attemptFail.id);
       expect(attemptWarn.status).toBe(ActivationAttemptStatus.CREATED);
@@ -600,13 +600,13 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
         dataSource,
         attemptWarn.id,
         tenantId,
-        'user-admin-1',
+        'c0000000-0000-4000-8000-00000000c1a0',
       );
 
       const finalizedWarn = await activationService.finalizeActivation(
         tenantId,
         attemptWarn.id,
-        'user-admin-1',
+        'c0000000-0000-4000-8000-00000000c1a0',
       );
 
       expect(finalizedWarn.status).toBe(
@@ -637,7 +637,7 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
         tenantId,
         followUps[0].id,
         { closureNote: 'Sync converged after connection restore' },
-        'user-admin-1',
+        'c0000000-0000-4000-8000-00000000c1a0',
       );
       expect(closedFollowUp.status).toBe(ActivationFollowUpStatus.CLOSED);
       expect(closedFollowUp.closedAt).toBeDefined();
@@ -745,7 +745,7 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
       const attempt = await activationService.startActivation(
         tenantId,
         { candidateTerminalId: 'term-hard-01' },
-        'user-operator-1',
+        'e0000000-0000-4000-8000-00000000000e',
       );
       expect(attempt.verificationProductId).toBe(product.id);
 
@@ -799,14 +799,14 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
         dataSource,
         attempt.id,
         tenantId,
-        'user-operator-1',
+        'e0000000-0000-4000-8000-00000000000e',
       );
 
       // Finalize -> PASS_WITH_WARNING
       const finalized = await activationService.finalizeActivation(
         tenantId,
         attempt.id,
-        'user-operator-1',
+        'e0000000-0000-4000-8000-00000000000e',
       );
       expect(finalized.status).toBe(ActivationAttemptStatus.PASS_WITH_WARNING);
 

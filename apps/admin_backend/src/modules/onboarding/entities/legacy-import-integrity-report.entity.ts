@@ -51,11 +51,12 @@ export class LegacyImportIntegrityReport {
 
   @Column({
     type: 'varchar',
+    length: 64,
     default: LegacyImportIntegrityStatus.CLEAN,
   })
   status: LegacyImportIntegrityStatus;
 
-  @Column({ type: 'varchar', nullable: true })
+  @Column({ type: 'varchar', length: 128, nullable: true })
   reviewed_by: string | null;
 
   @Column({ type: 'jsonb', default: () => "'[]'" })
