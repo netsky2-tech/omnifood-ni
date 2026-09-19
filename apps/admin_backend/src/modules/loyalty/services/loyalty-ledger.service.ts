@@ -102,7 +102,7 @@ export class LoyaltyLedgerService {
       loyalty_program_id: dto.loyaltyProgramId,
       ticket_id: dto.ticketId ?? null,
       reward_id: dto.rewardId ?? null,
-      transaction_type: dto.transactionType,
+      transaction_type: toLegacyPointTransactionType(dto.transactionType),
       type: toLegacyPointTransactionType(dto.transactionType),
       units: dto.units,
       points: dto.units ?? 0,

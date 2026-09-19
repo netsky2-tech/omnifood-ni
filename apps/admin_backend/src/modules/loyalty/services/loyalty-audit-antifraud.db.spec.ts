@@ -343,11 +343,11 @@ describe('LV1.7E — Loyalty Audit & Antifraud Suite (Real PostgreSQL)', () => {
 
       expect(revEarn).toBeDefined();
       expect(revEarn.reversal_of_transaction_id).toBeDefined();
-      expect(revEarn.transaction_type).toBe('REVERSAL');
+      expect(revEarn.transaction_type).toBe('reversal');
 
       expect(revRedeem).toBeDefined();
       expect(revRedeem.reversal_of_transaction_id).toBeDefined();
-      expect(revRedeem.transaction_type).toBe('REVERSAL');
+      expect(revRedeem.transaction_type).toBe('reversal');
 
       // Verify originals were NOT deleted (Strictly append-only ledger!)
       const originals = await txRepo.find({
