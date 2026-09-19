@@ -395,15 +395,18 @@ export class UserService {
       ? manager.getRepository(AuditLog)
       : this.auditRepository;
 
-    const lastLog = await repo.findOne({
-      where: {
-        tenant_id: tenantId,
-        device_id: 'WEB_ADMIN',
-        user_id: adminId,
-        forensic_status: 'ACTIVE',
-      },
-      order: { sequence_no: 'DESC' },
-    });
+    const lastLog =
+      typeof repo.findOne === 'function'
+        ? await repo.findOne({
+            where: {
+              tenant_id: tenantId,
+              device_id: 'WEB_ADMIN',
+              user_id: adminId,
+              forensic_status: 'ACTIVE',
+            },
+            order: { sequence_no: 'DESC' },
+          })
+        : null;
 
     const sequenceNo = lastLog ? Number(lastLog.sequence_no) + 1 : 1;
     const prevHash = lastLog?.entry_hash ? lastLog.entry_hash : 'GENESIS';
