@@ -19,4 +19,3 @@
 #                             the base column it reads, because PostgreSQL
 #                             refuses to change a type used by a view rule.
 #                             The changing unit must drop and recreate it.
-column invoice_items.tenant_id

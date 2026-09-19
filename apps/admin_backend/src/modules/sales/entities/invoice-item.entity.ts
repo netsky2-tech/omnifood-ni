@@ -42,7 +42,7 @@ export class InvoiceItem {
   /// through `upsert(... ['id'])`. Persisting and indexing `tenant_id`
   /// plus an ownership check before upsert prevents cross-tenant
   /// overwrite. Mirrors the tenant_id already on `invoices`.
-  @Column({ name: 'tenant_id' })
+  @Column({ name: 'tenant_id', type: 'uuid' })
   tenant_id: string;
 
   @Column({ name: 'invoice_id' })
