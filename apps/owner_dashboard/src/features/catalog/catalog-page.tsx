@@ -172,6 +172,7 @@ function CatalogDialog({
           input: { name: name.trim(), sort_order: sortOrder },
         });
         toast({
+          variant: "success",
           title: "Elemento actualizado",
           description: `"${name.trim()}" se actualizó correctamente en el catálogo.`,
         });
@@ -183,6 +184,7 @@ function CatalogDialog({
         };
         await createMutation.mutateAsync(input);
         toast({
+          variant: "success",
           title: "Elemento creado",
           description: `"${name.trim()}" se guardó correctamente en el catálogo.`,
         });
@@ -327,6 +329,7 @@ function DeactivateDialog({
     try {
       await deactivateMutation.mutateAsync(value.id);
       toast({
+        variant: "success",
         title: "Elemento desactivado",
         description: `"${value.name}" ha sido desactivado del catálogo.`,
       });

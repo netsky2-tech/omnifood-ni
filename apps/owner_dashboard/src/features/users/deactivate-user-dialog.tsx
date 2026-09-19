@@ -36,6 +36,7 @@ export function DeactivateUserDialog({
     try {
       await deactivate.mutateAsync(user.id);
       toast({
+        variant: "success",
         title: "Usuario desactivado",
         description: `El usuario "${user.name}" fue dado de baja correctamente.`,
       });

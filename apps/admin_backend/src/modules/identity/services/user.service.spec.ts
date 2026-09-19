@@ -326,6 +326,47 @@ describe('UserService', () => {
     expect(lockedAudit.save).toHaveBeenCalledTimes(2);
   });
 
+  it('does not increment security_version or revoke session when role is unchanged and password is not provided', async () => {
+    const lockedUsers = {
+      findOne: jest.fn().mockImplementation(() =>
+        Promise.resolve({
+          id: 'user-1',
+          tenant_id: 'tenant-1',
+          name: 'Cashier',
+          role: UserRole.CASHIER,
+          security_version: 7,
+        }),
+      ),
+      save: jest
+        .fn()
+        .mockImplementation((user: Record<string, unknown>) =>
+          Promise.resolve(user),
+        ),
+    };
+    const lockedAudit = { findOne: jest.fn(), save: jest.fn() };
+    manager.getRepository.mockImplementation((entity: unknown) =>
+      entity === User ? lockedUsers : lockedAudit,
+    );
+    dataSource.transaction.mockImplementation(
+      (operation: (transactionManager: typeof manager) => Promise<unknown>) =>
+        operation(manager),
+    );
+
+    await service.update(
+      'user-1',
+      { name: 'Cashier Updated', role: UserRole.CASHIER },
+      'tenant-1',
+      'admin-1',
+    );
+
+    expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+    expect(lockedUsers.save).toHaveBeenCalledWith(
+      expect.objectContaining({ security_version: 7, name: 'Cashier Updated' }),
+    );
+    expect(authService.revokeRefreshSessionForUser).not.toHaveBeenCalled();
+    expect(lockedAudit.save).toHaveBeenCalledTimes(1);
+  });
+
   it('treats each repeated deactivation as a sensitive revocation and audit boundary', async () => {
     const lockedUsers = {
       findOne: jest.fn().mockImplementation(() =>

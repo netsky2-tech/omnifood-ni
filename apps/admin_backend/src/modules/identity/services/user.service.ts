@@ -247,10 +247,17 @@ export class UserService {
       throw new NotFoundException('Usuario no encontrado');
     }
 
+    const isRoleActuallyChanged =
+      dto.role !== undefined && dto.role !== user.role;
+    const isPasswordChanged = passwordHash !== undefined;
+    const shouldRevoke = isRoleActuallyChanged || isPasswordChanged;
+
     if (dto.name) user.name = dto.name;
     if (dto.role !== undefined) user.role = dto.role;
     if (passwordHash) user.password_hash = passwordHash;
-    user.security_version += 1;
+    if (shouldRevoke) {
+      user.security_version += 1;
+    }
     const updatedUser = await users.save(user);
 
     if (pinHash) {
@@ -265,11 +272,13 @@ export class UserService {
       await profiles.save(profile);
     }
 
-    await this.authService.revokeRefreshSessionForUser(
-      manager,
-      updatedUser.id,
-      new Date(),
-    );
+    if (shouldRevoke) {
+      await this.authService.revokeRefreshSessionForUser(
+        manager,
+        updatedUser.id,
+        new Date(),
+      );
+    }
     await this.logAction(
       'USER_UPDATED',
       updatedUser.id,

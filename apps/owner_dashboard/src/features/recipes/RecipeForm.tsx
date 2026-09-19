@@ -177,7 +177,7 @@ export function RecipeForm({
         },
       });
 
-      toast({ title: 'Éxito', description: 'Receta creada correctamente' });
+      toast({ variant: 'success', title: 'Éxito', description: 'Receta creada correctamente' });
       onSuccess();
     } catch (err: unknown) {
       toast({

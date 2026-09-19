@@ -66,7 +66,10 @@ export function PromotionsList() {
   const handleToggle = async (promotion: Promotion) => {
     try {
       await togglePromotion.mutateAsync({ id: promotion.id, isActive: !promotion.is_active });
-      toast({ title: promotion.is_active ? 'Promoción desactivada' : 'Promoción activada' });
+      toast({
+        variant: 'success',
+        title: promotion.is_active ? 'Promoción desactivada' : 'Promoción activada',
+      });
     } catch (err) {
       toast({
         title: 'Error al cambiar estado',
@@ -80,7 +83,7 @@ export function PromotionsList() {
     if (!confirm('¿Está seguro de eliminar esta promoción?')) return;
     try {
       await deletePromotion.mutateAsync(id);
-      toast({ title: 'Promoción eliminada' });
+      toast({ variant: 'success', title: 'Promoción eliminada' });
     } catch (err) {
       toast({
         title: 'Error al eliminar',

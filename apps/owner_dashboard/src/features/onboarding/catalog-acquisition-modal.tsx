@@ -130,6 +130,7 @@ export function CatalogAcquisitionModal({
       {
         onSuccess: () => {
           toast({
+            variant: "success",
             title: "Producto creado",
             description: `"${values.name.trim()}" fue agregado al catálogo.`,
           });
@@ -153,6 +154,7 @@ export function CatalogAcquisitionModal({
       {
         onSuccess: () => {
           toast({
+            variant: "success",
             title: "Plantilla aplicada",
             description: "Los productos y recetas iniciales se cargaron exitosamente.",
           });
@@ -203,6 +205,7 @@ export function CatalogAcquisitionModal({
       });
       setImportFeedback(`¡Importación exitosa! ${commitRes.productsCreated} productos incorporados.`);
       toast({
+        variant: "success",
         title: "Importación exitosa",
         description: `${commitRes.productsCreated} productos incorporados correctamente.`,
       });
