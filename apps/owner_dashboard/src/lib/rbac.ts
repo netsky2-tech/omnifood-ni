@@ -25,6 +25,7 @@ export type AppAction =
  * - /users: OWNER
  * - /customers: OWNER, MANAGER, CASHIER, WAITER
  * - /settings: OWNER, MANAGER
+ * - /menu-qr: OWNER, MANAGER
  */
 export const ROUTE_ROLE_PERMISSIONS: Record<string, UserRole[]> = {
   "/": ["OWNER", "MANAGER"],
@@ -39,6 +40,7 @@ export const ROUTE_ROLE_PERMISSIONS: Record<string, UserRole[]> = {
   "/customers": ["OWNER", "MANAGER", "CASHIER", "WAITER"],
   "/loyalty": ["OWNER", "MANAGER"],
   "/settings": ["OWNER", "MANAGER"],
+  "/menu-qr": ["OWNER", "MANAGER"],
 };
 
 export const ACTION_ROLE_PERMISSIONS: Record<AppAction, UserRole[]> = {

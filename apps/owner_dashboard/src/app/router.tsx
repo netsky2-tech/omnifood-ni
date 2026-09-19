@@ -37,6 +37,9 @@ const UsersPage = lazyWithRetry(() =>
 const SettingsPage = lazyWithRetry(() =>
   import("@/features/settings/settings-page").then((m) => ({ default: m.SettingsPage })),
 );
+const MenuQrPage = lazyWithRetry(() =>
+  import("@/features/menu-qr/menu-qr-page").then((m) => ({ default: m.MenuQrPage })),
+);
 const CustomersPage = lazyWithRetry(() =>
   import("@/features/customers/customers-page").then((m) => ({ default: m.CustomersPage })),
 );
@@ -178,6 +181,16 @@ export const router = createBrowserRouter([
           <ProtectedRoute requiredRoles={ROUTE_ROLE_PERMISSIONS["/settings"]}>
             <SuspenseWrapper>
               <SettingsPage />
+            </SuspenseWrapper>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "menu-qr",
+        element: (
+          <ProtectedRoute requiredRoles={ROUTE_ROLE_PERMISSIONS["/menu-qr"]}>
+            <SuspenseWrapper>
+              <MenuQrPage />
             </SuspenseWrapper>
           </ProtectedRoute>
         ),
