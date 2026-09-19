@@ -54,23 +54,25 @@ Business owners need a printable QR that customers can scan to open an externall
 - **Commit evidence:** `1ce5f5554bc0b5ceb5fa17595ea615f260d8d599` — `feat(owner-dashboard): add local menu QR contract`.
 
 ### T2 — Build the accessible QR workflow
-- **Status:** verified; awaiting commit authorization
+- **Status:** done
 - Implemented the dedicated page, URL workflow, accessible preview, data-URL download, best-effort local persistence, and Spanish copy using existing UI primitives.
 - Covered validation, generation, state invalidation after edits, error recovery, persistence, preview, download, offline behavior, and CSP-safe URLs with hook/component tests.
 - **Checks:** focused T2 suite — 3 files, 33 tests passed; full menu-QR suite — 4 files, 60 tests passed; typecheck passed; lint passed with two pre-existing unrelated warnings.
 - **Independent verification:** no medium-or-higher code findings remain; restored URLs regenerate only after explicit user action, and generation/download make no network calls.
 - **Runtime harness:** Vitest + jsdom + Testing Library exercised type → generate → preview → download and remount → restore → regenerate.
 - **Rollback boundary:** remove `src/features/menu-qr/use-menu-qr.ts`, `menu-qr-page.tsx`, `use-menu-qr.test.ts`, `menu-qr-page.test.tsx`, `src/__tests__/menu-qr-page.test.tsx`, and the corresponding T2 task-progress lines; preserve committed T1.
-- **Commit evidence:** pending explicit commit authorization.
+- **Commit evidence:** `43a535add829d6a80af5a11f280a3565dd2c01f6` — `feat(owner-dashboard): add menu QR workflow`.
 
 ### T3 — Integrate and verify the feature
-- **Status:** pending
-- Wire lazy routing, role permissions, and sidebar navigation.
-- Add relevant integration/e2e coverage without relying on external network services.
-- Run typecheck, lint, tests, build, and the feasible Playwright scenario.
-- Confirm no calls to a remote QR service and no CSP-incompatible preview URL.
-- **Checks:** owner-dashboard verification commands and structural readback.
-- **Rollback boundary:** route, RBAC, sidebar, e2e integration, and QR feature files.
+- **Status:** verified; awaiting commit authorization
+- Added lazy `/menu-qr` routing, explicit OWNER/MANAGER permissions, and a `Gestión` sidebar entry backed by the same RBAC map.
+- Added focused route/navigation coverage and deterministic Playwright coverage across the three configured Chromium device projects.
+- Confirmed data-URL preview/download behavior, a stable PNG filename, no remote QR-service request after login, and a dedicated production build chunk.
+- **Checks:** focused T3 tests — 10 passed; full unit suite — 762 passed / 4 pre-existing skipped; typecheck passed; lint passed with two pre-existing unrelated warnings; production build passed; Playwright menu-QR spec passed twice across 3 projects.
+- **Independent verification:** all seven acceptance criteria have observed evidence; no blocker or medium-or-higher finding remains.
+- **Runtime harness:** Playwright exercised login → sidebar navigation → Google Drive-style URL → generate → data-URL preview → real download event on desktop and mobile projects.
+- **Unverified non-blockers:** no browser-level negative-role scenario and no browser context forced offline; role denial is covered in routing tests and the feature path is proven network-free after login.
+- **Rollback boundary:** revert menu-QR changes in `router.tsx`, `rbac.ts`, and `sidebar.tsx`; remove `menu-qr-routing.test.tsx`, `menu-qr-navigation.test.tsx`, and `e2e/menu-qr.spec.ts`; preserve T1/T2 commits.
 - **Commit evidence:** pending explicit commit authorization.
 
 ## Progress and evidence
@@ -84,6 +86,9 @@ Business owners need a printable QR that customers can scan to open an externall
 - 2026-09-19: T2 implemented under TDD. Independent verification found stale generated state after input edits and missing recovery coverage; both were corrected with focused tests.
 - 2026-09-19: T2 re-verification passed 33 focused tests, the 60-test menu-QR suite, typecheck, and lint; no medium-or-higher code findings remain.
 - Review workload note: T2 adds approximately 853 lines across page, hook, and behavior-first tests. Preserve it as a separate work-unit commit and treat T1/T2 as independent review slices if a PR is opened.
+- 2026-09-19: User authorized and created T2 work-unit commit `43a535add829d6a80af5a11f280a3565dd2c01f6`.
+- 2026-09-19: T3 implemented under TDD and independently verified. Full tests, typecheck, lint, production build, and two Playwright runs passed; all acceptance criteria have observed evidence.
+- Review workload note: T3 is approximately 330 lines and remains below the preferred 400-line review slice. The complete feature is approximately 1,614 inserted lines across three independent work units and should be reviewed as commit slices or chained PRs, not as one undifferentiated diff.
 
 ## Next step
-Obtain explicit authorization for the T2 work-unit commit, record its identity, then advance T3 integration and browser verification.
+Obtain explicit authorization for the T3 work-unit commit and final ODD closeout record, then run the native review preflight for the completed candidate.
