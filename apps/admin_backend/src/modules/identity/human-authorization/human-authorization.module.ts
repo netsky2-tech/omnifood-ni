@@ -10,13 +10,15 @@ import { HumanAuthRolloutCohort } from './entities/human-auth-rollout-cohort.ent
 import { HumanAuthPolicySnapshot } from './entities/human-auth-policy-snapshot.entity';
 import { HumanAuthTenantPublicationState } from './entities/human-auth-tenant-publication-state.entity';
 import { StaffPolicySnapshotPublisher } from './services/staff-policy-snapshot-publisher.service';
+import { StaffPolicyEpochMaterializationService } from './services/staff-policy-epoch-materialization.service';
 import { OhacTenantTransaction } from './rls/ohac-tenant-transaction';
 
 /**
  * Human Authorization (OHAC) backend module.
  *
  * Maps the nine OHAC tables and registers the serialized staff-policy
- * snapshot publisher with its RLS transaction seam. Routes, controllers, and
+ * snapshot publisher, the per-terminal epoch materialization service, and
+ * the shared RLS transaction seam. Routes, controllers, and
  * DTOs arrive in a later slice, and no other module imports this one yet, so
  * the dormant registration is intentional.
  */
@@ -34,6 +36,10 @@ import { OhacTenantTransaction } from './rls/ohac-tenant-transaction';
       HumanAuthTenantPublicationState,
     ]),
   ],
-  providers: [OhacTenantTransaction, StaffPolicySnapshotPublisher],
+  providers: [
+    OhacTenantTransaction,
+    StaffPolicySnapshotPublisher,
+    StaffPolicyEpochMaterializationService,
+  ],
 })
 export class HumanAuthorizationModule {}

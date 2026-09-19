@@ -39,6 +39,11 @@ export function getApiErrorMessage(
       ) {
         return trimmed;
       }
+    } else if (Array.isArray(bodyMsg) && bodyMsg.length > 0) {
+      const joined = bodyMsg.filter((m): m is string => typeof m === "string" && m.trim().length > 0).join(". ");
+      if (joined.length > 0) {
+        return joined;
+      }
     }
 
     const status = error.status ?? error.statusCode;
