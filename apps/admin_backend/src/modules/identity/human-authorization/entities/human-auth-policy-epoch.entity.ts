@@ -23,7 +23,7 @@ import { BIGINT_STRING } from './bigint-string.transformer';
 export class HumanAuthPolicyEpoch {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
-  @Column({ name: 'tenant_id', type: 'varchar', length: 128 })
+  @Column({ name: 'tenant_id', type: 'uuid' })
   tenantId!: string;
   @Column({ name: 'terminal_id', type: 'varchar', length: 128 })
   terminalId!: string;

@@ -14,7 +14,7 @@ import { Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
 export class HumanAuthRecoveryToken {
   @PrimaryGeneratedColumn('uuid', { name: 'token_id' })
   tokenId!: string;
-  @Column({ name: 'tenant_id', type: 'varchar', length: 128 })
+  @Column({ name: 'tenant_id', type: 'uuid' })
   tenantId!: string;
   @Column({ name: 'terminal_id', type: 'varchar', length: 128 })
   terminalId!: string;
