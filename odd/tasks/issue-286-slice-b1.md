@@ -145,7 +145,7 @@ Slice A's measured rates are the calibration: 27 policies → 1,701 review-facin
 | B1.1 + B1.2 (L1) | ~300–450 | **B1.1 = 209** (`tenant-rls-policy.ts` +65/−3, spec +138, doc +147) and **B1.2 = 154** (harness +124/−2, 8 entities +8/−8, spec +20/−6) |
 | B1.3 + B1.4 (L2) | ~250–350 | **272** (`1809000000001.ts` +22/−11 and its spec +111/−29; `1784000000000.ts` +14/−2 and its spec +82/−1) — 52 implementation, 220 spec |
 | B1.5 (L3a) | ~500–700 → **likely needs its own split** | **664** (641 insertions / 23 deletions over 14 paths: migration 236, its spec 363, 9 entities 18, manifest −9, 2 fixtures +38/−5) — over the 400 budget, disclosed rather than split, for the same reason slice A disclosed its 664-line slice PR: the spec cannot be reviewed apart from the migration it pins |
-| B1.6 (L3b) | ~200–300 | |
+| B1.6 (L3b) | ~200–300 | **328** (93 migration, 235 spec, manifest −2). Inside the budget, and the only unit of this slice that landed under it without a disclosure |
 
 L1's landed cost is **below** the projection, which is the first time in this slice a plan estimate was not falsified. What made it cheap is that the emitter and the harness already existed: `L1` extended both instead of creating either.
 
@@ -159,6 +159,25 @@ Overages are disclosed in the pull request body rather than hidden, and a spec i
 | B1.2 | `b4c2842` | Assertion in both scenarios: `uuid tenant_id tables: 32`, `entity uuid mismatches: 0`. RED proven by mutation (reverting `inventory-sync-outbox.entity.ts` to the non-uuid form): exit 1 with the named row `inventory_sync_outbox|InventorySyncOutbox|uuid|String`. Mutation reverted byte-identically. `npm run test:db` → **36 suites / 200 tests pass**. Full harness exit 0 after the correction. |
 | B1.3 + B1.4 (L2) | `070a17a` | Both earlier migrations resolve through `resolveTenantRlsPredicate`: one resolution per table inside `1809000000001`'s loop, one for `1784000000000`'s own table. RED captured per file by in-place reverts (6 failed for B1.3, 2 failed for B1.4), then restored. GREEN: 2 suites / 19 tests, including a mixed-type case that resolves one table to uuid and four to varchar in the same run and pins 5 uuid halves against 20 text halves — which is what proves the resolutions are independent rather than shared. Harness exit 0 in both scenarios with **no counter moved** (`34/34`, `text casts 0`, `unlisted 0`, `stale 0`, `entity uuid mismatches 0`), which is the evidence that this link is inert while every column is still varchar. |
 | B1.5 (L3a) | `40f2cc6` | Nine columns to uuid, 20 authored policy rows verified at exactly 20 from the catalog, 9 entities converted, ratchet **34 → 25**. Harness exit 0 in both scenarios with the predicted movement: `non-uuid tenant columns 25`, `manifest 25`, `unlisted 0`, `stale 0`, `uuid col text casts 0`, `uuid tenant_id tables 41`, `entity uuid mismatches 0`, `RLS policies 102`. Migration spec 6/6. `npm run test:db` 36/200. `npm run test:e2e` 49/392. |
+| B1.6 (L3b) | _(this commit)_ | `sys_parametros_config` rebound and the view dropped/recreated through the emitter's view support. Harness exit 0 in both scenarios: `non-uuid tenant columns 23`, `manifest 23`, `unlisted 0`, `stale 0`, `uuid col text casts 0`, `uuid tenant_id tables 42`, `entity uuid mismatches 0`, `RLS policies 102`. Migration spec 8/8. `npm run test:db` 36/200, `npm run test:e2e` 49/392, `npm test` 225 suites / 2041 tests. **The entity needed no edit**, as the census predicted: it declares `tenant_id` twice and the relation-derived metadata already reported uuid. |
+
+### The view step, verified out of the catalog rather than out of the spec
+
+A spec that pins generated SQL strings cannot show that the view survived with its isolation option, or that the recreated policy still restricts by index instead of post-scanning. Read from the scratch database as the **non-bypassing migration role** (as a superuser, RLS quals are not added to the plan and the `EXPLAIN` evidence would be empty for the wrong reason):
+
+```
+v_sys_parametros_config_active   reloptions = {security_invoker=true}   owner = omnifood_schema_build_migrator
+sys_parametros_config.tenant_id  uuid, character_maximum_length = NULL
+policy sys_parametros_config_tenant_isolation  ALL
+  qual = with_check = (tenant_id = (current_setting('app.tenant_id'::text, true))::uuid)
+
+EXPLAIN (enable_seqscan = off)
+  Bitmap Heap Scan on sys_parametros_config
+    ->  Bitmap Index Scan on idx_sys_parametros_config_tenant_key_active
+          Index Cond: (tenant_id = (current_setting('app.tenant_id'::text, true))::uuid)
+```
+
+`Index Cond` rather than `Filter` is the check that catches a policy which is correct but no longer index-usable — the failure mode that keeps tenant isolation and silently loses the index. Losing `security_invoker` would have been the other silent one: the view would read under the owner's privileges and widen every read.
 
 ### What L3a falsified about this document
 
