@@ -724,7 +724,7 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
       expect(changeLogService.log).toHaveBeenCalledWith(
         expect.objectContaining({
           tenantId,
-          userId,
+          actor: { userId },
           action: 'ONBOARDING_ACTIVATION_ATTEMPT_STARTED',
           targetType: 'ActivationAttempt',
         }),
@@ -833,7 +833,7 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
       expect(changeLogService.log).toHaveBeenCalledWith(
         expect.objectContaining({
           tenantId,
-          userId,
+          actor: { userId },
           action: 'ONBOARDING_ACTIVATION_FINALIZED',
           targetType: 'ActivationAttempt',
           changes: expect.objectContaining({
@@ -897,7 +897,7 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
       expect(changeLogService.log).toHaveBeenCalledWith(
         expect.objectContaining({
           tenantId,
-          userId: 'SYSTEM_RECONCILER',
+          actor: { ref: 'SYSTEM_RECONCILER' },
           action: 'ONBOARDING_ACTIVATION_FOLLOW_UP_CLOSED',
           targetType: 'ActivationFollowUp',
         }),
@@ -981,7 +981,7 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
       expect(changeLogService.log).toHaveBeenCalledWith(
         expect.objectContaining({
           tenantId,
-          userId,
+          actor: { userId },
           action: 'ONBOARDING_ACTIVATION_SUPPORT_OVERRIDE',
           targetType: 'ActivationAttempt',
         }),

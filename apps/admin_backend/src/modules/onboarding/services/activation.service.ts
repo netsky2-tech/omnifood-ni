@@ -373,7 +373,7 @@ export class ActivationService {
     if (!idempotentReplay) {
       await this.changeLogService.log({
         tenantId: trimmedTenant,
-        userId: actorUserId || 'SYSTEM',
+        actor: actorUserId ? { userId: actorUserId } : { ref: 'SYSTEM' },
         action: 'ONBOARDING_ACTIVATION_ATTEMPT_STARTED',
         targetType: 'ActivationAttempt',
         targetId: result.id,
@@ -545,7 +545,10 @@ export class ActivationService {
     if (savedCheck.status === ActivationCheckStatus.FAIL && !idempotentReplay) {
       await this.changeLogService.log({
         tenantId: effectiveTenantId,
-        userId: effectiveTerminalId,
+        // Attributes a failed check to the terminal, not to a user or to the
+        // system. Whether a terminal deserves its own actor class is a
+        // product decision left for review (issue #412).
+        actor: { ref: effectiveTerminalId },
         action: 'ONBOARDING_ACTIVATION_CHECK_FAILED',
         targetType: 'ActivationCheckResult',
         targetId: savedCheck.id,
@@ -735,7 +738,9 @@ export class ActivationService {
     if (!result.isReplay) {
       await this.changeLogService.log({
         tenantId: trimmedTenant,
-        userId: actorUserId || 'SYSTEM_FINALIZER',
+        actor: actorUserId
+          ? { userId: actorUserId }
+          : { ref: 'SYSTEM_FINALIZER' },
         action: 'ONBOARDING_ACTIVATION_FINALIZED',
         targetType: 'ActivationAttempt',
         targetId: result.savedAttempt.id,
@@ -750,7 +755,9 @@ export class ActivationService {
       if (result.followUpCreated) {
         await this.changeLogService.log({
           tenantId: trimmedTenant,
-          userId: actorUserId || 'SYSTEM_FINALIZER',
+          actor: actorUserId
+            ? { userId: actorUserId }
+            : { ref: 'SYSTEM_FINALIZER' },
           action: 'ONBOARDING_ACTIVATION_FOLLOW_UP_OPENED',
           targetType: 'ActivationFollowUp',
           targetId: result.followUpCreated.id,
@@ -851,7 +858,9 @@ export class ActivationService {
     if (outcome.changed) {
       await this.changeLogService.log({
         tenantId,
-        userId: actorUserId || 'SYSTEM_RECONCILER',
+        actor: actorUserId
+          ? { userId: actorUserId }
+          : { ref: 'SYSTEM_RECONCILER' },
         action: 'ONBOARDING_ACTIVATION_FOLLOW_UP_CLOSED',
         targetType: 'ActivationFollowUp',
         targetId: outcome.followUp.id,
@@ -974,7 +983,7 @@ export class ActivationService {
       if (outcome.converged) {
         await this.changeLogService.log({
           tenantId: fup.tenantId,
-          userId: 'SYSTEM_RECONCILER',
+          actor: { ref: 'SYSTEM_RECONCILER' },
           action: 'ONBOARDING_ACTIVATION_FOLLOW_UP_CLOSED',
           targetType: 'ActivationFollowUp',
           targetId: fup.id,
@@ -1086,7 +1095,9 @@ export class ActivationService {
 
       await this.changeLogService.log({
         tenantId: trimmedTenant,
-        userId: actorUserId || 'SUPPORT_OPERATOR',
+        actor: actorUserId
+          ? { userId: actorUserId }
+          : { ref: 'SUPPORT_OPERATOR' },
         action: 'ONBOARDING_ACTIVATION_SUPPORT_OVERRIDE',
         targetType: 'ActivationAttempt',
         targetId: attempt.id,
