@@ -39,6 +39,10 @@ import {
 } from '../../onboarding/dto/fiscal-config-version.dto';
 import { FiscalConfigVersionService } from '../../onboarding/services/fiscal-config-version.service';
 import { bindTenantContext } from '../../../core/database/tenant-transaction';
+import type { DeviceSyncPrincipal } from '../../identity/security/device-sync-principal';
+import { StaffPolicyEpochDeliveryService } from '../../identity/human-authorization/services/staff-policy-epoch-delivery.service';
+import { parseHumanAuthorizationNegotiation } from '../dto/human-authorization-negotiation';
+import type { HumanAuthorizationDeliveryDto } from '../dto/inbound-sync.dto';
 
 @Injectable()
 export class InboundSyncService {
@@ -65,11 +69,20 @@ export class InboundSyncService {
     @Optional()
     @InjectRepository(ProductInventoryMappingVersion)
     private readonly mappingVersionRepository?: Repository<ProductInventoryMappingVersion>,
+    /**
+     * OHAC delivery negotiation (design §11.4 decision 24). The epoch read
+     * stays owned by the human-authorization module, which is why this
+     * service delegates instead of querying epochs itself, and it is optional
+     * so the pull keeps working in compositions that do not wire OHAC.
+     */
+    @Optional()
+    private readonly humanAuthorizationDelivery?: StaffPolicyEpochDeliveryService,
   ) {}
 
   async getInboundDeltas(
     tenantId: string,
     query: InboundSyncQueryDto,
+    devicePrincipal?: DeviceSyncPrincipal,
   ): Promise<InboundSyncResponseDto> {
     if (!tenantId?.trim()) {
       throw new UnauthorizedException('Tenant ID is required for sync');
@@ -127,13 +140,64 @@ export class InboundSyncService {
       fiscalConfig,
     };
 
+    const humanAuthorization = await this.resolveHumanAuthorization(
+      tenantId,
+      query,
+      devicePrincipal,
+    );
+
     return {
       status: 'success',
       serverTime: now.toISOString(),
       currentVersion: now.getTime(),
       deltas,
       fiscalConfig,
+      ...(humanAuthorization === undefined ? {} : { humanAuthorization }),
     };
+  }
+
+  /**
+   * Resolves what this pull answers about the staff policy epoch. The
+   * terminal identity comes only from the authenticated device principal,
+   * never from the query or the body, because the principal is the canonical
+   * enrolled terminal the epoch chain is bound to (design §4.1 rule 2).
+   *
+   * Nothing is caught here on purpose: an integrity failure must fail the
+   * pull closed rather than return a response that would let a terminal treat
+   * a corrupt policy as current.
+   */
+  private async resolveHumanAuthorization(
+    tenantId: string,
+    query: InboundSyncQueryDto,
+    devicePrincipal?: DeviceSyncPrincipal,
+  ): Promise<HumanAuthorizationDeliveryDto | undefined> {
+    if (!this.humanAuthorizationDelivery || !devicePrincipal) {
+      return undefined;
+    }
+    const negotiation = parseHumanAuthorizationNegotiation(query);
+    const result = await this.humanAuthorizationDelivery.negotiate({
+      tenantId,
+      terminalId: devicePrincipal.deviceId,
+      ...negotiation,
+    });
+    switch (result.result) {
+      case 'not-participating':
+        // A legacy client: silence is the whole contract here.
+        return undefined;
+      case 'up-to-date':
+        // Current, and the client knows its own floor; an empty epoch would
+        // be indistinguishable from a policy to apply.
+        return undefined;
+      case 'status':
+        return { status: result.status };
+      case 'deliver':
+        return {
+          status: 'DELIVER',
+          epoch: result.epoch as unknown as Record<string, unknown>,
+          sequence: result.sequence,
+          digest: result.digest,
+        };
+    }
   }
 
   async recordFiscalAck(

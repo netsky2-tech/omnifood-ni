@@ -4,9 +4,12 @@ import {
   Get,
   Post,
   Query,
+  Req,
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
+import type { DeviceSyncPrincipal } from '../../identity/security/device-sync-principal';
 import { GetTenantId } from '../../../core/decorators/tenant.decorator';
 import { SyncTransportGuard } from '../../identity/guards/sync-transport.guard';
 import { RequireSyncScopes } from '../../identity/decorators/sync-scopes.decorator';
@@ -16,6 +19,10 @@ import {
 } from '../dto/inbound-sync.dto';
 import { FiscalAckDto } from '../../onboarding/dto/fiscal-config-version.dto';
 import { InboundSyncService } from '../services/inbound-sync.service';
+
+interface InboundSyncRequest extends Request {
+  devicePrincipal?: DeviceSyncPrincipal;
+}
 
 @Controller('v1/sync/inbound')
 @UseGuards(SyncTransportGuard)
@@ -33,36 +40,54 @@ export class InboundSyncController {
   @Get('deltas')
   @RequireSyncScopes('sync:pull')
   async getDeltas(
+    @Req() req: InboundSyncRequest,
     @GetTenantId() tenantId: string | undefined,
     @Query() query: InboundSyncQueryDto,
   ): Promise<InboundSyncResponseDto> {
+    // The terminal identity is taken from the authenticated device principal
+    // the transport guard attached, never from the query or the body: the
+    // principal is the canonical enrolled terminal the epoch chain binds to
+    // (design §4.1 rule 2, §11.4 decision 24).
     return this.inboundSyncService.getInboundDeltas(
       this.requireTenant(tenantId),
       query,
+      req.devicePrincipal,
     );
   }
 
   @Get('catalog')
   @RequireSyncScopes('sync:pull')
   async getCatalog(
+    @Req() req: InboundSyncRequest,
     @GetTenantId() tenantId: string | undefined,
     @Query() query: InboundSyncQueryDto,
   ): Promise<InboundSyncResponseDto> {
+    // The terminal identity is taken from the authenticated device principal
+    // the transport guard attached, never from the query or the body: the
+    // principal is the canonical enrolled terminal the epoch chain binds to
+    // (design §4.1 rule 2, §11.4 decision 24).
     return this.inboundSyncService.getInboundDeltas(
       this.requireTenant(tenantId),
       query,
+      req.devicePrincipal,
     );
   }
 
   @Get()
   @RequireSyncScopes('sync:pull')
   async getRootInbound(
+    @Req() req: InboundSyncRequest,
     @GetTenantId() tenantId: string | undefined,
     @Query() query: InboundSyncQueryDto,
   ): Promise<InboundSyncResponseDto> {
+    // The terminal identity is taken from the authenticated device principal
+    // the transport guard attached, never from the query or the body: the
+    // principal is the canonical enrolled terminal the epoch chain binds to
+    // (design §4.1 rule 2, §11.4 decision 24).
     return this.inboundSyncService.getInboundDeltas(
       this.requireTenant(tenantId),
       query,
+      req.devicePrincipal,
     );
   }
 

@@ -453,12 +453,16 @@ describe('Sync Device Transport Integration (DSI-2)', () => {
         .expect(200);
 
       // Verify that tenant passed to service is strictly the principal's tenant 'tenant-omega'
+      // The third argument is the authenticated principal, and it is the only
+      // source of the terminal identity the epoch chain binds to (decision 24),
+      // so asserting it here is what keeps the query from becoming an alias.
       expect(getInboundDeltasMock).toHaveBeenCalledWith(
         'tenant-omega',
         expect.objectContaining({
           sinceVersion: '100',
           terminalId: 'pos-terminal-01',
         }),
+        expect.objectContaining({ deviceId: 'pos-terminal-01' }),
       );
     });
 
@@ -532,6 +536,7 @@ describe('Sync Device Transport Integration (DSI-2)', () => {
       expect(getInboundDeltasMock).toHaveBeenCalledWith(
         'tenant-omega',
         expect.objectContaining({ sinceVersion: '0' }),
+        expect.objectContaining({ deviceId: 'pos-terminal-01' }),
       );
     });
 
@@ -563,6 +568,7 @@ describe('Sync Device Transport Integration (DSI-2)', () => {
       expect(getInboundDeltasMock).toHaveBeenCalledWith(
         'tenant-omega',
         expect.any(Object),
+        expect.objectContaining({ deviceId: 'pos-terminal-01' }),
       );
     });
 

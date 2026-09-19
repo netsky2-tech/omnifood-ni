@@ -17,6 +17,29 @@ export class InboundSyncQueryDto {
   @IsOptional()
   @IsString()
   types?: string;
+
+  /**
+   * OHAC delivery negotiation (design §11.4 decision 25). All four are
+   * optional, and a client that sends none of them keeps exactly its previous
+   * behaviour: the authorization member is simply absent from the response.
+   * An absent build means the client did not opt in; a present but empty one
+   * means it opted in and cannot be served, which is answered explicitly.
+   */
+  @IsOptional()
+  @IsString()
+  ohacPosBuild?: string;
+
+  @IsOptional()
+  @IsString()
+  ohacPolicySchemas?: string;
+
+  @IsOptional()
+  @IsString()
+  ohacAssertionSchemas?: string;
+
+  @IsOptional()
+  @IsString()
+  ohacFloorSequence?: string;
 }
 
 export interface InboundSyncSecurityProfileDto {
@@ -145,10 +168,32 @@ export interface InboundSyncDeltasDto {
   fiscalConfig?: FiscalConfigSnapshot | null;
 }
 
+/** Statuses the negotiation answers an opted-in client with (design §12). */
+export type HumanAuthorizationDeliveryStatus =
+  'DISABLED' | 'UPGRADE_REQUIRED' | 'RECOVERY_REQUIRED';
+
+export interface HumanAuthorizationDeliveryDto {
+  /**
+   * `DELIVER` carries the next epoch this terminal is missing. The three
+   * status values carry no epoch, because none of them is a policy to apply.
+   */
+  status: 'DELIVER' | HumanAuthorizationDeliveryStatus;
+  epoch?: Record<string, unknown>;
+  sequence?: string;
+  digest?: string;
+}
+
 export interface InboundSyncResponseDto {
   status: 'success';
   serverTime: string;
   currentVersion: number;
   deltas: InboundSyncDeltasDto;
   fiscalConfig?: FiscalConfigSnapshot | null;
+  /**
+   * Present only when the terminal negotiated OHAC delivery and there is
+   * something to answer: an epoch to apply, or an explicit non-delivery
+   * status. Absent for a client that never opted in — and absent while the
+   * terminal is already current, so absence never means `DISABLED`.
+   */
+  humanAuthorization?: HumanAuthorizationDeliveryDto;
 }

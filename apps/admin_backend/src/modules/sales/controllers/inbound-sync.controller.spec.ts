@@ -5,6 +5,14 @@ import { InboundSyncController } from './inbound-sync.controller';
 import { InboundSyncService } from '../services/inbound-sync.service';
 import { InboundSyncResponseDto } from '../dto/inbound-sync.dto';
 
+/**
+ * The controller reads the authenticated device principal the transport guard
+ * attached, so every direct call has to supply a request. Each test here
+ * exercises tenant validation and delegation, not OHAC negotiation, so the
+ * principal is omitted and the negotiation member stays absent.
+ */
+const deviceRequest = () => ({}) as never;
+
 describe('InboundSyncController', () => {
   let controller: InboundSyncController;
   const inboundSyncService = {
@@ -41,10 +49,10 @@ describe('InboundSyncController', () => {
   });
 
   it('throws UnauthorizedException if tenantId is missing', async () => {
-    await expect(controller.getDeltas(undefined, {})).rejects.toThrow(
-      UnauthorizedException,
-    );
-    await expect(controller.getDeltas('', {})).rejects.toThrow(
+    await expect(
+      controller.getDeltas(deviceRequest(), undefined, {}),
+    ).rejects.toThrow(UnauthorizedException);
+    await expect(controller.getDeltas(deviceRequest(), '', {})).rejects.toThrow(
       UnauthorizedException,
     );
   });
@@ -53,11 +61,16 @@ describe('InboundSyncController', () => {
     inboundSyncService.getInboundDeltas.mockResolvedValue(mockResponse);
 
     const query = { sinceVersion: '100', terminalId: 'term-1' };
-    const result = await controller.getDeltas('tenant-123', query);
+    const result = await controller.getDeltas(
+      deviceRequest(),
+      'tenant-123',
+      query,
+    );
 
     expect(inboundSyncService.getInboundDeltas).toHaveBeenCalledWith(
       'tenant-123',
       query,
+      undefined,
     );
     expect(result).toEqual(mockResponse);
   });
@@ -66,11 +79,16 @@ describe('InboundSyncController', () => {
     inboundSyncService.getInboundDeltas.mockResolvedValue(mockResponse);
 
     const query = { types: 'products,catalogValues' };
-    const result = await controller.getCatalog('tenant-123', query);
+    const result = await controller.getCatalog(
+      deviceRequest(),
+      'tenant-123',
+      query,
+    );
 
     expect(inboundSyncService.getInboundDeltas).toHaveBeenCalledWith(
       'tenant-123',
       query,
+      undefined,
     );
     expect(result).toEqual(mockResponse);
   });
@@ -78,11 +96,16 @@ describe('InboundSyncController', () => {
   it('delegates root inbound query to InboundSyncService', async () => {
     inboundSyncService.getInboundDeltas.mockResolvedValue(mockResponse);
 
-    const result = await controller.getRootInbound('tenant-123', {});
+    const result = await controller.getRootInbound(
+      deviceRequest(),
+      'tenant-123',
+      {},
+    );
 
     expect(inboundSyncService.getInboundDeltas).toHaveBeenCalledWith(
       'tenant-123',
       {},
+      undefined,
     );
     expect(result).toEqual(mockResponse);
   });
