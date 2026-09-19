@@ -40,6 +40,9 @@ const SettingsPage = lazyWithRetry(() =>
 const CustomersPage = lazyWithRetry(() =>
   import("@/features/customers/customers-page").then((m) => ({ default: m.CustomersPage })),
 );
+const LoyaltyPage = lazyWithRetry(() =>
+  import("@/features/loyalty/loyalty-page").then((m) => ({ default: m.LoyaltyPage })),
+);
 const NotFoundPage = lazyWithRetry(() =>
   import("@/app/not-found-page").then((m) => ({ default: m.NotFoundPage })),
 );
@@ -155,6 +158,16 @@ export const router = createBrowserRouter([
           <ProtectedRoute requiredRoles={ROUTE_ROLE_PERMISSIONS["/customers"]}>
             <SuspenseWrapper>
               <CustomersPage />
+            </SuspenseWrapper>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "loyalty",
+        element: (
+          <ProtectedRoute requiredRoles={ROUTE_ROLE_PERMISSIONS["/loyalty"]}>
+            <SuspenseWrapper>
+              <LoyaltyPage />
             </SuspenseWrapper>
           </ProtectedRoute>
         ),

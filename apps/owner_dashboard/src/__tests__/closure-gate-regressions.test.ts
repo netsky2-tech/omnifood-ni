@@ -100,6 +100,13 @@ describe("Closure Gate Regressions & Invariants", () => {
       expect(canPerformAction("OWNER", "promotions.write")).toBe(true);
     });
 
+    it("restricts /loyalty access to OWNER and MANAGER", () => {
+      expect(canAccessRoute("OWNER", "/loyalty")).toBe(true);
+      expect(canAccessRoute("MANAGER", "/loyalty")).toBe(true);
+      expect(canAccessRoute("CASHIER", "/loyalty")).toBe(false);
+      expect(canAccessRoute("WAITER", "/loyalty")).toBe(false);
+    });
+
     it("resolves safe default route for CASHIER as /promotions", () => {
       expect(getDefaultRouteForRole("CASHIER")).toBe("/promotions");
       expect(getDefaultRouteForRole("WAITER")).toBe("/promotions");
