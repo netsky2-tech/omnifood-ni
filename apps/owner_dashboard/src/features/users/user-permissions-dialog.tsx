@@ -82,6 +82,7 @@ function PermissionsContent({ user, onClose }: PermissionsContentProps) {
         permissions: selectedCustom,
       });
       toast({
+        variant: "success",
         title: "Permisos actualizados",
         description: `Se actualizaron los permisos de supervisor para ${user.name}.`,
       });

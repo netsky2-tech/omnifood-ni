@@ -275,6 +275,7 @@ function ProductDialog({
           },
         });
         toast({
+          variant: "success",
           title: "Producto actualizado",
           description: `"${name.trim()}" se actualizó exitosamente.`,
         });
@@ -289,6 +290,7 @@ function ProductDialog({
         };
         await createMutation.mutateAsync(input);
         toast({
+          variant: "success",
           title: "Producto creado",
           description: `"${name.trim()}" se guardó exitosamente en el catálogo.`,
         });
@@ -470,6 +472,7 @@ function DeactivateDialog({
     try {
       await deactivateMutation.mutateAsync(product.id);
       toast({
+        variant: "success",
         title: "Producto desactivado",
         description: `"${product.name}" ha sido desactivado del catálogo.`,
       });

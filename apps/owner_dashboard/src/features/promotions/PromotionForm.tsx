@@ -97,10 +97,10 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
     try {
       if (isEditing) {
         await updatePromotion.mutateAsync({ id: initialData!.id, dto: data });
-        toast({ title: 'Promoción actualizada' });
+        toast({ variant: 'success', title: 'Promoción actualizada' });
       } else {
         await createPromotion.mutateAsync(data);
-        toast({ title: 'Promoción creada' });
+        toast({ variant: 'success', title: 'Promoción creada' });
       }
       onSuccess();
     } catch (error) {

@@ -55,6 +55,7 @@ function AdjustDialog({
       const input: AdjustPointsInput = { points_delta: delta, reason: reason.trim() };
       await adjustMutation.mutateAsync({ customerId: customer.id, input });
       toast({
+        variant: "success",
         title: "Puntos ajustados",
         description: `Se aplicó un ajuste de ${delta > 0 ? "+" : ""}${delta} puntos para ${customer.name}.`,
       });

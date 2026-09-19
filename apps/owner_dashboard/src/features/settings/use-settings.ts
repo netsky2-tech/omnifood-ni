@@ -49,6 +49,7 @@ export function useUpdateFiscalSetup() {
       queryClient.setQueryData(SETTINGS_QUERY_KEYS.fiscalSetup(tenantId), data);
       queryClient.invalidateQueries({ queryKey: ["onboarding", tenantId] });
       toast({
+        variant: "success",
         title: "Configuración fiscal guardada",
         description: `Régimen: ${data.regime}. Aplicable a nuevas transacciones.`,
       });
@@ -94,6 +95,7 @@ export function useApplyIndustryTemplate() {
       queryClient.invalidateQueries({ queryKey: ["inventory", tenantId] });
       queryClient.invalidateQueries({ queryKey: ["onboarding", tenantId] });
       toast({
+        variant: "success",
         title: "Plantilla aplicada con éxito",
         description: `Creados: ${result.productsCreated} productos, ${result.insumosCreated} insumos, ${result.recipesCreated} recetas.`,
       });
@@ -140,6 +142,7 @@ export function useCommitImport() {
       queryClient.invalidateQueries({ queryKey: ["inventory", tenantId] });
       queryClient.invalidateQueries({ queryKey: ["onboarding", tenantId] });
       toast({
+        variant: "success",
         title: "Importación completada",
         description: `Se incorporaron ${result.totalCommitted} productos al catálogo (${result.productsCreated} nuevos, ${result.productsUpdated} actualizados).`,
       });

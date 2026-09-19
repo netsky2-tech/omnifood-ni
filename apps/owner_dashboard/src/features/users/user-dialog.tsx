@@ -54,7 +54,7 @@ function UserForm({ userToEdit, onClose }: UserFormProps) {
       if (isEdit && userToEdit) {
         const payload = {
           name,
-          role,
+          ...(role !== userToEdit.role ? { role } : {}),
           ...(password.trim() ? { password } : {}),
           ...(pin.trim() ? { pin } : {}),
         };
@@ -65,6 +65,7 @@ function UserForm({ userToEdit, onClose }: UserFormProps) {
         }
         await updateUser.mutateAsync({ id: userToEdit.id, input: payload });
         toast({
+          variant: "success",
           title: "Usuario actualizado",
           description: `Los datos de "${name}" fueron actualizados exitosamente.`,
         });
@@ -83,6 +84,7 @@ function UserForm({ userToEdit, onClose }: UserFormProps) {
         }
         await createUser.mutateAsync(payload);
         toast({
+          variant: "success",
           title: "Usuario creado",
           description: `"${name}" fue registrado exitosamente.`,
         });

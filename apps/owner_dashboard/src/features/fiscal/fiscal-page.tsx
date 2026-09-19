@@ -272,6 +272,7 @@ function ExportsTab({ startDate, endDate }: { startDate?: string; endDate?: stri
         downloadBlob(csv, `libro_ventas_${fileSuffix}.csv`, "text/csv;charset=utf-8;");
       }
       toast({
+        variant: "success",
         title: "Libro de Ventas exportado",
         description: `Se descargó el reporte fiscal en formato ${format.toUpperCase()}.`,
       });
@@ -301,6 +302,7 @@ function ExportsTab({ startDate, endDate }: { startDate?: string; endDate?: stri
         downloadBlob(csv, `reportes_z_${fileSuffix}.csv`, "text/csv;charset=utf-8;");
       }
       toast({
+        variant: "success",
         title: "Reportes Z exportados",
         description: `Se descargó el arqueo de caja en formato ${format.toUpperCase()}.`,
       });
