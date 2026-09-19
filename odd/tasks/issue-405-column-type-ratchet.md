@@ -253,9 +253,10 @@ not a live defect.
 time zone`; migrations write `timestamptz` in 40 of 42 places. The largest class and the only one
 with a real semantic gap (instant vs wall-clock). Deferred by the recorded decision below.
 
-Proposed follow-ups, **not opened** (the user chose triage-only): one issue for the annotation sweep
-(A + D), one for the six enums (B), one for the timestamp convergence (F), one for `audit_logs.id`
-(C).
+Follow-ups, opened on request after this unit was committed: **#407** the annotation sweep (A + D, 30
+columns — the schema is right, the entities are wrong, so no migration is needed), **#408** the six
+enums (B), **#409** the 48 timestamp convergence (F), **#410** `audit_logs.id` (C). None of them is
+reconciled by this unit.
 
 ## Non-goals
 
