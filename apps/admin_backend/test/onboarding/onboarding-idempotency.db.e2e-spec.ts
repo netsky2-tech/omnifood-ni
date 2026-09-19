@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
 import { ConflictException } from '@nestjs/common';
 import {
@@ -18,6 +18,20 @@ const postgresConnection = {
   username: process.env.DB_USERNAME?.trim() ?? 'postgres',
   password: process.env.DB_PASSWORD?.trim() ?? 'postgres',
   database: process.env.DB_DATABASE?.trim() ?? 'omnifood',
+};
+
+/**
+ * The tenant_id columns of onboarding_sessions and onboarding_idempotency_records
+ * are uuid (issue #286 Phase 2 rebind), so the tenant ids this fixture seeds must
+ * be valid uuids. The label is hashed into a stable variant-1 uuid: deterministic
+ * (no randomness that could flake, no dependence on execution order), distinct per
+ * label, and the label keeps the tests readable.
+ */
+const tenantUuid = (label: string): string => {
+  const hex = createHash('sha256')
+    .update(`onboarding-e2e:${label}`)
+    .digest('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 };
 
 async function withIdempotencyIsolatedSchema(
@@ -57,7 +71,7 @@ async function withIdempotencyIsolatedSchema(
       dataSource,
       coordinator,
       sessionService,
-      tenantId: `tenant_${randomUUID().slice(0, 8)}`,
+      tenantId: tenantUuid('tenant'),
     });
   } finally {
     if (dataSource?.isInitialized) {

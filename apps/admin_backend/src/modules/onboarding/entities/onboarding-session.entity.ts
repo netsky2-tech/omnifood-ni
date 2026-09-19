@@ -22,7 +22,7 @@ export class OnboardingSession {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column({ name: 'tenant_id', type: 'varchar', length: 128 })
+  @Column({ name: 'tenant_id', type: 'uuid' })
   @Index('idx_onboarding_sessions_tenant_id')
   tenantId!: string;
 

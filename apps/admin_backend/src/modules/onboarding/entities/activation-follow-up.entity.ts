@@ -23,7 +23,7 @@ export class ActivationFollowUp {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column({ name: 'tenant_id', type: 'varchar', length: 128 })
+  @Column({ name: 'tenant_id', type: 'uuid' })
   @Index('idx_activation_follow_ups_tenant')
   tenantId!: string;
 
