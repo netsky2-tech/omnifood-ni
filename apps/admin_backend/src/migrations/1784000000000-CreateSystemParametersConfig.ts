@@ -1,4 +1,5 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
+import { resolveTenantRlsPredicate } from '../core/database/tenant-rls-policy';
 
 export class CreateSystemParametersConfig1784000000000 implements MigrationInterface {
   name = 'CreateSystemParametersConfig1784000000000';
@@ -52,6 +53,17 @@ export class CreateSystemParametersConfig1784000000000 implements MigrationInter
       ALTER TABLE sys_parametros_config FORCE ROW LEVEL SECURITY;
     `);
 
+    // The policy predicate must match the tenant_id column's real type, so it
+    // is resolved through the shared type-aware resolver (one resolution for
+    // this table, never shared) instead of hardcoding a form. The column is
+    // known to exist by now — the table was created earlier in this up() — so
+    // the resolution works identically on a first run (varchar) and on a
+    // partial-ledger re-run after the column has been rebound (uuid).
+    const tenantPredicate = await resolveTenantRlsPredicate(
+      queryRunner,
+      'sys_parametros_config',
+    );
+
     await queryRunner.query(`
       DROP POLICY IF EXISTS sys_parametros_config_tenant_isolation ON sys_parametros_config;
       DO $$
@@ -64,8 +76,8 @@ export class CreateSystemParametersConfig1784000000000 implements MigrationInter
         ) THEN
           CREATE POLICY sys_parametros_config_tenant_isolation ON sys_parametros_config
             FOR ALL
-            USING (tenant_id = current_setting('app.tenant_id', true))
-            WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+            USING (${tenantPredicate})
+            WITH CHECK (${tenantPredicate});
         END IF;
       END;
       $$;
