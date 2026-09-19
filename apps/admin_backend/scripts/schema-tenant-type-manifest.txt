@@ -26,10 +26,6 @@ column customers.tenant_id
 column device_sync_credential_events.tenant_id
 column device_sync_credentials.tenant_id
 column forensic_alerts.tenant_id
-column human_auth_policy_snapshots.tenant_id
-column human_auth_rollout_cohorts.tenant_id
-column human_auth_tenant_publication_state.tenant_id
-column human_auth_verification_events.tenant_id
 column invoice_items.tenant_id
 column legacy_import_integrity_reports.tenant_id
 column legacy_onboarding_migration_receipts.tenant_id

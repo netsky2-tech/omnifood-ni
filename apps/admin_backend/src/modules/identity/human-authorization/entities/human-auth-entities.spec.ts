@@ -175,7 +175,7 @@ const mappings: readonly EntityMapping[] = [
     },
     columns: [
       ['id', 'id', 'uuid', false],
-      ['tenantId', 'tenant_id', 'varchar', false],
+      ['tenantId', 'tenant_id', 'uuid', false],
       ['terminalId', 'terminal_id', 'varchar', false],
       ['assertionId', 'assertion_id', 'uuid', false],
       ['credentialId', 'credential_id', 'uuid', false],
@@ -212,7 +212,7 @@ const mappings: readonly EntityMapping[] = [
     },
     columns: [
       ['id', 'id', 'uuid', false],
-      ['tenantId', 'tenant_id', 'varchar', false],
+      ['tenantId', 'tenant_id', 'uuid', false],
       ['posBuild', 'pos_build', 'varchar', false],
       ['backendBuild', 'backend_build', 'varchar', false],
       ['policySchema', 'policy_schema', 'varchar', false],
@@ -238,7 +238,7 @@ const mappings: readonly EntityMapping[] = [
     },
     columns: [
       ['id', 'id', 'uuid', false],
-      ['tenantId', 'tenant_id', 'varchar', false],
+      ['tenantId', 'tenant_id', 'uuid', false],
       ['sequence', 'sequence', 'bigint', false],
       ['previousSequence', 'previous_sequence', 'bigint', false],
       ['schema', 'schema', 'varchar', false],
@@ -256,7 +256,7 @@ const mappings: readonly EntityMapping[] = [
     table: 'human_auth_tenant_publication_state',
     primary: ['tenantId'],
     columns: [
-      ['tenantId', 'tenant_id', 'varchar', false],
+      ['tenantId', 'tenant_id', 'uuid', false],
       ['dirty', 'dirty', 'boolean', false],
       ['revision', 'revision', 'bigint', false],
       ['markedAt', 'marked_at', 'timestamptz', false],
@@ -326,22 +326,22 @@ describe('OHAC entity mapping vs migrations', () => {
     expect(declaredProperties).not.toContain('updatedAt');
   });
 
-  it('preserves the varchar widths the migrations declare for the publisher tables', () => {
+  it('preserves the varchar widths the migrations declare for the policy snapshot columns', () => {
     const widthOf = (target: EntityClass, property: string) =>
       getMetadataArgsStorage().columns.find(
         (column) =>
           column.target === target && column.propertyName === property,
       )?.options.length;
 
+    // Every tenant_id column is uuid since the B2.3 rebind, so the width
+    // assertion covers only the snapshot's varchar descriptor columns.
     const widths: readonly (readonly [EntityClass, string, number])[] = [
-      [HumanAuthPolicySnapshot, 'tenantId', 128],
       [HumanAuthPolicySnapshot, 'schema', 128],
       [HumanAuthPolicySnapshot, 'publisherBackendBuild', 128],
       [HumanAuthPolicySnapshot, 'minimumAssertionSchema', 128],
       [HumanAuthPolicySnapshot, 'cohortDecision', 32],
       [HumanAuthPolicySnapshot, 'previousDigest', 71],
       [HumanAuthPolicySnapshot, 'digest', 71],
-      [HumanAuthTenantPublicationState, 'tenantId', 128],
     ];
 
     for (const [entity, property, length] of widths) {
@@ -363,7 +363,10 @@ describe('OHAC entity mapping vs migrations', () => {
         column.target === HumanAuthTenantPublicationState &&
         column.propertyName === 'tenantId',
     );
-    expect(primary?.options).toMatchObject({ primary: true, length: 128 });
+    // The tenant_id primary column became uuid in the B2.3 rebind, so the
+    // width assertion no longer applies; the uuid type and primary marker are
+    // what the entity must keep declaring.
+    expect(primary?.options).toMatchObject({ primary: true, type: 'uuid' });
 
     const dirty = getMetadataArgsStorage().columns.find(
       (column) =>

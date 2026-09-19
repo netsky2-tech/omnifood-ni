@@ -20,7 +20,7 @@ import {
 export class HumanAuthRolloutCohort {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
-  @Column({ name: 'tenant_id', type: 'varchar', length: 128 })
+  @Column({ name: 'tenant_id', type: 'uuid' })
   tenantId!: string;
   @Column({ name: 'pos_build', type: 'varchar', length: 128 })
   posBuild!: string;

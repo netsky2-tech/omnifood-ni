@@ -8,7 +8,7 @@ import { BIGINT_STRING } from './bigint-string.transformer';
 // re-declare them.
 @Entity({ name: 'human_auth_tenant_publication_state' })
 export class HumanAuthTenantPublicationState {
-  @PrimaryColumn({ name: 'tenant_id', type: 'varchar', length: 128 })
+  @PrimaryColumn({ name: 'tenant_id', type: 'uuid' })
   tenantId!: string;
   @Column({ name: 'dirty', type: 'boolean', default: true })
   dirty!: boolean;
