@@ -11,16 +11,18 @@ import { HumanAuthPolicySnapshot } from './entities/human-auth-policy-snapshot.e
 import { HumanAuthTenantPublicationState } from './entities/human-auth-tenant-publication-state.entity';
 import { StaffPolicySnapshotPublisher } from './services/staff-policy-snapshot-publisher.service';
 import { StaffPolicyEpochMaterializationService } from './services/staff-policy-epoch-materialization.service';
+import { StaffPolicyEpochDeliveryService } from './services/staff-policy-epoch-delivery.service';
 import { OhacTenantTransaction } from './rls/ohac-tenant-transaction';
 
 /**
  * Human Authorization (OHAC) backend module.
  *
  * Maps the nine OHAC tables and registers the serialized staff-policy
- * snapshot publisher, the per-terminal epoch materialization service, and
- * the shared RLS transaction seam. Routes, controllers, and
- * DTOs arrive in a later slice, and no other module imports this one yet, so
- * the dormant registration is intentional.
+ * snapshot publisher, the per-terminal epoch materialization service, the
+ * delivery negotiation service, and the shared RLS transaction seam.
+ * `StaffPolicyEpochDeliveryService` is exported because the device pull in
+ * the sales module delegates to it rather than reading epochs itself, per
+ * design §11.4 decision 24. Routes and controllers arrive in a later slice.
  */
 @Module({
   imports: [
@@ -40,6 +42,8 @@ import { OhacTenantTransaction } from './rls/ohac-tenant-transaction';
     OhacTenantTransaction,
     StaffPolicySnapshotPublisher,
     StaffPolicyEpochMaterializationService,
+    StaffPolicyEpochDeliveryService,
   ],
+  exports: [StaffPolicyEpochDeliveryService],
 })
 export class HumanAuthorizationModule {}

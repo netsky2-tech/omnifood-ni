@@ -15,6 +15,7 @@ import { HumanAuthTenantPublicationState } from './entities/human-auth-tenant-pu
 import { OhacTenantTransaction } from './rls/ohac-tenant-transaction';
 import { StaffPolicySnapshotPublisher } from './services/staff-policy-snapshot-publisher.service';
 import { StaffPolicyEpochMaterializationService } from './services/staff-policy-epoch-materialization.service';
+import { StaffPolicyEpochDeliveryService } from './services/staff-policy-epoch-delivery.service';
 
 const ohacEntities = [
   HumanAuthPolicyEpoch,
@@ -69,9 +70,19 @@ describe('HumanAuthorizationModule skeleton', () => {
     expect(controllers).toEqual([]);
   });
 
-  it('registers the staff policy snapshot publisher, the epoch materialization service, and the RLS transaction seam', () => {
+  it('registers the staff policy snapshot publisher, the epoch materialization service, the delivery negotiation service, and the RLS transaction seam', () => {
     expect(module.get(StaffPolicySnapshotPublisher)).toBeDefined();
     expect(module.get(StaffPolicyEpochMaterializationService)).toBeDefined();
+    expect(module.get(StaffPolicyEpochDeliveryService)).toBeDefined();
     expect(module.get(OhacTenantTransaction)).toBeDefined();
+  });
+
+  it('exports the delivery negotiation service so the sales pull can delegate to it', () => {
+    // Decision 24 puts the route in the sales module while the epoch read
+    // stays owned here, which is only possible if this module exports the
+    // service the pull delegates to.
+    const exports =
+      Reflect.getMetadata('exports', HumanAuthorizationModule) ?? [];
+    expect(exports).toContain(StaffPolicyEpochDeliveryService);
   });
 });

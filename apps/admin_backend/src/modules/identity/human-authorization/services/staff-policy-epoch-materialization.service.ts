@@ -163,6 +163,26 @@ export class StaffPolicyEpochMaterializationService {
     );
   }
 
+  /**
+   * Reads the server's accepted floor sequence for one terminal through the
+   * same tenant-bound path the materialization itself uses, so the floor is
+   * never read by a second copy of this SQL. A terminal that has never
+   * acknowledged reports `'0'`. The delivery path needs this to detect a
+   * client claiming an epoch the server does not have.
+   */
+  async readAcceptedFloor(input: {
+    readonly tenantId: string;
+    readonly terminalId: string;
+  }): Promise<string> {
+    return await this.transaction.run(input.tenantId, async (manager) => {
+      const floor = await this.readAckFloor(
+        { ...input, posBuild: '' },
+        manager,
+      );
+      return floor?.sequence ?? '0';
+    });
+  }
+
   private async materializeWithin(
     input: MaterializeStaffPolicyEpochInput,
     manager: EntityManager,
