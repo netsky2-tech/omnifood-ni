@@ -248,7 +248,7 @@ describe('W7 — RecipesPage', () => {
   it('shows error message on load failure', () => {
     vi.mocked(useProducts).mockReturnValue({ data: undefined, isLoading: false, error: new Error('API down'), refetch: vi.fn() } as any);
     render(<RecipesPage />, { wrapper: TestWrapper });
-    expect(screen.getByText('Error al cargar productos: API down')).toBeInTheDocument();
+    expect(screen.getByText('API down')).toBeInTheDocument();
   });
 });
 
@@ -335,7 +335,7 @@ describe('W7 — RecipeForm', () => {
     await waitFor(() => {
       expect(toast).toHaveBeenCalledWith(
         expect.objectContaining({
-          title: 'Error',
+          title: 'Error al guardar receta',
           description: 'Error del servidor',
           variant: 'destructive',
         }),

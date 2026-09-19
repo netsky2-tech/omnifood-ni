@@ -1,6 +1,7 @@
 import { Component, type ReactNode } from "react";
 import { isApiError } from "@/lib/api";
 import { isChunkLoadError, triggerSafeChunkReload } from "@/lib/chunk-reload";
+import { getApiErrorMessage } from "@/lib/api-error";
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -53,7 +54,9 @@ class ErrorBoundaryInner extends Component<
             <p className="text-xs sm:text-sm text-muted-foreground mb-3">
               {isChunkError
                 ? "Se detectó una actualización en el sistema o una interrupción temporal de descarga. Si la página no se recarga automáticamente, use el botón a continuación."
-                : this.state.error?.message || "Ocurrió un error inesperado al procesar la vista."}
+                : isApiError(this.state.error) && this.state.error.message
+                  ? this.state.error.message
+                  : getApiErrorMessage(this.state.error, "Ocurrió un error inesperado al procesar la vista.")}
             </p>
             {requestId && (
               <p className="text-[11px] font-mono text-muted-foreground bg-muted/40 rounded px-2 py-1 mb-4 inline-block">
