@@ -4,13 +4,23 @@ import { RepairTenantTopologyRevisions1808000000000 } from './1808000000000-Repa
 describe('RepairTenantTopologyRevisions1808000000000', () => {
   const migration = new RepairTenantTopologyRevisions1808000000000();
 
+  // The migration resolves the tenant predicate through the shared
+  // type-aware resolver, which reads the tenant_id column type from
+  // information_schema. The stub answers with the declared data_type; a raw
+  // rows array mirrors what PostgresQueryRunner.query returns at runtime.
   const collectSql = async (
     direction: 'up' | 'down' = 'up',
+    tenantIdDataType: string = 'character varying',
   ): Promise<string> => {
     const queries: string[] = [];
     const queryRunner = {
       query: jest.fn((sql: string): Promise<QueryResult> => {
         queries.push(sql);
+        if (sql.includes('information_schema.columns')) {
+          return Promise.resolve([
+            { data_type: tenantIdDataType },
+          ]) as unknown as Promise<QueryResult>;
+        }
         return Promise.resolve(new QueryResult());
       }),
     } as unknown as QueryRunner;
@@ -77,8 +87,11 @@ describe('RepairTenantTopologyRevisions1808000000000', () => {
         'DROP POLICY IF EXISTS tenant_topology_revisions_tenant_insert ON tenant_topology_revisions',
         'CREATE POLICY tenant_topology_revisions_tenant_insert ON tenant_topology_revisions',
         'FOR INSERT',
-        "USING (tenant_id = current_setting('app.tenant_id', true))",
-        "WITH CHECK (tenant_id = current_setting('app.tenant_id', true))",
+        // On a varchar tenant_id the resolver returns the column-cast text
+        // form (its canonical answer for non-uuid columns), not the bare
+        // compare the migration hardcoded before this resolver existed.
+        "USING (tenant_id::text = current_setting('app.tenant_id', true))",
+        "WITH CHECK (tenant_id::text = current_setting('app.tenant_id', true))",
       ]) {
         expect(sql).toContain(fragment);
       }
@@ -142,6 +155,22 @@ describe('RepairTenantTopologyRevisions1808000000000', () => {
       expect(sql).toContain('RAISE EXCEPTION');
       expect(sql).toContain(
         'DROP TABLE IF EXISTS tenant_topology_revisions CASCADE',
+      );
+    });
+  });
+
+  describe('type-aware tenant predicate', () => {
+    it('emits the setting-cast predicate when tenant_id is already uuid (partial-ledger re-run)', async () => {
+      // A partial-ledger re-run happens after later slices converted the
+      // column to uuid; the recreated policies must use the setting-cast
+      // form instead of the hardcoded bare compare.
+      const sql = await collectSql('up', 'uuid');
+
+      expect(sql).toContain(
+        "tenant_id = current_setting('app.tenant_id', true)::uuid",
+      );
+      expect(sql).not.toContain(
+        "tenant_id::text = current_setting('app.tenant_id', true)",
       );
     });
   });

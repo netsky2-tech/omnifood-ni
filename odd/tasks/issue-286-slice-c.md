@@ -90,6 +90,22 @@ Each unit is its own commit, its own pull request, and — following slice B2, w
 
 C.4 and C.5 carry the fixture work because a unit owns the fixtures it breaks. That work may dominate those units' review size, which is why the estimate includes it — and if either lands materially over, the overage is disclosed rather than hidden.
 
+
+### C.1 contract, and why the emitted SQL is not byte-identical
+
+**The resolver's varchar answer is `tenant_id::text = current_setting('app.tenant_id', true)` — the column-cast form — while the six migrations in this unit hardcoded the *bare* compare `tenant_id = current_setting('app.tenant_id', true)`.** So this unit's change is **not** textually identical: varchar columns gain a column-side `::text`.
+
+That is **provably plan-equivalent**, measured rather than argued. On `catalog_values.tenant_id` (varchar, `enable_seqscan = off`), both forms produce the same plan:
+
+```
+Index Only Scan using idx_catalog_values_tenant_type_active on catalog_values
+  Index Cond: (tenant_id = current_setting('app.tenant_id'::text, true))
+```
+
+The planner normalises the `varchar → text` relabel and discards it, so the index condition is identical either way. And the harness's `uuid col text casts` counter only inspects policies on columns whose `data_type` is already `uuid`, so it cannot move — confirmed at `14 / 0 / 0 / 0` in both scenarios.
+
+**Consequence for C.2–C.5: a spec that pins the bare form is pinning the *old* contract.** One pre-existing assertion in `1808000000000-RepairTenantTopologyRevisions.spec.ts` was updated from the bare form to the resolver's exact output — a stricter exact-string pin, not a loosened one. Do not "correct" it back.
+
 ## Review budget
 
 Calibration, measured across this issue: a migration plus its spec costs roughly 25–30 lines per policy with the spec dominating; entity conversions cost 2 lines each; the manifest 1 line per entry; and a fixture fix costs 15–20 lines.
@@ -115,8 +131,7 @@ Calibration, measured across this issue: a migration plus its spec costs roughly
 
 | Unit | Commit | Evidence |
 | --- | --- | --- |
-| — | — | — |
-
+| **C.1** | pending merge | Six migrations resolve per table site. Harness exit 0 in both scenarios, `14 / 0 / 0 / 0` verbatim, `uuid tenant_id tables: 51`, `entity uuid mismatches: 0`. 232 suites / 2128 tests green. |
 ## Relevant files
 
 - `apps/admin_backend/src/migrations/1768000000000-CreateCatalogValues.ts`, `1785000000000-AddTenantCapabilityEvent.ts`, `1794000000001-AddTenantTopologyRevisionsRls.ts`, `1795000000000-CreateTenantFulfillmentRecords.ts`, `1807000000000-CreateDeviceSyncCredentials.ts`, `1808000000000-RepairTenantTopologyRevisions.ts` — C.1's six files.

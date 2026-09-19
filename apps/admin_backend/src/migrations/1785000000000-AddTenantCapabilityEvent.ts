@@ -1,4 +1,5 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
+import { resolveTenantRlsPredicate } from '../core/database/tenant-rls-policy';
 
 export class AddTenantCapabilityEvent1785000000000 implements MigrationInterface {
   name = 'AddTenantCapabilityEvent1785000000000';
@@ -12,6 +13,15 @@ export class AddTenantCapabilityEvent1785000000000 implements MigrationInterface
     await runner.query(
       'ALTER TABLE tenant_capability_event FORCE ROW LEVEL SECURITY',
     );
+    // The predicate form must match the tenant_id column's CURRENT type: a
+    // partial-ledger re-run happens after later slices converted the column
+    // to uuid, and a hardcoded bare compare would fail with
+    // "operator does not exist: uuid = text". The shared resolver reads the
+    // catalog once and returns the valid, index-friendly form.
+    const tenantPredicate = await resolveTenantRlsPredicate(
+      runner,
+      'tenant_capability_event',
+    );
     // PostgreSQL has no `CREATE POLICY IF NOT EXISTS`, so guard on the catalog.
     await runner.query(
       `DO $$ BEGIN
@@ -21,7 +31,7 @@ export class AddTenantCapabilityEvent1785000000000 implements MigrationInterface
             AND tablename = 'tenant_capability_event'
             AND policyname = 'tenant_capability_event_select'
         ) THEN
-          CREATE POLICY tenant_capability_event_select ON tenant_capability_event FOR SELECT USING (tenant_id = current_setting('app.tenant_id', true));
+          CREATE POLICY tenant_capability_event_select ON tenant_capability_event FOR SELECT USING (${tenantPredicate});
         END IF;
       END $$;`,
     );
@@ -33,7 +43,7 @@ export class AddTenantCapabilityEvent1785000000000 implements MigrationInterface
             AND tablename = 'tenant_capability_event'
             AND policyname = 'tenant_capability_event_insert'
         ) THEN
-          CREATE POLICY tenant_capability_event_insert ON tenant_capability_event FOR INSERT WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+          CREATE POLICY tenant_capability_event_insert ON tenant_capability_event FOR INSERT WITH CHECK (${tenantPredicate});
         END IF;
       END $$;`,
     );
@@ -45,7 +55,7 @@ export class AddTenantCapabilityEvent1785000000000 implements MigrationInterface
             AND tablename = 'tenant_capability_event'
             AND policyname = 'tenant_capability_event_update'
         ) THEN
-          CREATE POLICY tenant_capability_event_update ON tenant_capability_event FOR UPDATE USING (tenant_id = current_setting('app.tenant_id', true)) WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+          CREATE POLICY tenant_capability_event_update ON tenant_capability_event FOR UPDATE USING (${tenantPredicate}) WITH CHECK (${tenantPredicate});
         END IF;
       END $$;`,
     );
@@ -57,7 +67,7 @@ export class AddTenantCapabilityEvent1785000000000 implements MigrationInterface
             AND tablename = 'tenant_capability_event'
             AND policyname = 'tenant_capability_event_delete'
         ) THEN
-          CREATE POLICY tenant_capability_event_delete ON tenant_capability_event FOR DELETE USING (tenant_id = current_setting('app.tenant_id', true));
+          CREATE POLICY tenant_capability_event_delete ON tenant_capability_event FOR DELETE USING (${tenantPredicate});
         END IF;
       END $$;`,
     );
