@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
+import * as crypto from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { User } from '../entities/user.entity';
 import { AuditLog } from '../entities/audit-log.entity';
@@ -54,7 +55,7 @@ export class UserService {
   async findByTenant(tenantId: string): Promise<User[]> {
     return this.userRepository.find({
       where: { tenant_id: tenantId, is_active: true },
-      select: ['id', 'email', 'name', 'role', 'created_at'],
+      select: ['id', 'email', 'name', 'role', 'created_at', 'is_active'],
     });
   }
 
@@ -390,6 +391,33 @@ export class UserService {
     adminId: string,
     manager?: EntityManager,
   ) {
+    const repo = manager
+      ? manager.getRepository(AuditLog)
+      : this.auditRepository;
+
+    const lastLog = await repo.findOne({
+      where: {
+        tenant_id: tenantId,
+        device_id: 'WEB_ADMIN',
+        user_id: adminId,
+        forensic_status: 'ACTIVE',
+      },
+      order: { sequence_no: 'DESC' },
+    });
+
+    const sequenceNo = lastLog ? Number(lastLog.sequence_no) + 1 : 1;
+    const prevHash = lastLog?.entry_hash ? lastLog.entry_hash : 'GENESIS';
+    const timestamp = new Date();
+    const metadata: Record<string, unknown> = {
+      timestamp: timestamp.toISOString(),
+    };
+
+    const canonicalPayload = `${adminId}|${action}|WEB_ADMIN|${timestamp.toISOString()}|${sequenceNo}|${prevHash}|null|null|${JSON.stringify(metadata)}`;
+    const entryHash = crypto
+      .createHash('sha256')
+      .update(canonicalPayload)
+      .digest('hex');
+
     const log = new AuditLog();
     log.action = action;
     log.target_type = 'USER';
@@ -397,11 +425,13 @@ export class UserService {
     log.tenant_id = tenantId;
     log.user_id = adminId;
     log.device_id = 'WEB_ADMIN';
-    log.timestamp = new Date();
-    log.metadata = { timestamp: new Date().toISOString() };
+    log.sequence_no = sequenceNo;
+    log.prev_hash = prevHash;
+    log.entry_hash = entryHash;
+    log.timestamp = timestamp;
+    log.metadata = metadata;
+    log.forensic_status = 'ACTIVE';
 
-    await (manager
-      ? manager.getRepository(AuditLog).save(log)
-      : this.auditRepository.save(log));
+    await repo.save(log);
   }
 }
