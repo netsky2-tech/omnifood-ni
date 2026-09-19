@@ -26,7 +26,7 @@ export class LegacyOnboardingMigrationReceipt {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'varchar', length: 128 })
+  @Column({ type: 'uuid' })
   tenant_id: string;
 
   @Column({
