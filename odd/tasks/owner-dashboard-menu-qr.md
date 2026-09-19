@@ -43,7 +43,7 @@ Business owners need a printable QR that customers can scan to open an externall
 ## Tasks
 
 ### T1 — Establish the local QR contract
-- **Status:** verified; awaiting commit authorization
+- **Status:** done
 - Added bundled `uqr` dependency and a narrow PNG data-URL adapter.
 - Added canonical HTTP(S) URL validation with credential rejection and a 1024-byte UTF-8 payload bound.
 - Added focused tests for encoder options, PNG fidelity, canonicalization, typed failures, and validation boundaries.
@@ -51,14 +51,16 @@ Business owners need a printable QR that customers can scan to open an externall
 - **Independent verification:** PNG matrix fidelity matched `uqr` with zero mismatches; no medium-or-higher findings remain after bounded correction.
 - **Runtime harness:** N/A; T1 has no routed browser UI or network boundary.
 - **Rollback boundary:** QR dependency, encoder adapter, validation contract, and their focused tests.
-- **Commit evidence:** pending explicit commit authorization.
+- **Commit evidence:** `1ce5f5554bc0b5ceb5fa17595ea615f260d8d599` — `feat(owner-dashboard): add local menu QR contract`.
 
 ### T2 — Build the accessible QR workflow
-- **Status:** pending
-- Implement the dedicated page, form, preview, download action, local persistence, and Spanish copy using existing UI primitives.
-- Cover validation, generation, error, persistence, preview, and download behavior with component tests.
-- **Checks:** focused component tests; accessibility-oriented assertions; typecheck.
-- **Rollback boundary:** `src/features/menu-qr/` page/state and component tests.
+- **Status:** verified; awaiting commit authorization
+- Implemented the dedicated page, URL workflow, accessible preview, data-URL download, best-effort local persistence, and Spanish copy using existing UI primitives.
+- Covered validation, generation, state invalidation after edits, error recovery, persistence, preview, download, offline behavior, and CSP-safe URLs with hook/component tests.
+- **Checks:** focused T2 suite — 3 files, 33 tests passed; full menu-QR suite — 4 files, 60 tests passed; typecheck passed; lint passed with two pre-existing unrelated warnings.
+- **Independent verification:** no medium-or-higher code findings remain; restored URLs regenerate only after explicit user action, and generation/download make no network calls.
+- **Runtime harness:** Vitest + jsdom + Testing Library exercised type → generate → preview → download and remount → restore → regenerate.
+- **Rollback boundary:** remove `src/features/menu-qr/use-menu-qr.ts`, `menu-qr-page.tsx`, `use-menu-qr.test.ts`, `menu-qr-page.test.tsx`, `src/__tests__/menu-qr-page.test.tsx`, and the corresponding T2 task-progress lines; preserve committed T1.
 - **Commit evidence:** pending explicit commit authorization.
 
 ### T3 — Integrate and verify the feature
@@ -77,6 +79,11 @@ Business owners need a printable QR that customers can scan to open an externall
 - 2026-09-19: Created `feat/owner-dashboard-qr` worktree from `origin/main` (`94d274f`) without touching the dirty #408 worktree.
 - 2026-09-19: T1 implemented under TDD. Independent verification found a multibyte byte-capacity defect and raw-vs-canonical URL drift; both were corrected with regression tests.
 - 2026-09-19: T1 re-verification passed 32 focused tests, typecheck, and lint; PNG matrix fidelity had zero mismatches and no medium-or-higher findings remained.
+- 2026-09-19: User authorized and created T1 work-unit commit `1ce5f5554bc0b5ceb5fa17595ea615f260d8d599`.
+- Review workload note: T1 contains 736 inserted lines including tests and this recovery document, above the preferred 400-line PR slice. Keep subsequent behavior in separate work-unit commits so the history can support chained review if requested.
+- 2026-09-19: T2 implemented under TDD. Independent verification found stale generated state after input edits and missing recovery coverage; both were corrected with focused tests.
+- 2026-09-19: T2 re-verification passed 33 focused tests, the 60-test menu-QR suite, typecheck, and lint; no medium-or-higher code findings remain.
+- Review workload note: T2 adds approximately 853 lines across page, hook, and behavior-first tests. Preserve it as a separate work-unit commit and treat T1/T2 as independent review slices if a PR is opened.
 
 ## Next step
-Obtain explicit authorization for the T1 work-unit commit, record its identity, then advance T2.
+Obtain explicit authorization for the T2 work-unit commit, record its identity, then advance T3 integration and browser verification.
