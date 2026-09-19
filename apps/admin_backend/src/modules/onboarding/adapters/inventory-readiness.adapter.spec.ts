@@ -1,51 +1,75 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource } from 'typeorm';
 import { InventoryReadinessAdapter } from './inventory-readiness.adapter';
 import { Warehouse } from '../../inventory/entities/warehouse.entity';
 import { Insumo } from '../../inventory/entities/insumo.entity';
 import { Product } from '../../inventory/entities/product.entity';
 import { Invoice } from '../../sales/entities/invoice.entity';
+import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 
 describe('InventoryReadinessAdapter (Unit)', () => {
   let adapter: InventoryReadinessAdapter;
-  let warehouseRepo: jest.Mocked<Partial<Repository<Warehouse>>>;
-  let insumoRepo: jest.Mocked<Partial<Repository<Insumo>>>;
-  let productRepo: jest.Mocked<Partial<Repository<Product>>>;
-  let invoiceRepo: jest.Mocked<Partial<Repository<Invoice>>>;
+  let warehouseRepo: { count: jest.Mock };
+  let insumoRepo: { count: jest.Mock };
+  let productRepo: { count: jest.Mock };
+  let invoiceRepo: { count: jest.Mock };
+  let managerQuery: jest.Mock;
+  let manager: {
+    query: jest.Mock;
+    getRepository: jest.Mock;
+  };
+
+  const getManagerRepositories = (): Map<unknown, { count: jest.Mock }> => {
+    const repos = new Map<unknown, { count: jest.Mock }>();
+    repos.set(Warehouse, warehouseRepo);
+    repos.set(Insumo, insumoRepo);
+    repos.set(Product, productRepo);
+    repos.set(Invoice, invoiceRepo);
+    return repos;
+  };
+
+  const getEntityLabel = (entityClass: unknown): string =>
+    typeof entityClass === 'function' && entityClass.name
+      ? entityClass.name
+      : 'unknown-entity';
 
   beforeEach(async () => {
-    warehouseRepo = {
-      count: jest.fn(),
+    warehouseRepo = { count: jest.fn() };
+    insumoRepo = { count: jest.fn() };
+    productRepo = { count: jest.fn() };
+    invoiceRepo = { count: jest.fn().mockResolvedValue(0) };
+
+    // Every readiness query must run through the transaction manager
+    // (issue #358): the adapter binds the tenant context on the manager
+    // before any repository access, so the mock manager dispatches
+    // getRepository(Entity) calls instead of exposing injected
+    // default-connection repositories.
+    managerQuery = jest.fn(() => Promise.resolve([]));
+    manager = {
+      query: managerQuery,
+      getRepository: jest.fn((entityClass: unknown) => {
+        const repo = getManagerRepositories().get(entityClass);
+        if (!repo) {
+          throw new Error(
+            `unexpected repository requested: ${getEntityLabel(entityClass)}`,
+          );
+        }
+        return repo;
+      }),
     };
-    insumoRepo = {
-      count: jest.fn(),
-    };
-    productRepo = {
-      count: jest.fn(),
-    };
-    invoiceRepo = {
-      count: jest.fn().mockResolvedValue(0),
+
+    const dataSource = {
+      transaction: jest.fn((cb: (mgr: typeof manager) => Promise<unknown>) =>
+        cb(manager),
+      ),
     };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         InventoryReadinessAdapter,
         {
-          provide: getRepositoryToken(Warehouse),
-          useValue: warehouseRepo,
-        },
-        {
-          provide: getRepositoryToken(Insumo),
-          useValue: insumoRepo,
-        },
-        {
-          provide: getRepositoryToken(Product),
-          useValue: productRepo,
-        },
-        {
-          provide: getRepositoryToken(Invoice),
-          useValue: invoiceRepo,
+          provide: DataSource,
+          useValue: dataSource,
         },
       ],
     }).compile();
@@ -53,12 +77,34 @@ describe('InventoryReadinessAdapter (Unit)', () => {
     adapter = module.get<InventoryReadinessAdapter>(InventoryReadinessAdapter);
   });
 
+  it('binds the tenant context with a parameterized set_config on the transaction manager before any readiness query', async () => {
+    warehouseRepo.count.mockResolvedValue(1);
+    productRepo.count.mockResolvedValueOnce(3).mockResolvedValueOnce(0);
+    insumoRepo.count.mockResolvedValueOnce(0).mockResolvedValueOnce(0);
+
+    await adapter.evaluateInventoryReadiness('  tenant-bind-1  ');
+
+    expect(managerQuery).toHaveBeenCalledWith(TENANT_CONTEXT_SET_CONFIG_SQL, [
+      'tenant-bind-1',
+    ]);
+    // The trim matters: the bound parameter must be the trimmed id.
+    const setConfigCalls = managerQuery.mock.calls.filter(
+      (call) => call[0] === TENANT_CONTEXT_SET_CONFIG_SQL,
+    );
+    expect(setConfigCalls).toHaveLength(1);
+
+    // Every entity repository is resolved from the transaction manager.
+    for (const entity of [Warehouse, Product, Insumo, Invoice]) {
+      expect(manager.getRepository).toHaveBeenCalledWith(entity);
+    }
+  });
+
   it('evaluates inventory readiness as true when warehouse or products exist, even with ZERO physical stock (AC-07, AC-40)', async () => {
-    (warehouseRepo.count as jest.Mock).mockResolvedValue(1);
-    (productRepo.count as jest.Mock)
+    warehouseRepo.count.mockResolvedValue(1);
+    productRepo.count
       .mockResolvedValueOnce(3) // total active products
       .mockResolvedValueOnce(0); // products with stock > 0
-    (insumoRepo.count as jest.Mock)
+    insumoRepo.count
       .mockResolvedValueOnce(0) // total insumos
       .mockResolvedValueOnce(0); // insumos with stock > 0
 
@@ -75,25 +121,23 @@ describe('InventoryReadinessAdapter (Unit)', () => {
   });
 
   it('includes INVENTORY_ENRICHMENT_PENDING warning and count when pending enrichment invoices exist', async () => {
-    (warehouseRepo.count as jest.Mock).mockResolvedValue(1);
-    (productRepo.count as jest.Mock).mockResolvedValue(1);
-    (insumoRepo.count as jest.Mock).mockResolvedValue(1);
-    (invoiceRepo.count as jest.Mock).mockResolvedValue(4);
+    warehouseRepo.count.mockResolvedValue(1);
+    productRepo.count.mockResolvedValue(1);
+    insumoRepo.count.mockResolvedValue(1);
+    invoiceRepo.count.mockResolvedValue(4);
 
-    const result = await adapter.evaluateInventoryReadiness('tenant-test-pending');
+    const result = await adapter.evaluateInventoryReadiness(
+      'tenant-test-pending',
+    );
     expect(result.inventoryReady).toBe(true);
     expect(result.inventoryEnrichmentPendingCount).toBe(4);
     expect(result.notes).toContain('INVENTORY_ENRICHMENT_PENDING');
   });
 
   it('evaluates inventory readiness as false with scope NONE when no warehouses, products or insumos exist', async () => {
-    (warehouseRepo.count as jest.Mock).mockResolvedValue(0);
-    (productRepo.count as jest.Mock)
-      .mockResolvedValueOnce(0)
-      .mockResolvedValueOnce(0);
-    (insumoRepo.count as jest.Mock)
-      .mockResolvedValueOnce(0)
-      .mockResolvedValueOnce(0);
+    warehouseRepo.count.mockResolvedValue(0);
+    productRepo.count.mockResolvedValueOnce(0).mockResolvedValueOnce(0);
+    insumoRepo.count.mockResolvedValueOnce(0).mockResolvedValueOnce(0);
 
     const result = await adapter.evaluateInventoryReadiness('tenant-empty');
 
@@ -104,13 +148,9 @@ describe('InventoryReadinessAdapter (Unit)', () => {
   });
 
   it('triangulates ADVANCED scope when warehouses and insumos are configured', async () => {
-    (warehouseRepo.count as jest.Mock).mockResolvedValue(2);
-    (productRepo.count as jest.Mock)
-      .mockResolvedValueOnce(5)
-      .mockResolvedValueOnce(2);
-    (insumoRepo.count as jest.Mock)
-      .mockResolvedValueOnce(10)
-      .mockResolvedValueOnce(4);
+    warehouseRepo.count.mockResolvedValue(2);
+    productRepo.count.mockResolvedValueOnce(5).mockResolvedValueOnce(2);
+    insumoRepo.count.mockResolvedValueOnce(10).mockResolvedValueOnce(4);
 
     const result = await adapter.evaluateInventoryReadiness('tenant-advanced');
 
