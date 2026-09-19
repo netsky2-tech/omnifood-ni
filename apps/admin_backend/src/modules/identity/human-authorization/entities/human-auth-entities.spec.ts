@@ -51,7 +51,7 @@ const mappings: readonly EntityMapping[] = [
     },
     columns: [
       ['id', 'id', 'uuid', false],
-      ['tenantId', 'tenant_id', 'varchar', false],
+      ['tenantId', 'tenant_id', 'uuid', false],
       ['terminalId', 'terminal_id', 'varchar', false],
       ['schema', 'schema', 'varchar', false],
       ['sequence', 'sequence', 'bigint', false],
@@ -79,7 +79,7 @@ const mappings: readonly EntityMapping[] = [
     },
     columns: [
       ['id', 'id', 'uuid', false],
-      ['tenantId', 'tenant_id', 'varchar', false],
+      ['tenantId', 'tenant_id', 'uuid', false],
       ['terminalId', 'terminal_id', 'varchar', false],
       ['sequence', 'sequence', 'bigint', false],
       ['previousSequence', 'previous_sequence', 'bigint', false],
@@ -103,7 +103,7 @@ const mappings: readonly EntityMapping[] = [
     table: 'human_auth_terminal_ack_floor',
     primary: ['tenantId', 'terminalId'],
     columns: [
-      ['tenantId', 'tenant_id', 'varchar', false],
+      ['tenantId', 'tenant_id', 'uuid', false],
       ['terminalId', 'terminal_id', 'varchar', false],
       ['sequence', 'sequence', 'bigint', false],
       ['digest', 'digest', 'varchar', false],
@@ -125,7 +125,7 @@ const mappings: readonly EntityMapping[] = [
     },
     columns: [
       ['tokenId', 'token_id', 'uuid', false],
-      ['tenantId', 'tenant_id', 'varchar', false],
+      ['tenantId', 'tenant_id', 'uuid', false],
       ['terminalId', 'terminal_id', 'varchar', false],
       ['secretHmac', 'secret_hmac', 'varchar', false],
       ['status', 'status', 'varchar', false],
@@ -155,7 +155,7 @@ const mappings: readonly EntityMapping[] = [
     },
     columns: [
       ['id', 'id', 'uuid', false],
-      ['tenantId', 'tenant_id', 'varchar', false],
+      ['tenantId', 'tenant_id', 'uuid', false],
       ['terminalId', 'terminal_id', 'varchar', false],
       ['tokenId', 'token_id', 'uuid', false],
       ['eventType', 'event_type', 'varchar', false],

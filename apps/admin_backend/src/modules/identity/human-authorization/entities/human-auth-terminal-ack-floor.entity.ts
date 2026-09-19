@@ -5,7 +5,7 @@ import { BIGINT_STRING } from './bigint-string.transformer';
 // Monotonicity and no-delete guards live in the migration triggers.
 @Entity({ name: 'human_auth_terminal_ack_floor' })
 export class HumanAuthTerminalAckFloor {
-  @PrimaryColumn({ name: 'tenant_id', type: 'varchar', length: 128 })
+  @PrimaryColumn({ name: 'tenant_id', type: 'uuid' })
   tenantId!: string;
   @PrimaryColumn({ name: 'terminal_id', type: 'varchar', length: 128 })
   terminalId!: string;
