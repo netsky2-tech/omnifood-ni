@@ -2,7 +2,14 @@ import { randomUUID } from 'crypto';
 import { DataSource, type QueryRunner } from 'typeorm';
 import { OhacTenantTransaction } from '../rls/ohac-tenant-transaction';
 import { StaffPolicySnapshotPublisher } from '../services/staff-policy-snapshot-publisher.service';
+import { StaffPolicyEpochMaterializationService } from '../services/staff-policy-epoch-materialization.service';
+import { StaffPolicyEpochAcknowledgementService } from '../services/staff-policy-epoch-acknowledgement.service';
+import { projectStaffPolicySnapshotV1 } from '../projection/staff-policy-snapshot-projector';
+import { CreateHumanAuthorizationCore1809000000000 } from '../../../../migrations/1809000000000-CreateHumanAuthorizationCore';
+import { CreateHumanAuthorizationRecovery1809010000000 } from '../../../../migrations/1809010000000-CreateHumanAuthorizationRecovery';
 import { CreateHumanAuthorizationObservability1809020000000 } from '../../../../migrations/1809020000000-CreateHumanAuthorizationObservability';
+import { RebindHumanAuthorizationTenantColumns1809100000000 } from '../../../../migrations/1809100000000-RebindHumanAuthorizationTenantColumns';
+import { RebindHumanAuthorizationStateColumns1809110000000 } from '../../../../migrations/1809110000000-RebindHumanAuthorizationStateColumns';
 import { AddHumanAuthorizationAttemptResetGeneration1809030000000 } from '../../../../migrations/1809030000000-AddHumanAuthorizationAttemptResetGeneration';
 import { CreateHumanAuthorizationTenantPublicationState1809040000000 } from '../../../../migrations/1809040000000-CreateHumanAuthorizationTenantPublicationState';
 import { CreateHumanAuthorizationPolicySnapshots1809050000000 } from '../../../../migrations/1809050000000-CreateHumanAuthorizationPolicySnapshots';
@@ -14,7 +21,10 @@ import { CreateHumanAuthorizationPolicySnapshots1809050000000 } from '../../../.
  * - A fresh per-run scratch SCHEMA (not a hand-built table set) inside the
  *   database the runner provides via DB_DATABASE; cleanup drops the schema
  *   and the role. Random suffixes make concurrent runs safe.
- * - The real migrations 180902/180903/180904/180905 run via their up().
+ * - The real migrations 180900/180901/180902/180903/180904/180905 run via
+ *   their up(),
+ *   followed by the two tenant rebinds 180910/180911, so the OHAC tenant
+ *   columns here are uuid exactly as they are in production.
  *   180902 is required because the publisher's source reader resolves the
  *   tenant cohort decision against human_auth_rollout_cohorts, and its
  *   verification_events table FKs users(id). 180903 alters users, so the
@@ -41,6 +51,8 @@ export interface OhacPublicationFixture {
   readonly restricted: DataSource;
   readonly transaction: OhacTenantTransaction;
   readonly publisher: StaffPolicySnapshotPublisher;
+  readonly materialization: StaffPolicyEpochMaterializationService;
+  readonly acknowledgement: StaffPolicyEpochAcknowledgementService;
   seedTenantStaff(
     tenantId: string,
     staff: ReadonlyArray<{
@@ -51,12 +63,86 @@ export interface OhacPublicationFixture {
     }>,
   ): Promise<void>;
   seedCohort(tenantId: string, backendBuild: string): Promise<void>;
+  /**
+   * Seeds an enabled cohort for an explicit POS/backend pair. The delivery
+   * path gates on the exact pair, so a test that materializes for a specific
+   * POS build must enable that pair rather than the fixed one `seedCohort`
+   * uses for the publisher's backend-only lookup.
+   */
+  seedCohortPair(
+    tenantId: string,
+    posBuild: string,
+    backendBuild: string,
+  ): Promise<void>;
   seedSnapshot(
     tenantId: string,
     sequence: number,
     digest: string,
   ): Promise<void>;
+  /**
+   * Seeds staff and a snapshot whose payload is produced by the real
+   * projector, so the materialization service's payload validation sees a
+   * genuine artifact instead of a placeholder it would reject.
+   */
+  seedProjectedSnapshot(
+    tenantId: string,
+    metadata: {
+      readonly sequence: number;
+      readonly publisherBackendBuild: string;
+      /**
+       * Replaces the digest inside the payload while the signed `digest`
+       * column keeps the projected value, modelling a corrupted row. It has
+       * to be done here because the table is append-only: a later UPDATE is
+       * refused by the migration's trigger even for a superuser.
+       */
+      readonly payloadDigestOverride?: string;
+    },
+    staff: ReadonlyArray<{
+      readonly role: string;
+      readonly isActive: boolean;
+      readonly pinHash: string | null;
+      readonly customPermissions: readonly string[];
+    }>,
+  ): Promise<{ readonly sequence: string; readonly digest: string }>;
   seedMarker(tenantId: string, revision: number): Promise<void>;
+  /** Seeds the terminal's accepted head, as an earlier acknowledgement would have. */
+  seedAckFloor(
+    tenantId: string,
+    terminalId: string,
+    sequence: number,
+    digest: string,
+  ): Promise<void>;
+  /** Reads the terminal's accepted head, or undefined when it never acknowledged. */
+  readFloor(
+    tenantId: string,
+    terminalId: string,
+  ): Promise<
+    { readonly sequence: string; readonly digest: string } | undefined
+  >;
+  /** Reads the stored epoch rows for a terminal, newest last. */
+  readEpochs(
+    tenantId: string,
+    terminalId: string,
+  ): Promise<
+    ReadonlyArray<{
+      readonly sequence: string;
+      readonly digest: string;
+      readonly targetPosBuild: string;
+    }>
+  >;
+  /** Reads the acknowledgement history for a terminal, oldest first. */
+  readAckHistory(
+    tenantId: string,
+    terminalId: string,
+  ): Promise<
+    ReadonlyArray<{
+      readonly sequence: string;
+      readonly status: string;
+      readonly resultCode: string | null;
+      readonly idempotencyKey: string;
+      readonly receiptId: string | null;
+    }>
+  >;
   close(): Promise<void>;
 }
 
@@ -107,6 +193,118 @@ export async function createOhacPublicationFixture(): Promise<OhacPublicationFix
     publisher: new StaffPolicySnapshotPublisher(
       new OhacTenantTransaction(restricted),
     ),
+    materialization: new StaffPolicyEpochMaterializationService(
+      new OhacTenantTransaction(restricted),
+    ),
+    acknowledgement: new StaffPolicyEpochAcknowledgementService(
+      new OhacTenantTransaction(restricted),
+    ),
+
+    seedProjectedSnapshot: async (tenantId, metadata, staff) => {
+      await fixture.seedTenantStaff(tenantId, staff);
+      const sequence = String(metadata.sequence);
+      const projected = projectStaffPolicySnapshotV1(
+        {
+          tenantId,
+          sequence,
+          previousSequence: String(metadata.sequence - 1),
+          previousDigest:
+            metadata.sequence === 1 ? 'GENESIS' : 'sha256:' + '0'.repeat(64),
+          publisherBackendBuild: metadata.publisherBackendBuild,
+        },
+        staff.map((member, index) => ({
+          userId: `${tenantId.slice(0, 8)}-0000-4000-8000-${String(index).padStart(12, '0')}`,
+          role: member.role,
+          isActive: member.isActive,
+          pinHash: member.pinHash,
+          customPermissions: member.customPermissions
+            ? [...member.customPermissions]
+            : null,
+          attemptResetGeneration: '0',
+        })),
+      );
+      if (projected.ok === false) {
+        throw new Error(
+          `fixture failed to project a snapshot: ${projected.error.code}`,
+        );
+      }
+      await admin.query(
+        `INSERT INTO human_auth_policy_snapshots
+           (tenant_id, sequence, previous_sequence, schema, previous_digest,
+            publisher_backend_build, minimum_assertion_schema, cohort_decision,
+            digest, payload)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [
+          tenantId,
+          projected.value.sequence,
+          projected.value.previousSequence,
+          projected.value.schema,
+          projected.value.previousDigest,
+          projected.value.publisherBackendBuild,
+          projected.value.minimumAssertionSchema,
+          'ELIGIBLE',
+          projected.value.digest,
+          {
+            ...projected.value,
+            digest: metadata.payloadDigestOverride ?? projected.value.digest,
+          },
+        ],
+      );
+      return {
+        sequence: projected.value.sequence,
+        digest: projected.value.digest,
+      };
+    },
+
+    seedAckFloor: async (tenantId, terminalId, sequence, digest) => {
+      await admin.query(
+        `INSERT INTO human_auth_terminal_ack_floor
+           (tenant_id, terminal_id, sequence, digest, revision, updated_at)
+         VALUES ($1, $2, $3, $4, 1, CURRENT_TIMESTAMP)
+         ON CONFLICT (tenant_id, terminal_id) DO UPDATE
+           SET sequence = EXCLUDED.sequence,
+               digest = EXCLUDED.digest,
+               revision = human_auth_terminal_ack_floor.revision + 1,
+               updated_at = CURRENT_TIMESTAMP`,
+        [tenantId, terminalId, sequence, digest],
+      );
+    },
+
+    readFloor: async (tenantId, terminalId) => {
+      const rows: { sequence: string; digest: string }[] = await admin.query(
+        `SELECT sequence, digest
+           FROM human_auth_terminal_ack_floor
+          WHERE tenant_id = $1 AND terminal_id = $2`,
+        [tenantId, terminalId],
+      );
+      return rows[0];
+    },
+
+    readEpochs: async (tenantId, terminalId) => {
+      return await admin.query(
+        `SELECT sequence,
+                digest,
+                target_pos_build AS "targetPosBuild"
+           FROM human_auth_policy_epochs
+          WHERE tenant_id = $1 AND terminal_id = $2
+          ORDER BY sequence`,
+        [tenantId, terminalId],
+      );
+    },
+
+    readAckHistory: async (tenantId, terminalId) => {
+      return await admin.query(
+        `SELECT sequence,
+                status,
+                result_code AS "resultCode",
+                idempotency_key AS "idempotencyKey",
+                ack_receipt_id AS "receiptId"
+           FROM human_auth_terminal_ack_history
+          WHERE tenant_id = $1 AND terminal_id = $2
+          ORDER BY received_at, sequence`,
+        [tenantId, terminalId],
+      );
+    },
 
     seedTenantStaff: async (tenantId, staff) => {
       for (const member of staff) {
@@ -128,6 +326,17 @@ export async function createOhacPublicationFixture(): Promise<OhacPublicationFix
           [userId, member.pinHash, [...member.customPermissions]],
         );
       }
+    },
+
+    seedCohortPair: async (tenantId, posBuild, backendBuild) => {
+      await admin.query(
+        `INSERT INTO human_auth_rollout_cohorts
+           (tenant_id, pos_build, backend_build, policy_schema, assertion_schema,
+            enabled, owner_acceptance_actor_id, owner_acceptance_ref, owner_acceptance_at)
+         VALUES ($1, $2, $3, 'ohac.staff-policy-snapshot.v1',
+                 'ohac.assertion.v1', TRUE, $4, 'p4-acceptance', CURRENT_TIMESTAMP)`,
+        [tenantId, posBuild, backendBuild, randomUUID()],
+      );
     },
 
     seedCohort: async (tenantId, backendBuild) => {
@@ -267,6 +476,10 @@ export async function createOhacPublicationFixture(): Promise<OhacPublicationFix
     try {
       await migrationRunner.connect();
       await migrationRunner.query(`SET search_path TO "${schema}", public`);
+      await new CreateHumanAuthorizationCore1809000000000().up(migrationRunner);
+      await new CreateHumanAuthorizationRecovery1809010000000().up(
+        migrationRunner,
+      );
       await new CreateHumanAuthorizationObservability1809020000000().up(
         migrationRunner,
       );
@@ -277,6 +490,17 @@ export async function createOhacPublicationFixture(): Promise<OhacPublicationFix
         migrationRunner,
       );
       await new CreateHumanAuthorizationPolicySnapshots1809050000000().up(
+        migrationRunner,
+      );
+      // The tenant columns were rebound to uuid in production (issue #286,
+      // units B2.2 and B2.3). Running the rebinds keeps this schema faithful:
+      // without them every OHAC tenant column here would still be varchar
+      // while production compares uuid, and the delivery and acknowledgement
+      // paths would be exercised against a shape that no longer exists.
+      await new RebindHumanAuthorizationTenantColumns1809100000000().up(
+        migrationRunner,
+      );
+      await new RebindHumanAuthorizationStateColumns1809110000000().up(
         migrationRunner,
       );
     } finally {
@@ -295,6 +519,16 @@ export async function createOhacPublicationFixture(): Promise<OhacPublicationFix
          ON "${schema}".human_auth_policy_snapshots,
             "${schema}".human_auth_tenant_publication_state,
             "${schema}".human_auth_rollout_cohorts
+         TO "${roleName}"`,
+    );
+    await admin.query(
+      `GRANT SELECT, INSERT ON "${schema}".human_auth_policy_epochs,
+                               "${schema}".human_auth_terminal_ack_history
+         TO "${roleName}"`,
+    );
+    await admin.query(
+      `GRANT SELECT, INSERT, UPDATE, DELETE
+         ON "${schema}".human_auth_terminal_ack_floor
          TO "${roleName}"`,
     );
     await admin.query(
