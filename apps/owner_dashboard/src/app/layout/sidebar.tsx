@@ -308,9 +308,6 @@ export function Sidebar() {
                 <LogOut className="h-5 w-5 shrink-0" aria-hidden="true" />
                 <span>Cerrar sesión</span>
               </button>
-              <p className="mt-2 text-center font-mono text-[10px] text-white/40">
-                v{import.meta.env.VITE_APP_VERSION ?? "1.0.0"} ({String(import.meta.env.VITE_COMMIT_SHA ?? "dev").slice(0, 7)})
-              </p>
             </>
           ) : (
             <div className="flex flex-col items-center gap-2">
