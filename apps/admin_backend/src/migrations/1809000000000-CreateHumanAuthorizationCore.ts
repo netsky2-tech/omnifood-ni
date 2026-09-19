@@ -1,4 +1,5 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
+import { resolveTenantRlsPredicate } from '../core/database/tenant-rls-policy';
 
 const APPEND_ONLY_GUARD = 'guard_human_auth_append_only_mutation';
 const FLOOR_MONOTONIC_GUARD = 'guard_human_auth_ack_floor_monotonic';
@@ -176,8 +177,18 @@ export class CreateHumanAuthorizationCore1809000000000 implements MigrationInter
     tableName: string,
     options: { allowUpdate: boolean },
   ): Promise<void> {
-    const tenantPredicate =
-      "tenant_id = current_setting('app.tenant_id', true)";
+    // The predicate form must match the tenant_id column type as it is on this
+    // run, not as it was when this migration was written: this file is in the
+    // schema-build harness's partial-ledger re-run set, so once the Phase 2
+    // slice rebinds these tables to uuid, a re-run must emit the uuid form or
+    // the bare text comparison fails with "operator does not exist: uuid =
+    // text". Resolving once per table through the shared type-aware seam keeps
+    // each table's policies on the form that is valid and index-friendly for
+    // that table's own column type.
+    const tenantPredicate = await resolveTenantRlsPredicate(
+      queryRunner,
+      tableName,
+    );
 
     await queryRunner.query(`
       ALTER TABLE ${tableName} ENABLE ROW LEVEL SECURITY;

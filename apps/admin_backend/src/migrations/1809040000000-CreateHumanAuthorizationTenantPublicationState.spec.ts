@@ -5,13 +5,37 @@ describe('CreateHumanAuthorizationTenantPublicationState1809040000000', () => {
   const migration =
     new CreateHumanAuthorizationTenantPublicationState1809040000000();
 
-  const collectSql = async (direction: 'up' | 'down' = 'up') => {
+  // The migration resolves the tenant predicate per table through the shared
+  // type-aware seam, which reads the tenant_id column's type from
+  // information_schema.columns with the table name bound as the first query
+  // parameter. Each run must stub the data_type the environment declares;
+  // `null` stubs a table without a tenant_id column. The consulted table of
+  // every resolver read is recorded so tests can pin one resolution per table.
+  let consultedTables: string[] = [];
+  const collectSql = async (
+    direction: 'up' | 'down' = 'up',
+    tenantIdDataType: string | null = 'character varying',
+  ) => {
+    consultedTables = [];
     const queries: string[] = [];
     const queryRunner = {
-      query: jest.fn((sql: string): Promise<QueryResult> => {
-        queries.push(sql);
-        return Promise.resolve(new QueryResult());
-      }),
+      query: jest.fn(
+        (sql: string, params?: unknown[]): Promise<QueryResult> => {
+          queries.push(sql);
+          if (sql.includes('information_schema.columns')) {
+            const tableParam = params?.[0];
+            if (typeof tableParam === 'string') {
+              consultedTables.push(tableParam);
+            }
+            return Promise.resolve(
+              tenantIdDataType === null
+                ? []
+                : [{ data_type: tenantIdDataType }],
+            ) as unknown as Promise<QueryResult>;
+          }
+          return Promise.resolve(new QueryResult());
+        },
+      ),
     } as unknown as QueryRunner;
     await migration[direction](queryRunner);
     return queries.join('\n').replace(/\s+/g, ' ');
@@ -56,6 +80,59 @@ describe('CreateHumanAuthorizationTenantPublicationState1809040000000', () => {
 
     expect(sql).not.toContain(
       'human_auth_tenant_publication_state_tenant_delete',
+    );
+  });
+
+  it('resolves the tenant predicate per table and emits the uuid form when the stubbed type is uuid', async () => {
+    const sql = await collectSql('up', 'uuid');
+
+    // The resolver must be consulted exactly once for the table, with the
+    // table name recorded on the lookup, and the emitted form must follow the
+    // stubbed column type rather than the form this migration was written for.
+    expect(consultedTables).toEqual(['human_auth_tenant_publication_state']);
+
+    // The stubbed tenant_id column type is uuid, so every tenant policy must
+    // use the index-friendly uuid predicate; the bare text comparison or the
+    // column-side text cast would fail or lose the index on a uuid column.
+    const uuidPredicate =
+      "tenant_id = current_setting('app.tenant_id', true)::uuid";
+    expect(sql).toContain(
+      `CREATE POLICY human_auth_tenant_publication_state_tenant_select ON human_auth_tenant_publication_state FOR SELECT USING (${uuidPredicate});`,
+    );
+    expect(sql).toContain(
+      `CREATE POLICY human_auth_tenant_publication_state_tenant_insert ON human_auth_tenant_publication_state FOR INSERT WITH CHECK (${uuidPredicate});`,
+    );
+    expect(sql).toContain(
+      `CREATE POLICY human_auth_tenant_publication_state_tenant_update ON human_auth_tenant_publication_state FOR UPDATE USING (${uuidPredicate}) WITH CHECK (${uuidPredicate});`,
+    );
+    expect(sql).not.toContain('tenant_id::text');
+  });
+
+  it('emits the text-cast predicate when tenant_id is still varchar, never the uuid cast', async () => {
+    const sql = await collectSql('up', 'character varying');
+
+    expect(consultedTables).toEqual(['human_auth_tenant_publication_state']);
+
+    // The stubbed tenant_id column type is varchar, so a uuid-cast predicate
+    // would fail the migration with "operator does not exist: character
+    // varying = uuid"; the column-side text cast is the only valid form here.
+    const textPredicate =
+      "tenant_id::text = current_setting('app.tenant_id', true)";
+    expect(sql).toContain(
+      `CREATE POLICY human_auth_tenant_publication_state_tenant_select ON human_auth_tenant_publication_state FOR SELECT USING (${textPredicate});`,
+    );
+    expect(sql).not.toContain('::uuid');
+  });
+
+  it('refuses to emit tenant policies when the table has no tenant_id column', async () => {
+    await expect(collectSql('up', null)).rejects.toThrow(
+      /'human_auth_tenant_publication_state' has no tenant_id column/,
+    );
+  });
+
+  it('refuses to emit tenant policies for an unsupported tenant_id column type', async () => {
+    await expect(collectSql('up', 'integer')).rejects.toThrow(
+      /unsupported tenant_id column type 'integer'/,
     );
   });
 

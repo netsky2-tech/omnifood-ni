@@ -1,4 +1,5 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
+import { resolveTenantRlsPredicate } from '../core/database/tenant-rls-policy';
 
 // Design §11.2 decision 17 (user decision): the publisher persists one immutable terminal-agnostic
 // policy snapshot per (tenant_id, sequence); the per-terminal epoch row is materialized on the
@@ -87,8 +88,17 @@ export class CreateHumanAuthorizationPolicySnapshots1809050000000 implements Mig
     queryRunner: QueryRunner,
     tableName: string,
   ): Promise<void> {
-    const tenantPredicate =
-      "tenant_id = current_setting('app.tenant_id', true)";
+    // The predicate form must match the tenant_id column type as it is on this
+    // run, not as it was when this migration was written: this file is in the
+    // schema-build harness's partial-ledger re-run set, so once the Phase 2
+    // slice rebinds this table to uuid, a re-run must emit the uuid form or
+    // the bare text comparison fails with "operator does not exist: uuid =
+    // text". Resolving through the shared type-aware seam keeps the policies
+    // on the form that is valid and index-friendly for the column's real type.
+    const tenantPredicate = await resolveTenantRlsPredicate(
+      queryRunner,
+      tableName,
+    );
 
     await queryRunner.query(`
       ALTER TABLE ${tableName} ENABLE ROW LEVEL SECURITY;

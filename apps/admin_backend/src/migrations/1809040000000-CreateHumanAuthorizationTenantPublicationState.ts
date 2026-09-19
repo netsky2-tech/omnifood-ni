@@ -1,4 +1,5 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
+import { resolveTenantRlsPredicate } from '../core/database/tenant-rls-policy';
 
 // Design §11.2 decision 16 (user decision): a staff/profile mutation marks the tenant dirty in its
 // own transaction, and a serialized publisher holding an advisory lock on the tenant sequence builds
@@ -72,8 +73,17 @@ export class CreateHumanAuthorizationTenantPublicationState1809040000000 impleme
 
   private async enableTenantRls(queryRunner: QueryRunner): Promise<void> {
     const tableName = 'human_auth_tenant_publication_state';
-    const tenantPredicate =
-      "tenant_id = current_setting('app.tenant_id', true)";
+    // The predicate form must match the tenant_id column type as it is on this
+    // run, not as it was when this migration was written: this file is in the
+    // schema-build harness's partial-ledger re-run set, so once the Phase 2
+    // slice rebinds this table to uuid, a re-run must emit the uuid form or
+    // the bare text comparison fails with "operator does not exist: uuid =
+    // text". Resolving through the shared type-aware seam keeps the policies
+    // on the form that is valid and index-friendly for the column's real type.
+    const tenantPredicate = await resolveTenantRlsPredicate(
+      queryRunner,
+      tableName,
+    );
 
     await queryRunner.query(`
       ALTER TABLE ${tableName} ENABLE ROW LEVEL SECURITY;
