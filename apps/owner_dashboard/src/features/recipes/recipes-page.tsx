@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/dialog';
 import { RecipeForm } from './RecipeForm';
 import { formatNumber } from '@/lib/utils';
+import { getApiErrorMessage } from '@/lib/api-error';
 
 export function RecipesPage() {
   const { data: products, isLoading: productsLoading, error: productsError, refetch: refetchProducts } = useProducts('COMPOUND');
@@ -58,7 +59,7 @@ export function RecipesPage() {
   if (productsError) {
     return (
       <div className="text-center py-8 text-destructive">
-        <p>Error al cargar productos: {(productsError as Error).message}</p>
+        <p>{getApiErrorMessage(productsError, "Error al cargar productos")}</p>
         <Button onClick={() => refetchProducts()} className="ml-2 mt-2" variant="outline" size="sm">
           Reintentar
         </Button>

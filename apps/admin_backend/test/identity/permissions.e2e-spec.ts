@@ -166,6 +166,7 @@ describe('Permissions & Fine-Grained RBAC (e2e) (Slice 10.1)', () => {
     };
 
     auditRepository = {
+      findOne: jest.fn(),
       save: jest.fn(),
     };
 

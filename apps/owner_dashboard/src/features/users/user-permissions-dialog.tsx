@@ -24,6 +24,8 @@ import {
   useUserPermissions,
   useUpdateUserPermissions,
 } from "./use-users";
+import { toast } from "@/hooks/use-toast";
+import { getApiErrorMessage } from "@/lib/api-error";
 
 interface UserPermissionsDialogProps {
   open: boolean;
@@ -79,13 +81,19 @@ function PermissionsContent({ user, onClose }: PermissionsContentProps) {
         userId: user.id,
         permissions: selectedCustom,
       });
+      toast({
+        title: "Permisos actualizados",
+        description: `Se actualizaron los permisos de supervisor para ${user.name}.`,
+      });
       onClose();
     } catch (err: unknown) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("Error al guardar la configuración de permisos");
-      }
+      const msg = getApiErrorMessage(err, "Error al guardar la configuración de permisos");
+      setError(msg);
+      toast({
+        variant: "destructive",
+        title: "Error al actualizar permisos",
+        description: msg,
+      });
     }
   };
 

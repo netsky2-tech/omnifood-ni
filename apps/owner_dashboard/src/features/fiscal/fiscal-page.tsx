@@ -12,6 +12,8 @@ import {
   useSalesBookExport,
   useZReportsExport,
 } from "./use-fiscal-reports";
+import { toast } from "@/hooks/use-toast";
+import { getApiErrorMessage } from "@/lib/api-error";
 
 type TabId = "summary" | "voided" | "sequence" | "exports";
 
@@ -255,35 +257,59 @@ function ExportsTab({ startDate, endDate }: { startDate?: string; endDate?: stri
 
   const handleExportSalesBook = (format: "csv" | "json") => {
     if (!salesBook.data) return;
-    const fileSuffix = `${startDate ?? "inicio"}_${endDate ?? "fin"}`;
-    if (format === "json") {
-      downloadBlob(
-        JSON.stringify(salesBook.data, null, 2),
-        `libro_ventas_${fileSuffix}.json`,
-        "application/json",
-      );
-    } else {
-      const csv = convertRowsToCsv(
-        (salesBook.data.records ?? []) as unknown as Record<string, unknown>[],
-      );
-      downloadBlob(csv, `libro_ventas_${fileSuffix}.csv`, "text/csv;charset=utf-8;");
+    try {
+      const fileSuffix = `${startDate ?? "inicio"}_${endDate ?? "fin"}`;
+      if (format === "json") {
+        downloadBlob(
+          JSON.stringify(salesBook.data, null, 2),
+          `libro_ventas_${fileSuffix}.json`,
+          "application/json",
+        );
+      } else {
+        const csv = convertRowsToCsv(
+          (salesBook.data.records ?? []) as unknown as Record<string, unknown>[],
+        );
+        downloadBlob(csv, `libro_ventas_${fileSuffix}.csv`, "text/csv;charset=utf-8;");
+      }
+      toast({
+        title: "Libro de Ventas exportado",
+        description: `Se descargó el reporte fiscal en formato ${format.toUpperCase()}.`,
+      });
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Error al exportar",
+        description: getApiErrorMessage(err, "No se pudo generar el archivo de exportación"),
+      });
     }
   };
 
   const handleExportZReports = (format: "csv" | "json") => {
     if (!zReports.data) return;
-    const fileSuffix = `${startDate ?? "inicio"}_${endDate ?? "fin"}`;
-    if (format === "json") {
-      downloadBlob(
-        JSON.stringify(zReports.data, null, 2),
-        `reportes_z_${fileSuffix}.json`,
-        "application/json",
-      );
-    } else {
-      const csv = convertRowsToCsv(
-        (zReports.data.records ?? []) as unknown as Record<string, unknown>[],
-      );
-      downloadBlob(csv, `reportes_z_${fileSuffix}.csv`, "text/csv;charset=utf-8;");
+    try {
+      const fileSuffix = `${startDate ?? "inicio"}_${endDate ?? "fin"}`;
+      if (format === "json") {
+        downloadBlob(
+          JSON.stringify(zReports.data, null, 2),
+          `reportes_z_${fileSuffix}.json`,
+          "application/json",
+        );
+      } else {
+        const csv = convertRowsToCsv(
+          (zReports.data.records ?? []) as unknown as Record<string, unknown>[],
+        );
+        downloadBlob(csv, `reportes_z_${fileSuffix}.csv`, "text/csv;charset=utf-8;");
+      }
+      toast({
+        title: "Reportes Z exportados",
+        description: `Se descargó el arqueo de caja en formato ${format.toUpperCase()}.`,
+      });
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Error al exportar",
+        description: getApiErrorMessage(err, "No se pudo generar el archivo de exportación"),
+      });
     }
   };
 

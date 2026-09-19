@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { getApiErrorMessage } from "@/lib/api-error";
+import { toast } from "@/hooks/use-toast";
 import {
   Dialog,
   DialogContent,
@@ -170,6 +171,10 @@ function CatalogDialog({
           id: value.id,
           input: { name: name.trim(), sort_order: sortOrder },
         });
+        toast({
+          title: "Elemento actualizado",
+          description: `"${name.trim()}" se actualizó correctamente en el catálogo.`,
+        });
       } else {
         const input: CreateCatalogValueInput = {
           code: code.trim(),
@@ -177,10 +182,20 @@ function CatalogDialog({
           sort_order: sortOrder,
         };
         await createMutation.mutateAsync(input);
+        toast({
+          title: "Elemento creado",
+          description: `"${name.trim()}" se guardó correctamente en el catálogo.`,
+        });
       }
       onClose();
     } catch (err) {
-      setError(getApiErrorMessage(err, "Error al guardar valor de catálogo"));
+      const msg = getApiErrorMessage(err, "Error al guardar valor de catálogo");
+      setError(msg);
+      toast({
+        variant: "destructive",
+        title: "Error al guardar",
+        description: msg,
+      });
     } finally {
       isSubmittingRef.current = false;
     }
@@ -311,9 +326,19 @@ function DeactivateDialog({
     setError(null);
     try {
       await deactivateMutation.mutateAsync(value.id);
+      toast({
+        title: "Elemento desactivado",
+        description: `"${value.name}" ha sido desactivado del catálogo.`,
+      });
       onClose();
     } catch (err) {
-      setError(getApiErrorMessage(err, "Error al desactivar el valor de catálogo"));
+      const msg = getApiErrorMessage(err, "Error al desactivar el valor de catálogo");
+      setError(msg);
+      toast({
+        variant: "destructive",
+        title: "Error al desactivar",
+        description: msg,
+      });
     } finally {
       isSubmittingRef.current = false;
     }
