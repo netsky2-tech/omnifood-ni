@@ -2,8 +2,8 @@
 
 **Parent plan (plan of record):** `odd/tasks/issue-286-tenant-id-uuid.md`
 **Sibling slices:** `odd/tasks/issue-286-slice-b1.md` (#360/#369/#363/#364), `odd/tasks/issue-286-slice-b2.md` (#368/#372/#374)
-**Base:** `origin/main` @ `8e3fe64`
-**Status:** planned 2026-09-19, no code written.
+**Base:** `origin/main` @ `5ecbe23`
+**Status:** C.1 merged (#384, `5ecbe23`). C.2–C.6 planned; no code written for those units.
 
 ## Scope — measured from the catalog
 
@@ -131,7 +131,7 @@ Calibration, measured across this issue: a migration plus its spec costs roughly
 
 | Unit | Commit | Evidence |
 | --- | --- | --- |
-| **C.1** | pending merge | Six migrations resolve per table site. Harness exit 0 in both scenarios, `14 / 0 / 0 / 0` verbatim, `uuid tenant_id tables: 51`, `entity uuid mismatches: 0`. 232 suites / 2128 tests green. |
+| **C.1** | `5ecbe23` (#384) | Six migrations resolve per table site. Harness exit 0 in both scenarios, `14 / 0 / 0 / 0` verbatim, `uuid tenant_id tables: 51`, `entity uuid mismatches: 0`. 232 suites / 2128 tests green. |
 ## Relevant files
 
 - `apps/admin_backend/src/migrations/1768000000000-CreateCatalogValues.ts`, `1785000000000-AddTenantCapabilityEvent.ts`, `1794000000001-AddTenantTopologyRevisionsRls.ts`, `1795000000000-CreateTenantFulfillmentRecords.ts`, `1807000000000-CreateDeviceSyncCredentials.ts`, `1808000000000-RepairTenantTopologyRevisions.ts` — C.1's six files.
