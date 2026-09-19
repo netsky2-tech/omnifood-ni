@@ -91,6 +91,28 @@
 # inside the CORRECT form, in current_setting('app.tenant_id'::text, true), so
 # the discriminator targets the column-side cast specifically.
 #
+# Why the entity/schema consistency assertion is one-directional
+# ------------------------------------------------------------------
+# A table can be correct in the schema while the entity that maps it still
+# declares the old type. Nothing measured that disagreement, so slice A's
+# rebindings left four entities behind invisibly. The assertion is strictly
+# one-directional: for every base table whose tenant_id column is uuid in the
+# built schema, the TypeORM entity that maps that table must declare
+# tenant_id as uuid. Tables whose tenant_id is still varchar are OUT of
+# scope: six of them legitimately declare uuid on the entity side already,
+# because a @ManyToOne(() => Tenant) @JoinColumn({ name: 'tenant_id' })
+# derives its type from the target's primary key. Those columns are tracked
+# by the ratchet above until their slice rebinds them, and the slice that
+# rebinds the column is the same slice that makes the entity truthful.
+#
+# The entity side is read from TypeORM metadata, never from entity source
+# text. Thirty entity files declare tenant_id twice in source (a plain
+# @Column and a relation join column) and TypeORM folds them into one column
+# metadata whose type is the relation-derived uuid; source parsing would
+# misread all thirty. The metadata is built from the compiled dist tree
+# without touching the database, so the comparison is against exactly what
+# TypeORM will issue at runtime.
+#
 # Why the migration run uses a restricted role
 # --------------------------------------------
 # Running the migrations as a superuser made this harness blind to privilege
@@ -208,7 +230,9 @@ rls_policy_exprs_missing_tenant="$(mktemp)"
 tenant_type_manifest="$(mktemp)"
 tenant_type_actual="$(mktemp)"
 tenant_uuid_cast_issues="$(mktemp)"
-trap 'rm -f "${entities}" "${applied}" "${entity_columns}" "${db_columns}" "${forced_rls_tables}" "${rls_policies}" "${rls_policy_exprs_missing_tenant}" "${tenant_type_manifest}" "${tenant_type_actual}" "${tenant_uuid_cast_issues}"' EXIT
+schema_uuid_tenant_tables="$(mktemp)"
+entity_tenant_types="$(mktemp)"
+trap 'rm -f "${entities}" "${applied}" "${entity_columns}" "${db_columns}" "${forced_rls_tables}" "${rls_policies}" "${rls_policy_exprs_missing_tenant}" "${tenant_type_manifest}" "${tenant_type_actual}" "${tenant_uuid_cast_issues}" "${schema_uuid_tenant_tables}" "${entity_tenant_types}"' EXIT
 
 # Entities declare their table two ways: @Entity('name') and
 # @Entity({ name: 'name' }). Missing the second form would silently under-count
@@ -513,6 +537,92 @@ report_tenant_type_diff() {
   fi
 }
 
+# Entity side of the entity/schema consistency assertion. One row per entity
+# column named tenant_id: table|entity|declared type. Read from the compiled
+# dist tree through TypeORM's own metadata builder (no database connection),
+# so dual-declared tenant_id columns report the relation-derived folded type
+# exactly as TypeORM uses it at runtime. See the header for why source text
+# parsing would misread thirty entities.
+collect_entity_tenant_types() {
+  ( cd "${APP_DIR}" && node -e '
+const { DataSource, getMetadataArgsStorage } = require("typeorm");
+const fs = require("fs");
+const path = require("path");
+function walk(dir, acc) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) walk(p, acc);
+    else if (e.name.endsWith(".entity.js")) acc.push(p);
+  }
+  return acc;
+}
+const files = walk(path.join(process.cwd(), "dist"), []);
+// Decorator metadata is registered while the entity modules load, so every
+// module must be required BEFORE the storage is read.
+const mods = files.map((file) => require(file));
+const entityClasses = new Set(getMetadataArgsStorage().tables.map((t) => t.target));
+const entities = [];
+for (const mod of mods) {
+  for (const key of Object.keys(mod)) {
+    const value = mod[key];
+    if (typeof value === "function" && entityClasses.has(value)) entities.push(value);
+  }
+}
+const dataSource = new DataSource({ type: "postgres", entities: entities });
+const run = async () => {
+  await dataSource.buildMetadatas();
+  const rows = [];
+  for (const entityMetadata of dataSource.entityMetadatas) {
+    for (const column of entityMetadata.columns) {
+      if (column.databaseName === "tenant_id") {
+        const declared = typeof column.type === "function" ? column.type.name : String(column.type);
+        rows.push(entityMetadata.tableName + "|" + entityMetadata.name + "|" + declared);
+      }
+    }
+  }
+  if (rows.length > 0) process.stdout.write(rows.sort().join("\n") + "\n");
+};
+run().catch((e) => { console.error(String((e && e.stack) || e)); process.exit(1); });
+  ' ) > "${entity_tenant_types}"
+}
+
+collect_schema_uuid_tenant_tables() {
+  # Base tables (never views) whose tenant_id column is ALREADY uuid. Only
+  # these are in scope for the entity/schema consistency assertion.
+  psql_admin -d "${SCRATCH_DB}" -tAc \
+    "SELECT c.table_name FROM information_schema.columns c JOIN information_schema.tables t ON t.table_schema = c.table_schema AND t.table_name = c.table_name WHERE c.table_schema = 'public' AND c.column_name = 'tenant_id' AND c.data_type = 'uuid' AND t.table_type = 'BASE TABLE' ORDER BY 1" \
+    | sed '/^[[:space:]]*$/d' | sort -u > "${schema_uuid_tenant_tables}"
+}
+
+report_tenant_entity_diff() {
+  # One-directional comparison, schema side is authoritative. A mismatch is a
+  # uuid tenant_id column whose mapping entity declares another type, or a
+  # uuid tenant_id table no entity declares tenant_id on at all. Both mean
+  # the entity was left behind by the slice that rebound the column.
+  tenant_entity_mismatches="$(awk -F'|' '
+    NR == FNR { in_scope[$1] = 1; next }
+    { declared[$1] = $2 "|" $3 }
+    END {
+      for (table in in_scope) {
+        if (table in declared) {
+          split(declared[table], parts, "|")
+          if (parts[2] != "uuid") print table "|" parts[1] "|uuid|" parts[2]
+        } else {
+          print table "||(no entity declares tenant_id)|uuid|(absent)"
+        }
+      }
+    }' "${schema_uuid_tenant_tables}" "${entity_tenant_types}" | sort)"
+  tenant_entity_mismatch_count="$(printf '%s' "${tenant_entity_mismatches}" | grep -c . || true)"
+
+  printf 'uuid tenant_id tables  : %s\n' "$(wc -l < "${schema_uuid_tenant_tables}" | tr -d ' ')"
+  printf 'entity uuid mismatches : %s\n' "${tenant_entity_mismatch_count}"
+
+  if [ -n "${tenant_entity_mismatches}" ]; then
+    printf '\n%s\n' "Base tables whose tenant_id is uuid while the mapping entity declares another type (table | entity | schema type | declared type):"
+    printf '%s\n' "${tenant_entity_mismatches}" | sed 's/^/  - /'
+  fi
+}
+
 printf '\n%s\n' "==> Scenario 1: comparing against the entity declarations"
 collect_tables
 report_diff
@@ -522,6 +632,9 @@ collect_rls_invariants
 report_rls_diff
 collect_tenant_type_invariants
 report_tenant_type_diff
+collect_entity_tenant_types
+collect_schema_uuid_tenant_tables
+report_tenant_entity_diff
 
 printf '\n'
 if [ "${migration_status}" -ne 0 ]; then
@@ -547,6 +660,9 @@ if [ "${stale_tenant_count}" -ne 0 ]; then
 fi
 if [ "${uuid_cast_issue_count}" -ne 0 ]; then
   fail "FAIL: ${uuid_cast_issue_count} policy expression(s) on a uuid tenant column still cast the column to text or omit the uuid cast on the setting (see above)."
+fi
+if [ "${tenant_entity_mismatch_count}" -ne 0 ]; then
+  fail "FAIL: ${tenant_entity_mismatch_count} entity declaration(s) disagree with a uuid tenant_id column in the built schema (see above)."
 fi
 
 printf '%s\n' "PASS (scenario 1): the migration set builds every entity table and column from an empty database, and no forced-RLS table is left deny-all without a tenant-scoped policy."
@@ -584,6 +700,9 @@ collect_rls_invariants
 report_rls_diff
 collect_tenant_type_invariants
 report_tenant_type_diff
+collect_entity_tenant_types
+collect_schema_uuid_tenant_tables
+report_tenant_entity_diff
 
 printf '\n'
 if [ "${migration2_status}" -ne 0 ]; then
@@ -610,6 +729,9 @@ fi
 if [ "${uuid_cast_issue_count}" -ne 0 ]; then
   fail "FAIL: ${uuid_cast_issue_count} policy expression(s) on a uuid tenant column cast the column to text or omit the uuid cast after the partial-ledger re-run (see above)."
 fi
+if [ "${tenant_entity_mismatch_count}" -ne 0 ]; then
+  fail "FAIL: ${tenant_entity_mismatch_count} entity declaration(s) disagree with a uuid tenant_id column in the built schema after the partial-ledger re-run (see above)."
+fi
 
 printf '%s\n' "PASS (scenario 2): the migration set re-applies cleanly over an existing schema with a partial ledger."
-printf '%s\n' "PASS: the migration set builds every entity table and column from an empty database, survives a partial-ledger re-run, and leaves no forced-RLS table deny-all, no defined policy expression without the app.tenant_id predicate, no non-uuid tenant column outside the reviewed manifest, and no predicate on a uuid tenant column left in the text form."
+printf '%s\n' "PASS: the migration set builds every entity table and column from an empty database, survives a partial-ledger re-run, and leaves no forced-RLS table deny-all, no defined policy expression without the app.tenant_id predicate, no non-uuid tenant column outside the reviewed manifest, no predicate on a uuid tenant column left in the text form, and no entity declaring tenant_id with a non-uuid type where the schema column is uuid."
