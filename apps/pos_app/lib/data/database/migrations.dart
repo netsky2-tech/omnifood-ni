@@ -2257,6 +2257,131 @@ final migration51_52 = Migration(51, 52, (database) async {
   );
 });
 
+final migration52_53 = Migration(52, 53, (database) async {
+  // OHAC local delivery persistence (design §4.2, §5, §6). Everything here is
+  // additive: the legacy verifier projection is left exactly as it is
+  // (decision 33), so a terminal that never negotiates OHAC is unaffected by
+  // this migration.
+
+  // Immutable policy artifacts. The verifier is stored exactly as received; it
+  // is never transformed and it is read only inside the local authorization
+  // path, never logged and never exposed.
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS human_auth_policy_epochs (
+      tenant_id TEXT NOT NULL,
+      terminal_id TEXT NOT NULL,
+      sequence INTEGER NOT NULL,
+      digest TEXT NOT NULL,
+      previous_sequence INTEGER NOT NULL,
+      previous_digest TEXT NOT NULL,
+      schema TEXT NOT NULL,
+      target_pos_build TEXT NOT NULL,
+      publisher_backend_build TEXT NOT NULL,
+      minimum_assertion_schema TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      received_at TEXT NOT NULL,
+      PRIMARY KEY (tenant_id, terminal_id, sequence)
+    )
+  ''');
+
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS human_auth_policy_entries (
+      tenant_id TEXT NOT NULL,
+      terminal_id TEXT NOT NULL,
+      sequence INTEGER NOT NULL,
+      user_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      role TEXT NOT NULL,
+      permissions TEXT NOT NULL,
+      verifier_algorithm TEXT NOT NULL,
+      verifier_format_version TEXT NOT NULL,
+      verifier_encoded TEXT NOT NULL,
+      attempt_reset_generation TEXT NOT NULL,
+      PRIMARY KEY (tenant_id, terminal_id, sequence, user_id)
+    )
+  ''');
+
+  await database.execute('''
+    CREATE INDEX IF NOT EXISTS index_human_auth_policy_entries_user
+    ON human_auth_policy_entries (tenant_id, terminal_id, user_id)
+  ''');
+
+  // Mutable terminal state, one row per terminal, guarded by a revision so a
+  // transition is a compare-and-set rather than a blind write.
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS human_auth_terminal_state (
+      tenant_id TEXT NOT NULL,
+      terminal_id TEXT NOT NULL,
+      state TEXT NOT NULL,
+      active_sequence INTEGER NOT NULL,
+      active_digest TEXT NOT NULL,
+      revision INTEGER NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (tenant_id, terminal_id)
+    )
+  ''');
+
+  // Durable attempt state: it must survive process death, logout, a successful
+  // sync, an epoch replacement, and an app upgrade.
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS human_auth_attempt_state (
+      tenant_id TEXT NOT NULL,
+      terminal_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      failure_timestamps TEXT NOT NULL,
+      locked_until TEXT,
+      reset_generation TEXT NOT NULL,
+      local_authorization_sequence INTEGER NOT NULL,
+      revision INTEGER NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (tenant_id, terminal_id, user_id)
+    )
+  ''');
+
+  // Append-only local event log.
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS human_auth_local_events (
+      id TEXT NOT NULL PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      terminal_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      sequence INTEGER NOT NULL,
+      payload TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    )
+  ''');
+
+  await database.execute('''
+    CREATE INDEX IF NOT EXISTS index_human_auth_local_events_terminal
+    ON human_auth_local_events (tenant_id, terminal_id, created_at)
+  ''');
+
+  // Immutability is a property of the schema, not a convention callers
+  // remember: a policy artifact that could be edited in place would let the
+  // stored epoch disagree with the digest the backend signed. The local event
+  // log is append-only for the same reason.
+  for (final table in [
+    'human_auth_policy_epochs',
+    'human_auth_policy_entries',
+    'human_auth_local_events',
+  ]) {
+    await database.execute('''
+      CREATE TRIGGER IF NOT EXISTS trg_${table}_no_update
+      BEFORE UPDATE ON $table
+      BEGIN
+        SELECT RAISE(ABORT, '$table is append-only: update is forbidden');
+      END
+    ''');
+    await database.execute('''
+      CREATE TRIGGER IF NOT EXISTS trg_${table}_no_delete
+      BEFORE DELETE ON $table
+      BEGIN
+        SELECT RAISE(ABORT, '$table is append-only: delete is forbidden');
+      END
+    ''');
+  }
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -2300,6 +2425,7 @@ final allMigrations = [
   migration49_50,
   migration50_51,
   migration51_52,
+  migration52_53,
 ];
 
 /// Catalog mapping identity is additive: historical products remain usable.
