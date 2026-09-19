@@ -12,7 +12,7 @@ import {
 })
 export class TenantTopologyRevision {
   @PrimaryGeneratedColumn('uuid') id: string;
-  @Column() tenant_id: string;
+  @Column({ type: 'uuid' }) tenant_id: string;
   @Column({ type: 'integer' }) contract_version: number;
   @Column({ type: 'integer' }) revision: number;
   @Column({ type: 'jsonb' }) topology: Record<string, unknown>;

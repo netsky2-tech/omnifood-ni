@@ -2,8 +2,8 @@
 
 **Parent plan (plan of record):** `odd/tasks/issue-286-tenant-id-uuid.md`
 **Sibling slices:** `odd/tasks/issue-286-slice-b1.md` (#360/#369/#363/#364), `odd/tasks/issue-286-slice-b2.md` (#368/#372/#374)
-**Base:** `origin/main` @ `8e3fe64`
-**Status:** planned 2026-09-19, no code written.
+**Base:** `origin/main` @ `5ecbe23`
+**Status:** C.1 merged (#384, `5ecbe23`). C.2–C.6 planned; no code written for those units.
 
 ## Scope — measured from the catalog
 
@@ -75,6 +75,8 @@ The rule recorded after slice B1: a fixture census that greps for entity class n
 
 Literal text seeds were found in `invoices.service.db.spec.ts` (6), `onboarding-template-cutover.db.e2e-spec.ts` (2) and `onboarding-security-isolation.db.e2e-spec.ts` (1); the rest seed from variables whose values must be checked at the unit, not assumed. **The fix pattern is slice B1's**: a valid, deterministic UUID derived from a readable label, with no assertion weakened and no test skipped.
 
+**Corrected in C.2, and it matters for C.3–C.5.** The table above enumerates each fixture by the slice C entities it builds, and it is incomplete for C.2's own three tables: `activation-device-provisioning.db.spec.ts` is listed as `InvoiceItem` only, but it is `synchronize: true` and also builds `TenantTopologyRevision`. It is safe *only because it seeds `randomUUID()`* — a text seed there would have broken exactly as in B1. So the checkable class is not "a fixture that builds a slice C entity" but "a fixture that builds a slice C entity **whose column type changes** *and* seeds a non-UUID value", and no enumeration of the first class substitutes for it. Measured for C.2, three ways: no spec runs the full migration chain (`migrationsRun: true` / `runMigrations(` have zero hits), the one `synchronize: true` fixture above seeds a valid UUID, and the four `test/identity/*.e2e-spec.ts` files that import `TenantCapabilityEvent` mock the repository rather than a schema. Also measured: the harness does not exercise a rebind unit's own re-run, because `partial_ledger_names` holds only CREATE migrations — C.2's idempotency is therefore argued from the emitter, not proven by the harness.
+
 ## Units
 
 Each unit is its own commit, its own pull request, and — following slice B2, which was right — **based directly on `main`, never stacked**. Every unit here is green on its own.
@@ -112,8 +114,8 @@ Calibration, measured across this issue: a migration plus its spec costs roughly
 
 | Unit | Expectation | Measured at close |
 | --- | --- | --- |
-| C.1 | ~350–450 | |
-| C.2 | ~400 | |
+| C.1 | ~350–450 | 268 (236 ins / 32 del, code only) |
+| C.2 | ~400 | 496 (487 new / 9 del) |
 | C.3 | ~350 | |
 | C.4 | ~450 | |
 | C.5 | ~350 | |
@@ -125,17 +127,22 @@ Calibration, measured across this issue: a migration plus its spec costs roughly
 3. **A green measured against a superseded base is not evidence.** `main` moved five times during B1.
 4. **A conformance spec pins an entity's declared columns in more places than a reader enumerates** — three in `human-auth-entities.spec.ts`, not the two the document listed. Grep the whole spec for the old shape. Check whether an equivalent spec exists for slice C's entities before assuming there is none.
 5. **RLS plan evidence must be taken as a non-bypassing role**; as a superuser the qual is absent from the plan and the same `EXPLAIN` looks clean for the wrong reason.
-6. **`test:e2e` failed once in two different units and never reproduced** (7 tests each, suite never captured). Treat a single red run as untrusted until it repeats, and record it rather than attributing it.
+6. **`test:e2e` failed once in two different units and never reproduced** (7 tests each, suite never captured). Treat a single red run as untrusted until it repeats, and record it rather than attributing it. Measured in C.2: it did not reproduce (49 suites / 392 tests green, first pass).
+7. **Three migration specs are gated on `DB_PASSWORD` and run in no suite at all.** `1764000000000-EnforceAuditLogImmutability.spec.ts`, `1765000000000-CreateAuditIntegrityAlerts.spec.ts` and `1766000000000-BohInventoryLedgerFoundation.spec.ts` self-skip via `process.env.DB_PASSWORD?.trim() ? describe : describe.skip`, because plain `npm test` does not load `test/setup-test-env.ts`; and neither `test:db` (`*.db.spec.ts`) nor `test:e2e` (`.e2e-spec.ts`) matches them. They account for the 3 skipped suites in the C.2 run. Activated explicitly with `DB_PASSWORD` set they pass (3/3, 7 tests), so they are green today — but a red there would be invisible to the standard evidence run. `1765000000000` creates `audit_integrity_alerts`, a C.3 table, so **C.3 must activate them rather than inherit the skip**.
 
 ## Evidence log
 
 | Unit | Commit | Evidence |
 | --- | --- | --- |
-| **C.1** | pending merge | Six migrations resolve per table site. Harness exit 0 in both scenarios, `14 / 0 / 0 / 0` verbatim, `uuid tenant_id tables: 51`, `entity uuid mismatches: 0`. 232 suites / 2128 tests green. |
+| **C.1** | `5ecbe23` (#384) | Six migrations resolve per table site. Harness exit 0 in both scenarios, `14 / 0 / 0 / 0` verbatim, `uuid tenant_id tables: 51`, `entity uuid mismatches: 0`. 232 suites / 2128 tests green. |
+| **C.2** | `feat/tenant-uuid-slice-c2-lifecycle` (PR pending) | 3 tables / 10 policies rebound; ratchet 14 → 11. Harness exit 0 in both scenarios: `11 / 0 / 0 / 0` verbatim, `uuid tenant_id tables: 51 → 54`, `entity uuid mismatches: 0`, `ledger rows removed: 27 / 27`. Spec 5/5; `1808000000000-RepairTenantTopologyRevisions.spec.ts` 8/8 and unmodified. `nest build` and `npx eslint` (five paths) exit 0. Each `previousType` verified against the live pre-C.2 `information_schema`, not only the DDL: `character varying` ×2, `character varying(64)` ×1. No fixture fix was needed. Suites: `npm test` 233 suites / 2176 tests, `test:db` 38 / 219, `test:e2e` 49 / 394, all green with zero failures. |
+
+**Re-measured after rebase, because hazard 3 applies to this slice.** These numbers were first taken against `5ecbe23`. `main` then moved eleven commits (`5ecbe23` to `262088a`, the OHAC delivery work), which changed **both** `verify-schema-build.sh` (it learned to ignore `@ViewEntity` / `@ViewColumn`) and several fixtures this slice builds against, including `activation-device-provisioning.db.spec.ts` and six onboarding e2e specs. A green measured against a superseded base is not evidence, so every unit was rebased onto `262088a` and re-measured there: harness exit 0 in both scenarios with unchanged counters, and suites green on the new baseline of **233 / 2176, 38 / 219, 49 / 394**. All four rebases were conflict-free, including `app.module.ts`, where the C.3 `ForensicAlert` entity and the `SystemParametersConfigActiveView` entity added by main both survive.
+
 ## Relevant files
 
 - `apps/admin_backend/src/migrations/1768000000000-CreateCatalogValues.ts`, `1785000000000-AddTenantCapabilityEvent.ts`, `1794000000001-AddTenantTopologyRevisionsRls.ts`, `1795000000000-CreateTenantFulfillmentRecords.ts`, `1807000000000-CreateDeviceSyncCredentials.ts`, `1808000000000-RepairTenantTopologyRevisions.ts` — C.1's six files.
-- `apps/admin_backend/src/migrations/1809100000000-RebindHumanAuthorizationTenantColumns.ts` — the closest template (slice B2's first slice unit).
+- `apps/admin_backend/src/migrations/1809100000000-RebindHumanAuthorizationTenantColumns.ts` — the closest template (slice B2's first slice unit), and now also `1809120000000-RebindLifecycleTenantColumns.ts` (C.2), which is the closest template for the units that follow.
 - `apps/admin_backend/scripts/schema-tenant-type-manifest.txt` — the ratchet, 14 entries, empty at the end of this slice.
 - `apps/admin_backend/scripts/verify-schema-build.sh` — `partial_ledger_names` defines the re-run class.
 - `apps/admin_backend/src/core/database/tenant-rls-policy.ts` — the shared emitter and `resolveTenantRlsPredicate`; unchanged here, consumed by every unit.

@@ -30,6 +30,3 @@ column invoice_items.tenant_id
 column legacy_import_integrity_reports.tenant_id
 column legacy_onboarding_migration_receipts.tenant_id
 column promotions.tenant_id
-column tenant_capability_event.tenant_id
-column tenant_fulfillment_records.tenant_id
-column tenant_topology_revisions.tenant_id
