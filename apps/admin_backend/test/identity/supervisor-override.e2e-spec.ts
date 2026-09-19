@@ -146,6 +146,7 @@ describe('Dual-Channel Supervisor Override (e2e) (Slice 10.2)', () => {
     };
 
     auditRepository = {
+      findOne: jest.fn(),
       save: jest.fn(),
     };
 
