@@ -11,12 +11,27 @@ import { InboundSyncResponseDto } from '../dto/inbound-sync.dto';
  * exercises tenant validation and delegation, not OHAC negotiation, so the
  * principal is omitted and the negotiation member stays absent.
  */
-const deviceRequest = () => ({}) as never;
+const deviceRequest = (withPrincipal = false) =>
+  (withPrincipal
+    ? { devicePrincipal: { deviceId: 'pos-terminal-01' } }
+    : {}) as never;
+
+const ackDto = {
+  schema: 'ohac.staff-policy-epoch.v1',
+  sequence: '1',
+  digest: 'sha256:' + 'a'.repeat(64),
+  previousSequence: '0',
+  previousDigest: 'GENESIS',
+  posBuild: 'pos-build-1',
+  assertionSchema: 'ohac.assertion.v1',
+  idempotencyKey: 'idem-1',
+};
 
 describe('InboundSyncController', () => {
   let controller: InboundSyncController;
   const inboundSyncService = {
     getInboundDeltas: jest.fn(),
+    acknowledgeStaffPolicyEpoch: jest.fn(),
   };
 
   const mockResponse: InboundSyncResponseDto = {
@@ -137,5 +152,43 @@ describe('InboundSyncController', () => {
       ackPayload,
     );
     expect(result).toEqual(ackResponse);
+  });
+  it('delegates the epoch acknowledgement with the authenticated principal', async () => {
+    const expected = {
+      status: 'ACCEPTED' as const,
+      receiptId: 'receipt-1',
+      sequence: '1',
+      digest: 'sha256:' + 'a'.repeat(64),
+      floorSequence: '1',
+    };
+    inboundSyncService.acknowledgeStaffPolicyEpoch.mockResolvedValue(expected);
+
+    const result = await controller.acknowledgeStaffPolicyEpoch(
+      deviceRequest(true),
+      'tenant-123',
+      ackDto,
+    );
+
+    expect(result).toEqual(expected);
+    expect(inboundSyncService.acknowledgeStaffPolicyEpoch).toHaveBeenCalledWith(
+      'tenant-123',
+      expect.objectContaining({ deviceId: 'pos-terminal-01' }),
+      ackDto,
+    );
+  });
+
+  it('refuses an acknowledgement without an authenticated device principal', async () => {
+    // Acknowledging for a terminal that did not authenticate is exactly the
+    // forgery the principal exists to prevent.
+    await expect(
+      controller.acknowledgeStaffPolicyEpoch(
+        deviceRequest(false),
+        'tenant-123',
+        ackDto,
+      ),
+    ).rejects.toThrow(UnauthorizedException);
+    expect(
+      inboundSyncService.acknowledgeStaffPolicyEpoch,
+    ).not.toHaveBeenCalled();
   });
 });
