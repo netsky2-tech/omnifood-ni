@@ -176,7 +176,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 52,
+      version: 53,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -305,6 +305,16 @@ class _$AppDatabase extends AppDatabase {
             'CREATE TABLE IF NOT EXISTS `first_customer_sale_observations` (`tenant_id` TEXT NOT NULL, `terminal_id` TEXT NOT NULL, `ticket_id` TEXT NOT NULL, `occurred_at` TEXT NOT NULL, `outbox_event_id` TEXT NOT NULL, `created_at_local` TEXT NOT NULL, PRIMARY KEY (`tenant_id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `activation_outbox_envelopes` (`id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `activation_attempt_id` TEXT NOT NULL, `event_type` TEXT NOT NULL, `idempotency_key` TEXT NOT NULL, `payload_json` TEXT NOT NULL, `payload_hash` TEXT NOT NULL, `sync_status` TEXT NOT NULL, `created_at` TEXT NOT NULL, `synced_at` TEXT, `last_error` TEXT, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `human_auth_policy_epochs` (`tenant_id` TEXT NOT NULL, `terminal_id` TEXT NOT NULL, `sequence` INTEGER NOT NULL, `digest` TEXT NOT NULL, `previous_sequence` INTEGER NOT NULL, `previous_digest` TEXT NOT NULL, `schema` TEXT NOT NULL, `target_pos_build` TEXT NOT NULL, `publisher_backend_build` TEXT NOT NULL, `minimum_assertion_schema` TEXT NOT NULL, `payload` TEXT NOT NULL, `received_at` TEXT NOT NULL, PRIMARY KEY (`tenant_id`, `terminal_id`, `sequence`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `human_auth_policy_entries` (`tenant_id` TEXT NOT NULL, `terminal_id` TEXT NOT NULL, `sequence` INTEGER NOT NULL, `user_id` TEXT NOT NULL, `status` TEXT NOT NULL, `role` TEXT NOT NULL, `permissions` TEXT NOT NULL, `verifier_algorithm` TEXT NOT NULL, `verifier_format_version` TEXT NOT NULL, `verifier_encoded` TEXT NOT NULL, `attempt_reset_generation` TEXT NOT NULL, PRIMARY KEY (`tenant_id`, `terminal_id`, `sequence`, `user_id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `human_auth_terminal_state` (`tenant_id` TEXT NOT NULL, `terminal_id` TEXT NOT NULL, `state` TEXT NOT NULL, `active_sequence` INTEGER NOT NULL, `active_digest` TEXT NOT NULL, `revision` INTEGER NOT NULL, `updated_at` TEXT NOT NULL, PRIMARY KEY (`tenant_id`, `terminal_id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `human_auth_attempt_state` (`tenant_id` TEXT NOT NULL, `terminal_id` TEXT NOT NULL, `user_id` TEXT NOT NULL, `failure_timestamps` TEXT NOT NULL, `locked_until` TEXT, `reset_generation` TEXT NOT NULL, `local_authorization_sequence` INTEGER NOT NULL, `revision` INTEGER NOT NULL, `updated_at` TEXT NOT NULL, PRIMARY KEY (`tenant_id`, `terminal_id`, `user_id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `human_auth_local_events` (`id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `terminal_id` TEXT NOT NULL, `event_type` TEXT NOT NULL, `sequence` INTEGER NOT NULL, `payload` TEXT NOT NULL, `created_at` TEXT NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE UNIQUE INDEX `index_audit_logs_tenant_id_device_id_user_id_sequence_no` ON `audit_logs` (`tenant_id`, `device_id`, `user_id`, `sequence_no`)');
         await database.execute(
