@@ -105,6 +105,18 @@ export interface OhacPublicationFixture {
     }>,
   ): Promise<{ readonly sequence: string; readonly digest: string }>;
   seedMarker(tenantId: string, revision: number): Promise<void>;
+  /**
+   * Seeds a materialized epoch row directly, which the delivery path itself
+   * cannot produce out of order. A test that needs an epoch to exist at a
+   * sequence the terminal is not yet owed uses this.
+   */
+  seedEpoch(
+    tenantId: string,
+    terminalId: string,
+    sequence: number,
+    digest: string,
+    posBuild: string,
+  ): Promise<void>;
   /** Seeds the terminal's accepted head, as an earlier acknowledgement would have. */
   seedAckFloor(
     tenantId: string,
@@ -254,6 +266,27 @@ export async function createOhacPublicationFixture(): Promise<OhacPublicationFix
         sequence: projected.value.sequence,
         digest: projected.value.digest,
       };
+    },
+
+    seedEpoch: async (tenantId, terminalId, sequence, digest, posBuild) => {
+      await admin.query(
+        `INSERT INTO human_auth_policy_epochs
+           (tenant_id, terminal_id, schema, sequence, previous_sequence,
+            previous_digest, publisher_backend_build, target_pos_build,
+            minimum_assertion_schema, cohort_decision, digest, payload)
+         VALUES ($1, $2, 'ohac.staff-policy-epoch.v1', $3, $4,
+                 'GENESIS', 'backend-build-1', $5,
+                 'ohac.assertion.v1', 'ELIGIBLE', $6, $7)`,
+        [
+          tenantId,
+          terminalId,
+          sequence,
+          sequence - 1,
+          posBuild,
+          digest,
+          { schema: 'ohac.staff-policy-epoch.v1', sequence: String(sequence) },
+        ],
+      );
     },
 
     seedAckFloor: async (tenantId, terminalId, sequence, digest) => {
