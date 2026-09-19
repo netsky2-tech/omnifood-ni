@@ -4,14 +4,39 @@ import { CreateDeviceSyncCredentials1807000000000 } from './1807000000000-Create
 describe('CreateDeviceSyncCredentials1807000000000', () => {
   const migration = new CreateDeviceSyncCredentials1807000000000();
 
-  const collectSql = async (direction: 'up' | 'down' = 'up') => {
+  // The migration resolves the tenant predicate through the shared
+  // type-aware resolver, which reads each table's tenant_id column type
+  // from information_schema. The stub answers per table (the resolver binds
+  // the table name as $1) with the declared data_type; a raw rows array
+  // mirrors what PostgresQueryRunner.query returns at runtime.
+  const createQueryRunner = (
+    tenantIdDataTypes: Record<string, string> = {},
+  ) => {
     const queries: string[] = [];
     const queryRunner = {
-      query: jest.fn((sql: string): Promise<QueryResult> => {
-        queries.push(sql);
-        return Promise.resolve(new QueryResult());
-      }),
+      query: jest.fn(
+        (sql: string, parameters?: unknown[]): Promise<QueryResult> => {
+          queries.push(sql);
+          if (sql.includes('information_schema.columns')) {
+            const table =
+              typeof parameters?.[0] === 'string' ? parameters[0] : '';
+            return Promise.resolve([
+              { data_type: tenantIdDataTypes[table] ?? 'character varying' },
+            ]) as unknown as Promise<QueryResult>;
+          }
+          return Promise.resolve(new QueryResult());
+        },
+      ),
     } as unknown as QueryRunner;
+
+    return { queryRunner, queries };
+  };
+
+  const collectSql = async (
+    direction: 'up' | 'down' = 'up',
+    tenantIdDataTypes?: Record<string, string>,
+  ): Promise<string> => {
+    const { queryRunner, queries } = createQueryRunner(tenantIdDataTypes);
     await migration[direction](queryRunner);
     return queries.join('\n');
   };
@@ -98,5 +123,50 @@ describe('CreateDeviceSyncCredentials1807000000000', () => {
     ]) {
       expect(sql).toContain(fragment);
     }
+  });
+
+  it('emits the setting-cast predicate on both tables when tenant_id is already uuid (partial-ledger re-run)', async () => {
+    // A partial-ledger re-run happens after later slices converted the
+    // columns to uuid; the recreated policies must use the setting-cast form
+    // instead of the hardcoded bare compare.
+    const sql = await collectSql('up', {
+      device_sync_credentials: 'uuid',
+      device_sync_credential_events: 'uuid',
+    });
+
+    expect(sql).toContain(
+      "tenant_id = current_setting('app.tenant_id', true)::uuid",
+    );
+    expect(sql).not.toContain(
+      "tenant_id::text = current_setting('app.tenant_id', true)",
+    );
+  });
+
+  it('resolves the predicate per table, never one shared answer across tables', async () => {
+    // The two tables resolve independently: a shared resolution would give
+    // one table the other's answer when the column types differ mid-slice.
+    const { queryRunner, queries } = createQueryRunner({
+      device_sync_credentials: 'uuid',
+      device_sync_credential_events: 'character varying',
+    });
+
+    await migration.up(queryRunner);
+
+    const credentialsSelect = queries.find((q) =>
+      q.includes('device_sync_credentials_tenant_select'),
+    );
+    const eventsSelect = queries.find((q) =>
+      q.includes('device_sync_cred_events_tenant_select'),
+    );
+
+    expect(credentialsSelect).toBeDefined();
+    expect(eventsSelect).toBeDefined();
+    expect(credentialsSelect).toContain(
+      "tenant_id = current_setting('app.tenant_id', true)::uuid",
+    );
+    expect(eventsSelect).not.toContain('::uuid');
+    expect(eventsSelect).toContain(
+      "tenant_id::text = current_setting('app.tenant_id', true)",
+    );
   });
 });

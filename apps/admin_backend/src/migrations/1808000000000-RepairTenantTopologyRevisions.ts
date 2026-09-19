@@ -1,4 +1,5 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
+import { resolveTenantRlsPredicate } from '../core/database/tenant-rls-policy';
 
 export class RepairTenantTopologyRevisions1808000000000 implements MigrationInterface {
   name = 'RepairTenantTopologyRevisions1808000000000';
@@ -34,7 +35,19 @@ export class RepairTenantTopologyRevisions1808000000000 implements MigrationInte
 
       ALTER TABLE tenant_topology_revisions ENABLE ROW LEVEL SECURITY;
       ALTER TABLE tenant_topology_revisions FORCE ROW LEVEL SECURITY;
+    `);
 
+    // The predicate form must match the tenant_id column's CURRENT type: a
+    // partial-ledger re-run happens after later slices converted the column
+    // to uuid, and a hardcoded bare compare would fail with
+    // "operator does not exist: uuid = text". The shared resolver reads the
+    // catalog once and returns the valid, index-friendly form.
+    const tenantPredicate = await resolveTenantRlsPredicate(
+      queryRunner,
+      'tenant_topology_revisions',
+    );
+
+    await queryRunner.query(`
       DROP POLICY IF EXISTS tenant_topology_revisions_tenant_select ON tenant_topology_revisions;
       DO $$
       BEGIN
@@ -46,7 +59,7 @@ export class RepairTenantTopologyRevisions1808000000000 implements MigrationInte
         ) THEN
           CREATE POLICY tenant_topology_revisions_tenant_select ON tenant_topology_revisions
             FOR SELECT
-            USING (tenant_id = current_setting('app.tenant_id', true));
+            USING (${tenantPredicate});
         END IF;
       END;
       $$;
@@ -62,7 +75,7 @@ export class RepairTenantTopologyRevisions1808000000000 implements MigrationInte
         ) THEN
           CREATE POLICY tenant_topology_revisions_tenant_insert ON tenant_topology_revisions
             FOR INSERT
-            WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+            WITH CHECK (${tenantPredicate});
         END IF;
       END;
       $$;

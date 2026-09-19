@@ -1,4 +1,5 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
+import { resolveTenantRlsPredicate } from '../core/database/tenant-rls-policy';
 
 export class CreateDeviceSyncCredentials1807000000000 implements MigrationInterface {
   name = 'CreateDeviceSyncCredentials1807000000000';
@@ -42,7 +43,18 @@ export class CreateDeviceSyncCredentials1807000000000 implements MigrationInterf
       -- If an app role bypasses non-forced RLS, FORCE RLS eliminates that risk without unsafe bypasses.
       ALTER TABLE device_sync_credentials ENABLE ROW LEVEL SECURITY;
       ALTER TABLE device_sync_credentials FORCE ROW LEVEL SECURITY;
+    `);
 
+    // Each table resolves its OWN predicate from the catalog: the two
+    // tenant_id columns can be of different types mid-slice (a partial-ledger
+    // re-run lands after later slices converted only some columns to uuid),
+    // so a single shared resolution would give one table the other's answer.
+    const credentialsPredicate = await resolveTenantRlsPredicate(
+      queryRunner,
+      'device_sync_credentials',
+    );
+
+    await queryRunner.query(`
       DO $$
       BEGIN
         IF NOT EXISTS (
@@ -52,7 +64,7 @@ export class CreateDeviceSyncCredentials1807000000000 implements MigrationInterf
             AND policyname = 'device_sync_credentials_tenant_select'
         ) THEN
           CREATE POLICY device_sync_credentials_tenant_select ON device_sync_credentials
-            FOR SELECT USING (tenant_id = current_setting('app.tenant_id', true));
+            FOR SELECT USING (${credentialsPredicate});
         END IF;
         IF NOT EXISTS (
           SELECT 1 FROM pg_policies
@@ -61,7 +73,7 @@ export class CreateDeviceSyncCredentials1807000000000 implements MigrationInterf
             AND policyname = 'device_sync_credentials_tenant_insert'
         ) THEN
           CREATE POLICY device_sync_credentials_tenant_insert ON device_sync_credentials
-            FOR INSERT WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+            FOR INSERT WITH CHECK (${credentialsPredicate});
         END IF;
         IF NOT EXISTS (
           SELECT 1 FROM pg_policies
@@ -70,8 +82,8 @@ export class CreateDeviceSyncCredentials1807000000000 implements MigrationInterf
             AND policyname = 'device_sync_credentials_tenant_update'
         ) THEN
           CREATE POLICY device_sync_credentials_tenant_update ON device_sync_credentials
-            FOR UPDATE USING (tenant_id = current_setting('app.tenant_id', true))
-            WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+            FOR UPDATE USING (${credentialsPredicate})
+            WITH CHECK (${credentialsPredicate});
         END IF;
         IF NOT EXISTS (
           SELECT 1 FROM pg_policies
@@ -80,11 +92,13 @@ export class CreateDeviceSyncCredentials1807000000000 implements MigrationInterf
             AND policyname = 'device_sync_credentials_tenant_delete'
         ) THEN
           CREATE POLICY device_sync_credentials_tenant_delete ON device_sync_credentials
-            FOR DELETE USING (tenant_id = current_setting('app.tenant_id', true));
+            FOR DELETE USING (${credentialsPredicate});
         END IF;
       END;
       $$;
+    `);
 
+    await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS device_sync_credential_events (
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         tenant_id varchar(128) NOT NULL,
@@ -105,7 +119,14 @@ export class CreateDeviceSyncCredentials1807000000000 implements MigrationInterf
 
       ALTER TABLE device_sync_credential_events ENABLE ROW LEVEL SECURITY;
       ALTER TABLE device_sync_credential_events FORCE ROW LEVEL SECURITY;
+    `);
 
+    const eventsPredicate = await resolveTenantRlsPredicate(
+      queryRunner,
+      'device_sync_credential_events',
+    );
+
+    await queryRunner.query(`
       DO $$
       BEGIN
         IF NOT EXISTS (
@@ -115,7 +136,7 @@ export class CreateDeviceSyncCredentials1807000000000 implements MigrationInterf
             AND policyname = 'device_sync_cred_events_tenant_select'
         ) THEN
           CREATE POLICY device_sync_cred_events_tenant_select ON device_sync_credential_events
-            FOR SELECT USING (tenant_id = current_setting('app.tenant_id', true));
+            FOR SELECT USING (${eventsPredicate});
         END IF;
         IF NOT EXISTS (
           SELECT 1 FROM pg_policies
@@ -124,7 +145,7 @@ export class CreateDeviceSyncCredentials1807000000000 implements MigrationInterf
             AND policyname = 'device_sync_cred_events_tenant_insert'
         ) THEN
           CREATE POLICY device_sync_cred_events_tenant_insert ON device_sync_credential_events
-            FOR INSERT WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+            FOR INSERT WITH CHECK (${eventsPredicate});
         END IF;
       END;
       $$;

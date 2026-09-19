@@ -1,4 +1,5 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
+import { resolveTenantRlsPredicate } from '../core/database/tenant-rls-policy';
 
 export class CreateCatalogValues1768000000000 implements MigrationInterface {
   name = 'CreateCatalogValues1768000000000';
@@ -37,6 +38,16 @@ export class CreateCatalogValues1768000000000 implements MigrationInterface {
       ALTER TABLE catalog_values FORCE ROW LEVEL SECURITY
     `);
 
+    // The predicate form must match the tenant_id column's CURRENT type: a
+    // partial-ledger re-run happens after later slices converted the column
+    // to uuid, and a hardcoded bare compare would fail with
+    // "operator does not exist: uuid = text". The shared resolver reads the
+    // catalog once and returns the valid, index-friendly form.
+    const tenantPredicate = await resolveTenantRlsPredicate(
+      queryRunner,
+      'catalog_values',
+    );
+
     await queryRunner.query(`
       DO $$
       BEGIN
@@ -48,7 +59,7 @@ export class CreateCatalogValues1768000000000 implements MigrationInterface {
         ) THEN
           CREATE POLICY catalog_values_tenant_select ON catalog_values
           FOR SELECT
-          USING (tenant_id = current_setting('app.tenant_id', true));
+          USING (${tenantPredicate});
         END IF;
       END;
       $$
@@ -65,7 +76,7 @@ export class CreateCatalogValues1768000000000 implements MigrationInterface {
         ) THEN
           CREATE POLICY catalog_values_tenant_insert ON catalog_values
           FOR INSERT
-          WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+          WITH CHECK (${tenantPredicate});
         END IF;
       END;
       $$
@@ -82,8 +93,8 @@ export class CreateCatalogValues1768000000000 implements MigrationInterface {
         ) THEN
           CREATE POLICY catalog_values_tenant_update ON catalog_values
           FOR UPDATE
-          USING (tenant_id = current_setting('app.tenant_id', true))
-          WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+          USING (${tenantPredicate})
+          WITH CHECK (${tenantPredicate});
         END IF;
       END;
       $$
@@ -100,7 +111,7 @@ export class CreateCatalogValues1768000000000 implements MigrationInterface {
         ) THEN
           CREATE POLICY catalog_values_tenant_delete ON catalog_values
           FOR DELETE
-          USING (tenant_id = current_setting('app.tenant_id', true));
+          USING (${tenantPredicate});
         END IF;
       END;
       $$
