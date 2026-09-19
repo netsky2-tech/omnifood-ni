@@ -12,6 +12,7 @@ import { HumanAuthTenantPublicationState } from './entities/human-auth-tenant-pu
 import { StaffPolicySnapshotPublisher } from './services/staff-policy-snapshot-publisher.service';
 import { StaffPolicyEpochMaterializationService } from './services/staff-policy-epoch-materialization.service';
 import { StaffPolicyEpochDeliveryService } from './services/staff-policy-epoch-delivery.service';
+import { StaffPolicyEpochAcknowledgementService } from './services/staff-policy-epoch-acknowledgement.service';
 import { OhacTenantTransaction } from './rls/ohac-tenant-transaction';
 
 /**
@@ -20,9 +21,9 @@ import { OhacTenantTransaction } from './rls/ohac-tenant-transaction';
  * Maps the nine OHAC tables and registers the serialized staff-policy
  * snapshot publisher, the per-terminal epoch materialization service, the
  * delivery negotiation service, and the shared RLS transaction seam.
- * `StaffPolicyEpochDeliveryService` is exported because the device pull in
- * the sales module delegates to it rather than reading epochs itself, per
- * design §11.4 decision 24. Routes and controllers arrive in a later slice.
+ * The delivery and acknowledgement services are exported because the device
+ * pull and the acknowledgement route live in the sales module while every
+ * epoch and history read stays owned here, per design §11.4 decision 24.
  */
 @Module({
   imports: [
@@ -43,7 +44,11 @@ import { OhacTenantTransaction } from './rls/ohac-tenant-transaction';
     StaffPolicySnapshotPublisher,
     StaffPolicyEpochMaterializationService,
     StaffPolicyEpochDeliveryService,
+    StaffPolicyEpochAcknowledgementService,
   ],
-  exports: [StaffPolicyEpochDeliveryService],
+  exports: [
+    StaffPolicyEpochDeliveryService,
+    StaffPolicyEpochAcknowledgementService,
+  ],
 })
 export class HumanAuthorizationModule {}

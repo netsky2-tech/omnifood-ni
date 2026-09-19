@@ -16,6 +16,7 @@ import { OhacTenantTransaction } from './rls/ohac-tenant-transaction';
 import { StaffPolicySnapshotPublisher } from './services/staff-policy-snapshot-publisher.service';
 import { StaffPolicyEpochMaterializationService } from './services/staff-policy-epoch-materialization.service';
 import { StaffPolicyEpochDeliveryService } from './services/staff-policy-epoch-delivery.service';
+import { StaffPolicyEpochAcknowledgementService } from './services/staff-policy-epoch-acknowledgement.service';
 
 const ohacEntities = [
   HumanAuthPolicyEpoch,
@@ -74,6 +75,7 @@ describe('HumanAuthorizationModule skeleton', () => {
     expect(module.get(StaffPolicySnapshotPublisher)).toBeDefined();
     expect(module.get(StaffPolicyEpochMaterializationService)).toBeDefined();
     expect(module.get(StaffPolicyEpochDeliveryService)).toBeDefined();
+    expect(module.get(StaffPolicyEpochAcknowledgementService)).toBeDefined();
     expect(module.get(OhacTenantTransaction)).toBeDefined();
   });
 
@@ -84,5 +86,6 @@ describe('HumanAuthorizationModule skeleton', () => {
     const exports =
       Reflect.getMetadata('exports', HumanAuthorizationModule) ?? [];
     expect(exports).toContain(StaffPolicyEpochDeliveryService);
+    expect(exports).toContain(StaffPolicyEpochAcknowledgementService);
   });
 });
