@@ -5,6 +5,7 @@ import { useLogin } from "@/features/auth/auth-hooks";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
+
 const loginSchema = z.object({
   email: z.string().email("Correo inválido"),
   password: z.string().min(6, "Mínimo 6 caracteres"),

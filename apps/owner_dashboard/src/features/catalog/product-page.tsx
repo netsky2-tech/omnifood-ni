@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { getApiErrorMessage } from "@/lib/api-error";
+import { toast } from "@/hooks/use-toast";
 import {
   Dialog,
   DialogContent,
@@ -273,6 +274,10 @@ function ProductDialog({
             is_perishable: isPerishable,
           },
         });
+        toast({
+          title: "Producto actualizado",
+          description: `"${name.trim()}" se actualizó exitosamente.`,
+        });
       } else {
         const input: CreateProductInput = {
           name: name.trim(),
@@ -283,10 +288,20 @@ function ProductDialog({
           is_perishable: isPerishable,
         };
         await createMutation.mutateAsync(input);
+        toast({
+          title: "Producto creado",
+          description: `"${name.trim()}" se guardó exitosamente en el catálogo.`,
+        });
       }
       onClose();
     } catch (err) {
-      setError(getApiErrorMessage(err, "Error al guardar producto"));
+      const msg = getApiErrorMessage(err, "Error al guardar producto");
+      setError(msg);
+      toast({
+        variant: "destructive",
+        title: "Error al guardar",
+        description: msg,
+      });
     } finally {
       isSubmittingRef.current = false;
     }
@@ -454,9 +469,19 @@ function DeactivateDialog({
     setError(null);
     try {
       await deactivateMutation.mutateAsync(product.id);
+      toast({
+        title: "Producto desactivado",
+        description: `"${product.name}" ha sido desactivado del catálogo.`,
+      });
       onClose();
     } catch (err) {
-      setError(getApiErrorMessage(err, "Error al desactivar el producto"));
+      const msg = getApiErrorMessage(err, "Error al desactivar el producto");
+      setError(msg);
+      toast({
+        variant: "destructive",
+        title: "Error al desactivar",
+        description: msg,
+      });
     } finally {
       isSubmittingRef.current = false;
     }

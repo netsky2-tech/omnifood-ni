@@ -14,6 +14,7 @@ import { HumanAuthPolicySnapshot } from './entities/human-auth-policy-snapshot.e
 import { HumanAuthTenantPublicationState } from './entities/human-auth-tenant-publication-state.entity';
 import { OhacTenantTransaction } from './rls/ohac-tenant-transaction';
 import { StaffPolicySnapshotPublisher } from './services/staff-policy-snapshot-publisher.service';
+import { StaffPolicyEpochMaterializationService } from './services/staff-policy-epoch-materialization.service';
 
 const ohacEntities = [
   HumanAuthPolicyEpoch,
@@ -68,8 +69,9 @@ describe('HumanAuthorizationModule skeleton', () => {
     expect(controllers).toEqual([]);
   });
 
-  it('registers the staff policy snapshot publisher with its RLS transaction seam', () => {
+  it('registers the staff policy snapshot publisher, the epoch materialization service, and the RLS transaction seam', () => {
     expect(module.get(StaffPolicySnapshotPublisher)).toBeDefined();
+    expect(module.get(StaffPolicyEpochMaterializationService)).toBeDefined();
     expect(module.get(OhacTenantTransaction)).toBeDefined();
   });
 });

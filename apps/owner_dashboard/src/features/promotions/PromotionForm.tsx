@@ -21,6 +21,7 @@ import { DAYS_OF_WEEK, cn } from '@/lib/utils';
 import { useCreatePromotion, useUpdatePromotion } from '@/hooks/use-promotions';
 import { toast } from '@/hooks/use-toast';
 import { DialogFooter } from '@/components/ui/dialog';
+import { getApiErrorMessage } from '@/lib/api-error';
 
 interface PromotionFormProps {
   initialData?: Promotion | null;
@@ -104,8 +105,8 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
       onSuccess();
     } catch (error) {
       toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'No se pudo guardar la promoción',
+        title: 'Error al guardar promoción',
+        description: getApiErrorMessage(error, 'No se pudo guardar la promoción'),
         variant: 'destructive',
       });
     }

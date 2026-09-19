@@ -17,17 +17,18 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { type Insumo, type RecipeComponent, type IngredientType, INGREDIENT_TYPES } from './types';
+import { type Insumo, type RecipeComponent, type IngredientType, type RecipeSnapshot, INGREDIENT_TYPES } from './types';
 import { type Product } from '@/features/catalog/product-types';
 import { formatNumber } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
+import { getApiErrorMessage } from '@/lib/api-error';
 
 interface RecipeFormProps {
   productId: string;
   productName: string;
   insumos: Insumo[];
   compoundProducts: Product[];
-  existingRecipe: { recipeVersion: any; components: any[] } | null;
+  existingRecipe: RecipeSnapshot | null;
   onSuccess: () => void;
   onCancel: () => void;
 }
@@ -90,7 +91,7 @@ export function RecipeForm({
     setComponents(components.filter((c) => c.tempId !== tempId));
   };
 
-  const updateComponent = (tempId: string, field: keyof FormComponent, value: any) => {
+  const updateComponent = (tempId: string, field: keyof FormComponent, value: FormComponent[keyof FormComponent]) => {
     setComponents(components.map((c) =>
       c.tempId === tempId ? { ...c, [field]: value } : c
     ));
@@ -178,8 +179,12 @@ export function RecipeForm({
 
       toast({ title: 'Éxito', description: 'Receta creada correctamente' });
       onSuccess();
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message || 'No se pudo crear la receta', variant: 'destructive' });
+    } catch (err: unknown) {
+      toast({
+        title: 'Error al guardar receta',
+        description: getApiErrorMessage(err, 'No se pudo crear la receta'),
+        variant: 'destructive',
+      });
     } finally {
       setIsSubmitting(false);
     }

@@ -12,6 +12,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ROLE_LABELS } from "./types";
 import type { User } from "./types";
 import { useDeactivateUser } from "./use-users";
+import { toast } from "@/hooks/use-toast";
+import { getApiErrorMessage } from "@/lib/api-error";
 
 interface DeactivateUserDialogProps {
   open: boolean;
@@ -33,13 +35,19 @@ export function DeactivateUserDialog({
     setError(null);
     try {
       await deactivate.mutateAsync(user.id);
+      toast({
+        title: "Usuario desactivado",
+        description: `El usuario "${user.name}" fue dado de baja correctamente.`,
+      });
       onOpenChange(false);
     } catch (err: unknown) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("Error al desactivar al usuario");
-      }
+      const msg = getApiErrorMessage(err, "Error al desactivar al usuario");
+      setError(msg);
+      toast({
+        variant: "destructive",
+        title: "Error al desactivar usuario",
+        description: msg,
+      });
     }
   };
 
