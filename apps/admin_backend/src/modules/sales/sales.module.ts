@@ -33,6 +33,7 @@ import { FiscalReportsService } from './services/fiscal-reports.service';
 import { SalesExportService } from './services/sales-export.service';
 import { SaleInventoryOutcomeService } from './services/sale-inventory-outcome.service';
 import { IdentityModule } from '../identity/identity.module';
+import { HumanAuthorizationModule } from '../identity/human-authorization/human-authorization.module';
 import { DeviceSyncModule } from '../identity/device-sync.module';
 import { OnboardingModule } from '../onboarding/onboarding.module';
 import { forwardRef } from '@nestjs/common';
@@ -40,6 +41,10 @@ import { forwardRef } from '@nestjs/common';
 @Module({
   imports: [
     IdentityModule,
+    // The device pull delegates its OHAC epoch negotiation here instead of
+    // reading epochs itself, so the tenant-bound epoch read stays owned by
+    // the human-authorization module (design §11.4 decision 24).
+    HumanAuthorizationModule,
     DeviceSyncModule,
     InventoryModule,
     forwardRef(() => OnboardingModule),
@@ -61,7 +66,7 @@ import { forwardRef } from '@nestjs/common';
       CashShiftSession,
       CashMovement,
       DatafonoEquipo,
-          ProductInventoryMappingVersion,
+      ProductInventoryMappingVersion,
     ]),
   ],
   controllers: [

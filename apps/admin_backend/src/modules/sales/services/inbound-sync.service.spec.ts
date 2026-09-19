@@ -11,6 +11,8 @@ import { RecipeDetail } from '../../inventory/entities/recipe-detail.entity';
 import { ProductInventoryMappingVersion } from '../../inventory/entities/product-inventory-mapping-version.entity';
 import { User, UserRole } from '../../identity/entities/user.entity';
 import { FiscalConfigVersionService } from '../../onboarding/services/fiscal-config-version.service';
+import { StaffPolicyEpochDeliveryService } from '../../identity/human-authorization/services/staff-policy-epoch-delivery.service';
+import type { DeviceSyncPrincipal } from '../../identity/security/device-sync-principal';
 import { CatalogType } from '../../catalog/catalog-type';
 
 interface MockQueryBuilder<T> {
@@ -36,6 +38,16 @@ function createMockQueryBuilder<T>(items: T[] = []): MockQueryBuilder<T> {
 
 describe('InboundSyncService', () => {
   let service: InboundSyncService;
+  const deliveryMock = { negotiate: jest.fn() };
+  const devicePrincipal = {
+    principalType: 'DEVICE_SYNC',
+    credentialId: 'cred-1',
+    tenantId: 'tenant-1',
+    deviceId: 'pos-terminal-01',
+    scopes: ['sync:pull'],
+    credentialVersion: 1,
+  } as unknown as DeviceSyncPrincipal;
+
   let fiscalService: {
     getFiscalConfigSnapshot: jest.Mock;
     validateIntegrity: jest.Mock;
@@ -56,7 +68,10 @@ describe('InboundSyncService', () => {
   let mockRecipeRepo: { createQueryBuilder: jest.Mock };
   let mockRecipeVersionRepo: { createQueryBuilder: jest.Mock };
   let mockRecipeDetailRepo: { createQueryBuilder: jest.Mock };
-  let mockMappingVersionRepo: { createQueryBuilder: jest.Mock; manager: { query: jest.Mock } };
+  let mockMappingVersionRepo: {
+    createQueryBuilder: jest.Mock;
+    manager: { query: jest.Mock };
+  };
   let mockUserRepo: { createQueryBuilder: jest.Mock };
 
   beforeEach(async () => {
@@ -66,7 +81,9 @@ describe('InboundSyncService', () => {
     recipeQb = createMockQueryBuilder<Recipe>([]);
     recipeVersionQb = createMockQueryBuilder<RecipeVersion>([]);
     recipeDetailQb = createMockQueryBuilder<RecipeDetail>([]);
-    mappingVersionQb = createMockQueryBuilder<ProductInventoryMappingVersion>([]);
+    mappingVersionQb = createMockQueryBuilder<ProductInventoryMappingVersion>(
+      [],
+    );
     userQb = createMockQueryBuilder<User>([]);
 
     mockProductRepo = {
@@ -136,6 +153,10 @@ describe('InboundSyncService', () => {
         {
           provide: getRepositoryToken(User),
           useValue: mockUserRepo,
+        },
+        {
+          provide: StaffPolicyEpochDeliveryService,
+          useValue: deliveryMock,
         },
       ],
     }).compile();
@@ -321,7 +342,9 @@ describe('InboundSyncService', () => {
 
     expect(response.deltas.products).toHaveLength(2);
 
-    const taxable = response.deltas.products.find((p) => p.id === 'prod-taxable');
+    const taxable = response.deltas.products.find(
+      (p) => p.id === 'prod-taxable',
+    );
     const exempt = response.deltas.products.find((p) => p.id === 'prod-exempt');
 
     expect(taxable).not.toHaveProperty('taxRate');
@@ -447,6 +470,137 @@ describe('InboundSyncService', () => {
         "SELECT set_config('app.tenant_id', $1, true)",
         ['tenant-abc'],
       );
+    });
+  });
+  describe('OHAC delivery negotiation member', () => {
+    const negotiationQuery = { ohacPosBuild: 'pos-build-1' };
+
+    // The shared setup clears mocks once, not per test, so a rejected
+    // implementation would leak into the next test and make it fail for a
+    // reason that has nothing to do with what it asserts.
+    beforeEach(() => deliveryMock.negotiate.mockReset());
+
+    it('omits the member for a client that never opted in', async () => {
+      deliveryMock.negotiate.mockResolvedValue({ result: 'not-participating' });
+
+      const response = await service.getInboundDeltas(
+        'tenant-1',
+        {},
+        devicePrincipal,
+      );
+
+      expect(response).not.toHaveProperty('humanAuthorization');
+    });
+
+    it('omits the member while the terminal is already current', async () => {
+      // Absence must never mean DISABLED, so an up-to-date terminal is silent
+      // and only an explicit status is reported.
+      deliveryMock.negotiate.mockResolvedValue({ result: 'up-to-date' });
+
+      const response = await service.getInboundDeltas(
+        'tenant-1',
+        {},
+        devicePrincipal,
+      );
+
+      expect(response).not.toHaveProperty('humanAuthorization');
+    });
+
+    it('omits the member when no device principal is present', async () => {
+      const response = await service.getInboundDeltas('tenant-1', {});
+
+      expect(response).not.toHaveProperty('humanAuthorization');
+      expect(deliveryMock.negotiate).not.toHaveBeenCalled();
+    });
+
+    it('reports an explicit non-delivery status', async () => {
+      for (const status of [
+        'DISABLED',
+        'UPGRADE_REQUIRED',
+        'RECOVERY_REQUIRED',
+      ] as const) {
+        deliveryMock.negotiate.mockResolvedValue({ result: 'status', status });
+
+        const response = await service.getInboundDeltas(
+          'tenant-1',
+          negotiationQuery,
+          devicePrincipal,
+        );
+
+        expect(response.humanAuthorization).toEqual({ status });
+      }
+    });
+
+    it('carries the epoch, sequence, and digest when there is one to apply', async () => {
+      deliveryMock.negotiate.mockResolvedValue({
+        result: 'deliver',
+        epoch: { schema: 'ohac.staff-policy-epoch.v1', sequence: '1' },
+        sequence: '1',
+        digest: 'sha256:' + 'a'.repeat(64),
+      });
+
+      const response = await service.getInboundDeltas(
+        'tenant-1',
+        negotiationQuery,
+        devicePrincipal,
+      );
+
+      expect(response.humanAuthorization).toEqual({
+        status: 'DELIVER',
+        epoch: { schema: 'ohac.staff-policy-epoch.v1', sequence: '1' },
+        sequence: '1',
+        digest: 'sha256:' + 'a'.repeat(64),
+      });
+    });
+
+    it('takes the terminal identity from the principal and the build from the query', async () => {
+      deliveryMock.negotiate.mockResolvedValue({ result: 'up-to-date' });
+
+      await service.getInboundDeltas(
+        'tenant-1',
+        {
+          ohacPosBuild: 'pos-build-1',
+          ohacPolicySchemas: 'ohac.staff-policy-epoch.v1',
+          ohacAssertionSchemas: 'ohac.assertion.v1',
+          ohacFloorSequence: '4',
+        },
+        devicePrincipal,
+      );
+
+      expect(deliveryMock.negotiate).toHaveBeenCalledWith({
+        tenantId: 'tenant-1',
+        terminalId: 'pos-terminal-01',
+        posBuild: 'pos-build-1',
+        supportedPolicySchemas: ['ohac.staff-policy-epoch.v1'],
+        supportedAssertionSchemas: ['ohac.assertion.v1'],
+        localFloorSequence: '4',
+      });
+    });
+
+    it('fails the pull closed when the delivery path refuses an untrusted artifact', async () => {
+      // Failing the whole pull is deliberate: reporting deltas while silently
+      // omitting the member would let a terminal keep operating on a corrupt
+      // policy believing it is current.
+      const failure = new Error('OHAC delivery refused an untrusted artifact');
+      deliveryMock.negotiate.mockRejectedValue(failure);
+
+      await expect(
+        service.getInboundDeltas('tenant-1', negotiationQuery, devicePrincipal),
+      ).rejects.toBe(failure);
+    });
+
+    it('still reports the rest of the pull when the tenant negotiates nothing', async () => {
+      deliveryMock.negotiate.mockResolvedValue({ result: 'not-participating' });
+
+      const response = await service.getInboundDeltas(
+        'tenant-1',
+        { sinceVersion: '100' },
+        devicePrincipal,
+      );
+
+      expect(response.status).toBe('success');
+      expect(response.currentVersion).toBeGreaterThan(0);
+      expect(response).not.toHaveProperty('humanAuthorization');
     });
   });
 });
