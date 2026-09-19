@@ -17,7 +17,7 @@ import { BIGINT_STRING } from './bigint-string.transformer';
 export class HumanAuthPolicySnapshot {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
-  @Column({ name: 'tenant_id', type: 'varchar', length: 128 })
+  @Column({ name: 'tenant_id', type: 'uuid' })
   tenantId!: string;
   @Column({ name: 'sequence', type: 'bigint', transformer: BIGINT_STRING })
   sequence!: string;
