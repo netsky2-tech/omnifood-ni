@@ -906,7 +906,9 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
           overrideAction: SupportOverrideAction.RECORD_DIAGNOSTIC_ASSIST,
           notes: 'Terminal hardware validated on site',
         },
-        'user-support-specialist',
+        // users.id is a uuid; the actor identity recorded here is the
+        // authenticated user's id, not a label (issue #412).
+        'a1111111-1111-4111-8111-111111111111',
       );
       expect(overrideResult.attempt.id).toBe(attempt.id);
 

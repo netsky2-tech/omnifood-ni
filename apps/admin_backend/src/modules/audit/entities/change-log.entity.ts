@@ -27,8 +27,17 @@ export class ChangeLog {
   @JoinColumn({ name: 'tenant_id' })
   tenant: Tenant;
 
-  @Column()
-  user_id: string;
+  @Column({ type: 'uuid', nullable: true })
+  user_id: string | null;
+
+  /**
+   * Logical actor ('SYSTEM', 'SYSTEM_RECONCILER', a terminal id) when no
+   * human performed the change. Exactly one of user_id / actor_ref is set:
+   * enforced by the change_log_actor_exactly_one CHECK (migration
+   * 1809170000000-ExplicitChangeLogActor, issue #412).
+   */
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  actor_ref: string | null;
 
   @Column({ type: 'varchar', length: 64 })
   action: string;

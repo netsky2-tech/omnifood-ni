@@ -166,7 +166,7 @@ export class CatalogService {
     if (user) {
       await this.changeLogService.log({
         tenantId,
-        userId: user.userId,
+        actor: { userId: user.userId },
         userEmail: user.userEmail,
         action: 'CREATE',
         targetType: 'catalog_value',
@@ -219,7 +219,7 @@ export class CatalogService {
     if (user && Object.keys(result.changes).length > 0) {
       await this.changeLogService.log({
         tenantId,
-        userId: user.userId,
+        actor: { userId: user.userId },
         userEmail: user.userEmail,
         action: 'UPDATE',
         targetType: 'catalog_value',
@@ -260,7 +260,7 @@ export class CatalogService {
     if (user) {
       await this.changeLogService.log({
         tenantId,
-        userId: user.userId,
+        actor: { userId: user.userId },
         userEmail: user.userEmail,
         action: 'DEACTIVATE',
         targetType: 'catalog_value',

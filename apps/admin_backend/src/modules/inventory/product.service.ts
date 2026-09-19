@@ -183,7 +183,7 @@ export class ProductService {
     if (user) {
       await this.changeLogService.log({
         tenantId,
-        userId: user.userId,
+        actor: { userId: user.userId },
         userEmail: user.userEmail,
         action: 'CREATE',
         targetType: 'product',
@@ -261,7 +261,7 @@ export class ProductService {
     if (user && Object.keys(result.changes).length > 0) {
       await this.changeLogService.log({
         tenantId,
-        userId: user.userId,
+        actor: { userId: user.userId },
         userEmail: user.userEmail,
         action: 'UPDATE',
         targetType: 'product',
@@ -298,7 +298,7 @@ export class ProductService {
     if (user) {
       await this.changeLogService.log({
         tenantId,
-        userId: user.userId,
+        actor: { userId: user.userId },
         userEmail: user.userEmail,
         action: 'DEACTIVATE',
         targetType: 'product',
