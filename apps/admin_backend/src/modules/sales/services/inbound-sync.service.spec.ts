@@ -12,6 +12,7 @@ import { ProductInventoryMappingVersion } from '../../inventory/entities/product
 import { User, UserRole } from '../../identity/entities/user.entity';
 import { FiscalConfigVersionService } from '../../onboarding/services/fiscal-config-version.service';
 import { StaffPolicyEpochDeliveryService } from '../../identity/human-authorization/services/staff-policy-epoch-delivery.service';
+import { StaffPolicyEpochAcknowledgementService } from '../../identity/human-authorization/services/staff-policy-epoch-acknowledgement.service';
 import type { DeviceSyncPrincipal } from '../../identity/security/device-sync-principal';
 import { CatalogType } from '../../catalog/catalog-type';
 
@@ -39,6 +40,7 @@ function createMockQueryBuilder<T>(items: T[] = []): MockQueryBuilder<T> {
 describe('InboundSyncService', () => {
   let service: InboundSyncService;
   const deliveryMock = { negotiate: jest.fn() };
+  const acknowledgementMock = { acknowledge: jest.fn() };
   const devicePrincipal = {
     principalType: 'DEVICE_SYNC',
     credentialId: 'cred-1',
@@ -157,6 +159,10 @@ describe('InboundSyncService', () => {
         {
           provide: StaffPolicyEpochDeliveryService,
           useValue: deliveryMock,
+        },
+        {
+          provide: StaffPolicyEpochAcknowledgementService,
+          useValue: acknowledgementMock,
         },
       ],
     }).compile();
@@ -601,6 +607,155 @@ describe('InboundSyncService', () => {
       expect(response.status).toBe('success');
       expect(response.currentVersion).toBeGreaterThan(0);
       expect(response).not.toHaveProperty('humanAuthorization');
+    });
+  });
+  describe('OHAC epoch acknowledgement', () => {
+    const ackDto = {
+      schema: 'ohac.staff-policy-epoch.v1',
+      sequence: '1',
+      digest: 'sha256:' + 'a'.repeat(64),
+      previousSequence: '0',
+      previousDigest: 'GENESIS',
+      posBuild: 'pos-build-1',
+      assertionSchema: 'ohac.assertion.v1',
+      idempotencyKey: 'idem-1',
+    };
+
+    beforeEach(() => acknowledgementMock.acknowledge.mockReset());
+
+    it('returns the receipt for an accepted acknowledgement', async () => {
+      acknowledgementMock.acknowledge.mockResolvedValue({
+        status: 'accepted',
+        receipt: {
+          receiptId: 'receipt-1',
+          status: 'ACCEPTED',
+          sequence: '1',
+          digest: ackDto.digest,
+          floorSequence: '1',
+        },
+      });
+
+      const response = await service.acknowledgeStaffPolicyEpoch(
+        'tenant-1',
+        devicePrincipal,
+        ackDto,
+      );
+
+      expect(response).toEqual({
+        status: 'ACCEPTED',
+        receiptId: 'receipt-1',
+        sequence: '1',
+        digest: ackDto.digest,
+        floorSequence: '1',
+      });
+    });
+
+    it('returns the same receipt for a replayed acknowledgement', async () => {
+      // A retry must be indistinguishable from the first success, because the
+      // terminal lost the response and the receipt is its only proof.
+      const receipt = {
+        receiptId: 'receipt-1',
+        status: 'ACCEPTED' as const,
+        sequence: '1',
+        digest: ackDto.digest,
+        floorSequence: '1',
+      };
+      acknowledgementMock.acknowledge.mockResolvedValueOnce({
+        status: 'accepted',
+        receipt,
+      });
+      acknowledgementMock.acknowledge.mockResolvedValueOnce({
+        status: 'replayed',
+        receipt,
+      });
+
+      const first = await service.acknowledgeStaffPolicyEpoch(
+        'tenant-1',
+        devicePrincipal,
+        ackDto,
+      );
+      const second = await service.acknowledgeStaffPolicyEpoch(
+        'tenant-1',
+        devicePrincipal,
+        ackDto,
+      );
+
+      expect(second).toEqual(first);
+    });
+
+    it('answers a rejection as a conflict carrying the stable code', async () => {
+      acknowledgementMock.acknowledge.mockResolvedValue({
+        status: 'rejected',
+        resultCode: 'SEQUENCE_GAP',
+        sequence: '3',
+      });
+
+      await expect(
+        service.acknowledgeStaffPolicyEpoch(
+          'tenant-1',
+          devicePrincipal,
+          ackDto,
+        ),
+      ).rejects.toMatchObject({
+        status: 409,
+        response: {
+          status: 'REJECTED',
+          resultCode: 'SEQUENCE_GAP',
+          sequence: '3',
+        },
+      });
+    });
+
+    it('takes the terminal from the principal and never from the body', async () => {
+      acknowledgementMock.acknowledge.mockResolvedValue({
+        status: 'accepted',
+        receipt: {
+          receiptId: 'receipt-1',
+          status: 'ACCEPTED',
+          sequence: '1',
+          digest: ackDto.digest,
+          floorSequence: '1',
+        },
+      });
+
+      await service.acknowledgeStaffPolicyEpoch(
+        'tenant-1',
+        devicePrincipal,
+        ackDto,
+      );
+
+      expect(acknowledgementMock.acknowledge).toHaveBeenCalledWith({
+        tenantId: 'tenant-1',
+        terminalId: 'pos-terminal-01',
+        posBuild: 'pos-build-1',
+        assertionSchema: 'ohac.assertion.v1',
+        idempotencyKey: 'idem-1',
+        claim: {
+          sequence: '1',
+          digest: ackDto.digest,
+          previousSequence: '0',
+          previousDigest: 'GENESIS',
+        },
+      });
+    });
+
+    it('fails closed when the acknowledgement service is not wired', async () => {
+      // A composition without OHAC must not answer as though it had recorded
+      // anything, so the terminal gets a conflict rather than a silent success.
+      const bareService = new (
+        service.constructor as new (...args: unknown[]) => typeof service
+      )(...(Array.from({ length: 9 }, () => ({})) as unknown[]));
+
+      await expect(
+        bareService.acknowledgeStaffPolicyEpoch(
+          'tenant-1',
+          devicePrincipal,
+          ackDto,
+        ),
+      ).rejects.toMatchObject({
+        status: 409,
+        response: { status: 'REJECTED', resultCode: 'UNAVAILABLE' },
+      });
     });
   });
 });

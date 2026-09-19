@@ -19,6 +19,7 @@ import {
 } from '../dto/inbound-sync.dto';
 import { FiscalAckDto } from '../../onboarding/dto/fiscal-config-version.dto';
 import { InboundSyncService } from '../services/inbound-sync.service';
+import { AcknowledgeStaffPolicyEpochDto } from '../dto/human-authorization-ack.dto';
 
 interface InboundSyncRequest extends Request {
   devicePrincipal?: DeviceSyncPrincipal;
@@ -88,6 +89,32 @@ export class InboundSyncController {
       this.requireTenant(tenantId),
       query,
       req.devicePrincipal,
+    );
+  }
+
+  /**
+   * Terminal acknowledgement of an applied policy epoch (design §5.3). The
+   * terminal identity comes from the authenticated device principal and the
+   * tenant from the bound context, never from the body, so an acknowledgement
+   * can only ever be made for the terminal that authenticated.
+   */
+  @Post('human-authorization/staff-policy/ack')
+  @RequireSyncScopes('sync:pull')
+  async acknowledgeStaffPolicyEpoch(
+    @Req() req: InboundSyncRequest,
+    @GetTenantId() tenantId: string | undefined,
+    @Body() dto: AcknowledgeStaffPolicyEpochDto,
+  ) {
+    const principal = req.devicePrincipal;
+    if (!principal) {
+      throw new UnauthorizedException(
+        'DEVICE_PRINCIPAL_MISSING: an authenticated device is required to acknowledge an epoch',
+      );
+    }
+    return this.inboundSyncService.acknowledgeStaffPolicyEpoch(
+      this.requireTenant(tenantId),
+      principal,
+      dto,
     );
   }
 

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   Logger,
@@ -41,8 +42,11 @@ import { FiscalConfigVersionService } from '../../onboarding/services/fiscal-con
 import { bindTenantContext } from '../../../core/database/tenant-transaction';
 import type { DeviceSyncPrincipal } from '../../identity/security/device-sync-principal';
 import { StaffPolicyEpochDeliveryService } from '../../identity/human-authorization/services/staff-policy-epoch-delivery.service';
+import { StaffPolicyEpochAcknowledgementService } from '../../identity/human-authorization/services/staff-policy-epoch-acknowledgement.service';
+import type { AcknowledgeStaffPolicyEpochDto } from '../dto/human-authorization-ack.dto';
 import { parseHumanAuthorizationNegotiation } from '../dto/human-authorization-negotiation';
 import type { HumanAuthorizationDeliveryDto } from '../dto/inbound-sync.dto';
+import type { AcknowledgeStaffPolicyEpochResponseDto } from '../dto/human-authorization-ack.dto';
 
 @Injectable()
 export class InboundSyncService {
@@ -77,6 +81,8 @@ export class InboundSyncService {
      */
     @Optional()
     private readonly humanAuthorizationDelivery?: StaffPolicyEpochDeliveryService,
+    @Optional()
+    private readonly humanAuthorizationAcknowledgement?: StaffPolicyEpochAcknowledgementService,
   ) {}
 
   async getInboundDeltas(
@@ -224,6 +230,59 @@ export class InboundSyncService {
       status: 'success',
       acknowledgedRevision: dto.revision,
       acknowledgedFingerprint: dto.fingerprint,
+    };
+  }
+
+  /**
+   * Records a terminal's acknowledgement of an applied policy epoch (design
+   * §5.3). The terminal and tenant come only from the authenticated device
+   * principal, so a request body can never acknowledge on behalf of another
+   * terminal or tenant.
+   *
+   * A rejection is answered as a conflict carrying its stable code rather
+   * than a 200 with a rejection body: the acknowledgement did not happen, and
+   * a terminal must be able to act on that without parsing prose. The code,
+   * not the status, is what distinguishes the reasons.
+   */
+  async acknowledgeStaffPolicyEpoch(
+    tenantId: string,
+    devicePrincipal: DeviceSyncPrincipal,
+    dto: AcknowledgeStaffPolicyEpochDto,
+  ): Promise<AcknowledgeStaffPolicyEpochResponseDto> {
+    if (!this.humanAuthorizationAcknowledgement) {
+      throw new ConflictException({
+        status: 'REJECTED',
+        resultCode: 'UNAVAILABLE',
+        sequence: dto.sequence,
+      });
+    }
+    const outcome = await this.humanAuthorizationAcknowledgement.acknowledge({
+      tenantId,
+      terminalId: devicePrincipal.deviceId,
+      posBuild: dto.posBuild,
+      assertionSchema: dto.assertionSchema,
+      idempotencyKey: dto.idempotencyKey,
+      claim: {
+        sequence: dto.sequence,
+        digest: dto.digest,
+        previousSequence: dto.previousSequence,
+        previousDigest: dto.previousDigest,
+      },
+    });
+
+    if (outcome.status === 'rejected') {
+      throw new ConflictException({
+        status: 'REJECTED',
+        resultCode: outcome.resultCode,
+        sequence: outcome.sequence,
+      });
+    }
+    return {
+      status: 'ACCEPTED',
+      receiptId: outcome.receipt.receiptId,
+      sequence: outcome.receipt.sequence,
+      digest: outcome.receipt.digest,
+      floorSequence: outcome.receipt.floorSequence,
     };
   }
 
