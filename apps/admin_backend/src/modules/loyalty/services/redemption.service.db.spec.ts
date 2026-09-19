@@ -498,7 +498,7 @@ describe('LV1.3 — Redemption & Reversal (db)', () => {
       );
 
       expect(redeemResult.redeemTransaction).toBeDefined();
-      expect(redeemResult.redeemTransaction.transaction_type).toBe('REDEEM');
+      expect(redeemResult.redeemTransaction.transaction_type).toBe('redeem');
       expect(redeemResult.redeemTransaction.units).toBe(-50);
       expect(redeemResult.redeemTransaction.reward_id).toBe(reward.id);
       expect(

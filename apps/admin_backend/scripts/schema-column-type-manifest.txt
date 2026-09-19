@@ -29,9 +29,6 @@ batches.updated_at|timestamp without time zone|timestamp with time zone
 catalog_values.created_at|timestamp without time zone|timestamp with time zone
 catalog_values.updated_at|timestamp without time zone|timestamp with time zone
 customer_point_transactions.created_at|timestamp without time zone|timestamp with time zone
-customer_point_transactions.origin|enum|character varying
-customer_point_transactions.transaction_type|enum|character varying
-customer_point_transactions.type|enum|character varying
 customers.created_at|timestamp without time zone|timestamp with time zone
 customers.updated_at|timestamp without time zone|timestamp with time zone
 datafonos_equipos.created_at|timestamp without time zone|timestamp with time zone
@@ -41,7 +38,6 @@ industry_templates.updated_at|timestamp without time zone|timestamp with time zo
 insumos.created_at|timestamp without time zone|timestamp with time zone
 insumos.updated_at|timestamp without time zone|timestamp with time zone
 inventory_bcn_fx_rates.created_at|timestamp without time zone|timestamp with time zone
-inventory_kardex.movement_type|enum|character varying
 inventory_kardex.occurred_at|timestamp without time zone|timestamp with time zone
 inventory_purchase_documents.created_at|timestamp without time zone|timestamp with time zone
 inventory_sync_outbox.created_at|timestamp without time zone|timestamp with time zone
@@ -51,7 +47,6 @@ invoice_payments.created_at|timestamp without time zone|timestamp with time zone
 invoice_payments.reconciled_at|Date|timestamp without time zone
 invoices.updated_at|timestamp without time zone|timestamp with time zone
 kardex_recalculate_queue.attempts|Number|integer
-kardex_recalculate_queue.status|enum|character varying
 loyalty_programs.created_at|timestamp without time zone|timestamp with time zone
 loyalty_programs.updated_at|timestamp without time zone|timestamp with time zone
 loyalty_rewards.created_at|timestamp without time zone|timestamp with time zone
@@ -60,7 +55,6 @@ production_orders.created_at|timestamp without time zone|timestamp with time zon
 products.created_at|timestamp without time zone|timestamp with time zone
 products.updated_at|timestamp without time zone|timestamp with time zone
 promotions.created_at|timestamp without time zone|timestamp with time zone
-promotions.type|enum|character varying
 promotions.updated_at|timestamp without time zone|timestamp with time zone
 recipe_versions.created_at|timestamp without time zone|timestamp with time zone
 recipe_versions.version_number|Number|integer

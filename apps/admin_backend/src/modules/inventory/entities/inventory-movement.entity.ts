@@ -18,6 +18,8 @@ export enum MovementType {
   CREDIT_NOTE_RESTOCK = 'CREDIT_NOTE_RESTOCK',
   ADJUSTMENT = 'ADJUSTMENT',
   REVERSAL = 'REVERSAL',
+  /** Seed-time baseline stock entry (src/scripts/seed-test-data.ts). */
+  INITIAL_STOCK = 'INITIAL_STOCK',
 }
 
 @Entity('inventory_kardex')

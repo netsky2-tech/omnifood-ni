@@ -175,7 +175,7 @@ describe('LoyaltyLedgerService (db)', () => {
       expect(tx.id).toBeDefined();
       expect(tx.loyalty_program_id).toBe(programId);
       expect(tx.units).toBe(10);
-      expect(tx.transaction_type).toBe('EARN');
+      expect(tx.transaction_type).toBe('earn');
       expect(tx.idempotency_key).toBe(dto.idempotencyKey);
       expect(tx.legacy_imported).toBe(false);
 
