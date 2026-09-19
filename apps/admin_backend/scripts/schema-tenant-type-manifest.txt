@@ -26,7 +26,6 @@ column customers.tenant_id
 column device_sync_credential_events.tenant_id
 column device_sync_credentials.tenant_id
 column forensic_alerts.tenant_id
-column invoice_items.tenant_id
 column legacy_import_integrity_reports.tenant_id
 column legacy_onboarding_migration_receipts.tenant_id
 column promotions.tenant_id
