@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -491,11 +493,24 @@ Future<void> _reconnectAndVoid(AppDatabase db, String marker) async {
   expect(voided.isSuccess, isTrue, reason: voided.errors.join('\n'));
   final invoice = await db.invoiceDao.getInvoiceById(ticketId);
   expect(invoice?.isCanceled, isTrue);
-  expect((await db.firstSuccessfulSaleClaimDao.getClaimByTenantId(_tenantId))?.ticketId, ticketId);
+  final settledClaim = await db.firstSuccessfulSaleClaimDao.getClaimByTenantId(_tenantId);
+  expect(settledClaim?.ticketId, ticketId);
+
+  // The protocol's clockConfidence and firstSaleClaimEventIdHash are produced on the
+  // device: the claim carries the confidence classification and the outbox event id of
+  // the first successful sale. They were previously left uncaptured because they live in
+  // the device's local database, which nothing exported before the app was uninstalled
+  // at the end of the run. Reporting them here is what removes that gap.
+  expect(settledClaim?.clockConfidence, isNotEmpty,
+      reason: 'the first-sale claim must record a clock confidence');
+  final claimEventId = settledClaim?.outboxEventId;
+  expect(claimEventId, isNotEmpty,
+      reason: 'the first-sale claim must record its outbox event id');
+  final claimEventIdHash = sha256.convert(utf8.encode(claimEventId!)).toString();
 
   final fixtureStartedAt = DateTime.tryParse(_fixtureStartedAt)?.toUtc();
   expect(fixtureStartedAt, isNotNull, reason: 'PILOT_FIXTURE_STARTED_AT must be ISO-8601');
   final elapsed = DateTime.now().toUtc().difference(fixtureStartedAt!);
   // ignore: avoid_print
-  print('ONB1.10F_PHASE_RECEIPT ${jsonEncode({'phase': 'reconnect', 'marker': marker, 'attemptId': resolvedAttempt.attemptId, 'ticketId': ticketId, 'backendStatus': diagnostics.data!['attempt']['status'], 'elapsedWallClockMs': elapsed.inMilliseconds, 'visualConfirmation': _printerMode == 'real' ? 'not-claimed' : 'not-applicable-simulated-printer', 'printerMode': _printerMode})}');
+  print('ONB1.10F_PHASE_RECEIPT ${jsonEncode({'phase': 'reconnect', 'marker': marker, 'attemptId': resolvedAttempt.attemptId, 'ticketId': ticketId, 'backendStatus': diagnostics.data!['attempt']['status'], 'elapsedWallClockMs': elapsed.inMilliseconds, 'clockConfidence': settledClaim!.clockConfidence, 'firstSaleClaimEventIdHash': claimEventIdHash, 'visualConfirmation': _printerMode == 'real' ? 'not-claimed' : 'not-applicable-simulated-printer', 'printerMode': _printerMode})}');
 }
