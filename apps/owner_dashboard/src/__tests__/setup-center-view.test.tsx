@@ -3,7 +3,13 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { SetupCenterView } from "@/features/onboarding/setup-center-view";
-import { OnboardingLifecycleState } from "@/features/onboarding/types";
+import {
+  ActivationAttemptStatus,
+  OnboardingLifecycleState,
+  type ActivationAttempt,
+} from "@/features/onboarding/types";
+import { useAuthStore } from "@/features/auth/auth-store";
+import { UserRole } from "@/features/users/types";
 import { setTokens, clearTokens } from "@/lib/api";
 
 function TestWrapper({ children }: { children: React.ReactNode }) {
@@ -307,5 +313,230 @@ describe("ONB1.2 — SetupCenterView Component (State-based Authority & Concurre
     await waitFor(() => {
       expect(screen.getByTestId("setup-center-view")).toBeInTheDocument();
     });
+  });
+});
+
+describe("L1-04b — SetupCenterView Activation Attempt Creation Surface", () => {
+  const saleReadyResponse = {
+    session: {
+      id: "session-uuid-10",
+      tenantId: "tenant-sc-1",
+      lifecycleState: OnboardingLifecycleState.SALE_READY,
+      onboardingStartedAt: "2026-09-03T18:00:00.000Z",
+      saleReadyFirstAt: "2026-09-03T18:10:00.000Z",
+      activationStartedAt: null,
+      activatedAt: null,
+      firstSuccessfulSaleAt: null,
+      firstCustomerSaleAt: null,
+      lastActivityAt: "2026-09-03T18:10:00.000Z",
+      currentActivationAttemptId: null,
+      measurementEligible: true,
+      legacyBaseline: false,
+      optimisticVersion: 4,
+      createdAt: "2026-09-03T18:00:00.000Z",
+      updatedAt: "2026-09-03T18:10:00.000Z",
+    },
+    readiness: {
+      identity: {
+        tenantExists: true,
+        initialOwnerExists: true,
+        ownerCanAuthenticate: true,
+        tenantContextValid: true,
+      },
+      fiscal: {
+        minimumConfigurationValid: true,
+        businessName: "Taquería El Pastor",
+        fiscalRegime: "CUOTA_FIJA",
+        taxRate: 0.0,
+        pricesIncludeTax: true,
+      },
+      catalog: {
+        sellableProductCount: 5,
+        hasSellableProduct: true,
+      },
+      saleReady: true,
+      inventoryReady: false,
+      costingReady: false,
+      operationsReady: false,
+      blockers: [],
+      warnings: [],
+      evaluatedAt: "2026-09-03T18:10:00.000Z",
+    },
+  };
+
+  afterEach(() => {
+    useAuthStore.setState({
+      user: null,
+      tenant: null,
+      isAuthenticated: false,
+      hydrated: false,
+    });
+  });
+
+  function grantRole(role: UserRole) {
+    useAuthStore.setState({
+      user: {
+        id: "user-sc-1",
+        email: "user@omnifood.ni",
+        name: "Usuario Setup Center",
+        role,
+        tenantId: "tenant-sc-1",
+        active: true,
+      },
+      tenant: {
+        id: "tenant-sc-1",
+        name: "Taquería El Pastor",
+        slug: "taqueria-el-pastor",
+        ruc: "J0310000000001X",
+        active: true,
+      },
+      isAuthenticated: true,
+      hydrated: true,
+    });
+  }
+
+  function routeFetch(options: {
+    activeAttemptSequence?: Array<ActivationAttempt | null>;
+    startAttemptResponse?: { status: number; body: unknown };
+  }) {
+    const sequence = options.activeAttemptSequence ?? [null];
+    let activeCalls = 0;
+    fetchSpy.mockImplementation(async (input: string | URL | Request) => {
+      const url = String(input);
+      const okJson = (body: unknown, status = 200) =>
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { "Content-Type": "application/json" },
+        });
+
+      if (url.includes("/onboarding/session")) {
+        return okJson(saleReadyResponse);
+      }
+      if (url.includes("/onboarding/catalog/summary")) {
+        return okJson({
+          sellableProductCount: 5,
+          hasSellableProduct: true,
+          sampleProducts: [],
+        });
+      }
+      if (url.includes("/onboarding/activation/attempts/active")) {
+        const index = Math.min(activeCalls, sequence.length - 1);
+        activeCalls += 1;
+        return okJson(sequence[index]);
+      }
+      if (url.includes("/onboarding/activation/attempts")) {
+        const response = options.startAttemptResponse;
+        return okJson(response?.body ?? {}, response?.status ?? 200);
+      }
+      return okJson({});
+    });
+  }
+
+  function sentActivationPosts(): Array<Record<string, unknown>> {
+    return fetchSpy.mock.calls
+      .filter(
+        (call) =>
+          String(call[0]).includes("/onboarding/activation/attempts") &&
+          (call[1]?.method ?? "GET") === "POST",
+      )
+      .map((call) => JSON.parse(String(call[1]?.body)));
+  }
+
+  it("shows the terminal id action and creates the attempt with the expected body", async () => {
+    grantRole(UserRole.OWNER);
+    const createdAttempt: ActivationAttempt = {
+      id: "attempt-sc-1",
+      tenantId: "tenant-sc-1",
+      onboardingSessionId: "session-uuid-10",
+      candidateTerminalId: "POS-07",
+      trustedTerminalId: null,
+      status: ActivationAttemptStatus.CREATED,
+      startedByUserId: "user-sc-1",
+      startedAt: "2026-09-03T19:00:00.000Z",
+      completedAt: null,
+      posBuild: null,
+      warningsCount: 0,
+      failureCode: null,
+      idempotencyKey: "idem-sc-1",
+      createdAt: "2026-09-03T19:00:00.000Z",
+      updatedAt: "2026-09-03T19:00:00.000Z",
+    };
+    routeFetch({
+      activeAttemptSequence: [null, createdAttempt],
+      startAttemptResponse: { status: 201, body: createdAttempt },
+    });
+    const user = userEvent.setup();
+
+    render(
+      <TestWrapper>
+        <SetupCenterView />
+      </TestWrapper>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("setup-center-view")).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId("activation-terminal-id-input")).toBeInTheDocument();
+    expect(screen.getByTestId("create-activation-attempt-btn")).toBeEnabled();
+
+    await user.type(screen.getByTestId("activation-terminal-id-input"), "POS-07");
+    await user.click(screen.getByTestId("create-activation-attempt-btn"));
+
+    await waitFor(() => {
+      expect(sentActivationPosts()).toHaveLength(1);
+    });
+    const body = sentActivationPosts()[0] as Record<string, unknown>;
+    expect(Object.keys(body).sort()).toEqual(["candidateTerminalId", "idempotencyKey"]);
+    expect(body.candidateTerminalId).toBe("POS-07");
+
+    expect(await screen.findByTestId("activation-awaiting-device-checks")).toHaveTextContent(
+      "POS-07",
+    );
+  });
+
+  it("does not issue a request when the terminal id is empty and tells the user why", async () => {
+    grantRole(UserRole.OWNER);
+    routeFetch({});
+    const user = userEvent.setup();
+
+    render(
+      <TestWrapper>
+        <SetupCenterView />
+      </TestWrapper>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("setup-center-view")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTestId("create-activation-attempt-btn"));
+
+    expect(await screen.findByTestId("activation-terminal-id-error")).toHaveTextContent(
+      /ID de terminal/i,
+    );
+    expect(sentActivationPosts()).toHaveLength(0);
+  });
+
+  it("keeps the action unavailable without the activation permission and shows the guard note", async () => {
+    grantRole(UserRole.CASHIER);
+    routeFetch({});
+
+    render(
+      <TestWrapper>
+        <SetupCenterView />
+      </TestWrapper>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("setup-center-view")).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId("start-pos-terminal-btn")).toHaveClass("opacity-60");
+    expect(screen.queryByTestId("activation-terminal-id-input")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("create-activation-attempt-btn")).not.toBeInTheDocument();
+    expect(screen.getByTestId("activation-permission-guard-note")).toHaveTextContent(
+      /onboarding:activation:manage/i,
+    );
   });
 });
