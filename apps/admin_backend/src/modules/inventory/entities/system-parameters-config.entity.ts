@@ -34,7 +34,7 @@ export class SystemParametersConfig {
   @Column({ name: 'param_value', type: 'jsonb' })
   paramValue: Record<string, unknown> | number | string | boolean;
 
-  @Column({ default: 1 })
+  @Column({ type: 'integer', default: 1 })
   version: number;
 
   @Column({
