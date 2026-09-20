@@ -131,6 +131,22 @@ const canonicalColumnType = (
     : dataType;
 
 /**
+ * Privileges PostgreSQL permits on a view, and therefore the only ones this emitter can
+ * re-grant after a DROP. An ACL entry outside this set means the emitter has met
+ * something it does not understand, so it fails closed instead of quietly dropping a
+ * role's access.
+ */
+const VIEW_GRANTABLE_PRIVILEGES = new Set([
+  'SELECT',
+  'INSERT',
+  'UPDATE',
+  'DELETE',
+  'REFERENCES',
+  'TRIGGER',
+  'MAINTAIN',
+]);
+
+/**
  * Rebinds each target's tenant column and policies, in this order, inside the
  * caller's transaction:
  *
@@ -185,7 +201,63 @@ export async function rebindTenantColumns(
 
     // The view must be dropped before the column change: its rewrite rule
     // is what blocks the `ALTER`, the same way a policy does.
+    //
+    // A `DROP` takes the object's ACL with it, and the recreate leaves the
+    // owner-only default, so every privilege granted to another role is silently
+    // revoked by this migration. Grants are a provisioning concern in this
+    // repository (no migration grants anything), which is exactly why the ACL has to
+    // be carried across the drop here instead of being re-established later: whether
+    // the role still has access would otherwise depend on whether provisioning ran
+    // after this migration, not on the migration being correct.
+    const reGrantStatements: string[] = [];
     for (const view of target.views ?? []) {
+      // TypeORM returns the raw rows array; a structured QueryResult is what tests and
+      // other drivers hand back. Accept both shapes, like the column-type lookup does.
+      // Typed `unknown` on purpose: `QueryRunner.query` is typed `any`.
+      const aclResult: unknown = await queryRunner.query(
+        `SELECT r.rolname AS role, a.privilege_type AS privilege, a.is_grantable AS grantable
+           FROM pg_class c
+           JOIN pg_namespace n ON n.oid = c.relnamespace
+           CROSS JOIN LATERAL aclexplode(c.relacl) a
+           JOIN pg_roles r ON r.oid = a.grantee
+          WHERE n.nspname = current_schema()
+            AND c.relname = $1
+            AND a.grantee <> c.relowner
+          ORDER BY r.rolname, a.privilege_type`,
+        [view.name],
+      );
+      const grants: Array<{
+        role: string;
+        privilege: string;
+        grantable: boolean;
+      }> = Array.isArray(aclResult)
+        ? (aclResult as Array<{
+            role: string;
+            privilege: string;
+            grantable: boolean;
+          }>)
+        : ((
+            aclResult as QueryResult<{
+              role: string;
+              privilege: string;
+              grantable: boolean;
+            }>
+          ).records ?? []);
+
+      for (const grant of grants) {
+        if (!VIEW_GRANTABLE_PRIVILEGES.has(grant.privilege)) {
+          throw new Error(
+            `TENANT_RLS_VIEW_PRIVILEGE_UNSUPPORTED: view "${view.name}" carries privilege ` +
+              `"${grant.privilege}" for role "${grant.role}", which cannot be re-granted on a view. ` +
+              'Teach the emitter about it rather than dropping the privilege silently.',
+          );
+        }
+        reGrantStatements.push(
+          `GRANT ${grant.privilege} ON ${quoteIdentifier(view.name)} TO ${quoteIdentifier(grant.role)}` +
+            (grant.grantable ? ' WITH GRANT OPTION' : ''),
+        );
+      }
+
       await queryRunner.query(
         `DROP VIEW IF EXISTS ${quoteIdentifier(view.name)}`,
       );
@@ -195,9 +267,13 @@ export async function rebindTenantColumns(
     await changeTenantColumnType(queryRunner, table, targetType);
 
     // Recreate the view with the migration's own DDL, placed after the
-    // column change and before the policies.
+    // column change and before the policies, then restore the privileges the
+    // drop revoked.
     for (const view of target.views ?? []) {
       await queryRunner.query(view.createSql);
+    }
+    for (const statement of reGrantStatements) {
+      await queryRunner.query(statement);
     }
 
     for (const policy of target.policies) {
