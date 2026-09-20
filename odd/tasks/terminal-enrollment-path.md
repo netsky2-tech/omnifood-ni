@@ -149,12 +149,11 @@ Environment note, not a code defect: `npm run typecheck` fails on `src/features/
 
 ### L1-04b — Authorize and create the attempt from the setup center
 
-Status: pending
-Depends on: L1-04a
+Status: complete — committed as `defb0f6`.
 
-- [ ] Replace the non-interactive activation block with an action gated on `onboarding:activation:manage`.
-- [ ] Collect the terminal id the operator reads from the terminal's own identity surface (L1-03).
-- [ ] Surface the attempt state, including the awaiting-device-checks state, and map each documented backend failure to an understandable message.
+- [x] Replace the non-interactive activation block with an action gated on `onboarding:activation:manage`.
+- [x] Collect the terminal id the operator reads from the terminal's own identity surface (L1-03).
+- [x] Surface the attempt state, including the awaiting-device-checks state, and map each documented backend failure to an understandable message.
 
 Acceptance criteria:
 - An OWNER can create an attempt for a terminal id from the back office, and a role without the permission cannot.
@@ -165,9 +164,85 @@ Checks:
 - Dashboard tests for the new surface, the permission gate, and each failure mapping.
 - Backend permission enforcement readback.
 
+Evidence: implemented with strict TDD. RED observed with the surface tests failing before the panels existed; GREEN 23 tests across the two files, and the parent ran the whole dashboard unit suite at 708 tests with zero failures. The permission gate is unchanged, an empty or whitespace-only terminal id issues no request, and each documented backend failure maps to its own business message with the backend text still visible.
+
+Defect the parent found before committing, and the slice was corrected: the first version surfaced the attempt state only for `CREATED` and `IN_PROGRESS`, so an attempt that ended in `FAIL` brought the empty form back with no explanation of what had happened — the very state an operator most needs to see. The correction adds panels for `FAIL`, stating that the terminal must be reviewed before retrying while keeping the retry path reachable, and for `PASS_WITH_WARNING`, stating that the warnings must be reviewed. `PASS` keeps the activated lifecycle this screen already handles. No check result is rendered or fabricated, because the dashboard does not fetch checks.
+
+Environment note, not introduced here: two menu-qr test files fail to load because the declared dependency `uqr` is not installed in the local `node_modules`; it is declared and imported on `main`, so a local `npm install` resolves it.
+
+Remaining known gap: the screen does not show which checks the terminal reported, because the dashboard does not fetch them. If the operator needs that detail, it belongs to a later slice, not to a guess here.
+
+### L1-05a — Let the POS discover its own attempt
+
+Status: in progress — implemented, then corrected after adversarial verification found six defects.
+
+Exploration found the gap is larger than wiring. `ActivationSyncPort` has eight methods and **all of them are POSTs keyed on a caller-supplied `attemptId`**; the POS cannot read the active attempt at all. Worse, every write to `activation_attempts_local` in the codebase is a test: no production code persists the attempt row, and the runners resolve it with `getAttemptById`, so without a writer they cannot run at all.
+
+- [ ] Add the missing read to `ActivationSyncPort` and its Dio adapter for the active attempt.
+- [ ] Add the production writer that maps the fetched attempt into `ActivationAttemptLocalEntity` with the status, the pinned fiscal revision and fingerprint, the verification product and the time anchor the runners require.
+- [ ] Resolve the attempt id from local persistence on later phases, so a restart mid-activation resumes instead of restarting.
+
+Acceptance criteria:
+- After the back office creates an attempt, the terminal can discover it and persist it without hand-made API calls.
+- The persisted row carries every field the three runners and the config adapter read.
+- A restart between phases resumes from the persisted attempt.
+
+Checks:
+- Focused tests for the read and the mapping, including a restart between phases.
+- Readback that the persisted fields match what the runners consume.
+
 Evidence: pending.
 
-### L1-05 — Run the checks and finalize from the POS
+Defects found by adversarial verification and corrected. The highest-severity one was ours: the backend attempt row DOES carry `serverTimeAnchorAt` (`server_time_anchor_at` on the activation attempt entity) and the reference harness read it straight from the response, but the new adapter did not parse it and discovery minted the anchor from the local clock while still labelling it `serverTimeAnchorAt` and registering it as `anchor-<attemptId>`. That is a local timestamp wearing a server label, and it feeds the clock confidence the whole TTFSS measurement depends on. The correction parses the real server anchor and keeps `anchorMonotonicTicks` local, which is correct because monotonic ticks are local by definition. Also corrected: fabricated defaults (`0`, `''`, `''`) for missing pinned fields, which only surfaced one phase later as a confusing `REQUIRED_CONFIG_LOCAL`; a malformed payload escaping as an uncaught `StateError` instead of a named failure; a stale local attempt pinning discovery forever, which would have made a newly created back-office attempt invisible to the terminal after any previous activation and skipped the terminal-mismatch guard entirely; the snapshot tenant never being compared with the requested tenant; and a test that was green for the wrong reason.
+
+Reported separately rather than fixed here: `activation_pre_offline_runner.dart:335` rewrites an advanced row back to `ASSIGNED` when a re-run fails, which can strand an attempt whose controlled sale already succeeded; tracked as issue #450.
+
+### L1-05b — Assemble the activation session and decide the check replay
+
+Status: pending
+Depends on: L1-05a
+
+- [ ] Build the three runners for production with the dependencies that do not exist in `main.dart` yet, chiefly a `PrinterPort` resolved from the stored printer profile and the required-config adapter.
+- [ ] Decide and implement where the pre-offline checks are replayed before finalization: today `ActivationReconnectSyncRunner` drains only the outbox created by the controlled sale, and the reference harness had to replay the persisted checks by hand with `sendCheck` before reconnecting. Leaving that manual step outside production would preserve a harness-only behaviour in the enrolment path.
+- [ ] Collect the authorized user PIN from the human, since it is not stored anywhere and the pre-offline check requires it.
+
+Acceptance criteria:
+- One production entry point drives checks, the controlled sale and the reconnect without any step left to a test harness.
+- The check replay has a single owner, and it is covered by a test that would fail if a check never reached the backend.
+- No dependency is satisfied by a value that only exists in a test.
+- The pinned verification product exists in the terminal's LOCAL catalog before the controlled sale, or the flow fails closed before it and says which product is missing.
+
+Prerequisite discovered by verification, and it is not satisfied today: the controlled-sale runner looks the pinned verification product up in the local `products` table and fails with `VERIFICATION_PRODUCT_NOT_FOUND` when it is absent, while the pre-offline required-config check fails earlier with `REQUIRED_CONFIG_LOCAL`. Nothing in the activation flow waits for, verifies or retrieves that product. A freshly provisioned terminal seeds nothing by design and receives products only through inbound sync after login, so a terminal that is online but has not yet received the pinned, tenant-owned, active, sellable product will block in the pre-offline phase and cannot recover from inside the activation flow. The session must therefore guarantee the product locally or fail closed naming it, and this also bounds what L1-06 can confirm at runtime.
+
+Checks:
+- Focused tests for the session wiring and the replay.
+- `flutter analyze`.
+
+Evidence: pending.
+
+### L1-05c — Guide the operator through activation
+
+Status: pending
+Depends on: L1-05b
+
+- [ ] Add the guided screen, reachable from the drawer, that walks the three phases in order and shows each outcome.
+- [ ] Show the check results and the blockers the runners already return, without inventing any.
+- [ ] Fail closed with a named reason when a phase blocks.
+
+Acceptance criteria:
+- An operator can complete activation from the terminal with no hand-made API call.
+- Every phase outcome and blocker is visible on screen.
+- Nothing is displayed that a runner did not report.
+
+Checks:
+- Widget and view-model tests for each phase outcome.
+- `flutter analyze`.
+
+Evidence: pending.
+
+### L1-05 — superseded
+
+The original single slice was split into L1-05a, L1-05b and L1-05c once exploration showed it required a new backend read, the first production writer for the attempt row, the assembly of three runners, a decision about where checks are replayed, and a new multi-step screen.
 
 Status: pending
 

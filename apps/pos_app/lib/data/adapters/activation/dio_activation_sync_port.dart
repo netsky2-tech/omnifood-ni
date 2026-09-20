@@ -1,9 +1,34 @@
 import 'package:dio/dio.dart';
 
+import '../../../domain/models/activation/activation_attempt_snapshot.dart';
 import '../../../domain/security/device_sync_credential_coordinator.dart';
 import '../../../domain/security/device_sync_credential_record.dart';
 import '../../../domain/security/device_sync_exceptions.dart';
 import '../../ports/activation_sync_port.dart';
+
+/// Thrown by [DioActivationSyncPort.fetchActiveAttempt] when the backend
+/// response for GET /onboarding/activation/attempts/active cannot be parsed
+/// into a valid [ActivationAttemptSnapshot]: a non-object body, a JSON string
+/// body, a missing/blank hard identity field (id, tenantId,
+/// candidateTerminalId), a missing/invalid pinned field (requiredFiscalRevision,
+/// requiredFiscalFingerprint, verificationProductId), or a missing/unparseable
+/// serverTimeAnchorAt.
+///
+/// This is deliberately distinct from `null` (the backend reports no active
+/// attempt) and from `DioException` (the backend could not be reached), so
+/// callers can fail closed with the right named blocker and never confuse
+/// "no attempt" with "unusable payload".
+class ActivationAttemptPayloadException implements Exception {
+  /// Stable machine-readable error code (e.g. `ACTIVE_ATTEMPT_PAYLOAD_MALFORMED`).
+  final String code;
+
+  final String message;
+
+  const ActivationAttemptPayloadException(this.code, this.message);
+
+  @override
+  String toString() => 'ActivationAttemptPayloadException($code): $message';
+}
 
 class DioActivationSyncPort implements ActivationSyncPort {
   final Dio _dio;
@@ -137,6 +162,88 @@ class DioActivationSyncPort implements ActivationSyncPort {
         failureCode: 'FINALIZE_NETWORK_ERROR',
       );
     }
+  }
+
+  @override
+  Future<ActivationAttemptSnapshot?> fetchActiveAttempt() async {
+    final response = await _dio.get<dynamic>(
+      'onboarding/activation/attempts/active',
+    );
+    if (!_isSuccess(response.statusCode)) return null;
+    final raw = response.data;
+    // A null (JSON `null`) or blank body means the backend reports no active
+    // attempt for the authenticated tenant — distinct from an unusable payload.
+    if (raw == null || (raw is String && raw.trim().isEmpty)) return null;
+    if (raw is! Map) {
+      // Covers JSON string bodies and any other non-object shape.
+      throw const ActivationAttemptPayloadException(
+        'ACTIVE_ATTEMPT_PAYLOAD_MALFORMED',
+        'Server returned a non-object active activation attempt payload',
+      );
+    }
+
+    final data = Map<String, dynamic>.from(raw);
+    final attemptId = (data['id'] as String?)?.trim() ?? '';
+    final tenantId = (data['tenantId'] as String?)?.trim() ?? '';
+    final candidateTerminalId =
+        (data['candidateTerminalId'] as String?)?.trim() ?? '';
+    if (attemptId.isEmpty || tenantId.isEmpty || candidateTerminalId.isEmpty) {
+      throw const ActivationAttemptPayloadException(
+        'ACTIVE_ATTEMPT_IDENTITY_MISSING',
+        'Active activation attempt payload is missing id, tenantId, or candidateTerminalId',
+      );
+    }
+
+    // Pinned configuration is never defaulted: a missing or invalid pinned
+    // field must fail closed at parse time instead of surfacing one phase
+    // later as a confusing REQUIRED_CONFIG_LOCAL.
+    final requiredFiscalRevision = data['requiredFiscalRevision'];
+    if (requiredFiscalRevision is! num) {
+      throw const ActivationAttemptPayloadException(
+        'ACTIVE_ATTEMPT_PINNED_FIELD_INVALID',
+        'Active activation attempt payload is missing or has an invalid requiredFiscalRevision',
+      );
+    }
+    final requiredFiscalFingerprint =
+        (data['requiredFiscalFingerprint'] as String?)?.trim() ?? '';
+    if (requiredFiscalFingerprint.isEmpty) {
+      throw const ActivationAttemptPayloadException(
+        'ACTIVE_ATTEMPT_PINNED_FIELD_INVALID',
+        'Active activation attempt payload is missing or has a blank requiredFiscalFingerprint',
+      );
+    }
+    final verificationProductId =
+        (data['verificationProductId'] as String?)?.trim() ?? '';
+    if (verificationProductId.isEmpty) {
+      throw const ActivationAttemptPayloadException(
+        'ACTIVE_ATTEMPT_PINNED_FIELD_INVALID',
+        'Active activation attempt payload is missing or has a blank verificationProductId',
+      );
+    }
+
+    // The server time anchor is the backend's server_time_anchor_at value; it
+    // must be present and parseable. Local time is never substituted.
+    final serverTimeAnchorRaw = data['serverTimeAnchorAt'];
+    final serverTimeAnchor =
+        serverTimeAnchorRaw is String ? serverTimeAnchorRaw.trim() : '';
+    if (serverTimeAnchor.isEmpty ||
+        DateTime.tryParse(serverTimeAnchor) == null) {
+      throw const ActivationAttemptPayloadException(
+        'ACTIVE_ATTEMPT_SERVER_TIME_ANCHOR_INVALID',
+        'Active activation attempt payload is missing or has an unparseable serverTimeAnchorAt',
+      );
+    }
+
+    return ActivationAttemptSnapshot(
+      attemptId: attemptId,
+      tenantId: tenantId,
+      candidateTerminalId: candidateTerminalId,
+      requiredFiscalRevision: requiredFiscalRevision.toInt(),
+      requiredFiscalFingerprint: requiredFiscalFingerprint,
+      verificationProductId: verificationProductId,
+      assignedAt: (data['startedAt'] as String?)?.trim() ?? '',
+      serverTimeAnchorAt: serverTimeAnchor,
+    );
   }
 
   bool _isSuccess(int? statusCode) =>
