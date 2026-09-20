@@ -4,24 +4,41 @@ import assert from "node:assert/strict";
 import {
   classifyReleaseGate,
   REQUIRED_BLOCKER_IDS,
+  REQUIRED_REGRESSION_IDS,
   RELEASE_GATE_SCHEMA,
 } from "../lib/loyalty-release-gate.mjs";
 
 const REQUIRED = [...REQUIRED_BLOCKER_IDS];
 
 const blocker = (id, result = "FAIL") => ({ id, kind: "blocker", result });
+const regression = (id, result = "PASS") => ({ id, kind: "regression", result });
 const control = (id, result = "PASS") => ({ id, kind: "control", result });
 const doc = (probes, source = "jest-backend") => ({ schema: RELEASE_GATE_SCHEMA, source, probes });
 const gate = (probes, mode = "baseline") => classifyReleaseGate(doc(probes), mode);
-const baselineProbes = () => [...REQUIRED.map((id) => blocker(id)), control("control-smoke")];
-const finalProbes = () => [...REQUIRED.map((id) => blocker(id, "PASS")), control("control-smoke")];
+// Baseline shape: every declared blocker observed FAIL, every declared
+// regression and every control observed PASS.
+const baselineProbes = () => [
+  ...REQUIRED.map((id) => blocker(id)),
+  ...REQUIRED_REGRESSION_IDS.map((id) => regression(id)),
+  control("control-smoke"),
+];
+const finalProbes = () => [
+  ...REQUIRED.map((id) => blocker(id, "PASS")),
+  ...REQUIRED_REGRESSION_IDS.map((id) => regression(id, "PASS")),
+  control("control-smoke"),
+];
 const codesOf = (r) => r.errors.map((e) => e.code);
 
 describe("contract constants", () => {
   it("declares exactly the required blocker tags", () => {
     assert.deepEqual([...REQUIRED_BLOCKER_IDS].sort(), [
-      "B1", "B2", "B3", "B4-pg", "B4-sqlite", "B5", "B7",
+      "B1", "B2", "B3", "B4-pg", "B4-sqlite", "B5",
+      "B7-cross-tenant-read", "B7-rls-enforcement",
     ]);
+  });
+
+  it("declares exactly the required regression tags", () => {
+    assert.deepEqual([...REQUIRED_REGRESSION_IDS], ["B9-customer-code"]);
   });
 
   it("declares the release-gate schema identifier", () => {
@@ -30,13 +47,13 @@ describe("contract constants", () => {
 });
 
 describe("baseline mode", () => {
-  it("holds when every required blocker is FAIL and controls are PASS", () => {
+  it("holds when every required blocker is FAIL and regressions/controls are PASS", () => {
     const result = gate(baselineProbes());
     assert.equal(result.ok, true);
     assert.equal(result.status, "gate_held");
     assert.equal(result.mode, "baseline");
     assert.deepEqual(result.errors, []);
-    assert.equal(result.observed.length, 8);
+    assert.equal(result.observed.length, 8 + 1 + 1);
   });
 
   it("reports gate_failed (not input_invalid) when an expected blocker passes", () => {
@@ -47,6 +64,18 @@ describe("baseline mode", () => {
     assert.ok(codesOf(result).includes("blocker_unexpected_pass"));
   });
 
+  it("reports gate_failed (not input_invalid) when a regression probe fails", () => {
+    // Regression rule: a regression must PASS in every mode. Its FAIL is real
+    // (valid) evidence that a fixed behavior broke again, so it fails the
+    // gate (gate_failed) exactly like any other contradicting evidence; it is
+    // NOT broken instrumentation (input_invalid).
+    const probes = baselineProbes().map((p) => (p.id === "B9-customer-code" ? regression("B9-customer-code", "FAIL") : p));
+    const result = gate(probes);
+    assert.equal(result.ok, false);
+    assert.equal(result.status, "gate_failed");
+    assert.ok(codesOf(result).includes("regression_fail"));
+  });
+
   it("reports input_invalid when a required blocker is missing", () => {
     const result = gate(baselineProbes().filter((p) => p.id !== "B5"));
     assert.equal(result.ok, false);
@@ -54,8 +83,15 @@ describe("baseline mode", () => {
     assert.ok(codesOf(result).includes("missing_blocker"));
   });
 
+  it("reports input_invalid when a required regression is missing (baseline)", () => {
+    const result = gate(baselineProbes().filter((p) => p.id !== "B9-customer-code"));
+    assert.equal(result.ok, false);
+    assert.equal(result.status, "input_invalid");
+    assert.ok(codesOf(result).includes("missing_regression"));
+  });
+
   it("reports input_invalid on duplicate probe ids", () => {
-    const result = gate([...baselineProbes(), blocker("B7")]);
+    const result = gate([...baselineProbes(), blocker("B7-rls-enforcement")]);
     assert.equal(result.ok, false);
     assert.equal(result.status, "input_invalid");
     assert.ok(codesOf(result).includes("duplicate_probe"));
@@ -67,6 +103,13 @@ describe("baseline mode", () => {
     assert.ok(codesOf(result).includes("unknown_blocker_tag"));
   });
 
+  it("reports input_invalid on an unknown regression tag", () => {
+    const result = gate([...baselineProbes(), regression("B9-legacy")]);
+    assert.equal(result.ok, false);
+    assert.equal(result.status, "input_invalid");
+    assert.ok(codesOf(result).includes("unknown_regression_tag"));
+  });
+
   it("reports input_invalid when a control probe fails (broken instrumentation)", () => {
     const result = gate([...baselineProbes(), control("ctl", "FAIL")]);
     assert.equal(result.ok, false);
@@ -75,7 +118,10 @@ describe("baseline mode", () => {
   });
 
   it("reports input_invalid when no control probe is declared", () => {
-    const result = gate(REQUIRED.map((id) => blocker(id)));
+    const result = gate([
+      ...REQUIRED.map((id) => blocker(id)),
+      ...REQUIRED_REGRESSION_IDS.map((id) => regression(id)),
+    ]);
     assert.equal(result.ok, false);
     assert.equal(result.status, "input_invalid");
     assert.ok(codesOf(result).includes("missing_control_declaration"));
@@ -83,7 +129,7 @@ describe("baseline mode", () => {
 });
 
 describe("final mode", () => {
-  it("holds only when every blocking and control probe passes", () => {
+  it("holds only when every blocking, regression, and control probe passes", () => {
     const result = classifyReleaseGate(doc(finalProbes()), "final");
     assert.equal(result.ok, true);
     assert.equal(result.status, "gate_held");
@@ -95,6 +141,14 @@ describe("final mode", () => {
     assert.equal(result.ok, false);
     assert.equal(result.status, "gate_failed");
     assert.ok(codesOf(result).includes("blocker_fail"));
+  });
+
+  it("fails closed with gate_failed on a regression FAIL", () => {
+    const probes = finalProbes().map((p) => (p.id === "B9-customer-code" ? regression("B9-customer-code", "FAIL") : p));
+    const result = classifyReleaseGate(doc(probes), "final");
+    assert.equal(result.ok, false);
+    assert.equal(result.status, "gate_failed");
+    assert.ok(codesOf(result).includes("regression_fail"));
   });
 
   it("fails closed with input_invalid on a control FAIL (broken environment)", () => {
@@ -113,8 +167,18 @@ describe("final mode", () => {
     assert.equal(unknown.status, "input_invalid");
   });
 
+  it("fails closed with input_invalid when a required regression is missing (final)", () => {
+    const result = classifyReleaseGate(doc(finalProbes().filter((p) => p.id !== "B9-customer-code")), "final");
+    assert.equal(result.ok, false);
+    assert.equal(result.status, "input_invalid");
+    assert.ok(codesOf(result).includes("missing_regression"));
+  });
+
   it("fails closed when no control probe is declared", () => {
-    const result = classifyReleaseGate(doc(REQUIRED.map((id) => blocker(id, "PASS"))), "final");
+    const result = classifyReleaseGate(doc([
+      ...REQUIRED.map((id) => blocker(id, "PASS")),
+      ...REQUIRED_REGRESSION_IDS.map((id) => regression(id, "PASS")),
+    ]), "final");
     assert.equal(result.ok, false);
     assert.equal(result.status, "input_invalid");
   });
@@ -125,7 +189,11 @@ describe("provenance attribution", () => {
     const docs = [
       doc([blocker("B1"), blocker("B2")], "jest-backend"),
       doc([blocker("B3")], "flutter-pos"),
-      doc([...REQUIRED.filter((id) => !["B1", "B2", "B3"].includes(id)).map((id) => blocker(id)), control("ctl")], "jest-backend"),
+      doc([
+        ...REQUIRED.filter((id) => !["B1", "B2", "B3"].includes(id)).map((id) => blocker(id)),
+        ...REQUIRED_REGRESSION_IDS.map((id) => regression(id)),
+        control("ctl"),
+      ], "jest-backend"),
     ];
     const result = classifyReleaseGate(docs, "baseline");
     assert.equal(result.ok, true);
@@ -133,7 +201,7 @@ describe("provenance attribution", () => {
     assert.equal(b3.source, "flutter-pos");
     const b1 = result.observed.find((p) => p.id === "B1");
     assert.equal(b1.source, "jest-backend");
-    assert.equal(result.observed.length, 8);
+    assert.equal(result.observed.length, 8 + 1 + 1);
   });
 
   it("attributes errors to the declaring source and file", () => {

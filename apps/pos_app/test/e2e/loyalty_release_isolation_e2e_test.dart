@@ -171,7 +171,7 @@ void main() {
       }
     });
 
-    test('[B9] migrated customers table supports real CustomerDao '
+    test('[B9-customer-code] migrated customers table supports real CustomerDao '
         'save/read by customer_code', () async {
       final harness = await createHarness();
       try {
@@ -200,7 +200,7 @@ void main() {
         expect(
           loaded,
           isNotNull,
-          reason: '[B9] customer saved through the real DAO must be readable '
+          reason: '[B9-customer-code] customer saved through the real DAO must be readable '
               'by customer_code on the migrated database',
         );
         expect(loaded!.id, customerId);

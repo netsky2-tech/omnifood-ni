@@ -4,9 +4,13 @@
  * Contract `loyalty-release-gate/v1`: one JSON result document per runner
  * (Jest backend, Flutter POS); every document MUST declare the exact schema,
  * a non-empty `source`, and probes with explicit `id`, `kind`
- * ("blocker"|"control"), `result` ("PASS"|"FAIL"); optional `file` adds
- * provenance. Modes: baseline = every required blocker FAIL and every control
- * PASS; final = every probe PASS.
+ * ("blocker"|"regression"|"control"), `result` ("PASS"|"FAIL"); optional
+ * `file` adds provenance. Modes: baseline = every required blocker FAIL and
+ * every regression/control PASS; final = every probe PASS. A `regression`
+ * probe guards a behavior that was fixed and must stay fixed: a regression
+ * FAIL is valid (if contradicting) evidence, so it yields `gate_failed`
+ * (code `regression_fail`) in either mode — unlike a control FAIL, which is
+ * broken instrumentation (`input_invalid`).
  *
  * Status: `gate_held` (valid evidence satisfying the mode), `gate_failed`
  * (valid evidence contradicting the mode), `input_invalid` (broken
@@ -23,13 +27,28 @@ export const RELEASE_GATE_SCHEMA = "loyalty-release-gate/v1";
 // gate) when new blockers land; unknown tags always fail closed so stale
 // producers can never silently widen the gate.
 export const REQUIRED_BLOCKER_IDS = Object.freeze([
-  "B1", "B2", "B3", "B4-pg", "B4-sqlite", "B5", "B7",
+  "B1", "B2", "B3", "B4-pg", "B4-sqlite", "B5",
+  "B7-rls-enforcement", "B7-cross-tenant-read",
+]);
+
+// Regression probes: fixed behaviors that must PASS in every mode (a FAIL is
+// gate_failed evidence, never accepted). Presence per runner is enforced by
+// the collector's per-source expected-tag sets; this classifier-level set
+// fails closed on unknown regression KINDS/tags.
+export const REQUIRED_REGRESSION_IDS = Object.freeze(["B9-customer-code"]);
+
+// Declared control probes guard the harness environment. The classifier
+// requires at least one control and fails on a control FAIL; the collector
+// requires each declared control to be observed by its owning runner.
+export const DECLARED_CONTROL_IDS = Object.freeze([
+  "CONTROL-pg-schema", "CONTROL-http", "CONTROL-sqlite-schema",
 ]);
 
 export const GATE_MODES = Object.freeze(["baseline", "final"]);
 
 const REQUIRED_BLOCKER_SET = new Set(REQUIRED_BLOCKER_IDS);
-const PROBE_KINDS = new Set(["blocker", "control"]);
+const REQUIRED_REGRESSION_SET = new Set(REQUIRED_REGRESSION_IDS);
+const PROBE_KINDS = new Set(["blocker", "regression", "control"]);
 const PROBE_RESULTS = new Set(["PASS", "FAIL"]);
 const MODES = new Set(GATE_MODES);
 
@@ -37,8 +56,9 @@ const MODES = new Set(GATE_MODES);
 // instrumentation (input_invalid), never gate evidence about the blockers.
 const INPUT_INVALID_CODES = new Set([
   "invalid_mode", "unreadable_file", "invalid_document", "invalid_probe",
-  "duplicate_probe", "unknown_blocker_tag", "missing_blocker",
-  "missing_control_declaration", "control_fail",
+  "duplicate_probe", "unknown_blocker_tag", "unknown_regression_tag",
+  "missing_blocker", "missing_regression", "missing_control_declaration",
+  "control_fail",
 ]);
 
 function collectProbes(documents) {
@@ -86,7 +106,7 @@ function collectProbes(documents) {
           code: "invalid_probe",
           probeId: id,
           ...origin,
-          message: `probe ${id} must declare kind "blocker"|"control" and result "PASS"|"FAIL" (got kind ${JSON.stringify(kind ?? null)}, result ${JSON.stringify(result ?? null)})`,
+          message: `probe ${id} must declare kind "blocker"|"regression"|"control" and result "PASS"|"FAIL" (got kind ${JSON.stringify(kind ?? null)}, result ${JSON.stringify(result ?? null)})`,
         }));
         return;
       }
@@ -118,6 +138,12 @@ function structuralErrors(probes) {
         message: `probe ${probe.id} is not a declared blocker tag (${REQUIRED_BLOCKER_IDS.join(", ")})`,
       });
     }
+    if (probe.kind === "regression" && !REQUIRED_REGRESSION_SET.has(probe.id)) {
+      errors.push({
+        code: "unknown_regression_tag", probeId: probe.id, source: probe.source, file: probe.file,
+        message: `probe ${probe.id} is not a declared regression tag (${REQUIRED_REGRESSION_IDS.join(", ")})`,
+      });
+    }
   }
 
   if (controls === 0) {
@@ -138,12 +164,27 @@ function modeErrors(mode, probes) {
       errors.push({ code: "missing_blocker", probeId: id, message: `required blocker ${id} was not observed` });
     }
   }
+  for (const id of REQUIRED_REGRESSION_IDS) {
+    if (!observed.has(id)) {
+      errors.push({
+        code: "missing_regression", probeId: id,
+        message: `required regression ${id} was not observed (incomplete instrumentation)`,
+      });
+    }
+  }
 
   for (const probe of probes) {
     if (probe.kind === "control" && probe.result !== "PASS") {
       errors.push({
         code: "control_fail", probeId: probe.id, source: probe.source, file: probe.file,
         message: `control probe ${probe.id} observed ${probe.result}; controls must PASS in every mode`,
+      });
+      continue;
+    }
+    if (probe.kind === "regression" && probe.result !== "PASS") {
+      errors.push({
+        code: "regression_fail", probeId: probe.id, source: probe.source, file: probe.file,
+        message: `regression probe ${probe.id} observed ${probe.result}; regressions must PASS in every mode (the fixed behavior broke again)`,
       });
       continue;
     }

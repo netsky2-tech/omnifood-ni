@@ -10,9 +10,10 @@
  *   - `[B4-pg]` FAILS: duplicate loyalty idempotency identity is accepted by
  *     PostgreSQL today (`idempotency_key`, migration 1795000000000, carries no
  *     unique enforcement) — the DB-enforcement gap T2 must close.
- *   - `[B7]` FAILS: no Loyalty tenant table has ENABLE+FORCE RLS (no migration
+ *   - `[B7-rls-enforcement]` FAILS: no Loyalty tenant table has ENABLE+FORCE RLS (no migration
  *     touches them) and a restricted tenant-scoped session reads another
- *     tenant's ledger rows — the isolation gap T3 must close.
+ *     tenant's ledger rows — the isolation gap T3 must close (two named
+ *     probes: `[B7-rls-enforcement]` and `[B7-cross-tenant-read]`).
  *
  * State setup uses production entity/repository paths (tenants,
  * customer_point_transactions). Direct SQL is used ONLY for the allowed
@@ -163,7 +164,7 @@ describe('T1 storage baseline: migrated PostgreSQL Loyalty surface (release prob
     ).rejects.toMatchObject({ code: '23505' });
   });
 
-  it('[B7] every Loyalty tenant table is RLS ENABLE+FORCEd (arch §9.6; T3 acceptance) — RED on baseline', async () => {
+  it('[B7-rls-enforcement] every Loyalty tenant table is RLS ENABLE+FORCEd (arch §9.6; T3 acceptance) — RED on baseline', async () => {
     const unforced = await admin.query<Array<{ table_name: string }>>(
       `SELECT c.relname AS table_name
          FROM pg_class c
@@ -176,7 +177,7 @@ describe('T1 storage baseline: migrated PostgreSQL Loyalty surface (release prob
     expect(unforced.map((r) => r.table_name)).toEqual([]);
   });
 
-  it("[B7] a restricted tenant-scoped session cannot read another tenant's loyalty rows (arch §9.6; T3 acceptance) — RED on baseline", async () => {
+  it("[B7-cross-tenant-read] a restricted tenant-scoped session cannot read another tenant's loyalty rows (arch §9.6; T3 acceptance) — RED on baseline", async () => {
     // Production-shaped tenant bind: transaction-local set_config through the
     // shared TENANT_CONTEXT_SET_CONFIG_SQL constant, on the helper's
     // SELECT-only NOBYPASSRLS reader role. Correct behavior: only tenant A's
