@@ -71,9 +71,9 @@ export class LoyaltyProgram {
   @OneToMany(() => RewardDefinition, (reward) => reward.loyalty_program)
   rewards: RewardDefinition[];
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   created_at: Date;
 
-  @UpdateDateColumn({ name: 'updated_at' })
+  @UpdateDateColumn({ type: 'timestamptz', name: 'updated_at' })
   updated_at: Date;
 }

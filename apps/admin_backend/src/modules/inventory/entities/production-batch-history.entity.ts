@@ -69,9 +69,9 @@ export class ProductionBatchHistory {
   @Column('text', { array: true, default: '{}' })
   movement_references: string[];
 
-  @Column({ type: 'timestamp' })
+  @Column({ type: 'timestamptz' })
   operation_date: Date;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamptz' })
   created_at: Date;
 }

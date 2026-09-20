@@ -139,6 +139,6 @@ export class InventoryMovement {
 
   user_id?: string;
 
-  @CreateDateColumn({ name: 'occurred_at' })
+  @CreateDateColumn({ type: 'timestamptz', name: 'occurred_at' })
   timestamp: Date;
 }

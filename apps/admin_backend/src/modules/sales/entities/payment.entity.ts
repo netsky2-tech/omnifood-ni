@@ -81,12 +81,12 @@ export class Payment {
   @Column({ name: 'batch_number', nullable: true })
   batchNumber?: string;
 
-  @Column({ name: 'reconciled_at', nullable: true })
+  @Column({ type: 'timestamptz', name: 'reconciled_at', nullable: true })
   reconciledAt?: Date;
 
   @Column({ name: 'reconciled_by_user_id', nullable: true })
   reconciledByUserId?: string;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   createdAt: Date;
 }

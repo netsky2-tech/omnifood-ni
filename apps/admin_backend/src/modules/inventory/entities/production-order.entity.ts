@@ -29,6 +29,6 @@ export class ProductionOrder {
   @Column({ default: 'DRAFT' })
   status: string;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamptz' })
   created_at: Date;
 }

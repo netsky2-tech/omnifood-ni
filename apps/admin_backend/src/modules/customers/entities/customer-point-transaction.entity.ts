@@ -167,6 +167,6 @@ export class CustomerPointTransaction {
   @Column({ type: 'varchar', nullable: true })
   reason?: string | null;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   created_at: Date;
 }

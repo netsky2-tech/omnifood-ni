@@ -121,6 +121,6 @@ export class PurchaseDocument {
   @Column({ type: 'date', nullable: true, name: 'expiration_date' })
   expiration_date: Date | null;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   created_at: Date;
 }
