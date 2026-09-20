@@ -15,6 +15,36 @@ void main() {
     databaseFactory = databaseFactoryFfi;
   });
 
+  /// Opens a database at version 53 whose terminal-state table has the
+  /// original (pre-extension) schema, which is the only prior schema
+  /// migration53_54 needs to find.
+  Future<Database> openAt53() async {
+    return openDatabase(
+      inMemoryDatabasePath,
+      version: 53,
+      onCreate: (db, version) async {
+        await db.execute('''
+          CREATE TABLE human_auth_terminal_state (
+            tenant_id TEXT NOT NULL,
+            terminal_id TEXT NOT NULL,
+            state TEXT NOT NULL,
+            active_sequence INTEGER NOT NULL,
+            active_digest TEXT NOT NULL,
+            revision INTEGER NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (tenant_id, terminal_id)
+          )
+        ''');
+      },
+    );
+  }
+
+  Future<Database> migrateFrom53() async {
+    final db = await openAt53();
+    await migration53_54.migrate(db);
+    return db;
+  }
+
   Future<Database> migrateFrom52() async {
     final db = await openDatabase(
       inMemoryDatabasePath,
@@ -34,6 +64,18 @@ void main() {
   Future<List<String>> columnNames(Database db, String table) async {
     final rows = await db.rawQuery('PRAGMA table_info($table)');
     return rows.map((row) => row['name'] as String).toList();
+  }
+
+  /// The properties a parity claim actually depends on, one entry per column.
+  /// Comparing names alone would pass while the two install paths disagreed on
+  /// a declared type, on whether the column allows nulls, or on a default.
+  Future<Map<String, String>> columnShapes(Database db, String table) async {
+    final rows = await db.rawQuery('PRAGMA table_info($table)');
+    return {
+      for (final row in rows)
+        row['name'] as String:
+            '${row['type']} notnull=${row['notnull']} default=${row['dflt_value']}',
+    };
   }
 
   test('migration52_53 creates the five OHAC delivery tables', () async {
@@ -282,6 +324,121 @@ void main() {
       "AND name LIKE 'human_auth_%'",
     );
     expect(tables, hasLength(5));
+    await db.close();
+  });
+
+  test('migration53_54 adds the terminal-state extension columns', () async {
+    final db = await migrateFrom53();
+
+    // Compared as a set: ALTER TABLE ADD COLUMN appends, so on the upgrade
+    // path the new columns sit after revision/updated_at, while a fresh
+    // install builds them in entity order. Existence by name is the parity
+    // that matters; the fresh-install order is asserted in
+    // ohac_delivery_install_parity_test.dart.
+    expect(await columnNames(db, 'human_auth_terminal_state'), unorderedEquals([
+      'tenant_id',
+      'terminal_id',
+      'state',
+      'active_sequence',
+      'active_digest',
+      'candidate_sequence',
+      'candidate_digest',
+      'server_floor_sequence',
+      'server_floor_digest',
+      'negotiated_pos_build',
+      'negotiated_backend_build',
+      'negotiated_policy_schema',
+      'negotiated_assertion_schema',
+      'integrity_classification',
+      'local_authorization_sequence',
+      'revision',
+      'updated_at',
+    ]));
+
+    // The shape too, and specifically the one place the two install paths
+    // diverge: SQLite cannot add a `NOT NULL` column without a default, and
+    // Floor's entity DDL cannot declare one, so this path carries the defaults
+    // below while a fresh install carries none. Both sides are pinned, so a new
+    // divergence in either direction fails a test instead of passing silently.
+    final shapes = await columnShapes(db, 'human_auth_terminal_state');
+    const expectedShapes = {
+      'candidate_sequence': 'INTEGER notnull=1 default=0',
+      'candidate_digest': "TEXT notnull=1 default=''",
+      'server_floor_sequence': 'INTEGER notnull=1 default=0',
+      'server_floor_digest': "TEXT notnull=1 default='GENESIS'",
+      'negotiated_pos_build': "TEXT notnull=1 default=''",
+      'negotiated_backend_build': "TEXT notnull=1 default=''",
+      'negotiated_policy_schema': "TEXT notnull=1 default=''",
+      'negotiated_assertion_schema': "TEXT notnull=1 default=''",
+      'integrity_classification': "TEXT notnull=1 default=''",
+      'local_authorization_sequence': 'INTEGER notnull=1 default=0',
+    };
+    for (final entry in expectedShapes.entries) {
+      expect(shapes[entry.key], entry.value, reason: entry.key);
+    }
+    await db.close();
+  });
+
+  test('migration53_54 seeds the absent-sentinels on pre-existing rows',
+      () async {
+    final db = await openAt53();
+    await db.insert('human_auth_terminal_state', {
+      'tenant_id': 'tenant-1',
+      'terminal_id': 'terminal-1',
+      'state': 'ACTIVE',
+      'active_sequence': 4,
+      'active_digest': 'sha256:${'c' * 64}',
+      'revision': 7,
+      'updated_at': '2026-01-01T00:00:00.000Z',
+    });
+
+    await migration53_54.migrate(db);
+
+    final row = (await db.query('human_auth_terminal_state')).single;
+    // The row's identity is untouched; only the new columns carry values.
+    expect(row['state'], 'ACTIVE');
+    expect(row['active_sequence'], 4);
+    expect(row['revision'], 7);
+    // Epoch sequences start at 1, so 0 means "no candidate"; a digest is
+    // never empty; a terminal that acknowledged nothing sits at the GENESIS
+    // floor; and 0 means no local authorization has been issued yet.
+    expect(row['candidate_sequence'], 0);
+    expect(row['candidate_digest'], '');
+    expect(row['server_floor_sequence'], 0);
+    expect(row['server_floor_digest'], 'GENESIS');
+    expect(row['negotiated_pos_build'], '');
+    expect(row['negotiated_backend_build'], '');
+    expect(row['negotiated_policy_schema'], '');
+    expect(row['negotiated_assertion_schema'], '');
+    expect(row['integrity_classification'], '');
+    expect(row['local_authorization_sequence'], 0);
+    await db.close();
+  });
+
+  test('migration53_54 is idempotent when it runs twice', () async {
+    final db = await migrateFrom53();
+
+    await migration53_54.migrate(db);
+
+    final columns = await columnNames(db, 'human_auth_terminal_state');
+    for (final column in [
+      'candidate_sequence',
+      'candidate_digest',
+      'server_floor_sequence',
+      'server_floor_digest',
+      'negotiated_pos_build',
+      'negotiated_backend_build',
+      'negotiated_policy_schema',
+      'negotiated_assertion_schema',
+      'integrity_classification',
+      'local_authorization_sequence',
+    ]) {
+      expect(
+        columns.where((name) => name == column),
+        hasLength(1),
+        reason: '$column must exist exactly once after a re-run',
+      );
+    }
     await db.close();
   });
 }

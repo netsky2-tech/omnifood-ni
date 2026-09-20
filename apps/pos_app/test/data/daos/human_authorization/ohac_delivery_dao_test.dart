@@ -75,16 +75,38 @@ void main() {
     String terminalId = 'terminal-1',
     String state = 'ACTIVE',
     int activeSequence = 1,
+    String? activeDigest,
     int revision = 1,
+    int candidateSequence = 0,
+    String candidateDigest = '',
+    int serverFloorSequence = 0,
+    String serverFloorDigest = 'GENESIS',
+    String negotiatedPosBuild = '',
+    String negotiatedBackendBuild = '',
+    String negotiatedPolicySchema = '',
+    String negotiatedAssertionSchema = '',
+    String integrityClassification = '',
+    int localAuthorizationSequence = 0,
+    String updatedAt = '2026-01-01T00:00:00.000Z',
   }) =>
       OhacTerminalStateEntity(
         tenantId: tenantId,
         terminalId: terminalId,
         state: state,
         activeSequence: activeSequence,
-        activeDigest: 'sha256:${'c' * 64}',
+        activeDigest: activeDigest ?? 'sha256:${'c' * 64}',
+        candidateSequence: candidateSequence,
+        candidateDigest: candidateDigest,
+        serverFloorSequence: serverFloorSequence,
+        serverFloorDigest: serverFloorDigest,
+        negotiatedPosBuild: negotiatedPosBuild,
+        negotiatedBackendBuild: negotiatedBackendBuild,
+        negotiatedPolicySchema: negotiatedPolicySchema,
+        negotiatedAssertionSchema: negotiatedAssertionSchema,
+        integrityClassification: integrityClassification,
+        localAuthorizationSequence: localAuthorizationSequence,
         revision: revision,
-        updatedAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: updatedAt,
       );
 
   OhacAttemptStateEntity attemptState({
@@ -260,6 +282,52 @@ void main() {
   });
 
   group('OhacTerminalStateDao', () {
+    // The extension columns use "absent" sentinels instead of NULL and carry
+    // no CHECK constraint (a Floor @Entity cannot express one, so a CHECK
+    // would exist only on the upgrade path and reintroduce the
+    // install-versus-upgrade drift that 0264fde repaired). The pairing is a
+    // documented invariant enforced here instead.
+    void expectSameTerminalState(
+      OhacTerminalStateEntity actual,
+      OhacTerminalStateEntity expected, [
+      String reasonPrefix = '',
+    ]) {
+      void check(Object? actualValue, Object? expectedValue, String field) {
+        expect(actualValue, expectedValue, reason: '$reasonPrefix$field');
+      }
+
+      check(actual.tenantId, expected.tenantId, 'tenant_id');
+      check(actual.terminalId, expected.terminalId, 'terminal_id');
+      check(actual.state, expected.state, 'state');
+      check(actual.activeSequence, expected.activeSequence, 'active_sequence');
+      check(actual.activeDigest, expected.activeDigest, 'active_digest');
+      check(
+          actual.candidateSequence, expected.candidateSequence,
+          'candidate_sequence');
+      check(actual.candidateDigest, expected.candidateDigest,
+          'candidate_digest');
+      check(actual.serverFloorSequence, expected.serverFloorSequence,
+          'server_floor_sequence');
+      check(actual.serverFloorDigest, expected.serverFloorDigest,
+          'server_floor_digest');
+      check(actual.negotiatedPosBuild, expected.negotiatedPosBuild,
+          'negotiated_pos_build');
+      check(actual.negotiatedBackendBuild, expected.negotiatedBackendBuild,
+          'negotiated_backend_build');
+      check(actual.negotiatedPolicySchema, expected.negotiatedPolicySchema,
+          'negotiated_policy_schema');
+      check(actual.negotiatedAssertionSchema,
+          expected.negotiatedAssertionSchema, 'negotiated_assertion_schema');
+      check(actual.integrityClassification, expected.integrityClassification,
+          'integrity_classification');
+      check(
+          actual.localAuthorizationSequence,
+          expected.localAuthorizationSequence,
+          'local_authorization_sequence');
+      check(actual.revision, expected.revision, 'revision');
+      check(actual.updatedAt, expected.updatedAt, 'updated_at');
+    }
+
     test('round trip preserves every field', () async {
       expect(
         await database.database.query('human_auth_terminal_state'),
@@ -270,6 +338,16 @@ void main() {
         state: 'RECEIVE_PENDING',
         activeSequence: 4,
         revision: 2,
+        candidateSequence: 5,
+        candidateDigest: 'sha256:${'d' * 64}',
+        serverFloorSequence: 3,
+        serverFloorDigest: 'sha256:${'f' * 64}',
+        negotiatedPosBuild: '2.0.0+7',
+        negotiatedBackendBuild: 'backend-2',
+        negotiatedPolicySchema: 'ohac.staff-policy-epoch.v1',
+        negotiatedAssertionSchema: 'ohac.assertion.v1',
+        integrityClassification: 'EPOCH_CHAIN_BROKEN',
+        localAuthorizationSequence: 12,
       );
       await database.ohacTerminalStateDao.insertTerminalState(inserted);
 
@@ -278,13 +356,7 @@ void main() {
         'terminal-1',
       );
       expect(read, isNotNull);
-      expect(read!.tenantId, inserted.tenantId);
-      expect(read.terminalId, inserted.terminalId);
-      expect(read.state, inserted.state);
-      expect(read.activeSequence, inserted.activeSequence);
-      expect(read.activeDigest, inserted.activeDigest);
-      expect(read.revision, inserted.revision);
-      expect(read.updatedAt, inserted.updatedAt);
+      expectSameTerminalState(read!, inserted);
     });
 
     test('insertTerminalState twice for the same terminal fails instead of '
@@ -306,70 +378,387 @@ void main() {
           reason: 'a failed insert must not overwrite the protected state');
     });
 
-    test('the revision compare-and-set is real', () async {
+    test('a terminal that never received a candidate reports the sentinel '
+        'pair, and confirm restores it', () async {
+      // The sentinels are the documented "absent" values: epoch sequences
+      // start at 1 so 0 is not a sequence, and a digest is never empty.
       await database.ohacTerminalStateDao
-          .insertTerminalState(terminalState(revision: 5));
+          .insertTerminalState(terminalState(state: 'ACTIVE', revision: 7));
 
-      // A stale expectation loses the race and changes nothing. The seeded
-      // revision is deliberately not 1, so a WHERE clause that compared the
-      // revision against a constant instead of against the caller's
-      // expectation would fail here rather than pass by coincidence.
-      final stale = await database.ohacTerminalStateDao
-          .updateTerminalStateIfRevisionMatches(
+      final fresh = await database.ohacTerminalStateDao.findTerminalState(
         'tenant-1',
         'terminal-1',
-        5 + 100,
-        'ACK_SUBMITTING',
-        2,
+      );
+      expect(fresh!.candidateSequence, 0);
+      expect(fresh.candidateDigest, '');
+      expect(fresh.serverFloorSequence, 0,
+          reason: 'a terminal that acknowledged nothing sits at the genesis '
+              'floor');
+      expect(fresh.serverFloorDigest, 'GENESIS');
+
+      final received = await database.ohacTerminalStateDao.receiveEpoch(
+        'tenant-1',
+        'terminal-1',
+        7,
+        8,
         'sha256:${'d' * 64}',
+        '2.0.0+7',
+        'backend-2',
+        'ohac.staff-policy-epoch.v1',
+        'ohac.assertion.v1',
         '2026-01-02T00:00:00.000Z',
       );
-      expect(stale, 0);
-      final afterStale = await database.ohacTerminalStateDao.findTerminalState(
-        'tenant-1',
-        'terminal-1',
-      );
-      expect(afterStale!.state, 'ACTIVE');
-      expect(afterStale.revision, 5);
+      expect(received, 1);
 
-      // The current expectation wins exactly once and bumps the revision.
-      final won = await database.ohacTerminalStateDao
-          .updateTerminalStateIfRevisionMatches(
-        'tenant-1',
-        'terminal-1',
-        5,
-        'ACK_SUBMITTING',
-        2,
-        'sha256:${'d' * 64}',
-        '2026-01-02T00:00:00.000Z',
-      );
-      expect(won, 1);
-      final afterWin = await database.ohacTerminalStateDao.findTerminalState(
+      final carrying = await database.ohacTerminalStateDao.findTerminalState(
         'tenant-1',
         'terminal-1',
       );
-      expect(afterWin!.state, 'ACK_SUBMITTING');
-      expect(afterWin.activeSequence, 2);
-      expect(afterWin.activeDigest, 'sha256:${'d' * 64}');
-      expect(afterWin.updatedAt, '2026-01-02T00:00:00.000Z');
-      expect(afterWin.revision, 6);
+      expect(carrying!.candidateSequence, 8);
+      expect(carrying.candidateDigest, 'sha256:${'d' * 64}');
 
-      // The revision the first win consumed can never win again.
-      final replayed = await database.ohacTerminalStateDao
-          .updateTerminalStateIfRevisionMatches(
+      final confirmed = await database.ohacTerminalStateDao
+          .confirmAcknowledgement(
         'tenant-1',
         'terminal-1',
-        5,
-        'ACK_CONFIRMED',
-        3,
-        'sha256:${'e' * 64}',
+        8,
         '2026-01-03T00:00:00.000Z',
       );
-      expect(replayed, 0);
-      final afterReplay = await database.ohacTerminalStateDao
-          .findTerminalState('tenant-1', 'terminal-1');
-      expect(afterReplay!.state, 'ACK_SUBMITTING');
-      expect(afterReplay.revision, 6);
+      expect(confirmed, 1);
+
+      final restored = await database.ohacTerminalStateDao.findTerminalState(
+        'tenant-1',
+        'terminal-1',
+      );
+      expect(restored!.candidateSequence, 0,
+          reason: 'confirm must clear the candidate back to its sentinel');
+      expect(restored.candidateDigest, '');
+      expect(restored.activeSequence, 8,
+          reason: 'confirm must promote the candidate to active');
+      expect(restored.activeDigest, 'sha256:${'d' * 64}');
+      expect(restored.state, 'ACTIVE');
+    });
+
+    test('receiveEpoch writes the pending state, the candidate pair and the '
+        'negotiated facts', () async {
+      await database.ohacTerminalStateDao
+          .insertTerminalState(terminalState(state: 'ACTIVE', revision: 7));
+
+      final received = await database.ohacTerminalStateDao.receiveEpoch(
+        'tenant-1',
+        'terminal-1',
+        7,
+        8,
+        'sha256:${'d' * 64}',
+        '2.0.0+7',
+        'backend-2',
+        'ohac.staff-policy-epoch.v1',
+        'ohac.assertion.v1',
+        '2026-01-02T00:00:00.000Z',
+      );
+      expect(received, 1);
+
+      final read = await database.ohacTerminalStateDao.findTerminalState(
+        'tenant-1',
+        'terminal-1',
+      );
+      expect(read!.state, 'RECEIVE_PENDING');
+      expect(read.candidateSequence, 8);
+      expect(read.candidateDigest, 'sha256:${'d' * 64}');
+      expect(read.negotiatedPosBuild, '2.0.0+7');
+      expect(read.negotiatedBackendBuild, 'backend-2');
+      expect(read.negotiatedPolicySchema, 'ohac.staff-policy-epoch.v1');
+      expect(read.negotiatedAssertionSchema, 'ohac.assertion.v1');
+      expect(read.updatedAt, '2026-01-02T00:00:00.000Z');
+      expect(read.revision, 8);
+      // Fields the receive transition does not own stay untouched.
+      expect(read.activeSequence, 1);
+      expect(read.activeDigest, 'sha256:${'c' * 64}');
+    });
+
+    test('the negotiated facts survive a receive and are not silently '
+        'defaulted', () async {
+      // A receive over a row whose negotiated facts were already set must
+      // overwrite every one of them, not leave stale values behind.
+      await database.ohacTerminalStateDao.insertTerminalState(terminalState(
+        state: 'ACTIVE',
+        revision: 7,
+        negotiatedPosBuild: '1.0.0+1',
+        negotiatedBackendBuild: 'backend-1',
+        negotiatedPolicySchema: 'ohac.staff-policy-epoch.v0',
+        negotiatedAssertionSchema: 'ohac.assertion.v0',
+      ));
+
+      final received = await database.ohacTerminalStateDao.receiveEpoch(
+        'tenant-1',
+        'terminal-1',
+        7,
+        8,
+        'sha256:${'d' * 64}',
+        '3.0.0+1',
+        'backend-3',
+        'ohac.staff-policy-epoch.v2',
+        'ohac.assertion.v2',
+        '2026-01-02T00:00:00.000Z',
+      );
+      expect(received, 1);
+
+      final read = await database.ohacTerminalStateDao.findTerminalState(
+        'tenant-1',
+        'terminal-1',
+      );
+      expect(read!.negotiatedPosBuild, '3.0.0+1');
+      expect(read.negotiatedBackendBuild, 'backend-3');
+      expect(read.negotiatedPolicySchema, 'ohac.staff-policy-epoch.v2');
+      expect(read.negotiatedAssertionSchema, 'ohac.assertion.v2');
+    });
+
+    test('submitAcknowledgement moves to ACK_SUBMITTING and leaves the '
+        'candidate untouched', () async {
+      await database.ohacTerminalStateDao.insertTerminalState(terminalState(
+        state: 'RECEIVE_PENDING',
+        revision: 7,
+        candidateSequence: 8,
+        candidateDigest: 'sha256:${'d' * 64}',
+      ));
+
+      final submitted = await database.ohacTerminalStateDao
+          .submitAcknowledgement(
+        'tenant-1',
+        'terminal-1',
+        7,
+        '2026-01-02T00:00:00.000Z',
+      );
+      expect(submitted, 1);
+
+      final read = await database.ohacTerminalStateDao.findTerminalState(
+        'tenant-1',
+        'terminal-1',
+      );
+      expect(read!.state, 'ACK_SUBMITTING');
+      expect(read.candidateSequence, 8,
+          reason: 'submit owns only the state; the candidate is untouched');
+      expect(read.candidateDigest, 'sha256:${'d' * 64}');
+      expect(read.revision, 8);
+      expect(read.updatedAt, '2026-01-02T00:00:00.000Z');
+    });
+
+    test('recordServerFloor writes both halves of the floor', () async {
+      await database.ohacTerminalStateDao
+          .insertTerminalState(terminalState(state: 'ACTIVE', revision: 7));
+
+      final recorded = await database.ohacTerminalStateDao.recordServerFloor(
+        'tenant-1',
+        'terminal-1',
+        7,
+        6,
+        'sha256:${'f' * 64}',
+        '2026-01-02T00:00:00.000Z',
+      );
+      expect(recorded, 1);
+
+      final read = await database.ohacTerminalStateDao.findTerminalState(
+        'tenant-1',
+        'terminal-1',
+      );
+      expect(read!.serverFloorSequence, 6);
+      expect(read.serverFloorDigest, 'sha256:${'f' * 64}');
+      expect(read.revision, 8);
+    });
+
+    test('markIntegrityLoss sets the state and the classification, and the '
+        'classification is readable afterwards', () async {
+      await database.ohacTerminalStateDao
+          .insertTerminalState(terminalState(state: 'ACTIVE', revision: 7));
+
+      final marked = await database.ohacTerminalStateDao.markIntegrityLoss(
+        'tenant-1',
+        'terminal-1',
+        7,
+        'EPOCH_CHAIN_BROKEN',
+        '2026-01-02T00:00:00.000Z',
+      );
+      expect(marked, 1);
+
+      final read = await database.ohacTerminalStateDao.findTerminalState(
+        'tenant-1',
+        'terminal-1',
+      );
+      expect(read!.state, 'INTEGRITY_LOSS');
+      expect(read.integrityClassification, 'EPOCH_CHAIN_BROKEN');
+      expect(read.revision, 8);
+    });
+
+    test('every transition is a real compare-and-set, and a stale one does '
+        'not partially apply', () async {
+      final candidateDigest = 'sha256:${'d' * 64}';
+
+      Future<int?> receive(int expectedRevision) =>
+          database.ohacTerminalStateDao.receiveEpoch(
+            'tenant-1',
+            'terminal-1',
+            expectedRevision,
+            8,
+            candidateDigest,
+            '2.0.0+7',
+            'backend-2',
+            'ohac.staff-policy-epoch.v1',
+            'ohac.assertion.v1',
+            '2026-01-02T00:00:00.000Z',
+          );
+      Future<int?> submit(int expectedRevision) =>
+          database.ohacTerminalStateDao.submitAcknowledgement(
+            'tenant-1',
+            'terminal-1',
+            expectedRevision,
+            '2026-01-02T00:00:00.000Z',
+          );
+      Future<int?> confirm(int expectedRevision) =>
+          database.ohacTerminalStateDao.confirmAcknowledgement(
+            'tenant-1',
+            'terminal-1',
+            expectedRevision,
+            '2026-01-02T00:00:00.000Z',
+          );
+      Future<int?> floor(int expectedRevision) =>
+          database.ohacTerminalStateDao.recordServerFloor(
+            'tenant-1',
+            'terminal-1',
+            expectedRevision,
+            6,
+            'sha256:${'f' * 64}',
+            '2026-01-02T00:00:00.000Z',
+          );
+      Future<int?> loss(int expectedRevision) =>
+          database.ohacTerminalStateDao.markIntegrityLoss(
+            'tenant-1',
+            'terminal-1',
+            expectedRevision,
+            'EPOCH_CHAIN_BROKEN',
+            '2026-01-02T00:00:00.000Z',
+          );
+
+      final scenarios = <(
+        String name,
+        OhacTerminalStateEntity seeded,
+        Future<int?> Function(int expectedRevision) attempt,
+        OhacTerminalStateEntity Function(int newRevision) expectedAfterWin,
+      )>[
+        (
+          'receive',
+          terminalState(state: 'ACTIVE', activeSequence: 4, revision: 7),
+          receive,
+          (int newRevision) => terminalState(
+                state: 'RECEIVE_PENDING',
+                activeSequence: 4,
+                revision: newRevision,
+                candidateSequence: 8,
+                candidateDigest: candidateDigest,
+                negotiatedPosBuild: '2.0.0+7',
+                negotiatedBackendBuild: 'backend-2',
+                negotiatedPolicySchema: 'ohac.staff-policy-epoch.v1',
+                negotiatedAssertionSchema: 'ohac.assertion.v1',
+                updatedAt: '2026-01-02T00:00:00.000Z',
+              ),
+        ),
+        (
+          'submit',
+          terminalState(
+            state: 'RECEIVE_PENDING',
+            revision: 7,
+            candidateSequence: 8,
+            candidateDigest: candidateDigest,
+          ),
+          submit,
+          (int newRevision) => terminalState(
+                state: 'ACK_SUBMITTING',
+                revision: newRevision,
+                candidateSequence: 8,
+                candidateDigest: candidateDigest,
+                updatedAt: '2026-01-02T00:00:00.000Z',
+              ),
+        ),
+        (
+          'confirm',
+          terminalState(
+            state: 'RECEIVE_PENDING',
+            revision: 7,
+            candidateSequence: 8,
+            candidateDigest: candidateDigest,
+          ),
+          confirm,
+          (int newRevision) => terminalState(
+                state: 'ACTIVE',
+                activeSequence: 8,
+                activeDigest: candidateDigest,
+                revision: newRevision,
+                updatedAt: '2026-01-02T00:00:00.000Z',
+              ),
+        ),
+        (
+          'floor',
+          terminalState(state: 'ACTIVE', revision: 7),
+          floor,
+          (int newRevision) => terminalState(
+                state: 'ACTIVE',
+                revision: newRevision,
+                serverFloorSequence: 6,
+                serverFloorDigest: 'sha256:${'f' * 64}',
+                updatedAt: '2026-01-02T00:00:00.000Z',
+              ),
+        ),
+        (
+          'integrity loss',
+          terminalState(state: 'ACTIVE', revision: 7),
+          loss,
+          (int newRevision) => terminalState(
+                state: 'INTEGRITY_LOSS',
+                revision: newRevision,
+                integrityClassification: 'EPOCH_CHAIN_BROKEN',
+                updatedAt: '2026-01-02T00:00:00.000Z',
+              ),
+        ),
+      ];
+
+      for (final (name, seeded, attempt, expectedAfterWin) in scenarios) {
+        await database.database.delete('human_auth_terminal_state');
+        await database.ohacTerminalStateDao.insertTerminalState(seeded);
+
+        // A stale expectation loses the race and changes nothing. The seeded
+        // revision is deliberately not 1, so a WHERE clause that compared the
+        // revision against a constant instead of against the caller's
+        // expectation would fail here rather than pass by coincidence.
+        final stale = await attempt(seeded.revision + 100);
+        expect(stale, 0, reason: name);
+        final afterStale = await database.ohacTerminalStateDao
+            .findTerminalState(seeded.tenantId, seeded.terminalId);
+        // Whole-row equality is what proves a stale transition did not
+        // partially apply: the state and the candidate must be unchanged
+        // together, not just one of them.
+        expectSameTerminalState(afterStale!, seeded, '$name stale: ');
+
+        // The current expectation wins exactly once and bumps the revision.
+        final won = await attempt(seeded.revision);
+        expect(won, 1, reason: name);
+        final afterWin = await database.ohacTerminalStateDao
+            .findTerminalState(seeded.tenantId, seeded.terminalId);
+        expectSameTerminalState(
+          afterWin!,
+          expectedAfterWin(seeded.revision + 1),
+          '$name win: ',
+        );
+
+        // The revision the win consumed can never win again.
+        final replayed = await attempt(seeded.revision);
+        expect(replayed, 0, reason: name);
+        final afterReplay = await database.ohacTerminalStateDao
+            .findTerminalState(seeded.tenantId, seeded.terminalId);
+        expectSameTerminalState(
+          afterReplay!,
+          expectedAfterWin(seeded.revision + 1),
+          '$name replay: ',
+        );
+      }
     });
   });
 
@@ -693,13 +1082,10 @@ void main() {
       await database.ohacTerminalStateDao
           .insertTerminalState(terminalState(revision: 1));
       final updated = await database.ohacTerminalStateDao
-          .updateTerminalStateIfRevisionMatches(
+          .submitAcknowledgement(
         'tenant-1',
         'terminal-1',
         1,
-        'ACK_CONFIRMED',
-        1,
-        'sha256:${'c' * 64}',
         '2026-01-02T00:00:00.000Z',
       );
       expect(updated, 1);
@@ -726,7 +1112,7 @@ void main() {
           'terminal-1',
         ))!
             .state,
-        'ACK_CONFIRMED',
+        'ACK_SUBMITTING',
       );
       expect(
         (await database.ohacAttemptStateDao.findAttemptState(
