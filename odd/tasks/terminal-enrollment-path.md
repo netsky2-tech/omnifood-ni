@@ -243,8 +243,34 @@ Flakiness note, verified rather than assumed: a combined run of the service and 
 
 ### L1-05c — Guide the operator through activation
 
+Status: pending — split into the view model plus wiring, and the screen.
+
+Split into L1-05c-1 (view model and `main.dart` wiring) and L1-05c-2 (screen, route and drawer entry), for the same reason L1-04 was split: together they exceed the review budget, and the logic is independently reviewable from the presentation.
+
+### L1-05c-1 — Drive the session from a view model
+
+Status: in progress
+
+- [ ] Expose preparation state, the resolved attempt, per-phase progress and the distinct blocker codes and messages.
+- [ ] Source the tenant and the user ids from the logged-in user, never from the screen and never hard-coded.
+- [ ] Collect the authorized PIN from the human and retain it only for the call.
+- [ ] Wire the whole activation stack in `main.dart`, including the `PrinterPort` resolved from the stored printer profile rather than assumed.
+
+Acceptance criteria:
+- The view model returns the session's own results and fabricates nothing.
+- A failed phase cannot be reported as a later success, and no phase runs before a successful preparation.
+- The PIN is never logged, persisted or exposed.
+
+Checks:
+- Focused view-model tests with an injected session service.
+- `flutter analyze`.
+
+Evidence: pending.
+
+### L1-05c-2 — The guided screen
+
 Status: pending
-Depends on: L1-05b
+Depends on: L1-05c-1
 
 - [ ] Add the guided screen, reachable from the drawer, that walks the three phases in order and shows each outcome.
 - [ ] Show the check results and the blockers the runners already return, without inventing any.
