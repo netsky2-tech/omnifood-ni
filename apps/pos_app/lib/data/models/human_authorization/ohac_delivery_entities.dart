@@ -145,6 +145,61 @@ class OhacTerminalStateEntity {
   @ColumnInfo(name: 'active_digest')
   final String activeDigest;
 
+  /// The epoch the terminal has received but not yet acknowledged, together
+  /// with the four negotiated facts (design §4.2).
+  ///
+  /// The "absent" value of each of these columns is a sentinel rather than
+  /// NULL: epoch sequences start at 1, so `candidate_sequence` 0 means no
+  /// candidate; a digest is `sha256:` plus 64 hex, so `''` means none; the
+  /// floor of a terminal that acknowledged nothing is 0 / `GENESIS`, the
+  /// epoch chain's own representation of the position before epoch 1; and an
+  /// empty build, schema or classification means "never negotiated" / "no
+  /// integrity fault observed".
+  ///
+  /// There is deliberately no CHECK constraint tying, say,
+  /// `candidate_sequence` 0 to `candidate_digest` `''`: a Floor @Entity
+  /// cannot express one, so a fresh install (built from this entity DDL)
+  /// would lack it while an upgraded database had it — exactly the
+  /// install-versus-upgrade drift that 0264fde had to repair. The pairing is
+  /// a documented invariant enforced by tests instead.
+  @ColumnInfo(name: 'candidate_sequence')
+  final int candidateSequence;
+
+  @ColumnInfo(name: 'candidate_digest')
+  final String candidateDigest;
+
+  /// The highest fully confirmed position the server has acknowledged.
+  @ColumnInfo(name: 'server_floor_sequence')
+  final int serverFloorSequence;
+
+  @ColumnInfo(name: 'server_floor_digest')
+  final String serverFloorDigest;
+
+  /// The builds and schemas agreed during the last negotiation. Empty means
+  /// never negotiated.
+  @ColumnInfo(name: 'negotiated_pos_build')
+  final String negotiatedPosBuild;
+
+  @ColumnInfo(name: 'negotiated_backend_build')
+  final String negotiatedBackendBuild;
+
+  @ColumnInfo(name: 'negotiated_policy_schema')
+  final String negotiatedPolicySchema;
+
+  @ColumnInfo(name: 'negotiated_assertion_schema')
+  final String negotiatedAssertionSchema;
+
+  /// The integrity fault class observed, or `''` when none was observed.
+  @ColumnInfo(name: 'integrity_classification')
+  final String integrityClassification;
+
+  /// Terminal-local authorization sequence, forced by the authority (design
+  /// §4.2, §6). Note: `human_auth_attempt_state` also carries a column of
+  /// this name with a per-user meaning; that duplication is a known open
+  /// question deliberately left alone here.
+  @ColumnInfo(name: 'local_authorization_sequence')
+  final int localAuthorizationSequence;
+
   /// Monotonic revision for compare-and-set, so a concurrent transition can
   /// never silently overwrite another.
   final int revision;
@@ -158,6 +213,16 @@ class OhacTerminalStateEntity {
     required this.state,
     required this.activeSequence,
     required this.activeDigest,
+    required this.candidateSequence,
+    required this.candidateDigest,
+    required this.serverFloorSequence,
+    required this.serverFloorDigest,
+    required this.negotiatedPosBuild,
+    required this.negotiatedBackendBuild,
+    required this.negotiatedPolicySchema,
+    required this.negotiatedAssertionSchema,
+    required this.integrityClassification,
+    required this.localAuthorizationSequence,
     required this.revision,
     required this.updatedAt,
   });
