@@ -40,18 +40,22 @@ import { DataSource } from 'typeorm';
  *   run into a fresh schema, but a re-run of the migration set into the SAME
  *   schema fails with `type already exists`. This helper is therefore
  *   one-shot: one fresh schema per call, never re-run into the same schema.
- * - SHARED-DATABASE COLLISION (documented): the bootstrap guards look only at
- *   `public`, and the shared test database's `public` ALREADY holds the
- *   bootstrap enum types (local environments ran the migrations in it). An
- *   unqualified reference therefore binds to `public`'s type, which the
- *   migration role does not own — and 1802000000000's
- *   `ALTER TYPE products_product_type_enum ADD VALUE` fails with
- *   `must be owner of type ...`. The helper pre-creates exactly that one enum
- *   in the scratch schema AS THE MIGRATION ROLE (with the full member list
- *   bootstrap 1759000000002 uses, so the later ADD VALUE is a no-op), making
- *   the ALTER work on a type the role owns. Enum types never ALTERed can
- *   keep resolving to `public`'s harmlessly; if a future migration ALTERs
- *   another bootstrap enum, it needs the same pre-creation here.
+ * - PUBLIC-SCOPED ENUM GUARDS (documented workaround for a verified trap,
+ *   not a design): the bootstrap enum guards look only at `public`
+ *   (1759000000001:58, 1759000000002:72,86,100,119, 1759000000004:54). In a
+ *   PROVISIONED database (the shared local `omnifood`), `public` already
+ *   holds the bootstrap enum types, so the guards SKIP creating them and the
+ *   scratch schema would have no such type — every unqualified reference then
+ *   binds to `public`'s type, which the migration role does not own, and
+ *   1802000000000's `ALTER TYPE products_product_type_enum ADD VALUE` fails
+ *   with `must be owner of type ...`. In a FRESH database (CI), `public` has
+ *   no such types, the guards correctly create them in the scratch schema,
+ *   and nothing is needed. The helper therefore mirrors `public`'s enum
+ *   types into the scratch schema — same members, owned by the migration
+ *   role so the later ADD VALUE succeeds — ONLY for types that exist in
+ *   `public` and not yet in the scratch schema: the clone list is empty in a
+ *   fresh database and non-empty in a provisioned one. The real fix would be
+ *   bootstrap guards that resolve their schema instead of naming `public`.
  * - UP-ONLY: the bootstrap migrations hardcode `public` in their rollback
  *   paths, so `down()` is off limits. The helper runs `up()` only — the
  *   schema is torn down by dropping it, never by rolling back.
@@ -219,12 +223,49 @@ export async function createMigrationBuiltSchemaFixture(): Promise<MigrationBuil
       extra: { max: 2, allowExitOnIdle: true },
     });
     await migrator.initialize();
-    // Shared-database collision, see the header note: pre-create the one
-    // bootstrap enum a later migration ALTERs, owned by the migration role,
-    // in the scratch schema (first on the pinned search_path).
-    await migrator.query(
-      `CREATE TYPE products_product_type_enum AS ENUM ('SIMPLE', 'COMPOUND', 'PREPARED', 'VARIANT_PARENT')`,
-    );
+    // Public-scoped enum guards, see the header note: mirror `public`'s enum
+    // types into the scratch schema ONLY where they exist in `public` and not
+    // in the scratch schema, owned by the migration role so a later
+    // ALTER TYPE ... ADD VALUE succeeds. In a fresh database (CI) the list is
+    // empty and the bootstrap guards create everything themselves.
+    const publicEnumLabels = await migrator.query<
+      Array<{ typname: string; enumlabel: string }>
+    >(`
+      SELECT t.typname, e.enumlabel
+        FROM pg_type t
+        JOIN pg_namespace n ON n.oid = t.typnamespace
+        JOIN pg_enum e ON e.enumtypid = t.oid
+       WHERE n.nspname = 'public'
+       ORDER BY t.typname, e.enumsortorder
+    `);
+    const publicEnums = new Map<string, string[]>();
+    for (const { typname, enumlabel } of publicEnumLabels) {
+      const members = publicEnums.get(typname) ?? [];
+      members.push(enumlabel);
+      publicEnums.set(typname, members);
+    }
+    const scratchEnums = await migrator.query<Array<{ typname: string }>>(`
+      SELECT t.typname
+        FROM pg_type t
+        JOIN pg_namespace n ON n.oid = t.typnamespace
+       WHERE n.nspname = current_schema()
+    `);
+    const scratchEnumNames = new Set(scratchEnums.map((e) => e.typname));
+    const clonedEnums: string[] = [];
+    for (const [typname, members] of publicEnums) {
+      if (scratchEnumNames.has(typname)) continue;
+      const quoted = typname.replace(/"/g, '""');
+      const memberList = members
+        .map((m) => `'${m.replace(/'/g, "''")}'`)
+        .join(', ');
+      await migrator.query(`CREATE TYPE "${quoted}" AS ENUM (${memberList})`);
+      clonedEnums.push(typname);
+    }
+    if (clonedEnums.length > 0) {
+      process.stdout.write(
+        `[migration-built] cloned ${clonedEnums.length} enum type(s) from public: ${clonedEnums.join(', ')}\n`,
+      );
+    }
     const migrationStartedAt = Date.now();
     await migrator.runMigrations();
     migrationDurationMs = Date.now() - migrationStartedAt;

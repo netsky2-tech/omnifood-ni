@@ -145,19 +145,31 @@ so they would gain nothing for that price. Two are worth it: `src/modules/sales/
 `src/modules/fulfillment/services/fulfillment-retention.service.db.spec.ts`, together ≈ **+3.8 s**. The
 OHAC runtime specs already run real migrations through the existing OHAC fixture and are not targets.
 
-**Two gotchas the helper surfaced, both from running the full set into a scratch schema inside a shared
-database.** Neither was predicted:
+**Three gotchas the helper surfaced, and the third is the instructive one.** None was predicted:
 
 - The bootstrap enum guards hardcode `n.nspname = 'public'`, so in a scratch schema they see `public`'s
-types, skip creating their own, and a later `ALTER TYPE products_product_type_enum` then resolves to
-`public` and fails with `must be owner`. The helper pre-creates that enum in the scratch schema as the
-migration role. Running against a genuinely empty database should not need this, but it could not be
-observed here because the local database is fully provisioned.
+types, skip creating their own, and a later `ALTER TYPE products_product_type_enum` resolves to
+`public` and fails with `must be owner`.
 - An explicit `GRANT CONNECT` on the shared database blocks `DROP ROLE` through `pg_shdepend`. `CONNECT`
-is `PUBLIC` by default, so the grant was removed and the teardown revokes before dropping.
+is `PUBLIC` by default, so the grant was dropped and the teardown revokes before dropping.
+- **The workaround for the first one broke CI, and only CI could show it.** The first iteration
+pre-created that enum in the scratch schema *unconditionally*. Locally that is necessary, because the
+provisioned `public` makes the guard skip. In CI the database is fresh, `public` has no such type, the
+guard correctly issues `CREATE TYPE` into the scratch schema, and it collides with the pre-created copy:
+`QueryFailedError: type "products_product_type_enum" already exists`, five tests red. The three suites
+passed locally on the broken version too.
 
-Both are documented in the helper. This is the same lesson as the column-type ratchet: the traps that
-matter are the ones only a real run reveals.
+The fix mirrors `public`'s enum types into the scratch schema **only where they exist in `public`** and
+not in the scratch schema, owned by the migration role. The clone list is empty in a fresh database and
+nine long in a provisioned one. Both were then verified by running the spec against a freshly created
+`omnifood_418_fresh` **and** against the provisioned `omnifood` — one environment passing would have
+proven nothing, since that is exactly how the first version shipped.
+
+The lesson generalizes past this helper: **a workaround conditioned on one environment's state is a bug
+in the other, and local green is not evidence when the condition is environmental.**
+
+All three are documented in the helper. Same lesson as the column-type ratchet: the traps that matter are
+the ones only a real run reveals.
 
 **Suites green.** `npm test` 243 suites / 2251 tests (8 skipped); `npm run test:db` 42 / 243;
 `npm run test:e2e` 50 / **399** — two more than before, which are the new drift and `pg_policies`
