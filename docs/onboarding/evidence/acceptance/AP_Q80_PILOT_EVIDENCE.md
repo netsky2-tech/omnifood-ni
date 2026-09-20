@@ -2,10 +2,24 @@
 
 **Documento:** `AP_Q80_PILOT_EVIDENCE.md`
 **Ubicación:** `docs/onboarding/evidence/acceptance/AP_Q80_PILOT_EVIDENCE.md`
-**Estado:** **PENDING — TO BE COMPLETED DURING/_AFTER PILOT**
-**Versión:** 1.0
+**Estado:** **CERRADO — ONB1.10F PASS (2026-09-20); piloto en local real NOT READY**
+**Versión:** 2.0
 **Fecha de creación:** 2026-09-04
 **Autoridad:** `onboarding_acceptance_plan_v1.0.md` §AP-12
+
+---
+
+# Resultado (leer primero)
+
+```text
+ONB1.10F (aceptación técnica sobre hardware real):  PASS
+  Release: fp-acceptance-6b15d8a · Cohorte 5/5 PASS · TTFSS peor caso 947 ms
+Piloto en local real (operación comercial):         NOT READY
+  Motivo: L1 (enrolamiento de producción) y L2 (transporte mixto de
+  sincronización, issue #314) siguen abiertos en AP_KNOWN_LIMITATIONS.md
+```
+
+Este documento valida **sólo** el ciclo de vida de activación en el Q80 físico. El PASS de ONB1.10F **no** autoriza operar un local real: el transporte de dispositivo `/v1/sync/*` quedó fuera de alcance (§0) y las limitaciones L1/L2 permanecen abiertas.
 
 ---
 
@@ -24,13 +38,13 @@ Este documento captura la evidencia del piloto físico en hardware real. Se llen
 | Campo | Valor |
 |---|---|
 | acceptanceReleaseId | `fp-acceptance-96440859` para el **rehearsal (FREEZE-06)**, `fp-acceptance-4b13e4e` para la primera **cohorte** y `fp-acceptance-6b15d8a` para la **cohorte de captura de campos**, que es la vigente. Ver la nota de reacuñación debajo. |
-| Backend commit | rehearsal `9644085940de704eae0c0fcb23609df66e631770`; cohorte vigente `6b15d8af` |
+| Backend commit | rehearsal `9644085940de704eae0c0fcb23609df66e631770`; cohorte vigente `6b15d8af66aed80260a511aaaded53d04329f1de` (2026-09-20 10:39:28 -0600) |
 | Owner Dashboard commit | los mismos commits (monorepo) |
 | POS commit | los mismos commits (monorepo) |
 | POS APK version | `1.0.0+1` (declarado en `pubspec.yaml`; el APK instalado reportó `versionName 1.0.0`, `versionCode 1`) |
-| POS APK SHA-256 | `f93b63107f51bcbd70639fae896894e34dc36e37340a61b507b13c8e5d14550b` (el APK que corrió el rehearsal). El APK de la cohorte se reconstruye desde `4b13e4e`; su hash no se registró en esta corrida porque el binario se regeneró en cada run. |
-| Database migration version | `1809060000000-AlignInvoiceTenantPolicyPredicate` en el rehearsal; el release de la cohorte aplica 85 migraciones sobre una base vacía |
-| SQLite schema version | `52` (Floor database version verificada en `apps/pos_app/lib/data/database/app_database.dart`) |
+| POS APK SHA-256 | `f93b63107f51bcbd70639fae896894e34dc36e37340a61b507b13c8e5d14550b` — APK del **rehearsal** (FREEZE-06). **El APK de la cohorte vigente no tiene SHA-256 registrado: se reconstruyó por cada run desde `6b15d8a` y el hash del binario no fue capturado.** No se sustituye por el hash del rehearsal porque corresponde a otro binario. |
+| Database migration version | rehearsal: **69 migraciones aplicadas, cola `1809050000000-CreateHumanAuthorizationPolicySnapshots`** (`1809060000000-AlignInvoiceTenantPolicyPredicate` estaba en el árbol pero fue omitida por el `dist` desactualizado; ver §8.0); **cohorte vigente: 85 migraciones aplicadas sobre base vacía, cola exacta `1809210000000-FixInventoryKardexRunningBalanceTenantHash`** |
+| SQLite schema version | `53` (Floor database version verificada en `apps/pos_app/lib/data/database/app_database.dart` para el release `6b15d8a`) |
 
 **Nota de reacuñación (2026-09-19 / 2026-09-20).** El protocolo pide acuñar la identidad una sola vez, y se acuñó sobre `9644085` tras la entrega del 2026-09-18. Esa identidad **no podía gobernar la cohorte**, porque en el medio el instrumento cambió por hallazgos de campo: el ticket de venta se imprimía como FACTURA en 58 mm y se corrigió (#343), la impresión física se reemplazó por el modo simulado para no consumir papel del dispositivo prestado (#352), y el camino de lectura fiscal quedó atado al tenant (#377, #411). Correr la cohorte sobre `9644085` habría medido un instrumento que ya sabíamos defectuoso.
 
@@ -42,16 +56,16 @@ La tercera acuñación existe por una razón distinta y más estrecha: la cohort
 
 | Campo | Valor |
 |---|---|
-| Device model | Alacrity Q80 / iPOS |
-| Device serial (raw) | «COMPLETAR: `adb shell getprop ro.serialno`» |
-| Device serial SHA-256 | «COMPLETAR: SHA-256 del serial raw» |
-| Android version | «COMPLETAR: `adb shell getprop ro.build.version.release`» |
-| Security patch | «COMPLETAR: `adb shell getprop ro.build.version.security_patch`» |
-| Firmware | «COMPLETAR si aplica» |
-| Printer driver | Nyx Printer Service 2.0.5 (confirmar en logs del POS) |
+| Device model | MIRAY Q80 / iPOS — modelo `TPM4G_E9863`, fabricante `NB55` |
+| Device serial (raw) | **No persistido** — se leyó en campo vía `adb shell getprop ro.serialno` y se descartó a propósito; el repositorio sólo conserva su hash |
+| Device serial SHA-256 | `680f14116c61725b6f5aaf76fa99d8b8fbc7855deeb77a4d79903415c1eb56ec` |
+| Android version | 12 (SDK 31) |
+| Security patch | 2022-11-05 |
+| Firmware | `Q80_SC_V1.0.1_B241225.163320` |
+| Printer driver | Adaptador `SUNMI_V2S` vía `net.nyx.printerservice`; **versión del servicio no verificada** |
 | Printer paper width | 80 mm (rollo del Q80) |
-| WiFi SSID | «COMPLETAR: SSID del entorno de piloto» |
-| WAN outage method | «COMPLETAR: airplane mode / router disconnect» |
+| WiFi SSID | **No capturado** — la cohorte fue dirigida por el harness y no registró el SSID del entorno |
+| WAN outage method | **Sin corte físico de WAN.** El offline se aplicó por el propio harness (interceptor que cuenta requests) y se probó con `httpRequests: 0` en el recibo de la fase `offline` de cada run |
 
 ---
 
@@ -59,9 +73,9 @@ La tercera acuñación existe por una razón distinta y más estrecha: la cohort
 
 | Campo | Valor |
 |---|---|
-| Browser | «COMPLETAR: Chrome/Edge/Firefox + versión» |
-| OS | «COMPLETAR: Ubuntu/Windows/macOS + versión» |
-| Screen resolution | «COMPLETAR: ancho × alto» |
+| Browser | **No capturado** — la cohorte fue harness-driven: el Dashboard fue operado por el instrumento, no por un browser humano observado |
+| OS | **No capturado** — mismo motivo |
+| Screen resolution | **No capturado** — mismo motivo |
 
 ---
 
@@ -69,11 +83,11 @@ La tercera acuñación existe por una razón distinta y más estrecha: la cohort
 
 | Campo | Run 1 | Run 2 | Run 3 | Run 4 | Run 5 |
 |---|---|---|---|---|---|
-| runId | «del seed output» | «» | «» | «» | «» |
-| tenantId | «del seed output» | «» | «» | «» | «» |
-| tenantIdHash (SHA-256) | «hashear tenantId» | «» | «» | «» | «» |
-| Owner email | «del seed output» | «» | «» | «» | «» |
-| Offline PIN | «del seed output» | «» | «» | «» | «» |
+| runId (seed) | `1789922440928-ca058ea0` | `1789922456360-d55293f4` | `1789922472913-8f9352fb` | `1789922489786-53a4c50f` | `1789922506450-aafdf8dc` |
+| tenantId | `87631cab-8f45-485f-aa62-58cec58d14b7` | `8bc5c2f3-114e-41f6-95d8-146dc1fc8d19` | `53b8f44f-eb4c-40c6-a610-288348d11368` | `72740331-ae92-4767-bc16-282d7c29b781` | `da886f68-0be0-4da3-97ee-a1cbdbe4f75a` |
+| tenantIdHash (prefijo de 128 bits de SHA-256, según el protocolo) | `931a4a589c7f7654480ee73fcf453db3` | `671d3b1473cb06fe451724823b13ca19` | `8b9b585a06c069ccfd2845ce434f81e2` | `2a49a9b4aee442c0e8d569ad2cca6b73` | `bf31d5bde8822e1860df9efd927a0880` |
+| Owner email | `founder-pilot-1789922440928-ca058ea0@pilot.omnifood.ni` | `founder-pilot-1789922456360-d55293f4@pilot.omnifood.ni` | `founder-pilot-1789922472913-8f9352fb@pilot.omnifood.ni` | `founder-pilot-1789922489786-53a4c50f@pilot.omnifood.ni` | `founder-pilot-1789922506450-aafdf8dc@pilot.omnifood.ni` |
+| Offline PIN | Capturado en campo del output del seed; **no se persiste en el repositorio** por decisión de seguridad | ídem | ídem | ídem | ídem |
 
 ---
 
@@ -81,15 +95,15 @@ La tercera acuñación existe por una razón distinta y más estrecha: la cohort
 
 | Campo | Valor |
 |---|---|
-| RUC | `J0000000000000` (placeholder del seed) → **registrar aquí el RUC real usado en el run** |
-| RUC presente al activar (`rucPresent`) | «true/false — de la evidencia de TEST_PRINT» |
-| `rucHash` (SHA-256 del RUC canónico) | «de la evidencia de TEST_PRINT — nunca registrar el RUC crudo aquí» |
-| Régimen | **RESUELTO: `CUOTA_FIJA`** (decisión del founder, 2026-09-17; IVA 0.00%). El harness attachado (`integration_test/onb1_10_founder_pilot_q80_e2e_test.dart`) ya envía `CUOTA_FIJA` y coincide con el fixture declarado (§9 de `AP_FIXTURE_MANIFEST.md`) |
-| Nombre comercial | «COMPLETAR» |
-| Dirección fiscal | «COMPLETAR» |
-| Teléfono | «COMPLETAR» |
-| `TEST_PRINT` ancho efectivo (mm) | «de la evidencia de TEST_PRINT — debe ser 80» |
-| `TEST_PRINT` régimen efectivo | «de la evidencia de TEST_PRINT — debe ser `CUOTA_FIJA` (`COMPROBANTE DE VENTA` / `NO RECAUDA IVA`); la decisión del founder es la autoridad (§9 de `AP_FIXTURE_MANIFEST.md`)» |
+| RUC | **RUC real del founder, usado en la ejecución.** El valor crudo no se registra en este repositorio: sólo se comprobó contra el ticket físico |
+| RUC presente al activar (`rucPresent`) | `true` — evidencia de TEST_PRINT |
+| `rucHash` (SHA-256 del RUC canónico) | `46cef85fa3720cb8a1dee8b02aa4b59ab5bab3c1e116f0763759564d20581841` |
+| Régimen | `CUOTA_FIJA` (decisión del founder, 2026-09-17; IVA 0.00%), confirmado por el TEST_PRINT físico |
+| Nombre comercial | `NHILOS POS` (provisto por el founder) |
+| Dirección fiscal | `Managua` (provista por el founder) |
+| Teléfono | `81948526` (provisto por el founder) |
+| `TEST_PRINT` ancho efectivo (mm) | **80** |
+| `TEST_PRINT` régimen efectivo | **`CUOTA_FIJA`** — ticket `COMPROBANTE DE VENTA` / `NO RECAUDA IVA` |
 
 **Regla:** el RUC crudo sólo se comprueba contra el ticket físico. La telemetría y este documento registran `rucHash` + `rucPresent`, nunca el identificador completo.
 
@@ -99,11 +113,11 @@ La tercera acuñación existe por una razón distinta y más estrecha: la cohort
 
 | Campo | Valor |
 |---|---|
-| Industry Template name | «COMPLETAR: CAFETERIA u otra disponible» |
-| Productos seleccionados | «COMPLETAR: lista de nombres/SKUs aplicados» |
-| Verification product name | «COMPLETAR: producto usado para la venta de verificación» |
-| Verification product SKU | «COMPLETAR» |
-| Verification product sellPrice | «COMPLETAR: C$ X.00» |
+| Industry Template name | `BAR_RESTAURANTE` (Bar & Restaurante) |
+| Productos seleccionados | `Hamburguesa Clásica con Papas`, `Cerveza Toña 350ml`, `Trago Ron FDC 7 Años`, más **9 insumos** de la template; por run se aplicó además una fila CSV y un producto manual |
+| Verification product name | `VERIFICACION FISICA ONB1.10F-Q80-<epoch>-setup` (el `<epoch>` es el del runId de cada corrida) |
+| Verification product SKU | **No producido ni capturado** — el producto de verificación se creó sin SKU |
+| Verification product sellPrice | `C$ 1.00` |
 
 ---
 
@@ -111,10 +125,12 @@ La tercera acuñación existe por una razón distinta y más estrecha: la cohort
 
 | Fixture | SHA-256 del archivo CSV |
 |---|---|
-| F2 — CSV Clean | **Archivo determinista existe** (FREEZE-02) — hash pendiente de binding al congelar (FREEZE-05) |
-| F3 — CSV Mixed | **Archivo determinista existe** (FREEZE-02) — hash pendiente de binding al congelar |
-| F4 — CSV Duplicate | **Archivo determinista existe** (FREEZE-02) — hash pendiente de binding al congelar |
-| F5 — Legacy Unsafe | **Archivo determinista existe** (FREEZE-02) — hash pendiente de binding al congelar |
+| F2 — CSV Clean | `2751c8e62664daeab095a19c79072a604d2995a81f2f6900a82cdb3b7eb709bc` |
+| F3 — CSV Mixed | `fd525b2f5874db3af0c3110d06ffcb481e77c2ae16ad02df1d333c977a8762a9` |
+| F4 — CSV Duplicate | `2279c1c9bcefe3b881258db093d2804201f0d93df421f3dd657e24d7b1c76d25` |
+| F5 — Legacy Unsafe | `6ec18aa73493e5046c3ee607f283d13b40a0397fd843c0ba28644e21fe8a4307` |
+
+Hashes verificados con `sha256sum` contra los archivos deterministas de `fixtures/` al cierre (FREEZE-08, 2026-09-20).
 
 ---
 
@@ -198,32 +214,37 @@ Para cada run, capturar evidencia física/digital:
 
 | Evidencia | Run 1 | Run 2 | Run 3 | Run 4 | Run 5 |
 |---|---|---|---|---|---|
-| APK installed (screenshot/log) | «» | «» | «» | «» | «» |
+| APK installed (screenshot/log) | Ejecución del APK observada en el dispositivo; **captura de pantalla no capturada** | ídem | ídem | ídem | ídem |
 | Ticket impreso (foto) | «NO POR CAMBIO DE PROTOCOLO» | «idem» | «idem» | «idem» | «idem» |
-| WAN outage activado (screenshot/log) | «» | «» | «» | «» | «» |
-| Restart recovery (log) | «» | «» | «» | «» | «» |
-| Outbox drain (log/backend receipt) | «» | «» | «» | «» | «» |
-| ACTIVATED status (screenshot/query) | «» | «» | «» | «» | «» |
+| WAN outage activado (screenshot/log) | Sin corte físico — offline aplicado y probado en-harness con `httpRequests: 0` en el recibo de la fase `offline` | ídem | ídem | ídem | ídem |
+| Restart recovery (log) | **No capturado** — el ciclo de reinicio del dispositivo no formó parte del instrumento de cohorte | ídem | ídem | ídem | ídem |
+| Outbox drain (log/backend receipt) | PASS — outbox de activación drenado tras reconexión (`backendStatus: PASS`) | PASS | PASS | PASS | PASS |
+| ACTIVATED status (screenshot/query) | PASS — `session.lifecycleState = ACTIVATED` confirmado desde el backend, 10/10 checks | PASS | PASS | PASS | PASS |
 
 ---
 
 # 10. Post-Pilot Actions
 
-- [ ] Completar AP_FIXTURE_MANIFEST.md §5 (hardware fixture con datos reales)
-- [ ] Completar AP_REFERENCE_RUN_PROTOCOL.md §1 (operador) y §6 (Wan)
-- [ ] Actualizar AP-00_ENTRY_GATE.md §6 (marcar BLOCKERs como PASS)
-- [ ] Actualizar AP-00 §0 (cambiar resultado a READY o NOT READY)
-- [ ] Crear TTFSS_REFERENCE_RUNS.csv con los 5 runs
-- [ ] Crear TTFSS_REFERENCE_SUMMARY.md con resultado del cohort
-- [ ] Iniciar AP-01..AP-12
+- [x] Completar AP_FIXTURE_MANIFEST.md §5 (hardware fixture con datos reales) — hecho (FREEZE-08)
+- [x] Completar AP_REFERENCE_RUN_PROTOCOL.md §1 (operador) y §6 (Wan) — hecho (FREEZE-08), con los valores observados: operador = harness attachado, WAN = offline en-harness sin corte físico
+- [x] Actualizar AP-00_ENTRY_GATE.md §6 (marcar BLOCKERs como PASS) — hecho (FREEZE-08); restart recovery queda NOT CAPTURED
+- [x] Actualizar AP-00 §0 (resultado) — hecho (FREEZE-08): ONB1.10F PASS; piloto local real NOT READY por L1/L2
+- [x] Crear TTFSS_REFERENCE_RUNS.csv con los 5 runs — hecho (FREEZE-08)
+- [x] Crear TTFSS_REFERENCE_SUMMARY.md con resultado del cohort — hecho (FREEZE-08)
+- [ ] Iniciar AP-01..AP-12 — **NO iniciados**: el PASS de ONB1.10F no los implementa ni los autoriza a declararse completos
 
 ---
 
 # 11. Firma
 
 ```text
-Ejecutado por:    «COMPLETAR EN CAMPO»
-Fecha del piloto: «COMPLETAR EN CAMPO»
-acceptanceReleaseId: **NOT FROZEN** — «COMPLETAR EN FREEZE-05»
-Cohort result:    «PASS / FAIL»
+Ejecutado por:    Harness ONB1.10F attachado sobre el Q80 físico; operador con nombre no capturado
+Fecha del piloto: 2026-09-20 (cohorte de captura de campos; release fp-acceptance-6b15d8a)
+acceptanceReleaseId: fp-acceptance-6b15d8a
+Cohort result:    PASS (5/5 runs, TTFSS peor caso 947 ms, 5/5 ANCHORED)
+
+Alcance del resultado: este PASS cubre SOLAMENTE la aceptación técnica ONB1.10F
+(ciclo de vida de activación en hardware real). El piloto en local real queda
+NOT READY mientras L1 (enrolamiento de producción) y L2 (transporte mixto de
+sincronización, issue #314) sigan abiertos en AP_KNOWN_LIMITATIONS.md.
 ```

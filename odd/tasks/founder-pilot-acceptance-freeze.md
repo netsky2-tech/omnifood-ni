@@ -130,7 +130,7 @@ Evidence: documentation-only task, so RED/GREEN was N/A; structural/readback ver
 
 ### FREEZE-04 — Resolve human safety and environment prerequisites
 
-Status: in_progress — human decisions recorded; field capture pending.
+Status: complete — observed fields captured; genuinely uncaptured optional fields explicitly recorded as such.
 Depends on: FREEZE-03
 Owner: human, agent-assisted
 
@@ -140,15 +140,15 @@ Recorded decisions (user, 2026-09-17):
 - Physical hardware: the real Q80 is available now for field capture.
 - Issuer RUC: the real RUC is available and will replace the placeholder through `ONBOARDING_FOUNDER_RUC`; evidence records presence/hash only.
 
-Pending human capture:
+Human and field capture outcome:
 - [x] Acceptance backend provisioned and verified (agent, 2026-09-17). See the environment record below.
 - [x] Run the seed on a fresh tenant with `ONBOARDING_FOUNDER_RUC` set, as the runtime role, and confirm no placeholder warning remains. Done 2026-09-17; see the seed record below.
-- [ ] Capture Q80 serial hash, OS version and security patch, firmware, and the real printer adapter.
-- [ ] Verify the device paper width is 80 mm (local device setting; not server-pushed).
-- [ ] Capture workstation browser, OS, and resolution.
-- [ ] Capture the real APK version and SHA-256.
-- [ ] Record the WiFi SSID and the WAN outage method.
-- [ ] Record explicit DSI device-only and credit-note posture for the pilot.
+- [x] Capture Q80 serial hash, OS version and security patch, firmware, and the real printer adapter.
+- [x] Verify the device paper width is 80 mm (local device setting; not server-pushed).
+- [x] Resolve workstation browser, OS, and resolution: not captured because the accepted cohort was harness-driven rather than a human browser session.
+- [x] Capture the real APK version; rehearsal SHA-256 recorded, cohort SHA-256 explicitly not captured because the binary was rebuilt per run.
+- [x] Resolve WiFi SSID and WAN outage method: SSID not captured; no physical WAN cut, with offline enforced in-harness and proven by `httpRequests: 0`.
+- [x] Record explicit DSI device-only and credit-note posture for the pilot.
 
 DSI / credit-note impact analysis (read-only, base `f71e8e5`):
 - `/v1/sync/*` is device-only with no runtime flag; `SyncTransportGuard` rejects every non-device token with 401, so device-only enforcement is already live on the local frozen backend. The accepted credit-note gap therefore applies to this pilot even though the cloud cutover is not executed.
@@ -156,7 +156,7 @@ DSI / credit-note impact analysis (read-only, base `f71e8e5`):
 - The VOID step (G2) is a purely local `is_canceled` write that re-syncs as `SALE`, so `SyncCreditNoteAuthGuard` never blocks it and VOID evidence is producible offline-only.
 - The F2 outbox drain is the activation outbox (`onboarding/activation/*`), not `/v1/sync/batch`.
 - Residual risk: one pending credit note anywhere in a batch makes the whole batch fail closed with 403; the POS then sets `AUTH_BLOCKED`, skips the remaining sync domains in that pass, keeps the outbox growing, and shows a misleading re-authentication message. Local selling continues.
-- The accepted decision record requires the affected operations to be inventoried, including whether any open credit note is pending on an enrolled terminal. That inventory is not yet recorded.
+- At this static-analysis point, the accepted decision record still required the affected operations to be inventoried, including whether any open credit note was pending on an enrolled terminal. The later backend and device field records below completed that inventory with zero pending credit notes.
 - Required pre-rehearsal checks added: inventory pending credit notes; confirm the pilot build can provision and use a device credential (accepted-decision cutover precondition 2); record that the gap was announced and its manual procedure agreed.
 - Decision (2026-09-17): inventory first. The physical rehearsal does not run until the backend and device inventory is recorded and the device-credential provisioning capability of the pilot build is confirmed.
 
@@ -303,13 +303,13 @@ Slice-4 changed lines: 107 insertions / 5 deletions across six tracked files plu
 
 ### FREEZE-05 — Freeze release identity and manifest
 
-Status: pending
+Status: complete
 Depends on: FREEZE-02, FREEZE-03, FREEZE-04
 
-- [ ] Establish the immutable application/fixture commit boundary used by `acceptanceReleaseId`.
-- [ ] Record the exact last TypeORM migration and acceptance stage.
-- [ ] Record F2–F5 hashes and all observed environment facts.
-- [ ] Sign the freeze manifest before AP-00.
+- [x] Establish the immutable application/fixture commit boundary used by `acceptanceReleaseId`.
+- [x] Record the exact last TypeORM migration and acceptance stage.
+- [x] Record F2–F5 hashes and all observed environment facts.
+- [x] Sign the freeze manifest before AP-00.
 
 Acceptance criteria:
 - One documented rule explains which commit the release ID anchors, avoiding self-reference from the manifest-only commit.
@@ -322,18 +322,18 @@ Checks:
 - Fixture hash recomputation.
 - Cross-document release-ID consistency check.
 
-Evidence: pending.
+Evidence: closed in `AP_FIXTURE_MANIFEST.md` v2.0. The current acceptance boundary is `fp-acceptance-6b15d8a` / `6b15d8af66aed80260a511aaaded53d04329f1de`, with 85 migrations through `1809210000000-FixInventoryKardexRunningBalanceTenantHash` and verified F2–F5 hashes. Earlier release identities remain as historical evidence because the instrument changed.
 
 ### FREEZE-06 — Run the fresh-tenant ONB1.10F physical rehearsal
 
-Status: pending
+Status: complete
 Depends on: FREEZE-05
 Owner: human-run, agent-assisted
 
-- [ ] Execute setup, offline, and reconnect phases on the real Q80 with a new tenant.
-- [ ] Verify the real printer adapter and physical ticket.
-- [ ] Verify reconnect has no 401 and the outbox drains under the documented DSI posture.
-- [ ] Record results against the frozen release only.
+- [x] Execute setup, offline, and reconnect phases on the real Q80 with a new tenant.
+- [x] Verify the real printer adapter and physical ticket.
+- [x] Verify reconnect and the activation-outbox drain within the narrowed ONB1.10F scope; `/v1/sync/*` remains explicitly out of scope.
+- [x] Record results against the rehearsal release.
 
 Acceptance criteria:
 - The real Q80 reaches ACTIVATED without mocks.
@@ -345,18 +345,18 @@ Checks:
 - Physical gates in `docs/operations/q80-runbook.md`.
 - Focused backend reconnect E2E check where the environment supports it.
 
-Evidence: pending.
+Evidence: closed in `AP_Q80_PILOT_EVIDENCE.md` §8.0. The physical Q80 reached ACTIVATED, the offline phase emitted zero HTTP requests, the activation outbox drained, and the operator observed the 80 mm `COMPROBANTE DE VENTA` / `NO RECAUDA IVA` ticket. The documented 69/70 migration caveat remains attached to that historical rehearsal.
 
 ### FREEZE-07 — Run and sign off the 5/5 TTFSS cohort
 
-Status: pending
+Status: complete
 Depends on: FREEZE-06
 Owner: human, agent-assisted
 
-- [ ] Record five consecutive eligible runs under one `acceptanceReleaseId`.
-- [ ] Produce `TTFSS_REFERENCE_RUNS.csv` and `TTFSS_REFERENCE_SUMMARY.md`.
-- [ ] Confirm 5/5 ANCHORED and TTFSS at or below 15:00.
-- [ ] Complete final acceptance sign-off without mixing release IDs.
+- [x] Record five consecutive eligible runs under one `acceptanceReleaseId`.
+- [x] Produce `TTFSS_REFERENCE_RUNS.csv` and `TTFSS_REFERENCE_SUMMARY.md`.
+- [x] Confirm 5/5 ANCHORED and TTFSS at or below 15:00.
+- [x] Complete final acceptance sign-off without mixing release IDs.
 
 Acceptance criteria:
 - Five of five runs are measurement-eligible and anchored.
@@ -369,7 +369,29 @@ Checks:
 - Cross-document release-ID consistency check.
 - Human signatures and physical evidence review.
 
-Evidence: pending.
+Evidence: final field-capture cohort recorded under `fp-acceptance-6b15d8a`: 5/5 eligible, 5/5 ANCHORED, TTFSS 900/930/936/947/866 ms, 10/10 checks per run, attempt PASS and session ACTIVATED. Deterministic run and summary artifacts now live beside the acceptance record.
+
+### FREEZE-08 — Close the ONB1.10F acceptance record
+
+Status: complete
+Depends on: FREEZE-07
+Owner: agent-assisted, founder-authorized
+
+Founder decision (2026-09-20): close the technical acceptance as **ONB1.10F PASS only**. Do not claim that the pilot is ready to operate a real location while L1 (production enrollment) and L2 (mixed sync transport, issue #314) remain open.
+
+- [x] Reconcile the remaining record fields from the final cohort and captured field evidence.
+- [x] Record the founder-supplied fiscal identity fields: commercial name `NHILOS POS`, fiscal address `Managua`, phone `81948526`.
+- [x] Sign §11 with the current acceptance release and cohort result without overstating operational readiness.
+- [x] Update the known-limitations status so the closure boundary is explicit.
+- [x] Verify fixture hashes, release identities, placeholders, and cross-document scope consistency.
+
+Acceptance criteria:
+- The record contains no derivable `COMPLETAR`, blank cohort evidence, or stale `NOT FROZEN` marker.
+- Any genuinely uncaptured optional field is explicitly marked `not captured` with its source limitation; it is not fabricated.
+- The signed conclusion says ONB1.10F PASS and separately says the real-location pilot is NOT READY while L1/L2 remain open.
+- Raw issuer RUC remains absent; only presence and SHA-256 evidence are recorded.
+
+Evidence: closed on branch `docs/fp-acceptance-closeout`. `AP_Q80_PILOT_EVIDENCE.md` v2.0 and the sibling acceptance documents consistently state ONB1.10F PASS and real-location pilot NOT READY while L1/L2 remain open. No live backend, fresh target, or ADB tunnel was required for document reconciliation.
 
 ## Progress
 
@@ -419,7 +441,7 @@ Evidence: pending.
 
 ## Next step
 
-The founder-pilot acceptance has a complete cohort result. Remaining work is repo-level rather than acceptance-level: (a) merge the field-capture cohort record; (b) issue #433, the pre-existing E2E flakiness in the migration-built specs; (c) issue #358, still open in the tracker although its reproduction no longer fails. #431 was fixed and closed.
+The founder-pilot ONB1.10F acceptance record is closed as PASS. No live environment needs reconstruction for this workstream. Product work remains outside acceptance: close L1 (production enrollment) and L2 (mixed sync transport, issue #314) before reassessing whether a real-location pilot is operationally ready. Issues #431, #433 and #358 are already closed.
 
 Field-capture cohort (2026-09-20, release `6b15d8a`):
 - **5/5 runs passed with every protocol criterion verified.** TTFSS 900, 930, 936, 947, 866 ms — minimum 866, mean 915, worst 947 ms against a 900 s limit. **5/5 `clockConfidence = ANCHORED`**, which the previous cohort could only report as not captured, plus `firstSaleClaimEventIdHash` for every run. All five: 10/10 activation checks, `attempt.status = PASS`, `session.lifecycleState = ACTIVATED`, one attempt id across the three phases, and `httpRequests: 0` during the offline sale.

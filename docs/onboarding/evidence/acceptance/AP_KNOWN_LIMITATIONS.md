@@ -3,7 +3,7 @@
 **Documento:** `AP_KNOWN_LIMITATIONS.md`
 **Ubicación:** `docs/onboarding/evidence/acceptance/AP_KNOWN_LIMITATIONS.md`
 **Estado:** **VIGENTE — alcance de ONB1.10F reducido por decisión del founder (2026-09-17)**
-**Versión:** 1.0
+**Versión:** 1.1
 **Fecha de creación:** 2026-09-17
 **Autoridad:** decisión de reducción de alcance del founder (2026-09-17), registrada en el plan de trabajo del piloto
 
@@ -13,7 +13,7 @@
 
 ## 0.1 Lo que ONB1.10F SÍ valida
 
-La aceptación física del piloto del founder valida el **ciclo de vida de activación** en hardware real (Alacrity Q80/iPOS) con backend local congelado:
+La aceptación física del piloto del founder valida el **ciclo de vida de activación** en hardware real (MIRAY Q80/iPOS) con backend local congelado:
 
 1. Configuración fiscal `CUOTA_FIJA` de punta a punta (fixture declarado → harness attachado → ticket físico `COMPROBANTE DE VENTA` / `NO RECAUDA IVA`, 80 mm).
 2. Venta de verificación **offline** persistida en SQLite (fuente de verdad local) y ticket físico impreso.
@@ -69,8 +69,8 @@ Riesgo residual declarado: el bootstrap es best-effort silencioso, así que un f
 | **Afectado** | Mientras el transporte device-only esté activo y DSI-6 no exista, una nota de crédito creada por el POS no puede sincronizarse por transporte de dispositivo: `SyncCreditNoteAuthGuard` falla cerrado para lotes device-originados con `CREDIT_NOTE` (`apps/admin_backend/src/modules/sales/guards/sync-credit-note-auth.guard.ts:38`, aplicado en `sync-batch.controller.ts:19`). Un lote con una sola nota de crédito pendiente falla completo con 403; el POS marca `AUTH_BLOCKED`, saltea los dominios restantes del pase y muestra un mensaje engañoso de re-autenticación, mientras la venta local continúa. [LECTURA ESTÁTICA; el efecto observado en runtime requiere confirmación]. |
 | **Alcance en el piloto** | El guion del piloto no crea notas de crédito: `createCreditNote` solo es alcanzable por la UI de devoluciones (`apps/pos_app/lib/presentation/features/sales/view_models/sale_view_model.dart:1618`), que las fases A–G no invocan. El VOID (G2) es una escritura local `is_canceled` que re-sincroniza como `SALE`, por lo que el guard nunca lo bloquea y la evidencia de VOID es producible offline-only. [LECTURA ESTÁTICA]. |
 | **Por qué está fuera de alcance** | La brecha fue **aceptada** en el registro de decisión del cutover bajo condiciones explícitas (anuncio al tenant, inventario de operaciones afectadas, procedimiento manual, sin debilitar el guard). Cerrarla requiere DSI-6, que a su vez depende del prerrequisito de autorización humana offline. |
-| **Precondición afectada** | La decisión aceptada exige inventariar las operaciones afectadas, incluyendo si hay alguna nota de crédito abierta pendiente en una terminal enrolada. **Ese inventario aún no está registrado**, por lo que la condición de la decisión no está cumplida y el piloto se rige por la decisión inventory-first: el rehearsal físico no se ejecuta hasta registrar el inventario del backend y del dispositivo. |
-| **Qué se requiere para cerrarla** | Completar el inventario de notas de crédito pendientes (backend y dispositivo), registrar el anuncio de la brecha y el procedimiento manual acordado, y finalmente entregar DSI-6 con su prerrequisito de autorización humana offline. El inventario y el registro del anuncio son [REQUIERE CONFIRMACIÓN EN EJECUCIÓN]. |
+| **Precondición afectada** | La decisión aceptada exigía inventariar las operaciones afectadas, incluyendo si hay alguna nota de crédito abierta pendiente en una terminal enrolada. **Ese inventario quedó completado durante la captura de campo del 2026-09-17/18: inventario del backend y del dispositivo ambos ejecutados, con cero notas de crédito pendientes en cada uno.** Con esa condición satisfecha, la condición del registro de decisión que quedaba incumplida ya no bloquea por sí sola; el piloto sigue rigiéndose por la decisión inventory-first hasta que se registre el anuncio de la brecha y el procedimiento manual acordado. |
+| **Qué se requiere para cerrarla** | Con el inventario completado (backend y dispositivo, cero notas de crédito pendientes), restan: registrar el anuncio de la brecha y el procedimiento manual acordado, y finalmente entregar DSI-6 con su prerrequisito de autorización humana offline. El registro del anuncio es [REQUIERE CONFIRMACIÓN EN EJECUCIÓN]. |
 
 ---
 
@@ -80,6 +80,16 @@ Riesgo residual declarado: el bootstrap es best-effort silencioso, así que un f
 - La prohibición del RUC placeholder `J0000000000000` para ejecución fiscal sigue vigente (§9 de `AP_FIXTURE_MANIFEST.md`); este documento no registra RUC crudo.
 - La semántica DGI de inmutabilidad (sin borrado de documentos, cancelación solo con `is_canceled`, numeración secuencial) y las reglas offline-first (SQLite como fuente de verdad local) no se modifican.
 
+# 5. Estado al cierre de ONB1.10F (2026-09-20)
+
+ONB1.10F cerró como **PASS** (`fp-acceptance-6b15d8a`, cohorte 5/5). Este PASS es **sólo técnico** y no habilita la operación de un local real:
+
+- **L1 — abierta.** Sin enrolamiento de credencial de dispositivo en producción, un APK de piloto no puede aprovisionar la credencial que exige `/v1/sync/*`.
+- **L2 — abierta.** El defecto de transporte mixto (Dio device-only contra rutas de inventario con guard humano, issue #314) sigue sin decisión ni implementación.
+- **L3 — inventario completado; brecha abierta.** Los inventarios de notas de crédito del backend y del dispositivo se ejecutaron con cero pendientes, pero DSI-6 y el registro del anuncio siguen pendientes.
+
+Por lo tanto: **aceptación técnica ONB1.10F = PASS; piloto en local real = NOT READY** mientras L1 y L2 sigan abiertas.
+
 ## Next step
 
-Cerrar el inventario de notas de crédito (L3) y las capturas de campo de FREEZE-04; el cierre de L1/L2 queda como trabajo posterior al piloto, con seguimiento propio.
+Cerrar L1 (enrolamiento de producción) y L2 (issue #314) con su confirmación en ejecución, registrar el anuncio de la brecha de L3 y entregar DSI-6; recién entonces puede reabrirse la evaluación de preparación del local real.

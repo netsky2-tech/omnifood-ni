@@ -2,9 +2,9 @@
 
 **Documento:** `AP_REFERENCE_RUN_PROTOCOL.md`  
 **Ubicación:** `docs/onboarding/evidence/acceptance/AP_REFERENCE_RUN_PROTOCOL.md`  
-**Estado:** **NOT FROZEN — protocolo operativo pendiente de confirmación en campo; identidad de release pendiente de FREEZE-05**
+**Estado:** **EJECUTADO — ONB1.10F PASS (2026-09-20, release `fp-acceptance-6b15d8a`); protocolo ejecutado con las desviaciones declaradas en §1 y §6**
 
-**Versión:** 1.0 (protocolo humano/operativo pendiente de captura; release id NO acuñada)
+**Versión:** 1.1 (protocolo ejecutado por cohorte harness-driven; operador y WAN con método declarado)
 **Fecha de creación:** 2026-09-04  
 **Autoridad:** `onboarding_acceptance_plan_v1.0.md` §4.3
 
@@ -22,11 +22,13 @@ Este protocolo congelada el comportamiento humano y operativo del benchmark TTFS
 
 | Campo | Valor |
 |---|---|
-| Operador | «COMPLETAR EN CAMPO: nombre/rol del operador que ejecutará el piloto» |
-| Rol en sistema | OWNER (del tenant seed — el seed crea un OWNER; el operador usa esas credenciales) |
-| Nivel de entrenamiento | «COMPLETAR EN CAMPO: trainee / internal dogfood / expert» |
-| Entrenamiento previo permitido | «COMPLETAR EN CAMPO: Sí/No — si sí, especificar alcance exacto (ej. 'practicó una vez con fixture de prueba')» |
-| Número de practice runs antes del cohort | «COMPLETAR EN CAMPO: 0 si no se permite practice; documentar si hubo rehearsal» |
+| Operador | **Harness ONB1.10F attachado** (`apps/pos_app/integration_test/onb1_10_founder_pilot_q80_e2e_test.dart`) ejecutado sobre el Q80 físico. **Operador con nombre no capturado** — la cohorte fue harness-driven |
+| Rol en sistema | OWNER (del tenant seed — el seed crea un OWNER; el harness usa esas credenciales) |
+| Nivel de entrenamiento | **No aplica tal cual** — la ejecución fue dirigida por el instrumento, no por un operador humano entrenado |
+| Entrenamiento previo permitido | El instrumento ejecutó el rehearsal de FREEZE-06 (2026-09-18) sobre hardware real antes de la cohorte |
+| Número de practice runs antes del cohort | 1 rehearsal físico (FREEZE-06), más corridas de validación de instrumento y la cohorte previa del 2026-09-19, conservadas como historia |
+
+**Desviación declarada:** el protocolo asume un operador humano constante; la cohorte fue ejecutada por el instrumento attachado. La medición y sus verificaciones backend quedan independientes del operador, que es el propósito de esta sección.
 
 **Regla:** El operador y nivel de entrenamiento permanecen constantes durante todo el cohort de 5 runs.
 
@@ -39,7 +41,7 @@ Antes de cada run, verificar:
 - [ ] Backend corriendo y accesible
 - [ ] PostgreSQL con migración correcta
 - [ ] Feature flags en Stage 10 (todos `true`)
-- [ ] POS APK instalado en Alacrity Q80
+- [ ] POS APK instalado en MIRAY Q80
 - [ ] Impresora encendida y con papel
 - [ ] Terminal en perfil de red correcto
 - [ ] Browser limpio (sin cache de sesiones previas)
@@ -117,7 +119,7 @@ El operador ejecuta **exactamente** estos pasos en este orden:
 
 ### Phase E — POS Activation
 
-19. Abrir POS en Alacrity Q80
+19. Abrir POS en MIRAY Q80
 20. Login con credenciales del OWNER
 21. Verificar que POS recibe fiscal config
 22. Verificar que verification product está disponible localmente
@@ -168,9 +170,11 @@ El operador ejecuta **exactamente** estos pasos en este orden:
 | Phase E (paso 25–31) | **Disconnected** (airplane mode) |
 | Phase F | **Reconnected** |
 
-**Método de corte:** «COMPLETAR EN CAMPO: airplane mode / router disconnect / other — documentar el paso exacto del operador»  
-**Método de restauración:** «COMPLETAR EN CAMPO: desactivar airplane mode / reconectar router / other»  
-**Tiempo observable de corte:** «COMPLETAR EN CAMPO si hay constraint — ej. 'máximo 5 segundos entre corte y verificación'»
+**Método de corte:** **Desviación declarada: no hubo corte físico de WAN.** El offline fue aplicado por el propio harness (interceptor que cuenta requests en el camino de venta) y probado por el recibo de la fase `offline` con `httpRequests: 0` en cada run. Airplane mode / desconexión de router no formó parte del instrumento de cohorte
+
+**Método de restauración:** fase `reconnect` del harness — el outbox de activación se drena hacia el backend al reestablecerse la conectividad
+
+**Tiempo observable de corte:** no aplica — el offline se sostiene por aserción (la fase falla si el camino de venta emite aunque sea un request), no por ventana temporal de corte físico
 
 ---
 
@@ -181,7 +185,7 @@ El operador ejecuta **exactamente** estos pasos en este orden:
 | Cache | Limpiar cache del browser |
 | Cookies | Limpiar cookies del dominio del Owner Dashboard |
 | Local storage | Limpiar (si aplica) |
-| Service workers | «COMPLETAR EN CAMPO: unregister si aplica — Owner Dashboard es SPA sin service worker registrado» |
+| Service workers | No aplica — Owner Dashboard es SPA sin service worker registrado |
 
 ---
 
@@ -215,9 +219,9 @@ El operador **NO puede**:
 | Campo | Valor |
 |---|---|
 | Método de pago | Efectivo (C$ monto a definir en campo — recomendado: C$ 80.00) |
-| Verification product | «COMPLETAR EN CAMPO: nombre del producto de verificación del fixture manifest» |
-| Monto | «COMPLETAR EN CAMPO: ej. C$ 80.00 — debe ser > 0 y cubierto por el efectivo dado» |
-| Cambio | «COMPLETAR EN CAMPO si aplica: ej. C$ 0.00 si el monto exacto» |
+| Verification product | `VERIFICACION FISICA ONB1.10F-Q80-<epoch>-setup` (fixture manifest §10; el `<epoch>` es el del runId de cada corrida) |
+| Monto | `C$ 1.00` (sellPrice del producto de verificación, ejecutado) |
+| Cambio | `C$ 0.00` — el efectivo cubrió el monto exacto |
 
 ---
 
@@ -283,9 +287,12 @@ notes
 Cuando este protocolo se use para el cohort formal, firmar:
 
 ```text
-Firmado por:              «COMPLETAR EN CAMPO»
-Fecha de congelación:     «COMPLETAR EN CAMPO: actualizar fecha/hora exacta de firma»
-Protocol version:         1.0
-Fixture manifest ref:     AP_FIXTURE_MANIFEST.md v1.0 (release identity pendiente de FREEZE-05)
-acceptanceReleaseId:      **NOT FROZEN** — «COMPLETAR EN FREEZE-05: acuñar una sola vez tras estabilizar todo cambio que afecte release»
+Firmado por:              Harness ONB1.10F attachado sobre el Q80 físico; operador con nombre no capturado
+Fecha de congelación:     2026-09-20
+Protocol version:         1.1
+Fixture manifest ref:     AP_FIXTURE_MANIFEST.md v2.0 (fp-acceptance-6b15d8a)
+acceptanceReleaseId:      fp-acceptance-6b15d8a
+
+Resultado: cohorte 5/5 PASS — piloto en local real NOT READY (L1/L2 abiertas
+en AP_KNOWN_LIMITATIONS.md)
 ```

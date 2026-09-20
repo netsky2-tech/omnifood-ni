@@ -2,9 +2,9 @@
 
 **Documento:** `AP_FIXTURE_MANIFEST.md`  
 **Ubicación:** `docs/onboarding/evidence/acceptance/AP_FIXTURE_MANIFEST.md`  
-**Estado:** **NOT FROZEN — identidad de release NO congelada (pendiente de FREEZE-05); fixtures deterministas creados; hardware y datos de campo pendientes**
+**Estado:** **FROZEN — `fp-acceptance-6b15d8a` (2026-09-20). ONB1.10F PASS; piloto en local real NOT READY por L1/L2.** Fixtures deterministas vinculados por hash; hardware y datos de campo capturados
 
-**Versión:** 1.0 (identidad de release pendiente de acuñar; fixtures F2–F5 creados; hardware fixture pendiente de captura en campo)
+**Versión:** 2.0 (identidad congelada en FREEZE-08; fixtures F2–F5 con hash vinculado; hardware fixture capturado)
 **Fecha de creación:** 2026-09-04  
 **Autoridad:** `onboarding_acceptance_plan_v1.0.md` §4
 
@@ -12,11 +12,11 @@
 
 # 0. Instrucciones
 
-Este manifest se congela **una sola vez** antes del primer acceptance run. Cualquier cambio de código, migration, configuración funcional o fixture requiere un nuevo manifest y un nuevo `acceptanceReleaseId`.
+Este manifest quedó congelado una sola vez para el run de aceptación. Cualquier cambio de código, migration, configuración funcional o fixture requiere un nuevo manifest y un nuevo `acceptanceReleaseId`.
 
-**El `acceptanceReleaseId` NO está acuñado todavía.** Se genera una sola vez en FREEZE-05, después de que todos los cambios que afectan release (código, migraciones, configuración funcional y fixtures) estén estabilizados. Los valores de identidad de release anteriores estaban desactualizados y fueron retirados.
+El `acceptanceReleaseId` vigente es `fp-acceptance-6b15d8a` (§1). Los campos marcados con `«COMPLETAR»` restantes ya no existen en este manifest; los campos opcionalmente no capturados se marcan explícitamente **no capturado** con su limitación de origen.
 
-Los campos marcados con `«COMPLETAR»` deben llenarse con datos reales antes de ejecutar AP-00.
+**Resultado de la aceptación (2026-09-20):** ONB1.10F **PASS** (cohorte 5/5, TTFSS peor caso 947 ms). El piloto en local real permanece **NOT READY** mientras L1 (enrolamiento de producción) y L2 (transporte mixto de sincronización, issue #314) sigan abiertas en `AP_KNOWN_LIMITATIONS.md`.
 
 **Alcance del piloto (decisión del founder, 2026-09-17):** el piloto físico ONB1.10F valida el ciclo de vida de activación en hardware real. La validación del transporte de dispositivo `/v1/sync/*` está **FUERA de alcance** para esta aceptación, y la precondición 2 del cutover DSI **NO está satisfecha** para este piloto. Las limitaciones conocidas se registran en `AP_KNOWN_LIMITATIONS.md` (documento de referencia; este manifest no duplica su contenido). Ningún campo de este manifest implica que el rehearsal valide el transporte device-only.
 
@@ -24,14 +24,16 @@ Los campos marcados con `«COMPLETAR»` deben llenarse con datos reales antes de
 
 # 1. Release Identity
 
-**ESTADO: NOT FROZEN / PENDIENTE.** Identidad de release no congelada — se fija en FREEZE-05 sobre la frontera final aplicación-fixture.
+**ESTADO: FROZEN.** Identidad acuñada como `fp-acceptance-6b15d8a` sobre la cohorte de captura de campos (2026-09-20).
 
 | Campo | Valor |
 |---|---|
-| `acceptanceReleaseId` | **NOT FROZEN** — «COMPLETAR EN FREEZE-05: derivar del commit final de release + última migración + stage» |
-| Fecha de congelación | «COMPLETAR EN FREEZE-05: fecha/hora exacta de firma» |
-| Branch congelada | «COMPLETAR EN FREEZE-05: branch del commit de release» |
-| Último commit congelado | «COMPLETAR EN FREEZE-05: SHA del commit de release» |
+| `acceptanceReleaseId` | `fp-acceptance-6b15d8a` |
+| Fecha de congelación | 2026-09-20 |
+| Branch congelada | `docs/fp-acceptance-closeout` (rama de aceptación que contiene el commit de release; verificado con `git branch --contains`) |
+| Último commit congelado | `6b15d8af66aed80260a511aaaded53d04329f1de` (2026-09-20 10:39:28 -0600) |
+
+Historial de identidades (preservado, no sobrescrito): `fp-acceptance-96440859` (rehearsal FREEZE-06) → `fp-acceptance-4b13e4e` (primera cohorte) → `fp-acceptance-6b15d8a` (cohorte de captura de campos, vigente). El motivo de cada reacuñación está registrado en `AP_Q80_PILOT_EVIDENCE.md` §1.
 
 ---
 
@@ -39,11 +41,11 @@ Los campos marcados con `«COMPLETAR»` deben llenarse con datos reales antes de
 
 | Componente | Commit SHA | Build / Image | Notas |
 |---|---|---|---|
-| Backend (NestJS) | «COMPLETAR EN FREEZE-05: SHA del commit de release» | NestJS ^11.0.1 / TypeORM ^0.3.28 | `apps/admin_backend` |
-| Owner Dashboard | «COMPLETAR EN FREEZE-05: SHA del commit de release» | v0.0.0 (SPA build) | `apps/owner_dashboard` |
-| POS (Flutter) | «COMPLETAR EN FREEZE-05: SHA del commit de release» | pubspec declara `1.0.0+1`; «COMPLETAR: build number del APK tras flutter build apk» | `apps/pos_app` — Dart SDK ^3.11.5 |
-| Database migration version | `1809040000000-CreateHumanAuthorizationTenantPublicationState` | Última migración TypeORM del árbol (verificada en `apps/admin_backend/src/migrations/`) | PostgreSQL |
-| SQLite schema version | `52` | Floor database version (`apps/pos_app/lib/data/database/app_database.dart`) | POS local |
+| Backend (NestJS) | `6b15d8af66aed80260a511aaaded53d04329f1de` | NestJS ^11.0.1 / TypeORM ^0.3.28 | `apps/admin_backend` |
+| Owner Dashboard | `6b15d8af66aed80260a511aaaded53d04329f1de` | v0.0.0 (SPA build) | `apps/owner_dashboard` |
+| POS (Flutter) | `6b15d8af66aed80260a511aaaded53d04329f1de` | pubspec declara `1.0.0+1`; el APK de cohorte se reconstruyó por run y **su SHA-256 no fue capturado** (no se sustituye por el hash del rehearsal) | `apps/pos_app` — Dart SDK ^3.11.5 |
+| Database migration version | `1809210000000-FixInventoryKardexRunningBalanceTenantHash` | Última migración TypeORM del release; **el target de la cohorte aplicó 85 migraciones sobre base vacía con esta cola exacta** | PostgreSQL |
+| SQLite schema version | `53` | Floor database version en el release `6b15d8a` (`apps/pos_app/lib/data/database/app_database.dart`) | POS local |
 
 ---
 
@@ -68,9 +70,9 @@ Flags según `OnboardingFeatureRolloutService` — estado congelado para accepta
 
 | Componente | Versión / Config |
 |---|---|
-| PostgreSQL | «COMPLETAR: `SELECT version()` en el entorno de piloto — el código no pisa versión; documentar la exacta» |
+| PostgreSQL | **No capturado** — `SELECT version()` del entorno de piloto no quedó registrado en el repositorio; el target de cohorte es lo documentado en la evidencia (85 migraciones, cola `1809210000000`) |
 | Node.js | v24.19.0 |
-| Flutter SDK | «COMPLETAR: `flutter --version` en la máquina de build del APK» |
+| Flutter SDK | **No capturado** — salida de `flutter --version` de la máquina de build del APK no registrada |
 | Dart SDK | ^3.11.5 (constraint de pubspec.yaml) |
 
 ---
@@ -79,15 +81,15 @@ Flags según `OnboardingFeatureRolloutService` — estado congelado para accepta
 
 | Campo | Valor |
 |---|---|
-| Device model | MIRAY Q80 (iPOS) — Android 12, Nyx Printer Service 2.0.5 |
-| Device serial hash | «COMPLETAR EN CAMPO: SHA-256 del serial físico — obtener con `adb shell getprop ro.serialno` y hashear» |
+| Device model | MIRAY Q80 (iPOS) — modelo `TPM4G_E9863`, fabricante `NB55`, Android 12 (SDK 31) |
+| Device serial hash | `680f14116c61725b6f5aaf76fa99d8b8fbc7855deeb77a4d79903415c1eb56ec` — el serial crudo se leyó en campo y **no se persistió** |
 | Terminal ID (DevicePrincipal) | `Q802024120001` (fijo según seed script) |
-| OS version | «COMPLETAR EN CAMPO: `adb shell getprop ro.build.version.release` + security patch» |
-| Firmware | «COMPLETAR EN CAMPO si aplica» |
-| Printer adapter | «COMPLETAR EN CAMPO: driver real que aparece en logs del POS al imprimir — NO MockPrinterAdapter» |
+| OS version | Android 12 (SDK 31), security patch 2022-11-05 |
+| Firmware | `Q80_SC_V1.0.1_B241225.163320` |
+| Printer adapter | `SUNMI_V2S` vía `net.nyx.printerservice` — **versión del servicio no verificada** |
 | Printer paper width | **80 mm** (rollo incluido en el Q80). Es el único perfil físicamente calibrado en este equipo: Nyx `TLMono` font 4, 40 columnas, 576 dots, leftPadding 8. El soporte de 58 mm existe en software (32 columnas / 384 dots) pero **no está validado físicamente** en el piloto |
-| Network profile | «COMPLETAR EN CAMPO: WiFi SSID del entorno de piloto» |
-| WAN outage method | «COMPLETAR EN CAMPO: airplane mode / router disconnect / other» |
+| Network profile | **No capturado** — WiFi SSID del entorno no registrado por ser la cohorte harness-driven |
+| WAN outage method | **Sin corte físico.** Offline aplicado por el propio harness y probado con `httpRequests: 0` en el recibo de la fase `offline` de cada run |
 
 ---
 
@@ -95,9 +97,9 @@ Flags según `OnboardingFeatureRolloutService` — estado congelado para accepta
 
 | Campo | Valor |
 |---|---|
-| Browser + version | «COMPLETAR EN CAMPO: Chrome / Edge / Firefox + versión exacta del equipo del piloto» |
-| OS | «COMPLETAR EN CAMPO: Ubuntu / Windows / macOS + versión» |
-| Screen resolution | «COMPLETAR EN CAMPO» |
+| Browser + version | **No capturado** — la cohorte fue harness-driven: el Dashboard fue operado por el instrumento, no por un browser humano observado |
+| OS | **No capturado** — mismo motivo |
+| Screen resolution | **No capturado** — mismo motivo |
 
 ---
 
@@ -109,8 +111,8 @@ Flags según `OnboardingFeatureRolloutService` — estado congelado para accepta
 | Seed command | `npm run seed:onboarding-founder-pilot` (confirmado en package.json scripts) |
 | Tenant name pattern | `Founder Pilot Q80 <runId>` |
 | Owner role | `OWNER` |
-| Owner offline PIN | 6 dígitos (generado por el seed script — capturar del output JSON) |
-| Tenant RUC | `J0000000000000` (placeholder del seed — ver §9; reemplazar antes del primer documento fiscal real) |
+| Owner offline PIN | 6 dígitos (generado por el seed script — capturado en campo del output JSON; **no se persiste en el repositorio**) |
+| Tenant RUC | El seed provee el placeholder `J0000000000000`, pero la ejecución usó `ONBOARDING_FOUNDER_RUC` con el **RUC real del founder**: `rucPresent: true`, hash `46cef85fa3720cb8a1dee8b02aa4b59ab5bab3c1e116f0763759564d20581841`; el valor crudo no se registra en el repositorio (§9) |
 | Tenant initial state | `is_active=true`, `OnboardingSession` NO iniciada, sin milestones |
 
 **IMPORTANTE:** Cada reference run crea un tenant nuevo. El seed se ejecuta antes de cada run, no se reutiliza entre runs.
@@ -121,10 +123,9 @@ Flags según `OnboardingFeatureRolloutService` — estado congelado para accepta
 
 | Campo | Valor |
 |---|---|
-| Industry Template | «COMPLETAR EN CAMPO: nombre/versión de la template de aceptación que existe en `industry_template.service.ts` (ej. CAFETERIA) — seleccionar una que tenga ≥12 productos» |
-| Productos sugeridos | 12 (precio de venta > 0) |
-| Insumos sugeridos | 4 (sin stock/costo afirmado) |
-| Recetas sugeridas | 3 (quedan DRAFT/SUGGESTED) |
+| Industry Template | `BAR_RESTAURANTE` (Bar & Restaurante) — aplicada en todos los runs |
+| Productos aplicados | `Hamburguesa Clásica con Papas`, `Cerveza Toña 350ml`, `Trago Ron FDC 7 Años`, más 9 insumos de la template |
+| Adquisición adicional por run | Una fila CSV (fixture F2–F5 según el run) y un producto manual |
 | Template selection | Operador selecciona subconjunto suficiente para catálogo vendible |
 
 ---
@@ -133,11 +134,11 @@ Flags según `OnboardingFeatureRolloutService` — estado congelado para accepta
 
 | Campo | Valor |
 |---|---|
-| RUC | `J0000000000000` — **placeholder** provisto por el seed script (override: `ONBOARDING_FOUNDER_RUC`). Estructuralmente válido (`J` + 13 dígitos) pero **no es un RUC real de contribuyente** |
-| Régimen | `CUOTA_FIJA` — **RESUELTO (decisión del founder, 2026-09-17)**: el fixture declarado es la autoridad y el harness attachado real ahora también envía `CUOTA_FIJA` (ver registro de resolución abajo). No mezclar regímenes en el cohort |
-| Nombre comercial | «COMPLETAR EN CAMPO: nombre del tenant pilot» |
-| Dirección fiscal | «COMPLETAR EN CAMPO: dirección ficticia de prueba pero con formato válido» |
-| Teléfono | «COMPLETAR EN CAMPO» |
+| RUC | **RUC real del founder, usado en la ejecución** (override `ONBOARDING_FOUNDER_RUC`). Valor crudo omitido: `rucPresent: true`, hash `46cef85fa3720cb8a1dee8b02aa4b59ab5bab3c1e116f0763759564d20581841`. El placeholder `J0000000000000` nunca emitió documento fiscal |
+| Régimen | `CUOTA_FIJA` — **RESUELTO (decisión del founder, 2026-09-17)**: el fixture declarado es la autoridad y el harness attachado real también envía `CUOTA_FIJA` (ver registro de resolución abajo). No mezclar regímenes en el cohort |
+| Nombre comercial | `NHILOS POS` (provisto por el founder) |
+| Dirección fiscal | `Managua` (provista por el founder) |
+| Teléfono | `81948526` (provisto por el founder) |
 
 **ORDEN BLOQUEANTE:** el RUC placeholder debe reemplazarse por el RUC real del founder **antes de emitir el primer documento fiscal**. Los documentos emitidos son inmutables ante DGI: no se borran, no se re-numeran y no se corrigen retroactivamente. Corregir el RUC después de la primera factura deja esa factura con un identificador inválido de forma permanente. El RUC placeholder `J0000000000000` queda visiblemente prohibido para ejecución fiscal: ninguna emisión, TEST_PRINT ni rehearsal puede ejecutarse con él.
 
@@ -157,11 +158,11 @@ La emisión de documentos fiscales sigue bloqueada por el RUC placeholder hasta 
 
 | Campo | Valor |
 |---|---|
-| Product name | «COMPLETAR EN CAMPO: producto de verificación — puede ser el primero aplicado desde la template o uno creado manualmente; nombre descriptivo» |
-| SKU | «COMPLETAR EN CAMPO» |
-| sellPrice | > 0 (confirmar valor exacto — ej. C$ 80.00) |
+| Product name | `VERIFICACION FISICA ONB1.10F-Q80-<epoch>-setup` (el `<epoch>` es el del runId de cada corrida) |
+| SKU | **No producido ni capturado** — el producto de verificación se creó sin SKU |
+| sellPrice | `C$ 1.00` (observado en los runs) |
 | active | `true` |
-| Pinneado en Activation | «COMPLETAR EN CAMPO si aplica el pinning de revisión/fingerprint» |
+| Pinneado en Activation | **No capturado** — el instrumento no registró el pinning de revisión/fingerprint para este producto |
 
 ---
 
@@ -169,27 +170,27 @@ La emisión de documentos fiscales sigue bloqueada por el RUC placeholder hasta 
 
 | Fixture | Descripción | Estado |
 |---|---|---|
-| F2 — CSV Clean | 25 filas válidas, headers oficiales, sin stock/costo | **Archivo determinista existe** (FREEZE-02). Hash SHA-256 pendiente de binding al congelar (FREEZE-05) |
-| F3 — CSV Mixed | 20 válidas + 5 inválidas + alias + columna desconocida | **Archivo determinista existe** (FREEZE-02). Hash pendiente de binding al congelar |
-| F4 — CSV Duplicate | Productos existentes para REPLACE/SKIP/FAIL | **Archivo determinista existe** (FREEZE-02). Hash pendiente de binding al congelar |
-| F5 — Legacy Unsafe | Columnas legacy: stock_inicial, costo, barcode | **Archivo determinista existe** (FREEZE-02). Hash pendiente de binding al congelar |
+| F2 — CSV Clean | 25 filas válidas, headers oficiales, sin stock/costo | **Congelado.** SHA-256 `2751c8e62664daeab095a19c79072a604d2995a81f2f6900a82cdb3b7eb709bc` |
+| F3 — CSV Mixed | 20 válidas + 5 inválidas + alias + columna desconocida | **Congelado.** SHA-256 `fd525b2f5874db3af0c3110d06ffcb481e77c2ae16ad02df1d333c977a8762a9` |
+| F4 — CSV Duplicate | Productos existentes para REPLACE/SKIP/FAIL | **Congelado.** SHA-256 `2279c1c9bcefe3b881258db093d2804201f0d93df421f3dd657e24d7b1c76d25` |
+| F5 — Legacy Unsafe | Columnas legacy: stock_inicial, costo, barcode | **Congelado.** SHA-256 `6ec18aa73493e5046c3ee607f283d13b40a0397fd843c0ba28644e21fe8a4307` |
+
+Hashes verificados con `sha256sum` contra `fixtures/` al cierre (FREEZE-08, 2026-09-20).
 
 ---
 
-# 11.1 Pendiente para el freeze (no ejecutado por este cambio)
-
-Este manifest describe el **fixture real del piloto**. La identidad de release anterior estaba desactualizada y fue retirada; se acuña una sola vez al congelar:
+# 11.1 Estado del freeze (cerrado en FREEZE-08)
 
 | Campo | Estado |
 |---|---|
-| `acceptanceReleaseId` | **NOT FROZEN.** Se acuña una sola vez en FREEZE-05, tras estabilizar todo cambio que afecte release (código, migraciones, configuración funcional, fixtures) |
-| Último commit congelado / builds (§1, §2) | Pendientes de FREEZE-05 |
-| Database migration version (§2) | Verificado contra el árbol: `1809040000000-CreateHumanAuthorizationTenantPublicationState` |
-| SQLite Floor schema version (§2) | Verificado contra el árbol: `52` |
-| Versión POS (§2) | Verificada contra el árbol: pubspec `1.0.0+1` |
-| CSV fixtures F2–F5 (§11) | **Archivos deterministas existen** (FREEZE-02); hashes pendientes de binding al congelar (FREEZE-05) |
-| Régimen tributario (§9) | **RESUELTO (2026-09-17):** `CUOTA_FIJA` por decisión del founder; harness attachado alineado con el fixture. Ticket esperado: `COMPROBANTE DE VENTA` / `NO RECAUDA IVA`, 80 mm |
-| Capturas de campo (§5, §6) | Pendientes de captura en el dispositivo físico |
+| `acceptanceReleaseId` | **FROZEN: `fp-acceptance-6b15d8a`** (§1), acuñado para la cohorte de captura de campos (2026-09-20) |
+| Último commit congelado / builds (§1, §2) | `6b15d8af66aed80260a511aaaded53d04329f1de`; SHA-256 del APK de cohorte **no capturado** (reconstruido por run; declarado en `AP_Q80_PILOT_EVIDENCE.md` §1) |
+| Database migration version (§2) | Cola exacta del target de cohorte: `1809210000000-FixInventoryKardexRunningBalanceTenantHash` (85 migraciones aplicadas) |
+| SQLite Floor schema version (§2) | `53` |
+| Versión POS (§2) | pubspec `1.0.0+1` |
+| CSV fixtures F2–F5 (§11) | **Congelados con hash vinculado** |
+| Régimen tributario (§9) | `CUOTA_FIJA` — confirmado por el TEST_PRINT físico del rehearsal (§8.0 de la evidencia) |
+| Capturas de campo (§5, §6) | Capturadas; WiFi SSID y fixture de workstation **no capturados** explícitamente (cohorte harness-driven) |
 
 ---
 
@@ -209,7 +210,10 @@ Este manifest describe el **fixture real del piloto**. La identidad de release a
 Cuando este manifest se llene con datos reales, el responsable firma:
 
 ```text
-Firmado por:           «COMPLETAR EN CAMPO»
-Fecha de congelación:  «COMPLETAR EN CAMPO: actualizar fecha/hora exacta de firma»
-acceptanceReleaseId:   **NOT FROZEN** — «COMPLETAR EN FREEZE-05: acuñar una sola vez tras estabilizar todo cambio que afecte release»
+Firmado por:           Harness ONB1.10F attachado sobre el Q80 físico; operador con nombre no capturado
+Fecha de congelación:  2026-09-20
+acceptanceReleaseId:   fp-acceptance-6b15d8a
+
+Resultado: ONB1.10F PASS — piloto en local real NOT READY (L1/L2 abiertas en
+AP_KNOWN_LIMITATIONS.md)
 ```
