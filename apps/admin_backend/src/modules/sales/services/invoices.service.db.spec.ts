@@ -2,7 +2,6 @@ import { randomUUID } from 'crypto';
 import { DataSource, type QueryRunner, type Repository } from 'typeorm';
 import { BohInventoryLedgerFoundation1766000000000 } from '../../../migrations/1766000000000-BohInventoryLedgerFoundation';
 import { AddDeterministicSyncSequencing1780000000000 } from '../../../migrations/1780000000000-AddDeterministicSyncSequencing';
-import { AddCreditNoteProvenance1782000000000 } from '../../../migrations/1782000000000-AddCreditNoteProvenance';
 import { AddSaleInventoryOutcomeColumns1803000000000 } from '../../../migrations/1803000000000-AddSaleInventoryOutcomeColumns';
 import { AddAcceptedAtToInventorySyncReceipts1805000000000 } from '../../../migrations/1805000000000-AddAcceptedAtToInventorySyncReceipts';
 import { Insumo } from '../../inventory/entities/insumo.entity';
@@ -803,12 +802,11 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
   it(
     'replays a CREDIT_NOTE_RESTOCK through the real TypeORM/PostgreSQL path using invoice-prefixed SALE provenance',
     async () => {
-      const bootstrap = new DataSource({
-        type: 'postgres',
-        ...postgresConnection,
-      });
-      const suffix = randomUUID().replace(/-/g, '');
-      const schema = `credit_restock_replay_${suffix}`;
+      const fixture = await createMigrationBuiltSchemaFixture();
+      const schema = fixture.schema;
+      process.stdout.write(
+        `[timing] migration-built setup = ${fixture.setupDurationMs} ms (migrations alone: ${fixture.migrationDurationMs} ms)\n`,
+      );
       const tenantId = randomUUID();
       const insumoId = randomUUID();
       const saleInvoiceId = randomUUID();
@@ -817,8 +815,15 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
       let dataSource: DataSource | null = null;
 
       try {
-        await bootstrap.initialize();
-        await bootstrap.query(`CREATE SCHEMA "${schema}"`);
+        // Superuser connection for seeding and for the service calls: this
+        // test exercises the restock replay write path, not a restricted-role
+        // RLS read path. Row level security itself (ENABLE, FORCE and the
+        // tenant policies, in the migration-installed uuid predicate form) is
+        // owned by the migrations the fixture just ran; the catalog assertion
+        // below proves the inventory_kardex policies this replay path
+        // appends under. The full migration set also replaces the former
+        // manual AddCreditNoteProvenance1782000000000 up() call and installs
+        // the real running-balance trigger (#425, fixed by #427).
         dataSource = new DataSource({
           type: 'postgres',
           ...postgresConnection,
@@ -837,19 +842,42 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
             Product,
             ProductInventoryMappingVersion,
           ],
-          synchronize: true,
+          extra: {
+            allowExitOnIdle: true,
+            options: `-c search_path=${schema},public -c statement_timeout=15000`,
+          },
         });
         await dataSource.initialize();
-        await dataSource.query(`SET search_path TO "${schema}"`);
-        await dataSource.query(
-          "SELECT set_config('app.tenant_id', $1, false)",
-          [tenantId],
+
+        // The point of the conversion: assert the catalog the migrations
+        // built, not a hand-written copy. inventory_kardex — the table this
+        // replay path appends to — must carry the eight migration-installed
+        // policies in the uuid predicate form (1809070000000), production's
+        // form, which fails differently from the old text form on a blank
+        // app.tenant_id setting (#358: cast error, not a quiet deny).
+        const kardexPolicies = await dataSource.query<
+          Array<{
+            tablename: string;
+            policyname: string;
+            qual: string | null;
+            with_check: string | null;
+          }>
+        >(
+          `SELECT tablename, policyname, qual, with_check
+             FROM pg_policies
+            WHERE schemaname = $1
+              AND tablename IN ('inventory_kardex')
+            ORDER BY tablename, policyname`,
+          [schema],
         );
-        const queryRunner = dataSource.createQueryRunner();
-        await queryRunner.connect();
-        await queryRunner.query(`SET search_path TO "${schema}"`);
-        await new AddCreditNoteProvenance1782000000000().up(queryRunner);
-        await queryRunner.release();
+        expect(kardexPolicies).toHaveLength(8);
+        for (const policy of kardexPolicies) {
+          expect(policy.qual ?? '').not.toContain('tenant_id::text');
+          expect(policy.with_check ?? '').not.toContain('tenant_id::text');
+          expect(policy.qual ?? policy.with_check ?? '').toContain(
+            "current_setting('app.tenant_id'::text, true))::uuid",
+          );
+        }
 
         await dataSource.getRepository(Tenant).save(
           dataSource.getRepository(Tenant).create({
@@ -890,6 +918,26 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
             effective_at: new Date(0),
           }),
         );
+        // Real-schema requirement (#425 lineage): the migrated
+        // running-balance trigger derives the ledger's opening balance from
+        // inventory_kardex itself, not from insumos.stock, so opening stock
+        // must enter the ledger as an INITIAL_STOCK baseline — exactly how
+        // production loads it (seed-test-data.ts; the INITIAL_STOCK enum
+        // member installed by 1809180000000). Without it the service's first
+        // SALE insert (stock_before 10) fails the invariant against an empty
+        // ledger (latest stock_after 0).
+        await dataSource.getRepository(InventoryMovement).insert({
+          tenant_id: tenantId,
+          insumoId,
+          type: MovementType.INITIAL_STOCK,
+          quantity: 10,
+          previousStock: 0,
+          newStock: 10,
+          unitCostNio: 3.5,
+          totalCostNio: 35,
+          sourceDocumentType: 'SYSTEM',
+          sourceDocumentId: 'initial-stock-baseline',
+        });
 
         const service = new InvoicesService(
           dataSource,
@@ -1013,14 +1061,29 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
             where: { tenant_id: tenantId },
             order: { id: 'ASC' },
           });
+        // The baseline INITIAL_STOCK row now leads the ledger: the assertion
+        // covers the full running balance the real trigger enforced —
+        // 0 -> 10 (baseline), 10 -> 8 (SALE), 8 -> 9 (restock). The decimal
+        // columns come back from the driver as the exact numeric(14,4)
+        // string representation, so the expected values use that shape.
         expect(movements).toEqual([
           expect.objectContaining({
+            type: MovementType.INITIAL_STOCK,
+            previousStock: '0.0000',
+            newStock: '10.0000',
+            sourceDocumentId: 'initial-stock-baseline',
+          }),
+          expect.objectContaining({
             type: MovementType.SALE,
+            previousStock: '10.0000',
+            newStock: '8.0000',
             sourceDocumentId: `invoice:${saleInvoiceId}`,
             originInvoiceItemId: saleItemId,
           }),
           expect.objectContaining({
             type: MovementType.CREDIT_NOTE_RESTOCK,
+            previousStock: '8.0000',
+            newStock: '9.0000',
             sourceDocumentId: creditNoteId,
             sourceDocumentType: 'CREDIT_NOTE',
             originInvoiceItemId: saleItemId,
@@ -1032,12 +1095,11 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
           if (dataSource?.isInitialized) {
             await dataSource.destroy();
           }
-          if (bootstrap.isInitialized) {
-            await bootstrap.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
-            await bootstrap.destroy();
-          }
-        } catch {
-          // Best-effort cleanup.
+        } finally {
+          // Always drop the fixture's schema and roles, even when the caller
+          // DataSource fails to destroy: a failing test never leaks them.
+          // Either failure propagates; a second failure replaces the first.
+          await fixture.close();
         }
       }
     },
