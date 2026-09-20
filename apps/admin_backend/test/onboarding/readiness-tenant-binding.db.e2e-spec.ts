@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { DataSource } from 'typeorm';
+import { DataSource, type EntityMetadata } from 'typeorm';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../src/core/database/tenant-transaction';
 import { InventoryReadinessAdapter } from '../../src/modules/onboarding/adapters/inventory-readiness.adapter';
 import { Tenant } from '../../src/modules/tenant/entities/tenant.entity';
@@ -31,6 +31,7 @@ import { OnboardingSession } from '../../src/modules/onboarding/entities/onboard
 import { OnboardingIdempotencyRecord } from '../../src/modules/onboarding/entities/onboarding-idempotency.entity';
 import { OnboardingTelemetryEvent } from '../../src/modules/onboarding/entities/onboarding-telemetry-event.entity';
 import { ChangeLog } from '../../src/modules/audit/entities/change-log.entity';
+import { createMigrationBuiltSchemaFixture } from '../support/migration-built-schema.helper';
 
 /**
  * Issue #358 regression test: `GET /onboarding/readiness` and activation
@@ -48,18 +49,21 @@ import { ChangeLog } from '../../src/modules/audit/entities/change-log.entity';
  * (not to undefined) at commit. Any later unbound read of `invoices` on that
  * same pooled connection then throws on the `::uuid` cast.
  *
- * WHY THE RESTRICTED ROLE MATTERS: this spec builds the schema with
- * `synchronize: true`, so no RLS policies exist unless this file creates them,
- * and the CI role `postgres` is a SUPERUSER that BYPASSES row level security
- * entirely — a superuser never evaluates the policy, never hits the broken
- * `::uuid` cast, and the test would prove nothing. The connection used for the
- * poisoned-pool reads therefore runs as a dedicated LOGIN role provisioned
- * exactly like the one in scripts/verify-schema-build.sh:
- * NOSUPERUSER NOBYPASSRLS, so RLS policies apply to it.
+ * ISSUE #418: the schema is built by RUNNING THE FULL MIGRATION SET (via
+ * test/support/migration-built-schema.helper.ts) instead of
+ * `synchronize: true`, as a role that does not bypass RLS. The migration set
+ * creates the REAL RLS policies (~100 across the schema, four on `invoices`
+ * with the uuid-form predicate), so this file no longer hand-writes the
+ * `invoices` policy — it stopped asserting against a copy of reality and now
+ * asserts against the migrations' own output. The first two tests additionally
+ * pin the conversion itself: the entity-declared column types are compared
+ * against `information_schema` for the migration-built schema (a wrong entity
+ * annotation is now a RED test instead of an invisible divergence), and
+ * `pg_policies` must contain rows. Everything else — the poisoned-pool
+ * reproduction, the fixed-path success, the not-ready snapshot — is the
+ * original #358 regression, unchanged, and still holding on a
+ * migration-built schema is the proof the conversion did not weaken it.
  */
-
-const RESTRICTED_ROLE = 'omnifood_readiness_rls_reader';
-const RESTRICTED_PASSWORD = 'omnifood_readiness_rls_reader';
 
 const postgresConnection = {
   host: process.env.DB_HOST?.trim() ?? '127.0.0.1',
@@ -102,105 +106,156 @@ const entities = [
   ChangeLog,
 ];
 
-describe('InventoryReadiness tenant binding on poisoned pooled connections (Real PostgreSQL DB)', () => {
-  jest.setTimeout(30000);
+/**
+ * The entity/schema drift scope: every column this spec's fixtures and
+ * adapter queries actually depend on, checked by comparing the TypeORM
+ * entity metadata's declared type against `information_schema` for the
+ * MIGRATION-BUILT schema. A synchronized schema could never catch drift
+ * here (the entity IS the schema); against the migrations a lying annotation
+ * goes red.
+ *
+ * Deliberately scoped, not exhaustive: the full-schema comparison is the
+ * column-type ratchet's job (scripts/verify-schema-build.sh). This spec
+ * asserts only what it touches.
+ */
+const DRIFT_SCOPE: ReadonlyArray<{
+  readonly table: string;
+  readonly column: string;
+}> = [
+  { table: 'invoices', column: 'tenant_id' },
+  { table: 'invoices', column: 'invoice_number' },
+  { table: 'invoices', column: 'user_id' },
+  { table: 'invoices', column: 'subtotal' },
+  { table: 'invoices', column: 'total' },
+  { table: 'invoices', column: 'inventory_outcome' },
+  { table: 'invoices', column: 'created_at' },
+  { table: 'warehouses', column: 'tenant_id' },
+  { table: 'products', column: 'tenant_id' },
+  { table: 'products', column: 'stock' },
+  { table: 'insumos', column: 'tenant_id' },
+];
 
-  let bootstrap: DataSource;
+/**
+ * Folds a TypeORM column metadata declaration onto PostgreSQL's
+ * `information_schema` vocabulary so the two sides compare types, not
+ * spellings. Fail-closed: a declared type this table does not know makes the
+ * drift assertion FAIL naming the column, because an unknown declaration must
+ * be judged by a human, never silently skipped.
+ */
+const declaredTypeOf = (metadata: EntityMetadata, column: string): string => {
+  const col = metadata.columns.find((c) => c.databaseName === column);
+  if (!col) {
+    return `missing-from-entity:${metadata.tableName}.${column}`;
+  }
+  const raw = typeof col.type === 'function' ? col.type.name : String(col.type);
+  // String is TypeORM's reflection of a bare @Column() on a string property
+  // and maps to character varying unambiguously on PostgreSQL. Number and
+  // Date are deliberately NOT normalized: deciding integer vs numeric, or
+  // timestamp vs timestamptz, is a per-column design decision — a scoped
+  // column declared that way fails closed and must be judged by a human.
+  const base = (
+    {
+      String: 'character varying',
+      uuid: 'uuid',
+      varchar: 'character varying',
+      text: 'text',
+      decimal: 'numeric',
+      numeric: 'numeric',
+      integer: 'integer',
+      bigint: 'bigint',
+      boolean: 'boolean',
+      jsonb: 'jsonb',
+      timestamptz: 'timestamp with time zone',
+      timestamp: 'timestamp without time zone',
+    } as Record<string, string>
+  )[raw];
+  if (!base) {
+    return `unknown-declared-type:${metadata.tableName}.${column}:${raw}`;
+  }
+  if (col.isArray) return `${base}[]`;
+  if (base === 'character varying' && col.length)
+    return `${base}(${col.length})`;
+  if (base === 'numeric' && col.precision) {
+    return `${base}(${col.precision},${col.scale})`;
+  }
+  return base;
+};
+
+const actualTypeOf = async (
+  dataSource: DataSource,
+  schema: string,
+  table: string,
+  column: string,
+): Promise<string> => {
+  const rows = await dataSource.query<
+    Array<{
+      data_type: string;
+      character_maximum_length: number | null;
+      numeric_precision: number | null;
+      numeric_scale: number | null;
+    }>
+  >(
+    `SELECT data_type,
+            character_maximum_length,
+            numeric_precision,
+            numeric_scale
+       FROM information_schema.columns
+      WHERE table_schema = $1 AND table_name = $2 AND column_name = $3`,
+    [schema, table, column],
+  );
+  if (rows.length === 0) {
+    return `missing-from-schema:${schema}.${table}.${column}`;
+  }
+  const {
+    data_type,
+    character_maximum_length,
+    numeric_precision,
+    numeric_scale,
+  } = rows[0];
+  if (character_maximum_length !== null)
+    return `${data_type}(${character_maximum_length})`;
+  if (data_type === 'numeric' && numeric_precision !== null) {
+    return `${data_type}(${numeric_precision},${numeric_scale})`;
+  }
+  return data_type;
+};
+
+describe('InventoryReadiness tenant binding on poisoned pooled connections (Real PostgreSQL DB, migration-built schema)', () => {
+  jest.setTimeout(60000);
+
   let dataSource: DataSource;
   let restricted: DataSource;
   let schema: string;
+  let fixture: Awaited<ReturnType<typeof createMigrationBuiltSchemaFixture>>;
 
   const tenantAId = randomUUID();
   const tenantBId = randomUUID();
 
   beforeAll(async () => {
-    bootstrap = new DataSource({
-      type: 'postgres',
-      ...postgresConnection,
-      ...poolCleanupExtra,
-    });
-    await bootstrap.initialize();
+    // The schema is the migrations' output, built as a restricted role; the
+    // helper provisions the scratch schema, uuid-ossp, and both roles, and
+    // measures its own setup cost (logged below for the issue's measurement).
+    fixture = await createMigrationBuiltSchemaFixture();
+    schema = fixture.schema;
+    process.stdout.write(
+      `[timing] migration-built setup = ${fixture.setupDurationMs} ms (migrations alone: ${fixture.migrationDurationMs} ms)\n`,
+    );
 
-    schema = `onb_readiness_binding_${randomUUID().replace(/-/g, '')}`;
-    await bootstrap.query(`CREATE SCHEMA "${schema}"`);
-
-    // synchronize: true builds bare tables with NO policies; the invoices RLS
-    // policy below is created manually to mirror the uuid-form SELECT policy
-    // from migration 1809060000000-AlignInvoiceTenantPolicyPredicate.
+    // Admin (superuser) connection for seeding only: superuser bypasses the
+    // FORCED row-level security, which is what makes cross-tenant seeding
+    // possible. search_path is pinned on the connection itself so every
+    // pooled connection resolves the entities' unqualified SQL.
     dataSource = new DataSource({
       type: 'postgres',
       ...postgresConnection,
       schema,
       entities,
-      synchronize: true,
-      ...poolCleanupExtra,
+      extra: {
+        allowExitOnIdle: true,
+        options: `-c search_path=${schema},public`,
+      },
     });
     await dataSource.initialize();
-    await dataSource.query(`SET search_path TO "${schema}"`);
-
-    // Parity with the readiness DB spec: the active-config view entity does
-    // not get its DDL from synchronize, so create it explicitly.
-    await dataSource.query(`
-      CREATE OR REPLACE VIEW v_sys_parametros_config_active
-      WITH (security_invoker = true)
-      AS
-      SELECT DISTINCT ON (tenant_id, param_key)
-        id,
-        tenant_id,
-        param_key,
-        param_value,
-        version,
-        effective_from,
-        effective_to,
-        is_active,
-        created_by,
-        created_at
-      FROM sys_parametros_config
-      WHERE is_active = true
-        AND (effective_to IS NULL OR effective_to > now())
-      ORDER BY tenant_id, param_key, version DESC, effective_from DESC;
-    `);
-
-    // Provision the non-bypassing reader role (same posture as
-    // scripts/verify-schema-build.sh's omnifood_schema_build_migrator) and
-    // pin its search_path to the isolated schema so unqualified queries in
-    // the adapter resolve against it on every pooled connection.
-    const database = postgresConnection.database;
-    await bootstrap.query(`
-      DO $$
-      BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${RESTRICTED_ROLE}') THEN
-          CREATE ROLE "${RESTRICTED_ROLE}" LOGIN;
-        END IF;
-      END
-      $$;
-    `);
-    await bootstrap.query(
-      `ALTER ROLE "${RESTRICTED_ROLE}" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS PASSWORD '${RESTRICTED_PASSWORD}'`,
-    );
-    await bootstrap.query(
-      `GRANT CONNECT ON DATABASE "${database}" TO "${RESTRICTED_ROLE}"`,
-    );
-    await bootstrap.query(
-      `GRANT USAGE ON SCHEMA "${schema}" TO "${RESTRICTED_ROLE}"`,
-    );
-    await bootstrap.query(
-      `ALTER ROLE "${RESTRICTED_ROLE}" SET search_path TO "${schema}"`,
-    );
-
-    // RLS on invoices, exactly the predicate that makes the empty-string
-    // setting explode on the uuid cast.
-    await dataSource.query(`ALTER TABLE invoices ENABLE ROW LEVEL SECURITY`);
-    await dataSource.query(`
-      CREATE POLICY credit_note_invoices_tenant_select ON invoices
-      FOR SELECT
-      USING (tenant_id = current_setting('app.tenant_id', true)::uuid)
-    `);
-
-    // The reader only needs SELECT; it must never be able to mutate fixtures.
-    await bootstrap.query(
-      `GRANT SELECT ON ALL TABLES IN SCHEMA "${schema}" TO "${RESTRICTED_ROLE}"`,
-    );
 
     // Seed two tenants: tenant A owns readiness-relevant rows, tenant B owns
     // nothing (triangulates the not-ready snapshot).
@@ -284,11 +339,15 @@ describe('InventoryReadiness tenant binding on poisoned pooled connections (Real
       }),
     );
 
+    // The reader role provisioned by the helper: NOSUPERUSER NOBYPASSRLS
+    // (so RLS policies apply to it) and SELECT-only (so it can never mutate
+    // fixtures). Its role-level search_path is pinned to the scratch schema,
+    // so unqualified queries resolve against it on every pooled connection.
     restricted = new DataSource({
       type: 'postgres',
       ...postgresConnection,
-      username: RESTRICTED_ROLE,
-      password: RESTRICTED_PASSWORD,
+      username: fixture.readerRoleName,
+      password: fixture.readerRolePassword,
       entities,
       ...poolCleanupExtra,
     });
@@ -296,30 +355,85 @@ describe('InventoryReadiness tenant binding on poisoned pooled connections (Real
   });
 
   afterAll(async () => {
+    // The helper's close() drops the schema and roles; the spec's own
+    // connections must be gone first, because sessions block DROP ROLE.
     if (restricted?.isInitialized) {
       await restricted.destroy();
     }
     if (dataSource?.isInitialized) {
       await dataSource.destroy();
     }
-    if (bootstrap?.isInitialized) {
-      await bootstrap.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
-      await bootstrap.destroy();
+    if (fixture) {
+      await fixture.close();
     }
-    // Best-effort: a failed mid-test run may leave the role behind; that is
-    // harmless (it owns no objects and has cluster-wide LOGIN only).
-    try {
-      const admin = new DataSource({
-        type: 'postgres',
-        ...postgresConnection,
-        ...poolCleanupExtra,
-      });
-      await admin.initialize();
-      await admin.query(`DROP ROLE IF EXISTS "${RESTRICTED_ROLE}"`);
-      await admin.destroy();
-    } catch {
-      // ignore cleanup failures; the original test result takes precedence.
+  });
+
+  it('declares the same column types the migration-built schema has: entity metadata vs information_schema for every column this spec depends on (issue #418 drift assertion)', async () => {
+    const mismatches: string[] = [];
+    for (const { table, column } of DRIFT_SCOPE) {
+      const metadata = dataSource.entityMetadatas.find(
+        (m) => m.tableName === table,
+      );
+      if (!metadata) {
+        mismatches.push(`entity metadata not loaded: ${table}`);
+        continue;
+      }
+      const declared = declaredTypeOf(metadata, column);
+      if (
+        declared.startsWith('unknown-declared-type:') ||
+        declared.startsWith('missing-from-entity:')
+      ) {
+        mismatches.push(declared);
+        continue;
+      }
+      const actual = await actualTypeOf(dataSource, schema, table, column);
+      if (actual.startsWith('missing-from-schema:')) {
+        mismatches.push(actual);
+        continue;
+      }
+      if (declared !== actual) {
+        mismatches.push(
+          `${table}.${column}: entity declares ${declared}, migrations built ${actual}`,
+        );
+      }
     }
+    expect(mismatches).toEqual([]);
+  });
+
+  it('exercises the real RLS policy set: pg_policies has rows in the migration-built schema and the invoices SELECT policy is the uuid-form predicate', async () => {
+    // With synchronize:true this table was EMPTY unless the spec hand-wrote
+    // policies — which is exactly how RLS behavior went untested in CI.
+    // The migration set creates the real set; assert it exists and that the
+    // policy this spec's failure mode depends on has the uuid-form predicate
+    // (the empty-string setting explodes on `::uuid`, which is the point).
+    const invoicePolicies = await dataSource.query<
+      Array<{ policyname: string; qual: string }>
+    >(
+      `SELECT policyname, qual
+         FROM pg_policies
+        WHERE schemaname = $1 AND tablename = 'invoices'
+        ORDER BY policyname`,
+      [schema],
+    );
+
+    expect(invoicePolicies.map((p) => p.policyname)).toContain(
+      'credit_note_invoices_tenant_select',
+    );
+    // pg_policies stores the deparsed expression, which spells the setting
+    // argument as 'app.tenant_id'::text and parenthesizes the cast; assert on
+    // the semantic content, not the original migration's spelling.
+    const selectPolicy = invoicePolicies.find(
+      (p) => p.policyname === 'credit_note_invoices_tenant_select',
+    );
+    expect(selectPolicy?.qual).toContain(
+      "current_setting('app.tenant_id'::text, true))::uuid",
+    );
+
+    const totals = await dataSource.query<Array<{ count: number }>>(
+      `SELECT count(*)::int AS count FROM pg_policies WHERE schemaname = $1`,
+      [schema],
+    );
+    expect(totals[0].count).toBeGreaterThan(0);
   });
 
   it('reproduces the pool poisoning: after a transaction-local set_config commits, the pooled connection has app.tenant_id defined-and-empty and an unbound read of invoices throws on the uuid cast', async () => {
