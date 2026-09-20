@@ -70,23 +70,27 @@ Evidence: corrections applied and verified from scratch by the parent. `AP_KNOWN
 
 ### L1-02 — Provision the canonical terminal id at build time
 
-Status: pending
+Status: complete pending work-unit commit.
 
-- [ ] Accept a per-terminal `DEVICE_ID` dart-define in `scripts/build_sunmi_apk.sh`.
-- [ ] Fail the build when the define is absent for a pilot build rather than silently installing an app that resolves to `pos-local-<uuid>`.
-- [ ] Keep `TerminalIdentityService` precedence unchanged: build define, then persisted value, then generated id.
+- [x] Accept a per-terminal `DEVICE_ID` dart-define in `scripts/build_sunmi_apk.sh`.
+- [x] Fail the build when the define is absent for a pilot build rather than silently installing an app that resolves to `pos-local-<uuid>`.
+- [x] Keep `TerminalIdentityService` precedence unchanged: build define, then persisted value, then generated id.
 
 Acceptance criteria:
 - A pilot APK built through the script carries the intended canonical terminal id.
 - The script refuses an unlabeled build instead of producing a terminal that cannot match its attempt.
 - Existing identity precedence tests still pass.
 
+Closeout obligation: this slice changes the build script, so it invalidates two claims in `AP_KNOWN_LIMITATIONS.md` L1 — the `scripts/build_sunmi_apk.sh:111,117` line citation and the statement that the pilot build script defines no `DEVICE_ID`. Correct both in this same work unit before committing.
+
 Checks:
 - Focused Flutter tests for terminal identity.
 - Script dry run showing the define is present in the produced command.
 - `git diff --check`.
 
-Evidence: pending.
+Evidence: implemented with strict TDD. RED observed: `SKIP_END_TO_END_BUILD=1 bash scripts/test_packaging_pipeline.sh` failed at Test 6 with `Unknown option: --plan` before the options existed. GREEN observed three times, twice by the parent: the same command passes Tests 1-3 and 6-9 with Tests 4-5 skipped and exits 0. `--device-id` validates trimmed, non-empty, whitespace-free and at most 64 characters; `--pilot` without it exits 2 with a message naming the flag and the `pos-local-<uuid>` consequence; `--plan` prints the resolved configuration and the exact `flutter build apk` command(s) and stops before any side effect, proven not to invoke the toolchain by a failing `flutter` shim on `PATH`; both build invocations now carry `--dart-define=DEVICE_ID` only when supplied, using the `set -u`-safe empty-array idiom; `release_manifest.json` records `terminal_identity` as the id or `provisioned-at-runtime`. `TerminalIdentityService` precedence was not touched. `bash -n` clean on both scripts, `git diff --check` clean. Two `AP_KNOWN_LIMITATIONS.md` L1 claims that this slice invalidates were corrected in the same work unit: the `build_sunmi_apk.sh:111,117` citation is now `202,208`, and the statement that the build script defines no `DEVICE_ID` now records that the script supports `--device-id` while noting that the option did not previously exist on the packaging script, so the define could only be obtained by invoking the build directly. A first version of that clause claimed the rehearsal and cohort APKs were built without the define; independent verification falsified it against `odd/tasks/founder-pilot-acceptance-freeze.md:218` and a hash-matched local artifact whose `kernel_blob.bin` contains `DEVICE_ID=Q802024120001`, so the clause was corrected to say only what the evidence supports. Not verified: the real `flutter build apk` execution carrying the define, which needs the Flutter and Android toolchains, and the content of the rehearsal APK `f93b6310…`, which is not on disk anywhere.
+
+Spotted while verifying, deliberately left out of this slice: `--out-dir` as the final argument crashes with `$2: unbound variable` instead of a clean rejection, a pre-existing defect in the same argument parser that `--device-id` now handles correctly.
 
 ### L1-03 — Let the terminal show who it is
 
@@ -162,6 +166,57 @@ Checks:
 - Physical run on the Q80 with a fresh target.
 - Backend status queries for the attempt and the credential.
 - Negative check that a human token is rejected on `/v1/sync/*`.
+
+Evidence: pending.
+
+### L1-07 — Correct the device identity claims
+
+Status: pending (must not run concurrently with L1-02: same file).
+
+Founder clarification (2026-09-20): the fleet terminal is a MIRAY Q80/iPOS. The Sunmi V2s was the initial prospect and was never acquired, so no Sunmi device exists in the fleet.
+
+- [ ] Rename or re-label the packaging script away from the unacquired device it is named after, updating its header and every internal reference.
+- [ ] Remove the hardcoded paper width from the build manifest: width is per-tenant runtime configuration, not a property of the packaged APK.
+- [ ] Reconcile the operator-facing hardware runbook, whose device table currently describes the device that was never acquired.
+- [ ] Reconcile the duplicate verification documents, one of which carries the DGI compliance content under the stale device name while the other has every matrix row NOT EXECUTED.
+- [ ] Correct the stale MethodChannel path cited in the historical deployment plan.
+- [ ] Correct the acceptance record's printer-adapter field: `AP_FIXTURE_MANIFEST.md:89` and `AP_Q80_PILOT_EVIDENCE.md:65` record the adapter as `SUNMI_V2S`, while the founder's proven, working selection on the real Q80 is the **`Q80 / iPos`** driver (`IPOS_Q80`) printing at 80 mm. Nothing in the backend, the seed or the harness writes `printer_driver_type`, so the recorded value came from the device itself and is not corroborated by the proven configuration. State what is proven, keep the earlier captured value visible, and mark the discrepancy as unresolved rather than silently overwriting it.
+- [ ] Correct the `Alacrity Q80` label in `apps/pos_app/lib/data/adapters/printer/ipos_printer_adapter.dart`, whose vendor string is stale because the hardware reports MIRAY.
+
+Acceptance criteria:
+- No operator-facing document tells an operator to configure a device the fleet does not have.
+- The build manifest makes no claim about paper width.
+- The Sunmi/woyou printing interface is explicitly preserved and documented as the protocol in use on the Q80; nothing in the working printer path is renamed.
+- References to the renamed script are updated everywhere they appear.
+
+Checks:
+- `grep` for references to the old script name expecting only intentional historical records.
+- Readback of the preserved printer protocol path: the `woyou.aidlservice.jiu_mi` keep rules, the `com.nhilos.pos/sunmi_printer` MethodChannel, and the `SUNMI_V2S` wire value.
+- `git diff --check`.
+
+Evidence: pending.
+
+### L1-08 — Match fresh-terminal hardware defaults to the fleet
+
+Status: pending
+
+Founder confirmation (2026-09-20): on the physical terminal the working selection is **Q80** in hardware and printer settings, which is what prints correctly at 80 mm. Confirmed in code: nothing in the backend, the seed, or the harness writes `printer_driver_type` or the paper width; `PrinterConfigService` falls back to `sunmiV2s` when no driver is stored, and `PrinterConfig.paperWidthMm` defaults to `58`.
+
+Consequence: a freshly installed terminal — exactly the case this feature exists to handle — starts on the wrong driver path and the wrong paper width and only prints correctly after a human changes Configuración de Hardware. This is the same defect class as #343, which printed FACTURA at 58 mm for a cuota-fija tenant.
+
+- [ ] Decide the provisioning contract for the printer profile: set driver and width for the device during enrollment, change the fresh-install default to match the fleet, or fail closed with an explicit blocked reason while the profile is unset.
+- [ ] Implement the chosen contract without hard-coding one tenant's hardware into a multi-tenant platform: the profile is per-device configuration, and 58 mm remains a legitimate profile for other terminals.
+- [ ] Ensure activation reports the printer profile it actually used, so an unset or inconsistent profile cannot silently print at the wrong width.
+
+Acceptance criteria:
+- A fresh terminal either prints at the configured profile without a hidden manual step, or activation fails closed naming the missing or inconsistent printer profile.
+- The fleet's proven profile (Q80/iPos at 80 mm) is reachable without hand-editing configuration.
+- No tenant-specific hardware assumption is baked into shared defaults beyond what the platform explicitly documents.
+
+Checks:
+- Focused POS tests for the default and for the fail-closed branch.
+- `flutter analyze`.
+- Readback of the effective profile recorded in activation evidence.
 
 Evidence: pending.
 
