@@ -47,9 +47,9 @@ export class Recipe {
   @Column('decimal', { precision: 14, scale: 4 })
   quantity: number;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamptz' })
   created_at: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: 'timestamptz' })
   updated_at: Date;
 }

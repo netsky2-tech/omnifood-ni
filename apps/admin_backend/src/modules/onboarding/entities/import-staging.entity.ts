@@ -120,9 +120,9 @@ export class ImportStaging {
   @Column({ type: 'text', nullable: true })
   mensaje_error_detalle: string | null;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamptz' })
   created_at: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: 'timestamptz' })
   updated_at: Date;
 }

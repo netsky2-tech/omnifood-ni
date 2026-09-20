@@ -74,6 +74,6 @@ export class InventorySyncReceipt {
   @Column({ name: 'accepted_at', type: 'timestamptz', nullable: true })
   acceptedAt?: Date | null;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamptz' })
   created_at: Date;
 }

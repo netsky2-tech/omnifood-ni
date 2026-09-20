@@ -29,7 +29,7 @@ export class Invoice {
   @Index()
   number: string;
 
-  @Column({ type: 'timestamp' })
+  @Column({ type: 'timestamptz' })
   created_at: Date;
 
   @Column({ name: 'user_id', type: 'uuid' })
@@ -131,6 +131,6 @@ export class Invoice {
   @Column({ name: 'inventory_outcome_reason', type: 'jsonb', nullable: true })
   inventoryOutcomeReason?: Record<string, any> | string | null;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: 'timestamptz' })
   updated_at: Date;
 }

@@ -20,6 +20,6 @@ export class BcnFxRate {
   @Column('decimal', { precision: 14, scale: 4, name: 'rate_nio' })
   rate_nio: number;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   created_at: Date;
 }

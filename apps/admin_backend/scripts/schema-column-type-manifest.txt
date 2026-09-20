@@ -23,56 +23,7 @@
 #            (Number or Date); deciding the real type is a separate,
 #            per-column design decision, so it is recorded, not normalized.
 audit_logs.sequence_no|Number|integer
-batches.created_at|timestamp without time zone|timestamp with time zone
-batches.updated_at|timestamp without time zone|timestamp with time zone
-catalog_values.created_at|timestamp without time zone|timestamp with time zone
-catalog_values.updated_at|timestamp without time zone|timestamp with time zone
-customer_point_transactions.created_at|timestamp without time zone|timestamp with time zone
-customers.created_at|timestamp without time zone|timestamp with time zone
-customers.updated_at|timestamp without time zone|timestamp with time zone
-datafonos_equipos.created_at|timestamp without time zone|timestamp with time zone
-datafonos_equipos.updated_at|timestamp without time zone|timestamp with time zone
-industry_templates.created_at|timestamp without time zone|timestamp with time zone
-industry_templates.updated_at|timestamp without time zone|timestamp with time zone
-insumos.created_at|timestamp without time zone|timestamp with time zone
-insumos.updated_at|timestamp without time zone|timestamp with time zone
-inventory_bcn_fx_rates.created_at|timestamp without time zone|timestamp with time zone
-inventory_kardex.occurred_at|timestamp without time zone|timestamp with time zone
-inventory_purchase_documents.created_at|timestamp without time zone|timestamp with time zone
-inventory_sync_outbox.created_at|timestamp without time zone|timestamp with time zone
-inventory_sync_outbox.updated_at|timestamp without time zone|timestamp with time zone
-inventory_sync_receipts.created_at|timestamp without time zone|timestamp with time zone
-invoice_payments.created_at|timestamp without time zone|timestamp with time zone
-invoice_payments.reconciled_at|Date|timestamp without time zone
-invoices.updated_at|timestamp without time zone|timestamp with time zone
 kardex_recalculate_queue.attempts|Number|integer
-loyalty_programs.created_at|timestamp without time zone|timestamp with time zone
-loyalty_programs.updated_at|timestamp without time zone|timestamp with time zone
-loyalty_rewards.created_at|timestamp without time zone|timestamp with time zone
-loyalty_rewards.updated_at|timestamp without time zone|timestamp with time zone
-production_orders.created_at|timestamp without time zone|timestamp with time zone
-products.created_at|timestamp without time zone|timestamp with time zone
-products.updated_at|timestamp without time zone|timestamp with time zone
-promotions.created_at|timestamp without time zone|timestamp with time zone
-promotions.updated_at|timestamp without time zone|timestamp with time zone
-recipe_versions.created_at|timestamp without time zone|timestamp with time zone
 recipe_versions.version_number|Number|integer
-recipes.created_at|timestamp without time zone|timestamp with time zone
-recipes.updated_at|timestamp without time zone|timestamp with time zone
-shrinkages.created_at|timestamp without time zone|timestamp with time zone
-staging_importacion_productos.created_at|timestamp without time zone|timestamp with time zone
-staging_importacion_productos.updated_at|timestamp without time zone|timestamp with time zone
-suppliers.created_at|timestamp without time zone|timestamp with time zone
-suppliers.updated_at|timestamp without time zone|timestamp with time zone
 sys_parametros_config.version|Number|integer
-template_insumos.created_at|timestamp without time zone|timestamp with time zone
-template_insumos.updated_at|timestamp without time zone|timestamp with time zone
-template_products.created_at|timestamp without time zone|timestamp with time zone
-template_products.updated_at|timestamp without time zone|timestamp with time zone
-template_recipe_items.created_at|timestamp without time zone|timestamp with time zone
-template_recipe_items.updated_at|timestamp without time zone|timestamp with time zone
-uom_conversions.created_at|timestamp without time zone|timestamp with time zone
-uom_conversions.updated_at|timestamp without time zone|timestamp with time zone
 users.security_version|Number|integer
-warehouses.created_at|timestamp without time zone|timestamp with time zone
-warehouses.updated_at|timestamp without time zone|timestamp with time zone

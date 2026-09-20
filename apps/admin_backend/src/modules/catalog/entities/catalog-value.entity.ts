@@ -60,9 +60,9 @@ export class CatalogValue {
   @Column({ name: 'sort_order', type: 'int', default: 0 })
   sort_order: number;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   created_at: Date;
 
-  @UpdateDateColumn({ name: 'updated_at' })
+  @UpdateDateColumn({ type: 'timestamptz', name: 'updated_at' })
   updated_at: Date;
 }

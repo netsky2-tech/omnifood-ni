@@ -26,6 +26,6 @@ export class Shrinkage {
   @Column({ nullable: true })
   reason: string;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamptz' })
   created_at: Date;
 }

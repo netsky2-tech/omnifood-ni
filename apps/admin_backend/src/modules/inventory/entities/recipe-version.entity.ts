@@ -136,6 +136,6 @@ export class RecipeVersion {
   })
   suggestion_state: RecipeSuggestionState;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamptz' })
   created_at: Date;
 }
