@@ -2,7 +2,8 @@
 
 **Documento:** `AP-00_ENTRY_GATE.md`  
 **Ubicación:** `docs/onboarding/evidence/acceptance/AP-00_ENTRY_GATE.md`  
-**Estado:** **NOT READY FOR ACCEPTANCE**  
+**Estado:** **CERRADO — ONB1.10F PASS (2026-09-20); piloto en local real NOT READY por L1/L2**
+
 **Fecha de creación:** 2026-09-04  
 **Autoridad:** `onboarding_acceptance_plan_v1.0.md` §2
 
@@ -12,15 +13,18 @@
 
 ```text
 ╔═══════════════════════════════════════════════════════════╗
-║  RESULTADO: NOT READY FOR ACCEPTANCE                     ║
-║  Razón: Piloto físico Q80 pendiente (hardware real)      ║
-║          + identidad de release NOT FROZEN (FREEZE-05)   ║
-║  Non-hardware checks: PASS salvo Release Candidate       ║
-║    (§5 = PENDING: release no congelada)                  ║
-║  Acceptance Release ID: NOT FROZEN — pendiente de        ║
-║    acuñar en FREEZE-05                                   ║
+║  ONB1.10F (aceptación técnica, hardware real): PASS      ║
+║  Release: fp-acceptance-6b15d8a · Cohorte 5/5 PASS       ║
+║  TTFSS peor caso 947 ms · 5/5 ANCHORED · 10/10 checks    ║
+║                                                          ║
+║  Piloto en local real: NOT READY                         ║
+║  Motivo: L1 (enrolamiento de producción) y L2            ║
+║    (transporte mixto, issue #314) abiertas en            ║
+║    AP_KNOWN_LIMITATIONS.md                               ║
 ╚═══════════════════════════════════════════════════════════╝
 ```
+
+El PASS de ONB1.10F cubre **sólo** el ciclo de vida de activación en el Q80 físico. No habilita la operación de un local real: el transporte de dispositivo `/v1/sync/*` quedó fuera de alcance (§0.1) y L1/L2 permanecen abiertas.
 
 ---
 
@@ -56,7 +60,7 @@ Las limitaciones conocidas (brecha de enrolamiento de credencial de dispositivo,
 | ONB1.7 cerrado | ✅ | `ONB1.7_M5_PR17_EVIDENCE.md`, `PR18` |
 | ONB1.8 cerrado | ✅ | `ONB1.8_M6_PR19_EVIDENCE.md`, `PR20`, `PR21` |
 | ONB1.9 cerrado | ✅ | `ONB1.9_M7_PR22_EVIDENCE.md`, `PR23` |
-| ONB1.10 cerrado | ⚠️ PARCIAL | `ONB1.10_M8_PR24_EVIDENCE.md`, `PR25` — ONB1.10F pendiente de hardware |
+| ONB1.10 cerrado | ✅ | `ONB1.10_M8_PR24_EVIDENCE.md`, `PR25` + ONB1.10F **PASS** (`AP_Q80_PILOT_EVIDENCE.md`, release `fp-acceptance-6b15d8a`, 2026-09-20) |
 
 ---
 
@@ -84,9 +88,9 @@ Las limitaciones conocidas (brecha de enrolamiento de credencial de dispositivo,
 
 | Check | Estado | Evidencia |
 |---|---|---|
-| Release candidate exacto congelado | ⚠️ PENDING | La identidad de release anterior estaba desactualizada y fue retirada. **NOT FROZEN:** el manifest no declara release congelada; acuñar `acceptanceReleaseId` en FREEZE-05 tras estabilizar todo cambio que afecte release |
-| `acceptanceReleaseId` calculado | ⚠️ PENDING | **NOT FROZEN** — se acuña una sola vez en FREEZE-05 (commit final de release + última migración + stage 10 flags). Los valores anteriores no corresponden al árbol actual |
-| Migración y schema verificables en el árbol | ✅ | Última migración TypeORM: `1809040000000-CreateHumanAuthorizationTenantPublicationState`; Floor schema version del POS: `52`; POS pubspec: `1.0.0+1` |
+| Release candidate exacto congelado | ✅ | `fp-acceptance-6b15d8a` (2026-09-20); commit `6b15d8af66aed80260a511aaaded53d04329f1de`; detalles en `AP_FIXTURE_MANIFEST.md` §1 |
+| `acceptanceReleaseId` calculado | ✅ | `fp-acceptance-6b15d8a` — derivado del commit final de release + última migración + stage 10 flags. Historial de identidades preservado en `AP_FIXTURE_MANIFEST.md` §1 |
+| Migración y schema verificables en el árbol | ✅ | Última migración TypeORM del release: `1809210000000-FixInventoryKardexRunningBalanceTenantHash` (target de cohorte: 85 migraciones aplicadas sobre base vacía); Floor schema version del POS: `53`; POS pubspec: `1.0.0+1` |
 | Feature flags/cutover state documentado | ✅ | `AP_FIXTURE_MANIFEST.md` §3 — Stage 10 (todos los flags `true`) |
 | No existen P0/P1 conocidos abiertos | ✅ | Architecture audit: P0=0, P1=0; PRD audit: P0=0, P1=0; Acceptance plan re-audit: AP-A01..A10 CLOSED |
 | No existe corrupción de Inventory por imports legacy | ✅ | PR-ONB-24: `LegacyImportIntegrityReport` cerrado |
@@ -97,11 +101,11 @@ Las limitaciones conocidas (brecha de enrolamiento de credencial de dispositivo,
 
 | Check | Estado | Evidencia |
 |---|---|---|
-| Founder pilot completado en hardware real | ❌ BLOCKER | Falta APK en Q80/iPOS + ticket impreso |
-| TTFSS <= 15 min medido formalmente | ❌ BLOCKER | Requiere cohort de 5 reference runs |
-| Impresión de ticket verificada | ❌ BLOCKER | Requiere hardware real |
-| WAN outage real verificada | ❌ BLOCKER | Requiere hardware real |
-| Restart recovery en dispositivo verificada | ❌ BLOCKER | Requiere hardware real |
+| Founder pilot completado en hardware real | ✅ PASS | Cohorte 5/5 en el Q80 físico (release `fp-acceptance-6b15d8a`); evidencia en `AP_Q80_PILOT_EVIDENCE.md` §8.1–§8.2 |
+| TTFSS <= 15 min medido formalmente | ✅ PASS | 5/5 runs elegibles y ANCHORED; TTFSS 900/930/936/947/866 ms contra límite de 900 s; detalle en `TTFSS_REFERENCE_SUMMARY.md` y `TTFSS_REFERENCE_RUNS.csv` |
+| Impresión de ticket verificada | ✅ PASS (rehearsal) | Ticket físico 80 mm, `COMPROBANTE DE VENTA` / `NO RECAUDA IVA`, RUC del emisor presente (FREEZE-06, §8.0 de la evidencia); la cohorte imprimió en modo simulado por cambio de protocolo declarado |
+| WAN outage real verificada | ⚠️ PASS con método declarado | **Sin corte físico de WAN:** offline aplicado y probado en-harness con `httpRequests: 0` en el recibo de la fase `offline` de cada run. Un corte físico de router/airplane mode no formó parte del instrumento |
+| Restart recovery en dispositivo verificada | ❌ NOT CAPTURED | El ciclo de reinicio del dispositivo no fue ejercitado por el instrumento de cohorte; no se fabrica evidencia |
 
 ---
 
@@ -110,8 +114,8 @@ Las limitaciones conocidas (brecha de enrolamiento de credencial de dispositivo,
 | Check | Estado | Evidencia |
 |---|---|---|
 | `onboarding_acceptance_plan_v1.0.md` aprobado | ✅ | Re-auditoría cerrada (AP-A01..A10 = CLOSED) |
-| `AP_FIXTURE_MANIFEST.md` creado | ✅ | v1.0 — estructura disponible; identidad y hardware NOT FROZEN hasta FREEZE-05 |
-| `AP_REFERENCE_RUN_PROTOCOL.md` creado | ✅ | v1.0 — protocolo disponible; ejecución WAN/operador pendiente de campo |
+| `AP_FIXTURE_MANIFEST.md` creado | ✅ | v2.0 — congelado con identidad `fp-acceptance-6b15d8a`, fixtures F2–F5 vinculados por hash y hardware capturado |
+| `AP_REFERENCE_RUN_PROTOCOL.md` creado | ✅ | v1.1 — protocolo ejecutado; operador (harness) y método WAN (offline en-harness) registrados |
 | `onboarding_execution_roadmap.md` v1.1 aprobado | ✅ | Re-auditoría cerrada (ER-01..ER-09 = CLOSED) |
 
 ---
@@ -119,44 +123,40 @@ Las limitaciones conocidas (brecha de enrolamiento de credencial de dispositivo,
 # 8. Decisión
 
 ```text
-El Entry Gate NO PASSA por el blocker de hardware y porque la identidad de release aún NO está congelada.
+ONB1.10F (aceptación técnica):  PASS — 2026-09-20, release fp-acceptance-6b15d8a
+Piloto en local real:           NOT READY — L1 y L2 abiertas
 
-Non-hardware checks:
+Checks al cierre:
   §1 Architecture Authority:     PASS (P0=0, P1=0)
-  §2 Implementation Completeness: PASS (ONB1.0–ONB1.9 cerrados; ONB1.10F = hardware blocker)
+  §2 Implementation Completeness: PASS (ONB1.0–ONB1.10 cerrados, incl. ONB1.10F)
   §3 Regression Completeness:     PASS (74/74 escenarios verdes)
   §4 Baselines & Restoration:     DEFERRED (post-piloto con datos reales)
-  §5 Release Candidate:           PENDING (NOT FROZEN — release id se acuña en FREEZE-05)
-  §7 Documentation Readiness:     PASS (fixture + protocol v1.0; release identity pendiente)
+  §5 Release Candidate:           PASS (fp-acceptance-6b15d8a congelada)
+  §6 Hardware & Pilot Readiness:  ONB1.10F PASS; restart recovery NOT CAPTURED;
+                                  WAN outage probada en-harness (httpRequests=0),
+                                  sin corte físico
+  §7 Documentation Readiness:     PASS (manifest v2.0 congelado; protocolo v1.1
+                                  ejecutado; CSV y summary TTFSS creados)
 
-Blockers:
-  §6 Hardware & Pilot Readiness
-  Founder pilot en hardware real:    ❌ BLOCKER
-  TTFSS <= 15 min (cohort de 5):     ❌ BLOCKER
-  Impresión de ticket:                ❌ BLOCKER
-  WAN outage real:                    ❌ BLOCKER
-  Restart recovery en dispositivo:    ❌ BLOCKER
+Resultado técnico (cohorte 5/5):
+  Runs elegibles y ANCHORED:     5/5
+  TTFSS:                         900/930/936/947/866 ms (límite 900 s)
+  Activación:                    10/10 checks PASS por run;
+                                 lifecycle = ACTIVATED confirmado desde backend
 
-  Pre-rehearsal adicionales (documentados en el manifest):
-  Régimen tributario:                 ✅ RESUELTO — CUOTA_FIJA (decisión del
-                                      founder); harness attachado alineado;
-                                      ticket esperado COMPROBANTE DE VENTA /
-                                      NO RECAUDA IVA, 80 mm (§9 del manifest)
-  RUC placeholder del seed:           ❌ BLOCKER — reemplazar antes de emitir
-                                      cualquier documento fiscal
-  Alcance del piloto (§0.1):          ⚠️ REDUCIDO — transporte de dispositivo
-                                      /v1/sync/* fuera de alcance; ver
-                                      AP_KNOWN_LIMITATIONS.md
+Alcance del PASS:
+  El PASS cubre SOLAMENTE el ciclo de vida de activación en el Q80 físico.
+  El piloto en local real queda NOT READY mientras:
+    L1 — enrolamiento de credencial de dispositivo en producción (abierta)
+    L2 — transporte mixto de sincronización, issue #314 (abierta)
+  y el transporte de dispositivo /v1/sync/* sigue fuera del alcance validado.
 
-Siguiente acción:
-  1. Ejecutar piloto físico en Alacrity Q80/iPOS
-  2. Capturar evidencia: APK, ticket impreso, WAN outage, restart
-  3. Completar hardware fixture en AP_FIXTURE_MANIFEST.md (§5)
-  4. Completar Wan/operador en AP_REFERENCE_RUN_PROTOCOL.md (§1, §6)
-  5. Acuñar y congelar el acceptanceReleaseId en FREEZE-05, tras estabilizar
-     todo cambio que afecte release (código, migraciones, configuración, fixtures)
-  6. Actualizar este gate con resultado
-  7. Iniciar AP-01..AP-12
+Pendiente posterior a la aceptación:
+  1. Cerrar L1 y L2 (con confirmación en ejecución)
+  2. Registrar el anuncio de la brecha de L3 y entregar DSI-6
+  3. Restart recovery en dispositivo (no capturado en esta aceptación)
+  4. Baselines & Restoration con datos reales (§4)
+  5. Recién entonces reevaluar la preparación del local real
 ```
 
 ---
@@ -164,10 +164,9 @@ Siguiente acción:
 # 9. Firma
 
 ```text
-Revisado por:    «COMPLETAR EN CAMPO»
-Fecha:           «COMPLETAR EN CAMPO»
-Decisión:        NOT READY FOR ACCEPTANCE (hardware blocker + release NOT FROZEN)
-Blocker:         ONB1.10F — Physical pilot pending; release id pendiente de FREEZE-05
-acceptanceReleaseId: **NOT FROZEN** — «COMPLETAR EN FREEZE-05»
-Next gate:       AP-00 re-evaluation post-pilot → AP-01..AP-12
+Revisado por:    Harness ONB1.10F attachado sobre el Q80 físico; operador con nombre no capturado
+Fecha:           2026-09-20
+Decisión:        ONB1.10F PASS (aceptación técnica); piloto en local real NOT READY (L1/L2 abiertas)
+acceptanceReleaseId: fp-acceptance-6b15d8a
+Next gate:       Cierre de L1/L2 y DSI-6 antes de reevaluar la preparación del local real
 ```

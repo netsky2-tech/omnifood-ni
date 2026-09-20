@@ -2,16 +2,30 @@
 
 **Documento:** `AP_Q80_PILOT_CHECKLIST.md`  
 **Ubicación:** `docs/onboarding/evidence/acceptance/AP_Q80_PILOT_CHECKLIST.md`  
-**Estado:** **READY FOR EXECUTION — con bloqueante pre-rehearsal pendiente (RUC placeholder; ver §9 de `AP_FIXTURE_MANIFEST.md`). Régimen resuelto: `CUOTA_FIJA` (decisión del founder; harness alineado)**
-**Versión:** 1.0  
-**Fecha:** 2026-09-04  
+**Estado:** **EJECUTADO — ONB1.10F PASS (2026-09-20, release `fp-acceptance-6b15d8a`). Piloto en local real NOT READY por L1/L2 (`AP_KNOWN_LIMITATIONS.md`). Régimen `CUOTA_FIJA` confirmado; RUC real usado en la ejecución (valor crudo no registrado en el repositorio)**
+**Versión:** 1.1
+
+**Fecha:** 2026-09-04 (ejecutado 2026-09-20)
+
 **Autoridad:** `onboarding_acceptance_plan_v1.0.md` §AP-12, `onboarding_execution_roadmap.md` ONB1.10F
+
+---
+
+# Resultado de la ejecución (leer primero)
+
+```text
+ONB1.10F:  PASS — cohorte 5/5 (2026-09-20), TTFSS peor caso 947 ms
+Local real: NOT READY — L1 (enrolamiento) y L2 (transporte mixto, #314) abiertas
+Evidencia:  AP_Q80_PILOT_EVIDENCE.md · TTFSS_REFERENCE_RUNS.csv · TTFSS_REFERENCE_SUMMARY.md
+```
+
+Este checklist queda como guía de campo ejecutada; los valores capturados viven en el documento de evidencia, no aquí.
 
 ---
 
 # 0. Objetivo
 
-Checklist operativo paso a paso para ejecutar el piloto físico del founder tenant en un Alacrity Q80/iPOS real. Este documento es la guía de campo; no reemplaza el Acceptance Plan ni el Reference Run Protocol.
+Checklist operativo paso a paso para ejecutar el piloto físico del founder tenant en un MIRAY Q80/iPOS real. Este documento es la guía de campo; no reemplaza el Acceptance Plan ni el Reference Run Protocol.
 
 **Harness de acceptance — rehearsal simulado vs run físico real:**
 
@@ -30,7 +44,7 @@ Checklist operativo paso a paso para ejecutar el piloto físico del founder tena
 
 ## 1.1 Hardware
 
-- [ ] Alacrity Q80/iPOS cargado al 100%
+- [ ] MIRAY Q80/iPOS cargado al 100%
 - [ ] Impresora térmica encendida
 - [ ] Papel de recibo cargado (**80 mm** — rollo incluido en el Q80)
 - [ ] **Verificar/ajustar ancho de papel del POS = 80 mm** antes de activar (el ancho es configuración local del dispositivo, no se empuja desde el servidor)
@@ -88,12 +102,12 @@ Checklist operativo paso a paso para ejecutar el piloto físico del founder tena
 
 | # | Acción | Verificación | Timestamp |
 |---|---|---|---|
-| B0 | **BLOQUEANTE** — Reemplazar el RUC placeholder `J0000000000000` por el RUC real del founder (o confirmar el real si se pasó `ONBOARDING_FOUNDER_RUC`) | UI guarda el RUC válido; sin RUC válido no se alcanza `SALE_READY` | — |
+| B0 | **EJECUTADO:** la ejecución usó el RUC real del founder vía `ONBOARDING_FOUNDER_RUC`; el valor crudo no se registra en el repositorio (sólo `rucPresent: true` + hash, en `AP_Q80_PILOT_EVIDENCE.md` §5) | `rucPresent: true`; hash `46cef85fa3720cb8a1dee8b02aa4b59ab5bab3c1e116f0763759564d20581841` | — |
 | B1 | Verificar el RUC persistido | El RUC guardado coincide con el real del founder (no el placeholder) | — |
 | B2 | Seleccionar régimen tributario `CUOTA_FIJA` | **RESUELTO (2026-09-17):** régimen decidido por el founder — `CUOTA_FIJA` (IVA 0.00%); el harness attachado ya lo envía y coincide con el fixture (§9 de `AP_FIXTURE_MANIFEST.md`). Confirmar que la UI queda en `CUOTA_FIJA` | — |
-| B3 | Ingresar nombre comercial | «COMPLETAR» | — |
-| B4 | Ingresar dirección fiscal | «COMPLETAR» | — |
-| B5 | Ingresar teléfono | «COMPLETAR» | — |
+| B3 | Ingresar nombre comercial | `NHILOS POS` (valor ejecutado) | — |
+| B4 | Ingresar dirección fiscal | `Managua` (valor ejecutado) | — |
+| B5 | Ingresar teléfono | `81948526` (valor ejecutado) | — |
 | B6 | Guardar configuración fiscal | Fiscal persistido en DB | — |
 | B7 | Verificar que fiscal aparece como guardado | UI muestra estado persistido, no solo input | — |
 
@@ -158,32 +172,34 @@ Checklist operativo paso a paso para ejecutar el piloto físico del founder tena
 Después de cada run, capturar:
 
 ```text
-runId:                    «del seed script»
-tenantIdHash:             «SHA-256 del tenant ID»
-fixtureVersion:           «del AP_FIXTURE_MANIFEST.md»
-hardwareManifestHash:     «SHA-256 del serial del Q80»
-backendBuild:             «commit SHA del backend»
-ownerDashboardBuild:      «commit SHA del dashboard»
-posBuild:                 «build number del APK»
+runId:                    seed: 1789922440928-ca058ea0 … 1789922506450-aafdf8dc
+                          (5 runs; detalle en AP_Q80_PILOT_EVIDENCE.md §4 y §8.1)
+tenantIdHash:             registrado por run en AP_Q80_PILOT_EVIDENCE.md §4
+fixtureVersion:           AP_FIXTURE_MANIFEST.md v2.0 (fp-acceptance-6b15d8a)
+hardwareManifestHash:     serial SHA-256 680f14116c61725b6f5aaf76fa99d8b8fbc7855deeb77a4d79903415c1eb56ec
+backendBuild:             6b15d8af66aed80260a511aaaded53d04329f1de (monorepo)
+ownerDashboardBuild:      6b15d8af66aed80260a511aaaded53d04329f1de (monorepo)
+posBuild:                 1.0.0+1 (SHA-256 del APK de cohorte no capturado; ver evidencia §1)
 
-onboardingStartedAt:      «timestamp de DB»
-saleReadyFirstAt:         «timestamp de DB»
-firstSuccessfulSaleAt:    «timestamp de DB»
-activatedAt:              «timestamp de DB»
+onboardingStartedAt / saleReadyFirstAt / firstSuccessfulSaleAt / activatedAt:
+                          registrados por run en AP_Q80_PILOT_EVIDENCE.md §8.1
+                          y en TTFSS_REFERENCE_RUNS.csv
 
-clockConfidence:          «ANCHORED / DEVICE_VALIDATED / DEGRADED»
-ttfssMs:                  «firstSuccessfulSaleAt - onboardingStartedAt en ms»
-timeToSaleReadyMs:        «saleReadyFirstAt - onboardingStartedAt en ms»
-saleReadyToFirstSaleMs:   «firstSuccessfulSaleAt - saleReadyFirstAt en ms»
+clockConfidence:          ANCHORED (5/5)
+ttfssMs:                  900 / 930 / 936 / 947 / 866
+timeToSaleReadyMs:        587 / 590 / 627 / 633 / 548
+saleReadyToFirstSaleMs:   313 / 340 / 309 / 314 / 318
 
-activationResult:         «PASS / PASS_WITH_WARNING / FAIL»
-testPrintRucHash:         «SHA-256 del RUC canónico tomado de la evidencia de TEST_PRINT»
-testPrintRucPresent:      «true/false»
-testPrintPaperWidthMm:    «ancho efectivo registrado por TEST_PRINT — debe ser 80»
-verificationTicketIdHash: «SHA-256 del ticket ID»
-firstSaleClaimEventIdHash: «SHA-256 del event ID del claim»
+activationResult:         PASS (5/5)
+testPrintRucHash:         46cef85fa3720cb8a1dee8b02aa4b59ab5bab3c1e116f0763759564d20581841
+testPrintRucPresent:      true
+testPrintPaperWidthMm:    80
+verificationTicketIdHash: por run en AP_Q80_PILOT_EVIDENCE.md §8.1
+firstSaleClaimEventIdHash: por run en AP_Q80_PILOT_EVIDENCE.md §8.1
 
-notes:                    «cualquier observación relevante»
+notes:                    offline probado en-harness (httpRequests: 0); impresión
+                          de cohorte en modo simulado; evidencia física de impresión
+                          en el rehearsal de FREEZE-06 (§8.0 de la evidencia)
 ```
 
 ---
@@ -219,11 +235,11 @@ notes:                    «cualquier observación relevante»
 
 # 6. Post-Pilot
 
-Después del cohort:
+Después del cohort (estado al cierre, 2026-09-20):
 
-- [ ] Actualizar `AP-00_ENTRY_GATE.md` con resultado del piloto
-- [ ] Congelar `acceptanceReleaseId` final
-- [ ] Actualizar `AP_FIXTURE_MANIFEST.md` con builds reales
-- [ ] Crear `TTFSS_REFERENCE_RUNS.csv` con los 5 runs
-- [ ] Crear `TTFSS_REFERENCE_SUMMARY.md` con resultado
-- [ ] Iniciar ejecución formal de AP-01..AP-12
+- [x] Actualizar `AP-00_ENTRY_GATE.md` con resultado del piloto — ONB1.10F PASS; local real NOT READY
+- [x] Congelar `acceptanceReleaseId` final — `fp-acceptance-6b15d8a`
+- [x] Actualizar `AP_FIXTURE_MANIFEST.md` con builds reales — v2.0 congelado
+- [x] Crear `TTFSS_REFERENCE_RUNS.csv` con los 5 runs
+- [x] Crear `TTFSS_REFERENCE_SUMMARY.md` con resultado
+- [ ] Iniciar ejecución formal de AP-01..AP-12 — **NO iniciados**: el PASS de ONB1.10F no los implementa
