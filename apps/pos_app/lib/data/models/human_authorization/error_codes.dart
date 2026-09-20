@@ -18,6 +18,7 @@ abstract final class OhacErrorCode {
   static const digestMismatch = 'OHAC_DIGEST_MISMATCH';
   static const tenantScopeMismatch = 'OHAC_TENANT_SCOPE_MISMATCH';
   static const sequenceNotNewer = 'OHAC_SEQUENCE_NOT_NEWER';
+  static const sequenceGap = 'OHAC_SEQUENCE_GAP';
   static const unsupportedBuildPair = 'OHAC_UNSUPPORTED_BUILD_PAIR';
   static const credentialBindingMismatch = 'OHAC_CREDENTIAL_BINDING_MISMATCH';
   static const tenantTerminalMismatch = 'OHAC_TENANT_TERMINAL_MISMATCH';
