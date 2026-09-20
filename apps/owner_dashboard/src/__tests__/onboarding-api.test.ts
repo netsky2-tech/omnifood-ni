@@ -5,9 +5,13 @@ import {
   fetchOnboardingReadiness,
   startOnboardingSession,
   isVersionConflictError,
+  startActivationAttempt,
+  fetchActiveActivationAttempt,
 } from "@/features/onboarding/onboarding-api";
 import {
+  ActivationAttemptStatus,
   OnboardingLifecycleState,
+  type ActivationAttempt,
   type OnboardingSessionResponse,
   type OnboardingReadinessSnapshot,
 } from "@/features/onboarding/types";
@@ -351,6 +355,93 @@ describe("ONB1.2 — Onboarding API & Concurrency Contract (TDD RED)", () => {
       expect(progress.completedStepsCount).toBe(4);
       expect(progress.steps.every((s) => s.status === "COMPLETED")).toBe(true);
       expect(progress.nextRecommendedAction.label).toBe("Onboarding Completado");
+    });
+  });
+
+  describe("L1-04a — Activation Attempt API Contract", () => {
+    const sampleAttempt: ActivationAttempt = {
+      id: "attempt-uuid-1",
+      tenantId: "tenant-onb-1",
+      onboardingSessionId: "session-uuid-1",
+      candidateTerminalId: "terminal-pos-01",
+      trustedTerminalId: null,
+      status: ActivationAttemptStatus.CREATED,
+      startedByUserId: "user-owner-1",
+      startedAt: "2026-09-03T19:00:00.000Z",
+      completedAt: null,
+      posBuild: "1.2.0",
+      warningsCount: 0,
+      failureCode: null,
+      idempotencyKey: "idem-key-1",
+      createdAt: "2026-09-03T19:00:00.000Z",
+      updatedAt: "2026-09-03T19:00:00.000Z",
+    };
+
+    it("startActivationAttempt calls POST /api/onboarding/activation/attempts with exactly the whitelisted body and no tenant/actor fields", async () => {
+      mockFetchSuccess(sampleAttempt, 201);
+
+      const result = await startActivationAttempt({
+        candidateTerminalId: "terminal-pos-01",
+        verificationProductId: "vp-1",
+        idempotencyKey: "idem-key-1",
+        posBuild: "1.2.0",
+      });
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        "/api/onboarding/activation/attempts",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            candidateTerminalId: "terminal-pos-01",
+            verificationProductId: "vp-1",
+            idempotencyKey: "idem-key-1",
+            posBuild: "1.2.0",
+          }),
+        }),
+      );
+
+      // Tenant and actor must come from the JWT: the backend validation pipe
+      // rejects unknown fields (forbidNonWhitelisted).
+      const rawBody = String(fetchSpy.mock.calls[0]?.[1]?.body ?? "{}");
+      expect(rawBody).not.toContain("tenantId");
+      expect(rawBody).not.toContain("actorUserId");
+      expect(rawBody).not.toContain("startedByUserId");
+
+      expect(result.id).toBe("attempt-uuid-1");
+      expect(result.status).toBe(ActivationAttemptStatus.CREATED);
+    });
+
+    it("fetchActiveActivationAttempt calls GET /api/onboarding/activation/attempts/active and returns the attempt", async () => {
+      mockFetchSuccess(sampleAttempt);
+
+      const result = await fetchActiveActivationAttempt();
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        "/api/onboarding/activation/attempts/active",
+        expect.objectContaining({ method: "GET" }),
+      );
+      expect(result?.candidateTerminalId).toBe("terminal-pos-01");
+    });
+
+    it("fetchActiveActivationAttempt surfaces null when no attempt is active", async () => {
+      mockFetchSuccess(null);
+
+      const result = await fetchActiveActivationAttempt();
+
+      expect(result).toBeNull();
+    });
+
+    it.each([
+      [400, "CANNOT_START_ACTIVATION_NOT_SALE_READY: Onboarding session is in 'SETUP_IN_PROGRESS' state, but must be 'SALE_READY'"],
+      [409, "ACTIVE_ATTEMPT_EXISTS: An activation attempt (attempt-uuid-1) is already active in status 'IN_PROGRESS'"],
+      [400, "FISCAL_REVISION_NOT_AVAILABLE: Cannot pin fiscal revision"],
+      [403, "Permission denied: onboarding:activation:manage"],
+    ])("propagates documented failure %s with backend message intact", async (status, message) => {
+      mockFetchError(status, message);
+
+      await expect(
+        startActivationAttempt({ candidateTerminalId: "terminal-pos-01" }),
+      ).rejects.toThrow(message);
     });
   });
 });
