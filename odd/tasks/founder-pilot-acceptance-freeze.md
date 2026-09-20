@@ -391,7 +391,7 @@ Acceptance criteria:
 - The signed conclusion says ONB1.10F PASS and separately says the real-location pilot is NOT READY while L1/L2 remain open.
 - Raw issuer RUC remains absent; only presence and SHA-256 evidence are recorded.
 
-Evidence: closed on branch `docs/fp-acceptance-closeout`. `AP_Q80_PILOT_EVIDENCE.md` v2.0 and the sibling acceptance documents consistently state ONB1.10F PASS and real-location pilot NOT READY while L1/L2 remain open. No live backend, fresh target, or ADB tunnel was required for document reconciliation.
+Evidence: closed on branch `docs/fp-acceptance-closeout`. `AP_Q80_PILOT_EVIDENCE.md` v2.0 and the sibling acceptance documents consistently state ONB1.10F PASS and real-location pilot NOT READY while L1/L2 remain open. No live backend, fresh target, or ADB tunnel was required for document reconciliation. Work-unit commit: `727d4f9` (`docs(onboarding): close ONB1.10F acceptance record`).
 
 ## Progress
 
