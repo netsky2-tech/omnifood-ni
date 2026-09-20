@@ -23,14 +23,16 @@ Este documento captura la evidencia del piloto físico en hardware real. Se llen
 
 | Campo | Valor |
 |---|---|
-| acceptanceReleaseId | `fp-acceptance-96440859` — acuñado una sola vez el 2026-09-18, después de la entrega |
-| Backend commit | `9644085940de704eae0c0fcb23609df66e631770` (merge de PR #328 sobre `main`) |
-| Owner Dashboard commit | `9644085940de704eae0c0fcb23609df66e631770` (monorepo) |
-| POS commit | `9644085940de704eae0c0fcb23609df66e631770` (monorepo) |
+| acceptanceReleaseId | `fp-acceptance-96440859` para el **rehearsal (FREEZE-06)** y `fp-acceptance-4b13e4e` para la **cohorte (FREEZE-07)**. Ver la nota de reacuñación debajo. |
+| Backend commit | rehearsal `9644085940de704eae0c0fcb23609df66e631770`; cohorte `4b13e4e74a868780173228fae390f643b5908ed8` |
+| Owner Dashboard commit | los mismos dos commits (monorepo) |
+| POS commit | los mismos dos commits (monorepo) |
 | POS APK version | `1.0.0+1` (declarado en `pubspec.yaml`; el APK instalado reportó `versionName 1.0.0`, `versionCode 1`) |
-| POS APK SHA-256 | `f93b63107f51bcbd70639fae896894e34dc36e37340a61b507b13c8e5d14550b` (el APK que corrió el rehearsal) |
-| Database migration version | `1809060000000-AlignInvoiceTenantPolicyPredicate` (última migración presente en el árbol del release) |
+| POS APK SHA-256 | `f93b63107f51bcbd70639fae896894e34dc36e37340a61b507b13c8e5d14550b` (el APK que corrió el rehearsal). El APK de la cohorte se reconstruye desde `4b13e4e`; su hash no se registró en esta corrida porque el binario se regeneró en cada run. |
+| Database migration version | `1809060000000-AlignInvoiceTenantPolicyPredicate` en el rehearsal; el release de la cohorte aplica 85 migraciones sobre una base vacía |
 | SQLite schema version | `52` (Floor database version verificada en `apps/pos_app/lib/data/database/app_database.dart`) |
+
+**Nota de reacuñación (2026-09-19).** El protocolo pide acuñar la identidad una sola vez, y se acuñó sobre `9644085` tras la entrega del 2026-09-18. Esa identidad **no podía gobernar la cohorte**, porque en el medio el instrumento cambió por hallazgos de campo: el ticket de venta se imprimía como FACTURA en 58 mm y se corrigió (#343), la impresión física se reemplazó por el modo simulado para no consumir papel del dispositivo prestado (#352), y el camino de lectura fiscal quedó atado al tenant (#377, #411). Correr la cohorte sobre `9644085` habría medido un instrumento que ya sabíamos defectuoso. Por eso la cohorte se acuñó por separado sobre el release que efectivamente corrió, y ambos quedan registrados en lugar de sobrescribir el primero.
 
 ---
 
@@ -139,33 +141,41 @@ El intento previo sobre otro target falló y lo consumió: la fase `offline` ago
 
 | Campo | Run 1 | Run 2 | Run 3 | Run 4 | Run 5 |
 |---|---|---|---|---|---|
-| runId | «» | «» | «» | «» | «» |
-| tenantIdHash | «» | «» | «» | «» | «» |
-| onboardingStartedAt | «timestamp de DB» | «» | «» | «» | «» |
-| saleReadyFirstAt | «timestamp de DB» | «» | «» | «» | «» |
-| firstSuccessfulSaleAt | «timestamp de DB» | «» | «» | «» | «» |
-| activatedAt | «timestamp de DB» | «» | «» | «» | «» |
-| clockConfidence | «ANCHORED/DEVICE_VALIDATED/DEGRADED» | «» | «» | «» | «» |
-| ttfssMs | «firstSuccessfulSaleAt - onboardingStartedAt» | «» | «» | «» | «» |
-| ttfssFormatted | «MM:SS» | «» | «» | «» | «» |
-| timeToSaleReadyMs | «» | «» | «» | «» | «» |
-| saleReadyToFirstSaleMs | «» | «» | «» | «» | «» |
-| activationResult | «PASS/PASS_WITH_WARNING/FAIL» | «» | «» | «» | «» |
-| verificationTicketIdHash | «SHA-256 del ticket ID» | «» | «» | «» | «» |
-| firstSaleClaimEventIdHash | «SHA-256 del event ID» | «» | «» | «» | «» |
-| measurementEligible | «true/false» | «» | «» | «» | «» |
-| notes | «» | «» | «» | «» | «» |
+| runId | `ONB1.10F-Q80-1789880520864-setup` | `ONB1.10F-Q80-1789882884577-setup` | `ONB1.10F-Q80-1789882985981-setup` | `ONB1.10F-Q80-1789883096479-setup` | `ONB1.10F-Q80-1789883195876-setup` |
+| tenantIdHash | `77392e33d00d82ab66b56ad704593283` | `b3788f07fabab71fd7b8ec90d89d0c22` | `2ea3435d494551372f94ba14cb84fd31` | `f6c0bf16c5ea2c16851f48f8b19bc18b` | `654eb81a16a4af961a55200dc6b01df3` |
+| onboardingStartedAt | `2026-09-19 23:02:01.425-06` | `2026-09-19 23:41:24.841-06` | `2026-09-19 23:43:06.228-06` | `2026-09-19 23:44:56.342-06` | `2026-09-19 23:46:35.810-06` |
+| saleReadyFirstAt | `2026-09-19 23:02:02.042-06` | `2026-09-19 23:41:25.466-06` | `2026-09-19 23:43:06.756-06` | `2026-09-19 23:44:56.929-06` | `2026-09-19 23:46:36.485-06` |
+| firstSuccessfulSaleAt | `2026-09-19 23:02:02.398-06` | `2026-09-19 23:41:25.778-06` | `2026-09-19 23:43:07.055-06` | `2026-09-19 23:44:57.269-06` | `2026-09-19 23:46:36.816-06` |
+| activatedAt | `2026-09-19 23:02:06.817-06` | `2026-09-19 23:41:30.273-06` | `2026-09-19 23:43:11.502-06` | `2026-09-19 23:45:01.662-06` | `2026-09-19 23:46:41.243-06` |
+| clockConfidence | **no capturado** | **no capturado** | **no capturado** | **no capturado** | **no capturado** |
+| ttfssMs | 973 | 937 | 827 | 927 | 1006 |
+| ttfssFormatted | 00:00.973 | 00:00.937 | 00:00.827 | 00:00.927 | 00:01.006 |
+| timeToSaleReadyMs | 617 | 625 | 528 | 587 | 675 |
+| saleReadyToFirstSaleMs | 356 | 312 | 299 | 340 | 331 |
+| activationResult | PASS | PASS | PASS | PASS | PASS |
+| verificationTicketIdHash | `a4e1e35f4141fead0866f92c84dd0358` | `a66c87ab2b1b6b8c279e762620b07740` | `c0a37fff6eb1cc1a138060f73f409afd` | `3ec252e531d7fe6ec2594664bde9cb35` | `06f72106e1c555c93c12ba944f3352ab` |
+| firstSaleClaimEventIdHash | **no capturado** | **no capturado** | **no capturado** | **no capturado** | **no capturado** |
+| measurementEligible | true | true | true | true | true |
+| notas | 10/10 checks PASS | 10/10 checks PASS | 10/10 checks PASS | 10/10 checks PASS | 10/10 checks PASS |
+
+Los dos campos marcados **no capturado** no viven en el backend: `clockConfidence` y el identificador del evento del primer reclamo de venta los produce el dispositivo y quedan en su SQLite local, que el harness adjunto no exporta. No se rellenan por inferencia. Exportarlos es una mejora concreta del harness para futuras cohortes.
 
 ## 8.2 Cohort Verdict
 
 | Check | Estado |
 |---|---|
-| 5/5 runs ejecutados | «» |
-| 5/5 measurementEligible = true | «» |
-| 5/5 clockConfidence = ANCHORED | «» |
-| 5/5 TTFSS <= 15:00 | «» |
-| Ningún run DEGRADED reemplazado | «» |
-| **COHORT RESULT** | **«PASS / FAIL»** |
+| 5/5 runs ejecutados | **5/5** |
+| 5/5 measurementEligible = true | **5/5** |
+| 5/5 clockConfidence = ANCHORED | **no verificado: el campo no se captura (ver 8.1)** |
+| 5/5 TTFSS <= 15:00 | **5/5** (peor caso 1.006 s contra un límite de 900 s) |
+| Ningún run DEGRADED reemplazado | **ninguno** |
+| **COHORT RESULT** | **PASS con una salvedad declarada: los dos campos de origen dispositivo no se capturaron** |
+
+Salvedades que acompañan a este resultado, todas declaradas en otro lugar de este documento y no absorbidas por el veredicto:
+
+1. **Impresión simulada.** Por cambio de protocolo (§9) la cohorte corrió con `PILOT_PRINTER_MODE=simulated`, así que `PRINTER_AVAILABLE`, `TEST_PRINT` y `SALE_RECEIPT_PATH` quedaron satisfechos por simulación y el TTFSS **excluye la latencia de impresión física**. La evidencia física de 80 mm sigue siendo el rehearsal de FREEZE-06 (§8.0).
+2. **Dos corridas originales no cuentan como medición.** Los targets de los runs 2 y 3 recibieron sus migraciones después del aprovisionamiento, y la migración de rebind recreó la vista activa sin volver a otorgar los permisos, de modo que esas corridas fallaron con `permission denied for view`. Sus sesiones ya tenían `onboarding_started_at` de esos intentos fallidos, así que las repeticiones medían desde un origen anterior: **se descartaron y se re-ejecutaron sobre targets frescos**. El runner ahora exige que el target no tenga un onboarding iniciado antes de correr, en lugar de confiar en que alguien lo recuerde.
+3. **Defecto de repo encontrado en el camino:** issue #431, la migración que recrea la vista pierde sus grants. Aplica a cualquier despliegue que aplique esa migración más tarde que su aprovisionamiento.
 
 ---
 
