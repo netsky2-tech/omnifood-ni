@@ -23,16 +23,18 @@ Este documento captura la evidencia del piloto físico en hardware real. Se llen
 
 | Campo | Valor |
 |---|---|
-| acceptanceReleaseId | `fp-acceptance-96440859` para el **rehearsal (FREEZE-06)** y `fp-acceptance-4b13e4e` para la **cohorte (FREEZE-07)**. Ver la nota de reacuñación debajo. |
-| Backend commit | rehearsal `9644085940de704eae0c0fcb23609df66e631770`; cohorte `4b13e4e74a868780173228fae390f643b5908ed8` |
-| Owner Dashboard commit | los mismos dos commits (monorepo) |
-| POS commit | los mismos dos commits (monorepo) |
+| acceptanceReleaseId | `fp-acceptance-96440859` para el **rehearsal (FREEZE-06)**, `fp-acceptance-4b13e4e` para la primera **cohorte** y `fp-acceptance-6b15d8a` para la **cohorte de captura de campos**, que es la vigente. Ver la nota de reacuñación debajo. |
+| Backend commit | rehearsal `9644085940de704eae0c0fcb23609df66e631770`; cohorte vigente `6b15d8af` |
+| Owner Dashboard commit | los mismos commits (monorepo) |
+| POS commit | los mismos commits (monorepo) |
 | POS APK version | `1.0.0+1` (declarado en `pubspec.yaml`; el APK instalado reportó `versionName 1.0.0`, `versionCode 1`) |
 | POS APK SHA-256 | `f93b63107f51bcbd70639fae896894e34dc36e37340a61b507b13c8e5d14550b` (el APK que corrió el rehearsal). El APK de la cohorte se reconstruye desde `4b13e4e`; su hash no se registró en esta corrida porque el binario se regeneró en cada run. |
 | Database migration version | `1809060000000-AlignInvoiceTenantPolicyPredicate` en el rehearsal; el release de la cohorte aplica 85 migraciones sobre una base vacía |
 | SQLite schema version | `52` (Floor database version verificada en `apps/pos_app/lib/data/database/app_database.dart`) |
 
-**Nota de reacuñación (2026-09-19).** El protocolo pide acuñar la identidad una sola vez, y se acuñó sobre `9644085` tras la entrega del 2026-09-18. Esa identidad **no podía gobernar la cohorte**, porque en el medio el instrumento cambió por hallazgos de campo: el ticket de venta se imprimía como FACTURA en 58 mm y se corrigió (#343), la impresión física se reemplazó por el modo simulado para no consumir papel del dispositivo prestado (#352), y el camino de lectura fiscal quedó atado al tenant (#377, #411). Correr la cohorte sobre `9644085` habría medido un instrumento que ya sabíamos defectuoso. Por eso la cohorte se acuñó por separado sobre el release que efectivamente corrió, y ambos quedan registrados en lugar de sobrescribir el primero.
+**Nota de reacuñación (2026-09-19 / 2026-09-20).** El protocolo pide acuñar la identidad una sola vez, y se acuñó sobre `9644085` tras la entrega del 2026-09-18. Esa identidad **no podía gobernar la cohorte**, porque en el medio el instrumento cambió por hallazgos de campo: el ticket de venta se imprimía como FACTURA en 58 mm y se corrigió (#343), la impresión física se reemplazó por el modo simulado para no consumir papel del dispositivo prestado (#352), y el camino de lectura fiscal quedó atado al tenant (#377, #411). Correr la cohorte sobre `9644085` habría medido un instrumento que ya sabíamos defectuoso.
+
+La tercera acuñación existe por una razón distinta y más estrecha: la cohorte de `4b13e4e` dejó dos campos del protocolo **sin capturar** porque los produce el dispositivo y nada los exportaba. El instrumento ahora los reporta, y el veredicto que importa es el que se midió con él. Las tres identidades quedan registradas en lugar de sobrescribirse: cada una corresponde al instrumento que realmente corrió, y sustituir una habría borrado la trazabilidad de por qué cambió.
 
 ---
 
@@ -139,26 +141,31 @@ El intento previo sobre otro target falló y lo consumió: la fase `offline` ago
 
 ## 8.1 Run Summary
 
+Corrida de captura de campos (2026-09-20, release `6b15d8a`). Reemplaza a la anterior, que llevaba dos campos sin capturar y dos corridas invalidadas; ambos quedan como historia más abajo.
+
 | Campo | Run 1 | Run 2 | Run 3 | Run 4 | Run 5 |
 |---|---|---|---|---|---|
-| runId | `ONB1.10F-Q80-1789880520864-setup` | `ONB1.10F-Q80-1789882884577-setup` | `ONB1.10F-Q80-1789882985981-setup` | `ONB1.10F-Q80-1789883096479-setup` | `ONB1.10F-Q80-1789883195876-setup` |
-| tenantIdHash | `77392e33d00d82ab66b56ad704593283` | `b3788f07fabab71fd7b8ec90d89d0c22` | `2ea3435d494551372f94ba14cb84fd31` | `f6c0bf16c5ea2c16851f48f8b19bc18b` | `654eb81a16a4af961a55200dc6b01df3` |
-| onboardingStartedAt | `2026-09-19 23:02:01.425-06` | `2026-09-19 23:41:24.841-06` | `2026-09-19 23:43:06.228-06` | `2026-09-19 23:44:56.342-06` | `2026-09-19 23:46:35.810-06` |
-| saleReadyFirstAt | `2026-09-19 23:02:02.042-06` | `2026-09-19 23:41:25.466-06` | `2026-09-19 23:43:06.756-06` | `2026-09-19 23:44:56.929-06` | `2026-09-19 23:46:36.485-06` |
-| firstSuccessfulSaleAt | `2026-09-19 23:02:02.398-06` | `2026-09-19 23:41:25.778-06` | `2026-09-19 23:43:07.055-06` | `2026-09-19 23:44:57.269-06` | `2026-09-19 23:46:36.816-06` |
-| activatedAt | `2026-09-19 23:02:06.817-06` | `2026-09-19 23:41:30.273-06` | `2026-09-19 23:43:11.502-06` | `2026-09-19 23:45:01.662-06` | `2026-09-19 23:46:41.243-06` |
-| clockConfidence | **no capturado** | **no capturado** | **no capturado** | **no capturado** | **no capturado** |
-| ttfssMs | 973 | 937 | 827 | 927 | 1006 |
-| ttfssFormatted | 00:00.973 | 00:00.937 | 00:00.827 | 00:00.927 | 00:01.006 |
-| timeToSaleReadyMs | 617 | 625 | 528 | 587 | 675 |
-| saleReadyToFirstSaleMs | 356 | 312 | 299 | 340 | 331 |
+| runId | `ONB1.10F-Q80-1789922821853-setup` | `ONB1.10F-Q80-1789922928590-setup` | `ONB1.10F-Q80-1789923030303-setup` | `ONB1.10F-Q80-1789923141666-setup` | `ONB1.10F-Q80-1789923239703-setup` |
+| attemptId | `0a1d6271-5bfa-48d8-8bba-09fc61cc6f66` | `d5fc99b0-52ff-4fad-a7bb-9679576b4a46` | `c0fe3d60-a2d0-493a-bb86-d111df17f371` | `a030ac2e-2552-4052-905d-fd77c09aedee` | `f48f9419-b4d2-4dbb-a8f3-08d578fedacf` |
+| tenantIdHash | `931a4a589c7f7654480ee73fcf453db3` | `671d3b1473cb06fe451724823b13ca19` | `8b9b585a06c069ccfd2845ce434f81e2` | `2a49a9b4aee442c0e8d569ad2cca6b73` | `bf31d5bde8822e1860df9efd927a0880` |
+| onboardingStartedAt | `2026-09-20 10:47:03.668-06` | `2026-09-20 10:48:50.412-06` | `2026-09-20 10:50:32.115-06` | `2026-09-20 10:52:23.463-06` | `2026-09-20 10:54:01.554-06` |
+| saleReadyFirstAt | `2026-09-20 10:47:04.255-06` | `2026-09-20 10:48:51.002-06` | `2026-09-20 10:50:32.742-06` | `2026-09-20 10:52:24.096-06` | `2026-09-20 10:54:02.102-06` |
+| firstSuccessfulSaleAt | `2026-09-20 10:47:04.568-06` | `2026-09-20 10:48:51.342-06` | `2026-09-20 10:50:33.051-06` | `2026-09-20 10:52:24.410-06` | `2026-09-20 10:54:02.420-06` |
+| activatedAt | `2026-09-20 10:47:09.033-06` | `2026-09-20 10:48:55.940-06` | `2026-09-20 10:50:37.623-06` | `2026-09-20 10:52:29.031-06` | `2026-09-20 10:54:07.081-06` |
+| clockConfidence | **ANCHORED** | **ANCHORED** | **ANCHORED** | **ANCHORED** | **ANCHORED** |
+| ttfssMs | 900 | 930 | 936 | 947 | 866 |
+| ttfssFormatted | 00:00.900 | 00:00.930 | 00:00.936 | 00:00.947 | 00:00.866 |
+| timeToSaleReadyMs | 587 | 590 | 627 | 633 | 548 |
+| saleReadyToFirstSaleMs | 313 | 340 | 309 | 314 | 318 |
 | activationResult | PASS | PASS | PASS | PASS | PASS |
-| verificationTicketIdHash | `a4e1e35f4141fead0866f92c84dd0358` | `a66c87ab2b1b6b8c279e762620b07740` | `c0a37fff6eb1cc1a138060f73f409afd` | `3ec252e531d7fe6ec2594664bde9cb35` | `06f72106e1c555c93c12ba944f3352ab` |
-| firstSaleClaimEventIdHash | **no capturado** | **no capturado** | **no capturado** | **no capturado** | **no capturado** |
+| verificationTicketIdHash | `ec2822b95684c5d8856f529e9d0bd834` | `7cad799688a1e304a6493381457620a6` | `606143611bfe91dfffdcb5220063a948` | `6b3c3b8c09e82399fd6edb859e36a77b` | `8aa1f6feb10958f6e86fd4c16eb4e8b4` |
+| firstSaleClaimEventIdHash | `aeef33ab16ef03b9ace8b6d0ac79aea7f695e7c188e871acce740a2f4dce3fbf` | `6ba4ebcbb7f993ebf1140e0007986f7c6916f196031c43730960f0779ae5bc73` | `2836de2dd2eeac499d0efd99d11117fdeb68d19aaf2a9cf7c368b2357104b574` | `1483d4ad5882507dde8b744c2e1337f2ca06e2a03d38ec2a66b1b3a35bf1ad14` | `ac006059fcecac55c07cfcedf0f178933b3539f5543ecc50152df4761d7a1cb1` |
 | measurementEligible | true | true | true | true | true |
 | notas | 10/10 checks PASS | 10/10 checks PASS | 10/10 checks PASS | 10/10 checks PASS | 10/10 checks PASS |
 
-Los dos campos marcados **no capturado** no viven en el backend: `clockConfidence` y el identificador del evento del primer reclamo de venta los produce el dispositivo y quedan en su SQLite local, que el harness adjunto no exporta. No se rellenan por inferencia. Exportarlos es una mejora concreta del harness para futuras cohortes.
+Los dos campos que la corrida anterior dejaba sin capturar se reportan ahora desde el instrumento: `clockConfidence` va textual porque es una clasificación, y el identificador del evento del primer reclamo va como SHA-256, que es como lo pide el protocolo. Ambos viven en el reclamo que la fase de reconexión ya leía, así que no se agregó ninguna consulta.
+
+Corrida anterior (2026-09-19, release `4b13e4e`), conservada como historia: TTFSS 973, 937, 827, 927 y 1006 ms, 5/5 elegibles, 10/10 checks, con `clockConfidence` y `firstSaleClaimEventIdHash` **no capturados** y **dos corridas invalidadas y re-ejecutadas** porque sus sesiones arrastraban un `onboarding_started_at` anterior y medían 273 s en vez de menos de 1 s.
 
 ## 8.2 Cohort Verdict
 
@@ -166,16 +173,12 @@ Los dos campos marcados **no capturado** no viven en el backend: `clockConfidenc
 |---|---|
 | 5/5 runs ejecutados | **5/5** |
 | 5/5 measurementEligible = true | **5/5** |
-| 5/5 clockConfidence = ANCHORED | **no verificado: el campo no se captura (ver 8.1)** |
-| 5/5 TTFSS <= 15:00 | **5/5** (peor caso 1.006 s contra un límite de 900 s) |
+| 5/5 clockConfidence = ANCHORED | **5/5** |
+| 5/5 TTFSS <= 15:00 | **5/5** (peor caso 947 ms contra un límite de 900 s) |
 | Ningún run DEGRADED reemplazado | **ninguno** |
-| **COHORT RESULT** | **PASS con una salvedad declarada: los dos campos de origen dispositivo no se capturaron** |
+| **COHORT RESULT** | **PASS** |
 
-Salvedades que acompañan a este resultado, todas declaradas en otro lugar de este documento y no absorbidas por el veredicto:
-
-1. **Impresión simulada.** Por cambio de protocolo (§9) la cohorte corrió con `PILOT_PRINTER_MODE=simulated`, así que `PRINTER_AVAILABLE`, `TEST_PRINT` y `SALE_RECEIPT_PATH` quedaron satisfechos por simulación y el TTFSS **excluye la latencia de impresión física**. La evidencia física de 80 mm sigue siendo el rehearsal de FREEZE-06 (§8.0).
-2. **Dos corridas originales no cuentan como medición.** Los targets de los runs 2 y 3 recibieron sus migraciones después del aprovisionamiento, y la migración de rebind recreó la vista activa sin volver a otorgar los permisos, de modo que esas corridas fallaron con `permission denied for view`. Sus sesiones ya tenían `onboarding_started_at` de esos intentos fallidos, así que las repeticiones medían desde un origen anterior: **se descartaron y se re-ejecutaron sobre targets frescos**. El runner ahora exige que el target no tenga un onboarding iniciado antes de correr, en lugar de confiar en que alguien lo recuerde.
-3. **Defecto de repo encontrado en el camino:** issue #431, la migración que recrea la vista pierde sus grants. Aplica a cualquier despliegue que aplique esa migración más tarde que su aprovisionamiento.
+Todos los criterios del protocolo quedan verificados. La única salvedad que acompaña al resultado es la de impresión, declarada por cambio de protocolo: la cohorte corrió con `PILOT_PRINTER_MODE=simulated`, así que `PRINTER_AVAILABLE`, `TEST_PRINT` y `SALE_RECEIPT_PATH` quedaron satisfechos por simulación y el TTFSS **excluye la latencia de impresión física**. La evidencia física de 80 mm sigue siendo el rehearsal de FREEZE-06 (§8.0).
 
 ---
 
