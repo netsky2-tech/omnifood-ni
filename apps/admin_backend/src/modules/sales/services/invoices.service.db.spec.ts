@@ -22,8 +22,8 @@ import { InvoiceItem } from '../entities/invoice-item.entity';
 import { Invoice } from '../entities/invoice.entity';
 import { Payment } from '../entities/payment.entity';
 import type { SyncBatchRecordDto } from '../dto/sync-batch.dto';
-import { TENANT_RLS_PREDICATE } from '../../../core/database/tenant-rls-policy';
 import { InvoicesService } from './invoices.service';
+import { createMigrationBuiltSchemaFixture } from '../../../../test/support/migration-built-schema.helper';
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -189,12 +189,12 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
   it(
     'binds tenant context for invoice read paths under FORCE RLS and keeps cross-tenant rows blocked',
     async () => {
-      const bootstrap = new DataSource({
-        type: 'postgres',
-        ...postgresConnection,
-      });
+      const fixture = await createMigrationBuiltSchemaFixture();
+      const schema = fixture.schema;
+      process.stdout.write(
+        `[timing] migration-built setup = ${fixture.setupDurationMs} ms (migrations alone: ${fixture.migrationDurationMs} ms)\n`,
+      );
       const suffix = randomUUID().replace(/-/g, '');
-      const schema = `invoice_reads_rls_${suffix}`;
       const tenantRole = `invoice_reads_rls_role_${suffix}`;
       const tenantAId = randomUUID();
       const tenantBId = randomUUID();
@@ -202,10 +202,25 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
       const invoiceBId = randomUUID();
       let dataSource: DataSource | null = null;
 
+      let roleAdmin: DataSource | null = null;
+
       try {
-        await bootstrap.initialize();
-        await bootstrap.query(`CREATE SCHEMA "${schema}"`);
-        await bootstrap.query(`CREATE ROLE "${tenantRole}" NOLOGIN`);
+        // This test keeps its own NOLOGIN role and its grants verbatim
+        // (recipe: only the schema name changes). Row level security itself
+        // (ENABLE, FORCE and the tenant policies, in the migration-installed
+        // uuid predicate form) is owned by the migrations the fixture just
+        // ran.
+        roleAdmin = new DataSource({
+          type: 'postgres',
+          ...postgresConnection,
+          extra: { allowExitOnIdle: true },
+        });
+        await roleAdmin.initialize();
+        await roleAdmin.query(`CREATE ROLE "${tenantRole}" NOLOGIN`);
+        // Superuser connection for seeding and for SET ROLE below;
+        // search_path is pinned on the connection itself so every pooled
+        // connection resolves the service's unqualified SQL to the fixture
+        // schema (raw SQL ignores TypeORM's schema option).
         dataSource = new DataSource({
           type: 'postgres',
           ...postgresConnection,
@@ -219,15 +234,13 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
             InventorySyncReceipt,
             InventorySyncOutbox,
           ],
-          synchronize: true,
+          extra: {
+            allowExitOnIdle: true,
+            options: `-c search_path=${schema},public -c statement_timeout=15000`,
+          },
         });
         await dataSource.initialize();
-        await dataSource.query(`SET search_path TO "${schema}"`);
         await dataSource.query(`
-          ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;
-          ALTER TABLE invoices FORCE ROW LEVEL SECURITY;
-          CREATE POLICY invoice_reads_tenant_select ON invoices
-            FOR SELECT USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
           GRANT USAGE ON SCHEMA "${schema}" TO "${tenantRole}";
           GRANT SELECT ON invoices TO "${tenantRole}";
           GRANT SELECT ON invoice_items TO "${tenantRole}";
@@ -256,6 +269,35 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
         `,
           [invoiceAId, tenantAId, invoiceBId, tenantBId],
         );
+
+        // The point of the conversion: assert the catalog the migrations
+        // built, not a hand-written copy. invoices must carry the uuid
+        // predicate form (1809060000000) — production's form, which fails
+        // differently from the old text form on a blank app.tenant_id
+        // setting (#358: cast error, not a quiet deny).
+        const policies = await dataSource.query<
+          Array<{
+            tablename: string;
+            policyname: string;
+            qual: string | null;
+            with_check: string | null;
+          }>
+        >(
+          `SELECT tablename, policyname, qual, with_check
+             FROM pg_policies
+            WHERE schemaname = $1
+              AND tablename IN ('invoices')
+            ORDER BY tablename, policyname`,
+          [schema],
+        );
+        expect(policies).toHaveLength(4);
+        for (const policy of policies) {
+          expect(policy.qual ?? '').not.toContain('tenant_id::text');
+          expect(policy.with_check ?? '').not.toContain('tenant_id::text');
+          expect(policy.qual ?? policy.with_check ?? '').toContain(
+            "current_setting('app.tenant_id'::text, true))::uuid",
+          );
+        }
 
         const unusedRepository = {} as never;
         const userRepository = createMockAuthorizingUserRepository();
@@ -289,10 +331,17 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
             await dataSource.query('RESET ROLE');
             await dataSource.destroy();
           }
-          if (bootstrap.isInitialized) {
-            await bootstrap.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
-            await bootstrap.query(`DROP ROLE IF EXISTS "${tenantRole}"`);
-            await bootstrap.destroy();
+          // The fixture's schema drop removes this role's table grants, so
+          // the schema must go before DROP ROLE (the grants would otherwise
+          // block it).
+          await fixture.close();
+        } catch {
+          // Best-effort cleanup.
+        }
+        try {
+          if (roleAdmin?.isInitialized) {
+            await roleAdmin.query(`DROP ROLE IF EXISTS "${tenantRole}"`);
+            await roleAdmin.destroy();
           }
         } catch {
           // Best-effort cleanup.
@@ -305,12 +354,12 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
   it(
     'returns a deterministic non-retryable rejection for cross-tenant invoice item id collisions under FORCE RLS',
     async () => {
-      const bootstrap = new DataSource({
-        type: 'postgres',
-        ...postgresConnection,
-      });
+      const fixture = await createMigrationBuiltSchemaFixture();
+      const schema = fixture.schema;
+      process.stdout.write(
+        `[timing] migration-built setup = ${fixture.setupDurationMs} ms (migrations alone: ${fixture.migrationDurationMs} ms)\n`,
+      );
       const suffix = randomUUID().replace(/-/g, '');
-      const schema = `invoice_item_collision_rls_${suffix}`;
       const tenantRole = `invoice_item_collision_role_${suffix}`;
       const tenantAId = randomUUID();
       const tenantBId = randomUUID();
@@ -320,10 +369,25 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
       const collidingItemId = randomUUID();
       let dataSource: DataSource | null = null;
 
+      let roleAdmin: DataSource | null = null;
+
       try {
-        await bootstrap.initialize();
-        await bootstrap.query(`CREATE SCHEMA "${schema}"`);
-        await bootstrap.query(`CREATE ROLE "${tenantRole}" NOLOGIN`);
+        // The helper's reader role is SELECT-only, but this test exercises
+        // INSERT/UPDATE paths, so it keeps its own NOLOGIN role. Only the
+        // grants are created here: row level security itself (ENABLE, FORCE
+        // and the tenant policies, in the migration-installed uuid predicate
+        // form) is owned by the migrations the fixture just ran.
+        roleAdmin = new DataSource({
+          type: 'postgres',
+          ...postgresConnection,
+          extra: { allowExitOnIdle: true },
+        });
+        await roleAdmin.initialize();
+        await roleAdmin.query(`CREATE ROLE "${tenantRole}" NOLOGIN`);
+        // Superuser connection for seeding and for SET ROLE below;
+        // search_path is pinned on the connection itself so every pooled
+        // connection resolves the service's unqualified SQL to the fixture
+        // schema (raw SQL ignores TypeORM's schema option).
         dataSource = new DataSource({
           type: 'postgres',
           ...postgresConnection,
@@ -337,29 +401,13 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
             InventorySyncReceipt,
             InventorySyncOutbox,
           ],
-          synchronize: true,
+          extra: {
+            allowExitOnIdle: true,
+            options: `-c search_path=${schema},public -c statement_timeout=15000`,
+          },
         });
         await dataSource.initialize();
-        await dataSource.query(`SET search_path TO "${schema}"`);
         await dataSource.query(`
-          ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;
-          ALTER TABLE invoices FORCE ROW LEVEL SECURITY;
-          ALTER TABLE invoice_items ENABLE ROW LEVEL SECURITY;
-          ALTER TABLE invoice_items FORCE ROW LEVEL SECURITY;
-          CREATE POLICY invoice_tenant_select ON invoices
-            FOR SELECT USING (tenant_id::text = current_setting('app.tenant_id', true));
-          CREATE POLICY invoice_tenant_insert ON invoices
-            FOR INSERT WITH CHECK (tenant_id::text = current_setting('app.tenant_id', true));
-          CREATE POLICY invoice_tenant_update ON invoices
-            FOR UPDATE USING (tenant_id::text = current_setting('app.tenant_id', true))
-            WITH CHECK (tenant_id::text = current_setting('app.tenant_id', true));
-          CREATE POLICY item_tenant_select ON invoice_items
-            FOR SELECT USING (tenant_id::text = current_setting('app.tenant_id', true));
-          CREATE POLICY item_tenant_insert ON invoice_items
-            FOR INSERT WITH CHECK (tenant_id::text = current_setting('app.tenant_id', true));
-          CREATE POLICY item_tenant_update ON invoice_items
-            FOR UPDATE USING (tenant_id::text = current_setting('app.tenant_id', true))
-            WITH CHECK (tenant_id::text = current_setting('app.tenant_id', true));
           GRANT USAGE ON SCHEMA "${schema}" TO "${tenantRole}";
           GRANT SELECT, INSERT, UPDATE ON invoices TO "${tenantRole}";
           GRANT SELECT, INSERT, UPDATE ON invoice_items TO "${tenantRole}";
@@ -405,6 +453,36 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
             tenantBInvoiceId,
           ],
         );
+
+        // The point of the conversion: assert the catalog the migrations
+        // built, not a hand-written copy. Both tables must carry the uuid
+        // predicate form (1809060000000 for invoices, 1809150000000 for
+        // invoice_items) — production's form, which fails differently from
+        // the old text form on a blank app.tenant_id setting (#358: cast
+        // error, not a quiet deny).
+        const policies = await dataSource.query<
+          Array<{
+            tablename: string;
+            policyname: string;
+            qual: string | null;
+            with_check: string | null;
+          }>
+        >(
+          `SELECT tablename, policyname, qual, with_check
+             FROM pg_policies
+            WHERE schemaname = $1
+              AND tablename IN ('invoices', 'invoice_items')
+            ORDER BY tablename, policyname`,
+          [schema],
+        );
+        expect(policies).toHaveLength(8);
+        for (const policy of policies) {
+          expect(policy.qual ?? '').not.toContain('tenant_id::text');
+          expect(policy.with_check ?? '').not.toContain('tenant_id::text');
+          expect(policy.qual ?? policy.with_check ?? '').toContain(
+            "current_setting('app.tenant_id'::text, true))::uuid",
+          );
+        }
 
         const service = new InvoicesService(
           dataSource,
@@ -477,10 +555,17 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
             await dataSource.query('RESET ROLE');
             await dataSource.destroy();
           }
-          if (bootstrap.isInitialized) {
-            await bootstrap.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
-            await bootstrap.query(`DROP ROLE IF EXISTS "${tenantRole}"`);
-            await bootstrap.destroy();
+          // The fixture's schema drop removes this role's table grants, so
+          // the schema must go before DROP ROLE (the grants would otherwise
+          // block it).
+          await fixture.close();
+        } catch {
+          // Best-effort cleanup.
+        }
+        try {
+          if (roleAdmin?.isInitialized) {
+            await roleAdmin.query(`DROP ROLE IF EXISTS "${tenantRole}"`);
+            await roleAdmin.destroy();
           }
         } catch {
           // Best-effort cleanup.
@@ -493,12 +578,12 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
   it(
     'rejects hidden cross-tenant credit-note origin invoice items under FORCE RLS without saving a receipt',
     async () => {
-      const bootstrap = new DataSource({
-        type: 'postgres',
-        ...postgresConnection,
-      });
+      const fixture = await createMigrationBuiltSchemaFixture();
+      const schema = fixture.schema;
+      process.stdout.write(
+        `[timing] migration-built setup = ${fixture.setupDurationMs} ms (migrations alone: ${fixture.migrationDurationMs} ms)\n`,
+      );
       const suffix = randomUUID().replace(/-/g, '');
-      const schema = `credit_origin_item_rls_${suffix}`;
       const tenantRole = `credit_origin_item_role_${suffix}`;
       const tenantAId = randomUUID();
       const tenantBId = randomUUID();
@@ -507,10 +592,26 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
       const hiddenOriginItemId = randomUUID();
       let dataSource: DataSource | null = null;
 
+      let roleAdmin: DataSource | null = null;
+
       try {
-        await bootstrap.initialize();
-        await bootstrap.query(`CREATE SCHEMA "${schema}"`);
-        await bootstrap.query(`CREATE ROLE "${tenantRole}" NOLOGIN`);
+        // The helper's reader role is SELECT-only, but this test exercises
+        // INSERT/UPDATE paths, so it keeps its own NOLOGIN role and its
+        // grants verbatim. Only the schema name changes. Row level security
+        // itself (ENABLE, FORCE and the tenant policies, in the
+        // migration-installed uuid predicate form) is owned by the
+        // migrations the fixture just ran.
+        roleAdmin = new DataSource({
+          type: 'postgres',
+          ...postgresConnection,
+          extra: { allowExitOnIdle: true },
+        });
+        await roleAdmin.initialize();
+        await roleAdmin.query(`CREATE ROLE "${tenantRole}" NOLOGIN`);
+        // Superuser connection for seeding and for SET ROLE below;
+        // search_path is pinned on the connection itself so every pooled
+        // connection resolves the service's unqualified SQL to the fixture
+        // schema (raw SQL ignores TypeORM's schema option).
         dataSource = new DataSource({
           type: 'postgres',
           ...postgresConnection,
@@ -524,35 +625,13 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
             InventorySyncReceipt,
             InventorySyncOutbox,
           ],
-          synchronize: true,
+          extra: {
+            allowExitOnIdle: true,
+            options: `-c search_path=${schema},public -c statement_timeout=15000`,
+          },
         });
         await dataSource.initialize();
-        await dataSource.query(`SET search_path TO "${schema}"`);
         await dataSource.query(`
-          ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;
-          ALTER TABLE invoices FORCE ROW LEVEL SECURITY;
-          ALTER TABLE invoice_items ENABLE ROW LEVEL SECURITY;
-          ALTER TABLE invoice_items FORCE ROW LEVEL SECURITY;
-          ALTER TABLE inventory_sync_receipts ENABLE ROW LEVEL SECURITY;
-          ALTER TABLE inventory_sync_receipts FORCE ROW LEVEL SECURITY;
-          CREATE POLICY invoice_tenant_select ON invoices
-            FOR SELECT USING (tenant_id::text = current_setting('app.tenant_id', true));
-          CREATE POLICY invoice_tenant_insert ON invoices
-            FOR INSERT WITH CHECK (tenant_id::text = current_setting('app.tenant_id', true));
-          CREATE POLICY item_tenant_select ON invoice_items
-            FOR SELECT USING (tenant_id::text = current_setting('app.tenant_id', true));
-          CREATE POLICY item_tenant_insert ON invoice_items
-            FOR INSERT WITH CHECK (tenant_id::text = current_setting('app.tenant_id', true));
-          -- inventory_sync_receipts.tenant_id is uuid (Phase 2 slice A rebound
-          -- the real column, and synchronize builds this fixture's column from
-          -- the same entity declaration). The predicate therefore comes from the
-          -- shared definition instead of being written out here: a hand-written
-          -- form would silently become invalid for the column the fixture just
-          -- created, which is how this spec broke when the entity was corrected.
-          CREATE POLICY receipt_tenant_select ON inventory_sync_receipts
-            FOR SELECT USING (${TENANT_RLS_PREDICATE});
-          CREATE POLICY receipt_tenant_insert ON inventory_sync_receipts
-            FOR INSERT WITH CHECK (${TENANT_RLS_PREDICATE});
           GRANT USAGE ON SCHEMA "${schema}" TO "${tenantRole}";
           GRANT SELECT, INSERT, UPDATE ON invoices TO "${tenantRole}";
           GRANT SELECT, INSERT, UPDATE ON invoice_items TO "${tenantRole}";
@@ -589,6 +668,41 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
               0.1500, 3.00, 23.00, 0.00)`,
           [hiddenOriginItemId, tenantBId, tenantBInvoiceId],
         );
+
+        // The point of the conversion: assert the catalog the migrations
+        // built, not a hand-written copy. All three tables must carry the
+        // uuid predicate form (1809060000000 for invoices, 1809150000000 for
+        // invoice_items, 1809070000000 for inventory_sync_receipts) —
+        // production's form, which fails differently from the old text form
+        // on a blank app.tenant_id setting (#358: cast error, not a quiet
+        // deny).
+        const policies = await dataSource.query<
+          Array<{
+            tablename: string;
+            policyname: string;
+            qual: string | null;
+            with_check: string | null;
+          }>
+        >(
+          `SELECT tablename, policyname, qual, with_check
+             FROM pg_policies
+            WHERE schemaname = $1
+              AND tablename IN (
+                'invoices',
+                'invoice_items',
+                'inventory_sync_receipts'
+              )
+            ORDER BY tablename, policyname`,
+          [schema],
+        );
+        expect(policies).toHaveLength(12);
+        for (const policy of policies) {
+          expect(policy.qual ?? '').not.toContain('tenant_id::text');
+          expect(policy.with_check ?? '').not.toContain('tenant_id::text');
+          expect(policy.qual ?? policy.with_check ?? '').toContain(
+            "current_setting('app.tenant_id'::text, true))::uuid",
+          );
+        }
 
         const service = new InvoicesService(
           dataSource,
@@ -666,10 +780,17 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
             await dataSource.query('RESET ROLE');
             await dataSource.destroy();
           }
-          if (bootstrap.isInitialized) {
-            await bootstrap.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
-            await bootstrap.query(`DROP ROLE IF EXISTS "${tenantRole}"`);
-            await bootstrap.destroy();
+          // The fixture's schema drop removes this role's table grants, so
+          // the schema must go before DROP ROLE (the grants would otherwise
+          // block it).
+          await fixture.close();
+        } catch {
+          // Best-effort cleanup.
+        }
+        try {
+          if (roleAdmin?.isInitialized) {
+            await roleAdmin.query(`DROP ROLE IF EXISTS "${tenantRole}"`);
+            await roleAdmin.destroy();
           }
         } catch {
           // Best-effort cleanup.
