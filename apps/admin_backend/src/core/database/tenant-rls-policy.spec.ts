@@ -14,10 +14,17 @@ import {
  * type. `data_type`/`character_maximum_length` mirror the shape of
  * information_schema.columns.
  */
-const createQueryRunner = (columnType: {
-  data_type: string;
-  character_maximum_length?: number | null;
-}) => {
+const createQueryRunner = (
+  columnType: {
+    data_type: string;
+    character_maximum_length?: number | null;
+  },
+  viewGrants: Array<{
+    role: string;
+    privilege: string;
+    grantable: boolean;
+  }> = [],
+) => {
   const queries: string[] = [];
   const queryRunner = {
     query: jest.fn((sql: string): Promise<QueryResult> => {
@@ -31,6 +38,9 @@ const createQueryRunner = (columnType: {
               columnType.character_maximum_length ?? null,
           },
         ];
+      }
+      if (sql.includes('aclexplode')) {
+        result.records = viewGrants;
       }
       return Promise.resolve(result);
     }),
@@ -380,7 +390,9 @@ describe('rebindTenantColumns', () => {
       const dropViewIndex = queries.findIndex((sql) =>
         sql.includes('DROP VIEW IF EXISTS'),
       );
-      const alterIndex = queries.findIndex((sql) => sql.includes('ALTER TABLE'));
+      const alterIndex = queries.findIndex((sql) =>
+        sql.includes('ALTER TABLE'),
+      );
       const createViewIndex = queries.findIndex((sql) =>
         sql.includes('CREATE VIEW'),
       );
@@ -392,6 +404,76 @@ describe('rebindTenantColumns', () => {
       expect(dropViewIndex).toBeLessThan(alterIndex);
       expect(createViewIndex).toBeGreaterThan(alterIndex);
       expect(createViewIndex).toBeLessThan(createPolicyIndex);
+    });
+
+    // A DROP takes the view's ACL with it, so a privilege granted to another role is
+    // revoked unless the migration carries it across. Issue #431: without this the
+    // runtime role lost SELECT on the active-configuration view and every fiscal read
+    // answered "permission denied for view", but only in databases where the migration
+    // ran later than provisioning.
+    it('reads the view ACL before dropping it and restores the grants after recreating', async () => {
+      const { queryRunner, queries } = createQueryRunner(
+        { data_type: 'character varying' },
+        [{ role: 'runtime_role', privilege: 'SELECT', grantable: false }],
+      );
+
+      await rebindTenantColumns(
+        queryRunner,
+        [allPolicyTarget({ views: [viewDependency()] })],
+        TENANT_RLS_PREDICATE,
+      );
+
+      const aclIndex = queries.findIndex((sql) => sql.includes('aclexplode'));
+      const dropViewIndex = queries.findIndex((sql) =>
+        sql.includes('DROP VIEW IF EXISTS'),
+      );
+      const createViewIndex = queries.findIndex((sql) =>
+        sql.includes('CREATE VIEW'),
+      );
+      const grantIndex = queries.findIndex((sql) => sql.startsWith('GRANT '));
+      const createPolicyIndex = queries.findIndex((sql) =>
+        sql.includes('CREATE POLICY'),
+      );
+
+      expect(aclIndex).toBeGreaterThanOrEqual(0);
+      expect(aclIndex).toBeLessThan(dropViewIndex);
+      expect(grantIndex).toBeGreaterThan(createViewIndex);
+      expect(grantIndex).toBeLessThan(createPolicyIndex);
+      expect(queries[grantIndex]).toBe(
+        'GRANT SELECT ON "v_sys_parametros_config_active" TO "runtime_role"',
+      );
+    });
+
+    it('preserves WITH GRANT OPTION, because a delegated grant is part of the ACL', async () => {
+      const { queryRunner, queries } = createQueryRunner(
+        { data_type: 'character varying' },
+        [{ role: 'runtime_role', privilege: 'SELECT', grantable: true }],
+      );
+
+      await rebindTenantColumns(
+        queryRunner,
+        [allPolicyTarget({ views: [viewDependency()] })],
+        TENANT_RLS_PREDICATE,
+      );
+
+      expect(queries).toContain(
+        'GRANT SELECT ON "v_sys_parametros_config_active" TO "runtime_role" WITH GRANT OPTION',
+      );
+    });
+
+    it('fails closed on a privilege it cannot re-grant rather than dropping access', async () => {
+      const { queryRunner } = createQueryRunner(
+        { data_type: 'character varying' },
+        [{ role: 'runtime_role', privilege: 'TRUNCATE', grantable: false }],
+      );
+
+      await expect(
+        rebindTenantColumns(
+          queryRunner,
+          [allPolicyTarget({ views: [viewDependency()] })],
+          TENANT_RLS_PREDICATE,
+        ),
+      ).rejects.toThrow('TENANT_RLS_VIEW_PRIVILEGE_UNSUPPORTED');
     });
 
     it('emits the declared createSql verbatim, preserving security_invoker', async () => {
@@ -407,9 +489,9 @@ describe('rebindTenantColumns', () => {
 
       // The migration owns the DDL; the emitter only places it.
       expect(queries).toContain(viewDependency().createSql);
-      expect(
-        queries.find((sql) => sql.includes('CREATE VIEW')),
-      ).toContain('WITH (security_invoker = true)');
+      expect(queries.find((sql) => sql.includes('CREATE VIEW'))).toContain(
+        'WITH (security_invoker = true)',
+      );
     });
 
     it('drops the view by its quoted name', async () => {
@@ -464,7 +546,9 @@ describe('rebindTenantColumns', () => {
       const dropViewIndex = queries.findIndex((sql) =>
         sql.includes('DROP VIEW IF EXISTS'),
       );
-      const alterIndex = queries.findIndex((sql) => sql.includes('ALTER TABLE'));
+      const alterIndex = queries.findIndex((sql) =>
+        sql.includes('ALTER TABLE'),
+      );
       const createViewIndex = queries.findIndex((sql) =>
         sql.includes('CREATE VIEW'),
       );
@@ -481,13 +565,11 @@ describe('rebindTenantColumns', () => {
       for (const statement of queries.filter((sql) =>
         sql.includes('CREATE POLICY'),
       )) {
-        expect(statement).toContain(
-          `USING (${PREVIOUS_TENANT_RLS_PREDICATE})`,
-        );
+        expect(statement).toContain(`USING (${PREVIOUS_TENANT_RLS_PREDICATE})`);
       }
-      expect(
-        queries.find((sql) => sql.includes('ALTER TABLE')),
-      ).toContain('TYPE character varying');
+      expect(queries.find((sql) => sql.includes('ALTER TABLE'))).toContain(
+        'TYPE character varying',
+      );
     });
   });
 
