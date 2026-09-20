@@ -82,6 +82,15 @@ export interface MigrationBuiltSchemaFixture {
   /** Separate SELECT-only role for RLS-bound reads; never a table owner. */
   readonly readerRoleName: string;
   readonly readerRolePassword: string;
+  /**
+   * Least-privilege DML role for the application under test: non-superuser,
+   * non-bypassing, non-owner, scoped to the scratch schema. Ordinary
+   * SELECT/INSERT/UPDATE/DELETE plus the sequence USAGE ordinary DML needs;
+   * never TRUNCATE, CREATE, ownership, migration-ledger access, role
+   * management, or public-schema DML (issue #429).
+   */
+  readonly runtimeRoleName: string;
+  readonly runtimeRolePassword: string;
   /** Measured wall-clock of the whole setup, in milliseconds. */
   readonly setupDurationMs: number;
   /** Measured wall-clock of the migration run alone, in milliseconds. */
@@ -110,8 +119,10 @@ export async function createMigrationBuiltSchemaFixture(): Promise<MigrationBuil
   const schema = `${PREFIX}_${suffix}`;
   const migrationRoleName = `${PREFIX}_migr_${suffix}`;
   const readerRoleName = `${PREFIX}_read_${suffix}`;
+  const runtimeRoleName = `${PREFIX}_app_${suffix}`;
   const migrationRolePassword = randomUUID();
   const readerRolePassword = randomUUID();
+  const runtimeRolePassword = randomUUID();
 
   const admin = new DataSource({
     type: 'postgres',
@@ -168,8 +179,12 @@ export async function createMigrationBuiltSchemaFixture(): Promise<MigrationBuil
     await admin.query(
       `REVOKE CONNECT ON DATABASE "${postgresConnection.database}" FROM "${readerRoleName}"`,
     );
+    await admin.query(
+      `REVOKE CONNECT ON DATABASE "${postgresConnection.database}" FROM "${runtimeRoleName}"`,
+    );
     await admin.query(`DROP ROLE IF EXISTS "${migrationRoleName}"`);
     await admin.query(`DROP ROLE IF EXISTS "${readerRoleName}"`);
+    await admin.query(`DROP ROLE IF EXISTS "${runtimeRoleName}"`);
   };
 
   const destroyAdminQuietly = async (): Promise<void> => {
@@ -285,6 +300,47 @@ export async function createMigrationBuiltSchemaFixture(): Promise<MigrationBuil
     await admin.query(
       `ALTER ROLE "${readerRoleName}" SET search_path TO "${schema}", public`,
     );
+
+    // Dedicated application runtime role (issue #429): the Nest application
+    // must run with the privileges an ordinary production app role would
+    // have — NOSUPERUSER NOBYPASSRLS — so the migrated RLS policies are
+    // actually enforced instead of bypassed by a superuser connection. It
+    // receives exactly what ordinary DML requires and nothing more:
+    // - USAGE on the scratch schema (no CREATE, so it can never add objects);
+    // - SELECT/INSERT/UPDATE/DELETE on the schema's tables (never TRUNCATE,
+    //   never REFERENCES/TRIGGER);
+    // - USAGE/SELECT on the schema's sequences (what nextval/currval need);
+    // - NOTHING on the migrations ledger, so it cannot tamper with or drive
+    //   the migration set.
+    // It owns nothing: every object was created by the migration role, and
+    // even under FORCE ROW LEVEL SECURITY a non-owner role is fully subject
+    // to the policies. Its role-level search_path is pinned like the other
+    // roles' because raw SQL ignores TypeORM's schema option.
+    await admin.query(
+      `CREATE ROLE "${runtimeRoleName}" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS PASSWORD '${runtimeRolePassword}'`,
+    );
+    await admin.query(
+      `GRANT USAGE ON SCHEMA "${schema}" TO "${runtimeRoleName}"`,
+    );
+    await admin.query(
+      `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA "${schema}" TO "${runtimeRoleName}"`,
+    );
+    // The migrations ledger is infrastructure, not application data: the
+    // runtime role must never read or write it (no migration capability).
+    await admin.query(
+      `REVOKE ALL ON TABLE "${schema}".migrations FROM "${runtimeRoleName}"`,
+    );
+    await admin.query(
+      `GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA "${schema}" TO "${runtimeRoleName}"`,
+    );
+    // The ", public" part is load-bearing for uuid-ossp resolution (see the
+    // header note). On PostgreSQL >= 15 (and any database with the modern
+    // default) PUBLIC holds only USAGE on `public` — no CREATE — so the
+    // runtime role can resolve uuid_generate_v4() but cannot create in, or
+    // DML into, the public schema.
+    await admin.query(
+      `ALTER ROLE "${runtimeRoleName}" SET search_path TO "${schema}", public`,
+    );
   } catch (error) {
     // Provisioning failed partway: best-effort cleanup so this run leaks
     // neither its schema nor its roles, then propagate the original error.
@@ -298,6 +354,8 @@ export async function createMigrationBuiltSchemaFixture(): Promise<MigrationBuil
     migrationRoleName,
     readerRoleName,
     readerRolePassword,
+    runtimeRoleName,
+    runtimeRolePassword,
     setupDurationMs: Date.now() - setupStartedAt,
     migrationDurationMs,
     close: async () => {

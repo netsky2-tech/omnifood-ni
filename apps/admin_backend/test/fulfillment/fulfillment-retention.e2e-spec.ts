@@ -8,11 +8,6 @@ import { randomUUID } from 'crypto';
 import * as request from 'supertest';
 import { App } from 'supertest/types';
 import { DataSource } from 'typeorm';
-import { BohInventoryLedgerFoundation1766000000000 } from '../../src/migrations/1766000000000-BohInventoryLedgerFoundation';
-import { AddDeterministicSyncSequencing1780000000000 } from '../../src/migrations/1780000000000-AddDeterministicSyncSequencing';
-import { AddSaleInventoryOutcomeColumns1803000000000 } from '../../src/migrations/1803000000000-AddSaleInventoryOutcomeColumns';
-import { AddAcceptedAtToInventorySyncReceipts1805000000000 } from '../../src/migrations/1805000000000-AddAcceptedAtToInventorySyncReceipts';
-import { CreateTenantFulfillmentRecords1795000000000 } from '../../src/migrations/1795000000000-CreateTenantFulfillmentRecords';
 import { IdentityModule } from '../../src/modules/identity/identity.module';
 import { InventoryModule } from '../../src/modules/inventory/inventory.module';
 import {
@@ -46,19 +41,34 @@ import { TenantFulfillmentRecord } from '../../src/modules/fulfillment/entities/
 import { DeviceSyncCredential } from '../../src/modules/identity/entities/device-sync-credential.entity';
 import { ActivationAttempt } from '../../src/modules/onboarding/entities/activation-attempt.entity';
 import { signIdentityJwtAccessToken } from '../support/identity-jwt-test.fixture';
-import { ensurePublicAuthTables } from '../support/fulfillment-test-db.helper';
+import { createMigrationBuiltSchemaFixture } from '../support/migration-built-schema.helper';
 import {
-  ensurePublicDeviceSyncTables,
   provisionDeviceSyncCredential,
   signDeviceSyncAccessToken,
   type ProvisionedDeviceSyncCredential,
 } from '../support/device-sync-e2e.helper';
 import { SyncBatchRecordDto } from '../../src/modules/sales/dto/sync-batch.dto';
 
-describe('FulfillmentRetention (e2e - Real PostgreSQL, No Mocks)', () => {
+/**
+ * Issue #429: this HTTP E2E builds its schema exclusively from the FULL
+ * migration set (`createMigrationBuiltSchemaFixture`) and runs the Nest
+ * application under the fixture's dedicated runtime role — LOGIN
+ * NOSUPERUSER NOBYPASSRLS, owner of nothing. Every RLS policy below is
+ * therefore production policy actually enforced by PostgreSQL, not a
+ * decorative policy bypassed by a superuser connection.
+ *
+ * The administrator connection is used only for infrastructure and seeding
+ * the runtime role must not own: tenants/users fixtures, the device sync
+ * credential rows, and direct invoice/fulfillment seeds. Application flows
+ * (HTTP requests, RLS-context transactions) run through the app DataSource
+ * as the restricted runtime role.
+ */
+describe('FulfillmentRetention (e2e - Real PostgreSQL, migration-built schema, restricted runtime role)', () => {
   let app: INestApplication<App>;
+  let appSource: DataSource;
   let adminSource: DataSource;
   let jwtService: JwtService;
+  let fixture: Awaited<ReturnType<typeof createMigrationBuiltSchemaFixture>>;
   let schema: string;
 
   const tenantAId = randomUUID();
@@ -82,105 +92,67 @@ describe('FulfillmentRetention (e2e - Real PostgreSQL, No Mocks)', () => {
   };
 
   beforeAll(async () => {
-    schema = `e2e_retention_${randomUUID().replace(/-/g, '')}`;
+    // The schema is the migrations' output, built as a restricted role; the
+    // helper provisions the scratch schema, uuid-ossp, the migration/reader
+    // roles, and the dedicated runtime app role (NOSUPERUSER NOBYPASSRLS,
+    // DML-only grants, no migrations-ledger access).
+    fixture = await createMigrationBuiltSchemaFixture();
+    schema = fixture.schema;
+    process.stdout.write(
+      `[timing] migration-built setup = ${fixture.setupDurationMs} ms (migrations alone: ${fixture.migrationDurationMs} ms)\n`,
+    );
 
+    // Administrator connection for infrastructure/seeding only: superuser
+    // bypasses the FORCED row-level security, which is what makes cross-
+    // tenant fixture seeding possible. The app itself never uses this
+    // connection. search_path is pinned so unqualified seeding SQL resolves
+    // against the scratch schema.
     adminSource = new DataSource({
       ...postgresConnection,
+      schema,
+      extra: {
+        allowExitOnIdle: true,
+        options: `-c search_path=${schema},public`,
+      },
     });
     await adminSource.initialize();
-    const runner = adminSource.createQueryRunner();
-    await runner.connect();
-
-    await runner.query(`CREATE SCHEMA "${schema}"`);
-    await runner.query(`SET search_path TO "${schema}", public`);
-
-    await runner.query(`
-      CREATE TABLE IF NOT EXISTS invoices (
-        id varchar(128) PRIMARY KEY,
-        tenant_id varchar(64) NOT NULL,
-        number varchar(64) NOT NULL,
-        user_id varchar(64) NOT NULL,
-        subtotal numeric(12, 4) NOT NULL DEFAULT 0,
-        total_tax numeric(12, 4) NOT NULL DEFAULT 0,
-        total numeric(12, 4) NOT NULL DEFAULT 0,
-        created_at timestamptz NOT NULL DEFAULT now(),
-        status varchar(32) NOT NULL DEFAULT 'COMPLETED',
-        is_canceled boolean NOT NULL DEFAULT false
-      );
-      CREATE TABLE IF NOT EXISTS invoice_items (
-        id varchar(128) PRIMARY KEY,
-        tenant_id varchar(64) NOT NULL,
-        invoice_id varchar(128) NOT NULL
-      );
-    `);
-
-    const m1 = new BohInventoryLedgerFoundation1766000000000();
-    const m2 = new AddDeterministicSyncSequencing1780000000000();
-    const m3 = new CreateTenantFulfillmentRecords1795000000000();
-    await m1.up(runner);
-    await m2.up(runner);
-    await new AddSaleInventoryOutcomeColumns1803000000000().up(runner);
-    await new AddAcceptedAtToInventorySyncReceipts1805000000000().up(runner);
-    await m3.up(runner);
-
-    await runner.query(`
-      CREATE TABLE IF NOT EXISTS invoices (
-        id varchar(128) PRIMARY KEY,
-        tenant_id varchar(64) NOT NULL,
-        number varchar(64) NOT NULL,
-        user_id varchar(64) NOT NULL,
-        subtotal numeric(12, 4) NOT NULL DEFAULT 0,
-        total_tax numeric(12, 4) NOT NULL DEFAULT 0,
-        total numeric(12, 4) NOT NULL DEFAULT 0,
-        created_at timestamptz NOT NULL DEFAULT now(),
-        status varchar(32) NOT NULL DEFAULT 'COMPLETED',
-        is_canceled boolean NOT NULL DEFAULT false
-      );
-      ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;
-      ALTER TABLE invoices FORCE ROW LEVEL SECURITY;
-      CREATE POLICY invoices_select ON invoices FOR SELECT USING (tenant_id = current_setting('app.tenant_id', true));
-      CREATE POLICY invoices_insert ON invoices FOR INSERT WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
-      CREATE POLICY invoices_delete ON invoices FOR DELETE USING (tenant_id = current_setting('app.tenant_id', true));
-    `);
 
     const tenantAName = `Tenant A Retention ${randomUUID().substring(0, 8)}`;
     const tenantBName = `Tenant B Retention ${randomUUID().substring(0, 8)}`;
 
-    await ensurePublicAuthTables(runner);
-
-    await ensurePublicDeviceSyncTables(runner);
-
-    await runner.query(
-      `INSERT INTO tenants (id, name, created_at, updated_at) VALUES
-       ($1, $3, now(), now()),
-       ($2, $4, now(), now())
-       ON CONFLICT (id) DO NOTHING`,
-      [tenantAId, tenantBId, tenantAName, tenantBName],
+    // The migration set created tenants/users (with uuid ids and the
+    // users_role_enum role column) inside the scratch schema; seed via the
+    // admin connection, which bypasses RLS on purpose for fixtures.
+    const seedRunner = adminSource.createQueryRunner();
+    await seedRunner.connect();
+    await seedRunner.query(
+      `INSERT INTO tenants (id, name, is_active) VALUES ($1, $2, true), ($3, $4, true)`,
+      [tenantAId, tenantAName, tenantBId, tenantBName],
     );
 
     const ownerAEmail = `owner.a.${randomUUID()}@test.com`;
     const ownerBEmail = `owner.b.${randomUUID()}@test.com`;
 
-    await runner.query(
-      `INSERT INTO users (id, tenant_id, name, email, role, is_active, security_version, created_at, updated_at) VALUES
-       ($1, $2, 'Owner A', $5, 'OWNER', true, 1, now(), now()),
-       ($3, $4, 'Owner B', $6, 'OWNER', true, 1, now(), now())
-       ON CONFLICT (id) DO NOTHING`,
-      [ownerAId, tenantAId, ownerBId, tenantBId, ownerAEmail, ownerBEmail],
+    await seedRunner.query(
+      `INSERT INTO users (id, tenant_id, name, email, role, is_active, security_version) VALUES
+       ($1, $2, 'Owner A', $3, 'OWNER', true, 1),
+       ($4, $5, 'Owner B', $6, 'OWNER', true, 1)`,
+      [ownerAId, tenantAId, ownerAEmail, ownerBId, tenantBId, ownerBEmail],
     );
-
-    await runner.release();
+    await seedRunner.release();
 
     // Provision an ACTIVE device sync credential (plus its PASS activation
-    // attempt) for Tenant A: /v1/sync/batch is device-only, so it is bound to
-    // the canonical device id the batch record below uses as sourceDeviceId
-    // ('terminal-1') and granted only the sync:push scope the batch route
-    // requires. Tenant B never touches /v1/sync/* (human-auth endpoints
-    // only), so it needs no device credential.
+    // attempt) for Tenant A, in the scratch schema (the migration set owns
+    // the device sync DDL there): /v1/sync/batch is device-only, so it is
+    // bound to the canonical device id the batch record below uses as
+    // sourceDeviceId ('terminal-1') and granted only the sync:push scope the
+    // batch route requires. Tenant B never touches /v1/sync/* (human-auth
+    // endpoints only), so it needs no device credential.
     provisionedDevices.push(
       await provisionDeviceSyncCredential(adminSource, {
         tenantId: tenantAId,
         deviceId: 'terminal-1',
+        schema,
         scopes: ['sync:push'],
       }),
     );
@@ -206,6 +178,11 @@ describe('FulfillmentRetention (e2e - Real PostgreSQL, No Mocks)', () => {
         EventEmitterModule.forRoot(),
         TypeOrmModule.forRoot({
           ...postgresConnection,
+          // Issue #429: the Nest application connects as the fixture's
+          // runtime role — NOSUPERUSER NOBYPASSRLS, non-owner, DML-only —
+          // so every query below is subject to the migrated RLS policies.
+          username: fixture.runtimeRoleName,
+          password: fixture.runtimeRolePassword,
           entities: [
             Tenant,
             User,
@@ -233,13 +210,16 @@ describe('FulfillmentRetention (e2e - Real PostgreSQL, No Mocks)', () => {
             DeviceSyncCredential,
             ActivationAttempt,
           ],
-          // Every pooled connection must share the isolated-schema search_path:
-          // tables created by the migrations above live in the isolated schema,
-          // while tenants/users and the device-sync tables provisioned by the
-          // helper live in public. A DataSource-level `schema` option would force
-          // the SyncTransportGuard's repository reads into the isolated schema and
-          // miss the public rows.
-          extra: { options: `-c search_path=${schema},public` },
+          // The migration-built tables all live in the scratch schema,
+          // including the device sync tables. The DataSource-level `schema`
+          // option and the per-connection search_path agree on that schema
+          // for every pooled connection, exactly as production agrees on
+          // its own schema.
+          schema,
+          extra: {
+            allowExitOnIdle: true,
+            options: `-c search_path=${schema},public`,
+          },
           synchronize: false,
         }),
         IdentityModule,
@@ -269,6 +249,8 @@ describe('FulfillmentRetention (e2e - Real PostgreSQL, No Mocks)', () => {
 
     await app.init();
 
+    appSource = moduleFixture.get<DataSource>(DataSource);
+
     jwtService = moduleFixture.get<JwtService>(JwtService);
     ownerAToken = signIdentityJwtAccessToken(jwtService, {
       sub: ownerAId,
@@ -293,10 +275,10 @@ describe('FulfillmentRetention (e2e - Real PostgreSQL, No Mocks)', () => {
       await app.close();
     }
     if (adminSource && adminSource.isInitialized) {
-      // Device sync rows live in public and device_sync_credentials is FORCE
-      // RLS: delete inside a per-tenant transaction that sets the RLS tenant
-      // context, credentials before their activation attempts (same as the
-      // migrated reference suites).
+      // Device sync rows live in the scratch schema and
+      // device_sync_credentials is FORCE RLS: delete inside a per-tenant
+      // transaction that sets the RLS tenant context, credentials before
+      // their activation attempts (same as the migrated reference suites).
       for (const device of provisionedDevices) {
         await adminSource.transaction(async (manager) => {
           await manager.query("SELECT set_config('app.tenant_id', $1, true)", [
@@ -312,12 +294,13 @@ describe('FulfillmentRetention (e2e - Real PostgreSQL, No Mocks)', () => {
           );
         });
       }
-      try {
-        await adminSource.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
-      } catch {
-        // cleanup best effort
-      }
       await adminSource.destroy();
+    }
+    // The helper's close() drops the scratch schema and every role; all
+    // application/admin sessions must be gone first, because live sessions
+    // block DROP ROLE.
+    if (fixture) {
+      await fixture.close();
     }
   });
 
@@ -375,10 +358,192 @@ describe('FulfillmentRetention (e2e - Real PostgreSQL, No Mocks)', () => {
       .expect(404);
   });
 
+  it('runs the application connection under a non-superuser, non-bypassing, non-owner role (issue #429)', async () => {
+    const roleAttrs = await appSource.query<
+      Array<{
+        rolsuper: boolean;
+        rolbypassrls: boolean;
+        rolcreatedb: boolean;
+        rolcreaterole: boolean;
+        rolinherit: boolean;
+      }>
+    >(
+      `SELECT r.rolsuper, r.rolbypassrls, r.rolcreatedb, r.rolcreaterole, r.rolinherit
+         FROM pg_roles r
+        WHERE r.rolname = current_user`,
+    );
+
+    expect(roleAttrs).toHaveLength(1);
+    expect(roleAttrs[0].rolsuper).toBe(false);
+    expect(roleAttrs[0].rolbypassrls).toBe(false);
+    expect(roleAttrs[0].rolcreatedb).toBe(false);
+    expect(roleAttrs[0].rolcreaterole).toBe(false);
+    expect(roleAttrs[0].rolinherit).toBe(false);
+
+    // Non-ownership: the runtime role owns no table, sequence, or the schema
+    // itself — the migration role does, which is what keeps FORCE RLS
+    // meaningful for the app role and blocks any DDL capability.
+    const ownedObjects = await appSource.query<Array<{ count: number }>>(
+      `SELECT count(*)::int AS count
+         FROM pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = $1
+          AND c.relowner = (SELECT oid FROM pg_roles WHERE rolname = current_user)`,
+      [schema],
+    );
+    expect(ownedObjects[0].count).toBe(0);
+
+    const schemaOwner = await appSource.query<Array<{ count: number }>>(
+      `SELECT count(*)::int AS count
+         FROM pg_namespace
+        WHERE nspname = $1
+          AND nspowner = (SELECT oid FROM pg_roles WHERE rolname = current_user)`,
+      [schema],
+    );
+    expect(schemaOwner[0].count).toBe(0);
+  });
+
+  it('holds exactly the least-privilege DML grants ordinary application work needs (issue #429)', async () => {
+    const privilege = async (
+      objectType: 'table' | 'schema',
+      object: string,
+      privilege: string,
+    ): Promise<boolean> => {
+      const rows = await appSource.query<Array<{ allowed: boolean }>>(
+        objectType === 'table'
+          ? `SELECT has_table_privilege(current_user, $1, $2) AS allowed`
+          : `SELECT has_schema_privilege(current_user, $1, $2) AS allowed`,
+        [object, privilege],
+      );
+      return rows[0].allowed;
+    };
+
+    // Ordinary DML on application tables: granted.
+    expect(await privilege('table', 'invoices', 'SELECT')).toBe(true);
+    expect(await privilege('table', 'invoices', 'INSERT')).toBe(true);
+    expect(await privilege('table', 'invoices', 'UPDATE')).toBe(true);
+    expect(await privilege('table', 'invoices', 'DELETE')).toBe(true);
+    expect(
+      await privilege('table', 'tenant_fulfillment_records', 'SELECT'),
+    ).toBe(true);
+    expect(
+      await privilege('table', 'tenant_fulfillment_records', 'DELETE'),
+    ).toBe(true);
+
+    // Nothing beyond ordinary DML: no TRUNCATE, no DDL, no migrations-ledger
+    // access, no cross-schema capabilities.
+    expect(await privilege('table', 'invoices', 'TRUNCATE')).toBe(false);
+    expect(
+      await privilege('table', 'tenant_fulfillment_records', 'TRUNCATE'),
+    ).toBe(false);
+    expect(await privilege('table', 'invoices', 'REFERENCES')).toBe(false);
+    expect(await privilege('table', 'invoices', 'TRIGGER')).toBe(false);
+    // Schema-qualified so the probe cannot accidentally resolve a stray
+    // `public.migrations` through the pinned search_path instead of the
+    // scratch schema's migrations ledger.
+    expect(await privilege('table', `${schema}.migrations`, 'SELECT')).toBe(
+      false,
+    );
+    expect(await privilege('table', `${schema}.migrations`, 'INSERT')).toBe(
+      false,
+    );
+    expect(await privilege('schema', schema, 'CREATE')).toBe(false);
+    expect(await privilege('schema', schema, 'USAGE')).toBe(true);
+    // The public schema is on the search_path only so uuid_generate_v4()
+    // resolves; modern default PUBLIC privileges there are USAGE-only, so
+    // the runtime role can neither create in public nor DML into it.
+    expect(await privilege('schema', 'public', 'CREATE')).toBe(false);
+
+    // Catalog-level proof of that boundary: no table in schema `public`
+    // carries any of the seven table privileges for the runtime role or for
+    // PUBLIC (aclexplode grantee 0). This holds both on a fresh database,
+    // where `public` has zero tables, and on a provisioned one, where
+    // `public` may hold tables — any row here would mean an ambient public
+    // grant the runtime role could reach through its pinned search_path, so
+    // the assertion fails closed rather than silently narrowing the check.
+    const publicTableGrants = await appSource.query<
+      Array<{ table_name: string; privilege_type: string; grantee: string }>
+    >(
+      `SELECT c.relname AS table_name, a.privilege_type,
+              a.grantee::regrole::text AS grantee
+         FROM pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         CROSS JOIN LATERAL aclexplode(c.relacl) AS a
+        WHERE n.nspname = 'public'
+          AND c.relkind IN ('r', 'p')
+          AND a.grantee IN (0::oid, current_user::regrole::oid)
+          AND a.privilege_type IN
+              ('SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE',
+               'REFERENCES', 'TRIGGER')`,
+    );
+    expect(publicTableGrants).toEqual([]);
+  });
+
+  it('carries the production uuid-form tenant policy catalog from the migrations (issue #429)', async () => {
+    // The policies come from the migration set only — this spec never
+    // authors one. The rebind migrations recreate the invoices policies
+    // with the uuid-form predicate; assert the deparsed SELECT half.
+    const policyRows = await adminSource.query<
+      Array<{
+        tablename: string;
+        policyname: string;
+        cmd: string;
+        qual: string | null;
+        with_check: string | null;
+      }>
+    >(
+      `SELECT tablename, policyname, cmd, qual, with_check
+         FROM pg_policies
+        WHERE schemaname = $1 AND tablename IN ('invoices', 'invoice_items')`,
+      [schema],
+    );
+
+    const invoiceSelect = policyRows.find(
+      (r) =>
+        r.tablename === 'invoices' &&
+        r.policyname === 'credit_note_invoices_tenant_select',
+    );
+    expect(invoiceSelect).toBeDefined();
+    expect(invoiceSelect?.cmd).toBe('SELECT');
+    expect(invoiceSelect?.qual).toContain(
+      "tenant_id = (current_setting('app.tenant_id'::text, true))::uuid",
+    );
+
+    const invoiceInsert = policyRows.find(
+      (r) =>
+        r.tablename === 'invoices' &&
+        r.policyname === 'credit_note_invoices_tenant_insert',
+    );
+    expect(invoiceInsert).toBeDefined();
+    expect(invoiceInsert?.with_check).toContain('::uuid');
+
+    const invoiceDelete = policyRows.find(
+      (r) =>
+        r.tablename === 'invoices' &&
+        r.policyname === 'credit_note_invoices_tenant_delete',
+    );
+    expect(invoiceDelete).toBeDefined();
+    expect(invoiceDelete?.qual).toContain('::uuid');
+
+    // invoices is FORCED row-level security (from the migrations), so even
+    // the owner would be subject to these policies.
+    const rlsFlags = await adminSource.query<
+      Array<{ relrowsecurity: boolean; relforcerowsecurity: boolean }>
+    >(
+      `SELECT relrowsecurity, relforcerowsecurity
+         FROM pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = $1 AND c.relname = 'invoices'`,
+      [schema],
+    );
+    expect(rlsFlags).toHaveLength(1);
+    expect(rlsFlags[0].relrowsecurity).toBe(true);
+    expect(rlsFlags[0].relforcerowsecurity).toBe(true);
+  });
+
   it('executes 90-day retention purge on real PostgreSQL while preserving invoices and recent records', async () => {
-    const runner = adminSource.createQueryRunner();
-    await runner.connect();
-    await runner.query(`SET search_path TO "${schema}", public`);
+    const seedRunner = adminSource.createQueryRunner();
+    await seedRunner.connect();
 
     const oldDate = new Date(Date.now() - 100 * 24 * 60 * 60 * 1000);
     const recentDate = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
@@ -386,24 +551,37 @@ describe('FulfillmentRetention (e2e - Real PostgreSQL, No Mocks)', () => {
     const oldFulfillmentId = `f-old-${randomUUID()}`;
     const recentFulfillmentId = `f-recent-${randomUUID()}`;
 
-    // Seed old & recent fulfillment records
-    await runner.query(
-      `INSERT INTO tenant_fulfillment_records (id, tenant_id, channel, route_state, delivery_state, created_at) VALUES 
+    // Seed old & recent fulfillment records (admin seeding; the app role
+    // must not own fixture provisioning).
+    await seedRunner.query(
+      `INSERT INTO tenant_fulfillment_records (id, tenant_id, channel, route_state, delivery_state, created_at) VALUES
        ($1, $2, 'PRINT_ONLY', 'PRINTED', 'PENDING', $3),
        ($4, $2, 'KDS_ONLY', 'ROUTED', 'PENDING', $5)`,
       [oldFulfillmentId, tenantAId, oldDate, recentFulfillmentId, recentDate],
     );
 
-    const oldInvoiceId = `inv-old-${randomUUID()}`;
-    await runner.query(
-      `INSERT INTO invoices (id, tenant_id, number, user_id, subtotal, total_tax, total, created_at) VALUES 
+    // The migrated invoices table: uuid id/tenant_id/user_id and the
+    // invoice_number column (DGI sequential number), NOT NULL totals.
+    const oldInvoiceId = randomUUID();
+    await seedRunner.query(
+      `INSERT INTO invoices (id, tenant_id, invoice_number, user_id, subtotal, total_tax, total, created_at) VALUES
        ($1, $2, 'FAC-00000001', $3, 100, 15, 115, $4)`,
       [oldInvoiceId, tenantAId, ownerAId, oldDate],
     );
 
-    await runner.release();
+    // A Tenant B row proves the purge is tenant-scoped at the database level
+    // under the app role: it must survive Tenant A's purge untouched.
+    const tenantBOldFulfillmentId = `f-old-b-${randomUUID()}`;
+    await seedRunner.query(
+      `INSERT INTO tenant_fulfillment_records (id, tenant_id, channel, route_state, delivery_state, created_at) VALUES
+       ($1, $2, 'PRINT_ONLY', 'PRINTED', 'PENDING', $3)`,
+      [tenantBOldFulfillmentId, tenantBId, oldDate],
+    );
 
-    // Trigger Purge via HTTP Endpoint
+    await seedRunner.release();
+
+    // Trigger Purge via HTTP Endpoint (runs as the restricted runtime role
+    // inside a transaction that binds Tenant A's RLS context)
     const purgeRes = await request(app.getHttpServer())
       .post('/api/fulfillment/retention/purge')
       .set('Authorization', `Bearer ${ownerAToken}`)
@@ -428,15 +606,70 @@ describe('FulfillmentRetention (e2e - Real PostgreSQL, No Mocks)', () => {
 
     expect(recentRes.body).toMatchObject({ id: recentFulfillmentId });
 
-    // Verify old invoice was strictly preserved in the database
-    const verifyRunner = adminSource.createQueryRunner();
-    await verifyRunner.connect();
-    await verifyRunner.query(`SET search_path TO "${schema}", public`);
-    const invCheck = (await verifyRunner.query(
+    // These verification reads run over the ADMINISTRATOR connection, which
+    // bypasses RLS entirely: they prove service-scoped purge behavior and
+    // data preservation only — Tenant B's old record survived Tenant A's
+    // purge, and the invoice rows were never touched (DGI preservation).
+    // They are NOT an RLS proof; the authoritative RLS evidence is the
+    // separate restricted-app positive/negative test below, which binds
+    // tenant contexts on the non-bypassing runtime-role connection.
+    const otherTenantCheck = await adminSource.query<Array<{ id: string }>>(
+      `SELECT id FROM tenant_fulfillment_records WHERE id = $1 AND tenant_id = $2`,
+      [tenantBOldFulfillmentId, tenantBId],
+    );
+    expect(otherTenantCheck).toHaveLength(1);
+
+    // Verify old invoice was strictly preserved in the database (DGI: no
+    // delete path may ever remove invoice rows)
+    const invCheck = await adminSource.query<Array<{ id: string }>>(
       `SELECT id FROM invoices WHERE id = $1 AND tenant_id = $2`,
       [oldInvoiceId, tenantAId],
-    )) as Array<{ id: string }>;
+    );
     expect(invCheck).toHaveLength(1);
-    await verifyRunner.release();
+  });
+
+  // Issue #429: the production RLS policies must — not the service-level
+  // predicates — hide Tenant A rows from the application connection. The
+  // same query with Tenant A's context bound must still return the row, so
+  // the denial below is attributable to the policy, not to missing data.
+  it('hides a Tenant A invoice row after Tenant B context is bound on the application connection (issue #429)', async () => {
+    const crossTenantInvoiceId = randomUUID();
+    const seedRunner = adminSource.createQueryRunner();
+    await seedRunner.connect();
+    await seedRunner.query(
+      `INSERT INTO invoices (id, tenant_id, invoice_number, user_id, subtotal, total_tax, total, created_at)
+       VALUES ($1, $2, 'FAC-00000429', $3, 10, 0, 10, now())`,
+      [crossTenantInvoiceId, tenantAId, ownerAId],
+    );
+    await seedRunner.release();
+
+    // Positive control: with Tenant A's own context bound, the row is
+    // visible through the restricted runtime-role connection.
+    const ownTenantRows = await appSource.transaction(
+      async (manager): Promise<Array<{ id: string }>> => {
+        await manager.query("SELECT set_config('app.tenant_id', $1, true)", [
+          tenantAId,
+        ]);
+        return manager.query(`SELECT id FROM invoices WHERE id = $1`, [
+          crossTenantInvoiceId,
+        ]);
+      },
+    );
+    expect(ownTenantRows).toHaveLength(1);
+
+    // Binding Tenant B's RLS context on the SAME connection shape hides the
+    // row: production policy enforcement, not a service predicate.
+    const visibleRows = await appSource.transaction(
+      async (manager): Promise<Array<{ id: string }>> => {
+        await manager.query("SELECT set_config('app.tenant_id', $1, true)", [
+          tenantBId,
+        ]);
+        return manager.query(`SELECT id FROM invoices WHERE id = $1`, [
+          crossTenantInvoiceId,
+        ]);
+      },
+    );
+
+    expect(visibleRows).toHaveLength(0);
   });
 });
