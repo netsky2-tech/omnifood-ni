@@ -197,21 +197,28 @@ Defects found by adversarial verification and corrected. The highest-severity on
 
 Reported separately rather than fixed here: `activation_pre_offline_runner.dart:335` rewrites an advanced row back to `ASSIGNED` when a re-run fails, which can strand an attempt whose controlled sale already succeeded; tracked as issue #450.
 
-### L1-05b — Assemble the activation session
+### L1-05b-session — Assemble the activation session
 
-Status: pending
-Depends on: L1-05a
+Status: complete pending work-unit commit.
 
-Split into two: the check replay the founder assigned to the reconnect runner, and the session wiring that assembles every phase for production.
+Split from the original L1-05b: the check replay went to the reconnect runner, and this slice assembles the phases.
 
-- [ ] FAIL CLOSED when the pinned verification product is absent from the local catalog, naming the product, instead of letting it surface a phase later as `REQUIRED_CONFIG_LOCAL`.
-- [ ] Build the runners for production with the dependencies `main.dart` does not have yet, chiefly a `PrinterPort` resolved from the stored printer profile and the required-config adapter.
-- [ ] Collect the authorized user PIN from the human, since it is stored nowhere and the pre-offline check requires it.
+- [x] FAIL CLOSED when the pinned verification product is absent from the local catalog, naming the product, instead of letting it surface a phase later as `REQUIRED_CONFIG_LOCAL`.
+- [x] Provide the production entry point that drives the three phases, delegating to the runners rather than reimplementing them.
+- [x] Accept the authorized user PIN from the caller, since it is stored nowhere and the pre-offline check requires it.
 
 Acceptance criteria:
 - One production entry point drives checks, the controlled sale and the reconnect without any step left to a test harness.
 - No dependency is satisfied by a value that only exists in a test.
 - A terminal without the pinned product fails closed before the checks, naming the product.
+
+Remains for L1-05c: the UI, which supplies the human identifiers and the tenant, and the `main.dart` wiring that resolves the `PrinterPort` from the stored printer profile.
+
+Evidence: implemented with strict TDD. RED observed: the test file failed to compile before the service existed. GREEN: 8 tests in the new file and 59 across the four existing activation suites, reproduced by the parent, with `flutter analyze` clean. The session takes the three runners and the discovery service by injection so a test can supply them with fake collaborators, sources `tenantId` and `attemptId` from the attempt resolved in `prepare`, passes the human identifiers through untouched, returns the runners' own result objects without summarising or fabricating anything, and refuses a phase called before a successful prepare with a named `ATTEMPT_NOT_PREPARED`. It deliberately does not reimplement the local status machine: a phase that runs out of order is refused by its own runner and that refusal is surfaced.
+
+The product guarantee refuses rather than fetches, on purpose: retrieving the catalog belongs to the sync engine, so the session guarantees-or-fails-closed and says which product is missing. A fresh terminal therefore needs its catalog before activation, which is the same prerequisite it has before it can sell anything.
+
+Deliberate difference from the harness, recorded so it is not mistaken for a defect later: the harness forced `customAmount: 1`, while the session leaves it unset, so the verification sale is priced from the product's own `sellPrice`, which the required-config check already guarantees is greater than zero. That generalises instead of hard-coding one cordoba.
 
 ### L1-05b-replay — Let the reconnect runner own the check replay
 
