@@ -10,6 +10,15 @@
 # baseline-change decision, the same rule the Admin Backend CI ratchet uses
 # (openspec/changes/restore-admin-backend-ci-baseline).
 #
+# STATE: empty, and that is the intended destination rather than a missing
+# file. It was seeded with 91 divergences when the ratchet landed in #406 and
+# emptied in order: #407 (30 annotations), #412 (the change_log actor), #408
+# (six enums), #410 (audit_logs.id), #409 (49 timestamps) and finally the
+# five abstract Number reflections, which are declared integer because the
+# schema already is and TypeORM already resolved them that way. The check
+# still fails on any NEW divergence, and a stale entry still fails, so the
+# ratchet is not inert now that the list is empty -- it is clamped.
+#
 # Format, one entry per line, blank lines and # comments ignored:
 #
 #   <table>.<column>|<declared>|<actual>
@@ -22,8 +31,3 @@
 #   abstract The declaration is TypeORM's reflection of a bare @Column()
 #            (Number or Date); deciding the real type is a separate,
 #            per-column design decision, so it is recorded, not normalized.
-audit_logs.sequence_no|Number|integer
-kardex_recalculate_queue.attempts|Number|integer
-recipe_versions.version_number|Number|integer
-sys_parametros_config.version|Number|integer
-users.security_version|Number|integer

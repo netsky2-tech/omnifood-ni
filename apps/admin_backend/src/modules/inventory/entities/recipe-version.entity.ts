@@ -68,7 +68,7 @@ export class RecipeVersion {
   @JoinColumn({ name: 'product_id' })
   product: Product;
 
-  @Column()
+  @Column({ type: 'integer' })
   version_number: number;
 
   @Column({ default: false })

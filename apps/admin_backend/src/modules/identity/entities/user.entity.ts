@@ -55,7 +55,7 @@ export class User {
   @Column({ select: false, nullable: true })
   hashed_refresh_token: string;
 
-  @Column({ default: 1, select: false })
+  @Column({ type: 'integer', default: 1, select: false })
   security_version: number;
 
   @Column({ type: 'uuid', nullable: true, select: false })

@@ -52,7 +52,7 @@ export class KardexRecalculateQueue {
   })
   status: KardexQueueStatus;
 
-  @Column({ default: 0 })
+  @Column({ type: 'integer', default: 0 })
   attempts: number;
 
   @Column({ name: 'claimed_at', type: 'timestamptz', nullable: true })

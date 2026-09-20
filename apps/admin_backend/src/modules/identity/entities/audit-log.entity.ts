@@ -49,7 +49,7 @@ export class AuditLog {
   @Column()
   device_id: string;
 
-  @Column()
+  @Column({ type: 'integer' })
   sequence_no: number;
 
   @Column()
