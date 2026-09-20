@@ -3,9 +3,49 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/models/customer/customer_entity.dart';
+import 'package:pos_app/data/models/local_config_entity.dart';
+import 'package:pos_app/data/models/loyalty/loyalty_program_entity.dart';
+import 'package:pos_app/data/models/loyalty/loyalty_reward_entity.dart';
+import 'package:pos_app/data/adapters/customer_identification_adapters.dart';
+import 'package:pos_app/domain/services/sales/customer_identification_service.dart';
+import 'package:pos_app/domain/services/sales/loyalty_evaluation_service.dart';
+import 'package:pos_app/domain/services/sales/loyalty_reward_interaction_service.dart';
+import 'package:pos_app/domain/services/sales/loyalty_service.dart';
+import 'package:pos_app/domain/services/sales/table_order_service.dart';
+import 'package:pos_app/domain/services/config/tenant_config_service.dart';
+import 'package:pos_app/domain/services/kitchen/kitchen_order_service.dart';
+import 'package:pos_app/domain/services/config/printer_config_service.dart';
+import 'package:pos_app/domain/models/inventory/product.dart';
+import 'package:pos_app/domain/models/user.dart';
+import 'package:pos_app/domain/repositories/sales/sales_repository.dart';
+import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
+import 'package:pos_app/domain/repositories/auth_repository.dart';
+import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../support/loyalty_release_harness.dart';
+
+// Port fakes for the B1 evaluation probe. Justification: SalesRepository,
+// InventoryRepository and AuthRepository are I/O ports for sale persistence,
+// catalog loading and session identity. They cannot affect tenant resolution
+// or the Loyalty calculation: the probe exercises only the production
+// evaluation path (real Floor DAOs + real Loyalty services on the migrated
+// database) with autoLoad disabled and never calls processSale. Same
+// established pattern as test/e2e/loyalty_v1_real_sqlite_e2e_test.dart.
+class _ProbeSalesRepository implements SalesRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _ProbeInventoryRepository implements InventoryRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _ProbeAuthRepository implements AuthRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -37,7 +77,7 @@ void main() {
   }
 
   group('Loyalty release harness — migrated file-backed SQLite baseline', () {
-    test('[CONTROL-sqlite-schema] migrations 10->53 build the Loyalty schema '
+    test('[CONTROL-sqlite-schema] migrations 10->54 build the Loyalty schema '
         'and it survives close/reopen', () async {
       final harness = await createHarness();
       try {
@@ -164,6 +204,172 @@ void main() {
               'by customer_code on the migrated database',
         );
         expect(loaded!.id, customerId);
+      } finally {
+        await disposeHarness(harness);
+      }
+    });
+  });
+
+  group('Loyalty release harness — B1 device-tenant evaluation baseline', () {
+    const rewardId = 'rw-spend-device-tenant';
+
+    test('[B1] production evaluation path finds the program seeded under the '
+        'device tenant, never under the customer id', () async {
+      final harness = await createHarness();
+      try {
+        final db = await harness.openMigratedDatabase();
+        final now = DateTime.now().millisecondsSinceEpoch;
+
+        // The device tenant MUST come from device configuration
+        // (`local_configs['tenant_id']`), never from the customer id and never
+        // from the session. T4 resolves tenant context from
+        // `TenantConfigService.getTenantConfig().tenantId`; seeding it here
+        // means [B1] turns green exactly when that production fix lands.
+        await db.localConfigDao.saveConfig(
+          LocalConfigEntity(
+            key: TenantConfigService.tenantIdKey,
+            value: deviceTenantId,
+            description: 'Device tenant for the release probe',
+          ),
+        );
+        expect(
+          (await TenantConfigService(db.localConfigDao).getTenantConfig())
+              .tenantId,
+          deviceTenantId,
+          reason: '[B1] the device tenant must be readable from local '
+              'configuration before the program lookup is asserted',
+        );
+
+        // Program/reward seeded through the real Loyalty DAOs under the REAL
+        // device tenant id, which is deliberately different from the customer
+        // id (arch §5: programs are tenant-scoped).
+        await db.loyaltyProgramDao.saveProgram(
+          LoyaltyProgramEntity(
+            id: programId,
+            tenantId: deviceTenantId,
+            name: 'Puntos Device Tenant',
+            programType: 'spendPoints',
+            status: 'ACTIVE',
+            earningRuleJson: '{"spendBlockNio": 10, "pointsPerBlock": 1}',
+            eligibilityRuleJson: '{"minimumTicketTotal": 0}',
+            configVersion: 1,
+            createdAt: now,
+            updatedAt: now,
+          ),
+        );
+        await db.loyaltyRewardDao.saveReward(
+          LoyaltyRewardEntity(
+            id: rewardId,
+            tenantId: deviceTenantId,
+            loyaltyProgramId: programId,
+            name: 'C\$20 Descuento',
+            rewardType: 'discountAmount',
+            costUnits: 50,
+            benefitConfigJson: '{"amountNio": 20.0}',
+            status: 'ACTIVE',
+            configVersion: 1,
+            presentationOrder: 1,
+            createdAt: now,
+            updatedAt: now,
+          ),
+        );
+
+        // Customer persisted through the real CustomerDao, identified by its
+        // customer_code (T2a-repaired column), with a distinct id.
+        await db.customerDao.saveCustomer(
+          CustomerEntity(
+            id: customerId,
+            name: 'Cliente B1 Device Tenant',
+            taxId: '001-150692-0004J',
+            phone: '88991122',
+            pointsBalance: 200.0,
+            isActive: true,
+            customerCode: customerCode,
+            createdAt: now,
+            updatedAt: now,
+          ),
+        );
+
+        const evaluationService = LoyaltyEvaluationService();
+        final viewModel = SaleViewModel.withLoyalty(
+          _ProbeSalesRepository(),
+          _ProbeInventoryRepository(),
+          _ProbeAuthRepository(),
+          db,
+          tableOrderService: TableOrderService(db),
+          autoLoad: false,
+          tenantConfigService: TenantConfigService(db.localConfigDao),
+          kitchenOrderService: KitchenOrderService(db),
+          printerConfigService: PrinterConfigService(db.localConfigDao),
+          identificationService: CustomerIdentificationService([
+            QrIdentificationAdapter(db.customerDao),
+            CustomerCodeIdentificationAdapter(db.customerDao),
+            PhoneIdentificationAdapter(db.customerDao),
+            SearchIdentificationAdapter(db.customerDao),
+          ]),
+          rewardInteractionService:
+              LoyaltyRewardInteractionService(evaluationService),
+          evaluationService: evaluationService,
+          loyaltyService: const LoyaltyService(),
+        );
+
+        // C\$350 ticket: 2x burger (150) + 1x fries (50).
+        viewModel.addToCart(
+          const Product(
+            id: 'prod-b1-burger',
+            name: 'Hamburguesa B1',
+            uom: 'UND',
+            stock: 100,
+            averageCost: 50,
+            sellPrice: 150,
+            category: 'Comida',
+          ),
+        );
+        viewModel.addToCart(
+          const Product(
+            id: 'prod-b1-fries',
+            name: 'Papas B1',
+            uom: 'UND',
+            stock: 100,
+            averageCost: 20,
+            sellPrice: 50,
+            category: 'Comida',
+          ),
+        );
+
+        // Production identification path: the customer is resolved by its
+        // customer_code, and selection triggers the real _reEvaluateLoyalty.
+        final identified = await viewModel.identifyCustomer(
+          'NHL1:$customerCode',
+        );
+        expect(identified, isNotNull);
+        expect(viewModel.selectedCustomer?.id, customerId);
+
+        // Correct behavior (arch §9.6): program lookup must be scoped to the
+        // DEVICE tenant, never to _selectedCustomer.id. RED today because
+        // sale_view_model.dart queries getActivePrograms(customer.id) and no
+        // program exists under the customer id.
+        final evaluation = viewModel.currentEvaluation;
+        expect(
+          evaluation,
+          isNotNull,
+          reason: '[B1] the device-tenant program must be evaluated',
+        );
+        final programEval = evaluation!.programs
+            .where((p) => p.programId == programId)
+            .toList();
+        expect(
+          programEval,
+          hasLength(1),
+          reason: '[B1] the program seeded under the device tenant must be '
+              'found and evaluated (not scoped by the customer id)',
+        );
+        expect(programEval.single.balanceUnits, 200);
+        expect(programEval.single.earningPreviewUnits, 35); // 350 / 10
+        expect(
+          programEval.single.eligibleRewards.map((r) => r.rewardId),
+          contains(rewardId),
+        );
       } finally {
         await disposeHarness(harness);
       }
