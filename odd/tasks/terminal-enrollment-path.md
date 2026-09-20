@@ -94,20 +94,30 @@ Spotted while verifying, deliberately left out of this slice: `--out-dir` as the
 
 ### L1-03 — Let the terminal show who it is
 
-Status: pending
+Status: in progress — independent verification found two defects; a bounded correction is running.
 
-- [ ] Add a read-only POS surface that displays the canonical terminal id so an operator can register it in the back office.
-- [ ] Do not add activation state, attempt creation, or credential logic to the POS in this slice.
+- [x] Add a read-only POS surface that displays the canonical terminal id so an operator can register it in the back office.
+- [x] Do not add activation state, attempt creation, or credential logic to the POS in this slice.
+- [ ] Replace the unverifiable provenance claim with the factual comparison the surface can actually know.
+- [ ] Add the missing view widget test that the sibling config screens already have.
 
 Acceptance criteria:
 - The displayed value is exactly the id the activation attempt must carry.
 - The surface is read-only and does not mutate configuration.
 
 Checks:
-- Focused widget test.
+- Focused view-model test, because the read-only guarantee and the origin mapping are logic, not layout.
 - `flutter analyze`.
 
-Evidence: pending.
+Evidence: implemented with strict TDD and then corrected after independent verification. RED observed: the test file failed to compile before the implementation existed. GREEN observed by the writer and reproduced by the parent: 9 of 9 tests pass and `flutter analyze` reports no issues. The parent also ran the pre-existing drawer test that the writer left unrun, 6 of 6 passing, closing the regression risk from the new drawer entry.
+
+The read-only invariant was verified adversarially rather than by name: `LocalConfigDao.getConfigByKey` is a pure Floor read and `PrinterConfigService.getPrinterConfig` issues only reads, so nothing reachable from this surface can write. That matters because `TerminalIdentityService.resolveDeviceId()` does persist a generated `pos-local-<uuid>`, and a display surface must not create state.
+
+Defects found by verification and being corrected. First, the surface asserted a provenance it cannot know: the origin was inferred from string equality, so an id differing only in letter case, a generated id that coincidentally equalled the compiled id, and an id inherited from an earlier tenant were all reported with a confident but false origin. The origin is not stored anywhere, so the correction replaces the claim with the factual comparison the surface can make, plus a warning to confirm the terminal before registering it. Second, the view widget had no test while both sibling config screens do.
+
+Measured risk that did NOT materialise: because the displayed value is read from the same key that `resolveDeviceId` returns, the operator is never shown an id that differs from the one the device presents, so the display cannot lead to registering the wrong terminal. Only the removed origin label was misleading.
+
+Recorded follow-up, deliberately not fixed here: `driverLabelFor` duplicates the four driver labels that also live in `hardware_settings_view.dart`, which is a cosmetic drift risk. Unifying them needs a shared label source on `PrinterDriverType` and would widen this slice into the hardware screen.
 
 ### L1-04 — Authorize and create the attempt from the owner dashboard
 
