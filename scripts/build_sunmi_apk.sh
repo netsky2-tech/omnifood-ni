@@ -67,6 +67,10 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --out-dir)
+            if [ "$#" -lt 2 ]; then
+                echo "Invalid --out-dir: missing required value." >&2
+                exit 1
+            fi
             OUT_DIR="$2"
             shift 2
             ;;

@@ -182,6 +182,31 @@ for INVALID_ID in "" "A B" "${LONG_ID}"; do
 done
 echo "✅ [Test 9 Passed] Empty, whitespace-containing and over-64-char device ids are rejected."
 
+# Test 10: --out-dir as the final argument (no value) is rejected cleanly
+# in the same style as --device-id, not via an unbound-variable crash.
+echo "🔍 [Test 10] Verifying --out-dir with a missing value is rejected cleanly..."
+OUTDIR_RC=0
+OUTDIR_OUTPUT="$(PATH="${SHIM_DIR}:${PATH}" "${SCRIPT_DIR}/build_sunmi_apk.sh" --plan --out-dir 2>&1)" || OUTDIR_RC=$?
+if [ "${OUTDIR_RC}" -eq 0 ]; then
+    echo "❌ FAILED: --out-dir as the final argument was accepted without a value" >&2
+    echo "${OUTDIR_OUTPUT}" >&2
+    rm -rf "${SHIM_DIR}"
+    exit 1
+fi
+if ! echo "${OUTDIR_OUTPUT}" | grep -q -- "--out-dir"; then
+    echo "❌ FAILED: missing-value --out-dir rejection must print a clear message naming --out-dir. Output:" >&2
+    echo "${OUTDIR_OUTPUT}" >&2
+    rm -rf "${SHIM_DIR}"
+    exit 1
+fi
+if echo "${OUTDIR_OUTPUT}" | grep -q "unbound variable"; then
+    echo "❌ FAILED: missing-value --out-dir crashed with an unbound-variable error instead of a clean rejection. Output:" >&2
+    echo "${OUTDIR_OUTPUT}" >&2
+    rm -rf "${SHIM_DIR}"
+    exit 1
+fi
+echo "✅ [Test 10 Passed] --out-dir with a missing value fails with a clear message and non-zero exit."
+
 rm -rf "${SHIM_DIR}"
 
 echo "=============================================================================="
