@@ -132,28 +132,44 @@ export async function createMigrationBuiltSchemaFixture(): Promise<MigrationBuil
 
   // Stale-run cleanup: earlier runs could leak their roles/schema when
   // provisioning failed partway. Underscores in the prefix are escaped so the
-  // pattern matches literally; backends are terminated first so DROP ROLE
-  // cannot fail on live sessions.
+  // pattern matches literally.
+  //
+  // It touches ONLY resources no live session is using. An earlier version
+  // terminated every backend whose role matched `migbuilt_%` and dropped every
+  // `migbuilt_%` schema, which is cluster-wide rather than run-scoped: jest runs the
+  // two fixtures that use this helper in parallel, so each one's cleanup tore down the
+  // other's connections mid-migration and the victim died with "terminating connection
+  // due to administrator command" (issue #433). Nothing needs terminating: a resource
+  // leaked by a dead run has no session, and one that still has a session belongs to a
+  // run that is still working. A leaked role therefore stays until its session ends,
+  // which is the correct trade for never disturbing a live fixture.
   const staleCleanup = async (): Promise<void> => {
     await admin.query(`
       DO $stale_cleanup$
       DECLARE
         stale record;
       BEGIN
-        PERFORM pg_terminate_backend(pid)
-          FROM pg_stat_activity
-         WHERE usename LIKE 'migbuilt\\_%' ESCAPE '\\'
-           AND pid <> pg_backend_pid();
         FOR stale IN
-          SELECT nspname AS name FROM pg_namespace
+          SELECT nspname AS name
+            FROM pg_namespace n
            WHERE nspname LIKE 'migbuilt\\_%' ESCAPE '\\'
+             AND NOT EXISTS (
+               SELECT 1 FROM pg_stat_activity a
+                WHERE a.usename LIKE 'migbuilt\\_%' ESCAPE '\\'
+                  AND a.usename LIKE '%' || substring(n.nspname from '[0-9a-f]{32}$')
+             )
         LOOP
           EXECUTE format('DROP SCHEMA IF EXISTS %I CASCADE', stale.name);
         END LOOP;
+
         FOR stale IN
-          SELECT rolname AS name FROM pg_roles
-           WHERE rolname LIKE 'migbuilt\\_%' ESCAPE '\\'
-             AND rolname <> current_user
+          SELECT r.rolname AS name
+            FROM pg_roles r
+           WHERE r.rolname LIKE 'migbuilt\\_%' ESCAPE '\\'
+             AND r.rolname <> current_user
+             AND NOT EXISTS (
+               SELECT 1 FROM pg_stat_activity a WHERE a.usename = r.rolname
+             )
         LOOP
           -- CONNECT on the shared database is a database-level dependency
           -- (pg_shdepend) that blocks DROP ROLE; revoke it first. Roles of
