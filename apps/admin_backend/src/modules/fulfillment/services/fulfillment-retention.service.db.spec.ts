@@ -1,4 +1,5 @@
-import { DataSource, QueryRunner } from 'typeorm';
+import { randomUUID } from 'crypto';
+import { DataSource } from 'typeorm';
 import { TenantFulfillmentRecord } from '../entities/tenant-fulfillment-record.entity';
 import { InventorySyncReceipt } from '../../inventory/entities/inventory-sync-receipt.entity';
 import { InventorySyncOutbox } from '../../inventory/entities/inventory-sync-outbox.entity';
@@ -10,392 +11,361 @@ import { Payment } from '../../sales/entities/payment.entity';
 import { InventoryMovement } from '../../inventory/entities/inventory-movement.entity';
 import { FulfillmentRetentionService } from './fulfillment-retention.service';
 import { InvoicesService } from '../../sales/services/invoices.service';
-import { BohInventoryLedgerFoundation1766000000000 } from '../../../migrations/1766000000000-BohInventoryLedgerFoundation';
-import { AddDeterministicSyncSequencing1780000000000 } from '../../../migrations/1780000000000-AddDeterministicSyncSequencing';
-import { AddSaleInventoryOutcomeColumns1803000000000 } from '../../../migrations/1803000000000-AddSaleInventoryOutcomeColumns';
-import { AddAcceptedAtToInventorySyncReceipts1805000000000 } from '../../../migrations/1805000000000-AddAcceptedAtToInventorySyncReceipts';
-import { CreateTenantFulfillmentRecords1795000000000 } from '../../../migrations/1795000000000-CreateTenantFulfillmentRecords';
 import { SyncBatchRecordDto } from '../../sales/dto/sync-batch.dto';
+import { createMigrationBuiltSchemaFixture } from '../../../../test/support/migration-built-schema.helper';
 
-const TEST_TIMEOUT_MS = 60000;
+/**
+ * ISSUE #418: the schema is built by RUNNING THE FULL MIGRATION SET (via
+ * test/support/migration-built-schema.helper.ts) instead of `synchronize: true`
+ * plus five hand-picked migration `up()` calls, and this file no longer
+ * hand-writes ANY RLS statement. The previous fixture created a fake `invoices`
+ * table (varchar ids, a `number`/`status` column pair the real schema does not
+ * have) and hand-wrote three text-form policies on it, so the spec asserted
+ * against a copy of reality: the real migrations rebind `tenant_id` columns to
+ * uuid (1809070000000/1809120000000), give `invoices` a uuid `invoice_number`/
+ * `user_id` shape with an FK to `tenants`, and own the policies — including the
+ * uuid-form predicate `tenant_id = current_setting('app.tenant_id', true)::uuid`.
+ *
+ * Consequences the conversion forces (all real-schema facts, not test choices):
+ * - Every tenant id is a uuid. The rebound `tenant_id` columns (fulfillment
+ *   records, receipts, outbox) and the `invoices` FK to `tenants` reject the
+ *   old varchar ids like 'tenant-1'.
+ * - The purge test's invoice seed uses the real columns and returns its
+ *   generated uuid id, which the preservation assertion then re-checks.
+ * - `inventory_kardex` now exists in the built schema, so the purge's kardex
+ *   exclusion path runs against a real (empty) table instead of a missing one.
+ * - A dedicated assertion reads `pg_policies` in the built schema: RLS is
+ *   genuinely exercised against the migrations' own output, not assumed.
+ *
+ * The behavioural assertions are unchanged in meaning: same sync/idempotency
+ * counts, same purge exclusions, same cross-tenant isolation expectations.
+ */
 
-async function withIsolatedSchema(
-  schemaName: string,
-  assertion: (context: {
-    dataSource: DataSource;
-    queryRunner: QueryRunner;
-    schema: string;
-  }) => Promise<void>,
-): Promise<void> {
-  const schema = `${schemaName}_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
-  const bootstrap = new DataSource({
-    type: 'postgres',
-    host: process.env.DB_HOST ?? '127.0.0.1',
-    port: parseInt(process.env.DB_PORT ?? '5432', 10),
-    username: process.env.DB_USERNAME ?? 'postgres',
-    password: process.env.DB_PASSWORD ?? 'postgres',
-    database: process.env.DB_NAME ?? 'omnifood',
-    synchronize: false,
-  });
+const postgresConnection = {
+  host: process.env.DB_HOST?.trim() ?? '127.0.0.1',
+  port: Number(process.env.DB_PORT?.trim() ?? 5432),
+  username: process.env.DB_USERNAME?.trim() ?? 'postgres',
+  password: process.env.DB_PASSWORD?.trim() ?? 'postgres',
+  database: process.env.DB_DATABASE?.trim() ?? 'omnifood',
+};
 
-  await bootstrap.initialize();
-  await bootstrap.query(`CREATE SCHEMA "${schema}"`);
+const entities = [
+  Tenant,
+  TenantFulfillmentRecord,
+  InventorySyncReceipt,
+  InventorySyncOutbox,
+  Invoice,
+  InvoiceItem,
+  InvoiceItemModifier,
+  Payment,
+  InventoryMovement,
+];
 
-  let dataSource: DataSource | null = null;
-  let queryRunner: QueryRunner | null = null;
+describe('FulfillmentRetentionService (db - Real PostgreSQL, Zero Mocks, migration-built schema)', () => {
+  jest.setTimeout(60000);
 
-  try {
+  let dataSource: DataSource;
+  let schema: string;
+  let fixture: Awaited<ReturnType<typeof createMigrationBuiltSchemaFixture>>;
+
+  // The real schema stores tenant ids as uuid (migrations 1809070000000 and
+  // 1809120000000), so every tenant fixture is a uuid. One distinct tenant per
+  // test keeps the per-tenant assertions exact inside the shared schema.
+  const tenantSyncId = randomUUID();
+  const tenantPurgeId = randomUUID();
+  const tenantAId = randomUUID();
+  const tenantBId = randomUUID();
+
+  beforeAll(async () => {
+    // The schema is the migrations' output, built as a restricted role; the
+    // helper provisions the scratch schema, uuid-ossp, and both roles, and
+    // measures its own setup cost (logged for the issue's measurement).
+    fixture = await createMigrationBuiltSchemaFixture();
+    schema = fixture.schema;
+    process.stdout.write(
+      `[timing] migration-built setup = ${fixture.setupDurationMs} ms (migrations alone: ${fixture.migrationDurationMs} ms)\n`,
+    );
+
+    // Admin (superuser) connection for seeding and for the services under
+    // test, mirroring the pre-conversion fixture: superuser bypasses RLS, so
+    // service-level tenant filtering is what the isolation assertions below
+    // exercise. search_path is pinned on the connection itself so every
+    // pooled connection resolves the entities' unqualified SQL.
     dataSource = new DataSource({
       type: 'postgres',
-      host: process.env.DB_HOST ?? '127.0.0.1',
-      port: parseInt(process.env.DB_PORT ?? '5432', 10),
-      username: process.env.DB_USERNAME ?? 'postgres',
-      password: process.env.DB_PASSWORD ?? 'postgres',
-      database: process.env.DB_NAME ?? 'omnifood',
-      synchronize: false,
+      ...postgresConnection,
       schema,
-      entities: [
-        Tenant,
-        TenantFulfillmentRecord,
-        InventorySyncReceipt,
-        InventorySyncOutbox,
-        Invoice,
-        InvoiceItem,
-        InvoiceItemModifier,
-        Payment,
-        InventoryMovement,
-      ],
+      entities,
+      extra: {
+        allowExitOnIdle: true,
+        options: `-c search_path=${schema},public -c statement_timeout=15000`,
+      },
     });
     await dataSource.initialize();
 
-    queryRunner = dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.query(`SET search_path TO "${schema}"`);
-    await queryRunner.query(`SET statement_timeout TO '15000ms'`);
-    await queryRunner.query(`
-      CREATE TABLE IF NOT EXISTS invoices (
-        id varchar(128) PRIMARY KEY,
-        tenant_id varchar(64) NOT NULL,
-        number varchar(64) NOT NULL DEFAULT '',
-        user_id varchar(64) NOT NULL DEFAULT '',
-        subtotal numeric(12, 4) NOT NULL DEFAULT 0,
-        total_tax numeric(12, 4) NOT NULL DEFAULT 0,
-        total numeric(12, 4) NOT NULL DEFAULT 0,
-        created_at timestamptz NOT NULL DEFAULT now(),
-        status varchar(32) NOT NULL DEFAULT 'COMPLETED',
-        is_canceled boolean NOT NULL DEFAULT false
-      );
-      CREATE TABLE IF NOT EXISTS invoice_items (
-        id varchar(128) PRIMARY KEY,
-        tenant_id varchar(64) NOT NULL,
-        invoice_id varchar(128) NOT NULL
-      );
-    `);
+    // The migration-built `invoices` table carries an FK to tenants(id), so
+    // every tenant id used below needs a real tenant row.
+    const tenantRepo = dataSource.getRepository(Tenant);
+    await tenantRepo.save(
+      [tenantSyncId, tenantPurgeId, tenantAId, tenantBId].map((id, index) =>
+        tenantRepo.create({
+          id,
+          name: `Retention Spec Tenant ${index}`,
+          ruc: `J031000000000${index}`,
+          is_active: true,
+        }),
+      ),
+    );
+  });
 
-    await assertion({ dataSource, queryRunner, schema });
-  } finally {
-    try {
-      if (queryRunner) {
-        await queryRunner.query('SET search_path TO public');
-        await queryRunner.release();
-      }
-    } catch {
-      // best-effort cleanup
-    }
-
+  afterAll(async () => {
+    // The helper's close() drops the schema and roles; the spec's own
+    // connections must be gone first, because sessions block DROP ROLE.
     if (dataSource?.isInitialized) {
       await dataSource.destroy();
     }
-
-    try {
-      if (bootstrap.isInitialized) {
-        await bootstrap.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
-        await bootstrap.destroy();
-      }
-    } catch {
-      // best-effort cleanup
+    if (fixture) {
+      await fixture.close();
     }
-  }
-}
+  });
 
-describe('FulfillmentRetentionService (db - Real PostgreSQL, Zero Mocks)', () => {
-  it(
-    'persists central fulfillment records on sync batch and idempotently handles replays',
-    async () => {
-      await withIsolatedSchema(
-        'fulfillment_sync_db',
-        async ({ dataSource, queryRunner }) => {
-          await new BohInventoryLedgerFoundation1766000000000().up(queryRunner);
-          await new AddDeterministicSyncSequencing1780000000000().up(
-            queryRunner,
-          );
-          await new AddSaleInventoryOutcomeColumns1803000000000().up(
-            queryRunner,
-          );
-          await new AddAcceptedAtToInventorySyncReceipts1805000000000().up(
-            queryRunner,
-          );
-          await new CreateTenantFulfillmentRecords1795000000000().up(
-            queryRunner,
-          );
+  it('persists central fulfillment records on sync batch and idempotently handles replays', async () => {
+    const fulfillmentRepo = dataSource.getRepository(TenantFulfillmentRecord);
 
-          const fulfillmentRepo = dataSource.getRepository(
-            TenantFulfillmentRecord,
-          );
-          const receiptRepo = dataSource.getRepository(InventorySyncReceipt);
-          const outboxRepo = dataSource.getRepository(InventorySyncOutbox);
+    const invoicesService = new InvoicesService(
+      dataSource,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      dataSource.getRepository(InventorySyncReceipt),
+      dataSource.getRepository(InventorySyncOutbox),
+      { findActiveVersion: jest.fn() } as never,
+      { explodeRecipe: jest.fn() } as never,
+    );
 
-          const invoicesService = new InvoicesService(
-            dataSource,
-            {} as never,
-            {} as never,
-            {} as never,
-            {} as never,
-            {} as never,
-            receiptRepo,
-            outboxRepo,
-            { findActiveVersion: jest.fn() } as never,
-            { explodeRecipe: jest.fn() } as never,
-          );
+    const recordDto: SyncBatchRecordDto = {
+      idempotencyKey: 'outbox:tenant-1:fulfillment-101',
+      sourceDeviceId: 'pos-1',
+      sourceSequence: 1,
+      flowType: 'fulfillment',
+      documentType: 'FULFILLMENT',
+      aggregateType: 'fulfillment',
+      aggregateId: 'fulfillment-sale-101',
+      eventId: 'event:fulfillment-sale-101',
+      topologyRevision: 1,
+      fulfillment: {
+        id: 'fulfillment-sale-101',
+        saleId: 'sale-101',
+        topologySnapshotId: 'snap-1',
+        topologyRevision: 1,
+        channel: 'KDS_AND_PRINT',
+        routeState: 'ROUTED',
+        deliveryState: 'PENDING',
+        lines: [{ id: 'line-1', action: 'PREPARE', station: 'COCINA' }],
+      },
+    };
 
-          const recordDto: SyncBatchRecordDto = {
-            idempotencyKey: 'outbox:tenant-1:fulfillment-101',
-            sourceDeviceId: 'pos-1',
-            sourceSequence: 1,
-            flowType: 'fulfillment',
-            documentType: 'FULFILLMENT',
-            aggregateType: 'fulfillment',
-            aggregateId: 'fulfillment-sale-101',
-            eventId: 'event:fulfillment-sale-101',
-            topologyRevision: 1,
-            fulfillment: {
-              id: 'fulfillment-sale-101',
-              saleId: 'sale-101',
-              topologySnapshotId: 'snap-1',
-              topologyRevision: 1,
-              channel: 'KDS_AND_PRINT',
-              routeState: 'ROUTED',
-              deliveryState: 'PENDING',
-              lines: [{ id: 'line-1', action: 'PREPARE', station: 'COCINA' }],
-            },
-          };
+    // 1. Initial Sync
+    const result1 = await invoicesService.syncBatch(tenantSyncId, [recordDto]);
+    expect(result1.processed).toBe(1);
+    expect(result1.duplicates).toBe(0);
 
-          // 1. Initial Sync
-          const result1 = await invoicesService.syncBatch('tenant-1', [
-            recordDto,
-          ]);
-          expect(result1.processed).toBe(1);
-          expect(result1.duplicates).toBe(0);
+    // Verify stored in PostgreSQL
+    const stored = await fulfillmentRepo.findOne({
+      where: { id: 'fulfillment-sale-101', tenant_id: tenantSyncId },
+    });
+    expect(stored).toBeDefined();
+    expect(stored?.channel).toBe('KDS_AND_PRINT');
+    expect(stored?.delivery_state).toBe('PENDING');
+    expect(stored?.route_state).toBe('ROUTED');
 
-          // Verify stored in PostgreSQL
-          const stored = await fulfillmentRepo.findOne({
-            where: { id: 'fulfillment-sale-101', tenant_id: 'tenant-1' },
-          });
-          expect(stored).toBeDefined();
-          expect(stored?.channel).toBe('KDS_AND_PRINT');
-          expect(stored?.delivery_state).toBe('PENDING');
-          expect(stored?.route_state).toBe('ROUTED');
+    // 2. Reconnect Replay: Idempotent duplicate acknowledgment, no duplicates created
+    const result2 = await invoicesService.syncBatch(tenantSyncId, [recordDto]);
+    expect(result2.duplicates).toBe(1);
+    expect(result2.processed).toBe(0);
 
-          // 2. Reconnect Replay: Idempotent duplicate acknowledgment, no duplicates created
-          const result2 = await invoicesService.syncBatch('tenant-1', [
-            recordDto,
-          ]);
-          expect(result2.duplicates).toBe(1);
-          expect(result2.processed).toBe(0);
+    const count = await fulfillmentRepo.count({
+      where: { id: 'fulfillment-sale-101', tenant_id: tenantSyncId },
+    });
+    expect(count).toBe(1);
+  }, 60000);
 
-          const count = await fulfillmentRepo.count({
-            where: { id: 'fulfillment-sale-101', tenant_id: 'tenant-1' },
-          });
-          expect(count).toBe(1);
-        },
-      );
-    },
-    TEST_TIMEOUT_MS,
-  );
+  it('purges fulfillment records and receipts older than cutoff, while STRICTLY EXCLUDING invoices and kardex movements', async () => {
+    const fulfillmentRepo = dataSource.getRepository(TenantFulfillmentRecord);
 
-  it(
-    'purges fulfillment records and receipts older than cutoff, while STRICTLY EXCLUDING invoices and kardex movements',
-    async () => {
-      await withIsolatedSchema(
-        'fulfillment_purge_db',
-        async ({ dataSource, queryRunner }) => {
-          // Build required schema tables
-          await new BohInventoryLedgerFoundation1766000000000().up(queryRunner);
-          await new AddDeterministicSyncSequencing1780000000000().up(
-            queryRunner,
-          );
-          await new AddSaleInventoryOutcomeColumns1803000000000().up(
-            queryRunner,
-          );
-          await new AddAcceptedAtToInventorySyncReceipts1805000000000().up(
-            queryRunner,
-          );
-          await new CreateTenantFulfillmentRecords1795000000000().up(
-            queryRunner,
-          );
+    const retentionService = new FulfillmentRetentionService(
+      dataSource,
+      fulfillmentRepo,
+    );
 
-          // Minimal invoice table for exclusion assertion
-          await queryRunner.query(`
-          CREATE TABLE IF NOT EXISTS invoices (
-            id varchar(128) PRIMARY KEY,
-            tenant_id varchar(64) NOT NULL,
-            number varchar(64) NOT NULL,
-            user_id varchar(64) NOT NULL,
-            subtotal numeric(12, 4) NOT NULL DEFAULT 0,
-            total_tax numeric(12, 4) NOT NULL DEFAULT 0,
-            total numeric(12, 4) NOT NULL DEFAULT 0,
-            created_at timestamptz NOT NULL DEFAULT now(),
-            status varchar(32) NOT NULL DEFAULT 'COMPLETED',
-            is_canceled boolean NOT NULL DEFAULT false
-          );
-          ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;
-          ALTER TABLE invoices FORCE ROW LEVEL SECURITY;
-          CREATE POLICY invoices_select ON invoices FOR SELECT USING (tenant_id = current_setting('app.tenant_id', true));
-          CREATE POLICY invoices_insert ON invoices FOR INSERT WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
-          CREATE POLICY invoices_delete ON invoices FOR DELETE USING (tenant_id = current_setting('app.tenant_id', true));
-        `);
+    const oldDate = new Date(Date.now() - 100 * 24 * 60 * 60 * 1000); // 100 days ago (> 90 days)
+    const recentDate = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000); // 10 days ago (< 90 days)
+    const cutoffDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000); // 90 days cutoff
 
-          const fulfillmentRepo = dataSource.getRepository(
-            TenantFulfillmentRecord,
-          );
+    // Seed old and recent fulfillment records
+    await dataSource.query(
+      `INSERT INTO tenant_fulfillment_records (id, tenant_id, channel, route_state, delivery_state, created_at) VALUES
+       ('f-old-1', $1, 'PRINT_ONLY', 'PRINTED', 'PENDING', $2),
+       ('f-recent-1', $1, 'KDS_ONLY', 'ROUTED', 'PENDING', $3)`,
+      [tenantPurgeId, oldDate, recentDate],
+    );
 
-          const retentionService = new FulfillmentRetentionService(
-            dataSource,
-            fulfillmentRepo,
-          );
+    // Seed old and recent receipts
+    await dataSource.query(
+      `INSERT INTO inventory_sync_receipts (tenant_id, idempotency_key, source_device_id, flow_type, source_sequence, payload_hash, result_status, result_code, created_at) VALUES
+       ($1, 'key-old-f', 'pos-1', 'fulfillment', 1, 'hash-1', 'ACCEPTED', 'APPLIED', $2),
+       ($1, 'key-recent-f', 'pos-1', 'fulfillment', 2, 'hash-2', 'ACCEPTED', 'APPLIED', $3),
+       ($1, 'key-old-inv', 'pos-1', 'inventory', 1, 'hash-3', 'ACCEPTED', 'APPLIED', $2)`,
+      [tenantPurgeId, oldDate, recentDate],
+    );
 
-          const oldDate = new Date(Date.now() - 100 * 24 * 60 * 60 * 1000); // 100 days ago (> 90 days)
-          const recentDate = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000); // 10 days ago (< 90 days)
-          const cutoffDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000); // 90 days cutoff
+    // Seed old invoice (MUST NOT BE PURGED). The real schema: uuid ids, an
+    // FK to tenants, invoice_number/user_id naming, no `status` column.
+    const insertedInvoice: Array<{ id: string }> = await dataSource.query(
+      `INSERT INTO invoices (tenant_id, invoice_number, user_id, subtotal, total_tax, total, created_at)
+       VALUES ($1, 'FAC-00000001', $2, 100, 15, 115, $3)
+       RETURNING id`,
+      [tenantPurgeId, randomUUID(), oldDate],
+    );
 
-          // Seed old and recent fulfillment records
-          await queryRunner.query(
-            `INSERT INTO tenant_fulfillment_records (id, tenant_id, channel, route_state, delivery_state, created_at) VALUES 
-           ('f-old-1', 'tenant-1', 'PRINT_ONLY', 'PRINTED', 'PENDING', $1),
-           ('f-recent-1', 'tenant-1', 'KDS_ONLY', 'ROUTED', 'PENDING', $2)`,
-            [oldDate, recentDate],
-          );
+    // Execute Purge for tenant
+    const purgeResult = await retentionService.purgeRetentionData(
+      tenantPurgeId,
+      cutoffDate,
+    );
 
-          // Seed old and recent receipts
-          await queryRunner.query(
-            `INSERT INTO inventory_sync_receipts (tenant_id, idempotency_key, source_device_id, flow_type, source_sequence, payload_hash, result_status, result_code, created_at) VALUES 
-           ('tenant-1', 'key-old-f', 'pos-1', 'fulfillment', '1', 'hash-1', 'ACCEPTED', 'APPLIED', $1),
-           ('tenant-1', 'key-recent-f', 'pos-1', 'fulfillment', '2', 'hash-2', 'ACCEPTED', 'APPLIED', $2),
-           ('tenant-1', 'key-old-inv', 'pos-1', 'inventory', '1', 'hash-3', 'ACCEPTED', 'APPLIED', $1)`,
-            [oldDate, recentDate],
-          );
+    expect(purgeResult.purgedFulfillments).toBe(1);
+    expect(purgeResult.purgedReceipts).toBe(0);
+    expect(purgeResult.excludedInvoices).toBe(1);
 
-          // Seed old invoice (MUST NOT BE PURGED)
-          await queryRunner.query(
-            `INSERT INTO invoices (id, tenant_id, number, user_id, subtotal, total_tax, total, created_at) VALUES
-           ('inv-old-1', 'tenant-1', 'FAC-00000001', 'user-1', 100, 15, 115, $1)`,
-            [oldDate],
-          );
+    // Verify old fulfillment record was deleted
+    const remainingFulfillments: Array<{ id: string }> = await dataSource.query(
+      `SELECT id FROM tenant_fulfillment_records WHERE tenant_id = $1`,
+      [tenantPurgeId],
+    );
+    expect(remainingFulfillments.map((r) => r.id)).toEqual(['f-recent-1']);
 
-          // Execute Purge for tenant-1
-          const purgeResult = await retentionService.purgeRetentionData(
-            'tenant-1',
-            cutoffDate,
-          );
+    // Verify receipts are append-only audit log and remain preserved
+    const remainingReceipts: Array<{
+      idempotency_key: string;
+      flow_type: string;
+    }> = await dataSource.query(
+      `SELECT idempotency_key, flow_type FROM inventory_sync_receipts WHERE tenant_id = $1 ORDER BY idempotency_key`,
+      [tenantPurgeId],
+    );
+    expect(remainingReceipts).toHaveLength(3);
 
-          expect(purgeResult.purgedFulfillments).toBe(1);
-          expect(purgeResult.purgedReceipts).toBe(0);
-          expect(purgeResult.excludedInvoices).toBe(1);
+    // Verify invoice was strictly preserved
+    const remainingInvoices: Array<{ id: string }> = await dataSource.query(
+      `SELECT id FROM invoices WHERE tenant_id = $1`,
+      [tenantPurgeId],
+    );
+    expect(remainingInvoices).toHaveLength(1);
+    expect(remainingInvoices[0]?.id).toBe(insertedInvoice[0].id);
+  }, 60000);
 
-          // Verify old fulfillment record was deleted
-          const remainingFulfillments: Array<{ id: string }> =
-            (await queryRunner.query(
-              `SELECT id FROM tenant_fulfillment_records WHERE tenant_id = 'tenant-1'`,
-            )) as Array<{ id: string }>;
-          expect(remainingFulfillments.map((r) => r.id)).toEqual([
-            'f-recent-1',
-          ]);
+  it('enforces multi-tenant RLS isolation during retention purge and queries', async () => {
+    const oldDate = new Date(Date.now() - 100 * 24 * 60 * 60 * 1000);
+    const cutoffDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
 
-          // Verify receipts are append-only audit log and remain preserved
-          const remainingReceipts: Array<{
-            idempotency_key: string;
-            flow_type: string;
-          }> = (await queryRunner.query(
-            `SELECT idempotency_key, flow_type FROM inventory_sync_receipts WHERE tenant_id = 'tenant-1' ORDER BY idempotency_key`,
-          )) as Array<{ idempotency_key: string; flow_type: string }>;
-          expect(remainingReceipts).toHaveLength(3);
+    // Insert records for Tenant A and Tenant B
+    await dataSource.query(
+      `INSERT INTO tenant_fulfillment_records (id, tenant_id, channel, route_state, delivery_state, created_at) VALUES
+       ('f-tenant-a', $1, 'PRINT_ONLY', 'PRINTED', 'PENDING', $3),
+       ('f-tenant-b', $2, 'KDS_ONLY', 'ROUTED', 'PENDING', $3)`,
+      [tenantAId, tenantBId, oldDate],
+    );
 
-          // Verify invoice was strictly preserved
-          const remainingInvoices: Array<{ id: string }> =
-            (await queryRunner.query(
-              `SELECT id FROM invoices WHERE tenant_id = 'tenant-1'`,
-            )) as Array<{ id: string }>;
-          expect(remainingInvoices).toHaveLength(1);
-          expect(remainingInvoices[0]?.id).toBe('inv-old-1');
-        },
-      );
-    },
-    TEST_TIMEOUT_MS,
-  );
+    const fulfillmentRepo = dataSource.getRepository(TenantFulfillmentRecord);
+    const retentionService = new FulfillmentRetentionService(
+      dataSource,
+      fulfillmentRepo,
+    );
 
-  it(
-    'enforces multi-tenant RLS isolation during retention purge and queries',
-    async () => {
-      await withIsolatedSchema(
-        'fulfillment_rls_db',
-        async ({ dataSource, queryRunner }) => {
-          await new BohInventoryLedgerFoundation1766000000000().up(queryRunner);
-          await new AddDeterministicSyncSequencing1780000000000().up(
-            queryRunner,
-          );
-          await new AddSaleInventoryOutcomeColumns1803000000000().up(
-            queryRunner,
-          );
-          await new AddAcceptedAtToInventorySyncReceipts1805000000000().up(
-            queryRunner,
-          );
-          await new CreateTenantFulfillmentRecords1795000000000().up(
-            queryRunner,
-          );
+    // Purge Tenant A
+    const purgeResA = await retentionService.purgeRetentionData(
+      tenantAId,
+      cutoffDate,
+    );
+    expect(purgeResA.purgedFulfillments).toBe(1);
 
-          const oldDate = new Date(Date.now() - 100 * 24 * 60 * 60 * 1000);
-          const cutoffDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    // Verify Tenant B's record was NOT touched
+    const recordB = await retentionService.findFulfillmentRecord(
+      tenantBId,
+      'f-tenant-b',
+    );
+    expect(recordB).toBeDefined();
+    expect(recordB?.id).toBe('f-tenant-b');
 
-          // Insert records for Tenant A and Tenant B
-          await queryRunner.query(
-            `INSERT INTO tenant_fulfillment_records (id, tenant_id, channel, route_state, delivery_state, created_at) VALUES 
-           ('f-tenant-a', 'tenant-A', 'PRINT_ONLY', 'PRINTED', 'PENDING', $1),
-           ('f-tenant-b', 'tenant-B', 'KDS_ONLY', 'ROUTED', 'PENDING', $1)`,
-            [oldDate],
-          );
+    // Verify Tenant A cannot read Tenant B's record
+    const recordBFromA = await retentionService.findFulfillmentRecord(
+      tenantAId,
+      'f-tenant-b',
+    );
+    expect(recordBFromA).toBeNull();
+  }, 60000);
 
-          const fulfillmentRepo = dataSource.getRepository(
-            TenantFulfillmentRecord,
-          );
-          const retentionService = new FulfillmentRetentionService(
-            dataSource,
-            fulfillmentRepo,
-          );
+  it('exercises the real RLS policy set: pg_policies holds rows in the migration-built schema for every table this spec touches', async () => {
+    // With synchronize:true this catalog query returned nothing for
+    // tenant_fulfillment_records/inventory_sync_receipts and the invoices
+    // policies only existed because this spec hand-wrote them. The migration
+    // set owns the policies now; assert they exist and that the tenant
+    // predicate is the real uuid-form one the rebind migrations installed.
+    const policyRows = await dataSource.query<
+      Array<{
+        tablename: string;
+        policyname: string;
+        cmd: string;
+        qual: string | null;
+        with_check: string | null;
+      }>
+    >(
+      `SELECT tablename, policyname, cmd, qual, with_check
+         FROM pg_policies
+        WHERE schemaname = $1
+          AND tablename IN ('tenant_fulfillment_records', 'inventory_sync_receipts', 'invoices')
+        ORDER BY tablename, policyname`,
+      [schema],
+    );
 
-          // Purge Tenant A
-          const purgeResA = await retentionService.purgeRetentionData(
-            'tenant-A',
-            cutoffDate,
-          );
-          expect(purgeResA.purgedFulfillments).toBe(1);
+    const namesFor = (table: string): string[] =>
+      policyRows.filter((r) => r.tablename === table).map((r) => r.policyname);
 
-          // Verify Tenant B's record was NOT touched
-          const recordB = await retentionService.findFulfillmentRecord(
-            'tenant-B',
-            'f-tenant-b',
-          );
-          expect(recordB).toBeDefined();
-          expect(recordB?.id).toBe('f-tenant-b');
+    // The rebind migration recreates the four lifecycle policies with the
+    // uuid-form predicate; assert the SELECT half's deparsed expression.
+    expect(namesFor('tenant_fulfillment_records')).toEqual(
+      expect.arrayContaining([
+        'tenant_fulfillment_records_tenant_select',
+        'tenant_fulfillment_records_tenant_insert',
+        'tenant_fulfillment_records_tenant_update',
+        'tenant_fulfillment_records_tenant_delete',
+      ]),
+    );
+    const fulfillmentSelect = policyRows.find(
+      (r) =>
+        r.tablename === 'tenant_fulfillment_records' &&
+        r.policyname === 'tenant_fulfillment_records_tenant_select',
+    );
+    expect(fulfillmentSelect?.qual).toContain(
+      "current_setting('app.tenant_id'::text, true))::uuid",
+    );
 
-          // Verify Tenant A cannot read Tenant B's record
-          const recordBFromA = await retentionService.findFulfillmentRecord(
-            'tenant-A',
-            'f-tenant-b',
-          );
-          expect(recordBFromA).toBeNull();
-        },
-      );
-    },
-    TEST_TIMEOUT_MS,
-  );
+    // Append-only sync ledger and the invoices table: at least one tenant-
+    // scoped SELECT policy each, from the migrations, not from this spec.
+    expect(namesFor('inventory_sync_receipts')).toContain(
+      'sync_ledger_inventory_sync_receipts_tenant_select',
+    );
+    expect(
+      namesFor('invoices').some((name) => name.includes('tenant_select')),
+    ).toBe(true);
+
+    // And the schema as a whole is policy-carrying, not just these tables.
+    const totals = await dataSource.query<Array<{ count: number }>>(
+      `SELECT count(*)::int AS count FROM pg_policies WHERE schemaname = $1`,
+      [schema],
+    );
+    expect(totals[0].count).toBeGreaterThan(0);
+  });
 });
