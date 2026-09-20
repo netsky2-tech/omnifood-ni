@@ -64,6 +64,12 @@ import { SyncBatchRecordDto } from '../../src/modules/sales/dto/sync-batch.dto';
  * as the restricted runtime role.
  */
 describe('FulfillmentRetention (e2e - Real PostgreSQL, migration-built schema, restricted runtime role)', () => {
+  // The fixture's beforeAll builds the whole schema by running the migration set, which
+  // does not fit jest's 5 s default hook timeout: on a loaded parallel run it exceeded it
+  // and the suite failed with "Exceeded timeout of 5000 ms for a hook" rather than a real
+  // assertion (issue #433). The sibling spec that uses the same helper already sets this.
+  jest.setTimeout(60000);
+
   let app: INestApplication<App>;
   let appSource: DataSource;
   let adminSource: DataSource;
