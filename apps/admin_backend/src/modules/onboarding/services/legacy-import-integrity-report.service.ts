@@ -3,9 +3,11 @@ import {
   BadRequestException,
   NotFoundException,
   Optional,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository, In } from 'typeorm';
+import { bindTenantContext } from '../../../core/database/tenant-transaction';
 import {
   ImportStaging,
   ImportStagingStatus,
@@ -36,6 +38,8 @@ function isKardexTotalRow(row: unknown): row is KardexTotalRow {
 
 @Injectable()
 export class LegacyImportIntegrityReportService {
+  private readonly logger = new Logger(LegacyImportIntegrityReportService.name);
+
   constructor(
     @InjectRepository(ImportStaging)
     private readonly stagingRepo: Repository<ImportStaging>,
@@ -50,6 +54,39 @@ export class LegacyImportIntegrityReportService {
     @InjectRepository(OnboardingSession)
     private readonly sessionRepo?: Repository<OnboardingSession>,
   ) {}
+
+  /**
+   * Sums the Kardex movements for one insumo.
+   *
+   * `inventory_kardex` carries FORCE ROW LEVEL SECURITY, so this read has to run on a
+   * connection with the tenant bound: unbound, the policy evaluates
+   * `current_setting('app.tenant_id', true)::uuid` on a blank value and the query either
+   * throws or silently returns nothing, depending on what the pooled connection last
+   * held. Read through the default connection, it did both at different times, and the
+   * caller's catch turned either outcome into a quietly wrong integrity report
+   * (issue #358).
+   */
+  private async kardexStockFor(
+    tenantId: string,
+    insumoId: string,
+  ): Promise<number> {
+    return this.dataSource.transaction(async (manager) => {
+      await bindTenantContext(manager, tenantId);
+      const rows: unknown = await manager.query(
+        `SELECT COALESCE(SUM(quantity), 0) as total FROM inventory_kardex WHERE tenant_id = $1 AND insumo_id = $2`,
+        [tenantId, insumoId],
+      );
+      if (
+        Array.isArray(rows) &&
+        rows.length > 0 &&
+        isKardexTotalRow(rows[0]) &&
+        rows[0].total
+      ) {
+        return Number(rows[0].total);
+      }
+      return 0;
+    });
+  }
 
   /**
    * Generates a forensic report scanning for any legacy imports that may have committed
@@ -116,21 +153,21 @@ export class LegacyImportIntegrityReportService {
           // Check if there are real movements in inventory_kardex
           let kardexStock = 0;
           try {
-            const kardexRows: unknown = await this.dataSource.query(
-              `SELECT COALESCE(SUM(quantity), 0) as total FROM inventory_kardex WHERE tenant_id = $1 AND insumo_id = $2`,
-              [trimmedTenant, matchedProduct.id],
+            kardexStock = await this.kardexStockFor(
+              trimmedTenant,
+              matchedProduct.id,
             );
-            if (
-              Array.isArray(kardexRows) &&
-              kardexRows.length > 0 &&
-              isKardexTotalRow(kardexRows[0]) &&
-              kardexRows[0].total
-            ) {
-              kardexStock = Number(kardexRows[0].total);
+            if (kardexStock > 0) {
               kardexEvidencePresent = true;
             }
-          } catch {
-            // If table doesn't have matching structure, kardexStock remains 0
+          } catch (error) {
+            // The column shape is the documented reason for tolerating a failure here.
+            // Log it instead of swallowing it: a silent catch turned an unbound read of
+            // a FORCE-RLS table into a quietly wrong integrity report (issue #358).
+            this.logger.warn(
+              `Kardex stock unavailable for insumo ${matchedProduct.id}: ` +
+                `${(error as Error).message}`,
+            );
           }
 
           const productStock = Number(matchedProduct.stock) || 0;
