@@ -197,28 +197,42 @@ Defects found by adversarial verification and corrected. The highest-severity on
 
 Reported separately rather than fixed here: `activation_pre_offline_runner.dart:335` rewrites an advanced row back to `ASSIGNED` when a re-run fails, which can strand an attempt whose controlled sale already succeeded; tracked as issue #450.
 
-### L1-05b — Assemble the activation session and decide the check replay
+### L1-05b — Assemble the activation session
 
 Status: pending
 Depends on: L1-05a
 
-- [ ] Build the three runners for production with the dependencies that do not exist in `main.dart` yet, chiefly a `PrinterPort` resolved from the stored printer profile and the required-config adapter.
-- [ ] Decide and implement where the pre-offline checks are replayed before finalization: today `ActivationReconnectSyncRunner` drains only the outbox created by the controlled sale, and the reference harness had to replay the persisted checks by hand with `sendCheck` before reconnecting. Leaving that manual step outside production would preserve a harness-only behaviour in the enrolment path.
-- [ ] Collect the authorized user PIN from the human, since it is not stored anywhere and the pre-offline check requires it.
+Split into two: the check replay the founder assigned to the reconnect runner, and the session wiring that assembles every phase for production.
+
+- [ ] FAIL CLOSED when the pinned verification product is absent from the local catalog, naming the product, instead of letting it surface a phase later as `REQUIRED_CONFIG_LOCAL`.
+- [ ] Build the runners for production with the dependencies `main.dart` does not have yet, chiefly a `PrinterPort` resolved from the stored printer profile and the required-config adapter.
+- [ ] Collect the authorized user PIN from the human, since it is stored nowhere and the pre-offline check requires it.
 
 Acceptance criteria:
 - One production entry point drives checks, the controlled sale and the reconnect without any step left to a test harness.
-- The check replay has a single owner, and it is covered by a test that would fail if a check never reached the backend.
 - No dependency is satisfied by a value that only exists in a test.
-- The pinned verification product exists in the terminal's LOCAL catalog before the controlled sale, or the flow fails closed before it and says which product is missing.
+- A terminal without the pinned product fails closed before the checks, naming the product.
 
-Prerequisite discovered by verification, and it is not satisfied today: the controlled-sale runner looks the pinned verification product up in the local `products` table and fails with `VERIFICATION_PRODUCT_NOT_FOUND` when it is absent, while the pre-offline required-config check fails earlier with `REQUIRED_CONFIG_LOCAL`. Nothing in the activation flow waits for, verifies or retrieves that product. A freshly provisioned terminal seeds nothing by design and receives products only through inbound sync after login, so a terminal that is online but has not yet received the pinned, tenant-owned, active, sellable product will block in the pre-offline phase and cannot recover from inside the activation flow. The session must therefore guarantee the product locally or fail closed naming it, and this also bounds what L1-06 can confirm at runtime.
+### L1-05b-replay — Let the reconnect runner own the check replay
+
+Status: complete pending work-unit commit.
+
+- [x] Replay the persisted pre-offline checks inside the reconnect runner before the outbox drain and before finalization.
+- [x] Mirror the reference harness's replay field for field, so the runner and the harness cannot diverge.
+- [x] Fail closed when a replay fails, without finalizing.
+
+Acceptance criteria:
+- The check replay has a single owner in production code, and the harness's manual step becomes redundant rather than load-bearing.
+- A failing replay prevents finalization and is reported.
+- Repeating the runner does not corrupt state.
 
 Checks:
-- Focused tests for the session wiring and the replay.
-- `flutter analyze`.
+- Focused tests for replay ordering, field fidelity, the failure path and repeat-safety.
+- The existing status-transition and outbox assertions still pass.
 
-Evidence: pending.
+Evidence: implemented with strict TDD and verified by the parent. RED observed: the four new tests failed against the unmodified runner because no checks were replayed and a failing replay still reported success. GREEN: 11 tests in the runner file, reproduced by the parent, and `flutter analyze` clean. The replay mirrors the reference harness field for field and skips no check status, and the writer confirmed from `activation.service.ts` that repeating `sendCheck` for the same check code is an accepted idempotent replay, which is why the harness can keep replaying harmlessly and why this change is safe to run more than once. A failed replay now returns before the outbox drain and before finalization, leaving the attempt in `SYNC_VERIFICATION_PENDING` with its envelopes pending so a later retry resumes. The harness is deliberately left untouched.
+
+Flakiness note, verified rather than assumed: a combined run of the service and activation-adapter suites reported one failure, a `loading [E]` on `local_auth_service_test.dart`. That file passes 6 of 6 in isolation and a repeated combined run passed 264 of 264, so it is the repository's already-documented local load flakiness from concurrent worktrees, not a regression from this change.
 
 ### L1-05c — Guide the operator through activation
 
