@@ -452,7 +452,7 @@ Founder decisions (2026-09-21):
 
 Tasks:
 
-- [ ] L1-10a — Backend: one human-authenticated read endpoint returning the same `InboundSyncResponseDto` envelope for the authenticated tenant, reusing the exported `InboundSyncService` (`apps/admin_backend/src/modules/sales/services/inbound-sync.service.ts:88-162`, exported by `SalesModule` and already imported by `OnboardingModule`), gated by `@RequirePermissions(ONBOARDING_ACTIVATION_MANAGE)`, with the read wrapped in the tenant-bound transaction helper (`apps/admin_backend/src/core/database/tenant-transaction.ts`). No POS change in this unit.
+- [x] L1-10a — Backend: one human-authenticated read endpoint returning the priming envelope for the authenticated tenant, reusing the exported `InboundSyncService`, gated by `@RequirePermissions(ONBOARDING_ACTIVATION_MANAGE)` with no OWNER hardcode, and scoped to catalog values, products and the fiscal snapshot.
 - [ ] L1-10b — POS: a priming service that fetches the envelope with the human-authenticated client and applies it through the existing projection code (`SyncService` product/catalog mapping and `FiscalInboxHandler.handleFiscalEnvelope`).
 - [ ] L1-10c — Wire priming into the activation entry point before `prepare()`, and prove `prepare()` plus `REQUIRED_CONFIG_LOCAL` succeed on a terminal primed only through this path.
 
@@ -471,7 +471,23 @@ Checks:
 - `git diff --check`.
 - The full physical confirmation remains L1-06; nothing here can be proven on the device in this session.
 
-Evidence: pending.
+Evidence for L1-10a — work-unit commit `631b043` on branch `feat/l1-10-terminal-priming`.
+
+Shipped surface: `GET /api/onboarding/terminals/priming`, guarded by `AuthGuard` + `PermissionsGuard` + `TenantInterceptor` and gated by `ONBOARDING_ACTIVATION_MANAGE` alone, with deliberately no `@Roles(OWNER)` because a business may delegate activation to an encargado who holds that permission through per-user custom permissions. `TerminalPrimingService` reuses `InboundSyncService` and maps to an explicit allowlist: catalog values, products and the fiscal snapshot. The user list is dropped on purpose, because the inbound envelope's user deltas carry `securityProfile.pinHash` and PIN material has no place on a human-authenticated catalog pull; the requested delta types are narrowed as the first layer and the response mapping as the second. No device credential, guard, scope or credential-service behavior was touched, and no activation attempt is required.
+
+**A real-database spec exposed a genuine defect in the first version of this work unit, and finding it changed the slice.** `TerminalPrimingService` opened `runInTenantTransaction` but ignored the bound `EntityManager` it received, calling `InboundSyncService` whose reads go through `@InjectRepository` global repositories. Those borrow a separate pooled connection per query, so the transaction-local `app.tenant_id` never reached them. Under FORCED RLS the catalog read either raised `invalid input syntax for type uuid: ""` or silently returned zero rows. The unit tests had passed because they mocked the inbound service; only the real-database spec could see it. RED was observed as 4 of 4 db tests failing with `QueryFailedError: invalid input syntax for type uuid: ""` at the catalog delta read, with three passing in-test controls isolating the cause to the binding placement rather than the schema, the role or the policies. GREEN: the same 4 of 4 pass after the fix, and no red-spec assertion was weakened.
+
+The fix is strictly additive: `InboundSyncService.getInboundDeltas` takes an optional trailing bound `EntityManager` and resolves each repository read through `manager.getRepository(Entity)` when one is supplied, falling back to the injected global repositories otherwise. The session-scoped `set_config` workaround in the mapping-version read now runs only on the unbound path, where it belongs. The device path is byte-for-byte unchanged: no guard, controller or default-path behavior was altered.
+
+Checks run: `npm run test:db -- --testPathPattern 'terminal-priming'` 4 of 4 passing after being 4 of 4 failing; `npx jest src/modules/onboarding --testPathPattern 'terminal-priming'` 41 suites and 399 tests passing; `npx jest src/modules/sales/services/inbound-sync` 25 tests passing; `npm run build` clean; `git diff --check` clean. The db spec asserts by row id that each of two tenants receives only its own products and catalog values even when names and codes collide across tenants, resolves the fiscal snapshot per tenant, and confirms the serialized payload never carries a users array or PIN material.
+
+Size exception, recorded rather than hidden: this work unit is 1522 changed lines, of which ~1240 are test code across three new specs and ~284 are production lines (62 controller, 138 service, 84 in the shared inbound service). The excess is test code, which is the condition the feature's recorded rule allows.
+
+Defect found and deliberately NOT fixed here, tracked as issue #470: the device path `/v1/sync/inbound/*` shares the same binding defect, because `SyncTransportGuard` binds on its own transaction which commits before the handler, and `InboundSyncService` then reads through global repositories. Changing that path affects production sync behavior and needs its own review, so only the priming path was corrected. **This matters for L1-06:** its checks exercise `/v1/sync/*`, so #470 may need to be resolved before L1-06 can demonstrate a complete credential-to-transport story.
+
+Constraint for L1-10b, recorded before the work starts because it is easy to get wrong: the POS persists `currentVersion` from an inbound envelope as `last_inbound_sync_version` (`apps/pos_app/lib/data/services/sync_service.dart:1898-1906`), and that key is the cursor for subsequent delta pulls. Priming deliberately requests a **subset** of delta types. If the priming path reuses that persistence, the cursor jumps forward and the later full device sync will skip users, recipes, insumos and every other type priming never delivered, producing a silently incomplete terminal. L1-10b must therefore either keep priming out of that cursor or store it under a separate key.
+
+Remaining tasks: L1-10b and L1-10c.
 
 ### Post-merge housekeeping — outside the L1 implementation scope
 
