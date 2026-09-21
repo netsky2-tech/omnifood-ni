@@ -93,6 +93,7 @@ import 'ui/features/identity/audit/audit_log_view.dart';
 import 'ui/features/identity/users/user_management_view_model.dart';
 import 'ui/features/identity/users/user_management_view.dart';
 import 'ui/features/config/activation/activation_session_view_model.dart';
+import 'ui/features/config/activation/activation_terminal_view.dart';
 import 'ui/features/auth/views/login_view.dart';
 import 'ui/features/auth/views/lock_screen_view.dart';
 import 'domain/services/sales/dgi_numbering_service.dart';
@@ -676,6 +677,7 @@ class MyApp extends StatelessWidget {
           '/config/profile': (context) => const BusinessProfileView(),
           '/config/hardware': (context) => const HardwareSettingsView(),
           '/config/terminal': (context) => const TerminalIdentityView(),
+          '/config/activation': (context) => const ActivationTerminalView(),
           '/identity/audit': (context) => const AuditLogView(),
         },
       ),

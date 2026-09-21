@@ -250,6 +250,14 @@ class _AppDrawerState extends State<AppDrawer> {
                       Navigator.pushNamed(context, '/config/terminal');
                     },
                   ),
+                  ListTile(
+                    leading: const Icon(Icons.app_registration),
+                    title: const Text('Activar Terminal'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.pushNamed(context, '/config/activation');
+                    },
+                  ),
                   if (_userCount > 0)
                     ListTile(
                       leading: const Icon(Icons.people),
