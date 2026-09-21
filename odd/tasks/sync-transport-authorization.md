@@ -73,11 +73,11 @@ The classification question is **who transmits, not who authored**. Inventory do
 
 ### ST-01 — Guard the two routes with no caller
 
-Status: pending
+Status: complete — work-unit commit `4747ba9` on branch `feat/sync-transport-authorization`. Not yet merged.
 
-- [ ] Apply `SyncTransportGuard` plus `@RequireSyncScopes('sync:push')` to `POST /inventory/movements/sync` and `POST /inventory/shrinkage`.
-- [ ] Bind the tenant and terminal from the device principal, never from a human user.
-- [ ] Add the registry entry declaring both routes as device transport.
+- [x] Apply `SyncTransportGuard` plus `@RequireSyncScopes('sync:push')` to `POST /inventory/movements/sync` and `POST /inventory/shrinkage`.
+- [x] Bind the tenant and terminal from the device principal, never from a human user.
+- [ ] Add the registry entry declaring both routes as device transport. **Deferred to ST-02**, which introduces the registry itself; both routes already carry their guards, and the registry will declare them there.
 
 Acceptance criteria:
 - Both routes answer 401 without a valid device token and are reachable with one.
@@ -87,7 +87,11 @@ Checks:
 - Focused controller specs asserting guard metadata and rejection without a device principal.
 - `npm run build`, `git diff --check`.
 
-Evidence: pending.
+Evidence: strictly TDD. RED observed as the new focused spec failing 6 of 11 on missing guard metadata, missing scope metadata, the human role gate and both fail-closed tenant cases; GREEN as 10 of 10 in the new spec and 285 tests across 37 inventory suites, reproduced by the parent. `npm run build` clean, `git diff --check` clean, `npm run lint` at the repository's exact known baseline of 0 errors and 388 warnings, with 46 unrelated files that the lint script rewrote reverted afterwards.
+
+Two details worth recording because they were deliberate. `movements/sync` binds the tenant fail-closed through a `requireTenant` helper mirroring `SyncBatchController`, so an unbound request cannot reach the service. `shrinkage` deliberately keeps its original signature and takes no tenant parameter, because `ShrinkageService` derives `tenant_id` from the affected rows inside its own transaction; adding a parameter would have changed a public contract for no gain. `DeviceSyncModule` had to be imported into `InventoryModule`, because `IdentityModule` does not re-export it and the guard's dependencies were otherwise unresolvable — that is also why the pre-existing `inventory.controller.spec.ts` needed a guard override, applied with no change to any existing assertion.
+
+Size: 285 changed lines, of which 34 are production (32 in the controller, 2 in the module) and the rest is test code, which satisfies the recorded rule for exceeding the advisory budget.
 
 ### ST-02 — Pin the transport contract with a registry test
 
@@ -176,7 +180,9 @@ Evidence: pending.
 ## Progress
 
 - Feature opened 2026-09-21 from the route-by-route inventory taken at `main` `8e489ab`, after the parent verified that guarding `count-sessions` alone would break a working POS flow.
+- ST-01 complete: the two write routes that had no caller are no longer open. Issue #445 stays open until ST-04 closes its third route.
+- Issue #473 filed for the cascade defect found during the inventory: one 401 suppresses every later sync domain, and the recipe domain runs before sales, so a pending recipe can suppress the device-authoritative sales batch.
 
 ## Next step
 
-Execute ST-01, then ST-02.
+Execute ST-02 (the transport registry test), then ST-03.
