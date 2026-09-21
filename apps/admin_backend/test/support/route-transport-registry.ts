@@ -88,7 +88,7 @@ function moduleClassOf(ref: unknown): Type | undefined {
   if (typeof ref === 'function') return ref as Type;
   if (ref && typeof ref === 'object' && 'module' in ref) {
     const module = (ref as DynamicModule).module;
-    if (typeof module === 'function') return module as Type;
+    if (typeof module === 'function') return module;
   }
   return undefined;
 }
@@ -112,12 +112,10 @@ function collectControllers(
 
   // Walk both the static imports recorded on the module class and any
   // runtime imports carried by a DynamicModule object (e.g. forRoot()).
-  const imports = (Reflect.getMetadata(
-    MODULE_METADATA_IMPORTS,
-    moduleClass,
-  ) ?? []) as unknown[];
+  const imports = (Reflect.getMetadata(MODULE_METADATA_IMPORTS, moduleClass) ??
+    []) as unknown[];
   if (ref && typeof ref === 'object') {
-    imports.push(...(((ref as DynamicModule).imports ?? []) as unknown[]));
+    imports.push(...((ref.imports ?? []) as unknown[]));
   }
   for (const imported of imports) {
     collectControllers(imported as ModuleRef, visited, found);
@@ -127,9 +125,16 @@ function collectControllers(
 function guardNames(metadata: unknown): string[] {
   if (!Array.isArray(metadata)) return [];
   return metadata
-    .map((guard) => {
+    .map((guard: unknown) => {
       if (typeof guard === 'function') return (guard as Type).name;
-      if (guard && typeof guard === 'object') return guard.constructor?.name;
+      if (guard !== null && typeof guard === 'object') {
+        // Guards may be registered as instances rather than classes; read the
+        // constructor off a narrowed shape so the access stays type-safe.
+        const constructor = (guard as { constructor?: unknown }).constructor;
+        if (typeof constructor === 'function') {
+          return (constructor as Type).name;
+        }
+      }
       return undefined;
     })
     .filter((name): name is string => typeof name === 'string');
@@ -143,13 +148,18 @@ function joinRoute(controllerPath: string, handlerPath: string): string {
 }
 
 function declaredRoutes(controller: Type): RouteRecord[] {
-  const watermark = Reflect.getMetadata(CONTROLLER_WATERMARK, controller);
+  const watermark = Reflect.getMetadata(
+    CONTROLLER_WATERMARK,
+    controller,
+  ) as unknown;
   if (watermark !== true) return [];
 
   const controllerPath =
     (Reflect.getMetadata(PATH_METADATA, controller) as string | undefined) ??
     '';
-  const classGuards = guardNames(Reflect.getMetadata(GUARDS_METADATA, controller));
+  const classGuards = guardNames(
+    Reflect.getMetadata(GUARDS_METADATA, controller) as unknown,
+  );
 
   const records: RouteRecord[] = [];
   let proto = controller.prototype as object | null;
@@ -157,10 +167,9 @@ function declaredRoutes(controller: Type): RouteRecord[] {
     for (const key of Object.getOwnPropertyNames(proto)) {
       const handler = (proto as Record<string, unknown>)[key];
       if (typeof handler !== 'function') continue;
-      const methodValue = Reflect.getMetadata(
-        METHOD_METADATA,
-        handler,
-      ) as number | undefined;
+      const methodValue = Reflect.getMetadata(METHOD_METADATA, handler) as
+        | number
+        | undefined;
       if (methodValue === undefined) continue;
       const handlerPath =
         (Reflect.getMetadata(PATH_METADATA, handler) as string | undefined) ??
@@ -168,19 +177,21 @@ function declaredRoutes(controller: Type): RouteRecord[] {
       const guards = [
         ...new Set([
           ...classGuards,
-          ...guardNames(Reflect.getMetadata(GUARDS_METADATA, handler)),
+          ...guardNames(
+            Reflect.getMetadata(GUARDS_METADATA, handler) as unknown,
+          ),
         ]),
       ];
       records.push({
         controller: controller.name,
         controllerPath,
-        httpMethod: RequestMethod[methodValue as RequestMethod] ?? `METHOD_${methodValue}`,
+        httpMethod: RequestMethod[methodValue] ?? `METHOD_${methodValue}`,
         handlerPath,
         route: joinRoute(controllerPath, handlerPath),
         guards,
       });
     }
-    proto = Object.getPrototypeOf(proto);
+    proto = Object.getPrototypeOf(proto) as object | null;
   }
   return records;
 }
@@ -200,7 +211,8 @@ export function enumerateAppRoutes(rootModule: ModuleRef): RouteRecord[] {
   }
   return routes.sort(
     (a, b) =>
-      a.route.localeCompare(b.route) || a.httpMethod.localeCompare(b.httpMethod),
+      a.route.localeCompare(b.route) ||
+      a.httpMethod.localeCompare(b.httpMethod),
   );
 }
 
@@ -213,7 +225,8 @@ function effectiveTransport(
     reason: declaration.reason,
   };
   for (const override of declaration.overrides ?? []) {
-    if (override.httpMethod && override.httpMethod !== route.httpMethod) continue;
+    if (override.httpMethod && override.httpMethod !== route.httpMethod)
+      continue;
     if (
       override.handlerPath !== undefined &&
       override.handlerPath !== route.handlerPath
@@ -225,10 +238,7 @@ function effectiveTransport(
   return effective;
 }
 
-function finding(
-  route: RouteRecord,
-  violation: string,
-): RegistryFinding {
+function finding(route: RouteRecord, violation: string): RegistryFinding {
   return {
     route: `${route.httpMethod} ${route.route}`,
     controller: route.controller,
@@ -266,10 +276,7 @@ export function verifyRouteTransportRegistry(
     if (transport === 'device') {
       if (!route.guards.includes(DEVICE_GUARD)) {
         findings.push(
-          finding(
-            route,
-            `declared device but does not carry ${DEVICE_GUARD}`,
-          ),
+          finding(route, `declared device but does not carry ${DEVICE_GUARD}`),
         );
       }
       const humanGuards = route.guards.filter((guard) =>
@@ -311,10 +318,7 @@ export function verifyRouteTransportRegistry(
       }
       if (!reason) {
         findings.push(
-          finding(
-            route,
-            'declared public without a recorded reason',
-          ),
+          finding(route, 'declared public without a recorded reason'),
         );
       }
     }

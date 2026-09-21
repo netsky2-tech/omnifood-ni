@@ -50,10 +50,7 @@ export class InvoicesController {
     @GetTenantId() tenantId: string | undefined,
     @Body() dtos: SyncInvoiceDto[],
   ) {
-    await this.invoicesService.syncInvoices(
-      this.requireTenant(tenantId),
-      dtos,
-    );
+    await this.invoicesService.syncInvoices(this.requireTenant(tenantId), dtos);
     return { status: 'success', synced: dtos.length };
   }
 

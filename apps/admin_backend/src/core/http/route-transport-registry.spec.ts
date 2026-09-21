@@ -32,25 +32,31 @@ describe('route transport registry (AppModule route table)', () => {
 
   it('sees device sync transport where SyncTransportGuard is declared', () => {
     const batch = routes.find(
-      (record) => record.route === '/v1/sync/batch' && record.httpMethod === 'POST',
+      (record) =>
+        record.route === '/v1/sync/batch' && record.httpMethod === 'POST',
     );
     expect(batch?.controller).toBe('SyncBatchController');
     expect(batch?.guards).toContain('SyncTransportGuard');
 
     const movementsSync = routes.find(
       (record) =>
-        record.route === '/inventory/movements/sync' && record.httpMethod === 'POST',
+        record.route === '/inventory/movements/sync' &&
+        record.httpMethod === 'POST',
     );
     expect(movementsSync?.guards).toContain('SyncTransportGuard');
 
     const shrinkage = routes.find(
-      (record) => record.route === '/inventory/shrinkage' && record.httpMethod === 'POST',
+      (record) =>
+        record.route === '/inventory/shrinkage' && record.httpMethod === 'POST',
     );
     expect(shrinkage?.guards).toContain('SyncTransportGuard');
   });
 
   it('classifies every route and matches declared transports to the guards actually present', () => {
-    const findings = verifyRouteTransportRegistry(routes, TRANSPORT_DECLARATIONS);
+    const findings = verifyRouteTransportRegistry(
+      routes,
+      TRANSPORT_DECLARATIONS,
+    );
     expect(findings).toEqual([]);
   });
 });
@@ -175,26 +181,30 @@ describe('route transport registry (verification rules)', () => {
       route: '/fixture/read',
       guards: ['AuthGuard', 'RolesGuard'],
     });
-    const findings = verifyRouteTransportRegistry([write, read], [
-      {
-        controller: 'FixtureController',
-        transport: 'human',
-        overrides: [
-          {
-            httpMethod: 'POST',
-            handlerPath: 'write',
-            transport: 'device',
-          },
-        ],
-      },
-    ]);
+    const findings = verifyRouteTransportRegistry(
+      [write, read],
+      [
+        {
+          controller: 'FixtureController',
+          transport: 'human',
+          overrides: [
+            {
+              httpMethod: 'POST',
+              handlerPath: 'write',
+              transport: 'device',
+            },
+          ],
+        },
+      ],
+    );
     expect(findings).toEqual([]);
   });
 
   it('fails a stale declaration for a controller that no longer exists', () => {
-    const findings = verifyRouteTransportRegistry([], [
-      { controller: 'RemovedController', transport: 'human' },
-    ]);
+    const findings = verifyRouteTransportRegistry(
+      [],
+      [{ controller: 'RemovedController', transport: 'human' }],
+    );
     expect(findings).toEqual([
       {
         route: expect.any(String),
