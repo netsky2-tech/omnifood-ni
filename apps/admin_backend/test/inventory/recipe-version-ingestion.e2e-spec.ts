@@ -1,4 +1,9 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import {
+  ExecutionContext,
+  INestApplication,
+  UnauthorizedException,
+  ValidationPipe,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -54,16 +59,59 @@ const validRecipeVersionPayload = {
 
 const INVENTORY_API_PREFIX = '/api/inventory';
 
+// Device transport fixture (ST-03, issue #478): POST /inventory/recipes/versions
+// is now guarded by SyncTransportGuard. This fixture keeps the suite's route
+// behavior coverage while mirroring the real guard's contract: fail-closed on
+// a missing or non-device bearer, and when it accepts, it attaches the device
+// principal exactly like the real guard does, carrying the tenant. Token
+// convention: device-sync-route-test-token[:<tenantId>]. Cryptographic token
+// validation is proven in
+// src/modules/inventory/inventory-movement.controller.spec.ts.
+const DEVICE_SYNC_BEARER_TOKEN_PREFIX = 'device-sync-route-test-token';
+
+interface RequestWithDevicePrincipalFixture {
+  headers?: Record<string, unknown>;
+  devicePrincipal?: Record<string, unknown>;
+}
+
+const deviceTransportGuardOverride = {
+  canActivate: (context: ExecutionContext): boolean => {
+    const request = context
+      .switchToHttp()
+      .getRequest<RequestWithDevicePrincipalFixture>();
+    const header = request.headers?.authorization;
+    const bearer =
+      typeof header === 'string' && header.startsWith('Bearer ')
+        ? header.slice('Bearer '.length)
+        : undefined;
+    if (!bearer?.startsWith(DEVICE_SYNC_BEARER_TOKEN_PREFIX)) {
+      throw new UnauthorizedException(
+        'Missing or invalid device authorization header',
+      );
+    }
+    const tenantId =
+      bearer.slice(DEVICE_SYNC_BEARER_TOKEN_PREFIX.length + 1) || 'tenant-A';
+    request.devicePrincipal = {
+      principalType: 'DEVICE_SYNC',
+      credentialId: 'device-credential-1',
+      tenantId,
+      deviceId: 'terminal-A',
+      scopes: ['sync:push'],
+      credentialVersion: 1,
+    };
+    return true;
+  },
+};
+
+const deviceAuth = (tenantId?: string): string =>
+  `Bearer ${DEVICE_SYNC_BEARER_TOKEN_PREFIX}${tenantId ? `:${tenantId}` : ''}`;
+
 type RecipeIngestionHandler = (
   input: IngestPosVersionInput,
 ) => Promise<IngestPosVersionResult>;
 
 interface RecipeServiceMock {
   ingestPosVersion: jest.MockedFunction<RecipeIngestionHandler>;
-}
-
-interface UnauthorizedResponseBody {
-  message: string;
 }
 
 interface RecipeVersionIngestionResponseBody {
@@ -196,14 +244,15 @@ describe('Recipe version ingestion route (integration)', () => {
         JwtService,
         createIdentityJwtTestConfigProvider(),
         createIdentityJwtConfigProvider(),
-      ]
+      ],
     })
-      // The device transport guard is declared per-route on movements/sync and
-      // shrinkage; this suite verifies route behavior, so the guard's token
-      // validation is overridden while the dedicated spec in
-      // inventory-movement.controller.spec.ts proves the guard for real.
+      // Device transport routes (movements/sync, shrinkage, recipes/versions)
+      // declare SyncTransportGuard per-route; this suite verifies route
+      // behavior, so the guard is replaced by the fail-closed device fixture
+      // above while the dedicated spec in
+      // inventory-movement.controller.spec.ts proves the real guard for real.
       .overrideGuard(SyncTransportGuard)
-      .useValue({ canActivate: () => true })
+      .useValue(deviceTransportGuardOverride)
       .compile();
 
     app = moduleFixture.createNestApplication();
@@ -254,23 +303,24 @@ describe('Recipe version ingestion route (integration)', () => {
     expect(recipeService.ingestPosVersion).not.toHaveBeenCalled();
   });
 
-  it('returns 401 when the authenticated token lacks tenant context', async () => {
-    const token = signToken({ tenant_id: undefined });
+  it('returns 401 when a human bearer reaches the device transport route', async () => {
+    // Re-pointed (ST-03, issue #478): the former case asserted a human token
+    // lacking tenant context, which tested the retired human transport's
+    // tenant source. On device transport the tenant comes from the device
+    // principal the guard validated, and a human session bearer is not an
+    // accepted transport at all, so a manager JWT must fail closed.
+    const token = signToken();
 
-    const response = await request(app.getHttpServer())
+    await request(app.getHttpServer())
       .post(`${INVENTORY_API_PREFIX}/recipes/versions`)
       .set('Authorization', `Bearer ${token}`)
       .send(validRecipeVersionPayload)
       .expect(401);
 
-    const body = response.body as UnauthorizedResponseBody;
-    expect(body.message).toBe('Unauthorized');
-
     expect(recipeService.ingestPosVersion).not.toHaveBeenCalled();
   });
 
   it('returns 400 for an invalid request body before hitting the service', async () => {
-    const token = signToken();
     const invalidPayload = {
       ...validRecipeVersionPayload,
       components: [],
@@ -278,19 +328,17 @@ describe('Recipe version ingestion route (integration)', () => {
 
     await request(app.getHttpServer())
       .post(`${INVENTORY_API_PREFIX}/recipes/versions`)
-      .set('Authorization', `Bearer ${token}`)
+      .set('Authorization', deviceAuth())
       .send(invalidPayload)
       .expect(400);
 
     expect(recipeService.ingestPosVersion).not.toHaveBeenCalled();
   });
 
-  it('extracts tenant_id from the auth token and delegates the validated body', async () => {
-    const token = signToken({ tenant_id: 'tenant-XYZ' });
-
+  it('extracts tenant_id from the device principal and delegates the validated body', async () => {
     const response = await request(app.getHttpServer())
       .post(`${INVENTORY_API_PREFIX}/recipes/versions`)
-      .set('Authorization', `Bearer ${token}`)
+      .set('Authorization', deviceAuth('tenant-XYZ'))
       .send(validRecipeVersionPayload)
       .expect(201);
 
@@ -311,17 +359,16 @@ describe('Recipe version ingestion route (integration)', () => {
 
   it('treats reposting the same document as an idempotent replacement at the HTTP layer', async () => {
     const tenantId = 'tenant-idempotent';
-    const token = signToken({ tenant_id: tenantId });
 
     const firstResponse = await request(app.getHttpServer())
       .post(`${INVENTORY_API_PREFIX}/recipes/versions`)
-      .set('Authorization', `Bearer ${token}`)
+      .set('Authorization', deviceAuth(tenantId))
       .send(validRecipeVersionPayload)
       .expect(201);
 
     const secondResponse = await request(app.getHttpServer())
       .post(`${INVENTORY_API_PREFIX}/recipes/versions`)
-      .set('Authorization', `Bearer ${token}`)
+      .set('Authorization', deviceAuth(tenantId))
       .send(validRecipeVersionPayload)
       .expect(201);
 

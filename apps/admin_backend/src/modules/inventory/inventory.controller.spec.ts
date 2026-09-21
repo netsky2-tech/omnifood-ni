@@ -4,6 +4,7 @@ import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ROLES_KEY } from '../../core/decorators/roles.decorator';
+import { SYNC_SCOPES_KEY } from '../identity/decorators/sync-scopes.decorator';
 import { UserRole } from '../identity/entities/user.entity';
 import { AuthGuard } from '../identity/guards/auth.guard';
 import { SyncTransportGuard } from '../identity/guards/sync-transport.guard';
@@ -165,12 +166,7 @@ describe('InventoryController', () => {
   });
 
   const expectRouteToRequireInventoryWriterRole = (
-    handlerName:
-      | 'previewPurchase'
-      | 'recordPurchase'
-      | 'correctPurchase'
-      | 'ingestRecipeVersion'
-      | 'getBcnFxRate',
+    handlerName: 'previewPurchase' | 'correctPurchase' | 'getBcnFxRate',
     requiresAuthoritativeGuard = false,
   ): void => {
     const descriptor = Object.getOwnPropertyDescriptor(
@@ -191,12 +187,47 @@ describe('InventoryController', () => {
     ]);
   };
 
+  // ST-03 (issue #478): the inventory document writes are transmitted by the
+  // POS background sync pass, so their contract is the device transport: the
+  // SyncTransportGuard with the sync:push scope and no human session guards
+  // or role gate. Actor authorization is a declared DSI-6/OHAC dependency.
+  const expectRouteToUseDeviceTransport = (
+    handlerName:
+      | 'recordPurchase'
+      | 'ingestRecipeVersion'
+      | 'closeProductionOrder',
+  ): void => {
+    const descriptor = Object.getOwnPropertyDescriptor(
+      InventoryMovementController.prototype,
+      handlerName,
+    ) as TypedPropertyDescriptor<(...args: never[]) => unknown> | undefined;
+    const handler = descriptor?.value;
+
+    expect(handler).toBeDefined();
+    expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toEqual([
+      SyncTransportGuard,
+    ]);
+    expect(Reflect.getMetadata(SYNC_SCOPES_KEY, handler)).toEqual([
+      'sync:push',
+    ]);
+    expect(Reflect.getMetadata(ROLES_KEY, handler)).toBeUndefined();
+    expect(Reflect.getMetadata(GUARDS_METADATA, handler)).not.toContain(
+      AuthGuard,
+    );
+    expect(Reflect.getMetadata(GUARDS_METADATA, handler)).not.toContain(
+      AuthoritativeCurrentUserGuard,
+    );
+    expect(Reflect.getMetadata(GUARDS_METADATA, handler)).not.toContain(
+      RolesGuard,
+    );
+  };
+
   it('should be defined', () => {
     expect(controller).toBeDefined();
   });
 
-  it('keeps the recipe ingestion route protected by auth + role guards', () => {
-    expectRouteToRequireInventoryWriterRole('ingestRecipeVersion', true);
+  it('moves the recipe ingestion route to device sync transport', () => {
+    expectRouteToUseDeviceTransport('ingestRecipeVersion');
     expect(configService).toBeDefined();
   });
 
@@ -204,8 +235,8 @@ describe('InventoryController', () => {
     expectRouteToRequireInventoryWriterRole('previewPurchase');
   });
 
-  it('keeps the purchase posting route protected by auth + role guards', () => {
-    expectRouteToRequireInventoryWriterRole('recordPurchase', true);
+  it('moves the purchase posting route to device sync transport', () => {
+    expectRouteToUseDeviceTransport('recordPurchase');
   });
 
   it('keeps the purchase correction route protected by auth + role guards', () => {
@@ -217,12 +248,11 @@ describe('InventoryController', () => {
   });
 
   it('requires authoritative authorization only on approved inventory writes', () => {
-    for (const handlerName of [
-      'recordPurchase',
-      'correctPurchase',
-      'closeProductionOrder',
-      'ingestRecipeVersion',
-    ] as const) {
+    // ST-03 (issue #478) moved recordPurchase, closeProductionOrder and
+    // ingestRecipeVersion to device transport; the correction route is the
+    // remaining inventory write that still requires the human authoritative
+    // guard, so the loop now pins it alone.
+    for (const handlerName of ['correctPurchase'] as const) {
       const handler: unknown = Object.getOwnPropertyDescriptor(
         InventoryMovementController.prototype,
         handlerName,
@@ -241,6 +271,10 @@ describe('InventoryController', () => {
 
     expectRouteToRequireInventoryWriterRole('previewPurchase');
     expectRouteToRequireInventoryWriterRole('getBcnFxRate');
+  });
+
+  it('moves the production close route to device sync transport', () => {
+    expectRouteToUseDeviceTransport('closeProductionOrder');
   });
 
   describe('recordPurchase', () => {
