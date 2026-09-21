@@ -11,10 +11,10 @@ Este documento define el protocolo operativo para la instalación, prueba físic
 | Parámetro | MIRAY Q80/iPOS (terminal de flota) | Dispositivo Comercial (Samsung S23/S24 Ultra) — fallback/simulación |
 |---|---|---|
 | **Sistema Operativo** | Android 12 | One UI (Android 14 / 16) |
-| **Impresora Térmica** | Integrada. Perfil de flota comprobado por el fundador: **80 mm**. El conteo de columnas es una estimación lógica **pendiente de calibración física** (no medido). El ancho de papel es **configuración por dispositivo en tiempo de ejecución**, no una propiedad fija del hardware | No disponible $\rightarrow$ Simulación en Logcat/Console |
+| **Impresora Térmica** | Integrada. Perfil de flota comprobado por el fundador: **80 mm**, que `ReceiptLayoutMetrics` traduce a **40 columnas lógicas / 576 puntos** (58 mm: 32 columnas / 384 puntos). El ancho de papel es **configuración por dispositivo en tiempo de ejecución**, no una propiedad fija del hardware | No disponible $\rightarrow$ Simulación en Logcat/Console |
 | **APK Recomendado** | Verificar la ABI del terminal con `adb-wrapper shell getprop ro.product.cpu.abi` antes de instalar | `app-arm64-v8a-release.apk` (23MB) |
 
-**Sobre el ancho de papel:** el perfil de flota comprobado del Q80/iPOS es **80 mm**; el conteo de columnas correspondiente queda **pendiente de calibración física** y no debe asumirse como medido. **58 mm sigue siendo un perfil legítimo para otros terminales**, por lo que el ancho debe tratarse siempre como configuración por dispositivo (`Ajustes` $\rightarrow$ `Hardware de Impresión`) y nunca como una propiedad fija de la flota.
+**Sobre el ancho de papel:** el perfil de flota comprobado del Q80/iPOS es **80 mm**, que el código traduce a 40 columnas lógicas / 576 puntos (`ReceiptLayoutMetrics.logicalTextWidth80mm` / `logicalRasterWidth80mm`). Esa es la **métrica lógica configurada**, no una medición del cabezal: la verificación física de cada valor sigue **pendiente** y se lista en la matriz de la sección E. **58 mm sigue siendo un perfil legítimo para otros terminales** (32 columnas / 384 puntos), por lo que el ancho debe tratarse siempre como configuración por dispositivo (`Ajustes` $\rightarrow$ `Hardware de Impresión`) y nunca como una propiedad fija de la flota.
 
 ---
 
@@ -73,7 +73,7 @@ Marcar cada ítem tras ejecutar la prueba en el dispositivo físico:
 - [ ] **B1. Test de Hardware en Ajustes**: Ir a `Ajustes` $\rightarrow$ `Hardware de Impresión` $\rightarrow$ `Imprimir Ticket de Prueba`. La impresora emite el ticket con tipografía nítida y alineación centrada.
 - [ ] **B2. Factura Fiscal DGI (DT 09-2007)**: Realizar una venta en efectivo:
   - Verificar encabezado: Nombre Comercial, RUC (`J0000000001`), Dirección, Teléfono.
-  - Formato estricto de columnas según el ancho configurado (32 columnas en 58 mm / 48 columnas en 80 mm) con numeración fiscal consecutiva (ej. `001-001-01-00000001`).
+  - Formato estricto de columnas según el ancho configurado (32 columnas en 58 mm / 40 columnas en 80 mm) con numeración fiscal consecutiva (ej. `001-001-01-00000001`).
   - Desglose exacto: Cantidad, Descripción, Subtotal, IVA (15%) y Total en C$ y USD.
   - Leyenda fiscal `"Disposicion Tecnica 09-2007"` y `"GRACIAS POR SU COMPRA!"`.
 - [ ] **B3. Comanda de Cocina / KDS**: Emitir una orden con buzzer (ej. `#Buzzer 42`) y notas:
@@ -102,7 +102,7 @@ Marcar cada ítem tras ejecutar la prueba en el dispositivo físico:
 
 ### E. Matriz de Verificación del Ancho de Ticket Térmico (Q80/iPOS)
 
-Los valores de 32/48 columnas y 384/576 puntos son estimaciones lógicas de configuración pendientes de calibración en el dispositivo; no son límites de hardware comprobados.
+Los valores de columna de esta matriz (30 a 50) y los de 384/576 puntos son sondas de verificación lógica: sólo las métricas configuradas (32 columnas / 384 puntos en 58 mm y 40 columnas / 576 puntos en 80 mm) están definidas en `ReceiptLayoutMetrics`, y **ninguna de estas filas ha sido medida en hardware**. No son límites de hardware comprobados.
 
 | Check | Status |
 |---|---|
