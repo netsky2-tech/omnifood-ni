@@ -7,7 +7,9 @@ import '../../domain/security/device_sync_exceptions.dart';
 ///
 /// Key Guarantees:
 /// - Attaches short-lived device sync access JWT as Bearer ONLY to canonical sync
-///   routes (`/v1/sync/*` and `v1/sync/*`).
+///   routes (`/v1/sync/*` and `v1/sync/*`) and the explicitly allowlisted
+///   device-transported inventory document routes (exact match, no prefix
+///   matching).
 /// - NEVER attaches device credentials to human, admin, onboarding, or activation endpoints.
 /// - Obtains tokens from [DeviceSyncCredentialCoordinator] which provides memory-first caching
 ///   and single-flight concurrent token renewals.
@@ -26,6 +28,18 @@ class DeviceSyncAuthInterceptor extends Interceptor {
 
   static const String _syncPathPrefix = 'v1/sync';
 
+  /// Inventory document writes transmitted by the background sync pass on the
+  /// device sync Dio. The backend guards exactly these routes with
+  /// SyncTransportGuard (ST-03, issue #478); every other inventory route
+  /// stays human-transported and must never receive the device token. Keep
+  /// this allowlist explicit and exact-match: widening it to all of
+  /// `/inventory/*` would leak device credentials to human surfaces.
+  static const List<String> _deviceTransportedInventoryRoutes = [
+    'inventory/purchases',
+    'inventory/recipes/versions',
+    'inventory/production-orders/close',
+  ];
+
   static String _normalizePath(String path) {
     var p = path.split('?').first;
     while (p.startsWith('/')) {
@@ -43,6 +57,11 @@ class DeviceSyncAuthInterceptor extends Interceptor {
         normalized.startsWith('$_syncPathPrefix/');
   }
 
+  static bool isDeviceTransportedInventoryRoute(String path) {
+    final normalized = _normalizePath(path);
+    return _deviceTransportedInventoryRoutes.contains(normalized);
+  }
+
   @override
   Future<void> onRequest(
     RequestOptions options,
@@ -50,8 +69,9 @@ class DeviceSyncAuthInterceptor extends Interceptor {
   ) async {
     final path = options.path;
 
-    // Bearer token must ONLY be attached to canonical /v1/sync/* routes
-    if (!isSyncRoute(path)) {
+    // Bearer token must ONLY be attached to canonical /v1/sync/* routes and
+    // the explicitly allowlisted device-transported inventory document routes
+    if (!isSyncRoute(path) && !isDeviceTransportedInventoryRoute(path)) {
       handler.next(options);
       return;
     }
@@ -83,7 +103,9 @@ class DeviceSyncAuthInterceptor extends Interceptor {
         DioException(
           requestOptions: options,
           type: DioExceptionType.cancel,
-          error: DeviceSyncUnavailableException('Failed to acquire device sync token: $e'),
+          error: DeviceSyncUnavailableException(
+            'Failed to acquire device sync token: $e',
+          ),
         ),
       );
     }
