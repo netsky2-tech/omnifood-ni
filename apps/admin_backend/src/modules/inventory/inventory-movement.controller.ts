@@ -39,7 +39,6 @@ import { CountSessionService } from './count-session.service';
 import { CountSessionDocumentDto } from './dto/count-session-document.dto';
 import { ProductionOrderDocumentDto } from './dto/production-order-document.dto';
 import { ProductionService } from './production.service';
-import { InventoryReportsService } from './services/inventory-reports.service';
 
 const TERMINAL_IDEMPOTENCY_PREFIX = 'production';
 
@@ -112,7 +111,6 @@ export class InventoryMovementController {
     private readonly recipeService: RecipeService,
     private readonly countSessionService: CountSessionService,
     private readonly productionService: ProductionService,
-    private readonly reportsService: InventoryReportsService,
   ) {}
 
   /**
@@ -128,12 +126,11 @@ export class InventoryMovementController {
     return tenantId.trim();
   }
 
-  @Get('alerts')
-  @UseGuards(AuthGuard, RolesGuard)
-  @Roles(UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER)
-  async getAlerts(@GetTenantId() tenantId: string) {
-    return this.reportsService.getAlertsSummaryReport(tenantId);
-  }
+  // ST-05 (issue #314): the former `GET /inventory/alerts` surface is
+  // retired. It answered the stock-summary report shape the POS forensic
+  // model cannot consume; forensic alerts now reach terminals only through
+  // the device-authenticated `/v1/sync/inbound/deltas` projection. The
+  // distinct `/inventory/reports/alerts` report surface remains intact.
 
   @Post('movements/sync')
   @UseGuards(SyncTransportGuard)

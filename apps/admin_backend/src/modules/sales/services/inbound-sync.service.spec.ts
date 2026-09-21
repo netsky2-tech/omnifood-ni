@@ -9,6 +9,7 @@ import { Recipe } from '../../inventory/entities/recipe.entity';
 import { RecipeVersion } from '../../inventory/entities/recipe-version.entity';
 import { RecipeDetail } from '../../inventory/entities/recipe-detail.entity';
 import { ProductInventoryMappingVersion } from '../../inventory/entities/product-inventory-mapping-version.entity';
+import { ForensicAlert } from '../../inventory/entities/forensic-alert.entity';
 import { User, UserRole } from '../../identity/entities/user.entity';
 import { FiscalConfigVersionService } from '../../onboarding/services/fiscal-config-version.service';
 import { StaffPolicyEpochDeliveryService } from '../../identity/human-authorization/services/staff-policy-epoch-delivery.service';
@@ -879,6 +880,179 @@ describe('InboundSyncService', () => {
         status: 409,
         response: { status: 'REJECTED', resultCode: 'UNAVAILABLE' },
       });
+    });
+  });
+
+  describe('forensic alerts projection (ST-05)', () => {
+    const boundAlertRows: Record<string, unknown>[] = [
+      {
+        id: 'alert-active-1',
+        tenant_id: 'tenant-abc',
+        alert_type: 'COUNT_VARIANCE',
+        severity: 'high',
+        actor_role: 'MANAGER',
+        message: 'Conteo con variación relevante.',
+        metadata: null,
+        resolved_at: null,
+        created_at: new Date('2026-09-01T10:00:00Z'),
+      },
+      {
+        id: 'alert-resolved-1',
+        tenant_id: 'tenant-abc',
+        alert_type: 'AUDIT_BACKEND_TERMINAL_REJECTION',
+        severity: 'critical',
+        actor_role: null,
+        message: 'Rechazo de terminal registrado.',
+        metadata: null,
+        resolved_at: new Date('2026-09-02T12:00:00Z'),
+        created_at: new Date('2026-09-01T11:00:00Z'),
+      },
+    ];
+
+    it('projects tenant forensic alerts through the bound manager when types=alerts', async () => {
+      const alertRepo = {
+        createQueryBuilder: jest
+          .fn()
+          .mockReturnValue(createMockQueryBuilder(boundAlertRows)),
+      };
+      const manager = {
+        getRepository: jest.fn((entity: unknown) =>
+          entity === ForensicAlert ? alertRepo : undefined,
+        ),
+      };
+
+      const response = await service.getInboundDeltas(
+        'tenant-abc',
+        { types: 'alerts' },
+        undefined,
+        manager as never,
+      );
+
+      // The alerts read must ride the tenant-bound transaction connection:
+      // `forensic_alerts` carries no row-level security policy, so the
+      // explicit tenant predicate is the only isolation this table has.
+      expect(manager.getRepository).toHaveBeenCalledWith(ForensicAlert);
+      expect(alertRepo.createQueryBuilder).toHaveBeenCalledTimes(1);
+      expect(alertRepo.createQueryBuilder().where).toHaveBeenCalledWith(
+        'alert.tenant_id = :tenantId',
+        { tenantId: 'tenant-abc' },
+      );
+      expect(mockProductRepo.createQueryBuilder).not.toHaveBeenCalled();
+
+      expect(response.deltas.alerts).toHaveLength(2);
+      expect(response.deltas.alerts[0]).toEqual({
+        id: 'alert-active-1',
+        alertType: 'COUNT_VARIANCE',
+        severity: 'high',
+        message: 'Conteo con variación relevante.',
+        actorRole: 'MANAGER',
+        resolvedAt: null,
+        createdAt: new Date('2026-09-01T10:00:00Z'),
+      });
+      // Lifecycle state is reported, never fabricated: resolvedAt is passed
+      // through verbatim so the terminal can derive status from it.
+      expect(response.deltas.alerts[1]).toMatchObject({
+        id: 'alert-resolved-1',
+        alertType: 'AUDIT_BACKEND_TERMINAL_REJECTION',
+        severity: 'critical',
+        actorRole: null,
+        resolvedAt: new Date('2026-09-02T12:00:00Z'),
+      });
+    });
+
+    it('filters incremental pulls by created_at >= sinceVersion', async () => {
+      const alertRepo = {
+        createQueryBuilder: jest
+          .fn()
+          .mockReturnValue(createMockQueryBuilder(boundAlertRows)),
+      };
+      const manager = {
+        getRepository: jest.fn((entity: unknown) =>
+          entity === ForensicAlert ? alertRepo : undefined,
+        ),
+      };
+
+      await service.getInboundDeltas(
+        'tenant-abc',
+        { types: 'alerts', sinceVersion: '1787745600000' },
+        undefined,
+        manager as never,
+      );
+
+      // The cursor for alerts is created_at only: the table has no
+      // updated_at column, so no other timestamp can advance it. The
+      // comparison is INCLUSIVE because the terminal applies each delta
+      // insert-if-absent, so an overlapping row is idempotent there, while a
+      // strict comparison could silently drop an alert created exactly at
+      // the watermark.
+      expect(alertRepo.createQueryBuilder().andWhere).toHaveBeenCalledWith(
+        'alert.created_at >= :sinceDate',
+        { sinceDate: new Date(1787745600000) },
+      );
+    });
+
+    it('includes alerts in the default pull when the types parameter is omitted', async () => {
+      const alertRepo = {
+        createQueryBuilder: jest
+          .fn()
+          .mockReturnValue(createMockQueryBuilder(boundAlertRows)),
+      };
+      const manager = {
+        getRepository: jest.fn((entity: unknown) =>
+          entity === ForensicAlert ? alertRepo : undefined,
+        ),
+      };
+
+      // The production POS pull sends no types parameter: the default type
+      // set must include alerts or the terminal inbox would starve.
+      const response = await service.getInboundDeltas(
+        'tenant-abc',
+        {},
+        undefined,
+        manager as never,
+      );
+
+      expect(manager.getRepository).toHaveBeenCalledWith(ForensicAlert);
+      expect(response.deltas.alerts).toHaveLength(2);
+      expect(response.deltas.alerts[0]).toMatchObject({
+        id: 'alert-active-1',
+      });
+    });
+
+    it('serves no alerts when the type is not requested', async () => {
+      const alertRepo = {
+        createQueryBuilder: jest
+          .fn()
+          .mockReturnValue(createMockQueryBuilder(boundAlertRows)),
+      };
+      const manager = {
+        getRepository: jest.fn((entity: unknown) =>
+          entity === ForensicAlert ? alertRepo : undefined,
+        ),
+      };
+
+      const response = await service.getInboundDeltas(
+        'tenant-abc',
+        { types: 'products' },
+        undefined,
+        manager as never,
+      );
+
+      expect(manager.getRepository).not.toHaveBeenCalledWith(ForensicAlert);
+      expect(response.deltas.alerts).toEqual([]);
+    });
+
+    it('answers an empty alerts array on the legacy unmanaged path instead of touching foreign repositories', async () => {
+      // Without a bound manager there is no repository to read alerts from:
+      // the entity is deliberately not registered forFeature (no module owns
+      // it) and a pooled unbound read would bypass tenant isolation. Every
+      // production caller (inbound controller, terminal priming) supplies a
+      // manager; the legacy path stays defined and empty rather than unsafe.
+      const response = await service.getInboundDeltas('tenant-abc', {
+        types: 'alerts',
+      });
+
+      expect(response.deltas.alerts).toEqual([]);
     });
   });
 });

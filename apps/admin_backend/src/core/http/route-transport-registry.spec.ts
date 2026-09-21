@@ -59,6 +59,17 @@ describe('route transport registry (AppModule route table)', () => {
     );
     expect(findings).toEqual([]);
   });
+
+  it('no longer serves the retired GET /inventory/alerts surface (ST-05)', () => {
+    // The inventory-alert read was folded into /v1/sync/inbound/deltas as a
+    // one-way cloud-to-POS projection; the separate human surface that
+    // answered with an incompatible stock-summary shape is retired.
+    const retired = routes.filter(
+      (record) =>
+        record.route === '/inventory/alerts' && record.httpMethod === 'GET',
+    );
+    expect(retired).toEqual([]);
+  });
 });
 
 describe('route transport registry (verification rules)', () => {

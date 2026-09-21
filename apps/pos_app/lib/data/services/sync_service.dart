@@ -11,7 +11,6 @@ import '../../domain/models/inventory/inventory_movement.dart';
 import '../../domain/repositories/inventory/inventory_repository.dart';
 import '../../domain/models/inventory/purchase.dart';
 import '../../domain/models/inventory/count_session_document.dart';
-import '../../domain/models/inventory/forensic_alert.dart';
 import '../../domain/models/inventory/recipe_version_document.dart';
 import '../../domain/models/inventory/production_order_document.dart';
 import '../../domain/security/cloud_auth_unavailable_exception.dart';
@@ -42,6 +41,7 @@ class InboundSyncResult {
   final int insumosCount;
   final int recipesCount;
   final int usersCount;
+  final int alertsCount;
   final int? appliedFiscalRevision;
   final String? appliedFiscalFingerprint;
   final String timestamp;
@@ -52,6 +52,7 @@ class InboundSyncResult {
     this.insumosCount = 0,
     this.recipesCount = 0,
     this.usersCount = 0,
+    this.alertsCount = 0,
     this.appliedFiscalRevision,
     this.appliedFiscalFingerprint,
     required this.timestamp,
@@ -215,11 +216,6 @@ class SyncService {
     } catch (_) {}
 
     try {
-      final alerts = await _inventoryRepository.getUnsyncedForensicAlerts();
-      count += alerts.length;
-    } catch (_) {}
-
-    try {
       final movements = await _inventoryRepository.getUnsyncedMovements();
       count += movements.length;
     } catch (_) {}
@@ -305,14 +301,6 @@ class SyncService {
         hasFailure = true;
         domainErrors.add('Conteos físicos');
       }
-      final alertLifeSuccess = await _runDomain(
-        'alert lifecycle',
-        _syncAlertLifecycleDocuments,
-      );
-      if (!alertLifeSuccess) {
-        hasFailure = true;
-        domainErrors.add('Alertas');
-      }
       final kardexSuccess = await _runDomain(
         'kardex corrections',
         _syncKardexCorrections,
@@ -331,16 +319,10 @@ class SyncService {
         hasFailure = true;
         domainErrors.add('Movimientos de stock');
       }
-      final alertInboxSuccess = await _runDomain(
-        'alert inbox',
-        _refreshAlertInbox,
-      );
-      if (!alertInboxSuccess) {
-        hasFailure = true;
-        domainErrors.add('Bandeja de alertas');
-      }
-
       // 3. Pull Master Catalog & Security Inbound Deltas
+      // ST-05: forensic alerts ride this pull as a one-way cloud-to-POS
+      // projection; the retired /inventory/alerts GET/POST surfaces are no
+      // longer contacted and local lifecycle state stays terminal-local.
       final inboundSuccess = await _runDomain(
         'inbound deltas',
         _pullInboundDeltas,
@@ -1038,79 +1020,6 @@ class SyncService {
     }
   }
 
-  Future<void> _syncAlertLifecycleDocuments() async {
-    final unsynced = await _inventoryRepository.getUnsyncedForensicAlerts();
-    if (unsynced.isEmpty) {
-      return;
-    }
-
-    for (final alert in unsynced) {
-      try {
-        final response = await _dio.post(
-          '/inventory/alerts/${alert.id}/lifecycle',
-          data: _buildAlertLifecyclePayload(alert),
-        );
-        if (response.statusCode == 200 || response.statusCode == 201) {
-          await _inventoryRepository.markForensicAlertAsSynced(alert.id);
-        }
-      } on DioException catch (e) {
-        developer.log(
-          'Failed to sync alert lifecycle ${alert.id}: ${e.message}',
-          name: 'SyncService',
-        );
-        rethrow;
-      }
-    }
-  }
-
-  Future<void> _refreshAlertInbox() async {
-    try {
-      final response = await _dio.get('/inventory/alerts');
-      final payload = response.data;
-      final alertsPayload = payload is Map<String, dynamic>
-          ? payload['alerts'] as List<dynamic>? ?? const <dynamic>[]
-          : payload is List<dynamic>
-          ? payload
-          : const <dynamic>[];
-
-      for (final row in alertsPayload) {
-        if (row is! Map) continue;
-        final map = Map<String, dynamic>.from(row);
-        final id = map['id']?.toString();
-        if (id == null || id.isEmpty) continue;
-        await _inventoryRepository.saveForensicAlert(
-          ForensicAlert(
-            id: id,
-            alertType: (map['alertType'] ?? map['alert_type'] ?? 'SYSTEM_ALERT')
-                .toString(),
-            severity: (map['severity'] ?? 'MEDIUM').toString(),
-            message: (map['message'] ?? '').toString(),
-            createdAt: map['createdAt'] != null
-                ? DateTime.tryParse(map['createdAt'].toString()) ??
-                      DateTime.now()
-                : DateTime.now(),
-            status: (map['status'] ?? 'active').toString(),
-            note: map['note']?.toString(),
-            actorLabel: (map['actorLabel'] ?? map['actor_role'])?.toString(),
-            actedAt: map['actedAt'] != null
-                ? DateTime.tryParse(map['actedAt'].toString())
-                : null,
-            sourceMovementId: map['sourceMovementId']?.toString(),
-            sourceDocumentId: map['sourceDocumentId']?.toString(),
-            sourceDocumentType: map['sourceDocumentType']?.toString(),
-            isSynced: true,
-          ),
-        );
-      }
-    } on DioException catch (e) {
-      developer.log(
-        'Failed to refresh forensic alerts: ${e.message}',
-        name: 'SyncService',
-      );
-      // Non-blocking for offline continuity
-    }
-  }
-
   Map<String, Object?> _buildPurchasePayload(Purchase purchase) {
     final payload = <String, Object?>{
       'id': purchase.id,
@@ -1245,16 +1154,6 @@ class SyncService {
             },
           )
           .toList(growable: false),
-    };
-  }
-
-  Map<String, Object?> _buildAlertLifecyclePayload(ForensicAlert alert) {
-    return {
-      'status': alert.status,
-      'actorLabel': alert.actorLabel,
-      'note': alert.note,
-      'actedAt':
-          alert.actedAt?.toIso8601String() ?? alert.createdAt.toIso8601String(),
     };
   }
 
@@ -1850,6 +1749,96 @@ class SyncService {
           await _database!.securityProfileDao.insertProfiles(profileEntities);
         }
 
+        // 5b. Forensic alerts — one-way cloud-to-POS projection (ST-05).
+        // Every row is applied insert-if-absent so a cloud replay can never
+        // overwrite a locally acknowledged/resolved alert. Lifecycle state
+        // comes only from the backend's `resolvedAt` (derived status) and
+        // `actorRole` (mapped to the terminal's actor label); anything the
+        // backend does not carry is not fabricated.
+        final rawAlerts = rawDeltas['alerts'] as List<dynamic>? ?? const [];
+        var alertsCount = 0;
+        for (final row in rawAlerts) {
+          if (row is! Map) continue;
+          final map = Map<String, dynamic>.from(row);
+          final id = map['id']?.toString();
+          final alertType = map['alertType']?.toString();
+          final severity = map['severity']?.toString();
+          final message = map['message']?.toString();
+          final createdAt = map['createdAt'] != null
+              ? DateTime.tryParse(map['createdAt'].toString())
+              : null;
+
+          // Strict parsing: a row without its identity, type, severity,
+          // message, or cursor timestamp is skipped, never defaulted.
+          if (id == null ||
+              id.isEmpty ||
+              alertType == null ||
+              alertType.isEmpty ||
+              severity == null ||
+              severity.isEmpty ||
+              message == null ||
+              createdAt == null) {
+            developer.log(
+              '[SYNC_ALERTS] skipped malformed cloud alert row (id=$id)',
+              name: 'SyncService',
+            );
+            continue;
+          }
+
+          final resolvedRaw = map['resolvedAt'];
+          final hasResolvedRaw = resolvedRaw != null;
+          final resolvedAt = hasResolvedRaw
+              ? DateTime.tryParse(resolvedRaw.toString())
+              : null;
+          // A non-null but unparsable resolvedAt is malformed, never a
+          // downgrade to "active": skipping the row keeps the terminal from
+          // recording a lifecycle state the cloud did not state.
+          if (hasResolvedRaw && resolvedAt == null) {
+            developer.log(
+              '[SYNC_ALERTS] skipped cloud alert row with unparsable resolvedAt (id=$id)',
+              name: 'SyncService',
+            );
+            continue;
+          }
+          final actorRole = map['actorRole']?.toString();
+
+          // The existing DAO insert-if-absent statement cannot carry the
+          // actor label without Floor codegen, so the projection runs one
+          // parameterized INSERT OR IGNORE directly: a cloud row is written
+          // only when its id is absent, never overwriting terminal-local
+          // lifecycle state. `is_synced = 1` because nothing is uploaded.
+          await _database!.database.execute(
+            'INSERT OR IGNORE INTO forensic_alerts '
+            '(id, alert_type, severity, message, created_at, status, '
+            'actor_label, is_synced) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [
+              id,
+              alertType,
+              severity,
+              message,
+              createdAt.toIso8601String(),
+              resolvedAt != null ? 'resolved' : 'active',
+              actorRole,
+              1,
+            ],
+          );
+          // alertsCount must report rows actually inserted, not rows
+          // received. rawInsert cannot be used here: its ignored-insert
+          // result diverges per platform (sqflite_common_ffi returns null,
+          // iOS FMDB returns a stale lastInsertRowid), while execute() has
+          // no result. SQLite's changes() is exact and platform-independent,
+          // and sqflite serializes every operation on the same database
+          // through one queue, so no other statement can run between the
+          // INSERT and this read.
+          final changedRows = await _database!.database
+              .rawQuery('SELECT changes() AS changed');
+          final inserted =
+              (changedRows.first['changed'] as int? ?? 0) > 0;
+          if (inserted) {
+            alertsCount++;
+          }
+        }
+
         // 6. Fiscal Configuration projection
         int? appliedFiscalRevision;
         String? appliedFiscalFingerprint;
@@ -1909,6 +1898,7 @@ class SyncService {
           insumosCount: insumoEntities.length,
           recipesCount: recipeEntities.length,
           usersCount: userEntities.length,
+          alertsCount: alertsCount,
           appliedFiscalRevision: appliedFiscalRevision,
           appliedFiscalFingerprint: appliedFiscalFingerprint,
           timestamp:
