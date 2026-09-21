@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_app/data/adapters/activation/dio_activation_sync_port.dart';
+import 'package:pos_app/data/ports/activation_sync_port.dart';
+import 'package:pos_app/domain/models/activation/activation_attempt_snapshot.dart';
 
 void main() {
   late HttpServer server;
@@ -86,6 +88,175 @@ void main() {
     );
     expect(verification.headers.value('x-device-terminal-id'), 'terminal-1');
     expect(verification.body, _verificationSaleRecord());
+  });
+
+  group('DioActivationSyncPort.fetchActiveAttempt payload contract', () {
+    late HttpServer server;
+    late DioActivationSyncPort port;
+
+    /// Raw response body for GET /attempts/active: a String is written
+    /// verbatim (raw JSON text), anything else is jsonEncoded.
+    Object? activeResponseBody;
+    int activeResponseStatus = 200;
+
+    setUp(() async {
+      server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      server.listen((request) async {
+        await utf8.decoder.bind(request).join();
+        request.response.headers.contentType = ContentType.json;
+        request.response.statusCode = activeResponseStatus;
+        final body = activeResponseBody;
+        if (body is String) {
+          request.response.write(body);
+        } else {
+          request.response.write(jsonEncode(body));
+        }
+        await request.response.close();
+      });
+      port = DioActivationSyncPort(
+        Dio(BaseOptions(
+          baseUrl: 'http://${server.address.address}:${server.port}/',
+        )),
+      );
+    });
+
+    tearDown(() async => server.close(force: true));
+
+    Map<String, dynamic> validActivePayload() => <String, dynamic>{
+          'id': 'attempt-active-1',
+          'tenantId': 'tenant-founder-01',
+          'candidateTerminalId': 'pos-term-01',
+          'requiredFiscalRevision': 3,
+          'requiredFiscalFingerprint': 'fiscal-fp-sha256-abc',
+          'verificationProductId': 'prod-uuid-1',
+          'serverTimeAnchorAt': '2026-09-04T11:59:58.000Z',
+          'startedAt': '2026-09-04T12:00:00.000Z',
+        };
+
+    test('parses the backend serverTimeAnchorAt into the snapshot', () async {
+      activeResponseBody = validActivePayload();
+
+      final snapshot = await port.fetchActiveAttempt();
+
+      expect(snapshot, isNotNull);
+      expect(snapshot!.attemptId, 'attempt-active-1');
+      expect(snapshot.serverTimeAnchorAt, '2026-09-04T11:59:58.000Z');
+      expect(snapshot.assignedAt, '2026-09-04T12:00:00.000Z');
+    });
+
+    test('fails closed when serverTimeAnchorAt is absent', () async {
+      activeResponseBody = validActivePayload()..remove('serverTimeAnchorAt');
+
+      await expectLater(
+        port.fetchActiveAttempt(),
+        throwsA(isA<ActivationAttemptPayloadException>()),
+      );
+    });
+
+    test('fails closed when serverTimeAnchorAt is unparseable', () async {
+      activeResponseBody = validActivePayload();
+      (activeResponseBody as Map<String, dynamic>)['serverTimeAnchorAt'] =
+          'not-a-timestamp';
+
+      await expectLater(
+        port.fetchActiveAttempt(),
+        throwsA(isA<ActivationAttemptPayloadException>()),
+      );
+    });
+
+    test('fails closed when requiredFiscalRevision is missing', () async {
+      activeResponseBody = validActivePayload()..remove('requiredFiscalRevision');
+
+      await expectLater(
+        port.fetchActiveAttempt(),
+        throwsA(isA<ActivationAttemptPayloadException>()),
+      );
+    });
+
+    test('fails closed when requiredFiscalRevision is not a number', () async {
+      activeResponseBody = validActivePayload();
+      (activeResponseBody as Map<String, dynamic>)['requiredFiscalRevision'] = '3';
+
+      await expectLater(
+        port.fetchActiveAttempt(),
+        throwsA(isA<ActivationAttemptPayloadException>()),
+      );
+    });
+
+    test('fails closed when requiredFiscalFingerprint is missing or blank', () async {
+      activeResponseBody = validActivePayload()..remove('requiredFiscalFingerprint');
+      await expectLater(
+        port.fetchActiveAttempt(),
+        throwsA(isA<ActivationAttemptPayloadException>()),
+      );
+
+      activeResponseBody = validActivePayload();
+      (activeResponseBody as Map<String, dynamic>)['requiredFiscalFingerprint'] =
+          '   ';
+      await expectLater(
+        port.fetchActiveAttempt(),
+        throwsA(isA<ActivationAttemptPayloadException>()),
+      );
+    });
+
+    test('fails closed when verificationProductId is missing or blank', () async {
+      activeResponseBody = validActivePayload()..remove('verificationProductId');
+      await expectLater(
+        port.fetchActiveAttempt(),
+        throwsA(isA<ActivationAttemptPayloadException>()),
+      );
+
+      activeResponseBody = validActivePayload();
+      (activeResponseBody as Map<String, dynamic>)['verificationProductId'] = '';
+      await expectLater(
+        port.fetchActiveAttempt(),
+        throwsA(isA<ActivationAttemptPayloadException>()),
+      );
+    });
+
+    test('fails closed when a hard identity field is blank', () async {
+      activeResponseBody = validActivePayload();
+      (activeResponseBody as Map<String, dynamic>)['candidateTerminalId'] = '';
+
+      await expectLater(
+        port.fetchActiveAttempt(),
+        throwsA(isA<ActivationAttemptPayloadException>()),
+      );
+    });
+
+    test('maps a non-object payload to a named error instead of StateError', () async {
+      activeResponseBody = <Object>['unusable'];
+
+      await expectLater(
+        port.fetchActiveAttempt(),
+        throwsA(isA<ActivationAttemptPayloadException>()),
+      );
+    });
+
+    test('maps a JSON string payload to a named error instead of StateError', () async {
+      activeResponseBody = jsonEncode('unusable');
+
+      await expectLater(
+        port.fetchActiveAttempt(),
+        throwsA(isA<ActivationAttemptPayloadException>()),
+      );
+    });
+
+    test('keeps reporting no active attempt for a null body', () async {
+      activeResponseBody = 'null';
+
+      expect(await port.fetchActiveAttempt(), isNull);
+    });
+
+    test('propagates a non-2xx response as DioException, not a snapshot', () async {
+      activeResponseBody = <String, dynamic>{'statusCode': 500};
+      activeResponseStatus = 500;
+
+      await expectLater(
+        port.fetchActiveAttempt(),
+        throwsA(isA<DioException>()),
+      );
+    });
   });
 }
 
