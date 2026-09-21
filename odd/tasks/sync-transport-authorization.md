@@ -160,7 +160,7 @@ Two lessons from earlier units were applied here as requirements rather than red
 
 ### ST-06 — Move regularization/sync to device transport without fabricating an actor
 
-Status: complete — work-unit commit `118b9bc`, published as PR #483 from branch `feat/regularization-device-transport`; issue #482 approved and CI pending.
+Status: complete — work-unit commit `118b9bc`, merged via PR #483 (`19889d0`); issue #482 closed.
 Route: delegated direct — the 4-file mapping and multi-file writer triggers applied.
 Actual size: 972 authored changed lines excluding this task record: approximately 158 production and 814 test/support lines, including a 499-line real-database FORCE-RLS contract. Founder authorized one atomic PR with a recorded size exception because guard, exact POS bearer route, fail-closed actor handling and tenant-bound persistence form one coherent security outcome; splitting transport from RLS leaves an authenticated route that still fails under the production runtime role.
 
@@ -302,9 +302,10 @@ Runtime harness: the real HTTP plus PostgreSQL sync-down contract is the backend
 - ST-03 merged via PR #479 (`58ce0dc`): the three inventory document writes now use device transport; issue #478 is closed.
 - ST-04 merged via PR #480 (`343c62a`): `count-sessions` now has a satisfiable device transport and tenant-bound persistence under real forced-RLS proof; issue #445 is closed.
 - ST-05 merged via PR #481 (`25dfe53`): forensic alerts now arrive through inbound deltas, both broken POS alert calls are gone, and local lifecycle state survives cloud replay; issue #314 is closed.
-- ST-06 complete in work-unit commit `118b9bc` and published as PR #483, closing approved issue #482: regularization sync now has device transport plus tenant-bound FORCE-RLS persistence, document actor absence stays null, and human approve has no fail-open identity defaults. Publication verification found the PR MERGEABLE with Admin, POS and Cloudflare checks pending and GitGuardian green.
+- ST-06 merged via PR #483 (`19889d0`): regularization sync now has device transport plus tenant-bound FORCE-RLS persistence, document actor absence stays null, and human approve has no fail-open identity defaults; issue #482 is closed.
+- The ST-01 through ST-06 transport contract is complete. Remaining alert lifecycle upload, durable alert cursor, auth-cascade issue #473 and DSI-6 actor attestation are separate follow-ups rather than unfinished work in this feature.
 - Issue #473 filed for the cascade defect found during the inventory: one 401 suppresses every later sync domain, and the recipe domain runs before sales, so a pending recipe can suppress the device-authoritative sales batch.
 
 ## Next step
 
-Wait for PR #483 checks and the founder's merge decision.
+Close this feature record. Continue with the separately tracked follow-ups only when prioritized; L1-06 still requires the physical Q80 and a fresh tenant.
