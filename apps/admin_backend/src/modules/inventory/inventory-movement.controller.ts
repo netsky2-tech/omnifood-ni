@@ -259,12 +259,22 @@ export class InventoryMovementController {
   }
 
   @Post('count-sessions')
+  // Device transport (ST-04, issue #445): this write is transmitted by the POS
+  // background sync pass, where no human session is guaranteed. The
+  // AuthoritativeCurrentUserGuard human authorization that a human route
+  // would carry is absent: actor authorization is a declared dependency on
+  // the DSI-6/OHAC offline-human-authorization workstream (founder decision,
+  // 2026-09-21). Device identity alone is not recorded as sufficient
+  // authority; authorization is captured at authoring time, not at transmit
+  // time.
+  @UseGuards(SyncTransportGuard)
+  @RequireSyncScopes('sync:push')
   async recordCountSession(
     @Body() dto: CountSessionDocumentDto,
-    @GetTenantId() tenantId: string,
+    @GetTenantId() tenantId: string | undefined,
   ) {
     return this.countSessionService.replayCountSession({
-      tenantId,
+      tenantId: this.requireTenant(tenantId),
       document: dto,
     });
   }

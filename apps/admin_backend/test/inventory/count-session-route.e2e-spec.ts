@@ -110,6 +110,7 @@ describe('Count session route (integration)', () => {
   const findExistingMovement = jest.fn();
   const findInsumo = jest.fn();
   const saveInsumo = jest.fn();
+  const bindTenantQuery = jest.fn().mockResolvedValue(undefined);
   const createMovement = jest.fn(
     (movement: Partial<InventoryMovement>): InventoryMovement =>
       movement as InventoryMovement,
@@ -137,6 +138,7 @@ describe('Count session route (integration)', () => {
 
       throw new Error('Unexpected repository');
     }),
+    query: bindTenantQuery,
   };
   const transaction = jest.fn(
     (handler: (entityManager: typeof manager) => Promise<unknown>) =>
@@ -199,7 +201,7 @@ describe('Count session route (integration)', () => {
         JwtService,
         createIdentityJwtTestConfigProvider(),
         createIdentityJwtConfigProvider(),
-      ]
+      ],
     })
       // The device transport guard is declared per-route on movements/sync and
       // shrinkage; this suite verifies route behavior, so the guard's token
@@ -265,6 +267,15 @@ describe('Count session route (integration)', () => {
     expect(findInsumo).toHaveBeenCalledWith({
       where: { id: 'ins-count-1', tenant_id: TEST_TENANT_ID },
     });
+    // L1-11: the RLS tenant context must be bound on the service's own
+    // transaction before any RLS-protected query runs.
+    expect(bindTenantQuery).toHaveBeenCalledWith(
+      "SELECT set_config('app.tenant_id', $1, true)",
+      [TEST_TENANT_ID],
+    );
+    expect(bindTenantQuery.mock.invocationCallOrder[0]).toBeLessThan(
+      findInsumo.mock.invocationCallOrder[0],
+    );
     expect(saveInsumo).toHaveBeenCalledWith(
       expect.objectContaining({ stock: 10, existenciaActual: 10 }),
     );

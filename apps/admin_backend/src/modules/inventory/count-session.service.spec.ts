@@ -40,10 +40,14 @@ describe('CountSessionService', () => {
   const save = jest.fn();
   const findOne = jest.fn();
   const findOneBy = jest.fn();
+  const bindTenantQuery = jest.fn();
   const create = jest.fn((entity: unknown) => entity);
   const transaction = jest.fn((callback: (manager: unknown) => unknown) =>
     Promise.resolve(
       callback({
+        // CountSessionService binds the RLS tenant context on its own
+        // transaction (bindTenantContext) before any RLS-protected query.
+        query: bindTenantQuery,
         getRepository: (entity: unknown) => {
           if (entity === Insumo) return { findOne, save };
           if (entity === InventoryMovement) return { create, findOneBy, save };
@@ -55,6 +59,7 @@ describe('CountSessionService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    bindTenantQuery.mockResolvedValue(undefined);
     findOneBy.mockResolvedValue(null);
     findOne.mockResolvedValue({
       stock: 15,

@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
+import { bindTenantContext } from '../../core/database/tenant-transaction';
 import { CountSessionDocumentDto } from './dto/count-session-document.dto';
 import { Insumo } from './entities/insumo.entity';
 import {
@@ -42,6 +43,12 @@ export class CountSessionService {
     }
 
     return this.dataSource.transaction(async (manager) => {
+      // RLS binding (L1-11): app.tenant_id must be set on THIS transaction
+      // before any query touches an RLS-protected table, so the existing-
+      // movement lookup, the stock update and the adjustment insert all run
+      // inside the tenant's row-security context.
+      await bindTenantContext(manager, input.tenantId);
+
       const existing = await manager
         .getRepository(InventoryMovement)
         .findOneBy({

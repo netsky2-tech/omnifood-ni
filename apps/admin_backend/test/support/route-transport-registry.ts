@@ -440,9 +440,7 @@ export const TRANSPORT_DECLARATIONS: TransportDeclaration[] = [
       {
         httpMethod: 'POST',
         handlerPath: 'count-sessions',
-        transport: 'public',
-        reason:
-          'TRANSITIONAL (issue #445): open write the POS completes today; guarded in ST-04 together with its transport change, because guarding it alone breaks POS sync (founder decision)',
+        transport: 'device',
       },
     ],
   },
