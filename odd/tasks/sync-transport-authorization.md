@@ -160,7 +160,7 @@ Two lessons from earlier units were applied here as requirements rather than red
 
 ### ST-06 — Move regularization/sync to device transport without fabricating an actor
 
-Status: implemented and verified on branch `feat/regularization-device-transport`; work-unit commit pending.
+Status: complete — work-unit commit `118b9bc` on branch `feat/regularization-device-transport`; not yet pushed or published.
 Route: delegated direct — the 4-file mapping and multi-file writer triggers applied.
 Actual size: 972 authored changed lines excluding this task record: approximately 158 production and 814 test/support lines, including a 499-line real-database FORCE-RLS contract. Founder authorized one atomic PR with a recorded size exception because guard, exact POS bearer route, fail-closed actor handling and tenant-bound persistence form one coherent security outcome; splitting transport from RLS leaves an authenticated route that still fails under the production runtime role.
 
@@ -302,9 +302,9 @@ Runtime harness: the real HTTP plus PostgreSQL sync-down contract is the backend
 - ST-03 merged via PR #479 (`58ce0dc`): the three inventory document writes now use device transport; issue #478 is closed.
 - ST-04 merged via PR #480 (`343c62a`): `count-sessions` now has a satisfiable device transport and tenant-bound persistence under real forced-RLS proof; issue #445 is closed.
 - ST-05 merged via PR #481 (`25dfe53`): forensic alerts now arrive through inbound deltas, both broken POS alert calls are gone, and local lifecycle state survives cloud replay; issue #314 is closed.
-- ST-06 implemented and verified on `feat/regularization-device-transport`: regularization sync now has device transport plus tenant-bound FORCE-RLS persistence, document actor absence stays null, and human approve has no fail-open identity defaults. Work-unit commit pending.
+- ST-06 complete in work-unit commit `118b9bc`: regularization sync now has device transport plus tenant-bound FORCE-RLS persistence, document actor absence stays null, and human approve has no fail-open identity defaults. The branch is not yet pushed or published.
 - Issue #473 filed for the cascade defect found during the inventory: one 401 suppresses every later sync domain, and the recipe domain runs before sales, so a pending recipe can suppress the device-authoritative sales batch.
 
 ## Next step
 
-Create the ST-06 work-unit commit, then offer the founder the push/PR decision.
+Offer the founder the ST-06 push/PR decision.
