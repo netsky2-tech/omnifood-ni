@@ -24,6 +24,7 @@ import { SyncRecipeVersionDocumentDto } from './dto/sync-recipe-version-document
 import { GetTenantId } from '../../core/decorators/tenant.decorator';
 import { TenantInterceptor } from '../../core/database/rls.interceptor';
 import { SyncTransportGuard } from '../identity/guards/sync-transport.guard';
+import type { RequestWithDevicePrincipal } from '../identity/guards/sync-transport.guard';
 import { RequireSyncScopes } from '../identity/decorators/sync-scopes.decorator';
 import { InventoryPurchaseService } from './inventory-purchase.service';
 import { AuthGuard } from '../identity/guards/auth.guard';
@@ -40,25 +41,14 @@ import { ProductionOrderDocumentDto } from './dto/production-order-document.dto'
 import { ProductionService } from './production.service';
 import { InventoryReportsService } from './services/inventory-reports.service';
 
-interface RequestWithProductionTerminalClaim extends Request {
-  user?: {
-    terminal_id?: string;
-    terminalId?: string;
-    device_id?: string;
-    deviceId?: string;
-  };
-}
-
 const TERMINAL_IDEMPOTENCY_PREFIX = 'production';
 
 const readAuthenticatedTerminalId = (
-  request: RequestWithProductionTerminalClaim,
+  request: RequestWithDevicePrincipal,
 ): string | undefined => {
-  const terminalId =
-    request.user?.terminal_id ??
-    request.user?.terminalId ??
-    request.user?.device_id ??
-    request.user?.deviceId;
+  // Device transport: the terminal identity is the device the transport guard
+  // authenticated (the device principal), never a claim from a human session.
+  const terminalId = request.devicePrincipal?.deviceId;
 
   return terminalId?.trim() || undefined;
 };
@@ -79,7 +69,7 @@ const buildProductionIdempotencyKeyForTerminal = (
 
 const bindProductionDocumentTerminal = (
   document: ProductionOrderDocumentDto,
-  request: RequestWithProductionTerminalClaim,
+  request: RequestWithDevicePrincipal,
 ): ProductionOrderDocumentDto => {
   const authenticatedTerminalId = readAuthenticatedTerminalId(request);
   const terminalId = authenticatedTerminalId || document.terminalId?.trim();
@@ -192,8 +182,16 @@ export class InventoryMovementController {
   }
 
   @Post('purchases')
-  @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)
-  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  // Device transport (ST-03, issue #478): this write is transmitted by the POS
+  // background sync pass, where no human session is guaranteed. The
+  // AuthoritativeCurrentUserGuard human authorization that used to gate this
+  // route is gone: actor authorization is now a declared dependency on the
+  // DSI-6/OHAC offline-human-authorization workstream (founder decision,
+  // 2026-09-21). Device identity alone is not recorded as sufficient
+  // authority; authorization is captured at authoring time, not at transmit
+  // time.
+  @UseGuards(SyncTransportGuard)
+  @RequireSyncScopes('sync:push')
   async recordPurchase(
     @Body() dto: PurchaseDocumentDto,
     @GetTenantId() tenantId: string,
@@ -272,12 +270,20 @@ export class InventoryMovementController {
   }
 
   @Post('production-orders/close')
-  @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)
-  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  // Device transport (ST-03, issue #478): this write is transmitted by the POS
+  // background sync pass, where no human session is guaranteed. The
+  // AuthoritativeCurrentUserGuard human authorization that used to gate this
+  // route is gone: actor authorization is now a declared dependency on the
+  // DSI-6/OHAC offline-human-authorization workstream (founder decision,
+  // 2026-09-21). Device identity alone is not recorded as sufficient
+  // authority; authorization is captured at authoring time, not at transmit
+  // time. The terminal is bound from the authenticated device principal.
+  @UseGuards(SyncTransportGuard)
+  @RequireSyncScopes('sync:push')
   async closeProductionOrder(
     @Body() dto: ProductionOrderDocumentDto,
     @GetTenantId() tenantId: string,
-    @Req() request: RequestWithProductionTerminalClaim,
+    @Req() request: RequestWithDevicePrincipal,
   ) {
     return this.productionService.replayProductionClose({
       tenantId,
@@ -286,8 +292,16 @@ export class InventoryMovementController {
   }
 
   @Post('recipes/versions')
-  @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)
-  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  // Device transport (ST-03, issue #478): this write is transmitted by the POS
+  // background sync pass, where no human session is guaranteed. The
+  // AuthoritativeCurrentUserGuard human authorization that used to gate this
+  // route is gone: actor authorization is now a declared dependency on the
+  // DSI-6/OHAC offline-human-authorization workstream (founder decision,
+  // 2026-09-21). Device identity alone is not recorded as sufficient
+  // authority; authorization is captured at authoring time, not at transmit
+  // time.
+  @UseGuards(SyncTransportGuard)
+  @RequireSyncScopes('sync:push')
   async ingestRecipeVersion(
     @Body() dto: SyncRecipeVersionDocumentDto,
     @GetTenantId() tenantId: string,

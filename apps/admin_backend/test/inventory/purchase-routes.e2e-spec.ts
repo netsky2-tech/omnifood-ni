@@ -1,6 +1,8 @@
 import {
+  ExecutionContext,
   INestApplication,
   NotFoundException,
+  UnauthorizedException,
   ValidationPipe,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
@@ -136,6 +138,45 @@ const officialModePurchasePayload = {
 
 const INVENTORY_API_PREFIX = '/api/inventory';
 
+// Device transport fixture (ST-03, issue #478): POST /inventory/purchases is
+// now guarded by SyncTransportGuard. This fixture keeps the suite's route
+// behavior coverage while mirroring the real guard's contract: fail-closed on
+// a missing or non-device bearer, and when it accepts, it attaches the device
+// principal exactly like the real guard does. Cryptographic token validation
+// is proven in src/modules/inventory/inventory-movement.controller.spec.ts.
+const DEVICE_SYNC_BEARER_TOKEN = 'device-sync-route-test-token';
+const DEVICE_PRINCIPAL_FIXTURE = {
+  principalType: 'DEVICE_SYNC',
+  credentialId: 'device-credential-1',
+  tenantId: 'tenant-A',
+  deviceId: 'terminal-A',
+  scopes: ['sync:push'],
+  credentialVersion: 1,
+};
+
+interface RequestWithDevicePrincipalFixture {
+  headers?: Record<string, unknown>;
+  devicePrincipal?: Record<string, unknown>;
+}
+
+const deviceTransportGuardOverride = {
+  canActivate: (context: ExecutionContext): boolean => {
+    const request = context
+      .switchToHttp()
+      .getRequest<RequestWithDevicePrincipalFixture>();
+    const header = request.headers?.authorization;
+    if (header !== `Bearer ${DEVICE_SYNC_BEARER_TOKEN}`) {
+      throw new UnauthorizedException(
+        'Missing or invalid device authorization header',
+      );
+    }
+    request.devicePrincipal = { ...DEVICE_PRINCIPAL_FIXTURE };
+    return true;
+  },
+};
+
+const deviceAuth = (): string => `Bearer ${DEVICE_SYNC_BEARER_TOKEN}`;
+
 const buildInsumoRecord = (
   overrides: Partial<InsumoResponseBody> = {},
 ): InsumoResponseBody => ({
@@ -249,14 +290,15 @@ describe('Inventory purchase routes (integration)', () => {
         JwtService,
         createIdentityJwtTestConfigProvider(),
         createIdentityJwtConfigProvider(),
-      ]
+      ],
     })
-      // The device transport guard is declared per-route on movements/sync and
-      // shrinkage; this suite verifies route behavior, so the guard's token
-      // validation is overridden while the dedicated spec in
-      // inventory-movement.controller.spec.ts proves the guard for real.
+      // Device transport routes (movements/sync, shrinkage, purchases) declare
+      // SyncTransportGuard per-route; this suite verifies route behavior, so
+      // the guard is replaced by the fail-closed device fixture above while
+      // the dedicated spec in inventory-movement.controller.spec.ts proves
+      // the real guard for real.
       .overrideGuard(SyncTransportGuard)
-      .useValue({ canActivate: () => true })
+      .useValue(deviceTransportGuardOverride)
       .compile();
 
     app = moduleFixture.createNestApplication();
@@ -595,19 +637,25 @@ describe('Inventory purchase routes (integration)', () => {
     });
   });
 
-  it('returns 403 for purchase posting when the authenticated role lacks permission', async () => {
+  // POST /inventory/purchases moved to device transport (ST-03, issue #478):
+  // the device transport carries no human roles, so the route-level 403 role
+  // case was re-pointed to the purchase correction route, which remains under
+  // the human guards and still enforces the owner/manager permission.
+  it('returns 403 for purchase correction when the authenticated role lacks permission', async () => {
     const token = signToken({ role: UserRole.CASHIER });
 
     await request(app.getHttpServer())
-      .post(`${INVENTORY_API_PREFIX}/purchases`)
+      .post(`${INVENTORY_API_PREFIX}/purchases/purchase-doc-1/correction`)
       .set('Authorization', `Bearer ${token}`)
-      .send(validPurchasePayload)
+      .send({ reason: 'Wrong invoice entered' })
       .expect(403);
 
     expect(transaction).not.toHaveBeenCalled();
   });
 
   it('returns 401 for purchase posting when no bearer token is provided', async () => {
+    // The device transport is fail-closed: without a device bearer the guard
+    // rejects before the handler, so no tenant context can be reached.
     await request(app.getHttpServer())
       .post(`${INVENTORY_API_PREFIX}/purchases`)
       .send(validPurchasePayload)
@@ -616,8 +664,13 @@ describe('Inventory purchase routes (integration)', () => {
     expect(transaction).not.toHaveBeenCalled();
   });
 
-  it('returns 401 for purchase posting when the authenticated token lacks tenant context', async () => {
-    const token = signToken({ tenant_id: undefined });
+  it('returns 401 for purchase posting when a human bearer reaches the device transport route', async () => {
+    // Re-pointed (ST-03, issue #478): the former case asserted a human token
+    // lacking tenant context, which tested the retired human transport's
+    // tenant source. On device transport the tenant comes from the device
+    // principal the guard validated, and a human session bearer is not an
+    // accepted transport at all, so a manager JWT must fail closed.
+    const token = signToken();
 
     const response = await request(app.getHttpServer())
       .post(`${INVENTORY_API_PREFIX}/purchases`)
@@ -626,16 +679,16 @@ describe('Inventory purchase routes (integration)', () => {
       .expect(401);
 
     const body = response.body as UnauthorizedResponseBody;
-    expect(body.message).toBe('Unauthorized');
+    expect(body.message).toBe('Missing or invalid device authorization header');
     expect(transaction).not.toHaveBeenCalled();
   });
 
-  it('returns 201 with the real purchase posting route contract for an authenticated valid request', async () => {
-    const token = signToken();
-
+  it('returns 201 with the real purchase posting route contract for a valid device transport request', async () => {
+    // The tenant (tenant-A) now comes from the device principal the transport
+    // guard attached, not from a human session.
     const response = await request(app.getHttpServer())
       .post(`${INVENTORY_API_PREFIX}/purchases`)
-      .set('Authorization', `Bearer ${token}`)
+      .set('Authorization', deviceAuth())
       .send(validPurchasePayload)
       .expect(201);
 
@@ -697,12 +750,11 @@ describe('Inventory purchase routes (integration)', () => {
   });
 
   it('returns 201 for purchase posting in official mode and persists the resolved BCN rate', async () => {
-    const token = signToken();
     resolveBcnRateByDate.mockResolvedValueOnce(36.95);
 
     const response = await request(app.getHttpServer())
       .post(`${INVENTORY_API_PREFIX}/purchases`)
-      .set('Authorization', `Bearer ${token}`)
+      .set('Authorization', deviceAuth())
       .send({
         ...officialModePurchasePayload,
         bcnRate: undefined,
@@ -743,7 +795,6 @@ describe('Inventory purchase routes (integration)', () => {
   });
 
   it('returns 404 for purchase posting in official mode when no BCN FX rate exists for the invoice date', async () => {
-    const token = signToken();
     resolveBcnRateByDate.mockRejectedValueOnce(
       new NotFoundException(
         'No official BCN FX rate found for invoiceDate 2026-01-08',
@@ -752,7 +803,7 @@ describe('Inventory purchase routes (integration)', () => {
 
     const response = await request(app.getHttpServer())
       .post(`${INVENTORY_API_PREFIX}/purchases`)
-      .set('Authorization', `Bearer ${token}`)
+      .set('Authorization', deviceAuth())
       .send({
         ...officialModePurchasePayload,
         invoiceDate: '2026-01-08',
@@ -773,12 +824,11 @@ describe('Inventory purchase routes (integration)', () => {
   });
 
   it('returns 409 for purchase posting when the invoice is already registered', async () => {
-    const token = signToken();
     existingPurchaseDocument = { id: 'purchase-doc-duplicate' };
 
     const response = await request(app.getHttpServer())
       .post(`${INVENTORY_API_PREFIX}/purchases`)
-      .set('Authorization', `Bearer ${token}`)
+      .set('Authorization', deviceAuth())
       .send(validPurchasePayload)
       .expect(409);
 

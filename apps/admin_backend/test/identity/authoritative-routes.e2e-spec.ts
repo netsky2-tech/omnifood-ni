@@ -190,6 +190,7 @@ describe('authoritative remaining sensitive routes (e2e)', () => {
   });
   const purchaseService = {
     recordPurchase: jest.fn().mockResolvedValue({ id: 'purchase-1' }),
+    correctPurchase: jest.fn().mockResolvedValue({ id: 'correction-1' }),
   };
   const catalogService = {
     seedDefaults: jest.fn().mockResolvedValue(1),
@@ -255,7 +256,7 @@ describe('authoritative remaining sensitive routes (e2e)', () => {
         { provide: CatalogService, useValue: catalogService },
         { provide: getRepositoryToken(User), useValue: users },
         { provide: DataSource, useValue: {} },
-      ]
+      ],
     })
       // The device transport guard is declared per-route on movements/sync and
       // shrinkage; this suite verifies route behavior, so the guard's token
@@ -295,17 +296,21 @@ describe('authoritative remaining sensitive routes (e2e)', () => {
       .get('/sales/reports/x')
       .set('Authorization', `Bearer ${tokenFor({ security_version: 2 })}`)
       .expect(401);
+    // Re-pointed (ST-03, issue #478): /inventory/purchases moved to device
+    // transport, so its authoritative human coverage moved to the purchase
+    // correction route, which still carries AuthGuard,
+    // AuthoritativeCurrentUserGuard and RolesGuard.
     await request(app.getHttpServer())
-      .post('/inventory/purchases')
+      .post('/inventory/purchases/purchase-doc-1/correction')
       .set('Authorization', `Bearer ${tokenFor({ tenant_id: 'tenant-B' })}`)
-      .send({})
+      .send({ reason: 'Wrong invoice entered' })
       .expect(401);
     await request(app.getHttpServer())
       .post('/catalogs/seed-defaults')
       .set('Authorization', `Bearer ${tokenFor({ role: UserRole.OWNER })}`)
       .expect(401);
 
-    expect(purchaseService.recordPurchase).not.toHaveBeenCalled();
+    expect(purchaseService.correctPurchase).not.toHaveBeenCalled();
     expect(catalogService.seedDefaults).not.toHaveBeenCalled();
   });
 

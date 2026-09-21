@@ -424,6 +424,21 @@ export const TRANSPORT_DECLARATIONS: TransportDeclaration[] = [
       },
       {
         httpMethod: 'POST',
+        handlerPath: 'purchases',
+        transport: 'device',
+      },
+      {
+        httpMethod: 'POST',
+        handlerPath: 'recipes/versions',
+        transport: 'device',
+      },
+      {
+        httpMethod: 'POST',
+        handlerPath: 'production-orders/close',
+        transport: 'device',
+      },
+      {
+        httpMethod: 'POST',
         handlerPath: 'count-sessions',
         transport: 'public',
         reason:

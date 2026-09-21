@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { UnauthorizedException } from '@nestjs/common';
 import type { ExecutionContext } from '@nestjs/common';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
+import type { Request } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
@@ -32,6 +33,7 @@ import { ProductionService } from './production.service';
 import { InventoryReportsService } from './services/inventory-reports.service';
 import { CreateShrinkageDto } from './dto/create-shrinkage.dto';
 import type { SyncMovementsDto } from './dto/create-inventory-movement.dto';
+import { ProductionOrderDocumentDto } from './dto/production-order-document.dto';
 
 const handlerOf = (handlerName: string): unknown => {
   const handler = Object.getOwnPropertyDescriptor(
@@ -65,6 +67,7 @@ const callRecordShrinkage = (
 describe('InventoryMovementController device transport routes', () => {
   let controller: InventoryMovementController;
   const inventoryService = { syncMovements: jest.fn() };
+  const productionService = { replayProductionClose: jest.fn() };
   const shrinkageService = {
     recordShrinkage: jest.fn(),
     recordProductShrinkage: jest.fn(),
@@ -80,7 +83,7 @@ describe('InventoryMovementController device transport routes', () => {
         { provide: InventoryService, useValue: inventoryService },
         { provide: RecipeService, useValue: {} },
         { provide: CountSessionService, useValue: {} },
-        { provide: ProductionService, useValue: {} },
+        { provide: ProductionService, useValue: productionService },
         { provide: InventoryReportsService, useValue: {} },
         AuthGuard,
         AuthoritativeCurrentUserGuard,
@@ -135,6 +138,9 @@ describe('InventoryMovementController device transport routes', () => {
   describe.each([
     ['POST inventory/movements/sync', 'syncMovements'],
     ['POST inventory/shrinkage', 'recordShrinkage'],
+    ['POST inventory/purchases', 'recordPurchase'],
+    ['POST inventory/recipes/versions', 'ingestRecipeVersion'],
+    ['POST inventory/production-orders/close', 'closeProductionOrder'],
   ])('%s', (_route, handlerName) => {
     it('declares the device sync transport with the sync:push scope', () => {
       const handler = handlerOf(handlerName);
@@ -194,6 +200,41 @@ describe('InventoryMovementController device transport routes', () => {
         UnauthorizedException,
       );
       expect(inventoryService.syncMovements).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('closeProductionOrder', () => {
+    it('binds the terminal from the device principal the transport guard validated, never from the payload', async () => {
+      const dto = Object.assign(new ProductionOrderDocumentDto(), {
+        id: 'prod-doc-1',
+        terminalId: 'payload-spoofed-terminal',
+        idempotencyKey: 'production:payload-spoofed-terminal:prod-doc-1',
+        sourceSequence: 11,
+        payloadHash: 'hash-1',
+      });
+      const request = {
+        headers: {},
+        devicePrincipal: {
+          principalType: 'DEVICE_SYNC',
+          credentialId: 'credential-1',
+          tenantId: 'tenant-123',
+          deviceId: 'terminal-claim-1',
+          scopes: ['sync:push'],
+          credentialVersion: 1,
+        },
+      } as unknown as Request;
+
+      await controller.closeProductionOrder(dto, 'tenant-123', request);
+
+      expect(productionService.replayProductionClose).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenantId: 'tenant-123',
+          document: expect.objectContaining({
+            terminalId: 'terminal-claim-1',
+            idempotencyKey: 'production:terminal-claim-1:prod-doc-1',
+          }),
+        }),
+      );
     });
   });
 
