@@ -179,7 +179,7 @@ Evidence: pending.
 
 ### ST-04 — Complete the count-session device transport
 
-Status: complete — work-unit commit `bb90e6a` on branch `feat/count-session-device-transport`; not yet pushed or published.
+Status: complete — work-unit commit `bb90e6a`, published as PR #480 from branch `feat/count-session-device-transport`; CI pending.
 Depends on: ST-03 (satisfied by PR #479)
 Route: delegated direct — the 4-file mapping and multi-file writer triggers applied.
 Actual size: 558 authored changed lines excluding this task record: 31 production and 527 test lines, of which the real-database RLS contract contributes 468. Founder authorized one atomic PR with a recorded size exception because backend guard and POS bearer transport cannot be delivered separately without preserving the broken 401 path; extracting a shared RLS harness would expand scope across multiple existing suites.
@@ -246,9 +246,9 @@ Evidence: pending.
 - ST-01 merged via PR #475: the two write routes that had no caller are no longer open. Issue #445 stays open until ST-04 completes its third route's explicit device contract.
 - ST-02 merged via PR #477: the route registry now makes undeclared transport drift fail.
 - ST-03 merged via PR #479 (`58ce0dc`): the three inventory document writes now use device transport; issue #478 is closed.
-- ST-04 complete in work-unit commit `bb90e6a`: `count-sessions` now has a satisfiable device transport and tenant-bound persistence under real forced-RLS proof. The branch is not yet pushed or published; issue #445 remains open until delivery.
+- ST-04 complete in work-unit commit `bb90e6a` and published as PR #480: `count-sessions` now has a satisfiable device transport and tenant-bound persistence under real forced-RLS proof. Issue #445 remains open until merge; publication verification found the PR MERGEABLE with Admin, POS and Cloudflare checks pending and GitGuardian green.
 - Issue #473 filed for the cascade defect found during the inventory: one 401 suppresses every later sync domain, and the recipe domain runs before sales, so a pending recipe can suppress the device-authoritative sales batch.
 
 ## Next step
 
-Offer the founder the ST-04 push/PR decision. After ST-04 delivery, continue with ST-05 and ST-06.
+Wait for PR #480 checks and the founder's merge decision. After ST-04 delivery, continue with ST-05 and ST-06.
