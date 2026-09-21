@@ -44,6 +44,8 @@ Without enrollment the platform cannot bring a real terminal online, so the firs
 - Work-unit commits on this feature branch; push and pull request remain the user's decisions.
 - Documentation slices use structural checks, readback and grep; code slices use focused tests plus `flutter analyze` or the backend suite as applicable.
 - Runtime confirmation requires the physical device and a freshly provisioned target; it is the only slice that cannot be verified from the repository.
+- Recorded size exception, authorized by the founder on 2026-09-20: slice L1-03 is 925 changed lines (428 production, 482 tests), and slice L1-04a is 474 (124 production, 350 tests), both above the ~400-line budget. Splitting a view from its own test would leave the first pull request unable to demonstrate what it claims, so each slice ships whole and every exception is recorded here rather than hidden.
+- Rule for the rest of this feature: a slice may exceed the budget only when the excess is test code, and every such slice is listed above with its measured counts.
 
 ## Tasks
 
@@ -119,21 +121,48 @@ Measured risk that did NOT materialise: because the displayed value is read from
 
 Recorded follow-up, deliberately not fixed here: `driverLabelFor` duplicates the four driver labels that also live in `hardware_settings_view.dart`, which is a cosmetic drift risk. Unifying them needs a shared label source on `PrinterDriverType` and would widen this slice into the hardware screen.
 
-### L1-04 — Authorize and create the attempt from the owner dashboard
+### L1-04a — Add the activation client and hooks to the dashboard
 
-Status: pending
+Status: complete — committed as `801fae6`.
 
-- [ ] Add the activation client calls to the dashboard onboarding API layer.
-- [ ] Add a setup-center action that creates the attempt for a given terminal id with an idempotency key, respecting `ONBOARDING_ACTIVATION_MANAGE`.
-- [ ] Surface the attempt state, including the awaiting-device-checks state.
+Split from the original L1-04 on purpose: the client, the hooks and the surface together exceed the review budget, and the data layer is independently reviewable and independently testable.
+
+- [ ] Add the activation client calls to the dashboard onboarding API layer, using the exact whitelisted body and the relative path convention.
+- [ ] Add the attempt types and the status vocabulary, verified against the backend entity rather than assumed.
+- [ ] Add the active-attempt query and the create-attempt mutation, including a stable idempotency key so a retry replays instead of failing.
+- [ ] Invalidate the session and readiness queries after creating an attempt, because creating one moves the lifecycle state.
 
 Acceptance criteria:
-- An OWNER can create an attempt for a terminal id from the back office.
-- The action is idempotent and permission-gated.
+- The client sends only the four whitelisted fields, never a tenant or an actor, which the backend rejects under `forbidNonWhitelisted`.
+- A retried submission reuses the same idempotency key and therefore replays the existing attempt instead of returning `CANNOT_START_ACTIVATION_NOT_SALE_READY`.
+- The hooks expose the documented failure modes rather than swallowing them.
+
+Checks:
+- Dashboard API-layer tests asserting the exact path, method and body.
+- Hook tests covering success, the idempotent retry and each documented error.
+
+Evidence: implemented with strict TDD. RED observed: both test files failed because the attempt status vocabulary did not exist yet. GREEN: 28 tests pass across the two files, reproduced by the parent, and lint reports no findings in the changed files. The contract was read from the backend before coding: the four whitelisted body fields, the two relative paths, the status vocabulary from the entity, and the idempotency lookup keyed on `{tenantId, idempotencyKey}` only when the key is non-blank. The mutation keeps one idempotency key per submission, reuses it on retry, regenerates it after success or when the terminal id changes, and invalidates the session, readiness and active-attempt queries because creating an attempt moves the lifecycle state. Backend failure messages and statuses reach the caller intact instead of being collapsed into a generic error.
+
+Parent correction during review: the new hooks test was first written with a `.ts` extension, which forced `createElement` instead of JSX and diverged from every sibling test. It was renamed to `.tsx` and converted to JSX; the suite was re-run green.
+
+Environment note, not a code defect: `npm run typecheck` fails on `src/features/menu-qr/qr-encode.ts` because the declared dependency `uqr` is not installed in the local `node_modules`. It is present in the manifest on `main` and the import exists on `main`, so this is a missing local install rather than a broken tree, and it is outside this slice.
+
+### L1-04b — Authorize and create the attempt from the setup center
+
+Status: pending
+Depends on: L1-04a
+
+- [ ] Replace the non-interactive activation block with an action gated on `onboarding:activation:manage`.
+- [ ] Collect the terminal id the operator reads from the terminal's own identity surface (L1-03).
+- [ ] Surface the attempt state, including the awaiting-device-checks state, and map each documented backend failure to an understandable message.
+
+Acceptance criteria:
+- An OWNER can create an attempt for a terminal id from the back office, and a role without the permission cannot.
+- Every documented failure is surfaced with its meaning, not as a generic error.
 - No device-observed check is fabricated by the dashboard.
 
 Checks:
-- Dashboard tests for the new surface and the permission gate.
+- Dashboard tests for the new surface, the permission gate, and each failure mapping.
 - Backend permission enforcement readback.
 
 Evidence: pending.
