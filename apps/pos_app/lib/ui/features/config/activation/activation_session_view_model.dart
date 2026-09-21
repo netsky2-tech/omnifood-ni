@@ -4,7 +4,9 @@ import '../../../../data/models/activation/activation_attempt_local_entity.dart'
 import '../../../../data/services/activation_controlled_sale_runner.dart';
 import '../../../../data/services/activation_pre_offline_runner.dart';
 import '../../../../data/services/activation_reconnect_sync_runner.dart';
+import '../../../../data/services/activation_priming_service.dart';
 import '../../../../data/services/activation_session_service.dart';
+import '../../../../data/ports/activation_priming_port.dart';
 import '../../../../domain/models/user.dart';
 import '../../../../domain/repositories/auth_repository.dart';
 
@@ -46,11 +48,14 @@ class ActivationPhaseNotPreparedException extends StateError {
 class ActivationSessionViewModel extends ChangeNotifier {
   ActivationSessionViewModel({
     required ActivationSessionService sessionService,
+    required ActivationPrimingService primingService,
     required AuthRepository authRepository,
   })  : _sessionService = sessionService,
+        _primingService = primingService,
         _authRepository = authRepository;
 
   final ActivationSessionService _sessionService;
+  final ActivationPrimingService _primingService;
   final AuthRepository _authRepository;
 
   bool _isPrepared = false;
@@ -116,6 +121,13 @@ class ActivationSessionViewModel extends ChangeNotifier {
   /// Resolves the activation attempt using the tenant of the currently
   /// logged-in user. Fails closed with a named blocker when no valid
   /// session user is available.
+  ///
+  /// L1-10c: BEFORE the session's prepare(), the terminal is primed with its
+  /// tenant's catalog and fiscal projection over the human-authenticated
+  /// path (the same trust level as the activation discovery call). A priming
+  /// failure is a distinct, named blocker and PREVENTS prepare() from
+  /// running: a half-primed terminal must never reach the activation
+  /// lifecycle, whose checks pin local catalog and fiscal revisions.
   Future<void> prepare() async {
     _isPrepared = false;
     _attempt = null;
@@ -130,6 +142,25 @@ class ActivationSessionViewModel extends ChangeNotifier {
       _blockerCode = 'SESSION_USER_UNRESOLVED';
       _blockerMessage =
           'No hay una sesión de usuario válida con tenant asignado. Inicie sesión e intente nuevamente.';
+      notifyListeners();
+      return;
+    }
+
+    try {
+      await _primingService.primeTerminal();
+    } on TerminalPrimingPayloadException catch (error) {
+      _blockerCode = error.code;
+      _blockerMessage =
+          'No se pudo preparar el terminal antes de la activación: la respuesta '
+          'de priming no es utilizable. Detalle: ${error.message}';
+      notifyListeners();
+      return;
+    } catch (error) {
+      _blockerCode = 'TERMINAL_PRIMING_FAILED';
+      _blockerMessage =
+          'No se pudo descargar los datos iniciales del terminal (catálogo y '
+          'proyección fiscal) antes de la activación. Verifique la conexión e '
+          'intente nuevamente. Detalle: $error';
       notifyListeners();
       return;
     }

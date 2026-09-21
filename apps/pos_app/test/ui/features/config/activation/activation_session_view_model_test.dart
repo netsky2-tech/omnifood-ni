@@ -4,10 +4,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:pos_app/data/models/activation/activation_attempt_local_entity.dart';
 import 'package:pos_app/data/models/activation/activation_check_result_local_entity.dart';
+import 'package:pos_app/data/ports/activation_priming_port.dart';
 import 'package:pos_app/data/services/activation_controlled_sale_runner.dart';
 import 'package:pos_app/data/services/activation_pre_offline_runner.dart';
+import 'package:pos_app/data/services/activation_priming_service.dart';
 import 'package:pos_app/data/services/activation_reconnect_sync_runner.dart';
 import 'package:pos_app/data/services/activation_session_service.dart';
+import 'package:pos_app/data/services/fiscal_inbox_handler.dart';
 import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/domain/repositories/auth_repository.dart';
 import 'package:pos_app/ui/features/config/activation/activation_session_view_model.dart';
@@ -16,6 +19,9 @@ class _MockActivationSessionService extends Mock
     implements ActivationSessionService {}
 
 class _MockAuthRepository extends Mock implements AuthRepository {}
+
+class _MockActivationPrimingService extends Mock
+    implements ActivationPrimingService {}
 
 ActivationAttemptLocalEntity _attemptEntity() =>
     const ActivationAttemptLocalEntity(
@@ -45,6 +51,7 @@ ActivationCheckResultLocalEntity _checkEntity(String status) =>
 void main() {
   late _MockActivationSessionService sessionService;
   late _MockAuthRepository authRepository;
+  late _MockActivationPrimingService primingService;
   late ActivationSessionViewModel viewModel;
 
   const loggedInUser = User(
@@ -100,10 +107,22 @@ void main() {
   setUp(() {
     sessionService = _MockActivationSessionService();
     authRepository = _MockAuthRepository();
+    primingService = _MockActivationPrimingService();
     when(() => authRepository.getCurrentUser())
         .thenAnswer((_) async => loggedInUser);
+    when(() => primingService.primeTerminal()).thenAnswer(
+      (_) async => const ActivationPrimingResult(
+        status: 'OK',
+        appliedProducts: 0,
+        appliedCatalogValues: 0,
+        fiscalEnvelopePresent: false,
+        fiscalOutcome: null,
+        serverCurrentVersion: 7,
+      ),
+    );
     viewModel = ActivationSessionViewModel(
       sessionService: sessionService,
+      primingService: primingService,
       authRepository: authRepository,
     );
   });
@@ -162,6 +181,77 @@ void main() {
       verifyNever(() => sessionService.syncActivationEvidence());
     });
 
+    test('primes the terminal before prepare, in that order', () async {
+      stubSuccessfulSession();
+
+      await viewModel.prepare();
+
+      verifyInOrder([
+        () => primingService.primeTerminal(),
+        () => sessionService.prepare(tenantId: 'tenant-1'),
+      ]);
+      expect(viewModel.isPrepared, isTrue);
+      expect(viewModel.blockerCode, isNull);
+    });
+
+    test('a malformed priming payload surfaces its own named blocker and '
+        'prepare() is never called', () async {
+      when(() => primingService.primeTerminal()).thenThrow(
+        const TerminalPrimingPayloadException(
+          'TERMINAL_PRIMING_PAYLOAD_MALFORMED',
+          'Server returned a non-object terminal priming payload',
+        ),
+      );
+
+      await viewModel.prepare();
+
+      expect(viewModel.isPrepared, isFalse);
+      expect(viewModel.attempt, isNull);
+      expect(viewModel.blockerCode, 'TERMINAL_PRIMING_PAYLOAD_MALFORMED');
+      expect(viewModel.blockerMessage, isNotEmpty);
+      verifyNever(() => sessionService.prepare(
+            tenantId: any(named: 'tenantId'),
+          ));
+
+      await expectLater(
+        viewModel.runPreOfflineChecks(authorizedUserPin: '4321'),
+        throwsStateError,
+      );
+    });
+
+    test('a priming transport failure surfaces a distinct named blocker and '
+        'prepare() is never called', () async {
+      when(() => primingService.primeTerminal()).thenThrow(
+        StateError('DioException: connection refused'),
+      );
+
+      await viewModel.prepare();
+
+      expect(viewModel.isPrepared, isFalse);
+      expect(viewModel.attempt, isNull);
+      expect(viewModel.blockerCode, 'TERMINAL_PRIMING_FAILED');
+      expect(viewModel.blockerMessage, isNotEmpty);
+      verifyNever(() => sessionService.prepare(
+            tenantId: any(named: 'tenantId'),
+          ));
+    });
+
+    test('priming is not run when the logged-in user cannot be resolved',
+        () async {
+      when(() => authRepository.getCurrentUser()).thenAnswer(
+        (_) async => null,
+      );
+
+      await viewModel.prepare();
+
+      expect(viewModel.isPrepared, isFalse);
+      expect(viewModel.blockerCode, 'SESSION_USER_UNRESOLVED');
+      verifyNever(() => primingService.primeTerminal());
+      verifyNever(() => sessionService.prepare(
+            tenantId: any(named: 'tenantId'),
+          ));
+    });
+
     test('a logged-in user without a tenant fails preparation closed',
         () async {
       when(() => authRepository.getCurrentUser()).thenAnswer(
@@ -177,6 +267,7 @@ void main() {
 
       expect(viewModel.isPrepared, isFalse);
       expect(viewModel.blockerCode, 'SESSION_USER_UNRESOLVED');
+      verifyNever(() => primingService.primeTerminal());
       verifyNever(() => sessionService.prepare(
             tenantId: any(named: 'tenantId'),
           ));

@@ -12,10 +12,12 @@ import 'data/database/migrations.dart';
 import 'data/database/database_seeder.dart';
 import 'data/network/cloud_auth_interceptor.dart';
 import 'data/network/device_sync_auth_interceptor.dart';
+import 'data/adapters/activation/dio_activation_priming_port.dart';
 import 'data/adapters/activation/dio_activation_sync_port.dart';
 import 'data/services/activation_attempt_discovery_service.dart';
 import 'data/services/activation_controlled_sale_runner.dart';
 import 'data/services/activation_pre_offline_runner.dart';
+import 'data/services/activation_priming_service.dart';
 import 'data/services/activation_reconnect_sync_runner.dart';
 import 'data/services/activation_required_config_adapter.dart';
 import 'data/services/activation_session_service.dart';
@@ -318,6 +320,13 @@ void main() async {
     controlledSaleRunner: activationControlledSaleRunner,
     reconnectSyncRunner: activationReconnectSyncRunner,
   );
+  // L1-10c: terminal priming before activation prepare(). Uses the same
+  // human-authenticated Dio client as DioActivationSyncPort (the trust level
+  // of the activation discovery call); the device path is untouched.
+  final activationPrimingService = ActivationPrimingService(
+    database: database,
+    primingPort: DioActivationPrimingPort(dio),
+  );
 
   final connectivityService = NetworkConnectivityService(dio);
   connectivityService.start();
@@ -415,6 +424,7 @@ void main() async {
         ChangeNotifierProvider(
           create: (_) => ActivationSessionViewModel(
             sessionService: activationSessionService,
+            primingService: activationPrimingService,
             authRepository: authRepository,
           ),
         ),
