@@ -89,6 +89,8 @@ graph TD
 
 ### Batch 12.2: Production Build Profiles, ProGuard Rules & Packaging Automation
 
+> **Corrección (2026-09-21):** el script de empaquetado fue renombrado a `scripts/build_pos_apk.sh` al hacer el packaging neutral respecto del dispositivo. Las referencias a `scripts/build_sunmi_apk.sh` en esta sección histórica designan ese mismo script con su nombre anterior.
+
 - **Goal:** Configure release build profiles, ProGuard/R8 retention rules, signing configurations, and provide an automated release script (`scripts/build_sunmi_apk.sh`) to build optimized ARM/ARM64 and Universal Release Candidate APKs.
 - **Traceability:** PRD Operational Readiness; `GEMINI.md`.
 - **Prerequisites and dependencies:** Batch 12.1.
