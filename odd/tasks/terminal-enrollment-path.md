@@ -513,7 +513,7 @@ PR #461 (merge `964a0ce`, commits `77dcc6b` + `68ffbd3`, closing issue #460) pub
 
 - Repository implementation is merged: L1-01 through L1-05c-2, L1-07, L1-08 and L1-09 are complete and merged to `main`. L1-10 is complete on `feat/l1-10-terminal-priming` and not yet merged.
 - **L1-10 unblocks L1-06.** A fresh terminal now has a production path to satisfy `prepare()` and `REQUIRED_CONFIG_LOCAL` before it holds a credential.
-- **Issue #470 may still block L1-06.** The device path `/v1/sync/inbound/*` shares the RLS binding defect found here, and L1-06's checks exercise `/v1/sync/*`. Resolve #470 before expecting L1-06 to demonstrate a complete credential-to-transport story.
+- **The device-path defect found here is fixed.** Issue #470 was confirmed against a production-shaped database (FORCED RLS, uuid predicate, non-bypass role) and corrected in PR #472 by binding at the controller boundary. L1-06's `/v1/sync/*` checks now have a transport that can actually deliver RLS-protected data.
 - L1-06 also requires the physical Q80 and a fresh tenant.
 - #314 follows confirmed L1 (confirmation happens at L1-06); #445 remains separate.
 
@@ -529,4 +529,26 @@ PR #461 (merge `964a0ce`, commits `77dcc6b` + `68ffbd3`, closing issue #460) pub
 
 ## Next step
 
-Publish L1-10 as a pull request and merge it. Then decide whether to fix issue #470 before L1-06, because L1-06 exercises `/v1/sync/*`. L1-06 itself still needs the physical Q80 and a fresh tenant. #314 follows confirmed L1; #445 remains separate.
+Merge PR #472 for issue #470 (see the L1-11 entry below), then execute L1-06 when the physical Q80 and a fresh tenant are available. #314 follows confirmed L1; #445 remains separate.
+
+### L1-11 — Fix the device inbound tenant binding
+
+Status: complete — work-unit commit `750e2e4` on branch `fix/device-inbound-rls-binding`, published as PR #472 closing issue #470. Not yet merged.
+
+This is not an enrollment slice; it is recorded here because L1-06 depends on it and because the same investigation found it.
+
+**Confirmed defect.** `SyncTransportGuard` binds `app.tenant_id` inside its own transaction, which commits before the controller handler runs. The handler then called `InboundSyncService.getInboundDeltas` without an entity manager, so the reads went through global pooled repositories that never see the binding. Under FORCED RLS that gave HTTP 500 `invalid input syntax for type uuid: ""` on a warm pooled connection, or a silently empty catalog list on a never-bound one. Affected the three inbound GET handlers: `/deltas`, `/catalog` and the root, for any request whose types include catalog values, including the default request with no `types` filter.
+
+**Why an existing test appeared to contradict it, and why that test was worth fixing.** `sync-down-contract.db.e2e-spec.ts` passed while asserting that catalog values arrived. Its schema was built with `synchronize: true`, which never emits `ENABLE`/`FORCE ROW LEVEL SECURITY` or any policy, and it connected as the `postgres` superuser, which has `rolbypassrls = true`. The spec proved nothing about RLS and could not discriminate the defect. That is the more useful finding: a green test that cannot fail for the property it appears to cover.
+
+**Fix.** `InboundSyncController` injects `DataSource` and wraps the three GET handlers in `runInTenantTransaction`, passing the bound manager as the fourth argument. No guard, service, response shape, scope or permission changed, and the acknowledge POST handlers were left untouched. The service already supported the manager from the L1-10a fix, so the change is confined to the controller boundary.
+
+**Strict TDD, and the RED is the point.** The contract spec was first made non-vacuous: FORCED RLS with the same predicate the migrations emit, the app connection running as a non-owner `NOSUPERUSER NOBYPASSRLS` role, seeding and cleanup through a separate admin connection, and a shared helper (`apps/admin_backend/test/support/rls-test-shape.helper.ts`) for the RLS shape, the uuid rebind and the restricted role. RED observed: 2 of 6 tests failed, `Contract: catalog values` with `expected 200, got 500` and `QueryFailedError: invalid input syntax for type uuid: ""`, plus the `sinceVersion` case failing on the RLS-protected mapping-version `EXISTS`. GREEN observed after the controller fix: 6 of 6, including the tenant-isolation case.
+
+Checks run: `npm run test:e2e -- --testPathPattern 'sync-down-contract'` 6 of 6 after being 2 of 6 failing; `npx jest src/modules/sales` 238 of 238; `npm run build` clean; `git diff --check` clean; `npm run lint` with no errors and only the repository's pre-existing warnings, followed by reverting the unrelated formatting churn that script produces.
+
+Size: 376 changed lines in the fix commit (318 insertions, 58 deletions), of which the production change is 49 lines in the controller and the rest is test infrastructure and the mechanical arity updates. An earlier version of this record said "318 changed lines", which counted insertions alone; independent verification caught it.
+
+The RED was reproduced first-hand by the parent, not only reported by the implementing writer: reverting just the controller file to `05e73fe` and re-running the contract spec gives exactly 2 failed and 4 passed, with `QueryFailedError: invalid input syntax for type uuid: ""`, and the two failures are precisely the catalog-values case and the `sinceVersion` case. Restoring the controller returns the spec to 6 of 6. Independent verification had to leave that step undone because its own contract forbids mutating the tree, so the reproduction is recorded here as the parent's.
+
+Two mechanical contract updates were required in sibling specs whose `toHaveBeenCalledWith` assertions pinned the old three-argument arity. Both were authorized explicitly rather than widened silently, and neither assertion was weakened: the new expectation pins the real bound manager.

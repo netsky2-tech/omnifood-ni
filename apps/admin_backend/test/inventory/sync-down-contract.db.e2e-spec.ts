@@ -36,6 +36,12 @@ import {
   signDeviceSyncAccessToken,
   type ProvisionedDeviceSyncCredential,
 } from '../support/device-sync-e2e.helper';
+import {
+  applyForcedTenantRls,
+  createRlsTestRole,
+  dropRlsTestRole,
+  rebindTenantColumnToUuid,
+} from '../support/rls-test-shape.helper';
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -67,10 +73,29 @@ const ALL_ENTITIES = [
   ActivationAttempt,
 ];
 
+/** Tables the restricted runtime role may SELECT (the inbound read path). */
+const RLS_ROLE_TABLES = [
+  'tenants',
+  'products',
+  'catalog_values',
+  'insumos',
+  'recipes',
+  'recipe_versions',
+  'recipe_details',
+  'users',
+  'security_profiles',
+  'product_inventory_mapping_versions',
+  'device_sync_credentials',
+  'onboarding_activation_attempts',
+] as const;
+
 async function withIsolatedSchema(
   schemaPrefix: string,
   assertion: (ctx: {
     app: INestApplication;
+    /** Admin (superuser) connection: schema build, seeding and cleanup only. */
+    admin: DataSource;
+    /** The connection the application runs on: restricted role, RLS-bound. */
     dataSource: DataSource;
     deviceToken: string;
     tenantId: string;
@@ -78,6 +103,9 @@ async function withIsolatedSchema(
 ): Promise<void> {
   const bootstrap = new DataSource({ type: 'postgres', ...postgresConnection });
   const schema = `${schemaPrefix}_${randomUUID().replace(/-/g, '')}`;
+  const roleName = `${schemaPrefix}_rls_${randomUUID().replace(/-/g, '')}`;
+  const rolePassword = randomUUID();
+  let admin: DataSource | null = null;
   let dataSource: DataSource | null = null;
   let app: INestApplication | null = null;
   const provisionedDevices: ProvisionedDeviceSyncCredential[] = [];
@@ -86,23 +114,54 @@ async function withIsolatedSchema(
     await bootstrap.initialize();
     await bootstrap.query(`CREATE SCHEMA "${schema}"`);
 
-    dataSource = new DataSource({
+    admin = new DataSource({
       type: 'postgres',
       ...postgresConnection,
       schema,
       entities: ALL_ENTITIES,
       synchronize: true,
-      // Every pooled connection must share the isolated-schema search_path so
-      // the device-sync helper's raw INSERTs and the guard's entity reads
-      // resolve to the same tables (same convention as the migrated
-      // sync-outbox-replay reference suite).
-      extra: { options: `-c search_path=${schema},public` },
+      extra: { max: 2 },
     });
-    await dataSource.initialize();
-    await dataSource.query(`SET search_path TO "${schema}"`);
+    await admin.initialize();
+
+    // Production RLS shape (issue #470): `synchronize` never emits RLS, so
+    // the suite applies FORCED row-level security with the exact predicate
+    // the migrations emit, on the catalog tables the inbound read path
+    // touches. Products carry no RLS in production and keep none here.
+    const ddl = admin.createQueryRunner();
+    try {
+      await ddl.connect();
+      // current_schema() inside resolveTenantRlsPredicate follows the
+      // session search_path, so point it at the isolated schema before
+      // emitting any RLS DDL.
+      await ddl.query(`SET search_path TO "${schema}", public`);
+      await rebindTenantColumnToUuid(ddl, schema, 'catalog_values');
+      await applyForcedTenantRls(ddl, schema, 'catalog_values', ['select']);
+      await rebindTenantColumnToUuid(
+        ddl,
+        schema,
+        'product_inventory_mapping_versions',
+      );
+      await applyForcedTenantRls(
+        ddl,
+        schema,
+        'product_inventory_mapping_versions',
+        ['select'],
+      );
+    } finally {
+      await ddl.release();
+    }
+
+    await createRlsTestRole({
+      bootstrap,
+      roleName,
+      password: rolePassword,
+      schema,
+      tables: RLS_ROLE_TABLES,
+    });
 
     const tenantId = randomUUID();
-    await dataSource.query(
+    await admin.query(
       `INSERT INTO tenants (id, name, is_active, created_at, updated_at) VALUES ($1, $2, true, now(), now())`,
       [tenantId, `E2E Tenant ${schemaPrefix}`],
     );
@@ -111,10 +170,10 @@ async function withIsolatedSchema(
     // attempt) for the tenant: the /v1/sync transport is device-only, so the
     // inbound pull routes below authenticate with a device token.
     provisionedDevices.push(
-      await provisionDeviceSyncCredential(dataSource, {
-        // This suite bootstraps the app with a DataSource-level `schema` option,
-        // so SyncTransportGuard reads the device tables from that isolated schema
-        // and the provisioned rows must land there too.
+      await provisionDeviceSyncCredential(admin, {
+        // Both DataSources carry the isolated-schema `schema` option, so
+        // SyncTransportGuard reads the device tables from that isolated
+        // schema and the provisioned rows must land there too.
         schema,
         tenantId,
         deviceId: 'terminal-1',
@@ -122,34 +181,52 @@ async function withIsolatedSchema(
       }),
     );
 
-    const productRepo = dataSource.getRepository(Product);
-    const catalogValueRepo = dataSource.getRepository(CatalogValue);
-    const insumoRepo = dataSource.getRepository(Insumo);
-    const recipeRepo = dataSource.getRepository(Recipe);
-    const recipeVersionRepo = dataSource.getRepository(RecipeVersion);
-    const recipeDetailRepo = dataSource.getRepository(RecipeDetail);
-    const userRepo = dataSource.getRepository(User);
+    // The application runs as the restricted role: NOSUPERUSER NOBYPASSRLS,
+    // not the table owner, so FORCED RLS applies to every read it makes.
+    dataSource = new DataSource({
+      type: 'postgres',
+      ...postgresConnection,
+      username: roleName,
+      password: rolePassword,
+      schema,
+      entities: ALL_ENTITIES,
+      synchronize: false,
+      extra: { max: 2 },
+    });
+    await dataSource.initialize();
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [InboundSyncController],
       providers: [
         InboundSyncService,
-        { provide: getRepositoryToken(Product), useValue: productRepo },
+        {
+          provide: getRepositoryToken(Product),
+          useValue: dataSource.getRepository(Product),
+        },
         {
           provide: getRepositoryToken(CatalogValue),
-          useValue: catalogValueRepo,
+          useValue: dataSource.getRepository(CatalogValue),
         },
-        { provide: getRepositoryToken(Insumo), useValue: insumoRepo },
-        { provide: getRepositoryToken(Recipe), useValue: recipeRepo },
+        {
+          provide: getRepositoryToken(Insumo),
+          useValue: dataSource.getRepository(Insumo),
+        },
+        {
+          provide: getRepositoryToken(Recipe),
+          useValue: dataSource.getRepository(Recipe),
+        },
         {
           provide: getRepositoryToken(RecipeVersion),
-          useValue: recipeVersionRepo,
+          useValue: dataSource.getRepository(RecipeVersion),
         },
         {
           provide: getRepositoryToken(RecipeDetail),
-          useValue: recipeDetailRepo,
+          useValue: dataSource.getRepository(RecipeDetail),
         },
-        { provide: getRepositoryToken(User), useValue: userRepo },
+        {
+          provide: getRepositoryToken(User),
+          useValue: dataSource.getRepository(User),
+        },
         JwtService,
         AuthGuard,
         SyncTransportGuard,
@@ -172,15 +249,16 @@ async function withIsolatedSchema(
 
     const deviceToken = signDeviceSyncAccessToken(app, provisionedDevices[0]);
 
-    await assertion({ app, dataSource, deviceToken, tenantId });
+    await assertion({ app, admin, dataSource, deviceToken, tenantId });
   } finally {
     if (app) await app.close();
-    if (dataSource?.isInitialized) {
+    if (dataSource?.isInitialized) await dataSource.destroy();
+    if (admin?.isInitialized) {
       // Device sync rows live in the isolated schema: delete provisioned
       // credentials before their activation attempts inside a per-tenant
       // transaction that sets the RLS tenant context.
       for (const device of provisionedDevices) {
-        await dataSource.transaction(async (manager) => {
+        await admin.transaction(async (manager) => {
           await manager.query("SELECT set_config('app.tenant_id', $1, true)", [
             device.tenantId,
           ]);
@@ -194,10 +272,11 @@ async function withIsolatedSchema(
           );
         });
       }
-      await dataSource.destroy();
+      await admin.destroy();
     }
     if (bootstrap.isInitialized) {
       await bootstrap.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+      await dropRlsTestRole(bootstrap, roleName);
       await bootstrap.destroy();
     }
   }
@@ -214,11 +293,11 @@ describe('InboundSyncController E2E — real PostgreSQL', () => {
       async () => {
         await withIsolatedSchema(
           'e2e_sync_products',
-          async ({ app, dataSource, deviceToken, tenantId }) => {
+          async ({ app, admin, deviceToken, tenantId }) => {
             const token = deviceToken;
 
             const productId = randomUUID();
-            await dataSource.query(
+            await admin.query(
               `INSERT INTO products (id, tenant_id, name, uom, stock, "averageCost", "sellPrice", is_active, is_perishable, created_at, updated_at)
                VALUES ($1, $2, 'Cafe Americano', 'UND', 100, 12.50, 60.00, true, false, now(), now())`,
               [productId, tenantId],
@@ -267,11 +346,11 @@ describe('InboundSyncController E2E — real PostgreSQL', () => {
       async () => {
         await withIsolatedSchema(
           'e2e_sync_catalog',
-          async ({ app, dataSource, deviceToken, tenantId }) => {
+          async ({ app, admin, deviceToken, tenantId }) => {
             const token = deviceToken;
 
             const catalogId = randomUUID();
-            await dataSource.query(
+            await admin.query(
               `INSERT INTO catalog_values (id, tenant_id, catalog_type, code, label, is_active, sort_order, created_at, updated_at)
                VALUES ($1, $2, 'UOM', 'kg', 'Kilogramo', true, 0, now(), now())`,
               [catalogId, tenantId],
@@ -315,21 +394,21 @@ describe('InboundSyncController E2E — real PostgreSQL', () => {
       async () => {
         await withIsolatedSchema(
           'e2e_sync_since',
-          async ({ app, dataSource, deviceToken, tenantId }) => {
+          async ({ app, admin, deviceToken, tenantId }) => {
             const token = deviceToken;
 
             const oldProductId = randomUUID();
             const newProductId = randomUUID();
 
             // Old product — updated_at frozen at 1970-01-01 (clearly before sinceVersion)
-            await dataSource.query(
+            await admin.query(
               `INSERT INTO products (id, tenant_id, name, uom, stock, "averageCost", "sellPrice", is_active, is_perishable, created_at, updated_at)
                VALUES ($1, $2, 'Old Product', 'UND', 10, 5.00, 15.00, true, false, '1970-01-01T00:00:00Z', '1970-01-01T00:00:00Z')`,
               [oldProductId, tenantId],
             );
 
             // New product — updated_at = now
-            await dataSource.query(
+            await admin.query(
               `INSERT INTO products (id, tenant_id, name, uom, stock, "averageCost", "sellPrice", is_active, is_perishable, created_at, updated_at)
                VALUES ($1, $2, 'New Product', 'UND', 20, 8.00, 25.00, true, false, now(), now())`,
               [newProductId, tenantId],
@@ -364,18 +443,18 @@ describe('InboundSyncController E2E — real PostgreSQL', () => {
       async () => {
         await withIsolatedSchema(
           'e2e_sync_types',
-          async ({ app, dataSource, deviceToken, tenantId }) => {
+          async ({ app, admin, deviceToken, tenantId }) => {
             const token = deviceToken;
 
             // Seed a product
-            await dataSource.query(
+            await admin.query(
               `INSERT INTO products (id, tenant_id, name, uom, stock, "averageCost", "sellPrice", is_active, is_perishable, created_at, updated_at)
                VALUES ($1, $2, 'Test Product', 'UND', 10, 5.00, 15.00, true, false, now(), now())`,
               [randomUUID(), tenantId],
             );
 
             // Seed a catalog value
-            await dataSource.query(
+            await admin.query(
               `INSERT INTO catalog_values (id, tenant_id, catalog_type, code, label, is_active, sort_order, created_at, updated_at)
                VALUES ($1, $2, 'UOM', 'kg', 'Kilogramo', true, 0, now(), now())`,
               [randomUUID(), tenantId],
@@ -404,9 +483,9 @@ describe('InboundSyncController E2E — real PostgreSQL', () => {
       async () => {
         await withIsolatedSchema(
           'e2e_sync_tenant',
-          async ({ app, dataSource, deviceToken, tenantId }) => {
+          async ({ app, admin, deviceToken, tenantId }) => {
             const otherTenantId = randomUUID();
-            await dataSource.query(
+            await admin.query(
               `INSERT INTO tenants (id, name, is_active, created_at, updated_at) VALUES ($1, $2, true, now(), now())`,
               [otherTenantId, 'Other Tenant'],
             );
@@ -414,14 +493,14 @@ describe('InboundSyncController E2E — real PostgreSQL', () => {
             const tokenA = deviceToken;
 
             // Product for tenant A
-            await dataSource.query(
+            await admin.query(
               `INSERT INTO products (id, tenant_id, name, uom, stock, "averageCost", "sellPrice", is_active, is_perishable, created_at, updated_at)
                VALUES ($1, $2, 'Tenant A Product', 'UND', 10, 5.00, 15.00, true, false, now(), now())`,
               [randomUUID(), tenantId],
             );
 
             // Product for tenant B
-            await dataSource.query(
+            await admin.query(
               `INSERT INTO products (id, tenant_id, name, uom, stock, "averageCost", "sellPrice", is_active, is_perishable, created_at, updated_at)
                VALUES ($1, $2, 'Tenant B Product', 'UND', 10, 5.00, 15.00, true, false, now(), now())`,
               [randomUUID(), otherTenantId],
