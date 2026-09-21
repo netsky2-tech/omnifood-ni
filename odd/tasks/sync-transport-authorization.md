@@ -125,7 +125,9 @@ Final state: full unit suite 249 suites and 2318 tests passing, full e2e 50 suit
 
 Status: pending
 
-- [ ] Move `POST /inventory/purchases`, `POST /inventory/recipes/versions`, `POST /inventory/production-orders/close` and `POST /inventory/regularization/sync` from the human guards to `SyncTransportGuard` with `sync:push`.
+Split from the original scope after inspection: `POST /inventory/regularization/sync` moved to its own unit (ST-06) because its actor derivation is not a simple guard swap. `regularization.controller.ts` derives the actor as `request.user?.sub || request.user?.id || 'unknown-user'` and the role as `request.user?.role || 'manager'`. Those are fail-open defaults that only make sense with a human session; over device transport they would fabricate an actor and a role. That needs its own treatment and its own review, so it does not ride along here.
+
+- [ ] Move `POST /inventory/purchases`, `POST /inventory/recipes/versions` and `POST /inventory/production-orders/close` from the human guards to `SyncTransportGuard` with `sync:push`.
 - [ ] Bind the tenant and terminal from the device principal and stop reading the human user.
 - [ ] Declare, in code and in this record, the actor-authorization gap this creates and its dependency on DSI-6, so the removal of `AuthoritativeCurrentUserGuard` is visible rather than implicit.
 - [ ] Extend the POS device interceptor or the route paths so the device bearer is attached to these calls.
@@ -139,6 +141,25 @@ Checks:
 - Backend controller and guard specs; a real-database spec proving tenant binding for at least one of these writes.
 - POS tests asserting the client selection per route.
 - `npm run build`, `flutter analyze`, `git diff --check`.
+
+Evidence: pending.
+
+### ST-06 — Move regularization/sync to device transport without fabricating an actor
+
+Status: pending
+
+- [ ] Move `POST /inventory/regularization/sync` to `SyncTransportGuard` with `sync:push`.
+- [ ] Stop deriving the actor from a human session. The document carries the actor it was authored with (`authorizedByUserId`, `authorizedByRole`, `authorizationMethod`), captured locally at authoring time; the device route must use that and declare it as self-reported until DSI-6 provides attestation.
+- [ ] Remove the fail-open defaults `'unknown-user'` and `'manager'`. Neither may survive on the device path, because they fabricate an identity where none was attested.
+
+Acceptance criteria:
+- The route accepts only a valid device token.
+- The actor recorded for a regularization correction is the one carried by the document, never a fabricated default and never a human session that is absent.
+- The DSI-6 dependency is explicit at the point where the human actor used to be read.
+
+Checks:
+- Backend spec asserting the recorded actor comes from the document and that no default identity is produced when the document carries none.
+- `npm test`, `npm run test:e2e`, `npm run build`, `git diff --check`.
 
 Evidence: pending.
 
