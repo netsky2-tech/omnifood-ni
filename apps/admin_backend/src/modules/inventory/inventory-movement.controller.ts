@@ -6,6 +6,7 @@ import {
   Body,
   Param,
   Query,
+  UnauthorizedException,
   UseGuards,
   UseInterceptors,
   Req,
@@ -22,6 +23,8 @@ import {
 import { SyncRecipeVersionDocumentDto } from './dto/sync-recipe-version-document.dto';
 import { GetTenantId } from '../../core/decorators/tenant.decorator';
 import { TenantInterceptor } from '../../core/database/rls.interceptor';
+import { SyncTransportGuard } from '../identity/guards/sync-transport.guard';
+import { RequireSyncScopes } from '../identity/decorators/sync-scopes.decorator';
 import { InventoryPurchaseService } from './inventory-purchase.service';
 import { AuthGuard } from '../identity/guards/auth.guard';
 import { AuthoritativeCurrentUserGuard } from '../identity/guards/authoritative-current-user.guard';
@@ -122,6 +125,19 @@ export class InventoryMovementController {
     private readonly reportsService: InventoryReportsService,
   ) {}
 
+  /**
+   * Fail-closed tenant binding for the device transport routes: the tenant
+   * always comes from the authenticated device principal the transport guard
+   * attached, never from a human user. On a valid device token this is always
+   * present; the check keeps an unbound request from reaching the services.
+   */
+  private requireTenant(tenantId?: string): string {
+    if (!tenantId?.trim()) {
+      throw new UnauthorizedException('Tenant context is required');
+    }
+    return tenantId.trim();
+  }
+
   @Get('alerts')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles(UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER)
@@ -130,11 +146,16 @@ export class InventoryMovementController {
   }
 
   @Post('movements/sync')
+  @UseGuards(SyncTransportGuard)
+  @RequireSyncScopes('sync:push')
   async syncMovements(
     @Body() syncDto: SyncMovementsDto,
-    @GetTenantId() tenantId: string,
+    @GetTenantId() tenantId: string | undefined,
   ) {
-    return this.inventoryService.syncMovements(syncDto.movements, tenantId);
+    return this.inventoryService.syncMovements(
+      syncDto.movements,
+      this.requireTenant(tenantId),
+    );
   }
 
   @Post('purchase')
@@ -213,7 +234,14 @@ export class InventoryMovementController {
   }
 
   @Post('shrinkage')
+  @UseGuards(SyncTransportGuard)
+  @RequireSyncScopes('sync:push')
   async recordShrinkage(@Body() dto: CreateShrinkageDto) {
+    // Device transport only: the tenant and terminal identity come from the
+    // device principal the guard validated, never from a human user. Neither
+    // shrinkage DTO carries a terminal field and ShrinkageService derives
+    // tenant_id from the affected rows inside its own transaction, so no
+    // additional binding is introduced in the handler.
     if (dto.targetType === 'PRODUCT') {
       return this.shrinkageService.recordProductShrinkage({
         productId: dto.productId ?? '',

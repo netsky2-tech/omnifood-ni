@@ -6,6 +6,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ROLES_KEY } from '../../core/decorators/roles.decorator';
 import { UserRole } from '../identity/entities/user.entity';
 import { AuthGuard } from '../identity/guards/auth.guard';
+import { SyncTransportGuard } from '../identity/guards/sync-transport.guard';
 import { AuthoritativeCurrentUserGuard } from '../identity/guards/authoritative-current-user.guard';
 import { CurrentUserAuthorizationService } from '../identity/services/current-user-authorization.service';
 import { RolesGuard } from '../identity/guards/roles.guard';
@@ -142,7 +143,14 @@ describe('InventoryController', () => {
           useValue: identityJwtConfig,
         },
       ],
-    }).compile();
+    })
+      // The device transport guard is declared per-route on movements/sync and
+      // shrinkage (issue #445); this suite covers handler behavior, so the
+      // guard's token validation is overridden while the dedicated spec in
+      // inventory-movement.controller.spec.ts proves the guard for real.
+      .overrideGuard(SyncTransportGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     controller = module.get<InventoryMovementController>(
       InventoryMovementController,
