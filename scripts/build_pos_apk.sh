@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# OmniFood NI — Sunmi V2s & Android POS Automated Release Packaging Pipeline
+# OmniFood NI — Android POS Automated Release Packaging Pipeline
 # ==============================================================================
 # Builds optimized Release Candidate APKs with ProGuard/R8, computes SHA-256
 # checksums, verifies size constraints, and produces a structured release manifest.
@@ -133,7 +133,7 @@ fi
 # Must run before any side effect and must not require Flutter or the Android SDK.
 if [ "${PLAN_ONLY}" = true ]; then
     echo "=============================================================================="
-    echo "📋 Plan — OmniFood POS Sunmi V2s Release Candidate Packaging"
+    echo "📋 Plan — OmniFood POS Release Candidate Packaging"
     echo "=============================================================================="
     echo "📁 Root Directory:      ${ROOT_DIR}"
     echo "📱 App Directory:       ${POS_APP_DIR}"
@@ -160,7 +160,7 @@ if [ "${PLAN_ONLY}" = true ]; then
 fi
 
 echo "=============================================================================="
-echo "🚀 OmniFood POS — Sunmi V2s Release Candidate Packaging Pipeline"
+echo "🚀 OmniFood POS — Release Candidate Packaging Pipeline"
 echo "=============================================================================="
 echo "📁 Root Directory:      ${ROOT_DIR}"
 echo "📱 App Directory:       ${POS_APP_DIR}"
@@ -233,7 +233,7 @@ APP_VERSION="$(grep '^version:' "${POS_APP_DIR}/pubspec.yaml" | awk '{print $2}'
 cat <<EOF > release_manifest.json
 {
   "project": "OmniFood POS",
-  "target_hardware": "Sunmi V2s Handheld POS (58mm Thermal)",
+  "target_hardware": "Android POS terminal",
   "version": "${APP_VERSION}",
   "git_commit": "${GIT_COMMIT}",
   "build_timestamp": "${BUILD_TIMESTAMP}",

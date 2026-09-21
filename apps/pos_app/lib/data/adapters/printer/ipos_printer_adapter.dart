@@ -12,7 +12,7 @@ import '../../../domain/services/printer/receipt_58mm_formatter.dart';
 import '../../../domain/services/printer/receipt_layout_formatter.dart';
 import '../../../domain/services/printer/thermal_logo_processor.dart';
 
-/// Hardware Driver Adapter for Alacrity Q80 and iPos-compatible thermal printers.
+/// Hardware Driver Adapter for MIRAY Q80/iPOS and iPos-compatible thermal printers.
 /// Communicates via Android Platform Channel with fallback resilience for non-Q80 environments.
 class IPosPrinterAdapter implements PrinterPort {
   /// Keeps platform-channel bitmap payloads bounded before Nyx decodes them.

@@ -89,6 +89,8 @@ graph TD
 
 ### Batch 12.2: Production Build Profiles, ProGuard Rules & Packaging Automation
 
+> **Corrección (2026-09-21):** el script de empaquetado fue renombrado a `scripts/build_pos_apk.sh` al hacer el packaging neutral respecto del dispositivo. Las referencias a `scripts/build_sunmi_apk.sh` en esta sección histórica designan ese mismo script con su nombre anterior.
+
 - **Goal:** Configure release build profiles, ProGuard/R8 retention rules, signing configurations, and provide an automated release script (`scripts/build_sunmi_apk.sh`) to build optimized ARM/ARM64 and Universal Release Candidate APKs.
 - **Traceability:** PRD Operational Readiness; `GEMINI.md`.
 - **Prerequisites and dependencies:** Batch 12.1.
@@ -119,13 +121,15 @@ graph TD
 
 ---
 
+> **Corrección (2026-09-21):** este plan histórico fue escrito para un dispositivo Sunmi V2s que nunca se adquirió. (a) El runbook referenciado fue renombrado y reorientado al terminal de flota MIRAY Q80/iPOS, por lo que las descripciones de pantalla 360×720dp, recibo de 58 mm y gaveta RJ11 que siguen a continuación son la suposición original de Sunmi, no la flota actual. (b) El MethodChannel vivo es `com.nhilos.pos/sunmi_printer`, no `com.omnifood.pos/sunmi_printer`.
+
 ### Batch 12.3: Physical Hardware Verification Checklist & Runbook
 
 - **Goal:** Provide a comprehensive physical device verification runbook and checklist for validating the Release Candidate APK on real Sunmi V2s hardware prior to Food Park pilot rollout.
 - **Traceability:** PRD Section 7 (Pilot Readiness); `GEMINI.md` Golden Rules.
 - **Prerequisites and dependencies:** Batch 12.2.
 - **In scope:**
-  - `docs/operations/sunmi_v2s_hardware_verification_checklist.md` covering:
+  - `docs/operations/q80_ipos_hardware_verification_checklist.md` covering:
     1. UI Responsiveness on $360\times 720\text{dp}$ screen.
     2. Physical 58mm thermal receipt printing (Facturas DGI, Comandas KDS, Cortes X/Z).
     3. RJ11 Cash Drawer physical trigger.
@@ -134,7 +138,7 @@ graph TD
   - Troubleshooting guide for Sunmi Printer Service, ADB over USB/WiFi, and cleartext network security.
 - **Out of scope:** Cloud server infrastructure provisioning.
 - **Touched domains/contracts/data/operations:**
-  - `docs/operations/sunmi_v2s_hardware_verification_checklist.md`
+  - `docs/operations/q80_ipos_hardware_verification_checklist.md`
   - `docs/plans/master_execution_roadmap.md`
 - **Acceptance criteria:**
   - Complete verification matrix with clear pass/fail criteria and remediation actions.

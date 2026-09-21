@@ -62,7 +62,7 @@ La tercera acuñación existe por una razón distinta y más estrecha: la cohort
 | Android version | 12 (SDK 31) |
 | Security patch | 2022-11-05 |
 | Firmware | `Q80_SC_V1.0.1_B241225.163320` |
-| Printer driver | Adaptador `SUNMI_V2S` vía `net.nyx.printerservice`; **versión del servicio no verificada** |
+| Printer driver | Adaptador `SUNMI_V2S` vía `net.nyx.printerservice`; **versión del servicio no verificada**. **Corrección (2026-09-21):** este valor fue capturado desde el dispositivo: nada en el backend, el seed ni el harness escribe `printer_driver_type`, por lo que no está corroborado por la configuración probada. La selección probada y funcional del founder en el Q80 real es el driver `Q80 / iPos` (`IPOS_Q80`) imprimiendo a 80 mm. La discrepancia queda registrada como **UNRESOLVED** pendiente de la confirmación física trazada en L1-06; no se afirma cuál de los dos valores es el correcto. |
 | Printer paper width | 80 mm (rollo del Q80) |
 | WiFi SSID | **No capturado** — la cohorte fue dirigida por el harness y no registró el SSID del entorno |
 | WAN outage method | **Sin corte físico de WAN.** El offline se aplicó por el propio harness (interceptor que cuenta requests) y se probó con `httpRequests: 0` en el recibo de la fase `offline` de cada run |
