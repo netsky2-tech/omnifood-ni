@@ -699,6 +699,128 @@ void main() {
       });
     });
 
+    group('Issue #450 — entry-status gate (runner owns only ASSIGNED and RUNNING)', () {
+      Future<PreOfflineRunnerSummary> runPreOffline() => runner.runPreOfflineChecks(
+            const PreOfflineRunnerParams(
+              attemptId: attemptId,
+              tenantId: tenantId,
+              authorizedUserId: authorizedUserId,
+              authorizedUserPin: validPin,
+            ),
+          );
+
+      test('a re-run on a LOCAL_ACTIVATION_EVIDENCE_COMPLETE attempt with a recorded verification ticket is refused without stranding it', () async {
+        // The controlled sale already succeeded for this attempt.
+        final attempt = await database.activationAttemptLocalDao.getAttemptById(attemptId);
+        await database.activationAttemptLocalDao.updateAttempt(
+          attempt!.copyWith(
+            localStatus: 'LOCAL_ACTIVATION_EVIDENCE_COMPLETE',
+            verificationTicketId: 'ticket-controlled-sale-001',
+          ),
+        );
+
+        // Force the re-run to fail (printer out of paper).
+        printerAdapter.currentStatus = PrinterStatus.outOfPaper;
+
+        final summary = await runPreOffline();
+
+        expect(summary.isReadyForOffline, isFalse);
+        expect(summary.checks, isEmpty);
+        expect(summary.blockers, hasLength(1));
+        expect(summary.blockers.single, contains('ATTEMPT_NOT_READY_FOR_CHECKS'));
+        expect(summary.blockers.single, contains("'LOCAL_ACTIVATION_EVIDENCE_COMPLETE'"));
+
+        // No check rows were written.
+        final persistedChecks = await database.activationCheckResultLocalDao
+            .getChecksForAttempt(tenantId, attemptId);
+        expect(persistedChecks, isEmpty);
+
+        // The printer was never called.
+        expect(printerAdapter.printHistory, isEmpty);
+        expect(printerAdapter.lastRuc, isNull);
+
+        // Status and verification ticket stay intact.
+        final reloaded = await database.activationAttemptLocalDao.getAttemptById(attemptId);
+        expect(reloaded!.localStatus, equals('LOCAL_ACTIVATION_EVIDENCE_COMPLETE'));
+        expect(reloaded.verificationTicketId, equals('ticket-controlled-sale-001'));
+      });
+
+      test('refuses every advanced or terminal status from the code vocabulary without mutating it', () async {
+        const advancedStatuses = [
+          'LOCAL_ACTIVATION_EVIDENCE_COMPLETE',
+          'SYNC_VERIFICATION_PENDING',
+          'EVIDENCE_ACKED',
+          'FAILED',
+        ];
+
+        for (final status in advancedStatuses) {
+          printerAdapter.reset();
+          printerAdapter.currentStatus = PrinterStatus.outOfPaper;
+
+          final attempt = await database.activationAttemptLocalDao.getAttemptById(attemptId);
+          await database.activationAttemptLocalDao.updateAttempt(
+            attempt!.copyWith(localStatus: status),
+          );
+
+          final summary = await runPreOffline();
+
+          expect(summary.isReadyForOffline, isFalse, reason: status);
+          expect(summary.checks, isEmpty, reason: status);
+          expect(summary.blockers, hasLength(1), reason: status);
+          expect(summary.blockers.single, contains('ATTEMPT_NOT_READY_FOR_CHECKS'), reason: status);
+          expect(summary.blockers.single, contains("'$status'"), reason: status);
+
+          final persistedChecks = await database.activationCheckResultLocalDao
+              .getChecksForAttempt(tenantId, attemptId);
+          expect(persistedChecks, isEmpty, reason: status);
+          expect(printerAdapter.printHistory, isEmpty, reason: status);
+
+          final reloaded = await database.activationAttemptLocalDao.getAttemptById(attemptId);
+          expect(reloaded!.localStatus, equals(status), reason: status);
+        }
+      });
+
+      test('a legitimate retry from ASSIGNED still reaches RUNNING when the checks pass', () async {
+        // First run fails and stays in ASSIGNED.
+        printerAdapter.currentStatus = PrinterStatus.outOfPaper;
+        final failed = await runPreOffline();
+        expect(failed.isReadyForOffline, isFalse);
+
+        var attemptInDb = await database.activationAttemptLocalDao.getAttemptById(attemptId);
+        expect(attemptInDb!.localStatus, equals('ASSIGNED'));
+
+        // The operator fixes the printer and retries: this time every check passes.
+        printerAdapter.reset();
+        final retry = await runPreOffline();
+
+        expect(retry.isReadyForOffline, isTrue);
+        expect(retry.blockers, isEmpty);
+        expect(retry.checks.length, equals(6));
+
+        attemptInDb = await database.activationAttemptLocalDao.getAttemptById(attemptId);
+        expect(attemptInDb!.localStatus, equals('RUNNING'));
+      });
+
+      test('a legitimate re-run from RUNNING rolls back to ASSIGNED when a check fails', () async {
+        final attempt = await database.activationAttemptLocalDao.getAttemptById(attemptId);
+        await database.activationAttemptLocalDao.updateAttempt(
+          attempt!.copyWith(localStatus: 'RUNNING'),
+        );
+
+        printerAdapter.currentStatus = PrinterStatus.outOfPaper;
+
+        final summary = await runPreOffline();
+
+        expect(summary.isReadyForOffline, isFalse);
+        expect(summary.checks, isNotEmpty);
+        expect(summary.blockers.any((b) => b.contains('PRINTER_AVAILABLE_FAILED')), isTrue);
+
+        // The rollback from RUNNING to ASSIGNED is intentional: the checks no longer pass.
+        final reloaded = await database.activationAttemptLocalDao.getAttemptById(attemptId);
+        expect(reloaded!.localStatus, equals('ASSIGNED'));
+      });
+    });
+
   });
 
   group('ONB1.8A–B — Offline Restart Durability (Disk Persistence Roundtrip)', () {
