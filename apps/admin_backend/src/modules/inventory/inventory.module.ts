@@ -52,6 +52,7 @@ import {
 } from './forensic-alert.service';
 import { UomConversionCalculator } from './uom-conversion-calculator';
 import { IdentityModule } from '../identity/identity.module';
+import { DeviceSyncModule } from '../identity/device-sync.module';
 import { CountSessionService } from './count-session.service';
 import { GovernanceApprovalService } from './services/governance-approval.service';
 import { KardexRegularizationService } from './services/kardex-regularization.service';
@@ -65,6 +66,7 @@ import { AuditModule } from '../audit/audit.module';
   imports: [
     IdentityModule,
     AuditModule,
+    DeviceSyncModule,
     TypeOrmModule.forFeature([
       Insumo,
       Product,
