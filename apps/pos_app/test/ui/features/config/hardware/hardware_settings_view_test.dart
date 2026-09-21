@@ -12,16 +12,63 @@ import 'package:provider/provider.dart';
 
 import 'hardware_settings_view_test.mocks.dart';
 
+/// Thin spy around the generated Mockito mock.
+///
+/// The committed generated mock predates `isPrinterProfileConfigured` and
+/// `confirmPrinterProfile`; invoking those members on the raw mock fails at
+/// runtime (missing-member noSuchMethod forwarder returns null for a
+/// non-nullable Future). The spy owns the profile state itself and delegates
+/// every other member to the Mockito mock so existing stubs/verifies keep
+/// working without regenerating mocks.
+class _PrinterConfigServiceSpy implements PrinterConfigService {
+  _PrinterConfigServiceSpy(this._delegate);
+
+  final PrinterConfigService _delegate;
+  bool profileConfigured = true;
+  int confirmCallCount = 0;
+  PrinterDriverType? confirmedDriverType;
+  int? confirmedPaperWidthMm;
+
+  @override
+  Stream<PrinterConfig> get onConfigChanged => _delegate.onConfigChanged;
+
+  @override
+  Future<PrinterConfig> getPrinterConfig() => _delegate.getPrinterConfig();
+
+  @override
+  Future<void> savePrinterConfig(PrinterConfig config) =>
+      _delegate.savePrinterConfig(config);
+
+  @override
+  Future<bool> isPrinterProfileConfigured() async => profileConfigured;
+
+  @override
+  Future<void> confirmPrinterProfile({
+    required PrinterDriverType driverType,
+    required int paperWidthMm,
+  }) async {
+    confirmCallCount++;
+    confirmedDriverType = driverType;
+    confirmedPaperWidthMm = paperWidthMm;
+    profileConfigured = true;
+  }
+
+  @override
+  void dispose() => _delegate.dispose();
+}
+
 @GenerateNiceMocks([
   MockSpec<PrinterConfigService>(),
   MockSpec<PrinterPort>(),
 ])
 void main() {
   late MockPrinterConfigService mockConfigService;
+  late _PrinterConfigServiceSpy configServiceSpy;
   late MockPrinterPort mockPrinterPort;
 
   setUp(() {
     mockConfigService = MockPrinterConfigService();
+    configServiceSpy = _PrinterConfigServiceSpy(mockConfigService);
     mockPrinterPort = MockPrinterPort();
 
     when(mockConfigService.getPrinterConfig()).thenAnswer(
@@ -51,7 +98,7 @@ void main() {
   Widget buildTestWidget() {
     return ChangeNotifierProvider<HardwareSettingsViewModel>(
       create: (_) => HardwareSettingsViewModel(
-        configService: mockConfigService,
+        configService: configServiceSpy,
         printerPort: mockPrinterPort,
       ),
       child: const MaterialApp(
@@ -211,6 +258,125 @@ void main() {
 
       verify(mockPrinterPort.openCashDrawer()).called(1);
       expect(find.textContaining('Pulso de apertura'), findsWidgets);
+    });
+  });
+
+  group('HardwareSettingsViewModel printer profile state (L1-08b)', () {
+    test('reports the profile as unconfigured when the service says so', () async {
+      configServiceSpy.profileConfigured = false;
+      final viewModel = HardwareSettingsViewModel(
+        configService: configServiceSpy,
+        printerPort: mockPrinterPort,
+      );
+      await pumpEventQueue();
+
+      expect(viewModel.isProfileConfigured, isFalse);
+      viewModel.dispose();
+    });
+
+    test('reports the profile as configured when the service says so', () async {
+      configServiceSpy.profileConfigured = true;
+      final viewModel = HardwareSettingsViewModel(
+        configService: configServiceSpy,
+        printerPort: mockPrinterPort,
+      );
+      await pumpEventQueue();
+
+      expect(viewModel.isProfileConfigured, isTrue);
+      viewModel.dispose();
+    });
+
+    test('confirming the profile persists it and refreshes the configured state', () async {
+      configServiceSpy.profileConfigured = false;
+      final viewModel = HardwareSettingsViewModel(
+        configService: configServiceSpy,
+        printerPort: mockPrinterPort,
+      );
+      await pumpEventQueue();
+
+      expect(viewModel.canConfirmPrinterProfile, isFalse);
+      viewModel.selectDriverType(PrinterDriverType.mock);
+      viewModel.selectPaperWidth(80);
+      expect(viewModel.canConfirmPrinterProfile, isTrue);
+
+      await viewModel.confirmPrinterProfile();
+
+      expect(configServiceSpy.confirmCallCount, 1);
+      expect(configServiceSpy.confirmedDriverType, PrinterDriverType.mock);
+      expect(configServiceSpy.confirmedPaperWidthMm, 80);
+      expect(viewModel.isProfileConfigured, isTrue);
+      viewModel.dispose();
+    });
+  });
+
+  group('HardwareSettingsView unconfigured printer profile (L1-08b)', () {
+    testWidgets(
+        'shows the explicit unconfigured state, requires explicit confirmation, then switches to the configured presentation',
+        (tester) async {
+      configServiceSpy.profileConfigured = false;
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Perfil de impresora sin configurar'), findsOneWidget);
+      expect(find.textContaining('nunca configuró'), findsWidgets);
+      final confirmButton =
+          find.byKey(const Key('confirm_printer_profile_button'));
+      expect(tester.widget<FilledButton>(confirmButton).onPressed, isNull);
+
+      await tester.tap(find.text('Simulador'));
+      await tester.pump();
+      final widthSegment = find.text('80 mm (44 columnas)');
+      await tester.ensureVisible(widthSegment);
+      await tester.pumpAndSettle();
+      await tester.tap(widthSegment);
+      await tester.pump();
+
+      expect(tester.widget<FilledButton>(confirmButton).onPressed, isNotNull);
+
+      await tester.ensureVisible(confirmButton);
+      await tester.pumpAndSettle();
+      await tester.tap(confirmButton);
+      await tester.pumpAndSettle();
+
+      expect(configServiceSpy.confirmCallCount, 1);
+      expect(configServiceSpy.confirmedDriverType, PrinterDriverType.mock);
+      expect(configServiceSpy.confirmedPaperWidthMm, 80);
+      expect(find.text('Perfil de impresora sin configurar'), findsNothing);
+    });
+
+    testWidgets(
+        'rule toggles keep saving without materialising the profile while unconfigured',
+        (tester) async {
+      configServiceSpy.profileConfigured = false;
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      final kitchenSwitch = find.text('Impresión automática a Cocina');
+      await tester.ensureVisible(kitchenSwitch);
+      await tester.pumpAndSettle();
+      await tester.tap(kitchenSwitch);
+      await tester.pumpAndSettle();
+
+      verify(mockConfigService.savePrinterConfig(any)).called(1);
+      expect(configServiceSpy.confirmCallCount, 0);
+      expect(find.text('Perfil de impresora sin configurar'), findsOneWidget);
+    });
+  });
+
+  group('HardwareSettingsView configured printer profile (L1-08b)', () {
+    testWidgets(
+        'keeps today behaviour: selections reflect the stored profile and persist on change',
+        (tester) async {
+      configServiceSpy.profileConfigured = true;
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Perfil de impresora sin configurar'), findsNothing);
+
+      await tester.tap(find.text('Simulador'));
+      await tester.pumpAndSettle();
+
+      verify(mockConfigService.savePrinterConfig(any)).called(1);
     });
   });
 }

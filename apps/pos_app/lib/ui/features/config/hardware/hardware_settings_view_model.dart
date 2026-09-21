@@ -23,6 +23,15 @@ class HardwareSettingsViewModel extends ChangeNotifier {
   bool _isTesting = false;
   String? _statusMessage;
 
+  /// Whether the operator has deliberately confirmed a printer profile
+  /// (driver + paper width) on this terminal (L1-08b).
+  bool _isProfileConfigured = false;
+
+  /// Pending selections while the profile is unconfigured. They are NOT
+  /// persisted until [confirmPrinterProfile] is called.
+  PrinterDriverType? _pendingDriverType;
+  int? _pendingPaperWidth;
+
   HardwareSettingsViewModel({
     required PrinterConfigService configService,
     PrinterPort? printerPort,
@@ -39,6 +48,11 @@ class HardwareSettingsViewModel extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isTesting => _isTesting;
   String? get statusMessage => _statusMessage;
+  bool get isProfileConfigured => _isProfileConfigured;
+  PrinterDriverType? get pendingDriverType => _pendingDriverType;
+  int? get pendingPaperWidth => _pendingPaperWidth;
+  bool get canConfirmPrinterProfile =>
+      _pendingDriverType != null && _pendingPaperWidth != null;
 
   Future<void> loadConfig() async {
     _isLoading = true;
@@ -46,6 +60,9 @@ class HardwareSettingsViewModel extends ChangeNotifier {
 
     try {
       _config = await _configService.getPrinterConfig();
+      _isProfileConfigured = await _configService.isPrinterProfileConfigured();
+      _pendingDriverType = null;
+      _pendingPaperWidth = null;
       if (_injectedPrinterPort == null) {
         _printerPort = PrinterResolver.resolve(_config);
       }
@@ -65,6 +82,35 @@ class HardwareSettingsViewModel extends ChangeNotifier {
       _printerStatus = PrinterStatus.error;
     }
     notifyListeners();
+  }
+
+  /// Pending (unpersisted) selection of the driver while the profile is
+  /// unconfigured. Used only by the unconfigured-profile confirmation flow.
+  void selectDriverType(PrinterDriverType driverType) {
+    _pendingDriverType = driverType;
+    notifyListeners();
+  }
+
+  /// Pending (unpersisted) selection of the paper width while the profile is
+  /// unconfigured. Used only by the unconfigured-profile confirmation flow.
+  void selectPaperWidth(int width) {
+    _pendingPaperWidth = width;
+    notifyListeners();
+  }
+
+  /// Deliberately confirms the pending driver and paper width selections as
+  /// this terminal's printer profile, then reloads the configuration and the
+  /// configured state (L1-08b).
+  Future<void> confirmPrinterProfile() async {
+    final driverType = _pendingDriverType;
+    final paperWidthMm = _pendingPaperWidth;
+    if (driverType == null || paperWidthMm == null) return;
+
+    await _configService.confirmPrinterProfile(
+      driverType: driverType,
+      paperWidthMm: paperWidthMm,
+    );
+    await loadConfig();
   }
 
   Future<void> setDriverType(PrinterDriverType driverType) async {

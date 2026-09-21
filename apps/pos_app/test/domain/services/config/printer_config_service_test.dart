@@ -100,6 +100,15 @@ void main() {
     });
 
     test('savePrinterConfig persists all values and emits on stream', () async {
+      // L1-08b setup adaptation: the profile keys must already exist for
+      // savePrinterConfig to keep persisting them (assertions unchanged).
+      when(mockDao.getConfigByKey(PrinterConfigService.driverTypeKey)).thenAnswer(
+          (_) async => LocalConfigEntity(
+              key: PrinterConfigService.driverTypeKey, value: 'SUNMI_V2S'));
+      when(mockDao.getConfigByKey(PrinterConfigService.paperWidthMmKey)).thenAnswer(
+          (_) async => LocalConfigEntity(
+              key: PrinterConfigService.paperWidthMmKey, value: '58'));
+
       const newConfig = PrinterConfig(
         driverType: PrinterDriverType.mock,
         autoPrintInvoice: true,
@@ -128,6 +137,78 @@ void main() {
       expect(emissions.first.headerBusinessName, 'Mi Restaurante');
 
       await sub.cancel();
+    });
+  });
+
+  group('PrinterConfigService — printer profile persistence (L1-08b)', () {
+    LocalConfigEntity entity(String key, String value) =>
+        LocalConfigEntity(key: key, value: value);
+
+    test('confirmPrinterProfile writes exactly the driver and paper width keys and nothing else', () async {
+      when(mockDao.getConfigByKey(any)).thenAnswer((_) async => null);
+
+      await service.confirmPrinterProfile(
+        driverType: PrinterDriverType.mock,
+        paperWidthMm: 80,
+      );
+
+      final writes = verify(mockDao.saveConfig(captureAny)).captured
+          .whereType<LocalConfigEntity>()
+          .toList();
+      expect(writes, hasLength(2));
+      expect(
+        writes
+            .where((e) => e.key == PrinterConfigService.driverTypeKey)
+            .single
+            .value,
+        'MOCK',
+      );
+      expect(
+        writes
+            .where((e) => e.key == PrinterConfigService.paperWidthMmKey)
+            .single
+            .value,
+        '80',
+      );
+    });
+
+    test('savePrinterConfig preserves an absent profile while persisting other settings', () async {
+      when(mockDao.getConfigByKey(any)).thenAnswer((_) async => null);
+
+      await service.savePrinterConfig(const PrinterConfig(
+        driverType: PrinterDriverType.mock,
+        autoPrintKitchen: true,
+        headerBusinessName: 'Mi Restaurante',
+      ));
+
+      final keys = verify(mockDao.saveConfig(captureAny)).captured
+          .whereType<LocalConfigEntity>()
+          .map((e) => e.key)
+          .toList();
+      expect(keys, isNot(contains(PrinterConfigService.driverTypeKey)));
+      expect(keys, isNot(contains(PrinterConfigService.paperWidthMmKey)));
+      expect(keys, contains(PrinterConfigService.autoPrintKitchenKey));
+    });
+
+    test('savePrinterConfig keeps writing the profile keys when they already exist', () async {
+      when(mockDao.getConfigByKey(any)).thenAnswer((_) async => null);
+      when(mockDao.getConfigByKey(PrinterConfigService.driverTypeKey)).thenAnswer(
+          (_) async => entity(PrinterConfigService.driverTypeKey, 'MOCK'));
+      when(mockDao.getConfigByKey(PrinterConfigService.paperWidthMmKey)).thenAnswer(
+          (_) async => entity(PrinterConfigService.paperWidthMmKey, '58'));
+
+      await service.savePrinterConfig(const PrinterConfig(
+        driverType: PrinterDriverType.iPosQ80,
+        paperWidthMm: 80,
+        headerBusinessName: 'Mi Restaurante',
+      ));
+
+      verify(mockDao.saveConfig(argThat(predicate<LocalConfigEntity>((e) =>
+          e.key == PrinterConfigService.driverTypeKey &&
+          e.value == 'IPOS_Q80')))).called(1);
+      verify(mockDao.saveConfig(argThat(predicate<LocalConfigEntity>((e) =>
+          e.key == PrinterConfigService.paperWidthMmKey &&
+          e.value == '80')))).called(1);
     });
   });
 
