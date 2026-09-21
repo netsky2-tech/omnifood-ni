@@ -94,7 +94,7 @@ Checks:
 
 Evidence: implemented with strict TDD. RED observed: `SKIP_END_TO_END_BUILD=1 bash scripts/test_packaging_pipeline.sh` failed at Test 6 with `Unknown option: --plan` before the options existed. GREEN observed three times, twice by the parent: the same command passes Tests 1-3 and 6-9 with Tests 4-5 skipped and exits 0. `--device-id` validates trimmed, non-empty, whitespace-free and at most 64 characters; `--pilot` without it exits 2 with a message naming the flag and the `pos-local-<uuid>` consequence; `--plan` prints the resolved configuration and the exact `flutter build apk` command(s) and stops before any side effect, proven not to invoke the toolchain by a failing `flutter` shim on `PATH`; both build invocations now carry `--dart-define=DEVICE_ID` only when supplied, using the `set -u`-safe empty-array idiom; `release_manifest.json` records `terminal_identity` as the id or `provisioned-at-runtime`. `TerminalIdentityService` precedence was not touched. `bash -n` clean on both scripts, `git diff --check` clean. Two `AP_KNOWN_LIMITATIONS.md` L1 claims that this slice invalidates were corrected in the same work unit: the `build_sunmi_apk.sh:111,117` citation is now `202,208`, and the statement that the build script defines no `DEVICE_ID` now records that the script supports `--device-id` while noting that the option did not previously exist on the packaging script, so the define could only be obtained by invoking the build directly. A first version of that clause claimed the rehearsal and cohort APKs were built without the define; independent verification falsified it against `odd/tasks/founder-pilot-acceptance-freeze.md:218` and a hash-matched local artifact whose `kernel_blob.bin` contains `DEVICE_ID=Q802024120001`, so the clause was corrected to say only what the evidence supports. Not verified: the real `flutter build apk` execution carrying the define, which needs the Flutter and Android toolchains, and the content of the rehearsal APK `f93b6310…`, which is not on disk anywhere.
 
-The `--out-dir` defect noted below was corrected in this same work unit as commit `4dfa6c6` and shipped in PR #455.
+A pre-existing parser defect made `--out-dir` as the final argument crash with `$2: unbound variable`; it was corrected in the same delivery as commit `4dfa6c6` and shipped in PR #455.
 
 ### L1-03 — Let the terminal show who it is
 
@@ -363,7 +363,7 @@ Evidence: pending.
 
 ### L1-08 — Match fresh-terminal hardware defaults to the fleet
 
-Status: complete — work-unit commits `b7a0e9f` + `ff3b67e` with fixture repair `1a14675`, merged via PR #463 (`4b2c6a1`).
+Status: complete — work-unit commits `b7a0e9f` + `ff3b67e`, fixture repair `1a14675`, and recovery-record commit `bf0f37a`, merged via PR #463 (`4b2c6a1`).
 
 Founder confirmation (2026-09-20): on the physical terminal the working selection is **Q80** in hardware and printer settings, which is what prints correctly at 80 mm. Confirmed in code: nothing in the backend, the seed, or the harness writes `printer_driver_type` or the paper width; `PrinterConfigService` falls back to `sunmiV2s` when no driver is stored, and `PrinterConfig.paperWidthMm` defaults to `58`.
 
@@ -383,7 +383,7 @@ Checks:
 - `flutter analyze`.
 - Readback of the effective profile recorded in activation evidence.
 
-Evidence: the chosen contract is the explicit-choice/fail-closed path. `PrinterConfigService.isPrinterProfileConfigured()` is read-only and true only when both the driver and paper-width keys exist with non-blank values, so an unconfigured device is no longer indistinguishable from a deliberate Sunmi V2s at 58 mm. `confirmPrinterProfile` is the only path that materialises a profile on a fresh terminal, `savePrinterConfig` no longer writes the profile keys when absent, and TEST_PRINT fails closed with a named blocker (and never calls the printer) when the profile was never configured, recording `printerProfileConfigured` in its evidence. Fixture repair `1a14675` re-seeded the profile keys in the affected e2e fixtures, with the recovery recorded in `odd/tasks/printer-profile-ci-fixtures.md`. Merged through PR #463 (`4b2c6a1`). Physical print behaviour on the Q80 remains subject to L1-06.
+Evidence: the chosen contract is the explicit-choice/fail-closed path. `PrinterConfigService.isPrinterProfileConfigured()` is read-only and true only when both the driver and paper-width keys exist with non-blank values, so an unconfigured device is no longer indistinguishable from a deliberate Sunmi V2s at 58 mm. `confirmPrinterProfile` is the only path that materialises a profile on a fresh terminal, `savePrinterConfig` no longer writes the profile keys when absent, and TEST_PRINT fails closed with a named blocker (and never calls the printer) when the profile was never configured, recording `printerProfileConfigured` in its evidence. Fixture repair `1a14675` re-seeded the profile keys in the affected e2e fixtures; recovery-record commit `bf0f37a` updated `odd/tasks/printer-profile-ci-fixtures.md`. Merged through PR #463 (`4b2c6a1`). Physical print behaviour on the Q80 remains subject to L1-06.
 
 ### L1-09 — Stop a failing pre-offline re-run from stranding an advanced attempt
 
