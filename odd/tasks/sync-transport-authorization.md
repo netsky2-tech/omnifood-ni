@@ -99,19 +99,27 @@ Two rules follow for the rest of this feature, both stated as requirements in De
 
 ### ST-02 — Pin the transport contract with a registry test
 
-Status: pending
+Status: complete — work-unit commits `2784109` (the invoice fix it found) and `d380cf9` (the registry) on branch `feat/sync-transport-registry`. Not yet merged.
 
-- [ ] Add a registry test that enumerates the POS-facing routes and their declared transport class, and fails when a route exists in the controllers without a declared class.
-- [ ] Record the classification for every route in the inventory as data, not prose, so drift fails the test rather than a review.
+- [x] Add a registry test that enumerates the application's real route table and fails when a route carries no guard and is not declared public.
+- [x] Record the transport class per route as data, not prose, so drift fails the test rather than a review.
+- [x] Classify every route as `device`, `human` or `public`, with a one-line reason on every `public` entry.
 
 Acceptance criteria:
 - Adding an unguarded or unclassified route fails the test.
-- The registry matches the guards actually declared on the controllers.
+- The registry matches the guards actually declared on the controllers, checked in both directions.
 
 Checks:
-- The registry test itself, plus a deliberate temporary omission to observe the failure.
+- The registry test itself, demonstrated failing for both drift directions with temporary edits that were reverted.
+- `npm test`, `npm run test:e2e`, `npm run build`, `git diff --check`.
 
-Evidence: pending.
+Evidence: the registry walks the Nest module graph metadata rather than compiling the application, which lets it run without a database — `DiscoveryService` or an HTTP-adapter route table would both require a full app instance and therefore TypeORM. It classifies each controller with per-handler overrides, and it enforces three rules: every route must be classified; a `device` declaration must actually carry `SyncTransportGuard` and must not carry a human guard; a `public` declaration must actually carry no authentication guard and must state a reason. Stale declarations fail too. Drift was demonstrated in both directions with temporary edits and reverted: declaring a guarded controller `public` failed with `declared public but carries guard(s): SyncTransportGuard, SyncCreditNoteAuthGuard`, and declaring an unguarded one `human` failed with `declared human but carries no human authentication guard`.
+
+**The registry immediately earned its place by finding a real, previously untracked hole.** `InvoicesController`, registered in `SalesModule`, declared no guard at all: `POST /sales/sync` (invoice write), `GET /sales` and `GET /sales/:id` were reachable unauthenticated and reached the service with `tenantId: undefined`. A guard import had been left commented out with the note "Import JwtAuthGuard if it exists, or similar", which is what left the surface open. No caller was found in the POS or the dashboard, and the POS syncs sales through the device-guarded `/v1/sync/batch`. The implementing writer refused to whitelist it and reported it instead, which is the correct behaviour and is why the registry test was red until the fix landed.
+
+Founder decision: guard it as **device** transport. Fixed in commit `2784109` with `SyncTransportGuard` at controller level, `sync:push` on the write and `sync:pull` on the two reads, `TenantInterceptor` plus the same fail-closed `requireTenant` used by `movements/sync`, and the actor-authorization gap declared in a controller comment as a DSI-6 dependency. The stale commented import was removed.
+
+Final state: full unit suite 249 suites and 2318 tests passing, full e2e 50 suites and 403 tests passing, build clean. The only `public` entry that is not genuinely public is `count-sessions`, recorded as transitional with its reason and removed by ST-04.
 
 ### ST-03 — Move the inventory document writes to device transport
 
@@ -189,4 +197,4 @@ Evidence: pending.
 
 ## Next step
 
-Execute ST-02 (the transport registry test), then ST-03.
+Execute ST-03 (move the inventory document writes to device transport), then ST-04 and ST-05.
