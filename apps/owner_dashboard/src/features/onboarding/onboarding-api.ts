@@ -5,6 +5,8 @@ import type {
   CreateManualProductDto,
   OnboardingManualProductResponse,
   OnboardingCatalogSummaryResponse,
+  ActivationAttempt,
+  StartActivationDto,
 } from "./types";
 
 export function isVersionConflictError(error: unknown): boolean {
@@ -52,4 +54,14 @@ export async function createManualOnboardingProduct(
 
 export async function fetchOnboardingCatalogSummary(): Promise<OnboardingCatalogSummaryResponse> {
   return api.get<OnboardingCatalogSummaryResponse>("/onboarding/catalog/summary");
+}
+
+export async function startActivationAttempt(
+  dto: StartActivationDto,
+): Promise<ActivationAttempt> {
+  return api.post<ActivationAttempt>("/onboarding/activation/attempts", dto);
+}
+
+export async function fetchActiveActivationAttempt(): Promise<ActivationAttempt | null> {
+  return api.get<ActivationAttempt | null>("/onboarding/activation/attempts/active");
 }

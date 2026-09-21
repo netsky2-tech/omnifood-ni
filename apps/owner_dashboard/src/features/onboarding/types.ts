@@ -183,3 +183,56 @@ export interface OnboardingCatalogSummaryResponse {
   hasSellableProduct: boolean;
   sampleProducts: OnboardingCatalogProductSummary[];
 }
+
+/**
+ * Activation attempt status vocabulary, verified against the backend entity
+ * `ActivationAttemptStatus` in
+ * apps/admin_backend/src/modules/onboarding/entities/activation-attempt.entity.ts.
+ */
+export const ActivationAttemptStatus = {
+  CREATED: "CREATED",
+  IN_PROGRESS: "IN_PROGRESS",
+  PASS: "PASS",
+  PASS_WITH_WARNING: "PASS_WITH_WARNING",
+  FAIL: "FAIL",
+} as const;
+
+export type ActivationAttemptStatus =
+  (typeof ActivationAttemptStatus)[keyof typeof ActivationAttemptStatus];
+
+/**
+ * Activation attempt as consumed by the owner dashboard. The backend response
+ * carries more fields (fiscal revision/fingerprint, verification product
+ * metadata, evidence, timestamps); only the fields the dashboard actually
+ * consumes are declared here.
+ */
+export interface ActivationAttempt {
+  id: string;
+  tenantId: string;
+  onboardingSessionId: string;
+  candidateTerminalId: string;
+  trustedTerminalId: string | null;
+  status: ActivationAttemptStatus;
+  startedByUserId: string;
+  startedAt: string;
+  completedAt: string | null;
+  posBuild: string | null;
+  warningsCount: number;
+  failureCode: string | null;
+  idempotencyKey: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Body for POST /onboarding/activation/attempts. The backend accepts exactly
+ * these whitelisted fields (global validation pipe: whitelist +
+ * forbidNonWhitelisted). Tenant and actor identity come from the JWT and must
+ * never be sent.
+ */
+export interface StartActivationDto {
+  candidateTerminalId: string;
+  verificationProductId?: string;
+  idempotencyKey?: string;
+  posBuild?: string;
+}

@@ -19,6 +19,29 @@ BUILD_MODE="both" # split, universal, both
 RUN_TESTS=true
 RUN_CODEGEN=false
 OUT_DIR="${DEFAULT_OUT_DIR}"
+DEVICE_ID=""
+PILOT_MODE=false
+PLAN_ONLY=false
+
+# Validate a --device-id candidate: trimmed, non-empty, no whitespace, max 64 chars.
+validate_device_id() {
+    local raw="$1"
+    local id
+    id="$(printf '%s' "${raw}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    if [ -z "${id}" ]; then
+        echo "Invalid --device-id: value is empty after trimming." >&2
+        exit 1
+    fi
+    if printf '%s' "${id}" | grep -q '[[:space:]]'; then
+        echo "Invalid --device-id: '${raw}' contains whitespace." >&2
+        exit 1
+    fi
+    if [ "${#id}" -gt 64 ]; then
+        echo "Invalid --device-id: value exceeds 64 characters (got ${#id})." >&2
+        exit 1
+    fi
+    DEVICE_ID="${id}"
+}
 
 # Parse Arguments
 while [[ $# -gt 0 ]]; do
@@ -44,8 +67,28 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --out-dir)
+            if [ "$#" -lt 2 ]; then
+                echo "Invalid --out-dir: missing required value." >&2
+                exit 1
+            fi
             OUT_DIR="$2"
             shift 2
+            ;;
+        --device-id)
+            if [ "$#" -lt 2 ]; then
+                echo "Invalid --device-id: missing required value." >&2
+                exit 1
+            fi
+            validate_device_id "$2"
+            shift 2
+            ;;
+        --pilot)
+            PILOT_MODE=true
+            shift
+            ;;
+        --plan)
+            PLAN_ONLY=true
+            shift
             ;;
         -h|--help)
             echo "Usage: $0 [options]"
@@ -53,6 +96,11 @@ while [[ $# -gt 0 ]]; do
             echo "  --split-per-abi   Build separate APKs for armeabi-v7a, arm64-v8a, x86_64"
             echo "  --universal       Build a single universal APK"
             echo "  --both            Build both split APKs and universal APK (Default)"
+            echo "  --device-id <id>  Canonical terminal id baked into the APK via"
+            echo "                    --dart-define=DEVICE_ID (trimmed, no whitespace, max 64 chars)"
+            echo "  --pilot           Pilot/single-terminal build; REQUIRES --device-id"
+            echo "  --plan            Print resolved configuration and the exact flutter build apk"
+            echo "                    command(s), then exit 0 without building (no Flutter/SDK needed)"
             echo "  --skip-tests      Skip running Flutter test suite"
             echo "  --with-codegen    Run build_runner code generation before building"
             echo "  --out-dir <path>  Specify output directory (default: dist/release_candidate)"
@@ -65,6 +113,52 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Pilot builds fail closed without a baked terminal id: the installed app would
+# resolve to pos-local-<uuid> and could never match its activation attempt.
+if [ "${PILOT_MODE}" = true ] && [ -z "${DEVICE_ID}" ]; then
+    echo "ERROR: --pilot requires --device-id (missing terminal id)." >&2
+    echo "Without a baked terminal id the installed app resolves to 'pos-local-<uuid>' and cannot match its activation attempt." >&2
+    exit 2
+fi
+
+# Terminal identity binding
+DART_DEFINE_ARGS=()
+TERMINAL_ID_BINDING="provisioned-at-runtime"
+if [ -n "${DEVICE_ID}" ]; then
+    DART_DEFINE_ARGS+=("--dart-define=DEVICE_ID=${DEVICE_ID}")
+    TERMINAL_ID_BINDING="${DEVICE_ID}"
+fi
+
+# Plan mode: print resolved configuration and exact build commands, then stop.
+# Must run before any side effect and must not require Flutter or the Android SDK.
+if [ "${PLAN_ONLY}" = true ]; then
+    echo "=============================================================================="
+    echo "📋 Plan — OmniFood POS Sunmi V2s Release Candidate Packaging"
+    echo "=============================================================================="
+    echo "📁 Root Directory:      ${ROOT_DIR}"
+    echo "📱 App Directory:       ${POS_APP_DIR}"
+    echo "📦 Output Directory:    ${OUT_DIR}"
+    echo "⚙️  Build Mode:          ${BUILD_MODE}"
+    echo "🧪 Run Tests:           ${RUN_TESTS}"
+    echo "🔨 Run Codegen:         ${RUN_CODEGEN}"
+    echo "🆔 Terminal identity:   ${TERMINAL_ID_BINDING}"
+    if [ -z "${DEVICE_ID}" ]; then
+        echo "   (fleet build: no DEVICE_ID dart-define is baked; terminal is provisioned at runtime)"
+    fi
+    echo "📋 release_manifest.json would record terminal_identity: ${TERMINAL_ID_BINDING}"
+    echo "------------------------------------------------------------------------------"
+    echo "flutter build apk command(s) that would run:"
+    if [ "${BUILD_MODE}" = "split" ] || [ "${BUILD_MODE}" = "both" ]; then
+        echo "  flutter build apk --release --split-per-abi ${DART_DEFINE_ARGS[*]:-}"
+    fi
+    if [ "${BUILD_MODE}" = "universal" ] || [ "${BUILD_MODE}" = "both" ]; then
+        echo "  flutter build apk --release ${DART_DEFINE_ARGS[*]:-}"
+    fi
+    echo "=============================================================================="
+    echo "Plan mode: no dependencies resolved, no tests, no codegen, no build executed."
+    exit 0
+fi
+
 echo "=============================================================================="
 echo "🚀 OmniFood POS — Sunmi V2s Release Candidate Packaging Pipeline"
 echo "=============================================================================="
@@ -74,6 +168,7 @@ echo "📦 Output Directory:    ${OUT_DIR}"
 echo "⚙️  Build Mode:          ${BUILD_MODE}"
 echo "🧪 Run Tests:           ${RUN_TESTS}"
 echo "🔨 Run Codegen:         ${RUN_CODEGEN}"
+echo "🆔 Terminal Identity:   ${TERMINAL_ID_BINDING}"
 echo "=============================================================================="
 
 # Ensure output directory exists
@@ -108,13 +203,13 @@ BUILD_OUTPUT_DIR="${POS_APP_DIR}/build/app/outputs/flutter-apk"
 
 if [ "${BUILD_MODE}" = "split" ] || [ "${BUILD_MODE}" = "both" ]; then
     echo "  -> Compiling Split-per-ABI APKs (armeabi-v7a, arm64-v8a, x86_64)..."
-    flutter build apk --release --split-per-abi
+    flutter build apk --release --split-per-abi ${DART_DEFINE_ARGS[@]+"${DART_DEFINE_ARGS[@]}"}
     cp "${BUILD_OUTPUT_DIR}"/app-*-release.apk "${OUT_DIR}/" 2>/dev/null || true
 fi
 
 if [ "${BUILD_MODE}" = "universal" ] || [ "${BUILD_MODE}" = "both" ]; then
     echo "  -> Compiling Universal Release APK..."
-    flutter build apk --release
+    flutter build apk --release ${DART_DEFINE_ARGS[@]+"${DART_DEFINE_ARGS[@]}"}
     cp "${BUILD_OUTPUT_DIR}/app-release.apk" "${OUT_DIR}/app-universal-release.apk" 2>/dev/null || true
 fi
 
@@ -142,6 +237,7 @@ cat <<EOF > release_manifest.json
   "version": "${APP_VERSION}",
   "git_commit": "${GIT_COMMIT}",
   "build_timestamp": "${BUILD_TIMESTAMP}",
+  "terminal_identity": "${TERMINAL_ID_BINDING}",
   "artifacts": [
 EOF
 

@@ -94,6 +94,55 @@ class ActivationReconnectSyncRunner {
       await _database.activationAttemptLocalDao.updateAttempt(attempt);
     }
 
+    // 2b. Replay the persisted pre-offline checks for this attempt through the
+    // port. This evidence is durable in SQLite but intentionally not an outbox
+    // event, so without this replay the finalizer could run against a backend
+    // that never received it. Mirrors the reference harness mapping exactly:
+    // every persisted row is replayed (no status filtering), and the backend
+    // treats a repeated (tenant, attempt, checkCode) with the same status as an
+    // idempotent replay, so this is safe to run more than once. FAIL CLOSED: a
+    // failed replay aborts before the outbox drain and before finalization.
+    final persistedChecks = await _database.activationCheckResultLocalDao
+        .getChecksForAttempt(trimmedTenantId, trimmedAttemptId);
+    bool replayFailed = false;
+    for (final check in persistedChecks) {
+      final Map<String, dynamic>? details = check.detailsSanitizedJson == null
+          ? null
+          : Map<String, dynamic>.from(jsonDecode(check.detailsSanitizedJson!) as Map);
+      final delivered = await _syncPort.sendCheck(
+        attemptId: trimmedAttemptId,
+        checkCode: check.checkCode,
+        status: check.status,
+        evidenceType: check.evidenceType,
+        evidenceRef: check.evidenceRef,
+        occurredAt: check.occurredAt,
+        details: details,
+        tenantId: trimmedTenantId,
+        terminalId: attempt.candidateTerminalId,
+      );
+      if (!delivered) {
+        replayFailed = true;
+        errors.add(
+          "Persisted check '${check.checkCode}' replay unacknowledged by backend",
+        );
+      }
+    }
+    if (replayFailed) {
+      // Attempt stays in SYNC_VERIFICATION_PENDING (already transitioned above)
+      // so a later retry can resume; outbox envelopes remain PENDING.
+      final pendingBeforeDrain = await _database.activationOutboxDao.getPendingEnvelopes(trimmedTenantId);
+      final attemptPending = pendingBeforeDrain
+          .where((e) => e.activationAttemptId == trimmedAttemptId)
+          .toList();
+      return ActivationReconnectSyncResult(
+        isSuccess: false,
+        attemptStatus: attempt.localStatus,
+        syncedEnvelopesCount: 0,
+        pendingEnvelopesCount: attemptPending.length,
+        errors: errors,
+      );
+    }
+
     // 3. Flush Outbox Envelopes for this attempt to cloud
     final pendingEnvelopes = await _database.activationOutboxDao.getPendingEnvelopes(trimmedTenantId);
     final attemptEnvelopes = pendingEnvelopes

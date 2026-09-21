@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   fetchOnboardingSession,
@@ -5,6 +6,8 @@ import {
   startOnboardingSession,
   createManualOnboardingProduct,
   fetchOnboardingCatalogSummary,
+  startActivationAttempt,
+  fetchActiveActivationAttempt,
 } from "./onboarding-api";
 import {
   OnboardingLifecycleState,
@@ -13,6 +16,7 @@ import {
   type OnboardingStep,
   type SetupCenterProgress,
   type CreateManualProductDto,
+  type StartActivationDto,
 } from "./types";
 
 import { getActiveTenantId } from "@/lib/tenant";
@@ -22,6 +26,7 @@ export const onboardingKeys = {
   session: (tenantId?: string) => ["onboarding", tenantId ?? getActiveTenantId(), "session"] as const,
   readiness: (tenantId?: string) => ["onboarding", tenantId ?? getActiveTenantId(), "readiness"] as const,
   catalogSummary: (tenantId?: string) => ["onboarding", tenantId ?? getActiveTenantId(), "catalog-summary"] as const,
+  activationAttempt: (tenantId?: string) => ["onboarding", tenantId ?? getActiveTenantId(), "activation-attempt"] as const,
 };
 
 export function calculateSetupCenterProgress(
@@ -218,6 +223,60 @@ export function useCreateManualProduct() {
       queryClient.invalidateQueries({ queryKey: ["products"] });
       queryClient.invalidateQueries({ queryKey: ["catalog"] });
       queryClient.invalidateQueries({ queryKey: ["inventory"] });
+    },
+  });
+}
+
+function generateActivationIdempotencyKey(): string {
+  const c = typeof crypto !== "undefined" ? crypto : undefined;
+  if (c && typeof c.randomUUID === "function") {
+    return c.randomUUID();
+  }
+  return `activation-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+export function useActiveActivationAttempt() {
+  return useQuery({
+    queryKey: onboardingKeys.activationAttempt(),
+    queryFn: fetchActiveActivationAttempt,
+    staleTime: 10_000,
+  });
+}
+
+/**
+ * Creates an activation attempt for a terminal. The idempotency key is
+ * generated per submission and kept stable across retries of the same
+ * submission so the backend replays the existing attempt instead of failing
+ * with CANNOT_START_ACTIVATION_NOT_SALE_READY. It is regenerated only after a
+ * successful create or when the terminal id changes.
+ */
+export function useStartActivationAttempt() {
+  const queryClient = useQueryClient();
+  const idempotencyKeyRef = useRef<string | null>(null);
+  const idempotencyTerminalIdRef = useRef<string | null>(null);
+
+  return useMutation({
+    mutationFn: (input: Omit<StartActivationDto, "idempotencyKey">) => {
+      if (
+        !idempotencyKeyRef.current ||
+        idempotencyTerminalIdRef.current !== input.candidateTerminalId
+      ) {
+        idempotencyKeyRef.current = generateActivationIdempotencyKey();
+        idempotencyTerminalIdRef.current = input.candidateTerminalId;
+      }
+      return startActivationAttempt({
+        ...input,
+        idempotencyKey: idempotencyKeyRef.current,
+      });
+    },
+    onSuccess: () => {
+      // The backend moved the session to ACTIVATION_IN_PROGRESS: cached
+      // lifecycle state is stale and must be refetched.
+      idempotencyKeyRef.current = null;
+      idempotencyTerminalIdRef.current = null;
+      queryClient.invalidateQueries({ queryKey: onboardingKeys.session() });
+      queryClient.invalidateQueries({ queryKey: onboardingKeys.readiness() });
+      queryClient.invalidateQueries({ queryKey: onboardingKeys.activationAttempt() });
     },
   });
 }
