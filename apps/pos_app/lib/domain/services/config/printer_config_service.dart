@@ -39,6 +39,22 @@ class PrinterConfigService {
 
   Stream<PrinterConfig> get onConfigChanged => _configStreamController.stream;
 
+  /// Whether the operator has deliberately configured a printer profile.
+  ///
+  /// True only when BOTH [driverTypeKey] and [paperWidthMmKey] exist with
+  /// non-blank values in `local_configs`. Read-only: it never writes, and it
+  /// never materialises the fabricated defaults that [getPrinterConfig]
+  /// reports for a fresh terminal (L1-08a).
+  Future<bool> isPrinterProfileConfigured() async {
+    final driverEntity = await _configDao.getConfigByKey(driverTypeKey);
+    final paperWidthEntity = await _configDao.getConfigByKey(paperWidthMmKey);
+    final driverConfigured =
+        driverEntity != null && driverEntity.value.trim().isNotEmpty;
+    final paperWidthConfigured =
+        paperWidthEntity != null && paperWidthEntity.value.trim().isNotEmpty;
+    return driverConfigured && paperWidthConfigured;
+  }
+
   Future<PrinterConfig> getPrinterConfig() async {
     final driverEntity = await _configDao.getConfigByKey(driverTypeKey);
     final autoInvoiceEntity = await _configDao.getConfigByKey(autoPrintInvoiceKey);

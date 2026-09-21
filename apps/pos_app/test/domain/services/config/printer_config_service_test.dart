@@ -130,4 +130,67 @@ void main() {
       await sub.cancel();
     });
   });
+
+  group('PrinterConfigService — printer profile presence (L1-08a)', () {
+    LocalConfigEntity entity(String key, String value) =>
+        LocalConfigEntity(key: key, value: value);
+
+    test('is true only when both the driver key and the paper width key exist with non-blank values', () async {
+      when(mockDao.getConfigByKey(any)).thenAnswer((_) async => null);
+      when(mockDao.getConfigByKey(PrinterConfigService.driverTypeKey)).thenAnswer(
+          (_) async => entity(PrinterConfigService.driverTypeKey, 'IPOS_Q80'));
+      when(mockDao.getConfigByKey(PrinterConfigService.paperWidthMmKey)).thenAnswer(
+          (_) async => entity(PrinterConfigService.paperWidthMmKey, '80'));
+
+      expect(await service.isPrinterProfileConfigured(), isTrue);
+    });
+
+    test('is false when the driver key is absent, even with a configured paper width', () async {
+      when(mockDao.getConfigByKey(any)).thenAnswer((_) async => null);
+      when(mockDao.getConfigByKey(PrinterConfigService.paperWidthMmKey)).thenAnswer(
+          (_) async => entity(PrinterConfigService.paperWidthMmKey, '80'));
+
+      expect(await service.isPrinterProfileConfigured(), isFalse);
+    });
+
+    test('is false when the paper width key is absent, even with a configured driver', () async {
+      when(mockDao.getConfigByKey(any)).thenAnswer((_) async => null);
+      when(mockDao.getConfigByKey(PrinterConfigService.driverTypeKey)).thenAnswer(
+          (_) async => entity(PrinterConfigService.driverTypeKey, 'IPOS_Q80'));
+
+      expect(await service.isPrinterProfileConfigured(), isFalse);
+    });
+
+    test('is false when the driver key exists but is blank', () async {
+      when(mockDao.getConfigByKey(any)).thenAnswer((_) async => null);
+      when(mockDao.getConfigByKey(PrinterConfigService.driverTypeKey)).thenAnswer(
+          (_) async => entity(PrinterConfigService.driverTypeKey, '   '));
+      when(mockDao.getConfigByKey(PrinterConfigService.paperWidthMmKey)).thenAnswer(
+          (_) async => entity(PrinterConfigService.paperWidthMmKey, '80'));
+
+      expect(await service.isPrinterProfileConfigured(), isFalse);
+    });
+
+    test('is false when the paper width key exists but is blank', () async {
+      when(mockDao.getConfigByKey(any)).thenAnswer((_) async => null);
+      when(mockDao.getConfigByKey(PrinterConfigService.driverTypeKey)).thenAnswer(
+          (_) async => entity(PrinterConfigService.driverTypeKey, 'IPOS_Q80'));
+      when(mockDao.getConfigByKey(PrinterConfigService.paperWidthMmKey)).thenAnswer(
+          (_) async => entity(PrinterConfigService.paperWidthMmKey, '   '));
+
+      expect(await service.isPrinterProfileConfigured(), isFalse);
+    });
+
+    test('is read-only: the presence query never writes local_configs', () async {
+      when(mockDao.getConfigByKey(any)).thenAnswer((_) async => null);
+      when(mockDao.getConfigByKey(PrinterConfigService.driverTypeKey)).thenAnswer(
+          (_) async => entity(PrinterConfigService.driverTypeKey, 'IPOS_Q80'));
+      when(mockDao.getConfigByKey(PrinterConfigService.paperWidthMmKey)).thenAnswer(
+          (_) async => entity(PrinterConfigService.paperWidthMmKey, '80'));
+
+      await service.isPrinterProfileConfigured();
+
+      verifyNever(mockDao.saveConfig(any));
+    });
+  });
 }
