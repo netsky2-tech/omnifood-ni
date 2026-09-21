@@ -142,7 +142,19 @@ Checks:
 - POS tests asserting the client selection per route.
 - `npm run build`, `flutter analyze`, `git diff --check`.
 
-Evidence: pending.
+Evidence for ST-03 — work-unit commits `ded9420` (backend) and `61c6184` (POS) on branch `feat/inventory-document-transport`, closing issue #478. Not yet merged.
+
+Backend. The three handlers carry `SyncTransportGuard` with `@RequireSyncScopes('sync:push')`; the `@Roles` decorators and all three human guards are gone from them. Tenant arrives through the device-principal-first `GetTenantId`, and the production-close handler binds its terminal from `devicePrincipal.deviceId`, which is the precedent already set by `inbound-sync.service.ts`, so no new claim plumbing was needed. The DSI-6/OHAC actor-authorization gap is declared in a visible comment at each of the three guard-removal points.
+
+POS. The device interceptor now attaches the bearer to exactly three additional routes, by exact match and never by prefix, with a comment recording why widening it to all of `/inventory/*` would leak device credentials to human surfaces. Negative tests assert the token is not attached to `count-sessions`, `regularization`, `correction`, `preview`, `alerts` or any suffixed path.
+
+**ST-03 was where the blast radius peaked, and the implementing writer handled it the right way twice.** It stopped before writing when it found that four e2e suites pinned the human-transport contract being retired, rather than deleting cases to make them pass; and it stopped again when a fifth file, the pre-existing metadata spec, pinned the same retired contract in unit tests. Both were escalated for authorization instead of widened silently. The four e2e suites were migrated case by case with per-case justifications: the human tenant-less cases were replaced by human-bearer-rejected-on-device-route, the no-terminal-claim forking case was replaced by claim-wins neutralization because it is unreachable under device transport, and the 403 cases were re-pointed to a route that is still human. `AuthoritativeCurrentUserGuard`'s own contract was re-pointed from `/inventory/purchases` to `/inventory/purchases/:id/correction`, which still carries the triple guard, so that coverage was preserved rather than lost with the route.
+
+One correction the focused run caught and is worth recording: an early version of the metadata migration collapsed the human helper and silently lost the assertion that `correctPurchase` still carries `AuthoritativeCurrentUserGuard`. The migration was fixed to keep two helper variants rather than one, because a route leaving the human transport does not mean the human contract stopped existing elsewhere.
+
+Checks run: full unit suite 249 suites and 2329 tests passing; full e2e 50 suites and 402 tests passing; `npm run build` clean; `flutter analyze` clean; POS interceptor tests 12 of 12; `npx eslint` exit 0 on all ten changed files, including the ones under `test/`, after fixing twelve flagged issues; `git diff --check` clean.
+
+Two lessons from earlier units were applied here as requirements rather than rediscovered: the full suites were run instead of filtered patterns, and eslint was run on every changed and new file including test files, because CI lints `{src,apps,libs,test}/**/*.ts`. One further lesson is worth keeping: guard metadata for a route can be pinned in more than one spec file, so the blast-radius search after moving a guard must look for `GUARDS_METADATA` and `ROLES_KEY` assertions repo-wide, not only for specs that instantiate the controller.
 
 ### ST-06 — Move regularization/sync to device transport without fabricating an actor
 
