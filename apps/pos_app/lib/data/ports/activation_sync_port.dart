@@ -1,3 +1,4 @@
+import '../../domain/models/activation/activation_attempt_snapshot.dart';
 import '../../domain/security/device_sync_credential_record.dart';
 
 abstract class ActivationSyncPort {
@@ -27,6 +28,15 @@ abstract class ActivationSyncPort {
     required String tenantId,
     required String attemptId,
   });
+
+  /// Calls GET /onboarding/activation/attempts/active and parses the active
+  /// attempt into an [ActivationAttemptSnapshot]. Returns null when the backend
+  /// reports no active attempt for the authenticated tenant. Network failures
+  /// are thrown (not swallowed) so callers can distinguish "no attempt" from
+  /// "backend unreachable" and fail closed.
+  Future<ActivationAttemptSnapshot?> fetchActiveAttempt() {
+    throw UnimplementedError();
+  }
 
   /// Explicitly calls POST /onboarding/activation/attempts/:id/device-sync-credential
   /// while a human authorized cloud session exists, parses the one-time response

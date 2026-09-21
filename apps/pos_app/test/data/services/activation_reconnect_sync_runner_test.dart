@@ -19,6 +19,14 @@ class FakeActivationSyncPort extends ActivationSyncPort {
   String? finalizeFailureCode;
   int finalizeWarningsCount = 0;
 
+  /// Check codes whose sendCheck must report a failed (unacknowledged) delivery.
+  /// Unlike [simulateNetworkFailure] this leaves other deliveries intact so a
+  /// single bad replay can be isolated.
+  final Set<String> failCheckCodes = {};
+
+  /// Chronological log of every port call, for ordering assertions.
+  final List<String> callLog = [];
+
   final List<Map<String, dynamic>> sentChecks = [];
   final List<Map<String, dynamic>> sentClaims = [];
   final List<Map<String, dynamic>> sentSales = [];
@@ -37,6 +45,8 @@ class FakeActivationSyncPort extends ActivationSyncPort {
     String? terminalId,
   }) async {
     if (simulateNetworkFailure) return false;
+    if (failCheckCodes.contains(checkCode)) return false;
+    callLog.add('sendCheck:$checkCode');
     sentChecks.add({
       'attemptId': attemptId,
       'checkCode': checkCode,
@@ -57,6 +67,7 @@ class FakeActivationSyncPort extends ActivationSyncPort {
     required Map<String, dynamic> claimPayload,
   }) async {
     if (simulateNetworkFailure) return false;
+    callLog.add('sendFirstSaleClaim');
     sentClaims.add({
       'attemptId': attemptId,
       'payload': claimPayload,
@@ -70,6 +81,7 @@ class FakeActivationSyncPort extends ActivationSyncPort {
     required Map<String, dynamic> salePayload,
   }) async {
     if (simulateNetworkFailure) return false;
+    callLog.add('sendVerificationSale');
     sentSales.add({
       'attemptId': attemptId,
       'payload': salePayload,
@@ -82,6 +94,7 @@ class FakeActivationSyncPort extends ActivationSyncPort {
     required String tenantId,
     required String attemptId,
   }) async {
+    callLog.add('finalizeActivation');
     if (simulateFinalizeFailure) {
       return const FinalizeActivationResult(
         isSuccess: false,
@@ -375,6 +388,219 @@ void main() {
           await tempDir.delete(recursive: true);
         }
       }
+    });
+  });
+
+  group('ONB1.8H — Persisted check replay before reconnect sync', () {
+    const tenantId = 'tenant-founder-01';
+    const attemptId = 'attempt-pr21-uuid-replay';
+    const terminalId = 'pos-terminal-founder-01';
+
+    Future<void> seedAttemptWithEvidence() async {
+      await database.activationAttemptLocalDao.saveAttempt(
+        ActivationAttemptLocalEntity(
+          attemptId: attemptId,
+          tenantId: tenantId,
+          candidateTerminalId: terminalId,
+          localStatus: 'LOCAL_ACTIVATION_EVIDENCE_COMPLETE',
+          requiredFiscalRevision: 1,
+          requiredFiscalFingerprint: 'fiscal-fp-123',
+          verificationProductId: 'prod-001',
+          verificationTicketId: 'ticket-paid-001',
+          assignedAt: '2026-09-04T12:00:00.000Z',
+          updatedAt: '2026-09-04T12:00:00.000Z',
+        ),
+      );
+
+      // Pre-offline evidence: durable local rows, NOT outbox events.
+      await database.activationCheckResultLocalDao.insertChecks([
+        const ActivationCheckResultLocalEntity(
+          id: 'check-1',
+          tenantId: tenantId,
+          activationAttemptId: attemptId,
+          checkCode: 'TERMINAL_LINKED',
+          status: 'PASS',
+          evidenceType: 'DEVICE_LINK_ACK',
+          evidenceRef: 'link-ref-001',
+          occurredAt: '2026-09-04T11:55:00.000Z',
+          recordedAt: '2026-09-04T11:55:00.000Z',
+          detailsSanitizedJson: '{"bootSessionId":"bs-001"}',
+        ),
+        const ActivationCheckResultLocalEntity(
+          id: 'check-2',
+          tenantId: tenantId,
+          activationAttemptId: attemptId,
+          checkCode: 'SQLITE_DURABILITY',
+          status: 'PASS',
+          recordedAt: '2026-09-04T11:56:00.000Z',
+        ),
+      ]);
+
+      // One outbox envelope from the controlled sale.
+      await database.activationOutboxDao.insertEnvelopes([
+        ActivationOutboxEnvelopeEntity(
+          id: 'env-check-replay-1',
+          tenantId: tenantId,
+          activationAttemptId: attemptId,
+          eventType: 'ACTIVATION_CHECK',
+          idempotencyKey:
+              'activation:check:$tenantId:$attemptId:OFFLINE_SALE_PAID',
+          payloadJson: jsonEncode({
+            'checkCode': 'OFFLINE_SALE_PAID',
+            'status': 'PASS',
+            'evidenceRef': 'ticket-paid-001',
+            'occurredAt': '2026-09-04T12:00:05.000Z',
+          }),
+          payloadHash: 'hash-replay-1',
+          syncStatus: 'PENDING',
+          createdAt: '2026-09-04T12:00:05.000Z',
+        ),
+      ]);
+    }
+
+    test('replays every persisted check BEFORE draining the outbox and BEFORE finalize', () async {
+      await seedAttemptWithEvidence();
+
+      final result = await syncRunner.syncActivationEvidence(
+        const ActivationReconnectSyncParams(tenantId: tenantId, attemptId: attemptId),
+      );
+
+      expect(result.isSuccess, isTrue, reason: result.errors.join('\n'));
+      expect(result.attemptStatus, equals('ACTIVATED'));
+
+      // Both persisted checks were replayed through the port.
+      expect(
+        syncPort.sentChecks.map((c) => c['checkCode']),
+        containsAll(['TERMINAL_LINKED', 'SQLITE_DURABILITY']),
+      );
+
+      // Ordering: persisted-check replay first, then outbox drain, then
+      // POST_RECONNECT_SYNC, then finalize last.
+      final replayedTerminalLinked = syncPort.callLog.indexOf('sendCheck:TERMINAL_LINKED');
+      final replayedSqlite = syncPort.callLog.indexOf('sendCheck:SQLITE_DURABILITY');
+      final drainedEnvelope = syncPort.callLog.indexOf('sendCheck:OFFLINE_SALE_PAID');
+      final reconnect = syncPort.callLog.indexOf('sendCheck:POST_RECONNECT_SYNC');
+      final finalize = syncPort.callLog.indexOf('finalizeActivation');
+      expect(replayedTerminalLinked, isNonNegative);
+      expect(replayedSqlite, isNonNegative);
+      expect(replayedTerminalLinked, lessThan(drainedEnvelope));
+      expect(replayedSqlite, lessThan(drainedEnvelope));
+      expect(drainedEnvelope, lessThan(reconnect));
+      expect(reconnect, lessThan(finalize));
+    });
+
+    test('a replayed check carries the exact fields the reference harness sends', () async {
+      await seedAttemptWithEvidence();
+
+      final result = await syncRunner.syncActivationEvidence(
+        const ActivationReconnectSyncParams(tenantId: tenantId, attemptId: attemptId),
+      );
+
+      expect(result.isSuccess, isTrue, reason: result.errors.join('\n'));
+
+      final replayed = syncPort.sentChecks
+          .where((c) => c['checkCode'] == 'TERMINAL_LINKED')
+          .toList();
+      expect(replayed, hasLength(1));
+      expect(replayed.single, equals({
+        'attemptId': attemptId,
+        'checkCode': 'TERMINAL_LINKED',
+        'status': 'PASS',
+        'evidenceType': 'DEVICE_LINK_ACK',
+        'evidenceRef': 'link-ref-001',
+        'occurredAt': '2026-09-04T11:55:00.000Z',
+        'details': {'bootSessionId': 'bs-001'},
+        'tenantId': tenantId,
+        'terminalId': terminalId, // attempt.candidateTerminalId, as the harness does
+      }));
+
+      // Absent detailsSanitizedJson must be sent as null, not an empty map.
+      final replayedSqlite = syncPort.sentChecks
+          .where((c) => c['checkCode'] == 'SQLITE_DURABILITY')
+          .toList();
+      expect(replayedSqlite, hasLength(1));
+      expect(replayedSqlite.single['details'], isNull);
+      expect(replayedSqlite.single['evidenceType'], isNull);
+      expect(replayedSqlite.single['evidenceRef'], isNull);
+      expect(replayedSqlite.single['occurredAt'], isNull);
+    });
+
+    test('a failing replay fails closed: no outbox drain, no finalize, resumable state', () async {
+      await seedAttemptWithEvidence();
+      syncPort.failCheckCodes.add('SQLITE_DURABILITY');
+
+      final result = await syncRunner.syncActivationEvidence(
+        const ActivationReconnectSyncParams(tenantId: tenantId, attemptId: attemptId),
+      );
+
+      expect(result.isSuccess, isFalse);
+      expect(result.attemptStatus, equals('SYNC_VERIFICATION_PENDING'));
+      expect(result.errors.join(' '), contains('SQLITE_DURABILITY'));
+
+      // Never finalized and never drained.
+      expect(syncPort.callLog, isNot(contains('finalizeActivation')));
+      expect(syncPort.callLog, isNot(contains('sendCheck:OFFLINE_SALE_PAID')));
+      expect(syncPort.callLog, isNot(contains('sendCheck:POST_RECONNECT_SYNC')));
+
+      // Outbox envelope stays PENDING for a later retry.
+      final pending = await database.activationOutboxDao.getPendingEnvelopes(tenantId);
+      expect(pending, hasLength(1));
+
+      // Attempt stays in a resumable status in SQLite.
+      final attemptInDb = await database.activationAttemptLocalDao.getAttemptById(attemptId);
+      expect(attemptInDb!.localStatus, equals('SYNC_VERIFICATION_PENDING'));
+
+      // No POST_RECONNECT_SYNC evidence was persisted.
+      final reconnectCheck = await database.activationCheckResultLocalDao.getCheck(
+        tenantId,
+        attemptId,
+        'POST_RECONNECT_SYNC',
+      );
+      expect(reconnectCheck, isNull);
+    });
+
+    test('repeating the runner after a failed replay resumes cleanly without corrupting state', () async {
+      await seedAttemptWithEvidence();
+      syncPort.failCheckCodes.add('SQLITE_DURABILITY');
+
+      final firstAttempt = await syncRunner.syncActivationEvidence(
+        const ActivationReconnectSyncParams(tenantId: tenantId, attemptId: attemptId),
+      );
+      expect(firstAttempt.isSuccess, isFalse);
+
+      // Retry once the port accepts the replay again.
+      syncPort.failCheckCodes.clear();
+      final secondAttempt = await syncRunner.syncActivationEvidence(
+        const ActivationReconnectSyncParams(tenantId: tenantId, attemptId: attemptId),
+      );
+
+      expect(secondAttempt.isSuccess, isTrue, reason: secondAttempt.errors.join('\n'));
+      expect(secondAttempt.attemptStatus, equals('ACTIVATED'));
+      expect(secondAttempt.pendingEnvelopesCount, equals(0));
+
+      // The persisted checks were replayed on BOTH runs (idempotent-safe).
+      expect(
+        syncPort.sentChecks.where((c) => c['checkCode'] == 'TERMINAL_LINKED'),
+        hasLength(2),
+      );
+
+      // Local state is coherent: single POST_RECONNECT_SYNC row, attempt
+      // ACTIVATED, no pending envelopes, persisted checks untouched.
+      final attemptInDb = await database.activationAttemptLocalDao.getAttemptById(attemptId);
+      expect(attemptInDb!.localStatus, equals('ACTIVATED'));
+      final pending = await database.activationOutboxDao.getPendingEnvelopes(tenantId);
+      expect(pending, isEmpty);
+      final reconnectRows = (await database.activationCheckResultLocalDao.getChecksForAttempt(tenantId, attemptId))
+          .where((c) => c.checkCode == 'POST_RECONNECT_SYNC')
+          .toList();
+      expect(reconnectRows, hasLength(1));
+      final terminalLinked = await database.activationCheckResultLocalDao.getCheck(
+        tenantId,
+        attemptId,
+        'TERMINAL_LINKED',
+      );
+      expect(terminalLinked!.status, equals('PASS'));
+      expect(terminalLinked.evidenceRef, equals('link-ref-001'));
     });
   });
 }

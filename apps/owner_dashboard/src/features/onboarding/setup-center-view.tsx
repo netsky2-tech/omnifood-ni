@@ -1,17 +1,26 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import {
   useOnboardingSession,
   useOnboardingCatalogSummary,
+  useActiveActivationAttempt,
+  useStartActivationAttempt,
 } from "./use-onboarding";
 import { isVersionConflictError } from "./onboarding-api";
 import { emitOnboardingTelemetry } from "./onboarding-telemetry-client";
-import { OnboardingLifecycleState, type OnboardingStepKey } from "./types";
+import {
+  OnboardingLifecycleState,
+  ActivationAttemptStatus,
+  type OnboardingStepKey,
+} from "./types";
+import { isApiError } from "@/lib/api";
 import { CatalogAcquisitionModal } from "./catalog-acquisition-modal";
 import { useHasPermission } from "@/features/users/use-has-permission";
 import { AppPermission } from "@/features/users/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   CheckCircle2,
@@ -39,6 +48,33 @@ interface SetupCenterViewProps {
   onNavigateToTab?: (tab: "fiscal" | "templates" | "import") => void;
 }
 
+/**
+ * Maps a documented backend failure of POST /onboarding/activation/attempts to
+ * a message a business owner understands. The backend message stays available
+ * next to it for support diagnostics.
+ */
+function describeActivationAttemptFailure(error: unknown): string {
+  if (isApiError(error)) {
+    const backendMessage = typeof error.message === "string" ? error.message : "";
+    if (backendMessage.includes("CANNOT_START_ACTIVATION_NOT_SALE_READY")) {
+      return "Tu comercio todavía no está Listo para Venta, así que no se puede iniciar la activación de la terminal. Completá los pasos pendientes del Setup Center e intentá de nuevo.";
+    }
+    if (backendMessage.includes("ACTIVE_ATTEMPT_EXISTS")) {
+      return "Ya existe una activación en curso para tu comercio. Continuá el proceso desde la terminal POS; la activación actual debe completarse antes de iniciar otra.";
+    }
+    if (backendMessage.includes("FISCAL_REVISION_NOT_AVAILABLE")) {
+      return "No se pudo registrar la revisión de tu configuración fiscal. Revisá la Configuración Fiscal DGI en el Setup Center e intentá de nuevo.";
+    }
+    if (backendMessage.toLowerCase().includes("verification product")) {
+      return "No hay un producto de verificación válido para activar la terminal. Necesitás al menos un producto activo con precio de venta mayor a cero.";
+    }
+    if (error.status === 403) {
+      return "Tu usuario no tiene permiso para iniciar la activación de la terminal (requiere onboarding:activation:manage). Pedile al dueño del negocio que te asigne el permiso.";
+    }
+  }
+  return "No se pudo iniciar la activación de la terminal. Intentá de nuevo en unos minutos.";
+}
+
 export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
   const { session, readiness, progress, isLoading, isError, error, refetch, isFetching } =
     useOnboardingSession();
@@ -47,6 +83,20 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
 
   const isActivated = progress.currentLifecycle === OnboardingLifecycleState.ACTIVATED;
   const [catalogModalOpen, setCatalogModalOpen] = useState(false);
+  const [terminalIdInput, setTerminalIdInput] = useState("");
+  const [terminalIdValidationError, setTerminalIdValidationError] = useState<string | null>(null);
+  const { data: activeAttempt } = useActiveActivationAttempt();
+  const startActivationAttempt = useStartActivationAttempt();
+
+  const isAwaitingDeviceChecks =
+    activeAttempt?.status === ActivationAttemptStatus.CREATED ||
+    activeAttempt?.status === ActivationAttemptStatus.IN_PROGRESS;
+  // Finished attempt outcomes the dashboard can observe without fetching any
+  // check data: the outcome itself is surfaced honestly, next to the retry
+  // path, so the operator never faces a bare form after a finished attempt.
+  const hasFailedAttempt = activeAttempt?.status === ActivationAttemptStatus.FAIL;
+  const hasPassedWithWarnings =
+    activeAttempt?.status === ActivationAttemptStatus.PASS_WITH_WARNING;
 
   useEffect(() => {
     emitOnboardingTelemetry({
@@ -123,6 +173,19 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
   if (!session || !readiness) {
     return null;
   }
+
+  const handleStartActivationAttempt = (event: FormEvent) => {
+    event.preventDefault();
+    const trimmedTerminalId = terminalIdInput.trim();
+    if (!trimmedTerminalId) {
+      setTerminalIdValidationError(
+        "Ingresá el ID de terminal que aparece en la pantalla de identidad de la terminal POS.",
+      );
+      return;
+    }
+    setTerminalIdValidationError(null);
+    startActivationAttempt.mutate({ candidateTerminalId: trimmedTerminalId });
+  };
 
   const getLifecycleBadgeVariant = (state: OnboardingLifecycleState) => {
     switch (state) {
@@ -348,25 +411,148 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
             )}
             {progress.nextRecommendedAction.actionKey === "activation" && (
               <div className="flex flex-col gap-1.5">
-                <div
-                  data-testid="start-pos-terminal-btn"
-                  className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium ${
-                    progress.isSaleReady && hasActivationPermission
-                      ? "bg-blue-100 text-blue-800 border border-blue-300"
-                      : "bg-muted text-muted-foreground opacity-60"
-                  }`}
-                >
-                  <Store className="h-4 w-4" />
-                  {isActivated
-                    ? "Terminal Activado"
-                    : "Terminal Listo — Activar desde el POS"}
-                </div>
-                {progress.isSaleReady && hasActivationPermission && !isActivated && (
+                {isAwaitingDeviceChecks ? (
+                  <div
+                    data-testid="activation-awaiting-device-checks"
+                    className="inline-flex flex-col gap-1 px-3 py-2 rounded-md text-sm bg-indigo-50 text-indigo-900 border border-indigo-300"
+                  >
+                    <span className="font-medium flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-indigo-600 shrink-0" />
+                      Activación iniciada — esperando a la terminal POS
+                    </span>
+                    <span className="text-[11px] text-indigo-800/90">
+                      La terminal <span className="font-mono font-medium">{activeAttempt?.candidateTerminalId}</span>{" "}
+                      todavía no reportó sus verificaciones. El siguiente paso se realiza en la propia terminal:
+                      abrí la app POS en esa terminal e iniciá sesión para continuar la activación.
+                    </span>
+                  </div>
+                ) : progress.isSaleReady && hasActivationPermission && !isActivated ? (
+                  <>
+                    {hasFailedAttempt && (
+                      <div
+                        data-testid="activation-attempt-failed"
+                        role="alert"
+                        className="inline-flex flex-col gap-1 px-3 py-2 rounded-md text-sm bg-destructive/10 text-destructive border border-destructive/30"
+                      >
+                        <span className="font-medium flex items-center gap-2">
+                          <AlertCircle className="h-4 w-4 shrink-0" />
+                          El último intento de activación falló.
+                        </span>
+                        <span className="text-[11px]">
+                          La terminal debe ser revisada antes de intentar la activación nuevamente.
+                          Cuando esté revisada, podés iniciar un nuevo intento desde acá.
+                        </span>
+                      </div>
+                    )}
+                    {hasPassedWithWarnings && (
+                      <div
+                        data-testid="activation-attempt-passed-with-warning"
+                        role="alert"
+                        className="inline-flex flex-col gap-1 px-3 py-2 rounded-md text-sm bg-amber-50 text-amber-900 border border-amber-300"
+                      >
+                        <span className="font-medium flex items-center gap-2">
+                          <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                          El intento de activación pasó con advertencias.
+                        </span>
+                        <span className="text-[11px] text-amber-800/90">
+                          Las advertencias deben ser revisadas antes de continuar con la activación.
+                        </span>
+                      </div>
+                    )}
+                    <form
+                      data-testid="activation-attempt-form"
+                      onSubmit={handleStartActivationAttempt}
+                      className="flex flex-col gap-1.5"
+                    >
+                    <div
+                      data-testid="start-pos-terminal-btn"
+                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium bg-blue-100 text-blue-800 border border-blue-300"
+                    >
+                      <Store className="h-4 w-4" />
+                      Terminal Listo — Activar desde el POS
+                    </div>
+                    <Label
+                      htmlFor="activation-terminal-id-input"
+                      className="text-[11px] text-muted-foreground font-medium"
+                    >
+                      ID de Terminal (leelo en la pantalla de identidad de la terminal POS)
+                    </Label>
+                    <Input
+                      id="activation-terminal-id-input"
+                      data-testid="activation-terminal-id-input"
+                      value={terminalIdInput}
+                      onChange={(event) => {
+                        setTerminalIdInput(event.target.value);
+                        if (terminalIdValidationError) setTerminalIdValidationError(null);
+                      }}
+                      placeholder="Ej.: POS-01"
+                      autoComplete="off"
+                      className="h-8 max-w-xs text-sm"
+                    />
+                    {terminalIdValidationError && (
+                      <span
+                        data-testid="activation-terminal-id-error"
+                        role="alert"
+                        className="text-[11px] text-destructive font-medium flex items-center gap-1"
+                      >
+                        <AlertTriangle className="h-3 w-3 shrink-0" />
+                        {terminalIdValidationError}
+                      </span>
+                    )}
+                    <Button
+                      type="submit"
+                      size="sm"
+                      disabled={startActivationAttempt.isPending}
+                      data-testid="create-activation-attempt-btn"
+                      className="self-start flex items-center gap-2 focus-visible:ring-2 focus-visible:ring-[#013a57] focus-visible:ring-offset-2"
+                    >
+                      <Store className="h-4 w-4" />
+                      {startActivationAttempt.isPending
+                        ? "Iniciando activación..."
+                        : "Iniciar Activación de Terminal"}
+                    </Button>
+                    {startActivationAttempt.isError && (
+                      <div
+                        data-testid="activation-attempt-error"
+                        role="alert"
+                        className="flex flex-col gap-0.5 px-3 py-2 rounded-md text-[11px] bg-destructive/10 border border-destructive/20"
+                      >
+                        <span className="font-medium text-destructive">
+                          {describeActivationAttemptFailure(startActivationAttempt.error)}
+                        </span>
+                        {isApiError(startActivationAttempt.error) && (
+                          <span
+                            data-testid="activation-attempt-error-backend"
+                            className="font-mono text-[10px] text-muted-foreground break-all"
+                          >
+                            {startActivationAttempt.error.message}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    </form>
+                  </>
+                ) : (
+                  <div
+                    data-testid="start-pos-terminal-btn"
+                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium ${
+                      progress.isSaleReady && hasActivationPermission
+                        ? "bg-blue-100 text-blue-800 border border-blue-300"
+                        : "bg-muted text-muted-foreground opacity-60"
+                    }`}
+                  >
+                    <Store className="h-4 w-4" />
+                    {isActivated
+                      ? "Terminal Activado"
+                      : "Terminal Listo — Activar desde el POS"}
+                  </div>
+                )}
+                {progress.isSaleReady && hasActivationPermission && !isActivated && !isAwaitingDeviceChecks && (
                   <span
                     data-testid="activation-hint"
                     className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5"
                   >
-                    Abrí la app POS en tu terminal y completá la activación desde allí.
+                    Ingresá el ID de la terminal y iniciá la activación desde acá; el siguiente paso se realiza en la propia terminal POS.
                   </span>
                 )}
                 {progress.isSaleReady && !hasActivationPermission && (
