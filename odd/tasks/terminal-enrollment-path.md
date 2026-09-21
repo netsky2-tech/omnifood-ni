@@ -315,7 +315,7 @@ Delivered through L1-05a, L1-05b-replay, L1-05b-session, L1-05c-1 and L1-05c-2; 
 
 ### L1-06 — Confirm the credential at runtime on the device
 
-Status: pending
+Status: blocked — cannot be executed as written until L1-10 delivers the pre-credential priming path. It additionally requires the physical Q80, a fresh tenant and the terminal catalog.
 
 - [ ] Provision a fresh tenant and terminal, build with the canonical `DEVICE_ID`, and enroll end to end on the physical Q80.
 - [ ] Confirm the device-sync credential provisions, confirms, and renews.
@@ -426,24 +426,73 @@ Checks:
 
 Evidence: closes the defect reported separately during L1-05a (`activation_pre_offline_runner.dart:335`), tracked as issue #450. The unconditional status rewrite at completion is replaced by an entry-status gate; the refusal runs no check, calls no printer, writes no check row, and leaves the status untouched. Shipped as work-unit commit `4d680df`, merged through PR #464 (`6e4a2a7`).
 
+### L1-10 — Prime a fresh terminal before activation
+
+Status: pending — authorized; first work unit ready to execute. No hardware required.
+
+This slice was discovered while preparing L1-06, and it blocks it. Tracked as issue #469.
+
+**The closed cycle, verified on 2026-09-21.** L1-06's acceptance criterion requires a freshly built APK to obtain and use a device credential "without manual database intervention". That is unreachable through production paths today:
+
+1. A pilot POS starts empty. `DatabaseSeeder.seedAll` returns immediately unless `force`, so a fresh terminal has no catalog and no fiscal projection (`apps/pos_app/lib/data/database/database_seeder.dart`; called without `force` from `apps/pos_app/lib/main.dart:134`).
+2. `ActivationSessionService.prepare()` requires the product pinned by the attempt to exist in the **local** catalog and fails closed with `VERIFICATION_PRODUCT_MISSING` otherwise (`apps/pos_app/lib/data/services/activation_session_service.dart:130-146`), deliberately refusing to fetch.
+3. The pre-offline `REQUIRED_CONFIG_LOCAL` check requires a local fiscal projection whose revision **and** fingerprint match the attempt's pins, carrying a valid RUC (`apps/pos_app/lib/data/services/activation_required_config_adapter.dart:147,161,190`).
+4. Catalog and fiscal config reach a terminal only over `/v1/sync/inbound/*`, whose controller carries class-level `@UseGuards(SyncTransportGuard)` and `@RequireSyncScopes('sync:pull')`: device-only (`apps/admin_backend/src/modules/sales/controllers/inbound-sync.controller.ts:26-28`).
+5. The device credential, provisioned at OWNER login, resolves an attempt already in `PASS` or `PASS_WITH_WARNING` (`apps/admin_backend/src/modules/onboarding/services/activation.service.ts:1489-1527`).
+6. Finalizing an attempt requires exactly what steps 2 and 3 need.
+
+The POS endpoint surface confirms there is no alternative: `/identity/*`, `/v1/health`, `/v1/sync/batch`, `/v1/sync/inbound/deltas` and `/v1/sync/inbound/fiscal/ack`. No human-authenticated catalog or fiscal pull exists. The acceptance harness dodged the cycle by writing products and fiscal config straight into SQLite (`apps/pos_app/integration_test/onb1_10_founder_pilot_q80_e2e_test.dart:228-260`), which is precisely the intervention the criterion excludes. **Consequence: the L1 objective cannot be met as scoped without this slice.**
+
+Founder decisions (2026-09-21):
+
+- **Approach.** Human-authenticated priming that reuses the existing inbound-sync service. No pre-activation device credential is created; `SyncTransportGuard` and the device scope allowlist stay untouched. A scoped pre-finalization device credential was evaluated and rejected because it would give a device a live credential before it passed any activation check and would change the guard's central device-binding invariant.
+- **Order.** Priming runs **before** the attempt is created, so the attempt pins a fiscal revision that is already present locally. No re-pinning transition and no stale-pin window, because the backend fiscal snapshot only ever returns the latest revision.
+- **Gate.** The existing `onboarding:activation:manage` permission, with **no** `@Roles(OWNER)` hardcode. A business may delegate activation to an encargado, and a non-OWNER role can receive that permission through per-user custom permissions (`resolveEffectivePermissions` in `apps/admin_backend/src/modules/identity/security/permissions.enum.ts`). Gating on the permission alone covers both the OWNER and the delegated case, and keeps the priming surface and the activation surface authorized identically.
+- **RUC exposure.** Sending the raw issuer RUC over the human-authenticated path is accepted as parity with the existing device path.
+
+Tasks:
+
+- [ ] L1-10a — Backend: one human-authenticated read endpoint returning the same `InboundSyncResponseDto` envelope for the authenticated tenant, reusing the exported `InboundSyncService` (`apps/admin_backend/src/modules/sales/services/inbound-sync.service.ts:88-162`, exported by `SalesModule` and already imported by `OnboardingModule`), gated by `@RequirePermissions(ONBOARDING_ACTIVATION_MANAGE)`, with the read wrapped in the tenant-bound transaction helper (`apps/admin_backend/src/core/database/tenant-transaction.ts`). No POS change in this unit.
+- [ ] L1-10b — POS: a priming service that fetches the envelope with the human-authenticated client and applies it through the existing projection code (`SyncService` product/catalog mapping and `FiscalInboxHandler.handleFiscalEnvelope`).
+- [ ] L1-10c — Wire priming into the activation entry point before `prepare()`, and prove `prepare()` plus `REQUIRED_CONFIG_LOCAL` succeed on a terminal primed only through this path.
+
+Acceptance criteria:
+
+- An authorized human session on an empty terminal can obtain its tenant's catalog and fiscal snapshot in the exact envelope shape the POS projection already consumes.
+- An unauthenticated caller and a caller lacking the permission are both rejected; a second tenant receives only its own data under RLS.
+- Priming creates no device credential and changes no guard, scope or credential-service behavior.
+- After priming, `ActivationSessionService.prepare()` succeeds for the attempt's pinned product and `REQUIRED_CONFIG_LOCAL` passes for the pinned revision and fingerprint.
+- No manual database intervention is required for a fresh terminal to reach a state where activation can run.
+
+Checks:
+
+- Backend: controller decorator-metadata and permission-guard specs following the existing `activation-device-provisioning.spec.ts` pattern; a service spec asserting the response shape matches the inbound DTO; an RLS spec proving two-tenant isolation.
+- POS: unit tests feeding a fake priming port and asserting `prepare()` and `checkRequiredConfigLocal` pass, plus a test that the applied envelope matches the attempt's pins.
+- `git diff --check`.
+- The full physical confirmation remains L1-06; nothing here can be proven on the device in this session.
+
+Evidence: pending.
+
 ### Post-merge housekeeping — outside the L1 implementation scope
 
 PR #461 (merge `964a0ce`, commits `77dcc6b` + `68ffbd3`, closing issue #460) published the client startup requirements documentation. It is independent documentation work merged after the L1 implementation and is recorded here only for completeness; it is not an L1 slice.
 
 ## Dependencies
 
-- Repository implementation is merged: L1-01 through L1-05c-2, L1-08 and L1-09 are complete and merged to `main`.
-- L1-07 is the next actionable slice: documentation-only corrections, no hardware required.
-- L1-06 is last and blocked on hardware: it requires the physical Q80, a fresh tenant/terminal, and the catalog with the pinned verification product.
+- Repository implementation is merged: L1-01 through L1-05c-2, L1-07, L1-08 and L1-09 are complete and merged to `main`.
+- **L1-10 blocks L1-06.** Without a pre-credential priming path a fresh terminal cannot satisfy `prepare()` or `REQUIRED_CONFIG_LOCAL`, so L1-06 cannot be executed honestly.
+- L1-06 also requires the physical Q80 and a fresh tenant: hardware plus L1-10.
 - #314 follows confirmed L1 (confirmation happens at L1-06); #445 remains separate.
 
 ## Progress
 
 - Feature opened after independent verification of `main` at `9cef7ce` corrected the earlier assessment: the credential provisioning half is already production-wired, the three activation runners exist but are constructed only in tests, the owner dashboard has no enrollment surface, and the build script passes no `DEVICE_ID`.
 - Frozen plan approved by the founder: dashboard authorizes and creates, POS observes and finalizes, build defines the terminal id, recovery remains an exceptional ops path.
-- Repository implementation merged through PRs #454, #455, #456, #457, #458, #459, #463 and #464 (per-slice commits and merge identities recorded in each task above).
+- Repository implementation merged through PRs #454, #455, #456, #457, #458, #459, #463, #464, #466 and #468 (per-slice commits and merge identities recorded in each task above).
+- L1-07 merged as PR #468 (`c47f8f2`), closing issue #467.
+- **2026-09-21, preparation for L1-06 found a closed bootstrap cycle that the feature had not recorded.** The L1 objective claims enrollment works "through production code paths only"; it does not, because nothing can prime a fresh terminal before it holds a device credential. Recorded in full under L1-10 and traced to issue #469.
 - L1/DSI-2 is NOT complete: physical credential provisioning, renewal, and `/v1/sync/*` use on the device remain unverified until L1-06, so DSI cutover precondition 2 is still not satisfied.
 
 ## Next step
 
-Execute L1-07 (documentation corrections, no hardware needed). Then L1-06 when the physical Q80 and a fresh catalog/tenant are available. #314 follows confirmed L1; #445 remains separate.
+Execute L1-10 (pre-credential priming, no hardware needed). Then L1-06 when the physical Q80 and a fresh tenant are available. #314 follows confirmed L1; #445 remains separate.
