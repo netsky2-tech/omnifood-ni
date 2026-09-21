@@ -68,13 +68,13 @@ Evidence: CI and delegated reproduction observed RED in the four happy paths bec
 
 ### PF-CI-02 — Propagate the repaired base into PR #464
 
-Status: in progress.
+Status: complete.
 Depends on: PF-CI-01.
 Route: inline Git state management plus delegated verification if commands are required.
 
-- [ ] Update the stacked branch without squashing commit `4d680df`.
-- [ ] Push the refreshed branch and confirm PR #464 still contains only the status-guard work unit relative to #463.
-- [ ] Confirm required GitHub checks are green or record any remaining blocker.
+- [x] Update the stacked branch without squashing commit `4d680df`.
+- [x] Push the refreshed branch and confirm PR #464 still contains only the status-guard work unit relative to #463.
+- [x] Confirm required GitHub checks are green or record any remaining blocker.
 
 Acceptance criteria:
 - PR #464 remains based on #463 until #463 merges.
@@ -86,7 +86,7 @@ Checks:
 - GitHub PR file/commit comparison.
 - Required GitHub checks.
 
-Evidence: pending.
+Evidence: PR #463 received fixture-repair commit `1a14675`; GitHub `lint-and-test` passed in 7m19s and `build-check` passed in 2m13s. The base was merged into `fix/pre-offline-status-guard` as merge commit `753c793`, preserving `4d680df` unchanged as the first parent and `1a14675` as the second parent. Independent verification on the merged tip passed the four-file integration harness 7/7, the runner suite 26/26, `flutter analyze`, and `git diff --check`. GitHub shows PR #464 relative to #463 with only `activation_pre_offline_runner.dart` and its test (142 insertions, 1 deletion); `lint-and-test` passed in 6m40s and `build-check` passed in 2m11s. Runtime harness: focused four-file integration command, 7/7 passed. Rollback boundary: merge commit `753c793` can be reverted without rewriting the preserved `4d680df` work-unit commit.
 
 ## Progress
 
@@ -94,7 +94,9 @@ Evidence: pending.
 - The user selected CI repair before merging the L1 chain.
 - PF-CI-01 repaired the four fixtures with four inserted lines and passed writer, parent spot-check, and independent verification.
 - Review assessment was unavailable because the package-local Gentle AI binary is missing; verification followed the required high-risk fallback.
+- PF-CI-01 landed on PR #463 as `1a14675`; required POS CI is green.
+- PF-CI-02 merged that repaired base into PR #464 as `753c793`, preserved `4d680df`, kept the PR-relative diff to two status-guard files, and restored green POS CI.
 
 ## Next step
 
-Commit and push PF-CI-01 to PR #463, then refresh PR #464 against the repaired base without squashing its status-guard work unit.
+Return to the L1 delivery sequence: merge #454 through #459 with merge commits, then #463, then retarget #464 to `main` and merge it.
