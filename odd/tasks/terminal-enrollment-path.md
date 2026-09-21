@@ -6,7 +6,7 @@ Close limitation **L1** so that a freshly provisioned terminal can be enrolled b
 
 ## Problem
 
-The founder-pilot ONB1.10F acceptance closed as PASS under `fp-acceptance-6b15d8a`, but it deliberately excluded `/v1/sync/*` device transport. L1 records why: no production path creates or finalizes an `ActivationAttempt`, and a freshly built APK cannot match the seeded terminal id. DSI cutover precondition 2 is therefore NOT SATISFIED.
+At feature opening, the founder-pilot ONB1.10F acceptance had closed as PASS under `fp-acceptance-6b15d8a`, but it deliberately excluded `/v1/sync/*` device transport. No production path created or finalized an `ActivationAttempt`, and a freshly built APK could not match the seeded terminal id. The repository implementation now addresses those gaps, but DSI cutover precondition 2 remains NOT SATISFIED until L1-06 verifies the real credential lifecycle on the physical device.
 
 ## Why
 
@@ -40,8 +40,8 @@ Without enrollment the platform cannot bring a real terminal online, so the firs
 
 ## Delivery and verification
 
-- Delivery strategy: `stacked-to-main`, one work unit per slice, each PR carrying only its own diff.
-- Work-unit commits on this feature branch; push and pull request remain the user's decisions.
+- Delivery strategy used: `stacked-to-main`, one work unit per slice, each PR carrying only its own diff.
+- Repository implementation shipped through the merge commits recorded per slice below; physical runtime confirmation remains pending.
 - Documentation slices use structural checks, readback and grep; code slices use focused tests plus `flutter analyze` or the backend suite as applicable.
 - Runtime confirmation requires the physical device and a freshly provisioned target; it is the only slice that cannot be verified from the repository.
 - Recorded size exception, authorized by the founder on 2026-09-20: slice L1-03 is 925 changed lines (428 production, 482 tests), and slice L1-04a is 474 (124 production, 350 tests), both above the ~400-line budget. Splitting a view from its own test would leave the first pull request unable to demonstrate what it claims, so each slice ships whole and every exception is recorded here rather than hidden.
@@ -51,7 +51,7 @@ Without enrollment the platform cannot bring a real terminal online, so the firs
 
 ### L1-01 — Correct the stale claims this work builds on
 
-Status: complete pending work-unit commit.
+Status: complete — work-unit commit `e56584e`, merged via PR #454 (`dbf3d2b`).
 
 - [x] Fix `AP_KNOWN_LIMITATIONS.md`: stale `activation.service.ts` citation range, the `count-sessions` guard claim, the `alerts/{id}/lifecycle` 401 claim that is actually a missing route, and guard line drift.
 - [x] Fix the `device-sync-cutover-decision.md` addendum claim that the credit-note inventory is not recorded.
@@ -68,11 +68,13 @@ Checks:
 - `grep` for the removed claims.
 - `git diff --check`.
 
+Shipped as work-unit commit `e56584e`, merged through PR #454 (`dbf3d2b`).
+
 Evidence: corrections applied and verified from scratch by the parent. `AP_KNOWN_LIMITATIONS.md` now cites the real resolver (`activation.service.ts:1489-1527`, `resolveLatestFinalizedAttemptForDevice`), records that `/inventory/count-sessions` is unauthenticated rather than 401 and that `GetTenantId` therefore passes `tenantId: undefined`, records that `/inventory/alerts/{id}/lifecycle` has no backend route and returns 404 (removal inferred, not verified), and fixes two guard line citations (`sync-transport.guard.ts:49`, `sync-credit-note-auth.guard.ts:49-53`). The cutover addendum keeps the accepted-decision text and adds a dated correction stating the credit-note inventory was completed on 2026-09-17/18 with zero pending notes, leaving the announcement and manual procedure for precondition 3. The freeze record keeps its historical bullet and gains one dated correction naming the five construction sites of `ActivationReconnectSyncRunner`. Security finding tracked as issue #445. Changed lines: 12 insertions, 4 deletions across three files. Runtime harness: N/A, documentation-only slice.
 
 ### L1-02 — Provision the canonical terminal id at build time
 
-Status: complete pending work-unit commit.
+Status: complete — work-unit commits `41d9576` + `4dfa6c6`, merged via PR #455 (`effea86`).
 
 - [x] Accept a per-terminal `DEVICE_ID` dart-define in `scripts/build_sunmi_apk.sh`.
 - [x] Fail the build when the define is absent for a pilot build rather than silently installing an app that resolves to `pos-local-<uuid>`.
@@ -92,16 +94,16 @@ Checks:
 
 Evidence: implemented with strict TDD. RED observed: `SKIP_END_TO_END_BUILD=1 bash scripts/test_packaging_pipeline.sh` failed at Test 6 with `Unknown option: --plan` before the options existed. GREEN observed three times, twice by the parent: the same command passes Tests 1-3 and 6-9 with Tests 4-5 skipped and exits 0. `--device-id` validates trimmed, non-empty, whitespace-free and at most 64 characters; `--pilot` without it exits 2 with a message naming the flag and the `pos-local-<uuid>` consequence; `--plan` prints the resolved configuration and the exact `flutter build apk` command(s) and stops before any side effect, proven not to invoke the toolchain by a failing `flutter` shim on `PATH`; both build invocations now carry `--dart-define=DEVICE_ID` only when supplied, using the `set -u`-safe empty-array idiom; `release_manifest.json` records `terminal_identity` as the id or `provisioned-at-runtime`. `TerminalIdentityService` precedence was not touched. `bash -n` clean on both scripts, `git diff --check` clean. Two `AP_KNOWN_LIMITATIONS.md` L1 claims that this slice invalidates were corrected in the same work unit: the `build_sunmi_apk.sh:111,117` citation is now `202,208`, and the statement that the build script defines no `DEVICE_ID` now records that the script supports `--device-id` while noting that the option did not previously exist on the packaging script, so the define could only be obtained by invoking the build directly. A first version of that clause claimed the rehearsal and cohort APKs were built without the define; independent verification falsified it against `odd/tasks/founder-pilot-acceptance-freeze.md:218` and a hash-matched local artifact whose `kernel_blob.bin` contains `DEVICE_ID=Q802024120001`, so the clause was corrected to say only what the evidence supports. Not verified: the real `flutter build apk` execution carrying the define, which needs the Flutter and Android toolchains, and the content of the rehearsal APK `f93b6310…`, which is not on disk anywhere.
 
-Spotted while verifying, deliberately left out of this slice: `--out-dir` as the final argument crashes with `$2: unbound variable` instead of a clean rejection, a pre-existing defect in the same argument parser that `--device-id` now handles correctly.
+A pre-existing parser defect made `--out-dir` as the final argument crash with `$2: unbound variable`; it was corrected in the same delivery as commit `4dfa6c6` and shipped in PR #455.
 
 ### L1-03 — Let the terminal show who it is
 
-Status: in progress — independent verification found two defects; a bounded correction is running.
+Status: complete — work-unit commit `aabad74` (implementation plus the post-verification correction), merged via PR #456 (`cc52bd8`).
 
 - [x] Add a read-only POS surface that displays the canonical terminal id so an operator can register it in the back office.
 - [x] Do not add activation state, attempt creation, or credential logic to the POS in this slice.
-- [ ] Replace the unverifiable provenance claim with the factual comparison the surface can actually know.
-- [ ] Add the missing view widget test that the sibling config screens already have.
+- [x] Replace the unverifiable provenance claim with the factual comparison the surface can actually know.
+- [x] Add the missing view widget test that the sibling config screens already have.
 
 Acceptance criteria:
 - The displayed value is exactly the id the activation attempt must carry.
@@ -115,7 +117,7 @@ Evidence: implemented with strict TDD and then corrected after independent verif
 
 The read-only invariant was verified adversarially rather than by name: `LocalConfigDao.getConfigByKey` is a pure Floor read and `PrinterConfigService.getPrinterConfig` issues only reads, so nothing reachable from this surface can write. That matters because `TerminalIdentityService.resolveDeviceId()` does persist a generated `pos-local-<uuid>`, and a display surface must not create state.
 
-Defects found by verification and being corrected. First, the surface asserted a provenance it cannot know: the origin was inferred from string equality, so an id differing only in letter case, a generated id that coincidentally equalled the compiled id, and an id inherited from an earlier tenant were all reported with a confident but false origin. The origin is not stored anywhere, so the correction replaces the claim with the factual comparison the surface can make, plus a warning to confirm the terminal before registering it. Second, the view widget had no test while both sibling config screens do.
+Defects found by verification and corrected in the same work-unit commit. First, the surface asserted a provenance it cannot know: the origin was inferred from string equality, so an id differing only in letter case, a generated id that coincidentally equalled the compiled id, and an id inherited from an earlier tenant were all reported with a confident but false origin. The origin is not stored anywhere, so the correction replaces the claim with the factual comparison the surface can make, plus a warning to confirm the terminal before registering it. Second, the view widget had no test while both sibling config screens do.
 
 Measured risk that did NOT materialise: because the displayed value is read from the same key that `resolveDeviceId` returns, the operator is never shown an id that differs from the one the device presents, so the display cannot lead to registering the wrong terminal. Only the removed origin label was misleading.
 
@@ -123,14 +125,14 @@ Recorded follow-up, deliberately not fixed here: `driverLabelFor` duplicates the
 
 ### L1-04a — Add the activation client and hooks to the dashboard
 
-Status: complete — committed as `801fae6`.
+Status: complete — work-unit commit `801fae6`, merged via PR #457 (`83e5012`).
 
 Split from the original L1-04 on purpose: the client, the hooks and the surface together exceed the review budget, and the data layer is independently reviewable and independently testable.
 
-- [ ] Add the activation client calls to the dashboard onboarding API layer, using the exact whitelisted body and the relative path convention.
-- [ ] Add the attempt types and the status vocabulary, verified against the backend entity rather than assumed.
-- [ ] Add the active-attempt query and the create-attempt mutation, including a stable idempotency key so a retry replays instead of failing.
-- [ ] Invalidate the session and readiness queries after creating an attempt, because creating one moves the lifecycle state.
+- [x] Add the activation client calls to the dashboard onboarding API layer, using the exact whitelisted body and the relative path convention.
+- [x] Add the attempt types and the status vocabulary, verified against the backend entity rather than assumed.
+- [x] Add the active-attempt query and the create-attempt mutation, including a stable idempotency key so a retry replays instead of failing.
+- [x] Invalidate the session and readiness queries after creating an attempt, because creating one moves the lifecycle state.
 
 Acceptance criteria:
 - The client sends only the four whitelisted fields, never a tenant or an actor, which the backend rejects under `forbidNonWhitelisted`.
@@ -149,7 +151,7 @@ Environment note, not a code defect: `npm run typecheck` fails on `src/features/
 
 ### L1-04b — Authorize and create the attempt from the setup center
 
-Status: complete — committed as `defb0f6`.
+Status: complete — work-unit commits `defb0f6` + correction `88aff66`, merged via PR #457 (`83e5012`).
 
 - [x] Replace the non-interactive activation block with an action gated on `onboarding:activation:manage`.
 - [x] Collect the terminal id the operator reads from the terminal's own identity surface (L1-03).
@@ -174,13 +176,13 @@ Remaining known gap: the screen does not show which checks the terminal reported
 
 ### L1-05a — Let the POS discover its own attempt
 
-Status: in progress — implemented, then corrected after adversarial verification found six defects.
+Status: complete — work-unit commit `cb3a1d6` (implementation plus the post-verification corrections), merged via PR #458 (`c45bc78`).
 
 Exploration found the gap is larger than wiring. `ActivationSyncPort` has eight methods and **all of them are POSTs keyed on a caller-supplied `attemptId`**; the POS cannot read the active attempt at all. Worse, every write to `activation_attempts_local` in the codebase is a test: no production code persists the attempt row, and the runners resolve it with `getAttemptById`, so without a writer they cannot run at all.
 
-- [ ] Add the missing read to `ActivationSyncPort` and its Dio adapter for the active attempt.
-- [ ] Add the production writer that maps the fetched attempt into `ActivationAttemptLocalEntity` with the status, the pinned fiscal revision and fingerprint, the verification product and the time anchor the runners require.
-- [ ] Resolve the attempt id from local persistence on later phases, so a restart mid-activation resumes instead of restarting.
+- [x] Add the missing read to `ActivationSyncPort` and its Dio adapter for the active attempt.
+- [x] Add the production writer that maps the fetched attempt into `ActivationAttemptLocalEntity` with the status, the pinned fiscal revision and fingerprint, the verification product and the time anchor the runners require.
+- [x] Resolve the attempt id from local persistence on later phases, so a restart mid-activation resumes instead of restarting.
 
 Acceptance criteria:
 - After the back office creates an attempt, the terminal can discover it and persist it without hand-made API calls.
@@ -191,15 +193,17 @@ Checks:
 - Focused tests for the read and the mapping, including a restart between phases.
 - Readback that the persisted fields match what the runners consume.
 
-Evidence: pending.
+Shipped as work-unit commit `cb3a1d6`, merged through PR #458 (`c45bc78`).
+
+Evidence: the corrections below were applied before the commit.
 
 Defects found by adversarial verification and corrected. The highest-severity one was ours: the backend attempt row DOES carry `serverTimeAnchorAt` (`server_time_anchor_at` on the activation attempt entity) and the reference harness read it straight from the response, but the new adapter did not parse it and discovery minted the anchor from the local clock while still labelling it `serverTimeAnchorAt` and registering it as `anchor-<attemptId>`. That is a local timestamp wearing a server label, and it feeds the clock confidence the whole TTFSS measurement depends on. The correction parses the real server anchor and keeps `anchorMonotonicTicks` local, which is correct because monotonic ticks are local by definition. Also corrected: fabricated defaults (`0`, `''`, `''`) for missing pinned fields, which only surfaced one phase later as a confusing `REQUIRED_CONFIG_LOCAL`; a malformed payload escaping as an uncaught `StateError` instead of a named failure; a stale local attempt pinning discovery forever, which would have made a newly created back-office attempt invisible to the terminal after any previous activation and skipped the terminal-mismatch guard entirely; the snapshot tenant never being compared with the requested tenant; and a test that was green for the wrong reason.
 
-Reported separately rather than fixed here: `activation_pre_offline_runner.dart:335` rewrites an advanced row back to `ASSIGNED` when a re-run fails, which can strand an attempt whose controlled sale already succeeded; tracked as issue #450.
+Reported separately rather than fixed here: `activation_pre_offline_runner.dart:335` rewrites an advanced row back to `ASSIGNED` when a re-run fails, which can strand an attempt whose controlled sale already succeeded; tracked as issue #450 and fixed by L1-09 below.
 
 ### L1-05b-session — Assemble the activation session
 
-Status: complete pending work-unit commit.
+Status: complete — work-unit commit `d1ab3b9`, merged via PR #459 (`ab3eb4f`).
 
 Split from the original L1-05b: the check replay went to the reconnect runner, and this slice assembles the phases.
 
@@ -222,7 +226,7 @@ Deliberate difference from the harness, recorded so it is not mistaken for a def
 
 ### L1-05b-replay — Let the reconnect runner own the check replay
 
-Status: complete pending work-unit commit.
+Status: complete — work-unit commit `c40c60a`, merged via PR #459 (`ab3eb4f`).
 
 - [x] Replay the persisted pre-offline checks inside the reconnect runner before the outbox drain and before finalization.
 - [x] Mirror the reference harness's replay field for field, so the runner and the harness cannot diverge.
@@ -243,18 +247,18 @@ Flakiness note, verified rather than assumed: a combined run of the service and 
 
 ### L1-05c — Guide the operator through activation
 
-Status: pending — split into the view model plus wiring, and the screen.
+Status: superseded — split into L1-05c-1 and L1-05c-2, both complete.
 
 Split into L1-05c-1 (view model and `main.dart` wiring) and L1-05c-2 (screen, route and drawer entry), for the same reason L1-04 was split: together they exceed the review budget, and the logic is independently reviewable from the presentation.
 
 ### L1-05c-1 — Drive the session from a view model
 
-Status: in progress
+Status: complete — work-unit commit `5f08a4c`, merged via PR #459 (`ab3eb4f`).
 
-- [ ] Expose preparation state, the resolved attempt, per-phase progress and the distinct blocker codes and messages.
-- [ ] Source the tenant and the user ids from the logged-in user, never from the screen and never hard-coded.
-- [ ] Collect the authorized PIN from the human and retain it only for the call.
-- [ ] Wire the whole activation stack in `main.dart`, including the `PrinterPort` resolved from the stored printer profile rather than assumed.
+- [x] Expose preparation state, the resolved attempt, per-phase progress and the distinct blocker codes and messages.
+- [x] Source the tenant and the user ids from the logged-in user, never from the screen and never hard-coded.
+- [x] Collect the authorized PIN from the human and retain it only for the call.
+- [x] Wire the whole activation stack in `main.dart`, including the `PrinterPort` resolved from the stored printer profile rather than assumed.
 
 Acceptance criteria:
 - The view model returns the session's own results and fabricates nothing.
@@ -265,16 +269,16 @@ Checks:
 - Focused view-model tests with an injected session service.
 - `flutter analyze`.
 
-Evidence: pending.
+Shipped as work-unit commit `5f08a4c`, merged through PR #459 (`ab3eb4f`) together with the other activation-flow slices.
 
 ### L1-05c-2 — The guided screen
 
-Status: pending
+Status: complete — work-unit commit `e7a35ac`, merged via PR #459 (`ab3eb4f`).
 Depends on: L1-05c-1
 
-- [ ] Add the guided screen, reachable from the drawer, that walks the three phases in order and shows each outcome.
-- [ ] Show the check results and the blockers the runners already return, without inventing any.
-- [ ] Fail closed with a named reason when a phase blocks.
+- [x] Add the guided screen, reachable from the drawer, that walks the three phases in order and shows each outcome.
+- [x] Show the check results and the blockers the runners already return, without inventing any.
+- [x] Fail closed with a named reason when a phase blocks.
 
 Acceptance criteria:
 - An operator can complete activation from the terminal with no hand-made API call.
@@ -285,17 +289,17 @@ Checks:
 - Widget and view-model tests for each phase outcome.
 - `flutter analyze`.
 
-Evidence: pending.
+Shipped as work-unit commit `e7a35ac`, merged through PR #459 (`ab3eb4f`) together with the other activation-flow slices.
 
 ### L1-05 — superseded
 
 The original single slice was split into L1-05a, L1-05b and L1-05c once exploration showed it required a new backend read, the first production writer for the attempt row, the assembly of three runners, a decision about where checks are replayed, and a new multi-step screen.
 
-Status: pending
+Status: superseded — the goals below were delivered through the split slices above; kept as a historical record.
 
-- [ ] Construct the existing activation runners in production wiring, gated by an active attempt for this terminal.
-- [ ] Ensure a finalize attempt reaches `PASS` or `PASS_WITH_WARNING` and publishes the outbox drain on reconnect.
-- [ ] Preserve fail-closed behaviour when a check fails.
+- [x] Construct the existing activation runners in production wiring, gated by an active attempt for this terminal.
+- [x] Ensure a finalize attempt reaches `PASS` or `PASS_WITH_WARNING` and publishes the outbox drain on reconnect.
+- [x] Preserve fail-closed behaviour when a check fails.
 
 Acceptance criteria:
 - A production code path creates checks and finalizes the attempt; the runners stop being test-only.
@@ -307,7 +311,7 @@ Checks:
 - `flutter analyze`.
 - Backend confirmation that an attempt reaches a final status.
 
-Evidence: pending.
+Delivered through L1-05a, L1-05b-replay, L1-05b-session, L1-05c-1 and L1-05c-2; see their evidence.
 
 ### L1-06 — Confirm the credential at runtime on the device
 
@@ -332,7 +336,7 @@ Evidence: pending.
 
 ### L1-07 — Correct the device identity claims
 
-Status: pending (must not run concurrently with L1-02: same file).
+Status: pending — next actionable slice; no hardware required. (It was sequenced after L1-02 because both touch the packaging script; L1-02 is merged.)
 
 Founder clarification (2026-09-20): the fleet terminal is a MIRAY Q80/iPOS. The Sunmi V2s was the initial prospect and was never acquired, so no Sunmi device exists in the fleet.
 
@@ -359,15 +363,15 @@ Evidence: pending.
 
 ### L1-08 — Match fresh-terminal hardware defaults to the fleet
 
-Status: pending
+Status: complete — work-unit commits `b7a0e9f` + `ff3b67e`, fixture repair `1a14675`, and recovery-record commit `bf0f37a`, merged via PR #463 (`4b2c6a1`).
 
 Founder confirmation (2026-09-20): on the physical terminal the working selection is **Q80** in hardware and printer settings, which is what prints correctly at 80 mm. Confirmed in code: nothing in the backend, the seed, or the harness writes `printer_driver_type` or the paper width; `PrinterConfigService` falls back to `sunmiV2s` when no driver is stored, and `PrinterConfig.paperWidthMm` defaults to `58`.
 
 Consequence: a freshly installed terminal — exactly the case this feature exists to handle — starts on the wrong driver path and the wrong paper width and only prints correctly after a human changes Configuración de Hardware. This is the same defect class as #343, which printed FACTURA at 58 mm for a cuota-fija tenant.
 
-- [ ] Decide the provisioning contract for the printer profile: set driver and width for the device during enrollment, change the fresh-install default to match the fleet, or fail closed with an explicit blocked reason while the profile is unset.
-- [ ] Implement the chosen contract without hard-coding one tenant's hardware into a multi-tenant platform: the profile is per-device configuration, and 58 mm remains a legitimate profile for other terminals.
-- [ ] Ensure activation reports the printer profile it actually used, so an unset or inconsistent profile cannot silently print at the wrong width.
+- [x] Decide the provisioning contract for the printer profile: set driver and width for the device during enrollment, change the fresh-install default to match the fleet, or fail closed with an explicit blocked reason while the profile is unset.
+- [x] Implement the chosen contract without hard-coding one tenant's hardware into a multi-tenant platform: the profile is per-device configuration, and 58 mm remains a legitimate profile for other terminals.
+- [x] Ensure activation reports the printer profile it actually used, so an unset or inconsistent profile cannot silently print at the wrong width.
 
 Acceptance criteria:
 - A fresh terminal either prints at the configured profile without a hidden manual step, or activation fails closed naming the missing or inconsistent printer profile.
@@ -379,19 +383,43 @@ Checks:
 - `flutter analyze`.
 - Readback of the effective profile recorded in activation evidence.
 
-Evidence: pending.
+Evidence: the chosen contract is the explicit-choice/fail-closed path. `PrinterConfigService.isPrinterProfileConfigured()` is read-only and true only when both the driver and paper-width keys exist with non-blank values, so an unconfigured device is no longer indistinguishable from a deliberate Sunmi V2s at 58 mm. `confirmPrinterProfile` is the only path that materialises a profile on a fresh terminal, `savePrinterConfig` no longer writes the profile keys when absent, and TEST_PRINT fails closed with a named blocker (and never calls the printer) when the profile was never configured, recording `printerProfileConfigured` in its evidence. Fixture repair `1a14675` re-seeded the profile keys in the affected e2e fixtures; recovery-record commit `bf0f37a` updated `odd/tasks/printer-profile-ci-fixtures.md`. Merged through PR #463 (`4b2c6a1`). Physical print behaviour on the Q80 remains subject to L1-06.
+
+### L1-09 — Stop a failing pre-offline re-run from stranding an advanced attempt
+
+Status: complete — work-unit commit `4d680df`, merged via PR #464 (`6e4a2a7`), closing issue #450.
+
+- [x] Gate the pre-offline runner on entry: it owns only `ASSIGNED` and `RUNNING`, refusing any other status with the named blocker `ATTEMPT_NOT_READY_FOR_CHECKS` without running checks, calling the printer, or writing rows.
+- [x] Pin the stranding scenario with a test that reproduces it rather than relying on the shape of the fix.
+- [x] Keep `RUNNING` as a legitimate re-entry status, with the `RUNNING`→`ASSIGNED` rollback retained as intentional.
+
+Acceptance criteria:
+- A failing re-run cannot reset an attempt whose controlled sale already succeeded back to a status that merely looks fresh.
+- The refusal is named, not silent.
+
+Checks:
+- Focused POS tests reproducing the stranding scenario and the refusal path.
+
+Evidence: closes the defect reported separately during L1-05a (`activation_pre_offline_runner.dart:335`), tracked as issue #450. The unconditional status rewrite at completion is replaced by an entry-status gate; the refusal runs no check, calls no printer, writes no check row, and leaves the status untouched. Shipped as work-unit commit `4d680df`, merged through PR #464 (`6e4a2a7`).
+
+### Post-merge housekeeping — outside the L1 implementation scope
+
+PR #461 (merge `964a0ce`, commits `77dcc6b` + `68ffbd3`, closing issue #460) published the client startup requirements documentation. It is independent documentation work merged after the L1 implementation and is recorded here only for completeness; it is not an L1 slice.
 
 ## Dependencies
 
-- L1-02 before L1-06.
-- L1-04 before L1-05 in review order; either may be developed first.
-- L1-01 is independent and first.
+- Repository implementation is merged: L1-01 through L1-05c-2, L1-08 and L1-09 are complete and merged to `main`.
+- L1-07 is the next actionable slice: documentation-only corrections, no hardware required.
+- L1-06 is last and blocked on hardware: it requires the physical Q80, a fresh tenant/terminal, and the catalog with the pinned verification product.
+- #314 follows confirmed L1 (confirmation happens at L1-06); #445 remains separate.
 
 ## Progress
 
 - Feature opened after independent verification of `main` at `9cef7ce` corrected the earlier assessment: the credential provisioning half is already production-wired, the three activation runners exist but are constructed only in tests, the owner dashboard has no enrollment surface, and the build script passes no `DEVICE_ID`.
 - Frozen plan approved by the founder: dashboard authorizes and creates, POS observes and finalizes, build defines the terminal id, recovery remains an exceptional ops path.
+- Repository implementation merged through PRs #454, #455, #456, #457, #458, #459, #463 and #464 (per-slice commits and merge identities recorded in each task above).
+- L1/DSI-2 is NOT complete: physical credential provisioning, renewal, and `/v1/sync/*` use on the device remain unverified until L1-06, so DSI cutover precondition 2 is still not satisfied.
 
 ## Next step
 
-Execute L1-01, then L1-02.
+Execute L1-07 (documentation corrections, no hardware needed). Then L1-06 when the physical Q80 and a fresh catalog/tenant are available. #314 follows confirmed L1; #445 remains separate.
