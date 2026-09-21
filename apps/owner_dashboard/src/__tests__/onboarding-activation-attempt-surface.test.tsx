@@ -311,14 +311,8 @@ describe("L1-04b — Activation Attempt Creation Surface (Setup Center)", () => 
   });
 
   it.each([
-    [
-      ActivationAttemptStatus.CREATED,
-      "CREATED",
-    ],
-    [
-      ActivationAttemptStatus.IN_PROGRESS,
-      "IN_PROGRESS",
-    ],
+    ActivationAttemptStatus.CREATED,
+    ActivationAttemptStatus.IN_PROGRESS,
   ])(
     "renders the awaiting-device-checks state when the active attempt is %s",
     async (status) => {

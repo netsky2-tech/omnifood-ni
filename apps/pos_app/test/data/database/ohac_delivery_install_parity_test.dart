@@ -36,6 +36,29 @@ void main() {
     return database;
   }
 
+  Future<List<String>> columnNames(DatabaseExecutor db, String table) async {
+    final rows = await db.rawQuery('PRAGMA table_info($table)');
+    return rows.map((row) => row['name'] as String).toList();
+  }
+
+  /// The properties a parity claim actually depends on, one entry per column.
+  ///
+  /// Comparing names alone would pass while the two install paths disagreed on
+  /// a declared type, on whether the column allows nulls, or on a default —
+  /// which is the parity this file exists to hold, so it is asserted rather
+  /// than assumed.
+  Future<Map<String, String>> columnShapes(
+    DatabaseExecutor db,
+    String table,
+  ) async {
+    final rows = await db.rawQuery('PRAGMA table_info($table)');
+    return {
+      for (final row in rows)
+        row['name'] as String:
+            '${row['type']} notnull=${row['notnull']} default=${row['dflt_value']}',
+    };
+  }
+
   test('a fresh install creates the five OHAC delivery tables', () async {
     final db = await buildFreshDatabase();
 
@@ -65,6 +88,64 @@ void main() {
       'human_auth_local_events',
     ]) {
       expect(await db.database.query(table), isEmpty, reason: table);
+    }
+  });
+
+  test('a fresh install carries the terminal-state extension columns',
+      () async {
+    final db = await buildFreshDatabase();
+
+    // The same column set the migration adds on the upgrade path: the
+    // candidate pair, the server floor pair, the four negotiated facts, the
+    // integrity classification, and the terminal-local authorization
+    // sequence (design §4.2).
+    expect(await columnNames(db.database, 'human_auth_terminal_state'), [
+      'tenant_id',
+      'terminal_id',
+      'state',
+      'active_sequence',
+      'active_digest',
+      'candidate_sequence',
+      'candidate_digest',
+      'server_floor_sequence',
+      'server_floor_digest',
+      'negotiated_pos_build',
+      'negotiated_backend_build',
+      'negotiated_policy_schema',
+      'negotiated_assertion_schema',
+      'integrity_classification',
+      'local_authorization_sequence',
+      'revision',
+      'updated_at',
+    ]);
+
+    // And the shape, not only the names. Floor's entity DDL cannot declare a
+    // default, so on this path the ten added columns carry none; the upgrade
+    // path adds them with `DEFAULT`, because SQLite cannot add a `NOT NULL`
+    // column without one. That single divergence is pinned explicitly in
+    // ohac_delivery_migration_test.dart; everything else must match it.
+    final shapes = await columnShapes(
+      db.database,
+      'human_auth_terminal_state',
+    );
+    for (final column in [
+      'candidate_sequence',
+      'candidate_digest',
+      'server_floor_sequence',
+      'server_floor_digest',
+      'negotiated_pos_build',
+      'negotiated_backend_build',
+      'negotiated_policy_schema',
+      'negotiated_assertion_schema',
+      'integrity_classification',
+      'local_authorization_sequence',
+    ]) {
+      final expectedType = column.endsWith('sequence') ? 'INTEGER' : 'TEXT';
+      expect(
+        shapes[column],
+        '$expectedType notnull=1 default=null',
+        reason: column,
+      );
     }
   });
 
@@ -214,6 +295,16 @@ void main() {
       'state': 'ACTIVE',
       'active_sequence': 1,
       'active_digest': 'sha256:${'a' * 64}',
+      'candidate_sequence': 0,
+      'candidate_digest': '',
+      'server_floor_sequence': 0,
+      'server_floor_digest': 'GENESIS',
+      'negotiated_pos_build': '',
+      'negotiated_backend_build': '',
+      'negotiated_policy_schema': '',
+      'negotiated_assertion_schema': '',
+      'integrity_classification': '',
+      'local_authorization_sequence': 0,
       'revision': 1,
       'updated_at': '2026-01-01T00:00:00.000Z',
     });
