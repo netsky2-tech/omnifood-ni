@@ -93,6 +93,10 @@ Two details worth recording because they were deliberate. `movements/sync` binds
 
 Size: 285 changed lines, of which 34 are production (32 in the controller, 2 in the module) and the rest is test code, which satisfies the recorded rule for exceeding the advisory budget.
 
+**CI caught a blast radius the local verification missed, and the process lesson is recorded rather than hidden.** Declaring a guard on a controller is not a local change: Nest testing modules instantiate route guards eagerly, so every spec that builds that controller fails at DI resolution unless the guard's dependencies are provided or the guard is overridden. Local verification ran `npx jest src/modules/inventory` and `npm run build`, which passed, and CI then failed with 4 e2e suites and 58 tests down. Repairing the four named suites in commit `54a8f3b` and re-running the **full** e2e suite surfaced a fifth, `test/identity/authoritative-routes.e2e-spec.ts`, which builds the same controller and had not appeared in any filtered run. Final state: full e2e 50 suites and 403 tests passing, full unit suite 247 suites and 2289 tests passing, build clean.
+
+Two rules follow for the rest of this feature, both stated as requirements in Delivery and verification: after changing a controller's guard set, run the **full** unit and e2e suites and not a filtered pattern, because filtered runs systematically under-report the blast radius; and a spec file may hold more than one testing module, so only the module that instantiates the guarded controller needs the override.
+
 ### ST-02 — Pin the transport contract with a registry test
 
 Status: pending
