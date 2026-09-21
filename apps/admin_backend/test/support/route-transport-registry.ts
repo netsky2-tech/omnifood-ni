@@ -444,7 +444,20 @@ export const TRANSPORT_DECLARATIONS: TransportDeclaration[] = [
       },
     ],
   },
-  { controller: 'RegularizationController', transport: 'human' },
+  {
+    controller: 'RegularizationController',
+    transport: 'human',
+    overrides: [
+      {
+        // ST-06: the regularization sync write is transmitted by the POS
+        // background sync pass behind SyncTransportGuard; pending/approve
+        // stay human-transported.
+        httpMethod: 'POST',
+        handlerPath: 'sync',
+        transport: 'device',
+      },
+    ],
+  },
   { controller: 'RemediationController', transport: 'human' },
   { controller: 'InventoryReportsController', transport: 'human' },
   { controller: 'ProductController', transport: 'human' },

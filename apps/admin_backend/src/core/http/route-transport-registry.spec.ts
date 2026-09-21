@@ -60,6 +60,18 @@ describe('route transport registry (AppModule route table)', () => {
     expect(findings).toEqual([]);
   });
 
+  it('classifies POST /inventory/regularization/sync as device transport (ST-06)', () => {
+    const sync = routes.find(
+      (record) =>
+        record.route === '/inventory/regularization/sync' &&
+        record.httpMethod === 'POST',
+    );
+    expect(sync?.controller).toBe('RegularizationController');
+    expect(sync?.guards).toContain('SyncTransportGuard');
+    expect(sync?.guards).not.toContain('AuthGuard');
+    expect(sync?.guards).not.toContain('RolesGuard');
+  });
+
   it('no longer serves the retired GET /inventory/alerts surface (ST-05)', () => {
     // The inventory-alert read was folded into /v1/sync/inbound/deltas as a
     // one-way cloud-to-POS projection; the separate human surface that
