@@ -86,7 +86,7 @@ Flags según `OnboardingFeatureRolloutService` — estado congelado para accepta
 | Terminal ID (DevicePrincipal) | `Q802024120001` (fijo según seed script) |
 | OS version | Android 12 (SDK 31), security patch 2022-11-05 |
 | Firmware | `Q80_SC_V1.0.1_B241225.163320` |
-| Printer adapter | `SUNMI_V2S` vía `net.nyx.printerservice` — **versión del servicio no verificada** |
+| Printer adapter | `SUNMI_V2S` vía `net.nyx.printerservice` — **versión del servicio no verificada**. **Corrección (2026-09-21):** este valor fue capturado desde el dispositivo: nada en el backend, el seed ni el harness escribe `printer_driver_type`, por lo que no está corroborado por la configuración probada. La selección probada y funcional del founder en el Q80 real es el driver `Q80 / iPos` (`IPOS_Q80`) imprimiendo a 80 mm. La discrepancia queda registrada como **UNRESOLVED** pendiente de la confirmación física trazada en L1-06; no se afirma cuál de los dos valores es el correcto. |
 | Printer paper width | **80 mm** (rollo incluido en el Q80). Es el único perfil físicamente calibrado en este equipo: Nyx `TLMono` font 4, 40 columnas, 576 dots, leftPadding 8. El soporte de 58 mm existe en software (32 columnas / 384 dots) pero **no está validado físicamente** en el piloto |
 | Network profile | **No capturado** — WiFi SSID del entorno no registrado por ser la cohorte harness-driven |
 | WAN outage method | **Sin corte físico.** Offline aplicado por el propio harness y probado con `httpRequests: 0` en el recibo de la fase `offline` de cada run |

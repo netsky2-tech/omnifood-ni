@@ -14,7 +14,7 @@ import net.nyx.printerservice.print.IPrinterService
 import net.nyx.printerservice.print.PrintTextFormat
 
 /**
- * Native Android MethodChannel handler for Alacrity Q80 (Nyx Printer Service: net.nyx.printerservice).
+ * Native Android MethodChannel handler for MIRAY Q80/iPOS (Nyx Printer Service: net.nyx.printerservice).
  * Connects to the real hardware service found on this device.
  */
 class IPosPrinterHandler(private val context: Context) : MethodChannel.MethodCallHandler {

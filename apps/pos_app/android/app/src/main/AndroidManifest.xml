@@ -44,7 +44,7 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
-        <!-- Required for Android 11+ package visibility to bind Alacrity Q80 / Nyx AIDL print service -->
+        <!-- Required for Android 11+ package visibility to bind MIRAY Q80/iPOS / Nyx AIDL print service -->
         <package android:name="com.iposprinter.iposprinterservice" />
         <package android:name="net.nyx.printerservice" />
         <intent>
