@@ -101,7 +101,10 @@ describe('T1 storage baseline: migrated PostgreSQL Loyalty surface (release prob
         ledger.create({
           tenant_id: tenantId,
           customer_id: randomUUID(),
-          loyalty_program_id: null,
+          // V1-shaped EARN: `ck_loyalty_tx_type_semantics` requires a program
+          // on every declared EARN row, so the fixture must not emulate the
+          // pre-T2b legacy shape here.
+          loyalty_program_id: randomUUID(),
           ticket_id: ticket,
           transaction_type: PointTransactionType.EARN,
           units: 10,
@@ -139,7 +142,7 @@ describe('T1 storage baseline: migrated PostgreSQL Loyalty surface (release prob
     expect(ledger[0].count).toBeGreaterThan(0);
   });
 
-  it('[B4-pg] PostgreSQL rejects a duplicate loyalty idempotency identity (arch §5.3; T2 acceptance) — RED on baseline', async () => {
+  it('[B4-pg] PostgreSQL rejects a duplicate loyalty idempotency identity (arch §5.3; T2b acceptance)', async () => {
     const ledger = admin.getRepository(CustomerPointTransaction);
     const idempotencyKey = `probe:${randomUUID()}`;
     // Two DIFFERENT loyalty movements — distinct customer and ticket_id —
@@ -149,6 +152,7 @@ describe('T1 storage baseline: migrated PostgreSQL Loyalty surface (release prob
     const movement = (ticket: string) => ({
       tenant_id: tenantAId,
       customer_id: randomUUID(),
+      loyalty_program_id: randomUUID(),
       ticket_id: ticket,
       transaction_type: PointTransactionType.EARN,
       units: 5,
@@ -157,8 +161,8 @@ describe('T1 storage baseline: migrated PostgreSQL Loyalty surface (release prob
     });
     await ledger.save(ledger.create(movement('TICKET-B4-FIRST')));
     // Correct behavior: the second movement with the same identity is a
-    // PostgreSQL-level unique violation (23505). On the baseline this insert
-    // RESOLVES, which is exactly the B4 DB-enforcement gap.
+    // PostgreSQL-level unique violation (23505); a resolving insert is the
+    // DB-enforcement gap this probe guards against regressing into.
     await expect(
       ledger.save(ledger.create(movement('TICKET-B4-RETRY'))),
     ).rejects.toMatchObject({ code: '23505' });

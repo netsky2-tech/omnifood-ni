@@ -25,17 +25,24 @@ export const RELEASE_GATE_SCHEMA = "loyalty-release-gate/v1";
 // Versioned with the T1 probe-producer contract (docs/loyalty T1 batch, M0
 // baseline-red gate). This closed set MUST be expanded for T10 (final-green
 // gate) when new blockers land; unknown tags always fail closed so stale
-// producers can never silently widen the gate.
+// producers can never silently widen the gate. Repaired blockers (B4-pg and
+// B4-sqlite, T2b commits 5709931 and 4153511) move OUT of this set and into
+// REQUIRED_REGRESSION_IDS so baseline keeps meaning "the remaining known
+// blockers are still red"; the remaining blockers after T2b are exactly
+// B1, B2, B3, B5, B7-rls-enforcement, B7-cross-tenant-read.
 export const REQUIRED_BLOCKER_IDS = Object.freeze([
-  "B1", "B2", "B3", "B4-pg", "B4-sqlite", "B5",
-  "B7-rls-enforcement", "B7-cross-tenant-read",
+  "B1", "B2", "B3", "B5", "B7-rls-enforcement", "B7-cross-tenant-read",
 ]);
 
 // Regression probes: fixed behaviors that must PASS in every mode (a FAIL is
-// gate_failed evidence, never accepted). Presence per runner is enforced by
-// the collector's per-source expected-tag sets; this classifier-level set
-// fails closed on unknown regression KINDS/tags.
-export const REQUIRED_REGRESSION_IDS = Object.freeze(["B9-customer-code"]);
+// gate_failed evidence, never accepted). Repaired blockers move here (same
+// lifecycle as B9-customer-code after T2a) so that baseline stays meaningful:
+// baseline = remaining known blockers FAIL, final = everything PASS. Presence
+// per runner is enforced by the collector's per-source expected-tag sets;
+// this classifier-level set fails closed on unknown regression KINDS/tags.
+export const REQUIRED_REGRESSION_IDS = Object.freeze([
+  "B4-pg", "B4-sqlite", "B9-customer-code",
+]);
 
 // Declared control probes guard the harness environment. The classifier
 // requires at least one control and fails on a control FAIL; the collector

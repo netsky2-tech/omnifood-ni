@@ -11,6 +11,7 @@ import {
 import {
   RELEASE_GATE_SCHEMA,
   REQUIRED_BLOCKER_IDS,
+  REQUIRED_REGRESSION_IDS,
 } from "../lib/loyalty-release-gate.mjs";
 
 const codesOf = (errors) => errors.map((e) => e.code);
@@ -52,7 +53,9 @@ const flutterTestStartDone = (id, name, result, extra = {}) => [
 
 const conformingJestText = () => jestDoc([
   ["T1 storage baseline (release probes) [CONTROL-pg-schema] the full migration set builds the Loyalty storage surface", "passed"],
-  ["T1 storage baseline (release probes) [B4-pg] PostgreSQL rejects a duplicate loyalty idempotency identity", "failed"],
+  // B4-pg is a regression since T2b (commit 5709931): the repaired duplicate
+  // identity must PASS in every mode.
+  ["T1 storage baseline (release probes) [B4-pg] PostgreSQL rejects a duplicate loyalty idempotency identity", "passed"],
   ["T1 storage baseline (release probes) [B7-rls-enforcement] every Loyalty tenant table is RLS ENABLE+FORCEd", "failed"],
   ["T1 storage baseline (release probes) [B7-cross-tenant-read] a restricted tenant-scoped session cannot read another tenant's loyalty rows", "failed"],
   ["T1 sync-boundary baseline (release probes) [CONTROL-http] the app/auth harness reaches the existing POST /api/v1/sync/batch", "passed"],
@@ -64,7 +67,7 @@ const conformingFlutterText = () => flutterStream([
   ["suite", { suite: { id: 1, platform: "vm", path: "/repo/apps/pos_app/test/e2e/loyalty_release_isolation_e2e_test.dart" } }],
   ["group", { group: { id: 2, suiteID: 1, name: "Loyalty release harness — migrated file-backed SQLite baseline" } }],
   ...flutterTestStartDone(3, "Loyalty release harness — migrated file-backed SQLite baseline [CONTROL-sqlite-schema] migrations 10->54 build the Loyalty schema and it survives close/reopen", "success"),
-  ...flutterTestStartDone(4, "Loyalty release harness — migrated file-backed SQLite baseline [B4-sqlite] migrated SQLite rejects two ledger movements with distinct ids sharing one idempotency key", "failure"),
+  ...flutterTestStartDone(4, "Loyalty release harness — migrated file-backed SQLite baseline [B4-sqlite] migrated SQLite rejects two ledger movements with distinct ids sharing one idempotency key", "success"),
   ...flutterTestStartDone(5, "Loyalty release harness — migrated file-backed SQLite baseline [B9-customer-code] migrated customers table supports real CustomerDao save/read by customer_code", "success"),
   ...flutterTestStartDone(6, "Loyalty release harness — B1 device-tenant evaluation baseline [B1] production evaluation path finds the program seeded under the device tenant, never under the customer id", "failure"),
   ["suite", { suite: { id: 7, platform: "vm", path: "/repo/apps/pos_app/test/e2e/loyalty_release_void_e2e_test.dart" } }],
@@ -73,7 +76,7 @@ const conformingFlutterText = () => flutterStream([
 
 const expectedJestProbes = [
   { id: "CONTROL-pg-schema", kind: "control", result: "PASS" },
-  { id: "B4-pg", kind: "blocker", result: "FAIL" },
+  { id: "B4-pg", kind: "regression", result: "PASS" },
   { id: "B7-rls-enforcement", kind: "blocker", result: "FAIL" },
   { id: "B7-cross-tenant-read", kind: "blocker", result: "FAIL" },
   { id: "CONTROL-http", kind: "control", result: "PASS" },
@@ -83,7 +86,7 @@ const expectedJestProbes = [
 
 const expectedFlutterProbes = [
   { id: "CONTROL-sqlite-schema", kind: "control", result: "PASS" },
-  { id: "B4-sqlite", kind: "blocker", result: "FAIL" },
+  { id: "B4-sqlite", kind: "regression", result: "PASS" },
   { id: "B9-customer-code", kind: "regression", result: "PASS" },
   { id: "B1", kind: "blocker", result: "FAIL" },
   { id: "B5", kind: "blocker", result: "FAIL" },
@@ -92,7 +95,7 @@ const expectedFlutterProbes = [
 describe("runner source contract", () => {
   it("partitions every declared probe id across exactly two runners", () => {
     const all = [...RUNNER_SOURCES["jest-backend"], ...RUNNER_SOURCES["flutter-pos"]].sort();
-    const declared = [...REQUIRED_BLOCKER_IDS, "B9-customer-code",
+    const declared = [...REQUIRED_BLOCKER_IDS, ...REQUIRED_REGRESSION_IDS,
       "CONTROL-pg-schema", "CONTROL-http", "CONTROL-sqlite-schema"].sort();
     assert.deepEqual(all, declared);
   });
@@ -102,6 +105,9 @@ describe("kindForProbeId", () => {
   it("maps every declared id to its contract kind", () => {
     assert.equal(kindForProbeId("B1"), "blocker");
     assert.equal(kindForProbeId("B7-cross-tenant-read"), "blocker");
+    // Repaired blockers moved to the regression set (T2b).
+    assert.equal(kindForProbeId("B4-pg"), "regression");
+    assert.equal(kindForProbeId("B4-sqlite"), "regression");
     assert.equal(kindForProbeId("B9-customer-code"), "regression");
     assert.equal(kindForProbeId("CONTROL-sqlite-schema"), "control");
   });

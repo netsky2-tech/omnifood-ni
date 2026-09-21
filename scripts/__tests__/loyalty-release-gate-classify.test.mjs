@@ -15,8 +15,9 @@ const regression = (id, result = "PASS") => ({ id, kind: "regression", result })
 const control = (id, result = "PASS") => ({ id, kind: "control", result });
 const doc = (probes, source = "jest-backend") => ({ schema: RELEASE_GATE_SCHEMA, source, probes });
 const gate = (probes, mode = "baseline") => classifyReleaseGate(doc(probes), mode);
-// Baseline shape: every declared blocker observed FAIL, every declared
-// regression and every control observed PASS.
+// Baseline shape after T2b (roadmap v0.4): every declared blocker observed
+// FAIL (B4-pg/B4-sqlite are repaired and moved to the regression set), every
+// declared regression and every control observed PASS.
 const baselineProbes = () => [
   ...REQUIRED.map((id) => blocker(id)),
   ...REQUIRED_REGRESSION_IDS.map((id) => regression(id)),
@@ -32,13 +33,18 @@ const codesOf = (r) => r.errors.map((e) => e.code);
 describe("contract constants", () => {
   it("declares exactly the required blocker tags", () => {
     assert.deepEqual([...REQUIRED_BLOCKER_IDS].sort(), [
-      "B1", "B2", "B3", "B4-pg", "B4-sqlite", "B5",
+      "B1", "B2", "B3", "B5",
       "B7-cross-tenant-read", "B7-rls-enforcement",
     ]);
   });
 
   it("declares exactly the required regression tags", () => {
-    assert.deepEqual([...REQUIRED_REGRESSION_IDS], ["B9-customer-code"]);
+    // B4-pg and B4-sqlite were repaired by T2b (commits 5709931, 4153511) and
+    // joined B9-customer-code: a repaired blocker becomes a regression that
+    // must PASS in every mode.
+    assert.deepEqual([...REQUIRED_REGRESSION_IDS].sort(), [
+      "B4-pg", "B4-sqlite", "B9-customer-code",
+    ]);
   });
 
   it("declares the release-gate schema identifier", () => {
@@ -53,11 +59,11 @@ describe("baseline mode", () => {
     assert.equal(result.status, "gate_held");
     assert.equal(result.mode, "baseline");
     assert.deepEqual(result.errors, []);
-    assert.equal(result.observed.length, 8 + 1 + 1);
+    assert.equal(result.observed.length, REQUIRED.length + REQUIRED_REGRESSION_IDS.length + 1);
   });
 
   it("reports gate_failed (not input_invalid) when an expected blocker passes", () => {
-    const probes = baselineProbes().map((p) => (p.id === "B4-pg" ? blocker("B4-pg", "PASS") : p));
+    const probes = baselineProbes().map((p) => (p.id === "B1" ? blocker("B1", "PASS") : p));
     const result = gate(probes);
     assert.equal(result.ok, false);
     assert.equal(result.status, "gate_failed");
@@ -201,7 +207,7 @@ describe("provenance attribution", () => {
     assert.equal(b3.source, "flutter-pos");
     const b1 = result.observed.find((p) => p.id === "B1");
     assert.equal(b1.source, "jest-backend");
-    assert.equal(result.observed.length, 8 + 1 + 1);
+    assert.equal(result.observed.length, REQUIRED.length + REQUIRED_REGRESSION_IDS.length + 1);
   });
 
   it("attributes errors to the declaring source and file", () => {
