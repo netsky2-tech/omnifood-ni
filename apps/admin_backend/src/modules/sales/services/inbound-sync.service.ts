@@ -139,7 +139,11 @@ export class InboundSyncService {
         requestedTypes.has('catalogvalues') ||
         requestedTypes.has('catalog_values') ||
         requestedTypes.has('categories')
-          ? await this.fetchCatalogValueDeltas(tenantId, sinceDate, entityManager)
+          ? await this.fetchCatalogValueDeltas(
+              tenantId,
+              sinceDate,
+              entityManager,
+            )
           : [],
       insumos: requestedTypes.has('insumos')
         ? await this.fetchInsumoDeltas(tenantId, sinceDate, entityManager)
@@ -526,7 +530,8 @@ export class InboundSyncService {
     entityManager?: EntityManager,
   ): Promise<InboundSyncRecipeVersionDto[]> {
     const recipeVersionRepository =
-      entityManager?.getRepository(RecipeVersion) ?? this.recipeVersionRepository;
+      entityManager?.getRepository(RecipeVersion) ??
+      this.recipeVersionRepository;
     const insumoRepository =
       entityManager?.getRepository(Insumo) ?? this.insumoRepository;
     const qb = recipeVersionRepository

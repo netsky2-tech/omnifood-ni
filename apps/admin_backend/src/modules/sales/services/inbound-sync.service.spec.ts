@@ -522,15 +522,36 @@ describe('InboundSyncService', () => {
 
     it('routes the product, catalog and mapping reads through the supplied bound manager', async () => {
       const managerRepos = new Map<unknown, unknown>([
-        [Product, { createQueryBuilder: jest.fn().mockReturnValue(createMockQueryBuilder([boundProduct])) }],
-        [CatalogValue, { createQueryBuilder: jest.fn().mockReturnValue(createMockQueryBuilder([boundCatalogValue])) }],
-        [ProductInventoryMappingVersion, { createQueryBuilder: jest.fn().mockReturnValue(createMockQueryBuilder([boundMapping])) }],
+        [
+          Product,
+          {
+            createQueryBuilder: jest
+              .fn()
+              .mockReturnValue(createMockQueryBuilder([boundProduct])),
+          },
+        ],
+        [
+          CatalogValue,
+          {
+            createQueryBuilder: jest
+              .fn()
+              .mockReturnValue(createMockQueryBuilder([boundCatalogValue])),
+          },
+        ],
+        [
+          ProductInventoryMappingVersion,
+          {
+            createQueryBuilder: jest
+              .fn()
+              .mockReturnValue(createMockQueryBuilder([boundMapping])),
+          },
+        ],
       ]);
       const manager = buildBoundManager(managerRepos);
 
       const response = await service.getInboundDeltas(
         'tenant-abc',
-        { types: 'products,catalogvalues' } as never,
+        { types: 'products,catalogvalues' },
         undefined,
         manager as never,
       );
@@ -566,7 +587,7 @@ describe('InboundSyncService', () => {
 
       const response = await service.getInboundDeltas('tenant-abc', {
         types: 'products',
-      } as never);
+      });
 
       // Byte-for-byte the pre-existing device-path behavior: global repos,
       // and the session-scoped mapping binding workaround still runs.
@@ -842,9 +863,11 @@ describe('InboundSyncService', () => {
     it('fails closed when the acknowledgement service is not wired', async () => {
       // A composition without OHAC must not answer as though it had recorded
       // anything, so the terminal gets a conflict rather than a silent success.
-      const bareService = new (
-        service.constructor as new (...args: unknown[]) => typeof service
-      )(...(Array.from({ length: 9 }, () => ({})) as unknown[]));
+      const bareService = new (service.constructor as new (
+        ...args: unknown[]
+      ) => typeof service)(
+        ...(Array.from({ length: 9 }, () => ({})) as unknown[]),
+      );
 
       await expect(
         bareService.acknowledgeStaffPolicyEpoch(

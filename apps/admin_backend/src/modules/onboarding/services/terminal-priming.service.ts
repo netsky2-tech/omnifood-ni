@@ -1,10 +1,12 @@
-import { Inject, Injectable, UnauthorizedException, forwardRef } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  UnauthorizedException,
+  forwardRef,
+} from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { InboundSyncService } from '../../sales/services/inbound-sync.service';
-import type {
-  InboundSyncQueryDto,
-  InboundSyncResponseDto,
-} from '../../sales/dto/inbound-sync.dto';
+import type { InboundSyncResponseDto } from '../../sales/dto/inbound-sync.dto';
 import type { FiscalConfigSnapshot } from '../dto/fiscal-config-version.dto';
 import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 
@@ -16,8 +18,7 @@ import { runInTenantTransaction } from '../../../core/database/tenant-transactio
  * place on a human-authenticated catalog pull. Restricting the requested
  * types is the first layer; the response mapping below is the second.
  */
-export const TERMINAL_PRIMING_REQUESTED_TYPES =
-  'products,catalogvalues,fiscal';
+export const TERMINAL_PRIMING_REQUESTED_TYPES = 'products,catalogvalues,fiscal';
 
 export interface TerminalPrimingProductDto {
   id: string;
@@ -87,7 +88,9 @@ export class TerminalPrimingService {
     private readonly dataSource: DataSource,
   ) {}
 
-  async getPrimingPayload(tenantId: string): Promise<TerminalPrimingResponseDto> {
+  async getPrimingPayload(
+    tenantId: string,
+  ): Promise<TerminalPrimingResponseDto> {
     const trimmedTenantId = tenantId?.trim();
     if (!trimmedTenantId) {
       throw new UnauthorizedException('Tenant context not found in request');
@@ -104,7 +107,7 @@ export class TerminalPrimingService {
         // never negotiates OHAC delivery.
         const envelope = await this.inboundSyncService.getInboundDeltas(
           trimmedTenantId,
-          { types: TERMINAL_PRIMING_REQUESTED_TYPES } as InboundSyncQueryDto,
+          { types: TERMINAL_PRIMING_REQUESTED_TYPES },
           undefined,
           manager,
         );

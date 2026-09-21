@@ -1,8 +1,6 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import {
-  TENANT_CONTEXT_SET_CONFIG_SQL,
-} from '../../../core/database/tenant-transaction';
+import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 import { InboundSyncService } from '../../sales/services/inbound-sync.service';
 import type { InboundSyncResponseDto } from '../../sales/dto/inbound-sync.dto';
 import {
@@ -148,11 +146,8 @@ describe('L1-10a: TerminalPrimingService (Unit)', () => {
         TENANT_CONTEXT_SET_CONFIG_SQL,
         [tenantId],
       );
-      expect(
-        (transactionManager.query as jest.Mock).mock.invocationCallOrder[0],
-      ).toBeLessThan(
-        (inboundSyncService.getInboundDeltas as jest.Mock).mock
-          .invocationCallOrder[0],
+      expect(transactionManager.query.mock.invocationCallOrder[0]).toBeLessThan(
+        inboundSyncService.getInboundDeltas.mock.invocationCallOrder[0],
       );
     });
 
@@ -231,7 +226,9 @@ describe('L1-10a: TerminalPrimingService (Unit)', () => {
 
       const serialized = JSON.stringify(result);
       expect(serialized).not.toContain('pinHash');
-      expect(serialized).not.toContain('bcrypt-hash-must-never-leave-the-server');
+      expect(serialized).not.toContain(
+        'bcrypt-hash-must-never-leave-the-server',
+      );
       expect(serialized).not.toContain('securityProfile');
       expect(serialized).not.toContain('Encargado');
     });

@@ -116,7 +116,9 @@ interface IsolatedRlsContext {
    */
   openRestricted: () => Promise<DataSource>;
   /** Runs `run` with a cold restricted DataSource, destroying it after. */
-  withRestricted: <T>(run: (restricted: DataSource) => Promise<T>) => Promise<T>;
+  withRestricted: <T>(
+    run: (restricted: DataSource) => Promise<T>,
+  ) => Promise<T>;
 }
 
 async function applyTenantRls(
@@ -124,12 +126,8 @@ async function applyTenantRls(
   table: string,
   commands: ReadonlyArray<'select' | 'insert'>,
 ): Promise<void> {
-  await runner.query(
-    `ALTER TABLE "${table}" ENABLE ROW LEVEL SECURITY`,
-  );
-  await runner.query(
-    `ALTER TABLE "${table}" FORCE ROW LEVEL SECURITY`,
-  );
+  await runner.query(`ALTER TABLE "${table}" ENABLE ROW LEVEL SECURITY`);
+  await runner.query(`ALTER TABLE "${table}" FORCE ROW LEVEL SECURITY`);
   // The real production predicate resolver: the same code the migrations use
   // to emit the policy predicate for the column's actual type.
   const predicate = await resolveTenantRlsPredicate(runner, table);
@@ -311,7 +309,14 @@ async function withIsolatedRlsSchema(
       `ALTER ROLE "${roleName}" SET search_path TO "${schema}", public`,
     );
 
-    await assertion({ admin, schema, roleName, rolePassword, openRestricted, withRestricted });
+    await assertion({
+      admin,
+      schema,
+      roleName,
+      rolePassword,
+      openRestricted,
+      withRestricted,
+    });
   } finally {
     if (admin?.isInitialized) await admin.destroy();
     if (bootstrap.isInitialized) {
@@ -459,27 +464,63 @@ describe('TerminalPrimingService tenant isolation (db)', () => {
           const { admin, schema } = context;
           const tenantA = randomUUID();
           const tenantB = randomUUID();
-          await seedTenant(admin, schema, tenantA, 'Tenant Alfa (test)', 'RUC-TEST-000000000001');
-          await seedTenant(admin, schema, tenantB, 'Tenant Bravo (test)', 'RUC-TEST-000000000002');
+          await seedTenant(
+            admin,
+            schema,
+            tenantA,
+            'Tenant Alfa (test)',
+            'RUC-TEST-000000000001',
+          );
+          await seedTenant(
+            admin,
+            schema,
+            tenantB,
+            'Tenant Bravo (test)',
+            'RUC-TEST-000000000002',
+          );
 
-          const productA1 = await seedProduct(admin, schema, tenantA, 'Fanta Naranja 500ml', 'UN');
-          const productA2 = await seedProduct(admin, schema, tenantA, 'Pinolero 1L', 'UN');
+          const productA1 = await seedProduct(
+            admin,
+            schema,
+            tenantA,
+            'Fanta Naranja 500ml',
+            'UN',
+          );
+          const productA2 = await seedProduct(
+            admin,
+            schema,
+            tenantA,
+            'Pinolero 1L',
+            'UN',
+          );
           // Same name in both tenants: neither may appear in the other's payload.
-          const productB1 = await seedProduct(admin, schema, tenantB, 'Fanta Naranja 500ml', 'UN');
+          const productB1 = await seedProduct(
+            admin,
+            schema,
+            tenantB,
+            'Fanta Naranja 500ml',
+            'UN',
+          );
 
           const payloadA = await primeWithColdPool(context, tenantA);
           expect(payloadA.status).toBe('success');
           expect(payloadA.deltas.products.map((p) => p.id).sort()).toEqual(
             [productA1, productA2].sort(),
           );
-          expect(payloadA.deltas.products.map((p) => p.id)).not.toContain(productB1);
+          expect(payloadA.deltas.products.map((p) => p.id)).not.toContain(
+            productB1,
+          );
 
           const payloadB = await primeWithColdPool(context, tenantB);
           expect(payloadB.deltas.products.map((p) => p.id).sort()).toEqual(
             [productB1].sort(),
           );
-          expect(payloadB.deltas.products.map((p) => p.id)).not.toContain(productA1);
-          expect(payloadB.deltas.products.map((p) => p.id)).not.toContain(productA2);
+          expect(payloadB.deltas.products.map((p) => p.id)).not.toContain(
+            productA1,
+          );
+          expect(payloadB.deltas.products.map((p) => p.id)).not.toContain(
+            productA2,
+          );
         },
       );
     },
@@ -494,13 +535,46 @@ describe('TerminalPrimingService tenant isolation (db)', () => {
           const { admin, schema } = context;
           const tenantA = randomUUID();
           const tenantB = randomUUID();
-          await seedTenant(admin, schema, tenantA, 'Tenant Alfa (test)', 'RUC-TEST-000000000001');
-          await seedTenant(admin, schema, tenantB, 'Tenant Bravo (test)', 'RUC-TEST-000000000002');
+          await seedTenant(
+            admin,
+            schema,
+            tenantA,
+            'Tenant Alfa (test)',
+            'RUC-TEST-000000000001',
+          );
+          await seedTenant(
+            admin,
+            schema,
+            tenantB,
+            'Tenant Bravo (test)',
+            'RUC-TEST-000000000002',
+          );
 
-          const catalogA1 = await seedCatalogValue(admin, schema, tenantA, 'uom', 'CAT-TEST-001', 'Bebidas (Alfa)');
-          const catalogA2 = await seedCatalogValue(admin, schema, tenantA, 'uom', 'CAT-TEST-002', 'Snacks (Alfa)');
+          const catalogA1 = await seedCatalogValue(
+            admin,
+            schema,
+            tenantA,
+            'uom',
+            'CAT-TEST-001',
+            'Bebidas (Alfa)',
+          );
+          const catalogA2 = await seedCatalogValue(
+            admin,
+            schema,
+            tenantA,
+            'uom',
+            'CAT-TEST-002',
+            'Snacks (Alfa)',
+          );
           // Same code in both tenants: neither may appear in the other's payload.
-          const catalogB1 = await seedCatalogValue(admin, schema, tenantB, 'uom', 'CAT-TEST-001', 'Bebidas (Bravo)');
+          const catalogB1 = await seedCatalogValue(
+            admin,
+            schema,
+            tenantB,
+            'uom',
+            'CAT-TEST-001',
+            'Bebidas (Bravo)',
+          );
 
           // Control 1: an unbound read on a never-bound session sees nothing —
           // FORCED RLS is real in this schema, not decorative.
@@ -560,14 +634,20 @@ describe('TerminalPrimingService tenant isolation (db)', () => {
           expect(payloadA.deltas.catalogValues.map((c) => c.id).sort()).toEqual(
             [catalogA1, catalogA2].sort(),
           );
-          expect(payloadA.deltas.catalogValues.map((c) => c.id)).not.toContain(catalogB1);
+          expect(payloadA.deltas.catalogValues.map((c) => c.id)).not.toContain(
+            catalogB1,
+          );
 
           const payloadB = await primeWithColdPool(context, tenantB);
           expect(payloadB.deltas.catalogValues.map((c) => c.id).sort()).toEqual(
             [catalogB1].sort(),
           );
-          expect(payloadB.deltas.catalogValues.map((c) => c.id)).not.toContain(catalogA1);
-          expect(payloadB.deltas.catalogValues.map((c) => c.id)).not.toContain(catalogA2);
+          expect(payloadB.deltas.catalogValues.map((c) => c.id)).not.toContain(
+            catalogA1,
+          );
+          expect(payloadB.deltas.catalogValues.map((c) => c.id)).not.toContain(
+            catalogA2,
+          );
         },
       );
     },
@@ -584,8 +664,20 @@ describe('TerminalPrimingService tenant isolation (db)', () => {
           const tenantB = randomUUID();
           const nameA = 'Tenant Alfa (test)';
           const nameB = 'Tenant Bravo (test)';
-          await seedTenant(admin, schema, tenantA, nameA, 'RUC-TEST-000000000001');
-          await seedTenant(admin, schema, tenantB, nameB, 'RUC-TEST-000000000002');
+          await seedTenant(
+            admin,
+            schema,
+            tenantA,
+            nameA,
+            'RUC-TEST-000000000001',
+          );
+          await seedTenant(
+            admin,
+            schema,
+            tenantB,
+            nameB,
+            'RUC-TEST-000000000002',
+          );
 
           // Control: without the transaction-local binding, FORCED RLS on
           // fiscal_config_revisions default-denies every row for the
@@ -621,8 +713,20 @@ describe('TerminalPrimingService tenant isolation (db)', () => {
         async (context) => {
           const { admin, schema } = context;
           const tenantA = randomUUID();
-          await seedTenant(admin, schema, tenantA, 'Tenant Alfa (test)', 'RUC-TEST-000000000001');
-          const productA1 = await seedProduct(admin, schema, tenantA, 'Fanta Naranja 500ml', 'UN');
+          await seedTenant(
+            admin,
+            schema,
+            tenantA,
+            'Tenant Alfa (test)',
+            'RUC-TEST-000000000001',
+          );
+          const productA1 = await seedProduct(
+            admin,
+            schema,
+            tenantA,
+            'Fanta Naranja 500ml',
+            'UN',
+          );
           // Staff with security profiles carrying PIN material exist for the
           // tenant, and the full inbound envelope CAN carry them (its user
           // deltas include security profiles) — the priming surface must not.
@@ -634,14 +738,18 @@ describe('TerminalPrimingService tenant isolation (db)', () => {
           expect(payload.deltas.products.map((p) => p.id)).toContain(productA1);
 
           // The requested-types negotiation must not surface a users array.
-          expect(TERMINAL_PRIMING_REQUESTED_TYPES).toBe('products,catalogvalues,fiscal');
+          expect(TERMINAL_PRIMING_REQUESTED_TYPES).toBe(
+            'products,catalogvalues,fiscal',
+          );
           expect(payload.deltas).not.toHaveProperty('users');
 
           const serialized = JSON.stringify(payload);
           expect(serialized).not.toContain('"users"');
           expect(serialized).not.toContain('pinHash');
           expect(serialized).not.toContain('pin_hash');
-          expect(serialized).not.toContain('test-only-pin-hash-not-a-real-secret');
+          expect(serialized).not.toContain(
+            'test-only-pin-hash-not-a-real-secret',
+          );
         },
       );
     },

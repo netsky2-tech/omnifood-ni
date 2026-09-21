@@ -1,5 +1,8 @@
 import { UnauthorizedException } from '@nestjs/common';
-import { GUARDS_METADATA, INTERCEPTORS_METADATA } from '@nestjs/common/constants';
+import {
+  GUARDS_METADATA,
+  INTERCEPTORS_METADATA,
+} from '@nestjs/common/constants';
 import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '../../identity/guards/auth.guard';
 import { PermissionsGuard } from '../../identity/guards/permissions.guard';
