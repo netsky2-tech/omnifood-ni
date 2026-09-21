@@ -5,7 +5,7 @@
 #
 # Running only the cheap tests (no Flutter / Android SDK required):
 #   SKIP_END_TO_END_BUILD=1 scripts/test_packaging_pipeline.sh
-# This runs Tests 1-3 and 6-9 and skips the end-to-end build Tests 4-5,
+# This runs Tests 1-3 and 6-11 and skips the end-to-end build Tests 4-5,
 # which require a full Flutter toolchain and Android SDK.
 # ==============================================================================
 
@@ -41,17 +41,17 @@ grep -q "aidl = true" "${BUILD_GRADLE}" || { echo "❌ FAILED: buildFeatures aid
 echo "✅ [Test 2 Passed] build.gradle.kts correctly configures release signing, ProGuard and AIDL."
 
 # Test 3: Script Help and Option Parsing
-echo "🔍 [Test 3] Testing build_sunmi_apk.sh help option..."
-"${SCRIPT_DIR}/build_sunmi_apk.sh" --help > /dev/null
-echo "✅ [Test 3 Passed] build_sunmi_apk.sh argument parser functions cleanly."
+echo "🔍 [Test 3] Testing build_pos_apk.sh help option..."
+"${SCRIPT_DIR}/build_pos_apk.sh" --help > /dev/null
+echo "✅ [Test 3 Passed] build_pos_apk.sh argument parser functions cleanly."
 
 # Test 4: End-to-End Build Execution (Split APKs) — requires Flutter + Android SDK
 if [ "${SKIP_END_TO_END_BUILD:-0}" = "1" ]; then
     echo "⏩ [Test 4] Skipped (SKIP_END_TO_END_BUILD=1; end-to-end build requires Flutter + Android SDK)."
 else
-echo "🔍 [Test 4] Executing build_sunmi_apk.sh with --split-per-abi --skip-tests..."
+echo "🔍 [Test 4] Executing build_pos_apk.sh with --split-per-abi --skip-tests..."
 rm -rf "${TEST_OUT_DIR}"
-"${SCRIPT_DIR}/build_sunmi_apk.sh" --split-per-abi --skip-tests --out-dir "${TEST_OUT_DIR}"
+"${SCRIPT_DIR}/build_pos_apk.sh" --split-per-abi --skip-tests --out-dir "${TEST_OUT_DIR}"
 fi
 
 # Test 5: Verify Artifacts, Checksums & Manifest — requires Test 4 artifacts
@@ -84,6 +84,23 @@ elif command -v shasum >/dev/null 2>&1; then
     shasum -a 256 -c SHA256SUMS.txt
 fi
 
+if grep -Eq 'Sunmi|V2s|58mm|80mm' "${TEST_OUT_DIR}/release_manifest.json"; then
+    echo "❌ FAILED: generated release_manifest.json still claims a device model or paper width" >&2
+    exit 1
+fi
+
+# Positive exact contract: the manifest must declare the neutral descriptor,
+# not merely avoid a denylist of known device models or paper widths.
+MANIFEST_HW_VALUE="$(grep '"target_hardware"' "${TEST_OUT_DIR}/release_manifest.json" | sed -e 's/.*"target_hardware"[[:space:]]*:[[:space:]]*"//' -e 's/".*$//')"
+if [ -z "${MANIFEST_HW_VALUE}" ]; then
+    echo "❌ FAILED: generated release_manifest.json has no target_hardware value" >&2
+    exit 1
+fi
+if [ "${MANIFEST_HW_VALUE}" != "Android POS terminal" ]; then
+    echo "❌ FAILED: generated release_manifest.json target_hardware must be exactly 'Android POS terminal'; found '${MANIFEST_HW_VALUE}'" >&2
+    exit 1
+fi
+
 echo "✅ [Test 5 Passed] All release candidate APKs, SHA256 checksums and manifest validated successfully!"
 fi
 
@@ -103,7 +120,7 @@ chmod +x "${SHIM_DIR}/flutter"
 # Test 6: --plan --device-id prints the terminal id and the DEVICE_ID dart-define
 echo "🔍 [Test 6] Verifying --plan --device-id resolves the terminal identity binding..."
 PLAN_RC=0
-PLAN_OUTPUT="$(PATH="${SHIM_DIR}:${PATH}" "${SCRIPT_DIR}/build_sunmi_apk.sh" --plan --device-id Q802024120001 2>&1)" || PLAN_RC=$?
+PLAN_OUTPUT="$(PATH="${SHIM_DIR}:${PATH}" "${SCRIPT_DIR}/build_pos_apk.sh" --plan --device-id Q802024120001 2>&1)" || PLAN_RC=$?
 if [ "${PLAN_RC}" -ne 0 ]; then
     echo "❌ FAILED: --plan --device-id exited with code ${PLAN_RC} (expected 0). Output:" >&2
     echo "${PLAN_OUTPUT}" >&2
@@ -119,7 +136,7 @@ if echo "${PLAN_OUTPUT}" | grep -q "FLUTTER_SHIM_MUST_NOT_RUN"; then
 fi
 # Triangulation: surrounding whitespace is trimmed, inner value preserved.
 TRIM_RC=0
-TRIM_OUTPUT="$(PATH="${SHIM_DIR}:${PATH}" "${SCRIPT_DIR}/build_sunmi_apk.sh" --plan --device-id "  Q802024120001  " 2>&1)" || TRIM_RC=$?
+TRIM_OUTPUT="$(PATH="${SHIM_DIR}:${PATH}" "${SCRIPT_DIR}/build_pos_apk.sh" --plan --device-id "  Q802024120001  " 2>&1)" || TRIM_RC=$?
 if [ "${TRIM_RC}" -ne 0 ] || ! echo "${TRIM_OUTPUT}" | grep -q -- "--dart-define=DEVICE_ID=Q802024120001" || echo "${TRIM_OUTPUT}" | grep -Eq -- "DEVICE_ID=[[:space:]]"; then
     echo "❌ FAILED: --device-id must be trimmed before validation/binding. Output:" >&2
     echo "${TRIM_OUTPUT}" >&2
@@ -131,7 +148,7 @@ echo "✅ [Test 6 Passed] --plan --device-id prints the terminal id and the exac
 # Test 7: --plan with no terminal id reports provisioned-at-runtime and no define
 echo "🔍 [Test 7] Verifying fleet builds stay provisioned-at-runtime in --plan..."
 FLEET_RC=0
-FLEET_OUTPUT="$(PATH="${SHIM_DIR}:${PATH}" "${SCRIPT_DIR}/build_sunmi_apk.sh" --plan 2>&1)" || FLEET_RC=$?
+FLEET_OUTPUT="$(PATH="${SHIM_DIR}:${PATH}" "${SCRIPT_DIR}/build_pos_apk.sh" --plan 2>&1)" || FLEET_RC=$?
 if [ "${FLEET_RC}" -ne 0 ]; then
     echo "❌ FAILED: bare --plan exited with code ${FLEET_RC} (expected 0). Output:" >&2
     echo "${FLEET_OUTPUT}" >&2
@@ -150,7 +167,7 @@ echo "✅ [Test 7 Passed] Fleet --plan reports provisioned-at-runtime and no DEV
 # Test 8: --plan --pilot without --device-id fails closed with exit code 2
 echo "🔍 [Test 8] Verifying --pilot without --device-id fails closed (exit 2)..."
 PILOT_RC=0
-PILOT_OUTPUT="$(PATH="${SHIM_DIR}:${PATH}" "${SCRIPT_DIR}/build_sunmi_apk.sh" --plan --pilot 2>&1)" || PILOT_RC=$?
+PILOT_OUTPUT="$(PATH="${SHIM_DIR}:${PATH}" "${SCRIPT_DIR}/build_pos_apk.sh" --plan --pilot 2>&1)" || PILOT_RC=$?
 if [ "${PILOT_RC}" -ne 2 ]; then
     echo "❌ FAILED: --plan --pilot without --device-id exited with code ${PILOT_RC} (expected 2)" >&2
     echo "${PILOT_OUTPUT}" >&2
@@ -166,7 +183,7 @@ echo "🔍 [Test 9] Verifying invalid --device-id values are rejected..."
 LONG_ID="$(printf 'A%.0s' $(seq 1 65))"
 for INVALID_ID in "" "A B" "${LONG_ID}"; do
     INVALID_RC=0
-    INVALID_OUTPUT="$(PATH="${SHIM_DIR}:${PATH}" "${SCRIPT_DIR}/build_sunmi_apk.sh" --plan --device-id "${INVALID_ID}" 2>&1)" || INVALID_RC=$?
+    INVALID_OUTPUT="$(PATH="${SHIM_DIR}:${PATH}" "${SCRIPT_DIR}/build_pos_apk.sh" --plan --device-id "${INVALID_ID}" 2>&1)" || INVALID_RC=$?
     if [ "${INVALID_RC}" -eq 0 ]; then
         echo "❌ FAILED: invalid --device-id (empty/space/65 chars) was accepted" >&2
         echo "${INVALID_OUTPUT}" >&2
@@ -186,7 +203,7 @@ echo "✅ [Test 9 Passed] Empty, whitespace-containing and over-64-char device i
 # in the same style as --device-id, not via an unbound-variable crash.
 echo "🔍 [Test 10] Verifying --out-dir with a missing value is rejected cleanly..."
 OUTDIR_RC=0
-OUTDIR_OUTPUT="$(PATH="${SHIM_DIR}:${PATH}" "${SCRIPT_DIR}/build_sunmi_apk.sh" --plan --out-dir 2>&1)" || OUTDIR_RC=$?
+OUTDIR_OUTPUT="$(PATH="${SHIM_DIR}:${PATH}" "${SCRIPT_DIR}/build_pos_apk.sh" --plan --out-dir 2>&1)" || OUTDIR_RC=$?
 if [ "${OUTDIR_RC}" -eq 0 ]; then
     echo "❌ FAILED: --out-dir as the final argument was accepted without a value" >&2
     echo "${OUTDIR_OUTPUT}" >&2
@@ -206,6 +223,26 @@ if echo "${OUTDIR_OUTPUT}" | grep -q "unbound variable"; then
     exit 1
 fi
 echo "✅ [Test 10 Passed] --out-dir with a missing value fails with a clear message and non-zero exit."
+
+# Test 11: the release manifest stays device-neutral. Paper width is per-tenant
+# runtime configuration and the fleet is not a single device model, so
+# target_hardware must be exactly the neutral descriptor 'Android POS terminal',
+# not merely absent from a denylist.
+echo "🔍 [Test 11] Verifying target_hardware in the packaging script is exactly 'Android POS terminal'..."
+MANIFEST_HW_LINE="$(grep '"target_hardware"' "${SCRIPT_DIR}/build_pos_apk.sh")" || {
+    echo "❌ FAILED: build_pos_apk.sh does not define target_hardware in release_manifest.json" >&2
+    exit 1
+}
+MANIFEST_HW_VALUE="$(printf '%s' "${MANIFEST_HW_LINE}" | sed -e 's/.*"target_hardware"[[:space:]]*:[[:space:]]*"//' -e 's/".*$//')"
+if [ -z "${MANIFEST_HW_VALUE}" ]; then
+    echo "❌ FAILED: target_hardware value is empty in build_pos_apk.sh" >&2
+    exit 1
+fi
+if [ "${MANIFEST_HW_VALUE}" != "Android POS terminal" ]; then
+    echo "❌ FAILED: target_hardware must be exactly 'Android POS terminal'; found '${MANIFEST_HW_VALUE}'" >&2
+    exit 1
+fi
+echo "✅ [Test 11 Passed] target_hardware is exactly 'Android POS terminal'."
 
 rm -rf "${SHIM_DIR}"
 
