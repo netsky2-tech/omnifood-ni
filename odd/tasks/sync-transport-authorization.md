@@ -213,7 +213,7 @@ Runtime harness: the real HTTP plus PostgreSQL e2e is the runtime boundary. Roll
 
 ### ST-05 — Fold inventory alerts into inbound deltas
 
-Status: implemented and verified on branch `feat/inventory-alert-inbound-deltas`; work-unit commit pending.
+Status: complete — work-unit commit `c8218ce` on branch `feat/inventory-alert-inbound-deltas`; not yet pushed or published.
 Route: delegated direct — the 4-file mapping and multi-file writer triggers applied.
 Actual size: 833 authored changed lines excluding this task record: 294 production and 539 test lines. Founder authorized one atomic PR with a recorded size exception because the backend delta, retired route, removed broken POS domains and replacement local projection form one coherent transport outcome; splitting them creates either a no-alert window or retains a broken route.
 
@@ -273,8 +273,9 @@ Runtime harness: the real HTTP plus PostgreSQL sync-down contract is the backend
 - ST-02 merged via PR #477: the route registry now makes undeclared transport drift fail.
 - ST-03 merged via PR #479 (`58ce0dc`): the three inventory document writes now use device transport; issue #478 is closed.
 - ST-04 merged via PR #480 (`343c62a`): `count-sessions` now has a satisfiable device transport and tenant-bound persistence under real forced-RLS proof; issue #445 is closed.
+- ST-05 complete in work-unit commit `c8218ce`: forensic alerts now arrive through inbound deltas, both broken POS alert calls are gone, and local lifecycle state survives cloud replay. The branch is not yet pushed or published; issue #314 remains open until delivery.
 - Issue #473 filed for the cascade defect found during the inventory: one 401 suppresses every later sync domain, and the recipe domain runs before sales, so a pending recipe can suppress the device-authoritative sales batch.
 
 ## Next step
 
-Create the ST-05 work-unit commit, then offer the founder the push/PR decision. After ST-05 delivery, continue with ST-06.
+Offer the founder the ST-05 push/PR decision. After ST-05 delivery, continue with ST-06.
