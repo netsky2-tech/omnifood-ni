@@ -336,22 +336,24 @@ Evidence: pending.
 
 ### L1-07 — Correct the device identity claims
 
-Status: pending — next actionable slice; no hardware required. (It was sequenced after L1-02 because both touch the packaging script; L1-02 is merged.)
+Status: complete — work-unit commits `8996d1c`, `ec198d4`, `17d714d`, `6be3f17` and `0978e90` on branch `docs/l1-q80-device-identity`; not yet merged. No hardware required.
 
 Founder clarification (2026-09-20): the fleet terminal is a MIRAY Q80/iPOS. The Sunmi V2s was the initial prospect and was never acquired, so no Sunmi device exists in the fleet.
 
-- [ ] Rename or re-label the packaging script away from the unacquired device it is named after, updating its header and every internal reference.
-- [ ] Remove the hardcoded paper width from the build manifest: width is per-tenant runtime configuration, not a property of the packaged APK.
-- [ ] Reconcile the operator-facing hardware runbook, whose device table currently describes the device that was never acquired.
-- [ ] Reconcile the duplicate verification documents, one of which carries the DGI compliance content under the stale device name while the other has every matrix row NOT EXECUTED.
-- [ ] Correct the stale MethodChannel path cited in the historical deployment plan.
-- [ ] Correct the acceptance record's printer-adapter field: `AP_FIXTURE_MANIFEST.md:89` and `AP_Q80_PILOT_EVIDENCE.md:65` record the adapter as `SUNMI_V2S`, while the founder's proven, working selection on the real Q80 is the **`Q80 / iPos`** driver (`IPOS_Q80`) printing at 80 mm. Nothing in the backend, the seed or the harness writes `printer_driver_type`, so the recorded value came from the device itself and is not corroborated by the proven configuration. State what is proven, keep the earlier captured value visible, and mark the discrepancy as unresolved rather than silently overwriting it.
-- [ ] Correct the `Alacrity Q80` label in `apps/pos_app/lib/data/adapters/printer/ipos_printer_adapter.dart`, whose vendor string is stale because the hardware reports MIRAY.
+Execution decision (2026-09-21): rename the packaging entry point to device-neutral `scripts/build_pos_apk.sh`; consolidate the duplicate physical-verification documents into one MIRAY Q80/iPOS runbook while preserving every unexecuted hardware status and the DGI checklist; leave commercial proposals outside L1-07. Preserve the live Sunmi/woyou protocol identifiers unchanged. Delivery used five work units (packaging, runbook, runbook metric, evidence/vendor, historical notes) in one PR.
+
+- [x] Rename or re-label the packaging script away from the unacquired device it is named after, updating its header and every internal reference.
+- [x] Remove the hardcoded paper width from the build manifest: width is per-tenant runtime configuration, not a property of the packaged APK.
+- [x] Reconcile the operator-facing hardware runbook, whose device table currently describes the device that was never acquired.
+- [x] Reconcile the duplicate verification documents, one of which carries the DGI compliance content under the stale device name while the other has every matrix row NOT EXECUTED.
+- [x] Correct the stale MethodChannel path cited in the historical deployment plan.
+- [x] Correct the acceptance record's printer-adapter field: `AP_FIXTURE_MANIFEST.md:89` and `AP_Q80_PILOT_EVIDENCE.md:65` record the adapter as `SUNMI_V2S`, while the founder's proven, working selection on the real Q80 is the **`Q80 / iPos`** driver (`IPOS_Q80`) printing at 80 mm. Nothing in the backend, the seed or the harness writes `printer_driver_type`, so the recorded value came from the device itself and is not corroborated by the proven configuration. State what is proven, keep the earlier captured value visible, and mark the discrepancy as unresolved rather than silently overwriting it.
+- [x] Correct the `Alacrity Q80` label in `apps/pos_app/lib/data/adapters/printer/ipos_printer_adapter.dart`, whose vendor string is stale because the hardware reports MIRAY.
 
 Acceptance criteria:
 - No operator-facing document tells an operator to configure a device the fleet does not have.
 - The build manifest makes no claim about paper width.
-- The Sunmi/woyou printing interface is explicitly preserved and documented as the protocol in use on the Q80; nothing in the working printer path is renamed.
+- The Sunmi/woyou printing interface is explicitly preserved and documented as the protocol in use on the Q80; nothing in the working printer path is renamed. **Not satisfied as written** — see the recorded deviation below.
 - References to the renamed script are updated everywhere they appear.
 
 Checks:
@@ -359,7 +361,25 @@ Checks:
 - Readback of the preserved printer protocol path: the `woyou.aidlservice.jiu_mi` keep rules, the `com.nhilos.pos/sunmi_printer` MethodChannel, and the `SUNMI_V2S` wire value.
 - `git diff --check`.
 
-Evidence: pending.
+Evidence: implemented in five work units, each verified by the writer and reviewed by the parent, with independent verification of the packaging unit and the runbook unit.
+
+Packaging (`8996d1c`). RED observed: the harness was retargeted to the new filename first and failed with exit 127 on the missing `scripts/build_pos_apk.sh`. GREEN: `SKIP_END_TO_END_BUILD=1 bash scripts/test_packaging_pipeline.sh` passes Tests 1-3 and 6-11 and exits 0. `git mv`-equivalent rename preserved executable mode (100755) and rename detection at 97%. The manifest now records `"target_hardware": "Android POS terminal"`, which contains neither a device model nor a paper width. The harness pins that contract positively: Test 11 requires the source value to equal exactly `Android POS terminal`, and Test 5 applies the same exact check to the generated `release_manifest.json`; both retain a distinct empty-value failure. An earlier denylist-only version of Test 11 was rejected during review and replaced, because a denylist would have passed `58 mm` (with a space) or any unknown model name. The live `AP_KNOWN_LIMITATIONS.md` citation moved from the stale `build_sunmi_apk.sh:202,208` to `build_pos_apk.sh:118-121`, which covers guard, messages and `exit 2`; the previous numbers pointed at unrelated build lines.
+
+Runbook (`ec198d4`, `17d714d`). `docs/operations/sunmi_v2s_hardware_verification_checklist.md` was renamed to `docs/operations/q80_ipos_hardware_verification_checklist.md` (rename detected at 52%) and retargeted to the MIRAY Q80/iPOS fleet terminal with the commercial Android device kept as the fallback/simulation path. The standalone `docs/operations/q80_thermal_receipt_physical_verification.md` was consolidated into it and then deleted, so the duplicated matrices now have a single owner. Verified preservation: all 23 thermal-matrix rows still read `NOT EXECUTED — REQUIRES PHYSICAL DEVICE`, every one of the 21 checkboxes remains unchecked, and no physical test was marked executed. The DGI DT 09-2007 content (header fields, consecutive numbering example, IVA 15%, C$ and USD totals, both fiscal legends) is preserved in substance. Stale `com.omnifood.pos_app` and `-keep class com.omnifood.**` were corrected to `com.nhilos.pos_app` and `com.nhilos.pos_app.printer.**`, both read back against the real `build.gradle.kts` and `proguard-rules.pro`.
+
+The runbook metric was corrected in `17d714d` after the acceptance evidence showed the calibrated Q80 profile is Nyx `TLMono` font 4 at **40 columns / 576 dots**, matching `ReceiptLayoutMetrics.logicalTextWidth80mm = 40` and `logicalRasterWidth80mm = 576`. An early draft had stated 48 columns, which came from the matrix's probe rows and not from the configured metric; the same 48-column error was also present in the first draft of the gap-audit correction note and was fixed in `0978e90`.
+
+Evidence and vendor (`6be3f17`). The `Alacrity Q80` vendor string was corrected to `MIRAY Q80/iPOS` in the three comment-only locations (`ipos_printer_adapter.dart`, `IPosPrinterHandler.kt`, `AndroidManifest.xml`); no identifier, MethodChannel, service package, action or ProGuard rule was touched. The acceptance rows in `AP_FIXTURE_MANIFEST.md:89` and `AP_Q80_PILOT_EVIDENCE.md:65` keep the captured `SUNMI_V2S` text verbatim and gain a dated `Corrección (2026-09-21)` that records the captured value as uncorroborated, names the proven `Q80 / iPos` (`IPOS_Q80`) selection at 80 mm, and marks the discrepancy UNRESOLVED pending L1-06 without asserting which value is correct.
+
+Historical notes (`0978e90`). The batch-12 deployment plan received two dated corrections: one before Batch 12.2 recording that the packaging script is now `scripts/build_pos_apk.sh`, and one before Batch 12.3 recording the runbook rename/retarget and the live MethodChannel `com.nhilos.pos/sunmi_printer` instead of `com.omnifood.pos/sunmi_printer`. Section 13 of `onboarding_gap_audit.md` received a dated correction stating the fleet device and profile while keeping its original findings and classifications as issued. No historical body text was rewritten.
+
+Readback of the preserved printer protocol path: `woyou.aidlservice.jiu_mi` keep rules present (`proguard-rules.pro:13-14`), `com.nhilos.pos/sunmi_printer` present in `sunmi_printer_adapter.dart:19` and `SunmiPrinterHandler.kt:21`, `SUNMI_V2S` present as the wire value in `printer_config.dart:7`, and `com.nhilos.pos/ipos_printer` present in `ipos_printer_adapter.dart:22` and `IPosPrinterHandler.kt:23`. Nothing in the working printer path was renamed.
+
+Recorded deviation from the written acceptance criteria. The criterion "the Sunmi/woyou printing interface is explicitly preserved and documented as the protocol in use on the Q80" is **not satisfied as written**, because independent verification falsified its premise: no repository artifact shows the Q80 exposing the woyou AIDL service. The Q80 handler binds `net.nyx.printerservice`, and the acceptance record documents the pilot path as adapter `SUNMI_V2S` over `net.nyx.printerservice`, while the founder's proven field selection is the `Q80 / iPos` driver. The criterion's real intent — preserve the working printer path unchanged — is met: all four identifiers are intact and unchanged. The runbook documents them as live code paths and configuration values that must not be renamed, and records the actual `net.nyx.printerservice` binding rather than asserting a hardware compatibility that the evidence does not support. A first version of the runbook note did assert Q80 woyou compatibility and was corrected after verification.
+
+Deliberately left outside this slice, recorded so they are not mistaken for oversights: the historical records that still name the old script or a Sunmi device — `docs/plans/deployment/batch_12_sunmi_v2s_release_candidate_apk.md` body text (now carrying dated corrections), `odd/tasks/founder-pilot-acceptance-freeze.md:299`, this document's own L1-02 section, `docs/onboarding/evidence/ONB1.10_M8_PR25_EVIDENCE.md`, `docs/onboarding/onboarding_execution_roadmap.md:1433` and `docs/DoD/test-suite.md:86` — and the commercial proposal documents, which remain a founder decision.
+
+Untested in this environment, stated rather than implied: packaging harness Tests 4-5, which require a real Flutter and Android SDK toolchain and were skipped under `SKIP_END_TO_END_BUILD=1`; and `flutter analyze`, which was not run because no Flutter toolchain is available here and every code change in this slice is comment-only with no executable statement altered.
 
 ### L1-08 — Match fresh-terminal hardware defaults to the fleet
 
