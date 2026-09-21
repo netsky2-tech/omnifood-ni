@@ -11,6 +11,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
 import { ProductInventoryMappingVersion } from '../../inventory/entities/product-inventory-mapping-version.entity';
+import { ForensicAlert } from '../../inventory/entities/forensic-alert.entity';
 import { Product } from '../../inventory/entities/product.entity';
 import { CatalogValue } from '../../catalog/entities/catalog-value.entity';
 import { Insumo } from '../../inventory/entities/insumo.entity';
@@ -33,6 +34,7 @@ import {
   InboundSyncRecipeDto,
   InboundSyncRecipeVersionDto,
   InboundSyncUserDto,
+  InboundSyncForensicAlertDto,
 } from '../dto/inbound-sync.dto';
 import {
   FiscalAckDto,
@@ -163,6 +165,9 @@ export class InboundSyncService {
           : [],
       users: requestedTypes.has('users')
         ? await this.fetchUserDeltas(tenantId, sinceDate, entityManager)
+        : [],
+      alerts: requestedTypes.has('alerts')
+        ? await this.fetchAlertDeltas(tenantId, sinceDate, entityManager)
         : [],
       fiscalConfig,
     };
@@ -338,6 +343,7 @@ export class InboundSyncService {
         'recipeversions',
         'recipe_versions',
         'users',
+        'alerts',
         'fiscal',
         'fiscal_config',
         'fiscalconfig',
@@ -655,6 +661,52 @@ export class InboundSyncService {
           componentUom: detail.component_uom ?? null,
           referenceVersionId: detail.reference_version_id ?? null,
         })),
+    }));
+  }
+
+  /**
+   * One-way cloud-to-POS projection of `forensic_alerts` (ST-05, issue #314).
+   * The table carries no row-level security policy and no `updated_at`, so
+   * tenant isolation comes from the explicit `tenant_id` predicate and the
+   * incremental cursor is `created_at` alone. The read must ride the bound
+   * transaction manager: without one there is no repository to read through
+   * (the entity is deliberately not registered forFeature — no module owns
+   * it), and an unbound pooled read would bypass tenant isolation. Every
+   * production caller (inbound controller, terminal priming) supplies one.
+   * Lifecycle state is reported, never fabricated: `resolved_at` is handed
+   * over verbatim for the terminal to derive status from.
+   */
+  private async fetchAlertDeltas(
+    tenantId: string,
+    sinceDate: Date | null,
+    entityManager?: EntityManager,
+  ): Promise<InboundSyncForensicAlertDto[]> {
+    if (!entityManager) {
+      return [];
+    }
+    const forensicAlertRepository = entityManager.getRepository(ForensicAlert);
+    const qb = forensicAlertRepository
+      .createQueryBuilder('alert')
+      .where('alert.tenant_id = :tenantId', { tenantId });
+
+    if (sinceDate) {
+      // Inclusive on purpose: the terminal applies each delta insert-if-absent,
+      // so an alert already delivered re-inserts nothing and overlap is
+      // idempotent, while a strict comparison would silently drop an alert
+      // created exactly at the watermark. Other delta types keep their own
+      // cursor semantics; this applies to alerts only.
+      qb.andWhere('alert.created_at >= :sinceDate', { sinceDate });
+    }
+
+    const items = await qb.getMany();
+    return items.map((a) => ({
+      id: a.id,
+      alertType: a.alert_type,
+      severity: a.severity,
+      message: a.message,
+      actorRole: a.actor_role ?? null,
+      resolvedAt: a.resolved_at ?? null,
+      createdAt: a.created_at,
     }));
   }
 

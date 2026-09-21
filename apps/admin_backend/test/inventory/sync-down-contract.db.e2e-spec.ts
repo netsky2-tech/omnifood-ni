@@ -15,6 +15,7 @@ import { Recipe } from '../../src/modules/inventory/entities/recipe.entity';
 import { RecipeVersion } from '../../src/modules/inventory/entities/recipe-version.entity';
 import { RecipeDetail } from '../../src/modules/inventory/entities/recipe-detail.entity';
 import { ProductInventoryMappingVersion } from '../../src/modules/inventory/entities/product-inventory-mapping-version.entity';
+import { ForensicAlert } from '../../src/modules/inventory/entities/forensic-alert.entity';
 import { User } from '../../src/modules/identity/entities/user.entity';
 import { UomConversion } from '../../src/modules/inventory/entities/uom-conversion.entity';
 import { SecurityProfile } from '../../src/modules/identity/entities/security-profile.entity';
@@ -71,6 +72,7 @@ const ALL_ENTITIES = [
   SecurityProfile,
   DeviceSyncCredential,
   ActivationAttempt,
+  ForensicAlert,
 ];
 
 /** Tables the restricted runtime role may SELECT (the inbound read path). */
@@ -87,6 +89,11 @@ const RLS_ROLE_TABLES = [
   'product_inventory_mapping_versions',
   'device_sync_credentials',
   'onboarding_activation_attempts',
+  // forensic_alerts carries no row-level security policy in production: the
+  // inbound alerts projection isolates tenants through its explicit
+  // `tenant_id` predicate, so the role needs a plain SELECT grant and the
+  // suite must not claim RLS enforcement for this table.
+  'forensic_alerts',
 ] as const;
 
 async function withIsolatedSchema(
@@ -521,6 +528,192 @@ describe('InboundSyncController E2E — real PostgreSQL', () => {
   });
 
   // ─── Contract: 401 without token ────────────────────────────
+
+  // ─── Contract: forensic alerts in sync-down response ───────
+
+  describe('Contract: forensic alerts in sync-down response', () => {
+    it(
+      'returns seeded forensic alerts with the cloud-to-POS field mapping',
+      async () => {
+        await withIsolatedSchema(
+          'e2e_sync_alerts_map',
+          async ({ app, admin, deviceToken, tenantId }) => {
+            const token = deviceToken;
+
+            const activeAlertId = randomUUID();
+            const resolvedAlertId = randomUUID();
+
+            await admin.query(
+              `INSERT INTO forensic_alerts (id, tenant_id, alert_type, severity, actor_role, message, metadata, resolved_at, created_at)
+               VALUES ($1, $2, 'COUNT_VARIANCE', 'high', 'MANAGER', 'Conteo con variación relevante.', NULL, NULL, '2026-09-01T10:00:00Z')`,
+              [activeAlertId, tenantId],
+            );
+            await admin.query(
+              `INSERT INTO forensic_alerts (id, tenant_id, alert_type, severity, actor_role, message, metadata, resolved_at, created_at)
+               VALUES ($1, $2, 'AUDIT_BACKEND_TERMINAL_REJECTION', 'critical', NULL, 'Rechazo de terminal registrado.', NULL, '2026-09-02T12:00:00Z', '2026-09-01T11:00:00Z')`,
+              [resolvedAlertId, tenantId],
+            );
+
+            const res = await request(app.getHttpServer())
+              .get('/v1/sync/inbound/deltas?types=alerts')
+              .set('Authorization', `Bearer ${token}`)
+              .expect(200);
+
+            expect(res.body.deltas.alerts).toHaveLength(2);
+            const byId = new Map<string, Record<string, unknown>>(
+              (res.body.deltas.alerts as { id: string }[]).map(
+                (alert) => [alert.id, alert] as const,
+              ),
+            );
+
+            const active = byId.get(activeAlertId);
+            expect(active).toMatchObject({
+              alertType: 'COUNT_VARIANCE',
+              severity: 'high',
+              message: 'Conteo con variación relevante.',
+              actorRole: 'MANAGER',
+              resolvedAt: null,
+            });
+
+            // Lifecycle state is reported, never fabricated: the backend
+            // hands over resolvedAt verbatim and the terminal derives the
+            // status from it.
+            const resolved = byId.get(resolvedAlertId);
+            expect(resolved).toMatchObject({
+              alertType: 'AUDIT_BACKEND_TERMINAL_REJECTION',
+              severity: 'critical',
+              actorRole: null,
+            });
+            expect(resolved.resolvedAt).toBeTruthy();
+            expect(new Date(resolved.resolvedAt as string).toISOString()).toBe(
+              '2026-09-02T12:00:00.000Z',
+            );
+          },
+        );
+      },
+      TEST_TIMEOUT_MS,
+    );
+
+    it(
+      'filters incremental alert pulls by created_at >= sinceVersion',
+      async () => {
+        await withIsolatedSchema(
+          'e2e_sync_alerts_since',
+          async ({ app, admin, deviceToken, tenantId }) => {
+            const token = deviceToken;
+
+            await admin.query(
+              `INSERT INTO forensic_alerts (id, tenant_id, alert_type, severity, actor_role, message, metadata, resolved_at, created_at)
+               VALUES ($1, $2, 'OLD_ALERT', 'low', NULL, 'Antiguo.', NULL, NULL, '1970-01-01T00:00:00Z')`,
+              [randomUUID(), tenantId],
+            );
+            const newAlertId = randomUUID();
+            await admin.query(
+              `INSERT INTO forensic_alerts (id, tenant_id, alert_type, severity, actor_role, message, metadata, resolved_at, created_at)
+               VALUES ($1, $2, 'NEW_ALERT', 'high', NULL, 'Reciente.', NULL, NULL, now())`,
+              [newAlertId, tenantId],
+            );
+
+            const sinceVersion = new Date('2000-01-01T00:00:00Z').getTime();
+            const res = await request(app.getHttpServer())
+              .get(
+                `/v1/sync/inbound/deltas?types=alerts&sinceVersion=${sinceVersion}`,
+              )
+              .set('Authorization', `Bearer ${token}`)
+              .expect(200);
+
+            // The table has no updated_at, so created_at is the only cursor.
+            expect(res.body.deltas.alerts).toHaveLength(1);
+            expect(res.body.deltas.alerts[0].id).toBe(newAlertId);
+          },
+        );
+      },
+      TEST_TIMEOUT_MS,
+    );
+
+    it(
+      'returns an alert whose created_at equals the sinceVersion watermark exactly',
+      async () => {
+        await withIsolatedSchema(
+          'e2e_sync_alerts_boundary',
+          async ({ app, admin, deviceToken, tenantId }) => {
+            const token = deviceToken;
+
+            // Created strictly before the watermark: excluded.
+            await admin.query(
+              `INSERT INTO forensic_alerts (id, tenant_id, alert_type, severity, actor_role, message, metadata, resolved_at, created_at)
+               VALUES ($1, $2, 'OLDER_ALERT', 'low', NULL, 'Anterior.', NULL, NULL, $3)`,
+              [randomUUID(), tenantId, new Date(1787745599000).toISOString()],
+            );
+            // Created exactly AT the watermark: the inclusive comparison is
+            // what makes cloud overlap idempotent on the terminal, because
+            // the POS projection is insert-if-absent.
+            const boundaryAlertId = randomUUID();
+            await admin.query(
+              `INSERT INTO forensic_alerts (id, tenant_id, alert_type, severity, actor_role, message, metadata, resolved_at, created_at)
+               VALUES ($1, $2, 'BOUNDARY_ALERT', 'high', NULL, 'En la marca.', NULL, NULL, $3)`,
+              [
+                boundaryAlertId,
+                tenantId,
+                new Date(1787745600000).toISOString(),
+              ],
+            );
+
+            const res = await request(app.getHttpServer())
+              .get(
+                `/v1/sync/inbound/deltas?types=alerts&sinceVersion=1787745600000`,
+              )
+              .set('Authorization', `Bearer ${token}`)
+              .expect(200);
+
+            expect(res.body.deltas.alerts).toHaveLength(1);
+            expect(res.body.deltas.alerts[0].id).toBe(boundaryAlertId);
+          },
+        );
+      },
+      TEST_TIMEOUT_MS,
+    );
+
+    it(
+      'only returns alerts belonging to the authenticated tenant via the explicit predicate',
+      async () => {
+        await withIsolatedSchema(
+          'e2e_sync_alerts_tenant',
+          async ({ app, admin, deviceToken, tenantId }) => {
+            const token = deviceToken;
+            const otherTenantId = randomUUID();
+            await admin.query(
+              `INSERT INTO tenants (id, name, is_active, created_at, updated_at) VALUES ($1, $2, true, now(), now())`,
+              [otherTenantId, 'Other Tenant'],
+            );
+
+            await admin.query(
+              `INSERT INTO forensic_alerts (id, tenant_id, alert_type, severity, actor_role, message, metadata, resolved_at, created_at)
+               VALUES ($1, $2, 'TENANT_A_ALERT', 'high', NULL, 'De A.', NULL, NULL, now())`,
+              [randomUUID(), tenantId],
+            );
+            await admin.query(
+              `INSERT INTO forensic_alerts (id, tenant_id, alert_type, severity, actor_role, message, metadata, resolved_at, created_at)
+               VALUES ($1, $2, 'TENANT_B_ALERT', 'high', NULL, 'De B.', NULL, NULL, now())`,
+              [randomUUID(), otherTenantId],
+            );
+
+            // forensic_alerts has NO row-level security policy in production;
+            // the isolation proof below therefore exercises the explicit
+            // tenant_id predicate, not RLS. Do not credit RLS here.
+            const res = await request(app.getHttpServer())
+              .get('/v1/sync/inbound/deltas?types=alerts')
+              .set('Authorization', `Bearer ${token}`)
+              .expect(200);
+
+            expect(res.body.deltas.alerts).toHaveLength(1);
+            expect(res.body.deltas.alerts[0].alertType).toBe('TENANT_A_ALERT');
+          },
+        );
+      },
+      TEST_TIMEOUT_MS,
+    );
+  });
 
   describe('Contract: 401 without token', () => {
     it(

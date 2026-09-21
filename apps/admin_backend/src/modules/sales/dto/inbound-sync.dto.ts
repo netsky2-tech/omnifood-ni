@@ -158,6 +158,23 @@ export interface InboundSyncRecipeVersionDto {
   components: InboundSyncRecipeVersionComponentDto[];
 }
 
+/**
+ * One-way cloud-to-POS projection of one backend `forensic_alerts` row
+ * (ST-05). The terminal derives lifecycle state from `resolvedAt`; the
+ * backend deliberately does not fabricate acknowledged/note metadata it
+ * does not have. The table carries no `updated_at`, so `createdAt` is the
+ * only cursor field.
+ */
+export interface InboundSyncForensicAlertDto {
+  id: string;
+  alertType: string;
+  severity: string;
+  message: string;
+  actorRole: string | null;
+  resolvedAt: Date | null;
+  createdAt: Date;
+}
+
 export interface InboundSyncDeltasDto {
   products: InboundSyncProductDto[];
   catalogValues: InboundSyncCatalogValueDto[];
@@ -165,12 +182,20 @@ export interface InboundSyncDeltasDto {
   recipes: InboundSyncRecipeDto[];
   recipeVersions: InboundSyncRecipeVersionDto[];
   users: InboundSyncUserDto[];
+  /**
+   * One-way cloud-to-POS forensic alert projection (ST-05). Optional in the
+   * type like `fiscalConfig` — older envelope literals and consumers predate
+   * it — but the service always populates it (empty when not requested).
+   */
+  alerts?: InboundSyncForensicAlertDto[];
   fiscalConfig?: FiscalConfigSnapshot | null;
 }
 
 /** Statuses the negotiation answers an opted-in client with (design §12). */
 export type HumanAuthorizationDeliveryStatus =
-  'DISABLED' | 'UPGRADE_REQUIRED' | 'RECOVERY_REQUIRED';
+  | 'DISABLED'
+  | 'UPGRADE_REQUIRED'
+  | 'RECOVERY_REQUIRED';
 
 export interface HumanAuthorizationDeliveryDto {
   /**

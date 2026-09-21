@@ -179,7 +179,7 @@ Evidence: pending.
 
 ### ST-04 — Complete the count-session device transport
 
-Status: complete — work-unit commit `bb90e6a`, published as PR #480 from branch `feat/count-session-device-transport`; CI pending.
+Status: complete — work-unit commit `bb90e6a`, merged via PR #480 (`343c62a`); issue #445 closed.
 Depends on: ST-03 (satisfied by PR #479)
 Route: delegated direct — the 4-file mapping and multi-file writer triggers applied.
 Actual size: 558 authored changed lines excluding this task record: 31 production and 527 test lines, of which the real-database RLS contract contributes 468. Founder authorized one atomic PR with a recorded size exception because backend guard and POS bearer transport cannot be delivered separately without preserving the broken 401 path; extracting a shared RLS harness would expand scope across multiple existing suites.
@@ -213,21 +213,45 @@ Runtime harness: the real HTTP plus PostgreSQL e2e is the runtime boundary. Roll
 
 ### ST-05 — Fold inventory alerts into inbound deltas
 
-Status: pending
+Status: implemented and verified on branch `feat/inventory-alert-inbound-deltas`; work-unit commit pending.
+Route: delegated direct — the 4-file mapping and multi-file writer triggers applied.
+Actual size: 833 authored changed lines excluding this task record: 294 production and 539 test lines. Founder authorized one atomic PR with a recorded size exception because the backend delta, retired route, removed broken POS domains and replacement local projection form one coherent transport outcome; splitting them creates either a no-alert window or retains a broken route.
 
-- [ ] Remove the POS call to `POST /inventory/alerts/{id}/lifecycle`, which has no backend route and returns 404.
-- [ ] Move `GET /inventory/alerts` onto the inbound delta path so alerts travel with the rest of the machine pull, and retire the separate inventory alert surface.
+Founder decisions, 2026-09-21:
+- `deltas.alerts` is a one-way cloud-to-POS projection of backend `forensic_alerts`: map the backend fields, derive lifecycle status from `resolved_at`, use `created_at` as the cursor, and insert only when absent so a later pull cannot overwrite local acknowledgement/resolution state.
+- POS acknowledgements and resolutions remain terminal-local in this work unit. Remove the dead outbound lifecycle call and record upward lifecycle synchronization as a follow-up rather than inventing a device route or actor-authorization contract here.
+
+- [x] Add tenant-scoped forensic alerts to `/v1/sync/inbound/deltas`, including `types=alerts` and inclusive `sinceVersion` filtering on `created_at` so equal-watermark rows replay safely.
+- [x] Project inbound alerts into local Floor persistence with insert-if-absent semantics so cloud replay cannot clobber local lifecycle state.
+- [x] Remove the POS call to `POST /inventory/alerts/{id}/lifecycle`, which has no backend route and returns 404; keep local acknowledgement/resolution behavior intact.
+- [x] Retire the separate `GET /inventory/alerts` surface and remove the POS inbox refresh call that expected an incompatible payload shape.
+- [x] Record upward lifecycle sync as an explicit follow-up outside ST-05.
 
 Acceptance criteria:
-- No POS call targets a route that does not exist.
-- Alerts reach the terminal through the inbound delta path, and no separate inventory alert surface remains.
+- No POS call targets either broken inventory-alert route.
+- Tenant-scoped forensic alerts reach the terminal only through the device-authenticated inbound delta envelope.
+- `sinceVersion` and `types=alerts` filter alerts deterministically using `created_at`.
+- Re-pulling a cloud alert never overwrites a local acknowledgement or resolution.
+- Removing cloud lifecycle upload does not disable local acknowledgement/resolution and does not introduce a live human-session dependency.
 
 Checks:
-- POS tests asserting the alerts domain uses the inbound path.
-- Backend spec confirming the alert delta is present in the inbound envelope.
-- `flutter analyze`, `git diff --check`.
+- Backend strict RED/GREEN service and real-database sync-down contract for tenant isolation, `types=alerts`, and `sinceVersion`.
+- Route-registry contract proving the retired `GET /inventory/alerts` surface no longer exists.
+- POS strict RED/GREEN tests proving alerts are applied from inbound deltas, both broken calls are absent, and local lifecycle state survives replay.
+- Full `npm test` and `npm run test:e2e` after the controller surface change; `npm run build`; targeted eslint on every changed/new TypeScript file including `test/`.
+- Focused Flutter tests; `flutter analyze`; `git diff --check`.
 
-Evidence: pending.
+Evidence: mapping found that the old `GET /inventory/alerts` returned a stock-summary shape incompatible with the POS forensic model, while the nonexistent lifecycle POST forced every sync pass to partial.
+
+Strict TDD RED was observed for each replacement contract: the backend DTO/service initially lacked alerts, the registry still exposed the retired route, all three new real-database alert cases failed while the envelope returned no alerts, and POS tests observed the dead lifecycle POST plus zero projected alerts. GREEN after implementation: inbound service 30/30, registry plus focused backend suites green, real HTTP/PostgreSQL sync-down contract 10/10, and POS SyncService 53/53.
+
+The backend always populates `deltas.alerts` on the managed inbound path, includes it in the default pull and supports `types=alerts`. Reads use only the transaction-bound manager with an explicit `tenant_id` predicate because `forensic_alerts` has no RLS policy. Incremental alert pulls use `created_at >= sinceVersion`; equal-watermark replay is pinned by a real-database case and is safe because the POS uses parameterized `INSERT OR IGNORE`. Non-null malformed `resolvedAt` rows fail closed, replay preserves local acknowledgement/resolution fields, and `alertsCount` counts inserted rows rather than received rows.
+
+Full checks: backend unit 249 suites / 2340 tests passed with 8 skipped; backend e2e 51 suites / 409 tests passed; build clean; targeted eslint clean with the known sibling-pattern warnings in the DB spec; POS SyncService 53/53; `flutter analyze` clean; `git diff --check` clean. Independent high-risk verification re-ran the 30-case service contract, 10-case real DB contract and 53-case POS contract with no blocking finding. Parent spot-check re-ran the service contract at 30/30. Native risk assessment was unavailable (schema-incompatible native response), so the candidate was treated as high risk and independently verified under the RDD-off path.
+
+Residual risk: PostgreSQL `created_at DEFAULT now()` uses transaction-start time, so an unusually long or clock-skewed transaction can still predate a later watermark despite inclusive comparison. Solving that requires a different cursor/schema contract and is not guessed here. The local `SELECT changes()` count can theoretically observe an interleaved SQLite statement, but it affects only informational `alertsCount`, not persistence or cursor advancement.
+
+Runtime harness: the real HTTP plus PostgreSQL sync-down contract is the backend runtime boundary; the focused real-Floor SyncService test is the POS projection/replay boundary. Rollback boundary: restore the retired controller handler and two POS domains, remove alert deltas and their projection/tests; no fiscal or invoice behavior is included.
 
 ## Dependencies
 
@@ -239,6 +263,8 @@ Evidence: pending.
 
 - **The auth-blocked cascade is a blast-radius defect of its own.** A single 401 in an early domain suppresses every later domain for the rest of the pass, and the recipe domain runs before sales, so one pending recipe can suppress the device-authoritative sales batch. Worth its own issue.
 - **No `APP_GUARD` exists.** Recorded and deliberately left as a per-route decision.
+- **Alert lifecycle upload remains local-only.** ST-05 removes the nonexistent outbound route; a future upward device contract must define actor authorization before syncing local acknowledgements/resolutions.
+- **Alert cursors inherit transaction-start timestamp risk.** Inclusive `created_at` fixes equal-watermark loss, but a long or clock-skewed insert transaction can still predate the watermark; a durable fix needs a new cursor/schema contract.
 
 ## Progress
 
@@ -246,9 +272,9 @@ Evidence: pending.
 - ST-01 merged via PR #475: the two write routes that had no caller are no longer open. Issue #445 stays open until ST-04 completes its third route's explicit device contract.
 - ST-02 merged via PR #477: the route registry now makes undeclared transport drift fail.
 - ST-03 merged via PR #479 (`58ce0dc`): the three inventory document writes now use device transport; issue #478 is closed.
-- ST-04 complete in work-unit commit `bb90e6a` and published as PR #480: `count-sessions` now has a satisfiable device transport and tenant-bound persistence under real forced-RLS proof. Issue #445 remains open until merge; publication verification found the PR MERGEABLE with Admin, POS and Cloudflare checks pending and GitGuardian green.
+- ST-04 merged via PR #480 (`343c62a`): `count-sessions` now has a satisfiable device transport and tenant-bound persistence under real forced-RLS proof; issue #445 is closed.
 - Issue #473 filed for the cascade defect found during the inventory: one 401 suppresses every later sync domain, and the recipe domain runs before sales, so a pending recipe can suppress the device-authoritative sales batch.
 
 ## Next step
 
-Wait for PR #480 checks and the founder's merge decision. After ST-04 delivery, continue with ST-05 and ST-06.
+Create the ST-05 work-unit commit, then offer the founder the push/PR decision. After ST-05 delivery, continue with ST-06.

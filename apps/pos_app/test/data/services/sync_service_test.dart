@@ -9,6 +9,7 @@ import 'package:pos_app/domain/models/fulfillment/fulfillment_checkout_context.d
 import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_sync_state_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
+import 'package:pos_app/data/models/inventory/forensic_alert_entity.dart';
 import 'package:pos_app/data/models/inventory/kardex_correction_entity.dart';
 import 'package:pos_app/data/models/inventory/kardex_recalculate_queue_entity.dart';
 import 'package:pos_app/domain/models/inventory/inventory_movement.dart';
@@ -440,6 +441,7 @@ void main() {
   DioException? forcedError;
   final List<CapturedPost> capturedPosts = [];
   final Map<String, Object?> capturedGets = {};
+  final List<String> capturedGetPaths = [];
 
   setUpAll(() {
     sqfliteFfiInit();
@@ -454,6 +456,7 @@ void main() {
     forcedError = null;
     capturedPosts.clear();
     capturedGets.clear();
+    capturedGetPaths.clear();
     dio = Dio();
     dio.interceptors.add(
       InterceptorsWrapper(
@@ -487,6 +490,9 @@ void main() {
               );
               return;
             }
+          }
+          if (options.method.toUpperCase() == 'GET') {
+            capturedGetPaths.add(options.path);
           }
           if (options.method.toUpperCase() == 'GET' &&
               capturedGets.containsKey(options.path)) {
@@ -2362,8 +2368,11 @@ void main() {
   );
 
   test(
-    'syncs alert lifecycle documents and refreshes the persistent inbox',
+    'never targets the retired inventory-alert routes and keeps alert lifecycle terminal-local',
     () async {
+      // ST-05: the lifecycle POST (no backend route, always 404) and the
+      // inbox refresh GET (incompatible stock-summary shape) are both gone.
+      // Local acknowledgement/resolution stays enabled and terminal-local.
       mockInventoryRepository.unsyncedForensicAlerts = [
         ForensicAlert(
           id: 'alert-1',
@@ -2391,9 +2400,6 @@ void main() {
             'message': 'Conteo con variación relevante.',
             'status': 'active',
             'createdAt': '2026-06-02T11:00:00.000Z',
-            'sourceMovementId': 'mov-9',
-            'sourceDocumentId': 'count-1',
-            'sourceDocumentType': 'COUNT_SESSION',
           },
         ],
       };
@@ -2401,16 +2407,19 @@ void main() {
       await syncService.triggerManualSync();
 
       expect(
-        mockInventoryRepository.syncedForensicAlertIds,
-        contains('alert-1'),
+        capturedPosts.where(
+          (post) => post.path.startsWith('/inventory/alerts'),
+        ),
+        isEmpty,
       );
       expect(
-        capturedPosts.any(
-          (post) => post.path == '/inventory/alerts/alert-1/lifecycle',
-        ),
-        true,
+        capturedGetPaths.where((path) => path.startsWith('/inventory/alerts')),
+        isEmpty,
       );
-      expect(mockInventoryRepository.forensicAlerts.single.id, 'alert-remote');
+      // The locally acknowledged alert was never uploaded nor overwritten:
+      // its lifecycle state is terminal-local and stays untouched.
+      expect(mockInventoryRepository.syncedForensicAlertIds, isEmpty);
+      expect(mockInventoryRepository.forensicAlerts, isEmpty);
     },
   );
 
@@ -2675,6 +2684,136 @@ void main() {
               .getConfigByKey('last_inbound_sync_version');
           expect(savedVersionConfig, isNotNull);
           expect(savedVersionConfig!.value, '1787745600000');
+        } finally {
+          await database.close();
+        }
+      },
+    );
+
+    test(
+      'projects inbound forensic alerts into the local inbox with insert-if-absent replay semantics',
+      () async {
+        final database = await $FloorAppDatabase
+            .inMemoryDatabaseBuilder()
+            .build();
+
+        try {
+          final syncServiceWithDb = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+          );
+
+          // A locally acknowledged alert that the cloud replays: the replay
+          // must never clobber the terminal-local lifecycle state.
+          await database.forensicAlertDao.upsertAlert(
+            ForensicAlertEntity(
+              id: 'alert-replayed',
+              alertType: 'COUNT_VARIANCE',
+              severity: 'high',
+              message: 'Mensaje original de nube.',
+              createdAt: '2026-09-01T10:00:00.000Z',
+              status: 'acknowledged',
+              note: 'Revisado por gerente',
+              actorLabel: 'local-manager',
+              actedAt: '2026-09-01T10:05:00.000Z',
+            ),
+          );
+
+          capturedGets['/v1/sync/inbound/deltas'] = {
+            'status': 'success',
+            'serverTime': '2026-09-02T12:00:00.000Z',
+            'currentVersion': 1787745600000,
+            'deltas': {
+              'alerts': [
+                {
+                  // Replayed: locally acknowledged, must stay untouched.
+                  'id': 'alert-replayed',
+                  'alertType': 'COUNT_VARIANCE',
+                  'severity': 'high',
+                  'message': 'Mensaje actualizado de nube.',
+                  'actorRole': 'MANAGER',
+                  'resolvedAt': null,
+                  'createdAt': '2026-09-01T10:00:00.000Z',
+                },
+                {
+                  // Resolved upstream: derived status, actor label from role.
+                  'id': 'alert-resolved',
+                  'alertType': 'AUDIT_BACKEND_TERMINAL_REJECTION',
+                  'severity': 'critical',
+                  'message': 'Rechazo de terminal registrado.',
+                  'actorRole': null,
+                  'resolvedAt': '2026-09-02T12:00:00.000Z',
+                  'createdAt': '2026-09-01T11:00:00.000Z',
+                },
+                {
+                  // Active upstream: stays active.
+                  'id': 'alert-active',
+                  'alertType': 'LOW_STOCK',
+                  'severity': 'high',
+                  'message': 'Stock bajo en leche.',
+                  'actorRole': 'CASHIER',
+                  'resolvedAt': null,
+                  'createdAt': '2026-09-01T09:00:00.000Z',
+                },
+                {
+                  // Malformed: missing id and createdAt must be skipped
+                  // strictly, never fabricated with defaults.
+                  'alertType': 'BROKEN',
+                  'severity': 'low',
+                  'message': 'Sin identidad.',
+                },
+                {
+                  // Malformed lifecycle: a non-null but unparsable resolvedAt
+                  // is malformed, not "active" — the row must be skipped.
+                  'id': 'alert-bad-resolved-at',
+                  'alertType': 'COUNT_VARIANCE',
+                  'severity': 'medium',
+                  'message': 'resolvedAt ilegible.',
+                  'actorRole': null,
+                  'resolvedAt': 'not-a-timestamp',
+                  'createdAt': '2026-09-01T12:00:00.000Z',
+                },
+              ],
+            },
+          };
+
+          final result = await syncServiceWithDb.pullInboundDeltas();
+
+          expect(result, isNotNull);
+          // alertsCount reports rows actually INSERTED, not rows received:
+          // the replayed alert already exists locally, so its INSERT OR
+          // IGNORE changes nothing and must not be counted.
+          expect(result!.alertsCount, 2);
+
+          final alerts = await database.forensicAlertDao.findAllAlerts();
+          expect(alerts, hasLength(3));
+          final byId = {
+            for (final alert in alerts) alert.id: alert,
+          };
+
+          // The unparsable-resolvedAt row was skipped, never stored.
+          expect(byId.containsKey('alert-bad-resolved-at'), isFalse);
+
+          // Replay preservation: the local acknowledgement survived.
+          final replayed = byId['alert-replayed']!;
+          expect(replayed.status, 'acknowledged');
+          expect(replayed.note, 'Revisado por gerente');
+          expect(replayed.actorLabel, 'local-manager');
+          expect(replayed.actedAt, '2026-09-01T10:05:00.000Z');
+          expect(replayed.message, 'Mensaje original de nube.');
+
+          // resolved_at derives lifecycle status; nothing else is fabricated.
+          final resolved = byId['alert-resolved']!;
+          expect(resolved.status, 'resolved');
+          expect(resolved.actorLabel, isNull);
+          expect(resolved.createdAt, '2026-09-01T11:00:00.000Z');
+
+          final active = byId['alert-active']!;
+          expect(active.status, 'active');
+          expect(active.actorLabel, 'CASHIER');
         } finally {
           await database.close();
         }
