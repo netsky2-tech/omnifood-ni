@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UnauthorizedException } from '@nestjs/common';
+import { DataSource, EntityManager } from 'typeorm';
 import { SyncTransportGuard } from '../../identity/guards/sync-transport.guard';
 import { InboundSyncController } from './inbound-sync.controller';
 import { InboundSyncService } from '../services/inbound-sync.service';
@@ -34,6 +35,22 @@ describe('InboundSyncController', () => {
     acknowledgeStaffPolicyEpoch: jest.fn(),
   };
 
+  // The GET handlers must route the service reads through a tenant-bound
+  // transaction manager (issue #470): the guard's binding commits before the
+  // handler runs, so only this manager's connection sees `app.tenant_id`.
+  const boundManager = {
+    // runInTenantTransaction binds `app.tenant_id` through the manager's own
+    // parameterised query before running the work callback.
+    query: jest.fn().mockResolvedValue([]),
+    getRepository: jest.fn(),
+  } as unknown as EntityManager;
+  const dataSource = {
+    transaction: jest.fn(
+      async (work: (manager: EntityManager) => Promise<unknown>) =>
+        work(boundManager),
+    ),
+  } as unknown as DataSource;
+
   const mockResponse: InboundSyncResponseDto = {
     status: 'success',
     serverTime: '2026-08-26T12:00:00.000Z',
@@ -53,6 +70,7 @@ describe('InboundSyncController', () => {
       controllers: [InboundSyncController],
       providers: [
         { provide: InboundSyncService, useValue: inboundSyncService },
+        { provide: DataSource, useValue: dataSource },
       ],
     })
       .overrideGuard(SyncTransportGuard)
@@ -86,6 +104,7 @@ describe('InboundSyncController', () => {
       'tenant-123',
       query,
       undefined,
+      boundManager,
     );
     expect(result).toEqual(mockResponse);
   });
@@ -104,6 +123,7 @@ describe('InboundSyncController', () => {
       'tenant-123',
       query,
       undefined,
+      boundManager,
     );
     expect(result).toEqual(mockResponse);
   });
@@ -121,8 +141,27 @@ describe('InboundSyncController', () => {
       'tenant-123',
       {},
       undefined,
+      boundManager,
     );
     expect(result).toEqual(mockResponse);
+  });
+
+  it('binds the tenant context transaction with the authenticated tenant', async () => {
+    inboundSyncService.getInboundDeltas.mockResolvedValue(mockResponse);
+
+    await controller.getCatalog(deviceRequest(), 'tenant-123', {});
+
+    // The transaction must be opened on the controller's own DataSource and
+    // bound to the authenticated tenant, never to a query/body value.
+    expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses a blank tenant before opening any transaction', async () => {
+    await expect(
+      controller.getCatalog(deviceRequest(), '   ', {}),
+    ).rejects.toThrow(UnauthorizedException);
+    expect(dataSource.transaction).not.toHaveBeenCalled();
+    expect(inboundSyncService.getInboundDeltas).not.toHaveBeenCalled();
   });
 
   it('delegates fiscal ACK to InboundSyncService', async () => {

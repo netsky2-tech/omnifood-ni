@@ -59,6 +59,9 @@ describe('Sync Device Transport Integration (DSI-2)', () => {
 
   let mockCredentialRecord: Partial<DeviceSyncCredential>;
   let mockTenantRecord: Partial<Tenant>;
+  // The tenant-bound transaction manager created in beforeAll and passed to
+  // the service as the fourth argument of getInboundDeltas (issue #470).
+  let boundManager: object;
 
   const signDeviceToken = async (
     claimsOverrides: Partial<DeviceSyncJwtClaims> = {},
@@ -107,6 +110,7 @@ describe('Sync Device Transport Integration (DSI-2)', () => {
         throw new Error(`Unexpected entity: ${entity}`);
       }),
     };
+    boundManager = mockManager;
 
     const mockDataSource = {
       transaction: jest.fn().mockImplementation(async (cb) => cb(mockManager)),
@@ -456,6 +460,8 @@ describe('Sync Device Transport Integration (DSI-2)', () => {
       // The third argument is the authenticated principal, and it is the only
       // source of the terminal identity the epoch chain binds to (decision 24),
       // so asserting it here is what keeps the query from becoming an alias.
+      // The fourth argument is the tenant-bound transaction manager the reads
+      // must ride (issue #470): the guard's binding commits before the handler.
       expect(getInboundDeltasMock).toHaveBeenCalledWith(
         'tenant-omega',
         expect.objectContaining({
@@ -463,6 +469,7 @@ describe('Sync Device Transport Integration (DSI-2)', () => {
           terminalId: 'pos-terminal-01',
         }),
         expect.objectContaining({ deviceId: 'pos-terminal-01' }),
+        boundManager,
       );
     });
 
@@ -537,6 +544,7 @@ describe('Sync Device Transport Integration (DSI-2)', () => {
         'tenant-omega',
         expect.objectContaining({ sinceVersion: '0' }),
         expect.objectContaining({ deviceId: 'pos-terminal-01' }),
+        boundManager,
       );
     });
 
@@ -569,6 +577,7 @@ describe('Sync Device Transport Integration (DSI-2)', () => {
         'tenant-omega',
         expect.any(Object),
         expect.objectContaining({ deviceId: 'pos-terminal-01' }),
+        boundManager,
       );
     });
 

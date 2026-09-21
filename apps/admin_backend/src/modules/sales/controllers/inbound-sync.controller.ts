@@ -9,8 +9,10 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
+import { DataSource } from 'typeorm';
 import type { DeviceSyncPrincipal } from '../../identity/security/device-sync-principal';
 import { GetTenantId } from '../../../core/decorators/tenant.decorator';
+import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 import { SyncTransportGuard } from '../../identity/guards/sync-transport.guard';
 import { RequireSyncScopes } from '../../identity/decorators/sync-scopes.decorator';
 import {
@@ -29,7 +31,10 @@ interface InboundSyncRequest extends Request {
 @UseGuards(SyncTransportGuard)
 @RequireSyncScopes('sync:pull')
 export class InboundSyncController {
-  constructor(private readonly inboundSyncService: InboundSyncService) {}
+  constructor(
+    private readonly inboundSyncService: InboundSyncService,
+    private readonly dataSource: DataSource,
+  ) {}
 
   private requireTenant(tenantId?: string): string {
     if (!tenantId?.trim()) {
@@ -49,10 +54,20 @@ export class InboundSyncController {
     // the transport guard attached, never from the query or the body: the
     // principal is the canonical enrolled terminal the epoch chain binds to
     // (design §4.1 rule 2, §11.4 decision 24).
-    return this.inboundSyncService.getInboundDeltas(
-      this.requireTenant(tenantId),
-      query,
-      req.devicePrincipal,
+    //
+    // The guard's transaction-local `app.tenant_id` binding commits before
+    // this handler runs, so the service reads would otherwise go through
+    // global pooled repositories that never see it (issue #470: under FORCED
+    // RLS this is a 500 uuid-cast error or a silently empty catalog). Every
+    // read below rides this handler's own tenant-bound transaction instead.
+    const tenant = this.requireTenant(tenantId);
+    return runInTenantTransaction(this.dataSource, tenant, (manager) =>
+      this.inboundSyncService.getInboundDeltas(
+        tenant,
+        query,
+        req.devicePrincipal,
+        manager,
+      ),
     );
   }
 
@@ -67,10 +82,14 @@ export class InboundSyncController {
     // the transport guard attached, never from the query or the body: the
     // principal is the canonical enrolled terminal the epoch chain binds to
     // (design §4.1 rule 2, §11.4 decision 24).
-    return this.inboundSyncService.getInboundDeltas(
-      this.requireTenant(tenantId),
-      query,
-      req.devicePrincipal,
+    const tenant = this.requireTenant(tenantId);
+    return runInTenantTransaction(this.dataSource, tenant, (manager) =>
+      this.inboundSyncService.getInboundDeltas(
+        tenant,
+        query,
+        req.devicePrincipal,
+        manager,
+      ),
     );
   }
 
@@ -85,10 +104,14 @@ export class InboundSyncController {
     // the transport guard attached, never from the query or the body: the
     // principal is the canonical enrolled terminal the epoch chain binds to
     // (design §4.1 rule 2, §11.4 decision 24).
-    return this.inboundSyncService.getInboundDeltas(
-      this.requireTenant(tenantId),
-      query,
-      req.devicePrincipal,
+    const tenant = this.requireTenant(tenantId);
+    return runInTenantTransaction(this.dataSource, tenant, (manager) =>
+      this.inboundSyncService.getInboundDeltas(
+        tenant,
+        query,
+        req.devicePrincipal,
+        manager,
+      ),
     );
   }
 
