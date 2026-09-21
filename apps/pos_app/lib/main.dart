@@ -13,6 +13,12 @@ import 'data/database/database_seeder.dart';
 import 'data/network/cloud_auth_interceptor.dart';
 import 'data/network/device_sync_auth_interceptor.dart';
 import 'data/adapters/activation/dio_activation_sync_port.dart';
+import 'data/services/activation_attempt_discovery_service.dart';
+import 'data/services/activation_controlled_sale_runner.dart';
+import 'data/services/activation_pre_offline_runner.dart';
+import 'data/services/activation_reconnect_sync_runner.dart';
+import 'data/services/activation_required_config_adapter.dart';
+import 'data/services/activation_session_service.dart';
 import 'data/security/app_private_device_sync_credential_store.dart';
 import 'data/security/dio_device_sync_exchange_port.dart';
 import 'data/security/flutter_secure_cloud_credential_store.dart';
@@ -81,10 +87,13 @@ import 'ui/features/config/hardware/hardware_settings_view.dart';
 import 'ui/features/config/terminal/terminal_identity_view_model.dart';
 import 'ui/features/config/terminal/terminal_identity_view.dart';
 import 'domain/services/config/printer_config_service.dart';
+import 'domain/services/printer/printer_resolver.dart';
 import 'ui/features/identity/audit/audit_log_view_model.dart';
 import 'ui/features/identity/audit/audit_log_view.dart';
 import 'ui/features/identity/users/user_management_view_model.dart';
 import 'ui/features/identity/users/user_management_view.dart';
+import 'ui/features/config/activation/activation_session_view_model.dart';
+import 'ui/features/config/activation/activation_terminal_view.dart';
 import 'ui/features/auth/views/login_view.dart';
 import 'ui/features/auth/views/lock_screen_view.dart';
 import 'domain/services/sales/dgi_numbering_service.dart';
@@ -129,9 +138,11 @@ void main() async {
   await FiscalBootstrapRunner.fromDatabase(database).run();
 
   // Initialize Services & Repositories
-  final deviceId = await TerminalIdentityService(
+  final terminalIdentityService = TerminalIdentityService(
     database.localConfigDao,
-  ).resolveDeviceId(buildTimeDeviceId: provisionedDeviceId);
+  );
+  final deviceId = await terminalIdentityService
+      .resolveDeviceId(buildTimeDeviceId: provisionedDeviceId);
   final dio = Dio(productionTransportOptions(baseUrl));
   final localAuthService = LocalAuthService();
   final capabilityCache = TenantCapabilityCache(
@@ -266,6 +277,48 @@ void main() async {
     inventoryRepository: inventoryRepository,
   );
 
+  // Terminal Activation Stack: guided enrollment path dependencies. The
+  // printer port is resolved from the STORED printer profile (read through
+  // PrinterConfigService, offline-first), never from a hard-coded default.
+  final activationConfigAdapter = ActivationRequiredConfigAdapter(
+    database: database,
+  );
+  final activationPrinterConfigService = PrinterConfigService(
+    database.localConfigDao,
+  );
+  final activationPrinterPort = PrinterResolver.resolve(
+    await activationPrinterConfigService.getPrinterConfig(),
+  );
+  final activationPreOfflineRunner = ActivationPreOfflineRunner(
+    database: database,
+    configAdapter: activationConfigAdapter,
+    terminalIdentityService: terminalIdentityService,
+    printerPort: activationPrinterPort,
+    printerConfigService: activationPrinterConfigService,
+  );
+  final activationControlledSaleRunner = ActivationControlledSaleRunner(
+    database: database,
+    salesRepository: salesRepository,
+    printerPort: activationPrinterPort,
+    printerConfigService: activationPrinterConfigService,
+  );
+  final activationReconnectSyncRunner = ActivationReconnectSyncRunner(
+    database: database,
+    syncPort: activationSyncPort,
+  );
+  final activationDiscoveryService = ActivationAttemptDiscoveryService(
+    database: database,
+    syncPort: activationSyncPort,
+    terminalIdentityService: terminalIdentityService,
+  );
+  final activationSessionService = ActivationSessionService(
+    database: database,
+    discoveryService: activationDiscoveryService,
+    preOfflineRunner: activationPreOfflineRunner,
+    controlledSaleRunner: activationControlledSaleRunner,
+    reconnectSyncRunner: activationReconnectSyncRunner,
+  );
+
   final connectivityService = NetworkConnectivityService(dio);
   connectivityService.start();
 
@@ -357,6 +410,12 @@ void main() async {
           create: (_) => TerminalIdentityViewModel(
             configDao: database.localConfigDao,
             printerConfigService: PrinterConfigService(database.localConfigDao),
+          ),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => ActivationSessionViewModel(
+            sessionService: activationSessionService,
+            authRepository: authRepository,
           ),
         ),
         ChangeNotifierProvider(
@@ -618,6 +677,7 @@ class MyApp extends StatelessWidget {
           '/config/profile': (context) => const BusinessProfileView(),
           '/config/hardware': (context) => const HardwareSettingsView(),
           '/config/terminal': (context) => const TerminalIdentityView(),
+          '/config/activation': (context) => const ActivationTerminalView(),
           '/identity/audit': (context) => const AuditLogView(),
         },
       ),
