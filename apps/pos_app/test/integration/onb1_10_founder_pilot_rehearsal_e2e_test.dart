@@ -170,6 +170,7 @@ void main() {
 
         // Effective fiscal/printer config consumed by TEST_PRINT (FR-4 fixture proof).
         for (final entry in {
+          PrinterConfigService.driverTypeKey: 'MOCK',
           PrinterConfigService.fiscalRucKey: 'J0310000000001',
           'tax_regime': 'CUOTA_FIJA',
           PrinterConfigService.paperWidthMmKey: '80',

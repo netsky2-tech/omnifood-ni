@@ -39,6 +39,44 @@ class PrinterConfigService {
 
   Stream<PrinterConfig> get onConfigChanged => _configStreamController.stream;
 
+  /// Whether the operator has deliberately configured a printer profile.
+  ///
+  /// True only when BOTH [driverTypeKey] and [paperWidthMmKey] exist with
+  /// non-blank values in `local_configs`. Read-only: it never writes, and it
+  /// never materialises the fabricated defaults that [getPrinterConfig]
+  /// reports for a fresh terminal (L1-08a).
+  Future<bool> isPrinterProfileConfigured() async {
+    final driverEntity = await _configDao.getConfigByKey(driverTypeKey);
+    final paperWidthEntity = await _configDao.getConfigByKey(paperWidthMmKey);
+    final driverConfigured =
+        driverEntity != null && driverEntity.value.trim().isNotEmpty;
+    final paperWidthConfigured =
+        paperWidthEntity != null && paperWidthEntity.value.trim().isNotEmpty;
+    return driverConfigured && paperWidthConfigured;
+  }
+
+  /// Deliberately confirms the printer profile chosen by the operator.
+  ///
+  /// This is the ONLY path that materialises a printer profile on a fresh
+  /// terminal: it writes exactly [driverTypeKey] and [paperWidthMmKey] and
+  /// nothing else (L1-08b). Everything else goes through [savePrinterConfig],
+  /// which preserves an absent profile.
+  Future<void> confirmPrinterProfile({
+    required PrinterDriverType driverType,
+    required int paperWidthMm,
+  }) async {
+    await _configDao.saveConfig(LocalConfigEntity(
+      key: driverTypeKey,
+      value: _driverCode(driverType),
+      description: 'Printer driver type',
+    ));
+    await _configDao.saveConfig(LocalConfigEntity(
+      key: paperWidthMmKey,
+      value: paperWidthMm.toString(),
+      description: 'Paper width in mm (58 or 80)',
+    ));
+  }
+
   Future<PrinterConfig> getPrinterConfig() async {
     final driverEntity = await _configDao.getConfigByKey(driverTypeKey);
     final autoInvoiceEntity = await _configDao.getConfigByKey(autoPrintInvoiceKey);
@@ -113,28 +151,31 @@ class PrinterConfigService {
     );
   }
 
+  /// Persists the printer configuration.
+  ///
+  /// Profile rule (L1-08b): the driver key and the paper-width key are only
+  /// written when they ALREADY exist with non-blank values in `local_configs`
+  /// (same criterion as [isPrinterProfileConfigured]). An unconfigured terminal
+  /// therefore keeps its unconfigured state through unrelated saves (auto-print
+  /// toggles, logo uploads, ...) instead of materialising the fabricated
+  /// defaults; a configured device still persists profile edits. Only
+  /// [confirmPrinterProfile] materialises a profile.
   Future<void> savePrinterConfig(PrinterConfig config) async {
-    String driverCode = 'SUNMI_V2S';
-    switch (config.driverType) {
-      case PrinterDriverType.mock:
-        driverCode = 'MOCK';
-        break;
-      case PrinterDriverType.escPosNetwork:
-        driverCode = 'ESCPOS_NETWORK';
-        break;
-      case PrinterDriverType.sunmiV2s:
-        driverCode = 'SUNMI_V2S';
-        break;
-      case PrinterDriverType.iPosQ80:
-        driverCode = 'IPOS_Q80';
-        break;
-    }
+    final existingDriverEntity = await _configDao.getConfigByKey(driverTypeKey);
+    final existingPaperWidthEntity =
+        await _configDao.getConfigByKey(paperWidthMmKey);
+    final driverConfigured = existingDriverEntity != null &&
+        existingDriverEntity.value.trim().isNotEmpty;
+    final paperWidthConfigured = existingPaperWidthEntity != null &&
+        existingPaperWidthEntity.value.trim().isNotEmpty;
 
-    await _configDao.saveConfig(LocalConfigEntity(
-      key: driverTypeKey,
-      value: driverCode,
-      description: 'Printer driver type',
-    ));
+    if (driverConfigured) {
+      await _configDao.saveConfig(LocalConfigEntity(
+        key: driverTypeKey,
+        value: _driverCode(config.driverType),
+        description: 'Printer driver type',
+      ));
+    }
     await _configDao.saveConfig(LocalConfigEntity(
       key: autoPrintInvoiceKey,
       value: config.autoPrintInvoice.toString(),
@@ -150,11 +191,13 @@ class PrinterConfigService {
       value: config.openDrawerOnCash.toString(),
       description: 'Kick cash drawer on cash payments',
     ));
-    await _configDao.saveConfig(LocalConfigEntity(
-      key: paperWidthMmKey,
-      value: config.paperWidthMm.toString(),
-      description: 'Paper width in mm (58 or 80)',
-    ));
+    if (paperWidthConfigured) {
+      await _configDao.saveConfig(LocalConfigEntity(
+        key: paperWidthMmKey,
+        value: config.paperWidthMm.toString(),
+        description: 'Paper width in mm (58 or 80)',
+      ));
+    }
 
     if (config.networkIp != null) {
       await _configDao.saveConfig(LocalConfigEntity(
@@ -229,6 +272,19 @@ class PrinterConfigService {
     ));
 
     _configStreamController.add(config);
+  }
+
+  String _driverCode(PrinterDriverType driverType) {
+    switch (driverType) {
+      case PrinterDriverType.mock:
+        return 'MOCK';
+      case PrinterDriverType.escPosNetwork:
+        return 'ESCPOS_NETWORK';
+      case PrinterDriverType.sunmiV2s:
+        return 'SUNMI_V2S';
+      case PrinterDriverType.iPosQ80:
+        return 'IPOS_Q80';
+    }
   }
 
   void dispose() {

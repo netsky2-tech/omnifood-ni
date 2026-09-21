@@ -180,13 +180,20 @@ class ActivationPreOfflineRunner {
     String? effectiveTaxRegimeCode;
     bool rucPresent = false;
     String? rucHash;
+    bool printerProfileConfigured = false;
     if (printerIsReady) {
+      bool profileConfigured = false;
       PrinterConfig? effectiveConfig;
       try {
-        effectiveConfig = await _printerConfigService.getPrinterConfig();
+        profileConfigured =
+            await _printerConfigService.isPrinterProfileConfigured();
+        if (profileConfigured) {
+          effectiveConfig = await _printerConfigService.getPrinterConfig();
+        }
       } catch (_) {
         effectiveConfig = null;
       }
+      printerProfileConfigured = profileConfigured;
       final effectiveRucRaw = effectiveConfig?.fiscalRuc?.trim();
       final effectiveRuc =
           (effectiveRucRaw != null && effectiveRucRaw.isNotEmpty)
@@ -198,7 +205,12 @@ class ActivationPreOfflineRunner {
               ? TaxRegime.fromString(effectiveRegimeRaw)
               : null;
 
-      if (effectiveConfig == null) {
+      if (!profileConfigured) {
+        testPrintResult = PrinterResult.failure(
+          PrinterStatus.error,
+          'Perfil de impresora nunca configurado (modelo y ancho de papel) — configúrelo en Ajustes de Hardware e Impresora',
+        );
+      } else if (effectiveConfig == null) {
         testPrintResult = PrinterResult.failure(
           PrinterStatus.error,
           'Configuración fiscal local no disponible — no se pudo leer la configuración efectiva',
@@ -276,6 +288,7 @@ class ActivationPreOfflineRunner {
       'paperWidthMm': effectivePaperWidthMm,
       'taxRegime': effectiveTaxRegimeCode,
       'rucPresent': rucPresent,
+      'printerProfileConfigured': printerProfileConfigured,
       if (!testPrintPass) 'failure': testPrintFailure,
     };
     final rucHashValue = rucHash;

@@ -263,7 +263,11 @@ void main() {
 
       // Provision the EFFECTIVE fiscal/printer configuration consumed by
       // TEST_PRINT, which is a fixture proof and fails closed without it (FR-4).
+      // The printer profile keys (driver + paper width) are deliberately seeded:
+      // this fixture represents a terminal whose profile was configured by the
+      // operator (L1-08a); the unconfigured-terminal scenario deletes them.
       for (final entry in {
+        PrinterConfigService.driverTypeKey: 'IPOS_Q80',
         PrinterConfigService.fiscalRucKey: 'J0310000000001',
         'tax_regime': 'CUOTA_FIJA',
         PrinterConfigService.paperWidthMmKey: '80',
@@ -616,6 +620,81 @@ void main() {
         expect(
           summary.checks['TEST_PRINT']!.detailsSanitizedJson,
           contains('"paperWidthMm":58'),
+        );
+      });
+    });
+
+    group('L1-08a — printer profile presence gate (TEST_PRINT)', () {
+      Future<PreOfflineRunnerSummary> runPreOffline() =>
+          runner.runPreOfflineChecks(
+            const PreOfflineRunnerParams(
+              attemptId: attemptId,
+              tenantId: tenantId,
+              authorizedUserId: authorizedUserId,
+              authorizedUserPin: validPin,
+            ),
+          );
+
+      test('fails closed with a named blocker and never calls the printer when the profile was never configured', () async {
+        // Truly unconfigured terminal: the profile keys were never written.
+        await database.localConfigDao.deleteConfig(PrinterConfigService.driverTypeKey);
+        await database.localConfigDao.deleteConfig(PrinterConfigService.paperWidthMmKey);
+
+        final summary = await runPreOffline();
+
+        expect(summary.checks['TEST_PRINT']!.status, equals('FAIL'));
+        expect(printerAdapter.printHistory, isEmpty);
+        expect(printerAdapter.lastPaperWidthMm, isNull);
+        expect(
+          summary.blockers,
+          contains(
+            'TEST_PRINT_FAILED: Perfil de impresora nunca configurado (modelo y ancho de papel) — configúrelo en Ajustes de Hardware e Impresora',
+          ),
+        );
+      });
+
+      test('fails closed when either profile key exists but is blank', () async {
+        await database.localConfigDao.saveConfig(
+          LocalConfigEntity(
+            key: PrinterConfigService.paperWidthMmKey,
+            value: '   ',
+          ),
+        );
+
+        final summary = await runPreOffline();
+
+        expect(summary.checks['TEST_PRINT']!.status, equals('FAIL'));
+        expect(printerAdapter.printHistory, isEmpty);
+      });
+
+      test('still passes and records the width for a configured 58 mm device', () async {
+        await database.localConfigDao.saveConfig(
+          LocalConfigEntity(
+            key: PrinterConfigService.paperWidthMmKey,
+            value: '58',
+          ),
+        );
+
+        final summary = await runPreOffline();
+
+        expect(summary.checks['TEST_PRINT']!.status, equals('PASS'));
+        expect(printerAdapter.lastPaperWidthMm, equals(58));
+      });
+
+      test('evidence records the printer profile state', () async {
+        final configured = await runPreOffline();
+        expect(
+          configured.checks['TEST_PRINT']!.detailsSanitizedJson,
+          contains('"printerProfileConfigured":true'),
+        );
+
+        await database.localConfigDao.deleteConfig(PrinterConfigService.driverTypeKey);
+        await database.localConfigDao.deleteConfig(PrinterConfigService.paperWidthMmKey);
+
+        final unconfigured = await runPreOffline();
+        expect(
+          unconfigured.checks['TEST_PRINT']!.detailsSanitizedJson,
+          contains('"printerProfileConfigured":false'),
         );
       });
     });

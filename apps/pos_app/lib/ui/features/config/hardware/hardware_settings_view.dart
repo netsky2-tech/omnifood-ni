@@ -34,12 +34,20 @@ class HardwareSettingsView extends StatelessWidget {
 
           final config = viewModel.config;
           final status = viewModel.printerStatus;
+          final profileUnconfigured = !viewModel.isProfileConfigured;
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // Explicit unconfigured-profile state (L1-08b): never present
+                // pre-selected driver/width as if they were the device config.
+                if (profileUnconfigured) ...[
+                  _buildUnconfiguredProfileCard(context, viewModel),
+                  const SizedBox(height: 16),
+                ],
+
                 // Hardware Status Badge Card
                 _buildStatusCard(context, status, viewModel),
                 const SizedBox(height: 16),
@@ -85,12 +93,23 @@ class HardwareSettingsView extends StatelessWidget {
                               icon: Icon(Icons.point_of_sale),
                             ),
                           ],
-                          selected: {config.driverType},
-                          onSelectionChanged: (set) {
-                            if (set.isNotEmpty) {
-                              viewModel.setDriverType(set.first);
-                            }
-                          },
+                          emptySelectionAllowed: profileUnconfigured,
+                          selected: profileUnconfigured
+                              ? (viewModel.pendingDriverType == null
+                                  ? <PrinterDriverType>{}
+                                  : {viewModel.pendingDriverType!})
+                              : {config.driverType},
+                          onSelectionChanged: profileUnconfigured
+                              ? (set) {
+                                  if (set.isNotEmpty) {
+                                    viewModel.selectDriverType(set.first);
+                                  }
+                                }
+                              : (set) {
+                                  if (set.isNotEmpty) {
+                                    viewModel.setDriverType(set.first);
+                                  }
+                                },
                         ),
                       ],
                     ),
@@ -176,12 +195,23 @@ class HardwareSettingsView extends StatelessWidget {
                               label: Text('80 mm (44 columnas)'),
                             ),
                           ],
-                          selected: {config.paperWidthMm},
-                          onSelectionChanged: (set) {
-                            if (set.isNotEmpty) {
-                              viewModel.setPaperWidth(set.first);
-                            }
-                          },
+                          emptySelectionAllowed: profileUnconfigured,
+                          selected: profileUnconfigured
+                              ? (viewModel.pendingPaperWidth == null
+                                  ? <int>{}
+                                  : {viewModel.pendingPaperWidth!})
+                              : {config.paperWidthMm},
+                          onSelectionChanged: profileUnconfigured
+                              ? (set) {
+                                  if (set.isNotEmpty) {
+                                    viewModel.selectPaperWidth(set.first);
+                                  }
+                                }
+                              : (set) {
+                                  if (set.isNotEmpty) {
+                                    viewModel.setPaperWidth(set.first);
+                                  }
+                                },
                         ),
                       ],
                     ),
@@ -296,6 +326,59 @@ class HardwareSettingsView extends StatelessWidget {
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildUnconfiguredProfileCard(
+    BuildContext context,
+    HardwareSettingsViewModel viewModel,
+  ) {
+    return Card(
+      color: Colors.orange.withOpacity(0.08),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.warning_amber_rounded,
+                  color: Colors.orange,
+                  size: 28,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Perfil de impresora sin configurar',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange.shade900,
+                        ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Este terminal nunca configuró su perfil de impresión. '
+              'Mientras no lo confirme, el terminal no imprimirá '
+              'correctamente. Seleccione el controlador y el ancho de papel '
+              'y confirme para habilitar la impresión.',
+              style: TextStyle(fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              key: const Key('confirm_printer_profile_button'),
+              icon: const Icon(Icons.check_circle),
+              label: const Text('CONFIRMAR PERFIL DE IMPRESORA'),
+              onPressed: viewModel.canConfirmPrinterProfile
+                  ? () => viewModel.confirmPrinterProfile()
+                  : null,
+            ),
+          ],
+        ),
       ),
     );
   }
