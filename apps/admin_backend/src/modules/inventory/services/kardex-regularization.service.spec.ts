@@ -18,6 +18,8 @@ describe('KardexRegularizationService', () => {
   let dataSource: any;
 
   beforeEach(async () => {
+    jest.clearAllMocks();
+
     queueRepo = {
       find: jest.fn(),
       findOne: jest.fn(),
@@ -38,6 +40,7 @@ describe('KardexRegularizationService', () => {
     dataSource = {
       transaction: jest.fn(async (callback) => {
         const manager = {
+          query: jest.fn(async () => undefined),
           getRepository: (entity: any) => {
             if (entity === KardexRecalculateQueue) return queueRepo;
             if (entity === KardexCorrection) return correctionRepo;
@@ -189,5 +192,156 @@ describe('KardexRegularizationService', () => {
     expect(result.duplicatesCount).toBe(1);
     expect(correctionRepo.save).toHaveBeenCalledTimes(1);
     expect(movementRepo.save).toHaveBeenCalledTimes(1);
+  });
+
+  // ST-06: the sync path runs against FORCE-RLS tables, so it must bind
+  // app.tenant_id inside its own transaction before the first query.
+  it('syncCorrections binds the tenant context inside its own transaction before the first query', async () => {
+    const callOrder: string[] = [];
+
+    const txCorrectionRepo = {
+      findOne: jest.fn(async () => {
+        callOrder.push('find');
+        return null;
+      }),
+      create: jest.fn((dto) => ({ id: 'corr-tx-1', ...dto })),
+      save: jest.fn(async (entity) => entity),
+    };
+    const txMovementRepo = {
+      findOne: jest.fn(async () => {
+        callOrder.push('movement-find');
+        return null;
+      }),
+      save: jest.fn(async (entity) => entity),
+    };
+    const managerQuery = jest.fn(async () => {
+      callOrder.push('bind');
+    });
+
+    (dataSource.transaction as jest.Mock).mockImplementation(async (callback) =>
+      callback({
+        query: managerQuery,
+        getRepository: (entity: any) =>
+          entity === KardexCorrection ? txCorrectionRepo : txMovementRepo,
+      }),
+    );
+
+    await service.syncCorrections('tenant-test', [
+      {
+        id: 'corr-tx-1',
+        insumoId: 'ins-1',
+        originMovementId: '101',
+        triggerMovementId: '102',
+        previousUnitCostNio: 50,
+        recalculatedUnitCostNio: 55,
+        deltaUnitCostNio: 5,
+        totalDeltaCostNio: 50,
+        affectedQuantity: 10,
+        lineageHash: 'hash-bind-1',
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+
+    expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+    expect(managerQuery).toHaveBeenCalledWith(
+      "SELECT set_config('app.tenant_id', $1, true)",
+      ['tenant-test'],
+    );
+    expect(callOrder[0]).toBe('bind');
+    expect(callOrder).toContain('find');
+    expect(callOrder.indexOf('bind')).toBeLessThan(callOrder.indexOf('find'));
+  });
+
+  it('syncCorrections uses only manager-scoped repositories and never the global ones', async () => {
+    const txCorrectionRepo = {
+      findOne: jest.fn(async () => null),
+      create: jest.fn((dto) => ({ id: 'corr-tx-2', ...dto })),
+      save: jest.fn(async (entity) => entity),
+    };
+    const txMovementRepo = {
+      findOne: jest.fn(async () => null),
+      save: jest.fn(async (entity) => entity),
+    };
+
+    (dataSource.transaction as jest.Mock).mockImplementation(async (callback) =>
+      callback({
+        query: jest.fn(async () => undefined),
+        getRepository: (entity: any) =>
+          entity === KardexCorrection ? txCorrectionRepo : txMovementRepo,
+      }),
+    );
+
+    await service.syncCorrections('tenant-test', [
+      {
+        id: 'corr-tx-2',
+        insumoId: 'ins-1',
+        originMovementId: '101',
+        triggerMovementId: '102',
+        previousUnitCostNio: 50,
+        recalculatedUnitCostNio: 55,
+        deltaUnitCostNio: 5,
+        totalDeltaCostNio: 50,
+        affectedQuantity: 10,
+        lineageHash: 'hash-scoped-1',
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+
+    expect(txCorrectionRepo.findOne).toHaveBeenCalled();
+    expect(txCorrectionRepo.save).toHaveBeenCalled();
+    expect(correctionRepo.findOne).not.toHaveBeenCalled();
+    expect(correctionRepo.save).not.toHaveBeenCalled();
+    expect(movementRepo.findOne).not.toHaveBeenCalled();
+    expect(movementRepo.save).not.toHaveBeenCalled();
+  });
+
+  describe('syncCorrections actor fields (ST-06, DSI-6 self-reported until attested)', () => {
+    const baseCorrection = {
+      id: 'corr-actor-1',
+      insumoId: 'ins-1',
+      originMovementId: '101',
+      triggerMovementId: '102',
+      previousUnitCostNio: 50,
+      recalculatedUnitCostNio: 55,
+      deltaUnitCostNio: 5,
+      totalDeltaCostNio: 50,
+      affectedQuantity: 10,
+      lineageHash: 'hash-actor-1',
+      createdAt: new Date().toISOString(),
+    };
+
+    it('persists absent actor fields as absent without fabricating identity or role', async () => {
+      correctionRepo.findOne.mockResolvedValue(null);
+      movementRepo.findOne.mockResolvedValue(null);
+
+      await service.syncCorrections('tenant-test', [{ ...baseCorrection }]);
+
+      expect(correctionRepo.save).toHaveBeenCalledTimes(1);
+      const saved = correctionRepo.save.mock.calls[0][0];
+      expect(saved.authorizedByUserId).toBeUndefined();
+      expect(saved.authorizedByRole).toBeUndefined();
+      expect(saved.authorizationMethod).toBeUndefined();
+      expect(saved.authorizedByUserId).not.toBe('unknown-user');
+      expect(saved.authorizedByRole).not.toBe('manager');
+    });
+
+    it('records present self-reported actor values exactly as sent', async () => {
+      correctionRepo.findOne.mockResolvedValue(null);
+      movementRepo.findOne.mockResolvedValue(null);
+
+      await service.syncCorrections('tenant-test', [
+        {
+          ...baseCorrection,
+          authorizedByUserId: 'pos-user-7',
+          authorizedByRole: 'supervisor',
+          authorizationMethod: 'PIN',
+        },
+      ]);
+
+      const saved = correctionRepo.save.mock.calls[0][0];
+      expect(saved.authorizedByUserId).toBe('pos-user-7');
+      expect(saved.authorizedByRole).toBe('supervisor');
+      expect(saved.authorizationMethod).toBe('PIN');
+    });
   });
 });

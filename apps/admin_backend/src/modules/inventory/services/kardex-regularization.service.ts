@@ -4,7 +4,8 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, EntityManager } from 'typeorm';
+import { bindTenantContext } from '../../../core/database/tenant-transaction';
 import { createHash } from 'crypto';
 import {
   KardexRecalculateQueue,
@@ -154,49 +155,64 @@ export class KardexRegularizationService {
     let syncedCount = 0;
     let duplicatesCount = 0;
 
-    for (const item of corrections) {
-      const existing = await this.correctionRepository.findOne({
-        where: { tenant_id: tenantId, lineageHash: item.lineageHash },
-      });
+    // ST-06 (L1-11): kardex_correction and inventory_kardex carry tenant RLS
+    // policies, so every read and write must run inside a transaction whose
+    // app.tenant_id is bound before the first query. All repository access
+    // below is manager-scoped; no global repository is used in the sync path.
+    return this.dataSource.transaction(async (manager: EntityManager) => {
+      await bindTenantContext(manager, tenantId);
 
-      if (existing) {
-        duplicatesCount++;
-        continue;
+      const correctionRepo = manager.getRepository(KardexCorrection);
+      const movementRepo = manager.getRepository(InventoryMovement);
+
+      for (const item of corrections) {
+        const existing = await correctionRepo.findOne({
+          where: { tenant_id: tenantId, lineageHash: item.lineageHash },
+        });
+
+        if (existing) {
+          duplicatesCount++;
+          continue;
+        }
+
+        const entity = correctionRepo.create({
+          id: item.id,
+          tenant_id: tenantId,
+          insumoId: item.insumoId,
+          originMovementId: item.originMovementId,
+          triggerMovementId: item.triggerMovementId,
+          previousUnitCostNio: item.previousUnitCostNio,
+          recalculatedUnitCostNio: item.recalculatedUnitCostNio,
+          deltaUnitCostNio: item.deltaUnitCostNio,
+          totalDeltaCostNio: item.totalDeltaCostNio,
+          affectedQuantity: item.affectedQuantity,
+          lineageHash: item.lineageHash,
+          // DSI-6 dependency: actor fields are self-reported by the POS at
+          // authoring time and are not attested yet. Present values are
+          // recorded exactly as sent; legitimate absence stays null — the
+          // sync path never fabricates identity or privilege.
+          authorizedByUserId: item.authorizedByUserId,
+          authorizedByRole: item.authorizedByRole,
+          authorizationMethod: item.authorizationMethod,
+          createdAt: new Date(item.createdAt),
+        });
+
+        await correctionRepo.save(entity);
+
+        // Update movement costing state
+        const movement = await movementRepo.findOne({
+          where: { id: item.originMovementId, tenant_id: tenantId },
+        });
+        if (movement) {
+          movement.estadoCosteo = 30; // REGULARIZED
+          movement.unitCostNio = item.recalculatedUnitCostNio;
+          await movementRepo.save(movement);
+        }
+
+        syncedCount++;
       }
 
-      const entity = this.correctionRepository.create({
-        id: item.id,
-        tenant_id: tenantId,
-        insumoId: item.insumoId,
-        originMovementId: item.originMovementId,
-        triggerMovementId: item.triggerMovementId,
-        previousUnitCostNio: item.previousUnitCostNio,
-        recalculatedUnitCostNio: item.recalculatedUnitCostNio,
-        deltaUnitCostNio: item.deltaUnitCostNio,
-        totalDeltaCostNio: item.totalDeltaCostNio,
-        affectedQuantity: item.affectedQuantity,
-        lineageHash: item.lineageHash,
-        authorizedByUserId: item.authorizedByUserId,
-        authorizedByRole: item.authorizedByRole,
-        authorizationMethod: item.authorizationMethod,
-        createdAt: new Date(item.createdAt),
-      });
-
-      await this.correctionRepository.save(entity);
-
-      // Update movement costing state
-      const movement = await this.movementRepository.findOne({
-        where: { id: item.originMovementId, tenant_id: tenantId },
-      });
-      if (movement) {
-        movement.estadoCosteo = 30; // REGULARIZED
-        movement.unitCostNio = item.recalculatedUnitCostNio;
-        await this.movementRepository.save(movement);
-      }
-
-      syncedCount++;
-    }
-
-    return { syncedCount, duplicatesCount };
+      return { syncedCount, duplicatesCount };
+    });
   }
 }

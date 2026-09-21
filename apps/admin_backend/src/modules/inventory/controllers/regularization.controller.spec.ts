@@ -1,11 +1,14 @@
 import { GUARDS_METADATA } from '@nestjs/common/constants';
+import { BadRequestException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ROLES_KEY } from '../../../core/decorators/roles.decorator';
+import { SYNC_SCOPES_KEY } from '../../identity/decorators/sync-scopes.decorator';
 import { UserRole } from '../../identity/entities/user.entity';
 import { AuthGuard } from '../../identity/guards/auth.guard';
 import { RolesGuard } from '../../identity/guards/roles.guard';
+import { SyncTransportGuard } from '../../identity/guards/sync-transport.guard';
 import { RegularizationController } from './regularization.controller';
 import { KardexRegularizationService } from '../services/kardex-regularization.service';
 
@@ -42,6 +45,8 @@ describe('RegularizationController', () => {
   };
 
   beforeEach(async () => {
+    jest.clearAllMocks();
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [RegularizationController],
       providers: [
@@ -62,19 +67,48 @@ describe('RegularizationController', () => {
           useValue: reflectorMock,
         },
       ],
-    }).compile();
+    })
+      // ST-06: the sync handler declares SyncTransportGuard; the testing
+      // module must resolve it eagerly even in specs that only exercise the
+      // human handlers.
+      .overrideGuard(SyncTransportGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     controller = module.get<RegularizationController>(RegularizationController);
   });
 
-  it('should be defined and guarded with AuthGuard and RolesGuard', () => {
+  const handlerGuards = (handler: unknown): unknown[] =>
+    (Reflect.getMetadata(GUARDS_METADATA, handler) as unknown[] | undefined) ??
+    [];
+
+  it('should be defined', () => {
     expect(controller).toBeDefined();
-    const guards = Reflect.getMetadata(
-      GUARDS_METADATA,
-      RegularizationController,
+  });
+
+  // ST-06: human authorization moved from the controller class to the two
+  // human handlers so the sync handler can carry device transport instead.
+  it('keeps AuthGuard and RolesGuard on the human pending and approve handlers', () => {
+    expect(handlerGuards(controller.getPending)).toContain(AuthGuard);
+    expect(handlerGuards(controller.getPending)).toContain(RolesGuard);
+    expect(handlerGuards(controller.approve)).toContain(AuthGuard);
+    expect(handlerGuards(controller.approve)).toContain(RolesGuard);
+  });
+
+  it('moves the sync handler to device transport with sync:push and no human gate', () => {
+    const guards = handlerGuards(controller.syncCorrections);
+    expect(guards).toContain(SyncTransportGuard);
+    expect(guards).not.toContain(AuthGuard);
+    expect(guards).not.toContain(RolesGuard);
+
+    const scopes = Reflect.getMetadata(
+      SYNC_SCOPES_KEY,
+      controller.syncCorrections,
     );
-    expect(guards).toContain(AuthGuard);
-    expect(guards).toContain(RolesGuard);
+    expect(scopes).toEqual(['sync:push']);
+
+    const roles = Reflect.getMetadata(ROLES_KEY, controller.syncCorrections);
+    expect(roles).toBeUndefined();
   });
 
   it('getPending delegates to service with tenantId and role metadata', async () => {
@@ -111,6 +145,76 @@ describe('RegularizationController', () => {
       approvedByUserId: 'user-supervisor-1',
       role: 'manager',
       authMethod: 'PIN',
+    });
+  });
+
+  describe('approve fail-closed actor derivation (ST-06)', () => {
+    const approveDto = { queueId: 'queue-uuid-1', authMethod: 'PIN' };
+
+    it('rejects a request without an authenticated principal', async () => {
+      await expect(
+        controller.approve('tenant-123', approveDto, {
+          user: undefined,
+        } as any),
+      ).rejects.toThrow(BadRequestException);
+      expect(
+        regularizationServiceMock.approveRegularization,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('rejects a principal without a user id instead of substituting unknown-user', async () => {
+      await expect(
+        controller.approve('tenant-123', approveDto, {
+          user: { role: 'manager' },
+        } as any),
+      ).rejects.toThrow(BadRequestException);
+      expect(
+        regularizationServiceMock.approveRegularization,
+      ).not.toHaveBeenCalledWith(
+        'tenant-123',
+        expect.objectContaining({ approvedByUserId: 'unknown-user' }),
+      );
+    });
+
+    it('rejects a principal without a role instead of substituting manager', async () => {
+      await expect(
+        controller.approve('tenant-123', approveDto, {
+          user: { sub: 'user-supervisor-1' },
+        } as any),
+      ).rejects.toThrow(BadRequestException);
+      expect(
+        regularizationServiceMock.approveRegularization,
+      ).not.toHaveBeenCalledWith(
+        'tenant-123',
+        expect.objectContaining({ role: 'manager' }),
+      );
+    });
+
+    it('rejects a principal whose role is an empty string', async () => {
+      await expect(
+        controller.approve('tenant-123', approveDto, {
+          user: { sub: 'user-supervisor-1', role: '' },
+        } as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('forwards the id claim when sub is absent', async () => {
+      regularizationServiceMock.approveRegularization.mockResolvedValue({
+        id: 'corr-1',
+      });
+
+      await controller.approve('tenant-123', approveDto, {
+        user: { id: 'user-by-id', role: 'owner' },
+      } as any);
+
+      expect(
+        regularizationServiceMock.approveRegularization,
+      ).toHaveBeenCalledWith('tenant-123', {
+        queueId: 'queue-uuid-1',
+        approvedByUserId: 'user-by-id',
+        role: 'owner',
+        authMethod: 'PIN',
+      });
     });
   });
 

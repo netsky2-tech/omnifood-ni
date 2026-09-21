@@ -13,6 +13,7 @@ import { InventoryMovement } from './entities/inventory-movement.entity';
 import { SystemParametersConfig } from './entities/system-parameters-config.entity';
 import { AuthGuard } from '../identity/guards/auth.guard';
 import { RolesGuard } from '../identity/guards/roles.guard';
+import { SyncTransportGuard } from '../identity/guards/sync-transport.guard';
 
 describe('Batch 6b Backend E2E Integration: Complete Retrocalculation Lifecycle', () => {
   let controller: RegularizationController;
@@ -40,6 +41,7 @@ describe('Batch 6b Backend E2E Integration: Complete Retrocalculation Lifecycle'
   const mockDataSource = {
     transaction: jest.fn(async (cb) => {
       return cb({
+        query: jest.fn(async () => undefined),
         findOne: mockMovementRepo.findOne,
         save: mockMovementRepo.save,
         getRepository: (entity: unknown) => {
@@ -103,6 +105,10 @@ describe('Batch 6b Backend E2E Integration: Complete Retrocalculation Lifecycle'
       .overrideGuard(AuthGuard)
       .useValue({ canActivate: () => true })
       .overrideGuard(RolesGuard)
+      .useValue({ canActivate: () => true })
+      // ST-06: the sync handler declares SyncTransportGuard; the testing
+      // module must resolve it eagerly even though this spec stubs it out.
+      .overrideGuard(SyncTransportGuard)
       .useValue({ canActivate: () => true })
       .compile();
 

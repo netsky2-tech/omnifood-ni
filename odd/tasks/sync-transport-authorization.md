@@ -160,22 +160,50 @@ Two lessons from earlier units were applied here as requirements rather than red
 
 ### ST-06 — Move regularization/sync to device transport without fabricating an actor
 
-Status: pending
+Status: complete — work-unit commit `118b9bc`, published as PR #483 from branch `feat/regularization-device-transport`; issue #482 approved and CI pending.
+Route: delegated direct — the 4-file mapping and multi-file writer triggers applied.
+Actual size: 972 authored changed lines excluding this task record: approximately 158 production and 814 test/support lines, including a 499-line real-database FORCE-RLS contract. Founder authorized one atomic PR with a recorded size exception because guard, exact POS bearer route, fail-closed actor handling and tenant-bound persistence form one coherent security outcome; splitting transport from RLS leaves an authenticated route that still fails under the production runtime role.
 
-- [ ] Move `POST /inventory/regularization/sync` to `SyncTransportGuard` with `sync:push`.
-- [ ] Stop deriving the actor from a human session. The document carries the actor it was authored with (`authorizedByUserId`, `authorizedByRole`, `authorizationMethod`), captured locally at authoring time; the device route must use that and declare it as self-reported until DSI-6 provides attestation.
-- [ ] Remove the fail-open defaults `'unknown-user'` and `'manager'`. Neither may survive on the device path, because they fabricate an identity where none was attested.
+Founder decisions, 2026-09-21:
+- Harden the separate human `approve` handler too: remove its `unknown-user`/`manager` defaults and fail closed unless the authenticated human principal supplies a non-empty id and role.
+- Preserve legitimately absent actor fields as `null` on auto-approved sync documents; never fabricate identity or privilege. Present actor fields remain self-reported until DSI-6 attests them.
+- Include the real tenant bind and PostgreSQL FORCE-RLS contract now; do not ship an authenticated route that still fails under the `NOBYPASSRLS` runtime role.
+
+- [x] Move `POST /inventory/regularization/sync` to `SyncTransportGuard` with `sync:push`, while keeping `GET pending` and `POST approve` on the human guards.
+- [x] Add the exact route to the POS device interceptor without widening the bearer to other regularization paths.
+- [x] Persist actor fields exactly from each document, preserving legitimate absence as `null` and declaring the self-reported DSI-6 dependency.
+- [x] Remove the human `approve` handler's fail-open `unknown-user` and `manager` defaults and reject a missing authenticated id or role.
+- [x] Bind `app.tenant_id` inside `syncCorrections`' own transaction before every FORCE-RLS-protected query/write.
+- [x] Prove transport, actor, and tenant isolation through strict RED/GREEN tests, including a real `NOSUPERUSER NOBYPASSRLS` PostgreSQL contract.
 
 Acceptance criteria:
-- The route accepts only a valid device token.
-- The actor recorded for a regularization correction is the one carried by the document, never a fabricated default and never a human session that is absent.
-- The DSI-6 dependency is explicit at the point where the human actor used to be read.
+- The sync route accepts only a valid device credential with `sync:push`; human pending/approve routes retain human authorization.
+- The POS attaches the device bearer exactly to `/inventory/regularization/sync`.
+- Present actor values are recorded from the document; absent values remain null; no sync path fabricates identity or role.
+- Human approve fails closed when guard-provided id or role is missing and never substitutes a privileged role.
+- Sync persistence executes inside a tenant-bound transaction and cannot cross tenant boundaries under FORCE RLS.
+- The DSI-6 self-reported actor dependency is explicit at the transport boundary.
 
 Checks:
-- Backend spec asserting the recorded actor comes from the document and that no default identity is produced when the document carries none.
-- `npm test`, `npm run test:e2e`, `npm run build`, `git diff --check`.
+- Strict RED/GREEN controller metadata and fail-closed human-principal specs; service actor and transaction-order specs; route-registry contract.
+- Real HTTP/PostgreSQL FORCE-RLS contract for device authentication, tenant-bound persistence and cross-tenant isolation.
+- POS interceptor exact-route tests plus existing regularization sync tests.
+- Full `npm test` and `npm run test:e2e`; `npm run build`; targeted eslint on every changed/new TypeScript file including `test/`.
+- Focused Flutter tests; `flutter analyze`; `git diff --check`.
 
-Evidence: pending.
+Evidence: mapping corrected the original task premise: `sync` already forwarded document actor fields without defaults, while `unknown-user`/`manager` existed only in the human `approve` handler. It also found that `syncCorrections` used global repositories without tenant binding against FORCE-RLS tables.
+
+Strict TDD RED: controller tests failed six cases for missing device metadata, lost human-guard guarantees and fail-open approve behavior; service tests failed transaction bind ordering and manager-scoped repository requirements; registry still classified sync as human; POS attached no bearer; and three of four real-database cases failed with 401 while the route still used human guards. GREEN: focused backend controller/service/registry/retrocalculation suites 36/36, real HTTP/PostgreSQL contract 4/4, and focused POS transport/regularization tests 15/15.
+
+The controller now keeps pending/approve on human guards and moves only sync to `SyncTransportGuard` with `sync:push`. Approve uses the repository's existing fail-closed `BadRequestException('Authenticated actor principal is required')` precedent for missing/blank id or role. Sync has no request-user dependency; present document actor fields persist exactly and legitimate absence persists as SQL null, with the DSI-6 self-reported dependency visible at controller and service boundaries.
+
+`syncCorrections` now opens one transaction, binds `app.tenant_id` as its first statement and obtains every sync-path repository from that manager. The real-database contract uses a `NOSUPERUSER NOBYPASSRLS` app role against FORCE RLS, with the real guard, and proves unauthenticated rejection, tenant-A persistence, exact actor persistence, null-actor preservation and cross-tenant isolation.
+
+Full checks: backend unit 249 suites / 2352 tests passed with 8 skipped; backend e2e 52 suites / 413 tests passed; build clean; targeted eslint clean with ten known sibling-pattern warnings in the DB spec; focused POS 15/15; `flutter analyze` clean; `git diff --check` clean. Independent high-risk verification re-ran 36 focused backend tests, all four real DB cases and all 15 POS tests with no blocking finding. Parent spot-check re-ran the controller contract at 11/11. Native risk assessment was unavailable (empty native output), so the candidate was treated as high risk and independently verified under the RDD-off path.
+
+Behavior note: the batch is now atomic; one poison document rolls back earlier items rather than leaving a partial batch, and idempotent lineage hashes make retry safe. A foreign-tenant `originMovementId` remains invisible under RLS and cannot mutate the foreign row; preserving a correction under the device tenant is pre-existing behavior, not introduced here.
+
+Runtime harness: the real HTTP plus PostgreSQL FORCE-RLS e2e is the backend runtime boundary; focused POS interceptor and regularization tests are the transport boundary. Rollback boundary: restore class-level human guards/defaults, remove the sync device override and POS allowlist entry, and restore global-repository sync persistence; no unrelated fiscal behavior is included.
 
 ### ST-04 — Complete the count-session device transport
 
@@ -213,7 +241,7 @@ Runtime harness: the real HTTP plus PostgreSQL e2e is the runtime boundary. Roll
 
 ### ST-05 — Fold inventory alerts into inbound deltas
 
-Status: complete — work-unit commit `c8218ce`, published as PR #481 from branch `feat/inventory-alert-inbound-deltas`; CI pending.
+Status: complete — work-unit commit `c8218ce`, merged via PR #481 (`25dfe53`); issue #314 closed.
 Route: delegated direct — the 4-file mapping and multi-file writer triggers applied.
 Actual size: 833 authored changed lines excluding this task record: 294 production and 539 test lines. Founder authorized one atomic PR with a recorded size exception because the backend delta, retired route, removed broken POS domains and replacement local projection form one coherent transport outcome; splitting them creates either a no-alert window or retains a broken route.
 
@@ -273,9 +301,10 @@ Runtime harness: the real HTTP plus PostgreSQL sync-down contract is the backend
 - ST-02 merged via PR #477: the route registry now makes undeclared transport drift fail.
 - ST-03 merged via PR #479 (`58ce0dc`): the three inventory document writes now use device transport; issue #478 is closed.
 - ST-04 merged via PR #480 (`343c62a`): `count-sessions` now has a satisfiable device transport and tenant-bound persistence under real forced-RLS proof; issue #445 is closed.
-- ST-05 complete in work-unit commit `c8218ce` and published as PR #481: forensic alerts now arrive through inbound deltas, both broken POS alert calls are gone, and local lifecycle state survives cloud replay. Issue #314 remains open until merge; publication verification found the PR MERGEABLE with Admin, POS and Cloudflare checks pending and GitGuardian green.
+- ST-05 merged via PR #481 (`25dfe53`): forensic alerts now arrive through inbound deltas, both broken POS alert calls are gone, and local lifecycle state survives cloud replay; issue #314 is closed.
+- ST-06 complete in work-unit commit `118b9bc` and published as PR #483, closing approved issue #482: regularization sync now has device transport plus tenant-bound FORCE-RLS persistence, document actor absence stays null, and human approve has no fail-open identity defaults. Publication verification found the PR MERGEABLE with Admin, POS and Cloudflare checks pending and GitGuardian green.
 - Issue #473 filed for the cascade defect found during the inventory: one 401 suppresses every later sync domain, and the recipe domain runs before sales, so a pending recipe can suppress the device-authoritative sales batch.
 
 ## Next step
 
-Wait for PR #481 checks and the founder's merge decision. After ST-05 delivery, continue with ST-06.
+Wait for PR #483 checks and the founder's merge decision.

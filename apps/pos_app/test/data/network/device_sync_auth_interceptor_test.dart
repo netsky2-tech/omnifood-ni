@@ -115,7 +115,7 @@ void main() {
     );
 
     test(
-      'attaches device token to the four device-transported inventory document routes',
+      'attaches device token to the five device-transported inventory document routes',
       () async {
         when(
           () => coordinator.getAccessToken(),
@@ -126,6 +126,7 @@ void main() {
           '/inventory/recipes/versions',
           '/inventory/production-orders/close',
           '/inventory/count-sessions',
+          '/inventory/regularization/sync',
         ];
 
         for (final path in deviceTransportedRoutes) {
@@ -141,7 +142,7 @@ void main() {
           expect(options.headers['Authorization'], 'Bearer device.access.jwt');
         }
 
-        verify(() => coordinator.getAccessToken()).called(4);
+        verify(() => coordinator.getAccessToken()).called(5);
       },
     );
 
@@ -151,10 +152,13 @@ void main() {
         final paths = [
           '/inventory/purchase',
           '/inventory/purchases/doc-1/correction',
-          '/inventory/regularization/sync',
           '/inventory/shrinkage',
           '/inventory/recipes/versions/suffix',
           '/inventory/production-orders/close/extra',
+          '/inventory/regularization',
+          '/inventory/regularization/pending',
+          '/inventory/regularization/approve',
+          '/inventory/regularization/sync/suffix',
           '/inventory/alerts',
         ];
 
