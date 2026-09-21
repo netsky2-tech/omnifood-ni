@@ -73,6 +73,24 @@ class ActivationPreOfflineRunner {
       throw StateError("ActivationAttemptLocal '$trimmedAttemptId' not found in SQLite");
     }
 
+    // Entry-status gate: this runner owns only 'ASSIGNED' and 'RUNNING'. An
+    // attempt that already advanced past these states (for example
+    // 'LOCAL_ACTIVATION_EVIDENCE_COMPLETE' after a successful controlled sale)
+    // must not be rewound by a re-run: refuse without running a single check,
+    // calling the printer, writing check rows, or mutating the stored status.
+    // 'RUNNING' is a legitimate re-entry status (e.g. after an offline
+    // restart), and the rollback from 'RUNNING' to 'ASSIGNED' below is
+    // intentional: it means the checks no longer pass.
+    if (attempt.localStatus != 'ASSIGNED' && attempt.localStatus != 'RUNNING') {
+      return PreOfflineRunnerSummary(
+        isReadyForOffline: false,
+        checks: const {},
+        blockers: [
+          "ATTEMPT_NOT_READY_FOR_CHECKS: Attempt is in status '${attempt.localStatus}', must be in 'ASSIGNED' or 'RUNNING' to run the pre-offline checks",
+        ],
+      );
+    }
+
     final checks = <String, ActivationCheckResultLocalEntity>{};
     final blockers = <String>[];
 
@@ -342,7 +360,8 @@ class ActivationPreOfflineRunner {
     // Persist all checks in Floor SQLite
     await _database.activationCheckResultLocalDao.insertChecks(checks.values.toList());
 
-    // Update attempt status
+    // Update attempt status. Rolling back from 'RUNNING' to 'ASSIGNED' when a
+    // re-run fails is intentional: the checks no longer pass.
     final isAllPassed = blockers.isEmpty;
     final updatedAttempt = attempt.copyWith(
       localStatus: isAllPassed ? 'RUNNING' : 'ASSIGNED',
