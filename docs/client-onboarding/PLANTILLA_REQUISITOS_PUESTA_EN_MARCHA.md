@@ -11,11 +11,13 @@ Antes de entregar este documento al cliente:
 
 # Requisitos para la puesta en marcha de {{NOMBRE_DEL_NEGOCIO}}
 
-**Tipo de negocio:** {{TIPO_DE_NEGOCIO}}  
-**Responsable principal:** {{NOMBRE_DEL_RESPONSABLE}}  
-**Fecha de preparación:** {{FECHA}}  
-**Fecha tentativa de inicio:** {{FECHA_TENTATIVA}}  
-**Preparado por:** {{NOMBRE_DEL_IMPLEMENTADOR}}
+> **PLANTILLA INTERNA DE ONBOARDING.** Este documento es una plantilla de uso interno: completar los campos `{{LLAVES}}`, eliminar las secciones que no apliquen y exportar a PDF antes de entregarlo al cliente.
+
+- **Tipo de negocio:** {{TIPO_DE_NEGOCIO}}
+- **Responsable principal:** {{NOMBRE_DEL_RESPONSABLE}}
+- **Fecha de preparación:** {{FECHA}}
+- **Fecha tentativa de inicio:** {{FECHA_TENTATIVA}}
+- **Preparado por:** {{NOMBRE_DEL_IMPLEMENTADOR}}
 
 ---
 
