@@ -35,6 +35,7 @@ import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { AuthoritativeCurrentUserGuard } from '../../src/modules/identity/guards/authoritative-current-user.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
 import { CurrentUserAuthorizationService } from '../../src/modules/identity/services/current-user-authorization.service';
+import { SyncTransportGuard } from '../../src/modules/identity/guards/sync-transport.guard';
 import {
   createIdentityJwtConfigProvider,
   createIdentityJwtTestConfigProvider,
@@ -248,8 +249,15 @@ describe('Inventory purchase routes (integration)', () => {
         JwtService,
         createIdentityJwtTestConfigProvider(),
         createIdentityJwtConfigProvider(),
-      ],
-    }).compile();
+      ]
+    })
+      // The device transport guard is declared per-route on movements/sync and
+      // shrinkage; this suite verifies route behavior, so the guard's token
+      // validation is overridden while the dedicated spec in
+      // inventory-movement.controller.spec.ts proves the guard for real.
+      .overrideGuard(SyncTransportGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     app = moduleFixture.createNestApplication();
     app.setGlobalPrefix('api');
