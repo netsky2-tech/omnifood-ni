@@ -83,6 +83,13 @@ the repository at the pilot freeze base and is not runtime-verified.
   the inventory of affected operations, including whether any open credit note is
   pending on an enrolled terminal, has not been recorded. The pilot follows the
   inventory-first decision and does not start until that inventory exists.
+  - Correction (2026-09-20): the bullet above is superseded. The inventory of
+    affected operations **was completed** during the 2026-09-17/18 field capture on
+    both the backend and the device, with zero pending credit notes in each
+    (recorded in `docs/onboarding/evidence/acceptance/AP_KNOWN_LIMITATIONS.md` §3
+    and `odd/tasks/founder-pilot-acceptance-freeze.md`). What remains for cutover
+    precondition 3 is registering the gap announcement and the agreed manual
+    procedure; the pilot still follows the inventory-first decision.
 - No pilot evidence claims that device transport works. No evidence produced by the
   pilot may be cited as validation of `/v1/sync/*` on the terminal.
 
