@@ -478,6 +478,127 @@ describe('InboundSyncService', () => {
       );
     });
   });
+
+  describe('transaction-bound manager reads (L1-10a)', () => {
+    // A stand-in for the EntityManager `runInTenantTransaction` hands to the
+    // caller: it resolves repositories from its own transaction connection.
+    function buildBoundManager(repos: Map<unknown, unknown>) {
+      return {
+        getRepository: jest.fn((entity: unknown) => repos.get(entity)),
+      };
+    }
+
+    const boundProduct = {
+      id: 'prod-bound-1',
+      name: 'Café en grano',
+      uom: 'LBS',
+      stock: 5,
+      averageCost: 20,
+      sellPrice: 50,
+      is_active: true,
+      is_perishable: false,
+      warehouse_id: null,
+      product_type: ProductType.SIMPLE,
+      tenant_id: 'tenant-abc',
+      created_at: new Date('2026-08-01T00:00:00Z'),
+      updated_at: new Date('2026-08-02T00:00:00Z'),
+    } as unknown as Product;
+    const boundMapping = {
+      id: 'map-bound-1',
+      product_id: 'prod-bound-1',
+      insumo_id: 'insumo-bound-1',
+    } as unknown as ProductInventoryMappingVersion;
+    const boundCatalogValue = {
+      id: 'cat-bound-1',
+      catalog_type: 'CATEGORY' as CatalogType,
+      code: 'BEVERAGE',
+      name: 'Bebidas',
+      description: null,
+      is_active: true,
+      sort_order: 1,
+      created_at: new Date('2026-08-01T00:00:00Z'),
+      updated_at: new Date('2026-08-02T00:00:00Z'),
+    } as unknown as CatalogValue;
+
+    it('routes the product, catalog and mapping reads through the supplied bound manager', async () => {
+      const managerRepos = new Map<unknown, unknown>([
+        [
+          Product,
+          {
+            createQueryBuilder: jest
+              .fn()
+              .mockReturnValue(createMockQueryBuilder([boundProduct])),
+          },
+        ],
+        [
+          CatalogValue,
+          {
+            createQueryBuilder: jest
+              .fn()
+              .mockReturnValue(createMockQueryBuilder([boundCatalogValue])),
+          },
+        ],
+        [
+          ProductInventoryMappingVersion,
+          {
+            createQueryBuilder: jest
+              .fn()
+              .mockReturnValue(createMockQueryBuilder([boundMapping])),
+          },
+        ],
+      ]);
+      const manager = buildBoundManager(managerRepos);
+
+      const response = await service.getInboundDeltas(
+        'tenant-abc',
+        { types: 'products,catalogvalues' },
+        undefined,
+        manager as never,
+      );
+
+      expect(manager.getRepository).toHaveBeenCalledWith(Product);
+      expect(manager.getRepository).toHaveBeenCalledWith(CatalogValue);
+      expect(manager.getRepository).toHaveBeenCalledWith(
+        ProductInventoryMappingVersion,
+      );
+      // The global repositories stay untouched on the bound path: every
+      // query must ride the transaction's own connection.
+      expect(mockProductRepo.createQueryBuilder).not.toHaveBeenCalled();
+      expect(mockCatalogRepo.createQueryBuilder).not.toHaveBeenCalled();
+      expect(mockMappingVersionRepo.createQueryBuilder).not.toHaveBeenCalled();
+      // And the pooled manager's session-scoped set_config workaround must
+      // not run either: the transaction is already bound.
+      expect(mockMappingVersionRepo.manager.query).not.toHaveBeenCalled();
+
+      expect(response.deltas.products).toHaveLength(1);
+      expect(response.deltas.products[0]).toMatchObject({
+        id: 'prod-bound-1',
+        mappingVersionId: 'map-bound-1',
+        insumoId: 'insumo-bound-1',
+      });
+      expect(response.deltas.catalogValues).toHaveLength(1);
+      expect(response.deltas.catalogValues[0]).toMatchObject({
+        id: 'cat-bound-1',
+      });
+    });
+
+    it('keeps the global repositories as the default path when no manager is supplied', async () => {
+      productQb.getMany.mockResolvedValue([boundProduct]);
+
+      const response = await service.getInboundDeltas('tenant-abc', {
+        types: 'products',
+      });
+
+      // Byte-for-byte the pre-existing device-path behavior: global repos,
+      // and the session-scoped mapping binding workaround still runs.
+      expect(mockProductRepo.createQueryBuilder).toHaveBeenCalledTimes(1);
+      expect(mockMappingVersionRepo.manager.query).toHaveBeenCalledWith(
+        "SELECT set_config('app.tenant_id', $1, true)",
+        ['tenant-abc'],
+      );
+      expect(response.deltas.products).toHaveLength(1);
+    });
+  });
   describe('OHAC delivery negotiation member', () => {
     const negotiationQuery = { ohacPosBuild: 'pos-build-1' };
 
@@ -742,9 +863,11 @@ describe('InboundSyncService', () => {
     it('fails closed when the acknowledgement service is not wired', async () => {
       // A composition without OHAC must not answer as though it had recorded
       // anything, so the terminal gets a conflict rather than a silent success.
-      const bareService = new (
-        service.constructor as new (...args: unknown[]) => typeof service
-      )(...(Array.from({ length: 9 }, () => ({})) as unknown[]));
+      const bareService = new (service.constructor as new (
+        ...args: unknown[]
+      ) => typeof service)(
+        ...(Array.from({ length: 9 }, () => ({})) as unknown[]),
+      );
 
       await expect(
         bareService.acknowledgeStaffPolicyEpoch(

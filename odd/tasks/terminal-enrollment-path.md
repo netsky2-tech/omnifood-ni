@@ -315,7 +315,7 @@ Delivered through L1-05a, L1-05b-replay, L1-05b-session, L1-05c-1 and L1-05c-2; 
 
 ### L1-06 — Confirm the credential at runtime on the device
 
-Status: pending
+Status: blocked — cannot be executed as written until L1-10 delivers the pre-credential priming path. It additionally requires the physical Q80, a fresh tenant and the terminal catalog.
 
 - [ ] Provision a fresh tenant and terminal, build with the canonical `DEVICE_ID`, and enroll end to end on the physical Q80.
 - [ ] Confirm the device-sync credential provisions, confirms, and renews.
@@ -426,24 +426,107 @@ Checks:
 
 Evidence: closes the defect reported separately during L1-05a (`activation_pre_offline_runner.dart:335`), tracked as issue #450. The unconditional status rewrite at completion is replaced by an entry-status gate; the refusal runs no check, calls no printer, writes no check row, and leaves the status untouched. Shipped as work-unit commit `4d680df`, merged through PR #464 (`6e4a2a7`).
 
+### L1-10 — Prime a fresh terminal before activation
+
+Status: complete — work-unit commits `631b043`, `3e26831` and `d20e750` on branch `feat/l1-10-terminal-priming`, with the record maintained by the documentation commits on that branch. No hardware required. Not yet merged.
+
+This slice was discovered while preparing L1-06, and it blocks it. Tracked as issue #469.
+
+**The closed cycle, verified on 2026-09-21.** L1-06's acceptance criterion requires a freshly built APK to obtain and use a device credential "without manual database intervention". That is unreachable through production paths today:
+
+1. A pilot POS starts empty. `DatabaseSeeder.seedAll` returns immediately unless `force`, so a fresh terminal has no catalog and no fiscal projection (`apps/pos_app/lib/data/database/database_seeder.dart`; called without `force` from `apps/pos_app/lib/main.dart:134`).
+2. `ActivationSessionService.prepare()` requires the product pinned by the attempt to exist in the **local** catalog and fails closed with `VERIFICATION_PRODUCT_MISSING` otherwise (`apps/pos_app/lib/data/services/activation_session_service.dart:130-146`), deliberately refusing to fetch.
+3. The pre-offline `REQUIRED_CONFIG_LOCAL` check requires a local fiscal projection whose revision **and** fingerprint match the attempt's pins, carrying a valid RUC (`apps/pos_app/lib/data/services/activation_required_config_adapter.dart:147,161,190`).
+4. Catalog and fiscal config reach a terminal only over `/v1/sync/inbound/*`, whose controller carries class-level `@UseGuards(SyncTransportGuard)` and `@RequireSyncScopes('sync:pull')`: device-only (`apps/admin_backend/src/modules/sales/controllers/inbound-sync.controller.ts:26-28`).
+5. The device credential, provisioned at OWNER login, resolves an attempt already in `PASS` or `PASS_WITH_WARNING` (`apps/admin_backend/src/modules/onboarding/services/activation.service.ts:1489-1527`).
+6. Finalizing an attempt requires exactly what steps 2 and 3 need.
+
+The POS endpoint surface confirms there is no alternative: `/identity/*`, `/v1/health`, `/v1/sync/batch`, `/v1/sync/inbound/deltas` and `/v1/sync/inbound/fiscal/ack`. No human-authenticated catalog or fiscal pull exists. The acceptance harness dodged the cycle by writing products and fiscal config straight into SQLite (`apps/pos_app/integration_test/onb1_10_founder_pilot_q80_e2e_test.dart:228-260`), which is precisely the intervention the criterion excludes. **Consequence: the L1 objective cannot be met as scoped without this slice.**
+
+Founder decisions (2026-09-21):
+
+- **Approach.** Human-authenticated priming that reuses the existing inbound-sync service. No pre-activation device credential is created; `SyncTransportGuard` and the device scope allowlist stay untouched. A scoped pre-finalization device credential was evaluated and rejected because it would give a device a live credential before it passed any activation check and would change the guard's central device-binding invariant.
+- **Order.** Priming runs **before** the attempt is created, so the attempt pins a fiscal revision that is already present locally. No re-pinning transition and no stale-pin window, because the backend fiscal snapshot only ever returns the latest revision.
+- **Gate.** The existing `onboarding:activation:manage` permission, with **no** `@Roles(OWNER)` hardcode. A business may delegate activation to an encargado, and a non-OWNER role can receive that permission through per-user custom permissions (`resolveEffectivePermissions` in `apps/admin_backend/src/modules/identity/security/permissions.enum.ts`). Gating on the permission alone covers both the OWNER and the delegated case, and keeps the priming surface and the activation surface authorized identically.
+- **RUC exposure.** Sending the raw issuer RUC over the human-authenticated path is accepted as parity with the existing device path.
+
+Tasks:
+
+- [x] L1-10a — Backend: one human-authenticated read endpoint returning the priming envelope for the authenticated tenant, reusing the exported `InboundSyncService`, gated by `@RequirePermissions(ONBOARDING_ACTIVATION_MANAGE)` with no OWNER hardcode, and scoped to catalog values, products and the fiscal snapshot.
+- [x] L1-10b — POS: `ActivationPrimingPort` with a strictly parsed payload, `DioActivationPrimingPort` over the same human-authenticated client the activation port uses, and `ActivationPrimingService`, which applies catalog values and products through the real DAOs with the same field mapping the inbound projection uses, and the fiscal envelope through `FiscalInboxHandler.handleFiscalEnvelope`.
+- [x] L1-10c — Priming is wired into `ActivationSessionViewModel.prepare()`, running after identity resolution and before the session prepare.
+
+Acceptance criteria:
+
+- An authorized human session on an empty terminal can obtain its tenant's catalog and fiscal snapshot in the exact envelope shape the POS projection already consumes.
+- An unauthenticated caller and a caller lacking the permission are both rejected; a second tenant receives only its own data under RLS.
+- Priming creates no device credential and changes no guard, scope or credential-service behavior.
+- After priming, `ActivationSessionService.prepare()` succeeds for the attempt's pinned product and `REQUIRED_CONFIG_LOCAL` passes for the pinned revision and fingerprint.
+- No manual database intervention is required for a fresh terminal to reach a state where activation can run.
+
+Checks:
+
+- Backend: controller decorator-metadata and permission-guard specs following the existing `activation-device-provisioning.spec.ts` pattern; a service spec asserting the response shape matches the inbound DTO; an RLS spec proving two-tenant isolation.
+- POS: unit tests feeding a fake priming port and asserting `prepare()` and `checkRequiredConfigLocal` pass, plus a test that the applied envelope matches the attempt's pins.
+- `git diff --check`.
+- The full physical confirmation remains L1-06; nothing here can be proven on the device in this session.
+
+Evidence for L1-10a — work-unit commit `631b043` on branch `feat/l1-10-terminal-priming`.
+
+Shipped surface: `GET /api/onboarding/terminals/priming`, guarded by `AuthGuard` + `PermissionsGuard` + `TenantInterceptor` and gated by `ONBOARDING_ACTIVATION_MANAGE` alone, with deliberately no `@Roles(OWNER)` because a business may delegate activation to an encargado who holds that permission through per-user custom permissions. `TerminalPrimingService` reuses `InboundSyncService` and maps to an explicit allowlist: catalog values, products and the fiscal snapshot. The user list is dropped on purpose, because the inbound envelope's user deltas carry `securityProfile.pinHash` and PIN material has no place on a human-authenticated catalog pull; the requested delta types are narrowed as the first layer and the response mapping as the second. No device credential, guard, scope or credential-service behavior was touched, and no activation attempt is required.
+
+**A real-database spec exposed a genuine defect in the first version of this work unit, and finding it changed the slice.** `TerminalPrimingService` opened `runInTenantTransaction` but ignored the bound `EntityManager` it received, calling `InboundSyncService` whose reads go through `@InjectRepository` global repositories. Those borrow a separate pooled connection per query, so the transaction-local `app.tenant_id` never reached them. Under FORCED RLS the catalog read either raised `invalid input syntax for type uuid: ""` or silently returned zero rows. The unit tests had passed because they mocked the inbound service; only the real-database spec could see it. RED was observed as 4 of 4 db tests failing with `QueryFailedError: invalid input syntax for type uuid: ""` at the catalog delta read, with three passing in-test controls isolating the cause to the binding placement rather than the schema, the role or the policies. GREEN: the same 4 of 4 pass after the fix, and no red-spec assertion was weakened.
+
+The fix is strictly additive: `InboundSyncService.getInboundDeltas` takes an optional trailing bound `EntityManager` and resolves each repository read through `manager.getRepository(Entity)` when one is supplied, falling back to the injected global repositories otherwise. The session-scoped `set_config` workaround in the mapping-version read now runs only on the unbound path, where it belongs. Independent verification confirmed the device path is functionally unchanged: all three controller callers still pass three arguments, so the manager is `undefined`, the global repositories are used and the workaround still runs.
+
+One bounded imprecision in the code comment, recorded so it is not read as a broader guarantee: the routing covers the reads `InboundSyncService` performs itself. The fiscal snapshot is not among them, because `FiscalConfigVersionService.getFiscalConfigSnapshot` opens its own tenant-bound transaction and is therefore tenant-safe on a separate transaction rather than through the priming manager.
+
+Checks run: `npm run test:db -- --testPathPattern 'terminal-priming'` 4 of 4 passing after being 4 of 4 failing; the onboarding module suite green at 41 suites and 399 tests, which is the module total rather than a priming-only count because only three priming spec files exist; `npx jest src/modules/sales/services/inbound-sync` 25 tests passing; `npm run build` clean; `git diff --check` clean. The db spec asserts by row id that each of two tenants receives only its own products and catalog values even when names and codes collide across tenants, resolves the fiscal snapshot per tenant, and confirms the serialized payload never carries a users array or PIN material.
+
+Size exception, recorded rather than hidden: this work unit is 1522 changed lines, of which ~1240 are test code across three new specs and ~284 are production lines (62 controller, 138 service, 84 in the shared inbound service). The excess is test code, which is the condition the feature's recorded rule allows.
+
+Defect found and deliberately NOT fixed here, tracked as issue #470: the device path `/v1/sync/inbound/*` shares the same binding defect, because `SyncTransportGuard` binds on its own transaction which commits before the handler, and `InboundSyncService` then reads through global repositories. Changing that path affects production sync behavior and needs its own review, so only the priming path was corrected. **This matters for L1-06:** its checks exercise `/v1/sync/*`, so #470 may need to be resolved before L1-06 can demonstrate a complete credential-to-transport story.
+
+Constraint for L1-10b, recorded before the work starts because it is easy to get wrong: the POS persists `currentVersion` from an inbound envelope as `last_inbound_sync_version` (`apps/pos_app/lib/data/services/sync_service.dart:1898-1906`), and that key is the cursor for subsequent delta pulls. Priming deliberately requests a **subset** of delta types. If the priming path reuses that persistence, the cursor jumps forward and the later full device sync will skip users, recipes, insumos and every other type priming never delivered, producing a silently incomplete terminal. L1-10b must therefore either keep priming out of that cursor or store it under a separate key.
+
+Evidence for L1-10b — work-unit commit `3e26831`. Strict TDD: RED observed as all three new test files failing to compile before the implementation existed; GREEN as 10 of 10 service and adapter tests plus 9 of 9 port parsing tests passing, with `flutter analyze` reporting no issues and the pre-existing activation session suite still at 8 of 8.
+
+The mapping is deliberately a dedicated applier rather than an extraction from `SyncService`. Extracting the shared mapping would have meant refactoring the 1900-line service that the device path depends on, which this work unit is not allowed to change. The drift risk that duplication normally carries is contained by a test rather than by hope: the applied product is fed through `ActivationRequiredConfigAdapter.computeProductFingerprint` and asserted equal to a pinned fingerprint, so any divergence in the field mapping fails the test instead of silently producing a product that the required-config check would reject later. Stated exactly, because the difference matters: the test calls the fingerprint comparison the required-config check uses, not the check itself. Independent verification confirmed the pinned constant is reproducible from the same six-field payload, which makes the guard genuine rather than self-referential, and confirmed the fingerprint payload covers `{id, isActive, name, sellPrice, tenantId, uom}`, all of which the applier sets. The two fixture defects the writer found are recorded: Dart nested map literals infer `Map<String, Object>` so `null` needs an explicit `<String, dynamic>` annotation, and `FiscalInboxHandler`'s conflict detection compares against the `fiscal_config_local` snapshot row rather than the `local_config` projection keys.
+
+**The recorded cursor constraint was honoured and tested.** `TerminalPrimingService`/`ActivationPrimingService` writes the delivered version under the distinct key `last_priming_inbound_version`; `last_inbound_sync_version` appears in that file only inside comments and the description text of that distinct key. Readback confirms it: the only `saveConfig` call in the service is the priming key.
+
+Evidence for L1-10c — work-unit commit `d20e750`. Strict TDD: RED observed as the view-model suite failing to load with `No named parameter with the name 'primingService'`; GREEN as 13 of 13 view-model tests and 10 of 10 view tests passing, `flutter analyze` clean, `test/widget_test.dart` at 6 of 6 (the cheap check that `main.dart` still compiles and the app boots) and the activation session suite unchanged at 8 of 8.
+
+The ordering is explicit in the view model: the logged-in user and tenant are resolved first, priming runs second and returns early on any failure, and only then does the session prepare run. A priming failure surfaces its own name: the port's `TERMINAL_PRIMING_*` code when the payload is unusable, and `TERMINAL_PRIMING_FAILED` for transport-level failures. All three failure branches return before `prepare()`, so a half-primed terminal cannot reach a phase.
+
+The dependency was kept **required** on purpose. The implementing writer offered to make it optional to avoid touching a sibling test and rejected that itself, correctly: an optional priming dependency would restore exactly the silent no-priming prepare path that this slice exists to close. The parent authorized the mechanical sibling-test fix instead, and no assertion was weakened to accommodate the new parameter.
+
+Size record for this slice, corrected after independent verification caught an error in the first version: L1-10a is 1522 changed lines (1252 test, 270 production plus 4 in the module registration); L1-10b is 1064 (658 test, 406 production); L1-10c is 149 (108 test, 41 production — 31 in the view model and 10 in `main.dart`). The first version of this record had the L1-10c split inverted, claiming ~85 production and ~64 test. The correction matters because the feature's rule allows a unit to exceed the advisory budget only when the excess is test code: L1-10c's real shape satisfies that rule comfortably, and the wrong numbers made it look as though production code dominated the unit. L1-10a and L1-10b also satisfy it, with test code the clear majority in both.
+
+Remaining for L1-10: nothing. The physical end-to-end confirmation stays with L1-06.
+
 ### Post-merge housekeeping — outside the L1 implementation scope
 
 PR #461 (merge `964a0ce`, commits `77dcc6b` + `68ffbd3`, closing issue #460) published the client startup requirements documentation. It is independent documentation work merged after the L1 implementation and is recorded here only for completeness; it is not an L1 slice.
 
 ## Dependencies
 
-- Repository implementation is merged: L1-01 through L1-05c-2, L1-08 and L1-09 are complete and merged to `main`.
-- L1-07 is the next actionable slice: documentation-only corrections, no hardware required.
-- L1-06 is last and blocked on hardware: it requires the physical Q80, a fresh tenant/terminal, and the catalog with the pinned verification product.
+- Repository implementation is merged: L1-01 through L1-05c-2, L1-07, L1-08 and L1-09 are complete and merged to `main`. L1-10 is complete on `feat/l1-10-terminal-priming` and not yet merged.
+- **L1-10 unblocks L1-06.** A fresh terminal now has a production path to satisfy `prepare()` and `REQUIRED_CONFIG_LOCAL` before it holds a credential.
+- **Issue #470 may still block L1-06.** The device path `/v1/sync/inbound/*` shares the RLS binding defect found here, and L1-06's checks exercise `/v1/sync/*`. Resolve #470 before expecting L1-06 to demonstrate a complete credential-to-transport story.
+- L1-06 also requires the physical Q80 and a fresh tenant.
 - #314 follows confirmed L1 (confirmation happens at L1-06); #445 remains separate.
 
 ## Progress
 
 - Feature opened after independent verification of `main` at `9cef7ce` corrected the earlier assessment: the credential provisioning half is already production-wired, the three activation runners exist but are constructed only in tests, the owner dashboard has no enrollment surface, and the build script passes no `DEVICE_ID`.
 - Frozen plan approved by the founder: dashboard authorizes and creates, POS observes and finalizes, build defines the terminal id, recovery remains an exceptional ops path.
-- Repository implementation merged through PRs #454, #455, #456, #457, #458, #459, #463 and #464 (per-slice commits and merge identities recorded in each task above).
+- Repository implementation merged through PRs #454, #455, #456, #457, #458, #459, #463, #464, #466 and #468 (per-slice commits and merge identities recorded in each task above).
+- L1-07 merged as PR #468 (`c47f8f2`), closing issue #467.
+- **2026-09-21, preparation for L1-06 found a closed bootstrap cycle that the feature had not recorded.** The L1 objective claims enrollment works "through production code paths only"; it did not, because nothing could prime a fresh terminal before it held a device credential. Recorded in full under L1-10 and traced to issue #469; L1-10 now closes it in the repository.
+- **The same work surfaced a second, broader defect.** Binding the tenant context has no effect on reads performed through `@InjectRepository` global repositories, because those borrow a separate pooled connection. A real-database spec written for the priming path exposed it after unit tests had passed; the priming path was fixed, and the device path that shares the defect is tracked as issue #470 rather than changed here.
 - L1/DSI-2 is NOT complete: physical credential provisioning, renewal, and `/v1/sync/*` use on the device remain unverified until L1-06, so DSI cutover precondition 2 is still not satisfied.
 
 ## Next step
 
-Execute L1-07 (documentation corrections, no hardware needed). Then L1-06 when the physical Q80 and a fresh catalog/tenant are available. #314 follows confirmed L1; #445 remains separate.
+Publish L1-10 as a pull request and merge it. Then decide whether to fix issue #470 before L1-06, because L1-06 exercises `/v1/sync/*`. L1-06 itself still needs the physical Q80 and a fresh tenant. #314 follows confirmed L1; #445 remains separate.

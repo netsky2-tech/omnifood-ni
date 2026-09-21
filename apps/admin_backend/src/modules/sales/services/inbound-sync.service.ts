@@ -9,7 +9,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { ProductInventoryMappingVersion } from '../../inventory/entities/product-inventory-mapping-version.entity';
 import { Product } from '../../inventory/entities/product.entity';
 import { CatalogValue } from '../../catalog/entities/catalog-value.entity';
@@ -85,10 +85,22 @@ export class InboundSyncService {
     private readonly humanAuthorizationAcknowledgement?: StaffPolicyEpochAcknowledgementService,
   ) {}
 
+  /**
+   * Reads the inbound deltas for a tenant.
+   *
+   * When `entityManager` is supplied (a transaction-bound manager, e.g. from
+   * `runInTenantTransaction`), every repository read below resolves through
+   * that manager so the queries run on the transaction's own connection and
+   * honor its transaction-local `app.tenant_id` RLS binding. Without it, the
+   * reads use the injected global repositories exactly as before — the
+   * device-credential `/v1/sync/inbound/*` path keeps its existing behavior
+   * untouched.
+   */
   async getInboundDeltas(
     tenantId: string,
     query: InboundSyncQueryDto,
     devicePrincipal?: DeviceSyncPrincipal,
+    entityManager?: EntityManager,
   ): Promise<InboundSyncResponseDto> {
     if (!tenantId?.trim()) {
       throw new UnauthorizedException('Tenant ID is required for sync');
@@ -121,27 +133,36 @@ export class InboundSyncService {
 
     const deltas: InboundSyncDeltasDto = {
       products: requestedTypes.has('products')
-        ? await this.fetchProductDeltas(tenantId, sinceDate)
+        ? await this.fetchProductDeltas(tenantId, sinceDate, entityManager)
         : [],
       catalogValues:
         requestedTypes.has('catalogvalues') ||
         requestedTypes.has('catalog_values') ||
         requestedTypes.has('categories')
-          ? await this.fetchCatalogValueDeltas(tenantId, sinceDate)
+          ? await this.fetchCatalogValueDeltas(
+              tenantId,
+              sinceDate,
+              entityManager,
+            )
           : [],
       insumos: requestedTypes.has('insumos')
-        ? await this.fetchInsumoDeltas(tenantId, sinceDate)
+        ? await this.fetchInsumoDeltas(tenantId, sinceDate, entityManager)
         : [],
       recipes: requestedTypes.has('recipes')
-        ? await this.fetchRecipeDeltas(tenantId, sinceDate)
+        ? await this.fetchRecipeDeltas(tenantId, sinceDate, entityManager)
         : [],
       recipeVersions:
         requestedTypes.has('recipeversions') ||
         requestedTypes.has('recipe_versions')
-          ? await this.fetchRecipeVersionDeltas(tenantId, sinceDate, now)
+          ? await this.fetchRecipeVersionDeltas(
+              tenantId,
+              sinceDate,
+              now,
+              entityManager,
+            )
           : [],
       users: requestedTypes.has('users')
-        ? await this.fetchUserDeltas(tenantId, sinceDate)
+        ? await this.fetchUserDeltas(tenantId, sinceDate, entityManager)
         : [],
       fiscalConfig,
     };
@@ -333,8 +354,11 @@ export class InboundSyncService {
   private async fetchProductDeltas(
     tenantId: string,
     sinceDate: Date | null,
+    entityManager?: EntityManager,
   ): Promise<InboundSyncProductDto[]> {
-    const qb = this.productRepository
+    const productRepository =
+      entityManager?.getRepository(Product) ?? this.productRepository;
+    const qb = productRepository
       .createQueryBuilder('product')
       .where('product.tenant_id = :tenantId', { tenantId });
 
@@ -353,7 +377,16 @@ export class InboundSyncService {
 
     const items = await qb.getMany();
     const now = new Date();
-    if (this.mappingVersionRepository?.manager) {
+    // The mapping-version read follows the same optional-availability rule as
+    // the injected repository itself: when a bound manager is supplied AND a
+    // mapping repository is configured, the read rides the transaction
+    // connection (already tenant-bound, so the session-scoped set_config
+    // workaround below must not run against the pooled global manager).
+    const mappingVersionRepository =
+      entityManager && this.mappingVersionRepository
+        ? entityManager.getRepository(ProductInventoryMappingVersion)
+        : this.mappingVersionRepository;
+    if (!entityManager && this.mappingVersionRepository?.manager) {
       try {
         await bindTenantContext(
           this.mappingVersionRepository.manager,
@@ -365,8 +398,8 @@ export class InboundSyncService {
         );
       }
     }
-    const mappings = this.mappingVersionRepository
-      ? await this.mappingVersionRepository
+    const mappings = mappingVersionRepository
+      ? await mappingVersionRepository
           .createQueryBuilder('m')
           .where('m.tenant_id = :tenantId', { tenantId })
           .andWhere('m.effective_at <= :now', { now })
@@ -403,8 +436,11 @@ export class InboundSyncService {
   private async fetchCatalogValueDeltas(
     tenantId: string,
     sinceDate: Date | null,
+    entityManager?: EntityManager,
   ): Promise<InboundSyncCatalogValueDto[]> {
-    const qb = this.catalogValueRepository
+    const catalogValueRepository =
+      entityManager?.getRepository(CatalogValue) ?? this.catalogValueRepository;
+    const qb = catalogValueRepository
       .createQueryBuilder('catalog')
       .where('catalog.tenant_id = :tenantId', { tenantId });
 
@@ -429,8 +465,11 @@ export class InboundSyncService {
   private async fetchInsumoDeltas(
     tenantId: string,
     sinceDate: Date | null,
+    entityManager?: EntityManager,
   ): Promise<InboundSyncInsumoDto[]> {
-    const qb = this.insumoRepository
+    const insumoRepository =
+      entityManager?.getRepository(Insumo) ?? this.insumoRepository;
+    const qb = insumoRepository
       .createQueryBuilder('insumo')
       .where('insumo.tenant_id = :tenantId', { tenantId });
 
@@ -459,8 +498,11 @@ export class InboundSyncService {
   private async fetchRecipeDeltas(
     tenantId: string,
     sinceDate: Date | null,
+    entityManager?: EntityManager,
   ): Promise<InboundSyncRecipeDto[]> {
-    const qb = this.recipeRepository
+    const recipeRepository =
+      entityManager?.getRepository(Recipe) ?? this.recipeRepository;
+    const qb = recipeRepository
       .createQueryBuilder('recipe')
       .where('recipe.tenant_id = :tenantId', { tenantId });
 
@@ -485,8 +527,14 @@ export class InboundSyncService {
     tenantId: string,
     sinceDate: Date | null,
     now: Date,
+    entityManager?: EntityManager,
   ): Promise<InboundSyncRecipeVersionDto[]> {
-    const qb = this.recipeVersionRepository
+    const recipeVersionRepository =
+      entityManager?.getRepository(RecipeVersion) ??
+      this.recipeVersionRepository;
+    const insumoRepository =
+      entityManager?.getRepository(Insumo) ?? this.insumoRepository;
+    const qb = recipeVersionRepository
       .createQueryBuilder('rv')
       .where('rv.tenant_id = :tenantId', { tenantId })
       .andWhere('rv.is_active = true')
@@ -521,8 +569,10 @@ export class InboundSyncService {
 
     const versionIds = items.map((rv) => rv.id);
     const versionIdSet = new Set(versionIds);
+    const recipeDetailRepository =
+      entityManager?.getRepository(RecipeDetail) ?? this.recipeDetailRepository;
     const components = versionIds.length
-      ? await this.recipeDetailRepository
+      ? await recipeDetailRepository
           .createQueryBuilder('detail')
           .where('detail.recipe_version_id IN (:...versionIds)', {
             versionIds,
@@ -549,7 +599,7 @@ export class InboundSyncService {
       ...new Set(components.map((component) => component.insumo_id)),
     ];
     if (componentInsumoIds.length) {
-      const componentInsumos = await this.insumoRepository
+      const componentInsumos = await insumoRepository
         .createQueryBuilder('componentInsumo')
         .where('componentInsumo.tenant_id = :tenantId', { tenantId })
         .andWhere('componentInsumo.id IN (:...componentInsumoIds)', {
@@ -611,8 +661,11 @@ export class InboundSyncService {
   private async fetchUserDeltas(
     tenantId: string,
     sinceDate: Date | null,
+    entityManager?: EntityManager,
   ): Promise<InboundSyncUserDto[]> {
-    const qb = this.userRepository
+    const userRepository =
+      entityManager?.getRepository(User) ?? this.userRepository;
+    const qb = userRepository
       .createQueryBuilder('user')
       .leftJoinAndSelect('user.security_profile', 'security_profile')
       .addSelect('security_profile.pin_hash')

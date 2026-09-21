@@ -6,6 +6,7 @@ import 'package:pos_app/data/models/activation/activation_check_result_local_ent
 import 'package:pos_app/data/ports/activation_sync_port.dart';
 import 'package:pos_app/data/services/activation_controlled_sale_runner.dart';
 import 'package:pos_app/data/services/activation_pre_offline_runner.dart';
+import 'package:pos_app/data/services/activation_priming_service.dart';
 import 'package:pos_app/data/services/activation_reconnect_sync_runner.dart';
 import 'package:pos_app/data/services/activation_session_service.dart';
 import 'package:pos_app/domain/models/user.dart';
@@ -18,6 +19,9 @@ class _MockActivationSessionService extends Mock
     implements ActivationSessionService {}
 
 class _MockAuthRepository extends Mock implements AuthRepository {}
+
+class _MockActivationPrimingService extends Mock
+    implements ActivationPrimingService {}
 
 ActivationAttemptLocalEntity _attemptEntity() =>
     const ActivationAttemptLocalEntity(
@@ -47,6 +51,7 @@ ActivationCheckResultLocalEntity _checkEntity(String code, String status) =>
 void main() {
   late _MockActivationSessionService sessionService;
   late _MockAuthRepository authRepository;
+  late _MockActivationPrimingService primingService;
   late ActivationSessionViewModel viewModel;
 
   const loggedInUser = User(
@@ -60,10 +65,22 @@ void main() {
   setUp(() {
     sessionService = _MockActivationSessionService();
     authRepository = _MockAuthRepository();
+    primingService = _MockActivationPrimingService();
     when(() => authRepository.getCurrentUser())
         .thenAnswer((_) async => loggedInUser);
+    when(() => primingService.primeTerminal()).thenAnswer(
+      (_) async => const ActivationPrimingResult(
+        status: 'OK',
+        appliedProducts: 0,
+        appliedCatalogValues: 0,
+        fiscalEnvelopePresent: false,
+        fiscalOutcome: null,
+        serverCurrentVersion: 7,
+      ),
+    );
     viewModel = ActivationSessionViewModel(
       sessionService: sessionService,
+      primingService: primingService,
       authRepository: authRepository,
     );
   });

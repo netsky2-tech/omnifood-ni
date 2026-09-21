@@ -55,6 +55,8 @@ import { OnboardingCatalogService } from './services/onboarding-catalog.service'
 import { OnboardingCatalogController } from './controllers/onboarding-catalog.controller';
 import { ActivationService } from './services/activation.service';
 import { ActivationController } from './controllers/activation.controller';
+import { TerminalPrimingService } from './services/terminal-priming.service';
+import { TerminalPrimingController } from './controllers/terminal-priming.controller';
 import { OnboardingTelemetryService } from './telemetry/onboarding-telemetry.service';
 import { OnboardingTelemetryController } from './controllers/onboarding-telemetry.controller';
 import { OnboardingRolloutController } from './controllers/onboarding-rollout.controller';
@@ -138,6 +140,7 @@ export const getRequiredOnboardingJwtSecret = (
     OnboardingSessionController,
     OnboardingCatalogController,
     ActivationController,
+    TerminalPrimingController,
     OnboardingTelemetryController,
     OnboardingRolloutController,
   ],
@@ -156,6 +159,7 @@ export const getRequiredOnboardingJwtSecret = (
     OnboardingIdempotencyCoordinator,
     OnboardingCatalogService,
     ActivationService,
+    TerminalPrimingService,
     OnboardingTelemetryService,
     OnboardingCustomerSaleObserver,
     OnboardingFeatureRolloutService,
