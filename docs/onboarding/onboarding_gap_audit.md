@@ -440,7 +440,9 @@ ProductEntity (SQLite 'products')
 
 # 13. Auditoría de terminal/hardware readiness (Sunmi V2s)
 
-Basado en `docs/operations/sunmi_v2s_hardware_verification_checklist.md` y la arquitectura de `apps/pos_app`:
+> **Corrección (2026-09-21):** esta sección se redactó asumiendo un Sunmi V2s con impresora Seiko de 58 mm y 32 columnas. El terminal de flota real es un **MIRAY Q80/iPOS** (Android 12) con perfil de **80 mm / 48 columnas**; los 58 mm siguen siendo un perfil válido para otros terminales. Los hallazgos y clasificaciones de abajo se conservan tal como fueron emitidos. La referencia operativa vigente es `docs/operations/q80_ipos_hardware_verification_checklist.md`.
+
+Basado en `docs/operations/q80_ipos_hardware_verification_checklist.md` y la arquitectura de `apps/pos_app`:
 
 | Validación de Hardware | Clasificación | Motivo |
 |---|:---:|---|
