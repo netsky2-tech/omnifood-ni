@@ -170,13 +170,23 @@ class _$AppDatabase extends AppDatabase {
 
   FulfillmentPersistenceDao? _fulfillmentPersistenceDaoInstance;
 
+  OhacPolicyEpochDao? _ohacPolicyEpochDaoInstance;
+
+  OhacPolicyEntryDao? _ohacPolicyEntryDaoInstance;
+
+  OhacTerminalStateDao? _ohacTerminalStateDaoInstance;
+
+  OhacAttemptStateDao? _ohacAttemptStateDaoInstance;
+
+  OhacLocalEventDao? _ohacLocalEventDaoInstance;
+
   Future<sqflite.Database> open(
     String path,
     List<Migration> migrations, [
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 53,
+      version: 54,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -310,7 +320,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `human_auth_policy_entries` (`tenant_id` TEXT NOT NULL, `terminal_id` TEXT NOT NULL, `sequence` INTEGER NOT NULL, `user_id` TEXT NOT NULL, `status` TEXT NOT NULL, `role` TEXT NOT NULL, `permissions` TEXT NOT NULL, `verifier_algorithm` TEXT NOT NULL, `verifier_format_version` TEXT NOT NULL, `verifier_encoded` TEXT NOT NULL, `attempt_reset_generation` TEXT NOT NULL, PRIMARY KEY (`tenant_id`, `terminal_id`, `sequence`, `user_id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `human_auth_terminal_state` (`tenant_id` TEXT NOT NULL, `terminal_id` TEXT NOT NULL, `state` TEXT NOT NULL, `active_sequence` INTEGER NOT NULL, `active_digest` TEXT NOT NULL, `revision` INTEGER NOT NULL, `updated_at` TEXT NOT NULL, PRIMARY KEY (`tenant_id`, `terminal_id`))');
+            'CREATE TABLE IF NOT EXISTS `human_auth_terminal_state` (`tenant_id` TEXT NOT NULL, `terminal_id` TEXT NOT NULL, `state` TEXT NOT NULL, `active_sequence` INTEGER NOT NULL, `active_digest` TEXT NOT NULL, `candidate_sequence` INTEGER NOT NULL, `candidate_digest` TEXT NOT NULL, `server_floor_sequence` INTEGER NOT NULL, `server_floor_digest` TEXT NOT NULL, `negotiated_pos_build` TEXT NOT NULL, `negotiated_backend_build` TEXT NOT NULL, `negotiated_policy_schema` TEXT NOT NULL, `negotiated_assertion_schema` TEXT NOT NULL, `integrity_classification` TEXT NOT NULL, `local_authorization_sequence` INTEGER NOT NULL, `revision` INTEGER NOT NULL, `updated_at` TEXT NOT NULL, PRIMARY KEY (`tenant_id`, `terminal_id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `human_auth_attempt_state` (`tenant_id` TEXT NOT NULL, `terminal_id` TEXT NOT NULL, `user_id` TEXT NOT NULL, `failure_timestamps` TEXT NOT NULL, `locked_until` TEXT, `reset_generation` TEXT NOT NULL, `local_authorization_sequence` INTEGER NOT NULL, `revision` INTEGER NOT NULL, `updated_at` TEXT NOT NULL, PRIMARY KEY (`tenant_id`, `terminal_id`, `user_id`))');
         await database.execute(
@@ -668,6 +678,36 @@ class _$AppDatabase extends AppDatabase {
   FulfillmentPersistenceDao get fulfillmentPersistenceDao {
     return _fulfillmentPersistenceDaoInstance ??=
         _$FulfillmentPersistenceDao(database, changeListener);
+  }
+
+  @override
+  OhacPolicyEpochDao get ohacPolicyEpochDao {
+    return _ohacPolicyEpochDaoInstance ??=
+        _$OhacPolicyEpochDao(database, changeListener);
+  }
+
+  @override
+  OhacPolicyEntryDao get ohacPolicyEntryDao {
+    return _ohacPolicyEntryDaoInstance ??=
+        _$OhacPolicyEntryDao(database, changeListener);
+  }
+
+  @override
+  OhacTerminalStateDao get ohacTerminalStateDao {
+    return _ohacTerminalStateDaoInstance ??=
+        _$OhacTerminalStateDao(database, changeListener);
+  }
+
+  @override
+  OhacAttemptStateDao get ohacAttemptStateDao {
+    return _ohacAttemptStateDaoInstance ??=
+        _$OhacAttemptStateDao(database, changeListener);
+  }
+
+  @override
+  OhacLocalEventDao get ohacLocalEventDao {
+    return _ohacLocalEventDaoInstance ??=
+        _$OhacLocalEventDao(database, changeListener);
   }
 }
 
@@ -7498,6 +7538,419 @@ class _$FulfillmentPersistenceDao extends FulfillmentPersistenceDao {
   @override
   Future<void> insertOutboxEvent(OutboxEventEntity event) async {
     await _outboxEventEntityInsertionAdapter.insert(
+        event, OnConflictStrategy.abort);
+  }
+}
+
+class _$OhacPolicyEpochDao extends OhacPolicyEpochDao {
+  _$OhacPolicyEpochDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _ohacPolicyEpochEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'human_auth_policy_epochs',
+            (OhacPolicyEpochEntity item) => <String, Object?>{
+                  'tenant_id': item.tenantId,
+                  'terminal_id': item.terminalId,
+                  'sequence': item.sequence,
+                  'digest': item.digest,
+                  'previous_sequence': item.previousSequence,
+                  'previous_digest': item.previousDigest,
+                  'schema': item.schema,
+                  'target_pos_build': item.targetPosBuild,
+                  'publisher_backend_build': item.publisherBackendBuild,
+                  'minimum_assertion_schema': item.minimumAssertionSchema,
+                  'payload': item.payload,
+                  'received_at': item.receivedAt
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<OhacPolicyEpochEntity>
+      _ohacPolicyEpochEntityInsertionAdapter;
+
+  @override
+  Future<OhacPolicyEpochEntity?> findEpoch(
+    String tenantId,
+    String terminalId,
+    int sequence,
+  ) async {
+    return _queryAdapter.query(
+        'SELECT * FROM human_auth_policy_epochs WHERE tenant_id = ?1 AND terminal_id = ?2 AND sequence = ?3 LIMIT 1',
+        mapper: (Map<String, Object?> row) => OhacPolicyEpochEntity(tenantId: row['tenant_id'] as String, terminalId: row['terminal_id'] as String, sequence: row['sequence'] as int, digest: row['digest'] as String, previousSequence: row['previous_sequence'] as int, previousDigest: row['previous_digest'] as String, schema: row['schema'] as String, targetPosBuild: row['target_pos_build'] as String, publisherBackendBuild: row['publisher_backend_build'] as String, minimumAssertionSchema: row['minimum_assertion_schema'] as String, payload: row['payload'] as String, receivedAt: row['received_at'] as String),
+        arguments: [tenantId, terminalId, sequence]);
+  }
+
+  @override
+  Future<OhacPolicyEpochEntity?> findNewestEpoch(
+    String tenantId,
+    String terminalId,
+  ) async {
+    return _queryAdapter.query(
+        'SELECT * FROM human_auth_policy_epochs WHERE tenant_id = ?1 AND terminal_id = ?2 ORDER BY sequence DESC LIMIT 1',
+        mapper: (Map<String, Object?> row) => OhacPolicyEpochEntity(tenantId: row['tenant_id'] as String, terminalId: row['terminal_id'] as String, sequence: row['sequence'] as int, digest: row['digest'] as String, previousSequence: row['previous_sequence'] as int, previousDigest: row['previous_digest'] as String, schema: row['schema'] as String, targetPosBuild: row['target_pos_build'] as String, publisherBackendBuild: row['publisher_backend_build'] as String, minimumAssertionSchema: row['minimum_assertion_schema'] as String, payload: row['payload'] as String, receivedAt: row['received_at'] as String),
+        arguments: [tenantId, terminalId]);
+  }
+
+  @override
+  Future<List<OhacPolicyEpochEntity>> findEpochsAfter(
+    String tenantId,
+    String terminalId,
+    int sequence,
+  ) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM human_auth_policy_epochs WHERE tenant_id = ?1 AND terminal_id = ?2 AND sequence > ?3 ORDER BY sequence ASC',
+        mapper: (Map<String, Object?> row) => OhacPolicyEpochEntity(tenantId: row['tenant_id'] as String, terminalId: row['terminal_id'] as String, sequence: row['sequence'] as int, digest: row['digest'] as String, previousSequence: row['previous_sequence'] as int, previousDigest: row['previous_digest'] as String, schema: row['schema'] as String, targetPosBuild: row['target_pos_build'] as String, publisherBackendBuild: row['publisher_backend_build'] as String, minimumAssertionSchema: row['minimum_assertion_schema'] as String, payload: row['payload'] as String, receivedAt: row['received_at'] as String),
+        arguments: [tenantId, terminalId, sequence]);
+  }
+
+  @override
+  Future<void> insertEpoch(OhacPolicyEpochEntity epoch) async {
+    await _ohacPolicyEpochEntityInsertionAdapter.insert(
+        epoch, OnConflictStrategy.abort);
+  }
+}
+
+class _$OhacPolicyEntryDao extends OhacPolicyEntryDao {
+  _$OhacPolicyEntryDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _ohacPolicyEntryEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'human_auth_policy_entries',
+            (OhacPolicyEntryEntity item) => <String, Object?>{
+                  'tenant_id': item.tenantId,
+                  'terminal_id': item.terminalId,
+                  'sequence': item.sequence,
+                  'user_id': item.userId,
+                  'status': item.status,
+                  'role': item.role,
+                  'permissions': item.permissions,
+                  'verifier_algorithm': item.verifierAlgorithm,
+                  'verifier_format_version': item.verifierFormatVersion,
+                  'verifier_encoded': item.verifierEncoded,
+                  'attempt_reset_generation': item.attemptResetGeneration
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<OhacPolicyEntryEntity>
+      _ohacPolicyEntryEntityInsertionAdapter;
+
+  @override
+  Future<List<OhacPolicyEntryEntity>> findEntries(
+    String tenantId,
+    String terminalId,
+    int sequence,
+  ) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM human_auth_policy_entries WHERE tenant_id = ?1 AND terminal_id = ?2 AND sequence = ?3 ORDER BY user_id ASC',
+        mapper: (Map<String, Object?> row) => OhacPolicyEntryEntity(tenantId: row['tenant_id'] as String, terminalId: row['terminal_id'] as String, sequence: row['sequence'] as int, userId: row['user_id'] as String, status: row['status'] as String, role: row['role'] as String, permissions: row['permissions'] as String, verifierAlgorithm: row['verifier_algorithm'] as String, verifierFormatVersion: row['verifier_format_version'] as String, verifierEncoded: row['verifier_encoded'] as String, attemptResetGeneration: row['attempt_reset_generation'] as String),
+        arguments: [tenantId, terminalId, sequence]);
+  }
+
+  @override
+  Future<OhacPolicyEntryEntity?> findEntryForUser(
+    String tenantId,
+    String terminalId,
+    int sequence,
+    String userId,
+  ) async {
+    return _queryAdapter.query(
+        'SELECT * FROM human_auth_policy_entries WHERE tenant_id = ?1 AND terminal_id = ?2 AND sequence = ?3 AND user_id = ?4 LIMIT 1',
+        mapper: (Map<String, Object?> row) => OhacPolicyEntryEntity(tenantId: row['tenant_id'] as String, terminalId: row['terminal_id'] as String, sequence: row['sequence'] as int, userId: row['user_id'] as String, status: row['status'] as String, role: row['role'] as String, permissions: row['permissions'] as String, verifierAlgorithm: row['verifier_algorithm'] as String, verifierFormatVersion: row['verifier_format_version'] as String, verifierEncoded: row['verifier_encoded'] as String, attemptResetGeneration: row['attempt_reset_generation'] as String),
+        arguments: [tenantId, terminalId, sequence, userId]);
+  }
+
+  @override
+  Future<void> insertEntries(List<OhacPolicyEntryEntity> entries) async {
+    await _ohacPolicyEntryEntityInsertionAdapter.insertList(
+        entries, OnConflictStrategy.abort);
+  }
+}
+
+class _$OhacTerminalStateDao extends OhacTerminalStateDao {
+  _$OhacTerminalStateDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _ohacTerminalStateEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'human_auth_terminal_state',
+            (OhacTerminalStateEntity item) => <String, Object?>{
+                  'tenant_id': item.tenantId,
+                  'terminal_id': item.terminalId,
+                  'state': item.state,
+                  'active_sequence': item.activeSequence,
+                  'active_digest': item.activeDigest,
+                  'candidate_sequence': item.candidateSequence,
+                  'candidate_digest': item.candidateDigest,
+                  'server_floor_sequence': item.serverFloorSequence,
+                  'server_floor_digest': item.serverFloorDigest,
+                  'negotiated_pos_build': item.negotiatedPosBuild,
+                  'negotiated_backend_build': item.negotiatedBackendBuild,
+                  'negotiated_policy_schema': item.negotiatedPolicySchema,
+                  'negotiated_assertion_schema': item.negotiatedAssertionSchema,
+                  'integrity_classification': item.integrityClassification,
+                  'local_authorization_sequence':
+                      item.localAuthorizationSequence,
+                  'revision': item.revision,
+                  'updated_at': item.updatedAt
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<OhacTerminalStateEntity>
+      _ohacTerminalStateEntityInsertionAdapter;
+
+  @override
+  Future<OhacTerminalStateEntity?> findTerminalState(
+    String tenantId,
+    String terminalId,
+  ) async {
+    return _queryAdapter.query(
+        'SELECT * FROM human_auth_terminal_state WHERE tenant_id = ?1 AND terminal_id = ?2 LIMIT 1',
+        mapper: (Map<String, Object?> row) => OhacTerminalStateEntity(tenantId: row['tenant_id'] as String, terminalId: row['terminal_id'] as String, state: row['state'] as String, activeSequence: row['active_sequence'] as int, activeDigest: row['active_digest'] as String, candidateSequence: row['candidate_sequence'] as int, candidateDigest: row['candidate_digest'] as String, serverFloorSequence: row['server_floor_sequence'] as int, serverFloorDigest: row['server_floor_digest'] as String, negotiatedPosBuild: row['negotiated_pos_build'] as String, negotiatedBackendBuild: row['negotiated_backend_build'] as String, negotiatedPolicySchema: row['negotiated_policy_schema'] as String, negotiatedAssertionSchema: row['negotiated_assertion_schema'] as String, integrityClassification: row['integrity_classification'] as String, localAuthorizationSequence: row['local_authorization_sequence'] as int, revision: row['revision'] as int, updatedAt: row['updated_at'] as String),
+        arguments: [tenantId, terminalId]);
+  }
+
+  @override
+  Future<int?> receiveEpoch(
+    String tenantId,
+    String terminalId,
+    int expectedRevision,
+    int candidateSequence,
+    String candidateDigest,
+    String negotiatedPosBuild,
+    String negotiatedBackendBuild,
+    String negotiatedPolicySchema,
+    String negotiatedAssertionSchema,
+    String newUpdatedAt,
+  ) async {
+    return _queryAdapter.query(
+        'UPDATE human_auth_terminal_state SET state = \'RECEIVE_PENDING\', candidate_sequence = ?4, candidate_digest = ?5, negotiated_pos_build = ?6, negotiated_backend_build = ?7, negotiated_policy_schema = ?8, negotiated_assertion_schema = ?9, revision = revision + 1, updated_at = ?10 WHERE tenant_id = ?1 AND terminal_id = ?2 AND revision = ?3',
+        mapper: (Map<String, Object?> row) => row.values.first as int,
+        arguments: [
+          tenantId,
+          terminalId,
+          expectedRevision,
+          candidateSequence,
+          candidateDigest,
+          negotiatedPosBuild,
+          negotiatedBackendBuild,
+          negotiatedPolicySchema,
+          negotiatedAssertionSchema,
+          newUpdatedAt
+        ]);
+  }
+
+  @override
+  Future<int?> submitAcknowledgement(
+    String tenantId,
+    String terminalId,
+    int expectedRevision,
+    String newUpdatedAt,
+  ) async {
+    return _queryAdapter.query(
+        'UPDATE human_auth_terminal_state SET state = \'ACK_SUBMITTING\', revision = revision + 1, updated_at = ?4 WHERE tenant_id = ?1 AND terminal_id = ?2 AND revision = ?3',
+        mapper: (Map<String, Object?> row) => row.values.first as int,
+        arguments: [tenantId, terminalId, expectedRevision, newUpdatedAt]);
+  }
+
+  @override
+  Future<int?> confirmAcknowledgement(
+    String tenantId,
+    String terminalId,
+    int expectedRevision,
+    String newUpdatedAt,
+  ) async {
+    return _queryAdapter.query(
+        'UPDATE human_auth_terminal_state SET state = \'ACTIVE\', active_sequence = candidate_sequence, active_digest = candidate_digest, candidate_sequence = 0, candidate_digest = \'\', revision = revision + 1, updated_at = ?4 WHERE tenant_id = ?1 AND terminal_id = ?2 AND revision = ?3',
+        mapper: (Map<String, Object?> row) => row.values.first as int,
+        arguments: [tenantId, terminalId, expectedRevision, newUpdatedAt]);
+  }
+
+  @override
+  Future<int?> recordServerFloor(
+    String tenantId,
+    String terminalId,
+    int expectedRevision,
+    int serverFloorSequence,
+    String serverFloorDigest,
+    String newUpdatedAt,
+  ) async {
+    return _queryAdapter.query(
+        'UPDATE human_auth_terminal_state SET server_floor_sequence = ?4, server_floor_digest = ?5, revision = revision + 1, updated_at = ?6 WHERE tenant_id = ?1 AND terminal_id = ?2 AND revision = ?3',
+        mapper: (Map<String, Object?> row) => row.values.first as int,
+        arguments: [
+          tenantId,
+          terminalId,
+          expectedRevision,
+          serverFloorSequence,
+          serverFloorDigest,
+          newUpdatedAt
+        ]);
+  }
+
+  @override
+  Future<int?> markIntegrityLoss(
+    String tenantId,
+    String terminalId,
+    int expectedRevision,
+    String integrityClassification,
+    String newUpdatedAt,
+  ) async {
+    return _queryAdapter.query(
+        'UPDATE human_auth_terminal_state SET state = \'INTEGRITY_LOSS\', integrity_classification = ?4, revision = revision + 1, updated_at = ?5 WHERE tenant_id = ?1 AND terminal_id = ?2 AND revision = ?3',
+        mapper: (Map<String, Object?> row) => row.values.first as int,
+        arguments: [
+          tenantId,
+          terminalId,
+          expectedRevision,
+          integrityClassification,
+          newUpdatedAt
+        ]);
+  }
+
+  @override
+  Future<void> insertTerminalState(OhacTerminalStateEntity state) async {
+    await _ohacTerminalStateEntityInsertionAdapter.insert(
+        state, OnConflictStrategy.abort);
+  }
+}
+
+class _$OhacAttemptStateDao extends OhacAttemptStateDao {
+  _$OhacAttemptStateDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _ohacAttemptStateEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'human_auth_attempt_state',
+            (OhacAttemptStateEntity item) => <String, Object?>{
+                  'tenant_id': item.tenantId,
+                  'terminal_id': item.terminalId,
+                  'user_id': item.userId,
+                  'failure_timestamps': item.failureTimestamps,
+                  'locked_until': item.lockedUntil,
+                  'reset_generation': item.resetGeneration,
+                  'local_authorization_sequence':
+                      item.localAuthorizationSequence,
+                  'revision': item.revision,
+                  'updated_at': item.updatedAt
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<OhacAttemptStateEntity>
+      _ohacAttemptStateEntityInsertionAdapter;
+
+  @override
+  Future<OhacAttemptStateEntity?> findAttemptState(
+    String tenantId,
+    String terminalId,
+    String userId,
+  ) async {
+    return _queryAdapter.query(
+        'SELECT * FROM human_auth_attempt_state WHERE tenant_id = ?1 AND terminal_id = ?2 AND user_id = ?3 LIMIT 1',
+        mapper: (Map<String, Object?> row) => OhacAttemptStateEntity(tenantId: row['tenant_id'] as String, terminalId: row['terminal_id'] as String, userId: row['user_id'] as String, failureTimestamps: row['failure_timestamps'] as String, lockedUntil: row['locked_until'] as String?, resetGeneration: row['reset_generation'] as String, localAuthorizationSequence: row['local_authorization_sequence'] as int, revision: row['revision'] as int, updatedAt: row['updated_at'] as String),
+        arguments: [tenantId, terminalId, userId]);
+  }
+
+  @override
+  Future<int?> updateAttemptStateIfRevisionMatches(
+    String tenantId,
+    String terminalId,
+    String userId,
+    int expectedRevision,
+    String newFailureTimestamps,
+    String newLockedUntil,
+    String newResetGeneration,
+    int newLocalAuthorizationSequence,
+    String newUpdatedAt,
+  ) async {
+    return _queryAdapter.query(
+        'UPDATE human_auth_attempt_state SET failure_timestamps = ?5, locked_until = NULLIF(?6, \'\'), reset_generation = ?7, local_authorization_sequence = ?8, revision = revision + 1, updated_at = ?9 WHERE tenant_id = ?1 AND terminal_id = ?2 AND user_id = ?3 AND revision = ?4',
+        mapper: (Map<String, Object?> row) => row.values.first as int,
+        arguments: [
+          tenantId,
+          terminalId,
+          userId,
+          expectedRevision,
+          newFailureTimestamps,
+          newLockedUntil,
+          newResetGeneration,
+          newLocalAuthorizationSequence,
+          newUpdatedAt
+        ]);
+  }
+
+  @override
+  Future<void> insertAttemptState(OhacAttemptStateEntity state) async {
+    await _ohacAttemptStateEntityInsertionAdapter.insert(
+        state, OnConflictStrategy.abort);
+  }
+}
+
+class _$OhacLocalEventDao extends OhacLocalEventDao {
+  _$OhacLocalEventDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _ohacLocalEventEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'human_auth_local_events',
+            (OhacLocalEventEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'tenant_id': item.tenantId,
+                  'terminal_id': item.terminalId,
+                  'event_type': item.eventType,
+                  'sequence': item.sequence,
+                  'payload': item.payload,
+                  'created_at': item.createdAt
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<OhacLocalEventEntity>
+      _ohacLocalEventEntityInsertionAdapter;
+
+  @override
+  Future<List<OhacLocalEventEntity>> findEventsForTerminal(
+    String tenantId,
+    String terminalId,
+  ) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM human_auth_local_events WHERE tenant_id = ?1 AND terminal_id = ?2 ORDER BY created_at ASC, id ASC',
+        mapper: (Map<String, Object?> row) => OhacLocalEventEntity(id: row['id'] as String, tenantId: row['tenant_id'] as String, terminalId: row['terminal_id'] as String, eventType: row['event_type'] as String, sequence: row['sequence'] as int, payload: row['payload'] as String, createdAt: row['created_at'] as String),
+        arguments: [tenantId, terminalId]);
+  }
+
+  @override
+  Future<void> appendEvent(OhacLocalEventEntity event) async {
+    await _ohacLocalEventEntityInsertionAdapter.insert(
         event, OnConflictStrategy.abort);
   }
 }

@@ -2397,6 +2397,47 @@ final migration52_53 = Migration(52, 53, (database) async {
   await _ensureHumanAuthorizationLocalIndexesAndTriggers(database);
 });
 
+final migration53_54 = Migration(53, 54, (database) async {
+  // OHAC terminal-state extension (design §4.2): the candidate pair, the
+  // server-confirmed floor, the negotiated builds and schemas, the integrity
+  // classification, and the terminal-local authorization sequence. Additive
+  // only; the other OHAC tables are untouched.
+  //
+  // "Absent" is a sentinel per column, not NULL: 0 for sequences that start
+  // at 1, '' for digests and never-negotiated strings, and 0 / 'GENESIS' for
+  // the floor of a terminal that has acknowledged nothing. No CHECK
+  // constraint ties the sentinel pairs together: SQLite's ALTER TABLE ADD
+  // COLUMN cannot add one without a full table rebuild, and a Floor @Entity
+  // DDL cannot express one either, so a CHECK would exist only on the
+  // upgrade path and reintroduce the install-versus-upgrade drift that
+  // 0264fde had to repair. The pairing is a documented invariant enforced by
+  // tests instead.
+  //
+  // Each ADD COLUMN is guarded by a PRAGMA check so the migration is safe to
+  // re-run; SQLite has no ADD COLUMN IF NOT EXISTS (same pattern as
+  // migration47_48).
+  Future<void> addColumn(String column) async {
+    final columns = await database.rawQuery('PRAGMA table_info(human_auth_terminal_state)');
+    if (columns.any((row) => row['name'] == column.split(' ').first)) {
+      return;
+    }
+    await database.execute(
+      'ALTER TABLE human_auth_terminal_state ADD COLUMN $column',
+    );
+  }
+
+  await addColumn('candidate_sequence INTEGER NOT NULL DEFAULT 0');
+  await addColumn("candidate_digest TEXT NOT NULL DEFAULT ''");
+  await addColumn('server_floor_sequence INTEGER NOT NULL DEFAULT 0');
+  await addColumn("server_floor_digest TEXT NOT NULL DEFAULT 'GENESIS'");
+  await addColumn("negotiated_pos_build TEXT NOT NULL DEFAULT ''");
+  await addColumn("negotiated_backend_build TEXT NOT NULL DEFAULT ''");
+  await addColumn("negotiated_policy_schema TEXT NOT NULL DEFAULT ''");
+  await addColumn("negotiated_assertion_schema TEXT NOT NULL DEFAULT ''");
+  await addColumn("integrity_classification TEXT NOT NULL DEFAULT ''");
+  await addColumn('local_authorization_sequence INTEGER NOT NULL DEFAULT 0');
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -2441,6 +2482,7 @@ final allMigrations = [
   migration50_51,
   migration51_52,
   migration52_53,
+  migration53_54,
 ];
 
 /// Catalog mapping identity is additive: historical products remain usable.

@@ -98,13 +98,18 @@ import 'package:pos_app/data/models/kitchen/kitchen_order_entity.dart';
 import 'package:pos_app/data/models/kitchen/kitchen_order_item_entity.dart';
 import 'package:pos_app/data/models/inventory/authority_projection_entities.dart';
 import 'package:pos_app/data/daos/inventory/authority_projection_dao.dart';
+import '../daos/human_authorization/ohac_policy_epoch_dao.dart';
+import '../daos/human_authorization/ohac_policy_entry_dao.dart';
+import '../daos/human_authorization/ohac_terminal_state_dao.dart';
+import '../daos/human_authorization/ohac_attempt_state_dao.dart';
+import '../daos/human_authorization/ohac_local_event_dao.dart';
 
 import 'package:pos_app/data/models/human_authorization/ohac_delivery_entities.dart';
 
 part 'app_database.g.dart'; // generated code
 
 @Database(
-  version: 53,
+  version: 54,
   entities: [
     UserEntity,
     SecurityProfileEntity,
@@ -220,4 +225,9 @@ abstract class AppDatabase extends FloorDatabase {
   AuthorityProjectionDao get authorityProjectionDao;
   FulfillmentTopologyDao get fulfillmentTopologyDao;
   FulfillmentPersistenceDao get fulfillmentPersistenceDao;
+  OhacPolicyEpochDao get ohacPolicyEpochDao;
+  OhacPolicyEntryDao get ohacPolicyEntryDao;
+  OhacTerminalStateDao get ohacTerminalStateDao;
+  OhacAttemptStateDao get ohacAttemptStateDao;
+  OhacLocalEventDao get ohacLocalEventDao;
 }
