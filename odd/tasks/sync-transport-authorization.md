@@ -8,24 +8,26 @@ Define and enforce, per route, which transport authorizes a POS request — devi
 
 Two open defects are the same missing contract:
 
-- **Issue #445.** `POST /inventory/movements/sync`, `POST /inventory/shrinkage` and `POST /inventory/count-sessions` carry no guard at all, and the backend registers no global `APP_GUARD`. `GetTenantId` resolves `devicePrincipal?.tenantId ?? user?.tenant_id`, so those handlers run with `tenantId: undefined`.
-- **Issue #314.** `SyncService` sends every request through the device-only Dio, whose interceptor attaches a bearer only to `/v1/sync/*`. The inventory routes it calls are human-guarded, so they answer 401.
+- **Issue #445.** `POST /inventory/movements/sync`, `POST /inventory/shrinkage` and `POST /inventory/count-sessions` originally carried no authentication guard, and the backend registers no global `APP_GUARD`. The first two were open; `count-sessions` was nevertheless rejected by the class-level `TenantInterceptor` because no authenticated principal supplied a tenant.
+- **Issue #314.** `SyncService` sends every request through the device-only Dio, whose interceptor originally attached a bearer only to `/v1/sync/*`. The inventory routes it calls therefore answered 401 unless each route was explicitly classified and allowlisted for device transport.
 
-The consequence is not a routing detail. Measured on `main` at `8e489ab`:
+The original route inventory was recorded on `main` at `8e489ab`:
 
-| Route | Guard today | Real outcome |
+| Route | Guard at inventory time | Recorded outcome |
 |---|---|---|
 | `/v1/sync/*` (all) | `SyncTransportGuard` | works |
 | `/inventory/purchases`, `/recipes/versions`, `/production-orders/close`, `/regularization/sync` | human | 401 |
 | `GET /inventory/alerts` | human | 401 |
 | `POST /inventory/alerts/{id}/lifecycle` | no such backend route | 404 |
-| `POST /inventory/count-sessions` | none | 2xx with `tenantId: undefined` |
+| `POST /inventory/count-sessions` | none | originally recorded as 2xx with `tenantId: undefined`; corrected below |
 | `POST /inventory/movements/sync`, `/inventory/shrinkage` | none | open, no caller |
+
+Correction, 2026-09-21: the `count-sessions` row was inferred incorrectly from missing guard metadata. The controller's class-level `TenantInterceptor` fails closed when neither `devicePrincipal.tenantId` nor `user.tenant_id` exists. Its focused spec proves that behavior, while the existing route e2e substitutes `TestTenantInterceptor` and injects a human tenant, so its 201 did not prove the production route was open. The actual defect is that the POS sends this count document through the device Dio without a bearer, so the route cannot complete through production transport.
 
 Two aggravating facts:
 
 1. **A pending recipe blocks sales.** The recipe domain runs before the sales domain in the sync pass, and `_runDomain` sets `_authBlocked` on the first 401/403 and skips every later domain for the rest of that pass. The recipe 401 therefore also suppresses the device-authoritative `/v1/sync/batch` sales path.
-2. **`count-sessions` works only because it is open.** It is the only inventory write the POS completes today. Guarding it alone converts a security hole into a functional regression and trips the same cascade.
+2. **`count-sessions` has no satisfiable transport contract.** It is emitted by the background device sync pass, but the POS interceptor does not attach a device bearer and no human session is guaranteed. Adding a guard without the matching POS transport would preserve the 401 and trip the same cascade.
 
 ## Why
 
@@ -73,7 +75,7 @@ The classification question is **who transmits, not who authored**. Inventory do
 
 ### ST-01 — Guard the two routes with no caller
 
-Status: complete — work-unit commit `4747ba9` on branch `feat/sync-transport-authorization`. Not yet merged.
+Status: complete — work-unit commit `4747ba9`, merged via PR #475.
 
 - [x] Apply `SyncTransportGuard` plus `@RequireSyncScopes('sync:push')` to `POST /inventory/movements/sync` and `POST /inventory/shrinkage`.
 - [x] Bind the tenant and terminal from the device principal, never from a human user.
@@ -99,7 +101,7 @@ Two rules follow for the rest of this feature, both stated as requirements in De
 
 ### ST-02 — Pin the transport contract with a registry test
 
-Status: complete — work-unit commits `2784109` (the invoice fix it found) and `d380cf9` (the registry) on branch `feat/sync-transport-registry`. Not yet merged.
+Status: complete — work-unit commits `2784109` (the invoice fix it found) and `d380cf9` (the registry), merged via PR #477.
 
 - [x] Add a registry test that enumerates the application's real route table and fails when a route carries no guard and is not declared public.
 - [x] Record the transport class per route as data, not prose, so drift fails the test rather than a review.
@@ -123,14 +125,14 @@ Final state: full unit suite 249 suites and 2318 tests passing, full e2e 50 suit
 
 ### ST-03 — Move the inventory document writes to device transport
 
-Status: pending
+Status: complete — work-unit commits `ded9420` (backend) and `61c6184` (POS), merged via PR #479 (`58ce0dc`); issue #478 closed.
 
 Split from the original scope after inspection: `POST /inventory/regularization/sync` moved to its own unit (ST-06) because its actor derivation is not a simple guard swap. `regularization.controller.ts` derives the actor as `request.user?.sub || request.user?.id || 'unknown-user'` and the role as `request.user?.role || 'manager'`. Those are fail-open defaults that only make sense with a human session; over device transport they would fabricate an actor and a role. That needs its own treatment and its own review, so it does not ride along here.
 
-- [ ] Move `POST /inventory/purchases`, `POST /inventory/recipes/versions` and `POST /inventory/production-orders/close` from the human guards to `SyncTransportGuard` with `sync:push`.
-- [ ] Bind the tenant and terminal from the device principal and stop reading the human user.
-- [ ] Declare, in code and in this record, the actor-authorization gap this creates and its dependency on DSI-6, so the removal of `AuthoritativeCurrentUserGuard` is visible rather than implicit.
-- [ ] Extend the POS device interceptor or the route paths so the device bearer is attached to these calls.
+- [x] Move `POST /inventory/purchases`, `POST /inventory/recipes/versions` and `POST /inventory/production-orders/close` from the human guards to `SyncTransportGuard` with `sync:push`.
+- [x] Bind the tenant and terminal from the device principal and stop reading the human user.
+- [x] Declare, in code and in this record, the actor-authorization gap this creates and its dependency on DSI-6, so the removal of `AuthoritativeCurrentUserGuard` is visible rather than implicit.
+- [x] Extend the POS device interceptor or the route paths so the device bearer is attached to these calls.
 
 Acceptance criteria:
 - The POS completes these writes through device transport with no human session present.
@@ -142,7 +144,7 @@ Checks:
 - POS tests asserting the client selection per route.
 - `npm run build`, `flutter analyze`, `git diff --check`.
 
-Evidence for ST-03 — work-unit commits `ded9420` (backend) and `61c6184` (POS) on branch `feat/inventory-document-transport`, closing issue #478. Not yet merged.
+Evidence for ST-03 — work-unit commits `ded9420` (backend) and `61c6184` (POS), merged via PR #479 as `58ce0dc`; issue #478 closed.
 
 Backend. The three handlers carry `SyncTransportGuard` with `@RequireSyncScopes('sync:push')`; the `@Roles` decorators and all three human guards are gone from them. Tenant arrives through the device-principal-first `GetTenantId`, and the production-close handler binds its terminal from `devicePrincipal.deviceId`, which is the precedent already set by `inbound-sync.service.ts`, so no new claim plumbing was needed. The DSI-6/OHAC actor-authorization gap is declared in a visible comment at each of the three guard-removal points.
 
@@ -175,23 +177,39 @@ Checks:
 
 Evidence: pending.
 
-### ST-04 — Close the count-session hole together with its transport
+### ST-04 — Complete the count-session device transport
 
-Status: pending
-Depends on: ST-03
+Status: implemented and verified on branch `feat/count-session-device-transport`; work-unit commit pending.
+Depends on: ST-03 (satisfied by PR #479)
+Route: delegated direct — the 4-file mapping and multi-file writer triggers applied.
+Actual size: 558 authored changed lines excluding this task record: 31 production and 527 test lines, of which the real-database RLS contract contributes 468. Founder authorized one atomic PR with a recorded size exception because backend guard and POS bearer transport cannot be delivered separately without preserving the broken 401 path; extracting a shared RLS harness would expand scope across multiple existing suites.
 
-- [ ] Guard `POST /inventory/count-sessions`, which is the one inventory write the POS completes today and does so only by being open.
-- [ ] Do it in the same unit as its transport change, never alone: guarding it by itself breaks POS count-session sync and triggers the auth-blocked cascade.
+- [x] Guard `POST /inventory/count-sessions` with `SyncTransportGuard` and `sync:push`, and classify it as device transport in the route registry.
+- [x] Add the exact route to the POS device interceptor in the same work unit, never as a separate backend-only change.
+- [x] Bind `app.tenant_id` inside `CountSessionService`'s own transaction before any RLS-protected query.
+- [x] Prove the route and persistence contract through strict RED/GREEN tests, including a real FORCED RLS test with a `NOSUPERUSER NOBYPASSRLS` role.
 
 Acceptance criteria:
-- The route rejects an unauthenticated caller and accepts the POS device.
-- Count-session sync still completes end to end after the change.
+- The route rejects callers without a valid device credential and accepts the POS device with `sync:push`.
+- The POS attaches the device bearer to exactly `/inventory/count-sessions`, without widening credentials to other inventory routes.
+- Count-session persistence executes in a tenant-bound transaction; a second tenant cannot observe the resulting movement.
+- The background sync path requires no live human session.
 
 Checks:
-- Backend guard spec; POS test asserting the route now carries the device bearer.
-- Real-database spec proving the count-session write is tenant-bound rather than `tenantId: undefined`.
+- Focused RED/GREEN backend guard and route-registry specs; focused POS interceptor test.
+- Real-database count-session contract under FORCED RLS and a non-bypass role.
+- Full `npm test` and `npm run test:e2e` after the guard-set change; `npm run build`.
+- `npx eslint` on every changed or new TypeScript file, including `test/`; focused Flutter tests; `flutter analyze`; `git diff --check`.
 
-Evidence: pending.
+Evidence: the baseline probe confirmed the previous "open 2xx" narrative was wrong: `TenantInterceptor` rejects a missing principal, while the existing route e2e replaces that interceptor and injects a tenant.
+
+Strict TDD RED was observed independently per contract: controller metadata failed 3 of 25 tests before the guard/scope/fail-closed delegation existed; the registry failed 1 of 13 after declaring the route device while its guard was absent; the POS interceptor failed 1 of 12 because `count-sessions` received no bearer; the real-database contract passed its unauthenticated case but failed both device persistence cases with 401 before the route gained a satisfiable device transport.
+
+GREEN: controller 25/25, registry 13/13, service 3/3, focused mocked plus real-database e2e 5/5, and POS interceptor 12/12. The real-database spec runs the Nest HTTP boundary through a `NOSUPERUSER NOBYPASSRLS` app role against FORCED RLS, proves the resulting movement is stamped for tenant A, proves stock changes only for tenant A, and proves tenant A cannot address tenant B's insumo. `bindTenantContext` is the first statement inside `CountSessionService`'s transaction; the mocked route e2e pins it before the first repository query.
+
+Full checks: backend unit 249 suites / 2334 tests passed with 8 skipped; backend e2e 51 suites / 405 tests passed; build clean; targeted eslint clean on every changed/new TypeScript file with three known sibling-pattern warnings in the new DB spec; Flutter interceptor 12/12; `flutter analyze` clean; `git diff --check` clean. Independent high-risk verification re-ran 41 focused backend tests, the 3-case real RLS contract, the 12 POS interceptor tests and structural checks with no blocking finding. Parent spot-check re-ran the controller contract at 25/25. Native risk assessment was unavailable (empty native output), so the candidate was treated as high risk and independently verified under the RDD-off path.
+
+Runtime harness: the real HTTP plus PostgreSQL e2e is the runtime boundary. Rollback boundary: revert the ST-04 controller/service/registry/POS changes and delete the new count-session tenant-binding DB spec; no unrelated behavior is included.
 
 ### ST-05 — Fold inventory alerts into inbound deltas
 
@@ -213,7 +231,7 @@ Evidence: pending.
 
 ## Dependencies
 
-- ST-04 depends on ST-03; guarding `count-sessions` alone is the single change that breaks a working POS flow.
+- ST-04 depends on ST-03 so earlier document domains cannot suppress the count domain before it runs. The dependency is satisfied by merged PR #479. Backend guard and POS bearer transport still ship atomically so the route has a satisfiable device contract.
 - ST-03 and ST-04 depend on the DSI-6 / OHAC workstream for actor authorization, per the founder decision. The transport change is authorized now; what stays deferred and declared is the actor-attestation guarantee that the removed human guards used to provide.
 - Issue #445 closes when ST-01 and ST-04 are done. Issue #314 closes when ST-03 and ST-05 are done.
 
@@ -224,10 +242,12 @@ Evidence: pending.
 
 ## Progress
 
-- Feature opened 2026-09-21 from the route-by-route inventory taken at `main` `8e489ab`, after the parent verified that guarding `count-sessions` alone would break a working POS flow.
-- ST-01 complete: the two write routes that had no caller are no longer open. Issue #445 stays open until ST-04 closes its third route.
+- Feature opened 2026-09-21 from the route-by-route inventory taken at `main` `8e489ab`. A later baseline probe corrected the `count-sessions` premise: the class-level tenant interceptor already rejected principal-less calls, and the missing device bearer made the production POS path fail.
+- ST-01 merged via PR #475: the two write routes that had no caller are no longer open. Issue #445 stays open until ST-04 completes its third route's explicit device contract.
+- ST-02 merged via PR #477: the route registry now makes undeclared transport drift fail.
+- ST-03 merged via PR #479 (`58ce0dc`): the three inventory document writes now use device transport; issue #478 is closed.
 - Issue #473 filed for the cascade defect found during the inventory: one 401 suppresses every later sync domain, and the recipe domain runs before sales, so a pending recipe can suppress the device-authoritative sales batch.
 
 ## Next step
 
-Execute ST-03 (move the inventory document writes to device transport), then ST-04 and ST-05.
+Create the ST-04 work-unit commit, then offer the founder the push/PR decision. After ST-04 delivery, continue with ST-05 and ST-06.

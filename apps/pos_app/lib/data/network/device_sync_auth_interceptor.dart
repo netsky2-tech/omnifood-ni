@@ -30,14 +30,16 @@ class DeviceSyncAuthInterceptor extends Interceptor {
 
   /// Inventory document writes transmitted by the background sync pass on the
   /// device sync Dio. The backend guards exactly these routes with
-  /// SyncTransportGuard (ST-03, issue #478); every other inventory route
-  /// stays human-transported and must never receive the device token. Keep
-  /// this allowlist explicit and exact-match: widening it to all of
-  /// `/inventory/*` would leak device credentials to human surfaces.
+  /// SyncTransportGuard (ST-03/ST-04, issues #478/#445); every other
+  /// inventory route stays human-transported and must never receive the
+  /// device token. Keep this allowlist explicit and exact-match: widening it
+  /// to all of `/inventory/*` would leak device credentials to human
+  /// surfaces.
   static const List<String> _deviceTransportedInventoryRoutes = [
     'inventory/purchases',
     'inventory/recipes/versions',
     'inventory/production-orders/close',
+    'inventory/count-sessions',
   ];
 
   static String _normalizePath(String path) {

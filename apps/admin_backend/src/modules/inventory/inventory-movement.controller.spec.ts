@@ -34,6 +34,7 @@ import { InventoryReportsService } from './services/inventory-reports.service';
 import { CreateShrinkageDto } from './dto/create-shrinkage.dto';
 import type { SyncMovementsDto } from './dto/create-inventory-movement.dto';
 import { ProductionOrderDocumentDto } from './dto/production-order-document.dto';
+import { CountSessionDocumentDto } from './dto/count-session-document.dto';
 
 const handlerOf = (handlerName: string): unknown => {
   const handler = Object.getOwnPropertyDescriptor(
@@ -67,6 +68,7 @@ const callRecordShrinkage = (
 describe('InventoryMovementController device transport routes', () => {
   let controller: InventoryMovementController;
   const inventoryService = { syncMovements: jest.fn() };
+  const countSessionService = { replayCountSession: jest.fn() };
   const productionService = { replayProductionClose: jest.fn() };
   const shrinkageService = {
     recordShrinkage: jest.fn(),
@@ -82,7 +84,7 @@ describe('InventoryMovementController device transport routes', () => {
         { provide: ShrinkageService, useValue: shrinkageService },
         { provide: InventoryService, useValue: inventoryService },
         { provide: RecipeService, useValue: {} },
-        { provide: CountSessionService, useValue: {} },
+        { provide: CountSessionService, useValue: countSessionService },
         { provide: ProductionService, useValue: productionService },
         { provide: InventoryReportsService, useValue: {} },
         AuthGuard,
@@ -141,6 +143,7 @@ describe('InventoryMovementController device transport routes', () => {
     ['POST inventory/purchases', 'recordPurchase'],
     ['POST inventory/recipes/versions', 'ingestRecipeVersion'],
     ['POST inventory/production-orders/close', 'closeProductionOrder'],
+    ['POST inventory/count-sessions', 'recordCountSession'],
   ])('%s', (_route, handlerName) => {
     it('declares the device sync transport with the sync:push scope', () => {
       const handler = handlerOf(handlerName);
@@ -200,6 +203,32 @@ describe('InventoryMovementController device transport routes', () => {
         UnauthorizedException,
       );
       expect(inventoryService.syncMovements).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('recordCountSession', () => {
+    it('delegates the count document with the device principal tenant', async () => {
+      const dto = Object.assign(new CountSessionDocumentDto(), {
+        id: 'count-doc-1',
+      });
+
+      await controller.recordCountSession(dto, 'tenant-123');
+
+      expect(countSessionService.replayCountSession).toHaveBeenCalledWith({
+        tenantId: 'tenant-123',
+        document: dto,
+      });
+    });
+
+    it('fails closed when no tenant context is bound', async () => {
+      const dto = Object.assign(new CountSessionDocumentDto(), {
+        id: 'count-doc-1',
+      });
+
+      await expect(
+        controller.recordCountSession(dto, undefined),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(countSessionService.replayCountSession).not.toHaveBeenCalled();
     });
   });
 
