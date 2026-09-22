@@ -102,12 +102,13 @@ module, focused tests, this task record. No production migration in this task.
 
 ### T2 — Enforce onboarding and activation critical-path RLS
 
-Status: in progress; T1 dependency satisfied by `b23a8b7`. T2.S1 is committed
-as `5bbefe5`; T2.S2a is committed as `26342d2`; T2.S2b is committed as
-`25496f7`; T2.S3a is GREEN, independently verified, and committed as
-`f37b572`; T2.S3b is GREEN, independently verified, and committed as
-`7f14d63`; T2.S4 is complete in the worktree (S4a/S4b/S4c committed as
-`41a14a9`/`008749a`/`2e2e626`; S4d observed RED→GREEN, uncommitted). **S1 must NOT be deployed alone**: the S1 policies intentionally
+Status: implementation complete; the staging catalog probe remains T4-gated and is
+not authorized yet. T1 dependency satisfied by `b23a8b7`. Every T2 slice is
+committed and independently verified: S1 `5bbefe5`, S2a `26342d2`, S2b `25496f7`,
+S3a `f37b572`, S3b `7f14d63`, S4a `41a14a9`, S4b `008749a`, S4c `2e2e626`,
+S4d `1f5d4252` (evidence `9f6dc593`), and the activation closure proof
+`35562e9b`. Migration coverage and the repository gate are green locally; only
+the post-deploy staging probe is outstanding. **S1 must NOT be deployed alone**: the S1 policies intentionally
 make the still-unbound runtime paths fail closed, so S2 (session/idempotency
 service binding on the same transaction/manager) has to land in the same release
 before any deploy. Deploy remains unauthorized while S3/S4 onboarding debt is
@@ -182,8 +183,13 @@ behind.
       tests; `npm run build` clean; `SCHEMA_CHECK_DB=omnifood_schema_build_test
       bash scripts/verify-schema-build.sh` PASS both scenarios (direct 40,
       debt 26, total 79, failures 0); `git diff --check` clean.)
-- [ ] Commit as bounded domain work units and record commits below.
+- [x] Commit as bounded domain work units and record commits below.
+      T2 commits: `5bbefe5`, `26342d2`, `25496f7`, `f37b572`, `7f14d63`,
+      `41a14a9`, `008749a`, `2e2e626`, `1f5d4252`, `35562e9b`, plus their
+      evidence commits.
 - [ ] Re-run the safe staging catalog probe after an explicitly authorized deploy.
+      Not runnable in this session: it requires the explicit deploy
+      authorization that T4 owns, so it stays carried forward there.
 
 Checklist reconciliation (evidence correction): T2 stays IN PROGRESS with only
 the genuinely completed boxes checked. The activation-attempt/priming proof
