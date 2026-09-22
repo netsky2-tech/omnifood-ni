@@ -151,7 +151,8 @@ change because it reads the newly protected seed-link table and would otherwise 
 a known deploy regression; preserve `ImportStagingService.commitImport` post-commit
 onboarding start/reconcile semantics rather than expanding atomicity in #493.
 
-Next step: ~~T2.S4a~~ completed (evidence below); **T2.S4b** — bind
+Next step: ~~T2.S4a~~ completed (evidence below); ~~T2.S4b~~ completed
+in the worktree (evidence below); **T2.S4c** — bind
 `LegacyTemplateRecipeScanService`. S3a and S3b leave no policy debt behind.
 
 - [x] RED: migrate the existing onboarding session/idempotency DB tests away from
@@ -656,9 +657,111 @@ unauthorized):
   "set_config + rollback" while that probe transaction commits; the
   transaction-local discard effect is identical and the probe uses a
   disposable pool.
-- Next step: T2.S4b — bind `LegacyTemplateRecipeScanService` on the same
+- Next step: ~~T2.S4b~~ completed in the worktree (evidence below); **T2.S4c** —
+  bind `ImportStagingService` on the same transaction/manager vocabulary with
+  a migration-built application-path proof.
+
+#### T2.S4b evidence (implemented, independently verified, committed;
+deploy still unauthorized)
+
+Scope: bind `LegacyTemplateRecipeScanService.scanAndRemediate` — the last
+template-path flow still using pooled/unbound repositories against protected
+tables (`onboarding_sessions`, `invoice_items`,
+`legacy_onboarding_migration_receipts`).
+
+- RED (new migration-built runtime-role spec
+  `test/onboarding/legacy-template-recipe-scan.db.e2e-spec.ts` run against
+  the COMMITTED unbound service on the committed policy migrations; 5
+  failed / 2 passed, all behavioral): blank tenant still raised the local
+  `BadRequestException('Tenant ID is required')` instead of
+  `TenantContextRequiredError`; the unbound scan could not persist any
+  receipt (`new row violates row-level security policy for table
+  "legacy_onboarding_migration_receipts"`) while the recipe-version UPDATE
+  had already committed through a pooled autocommit write — the atomicity
+  defect observed directly (recipe left DRAFT/SUGGESTED with zero receipts);
+  the usage and operational proofs degraded silently (protected
+  `invoice_items`/`onboarding_sessions` reads invisible to the unbound
+  pool, so a used recipe and an activated tenant's unused recipe were both
+  routed to auto-MOVE_TO_DRAFT before the denied receipt insert). The raw
+  runtime-role probe and the foreign-tenant untouched assertion passed in
+  both phases, as designed.
+- GREEN (same spec after binding): 7/7 — bound tenant scan migrates its own
+  unused template recipe to DRAFT and retains unknown provenance without
+  mutation, persisting exactly two tenant-local receipts; a used template
+  recipe stays PUBLISHED through the bound `invoice_items` count (tenant
+  with no session); an activated tenant's unused recipe stays PUBLISHED
+  through the bound `onboarding_sessions` read; a foreign tenant's recipe
+  is never read, mutated, or receipted by other tenants' scans; blank
+  tenant fails closed with `TenantContextRequiredError` before any SQL;
+  mutation + receipts commit or roll back together (admin REVOKE/GRANT of
+  INSERT on the receipts table forces the receipt write to fail mid-scan
+  and the recipe UPDATE rolls back with it; after re-grant the same scan
+  succeeds end to end).
+- Service change: appended `DataSource` LAST (S4a precedent, DI-safe); the
+  whole scan runs inside ONE `runInTenantTransaction` — `app.tenant_id`
+  bound before the first protected read, recipe-version/save,
+  session, invoice-item, receipt, and global-template reads all resolved
+  from the transaction manager; the five pooled repository injections are
+  preserved (DI surface untouched, no reorder/removal) but never used for
+  protected data; blank tenant fails fast via `resolveTenantContextId`;
+  `RecipeOrigin`/publication-state semantics, `userDecision` handling, the
+  unknown-provenance rule, the three counters, receipt shape,
+  `LegacyScanReport` shape, and the public signature are unchanged;
+  `firstSuccessfulSaleAt` is only ever read, never invented or set.
+- Unit spec (`legacy-template-recipe-scan.service.spec.ts`) 8/8: added
+  bind-before-first-protected-access ordering via
+  `TENANT_CONTEXT_SET_CONFIG_SQL`, manager-scoped repository resolution for
+  all four protected repositories, single-transaction proof
+  (`dataSource.transaction` exactly once), blank-tenant fail-fast before
+  any transaction or SQL, binding-failure and transaction-open-failure
+  propagation with zero writes; existing behaviors re-covered through the
+  transaction manager mock; the one direct `new` construction site updated
+  to pass the `DataSource` last.
+- Verification (all observed, one at a time): `npx jest
+  src/modules/onboarding/services/legacy-template-recipe-scan.service.spec.ts
+  --runInBand` → 8/8; `npx jest --config ./test/jest-e2e.json --runInBand
+  legacy-template-recipe-scan` → RED 5 failed/2 passed pre-binding, then
+  7/7; sibling suites `onboarding-template-cutover` → 5/5 and
+  `onboarding-w9` → 4/4 (constructor/DI regressions none; all five e2e
+  testing modules already provide `DataSource`, so no e2e edits were
+  needed); `npm run test:db` → 45 suites / 256 tests passed; `npm run
+  build` → clean; `SCHEMA_CHECK_DB=omnifood_schema_build_test bash
+  scripts/verify-schema-build.sh` → PASS both scenarios (direct 40, debt
+  26, total 79, failures 0); `git diff --check` → clean.
+- Authored lines: ~800 across four files (service binding ~60 net, unit
+  spec rewrite ~330, DB e2e ~560) plus this record — no migration,
+  manifest, schema verifier, template apply/preview, session/idempotency,
+  import, integrity service or controller changes; `onboarding.module.ts`
+  needed no edit (class provider registration unchanged, `DataSource`
+  resolvable as in S4a).
+- Known error-contract change (same as S4a, intentional): blank-tenant
+  callers now get `TenantContextRequiredError` (HTTP 401 via the exception
+  filter) instead of the previous `BadRequestException` (400).
+- Rollback boundary: the four code files plus this evidence; removing them
+  restores the committed S4a state (`41a14a9`) without touching schema,
+  data, or any S1–S4a artifact.
+- No side effects: migrations, manifest, schema verifier, template
+  apply/preview, session/idempotency, import, and integrity services and
+  controllers untouched; no push, PR, deploy, staging mutation,
+  provisioning, or Q80 operation.
+- Independent verification (VERIFIED): all nine gates green. Confirmed the
+  five injected repositories have zero `this.<repo>` uses inside the bound
+  path (only `this.dataSource`), the REVOKE/GRANT receipt-failure injector
+  genuinely rolls back the preceding recipe UPDATE, `DataSource` appended
+  last keeps module providers and both `new` sites correct, and
+  semantics/counters/receipt shapes plus the read-only
+  `firstSuccessfulSaleAt` are unchanged. Residual risk recorded,
+  non-blocking and owned by T3: `recipe_versions` (like
+  `industry_templates`/`template_*`) carries no RLS in this migration set,
+  so its cross-tenant safety is the explicit `tenant_id` filter plus
+  single-transaction atomicity rather than an independent DB guard; T3 must
+  add that defense in depth. RED was not re-observed by the verifier (only
+  its diff-level consistency); the writer's observed RED stands as
+  recorded.
+- Next step: T2.S4c — bind `ImportStagingService` (S4c) on the same
   transaction/manager vocabulary with a migration-built application-path
-  proof.
+  proof; S4d follows; T2 remains in progress and deploy remains
+  unauthorized.
 
 ### T3 — Enforce first-business transaction-path isolation
 
@@ -691,7 +794,7 @@ Status: pending; depends on T2 and T3.
 | Task | Commit(s) | Verification | Result |
 |---|---|---|---|
 | T1 | `b23a8b7` | unit: `npx jest src/core/database/tenant-rls-coverage.spec.ts --runInBand` → 18/18 passed; DB: `npx jest --config ./test/jest-db.json --runInBand tenant-rls-coverage` → 5/5 passed; suite: `npm run test:db` → 45 suites / 256 tests passed; harness: `SCHEMA_CHECK_DB=omnifood_schema_build_test bash scripts/verify-schema-build.sh` → PASS both scenarios, coverage 79/79 classified (32 direct, 5 parent-owned, 8 global, 34 debt), failures 0; `git diff --check` → clean | RED observed: `onboarding_idempotency_records` and `onboarding_sessions` surfaced as unclassified tenant-bearing tables (1 failed, 4 passed). GREEN and independent verification observed; T1 complete. |
-| T2 | S1 `5bbefe5`; S2a `26342d2`; S2b `25496f7`; S3a `f37b572`; S3b `7f14d63`; S4a `41a14a9`; S4b–S4d pending | S1: unit `npx jest src/migrations/1809220000000-EnforceOnboardingSessionRls.spec.ts --runInBand` → 13/13; DB e2e `npx jest --config ./test/jest-e2e.json --runInBand onboarding-session-rls` → RED 6 failed/3 passed pre-migration, then 9/9. S2a: unit `onboarding-session.service.spec.ts` → 18/18; DB e2e `onboarding-session.db.e2e-spec` → RED 7 failed/1 passed pre-binding, then 8/8. S2b: unit `onboarding-idempotency.coordinator.spec.ts` → 17/17; DB e2e `onboarding-idempotency.db.e2e-spec` → RED 4 failed/1 passed pre-binding, then 6/6; legacy callers 6/6 and 9/9. S3a: unit `1809230000000-EnforceOnboardingTemplateRls.spec.ts` → 13/13; DB e2e `onboarding-template-rls` → RED 6 failed/3 passed pre-migration, then 9/9; harness both scenarios PASS (direct 37, debt 29, total 79, failures 0, ledger replay 29/29). S3b: unit `1809240000000-EnforceOnboardingImportRls.spec.ts` → 13/13; DB e2e `onboarding-import-rls` → RED 6 failed/3 passed pre-migration, then 9/9; harness both scenarios PASS (direct 40, debt 26, total 79, failures 0, ledger replay 30/30). S4a: units `industry-template.service.spec.ts`+`industry-template-safe-cutover.spec.ts` → 22/22, `template-preview.service.spec.ts` → 10/10; DB e2e `industry-template-application` → RED 6 failed/4 passed pre-binding, then 9/9; full DB 45 suites/256; build clean; harness PASS; `git diff --check` clean | S1–S3b behavioral RED/GREEN observed, independently verified, and committed; S4b–S4d pending |
+| T2 | S1 `5bbefe5`; S2a `26342d2`; S2b `25496f7`; S3a `f37b572`; S3b `7f14d63`; S4a `41a14a9`; S4b in worktree; S4c–S4d pending | S1: unit `npx jest src/migrations/1809220000000-EnforceOnboardingSessionRls.spec.ts --runInBand` → 13/13; DB e2e `npx jest --config ./test/jest-e2e.json --runInBand onboarding-session-rls` → RED 6 failed/3 passed pre-migration, then 9/9. S2a: unit `onboarding-session.service.spec.ts` → 18/18; DB e2e `onboarding-session.db.e2e-spec` → RED 7 failed/1 passed pre-binding, then 8/8. S2b: unit `onboarding-idempotency.coordinator.spec.ts` → 17/17; DB e2e `onboarding-idempotency.db.e2e-spec` → RED 4 failed/1 passed pre-binding, then 6/6; legacy callers 6/6 and 9/9. S3a: unit `1809230000000-EnforceOnboardingTemplateRls.spec.ts` → 13/13; DB e2e `onboarding-template-rls` → RED 6 failed/3 passed pre-migration, then 9/9; harness both scenarios PASS (direct 37, debt 29, total 79, failures 0, ledger replay 29/29). S3b: unit `1809240000000-EnforceOnboardingImportRls.spec.ts` → 13/13; DB e2e `onboarding-import-rls` → RED 6 failed/3 passed pre-migration, then 9/9; harness both scenarios PASS (direct 40, debt 26, total 79, failures 0, ledger replay 30/30). S4a: units `industry-template.service.spec.ts`+`industry-template-safe-cutover.spec.ts` → 22/22, `template-preview.service.spec.ts` → 10/10; DB e2e `industry-template-application` → RED 6 failed/4 passed pre-binding, then 9/9; full DB 45 suites/256; build clean; harness PASS; `git diff --check` clean. S4b: unit `legacy-template-recipe-scan.service.spec.ts` → 8/8; DB e2e `legacy-template-recipe-scan` → RED 5 failed/2 passed pre-binding, then 7/7; siblings `onboarding-template-cutover` 5/5, `onboarding-w9` 4/4; full DB 45 suites/256; build clean; harness PASS; `git diff --check` clean | S1–S3b behavioral RED/GREEN observed, independently verified, and committed; S4a committed, S4b observed in the worktree (uncommitted, unverified independently); S4c–S4d pending |
 | T3 | pending | pending | pending |
 | T4 | pending | pending | pending |
 
