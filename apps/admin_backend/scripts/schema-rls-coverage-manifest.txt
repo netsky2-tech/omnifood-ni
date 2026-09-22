@@ -25,7 +25,7 @@
 # the manifest is judged fail-closed, never silently filtered.
 
 # ---------------------------------------------------------------------------
-# direct — tenant_id + ENABLE + FORCE + at least one policy (32)
+# direct — tenant_id + ENABLE + FORCE + at least one policy (34)
 # ---------------------------------------------------------------------------
 catalog_values|direct
 device_sync_credential_events|direct
@@ -52,6 +52,8 @@ kardex_recalculate_queue|direct
 onboarding_activation_attempts|direct
 onboarding_activation_check_results|direct
 onboarding_activation_follow_ups|direct
+onboarding_idempotency_records|direct
+onboarding_sessions|direct
 onboarding_telemetry_events|direct
 product_inventory_mapping_versions|direct
 production_batch_history|direct
@@ -92,7 +94,7 @@ credit_note_provenance_rls_baseline|global
 # ---------------------------------------------------------------------------
 # debt — explicit temporary tenant isolation debt. Each entry must be
 # promoted to direct (or reclassified with a reviewed reason) by its domain
-# slice in T2/T3; a fully protected debt entry fails as stale. (34)
+# slice in T2/T3; a fully protected debt entry fails as stale. (32)
 # ---------------------------------------------------------------------------
 audit_integrity_alerts|debt
 audit_logs|debt
@@ -113,8 +115,6 @@ legacy_import_integrity_reports|debt
 legacy_onboarding_migration_receipts|debt
 loyalty_programs|debt
 loyalty_rewards|debt
-onboarding_idempotency_records|debt
-onboarding_sessions|debt
 onboarding_template_applications|debt
 onboarding_template_seed_links|debt
 product_import_sessions|debt
