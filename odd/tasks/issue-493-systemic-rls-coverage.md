@@ -105,8 +105,8 @@ module, focused tests, this task record. No production migration in this task.
 Status: in progress; T1 dependency satisfied by `b23a8b7`. T2.S1 is committed
 as `5bbefe5`; T2.S2a is committed as `26342d2`; T2.S2b is committed as
 `25496f7`; T2.S3a is GREEN, independently verified, and committed as
-`f37b572`; T2.S3b is GREEN and verified on the worktree (not yet committed) and
-S4 remains pending. **S1 must NOT be deployed alone**: the S1 policies intentionally
+`f37b572`; T2.S3b is GREEN, independently verified, and committed as
+`7f14d63`; T2.S4 is in progress. **S1 must NOT be deployed alone**: the S1 policies intentionally
 make the still-unbound runtime paths fail closed, so S2 (session/idempotency
 service binding on the same transaction/manager) has to land in the same release
 before any deploy. Deploy remains unauthorized while S3/S4 onboarding debt is
@@ -132,10 +132,10 @@ Delivery slices:
    `legacy_onboarding_migration_receipts`) — completed as `f37b572`; **S3b** is
    implemented and GREEN on the worktree for import/integrity tables
    (`legacy_import_integrity_reports`, `product_import_sessions`,
-   `staging_importacion_productos`), pending its work-unit commit. Each migration must atomically promote its
-   manifest entries and join scenario-2 replay.
-4. **T2.S4 — template/import/legacy binding:** bind every affected production flow
-   and prove activation/import behavior under the runtime-shaped role.
+   `staging_importacion_productos`) — completed as `7f14d63`. Each migration
+   atomically promotes its manifest entries and joins scenario-2 replay.
+4. **T2.S4 — template/import/legacy binding (in progress):** bind every affected
+   production flow and prove activation/import behavior under the runtime-shaped role.
 
 S1 and S2 must both land before any deploy; S1 alone intentionally makes unbound
 runtime paths fail closed. No privacy/consent table exists in the current schema, so
@@ -149,13 +149,12 @@ leave no binding debt behind (no service binding belongs to a policies slice).
 - [x] RED: migrate the existing onboarding session/idempotency DB tests away from
       `synchronize: true`/superuser and reproduce cross-tenant visibility under the
       runtime-shaped role. (S2a session spec 7/1 RED; S2b idempotency spec 4/1 RED.)
-- [ ] Add ENABLE+FORCE and command-appropriate policies for onboarding, template,
-      import, and legacy onboarding/privacy tables required by fresh-tenant setup.
-      (S3a template/provenance done; S3b import/integrity GREEN on the worktree,
-      pending its work-unit commit.)
+- [x] Add ENABLE+FORCE and command-appropriate policies for onboarding, template,
+      import, and legacy onboarding tables required by fresh-tenant setup.
+      (S1, S3a, and S3b complete; no privacy/consent schema target exists.)
 - [ ] Preserve authorized provisioning through an explicit transaction boundary;
       do not keep broad visibility to accommodate seeds.
-- [ ] Prove tenant-local SELECT/INSERT/UPDATE/DELETE and reject foreign writes.
+- [x] Prove tenant-local SELECT/INSERT/UPDATE/DELETE and reject foreign writes.
 - [ ] Prove activation attempt creation and priming still work with bound RLS.
 - [ ] Run focused backend unit, DB, migration, build, and diff checks.
 - [ ] Commit as bounded domain work units and record commits below.
@@ -468,7 +467,7 @@ NOT deployed):
   `staging_importacion_productos`) with the same migration/proof shape and
   atomic manifest promotion.
 
-T2.S3b evidence (implemented, verified on the worktree, NOT yet committed,
+T2.S3b evidence (implemented, independently verified, committed as `7f14d63`;
 NOT deployed):
 
 - Route: delegated direct implementation on the same S3a migration/proof
@@ -546,8 +545,9 @@ NOT deployed):
   baseline) without touching application data or the S1/S2/S3a
   migrations/tests/services or template/provenance targets.
 - No side effects: S1/S2/S3a migrations/tests/services, template/provenance
-  targets, controllers, and sibling e2e specs untouched; no commit, push,
-  PR, deploy, staging mutation, provisioning, or Q80 operation.
+  targets, controllers, and sibling e2e specs untouched. Functional commit
+  `7f14d63` was created locally; no push, PR, deploy, staging mutation,
+  provisioning, or Q80 operation.
 - Next step: T2.S4 — bind `ImportStagingService`,
   `LegacyImportIntegrityReportService`, and the related legacy flow before
   any deploy.
@@ -583,11 +583,7 @@ Status: pending; depends on T2 and T3.
 | Task | Commit(s) | Verification | Result |
 |---|---|---|---|
 | T1 | `b23a8b7` | unit: `npx jest src/core/database/tenant-rls-coverage.spec.ts --runInBand` → 18/18 passed; DB: `npx jest --config ./test/jest-db.json --runInBand tenant-rls-coverage` → 5/5 passed; suite: `npm run test:db` → 45 suites / 256 tests passed; harness: `SCHEMA_CHECK_DB=omnifood_schema_build_test bash scripts/verify-schema-build.sh` → PASS both scenarios, coverage 79/79 classified (32 direct, 5 parent-owned, 8 global, 34 debt), failures 0; `git diff --check` → clean | RED observed: `onboarding_idempotency_records` and `onboarding_sessions` surfaced as unclassified tenant-bearing tables (1 failed, 4 passed). GREEN and independent verification observed; T1 complete. |
-| T2 | S1 `5bbefe5`; S2a `26342d2`; S2b `25496f7`; S3a `f37b572`; S3b verified on worktree, commit pending; S4 pending | S1: unit `npx jest src/migrations/1809220000000-EnforceOnboardingSessionRls.spec.ts --runInBand` → 13/13; DB e2e `npx jest --config ./test/jest-e2e.json --runInBand onboarding-session-rls` → RED 6 failed/3 passed pre-migration, then 9/9. S2a: unit `onboarding-session.service.spec.ts` → 18/18; DB e2e `onboarding-session.db.e2e-spec` → RED 7 failed/1 passed pre-binding, then 8/8. S2b: unit `onboarding-idempotency.coordinator.spec.ts` → 17/17; DB e2e `onboarding-idempotency.db.e2e-spec` → RED 4 failed/1 passed pre-binding, then 6/6; legacy callers 6/6 and 9/9. S3a: unit `1809230000000-EnforceOnboardingTemplateRls.spec.ts` → 13/13; DB e2e `onboarding-template-rls` → RED 6 failed/3 passed pre-migration, then 9/9; harness both scenarios PASS (direct 37, debt 29, total 79, failures 0, ledger replay 29/29). Full DB 45 suites/256; build clean; `git diff --check` clean. S3b: unit `1809240000000-EnforceOnboardingImportRls.spec.ts` → 13/13; DB e2e
-`onboarding-import-rls` → RED 6 failed/3 passed pre-migration, then 9/9; harness both scenarios PASS (direct 40, debt 26,
-total 79, failures 0, ledger replay 30/30); full DB 45 suites/256; build clean; `git diff --check` clean | S1, S2a, S2b,
-S3a, and S3b behavioral RED/GREEN observed; S1–S3a committed, S3b verified on worktree pending its work-unit commit;
-S4 pending |
+| T2 | S1 `5bbefe5`; S2a `26342d2`; S2b `25496f7`; S3a `f37b572`; S3b `7f14d63`; S4 pending | S1: unit `npx jest src/migrations/1809220000000-EnforceOnboardingSessionRls.spec.ts --runInBand` → 13/13; DB e2e `npx jest --config ./test/jest-e2e.json --runInBand onboarding-session-rls` → RED 6 failed/3 passed pre-migration, then 9/9. S2a: unit `onboarding-session.service.spec.ts` → 18/18; DB e2e `onboarding-session.db.e2e-spec` → RED 7 failed/1 passed pre-binding, then 8/8. S2b: unit `onboarding-idempotency.coordinator.spec.ts` → 17/17; DB e2e `onboarding-idempotency.db.e2e-spec` → RED 4 failed/1 passed pre-binding, then 6/6; legacy callers 6/6 and 9/9. S3a: unit `1809230000000-EnforceOnboardingTemplateRls.spec.ts` → 13/13; DB e2e `onboarding-template-rls` → RED 6 failed/3 passed pre-migration, then 9/9; harness both scenarios PASS (direct 37, debt 29, total 79, failures 0, ledger replay 29/29). S3b: unit `1809240000000-EnforceOnboardingImportRls.spec.ts` → 13/13; DB e2e `onboarding-import-rls` → RED 6 failed/3 passed pre-migration, then 9/9; harness both scenarios PASS (direct 40, debt 26, total 79, failures 0, ledger replay 30/30). Full DB 45 suites/256; build clean; `git diff --check` clean | S1–S3b behavioral RED/GREEN observed, independently verified, and committed; S4 pending |
 | T3 | pending | pending | pending |
 | T4 | pending | pending | pending |
 
