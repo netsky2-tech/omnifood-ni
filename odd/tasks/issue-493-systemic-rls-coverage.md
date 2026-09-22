@@ -102,9 +102,9 @@ module, focused tests, this task record. No production migration in this task.
 
 ### T2 — Enforce onboarding and activation critical-path RLS
 
-Status: in progress; T1 dependency satisfied by `b23a8b7`. T2.S1 implementation
-is GREEN but its scenario-2 reapplication evidence needs one verifier-requested
-harness correction before commit; S2–S4 remain pending. **S1 must NOT be deployed
+Status: in progress; T1 dependency satisfied by `b23a8b7`. T2.S1 is GREEN,
+independently verified, and committed as `5bbefe5`; S2–S4 remain pending.
+**S1 must NOT be deployed
 alone**: the S1 policies intentionally make the still-unbound runtime paths
 fail closed, so S2 (session/idempotency service binding on the same
 transaction/manager) has to land in the same release before any deploy.
@@ -148,8 +148,7 @@ fail until the migration and the promotion land together.
 - [ ] Commit as bounded domain work units and record commits below.
 - [ ] Re-run the safe staging catalog probe after an explicitly authorized deploy.
 
-T2.S1 evidence (implemented, verified, uncommitted — commit is the user's
-decision):
+T2.S1 evidence (implemented, independently verified, committed as `5bbefe5`):
 
 - Route: delegated direct implementation; new migration
   `1809220000000-EnforceOnboardingSessionRls.ts` covers exactly
@@ -201,10 +200,10 @@ decision):
   new migration actually re-executed in scenario 2); coverage manifest
   tables 79, classified 79, direct 34, parent-owned 5, global 8, debt 32,
   failures 0.
-- Rollback boundary: only the five authorized paths; removing/reverting the
-  new migration, its spec, the DB proof, the two manifest promotions, and
-  this evidence restores the T1 baseline without deleting or modifying
-  application data.
+- Rollback boundary: the six T2.S1 paths in commit `5bbefe5`; reverting the
+  new migration, its spec, the DB proof, the two manifest promotions, the
+  scenario-2 harness entry, and this evidence restores the T1 baseline without
+  deleting or modifying application data.
 - WARNING: S2 binding (same transaction/manager, replace vacuous
   synchronize/superuser tests) must land before any deploy — S1 alone
   intentionally fails the unbound runtime paths closed.
@@ -240,7 +239,7 @@ Status: pending; depends on T2 and T3.
 | Task | Commit(s) | Verification | Result |
 |---|---|---|---|
 | T1 | `b23a8b7` | unit: `npx jest src/core/database/tenant-rls-coverage.spec.ts --runInBand` → 18/18 passed; DB: `npx jest --config ./test/jest-db.json --runInBand tenant-rls-coverage` → 5/5 passed; suite: `npm run test:db` → 45 suites / 256 tests passed; harness: `SCHEMA_CHECK_DB=omnifood_schema_build_test bash scripts/verify-schema-build.sh` → PASS both scenarios, coverage 79/79 classified (32 direct, 5 parent-owned, 8 global, 34 debt), failures 0; `git diff --check` → clean | RED observed: `onboarding_idempotency_records` and `onboarding_sessions` surfaced as unclassified tenant-bearing tables (1 failed, 4 passed). GREEN and independent verification observed; T1 complete. |
-| T2 | S1 pending commit | S1: unit `npx jest src/migrations/1809220000000-EnforceOnboardingSessionRls.spec.ts --runInBand` → 13/13; DB e2e `npx jest --config ./test/jest-e2e.json --runInBand onboarding-session-rls` → RED 6 failed/3 passed pre-migration, then 9/9; suite `npm run test:db` → 45 suites / 256 tests; build clean; harness PASS both scenarios (direct 34, debt 32, total 79, failures 0) after the verifier-requested partial-ledger correction: `EnforceOnboardingSessionRls1809220000000` added to the scenario-2 list, 28 rows removed, migration actually re-executed (DB-observed); `git diff --check` clean | S1 behavioral RED and GREEN observed, scenario-2 replay DB-observed post-correction; S2–S4 pending |
+| T2 | S1 `5bbefe5`; S2–S4 pending | S1: unit `npx jest src/migrations/1809220000000-EnforceOnboardingSessionRls.spec.ts --runInBand` → 13/13; DB e2e `npx jest --config ./test/jest-e2e.json --runInBand onboarding-session-rls` → RED 6 failed/3 passed pre-migration, then 9/9; suite `npm run test:db` → 45 suites / 256 tests; build clean; harness PASS both scenarios (direct 34, debt 32, total 79, failures 0) after the verifier-requested partial-ledger correction: `EnforceOnboardingSessionRls1809220000000` added to the scenario-2 list, 28 rows removed, migration actually re-executed (DB-observed); `git diff --check` clean | S1 behavioral RED and GREEN observed, scenario-2 replay DB-observed post-correction; S2–S4 pending |
 | T3 | pending | pending | pending |
 | T4 | pending | pending | pending |
 
