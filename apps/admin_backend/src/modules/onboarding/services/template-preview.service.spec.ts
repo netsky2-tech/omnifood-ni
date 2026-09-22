@@ -1,5 +1,9 @@
-import { Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import { TemplatePreviewService } from './template-preview.service';
+import {
+  TENANT_CONTEXT_SET_CONFIG_SQL,
+  TenantContextRequiredError,
+} from '../../../core/database/tenant-transaction';
 import { IndustryTemplate } from '../entities/industry-template.entity';
 import {
   TemplateSeedLink,
@@ -15,6 +19,8 @@ describe('TemplatePreviewService (TDD / ONB1.3A-B)', () => {
   let seedLinkRepo: jest.Mocked<Partial<Repository<TemplateSeedLink>>>;
   let insumoRepo: jest.Mocked<Partial<Repository<Insumo>>>;
   let productRepo: jest.Mocked<Partial<Repository<Product>>>;
+  let dataSource: jest.Mocked<Partial<DataSource>>;
+  let mockManager: jest.Mocked<Partial<EntityManager>>;
 
   const sampleTemplate: IndustryTemplate = {
     id: 'CAFETERIA',
@@ -102,11 +108,31 @@ describe('TemplatePreviewService (TDD / ONB1.3A-B)', () => {
       find: jest.fn().mockResolvedValue([]),
     };
 
+    // The tenant-bound transaction hands back a manager whose repositories
+    // serve every protected read; the pooled repositories are never used.
+    mockManager = {
+      query: jest.fn().mockResolvedValue(undefined),
+      getRepository: jest.fn(((entity: unknown) => {
+        if (entity === TemplateSeedLink)
+          return seedLinkRepo as unknown as Repository<TemplateSeedLink>;
+        if (entity === Insumo)
+          return insumoRepo as unknown as Repository<Insumo>;
+        if (entity === Product)
+          return productRepo as unknown as Repository<Product>;
+        throw new Error(`Unexpected repository request: ${String(entity)}`);
+      }) as any) as any,
+    };
+
+    dataSource = {
+      transaction: jest.fn((cb: any) => cb(mockManager)) as any,
+    };
+
     service = new TemplatePreviewService(
       templateRepo as Repository<IndustryTemplate>,
       seedLinkRepo as Repository<TemplateSeedLink>,
       insumoRepo as Repository<Insumo>,
       productRepo as Repository<Product>,
+      dataSource as unknown as DataSource,
     );
   });
 
@@ -133,6 +159,55 @@ describe('TemplatePreviewService (TDD / ONB1.3A-B)', () => {
 
     expect(preview.summary.newCount).toBe(3);
     expect(preview.summary.existingLinkedCount).toBe(0);
+  });
+
+  it('binds the tenant context inside the transaction before the first protected read', async () => {
+    await service.buildPreview('tenant-1', 'CAFETERIA');
+
+    expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+    expect(mockManager.query).toHaveBeenCalledWith(
+      TENANT_CONTEXT_SET_CONFIG_SQL,
+      ['tenant-1'],
+    );
+    const queryOrder =
+      (mockManager.query as jest.Mock).mock.invocationCallOrder[0];
+    const firstProtected = Math.min(
+      ...(seedLinkRepo.find as jest.Mock).mock.invocationCallOrder,
+      ...(insumoRepo.find as jest.Mock).mock.invocationCallOrder,
+      ...(productRepo.find as jest.Mock).mock.invocationCallOrder,
+    );
+    expect(queryOrder).toBeLessThan(firstProtected);
+  });
+
+  it('reads tenant-bearing data only through manager-scoped repositories, never the pooled ones', async () => {
+    await service.buildPreview('tenant-1', 'CAFETERIA');
+
+    // The injected pooled seed-link repository must stay untouched inside
+    // the bound path: manager.getRepository is the only access route.
+    expect(mockManager.getRepository).toHaveBeenCalledWith(TemplateSeedLink);
+    expect(mockManager.getRepository).toHaveBeenCalledWith(Insumo);
+    expect(mockManager.getRepository).toHaveBeenCalledWith(Product);
+  });
+
+  it('fails fast with TenantContextRequiredError on a blank tenant and issues no set_config SQL', async () => {
+    await expect(service.buildPreview('   ', 'CAFETERIA')).rejects.toThrow(
+      TenantContextRequiredError,
+    );
+
+    // The transaction itself must never be opened for a blank tenant.
+    expect(dataSource.transaction).not.toHaveBeenCalled();
+    expect(mockManager.query).not.toHaveBeenCalled();
+  });
+
+  it('propagates a binding failure from inside the transaction', async () => {
+    (mockManager.query as jest.Mock).mockRejectedValueOnce(
+      new Error('binding failed'),
+    );
+
+    await expect(service.buildPreview('tenant-1', 'CAFETERIA')).rejects.toThrow(
+      'binding failed',
+    );
+    expect(seedLinkRepo.find).not.toHaveBeenCalled();
   });
 
   it('identifies EXISTING_LINKED when a TemplateSeedLink exists', async () => {
@@ -202,10 +277,7 @@ describe('TemplatePreviewService (TDD / ONB1.3A-B)', () => {
     ).rejects.toThrow("Industry template 'UNKNOWN_TEMPLATE' not found");
   });
 
-  it('throws BadRequestException when tenantId or templateCode is empty', async () => {
-    await expect(service.buildPreview('', 'CAFETERIA')).rejects.toThrow(
-      'Tenant context is required',
-    );
+  it('throws BadRequestException when templateCode is empty', async () => {
     await expect(service.buildPreview('tenant-1', '  ')).rejects.toThrow(
       'Template code must not be empty',
     );

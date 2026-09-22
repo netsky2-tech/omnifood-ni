@@ -1,5 +1,8 @@
 import { DataSource, EntityManager, Repository } from 'typeorm';
-import { IndustryTemplateService } from './industry-template.service';
+import {
+  IndustryTemplateService,
+} from './industry-template.service';
+import { TenantContextRequiredError } from '../../../core/database/tenant-transaction';
 import { IndustryTemplate } from '../entities/industry-template.entity';
 import { TemplateApplication } from '../entities/template-application.entity';
 import { TemplateSeedLink } from '../entities/template-seed-link.entity';
@@ -124,6 +127,7 @@ describe('IndustryTemplateService Safe Cutover (TDD / ONB1.3D-F)', () => {
 
     const savedEntities: any[] = [];
     mockManager = {
+      query: jest.fn().mockResolvedValue(undefined),
       find: jest.fn().mockImplementation((entityClass: any) => {
         if (entityClass === TemplateSeedLink) return Promise.resolve([]);
         if (entityClass === Insumo) return Promise.resolve([]);
@@ -160,6 +164,50 @@ describe('IndustryTemplateService Safe Cutover (TDD / ONB1.3D-F)', () => {
       uomConversionRepo as any,
       dataSource as any,
     );
+  });
+
+  it('binds the tenant context on the transaction manager before the first protected access', async () => {
+    await service.applyTemplate('tenant-1', 'CAFETERIA', {
+      idempotencyKey: 'bind-order-key',
+    });
+
+    expect(mockManager.query).toHaveBeenCalledWith(
+      "SELECT set_config('app.tenant_id', $1, true)",
+      ['tenant-1'],
+    );
+    const queryCall = (mockManager.query as jest.Mock).mock.invocationCallOrder[0];
+    const firstProtected = Math.min(
+      ...(mockManager.findOne as jest.Mock).mock.invocationCallOrder,
+      ...(mockManager.find as jest.Mock).mock.invocationCallOrder,
+      ...(mockManager.save as jest.Mock).mock.invocationCallOrder,
+    );
+    expect(queryCall).toBeLessThan(firstProtected);
+  });
+
+  it('fails fast with TenantContextRequiredError on a blank tenant and issues no set_config SQL', async () => {
+    await expect(
+      service.applyTemplate('   ', 'CAFETERIA'),
+    ).rejects.toThrow(TenantContextRequiredError);
+
+    // The transaction itself must never be opened for a blank tenant.
+    expect(dataSource.transaction).not.toHaveBeenCalled();
+    expect(mockManager.query).not.toHaveBeenCalled();
+  });
+
+  it('propagates a binding failure and aborts before any protected write', async () => {
+    (mockManager.query as jest.Mock).mockRejectedValueOnce(
+      new Error('binding failed'),
+    );
+
+    await expect(
+      service.applyTemplate('tenant-1', 'CAFETERIA', {
+        idempotencyKey: 'binding-failure-key',
+      }),
+    ).rejects.toThrow('binding failed');
+
+    // RLS-protected work must not proceed past a failed binding.
+    expect(mockManager.findOne).not.toHaveBeenCalled();
+    expect(mockManager.save).not.toHaveBeenCalled();
   });
 
   it('creates persisted provenance and an inactive template recipe draft', async () => {

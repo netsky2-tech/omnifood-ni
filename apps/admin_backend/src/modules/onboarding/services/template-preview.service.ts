@@ -4,8 +4,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import * as crypto from 'crypto';
+import { runInTenantTransaction, resolveTenantContextId } from '../../../core/database/tenant-transaction';
 import { IndustryTemplate } from '../entities/industry-template.entity';
 import {
   TemplateSeedLink,
@@ -64,6 +65,7 @@ export class TemplatePreviewService {
     private readonly insumoRepo: Repository<Insumo>,
     @InjectRepository(Product)
     private readonly productRepo: Repository<Product>,
+    private readonly dataSource: DataSource,
   ) {}
 
   public computeFingerprint(payload: Record<string, any>): string {
@@ -80,10 +82,11 @@ export class TemplatePreviewService {
     templateCode: string,
     options?: TemplatePreviewOptions,
   ): Promise<TemplatePreviewResult> {
-    const trimmedTenant = tenantId?.trim();
-    if (!trimmedTenant) {
-      throw new BadRequestException('Tenant context is required');
-    }
+    // Fail closed on a blank tenant before even the global template lookup:
+    // the same TenantContextRequiredError contract as the other bound paths.
+    // runInTenantTransaction re-resolves (cheaply) before opening the
+    // tenant-bound transaction.
+    const trimmedTenant = resolveTenantContextId(tenantId);
 
     const trimmedCode = templateCode?.trim();
     if (!trimmedCode) {
@@ -107,34 +110,54 @@ export class TemplatePreviewService {
 
     const version = template.version ?? 1;
 
-    // Load existing seed links for this tenant & template
-    const existingLinks = await this.seedLinkRepo.find({
-      where: {
-        tenant_id: trimmedTenant,
-        template_code: template.code,
-      },
-    });
+    // Every tenant-bearing read below is RLS-protected (the seed-link table
+    // is FORCED by 1809230000000; insumos/products carry tenant rows), so
+    // they must share ONE transaction whose tenant context is bound before
+    // the first protected access. Manager-scoped repositories keep the whole
+    // read transaction-consistent; the pooled repositories are never used
+    // for tenant-bearing data.
+    const { existingLinks, insumoByName, productByName } =
+      await runInTenantTransaction(
+        this.dataSource,
+        trimmedTenant,
+        async (manager) => {
+          const seedLinkRepo = manager.getRepository(TemplateSeedLink);
+          const insumoRepo = manager.getRepository(Insumo);
+          const productRepo = manager.getRepository(Product);
+
+          // Load existing seed links for this tenant & template
+          const links = await seedLinkRepo.find({
+            where: {
+              tenant_id: trimmedTenant,
+              template_code: template.code,
+            },
+          });
+
+          // Load existing entities for name-matching fallback
+          // (EXISTING_UNLINKED)
+          const existingInsumos = await insumoRepo.find({
+            where: { tenant_id: trimmedTenant },
+          });
+          const insumoByName = new Map<string, Insumo>();
+          for (const ins of existingInsumos) {
+            insumoByName.set(ins.name.trim().toLowerCase(), ins);
+          }
+
+          const existingProducts = await productRepo.find({
+            where: { tenant_id: trimmedTenant },
+          });
+          const productByName = new Map<string, Product>();
+          for (const prod of existingProducts) {
+            productByName.set(prod.name.trim().toLowerCase(), prod);
+          }
+
+          return { existingLinks: links, insumoByName, productByName };
+        },
+      );
 
     const linkMap = new Map<string, TemplateSeedLink>();
     for (const link of existingLinks) {
       linkMap.set(`${link.source_item_id}:${link.target_entity_type}`, link);
-    }
-
-    // Load existing entities for name-matching fallback (EXISTING_UNLINKED)
-    const existingInsumos = await this.insumoRepo.find({
-      where: { tenant_id: trimmedTenant },
-    });
-    const insumoByName = new Map<string, Insumo>();
-    for (const ins of existingInsumos) {
-      insumoByName.set(ins.name.trim().toLowerCase(), ins);
-    }
-
-    const existingProducts = await this.productRepo.find({
-      where: { tenant_id: trimmedTenant },
-    });
-    const productByName = new Map<string, Product>();
-    for (const prod of existingProducts) {
-      productByName.set(prod.name.trim().toLowerCase(), prod);
     }
 
     const items: TemplateItemDiff[] = [];
