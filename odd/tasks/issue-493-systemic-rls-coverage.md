@@ -169,17 +169,38 @@ behind.
 - [ ] Preserve authorized provisioning through an explicit transaction boundary;
       do not keep broad visibility to accommodate seeds.
 - [x] Prove tenant-local SELECT/INSERT/UPDATE/DELETE and reject foreign writes.
-- [ ] Prove activation attempt creation and priming still work with bound RLS.
-- [ ] Run focused backend unit, DB, migration, build, and diff checks.
+- [x] Prove activation attempt creation and priming still work with bound RLS.
+      (Activation: real migration-built restricted-role FORCE-RLS proof
+      `activation-attempt-rls.db.e2e-spec.ts` 8/8, see T2 closure evidence
+      below. Priming: real restricted-role FORCE-RLS evidence exists in
+      `terminal-priming.db.spec.ts`, with the residual `synchronize: true`
+      entity↔migration drift risk recorded below.)
+- [x] Run focused backend unit, DB, migration, build, and diff checks.
+      (Consolidated re-run observed one at a time: unit
+      `activation.service.spec.ts` 48/48; e2e `activation-attempt-rls` 8/8;
+      `activation-flow.db.e2e-spec` 12/12; `npm run test:db` 45 suites / 256
+      tests; `npm run build` clean; `SCHEMA_CHECK_DB=omnifood_schema_build_test
+      bash scripts/verify-schema-build.sh` PASS both scenarios (direct 40,
+      debt 26, total 79, failures 0); `git diff --check` clean.)
 - [ ] Commit as bounded domain work units and record commits below.
 - [ ] Re-run the safe staging catalog probe after an explicitly authorized deploy.
 
 Checklist reconciliation (evidence correction): T2 stays IN PROGRESS with only
 the genuinely completed boxes checked. The activation-attempt/priming proof
-has not been run as a proof and stays unchecked; the commit box stays
-unchecked until the parent commits the S4d unit; the provisioning-boundary,
-final consolidated check, and post-deploy staging boxes remain open until
-their evidence exists.
+box is now CHECKED on real evidence: activation has a true migration-built
+restricted-role FORCE-RLS proof through the production `ActivationService`
+(`test/onboarding/activation-attempt-rls.db.e2e-spec.ts`, 8/8), and priming's
+proof (`src/modules/onboarding/services/terminal-priming.db.spec.ts`) is real
+restricted-role FORCED-RLS evidence — a per-run NOSUPERUSER/NOBYPASSRLS role
+with cross-tenant non-disclosure assertions under FORCED RLS — although it
+builds its tables with `synchronize: true` (production predicate resolver
+applied by hand), so a drifted entity could diverge from the migrated schema;
+that residual risk is recorded honestly and no migration-built priming spec
+exists yet. The consolidated-checks box is CHECKED only for the commands
+listed in the box itself, all observed one at a time. The commit box stays
+unchecked until the parent commits (S4d unit plus this proof slice); the
+provisioning-boundary and post-deploy staging boxes remain open until their
+evidence exists.
 
 T2.S1 evidence (implemented, independently verified, committed as `5bbefe5`):
 
@@ -999,7 +1020,96 @@ IN PROGRESS below — deploy remains unauthorized and staging evidence is T4.
 - Next step: complete the remaining open T2 checklist boxes (activation/
   priming proof, final consolidated checks, the parent-owned commit, then
   the authorized staging probe) before T3 — first-business transaction-path
-  isolation — starts.
+  isolation — starts. UPDATE (closure slice below): the activation/priming
+  proof and the consolidated local checks are now observed and checked; the
+  remaining open boxes are the parent-owned commit and the authorized
+  staging probe.
+
+#### T2 closure — activation-attempt RLS proof (proof-only slice, implemented
+and observed green in the worktree, NOT committed; T2 NOT marked complete —
+the parent decides after independent verification)
+
+- Scope honored: PROOF ONLY. The only surfaces touched are the new spec
+  `apps/admin_backend/test/onboarding/activation-attempt-rls.db.e2e-spec.ts`
+  and this task record. No production code, migration, manifest, schema
+  verifier, or existing spec changed; rollback removes the new spec and this
+  record and restores HEAD `9f6dc593` with no production impact.
+- Why the pre-existing suites are not RLS proof (recorded in the new spec's
+  header): `src/modules/onboarding/services/activation.service.db.spec.ts`
+  and `test/onboarding/activation-flow.db.e2e-spec.ts` build their schema
+  with `synchronize: true` (which never emits ENABLE/FORCE RLS or policies)
+  and connect as the default superuser (`rolbypassrls = true` ignores any
+  policy), so they stayed green through an RLS-binding regression.
+- The new spec builds the schema by RUNNING THE FULL MIGRATION SET via
+  `createMigrationBuiltSchemaFixture`, binds the fixture's table-non-owner
+  `NOSUPERUSER NOBYPASSRLS` runtime role, and drives the PRODUCTION
+  `ActivationService` (real `FiscalConfigVersionService`,
+  `OnboardingCatalogService`, `ChangeLogService`; only the cross-domain
+  readiness evaluator is stubbed) through production's own binding mechanism
+  (`runInTenantTransaction` -> transaction-local `set_config`).
+- Observed discriminating evidence (8/8 green):
+  (1) raw probes — the runtime role is `rolsuper = false`,
+  `rolbypassrls = false`, owns NOTHING in the scratch schema (all touched
+  tables are owned by the migration role), and the five activation tables
+  (`onboarding_activation_attempts`, `..._check_results`,
+  `..._follow_ups`, `onboarding_sessions`, `fiscal_config_revisions`) all
+  carry `relrowsecurity` AND `relforcerowsecurity = true` with the
+  migration-emitted `{table}_tenant_{select,insert,update,delete}` policies
+  whose predicates contain `current_setting('app.tenant_id', ...)`;
+  (2) `startActivation` on the bound runtime role creates exactly one
+  tenant-local attempt and advances only that tenant's session to
+  ACTIVATION_IN_PROGRESS;
+  (3) `ingestCheck` persists 10 tenant-local check rows plus the paid
+  verification-ticket reference through the production path;
+  (4) NEGATIVE CONTROL (non-vacuity): the admin connection sees strictly
+  MORE rows than the bound runtime role on ALL FIVE protected tables —
+  concretely 2 attempts / 20 checks / 2 follow-ups / 2 sessions / 2 fiscal
+  revisions admin-side vs 1 / 10 / 1 / 1 / 1 bound as tenant A. If the
+  binding or the FORCE-RLS policies regressed, the bound role would see
+  everything admin sees and this test fails;
+  (5) foreign-tenant non-disclosure: bound as A, every forged cross-tenant
+  read returns zero rows and every forged cross-tenant UPDATE (attempt,
+  checks, follow-ups, session) affects zero rows; the service read paths
+  fail closed (`getAttempt` NotFound, `getFollowUps` empty); tenant B's
+  rows are byte-identical to the pre-flow admin snapshot before and after
+  A's whole flow;
+  (6) `finalizeActivation` on the bound runtime role transitions tenant A
+  tenant-locally to PASS_WITH_WARNING with an OPEN follow-up and an ACTIVATED
+  session while foreign rows remain untouched;
+  (7) fail-closed control on a cold unbound pool: `current_setting(
+  'app.tenant_id', true)` resolves to NULL, so SELECTs disclose zero rows
+  on all five protected tables and an UPDATE affects zero rows — both
+  asserted as observed zero rows — and the INSERT is asserted to be denied
+  by the WITH CHECK via `.rejects.toThrow(/row-level security/i)`, so the
+  row-level-security denial class IS asserted (an earlier draft claiming
+  "no exception-class assertion" was inaccurate). Verified caveat: the
+  admin-vs-bound-role negative control does not detect a binding
+  regression on its own — an unbound role is fail-closed and sees zero
+  rows, so "admin sees strictly more" still holds; binding regression is
+  caught by the spec's positive assertions (exactly one tenant-local
+  `startActivation` attempt, the check-evidence counts, and the
+  tenant-scoped INSERT).
+- Priming evidence (honest classification): `terminal-priming.db.spec.ts`
+  is REAL restricted-role FORCED-RLS evidence — a dedicated per-run
+  `NOSUPERUSER NOBYPASSRLS` role, `catalog_values` and
+  `fiscal_config_revisions` ENABLE+FORCED with the production
+  `resolveTenantRlsPredicate` predicates, and cross-tenant non-disclosure
+  assertions — but it builds tables with `synchronize: true`, so the
+  residual entity↔migration drift risk remains for the priming path (the
+  same class bugs #286/#358/#412 exploited); a migration-built priming spec
+  is future work, not part of this proof-only slice.
+- Verification (all observed, one at a time): `cd apps/admin_backend && npx
+  jest --config ./test/jest-e2e.json --runInBand activation-attempt-rls` →
+  8/8; `... --runInBand activation-flow.db.e2e-spec` → 12/12 (functional
+  activation suite unaffected); `npx jest
+  src/modules/onboarding/services/activation.service.spec.ts --runInBand` →
+  48/48; `npm run test:db` → 45 suites / 256 tests passed; `npm run build`
+  → clean; `SCHEMA_CHECK_DB=omnifood_schema_build_test bash
+  scripts/verify-schema-build.sh` → PASS both scenarios (direct 40, debt 26,
+  total 79, failures 0); `git diff --check` → clean.
+- No side effects: no push, PR, commit, deploy, staging mutation,
+  provisioning, or Q80 operation; T2 remains IN PROGRESS pending the
+  parent-owned commit and the explicitly authorized staging probe.
 
 ### T3 — Enforce first-business transaction-path isolation
 
