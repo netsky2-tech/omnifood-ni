@@ -81,7 +81,11 @@ jobs:
           DB_DATABASE: omnifood
 
       - name: Run E2E tests
-        run: npm run test:e2e
+        # Serialized temporarily: the migration-built fixture can destroy a
+        # concurrently running suite's schema or roles, which makes the
+        # parallel run racy. The root cause is tracked in #499; remove the
+        # --runInBand flag once the fixture holds a safe lease.
+        run: npm run test:e2e -- --runInBand
         env:
           DB_HOST: localhost
           DB_PORT: 5432
