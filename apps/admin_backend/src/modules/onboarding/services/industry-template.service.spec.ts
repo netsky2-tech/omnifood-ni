@@ -1,6 +1,10 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { IndustryTemplateService } from './industry-template.service';
+import {
+  TENANT_CONTEXT_SET_CONFIG_SQL,
+  TenantContextRequiredError,
+} from '../../../core/database/tenant-transaction';
 import { IndustryTemplate } from '../entities/industry-template.entity';
 import { TemplateInsumo } from '../entities/template-insumo.entity';
 import { TemplateProduct } from '../entities/template-product.entity';
@@ -211,6 +215,7 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
     mockManager = {
       find: jest.fn(),
       findOne: jest.fn(),
+      query: jest.fn().mockResolvedValue(undefined),
       create: jest.fn(
         (_entityClass: unknown, plain: unknown) => plain as object,
       ),
@@ -309,9 +314,68 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
   describe('applyTemplate (Triangulation & Idempotency)', () => {
     const tenantId = 'tenant-123';
 
-    it('throws BadRequestException if tenantId is missing or blank', async () => {
+    it('binds the tenant context on the transaction manager before the first protected access', async () => {
+      templateRepo.findOne.mockResolvedValueOnce(mockTemplates[0]);
+      mockManager.find.mockResolvedValue([]);
+
+      await service.applyTemplate(tenantId, 'CAFETERIA');
+
+      expect(mockManager.query).toHaveBeenCalledWith(
+        TENANT_CONTEXT_SET_CONFIG_SQL,
+        [tenantId],
+      );
+      const queryOrder =
+        (mockManager.query as jest.Mock).mock.invocationCallOrder[0];
+      const firstProtected = Math.min(
+        ...(mockManager.findOne as jest.Mock).mock.invocationCallOrder,
+        ...(mockManager.find as jest.Mock).mock.invocationCallOrder,
+        ...(mockManager.save as jest.Mock).mock.invocationCallOrder,
+      );
+      expect(queryOrder).toBeLessThan(firstProtected);
+    });
+
+    it('runs every protected access through manager-scoped repositories, never the pooled ones', async () => {
+      templateRepo.findOne.mockResolvedValueOnce(mockTemplates[0]);
+      mockManager.find.mockResolvedValue([]);
+
+      await service.applyTemplate(tenantId, 'CAFETERIA');
+
+      // The pooled tenant-bearing repositories are untouched by apply.
+      expect(insumoRepo.find).not.toHaveBeenCalled();
+      expect(insumoRepo.save).not.toHaveBeenCalled();
+      expect(productRepo.find).not.toHaveBeenCalled();
+      expect(productRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('fails fast with TenantContextRequiredError on a blank tenant and issues no set_config SQL (Unit 0b-3)', async () => {
+      await expect(
+        service.applyTemplate('   ', 'CAFETERIA'),
+      ).rejects.toThrow(TenantContextRequiredError);
+
+      // The transaction itself must never be opened for a blank tenant.
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+      expect(mockManager.query).not.toHaveBeenCalled();
+    });
+
+    it('propagates a binding failure and aborts before any protected write', async () => {
+      templateRepo.findOne.mockResolvedValueOnce(mockTemplates[0]);
+      (mockManager.query as jest.Mock).mockRejectedValueOnce(
+        new Error('binding failed'),
+      );
+
+      await expect(
+        service.applyTemplate(tenantId, 'CAFETERIA'),
+      ).rejects.toThrow('binding failed');
+
+      expect(mockManager.findOne).not.toHaveBeenCalled();
+      expect(mockManager.save).not.toHaveBeenCalled();
+    });
+
+    it('fails closed if tenantId is missing or blank (Unit 0b-3: TenantContextRequiredError, no SQL)', async () => {
+      // The old BadRequestException guard is superseded by the stricter
+      // fail-closed contract shared with the rest of the bound services.
       await expect(service.applyTemplate('   ', 'CAFETERIA')).rejects.toThrow(
-        BadRequestException,
+        TenantContextRequiredError,
       );
     });
 

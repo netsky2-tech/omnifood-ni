@@ -1,6 +1,10 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
+import {
+  runInTenantTransaction,
+  resolveTenantContextId,
+} from '../../../core/database/tenant-transaction';
 import {
   RecipeOrigin,
   RecipePublicationState,
@@ -54,139 +58,168 @@ export class LegacyTemplateRecipeScanService {
     private readonly invoiceItemRepo: Repository<InvoiceItem>,
     @InjectRepository(IndustryTemplate)
     private readonly templateRepo: Repository<IndustryTemplate>,
+    // Appended LAST (S4a precedent, DI-safe): opens the ONE tenant-bound
+    // transaction that every protected-table access below joins.
+    private readonly dataSource: DataSource,
   ) {}
 
   async scanAndRemediate(
     tenantId: string,
     options?: ScanOptions,
   ): Promise<LegacyScanReport> {
-    const trimmedTenant = tenantId?.trim();
-    if (!trimmedTenant) {
-      throw new BadRequestException('Tenant ID is required');
-    }
+    // Fail closed on a blank tenant before any SQL: the same
+    // TenantContextRequiredError contract as the other bound onboarding
+    // paths (T2.S2a/S2b/S4a).
+    const trimmedTenant = resolveTenantContextId(tenantId);
 
-    // 1. Find all active recipe versions for this tenant
-    const activeVersions = await this.recipeVersionRepo.find({
-      where: {
-        tenant_id: trimmedTenant,
-        is_active: true,
-      },
-    });
+    // ONE tenant-bound transaction: `app.tenant_id` is bound before the
+    // first protected read, and every protected-table repository (recipe
+    // versions, onboarding sessions, invoice items, migration receipts) is
+    // resolved from the transaction manager, so the recipe-version mutation
+    // and the migration receipts commit or roll back together under FORCED
+    // row-level security. The pooled constructor repositories are part of
+    // the preserved DI surface (S4a precedent) but are never used for
+    // protected data; the global template read also joins the manager so the
+    // whole scan shares a single connection.
+    return runInTenantTransaction(
+      this.dataSource,
+      trimmedTenant,
+      async (manager) => {
+        const recipeVersionRepo = manager.getRepository(RecipeVersion);
+        const receiptRepo = manager.getRepository(
+          LegacyOnboardingMigrationReceipt,
+        );
+        const sessionRepo = manager.getRepository(OnboardingSession);
+        const invoiceItemRepo = manager.getRepository(InvoiceItem);
+        const templateRepo = manager.getRepository(IndustryTemplate);
 
-    // 2. Check if tenant is operational
-    const session = await this.sessionRepo.findOne({
-      where: { tenantId: trimmedTenant },
-    });
-    const isOperational = Boolean(
-      session?.activatedAt || session?.firstSuccessfulSaleAt,
-    );
-
-    // 3. Load global templates to match known template product names
-    const templates = await this.templateRepo.find({
-      relations: ['templateProducts'],
-    });
-    const templateProductNames = new Set<string>();
-    for (const t of templates) {
-      for (const p of t.templateProducts ?? []) {
-        templateProductNames.add(p.name.trim().toLowerCase());
-      }
-    }
-
-    const receipts: LegacyScanReceiptItem[] = [];
-    let migratedToDraftCount = 0;
-    let keptPublishedCount = 0;
-    let unknownProvenanceCount = 0;
-
-    for (const rv of activeVersions) {
-      const productName = rv.product_name || 'Unknown Product';
-      const hasTemplateProvenance =
-        rv.origin === RecipeOrigin.INDUSTRY_TEMPLATE ||
-        templateProductNames.has(productName.trim().toLowerCase());
-
-      let decision: LegacyMigrationDecision;
-      let reason: string;
-
-      if (!hasTemplateProvenance) {
-        decision = LegacyMigrationDecision.UNKNOWN_PROVENANCE;
-        reason =
-          'Provenance cannot be reliably attributed to an industry template; retained without mutation for manual review.';
-        unknownProvenanceCount++;
-      } else {
-        // Check historical sales/usage
-        const usageCount = await this.invoiceItemRepo.count({
-          where: [{ recipeVersionId: rv.id }, { productId: rv.product_id }],
+        // 1. Find all active recipe versions for this tenant
+        const activeVersions = await recipeVersionRepo.find({
+          where: {
+            tenant_id: trimmedTenant,
+            is_active: true,
+          },
         });
-        const hasUsage = usageCount > 0 || isOperational;
 
-        if (
-          options?.userDecision &&
-          options.userDecision.recipeVersionId === rv.id
-        ) {
-          decision = options.userDecision.decision;
-          reason = options.userDecision.reason;
+        // 2. Check if tenant is operational
+        const session = await sessionRepo.findOne({
+          where: { tenantId: trimmedTenant },
+        });
+        const isOperational = Boolean(
+          session?.activatedAt || session?.firstSuccessfulSaleAt,
+        );
 
-          if (decision === LegacyMigrationDecision.MOVE_TO_DRAFT) {
-            rv.is_active = false;
-            rv.publication_state = RecipePublicationState.DRAFT;
-            rv.suggestion_state = RecipeSuggestionState.SUGGESTED;
-            await this.recipeVersionRepo.save(rv);
-            migratedToDraftCount++;
-          } else {
-            keptPublishedCount++;
+        // 3. Load global templates to match known template product names
+        const templates = await templateRepo.find({
+          relations: ['templateProducts'],
+        });
+        const templateProductNames = new Set<string>();
+        for (const t of templates) {
+          for (const p of t.templateProducts ?? []) {
+            templateProductNames.add(p.name.trim().toLowerCase());
           }
-        } else if (hasUsage) {
-          // SAFETY GUARD: NEVER MUTATE SILENTLY
-          decision = LegacyMigrationDecision.KEEP_PUBLISHED;
-          reason =
-            'Recipe is in active operational use or tenant is operational; retained as PUBLISHED to prevent operational disruption without explicit owner command.';
-          keptPublishedCount++;
-        } else {
-          // Unused template recipe on non-operational tenant: safe auto migration to DRAFT
-          decision = LegacyMigrationDecision.MOVE_TO_DRAFT;
-          reason =
-            'Non-operational tenant with unused template recipe version safely migrated to DRAFT.';
-          rv.is_active = false;
-          rv.publication_state = RecipePublicationState.DRAFT;
-          rv.suggestion_state = RecipeSuggestionState.SUGGESTED;
-          await this.recipeVersionRepo.save(rv);
-          migratedToDraftCount++;
         }
-      }
 
-      const receipt = this.receiptRepo.create({
-        tenant_id: trimmedTenant,
-        receipt_type: 'LEGACY_TEMPLATE_RECIPE_SCAN',
-        target_entity_type: 'RECIPE_VERSION',
-        target_entity_id: rv.id,
-        decision,
-        reason,
-        evidence_json: {
-          productName,
-          origin: rv.origin,
-          hasTemplateProvenance,
-          isOperational,
-        },
-        executed_by: options?.userDecision?.userId || 'SYSTEM_SCAN',
-      });
+        const receipts: LegacyScanReceiptItem[] = [];
+        let migratedToDraftCount = 0;
+        let keptPublishedCount = 0;
+        let unknownProvenanceCount = 0;
 
-      const savedReceipt = await this.receiptRepo.save(receipt);
+        for (const rv of activeVersions) {
+          const productName = rv.product_name || 'Unknown Product';
+          const hasTemplateProvenance =
+            rv.origin === RecipeOrigin.INDUSTRY_TEMPLATE ||
+            templateProductNames.has(productName.trim().toLowerCase());
 
-      receipts.push({
-        recipeVersionId: rv.id,
-        productName,
-        decision,
-        reason,
-        receiptId: savedReceipt.id,
-      });
-    }
+          let decision: LegacyMigrationDecision;
+          let reason: string;
 
-    return {
-      tenantId: trimmedTenant,
-      scannedCount: activeVersions.length,
-      migratedToDraftCount,
-      keptPublishedCount,
-      unknownProvenanceCount,
-      receipts,
-    };
+          if (!hasTemplateProvenance) {
+            decision = LegacyMigrationDecision.UNKNOWN_PROVENANCE;
+            reason =
+              'Provenance cannot be reliably attributed to an industry template; retained without mutation for manual review.';
+            unknownProvenanceCount++;
+          } else {
+            // Check historical sales/usage
+            const usageCount = await invoiceItemRepo.count({
+              where: [
+                { recipeVersionId: rv.id },
+                { productId: rv.product_id },
+              ],
+            });
+            const hasUsage = usageCount > 0 || isOperational;
+
+            if (
+              options?.userDecision &&
+              options.userDecision.recipeVersionId === rv.id
+            ) {
+              decision = options.userDecision.decision;
+              reason = options.userDecision.reason;
+
+              if (decision === LegacyMigrationDecision.MOVE_TO_DRAFT) {
+                rv.is_active = false;
+                rv.publication_state = RecipePublicationState.DRAFT;
+                rv.suggestion_state = RecipeSuggestionState.SUGGESTED;
+                await recipeVersionRepo.save(rv);
+                migratedToDraftCount++;
+              } else {
+                keptPublishedCount++;
+              }
+            } else if (hasUsage) {
+              // SAFETY GUARD: NEVER MUTATE SILENTLY
+              decision = LegacyMigrationDecision.KEEP_PUBLISHED;
+              reason =
+                'Recipe is in active operational use or tenant is operational; retained as PUBLISHED to prevent operational disruption without explicit owner command.';
+              keptPublishedCount++;
+            } else {
+              // Unused template recipe on non-operational tenant: safe auto migration to DRAFT
+              decision = LegacyMigrationDecision.MOVE_TO_DRAFT;
+              reason =
+                'Non-operational tenant with unused template recipe version safely migrated to DRAFT.';
+              rv.is_active = false;
+              rv.publication_state = RecipePublicationState.DRAFT;
+              rv.suggestion_state = RecipeSuggestionState.SUGGESTED;
+              await recipeVersionRepo.save(rv);
+              migratedToDraftCount++;
+            }
+          }
+
+          const receipt = receiptRepo.create({
+            tenant_id: trimmedTenant,
+            receipt_type: 'LEGACY_TEMPLATE_RECIPE_SCAN',
+            target_entity_type: 'RECIPE_VERSION',
+            target_entity_id: rv.id,
+            decision,
+            reason,
+            evidence_json: {
+              productName,
+              origin: rv.origin,
+              hasTemplateProvenance,
+              isOperational,
+            },
+            executed_by: options?.userDecision?.userId || 'SYSTEM_SCAN',
+          });
+
+          const savedReceipt = await receiptRepo.save(receipt);
+
+          receipts.push({
+            recipeVersionId: rv.id,
+            productName,
+            decision,
+            reason,
+            receiptId: savedReceipt.id,
+          });
+        }
+
+        return {
+          tenantId: trimmedTenant,
+          scannedCount: activeVersions.length,
+          migratedToDraftCount,
+          keptPublishedCount,
+          unknownProvenanceCount,
+          receipts,
+        };
+      },
+    );
   }
 }

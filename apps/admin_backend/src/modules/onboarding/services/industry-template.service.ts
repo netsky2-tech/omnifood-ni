@@ -24,6 +24,10 @@ import { Recipe } from '../../inventory/entities/recipe.entity';
 import { OnboardingSession } from '../entities/onboarding-session.entity';
 import { UomConversion } from '../../inventory/entities/uom-conversion.entity';
 import {
+  resolveTenantContextId,
+  runInTenantTransaction,
+} from '../../../core/database/tenant-transaction';
+import {
   TemplateApplication,
   TemplateApplicationStatus,
 } from '../entities/template-application.entity';
@@ -117,8 +121,10 @@ export class IndustryTemplateService {
     actorUserId?: string,
     retryingIdempotency = false,
   ): Promise<ApplyTemplateResult> {
-    const trimmedTenant = tenantId?.trim();
-    if (!trimmedTenant) throw new BadRequestException('Tenant ID is required');
+    // A blank tenant fails fast here, before even the global template lookup:
+    // TenantContextRequiredError and no SQL at all. runInTenantTransaction
+    // re-resolves (cheaply) before opening the bound transaction.
+    const trimmedTenant = resolveTenantContextId(tenantId);
 
     const template = await this.getTemplateByCode(templateCode);
     const selectedSet = options?.selectedItemIds
@@ -153,7 +159,9 @@ export class IndustryTemplateService {
       .digest('hex');
 
     try {
-      return await this.dataSource.transaction(
+      return await runInTenantTransaction(
+        this.dataSource,
+        trimmedTenant,
         async (manager: EntityManager) => {
           const previous = await manager.findOne(TemplateApplication, {
             where: {

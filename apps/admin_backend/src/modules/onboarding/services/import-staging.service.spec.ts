@@ -1,5 +1,9 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { DataSource, EntityManager, Repository } from 'typeorm';
+import {
+  TENANT_CONTEXT_SET_CONFIG_SQL,
+  TenantContextRequiredError,
+} from '../../../core/database/tenant-transaction';
 import { ImportStagingService } from './import-staging.service';
 import {
   ImportStaging,
@@ -69,6 +73,10 @@ describe('ImportStagingService (Unit & Triangulation)', () => {
       save: jest.fn((_entityClass: unknown, entities: unknown) =>
         Promise.resolve(entities),
       ),
+      // The production binding SQL: runInTenantTransaction issues exactly
+      // this parameterised set_config on the transaction's manager before
+      // any protected access.
+      query: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<EntityManager>;
 
     dataSource = {
@@ -88,15 +96,18 @@ describe('ImportStagingService (Unit & Triangulation)', () => {
   });
 
   describe('uploadBatch (Parsing, Sanitization & Triangulation)', () => {
-    it('throws BadRequestException if tenantId is missing or empty', async () => {
+    it('fails fast with TenantContextRequiredError (never BadRequestException) when tenantId is missing or empty', async () => {
       const dto: UploadBatchDto = {
         sessionToken,
         rows: [{ nombre: 'Gaseosa', precioVenta: '25' }],
       };
 
       await expect(service.uploadBatch('   ', dto)).rejects.toThrow(
-        BadRequestException,
+        TenantContextRequiredError,
       );
+      // No SQL was issued: neither transaction opened nor binding attempted.
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+      expect(mockManager.query).not.toHaveBeenCalled();
     });
 
     it('throws BadRequestException if rows array is empty', async () => {
@@ -544,17 +555,20 @@ describe('ImportStagingService (Unit & Triangulation)', () => {
         },
       ];
 
-      stagingRepo.find.mockResolvedValueOnce(errorRows);
+      mockManager.find.mockResolvedValueOnce(errorRows);
 
       const result = await service.getFailedRows(tenantId, sessionToken);
 
       expect(result).toHaveLength(1);
       expect(result[0].rawNombre).toBe('Producto Roto');
       expect(result[0].reason).toBe('El precio de venta no es numérico');
+      // The read is manager-scoped inside one bound transaction: the pooled
+      // staging repository is never used for protected data.
+      expect(stagingRepo.find).not.toHaveBeenCalled();
     });
 
     it('throws NotFoundException when sessionToken has no staged rows', async () => {
-      stagingRepo.find.mockResolvedValueOnce([]);
+      mockManager.find.mockResolvedValueOnce([]);
 
       await expect(
         service.getFailedRows(tenantId, 'non-existent-token'),
@@ -564,8 +578,7 @@ describe('ImportStagingService (Unit & Triangulation)', () => {
 
   describe('uploadRawCsv (Raw CSV Parsing, Session Lifecycle & Triangulation)', () => {
     it('parses raw CSV text, stages rows with row_ordinal and creates ProductImportSession', async () => {
-      productRepo.find.mockResolvedValue([]);
-      sessionRepo.findOne.mockResolvedValue(null);
+      mockManager.find.mockResolvedValue([]);
 
       const rawCsv = [
         'producto,precio,unidad_venta,codigo_barras',
@@ -618,8 +631,7 @@ describe('ImportStagingService (Unit & Triangulation)', () => {
         updated_at: new Date(),
       };
 
-      productRepo.find.mockResolvedValue([existingProduct]);
-      sessionRepo.findOne.mockResolvedValue(null);
+      mockManager.find.mockResolvedValue([existingProduct]);
 
       const rawCsv = [
         'nombre,precio_venta,uom',
@@ -696,14 +708,27 @@ describe('ImportStagingService (Unit & Triangulation)', () => {
         updated_at: new Date(),
       };
 
-      sessionRepo.findOne.mockResolvedValue(sessionEntity);
-      stagingRepo.find.mockResolvedValue([stagedRow1]);
-      productRepo.findOne.mockResolvedValue({
-        id: 'prod-1',
-        name: 'Hamburguesa',
-        sellPrice: 150,
-        uom: 'UN',
-      } as Product);
+      mockManager.findOne.mockImplementation(
+        (entityClass: unknown, options?: { where?: { id?: string } }) => {
+          if (entityClass === ProductImportSession) {
+            return Promise.resolve(sessionEntity);
+          }
+          if (entityClass === Product) {
+            return Promise.resolve(
+              options?.where?.id === 'prod-1'
+                ? ({
+                    id: 'prod-1',
+                    name: 'Hamburguesa',
+                    sellPrice: 150,
+                    uom: 'UN',
+                  } as Product)
+                : null,
+            );
+          }
+          return Promise.resolve(null);
+        },
+      );
+      mockManager.find.mockResolvedValue([stagedRow1]);
 
       const preview = await service.getPreview(tenantId, sessionToken);
 
@@ -720,6 +745,278 @@ describe('ImportStagingService (Unit & Triangulation)', () => {
         isConflict: false,
       });
       expect(preview.unsupportedColumns).toContain('codigo_barras');
+    });
+  });
+
+  describe('tenant binding (T2.S4c): order, scoping, transactions & failure propagation', () => {
+    // Fresh row per call: commitImport mutates estado_fila on the rows it
+    // finds, so a shared fixture would leak COMMITTED between tests.
+    function makeStagedValidoRow(): ImportStaging {
+      return {
+        id: 'staged-bind-1',
+        tenant_id: tenantId,
+        token_sesion_importacion: sessionToken,
+        parsed_nombre: 'Gaseosa Bound',
+        parsed_precio_venta: 25,
+        estado_fila: ImportStagingStatus.VALIDO,
+        row_ordinal: 1,
+        created_at: new Date(),
+        updated_at: new Date(),
+      } as unknown as ImportStaging;
+    }
+
+    /**
+     * Manager-scoped data: staged VALIDO rows for the commit flow, no
+     * existing products, no session row.
+     */
+    function stubManagerData(): void {
+      mockManager.find.mockImplementation(async (entityClass: unknown) => {
+        if (entityClass === ImportStaging) {
+          return Promise.resolve([makeStagedValidoRow()]);
+        }
+        return Promise.resolve([]);
+      });
+      mockManager.findOne.mockResolvedValue(null);
+    }
+
+    /**
+     * Shared probe: records the exact order of binding SQL versus protected
+     * access on the transaction manager.
+     */
+    function recordAccessOrder(): string[] {
+      const order: string[] = [];
+      mockManager.query.mockImplementation(async (sql: string) => {
+        if (sql === TENANT_CONTEXT_SET_CONFIG_SQL) order.push('bind');
+        return undefined;
+      });
+      mockManager.find.mockImplementation(async () => {
+        order.push('find');
+        return [];
+      });
+      mockManager.save.mockImplementation(async (_c: unknown, e: unknown) => {
+        order.push('save');
+        return e;
+      });
+      return order;
+    }
+
+    it('binds app.tenant_id on the transaction manager BEFORE the first protected access in uploadBatch', async () => {
+      const order = recordAccessOrder();
+
+      await service.uploadBatch(tenantId, {
+        sessionToken,
+        rows: [{ nombre: 'Gaseosa', precioVenta: '25' }],
+      });
+
+      expect(order[0]).toBe('bind');
+      expect(mockManager.query).toHaveBeenCalledWith(
+        TENANT_CONTEXT_SET_CONFIG_SQL,
+        [tenantId],
+      );
+      expect(mockManager.query).toHaveBeenCalledTimes(1);
+    });
+
+    it('binds exactly once per public method and opens exactly one transaction', async () => {
+      const order = recordAccessOrder();
+      mockManager.findOne.mockResolvedValue(null);
+      // commitImport must find the staged rows through the manager.
+      mockManager.find.mockImplementation(async (entityClass: unknown) => {
+        order.push('find');
+        if (entityClass === ImportStaging) {
+          return Promise.resolve([makeStagedValidoRow()]);
+        }
+        return Promise.resolve([]);
+      });
+
+      await service.uploadBatch(tenantId, {
+        sessionToken,
+        rows: [{ nombre: 'Gaseosa', precioVenta: '25' }],
+      });
+      await service.uploadRawCsv(tenantId, {
+        sessionToken,
+        csvContent: 'nombre,precio_venta\nGaseosa,25',
+      });
+      await service.commitImport(tenantId, {
+        sessionToken,
+        mode: 'VALID_ONLY',
+      });
+      await service.getPreview(tenantId, sessionToken);
+      await service.getFailedRows(tenantId, sessionToken);
+
+      // Five public calls, five transactions, five single bindings.
+      expect(dataSource.transaction).toHaveBeenCalledTimes(5);
+      expect(mockManager.query).toHaveBeenCalledTimes(5);
+      mockManager.query.mock.calls.forEach((call) =>
+        expect(call).toEqual([TENANT_CONTEXT_SET_CONFIG_SQL, [tenantId]]),
+      );
+    });
+
+    it('never uses the pooled repositories for protected data in any public method', async () => {
+      stubManagerData();
+
+      await service.uploadBatch(tenantId, {
+        sessionToken,
+        rows: [{ nombre: 'Gaseosa', precioVenta: '25' }],
+      });
+      await service.uploadRawCsv(tenantId, {
+        sessionToken,
+        csvContent: 'nombre,precio_venta\nGaseosa,25',
+      });
+      await service.commitImport(tenantId, {
+        sessionToken,
+        mode: 'VALID_ONLY',
+      });
+      await service.getPreview(tenantId, sessionToken);
+      await service.getFailedRows(tenantId, sessionToken);
+
+      expect(stagingRepo.find).not.toHaveBeenCalled();
+      expect(stagingRepo.save).not.toHaveBeenCalled();
+      expect(productRepo.find).not.toHaveBeenCalled();
+      expect(productRepo.findOne).not.toHaveBeenCalled();
+      expect(sessionRepo.create).not.toHaveBeenCalled();
+      expect(sessionRepo.save).not.toHaveBeenCalled();
+      expect(receiptRepo.create).not.toHaveBeenCalled();
+      expect(receiptRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('creates the session and receipt through the manager, never through the pooled repositories', async () => {
+      stubManagerData();
+
+      await service.uploadBatch(tenantId, {
+        sessionToken,
+        rows: [{ nombre: 'Gaseosa', precioVenta: '25' }],
+      });
+      await service.commitImport(tenantId, {
+        sessionToken,
+        mode: 'VALID_ONLY',
+      });
+
+      expect(mockManager.create).toHaveBeenCalledWith(
+        ProductImportSession,
+        expect.objectContaining({ id: sessionToken, tenant_id: tenantId }),
+      );
+      expect(mockManager.create).toHaveBeenCalledWith(
+        LegacyOnboardingMigrationReceipt,
+        expect.objectContaining({
+          tenant_id: tenantId,
+          receipt_type: 'IMPORT_COMMIT',
+          target_entity_id: sessionToken,
+          decision: 'IMPORT_COMMITTED',
+        }),
+      );
+      expect(sessionRepo.create).not.toHaveBeenCalled();
+      expect(receiptRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('fails fast on a blank tenant with TenantContextRequiredError before any SQL in every public method', async () => {
+      const dtoRows = [{ nombre: 'Gaseosa', precioVenta: '25' }];
+
+      await expect(
+        service.uploadRawCsv('   ', {
+          csvContent: 'nombre,precio_venta\nX,10',
+        }),
+      ).rejects.toThrow(TenantContextRequiredError);
+      await expect(
+        service.uploadBatch('   ', { rows: dtoRows }),
+      ).rejects.toThrow(TenantContextRequiredError);
+      await expect(
+        service.commitImport('   ', { sessionToken }),
+      ).rejects.toThrow(TenantContextRequiredError);
+      await expect(service.getPreview('   ', sessionToken)).rejects.toThrow(
+        TenantContextRequiredError,
+      );
+      await expect(service.getFailedRows('   ', sessionToken)).rejects.toThrow(
+        TenantContextRequiredError,
+      );
+
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+      expect(mockManager.query).not.toHaveBeenCalled();
+      expect(mockManager.find).not.toHaveBeenCalled();
+      expect(mockManager.save).not.toHaveBeenCalled();
+    });
+
+    it('propagates a binding failure with zero protected writes', async () => {
+      mockManager.query.mockRejectedValueOnce(
+        new Error('set_config permission denied'),
+      );
+
+      await expect(
+        service.uploadBatch(tenantId, {
+          sessionToken,
+          rows: [{ nombre: 'Gaseosa', precioVenta: '25' }],
+        }),
+      ).rejects.toThrow('set_config permission denied');
+
+      expect(mockManager.find).not.toHaveBeenCalled();
+      expect(mockManager.save).not.toHaveBeenCalled();
+    });
+
+    it('propagates a transaction-open failure with zero protected writes', async () => {
+      (dataSource.transaction as unknown as jest.Mock).mockRejectedValueOnce(
+        new Error('connection pool exhausted'),
+      );
+
+      await expect(
+        service.uploadBatch(tenantId, {
+          sessionToken,
+          rows: [{ nombre: 'Gaseosa', precioVenta: '25' }],
+        }),
+      ).rejects.toThrow('connection pool exhausted');
+
+      expect(mockManager.query).not.toHaveBeenCalled();
+      expect(mockManager.find).not.toHaveBeenCalled();
+      expect(mockManager.save).not.toHaveBeenCalled();
+    });
+
+    it('works with the optional dependencies absent (session/receipt writes skipped, preview defaults)', async () => {
+      const bareService = new ImportStagingService(
+        stagingRepo,
+        productRepo,
+        dataSource,
+      );
+      mockManager.find.mockImplementation(async (entityClass: unknown) =>
+        entityClass === ImportStaging
+          ? Promise.resolve([makeStagedValidoRow()])
+          : Promise.resolve([]),
+      );
+      mockManager.findOne.mockResolvedValue(null);
+
+      const upload = await bareService.uploadBatch(tenantId, {
+        sessionToken,
+        rows: [{ nombre: 'Gaseosa', precioVenta: '25' }],
+      });
+      expect(upload).toMatchObject({
+        sessionToken,
+        totalRows: 1,
+        validRows: 1,
+        errorRows: 0,
+      });
+      // No session/receipt writes were attempted without the dependencies.
+      const savedClasses = mockManager.save.mock.calls.map((call) => call[0]);
+      expect(savedClasses).not.toContain(ProductImportSession);
+      expect(savedClasses).not.toContain(LegacyOnboardingMigrationReceipt);
+
+      const commit = await bareService.commitImport(tenantId, {
+        sessionToken,
+        mode: 'VALID_ONLY',
+      });
+      expect(commit).toMatchObject({
+        sessionToken,
+        productsCreated: 1,
+        totalCommitted: 1,
+      });
+      const commitSavedClasses = mockManager.save.mock.calls.map(
+        (call) => call[0],
+      );
+      expect(commitSavedClasses).not.toContain(
+        LegacyOnboardingMigrationReceipt,
+      );
+
+      const preview = await bareService.getPreview(tenantId, sessionToken);
+      expect(preview).toMatchObject({
+        status: 'READY',
+        parserContractVersion: 'v1.0',
+      });
     });
   });
 });
